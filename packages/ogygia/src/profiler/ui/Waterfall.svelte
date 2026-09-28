@@ -85,7 +85,7 @@
 						{@const theirs = c.timings.reduce((a, t) => a + t.ms, 0)}
 						<dt>Their side</dt>
 						<dd>
-							{#each c.timings as t (t.name)}<span class="st"><b>{t.desc ?? t.name}</b> {fmt_ms(t.ms)} ms</span>{/each}
+							{#each c.timings as t, i (t.name + '\0' + i)}<span class="st"><b>{t.desc ?? t.name}</b> {fmt_ms(t.ms)} ms</span>{/each}
 							{#if theirs > 0}<span class="dim">— {fmt_ms(theirs)} ms measured on their side, {fmt_ms(Math.max(0, c.ms - theirs))} ms network + framework (from their Server-Timing)</span>{/if}
 						</dd>
 					{/if}
@@ -182,7 +182,8 @@
 		display: flex;
 		align-items: center;
 		font: 10px ui-monospace, monospace;
-		color: var(--text);
+		/* on the blue bar: the theme's ink for its accent fills (4.5:1 in both themes) */
+		color: var(--text-on-accent);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 		pointer-events: none;

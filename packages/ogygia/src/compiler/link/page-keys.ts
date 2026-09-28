@@ -368,6 +368,23 @@ class Scan {
 			this.judge(node, parent, key);
 			if (node.type === 'CallExpression') return; // `get(page)` consumed as a unit
 		}
+		// A BRANCH THE BROWSER NEVER TAKES: this answer is about the island's CLIENT code, and a read
+		// under `typeof window === 'undefined'` (or `import.meta.env.SSR`) runs only on the server —
+		// Region's own server-side snapshot of page.data put every island that renders a <Region>
+		// down as reading the page whole
+		if (node.type === 'IfStatement' || node.type === 'ConditionalExpression') {
+			const side = runs_on(node.test);
+			if (side) {
+				this.walk(node.test, node, 'test');
+				if (side !== 'server') this.walk(node.consequent, node, 'consequent');
+				if (side !== 'client' && node.alternate) this.walk(node.alternate, node, 'alternate');
+				return;
+			}
+		}
+		if (node.type === 'LogicalExpression' && node.operator === '&&' && runs_on(node.left) === 'server') {
+			this.walk(node.left, node, 'left');
+			return;
+		}
 		for (const k of Object.keys(node)) {
 			if (SKIP_KEYS.has(k)) continue;
 			const v = node[k];
@@ -465,6 +482,43 @@ class Scan {
 }
 
 /** The nearest function-like ancestor an alias declared at `node` belongs to (`null` = module). */
+/**
+ * Which side a test lets through: `'server'` when it is true only on the server
+ * (`typeof window === 'undefined'`, `typeof document == 'undefined'`, `import.meta.env.SSR`),
+ * `'client'` for its negation (`!==`, `!`), null for anything else.
+ */
+function runs_on(test: Node | null | undefined): 'server' | 'client' | null {
+	const t = test ? unwrap_down(test) : null;
+	if (!t) return null;
+	if (t.type === 'UnaryExpression' && t.operator === '!') {
+		const inner = runs_on(t.argument);
+		return inner === 'server' ? 'client' : inner === 'client' ? 'server' : null;
+	}
+	// import.meta.env.SSR
+	if (
+		t.type === 'MemberExpression' &&
+		!t.computed &&
+		t.property?.name === 'SSR' &&
+		t.object?.type === 'MemberExpression' &&
+		t.object.property?.name === 'env' &&
+		t.object.object?.type === 'MetaProperty'
+	)
+		return 'server';
+	if (t.type !== 'BinaryExpression') return null;
+	const eq = t.operator === '===' || t.operator === '==';
+	if (!eq && t.operator !== '!==' && t.operator !== '!=') return null;
+	const typeof_global = (n: Node) =>
+		n?.type === 'UnaryExpression' &&
+		n.operator === 'typeof' &&
+		n.argument?.type === 'Identifier' &&
+		(n.argument.name === 'window' || n.argument.name === 'document');
+	const undef = (n: Node) => (n?.type === 'Literal' || n?.type === 'StringLiteral') && n.value === 'undefined';
+	const l = unwrap_down(t.left);
+	const r = unwrap_down(t.right);
+	if (!((typeof_global(l) && undef(r)) || (typeof_global(r) && undef(l)))) return null;
+	return eq ? 'server' : 'client';
+}
+
 function enclosing_scope(node: Node): Node | null {
 	for (let n = node.__parent as Node | null; n; n = n.__parent as Node | null) {
 		if (SCOPE_TYPES.has(n.type)) return n.type === 'Program' || n.type === 'Fragment' || n.type === 'Root' ? null : n;

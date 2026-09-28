@@ -29,7 +29,17 @@
 
 	const model = $derived.by(() => {
 		tick; // refresh with the panel tick
-		const events = snapshot().filter((e) => e.realm === 'client' && MARK[e.name]);
+		// THIS page: from the last in-app navigation on (the nav itself included). Every earlier page's
+		// islands stayed in the buffer: after a few navigations the axis spanned the whole session, one
+		// lane per island of every page visited, each squeezed to a dot.
+		const all = snapshot().filter((e) => e.realm === 'client' && MARK[e.name]);
+		let from = 0;
+		for (let i = all.length - 1; i >= 0; i--)
+			if (all[i].name === 'nav.start') {
+				from = i;
+				break;
+			}
+		const events = all.slice(from);
 		if (events.length === 0) return { events: [], lanes: [], span: 0 };
 
 		// Group by region, keeping only the FIRST occurrence of each phase. A live region re-emits
@@ -93,7 +103,7 @@
 	});
 </script>
 
-<h4>timeline — client wake / hydrate {model.events.length ? `(${model.events.length} events)` : ''}</h4>
+<h3>timeline — client wake / hydrate {model.events.length ? `(${model.events.length} events)` : ''}</h3>
 
 {#if model.events.length === 0}
 	<div class="muted">no client events yet — interact with the page, then reopen.</div>
@@ -133,13 +143,13 @@
 {/if}
 
 <style>
-	h4 {
+	h3 {
 		margin: 0 0 8px;
 		font-size: 12px;
 		color: #5eead4;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.wrap {
 		width: 100%;
@@ -151,7 +161,7 @@
 		margin: 3px 0;
 	}
 	.label {
-		color: #64748b;
+		color: #94a3b8;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -204,12 +214,12 @@
 	.axis .l {
 		position: absolute;
 		left: 0;
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.axis .r {
 		position: absolute;
 		right: 0;
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.legend {
 		margin-top: 10px;
@@ -218,7 +228,7 @@
 		gap: 10px;
 	}
 	.li {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.dot.inline {
 		position: static;

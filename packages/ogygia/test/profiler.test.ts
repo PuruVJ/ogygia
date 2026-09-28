@@ -13,12 +13,46 @@ import {
 	type HeapNode
 } from '../src/profiler/analyze.js';
 import { sequential_ms, type NetCall } from '../src/profiler/net.js';
-import { build_timeline, chain_steps, coalesce, phase_of_stack, label_call, load_lane_of } from '../src/profiler/timeline.js';
-import { n_plus_one, path_template, group_islands, island_name, cold_rows, run_spread, island_host_renamer, type IslandStat, type RequestEntry, type ReportMeta } from '../src/profiler/report.js';
-import { parse_server_timing, app_call_chain, decode_trace, encode_trace, wrap_event_fetch, set_stack_capture } from '../src/profiler/net.js';
+import {
+	build_timeline,
+	chain_steps,
+	coalesce,
+	phase_of_stack,
+	label_call,
+	load_lane_of
+} from '../src/profiler/timeline.js';
+import {
+	n_plus_one,
+	path_template,
+	group_islands,
+	island_name,
+	cold_rows,
+	run_spread,
+	run_trend,
+	island_host_renamer,
+	type IslandStat,
+	type RequestEntry,
+	type ReportMeta
+} from '../src/profiler/report.js';
+import {
+	parse_server_timing,
+	app_call_chain,
+	decode_trace,
+	encode_trace,
+	wrap_event_fetch,
+	set_stack_capture
+} from '../src/profiler/net.js';
 import { compare_reports, page_history } from '../src/profiler/compare.js';
-import { span, tag, instrument, set_span_recorder, type SpanRecord, type SpanRecorder, type SpanAttrs } from '../src/profiler/span.js';
-import { span_rows } from '../src/profiler/report.js';
+import {
+	span,
+	tag,
+	instrument,
+	set_span_recorder,
+	type SpanRecord,
+	type SpanRecorder,
+	type SpanAttrs
+} from '../src/profiler/span.js';
+import { span_rows, fair_shares } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
@@ -26,7 +60,11 @@ import { report_json, report_dump, is_dump, derive_findings } from '../src/profi
 import { budget_segments, build_treemap, waiting_rows } from '../src/profiler/ui/report-data.js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { set_chunk_contents } from './_stubs/virtual-island-deps.js';
-import { app_asset_rel, client_dir_candidates, client_file_finder } from '../src/profiler/client-files.js';
+import {
+	app_asset_rel,
+	client_dir_candidates,
+	client_file_finder
+} from '../src/profiler/client-files.js';
 
 // The profiler reads dev-vs-prod from `detect_dev()` (a compile-time constant under Vite). Mock it
 // through a switch so ONE test can run the production request path (idle requests unattributed).
@@ -428,6 +466,64 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 			})
 		).toContain('budget');
 	});
+
+	it("each island's own JS: shared chunks counted once, where no other island uses them", async () => {
+		const { island_js_unique } = await import('../src/profiler/report.js');
+		const row = (entry: string, wake: string, module_url: string, hints: string[]) => ({ entry, wake, module_url, hints }) as never;
+		const rows = [row('A', 'load', '/a.js', ['/svelte.js', '/big-a.js']), row('B', 'visible', '/b.js', ['/svelte.js']), row('L', 'none', '/l.js', ['/big-a.js'])];
+		const w = { '/a.js': 1000, '/svelte.js': 40_000, '/big-a.js': 300_000, '/b.js': 800, '/l.js': 500 };
+		const u = island_js_unique(rows, w)!;
+		// big-a is A's alone (the lake does not wake, so it does not count as a user); svelte is shared
+		expect(u.get('A')).toBe(301_000);
+		expect(u.get('B')).toBe(800);
+		expect(u.has('L')).toBe(false);
+		expect(island_js_unique(rows, undefined)).toBeNull();
+	});
+
+	it('memory kept per render: the runway to the heap limit, and a package named as its owner', () => {
+		const a = analyze(empty_profile);
+		const site = (url: string, mb: number) => ({ name: 'f', url, line: 1, component: null, bytes: mb * 1048576, share: 0 });
+		const retained = { total_bytes: 64 * 1048576, render_ms: 900, sites: [site('file:///app/node_modules/@scope/renderer/hydrate/index.mjs', 50), site('file:///app/src/lib/x.ts', 3)] };
+		const meta = { ...base, page: '/x', run_status: 200, run_bytes: 90000, heap_limit_mb: 4096 };
+		const f = derive_findings(a, meta, { net: [], heap: null, mem: [], retained } as never).find((x) => x.code === 'retained-per-render')!;
+		expect(f.message).toContain('its 4096 MB heap runs out after about 64 renders of this page');
+		expect(f.message).toContain('78% of it is held inside @scope/renderer');
+		expect(f.fix).toContain("@scope/renderer's");
+		// app code holding it: the owner-release advice, no package named
+		const own = { ...retained, sites: [site('file:///app/src/lib/cache.ts', 60)] };
+		const g = derive_findings(a, meta, { net: [], heap: null, mem: [], retained: own } as never).find((x) => x.code === 'retained-per-render')!;
+		expect(g.fix).toContain('module-level cache');
+		// on Lambda: the function's memory is the limit
+		const l = derive_findings(a, { ...meta, lambda: true, lambda_mb: 1024 }, { net: [], heap: null, mem: [], retained } as never).find((x) => x.code === 'retained-per-render')!;
+		expect(l.message).toContain('its 1024 MB of memory runs out after about 16 renders');
+	});
+
+	it('a window over several requests: the slowest named with their split, no one-request claims', () => {
+		// a mostly idle recording (the requests wait): the shape sequential-network is about
+		const a = analyze({
+			startTime: 0,
+			endTime: 20,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('(idle)') }
+			],
+			samples: [2, 2],
+			timeDeltas: [10, 10]
+		});
+		const req = (path: string, ms: number, cpu_ms: number, net = 0) => ({ ts: 1, method: 'GET', path, route: path, status: 200, ms, cpu_ms, inflight: 0, net_ms: net ? ms - cpu_ms - 5 : 0, net_count: net });
+		const meta = { ...base, trigger: 'window' as const, duration_ms: 6000, requests: [req('/a', 120, 20), req('/slow', 3300, 200, 3), req('/b', 40, 30)] };
+		// calls one after another from different requests: the test's pace, not an await chain
+		const net: NetCall[] = [0, 1000, 2000].map((start) => ({ start, epoch: start, ms: 900, method: 'GET', url: 'http://u/x', host: 'u', status: 200, kind: 'fetch', route: null, path: null }) as NetCall);
+		const found = derive_findings(a, meta, { net, heap: null, mem: [] });
+		const w = found.find((f) => f.code === 'window-requests')!;
+		expect(w.severity).toBe('warn');
+		expect(w.message).toContain('3 requests in the window; the slowest: GET /slow 3300 ms (200 ms CPU, 3100 ms waiting, 3095 ms of it on 3 outbound calls) · GET /a 120 ms');
+		expect(w.fix).toContain('waiting');
+		expect(found.map((f) => f.code)).not.toContain('sequential-network');
+		// a page recording still says it (one request's calls, back to back)
+		const page_meta = { ...base, page: '/x', run_status: 200, run_bytes: 90000, duration_ms: 3000 };
+		expect(derive_findings(a, page_meta, { net, heap: null, mem: [] }).map((f) => f.code)).toContain('sequential-network');
+	});
 });
 
 describe('I/O wait attribution', () => {
@@ -535,7 +631,9 @@ describe('categorize', () => {
 			category: 'dependency',
 			pkg: 'ogygia'
 		});
-		expect(categorize(frame('SlotBoundary$1', '/out/server/chunks/internal.js')).pkg).toBe('ogygia');
+		expect(categorize(frame('SlotBoundary$1', '/out/server/chunks/internal.js')).pkg).toBe(
+			'ogygia'
+		);
 		expect(categorize(frame('_page', '/out/entries/pages/_page.svelte.js')).category).toBe(
 			'component'
 		);
@@ -565,10 +663,21 @@ describe('component confirmation (structural)', () => {
 		endTime: 6000,
 		nodes: [
 			{ id: 1, callFrame: frame('(root)'), children: [2] },
-			{ id: 2, callFrame: frame('_page', '/out/server/chunks/_page.svelte.js', 3), children: [3, 5] },
+			{
+				id: 2,
+				callFrame: frame('_page', '/out/server/chunks/_page.svelte.js', 3),
+				children: [3, 5]
+			},
 			// a real component: its subtree reaches svelte's `push`
-			{ id: 3, callFrame: frame('Header$1', '/out/server/chunks/_page.svelte.js', 40), children: [4] },
-			{ id: 4, callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1) },
+			{
+				id: 3,
+				callFrame: frame('Header$1', '/out/server/chunks/_page.svelte.js', 40),
+				children: [4]
+			},
+			{
+				id: 4,
+				callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1)
+			},
 			// a class constructor called by the page: PascalCase, app url, no svelte below
 			{
 				id: 5,
@@ -614,14 +723,56 @@ describe('call stacks + locations', () => {
 			{ id: 2, callFrame: frame('handle', '/app/src/hooks.server.ts', 9), children: [3] },
 			{ id: 3, callFrame: frame('_page', '/app/src/routes/+page.svelte', 0), children: [4] },
 			{ id: 4, callFrame: frame('Row', '/app/src/lib/Row.svelte', 2), children: [5] },
-			{ id: 5, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3) },
+			{
+				id: 5,
+				callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3)
+			},
 			// the same escape reached another way (lighter)
 			{ id: 6, callFrame: frame('other', '/app/src/other.ts', 1), children: [7] },
-			{ id: 7, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3) }
+			{
+				id: 7,
+				callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3)
+			}
 		],
 		samples: [5, 5, 5, 7, 4],
 		timeDeltas: [1000, 1000, 1000, 1000, 1000]
 	};
+
+	it('a call path reads as if the profiler were not there: no span wrapper, no AsyncLocalStorage run it called in', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 2000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('processTags', '/app/src/lib/ds.ts', 34), children: [3] },
+				{
+					id: 3,
+					callFrame: frame('span', '/app/node_modules/ogygia/dist/profiler/span.js', 102),
+					children: [4]
+				},
+				{
+					id: 4,
+					callFrame: frame('within', '/app/node_modules/ogygia/dist/profiler/index.js', 1112),
+					children: [5]
+				},
+				{
+					id: 5,
+					callFrame: frame('run', 'node:internal/async_local_storage/async_context_frame', 58),
+					children: [6]
+				},
+				{ id: 6, callFrame: frame('splice', '/app/src/lib/ds.ts', 61) }
+			],
+			samples: [6, 6],
+			timeDeltas: [1000, 1000]
+		};
+		const a = analyze(p);
+		const f = a.functions.find((x) => x.name === 'splice')!;
+		expect(f.stacks![0].frames.map((x) => x.n)).toEqual(['processTags']);
+		// the flame graph the same: processTags → splice, nothing between
+		const top = a.flame.ch![0];
+		expect(top.n).toBe('processTags');
+		expect(top.ch!.map((x) => x.n)).toEqual(['splice']);
+	});
 
 	it('ranks a function’s call paths by the time that flowed through each, nearest caller first', () => {
 		const a = analyze(profile);
@@ -646,7 +797,15 @@ describe('call stacks + locations', () => {
 				{ id: 2, callFrame: frame('main', '/app/src/main.ts', 0), children: [3] },
 				// the bundled wrapper, then svelte's `component`, then the sourcemapped inner frame
 				{ id: 3, callFrame: frame('Card', '/out/chunks/_page.svelte.js', 4), children: [4] },
-				{ id: 4, callFrame: frame('component', '/app/node_modules/svelte/src/internal/server/renderer.js', 9), children: [5] },
+				{
+					id: 4,
+					callFrame: frame(
+						'component',
+						'/app/node_modules/svelte/src/internal/server/renderer.js',
+						9
+					),
+					children: [5]
+				},
 				{ id: 5, callFrame: frame('', '/app/src/lib/Card.svelte', 0) }
 			],
 			samples: [5, 5, 5],
@@ -659,9 +818,9 @@ describe('call stacks + locations', () => {
 	});
 
 	it('joins a sourcemap’s relative sources onto the chunk directory (an openable path)', () => {
-		expect(join_source('/app/.svelte-kit/output/server/chunks/x.js', '../../../../src/lib/Foo.svelte')).toBe(
-			'/app/src/lib/Foo.svelte'
-		);
+		expect(
+			join_source('/app/.svelte-kit/output/server/chunks/x.js', '../../../../src/lib/Foo.svelte')
+		).toBe('/app/src/lib/Foo.svelte');
 		expect(join_source('file:///app/out/chunks/x.js', '../../src/a.ts')).toBe('/app/src/a.ts');
 		expect(join_source('./chunks/x.js', '../src/a.ts')).toBe('./src/a.ts');
 		expect(join_source('/app/out/x.js', '/abs/b.ts')).toBe('/abs/b.ts');
@@ -701,9 +860,49 @@ describe('call stacks + locations', () => {
 
 	it('the island host wrapper reads as its island, not as the hash Svelte named its virtual file with', () => {
 		const rows: RequestEntry[] = [
-			{ ts: 0, method: 'GET', path: '/hell', route: '/hell', status: 200, ms: 40, cpu_ms: 10, inflight: 0, net_ms: 0, net_count: 0, internal: true,
-				og: { transform_ms: 1, islands: 1, hints: 0, holes: 0, seed_bytes: 0, remote_seed_bytes: 0, tail_bytes: 0, fnm_bytes: 0, ctx_bytes: 0, seed_json: true,
-					island_rows: [{ fp: 'f', entry: '/_app/immutable/og-region.4b95bfb97fab.js', name: 'ProductCard', module_url: '', wake: 'visible', props_bytes: 1, canonical_bytes: 1, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], interactivity: null, count: 48 }] } }
+			{
+				ts: 0,
+				method: 'GET',
+				path: '/hell',
+				route: '/hell',
+				status: 200,
+				ms: 40,
+				cpu_ms: 10,
+				inflight: 0,
+				net_ms: 0,
+				net_count: 0,
+				internal: true,
+				og: {
+					transform_ms: 1,
+					islands: 1,
+					hints: 0,
+					holes: 0,
+					seed_bytes: 0,
+					remote_seed_bytes: 0,
+					tail_bytes: 0,
+					fnm_bytes: 0,
+					ctx_bytes: 0,
+					seed_json: true,
+					island_rows: [
+						{
+							fp: 'f',
+							entry: '/_app/immutable/og-region.4b95bfb97fab.js',
+							name: 'ProductCard',
+							module_url: '',
+							wake: 'visible',
+							props_bytes: 1,
+							canonical_bytes: 1,
+							json: true,
+							culprit: null,
+							refs: 0,
+							ref_keys: [],
+							hints: [],
+							interactivity: null,
+							count: 48
+						}
+					]
+				}
+			}
 		];
 		const rename = island_host_renamer(rows)!;
 		expect(rename('_b95bfb97fab', '')).toBe('ProductCard (island host)');
@@ -715,15 +914,28 @@ describe('call stacks + locations', () => {
 			endTime: 2000,
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
-				{ id: 2, callFrame: frame('_b95bfb97fab', '/app/build/server/entries/pages/hell/_page.svelte.js', 401), children: [3] },
-				{ id: 3, callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1) }
+				{
+					id: 2,
+					callFrame: frame(
+						'_b95bfb97fab',
+						'/app/build/server/entries/pages/hell/_page.svelte.js',
+						401
+					),
+					children: [3]
+				},
+				{
+					id: 3,
+					callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1)
+				}
 			],
 			samples: [3],
 			timeDeltas: [2000]
 		};
 		const a = analyze(p, undefined, undefined, undefined, rename);
 		expect(a.components.map((c) => c.name)).toEqual(['ProductCard (island host)']);
-		expect(a.functions.find((f) => f.name === 'push')!.stacks![0].frames[0].n).toBe('ProductCard (island host)');
+		expect(a.functions.find((f) => f.name === 'push')!.stacks![0].frames[0].n).toBe(
+			'ProductCard (island host)'
+		);
 	});
 
 	it('a component is one frame on a stack: the bundled wrapper + the renderer calls between fold into the .svelte body', () => {
@@ -734,7 +946,11 @@ describe('call stacks + locations', () => {
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
 				// the bundled wrapper (the route chunk's export) …
-				{ id: 2, callFrame: frame('Card', '/app/build/server/entries/pages/_page.svelte.js', 316), children: [3] },
+				{
+					id: 2,
+					callFrame: frame('Card', '/app/build/server/entries/pages/_page.svelte.js', 316),
+					children: [3]
+				},
 				// … the renderer calling into it …
 				{ id: 3, callFrame: frame('component', RENDERER, 316), children: [4] },
 				{ id: 4, callFrame: frame('child', RENDERER, 200), children: [5] },
@@ -747,7 +963,11 @@ describe('call stacks + locations', () => {
 				{ id: 8, callFrame: frame('each', RENDERER, 50), children: [7] },
 				{ id: 9, callFrame: frame('fmt2', '/app/src/lib/fmt.ts', 9) },
 				// the same component reached through OTHER code (a nested island's Region): two frames
-				{ id: 10, callFrame: frame('Region', '/app/node_modules/ogygia/dist/Region.js', 100), children: [11] },
+				{
+					id: 10,
+					callFrame: frame('Region', '/app/node_modules/ogygia/dist/Region.js', 100),
+					children: [11]
+				},
 				{ id: 11, callFrame: frame('Card', '/app/src/lib/Card.svelte', 0), children: [12] },
 				{ id: 12, callFrame: frame('fmt3', '/app/src/lib/fmt.ts', 12) }
 			],
@@ -757,9 +977,13 @@ describe('call stacks + locations', () => {
 		p.nodes[4].children = [6, 8, 10];
 		const a = analyze(p);
 		const fmt = a.functions.find((f) => f.name === 'fmt')!;
-		expect(fmt.stacks![0].frames.map((f) => `${f.n} ${f.f}`)).toEqual(['Card app/src/lib/Card.svelte:1']);
+		expect(fmt.stacks![0].frames.map((f) => `${f.n} ${f.f}`)).toEqual([
+			'Card app/src/lib/Card.svelte:1'
+		]);
 		const fmt2 = a.functions.find((f) => f.name === 'fmt2')!;
-		expect(fmt2.stacks![0].frames.map((f) => `${f.n} ${f.f}`)).toEqual(['Card app/src/lib/Card.svelte:1']);
+		expect(fmt2.stacks![0].frames.map((f) => `${f.n} ${f.f}`)).toEqual([
+			'Card app/src/lib/Card.svelte:1'
+		]);
 		const fmt3 = a.functions.find((f) => f.name === 'fmt3')!;
 		expect(fmt3.stacks![0].frames.map((f) => f.n)).toEqual(['Card', 'Region', 'Card']);
 	});
@@ -777,12 +1001,32 @@ describe('timeline (critical path + phases)', () => {
 		endTime: 100_000,
 		nodes: [
 			{ id: 1, callFrame: frame('(root)'), children: [2, 6, 9] },
-			{ id: 2, callFrame: frame('respond', '/app/node_modules/@sveltejs/kit/src/runtime/server/respond.js', 1), children: [3, 5] },
+			{
+				id: 2,
+				callFrame: frame(
+					'respond',
+					'/app/node_modules/@sveltejs/kit/src/runtime/server/respond.js',
+					1
+				),
+				children: [3, 5]
+			},
 			{ id: 3, callFrame: frame('load', '/app/src/routes/+page.server.ts', 4), children: [4] },
 			{ id: 4, callFrame: frame('parse', '/app/src/lib/parse.ts', 2) },
 			{ id: 5, callFrame: frame('Header', '/app/src/lib/Header.svelte', 0) },
-			{ id: 6, callFrame: frame('render_response', '/app/node_modules/@sveltejs/kit/src/runtime/server/page/render.js', 1), children: [7] },
-			{ id: 7, callFrame: frame('inject_client_seeds', '/app/node_modules/ogygia/dist/hooks.js', 9), children: [8] },
+			{
+				id: 6,
+				callFrame: frame(
+					'render_response',
+					'/app/node_modules/@sveltejs/kit/src/runtime/server/page/render.js',
+					1
+				),
+				children: [7]
+			},
+			{
+				id: 7,
+				callFrame: frame('inject_client_seeds', '/app/node_modules/ogygia/dist/hooks.js', 9),
+				children: [8]
+			},
 			{ id: 8, callFrame: frame('stringify', '/app/node_modules/devalue/src/stringify.js', 1) },
 			{ id: 9, callFrame: frame('(idle)') }
 		],
@@ -796,7 +1040,13 @@ describe('timeline (critical path + phases)', () => {
 	const info = (id: number) => {
 		const f = frames.get(id)!.callFrame;
 		const c = categorize(f);
-		return { name: f.functionName, url: f.url, line: f.lineNumber + 1, category: c.category, pkg: c.pkg };
+		return {
+			name: f.functionName,
+			url: f.url,
+			line: f.lineNumber + 1,
+			category: c.category,
+			pkg: c.pkg
+		};
 	};
 	const input = {
 		perf_start: 1000,
@@ -826,7 +1076,11 @@ describe('timeline (critical path + phases)', () => {
 			'cpu:stringify (devalue)'
 		]);
 		// the cpu owner is the deepest named app function; its phase comes from the load file above it
-		expect(t.segments[0]).toMatchObject({ phase: 'load', category: 'app', file: 'app/src/lib/parse.ts:3' });
+		expect(t.segments[0]).toMatchObject({
+			phase: 'load',
+			category: 'app',
+			file: 'app/src/lib/parse.ts:3'
+		});
 		// a wait is charged to the phase of the code that was running before it
 		expect(t.segments[1].phase).toBe('load');
 		expect(t.segments[5].phase).toBe('render');
@@ -840,7 +1094,7 @@ describe('timeline (critical path + phases)', () => {
 	it('splits the window by phase, cpu and wait apart', () => {
 		const t = build_timeline(profile, info, (id) => parents.get(id), input);
 		const by = Object.fromEntries(t.phases.map((p) => [p.phase, p]));
-		expect(by.load).toMatchObject({ cpu_ms: 10, wait_ms: 38 });
+		expect(by.load).toMatchObject({ cpu_ms: 10, wait_ms: 38, top: [{ label: 'parse', ms: 10 }] });
 		expect(by.render).toMatchObject({ cpu_ms: 10, wait_ms: 25 });
 		expect(by.ogygia).toMatchObject({ cpu_ms: 10, wait_ms: 0 });
 	});
@@ -849,8 +1103,87 @@ describe('timeline (critical path + phases)', () => {
 		const t = build_timeline(profile, info, (id) => parents.get(id), input);
 		expect(t.parallelizable).toHaveLength(1);
 		// read off the coalesced view: each wait carries the 1 ms hair after it (21 + 19)
-		expect(t.parallelizable[0]).toMatchObject({ calls: ['GET api/a', 'GET api/b'], ms: 40, save_ms: 19 });
+		expect(t.parallelizable[0]).toMatchObject({
+			calls: ['GET api/a', 'GET api/b'],
+			ms: 40,
+			save_ms: 19
+		});
 		// the parallel pair (c + d) is not a chain — it already overlaps
+	});
+
+	it('the profiler’s own CPU inside a wait does not chop it: one wait, as if the profiler were not there', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 30_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2, 3] },
+				{ id: 2, callFrame: frame('(idle)') },
+				{ id: 3, callFrame: frame('within', '/app/node_modules/ogygia/dist/profiler/index.js', 10) }
+			],
+			// idle, a profiler sliver at 10–12 ms, idle — all inside one 30 ms call
+			samples: [2, 3, 2],
+			timeDeltas: [10_000, 2_000, 18_000]
+		};
+		const fr = new Map(p.nodes.map((n) => [n.id, n] as const));
+		const par = new Map<number, number>();
+		for (const n of p.nodes) for (const c of n.children ?? []) par.set(c, n.id);
+		const inf = (id: number) => {
+			const f = fr.get(id)!.callFrame;
+			const c = categorize(f);
+			return {
+				name: f.functionName,
+				url: f.url,
+				line: f.lineNumber + 1,
+				category: c.category,
+				pkg: c.pkg
+			};
+		};
+		const t = build_timeline(p, inf, (id) => par.get(id), {
+			perf_start: 1000,
+			window: { start: 1000, end: 1030 },
+			calls: [{ start: 1000, ms: 30, label: 'GET api/slow', kind: 'net' }]
+		});
+		expect(t.segments.map((s) => `${s.kind}:${s.label}`)).toEqual(['wait:GET api/slow']);
+		expect(t.segments[0]).toMatchObject({ t0: 0, t1: 30 });
+	});
+
+	it('a library working on after an await takes the phase of whoever last called into it', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 40_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2, 5] },
+				{ id: 2, callFrame: frame('handle', '/app/src/hooks.server.ts', 3), children: [3] },
+				{ id: 3, callFrame: frame('transform', '/app/src/lib/ds.ts', 8), children: [4] },
+				{ id: 4, callFrame: frame('renderLib', '/app/node_modules/libx/index.js', 1) },
+				// the library's own continuation: nothing of the app under it
+				{ id: 5, callFrame: frame('loop', '/app/node_modules/libx/index.js', 90) }
+			],
+			// an orphan before anyone called in (stays "other"), the call in, then two orphans
+			samples: [5, 4, 5, 5],
+			timeDeltas: [10_000, 10_000, 10_000, 10_000]
+		};
+		const fr = new Map(p.nodes.map((n) => [n.id, n] as const));
+		const par = new Map<number, number>();
+		for (const n of p.nodes) for (const c of n.children ?? []) par.set(c, n.id);
+		const inf = (id: number) => {
+			const f = fr.get(id)!.callFrame;
+			const c = categorize(f);
+			return {
+				name: f.functionName,
+				url: f.url,
+				line: f.lineNumber + 1,
+				category: c.category,
+				pkg: c.pkg
+			};
+		};
+		const t = build_timeline(p, inf, (id) => par.get(id), {
+			perf_start: 1000,
+			window: { start: 1000, end: 1040 },
+			calls: []
+		});
+		const by = Object.fromEntries(t.phases.map((x) => [x.phase, x.cpu_ms]));
+		expect(by).toMatchObject({ other: 10, hooks: 30 });
 	});
 
 	it('lists the steps that set the time, in order, and folds the slivers', () => {
@@ -872,16 +1205,33 @@ describe('timeline (critical path + phases)', () => {
 	});
 
 	it('coalesce: a run of small slivers becomes one block named after what dominated it', () => {
-		const seg = (t0: number, t1: number, kind: 'cpu' | 'wait', label: string): import('../src/profiler/timeline.js').Segment => ({
-			t0, t1, kind, label, category: kind === 'cpu' ? 'component' : 'idle', phase: 'render'
+		const seg = (
+			t0: number,
+			t1: number,
+			kind: 'cpu' | 'wait',
+			label: string
+		): import('../src/profiler/timeline.js').Segment => ({
+			t0,
+			t1,
+			kind,
+			label,
+			category: kind === 'cpu' ? 'component' : 'idle',
+			phase: 'render'
 		});
 		const t = {
-			window_ms: 100, cpu_ms: 0, wait_ms: 0, gap_ms: 0, phases: [], parallelizable: [],
+			window_ms: 100,
+			cpu_ms: 0,
+			wait_ms: 0,
+			gap_ms: 0,
+			phases: [],
+			parallelizable: [],
 			segments: [
 				seg(0, 30, 'wait', 'GET a'),
 				seg(30, 30.4, 'cpu', 'tick'),
 				seg(30.4, 60, 'wait', 'GET a'),
-				...Array.from({ length: 20 }, (_, i) => seg(60 + i * 0.5, 60.5 + i * 0.5, 'cpu', i % 2 ? 'Card' : 'Row')),
+				...Array.from({ length: 20 }, (_, i) =>
+					seg(60 + i * 0.5, 60.5 + i * 0.5, 'cpu', i % 2 ? 'Card' : 'Row')
+				),
 				seg(70, 100, 'cpu', 'Big')
 			]
 		};
@@ -894,7 +1244,14 @@ describe('timeline (critical path + phases)', () => {
 		expect(v[0].t1).toBe(60);
 		expect(v[1].inside?.map((i) => i.label)).toEqual(['Row', 'Card']);
 		// a hair of CPU before the first big block opens that block (the chain's first link is a step)
-		const lead = coalesce({ ...t, segments: [seg(0, 0.4, 'cpu', 'tick'), seg(0.4, 40, 'wait', 'GET a'), seg(40, 100, 'cpu', 'Big')] });
+		const lead = coalesce({
+			...t,
+			segments: [
+				seg(0, 0.4, 'cpu', 'tick'),
+				seg(0.4, 40, 'wait', 'GET a'),
+				seg(40, 100, 'cpu', 'Big')
+			]
+		});
 		expect(lead.map((s) => [s.label, s.parts, s.t0])).toEqual([
 			['GET a', 2, 0],
 			['Big', 1, 40]
@@ -902,26 +1259,73 @@ describe('timeline (critical path + phases)', () => {
 	});
 
 	it('classifies a stack by the deepest phase marker; ogygia beats render beats kit', () => {
-		const kit = { name: 'respond', url: '/x/@sveltejs/kit/src/runtime/server/respond.js', line: 1, category: 'dependency' as const };
-		const comp = { name: 'Foo', url: '/app/src/lib/Foo.svelte', line: 1, category: 'component' as const };
-		const og = { name: 'assemble', url: '/x/node_modules/ogygia/dist/server/document-assembly.js', line: 1, category: 'dependency' as const };
-		const hooks = { name: 'handle', url: '/app/src/hooks.server.ts', line: 1, category: 'app' as const };
+		const kit = {
+			name: 'respond',
+			url: '/x/@sveltejs/kit/src/runtime/server/respond.js',
+			line: 1,
+			category: 'dependency' as const
+		};
+		const comp = {
+			name: 'Foo',
+			url: '/app/src/lib/Foo.svelte',
+			line: 1,
+			category: 'component' as const
+		};
+		const og = {
+			name: 'assemble',
+			url: '/x/node_modules/ogygia/dist/server/document-assembly.js',
+			line: 1,
+			category: 'dependency' as const
+		};
+		const hooks = {
+			name: 'handle',
+			url: '/app/src/hooks.server.ts',
+			line: 1,
+			category: 'app' as const
+		};
 		expect(phase_of_stack([kit])).toBe('kit');
 		expect(phase_of_stack([comp, kit])).toBe('render');
 		expect(phase_of_stack([og, comp, kit])).toBe('ogygia');
 		expect(phase_of_stack([hooks, kit])).toBe('hooks');
 		// a remote function awaited during a component's render is "remote", not "render"
-		const remote = { name: 'stockSummary', url: '/app/src/lib/hell/hell.remote.ts', line: 3, category: 'app' as const };
+		const remote = {
+			name: 'stockSummary',
+			url: '/app/src/lib/hell/hell.remote.ts',
+			line: 3,
+			category: 'app' as const
+		};
 		expect(phase_of_stack([remote, comp, kit])).toBe('remote');
-		expect(phase_of_stack([{ name: 'run', url: '/x/@sveltejs/kit/src/runtime/app/server/remote/query.js', line: 1, category: 'dependency' }, comp])).toBe('remote');
-		expect(phase_of_stack([{ name: 'x', url: '/app/src/lib/x.ts', line: 1, category: 'app' }])).toBe('other');
-		expect(label_call('GET', 'https://api.example.com/v1/items/42?x=1')).toBe('GET api.example.com/v1/items/42');
+		expect(
+			phase_of_stack([
+				{
+					name: 'run',
+					url: '/x/@sveltejs/kit/src/runtime/app/server/remote/query.js',
+					line: 1,
+					category: 'dependency'
+				},
+				comp
+			])
+		).toBe('remote');
+		expect(
+			phase_of_stack([{ name: 'x', url: '/app/src/lib/x.ts', line: 1, category: 'app' }])
+		).toBe('other');
+		expect(label_call('GET', 'https://api.example.com/v1/items/42?x=1')).toBe(
+			'GET api.example.com/v1/items/42'
+		);
 	});
 
 	it('rides on analyze: the report carries the timeline and the findings read it', () => {
 		const a = analyze(profile, undefined, undefined, input);
 		expect(a.timeline?.segments.length).toBeGreaterThan(5);
-		const meta = { id: 'x', created: 0, trigger: 'request' as const, duration_ms: 100, node: 'v', requests: [], request: { method: 'GET', path: '/', route: null, ms: 100 } };
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'request' as const,
+			duration_ms: 100,
+			node: 'v',
+			requests: [],
+			request: { method: 'GET', path: '/', route: null, ms: 100 }
+		};
 		const f = derive_findings(a, meta as never, { net: [], mem: [] } as never);
 		const codes = f.map((x) => x.code);
 		expect(codes).toContain('phases');
@@ -937,10 +1341,22 @@ describe('timeline (critical path + phases)', () => {
 
 describe('findings name the row and the fix', () => {
 	it('N+1: the same endpoint once per item, folded to a template', () => {
-		expect(path_template('https://api.x/products/123/reviews?page=2')).toEqual({ host: 'api.x', tpl: '/products/:id/reviews' });
-		expect(path_template('https://api.x/u/3f2a9c1e-1111-4222-8333-abcdefabcdef')).toEqual({ host: 'api.x', tpl: '/u/:id' });
-		expect(path_template('http://h/hell/api/product/P7?ms=6')).toEqual({ host: 'h', tpl: '/hell/api/product/:id' });
-		expect(path_template('http://h/api/SKU-1000/stock')).toEqual({ host: 'h', tpl: '/api/:id/stock' });
+		expect(path_template('https://api.x/products/123/reviews?page=2')).toEqual({
+			host: 'api.x',
+			tpl: '/products/:id/reviews'
+		});
+		expect(path_template('https://api.x/u/3f2a9c1e-1111-4222-8333-abcdefabcdef')).toEqual({
+			host: 'api.x',
+			tpl: '/u/:id'
+		});
+		expect(path_template('http://h/hell/api/product/P7?ms=6')).toEqual({
+			host: 'h',
+			tpl: '/hell/api/product/:id'
+		});
+		expect(path_template('http://h/api/SKU-1000/stock')).toEqual({
+			host: 'h',
+			tpl: '/api/:id/stock'
+		});
 		const call = (i: number): NetCall => ({
 			start: i,
 			epoch: i,
@@ -965,14 +1381,32 @@ describe('findings name the row and the fix', () => {
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
 				{ id: 2, callFrame: frame('Row', '/app/src/lib/Row.svelte', 0), children: [3] },
-				{ id: 3, callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1) }
+				{
+					id: 3,
+					callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1)
+				}
 			],
 			samples: [3, 3, 3, 2],
 			timeDeltas: [10_000, 10_000, 10_000, 10_000]
 		};
-		const meta = { id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [40], run_status: 200, run_bytes: 9000, duration_ms: 40, node: 'v', requests: [] };
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [40],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 40,
+			node: 'v',
+			requests: []
+		};
 		const counts = { 'Row\0/app/src/lib/Row.svelte': 800 };
-		const f = derive_findings(analyze(many, undefined, counts), meta as never, { net: [], mem: [] } as never);
+		const f = derive_findings(
+			analyze(many, undefined, counts),
+			meta as never,
+			{ net: [], mem: [] } as never
+		);
 		const rep = f.find((x) => x.code === 'component-repeat')!;
 		expect(rep.message).toContain('Row rendered 800 times');
 		expect(rep.anchor).toBe('comp:Row');
@@ -985,7 +1419,10 @@ describe('findings name the row and the fix', () => {
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
 				{ id: 2, callFrame: frame('Sieve', '/app/src/lib/Sieve.svelte', 0), children: [3, 4] },
 				{ id: 3, callFrame: frame('primes', '/app/src/lib/math.ts', 7) },
-				{ id: 4, callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1) }
+				{
+					id: 4,
+					callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1)
+				}
 			],
 			samples: [3, 3, 3, 4],
 			timeDeltas: [10_000, 10_000, 10_000, 10_000]
@@ -1000,14 +1437,56 @@ describe('findings name the row and the fix', () => {
 	});
 
 	it('ogygia’s own cost: the seed and props bytes ride the request log into the findings', () => {
-		const p: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [1000] };
-		const og = { transform_ms: 4.2, islands: 21, hints: 30, holes: 0, seed_bytes: 300 * 1024, remote_seed_bytes: 0, tail_bytes: 130 * 1024, fnm_bytes: 0, ctx_bytes: 0, seed_json: true };
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const og = {
+			transform_ms: 4.2,
+			islands: 21,
+			hints: 30,
+			holes: 0,
+			seed_bytes: 300 * 1024,
+			remote_seed_bytes: 0,
+			tail_bytes: 130 * 1024,
+			fnm_bytes: 0,
+			ctx_bytes: 0,
+			seed_json: true
+		};
 		const meta = {
-			id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [40], run_status: 200, run_bytes: 9000, duration_ms: 40, node: 'v',
-			requests: [{ ts: 0, method: 'GET', path: '/p', route: '/p', status: 200, ms: 40, cpu_ms: 10, inflight: 0, net_ms: 0, net_count: 0, internal: true, og }]
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [40],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 40,
+			node: 'v',
+			requests: [
+				{
+					ts: 0,
+					method: 'GET',
+					path: '/p',
+					route: '/p',
+					status: 200,
+					ms: 40,
+					cpu_ms: 10,
+					inflight: 0,
+					net_ms: 0,
+					net_count: 0,
+					internal: true,
+					og
+				}
+			]
 		};
 		const f = derive_findings(analyze(p), meta as never, { net: [], mem: [] } as never);
-		expect(f.find((x) => x.code === 'ogygia-cost')!.message).toContain('21 islands, seed 300 KB, props 130 KB');
+		expect(f.find((x) => x.code === 'ogygia-cost')!.message).toContain(
+			'21 islands, seed 300 KB, props 130 KB'
+		);
 		expect(f.find((x) => x.code === 'seed-large')!.fix).toMatch(/page\.data\.x/);
 		const j = report_json(analyze(p), meta as never, '/p', { net: [], mem: [] } as never);
 		expect(j.ogygia).toMatchObject(og);
@@ -1017,8 +1496,26 @@ describe('findings name the row and the fix', () => {
 });
 
 describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup vs logic', () => {
-	const p1: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [1000] };
-	const base_og = { transform_ms: 4, islands: 3, hints: 4, holes: 1, seed_bytes: 80 * 1024, remote_seed_bytes: 0, tail_bytes: 20 * 1024, fnm_bytes: 0, ctx_bytes: 0, seed_json: false, seed_culprit: 'config.updated (Date)' };
+	const p1: CpuProfile = {
+		startTime: 0,
+		endTime: 1000,
+		nodes: [{ id: 1, callFrame: frame('(root)') }],
+		samples: [1],
+		timeDeltas: [1000]
+	};
+	const base_og = {
+		transform_ms: 4,
+		islands: 3,
+		hints: 4,
+		holes: 1,
+		seed_bytes: 80 * 1024,
+		remote_seed_bytes: 0,
+		tail_bytes: 20 * 1024,
+		fnm_bytes: 0,
+		ctx_bytes: 0,
+		seed_json: false,
+		seed_culprit: 'config.updated (Date)'
+	};
 	const island = (over: Partial<IslandStat> & { entry: string; fp: string }): IslandStat => ({
 		name: '',
 		module_url: `/_app/immutable/${over.fp}.js`,
@@ -1035,11 +1532,32 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		...over
 	});
 	const rows: IslandStat[] = [
-		island({ entry: 'src/lib/MegaHeader.svelte', fp: 'aaaaaaaaaaaaaaaa', props_bytes: 300 * 1024, canonical_bytes: 300 * 1024, json: false, culprit: 'config.updated (Date)' }),
-		island({ entry: 'src/lib/CountryPanel.svelte', fp: 'bbbbbbbbbbbbbbbb', wake: 'visible', interactivity: { handlers: 0, state: 0, effects: 0, binds: 0, actions: 0, files: 2 } }),
+		island({
+			entry: 'src/lib/MegaHeader.svelte',
+			fp: 'aaaaaaaaaaaaaaaa',
+			props_bytes: 300 * 1024,
+			canonical_bytes: 300 * 1024,
+			json: false,
+			culprit: 'config.updated (Date)'
+		}),
+		island({
+			entry: 'src/lib/CountryPanel.svelte',
+			fp: 'bbbbbbbbbbbbbbbb',
+			wake: 'visible',
+			interactivity: { handlers: 0, state: 0, effects: 0, binds: 0, actions: 0, files: 2 }
+		}),
 		// a list: one fingerprint per card (different props), merged into one row by group_islands
 		...Array.from({ length: 48 }, (_, i) =>
-			island({ entry: '/_app/immutable/og-region.4b95bfb97fab.js', name: 'ProductCard', fp: `cccccccccccccc${i.toString(16).padStart(2, '0')}`, wake: 'visible', refs: 1, ref_keys: ['catalog'], props_bytes: 80, canonical_bytes: 9000 })
+			island({
+				entry: '/_app/immutable/og-region.4b95bfb97fab.js',
+				name: 'ProductCard',
+				fp: `cccccccccccccc${i.toString(16).padStart(2, '0')}`,
+				wake: 'visible',
+				refs: 1,
+				ref_keys: ['catalog'],
+				props_bytes: 80,
+				canonical_bytes: 9000
+			})
 		)
 	];
 	const og = {
@@ -1047,39 +1565,130 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		island_rows: rows,
 		seed: {
 			keys: [
-				{ key: 'catalog', bytes: 70 * 1024, readers: ['PriceTicker'], referenced_by: ['ProductCard'], shipped: true, reason: 'read' as const },
-				{ key: 'session', bytes: 8 * 1024, readers: [], referenced_by: [], shipped: false, reason: null }
+				{
+					key: 'catalog',
+					bytes: 70 * 1024,
+					readers: ['PriceTicker'],
+					referenced_by: ['ProductCard'],
+					shipped: true,
+					reason: 'read' as const
+				},
+				{
+					key: 'session',
+					bytes: 8 * 1024,
+					readers: [],
+					referenced_by: [],
+					shipped: false,
+					reason: null
+				}
 			],
 			whole_by: []
 		},
-		hole_rows: [{ id: 'cafebabe0102', name: 'Recommendations', props: '{"forProduct":"P1"}', when: 'load', hydrate: null, ttl: 300, count: 1 }]
-	};
-	const req = (over: Partial<RequestEntry>): RequestEntry => ({ ts: 0, method: 'GET', path: '/hell', route: '/hell', status: 200, ms: 40, cpu_ms: 10, inflight: 0, net_ms: 0, net_count: 0, ...over });
-	const meta = {
-		id: 'x', created: 0, trigger: 'page' as const, page: '/hell', runs: [40, 42], run_status: 200, run_bytes: 9000, duration_ms: 82, node: 'v',
-		requests: [
-			req({ internal: true, og }),
-			req({ path: '/__ogygia__?id=cafebabe0102', route: null, ms: 30, hole: { kind: 'hole' as const, id: 'cafebabe0102', cache: 'miss' as const, ttl: 300 } }),
-			req({ path: '/__ogygia__?id=cafebabe0102', route: null, ms: 31, hole: { kind: 'hole' as const, id: 'cafebabe0102', cache: 'miss' as const, ttl: 300 } })
+		hole_rows: [
+			{
+				id: 'cafebabe0102',
+				name: 'Recommendations',
+				props: '{"forProduct":"P1"}',
+				when: 'load',
+				hydrate: null,
+				ttl: 300,
+				count: 1
+			}
 		]
 	};
-	const weights = { '/_app/immutable/aaaaaaaaaaaaaaaa.js': 40_000, '/_app/immutable/bbbbbbbbbbbbbbbb.js': 20_000, '/_app/immutable/chunk-shared.js': 100_000 };
-	const client = [{ fp: 'aaaaaaaaaaaaaaaa', entry: 'src/lib/MegaHeader.svelte', name: '', n: 3, p50_ms: 120, max_ms: 150, load_p50_ms: 100, recovered: 0 }];
+	const req = (over: Partial<RequestEntry>): RequestEntry => ({
+		ts: 0,
+		method: 'GET',
+		path: '/hell',
+		route: '/hell',
+		status: 200,
+		ms: 40,
+		cpu_ms: 10,
+		inflight: 0,
+		net_ms: 0,
+		net_count: 0,
+		...over
+	});
+	const meta = {
+		id: 'x',
+		created: 0,
+		trigger: 'page' as const,
+		page: '/hell',
+		runs: [40, 42],
+		run_status: 200,
+		run_bytes: 9000,
+		duration_ms: 82,
+		node: 'v',
+		requests: [
+			req({ internal: true, og }),
+			req({
+				path: '/__ogygia__?id=cafebabe0102',
+				route: null,
+				ms: 30,
+				hole: { kind: 'hole' as const, id: 'cafebabe0102', cache: 'miss' as const, ttl: 300 }
+			}),
+			req({
+				path: '/__ogygia__?id=cafebabe0102',
+				route: null,
+				ms: 31,
+				hole: { kind: 'hole' as const, id: 'cafebabe0102', cache: 'miss' as const, ttl: 300 }
+			})
+		]
+	};
+	const weights = {
+		'/_app/immutable/aaaaaaaaaaaaaaaa.js': 40_000,
+		'/_app/immutable/bbbbbbbbbbbbbbbb.js': 20_000,
+		'/_app/immutable/chunk-shared.js': 100_000
+	};
+	const client = [
+		{
+			fp: 'aaaaaaaaaaaaaaaa',
+			entry: 'src/lib/MegaHeader.svelte',
+			name: '',
+			n: 3,
+			p50_ms: 120,
+			max_ms: 150,
+			load_p50_ms: 100,
+			recovered: 0
+		}
+	];
 	const extras = { net: [], mem: [], weights, client } as never;
 
 	it('findings: the seed explained, devalue culprits, the wake advisor, hole economics, the browser side', () => {
 		const f = derive_findings(analyze(p1), meta as never, extras);
 		const by = Object.fromEntries(f.map((x) => [x.code, x]));
-		expect(by['seed-explainer'].message).toContain("The seed's biggest key is catalog (70 KB of 80 KB): read by PriceTicker");
+		expect(by['seed-explainer'].message).toContain(
+			"The seed's biggest key is catalog (70 KB of 80 KB): read by PriceTicker"
+		);
 		expect(by['seed-devalue'].message).toContain('config.updated (Date)');
 		expect(by['props-devalue'].severity).toBe('warn'); // 300 KB of devalue props
-		expect(by['props-devalue'].message).toContain("MegaHeader's props (300 KB) use devalue because of config.updated (Date)");
-		expect(by['wake-inert'].message).toContain('CountryPanel wakes (visible) but the build found no event handlers');
+		expect(by['props-devalue'].message).toContain(
+			"MegaHeader's props (300 KB) use devalue because of config.updated (Date)"
+		);
+		expect(by['wake-inert'].message).toContain(
+			'CountryPanel wakes (visible) but the build found no event handlers'
+		);
 		expect(by['wake-inert'].message).toContain('117 KB of JS loads for markup that never changes'); // 20 KB + the shared 100 KB chunk
-		expect(by['wake-crowd'].message).toContain('ProductCard has 48 copies on the page, each waking on visible with its own 80 B of props');
-		expect(by['hole-cache-cold'].message).toContain('The hole Recommendations {"forProduct":"P1"} has maxAge 300s but its cache never hit in 2 requests');
-		expect(by['client-hydrate'].message).toContain('the slowest MegaHeader at 120 ms, mostly loading its 100 ms of modules');
+		expect(by['wake-crowd'].message).toContain(
+			'ProductCard has 48 copies on the page, each waking on visible with its own 80 B of props'
+		);
+		expect(by['hole-cache-cold'].message).toContain(
+			'The hole Recommendations {"forProduct":"P1"} has maxAge 300s but its cache never hit in 2 requests'
+		);
+		expect(by['client-hydrate'].message).toContain(
+			'The slowest, MegaHeader, took 120 ms from wake to hydrated at the median, mostly loading its 100 ms of modules'
+		);
 		expect(by['client-hydrate'].fix).toMatch(/Module load dominates/);
+		// with the report's own visit: where the time went, and the advice for a queue, not a slow step
+		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [0, 1, 2].map((k) => ({ fp: 'aaaaaaaaaaaaaaaa', t0: 0, loaded: 10, turn: 10 + 90 + k, done: 110 + k })) };
+		const q = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, visit } as never).find((x) => x.code === 'client-hydrate')!;
+		expect(q.message).toContain('10.0 ms loading its modules, 91.0 ms waiting its turn behind other islands, 10.0 ms hydrating');
+		expect(q.fix).toMatch(/waited for its turn/);
+		// another island hydrating inside that wait is named as the one that held the queue
+		const held = { ...visit, islands: [...visit.islands, { fp: 'bbbbbbbbbbbbbbbb', t0: 0, loaded: 5, turn: 12, done: 95 }] };
+		const h = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, visit: held } as never).find((x) => x.code === 'client-hydrate')!;
+		expect(h.message).toContain('most of it behind CountryPanel (');
+		expect(h.fix).toContain('CountryPanel held the queue');
 		// no weights (dev) → no JS figures, the advisor still speaks
 		const g = derive_findings(analyze(p1), meta as never, { net: [], mem: [] } as never);
 		expect(g.find((x) => x.code === 'wake-inert')!.message).not.toContain('KB of JS');
@@ -1091,18 +1700,30 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const f = derive_findings(analyze(p1), meta as never, extras);
 		const nh = f.find((x) => x.code === 'never-hydrated')!;
 		expect(nh.severity).toBe('warn');
-		expect(nh.message).toBe('CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.');
+		expect(nh.message).toBe(
+			'CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.'
+		);
 		expect(nh.fix).toMatch(/can scroll/);
 		// no beacon at all: nothing to say
-		expect(derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights } as never).find((x) => x.code === 'never-hydrated')).toBeUndefined();
+		expect(
+			derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights } as never).find(
+				(x) => x.code === 'never-hydrated'
+			)
+		).toBeUndefined();
 	});
 
 	it('an island that reads page.data whole is the reason everything ships', () => {
 		const whole = { ...og, seed: { ...og.seed, whole_by: ['PriceTicker'] } };
-		const f = derive_findings(analyze(p1), { ...meta, requests: [req({ internal: true, og: whole })] } as never, extras);
+		const f = derive_findings(
+			analyze(p1),
+			{ ...meta, requests: [req({ internal: true, og: whole })] } as never,
+			extras
+		);
 		const w = f.find((x) => x.code === 'seed-whole')!;
 		expect(w.severity).toBe('warn');
-		expect(w.message).toContain('PriceTicker reads page.data whole, so every key ships in the seed (80 KB, the biggest is catalog at 70 KB)');
+		expect(w.message).toContain(
+			'PriceTicker reads page.data whole, so every key ships in the seed (80 KB, the biggest is catalog at 70 KB)'
+		);
 		expect(f.find((x) => x.code === 'seed-explainer')).toBeUndefined();
 	});
 
@@ -1112,13 +1733,46 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(og_json.islands).toBe(3); // the count survives next to the rows
 		expect(og_json.island_rows).toHaveLength(3); // 50 fingerprints, 3 islands
 		const mega = og_json.island_rows.find((r) => r.name === 'MegaHeader')!;
-		expect(mega).toMatchObject({ copies: 1, fingerprints: 1, wake: 'load', js_bytes: 140_000, devalue_culprit: 'config.updated (Date)', client: { hydrations: 3, p50_ms: 120, load_p50_ms: 100 } });
-		expect(mega.modules).toEqual(['/_app/immutable/aaaaaaaaaaaaaaaa.js', '/_app/immutable/chunk-shared.js']);
+		expect(mega).toMatchObject({
+			copies: 1,
+			fingerprints: 1,
+			wake: 'load',
+			js_bytes: 140_000,
+			devalue_culprit: 'config.updated (Date)',
+			client: { hydrations: 3, p50_ms: 120, load_p50_ms: 100 }
+		});
+		expect(mega.modules).toEqual([
+			'/_app/immutable/aaaaaaaaaaaaaaaa.js',
+			'/_app/immutable/chunk-shared.js'
+		]);
 		// the list: 48 fingerprints merged — copies and bytes add up, the keys union once
-		expect(og_json.island_rows.find((r) => r.name === 'ProductCard')).toMatchObject({ copies: 48, fingerprints: 48, props_bytes: 48 * 80, seed_refs: 48, seed_ref_keys: ['catalog'] });
-		expect(og_json.seed!.keys[0]).toMatchObject({ key: 'catalog', shipped: true, reason: 'read', readers: ['PriceTicker'], referenced_by: ['ProductCard'] });
-		expect(og_json.hole_rows[0]).toMatchObject({ id: 'cafebabe0102', component: 'Recommendations', props: '{"forProduct":"P1"}', max_age_s: 300, requests: { hit: 0, miss: 2, uncached: 0, avg_ms: 30.5 } });
-		expect(j.requests[1].hole).toEqual({ kind: 'hole', id: 'cafebabe0102', cache: 'miss', ttl: 300 });
+		expect(og_json.island_rows.find((r) => r.name === 'ProductCard')).toMatchObject({
+			copies: 48,
+			fingerprints: 48,
+			props_bytes: 48 * 80,
+			seed_refs: 48,
+			seed_ref_keys: ['catalog']
+		});
+		expect(og_json.seed!.keys[0]).toMatchObject({
+			key: 'catalog',
+			shipped: true,
+			reason: 'read',
+			readers: ['PriceTicker'],
+			referenced_by: ['ProductCard']
+		});
+		expect(og_json.hole_rows[0]).toMatchObject({
+			id: 'cafebabe0102',
+			component: 'Recommendations',
+			props: '{"forProduct":"P1"}',
+			max_age_s: 300,
+			requests: { hit: 0, miss: 2, uncached: 0, avg_ms: 30.5 }
+		});
+		expect(j.requests[1].hole).toEqual({
+			kind: 'hole',
+			id: 'cafebabe0102',
+			cache: 'miss',
+			ttl: 300
+		});
 	});
 
 	it('analyze: a component’s own time splits into markup (svelte internals under it) and logic; its parent is who rendered it', () => {
@@ -1127,11 +1781,29 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			endTime: 60_000,
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
-				{ id: 2, callFrame: frame('_page', '/app/.svelte-kit/output/server/entries/pages/_page.svelte.js', 0), children: [3, 6] },
+				{
+					id: 2,
+					callFrame: frame(
+						'_page',
+						'/app/.svelte-kit/output/server/entries/pages/_page.svelte.js',
+						0
+					),
+					children: [3, 6]
+				},
 				{ id: 3, callFrame: frame('Row', '/app/src/lib/Row.svelte', 0), children: [4, 5] },
-				{ id: 4, callFrame: frame('escape_html', '/app/node_modules/svelte/src/internal/server/escaping.js', 1) },
+				{
+					id: 4,
+					callFrame: frame(
+						'escape_html',
+						'/app/node_modules/svelte/src/internal/server/escaping.js',
+						1
+					)
+				},
 				{ id: 5, callFrame: frame('fmt', '/app/src/lib/fmt.ts', 3) },
-				{ id: 6, callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1) }
+				{
+					id: 6,
+					callFrame: frame('push', '/app/node_modules/svelte/src/internal/server/renderer.js', 1)
+				}
 			],
 			// Row: 30 ms escape (markup), 10 ms fmt (logic), 5 ms itself (logic); _page: 10 ms push (markup)
 			samples: [4, 4, 4, 5, 3, 6],
@@ -1146,29 +1818,72 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(page.markup_ms).toBe(10);
 		expect(page.logic_ms).toBe(0);
 		expect(page.parent).toBeUndefined();
-		const m = { id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [55], run_status: 200, run_bytes: 9000, duration_ms: 55, node: 'v', requests: [] };
+		const m = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [55],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 55,
+			node: 'v',
+			requests: []
+		};
 		const f = derive_findings(a, m as never, { net: [], mem: [] } as never);
 		const list = f.find((x) => x.code === 'hot-list')!;
 		expect(list.message).toContain('_page renders 40 Row rows per render');
 		expect(list.anchor).toBe('comp:_page');
 		const j = report_json(a, m as never, '/p', { net: [], mem: [] } as never);
-		expect(j.components.find((c) => c.name === 'Row')).toMatchObject({ markup_ms: 30, logic_ms: 15, parent: '_page' });
+		expect(j.components.find((c) => c.name === 'Row')).toMatchObject({
+			markup_ms: 30,
+			logic_ms: 15,
+			parent: '_page'
+		});
 	});
 
 	it('timeline: one lane per Kit load, the page lane behind the layout lane is the parent() chain', () => {
-		expect(load_lane_of('load (routes/hell/+page.server.ts:44)')).toEqual({ file: 'routes/hell/+page.server.ts', level: 'page', kind: 'server' });
-		expect(load_lane_of('/app/src/routes/+layout.ts')).toEqual({ file: 'routes/+layout.ts', level: 'layout', kind: 'universal' });
-		expect(load_lane_of('/app/build/server/entries/pages/hell/_page.server.ts.js')).toEqual({ file: 'pages/hell/+page.server.ts', level: 'page', kind: 'server' });
+		expect(load_lane_of('load (routes/hell/+page.server.ts:44)')).toEqual({
+			file: 'routes/hell/+page.server.ts',
+			level: 'page',
+			kind: 'server'
+		});
+		expect(load_lane_of('/app/src/routes/+layout.ts')).toEqual({
+			file: 'routes/+layout.ts',
+			level: 'layout',
+			kind: 'universal'
+		});
+		expect(load_lane_of('/app/build/server/entries/pages/hell/_page.server.ts.js')).toEqual({
+			file: 'pages/hell/+page.server.ts',
+			level: 'page',
+			kind: 'server'
+		});
 		expect(load_lane_of('fetchStock (src/lib/hell.ts:9)')).toBeNull();
 		const prof: CpuProfile = {
 			startTime: 0,
 			endTime: 100_000,
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2, 5, 7] },
-				{ id: 2, callFrame: frame('load_server_data', '/app/node_modules/@sveltejs/kit/src/runtime/server/page/load_data.js', 1), children: [3] },
+				{
+					id: 2,
+					callFrame: frame(
+						'load_server_data',
+						'/app/node_modules/@sveltejs/kit/src/runtime/server/page/load_data.js',
+						1
+					),
+					children: [3]
+				},
 				{ id: 3, callFrame: frame('load', '/app/src/routes/+layout.server.ts', 2), children: [4] },
 				{ id: 4, callFrame: frame('decode', '/app/src/lib/jwt.ts', 2) },
-				{ id: 5, callFrame: frame('parent', '/app/node_modules/@sveltejs/kit/src/runtime/server/page/load_data.js', 30), children: [6] },
+				{
+					id: 5,
+					callFrame: frame(
+						'parent',
+						'/app/node_modules/@sveltejs/kit/src/runtime/server/page/load_data.js',
+						30
+					),
+					children: [6]
+				},
 				{ id: 6, callFrame: frame('load', '/app/src/routes/hell/+page.server.ts', 5) },
 				{ id: 7, callFrame: frame('(idle)') }
 			],
@@ -1182,27 +1897,81 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const info = (id: number) => {
 			const f = frames.get(id)!.callFrame;
 			const c = categorize(f);
-			return { name: f.functionName, url: f.url, line: f.lineNumber + 1, category: c.category, pkg: c.pkg };
+			return {
+				name: f.functionName,
+				url: f.url,
+				line: f.lineNumber + 1,
+				category: c.category,
+				pkg: c.pkg
+			};
 		};
 		const t = build_timeline(prof, info, (id) => parents.get(id), {
 			perf_start: 1000,
 			window: { start: 1000, end: 1100 },
 			calls: [
-				{ start: 1010, ms: 20, label: 'GET auth/session', kind: 'net', caller: 'load (routes/+layout.server.ts:3)' },
-				{ start: 1035, ms: 60, label: 'GET api/catalog', kind: 'net', caller: 'load (routes/hell/+page.server.ts:9)' }
+				{
+					start: 1010,
+					ms: 20,
+					label: 'GET auth/session',
+					kind: 'net',
+					caller: 'load (routes/+layout.server.ts:3)'
+				},
+				{
+					start: 1035,
+					ms: 60,
+					label: 'GET api/catalog',
+					kind: 'net',
+					caller: 'load (routes/hell/+page.server.ts:9)'
+				}
 			]
 		});
 		expect(t.lanes).toEqual([
-			{ file: 'routes/+layout.server.ts', level: 'layout', kind: 'server', t0: 0, t1: 30, cpu_ms: 10, wait_ms: 20, awaited_parent: false },
-			{ file: 'routes/hell/+page.server.ts', level: 'page', kind: 'server', t0: 30, t1: 95, cpu_ms: 5, wait_ms: 60, awaited_parent: true }
+			{
+				file: 'routes/+layout.server.ts',
+				level: 'layout',
+				kind: 'server',
+				t0: 0,
+				t1: 30,
+				cpu_ms: 10,
+				wait_ms: 20,
+				awaited_parent: false
+			},
+			{
+				file: 'routes/hell/+page.server.ts',
+				level: 'page',
+				kind: 'server',
+				t0: 30,
+				t1: 95,
+				cpu_ms: 5,
+				wait_ms: 60,
+				awaited_parent: true
+			}
 		]);
-		expect(t.chain).toEqual({ layout: 'routes/+layout.server.ts', page: 'routes/hell/+page.server.ts', serial_ms: 30, explicit: true });
+		expect(t.chain).toEqual({
+			layout: 'routes/+layout.server.ts',
+			page: 'routes/hell/+page.server.ts',
+			serial_ms: 30,
+			explicit: true
+		});
 		const a = { ...analyze(prof), timeline: t };
-		const m = { id: 'x', created: 0, trigger: 'page' as const, page: '/hell', runs: [100], run_status: 200, run_bytes: 9000, duration_ms: 100, node: 'v', requests: [] };
+		const m = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/hell',
+			runs: [100],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 100,
+			node: 'v',
+			requests: []
+		};
 		const f = derive_findings(a, m as never, { net: [], mem: [] } as never);
 		const chain = f.find((x) => x.code === 'parent-chain')!;
 		expect(chain.severity).toBe('warn');
-		expect(chain.message).toBe('routes/hell/+page.server.ts started only after routes/+layout.server.ts finished (30.0 ms later) — it awaits parent().');
+		expect(chain.message).toBe(
+			'routes/hell/+page.server.ts started only after routes/+layout.server.ts finished (30.0 ms later) — it awaits parent().'
+		);
 		const j = report_json(a, m as never, '/p', { net: [], mem: [] } as never);
 		expect(j.timeline!.lanes).toHaveLength(2);
 		expect(j.timeline!.chain).toEqual(t.chain);
@@ -1226,22 +1995,57 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const info = (id: number) => {
 			const f = frames.get(id)!.callFrame;
 			const c = categorize(f);
-			return { name: f.functionName, url: f.url, line: f.lineNumber + 1, category: c.category, pkg: c.pkg };
+			return {
+				name: f.functionName,
+				url: f.url,
+				line: f.lineNumber + 1,
+				category: c.category,
+				pkg: c.pkg
+			};
 		};
 		const t = build_timeline(prof, info, (id) => parents.get(id), {
 			perf_start: 1000,
 			window: { start: 1000, end: 1400 },
 			calls: [
-				{ start: 1000, ms: 45, label: 'svc.session', kind: 'span', caller: 'load (routes/hell/+layout.server.ts:9)' },
+				{
+					start: 1000,
+					ms: 45,
+					label: 'svc.session',
+					kind: 'span',
+					caller: 'load (routes/hell/+layout.server.ts:9)'
+				},
 				// a UNIVERSAL layout load that finishes after the page's server load began: not what a
 				// server page load's parent() waits for, so it must not break the chain
-				{ start: 1046, ms: 40, label: 'GET toggles', kind: 'net', caller: 'load (routes/hell/+layout.ts:7)' },
-				{ start: 1071, ms: 40, label: 'GET pricing', kind: 'net', caller: 'callService (routes/hell/+page.server.ts:18)' }
+				{
+					start: 1046,
+					ms: 40,
+					label: 'GET toggles',
+					kind: 'net',
+					caller: 'load (routes/hell/+layout.ts:7)'
+				},
+				{
+					start: 1071,
+					ms: 40,
+					label: 'GET pricing',
+					kind: 'net',
+					caller: 'callService (routes/hell/+page.server.ts:18)'
+				}
 			]
 		});
-		expect(t.lanes!.find((l) => l.file === 'routes/hell/+layout.server.ts')).toMatchObject({ t0: 0, t1: 45, wait_ms: 45 });
-		expect(t.lanes!.find((l) => l.file === 'routes/hell/+layout.ts')).toMatchObject({ kind: 'universal', wait_ms: 40 });
-		expect(t.chain).toMatchObject({ layout: 'routes/hell/+layout.server.ts', page: 'routes/hell/+page.server.ts', explicit: false });
+		expect(t.lanes!.find((l) => l.file === 'routes/hell/+layout.server.ts')).toMatchObject({
+			t0: 0,
+			t1: 45,
+			wait_ms: 45
+		});
+		expect(t.lanes!.find((l) => l.file === 'routes/hell/+layout.ts')).toMatchObject({
+			kind: 'universal',
+			wait_ms: 40
+		});
+		expect(t.chain).toMatchObject({
+			layout: 'routes/hell/+layout.server.ts',
+			page: 'routes/hell/+page.server.ts',
+			explicit: false
+		});
 	});
 
 	it('timeline: loads that overlap are no chain; a universal load with waits gets the info', () => {
@@ -1263,22 +2067,57 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const info = (id: number) => {
 			const f = frames.get(id)!.callFrame;
 			const c = categorize(f);
-			return { name: f.functionName, url: f.url, line: f.lineNumber + 1, category: c.category, pkg: c.pkg };
+			return {
+				name: f.functionName,
+				url: f.url,
+				line: f.lineNumber + 1,
+				category: c.category,
+				pkg: c.pkg
+			};
 		};
 		const t = build_timeline(prof, info, (id) => parents.get(id), {
 			perf_start: 1000,
 			window: { start: 1000, end: 1100 },
 			calls: [
-				{ start: 1005, ms: 40, label: 'GET a', kind: 'net', caller: 'load (routes/+layout.server.ts:3)' },
-				{ start: 1010, ms: 40, label: 'GET b', kind: 'net', caller: 'load (routes/hell/+page.ts:9)' }
+				{
+					start: 1005,
+					ms: 40,
+					label: 'GET a',
+					kind: 'net',
+					caller: 'load (routes/+layout.server.ts:3)'
+				},
+				{
+					start: 1010,
+					ms: 40,
+					label: 'GET b',
+					kind: 'net',
+					caller: 'load (routes/hell/+page.ts:9)'
+				}
 			]
 		});
 		expect(t.chain).toBeUndefined();
 		expect(t.lanes!.map((l) => l.kind)).toEqual(['server', 'universal']);
-		const m = { id: 'x', created: 0, trigger: 'page' as const, page: '/hell', runs: [100], run_status: 200, run_bytes: 9000, duration_ms: 100, node: 'v', requests: [] };
-		const f = derive_findings({ ...analyze(prof), timeline: t }, m as never, { net: [], mem: [] } as never);
+		const m = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/hell',
+			runs: [100],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 100,
+			node: 'v',
+			requests: []
+		};
+		const f = derive_findings(
+			{ ...analyze(prof), timeline: t },
+			m as never,
+			{ net: [], mem: [] } as never
+		);
 		expect(f.find((x) => x.code === 'parent-chain')).toBeUndefined();
-		expect(f.find((x) => x.code === 'universal-load')!.message).toContain('routes/hell/+page.ts is a universal load: on this render it waited 40.0 ms');
+		expect(f.find((x) => x.code === 'universal-load')!.message).toContain(
+			'routes/hell/+page.ts is a universal load: on this render it waited 40.0 ms'
+		);
 	});
 
 	it('production: the beacon tag needs the flag cookie the login sets (site-wide, no secret), or the key header', async () => {
@@ -1287,7 +2126,10 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			const handle = profiler({ secret: 'prof-key' });
 			const doc = (cookies: Record<string, string>, headers: Record<string, string> = {}) =>
 				handle({
-					event: { ...make_event('/some/page', { 'sec-fetch-dest': 'document', ...headers }), cookies: { get: (k: string) => cookies[k] } } as never,
+					event: {
+						...make_event('/some/page', { 'sec-fetch-dest': 'document', ...headers }),
+						cookies: { get: (k: string) => cookies[k] }
+					} as never,
 					resolve: async (_e, opts) => new Response(String(!!opts?.transformPageChunk))
 				}).then((r) => r.text());
 			expect(await doc({})).toBe('false');
@@ -1296,14 +2138,29 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			expect(await doc({}, { 'x-profiler-key': 'wrong' })).toBe('false');
 			// login sets both cookies; logout clears both
 			const login = await handle({
-				event: { ...make_event('/__profiler/login'), request: new Request('http://localhost/__profiler/login', { method: 'POST', body: JSON.stringify({ key: 'prof-key' }) }) } as RequestEvent,
+				event: {
+					...make_event('/__profiler/login'),
+					request: new Request('http://localhost/__profiler/login', {
+						method: 'POST',
+						body: JSON.stringify({ key: 'prof-key' })
+					})
+				} as RequestEvent,
 				resolve: async () => new Response('no')
 			});
 			const set = login.headers.getSetCookie();
-			expect(set.some((c) => c.startsWith('og_profiler=') && c.includes('Path=/__profiler'))).toBe(true);
+			expect(set.some((c) => c.startsWith('og_profiler=') && c.includes('Path=/__profiler'))).toBe(
+				true
+			);
 			expect(set.some((c) => c.startsWith('og_profiler_beacon=1; Path=/;'))).toBe(true);
-			const logout = await handle({ event: make_event('/__profiler/logout', { 'x-profiler-key': 'prof-key' }), resolve: async () => new Response('no') });
-			expect(logout.headers.getSetCookie().some((c) => c.startsWith('og_profiler_beacon=;') && c.includes('Max-Age=0'))).toBe(true);
+			const logout = await handle({
+				event: make_event('/__profiler/logout', { 'x-profiler-key': 'prof-key' }),
+				resolve: async () => new Response('no')
+			});
+			expect(
+				logout.headers
+					.getSetCookie()
+					.some((c) => c.startsWith('og_profiler_beacon=;') && c.includes('Max-Age=0'))
+			).toBe(true);
 		} finally {
 			dev_switch.dev = true;
 		}
@@ -1311,13 +2168,71 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 
 	it('group_islands: one row per island — fingerprints merge, the first culprit and name stand', () => {
 		const rows: IslandStat[] = [
-			{ fp: 'a', entry: 'e', name: '', module_url: '/m.js', wake: 'visible', props_bytes: 10, canonical_bytes: 10, json: true, culprit: null, refs: 1, ref_keys: ['catalog'], hints: ['/x.js'], interactivity: null, count: 2 },
-			{ fp: 'b', entry: 'e', name: 'Card', module_url: '/m.js', wake: 'visible', props_bytes: 30, canonical_bytes: 40, json: false, culprit: 'at (Date)', refs: 1, ref_keys: ['catalog', 'stock'], hints: ['/y.js'], interactivity: { handlers: 1, state: 0, effects: 0, binds: 0, actions: 0, files: 1 }, count: 1 },
-			{ fp: 'c', entry: 'e', name: 'Card', module_url: '/m.js', wake: 'load', props_bytes: 5, canonical_bytes: 5, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], interactivity: null, count: 1 }
+			{
+				fp: 'a',
+				entry: 'e',
+				name: '',
+				module_url: '/m.js',
+				wake: 'visible',
+				props_bytes: 10,
+				canonical_bytes: 10,
+				json: true,
+				culprit: null,
+				refs: 1,
+				ref_keys: ['catalog'],
+				hints: ['/x.js'],
+				interactivity: null,
+				count: 2
+			},
+			{
+				fp: 'b',
+				entry: 'e',
+				name: 'Card',
+				module_url: '/m.js',
+				wake: 'visible',
+				props_bytes: 30,
+				canonical_bytes: 40,
+				json: false,
+				culprit: 'at (Date)',
+				refs: 1,
+				ref_keys: ['catalog', 'stock'],
+				hints: ['/y.js'],
+				interactivity: { handlers: 1, state: 0, effects: 0, binds: 0, actions: 0, files: 1 },
+				count: 1
+			},
+			{
+				fp: 'c',
+				entry: 'e',
+				name: 'Card',
+				module_url: '/m.js',
+				wake: 'load',
+				props_bytes: 5,
+				canonical_bytes: 5,
+				json: true,
+				culprit: null,
+				refs: 0,
+				ref_keys: [],
+				hints: [],
+				interactivity: null,
+				count: 1
+			}
 		];
 		const g = group_islands(rows);
 		expect(g).toHaveLength(2); // same entry, a different wake → its own row
-		expect(g[0]).toMatchObject({ fp: 'a', name: 'Card', wake: 'visible', count: 3, variants: 2, props_bytes: 40, canonical_bytes: 50, json: false, culprit: 'at (Date)', refs: 2, ref_keys: ['catalog', 'stock'], hints: ['/x.js', '/y.js'] });
+		expect(g[0]).toMatchObject({
+			fp: 'a',
+			name: 'Card',
+			wake: 'visible',
+			count: 3,
+			variants: 2,
+			props_bytes: 40,
+			canonical_bytes: 50,
+			json: false,
+			culprit: 'at (Date)',
+			refs: 2,
+			ref_keys: ['catalog', 'stock'],
+			hints: ['/x.js', '/y.js']
+		});
 		expect(g[0].interactivity).toEqual(rows[1].interactivity);
 		expect(g[1]).toMatchObject({ fp: 'c', wake: 'load', count: 1, variants: 1 });
 		expect(island_name(g[0])).toBe('Card');
@@ -1331,31 +2246,78 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			endTime: 50_000,
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
-				{ id: 2, callFrame: frame('render_response', '/app/node_modules/@sveltejs/kit/src/runtime/server/page/render.js', 1), children: [3] },
+				{
+					id: 2,
+					callFrame: frame(
+						'render_response',
+						'/app/node_modules/@sveltejs/kit/src/runtime/server/page/render.js',
+						1
+					),
+					children: [3]
+				},
 				{ id: 3, callFrame: frame('uneval', '/app/node_modules/devalue/src/uneval.js', 1) }
 			],
 			samples: [3, 3],
 			timeDeltas: [10_000, 10_000]
 		};
-		const m = { id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [10, 10], run_status: 200, run_bytes: 9000, duration_ms: 20, node: 'v', requests: [] };
+		const m = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [10, 10],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 20,
+			node: 'v',
+			requests: []
+		};
 		const f = derive_findings(analyze(prof), m as never, { net: [], mem: [] } as never);
 		const u = f.find((x) => x.code === 'kit-uneval')!;
-		expect(u.message).toContain('Kit serialized the load data for its client router: 10.0 ms per render');
+		expect(u.message).toContain(
+			'Kit serialized the load data for its client router: 10.0 ms per render'
+		);
 		expect(u.fix).toMatch(/csr=false/);
-		expect(report_json(analyze(prof), m as never, '/p', { net: [], mem: [] } as never).kit.uneval_ms).toBe(20);
+		expect(
+			report_json(analyze(prof), m as never, '/p', { net: [], mem: [] } as never).kit.uneval_ms
+		).toBe(20);
 	});
 });
 
 describe('the accuracy round: hot lines, server-timing, call paths, cold start, run spread, vitals', () => {
 	const meta_page = (over: Record<string, unknown> = {}) => ({
-		id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [40, 42, 41], run_status: 200, run_bytes: 9000, duration_ms: 123, node: 'v', requests: [], ...over
+		id: 'x',
+		created: 0,
+		trigger: 'page' as const,
+		page: '/p',
+		runs: [40, 42, 41],
+		run_status: 200,
+		run_bytes: 9000,
+		duration_ms: 123,
+		node: 'v',
+		requests: [],
+		...over
 	});
 	const net = (over: Partial<NetCall>): NetCall => ({
-		start: 0, epoch: 0, ms: 100, method: 'GET', url: 'https://api.x/catalog/42', host: 'api.x', status: 200, kind: 'fetch', route: null, path: null, ...over
+		start: 0,
+		epoch: 0,
+		ms: 100,
+		method: 'GET',
+		url: 'https://api.x/catalog/42',
+		host: 'api.x',
+		status: 200,
+		kind: 'fetch',
+		route: null,
+		path: null,
+		...over
 	});
 
 	it('parse_server_timing: tolerant of quotes, missing dur, junk; capped', () => {
-		expect(parse_server_timing('db;dur=180.4;desc="postgres", render;dur=30, cache;desc=miss, total;dur=abc')).toEqual([
+		expect(
+			parse_server_timing(
+				'db;dur=180.4;desc="postgres", render;dur=30, cache;desc=miss, total;dur=abc'
+			)
+		).toEqual([
 			{ name: 'db', ms: 180.4, desc: 'postgres' },
 			{ name: 'render', ms: 30 },
 			{ name: 'cache', ms: 0, desc: 'miss' },
@@ -1364,7 +2326,9 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		expect(parse_server_timing('')).toBeUndefined();
 		expect(parse_server_timing(null)).toBeUndefined();
 		expect(parse_server_timing('   ,  ;;, bad name;dur=1')).toBeUndefined();
-		expect(parse_server_timing(Array.from({ length: 20 }, (_, i) => `m${i};dur=1`).join(','))).toHaveLength(12);
+		expect(
+			parse_server_timing(Array.from({ length: 20 }, (_, i) => `m${i};dur=1`).join(','))
+		).toHaveLength(12);
 	});
 
 	it("the caller skip list: Kit's bundled runtime frames are the framework, not the app", async () => {
@@ -1396,7 +2360,15 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
 				{ id: 2, callFrame: frame('Row', '/app/src/lib/Row.svelte', 0), children: [3] },
-				{ id: 3, callFrame: frame('fmt', '/app/src/lib/fmt.ts', 3), positionTicks: [{ line: 9, ticks: 4 }, { line: 12, ticks: 1 }, { line: 4, ticks: 1 }] }
+				{
+					id: 3,
+					callFrame: frame('fmt', '/app/src/lib/fmt.ts', 3),
+					positionTicks: [
+						{ line: 9, ticks: 4 },
+						{ line: 12, ticks: 1 },
+						{ line: 4, ticks: 1 }
+					]
+				}
 			],
 			samples: [3, 3, 3, 3, 3, 3],
 			timeDeltas: [10_000, 10_000, 10_000, 10_000, 10_000, 10_000]
@@ -1421,38 +2393,221 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		const row = a.components.find((c) => c.name === 'Row')!;
 		expect(row.runs_ms).toEqual([20, 20, 20]);
 		const j = report_json(a, meta_page() as never, '/p', { net: [], mem: [] } as never);
-		expect(j.hot_functions.find((f) => f.name === 'fmt')!.hot_lines![0]).toEqual({ line: 9, ms: 40 });
+		expect(j.hot_functions.find((f) => f.name === 'fmt')!.hot_lines![0]).toEqual({
+			line: 9,
+			ms: 40
+		});
 		expect(j.components.find((c) => c.name === 'Row')!.runs_ms).toEqual([20, 20, 20]);
+	});
+
+	it("a function's hot lines add up to its own time, not to its ticks at the profile's mean interval", () => {
+		// 100 ms profile, 10 samples: the mean interval is 10 ms. The hot function's 4 samples came 2 ms
+		// apart (8 ms of self time); the idle ones soaked up the rest
+		const prof: CpuProfile = {
+			startTime: 0,
+			endTime: 100_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2, 3] },
+				{ id: 2, callFrame: frame('(idle)') },
+				{
+					id: 3,
+					callFrame: frame('fmt', '/app/src/lib/fmt.ts', 3),
+					positionTicks: [
+						{ line: 5, ticks: 3 },
+						{ line: 6, ticks: 1 }
+					]
+				}
+			],
+			samples: [2, 2, 2, 2, 2, 2, 3, 3, 3, 3],
+			timeDeltas: [23_000, 23_000, 23_000, 23_000, 0, 0, 2_000, 2_000, 2_000, 2_000]
+		};
+		const fmt = analyze(prof).functions.find((f) => f.name === 'fmt')!;
+		expect(fmt.self_ms).toBe(8);
+		expect(fmt.lines).toEqual([
+			{ line: 5, ms: 6 },
+			{ line: 6, ms: 2 }
+		]);
 	});
 
 	it('run_spread + the variance findings: a cold first run vs a run that just varies', () => {
 		expect(run_spread([90, 2, 2, 3])).toMatchObject({ min: 2, max: 90, max_run: 1, cold: true });
 		expect(run_spread([2, 2, 60, 3])).toMatchObject({ max: 60, max_run: 3, cold: false });
 		expect(run_spread([5])).toBeNull();
-		const p: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [1000] };
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
 		const base = analyze(p);
 		const with_runs = (runs_ms: number[]) => ({
 			...base,
-			components: [{ key: 'C:Cache', name: 'Cache', url: 'Cache.svelte', path: '', line: 1, col: 0, category: 'component' as const, self_ms: 1, total_ms: 97, runs_ms }]
+			components: [
+				{
+					key: 'C:Cache',
+					name: 'Cache',
+					url: 'Cache.svelte',
+					path: '',
+					line: 1,
+					col: 0,
+					category: 'component' as const,
+					self_ms: 1,
+					total_ms: 97,
+					runs_ms
+				}
+			]
 		});
-		const cold = derive_findings(with_runs([90, 2, 2, 3]), meta_page({ runs: [100, 10, 10, 11] }) as never, { net: [], mem: [] } as never).find((f) => f.code === 'component-cold-run')!;
+		const cold = derive_findings(
+			with_runs([90, 2, 2, 3]),
+			meta_page({ runs: [100, 10, 10, 11] }) as never,
+			{ net: [], mem: [] } as never
+		).find((f) => f.code === 'component-cold-run')!;
 		expect(cold.message).toContain('Cache took 90.0 ms in the first render and 2.00 ms after');
 		expect(cold.anchor).toBe('comp:Cache');
-		const flaky = derive_findings(with_runs([2, 2, 60, 3]), meta_page({ runs: [10, 10, 70, 11] }) as never, { net: [], mem: [] } as never).find((f) => f.code === 'component-variance')!;
+		const flaky = derive_findings(
+			with_runs([2, 2, 60, 3]),
+			meta_page({ runs: [10, 10, 70, 11] }) as never,
+			{ net: [], mem: [] } as never
+		).find((f) => f.code === 'component-variance')!;
 		expect(flaky.message).toContain('Cache is 3.00 ms in most renders but 60.0 ms in run 3');
 	});
 
+	it('run_trend: a climb across the runs, not one slow run, a flat page or a cold start', () => {
+		// the /hell runs: a page that keeps what it renders gets slower each time
+		const hell = run_trend([1440, 1451, 1484, 1490, 1570, 1556, 1841, 1601, 1615, 1639])!;
+		expect(hell).toMatchObject({ from: 1440, to: 1639, runs: 10 });
+		expect(hell.slope_ms).toBeGreaterThan(15);
+		expect(hell.slope_ms).toBeLessThan(30); // the one 1841 ms run does not tilt it
+		expect(run_trend([100, 101, 99, 100, 102, 100])).toBeNull(); // flat
+		expect(run_trend([100, 100, 180, 100, 101])).toBeNull(); // one slow run
+		expect(run_trend([100, 110, 120])).toBeNull(); // too few to call
+		expect(run_trend([400, 100, 101, 100, 99])).toBeNull(); // the cold start is not a climb
+		expect(run_trend([400, 100, 110, 120, 130])).toMatchObject({ from: 100, to: 130, runs: 4 });
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const retained = {
+			total_bytes: 3 * 1048576,
+			render_ms: 10,
+			sites: [{ name: 'push', url: '/app/src/lib/cache.ts', line: 7, bytes: 3 * 1048576, share: 1 }]
+		};
+		const f = derive_findings(
+			analyze(p),
+			meta_page({ runs: [100, 110, 120, 130, 140] }) as never,
+			{ net: [], mem: [], retained } as never
+		).find((x) => x.code === 'slower-each-run')!;
+		expect(f.message).toContain(
+			'Each render took about 10.0 ms longer than the one before: 100 ms → 140 ms over 5 runs (+40%). One render leaves 3 MB alive'
+		);
+		expect(f).toMatchObject({ file: '/app/src/lib/cache.ts', line: 7 });
+		const none = derive_findings(
+			analyze(p),
+			meta_page({ runs: [100, 101, 99, 100, 100] }) as never,
+			{ net: [], mem: [] } as never
+		);
+		expect(none.some((x) => x.code === 'slower-each-run')).toBe(false);
+	});
+
+	it('heap-filled-before: a page that keeps memory, profiled on a heap earlier requests filled', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const retained = {
+			total_bytes: 75 * 1048576,
+			render_ms: 10,
+			sites: [
+				{ name: 'render', url: '/app/src/lib/ds.ts', line: 17, bytes: 75 * 1048576, share: 1 }
+			]
+		};
+		const at = (heap_used: number, extra: object = {}) =>
+			derive_findings(
+				analyze(p),
+				meta_page({ runs: [1000, 1010, 1005] }) as never,
+				{ net: [], mem: [{ t: 0, rss: heap_used + 100, heap_used }], retained, ...extra } as never
+			).find((x) => x.code === 'heap-filled-before');
+		// 1 350 MB = 18 renders' worth: the times are inflated
+		expect(at(1350)?.message).toContain(
+			'This profile started with 1350 MB of heap in use: about 18 renders'
+		);
+		// a fresh server: a couple of renders' worth, nothing to say
+		expect(at(300)).toBeUndefined();
+		// a cache with a size limit that filled is not piling up
+		expect(at(1350, { growth: { levels_off: true } })).toBeUndefined();
+		// a page that keeps little: whatever filled the heap, not this page's habit
+		expect(
+			derive_findings(
+				analyze(p),
+				meta_page({ runs: [1000] }) as never,
+				{
+					net: [],
+					mem: [{ t: 0, rss: 1450, heap_used: 1350 }],
+					retained: { ...retained, total_bytes: 1048576 }
+				} as never
+			).some((x) => x.code === 'heap-filled-before')
+		).toBe(false);
+	});
+
 	it('upstream-split: the slowest call’s own Server-Timing says whose the wait is', () => {
-		const p: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [1000] };
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
 		const calls = [
-			net({ ms: 220, timings: [{ name: 'db', ms: 180, desc: 'postgres' }, { name: 'render', ms: 20 }], callers: ['fetchCatalog (lib/catalog.ts:9)', 'load (routes/+page.server.ts:12)'] }),
+			net({
+				ms: 220,
+				timings: [
+					{ name: 'db', ms: 180, desc: 'postgres' },
+					{ name: 'render', ms: 20 }
+				],
+				callers: ['fetchCatalog (lib/catalog.ts:9)', 'load (routes/+page.server.ts:12)']
+			}),
 			net({ ms: 50, url: 'https://api.x/other' })
 		];
-		const f = derive_findings(analyze(p), meta_page() as never, { net: calls, mem: [] } as never).find((x) => x.code === 'upstream-split')!;
-		expect(f.message).toBe('GET api.x/catalog/:id waited 220 ms; its own Server-Timing says postgres 180 ms, render 20.0 ms — 200 ms of the wait is on their side, 20.0 ms is the network and their framework.');
+		const f = derive_findings(
+			analyze(p),
+			meta_page() as never,
+			{ net: calls, mem: [] } as never
+		).find((x) => x.code === 'upstream-split')!;
+		expect(f.message).toBe(
+			'GET api.x/catalog/:id waited 220 ms; its own Server-Timing says postgres 180 ms, render 20.0 ms — 200 ms of the wait is on their side, 20.0 ms is the network and their framework.'
+		);
 		expect(f.fix).toMatch(/The wait is theirs/);
+		// nested entries (a framework render holding the db and the template): never more than the wait
+		const nested = [
+			net({
+				ms: 31,
+				timings: [
+					{ name: 'kit', ms: 29.9, desc: 'SvelteKit render' },
+					{ name: 'db', ms: 21, desc: 'postgres' },
+					{ name: 'tpl', ms: 6 }
+				]
+			})
+		];
+		const fn = derive_findings(
+			analyze(p),
+			meta_page() as never,
+			{ net: nested, mem: [] } as never
+		).find((x) => x.code === 'upstream-split')!;
+		expect(fn.message).toContain(
+			'29.9 ms of the wait is on their side (the entries overlap, so the largest is taken as the whole), 1.10 ms is the network'
+		);
 		const j = report_json(analyze(p), meta_page() as never, '/p', { net: calls, mem: [] } as never);
-		expect(j.network.calls[0]).toMatchObject({ server_timing: calls[0].timings, callers: calls[0].callers });
+		expect(j.network.calls[0]).toMatchObject({
+			server_timing: calls[0].timings,
+			callers: calls[0].callers
+		});
 	});
 
 	it('cold start: the warm-up render against the warm ones, per file', () => {
@@ -1468,62 +2623,181 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 			timeDeltas: [10_000, 10_000, 10_000]
 		};
 		const a = analyze(prof); // warm: heavy.ts 20 ms over 3 runs ≈ 6.7 ms each, +page.server.ts 3.3 ms
-		const cold = { ms: 400, busy_ms: 300, files: [{ file: 'app/src/lib/heavy.ts', category: 'app' as const, ms: 250 }, { file: 'app/src/routes/+page.server.ts', category: 'app' as const, ms: 4 }] };
+		const cold = {
+			ms: 400,
+			busy_ms: 300,
+			files: [
+				{ file: 'app/src/lib/heavy.ts', category: 'app' as const, ms: 250 },
+				{ file: 'app/src/routes/+page.server.ts', category: 'app' as const, ms: 4 }
+			]
+		};
 		const m = meta_page({ runs: [40, 42, 41], cold });
 		const rows = cold_rows(a, m as never);
-		expect(rows[0]).toMatchObject({ file: 'app/src/lib/heavy.ts', cold_ms: 250, warm_ms: 6.7, extra_ms: 243.3 });
+		expect(rows[0]).toMatchObject({
+			file: 'app/src/lib/heavy.ts',
+			cold_ms: 250,
+			warm_ms: 6.7,
+			extra_ms: 243.3
+		});
 		expect(rows).toHaveLength(2);
-		const f = derive_findings(a, m as never, { net: [], mem: [] } as never).find((x) => x.code === 'cold-start')!;
+		const f = derive_findings(a, m as never, { net: [], mem: [] } as never).find(
+			(x) => x.code === 'cold-start'
+		)!;
 		expect(f.severity).toBe('warn');
-		expect(f.message).toContain('The first render took 400 ms against 41.0 ms warm: 359 ms of module load and compile, most of it app/src/lib/heavy.ts (243 ms)');
-		expect(report_json(a, m as never, '/p', { net: [], mem: [] } as never).cold).toMatchObject({ ms: 400, files: rows });
+		// the 359 ms extra split: the CPU the cold window measured over a warm render's, and the rest waiting
+		expect(f.message).toContain(
+			'The first render took 400 ms against 41.0 ms warm: 290 ms more CPU (module load, compile, first-call caches), most of it app/src/lib/heavy.ts (243 ms), and 69.0 ms more waiting (its connections were new'
+		);
+		expect(report_json(a, m as never, '/p', { net: [], mem: [] } as never).cold).toMatchObject({
+			ms: 400,
+			files: rows
+		});
+		// the cold render made no outbound call: the waiting is not the network, and the advice is the modules'
+		const none = derive_findings(a, meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 700, calls: 0 } }) as never, { net: [], mem: [] } as never).find((x) => x.code === 'cold-start')!;
+		expect(none.message).toContain('ms more waiting with no outbound call in that render: not the network');
+		expect(none.message).not.toContain('DNS');
+		expect(none.fix).toContain('Fewer and smaller server modules');
+		// calls made: the connections, counted
+		const some = derive_findings(a, meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 700, calls: 3 } }) as never, { net: [], mem: [] } as never).find((x) => x.code === 'cold-start')!;
+		expect(some.message).toContain('its 3 outbound calls opened new connections: DNS, TLS, empty pools');
+		expect(some.fix).toContain('reuse one HTTP agent');
 		// a warm-up no slower than the runs: no warning (a note at most)
-		const g = derive_findings(a, meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 45, files: [] } }) as never, { net: [], mem: [] } as never);
+		const g = derive_findings(
+			a,
+			meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 45, files: [] } }) as never,
+			{ net: [], mem: [] } as never
+		);
 		expect(g.find((x) => x.code === 'cold-start')).toBeUndefined();
 	});
 
 	it('the browser’s vitals against the server: the LCP gap, the TTFB gap, or just the numbers', () => {
-		const p: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [1000] };
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
 		const say = (vitals: Record<string, number | null>) =>
-			derive_findings(analyze(p), meta_page() as never, { net: [], mem: [], vitals: { n: 2, ...vitals } } as never);
-		const lcp = say({ ttfb: 120, fcp: 400, lcp: 2600, cls: 0.02, inp: null }).find((f) => f.code === 'lcp-gap')!;
-		expect(lcp.message).toContain('LCP is 2600 ms while the server answered in 120 ms (TTFB; the render itself 41.0 ms): 2480 ms of the user');
-		const ttfb = say({ ttfb: 900, fcp: 950, lcp: 1000, cls: 0, inp: null }).find((f) => f.code === 'ttfb-gap')!;
-		expect(ttfb.message).toContain('TTFB in the browser is 900 ms but this server rendered the page in 41.0 ms: 859 ms sits between the two');
-		const plain = say({ ttfb: 60, fcp: 100, lcp: 300, cls: 0.01, inp: 40 }).find((f) => f.code === 'browser-vitals')!;
-		expect(plain.message).toBe('The browser measured TTFB 60.0 ms, LCP 300 ms, CLS 0.01, INP 40.0 ms over 2 visits.');
-		expect(report_json(analyze(p), meta_page() as never, '/p', { net: [], mem: [], vitals: { n: 1, ttfb: 1, fcp: 2, lcp: 3, cls: 0, inp: null } } as never).browser).toEqual({ n: 1, ttfb: 1, fcp: 2, lcp: 3, cls: 0, inp: null });
+			derive_findings(
+				analyze(p),
+				meta_page() as never,
+				{ net: [], mem: [], vitals: { n: 2, ...vitals } } as never
+			);
+		const lcp = say({ ttfb: 120, fcp: 400, lcp: 2600, cls: 0.02, inp: null }).find(
+			(f) => f.code === 'lcp-gap'
+		)!;
+		expect(lcp.message).toContain(
+			'LCP is 2600 ms while the server answered in 120 ms (TTFB; the render itself 41.0 ms): 2480 ms of the user'
+		);
+		const ttfb = say({ ttfb: 900, fcp: 950, lcp: 1000, cls: 0, inp: null }).find(
+			(f) => f.code === 'ttfb-gap'
+		)!;
+		expect(ttfb.message).toContain(
+			'TTFB in the browser is 900 ms but this server rendered the page in 41.0 ms: 859 ms sits between the two'
+		);
+		const plain = say({ ttfb: 60, fcp: 100, lcp: 300, cls: 0.01, inp: 40 }).find(
+			(f) => f.code === 'browser-vitals'
+		)!;
+		expect(plain.message).toBe(
+			'The browser measured TTFB 60.0 ms, LCP 300 ms, CLS 0.01, INP 40.0 ms over 2 visits.'
+		);
+		expect(
+			report_json(analyze(p), meta_page() as never, '/p', {
+				net: [],
+				mem: [],
+				vitals: { n: 1, ttfb: 1, fcp: 2, lcp: 3, cls: 0, inp: null }
+			} as never).browser
+		).toEqual({ n: 1, ttfb: 1, fcp: 2, lcp: 3, cls: 0, inp: null });
 	});
 
 	it('beacon: a vitals-only post lands per page; the report joins them; junk is bounded', async () => {
 		const handle = profiler({ secret: 'prof-key' });
 		const post = (body: string) =>
-			handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body }) } as RequestEvent, resolve: async () => new Response('no') });
-		expect((await post(JSON.stringify({ page: '/p', vitals: { ttfb: 100, lcp: 900, cls: 0.05, inp: 'x', fcp: -1 } }))).status).toBe(204);
-		expect((await post(JSON.stringify({ page: '/p', vitals: { ttfb: 120, lcp: 1100 } }))).status).toBe(204);
-		expect((await post(JSON.stringify({ page: 'not-a-path', vitals: { ttfb: 1 } }))).status).toBe(204); // ignored, not an error
+			handle({
+				event: {
+					...make_event('/__profiler/beacon'),
+					request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body })
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
+		expect(
+			(
+				await post(
+					JSON.stringify({
+						page: '/p',
+						vitals: { ttfb: 100, lcp: 900, cls: 0.05, inp: 'x', fcp: -1 }
+					})
+				)
+			).status
+		).toBe(204);
+		expect(
+			(await post(JSON.stringify({ page: '/p', vitals: { ttfb: 120, lcp: 1100 } }))).status
+		).toBe(204);
+		expect((await post(JSON.stringify({ page: 'not-a-path', vitals: { ttfb: 1 } }))).status).toBe(
+			204
+		); // ignored, not an error
 		expect((await post(JSON.stringify({ page: '/p' }))).status).toBe(400); // neither islands nor vitals
 		// a page profile of /p joins them at view time
-		const rec = await handle({ event: make_event('/__profiler/page?p=/p&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
+		const rec = await handle({
+			event: make_event('/__profiler/page?p=/p&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
 		const url = rec.headers.get('location')!;
-		const json = await (await handle({ event: make_event(url.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(url.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(json.browser).toEqual({ n: 2, ttfb: 120, fcp: null, lcp: 1100, cls: 0.05, inp: null });
 	});
 
 	it('beacon marks: per page, per name, joined to the report as "marked in the browser"', async () => {
 		const handle = profiler({ secret: 'prof-key' });
 		const post = (body: string) =>
-			handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body }) } as RequestEvent, resolve: async () => new Response('no') });
-		expect((await post(JSON.stringify({ page: '/m', marks: [{ name: 'ds.hydrate', ms: 320, attrs: { tags: 12 } }, { name: 'ds.hydrate', ms: 280 }, { name: 'widget', ms: 40, attrs: { error: true } }, { name: '', ms: 1 }, { name: 'bad', ms: -1 }] }))).status).toBe(204);
-		const rec = await handle({ event: make_event('/__profiler/page?p=/m&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
+			handle({
+				event: {
+					...make_event('/__profiler/beacon'),
+					request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body })
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
+		expect(
+			(
+				await post(
+					JSON.stringify({
+						page: '/m',
+						marks: [
+							{ name: 'ds.hydrate', ms: 320, attrs: { tags: 12 } },
+							{ name: 'ds.hydrate', ms: 280 },
+							{ name: 'widget', ms: 40, attrs: { error: true } },
+							{ name: '', ms: 1 },
+							{ name: 'bad', ms: -1 }
+						]
+					})
+				)
+			).status
+		).toBe(204);
+		const rec = await handle({
+			event: make_event('/__profiler/page?p=/m&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
 		const url = rec.headers.get('location')!;
-		const json = await (await handle({ event: make_event(url.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(url.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(json.browser.marks).toEqual([
 			{ name: 'ds.hydrate', n: 2, p50_ms: 320, max_ms: 320, errors: 0, attr_keys: ['tags'] },
 			{ name: 'widget', n: 1, p50_ms: 40, max_ms: 40, errors: 1, attr_keys: [] }
 		]);
 		const f = json.findings.find((x: { code: string }) => x.code === 'client-mark');
-		expect(f.message).toBe('In the browser the app marked 2 things: the slowest is ds.hydrate at 320 ms (p50 of 2); widget failed.');
+		expect(f.message).toBe(
+			'In the browser the app marked 2 things: the slowest is ds.hydrate at 320 ms (p50 of 2); widget failed.'
+		);
 		expect(f.fix).toMatch(/not the server render/);
 	});
 
@@ -1544,7 +2818,12 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 				}
 			});
 			const url = res.headers.get('x-profile-report')!;
-			const json = await (await handle({ event: make_event(url + '.json', { 'x-profiler-key': 'prof-key' }), resolve: async () => new Response('no') })).json();
+			const json = await (
+				await handle({
+					event: make_event(url + '.json', { 'x-profiler-key': 'prof-key' }),
+					resolve: async () => new Response('no')
+				})
+			).json();
 			const outer = json.spans.find((s: { name: string }) => s.name === 'outer');
 			const inner = json.spans.find((s: { name: string }) => s.name === 'inner');
 			expect(inner).toBeTruthy();
@@ -1557,7 +2836,10 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 	});
 
 	it('the trap: a coarse background window keeps only a request over the threshold', async () => {
-		const handle = profiler({ secret: 'prof-key', trap: { over: 30, window: 300, interval: 10, keep: 1 } });
+		const handle = profiler({
+			secret: 'prof-key',
+			trap: { over: 30, window: 300, interval: 10, keep: 1 }
+		});
 		// the first request arms the trap (its first window opens ~1 s later)
 		await handle({ event: make_event('/fast'), resolve: async () => new Response('ok') });
 		await new Promise((r) => setTimeout(r, 1100));
@@ -1572,7 +2854,9 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		});
 		// let the window close and the report finish
 		await new Promise((r) => setTimeout(r, 700));
-		const dash = await (await handle({ event: make_event('/__profiler'), resolve: async () => new Response('no') })).text();
+		const dash = await (
+			await handle({ event: make_event('/__profiler'), resolve: async () => new Response('no') })
+		).text();
 		expect(dash).toContain('Catch the slow one');
 		expect(dash).toContain('Caught 1 of 1');
 		expect(dash).toMatch(/caught \/slow\/one \(\d+ ms\)/);
@@ -1580,17 +2864,28 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 	}, 15_000);
 
 	it('the always-on sampler folds short windows into a hot-functions table on the dashboard', async () => {
-		const handle = profiler({ secret: 'prof-key', sample: { every: 1, window: 150, interval: 10 } });
+		const handle = profiler({
+			secret: 'prof-key',
+			sample: { every: 1, window: 150, interval: 10 }
+		});
 		await handle({ event: make_event('/arm'), resolve: async () => new Response('ok') });
 		// keep the CPU busy through the first window so something is hot
 		const busy_until = Date.now() + 1400;
 		let spins = 0;
 		while (Date.now() < busy_until) {
-			await handle({ event: make_event('/spin'), resolve: async () => { for (let i = 0; i < 2e5; i++) spins += Math.sqrt(i); return new Response('ok'); } });
+			await handle({
+				event: make_event('/spin'),
+				resolve: async () => {
+					for (let i = 0; i < 2e5; i++) spins += Math.sqrt(i);
+					return new Response('ok');
+				}
+			});
 			await new Promise((r) => setImmediate(r));
 		}
 		await new Promise((r) => setTimeout(r, 300));
-		const dash = await (await handle({ event: make_event('/__profiler'), resolve: async () => new Response('no') })).text();
+		const dash = await (
+			await handle({ event: make_event('/__profiler'), resolve: async () => new Response('no') })
+		).text();
 		expect(spins).toBeGreaterThan(0);
 		expect(dash).toContain('Always-on sampling');
 		expect(dash).toMatch(/[1-9]\d* windows? so far/);
@@ -1600,7 +2895,14 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 describe('instrument (ogygia/profiler): every call of a function becomes a span', () => {
 	const recorded: { name: string; attrs?: SpanAttrs; error?: string }[] = [];
 	const rec: SpanRecorder = {
-		begin: (name, attrs) => ({ id: recorded.push({ name, attrs }), name, start: 0, ms: -1, route: null, path: null }),
+		begin: (name, attrs) => ({
+			id: recorded.push({ name, attrs }),
+			name,
+			start: 0,
+			ms: -1,
+			route: null,
+			path: null
+		}),
 		within: (_s, fn) => fn(),
 		end: (s, attrs, error) => {
 			const r = recorded[s.id - 1];
@@ -1615,7 +2917,9 @@ describe('instrument (ogygia/profiler): every call of a function becomes a span'
 	});
 
 	it('the function form: a wrapped function, attrs from the result and the arguments, this kept', async () => {
-		const render = async (tag: string, opts: { pretty: boolean }) => ({ html: `<${tag}>`.repeat(opts.pretty ? 2 : 1) });
+		const render = async (tag: string, opts: { pretty: boolean }) => ({
+			html: `<${tag}>`.repeat(opts.pretty ? 2 : 1)
+		});
 		const wrapped = instrument(render, 'ds.render', (r, tag) => ({ tag, bytes: r.html.length }));
 		expect(wrapped.name).toBe('render');
 		// outside a recording: one `if`, the same result
@@ -1624,17 +2928,33 @@ describe('instrument (ogygia/profiler): every call of a function becomes a span'
 		set_span_recorder(rec);
 		expect((await wrapped('ds-card', { pretty: true })).html).toBe('<ds-card><ds-card>');
 		expect(recorded).toEqual([{ name: 'ds.render', attrs: { tag: 'ds-card', bytes: 18 } }]);
-		const obj = { n: 3, count: instrument(function (this: { n: number }, k: number) { return this.n * k; }, 'obj.count') };
+		const obj = {
+			n: 3,
+			count: instrument(function (this: { n: number }, k: number) {
+				return this.n * k;
+			}, 'obj.count')
+		};
 		expect(obj.count(2)).toBe(6);
-		const boom = instrument(() => { throw new Error('nope'); }, 'boom');
+		const boom = instrument(() => {
+			throw new Error('nope');
+		}, 'boom');
 		expect(() => boom()).toThrow('nope');
 		expect(recorded.at(-1)).toEqual({ name: 'boom', attrs: undefined, error: 'nope' });
 	});
 
 	it('the method form: patched in place, restored by the returned function', () => {
-		const client = { calls: 0, query(sql: string) { this.calls++; return sql.length; } };
+		const client = {
+			calls: 0,
+			query(sql: string) {
+				this.calls++;
+				return sql.length;
+			}
+		};
 		set_span_recorder(rec);
-		const restore = instrument(client, 'query', 'db.query', (rows, sql) => ({ rows, key: sql.slice(0, 6) }));
+		const restore = instrument(client, 'query', 'db.query', (rows, sql) => ({
+			rows,
+			key: sql.slice(0, 6)
+		}));
 		expect(client.query('select 1')).toBe(8);
 		expect(client.calls).toBe(1);
 		expect(recorded).toEqual([{ name: 'db.query', attrs: { rows: 8, key: 'select' } }]);
@@ -1655,7 +2975,11 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 			{ id: 2, callFrame: frame('_page', '/app/src/routes/+page.svelte', 0), children: [3, 8] },
 			{ id: 3, callFrame: frame('buildTree', '/app/src/lib/tree.ts', 10), children: [4, 7] },
 			{ id: 4, callFrame: frame('walk', '/app/src/lib/tree.ts', 30), children: [5] },
-			{ id: 5, callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3), children: [6] },
+			{
+				id: 5,
+				callFrame: frame('escape', '/app/node_modules/svelte/src/internal/server/escaping.js', 3),
+				children: [6]
+			},
 			{ id: 6, callFrame: frame('format', '/app/src/lib/fmt.ts', 2) },
 			{ id: 7, callFrame: frame('sortRows', '/app/src/lib/sort.ts', 5) },
 			{ id: 8, callFrame: frame('unrelated', '/app/src/lib/other.ts', 1) }
@@ -1676,18 +3000,46 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 		// buildTree → sortRows
 		expect(g.tree.name).toBe('buildTree');
 		expect(g.tree.ms).toBe(70);
-		expect(g.tree.children.map((c) => `${c.name}:${c.ms}:${c.hot}`)).toEqual(['walk:50:true', 'sortRows:20:true']);
+		expect(g.tree.children.map((c) => `${c.name}:${c.ms}:${c.hot}`)).toEqual([
+			'walk:50:true',
+			'sortRows:20:true'
+		]);
 		expect(g.tree.children[0].children).toHaveLength(1);
-		expect(g.tree.children[0].children[0]).toMatchObject({ name: 'format', ms: 30, hot: true, children: [] });
+		expect(g.tree.children[0].children[0]).toMatchObject({
+			name: 'format',
+			ms: 30,
+			hot: true,
+			children: []
+		});
 		// `unrelated` shares nothing but the root: no group for it
 		expect(a.paths.some((x) => x.fns.some((f) => f.name === 'unrelated'))).toBe(false);
-		const meta = { id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [100], run_status: 200, run_bytes: 9000, duration_ms: 100, node: 'v', requests: [] };
-		const f = derive_findings(a, meta as never, { net: [], mem: [] } as never).find((x) => x.code === 'path-group')!;
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [100],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 100,
+			node: 'v',
+			requests: []
+		};
+		const f = derive_findings(a, meta as never, { net: [], mem: [] } as never).find(
+			(x) => x.code === 'path-group'
+		)!;
 		expect(f.severity).toBe('warn');
-		expect(f.message).toBe('3 hot functions sit on one path under buildTree: format, walk, sortRows — 70.0 ms together (70.0% of busy).');
+		expect(f.message).toBe(
+			'3 hot functions sit on one path under buildTree: format, walk, sortRows — 70.0 ms together (70.0% of busy).'
+		);
 		expect(f.anchor).toMatch(/^fn:buildTree /);
 		const j = report_json(a, meta as never, '/p', { net: [], mem: [] } as never);
-		expect(j.paths[0]).toMatchObject({ owner: { name: 'buildTree', line: 11 }, ms: 70, pct_busy: 70, share_of_owner: 1 });
+		expect(j.paths[0]).toMatchObject({
+			owner: { name: 'buildTree', line: 11 },
+			ms: 70,
+			pct_busy: 70,
+			share_of_owner: 1
+		});
 		expect(j.paths[0].tree.children[0].name).toBe('walk');
 	});
 
@@ -1697,9 +3049,17 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 			endTime: 40_000,
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
-				{ id: 2, callFrame: frame('children', '/app/build/server/chunks/internal2.js', 507), children: [3] },
+				{
+					id: 2,
+					callFrame: frame('children', '/app/build/server/chunks/internal2.js', 507),
+					children: [3]
+				},
 				{ id: 3, callFrame: frame('_page', '/app/src/routes/+page.svelte', 0), children: [4] },
-				{ id: 4, callFrame: frame('_b95bfb97fab', '/app/build/server/entries/pages/_page.svelte.js', 401), children: [5] },
+				{
+					id: 4,
+					callFrame: frame('_b95bfb97fab', '/app/build/server/entries/pages/_page.svelte.js', 401),
+					children: [5]
+				},
 				{ id: 5, callFrame: frame('Card', '/app/src/lib/Card.svelte', 0), children: [6, 7] },
 				{ id: 6, callFrame: frame('fmt', '/app/src/lib/fmt.ts', 2) },
 				{ id: 7, callFrame: frame('slug', '/app/src/lib/slug.ts', 2) }
@@ -1724,8 +3084,16 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
 				{ id: 2, callFrame: frame('processTags', '/app/src/lib/ds.ts', 5), children: [3] },
-				{ id: 3, callFrame: frame('span', '/app/build/server/chunks/index-server.js', 900), children: [4] },
-				{ id: 4, callFrame: frame('within', '/app/build/server/chunks/index-server.js', 910), children: [5, 6] },
+				{
+					id: 3,
+					callFrame: frame('span', '/app/build/server/chunks/index-server.js', 900),
+					children: [4]
+				},
+				{
+					id: 4,
+					callFrame: frame('within', '/app/build/server/chunks/index-server.js', 910),
+					children: [5, 6]
+				},
 				{ id: 5, callFrame: frame('tokenize', '/app/node_modules/parse5/lib/tokenizer.js', 30) },
 				{ id: 6, callFrame: frame('splice', '/app/src/lib/ds.ts', 40) }
 			],
@@ -1755,9 +3123,14 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 
 describe('the causality graph, pending resources, memory per component, path diff', () => {
 	const idle_profile: CpuProfile = {
-		startTime: 0, endTime: 100_000,
-		nodes: [{ id: 1, callFrame: frame('(root)'), children: [2] }, { id: 2, callFrame: frame('(idle)') }],
-		samples: [2], timeDeltas: [100_000]
+		startTime: 0,
+		endTime: 100_000,
+		nodes: [
+			{ id: 1, callFrame: frame('(root)'), children: [2] },
+			{ id: 2, callFrame: frame('(idle)') }
+		],
+		samples: [2],
+		timeDeltas: [100_000]
 	};
 	const idle_info = () => ({ name: '(idle)', url: '', line: 0, category: 'idle' as const });
 
@@ -1766,11 +3139,36 @@ describe('the causality graph, pending resources, memory per component, path dif
 			perf_start: 1000,
 			window: { start: 1000, end: 1100 },
 			calls: [
-				{ start: 1000, ms: 20, label: 'GET a', kind: 'net', caller: 'load (routes/+page.server.ts:5)' },
-				{ start: 1021, ms: 20, label: 'GET b', kind: 'net', caller: 'load (routes/+page.server.ts:6)', callers: ['load (routes/+page.server.ts:6)', 'respond (x.ts:1)'] },
+				{
+					start: 1000,
+					ms: 20,
+					label: 'GET a',
+					kind: 'net',
+					caller: 'load (routes/+page.server.ts:5)'
+				},
+				{
+					start: 1021,
+					ms: 20,
+					label: 'GET b',
+					kind: 'net',
+					caller: 'load (routes/+page.server.ts:6)',
+					callers: ['load (routes/+page.server.ts:6)', 'respond (x.ts:1)']
+				},
 				// c and d start together right after b: parallel — c gets the edge from b, d does not (c in flight)
-				{ start: 1042, ms: 30, label: 'GET c', kind: 'net', caller: 'load (routes/+page.server.ts:8)' },
-				{ start: 1043, ms: 10, label: 'GET d', kind: 'net', caller: 'load (routes/+page.server.ts:9)' },
+				{
+					start: 1042,
+					ms: 30,
+					label: 'GET c',
+					kind: 'net',
+					caller: 'load (routes/+page.server.ts:8)'
+				},
+				{
+					start: 1043,
+					ms: 10,
+					label: 'GET d',
+					kind: 'net',
+					caller: 'load (routes/+page.server.ts:9)'
+				},
 				// a span is the overlay, never a node
 				{ start: 1000, ms: 80, label: 'db.all', kind: 'span' },
 				// a timer far later: nothing ended within 5 ms before it
@@ -1778,9 +3176,21 @@ describe('the causality graph, pending resources, memory per component, path dif
 			]
 		});
 		const g = t.awaits!;
-		expect(g.nodes.map((n) => `${n.label}@${n.lane}`)).toEqual(['GET a@0', 'GET b@0', 'GET c@0', 'GET d@1', 'timer@0']);
+		expect(g.nodes.map((n) => `${n.label}@${n.lane}`)).toEqual([
+			'GET a@0',
+			'GET b@0',
+			'GET c@0',
+			'GET d@1',
+			'timer@0'
+		]);
 		expect(g.edges).toEqual([
-			{ from: 'GET a', to: 'GET b', gap_ms: 1, at: 'load (routes/+page.server.ts:6)', callers: ['load (routes/+page.server.ts:6)', 'respond (x.ts:1)'] },
+			{
+				from: 'GET a',
+				to: 'GET b',
+				gap_ms: 1,
+				at: 'load (routes/+page.server.ts:6)',
+				callers: ['load (routes/+page.server.ts:6)', 'respond (x.ts:1)']
+			},
 			{ from: 'GET b', to: 'GET c', gap_ms: 1, at: 'load (routes/+page.server.ts:8)' }
 		]);
 	});
@@ -1791,7 +3201,12 @@ describe('the causality graph, pending resources, memory per component, path dif
 			window: { start: 1000, end: 1100 },
 			calls: [{ start: 1000, ms: 20, label: 'GET a', kind: 'net' }],
 			pending: [
-				{ start: 1020, end: 1060, label: 'Immediate from drainQueue (routes/+page.server.ts:30)', kind: 'timer' },
+				{
+					start: 1020,
+					end: 1060,
+					label: 'Immediate from drainQueue (routes/+page.server.ts:30)',
+					kind: 'timer'
+				},
 				{ start: 1025, end: 1055, label: 'TickObject', kind: 'other' },
 				{ start: 1070, end: 1100, label: 'TCPWRAP from pool (lib/db.ts:9)', kind: 'socket' }
 			]
@@ -1805,20 +3220,39 @@ describe('the causality graph, pending resources, memory per component, path dif
 			'60-70 nothing recorded',
 			'70-100 nothing recorded — pending: TCPWRAP from pool (lib/db.ts:9)'
 		]);
-		expect(gaps[1].pending).toEqual(['Immediate from drainQueue (routes/+page.server.ts:30)', 'TickObject']);
+		expect(gaps[1].pending).toEqual([
+			'Immediate from drainQueue (routes/+page.server.ts:30)',
+			'TickObject'
+		]);
 	});
 
 	it('heap_by_component: bytes credited to the nearest component, nested components take their own', () => {
 		const head: HeapNode = {
-			callFrame: frame('(root)'), selfSize: 0,
+			callFrame: frame('(root)'),
+			selfSize: 0,
 			children: [
-				{ callFrame: frame('_page', '/app/src/routes/+page.svelte', 0), selfSize: 100, children: [
-					{ callFrame: frame('Card', '/app/src/lib/Card.svelte', 0), selfSize: 1000, children: [
-						{ callFrame: frame('fmt', '/app/src/lib/fmt.ts', 1), selfSize: 500 },
-						{ callFrame: frame('Badge', '/app/src/lib/Badge.svelte', 0), selfSize: 50 }
-					] },
-					{ callFrame: frame('escape_html', '/app/node_modules/svelte/src/internal/server/escaping.js', 1), selfSize: 20 }
-				] }
+				{
+					callFrame: frame('_page', '/app/src/routes/+page.svelte', 0),
+					selfSize: 100,
+					children: [
+						{
+							callFrame: frame('Card', '/app/src/lib/Card.svelte', 0),
+							selfSize: 1000,
+							children: [
+								{ callFrame: frame('fmt', '/app/src/lib/fmt.ts', 1), selfSize: 500 },
+								{ callFrame: frame('Badge', '/app/src/lib/Badge.svelte', 0), selfSize: 50 }
+							]
+						},
+						{
+							callFrame: frame(
+								'escape_html',
+								'/app/node_modules/svelte/src/internal/server/escaping.js',
+								1
+							),
+							selfSize: 20
+						}
+					]
+				}
 			]
 		};
 		expect(heap_by_component(head)).toEqual([
@@ -1829,22 +3263,67 @@ describe('the causality graph, pending resources, memory per component, path dif
 	});
 
 	it('compare: the paths to fix diff by owner', () => {
-		const mk = (paths: Analysis['paths']): { meta: ReportMeta; analysis: Analysis; findings: string[] } => ({
-			meta: { id: 'x', created: 0, trigger: 'page', page: '/p', runs: [10], duration_ms: 10, sample_interval_us: 500, requests: [], node: 'v' },
+		const mk = (
+			paths: Analysis['paths']
+		): { meta: ReportMeta; analysis: Analysis; findings: string[] } => ({
+			meta: {
+				id: 'x',
+				created: 0,
+				trigger: 'page',
+				page: '/p',
+				runs: [10],
+				duration_ms: 10,
+				sample_interval_us: 500,
+				requests: [],
+				node: 'v'
+			},
 			analysis: { ...analyze(idle_profile), paths },
 			findings: []
 		});
 		const g = (owner: string, ms: number, fns: string[]): Analysis['paths'][number] => ({
 			owner: { key: owner, name: owner, url: 'x.ts', line: 1, category: 'app', total_ms: ms },
 			fns: fns.map((n) => ({ key: n, name: n, url: 'x.ts', line: 1, category: 'app', ms: 1 })),
-			ms, share: 1,
+			ms,
+			share: 1,
 			tree: { key: owner, name: owner, category: 'app', file: '', ms, hot: false, children: [] }
 		});
-		const cmp = compare_reports(mk([g('buildTree', 180, ['walk', 'fmt']), g('gone', 30, ['x'])]), mk([g('buildTree', 40, ['fmt']), g('fresh', 25, ['y', 'z'])]));
+		const cmp = compare_reports(
+			mk([g('buildTree', 180, ['walk', 'fmt']), g('gone', 30, ['x'])]),
+			mk([g('buildTree', 40, ['fmt']), g('fresh', 25, ['y', 'z'])])
+		);
 		expect(cmp.paths).toEqual([
-			{ owner: 'buildTree', file: 'x.ts', line: 1, a_ms: 180, b_ms: 40, d_ms: -140, a_fns: ['walk', 'fmt'], b_fns: ['fmt'] },
-			{ owner: 'gone', file: 'x.ts', line: 1, a_ms: 30, b_ms: 0, d_ms: -30, a_fns: ['x'], b_fns: [], only: 'a' },
-			{ owner: 'fresh', file: 'x.ts', line: 1, a_ms: 0, b_ms: 25, d_ms: 25, a_fns: [], b_fns: ['y', 'z'], only: 'b' }
+			{
+				owner: 'buildTree',
+				file: 'x.ts',
+				line: 1,
+				a_ms: 180,
+				b_ms: 40,
+				d_ms: -140,
+				a_fns: ['walk', 'fmt'],
+				b_fns: ['fmt']
+			},
+			{
+				owner: 'gone',
+				file: 'x.ts',
+				line: 1,
+				a_ms: 30,
+				b_ms: 0,
+				d_ms: -30,
+				a_fns: ['x'],
+				b_fns: [],
+				only: 'a'
+			},
+			{
+				owner: 'fresh',
+				file: 'x.ts',
+				line: 1,
+				a_ms: 0,
+				b_ms: 25,
+				d_ms: 25,
+				a_fns: [],
+				b_fns: ['y', 'z'],
+				only: 'b'
+			}
 		]);
 	});
 });
@@ -1867,7 +3346,10 @@ describe('the browser CPU profile and the request replay', () => {
 	// a JS Self-Profiling trace: Card (a component) calls fmt; idle samples have no stack
 	const trace = {
 		// the page's own chunks, on the origin the beacon is posted to (another host would be a dependency)
-		resources: ['http://localhost/_app/immutable/chunks/app.js', 'http://localhost/_app/immutable/chunks/rt.js'],
+		resources: [
+			'http://localhost/_app/immutable/chunks/app.js',
+			'http://localhost/_app/immutable/chunks/rt.js'
+		],
 		frames: [
 			{ name: 'Card', resourceId: 0, line: 10, column: 1 },
 			{ name: 'fmt', resourceId: 0, line: 40, column: 1 },
@@ -1885,14 +3367,22 @@ describe('the browser CPU profile and the request replay', () => {
 
 	it('self_profile_to_cpuprofile: stacks become nodes, samples become deltas, no stack is idle; junk is null', () => {
 		const p = self_profile_to_cpuprofile(trace)!;
-		expect(p.nodes.map((n) => `${n.id}:${n.callFrame.functionName}`)).toEqual(['1:(root)', '2:(idle)', '3:Card', '4:fmt', '5:set_text']);
+		expect(p.nodes.map((n) => `${n.id}:${n.callFrame.functionName}`)).toEqual([
+			'1:(root)',
+			'2:(idle)',
+			'3:Card',
+			'4:fmt',
+			'5:set_text'
+		]);
 		expect(p.nodes.find((n) => n.id === 3)!.children).toEqual([4, 5]);
 		expect(p.samples).toEqual([4, 4, 5, 2, 3]);
 		expect(p.timeDeltas).toEqual([0, 10_000, 10_000, 10_000, 10_000]);
 		expect(self_profile_to_cpuprofile({ frames: 'x' })).toBeNull();
 		expect(self_profile_to_cpuprofile(null)).toBeNull();
 		// analysed with the build's hint: rt.js holds only the svelte runtime → svelte; Card confirmed as a component
-		const a = analyze(p, undefined, undefined, undefined, undefined, (url) => (url.includes('rt.js') ? 'svelte' : undefined));
+		const a = analyze(p, undefined, undefined, undefined, undefined, (url) =>
+			url.includes('rt.js') ? 'svelte' : undefined
+		);
 		expect(a.components.map((c) => c.name)).toEqual(['Card']);
 		expect(a.functions.find((f) => f.name === 'set_text')!.category).toBe('svelte');
 		expect(a.components[0].markup_ms).toBe(10);
@@ -1902,30 +3392,69 @@ describe('the browser CPU profile and the request replay', () => {
 	it('a minified client chunk: the confirmed component is named from the .svelte files the build put in the chunk; helpers are not', () => {
 		// Y (the component: svelte runtime below it) and Pt (a helper, nothing svelte below) in one chunk
 		const minified = {
-			resources: ['http://h/_app/immutable/chunks/zQnt.js', 'http://h/_app/immutable/chunks/rt.js', 'http://h/_app/immutable/chunks/multi.js'],
+			resources: [
+				'http://h/_app/immutable/chunks/zQnt.js',
+				'http://h/_app/immutable/chunks/rt.js',
+				'http://h/_app/immutable/chunks/multi.js'
+			],
 			frames: [
 				{ name: 'Y', resourceId: 0, line: 1, column: 1 },
 				{ name: 'Pt', resourceId: 0, line: 1, column: 9 },
 				{ name: 'set_text', resourceId: 1, line: 5, column: 1 },
 				{ name: 'B', resourceId: 2, line: 1, column: 1 }
 			],
-			stacks: [{ frameId: 0 }, { frameId: 2, parentId: 0 }, { frameId: 1 }, { frameId: 3 }, { frameId: 2, parentId: 3 }],
-			samples: [{ timestamp: 0, stackId: 1 }, { timestamp: 10, stackId: 1 }, { timestamp: 20, stackId: 2 }, { timestamp: 30, stackId: 4 }, { timestamp: 40, stackId: 0 }]
+			stacks: [
+				{ frameId: 0 },
+				{ frameId: 2, parentId: 0 },
+				{ frameId: 1 },
+				{ frameId: 3 },
+				{ frameId: 2, parentId: 3 }
+			],
+			samples: [
+				{ timestamp: 0, stackId: 1 },
+				{ timestamp: 10, stackId: 1 },
+				{ timestamp: 20, stackId: 2 },
+				{ timestamp: 30, stackId: 4 },
+				{ timestamp: 40, stackId: 0 }
+			]
 		};
 		const contents = (path: string) =>
-			path.endsWith('zQnt.js') ? ['src/lib/hell/ProductCard.svelte', 'svelte runtime'] : path.endsWith('multi.js') ? ['src/lib/a/Header.svelte', 'src/lib/a/Nav.svelte', 'src/lib/a/Logo.svelte', '+2 more'] : path.endsWith('rt.js') ? ['svelte runtime'] : undefined;
+			path.endsWith('zQnt.js')
+				? ['src/lib/hell/ProductCard.svelte', 'svelte runtime']
+				: path.endsWith('multi.js')
+					? ['src/lib/a/Header.svelte', 'src/lib/a/Nav.svelte', 'src/lib/a/Logo.svelte', '+2 more']
+					: path.endsWith('rt.js')
+						? ['svelte runtime']
+						: undefined;
 		const p = self_profile_to_cpuprofile(minified)!;
-		const a = analyze(p, undefined, undefined, undefined, chunk_component_renamer(contents), (url) => (url.includes('rt.js') ? 'svelte' : undefined));
+		const a = analyze(
+			p,
+			undefined,
+			undefined,
+			undefined,
+			chunk_component_renamer(contents),
+			(url) => (url.includes('rt.js') ? 'svelte' : undefined)
+		);
 		expect(a.components.map((c) => c.name).sort()).toEqual(['Header (+2 in chunk)', 'ProductCard']);
 		// the helper keeps its minified name as app code — it was never confirmed, so never renamed
 		const pt = a.functions.find((f) => f.name === 'Pt')!;
 		expect(pt.category).toBe('app');
 		expect(a.functions.some((f) => f.name === 'Y')).toBe(false);
 		// a name that is not minified is left alone even when the chunk is known
-		expect(chunk_component_renamer(contents)('ProductCard', 'http://h/_app/immutable/chunks/zQnt.js', 'confirmed')).toBeUndefined();
-		expect(chunk_component_renamer(contents)('Y', 'http://h/_app/immutable/chunks/zQnt.js', 'frame')).toBeUndefined();
+		expect(
+			chunk_component_renamer(contents)(
+				'ProductCard',
+				'http://h/_app/immutable/chunks/zQnt.js',
+				'confirmed'
+			)
+		).toBeUndefined();
+		expect(
+			chunk_component_renamer(contents)('Y', 'http://h/_app/immutable/chunks/zQnt.js', 'frame')
+		).toBeUndefined();
 		// a path without a host (a relative resource) still finds its chunk
-		expect(chunk_component_renamer(contents)('Y', '/_app/immutable/chunks/zQnt.js', 'confirmed')).toBe('ProductCard');
+		expect(
+			chunk_component_renamer(contents)('Y', '/_app/immutable/chunks/zQnt.js', 'confirmed')
+		).toBe('ProductCard');
 	});
 
 	it('a browser frame with a source map: the minified name and the chunk give way to the real function and its .svelte file', () => {
@@ -1943,17 +3472,37 @@ describe('the browser CPU profile and the request replay', () => {
 			return out;
 		};
 		// generated line 0: col 0 → source 0 (ProductCard.svelte) line 3, name 0; col 40 → source 1 (fmt.ts) line 8, name 1
-		const mappings = [vlq(0) + vlq(0) + vlq(3) + vlq(0) + vlq(0), vlq(40) + vlq(1) + vlq(5) + vlq(0) + vlq(1)].join(',');
-		const map = JSON.stringify({ sources: ['../../../../src/lib/hell/ProductCard.svelte', '../../../../src/lib/fmt.ts'], names: ['ProductCard', 'format_price'], mappings });
+		const mappings = [
+			vlq(0) + vlq(0) + vlq(3) + vlq(0) + vlq(0),
+			vlq(40) + vlq(1) + vlq(5) + vlq(0) + vlq(1)
+		].join(',');
+		const map = JSON.stringify({
+			sources: ['../../../../src/lib/hell/ProductCard.svelte', '../../../../src/lib/fmt.ts'],
+			names: ['ProductCard', 'format_price'],
+			mappings
+		});
 		const file = '/app/.svelte-kit/output/client/_app/immutable/chunks/zQnt.js';
 		// the runtime chunk (hinted a dependency by the build) has a map too: svelte's own source and
 		// a workspace-linked ogygia runtime whose path has no node_modules in it
 		// col 0 → svelte task.js `flush_sync`; col 34 → hydrate-core.js, NAMELESS (the `function` keyword,
 		// as a minifier maps it); col 40 → the same file, the identifier `hydrate_island`
-		const rt_mappings = [vlq(0) + vlq(0) + vlq(0) + vlq(0) + vlq(0), vlq(34) + vlq(1) + vlq(0) + vlq(0), vlq(6) + vlq(0) + vlq(0) + vlq(0) + vlq(1)].join(',');
-		const rt_map = JSON.stringify({ sources: ['../../../../node_modules/svelte/src/internal/client/dom/task.js', '../../../../../packages/ogygia/dist/runtime/hydrate-core.js'], names: ['flush_sync', 'hydrate_island'], mappings: rt_mappings });
+		const rt_mappings = [
+			vlq(0) + vlq(0) + vlq(0) + vlq(0) + vlq(0),
+			vlq(34) + vlq(1) + vlq(0) + vlq(0),
+			vlq(6) + vlq(0) + vlq(0) + vlq(0) + vlq(1)
+		].join(',');
+		const rt_map = JSON.stringify({
+			sources: [
+				'../../../../node_modules/svelte/src/internal/client/dom/task.js',
+				'../../../../../packages/ogygia/dist/runtime/hydrate-core.js'
+			],
+			names: ['flush_sync', 'hydrate_island'],
+			mappings: rt_mappings
+		});
 		const rt = '/app/.svelte-kit/output/client/_app/immutable/chunks/rt.js';
-		const resolver = sourcemap_resolver((p) => (p === file + '.map' ? map : p === rt + '.map' ? rt_map : undefined));
+		const resolver = sourcemap_resolver((p) =>
+			p === file + '.map' ? map : p === rt + '.map' ? rt_map : undefined
+		);
 		const trace = {
 			resources: [file, rt],
 			frames: [
@@ -1964,11 +3513,32 @@ describe('the browser CPU profile and the request replay', () => {
 				// the function's start sits 6 columns before the named segment (`function w(` → `w`)
 				{ name: 'w', resourceId: 1, line: 1, column: 35 }
 			],
-			stacks: [{ frameId: 0 }, { frameId: 1, parentId: 0 }, { frameId: 2, parentId: 0 }, { frameId: 3 }, { frameId: 4 }],
-			samples: [{ timestamp: 0, stackId: 1 }, { timestamp: 10, stackId: 1 }, { timestamp: 20, stackId: 2 }, { timestamp: 30, stackId: 0 }, { timestamp: 40, stackId: 3 }, { timestamp: 50, stackId: 4 }]
+			stacks: [
+				{ frameId: 0 },
+				{ frameId: 1, parentId: 0 },
+				{ frameId: 2, parentId: 0 },
+				{ frameId: 3 },
+				{ frameId: 4 }
+			],
+			samples: [
+				{ timestamp: 0, stackId: 1 },
+				{ timestamp: 10, stackId: 1 },
+				{ timestamp: 20, stackId: 2 },
+				{ timestamp: 30, stackId: 0 },
+				{ timestamp: 40, stackId: 3 },
+				{ timestamp: 50, stackId: 4 }
+			]
 		};
 		const p = self_profile_to_cpuprofile(trace)!;
-		const a = analyze(p, resolver, undefined, undefined, chunk_component_renamer(() => undefined), (url) => (url.includes('rt.js') ? { category: 'dependency', pkg: 'svelte + ogygia' } : undefined));
+		const a = analyze(
+			p,
+			resolver,
+			undefined,
+			undefined,
+			chunk_component_renamer(() => undefined),
+			(url) =>
+				url.includes('rt.js') ? { category: 'dependency', pkg: 'svelte + ogygia' } : undefined
+		);
 		expect(a.components.map((c) => c.name)).toEqual(['ProductCard']);
 		expect(a.components[0].url).toMatch(/src\/lib\/hell\/ProductCard\.svelte$/);
 		const fmt = a.functions.find((f) => f.name === 'format_price')!;
@@ -2021,16 +3591,34 @@ describe('the browser CPU profile and the request replay', () => {
 	it('client files: app assets map to the built client dir, other hosts and crafted paths never do', () => {
 		const join = (...p: string[]) => p.join('/').replace(/\/+/g, '/');
 		// the cwd's build/client is the same dir as the entry's client here: listed once
-		expect(client_dir_candidates('/srv/build', '/srv', join)).toEqual(['/srv/build/client', '/srv/build/../client', '/srv/.svelte-kit/output/client']);
-		expect(client_dir_candidates(undefined, '/srv', join)).toEqual(['/srv/.svelte-kit/output/client', '/srv/build/client']);
+		expect(client_dir_candidates('/srv/build', '/srv', join)).toEqual([
+			'/srv/build/client',
+			'/srv/build/../client',
+			'/srv/.svelte-kit/output/client'
+		]);
+		expect(client_dir_candidates(undefined, '/srv', join)).toEqual([
+			'/srv/.svelte-kit/output/client',
+			'/srv/build/client'
+		]);
 		expect(app_asset_rel('/_app/immutable/chunks/X.js')).toBe('_app/immutable/chunks/X.js');
-		expect(app_asset_rel('/base/path/_app/immutable/entry/start.js')).toBe('_app/immutable/entry/start.js');
+		expect(app_asset_rel('/base/path/_app/immutable/entry/start.js')).toBe(
+			'_app/immutable/entry/start.js'
+		);
 		expect(app_asset_rel('/_app/../secret.js')).toBeUndefined();
 		expect(app_asset_rel('/other/x.js')).toBeUndefined();
 		const on_disk = new Set(['/srv/build/client/_app/immutable/chunks/X.js']);
-		const find = client_file_finder('http://site', ['/srv/nope', '/srv/build/client'], (p) => on_disk.has(p), join);
-		expect(find('http://site/_app/immutable/chunks/X.js')).toBe('/srv/build/client/_app/immutable/chunks/X.js');
-		expect(find('/_app/immutable/chunks/X.js')).toBe('/srv/build/client/_app/immutable/chunks/X.js');
+		const find = client_file_finder(
+			'http://site',
+			['/srv/nope', '/srv/build/client'],
+			(p) => on_disk.has(p),
+			join
+		);
+		expect(find('http://site/_app/immutable/chunks/X.js')).toBe(
+			'/srv/build/client/_app/immutable/chunks/X.js'
+		);
+		expect(find('/_app/immutable/chunks/X.js')).toBe(
+			'/srv/build/client/_app/immutable/chunks/X.js'
+		);
 		expect(find('http://site/_app/immutable/chunks/missing.js')).toBeUndefined();
 		expect(find('https://cdn.example.net/_app/immutable/chunks/X.js')).toBeUndefined();
 		expect(find('not a url')).toBeUndefined();
@@ -2041,17 +3629,44 @@ describe('the browser CPU profile and the request replay', () => {
 		// the build knows the runtime chunk holds only packages (svelte's runtime + clsx)
 		set_chunk_contents({ '/_app/immutable/chunks/rt.js': ['svelte runtime', 'clsx'] });
 		const cdn = {
-			resources: ['https://cdn.example.net/npm/@acme/core@8/dist/p-abc.js', 'http://localhost/_app/immutable/chunks/app.js', 'http://localhost/_app/immutable/chunks/rt.js'],
-			frames: [{ name: 'Card', resourceId: 0, line: 1, column: 1 }, { name: 'Local', resourceId: 1, line: 1, column: 1 }, { name: 'Gr', resourceId: 2, line: 1, column: 1 }],
+			resources: [
+				'https://cdn.example.net/npm/@acme/core@8/dist/p-abc.js',
+				'http://localhost/_app/immutable/chunks/app.js',
+				'http://localhost/_app/immutable/chunks/rt.js'
+			],
+			frames: [
+				{ name: 'Card', resourceId: 0, line: 1, column: 1 },
+				{ name: 'Local', resourceId: 1, line: 1, column: 1 },
+				{ name: 'Gr', resourceId: 2, line: 1, column: 1 }
+			],
 			stacks: [{ frameId: 0 }, { frameId: 1 }, { frameId: 2 }],
-			samples: [{ timestamp: 0, stackId: 0 }, { timestamp: 10, stackId: 0 }, { timestamp: 20, stackId: 1 }, { timestamp: 30, stackId: 2 }]
+			samples: [
+				{ timestamp: 0, stackId: 0 },
+				{ timestamp: 10, stackId: 0 },
+				{ timestamp: 20, stackId: 1 },
+				{ timestamp: 30, stackId: 2 }
+			]
 		};
 		const post = (body: string) =>
-			handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body }) } as RequestEvent, resolve: async () => new Response('no') });
+			handle({
+				event: {
+					...make_event('/__profiler/beacon'),
+					request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body })
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
 		expect((await post(JSON.stringify({ page: '/cdn', cpu: cdn }))).status).toBe(204);
-		const rec = await handle({ event: make_event('/__profiler/page?p=/cdn&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
+		const rec = await handle({
+			event: make_event('/__profiler/page?p=/cdn&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
 		const url = rec.headers.get('location')!;
-		const json = await (await handle({ event: make_event(url.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(url.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		const card = json.browser.cpu.hot_functions.find((f: { name: string }) => f.name === 'Card');
 		expect(card.category).toBe('dependency');
 		expect(card.package).toBe('@acme/core'); // named by the package in the CDN path, not "ogygia"
@@ -2065,25 +3680,53 @@ describe('the browser CPU profile and the request replay', () => {
 	it('beacon: a cpu trace lands per page and the report shows it as browser components', async () => {
 		const handle = profiler({ secret: 'prof-key' });
 		const post = (body: string) =>
-			handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body }) } as RequestEvent, resolve: async () => new Response('no') });
+			handle({
+				event: {
+					...make_event('/__profiler/beacon'),
+					request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body })
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
 		expect((await post(JSON.stringify({ page: '/c', cpu: { frames: 1 } }))).status).toBe(400);
 		expect((await post(JSON.stringify({ page: '/c', cpu: trace }))).status).toBe(204);
-		const rec = await handle({ event: make_event('/__profiler/page?p=/c&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
+		const rec = await handle({
+			event: make_event('/__profiler/page?p=/c&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
 		const url = rec.headers.get('location')!;
-		const json = await (await handle({ event: make_event(url.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(url.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(json.browser.cpu.components.map((c: { name: string }) => c.name)).toEqual(['Card']);
 		expect(json.browser.cpu.busy_ms).toBe(30);
 		// a document for the profiler's user carries the policy that lets the browser sample itself
-		const doc = await handle({ event: make_event('/some/page', { 'sec-fetch-dest': 'document' }), resolve: async () => new Response('<html><head></head></html>') });
+		const doc = await handle({
+			event: make_event('/some/page', { 'sec-fetch-dest': 'document' }),
+			resolve: async () => new Response('<html><head></head></html>')
+		});
 		expect(doc.headers.get('document-policy')).toBe('js-profiling');
-		const sub = await handle({ event: make_event('/some/data', { 'sec-fetch-dest': 'empty' }), resolve: async () => new Response('x') });
+		const sub = await handle({
+			event: make_event('/some/data', { 'sec-fetch-dest': 'empty' }),
+			resolve: async () => new Response('x')
+		});
 		expect(sub.headers.get('document-policy')).toBeNull();
 	});
 
 	it('replay: a header-profiled request is rendered again in page mode with its query and kept headers', async () => {
-		const handle = profiler({ secret: 'prof-key', trap: { over: 100_000, replay: ['x-tenant', 'accept-language'] } });
+		const handle = profiler({
+			secret: 'prof-key',
+			trap: { over: 100_000, replay: ['x-tenant', 'accept-language'] }
+		});
 		const profiled = await handle({
-			event: make_event('/prod/page?x=1', { 'x-profile': 'prof-key', 'x-tenant': 'acme', 'accept-language': 'fr', cookie: 'secret=1' }),
+			event: make_event('/prod/page?x=1', {
+				'x-profile': 'prof-key',
+				'x-tenant': 'acme',
+				'accept-language': 'fr',
+				cookie: 'secret=1'
+			}),
 			resolve: async () => new Response('page')
 		});
 		const report_url = profiled.headers.get('x-profile-report')!;
@@ -2096,15 +3739,40 @@ describe('the browser CPU profile and the request replay', () => {
 		};
 		const res = await handle({ event: ev, resolve: async () => new Response('no') });
 		expect(res.status).toBe(303);
-		const again = await (await handle({ event: make_event(res.headers.get('location')!.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const again = await (
+			await handle({
+				event: make_event(res.headers.get('location')!.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(again.target.page).toBe('/prod/page?x=1');
 		// the kept headers travel; the cookie does not (not named)
-		expect(seen[0]).toMatchObject({ 'x-tenant': 'acme', 'accept-language': 'fr', 'x-og-profiler-internal': '1' });
+		expect(seen[0]).toMatchObject({
+			'x-tenant': 'acme',
+			'accept-language': 'fr',
+			'x-og-profiler-internal': '1'
+		});
 		expect(seen[0].cookie).toBeUndefined();
 		// the report links it
-		const first = await (await handle({ event: make_event(report_url + '.json'), resolve: async () => new Response('no') })).json();
-		expect(first.replay).toEqual({ url: `/__profiler/replay/${id}`, path: '/prod/page?x=1', headers: ['x-tenant', 'accept-language'] });
-		expect((await handle({ event: make_event('/__profiler/replay/nope'), resolve: async () => new Response('no') })).status).toBe(404);
+		const first = await (
+			await handle({
+				event: make_event(report_url + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
+		expect(first.replay).toEqual({
+			url: `/__profiler/replay/${id}`,
+			path: '/prod/page?x=1',
+			headers: ['x-tenant', 'accept-language']
+		});
+		expect(
+			(
+				await handle({
+					event: make_event('/__profiler/replay/nope'),
+					resolve: async () => new Response('no')
+				})
+			).status
+		).toBe(404);
 	});
 });
 
@@ -2115,7 +3783,16 @@ describe('span + tag (ogygia/profiler)', () => {
 	let current: number | undefined;
 	const recorder: SpanRecorder = {
 		begin: (name, attrs) => {
-			const rec: SpanRecord = { id: ++seq, name, start: 100 + seq, ms: -1, attrs, parent: current, route: '/x', path: '/x' };
+			const rec: SpanRecord = {
+				id: ++seq,
+				name,
+				start: 100 + seq,
+				ms: -1,
+				attrs,
+				parent: current,
+				route: '/x',
+				path: '/x'
+			};
 			recorded.push(rec);
 			return rec;
 		},
@@ -2145,7 +3822,11 @@ describe('span + tag (ogygia/profiler)', () => {
 	it('is a pass-through without a recorder: sync stays sync, a promise stays a promise, nothing recorded', async () => {
 		expect(span('x', () => 1)).toBe(1);
 		await expect(span('y', async () => 2)).resolves.toBe(2);
-		expect(() => span('z', () => { throw new Error('boom'); })).toThrow('boom');
+		expect(() =>
+			span('z', () => {
+				throw new Error('boom');
+			})
+		).toThrow('boom');
 		expect(span.start('h').end()).toBeUndefined();
 		tag('k', 'v');
 		expect(recorded).toEqual([]);
@@ -2153,10 +3834,18 @@ describe('span + tag (ogygia/profiler)', () => {
 
 	it('records name, attrs (static or from the result), errors, nesting and tags while recording', async () => {
 		set_span_recorder(recorder);
-		const v = await span('db.user', async () => {
-			await span('db.orders', () => Promise.resolve([1, 2, 3]), (rows) => ({ rows: rows.length }));
-			return { fromCache: false };
-		}, (r) => ({ cache: r.fromCache ? 'hit' : 'miss' }));
+		const v = await span(
+			'db.user',
+			async () => {
+				await span(
+					'db.orders',
+					() => Promise.resolve([1, 2, 3]),
+					(rows) => ({ rows: rows.length })
+				);
+				return { fromCache: false };
+			},
+			(r) => ({ cache: r.fromCache ? 'hit' : 'miss' })
+		);
 		expect(v).toEqual({ fromCache: false });
 		expect(span('sync', () => 7, { key: 'a' })).toBe(7);
 		await expect(span('fails', () => Promise.reject(new Error('nope')))).rejects.toThrow('nope');
@@ -2178,54 +3867,267 @@ describe('span + tag (ogygia/profiler)', () => {
 
 	it('span_rows folds a recording per name: count, p50, max, errors, cache tallies, callers', () => {
 		const s = (name: string, ms: number, extra: Partial<SpanRecord> = {}): SpanRecord => ({
-			id: 0, name, start: 0, ms, route: null, path: null, caller: 'load (src/routes/+page.server.ts:9)', ...extra
+			id: 0,
+			name,
+			start: 0,
+			ms,
+			route: null,
+			path: null,
+			caller: 'load (src/routes/+page.server.ts:9)',
+			...extra
 		});
 		const rows = span_rows([
-			s('stock.lookup', 7), s('stock.lookup', 8), s('stock.lookup', 6, { error: 'timeout' }),
-			s('cache.segments', 18, { attrs: { cache: 'miss' } }), s('cache.segments', 0.1, { attrs: { cache: 'hit' } }),
+			s('stock.lookup', 7),
+			s('stock.lookup', 8),
+			s('stock.lookup', 6, { error: 'timeout' }),
+			s('cache.segments', 18, { attrs: { cache: 'miss' } }),
+			s('cache.segments', 0.1, { attrs: { cache: 'hit' } }),
 			s('open.one', -1, { open: true })
 		]);
-		expect(rows[0]).toMatchObject({ name: 'stock.lookup', count: 3, total_ms: 21, p50_ms: 7, max_ms: 8, errors: 1, callers: ['load (src/routes/+page.server.ts:9)'] });
-		expect(rows[1]).toMatchObject({ name: 'cache.segments', cache: { hit: 1, miss: 1, miss_ms: 18 } });
+		expect(rows[0]).toMatchObject({
+			name: 'stock.lookup',
+			count: 3,
+			total_ms: 21,
+			p50_ms: 7,
+			max_ms: 8,
+			errors: 1,
+			callers: ['load (src/routes/+page.server.ts:9)']
+		});
+		expect(rows[1]).toMatchObject({
+			name: 'cache.segments',
+			cache: { hit: 1, miss: 1, miss_ms: 18 }
+		});
 		expect(rows[2]).toMatchObject({ name: 'open.one', open: 1, total_ms: 0 });
 	});
 
 	it('the timeline treats a span as the overlay: a gap inside it reads "in <span>", a call inside it names the span', () => {
 		const profile: CpuProfile = {
-			startTime: 0, endTime: 100_000,
-			nodes: [{ id: 1, callFrame: frame('(root)'), children: [2] }, { id: 2, callFrame: frame('(idle)') }],
-			samples: [2], timeDeltas: [100_000]
+			startTime: 0,
+			endTime: 100_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('(idle)') }
+			],
+			samples: [2],
+			timeDeltas: [100_000]
 		};
-		const t = build_timeline(profile, () => ({ name: '(idle)', url: '', line: 0, category: 'idle' }), () => undefined, {
-			perf_start: 1000,
-			window: { start: 1000, end: 1100 },
-			calls: [
-				{ start: 1000, ms: 50, label: 'db.rows', kind: 'span', caller: 'load (src/routes/+page.server.ts:9)', phase: 'load' },
-				{ start: 1010, ms: 20, label: 'GET api/x', kind: 'net' },
-				{ start: 1060, ms: 30, label: 'queue.drain', kind: 'span', phase: 'load' }
+		const t = build_timeline(
+			profile,
+			() => ({ name: '(idle)', url: '', line: 0, category: 'idle' }),
+			() => undefined,
+			{
+				perf_start: 1000,
+				window: { start: 1000, end: 1100 },
+				calls: [
+					{
+						start: 1000,
+						ms: 50,
+						label: 'db.rows',
+						kind: 'span',
+						caller: 'load (src/routes/+page.server.ts:9)',
+						phase: 'load'
+					},
+					{ start: 1010, ms: 20, label: 'GET api/x', kind: 'net' },
+					{ start: 1060, ms: 30, label: 'queue.drain', kind: 'span', phase: 'load' }
+				]
+			}
+		);
+		expect(t.segments.map((s) => `${s.kind}:${s.label}${s.within ? ' @' + s.within : ''}`)).toEqual(
+			[
+				'wait:in db.rows @db.rows',
+				'wait:GET api/x @db.rows',
+				'wait:in db.rows @db.rows',
+				'gap:nothing recorded',
+				'wait:in queue.drain @queue.drain',
+				'gap:nothing recorded'
 			]
-		});
-		expect(t.segments.map((s) => `${s.kind}:${s.label}${s.within ? ' @' + s.within : ''}`)).toEqual([
-			'wait:in db.rows @db.rows',
-			'wait:GET api/x @db.rows',
-			'wait:in db.rows @db.rows',
-			'gap:nothing recorded',
-			'wait:in queue.drain @queue.drain',
-			'gap:nothing recorded'
-		]);
+		);
 		expect(t.phases.find((p) => p.phase === 'load')?.wait_ms).toBe(80);
 	});
 
+	it('findings quote one render’s worth: a 3-render profile’s 30 ms hot function burns 10 ms per render', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 40_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('crunch', '/app/src/lib/crunch.ts', 4) }
+			],
+			samples: [2, 2, 2],
+			timeDeltas: [10_000, 10_000, 10_000]
+		};
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [40, 40, 40],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 120,
+			node: 'v',
+			requests: []
+		};
+		const f = derive_findings(analyze(p), meta as never, { net: [], mem: [] } as never);
+		expect(f.find((x) => x.code === 'hot-function')!.message).toContain(
+			'crunch burns 10.0 ms per render (100'
+		);
+		expect(f.find((x) => x.code === 'top-consumer')?.message ?? '').not.toContain('30.0 ms');
+	});
+
+	it('cold-instance: on AWS Lambda the time to the first request is the cold start; elsewhere it says nothing', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const base = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [40, 40, 40],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 120,
+			node: 'v',
+			requests: [],
+			cold: { ms: 190, busy_ms: 150, files: [] }
+		};
+		const instance = { first_request_ms: 850, node_ms: 12, age_s: 3.2, requests_before: 1 };
+		const f = derive_findings(
+			analyze(p),
+			{ ...base, lambda: true, instance } as never,
+			{ net: [], mem: [] } as never
+		).find((x) => x.code === 'cold-instance')!;
+		expect(f.message).toContain(
+			"This instance took 850 ms from its process starting to its first request: Node's own startup 12.0 ms"
+		);
+		expect(f.message).toContain('the first render then pays about 150 ms more to warm up');
+		expect(f.message).toContain('3.2 s old and had served 1 request before this recording');
+		// a long-running server: the time to its first request is mostly waiting for traffic
+		expect(
+			derive_findings(
+				analyze(p),
+				{ ...base, instance } as never,
+				{ net: [], mem: [] } as never
+			).some((x) => x.code === 'cold-instance')
+		).toBe(false);
+	});
+
+	it('key-unread: a load’s wait counts once, however many of its keys nobody reads', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [40],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 40,
+			node: 'v',
+			requests: []
+		};
+		const from = 'routes/p/+page.server.ts';
+		const lineage = {
+			keys: [],
+			components: [],
+			unread: ['locale', 'freshest', 'labels'].map((key) => ({ key, from, load_wait_ms: 99 })),
+			server_only: [],
+			notes: []
+		};
+		const f = derive_findings(
+			analyze(p),
+			meta as never,
+			{ net: [], mem: [], lineage } as never
+		).find((x) => x.code === 'key-unread')!;
+		expect(f.message).toContain(
+			'The load returning them waited 99.0 ms on upstream calls per render in all'
+		);
+		expect(f.message).not.toContain('297');
+	});
+
+	it('fair_shares: the wall split among whoever is open, adding up to the union', () => {
+		// apart: each keeps its own length
+		expect(
+			fair_shares([
+				[0, 10],
+				[20, 25]
+			])
+		).toEqual({ shares: [10, 5], peak: 1 });
+		// touching is not overlapping
+		expect(
+			fair_shares([
+				[0, 10],
+				[10, 20]
+			]).peak
+		).toBe(1);
+		// overlap: 0–5 alone, 5–10 shared by two, 10–15 alone → 7.5 + 7.5, union 15
+		const r = fair_shares([
+			[0, 10],
+			[5, 15]
+		]);
+		expect(r).toEqual({ shares: [7.5, 7.5], peak: 2 });
+		// nested, uneven: the sum is always the union's length
+		const n = fair_shares([
+			[0, 100],
+			[10, 20],
+			[15, 60],
+			[90, 130]
+		]);
+		expect(n.shares.reduce((a, b) => a + b, 0)).toBeCloseTo(130, 9);
+		expect(n.peak).toBe(3);
+	});
+
 	it('findings: a span repeated per item, a cold cache, a failing span', () => {
-		const p: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [1000] };
-		const meta = { id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [200, 200], run_status: 200, run_bytes: 9000, duration_ms: 400, node: 'v', requests: [] };
-		const s = (name: string, ms: number, extra: Partial<SpanRecord> = {}): SpanRecord => ({ id: 0, name, start: 0, ms, route: null, path: null, ...extra });
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const meta = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [200, 200],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 400,
+			node: 'v',
+			requests: []
+		};
+		const s = (name: string, ms: number, extra: Partial<SpanRecord> = {}): SpanRecord => ({
+			id: 0,
+			name,
+			start: 0,
+			ms,
+			route: null,
+			path: null,
+			...extra
+		});
 		const spans = [
 			// one after another: each starts when the previous ended
-			...Array.from({ length: 32 }, (_, i) => s('stock.lookup', 7, { start: i * 7, caller: 'load (routes/+page.server.ts:20)' })),
+			...Array.from({ length: 32 }, (_, i) =>
+				s('stock.lookup', 7, { start: i * 7, caller: 'load (routes/+page.server.ts:20)' })
+			),
 			// together: forty renders under a Promise.all, the same 100 ms of wall
-			...Array.from({ length: 40 }, () => s('ds.render', 100, { start: 500, caller: 'processTags (lib/ds.ts:9)' })),
-			s('cache.segments', 18, { attrs: { cache: 'miss' } }), s('cache.segments', 18, { attrs: { cache: 'miss' } }),
+			...Array.from({ length: 40 }, () =>
+				s('ds.render', 100, { start: 500, caller: 'processTags (lib/ds.ts:9)' })
+			),
+			s('cache.segments', 18, { attrs: { cache: 'miss' } }),
+			s('cache.segments', 18, { attrs: { cache: 'miss' } }),
 			s('svc.x', 1, { error: 'ECONNRESET' })
 		];
 		const f = derive_findings(analyze(p), meta as never, { net: [], mem: [], spans } as never);
@@ -2234,28 +4136,71 @@ describe('span + tag (ogygia/profiler)', () => {
 		expect(repeats.map((x) => x.message.split(' ran ')[0])).toEqual(['ds.render', 'stock.lookup']);
 		expect(repeats[1].message).toContain('stock.lookup ran 16 times in one render');
 		expect(repeats[1].fix).toMatch(/batch/);
-		expect(repeats[0].message).toBe('ds.render ran 20 times in one render (processTags (lib/ds.ts:9)), together: 50.0 ms of wall for 2000 ms of summed work, 100 ms each.');
+		// forty at once over 100 ms: each one's fair part is 2.5 ms, not its 100 ms start-to-end
+		expect(repeats[0].message).toBe(
+			'ds.render ran 20 times in one render (processTags (lib/ds.ts:9)), up to 40 at once, and together they took 50.0 ms. ' +
+				"Each one's part of that is about 2.50 ms; its own start to end (100 ms) is mostly waiting its turn behind the others."
+		);
 		expect(repeats[0].fix).toMatch(/already overlap/);
 		const rows = span_rows(spans);
-		expect(rows.find((r) => r.name === 'ds.render')).toMatchObject({ count: 40, total_ms: 4000, wall_ms: 100 });
+		expect(rows.find((r) => r.name === 'ds.render')).toMatchObject({
+			count: 40,
+			total_ms: 4000,
+			wall_ms: 100,
+			share_p50_ms: 2.5,
+			peak: 40
+		});
 		// the breakdown by attribute value: `ds.render` by tag
 		const tagged = [
-			...Array.from({ length: 12 }, () => s('ds.render', 100, { start: 0, attrs: { tag: 'ds-chip', bytes: 900 } })),
-			...Array.from({ length: 2 }, () => s('ds.render', 10, { start: 0, attrs: { tag: 'ds-button', bytes: 100 } })),
+			...Array.from({ length: 12 }, () =>
+				s('ds.render', 100, { start: 0, attrs: { tag: 'ds-chip', bytes: 900 } })
+			),
+			...Array.from({ length: 2 }, () =>
+				s('ds.render', 10, { start: 0, attrs: { tag: 'ds-button', bytes: 100 } })
+			),
 			s('ds.render', 5, { start: 0, attrs: { tag: 'ds-badge' } })
 		];
 		const brk = span_rows(tagged)[0].by;
 		expect(Object.keys(brk)).toEqual(['tag']); // `bytes` is numeric: not a breakdown
 		// a value unique per span (an id) is no split either
-		expect(span_rows(Array.from({ length: 6 }, (_, i) => s('stock.lookup', 7, { start: i, attrs: { key: `P${i}` } })))[0].by).toEqual({});
-		// all twelve chips start together: 1200 ms summed, 100 ms of wall
+		expect(
+			span_rows(
+				Array.from({ length: 6 }, (_, i) =>
+					s('stock.lookup', 7, { start: i, attrs: { key: `P${i}` } })
+				)
+			)[0].by
+		).toEqual({});
+		// all twelve chips start together: 1200 ms summed, 100 ms of wall; the shares split the 100 ms
+		// (0–5 ms among 15, 5–10 among 14, 10–100 among the 12 chips) and add up to it
 		expect(brk.tag).toEqual([
-			{ value: 'ds-chip', count: 12, total_ms: 1200, wall_ms: 100, p50_ms: 100, max_ms: 100 },
-			{ value: 'ds-button', count: 2, total_ms: 20, wall_ms: 10, p50_ms: 10, max_ms: 10 },
-			{ value: 'ds-badge', count: 1, total_ms: 5, wall_ms: 5, p50_ms: 5, max_ms: 5 }
+			{
+				value: 'ds-chip',
+				count: 12,
+				total_ms: 1200,
+				wall_ms: 100,
+				share_ms: 98.29,
+				p50_ms: 100,
+				max_ms: 100
+			},
+			{
+				value: 'ds-button',
+				count: 2,
+				total_ms: 20,
+				wall_ms: 10,
+				share_ms: 1.38,
+				p50_ms: 10,
+				max_ms: 10
+			},
+			{ value: 'ds-badge', count: 1, total_ms: 5, wall_ms: 5, share_ms: 0.33, p50_ms: 5, max_ms: 5 }
 		]);
-		const fb = derive_findings(analyze(p), meta as never, { net: [], mem: [], spans: tagged } as never).find((x) => x.code === 'span-repeat')!;
-		expect(fb.message).toContain('Most of it is tag ds-chip: 6 of them, 50.0 ms of wall (600 ms summed).');
+		const fb = derive_findings(
+			analyze(p),
+			meta as never,
+			{ net: [], mem: [], spans: tagged } as never
+		).find((x) => x.code === 'span-repeat')!;
+		expect(fb.message).toContain(
+			'The biggest part is tag ds-chip: 6 of them, 49.1 ms of the 50.0 ms (98'
+		);
 		// SELF: a parent span minus the child spans inside it
 		const nested = [
 			s('ds.pass', 250, { id: 1, start: 0 }),
@@ -2265,10 +4210,17 @@ describe('span + tag (ogygia/profiler)', () => {
 		const by_name = Object.fromEntries(span_rows(nested).map((r) => [r.name, r]));
 		expect(by_name['ds.pass']).toMatchObject({ total_ms: 250, self_ms: 3, wall_ms: 250 });
 		expect(by_name['ds.render.all']).toMatchObject({ total_ms: 178, self_ms: 178 });
-		expect(rows.find((r) => r.name === 'stock.lookup')).toMatchObject({ count: 32, total_ms: 224, wall_ms: 224 });
+		expect(rows.find((r) => r.name === 'stock.lookup')).toMatchObject({
+			count: 32,
+			total_ms: 224,
+			wall_ms: 224
+		});
 		expect(by['cache-misses'].message).toContain('cache.segments: 1 cache miss per render cost 18');
 		expect(by['span-errors'].message).toContain('svc.x failed 1 time');
-		expect(report_json(analyze(p), meta as never, '/p', { net: [], mem: [], spans } as never).spans[0].name).toBe('ds.render'); // by summed time
+		expect(
+			report_json(analyze(p), meta as never, '/p', { net: [], mem: [], spans } as never).spans[0]
+				.name
+		).toBe('ds.render'); // by summed time
 	});
 });
 
@@ -2276,7 +4228,8 @@ describe('standalone HTML export', () => {
 	it('inlines styles, the runtime and every reachable chunk as an import map of data: URLs', async () => {
 		const files: Record<string, string> = {
 			'/_app/immutable/assets/report.css': 'body{color:red}',
-			'/_app/immutable/og-runtime.abc.js': 'import{x}from"./chunks/a.js";const m=(m=["./chunks/b.js"])=>m;const e=document.querySelector("ogygia-region").getAttribute("entry");import(e);import(`./chunks/a.js`);',
+			'/_app/immutable/og-runtime.abc.js':
+				'import{x}from"./chunks/a.js";const m=(m=["./chunks/b.js"])=>m;const e=document.querySelector("ogygia-region").getAttribute("entry");import(e);import(`./chunks/a.js`);',
 			'/_app/immutable/chunks/a.js': 'import"./b.js";export const x=1;',
 			'/_app/immutable/chunks/b.js': 'export const y=2;',
 			'/_app/immutable/og-region.island.js': 'import{y}from"./chunks/b.js";export default y;'
@@ -2289,7 +4242,9 @@ describe('standalone HTML export', () => {
 			page_url: 'http://h/__profiler/report/abc',
 			load: async (url) => files[new URL(url).pathname] ?? null
 		});
-		expect(out).toContain('<style data-standalone="/_app/immutable/assets/report.css">body{color:red}</style>');
+		expect(out).toContain(
+			'<style data-standalone="/_app/immutable/assets/report.css">body{color:red}</style>'
+		);
 		expect(out).not.toContain('modulepreload');
 		// the runtime is inline, its import rewritten to the og: key
 		expect(out).toContain('data-ogygia-runtime');
@@ -2300,13 +4255,18 @@ describe('standalone HTML export', () => {
 		// the island entry attribute now names its key
 		expect(out).toContain('entry="og://chunks/_app/immutable/og-region.island.js"');
 		// the import map carries every chunk the page can reach, as data: URLs, with imports rewritten
-		const map = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(out)![1]) as { imports: Record<string, string> };
+		const map = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(out)![1]) as {
+			imports: Record<string, string>;
+		};
 		expect(Object.keys(map.imports).sort()).toEqual([
 			'og://chunks/_app/immutable/chunks/a.js',
 			'og://chunks/_app/immutable/chunks/b.js',
 			'og://chunks/_app/immutable/og-region.island.js'
 		]);
-		const a = Buffer.from(map.imports['og://chunks/_app/immutable/chunks/a.js'].split(',')[1], 'base64').toString();
+		const a = Buffer.from(
+			map.imports['og://chunks/_app/immutable/chunks/a.js'].split(',')[1],
+			'base64'
+		).toString();
 		expect(a).toBe('import"og://chunks/_app/immutable/chunks/b.js";export const x=1;');
 		expect(out).toContain('<meta name="ogygia-standalone" content="1">');
 		// the map precedes the first module script
@@ -2327,21 +4287,84 @@ describe('compare + history', () => {
 			samples: [3, 2],
 			timeDeltas: [self * 1000, 1000]
 		};
-		const meta = { id, created, trigger: 'page' as const, page: '/p', runs, duration_ms: 4, node: 'v', requests: [] };
+		const meta = {
+			id,
+			created,
+			trigger: 'page' as const,
+			page: '/p',
+			runs,
+			duration_ms: 4,
+			node: 'v',
+			requests: []
+		};
 		return { meta: meta as never, analysis: analyze(p), findings: [`f-${id}`] };
 	};
 	it('reports signed deltas per component / function and what changed in the findings', () => {
-		const c = compare_reports(mk('a', 1, [100, 110, 120], 1), mk('b', 2, [130, 150, 160], 3));
-		expect(c.summary[0]).toMatchObject({ label: 'render (median run)', a: 110, b: 150, d: 40 });
+		// 3 runs against 6: every CPU number is per render, so fmt's 3 ms over 3 renders is 1 ms and its
+		// 12 ms over 6 is 2 ms (the totals alone would read 4× worse)
+		const c = compare_reports(
+			mk('a', 1, [100, 110, 120], 3),
+			mk('b', 2, [130, 150, 160, 170, 180, 190], 12)
+		);
+		expect(c.summary[0]).toMatchObject({ label: 'render (median run)', a: 110, b: 170, d: 60 });
 		const fmt = c.functions.find((r) => r.name === 'fmt')!;
-		expect(fmt).toMatchObject({ a_self: 1, b_self: 3, d_self: 2 });
+		expect(fmt).toMatchObject({ a_self: 1, b_self: 2, d_self: 1 });
 		const card = c.components.find((r) => r.name === 'Card')!;
-		expect(card.d_total).toBe(2);
+		expect(card.d_total).toBeCloseTo(13 / 6 - 4 / 3, 1);
+		expect(c.summary.find((r) => r.label === 'CPU busy (per render)')).toMatchObject({
+			a: 1.33,
+			b: 2.17
+		});
 		expect(c.findings).toEqual({ added: ['f-b'], gone: ['f-a'] });
 	});
+	it('every row carries a unique key, even two anonymous functions in one file (a view keys by it)', () => {
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 3000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2, 3] },
+				{ id: 2, callFrame: frame('', '/app/src/lib/x.ts', 3) },
+				{ id: 3, callFrame: frame('', '/app/src/lib/x.ts', 9) }
+			],
+			samples: [2, 3, 2],
+			timeDeltas: [1000, 1000, 1000]
+		};
+		const one = (id: string) => ({
+			meta: {
+				id,
+				created: 1,
+				trigger: 'page' as const,
+				page: '/p',
+				runs: [3],
+				duration_ms: 3,
+				node: 'v',
+				requests: []
+			} as never,
+			analysis: analyze(p),
+			findings: ['same text', 'same text']
+		});
+		const c = compare_reports(one('a'), { ...one('b'), findings: ['other', 'other'] });
+		const anon = c.functions.filter((r) => r.file.endsWith('x.ts'));
+		expect(anon.length).toBe(2);
+		expect(new Set(c.functions.map((r) => r.key)).size).toBe(c.functions.length);
+		// a finding text that repeats is listed once
+		expect(c.findings).toEqual({ added: ['other'], gone: ['same text'] });
+	});
+
 	it('groups page reports into a per-page history, oldest first, by median', () => {
-		const h = page_history([mk('b', 2, [130, 150, 160], 1).meta, mk('a', 1, [100, 110, 120], 1).meta]);
-		expect(h).toEqual([{ page: '/p', points: [{ id: 'a', created: 1, median: 110 }, { id: 'b', created: 2, median: 150 }] }]);
+		const h = page_history([
+			mk('b', 2, [130, 150, 160], 1).meta,
+			mk('a', 1, [100, 110, 120], 1).meta
+		]);
+		expect(h).toEqual([
+			{
+				page: '/p',
+				points: [
+					{ id: 'a', created: 1, median: 110 },
+					{ id: 'b', created: 2, median: 150 }
+				]
+			}
+		]);
 	});
 });
 
@@ -2461,6 +4484,63 @@ function make_event(path: string, headers: Record<string, string> = {}): Request
 	} as unknown as RequestEvent;
 }
 
+describe('a report carried with the request (serverless: another instance answers)', () => {
+	it('a fresh instance answers .json / .dump / .ogp from a gzipped kept copy, and opens its own .ogp', async () => {
+		const { gzipSync } = await import('node:zlib');
+		const key = { 'x-profiler-key': 'prof-key' };
+		const made = profiler({ secret: 'prof-key' });
+		const rec = await made({
+			event: make_event('/__profiler/page?p=/p&runs=1&cold=0', key),
+			resolve: async () => new Response('<html></html>')
+		});
+		const id = rec.headers.get('location')!.split('/').pop()!;
+		const dump = await (
+			await made({
+				event: make_event(`/__profiler/report/${id}.dump`, key),
+				resolve: async () => new Response('no')
+			})
+		).json();
+		// another instance: it never saw the report
+		const other = profiler({ secret: 'prof-key' });
+		const ask = (ext: string, body: BodyInit, headers: Record<string, string>) =>
+			other({
+				event: {
+					...make_event(`/__profiler/report/${id}.${ext}`, key),
+					request: new Request(`http://localhost/__profiler/report/${id}.${ext}`, {
+						method: 'POST',
+						headers: { ...key, ...headers },
+						body
+					})
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
+		expect(
+			(
+				await other({
+					event: make_event(`/__profiler/report/${id}.json`, key),
+					resolve: async () => new Response('no')
+				})
+			).status
+		).toBe(404);
+		const gz = { 'content-type': 'application/json', 'x-og-encoding': 'gzip' };
+		const json = await (await ask('json', gzipSync(JSON.stringify(dump)), gz)).json();
+		expect(json.id).toBe(id);
+		const ogp = await ask('ogp', gzipSync(JSON.stringify(dump)), gz);
+		expect(ogp.headers.get('content-type')).toBe('application/octet-stream');
+		const bytes = new Uint8Array(await ogp.arrayBuffer());
+		// the .ogp this server made opens on it: the dump comes back the same
+		const back = await (
+			await ask('dump', bytes, { 'content-type': 'application/octet-stream' })
+		).json();
+		expect(back.meta.id).toBe(id);
+		expect(back.meta.page).toBe('/p');
+		// nothing it can open: a clear 400, not a crash
+		expect((await ask('json', 'not a report', { 'content-type': 'application/json' })).status).toBe(
+			400
+		);
+	});
+});
+
 describe('profiler handle', () => {
 	it('times requests, attributes outbound fetches, serves the dashboard', async () => {
 		// stub the network BEFORE the first request so the patch wraps the stub
@@ -2562,11 +4642,18 @@ describe('profiler handle', () => {
 		const doc = await handle({
 			event: make_event('/some/page', { 'sec-fetch-dest': 'document' }),
 			resolve: async (_e, opts) => {
-				const html = await opts!.transformPageChunk!({ html: '<html><head><title>x</title></head><body></body></html>', done: true });
+				const html = await opts!.transformPageChunk!({
+					html: '<html><head><title>x</title></head><body></body></html>',
+					done: true
+				});
 				return new Response(html ?? '');
 			}
 		});
-		expect(await doc.text()).toContain('<meta name="ogygia-profiler-beacon" content="/__profiler/beacon"></head>');
+		const doc_html = await doc.text();
+		expect(doc_html).toContain('<meta name="ogygia-profiler-beacon" content="/__profiler/beacon">');
+		// …with the standalone beacon (for a page that never boots the ogygia runtime), before </head>
+		expect(doc_html).toContain('<script data-ogygia-beacon>');
+		expect(doc_html.indexOf('<script data-ogygia-beacon>')).toBeLessThan(doc_html.indexOf('</head>'));
 		const sub = await handle({
 			event: make_event('/some/data', { 'sec-fetch-dest': 'empty' }),
 			resolve: async (_e, opts) => new Response(String(opts?.transformPageChunk === undefined))
@@ -2579,24 +4666,83 @@ describe('profiler handle', () => {
 			event: make_event('/prod/page', { 'x-profile': 'prof-key' }),
 			resolve: async (e) => {
 				record_request_stats(e.request, {
-					transform_ms: 1, islands: 1, hints: 0, holes: 0, seed_bytes: 0, remote_seed_bytes: 0, tail_bytes: 100, fnm_bytes: 0, ctx_bytes: 0, seed_json: true,
-					island_rows: [{ fp, entry: 'src/lib/Widget.svelte', name: 'Widget', module_url: '/_app/immutable/w.js', wake: 'load', props_bytes: 100, canonical_bytes: 100, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], interactivity: null, count: 1 }]
+					transform_ms: 1,
+					islands: 1,
+					hints: 0,
+					holes: 0,
+					seed_bytes: 0,
+					remote_seed_bytes: 0,
+					tail_bytes: 100,
+					fnm_bytes: 0,
+					ctx_bytes: 0,
+					seed_json: true,
+					island_rows: [
+						{
+							fp,
+							entry: 'src/lib/Widget.svelte',
+							name: 'Widget',
+							module_url: '/_app/immutable/w.js',
+							wake: 'load',
+							props_bytes: 100,
+							canonical_bytes: 100,
+							json: true,
+							culprit: null,
+							refs: 0,
+							ref_keys: [],
+							hints: [],
+							interactivity: null,
+							count: 1
+						}
+					]
 				});
 				return new Response('page');
 			}
 		});
 		const report_url = profiled.headers.get('x-profile-report')!;
 		const post = (body: string) =>
-			handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body }) } as RequestEvent, resolve: async () => new Response('no') });
+			handle({
+				event: {
+					...make_event('/__profiler/beacon'),
+					request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body })
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
 		expect((await post('not json')).status).toBe(400);
 		expect((await post(JSON.stringify({ islands: 'x' }))).status).toBe(400);
 		expect((await post('x'.repeat(70 * 1024))).status).toBe(413);
-		const ok = await post(JSON.stringify({ page: '/prod/page', islands: [{ fp, entry: 'src/lib/Widget.svelte', ms: 42, load: 30, recovered: true }, { fp, entry: 'src/lib/Widget.svelte', ms: 50, load: 31 }, { fp: 'nope', ms: 1 }, { fp, ms: -5 }] }));
+		const ok = await post(
+			JSON.stringify({
+				page: '/prod/page',
+				islands: [
+					{ fp, entry: 'src/lib/Widget.svelte', ms: 42, load: 30, recovered: true },
+					{ fp, entry: 'src/lib/Widget.svelte', ms: 50, load: 31 },
+					{ fp: 'nope', ms: 1 },
+					{ fp, ms: -5 }
+				]
+			})
+		);
 		expect(ok.status).toBe(204);
-		const json = await (await handle({ event: make_event(report_url + '.json'), resolve: async () => new Response('no') })).json();
-		expect(json.ogygia.island_rows[0].client).toEqual({ hydrations: 2, p50_ms: 50, max_ms: 50, load_p50_ms: 31, recovered: 1 });
-		expect(json.findings.find((f: { code: string }) => f.code === 'hydration-mismatch').message).toContain('Widget discarded its server-rendered DOM and re-rendered in the browser (1 time seen)');
-		expect(json.findings.find((f: { code: string }) => f.code === 'client-hydrate').message).toContain('the slowest Widget at 50.0 ms, mostly loading its 31.0 ms of modules');
+		const json = await (
+			await handle({
+				event: make_event(report_url + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
+		expect(json.ogygia.island_rows[0].client).toEqual({
+			hydrations: 2,
+			p50_ms: 50,
+			max_ms: 50,
+			load_p50_ms: 31,
+			recovered: 1
+		});
+		expect(
+			json.findings.find((f: { code: string }) => f.code === 'hydration-mismatch').message
+		).toContain(
+			'Widget discarded its server-rendered DOM and re-rendered in the browser (1 time seen)'
+		);
+		expect(
+			json.findings.find((f: { code: string }) => f.code === 'client-hydrate').message
+		).toContain('The slowest, Widget, took 50.0 ms from wake to hydrated at the median, mostly loading its 31.0 ms of modules');
 	});
 
 	it('serializes recordings: a second profile while one is running renders un-profiled', async () => {
@@ -2671,28 +4817,79 @@ describe('the deep pictures on the host: visits, keep, the byte strip, nested tr
 				at: 1_700_000_000_000,
 				nav: { req_start: 5, res_start: 120, res_end: 180, dcl: 400, load: 900, size: 200_000 },
 				paints: { fcp: 350, lcp: 700, lcp_fp: '0000aaaa1111bbbb' },
-				resources: [{ url: 'http://localhost/_app/a.css', type: 'css', start: 130, end: 300, blocking: true }],
+				resources: [
+					{ url: 'http://localhost/_app/a.css', type: 'css', start: 130, end: 300, blocking: true }
+				],
 				longtasks: [],
 				islands: [{ fp: '0000aaaa1111bbbb', t0: 500, loaded: 560, done: 690, changed: true }],
 				firsts: [{ fp: '0000aaaa1111bbbb', t: 1500, type: 'pointer' }],
-				shifts: [{ t: 600, value: 0.12, fp: '0000aaaa1111bbbb' }, { t: 650, value: 0.03 }],
+				shifts: [
+					{ t: 600, value: 0.12, fp: '0000aaaa1111bbbb' },
+					{ t: 650, value: 0.03 }
+				],
 				viewport: [1200, 800]
 			}
 		});
 	const post = (handle: ReturnType<typeof profiler>, body: string) =>
-		handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body }) } as RequestEvent, resolve: async () => new Response('no') });
+		handle({
+			event: {
+				...make_event('/__profiler/beacon'),
+				request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body })
+			} as RequestEvent,
+			resolve: async () => new Response('no')
+		});
 
 	it('beacon: a visit lands per page, bounded, and the report JSON carries its picture', async () => {
 		const handle = profiler({ secret: 'prof-key' });
 		expect((await post(handle, visit_body())).status).toBe(204);
-		expect((await post(handle, JSON.stringify({ page: '/deep', visit: { nav: {} } }))).status).toBe(400);
-		expect((await post(handle, JSON.stringify({ page: '/deep', visit: { nav: { res_start: 1 }, resources: Array.from({ length: 20000 }, () => ({ url: 'http://x/y.js', type: 'script', start: 1, end: 2 })) } }))).status).toBe(413);
-		const rec = await handle({ event: make_event('/__profiler/page?p=/deep&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
+		expect((await post(handle, JSON.stringify({ page: '/deep', visit: { nav: {} } }))).status).toBe(
+			400
+		);
+		expect(
+			(
+				await post(
+					handle,
+					JSON.stringify({
+						page: '/deep',
+						visit: {
+							nav: { res_start: 1 },
+							resources: Array.from({ length: 20000 }, () => ({
+								url: 'http://x/y.js',
+								type: 'script',
+								start: 1,
+								end: 2
+							}))
+						}
+					})
+				)
+			).status
+		).toBe(413);
+		const rec = await handle({
+			event: make_event('/__profiler/page?p=/deep&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
 		const url = rec.headers.get('location')!;
-		const json = await (await handle({ event: make_event(url.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
-		expect(json.browser.visit).toMatchObject({ nav: { res_start: 120, res_end: 180 }, paints: { fcp: 350, lcp: 700, lcp_fp: '0000aaaa1111bbbb' }, resources: 1, shifts: 2 });
-		expect(json.browser.visit.islands[0]).toMatchObject({ fp: '0000aaaa1111bbbb', done: 690, changed: true });
-		expect(json.browser.visit.cls_by_island).toEqual({ '0000aaaa1111bbbb': 0.12, '(outside islands)': 0.03 });
+		const json = await (
+			await handle({
+				event: make_event(url.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
+		expect(json.browser.visit).toMatchObject({
+			nav: { res_start: 120, res_end: 180 },
+			paints: { fcp: 350, lcp: 700, lcp_fp: '0000aaaa1111bbbb' },
+			resources: 1,
+			shifts: 2
+		});
+		expect(json.browser.visit.islands[0]).toMatchObject({
+			fp: '0000aaaa1111bbbb',
+			done: 690,
+			changed: true
+		});
+		expect(json.browser.visit.cls_by_island).toEqual({
+			'0000aaaa1111bbbb': 0.12,
+			'(outside islands)': 0.03
+		});
 	});
 
 	it('/page?format=keep answers the dump for the browser to keep, with the byte strip of the rendered document', async () => {
@@ -2704,35 +4901,75 @@ describe('the deep pictures on the host: visits, keep, the byte strip, nested tr
 			'<script type="application/ogygia-props" data-ogygia-props>[]</script></body></html>';
 		// the page profile renders through event.fetch (Kit's internal render), not resolve
 		const ev = make_event('/__profiler/page?p=/deep&runs=2&cold=0&format=keep');
-		(ev as { fetch: unknown }).fetch = async () => new Response(doc, { headers: { 'content-type': 'text/html' } });
+		(ev as { fetch: unknown }).fetch = async () =>
+			new Response(doc, { headers: { 'content-type': 'text/html' } });
 		const res = await handle({ event: ev, resolve: async () => new Response('no') });
 		expect(res.status).toBe(200);
-		const keep = (await res.json()) as { id: string; url: string; dump: { kind: string; meta: { id: string; page: string }; extras: { strip?: { total: number; by_kind: Record<string, number>; segments: { kind: string }[] } } } };
+		const keep = (await res.json()) as {
+			id: string;
+			url: string;
+			dump: {
+				kind: string;
+				meta: { id: string; page: string };
+				extras: {
+					strip?: { total: number; by_kind: Record<string, number>; segments: { kind: string }[] };
+				};
+			};
+		};
 		expect(keep.url).toBe(`/__profiler/report/${keep.id}`);
 		expect(keep.dump.kind).toBe('ogygia-profiler-dump');
 		expect(keep.dump.meta.page).toBe('/deep');
 		const strip = keep.dump.extras.strip!;
 		expect(strip.total).toBe(doc.length);
-		expect(strip.segments.map((s) => s.kind)).toEqual(['head', 'style', 'head', 'markup', 'island', 'seed', 'props', 'markup']);
+		expect(strip.segments.map((s) => s.kind)).toEqual([
+			'head',
+			'style',
+			'head',
+			'markup',
+			'island',
+			'seed',
+			'props',
+			'markup'
+		]);
 		expect(strip.by_kind.seed).toBeGreaterThan(40);
 		// the report JSON carries the same strip; the river needs load lanes or calls (none here)
-		const json = await (await handle({ event: make_event(`/__profiler/report/${keep.id}.json`), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(`/__profiler/report/${keep.id}.json`),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(json.strip.total).toBe(doc.length);
 		expect(json.river).toBeNull();
 	});
 
 	it('nested traces: a request that asks gets our picture in a header; our outbound calls ask while recording', async () => {
 		const handle = profiler({ secret: 'prof-key' });
-		const res = await handle({ event: make_event('/api/thing', { 'x-og-trace': '1' }), resolve: async () => new Response('ok') });
+		const res = await handle({
+			event: make_event('/api/thing', { 'x-og-trace': '1' }),
+			resolve: async () => new Response('ok')
+		});
 		const t = decode_trace(res.headers.get('x-og-trace'))!;
 		expect(t).toMatchObject({ calls: 0, wait_ms: 0, route: '/[slug]', profiler: '/__profiler' });
 		expect(t.ms).toBeGreaterThanOrEqual(0);
 		expect(t.cpu_ms).toBeGreaterThanOrEqual(0);
 		// without the ask, no answer
-		const plain = await handle({ event: make_event('/api/thing'), resolve: async () => new Response('ok') });
+		const plain = await handle({
+			event: make_event('/api/thing'),
+			resolve: async () => new Response('ok')
+		});
 		expect(plain.headers.get('x-og-trace')).toBeNull();
 		// the round trip, capped: a long top list is trimmed until the header fits
-		const big = encode_trace({ ms: 10, cpu_ms: 1, wait_ms: 2, calls: 3, top: Array.from({ length: 400 }, (_, i) => ({ url: `http://h/${'x'.repeat(150)}/${i}`, ms: i })) });
+		const big = encode_trace({
+			ms: 10,
+			cpu_ms: 1,
+			wait_ms: 2,
+			calls: 3,
+			top: Array.from({ length: 400 }, (_, i) => ({
+				url: `http://h/${'x'.repeat(150)}/${i}`,
+				ms: i
+			}))
+		});
 		expect(big.length).toBeLessThanOrEqual(4000);
 		expect(decode_trace(big)!.top!.length).toBeLessThan(400);
 		expect(decode_trace('not base64 json')).toBeUndefined();
@@ -2741,7 +4978,9 @@ describe('the deep pictures on the host: visits, keep, the byte strip, nested tr
 		const seen: (string | null)[] = [];
 		const fake = (async (_i: RequestInfo | URL, init?: RequestInit) => {
 			seen.push(new Headers(init?.headers).get('x-og-trace'));
-			return new Response('x', { headers: { 'x-og-trace': encode_trace({ ms: 7, cpu_ms: 1, wait_ms: 0, calls: 0 }) } });
+			return new Response('x', {
+				headers: { 'x-og-trace': encode_trace({ ms: 7, cpu_ms: 1, wait_ms: 0, calls: 0 }) }
+			});
 		}) as typeof fetch;
 		const wrapped = wrap_event_fetch(fake);
 		await wrapped('http://up/x', { headers: { accept: 'text/plain' } });
@@ -2759,27 +4998,41 @@ describe('the deep pictures on the host: visits, keep, the byte strip, nested tr
 		let fail = true;
 		const orig = globalThis.fetch;
 		globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
-			posts.push({ url: String(url), body: String(init?.body), auth: new Headers(init?.headers).get('authorization') });
+			posts.push({
+				url: String(url),
+				body: String(init?.body),
+				auth: new Headers(init?.headers).get('authorization')
+			});
 			return new Response(fail ? 'no' : 'ok', { status: fail ? 500 : 200 });
 		}) as typeof fetch;
 		try {
-			const handle = profiler({ secret: 'prof-key', sink: { url: 'http://sink.test/rows', key: 'sk', every: 1000 } });
+			const handle = profiler({
+				secret: 'prof-key',
+				sink: { url: 'http://sink.test/rows', key: 'sk', every: 1000 }
+			});
 			await handle({ event: make_event('/a'), resolve: async () => new Response('ok') });
 			await handle({ event: make_event('/b'), resolve: async () => new Response('ok') });
 			await new Promise((r) => setTimeout(r, 1300));
 			expect(posts.length).toBeGreaterThanOrEqual(1);
 			expect(posts[0].url).toBe('http://sink.test/rows');
 			expect(posts[0].auth).toBe('Bearer sk');
-			const rows = posts[0].body.split('\n').map((l) => JSON.parse(l) as { k: string; path: string; ms: number });
+			const rows = posts[0].body
+				.split('\n')
+				.map((l) => JSON.parse(l) as { k: string; path: string; ms: number });
 			expect(rows.map((r) => r.path)).toEqual(['/a', '/b']);
 			expect(rows.every((r) => r.k === 'req' && r.ms >= 0)).toBe(true);
 			// the failed post's rows are kept and go again with the next flush
 			fail = false;
 			await new Promise((r) => setTimeout(r, 1300));
-			const again = posts[posts.length - 1].body.split('\n').map((l) => (JSON.parse(l) as { path: string }).path);
+			const again = posts[posts.length - 1].body
+				.split('\n')
+				.map((l) => (JSON.parse(l) as { path: string }).path);
 			expect(again).toEqual(expect.arrayContaining(['/a', '/b']));
 			// the site page draws this instance's rows and reports the sink's state
-			const site = await handle({ event: make_event('/__profiler/site', { 'x-profiler-key': 'prof-key' }), resolve: async () => new Response('no') });
+			const site = await handle({
+				event: make_event('/__profiler/site', { 'x-profiler-key': 'prof-key' }),
+				resolve: async () => new Response('no')
+			});
 			expect(site.status).toBe(200);
 			const html = await site.text();
 			expect(html).toContain('The whole site');
@@ -2791,7 +5044,10 @@ describe('the deep pictures on the host: visits, keep, the byte strip, nested tr
 
 	it('compare with a report this server no longer holds renders the browser-store fallback, not a 404', async () => {
 		const handle = profiler({ secret: 'prof-key' });
-		const res = await handle({ event: make_event('/__profiler/compare/gone1/gone2', { 'x-profiler-key': 'prof-key' }), resolve: async () => new Response('no') });
+		const res = await handle({
+			event: make_event('/__profiler/compare/gone1/gone2', { 'x-profiler-key': 'prof-key' }),
+			resolve: async () => new Response('no')
+		});
 		expect(res.status).toBe(200);
 		expect(await res.text()).toContain('Reading both reports from this browser');
 	});
@@ -2801,12 +5057,52 @@ describe('a visit posted in halves', () => {
 	it('the runtime half (islands) and the mark half (marks) of one visit fold into one picture', async () => {
 		const handle = profiler({ secret: 'prof-key' });
 		const post = (body: unknown) =>
-			handle({ event: { ...make_event('/__profiler/beacon'), request: new Request('http://localhost/__profiler/beacon', { method: 'POST', body: JSON.stringify(body) }) } as RequestEvent, resolve: async () => new Response('no') });
+			handle({
+				event: {
+					...make_event('/__profiler/beacon'),
+					request: new Request('http://localhost/__profiler/beacon', {
+						method: 'POST',
+						body: JSON.stringify(body)
+					})
+				} as RequestEvent,
+				resolve: async () => new Response('no')
+			});
 		const nav = { req_start: 1, res_start: 100, res_end: 150 };
-		expect((await post({ page: '/halves', visit: { at: 77, nav, islands: [{ fp: '0000aaaa1111bbbb', t0: 300, loaded: 320, done: 360 }] } })).status).toBe(204);
-		expect((await post({ page: '/halves', visit: { at: 77, nav: { ...nav, load: 900 }, paints: { lcp: 500 }, marks: [{ name: 'ds.hydrate', ms: 40, t0: 200 }] } })).status).toBe(204);
-		const rec = await handle({ event: make_event('/__profiler/page?p=/halves&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
-		const dump = await (await handle({ event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.dump'), resolve: async () => new Response('no') })).json();
+		expect(
+			(
+				await post({
+					page: '/halves',
+					visit: {
+						at: 77,
+						nav,
+						islands: [{ fp: '0000aaaa1111bbbb', t0: 300, loaded: 320, done: 360 }]
+					}
+				})
+			).status
+		).toBe(204);
+		expect(
+			(
+				await post({
+					page: '/halves',
+					visit: {
+						at: 77,
+						nav: { ...nav, load: 900 },
+						paints: { lcp: 500 },
+						marks: [{ name: 'ds.hydrate', ms: 40, t0: 200 }]
+					}
+				})
+			).status
+		).toBe(204);
+		const rec = await handle({
+			event: make_event('/__profiler/page?p=/halves&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
+		const dump = await (
+			await handle({
+				event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.dump'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		const v = dump.extras.visit;
 		expect(v.at).toBe(77);
 		expect(v.islands.map((i: { fp: string }) => i.fp)).toEqual(['0000aaaa1111bbbb']);
@@ -2815,8 +5111,16 @@ describe('a visit posted in halves', () => {
 		expect(v.paints.lcp).toBe(500);
 		// a different visit of the same page stays separate and becomes the latest
 		expect((await post({ page: '/halves', visit: { at: 99, nav } })).status).toBe(204);
-		const rec2 = await handle({ event: make_event('/__profiler/page?p=/halves&runs=1&cold=0'), resolve: async () => new Response('<html></html>') });
-		const json = await (await handle({ event: make_event(rec2.headers.get('location')!.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const rec2 = await handle({
+			event: make_event('/__profiler/page?p=/halves&runs=1&cold=0'),
+			resolve: async () => new Response('<html></html>')
+		});
+		const json = await (
+			await handle({
+				event: make_event(rec2.headers.get('location')!.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(json.browser.visit.at).toBe(99);
 	});
 });
@@ -2836,10 +5140,17 @@ describe('who caused the GC, on the host', () => {
 		const ev = make_event('/__profiler/page?p=/churn&runs=1&cold=0');
 		(ev as { fetch: unknown }).fetch = async () => {
 			make_garbage();
-			return new Response('<html><body>churn</body></html>', { headers: { 'content-type': 'text/html' } });
+			return new Response('<html><body>churn</body></html>', {
+				headers: { 'content-type': 'text/html' }
+			});
 		};
 		const rec = await handle({ event: ev, resolve: async () => new Response('no') });
-		const json = await (await handle({ event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		const g = json.memory.gc_attribution;
 		expect(g).not.toBeNull();
 		expect(g.count).toBeGreaterThanOrEqual(1);
@@ -2849,8 +5160,12 @@ describe('who caused the GC, on the host', () => {
 		// the churner is the top maker (or right behind V8's own array builtins on its stack)
 		const top = g.makers.slice(0, 5).map((m: { name: string }) => m.name);
 		expect(top.some((n: string) => /make_garbage|map|fill|Array/.test(n))).toBe(true);
-		expect(g.pauses[0].why).toMatch(/young space filled|old space grew|nothing sampled|incremental|forced/);
-		expect(json.findings.some((f: { code: string }) => f.code === 'gc-cause')).toBe(g.makers[0].gc_ms >= 3 && g.makers[0].share >= 0.15);
+		expect(g.pauses[0].why).toMatch(
+			/young space filled|old space grew|nothing sampled|incremental|forced/
+		);
+		expect(json.findings.some((f: { code: string }) => f.code === 'gc-cause')).toBe(
+			g.makers[0].gc_ms >= 3 && g.makers[0].share >= 0.15
+		);
 	}, 30_000);
 });
 
@@ -2860,9 +5175,29 @@ describe('the profiler’s own cost is taken out', () => {
 			startTime: 0,
 			endTime: 40_000,
 			nodes: [
-				{ id: 1, callFrame: { functionName: '(root)', url: '', lineNumber: 0, columnNumber: 0 }, children: [2, 3, 4] },
-				{ id: 2, callFrame: { functionName: 'render', url: '/app/src/lib/Page.svelte', lineNumber: 1, columnNumber: 0 } },
-				{ id: 3, callFrame: { functionName: 'heap_sites', url: '/x/node_modules/ogygia/dist/profiler/gc.js', lineNumber: 1, columnNumber: 0 } },
+				{
+					id: 1,
+					callFrame: { functionName: '(root)', url: '', lineNumber: 0, columnNumber: 0 },
+					children: [2, 3, 4]
+				},
+				{
+					id: 2,
+					callFrame: {
+						functionName: 'render',
+						url: '/app/src/lib/Page.svelte',
+						lineNumber: 1,
+						columnNumber: 0
+					}
+				},
+				{
+					id: 3,
+					callFrame: {
+						functionName: 'heap_sites',
+						url: '/x/node_modules/ogygia/dist/profiler/gc.js',
+						lineNumber: 1,
+						columnNumber: 0
+					}
+				},
 				{ id: 4, callFrame: { functionName: '(idle)', url: '', lineNumber: 0, columnNumber: 0 } }
 			],
 			samples: [2, 2, 3, 4],
@@ -2881,38 +5216,134 @@ describe('the profiler’s own cost is taken out', () => {
 			return new Response('<html>' + junk.length + '</html>');
 		};
 		const rec = await handle({ event: ev, resolve: async () => new Response('no') });
-		const json = await (await handle({ event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		const o = json.summary.overhead;
 		expect(o).not.toBeNull();
 		expect(o.cpu_ms).toBeGreaterThanOrEqual(0);
 		expect(o.gc_ms).toBeGreaterThanOrEqual(0);
 		if (o.per_run_ms > 0) {
 			expect(json.target.runs_measured).toHaveLength(2);
-			for (let i = 0; i < 2; i++) expect(json.target.runs[i]).toBeLessThanOrEqual(json.target.runs_measured[i]);
+			for (let i = 0; i < 2; i++)
+				expect(json.target.runs[i]).toBeLessThanOrEqual(json.target.runs_measured[i]);
 		}
 	}, 30_000);
 });
 
 describe('compare: the garbage makers diff', () => {
 	it('matches makers by line, signs the change, and marks what is only on one side', () => {
-		const tiny: CpuProfile = { startTime: 0, endTime: 1000, nodes: [{ id: 1, callFrame: { functionName: '(root)', url: '', lineNumber: 0, columnNumber: 0 } }], samples: [1], timeDeltas: [1000] };
-		const base = { meta: { id: 'a', created: 0, trigger: 'page' as const, page: '/p', runs: [10], duration_ms: 10, sample_interval_us: 500, requests: [], node: 'v' }, analysis: analyze(tiny), findings: [] };
-		const gc = (makers: { name: string; caller?: string; allocated: number; gc_ms: number }[], total_ms: number, allocated_mb: number) => ({
-			summary: { count: 1, total_ms, max_ms: total_ms, measured_ms: total_ms, overhead_ms: 0, minor: 1, major: 0, incremental: 0, weak: 0, allocated_mb, alloc_rate_mb_s: 0, slices: 1, slice_ms: 10 },
+		const tiny: CpuProfile = {
+			startTime: 0,
+			endTime: 1000,
+			nodes: [
+				{ id: 1, callFrame: { functionName: '(root)', url: '', lineNumber: 0, columnNumber: 0 } }
+			],
+			samples: [1],
+			timeDeltas: [1000]
+		};
+		const base = {
+			meta: {
+				id: 'a',
+				created: 0,
+				trigger: 'page' as const,
+				page: '/p',
+				runs: [10],
+				duration_ms: 10,
+				sample_interval_us: 500,
+				requests: [],
+				node: 'v'
+			},
+			analysis: analyze(tiny),
+			findings: []
+		};
+		const gc = (
+			makers: { name: string; caller?: string; allocated: number; gc_ms: number }[],
+			total_ms: number,
+			allocated_mb: number
+		) => ({
+			summary: {
+				count: 1,
+				total_ms,
+				max_ms: total_ms,
+				measured_ms: total_ms,
+				overhead_ms: 0,
+				minor: 1,
+				major: 0,
+				incremental: 0,
+				weak: 0,
+				allocated_mb,
+				alloc_rate_mb_s: 0,
+				slices: 1,
+				slice_ms: 10
+			},
 			pauses: [],
-			makers: makers.map((m) => ({ key: m.name, name: m.name, url: 'x.ts', line: 1, category: 'node' as const, component: null, ...(m.caller ? { caller: m.caller } : {}), allocated: m.allocated, share: 0.5, gc_ms: m.gc_ms, pauses: 0 })),
+			makers: makers.map((m) => ({
+				key: m.name,
+				name: m.name,
+				url: 'x.ts',
+				line: 1,
+				category: 'node' as const,
+				component: null,
+				...(m.caller ? { caller: m.caller } : {}),
+				allocated: m.allocated,
+				share: 0.5,
+				gc_ms: m.gc_ms,
+				pauses: 0
+			})),
 			components: []
 		});
-		const a = { ...base, gc: gc([{ name: 'replace', caller: 'splice (ds.ts:61)', allocated: 1_771_000_000, gc_ms: 60 }, { name: 'indexOf', caller: 'insert (ds.ts:82)', allocated: 62_000_000, gc_ms: 2 }], 90, 2600) };
-		const b = { ...base, meta: { ...base.meta, id: 'b', created: 1 }, gc: gc([{ name: 'join', caller: 'splice (ds.ts:130)', allocated: 3_000_000, gc_ms: 0.1 }, { name: 'indexOf', caller: 'insert (ds.ts:82)', allocated: 1_000_000, gc_ms: 0.05 }], 20, 300) };
+		const a = {
+			...base,
+			gc: gc(
+				[
+					{ name: 'replace', caller: 'splice (ds.ts:61)', allocated: 1_771_000_000, gc_ms: 60 },
+					{ name: 'indexOf', caller: 'insert (ds.ts:82)', allocated: 62_000_000, gc_ms: 2 }
+				],
+				90,
+				2600
+			)
+		};
+		const b = {
+			...base,
+			meta: { ...base.meta, id: 'b', created: 1 },
+			gc: gc(
+				[
+					{ name: 'join', caller: 'splice (ds.ts:130)', allocated: 3_000_000, gc_ms: 0.1 },
+					{ name: 'indexOf', caller: 'insert (ds.ts:82)', allocated: 1_000_000, gc_ms: 0.05 }
+				],
+				20,
+				300
+			)
+		};
 		const cmp = compare_reports(a, b);
-		expect(cmp.summary.find((r) => r.label === 'allocated in the window')).toMatchObject({ a: 2600, b: 300, d: -2300, unit: 'MB' });
-		expect(cmp.summary.find((r) => r.label === 'garbage collection')).toMatchObject({ a: 90, b: 20, d: -70 });
-		expect(cmp.gc_makers.map((m) => `${m.name}:${m.d_gc_ms}:${m.only ?? ''}`)).toEqual(['replace:-60:a', 'indexOf:-1.95:', 'join:0.1:b']);
+		expect(cmp.summary.find((r) => r.label === 'allocated (per render)')).toMatchObject({
+			a: 2600,
+			b: 300,
+			d: -2300,
+			unit: 'MB'
+		});
+		expect(cmp.summary.find((r) => r.label === 'garbage collection (per render)')).toMatchObject({
+			a: 90,
+			b: 20,
+			d: -70
+		});
+		expect(cmp.gc_makers.map((m) => `${m.name}:${m.d_gc_ms}:${m.only ?? ''}`)).toEqual([
+			'replace:-60:a',
+			'indexOf:-1.95:',
+			'join:0.1:b'
+		]);
 		expect(cmp.gc_makers[0]).toMatchObject({ a_mb: 1688.96, b_mb: 0, d_mb: -1688.96 });
 		// without attribution on either side, the diff is empty and the rows are absent
-		expect(compare_reports(base, { ...base, meta: { ...base.meta, id: 'c' } }).gc_makers).toEqual([]);
-		expect(compare_reports(base, base).summary.some((r) => r.label === 'allocated in the window')).toBe(false);
+		expect(compare_reports(base, { ...base, meta: { ...base.meta, id: 'c' } }).gc_makers).toEqual(
+			[]
+		);
+		expect(
+			compare_reports(base, base).summary.some((r) => r.label === 'allocated (per render)')
+		).toBe(false);
 	});
 });
 
@@ -2928,7 +5359,12 @@ describe('more from the same snapshot, on the host', () => {
 			return new Response('<html>' + rows.length + '</html>');
 		};
 		const rec = await handle({ event: ev, resolve: async () => new Response('no') });
-		const json = await (await handle({ event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.json'), resolve: async () => new Response('no') })).json();
+		const json = await (
+			await handle({
+				event: make_event(rec.headers.get('location')!.replace('http://localhost', '') + '.json'),
+				resolve: async () => new Response('no')
+			})
+		).json();
 		expect(json.promises).not.toBeNull();
 		expect(json.promises.per_render).toBeGreaterThanOrEqual(2000);
 		expect(json.retained).not.toBeNull();
@@ -2943,7 +5379,12 @@ describe('more from the same snapshot, on the host', () => {
 
 describe('paths: the owner is a named place', () => {
 	it('an anonymous arrow holding the hot functions never owns the path; its named parent does, and the app’s own hot functions stay in the set beside a dependency’s many', () => {
-		const frame = (functionName: string, url: string, line = 1) => ({ functionName, url, lineNumber: line, columnNumber: 0 });
+		const frame = (functionName: string, url: string, line = 1) => ({
+			functionName,
+			url,
+			lineNumber: line,
+			columnNumber: 0
+		});
 		// Card → priceTable → (anonymous arrow) → fmt / sym ; plus 45 hot dependency internals
 		const nodes: { id: number; callFrame: ReturnType<typeof frame>; children?: number[] }[] = [
 			{ id: 1, callFrame: frame('(root)', ''), children: [2, 100] },
@@ -2952,18 +5393,40 @@ describe('paths: the owner is a named place', () => {
 			{ id: 4, callFrame: frame('(anonymous)', '/app/src/lib/util.ts', 12), children: [5, 6] },
 			{ id: 5, callFrame: frame('fmt', '/app/src/lib/util.ts', 30) },
 			{ id: 6, callFrame: frame('sym', '/app/src/lib/util.ts', 40) },
-			{ id: 100, callFrame: frame('render', '/app/node_modules/ds/hydrate/index.mjs', 1), children: [] }
+			{
+				id: 100,
+				callFrame: frame('render', '/app/node_modules/ds/hydrate/index.mjs', 1),
+				children: []
+			}
 		];
 		const samples: number[] = [];
 		const deltas: number[] = [];
 		for (let i = 0; i < 45; i++) {
-			nodes.push({ id: 200 + i, callFrame: frame(`dep${i}`, '/app/node_modules/ds/hydrate/index.mjs', 100 + i) });
+			nodes.push({
+				id: 200 + i,
+				callFrame: frame(`dep${i}`, '/app/node_modules/ds/hydrate/index.mjs', 100 + i)
+			});
 			nodes[6].children!.push(200 + i);
-			for (let k = 0; k < 20; k++) { samples.push(200 + i); deltas.push(1000); } // 20 ms each: 900 ms of dependency
+			for (let k = 0; k < 20; k++) {
+				samples.push(200 + i);
+				deltas.push(1000);
+			} // 20 ms each: 900 ms of dependency
 		}
-		for (let k = 0; k < 30; k++) { samples.push(5); deltas.push(1000); } // fmt 30 ms
-		for (let k = 0; k < 20; k++) { samples.push(6); deltas.push(1000); } // sym 20 ms
-		const a = analyze({ startTime: 0, endTime: samples.length * 1000, nodes, samples, timeDeltas: deltas } as never);
+		for (let k = 0; k < 30; k++) {
+			samples.push(5);
+			deltas.push(1000);
+		} // fmt 30 ms
+		for (let k = 0; k < 20; k++) {
+			samples.push(6);
+			deltas.push(1000);
+		} // sym 20 ms
+		const a = analyze({
+			startTime: 0,
+			endTime: samples.length * 1000,
+			nodes,
+			samples,
+			timeDeltas: deltas
+		} as never);
 		const owners = a.paths.map((p) => p.owner.name);
 		expect(owners).not.toContain('(anonymous)');
 		const card = a.paths.find((p) => p.owner.name === 'Card' || p.owner.name === 'priceTable');

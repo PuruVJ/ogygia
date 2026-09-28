@@ -164,8 +164,10 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 				? await rewrite_svelte(code, importer, lookup, policy)
 				: await rewrite_module(code, importer, lookup, policy);
 			// The importer no longer imports the barrels it was rewritten away from: watch them (and
-			// what their maps depend on) so an edit still re-transforms this file in dev.
-			for (const map of seen) for (const d of map.deps) this.addWatchFile(d);
+			// what their maps depend on) so an edit still re-transforms this file in dev. A virtual
+			// module (`\0…`) is no file: Vite turns every watch file into an import of the client
+			// module, and a raw `\0` id fails to resolve there.
+			for (const map of seen) for (const d of map.deps) if (!d.includes('\0')) this.addWatchFile(d);
 			report.last_ms = performance.now();
 			if (!result) return null;
 			report.importers++;

@@ -3,6 +3,7 @@
 	 *  the server WAITED (not computed), attributed to the function that started the I/O. */
 	import { fmt_ms, kind_color } from './format.js';
 	import { sortable } from './sort.svelte.js';
+	import { pressable } from './press.js';
 
 	type Row = { caller: string; kind: string; count: number; ms: number; open: number };
 	let { rows, maxMs }: { rows: Row[]; maxMs: number } = $props();
@@ -16,10 +17,10 @@
 			<th>function</th>
 			<th>kind</th>
 			<th>wait</th>
-			<th class="num sort" class:active={s.key === 'count'} onclick={() => s.click('count')}
+			<th class="num sort" class:active={s.key === 'count'} onclick={() => s.click('count')} {@attach pressable} aria-sort={s.aria('count')}
 				>count<span class="arr">{s.arrow('count')}</span></th
 			>
-			<th class="num sort" class:active={s.key === 'ms'} onclick={() => s.click('ms')}
+			<th class="num sort" class:active={s.key === 'ms'} onclick={() => s.click('ms')} {@attach pressable} aria-sort={s.aria('ms')}
 				>wait ms<span class="arr">{s.arrow('ms')}</span></th
 			>
 		</tr>

@@ -36,6 +36,10 @@ declare module 'virtual:ogygia/runtime-url' {
 /** The generated runtime entry — side effects only (it boots); it exports nothing. */
 declare module 'virtual:ogygia/runtime-entry' {}
 
+declare module 'virtual:ogygia/devtools-meta' {
+	/** island id → component name (a build; empty on the dev server) */
+	export const names: Record<string, string>;
+}
 declare module 'virtual:ogygia/island-deps' {
 	/** Public URLs of hashed dependency chunks for a hydrate island entry (`/_app/immutable/…`). */
 	export function islandDeps(entry: string): string[];
@@ -68,6 +72,10 @@ declare module 'virtual:ogygia/island-deps' {
 	 *  those. `null` = ship all: dev, an entry the handoff does not know, or a closure whose reads
 	 *  could not be pinned to literal keys. */
 	export function islandPageKeys(entry: string): string[] | null;
+	/** why an island ships all of page.data: the modules whose reads the build could not pin */
+	export function islandPageWhy(
+		entry: string
+	): { file: string; line: number | null; why: string }[] | null;
 	/** The Kit remote-function modules (by id-hash, the prefix of `internals.id`) an island entry's
 	 *  client code can call — static + dynamic imports in its chunk closure. Decides which
 	 *  SSR-resolved remotes the page seeds (`application/ogygia-remote`). Fail-open: `null` ("may
@@ -123,6 +131,12 @@ declare module 'virtual:ogygia/profiler-config' {
 	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
 	export const profilerConfig: Record<string, unknown> | null;
 }
+declare module 'virtual:ogygia/profiler-maps' {
+	/** The server build's module map and chunk sourcemaps as one JSON string (filled after the build),
+	 *  or null outside a profiler-on server build. Loaded lazily by the profiler only. */
+	const maps: string | null;
+	export default maps;
+}
 declare module 'virtual:ogygia/freeze-config' {
 	/** Freeze policy from `ogygia({ freeze })`, or `null` when off. SERVER only (client: null).
 	 *  Non-null turns the handle's freeze (render-on-write) read/write path on. `default` is the
@@ -174,6 +188,8 @@ declare const __OGYGIA_SERVER_DELTA__: boolean;
 /** DEVTOOLS event layer gate (Vite `define`; default OFF — see `ogygia({ devtools })`). When off,
  *  every `if (DEVTOOLS) emit({…})` folds to `if (false)` and the whole bus tree-shakes away. */
 declare const __OGYGIA_DEVTOOLS__: boolean;
+/** a build with devtools on: launcher only; the dock and the page measuring start once opened */
+declare const __OGYGIA_DEVTOOLS_LAZY__: boolean;
 
 declare module 'virtual:ogygia/router-css' {
 	// Generated component→CSS registrations for the server router — side-effect only.

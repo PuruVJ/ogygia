@@ -7,8 +7,9 @@
 	 * culprit, and the one line of advice the numbers support. A finding links here by `#island=`.
 	 */
 	import type { IslandRow } from './report-data.js';
-	import { fmt_ms, fmt_bytes } from './format.js';
+	import { fmt_ms, fmt_bytes, ink_on } from './format.js';
 	import { sortable } from './sort.svelte.js';
+	import { pressable } from './press.js';
 	import { row_id, follow_hash } from './row-anchor.svelte.js';
 
 	let { rows, hasJs, hasClient }: { rows: IslandRow[]; hasJs: boolean; hasClient: boolean } = $props();
@@ -38,13 +39,20 @@
 		if (i.actions) parts.push(`${i.actions} use:`);
 		return parts.join(' · ');
 	};
+	// a link names the island by its component; rows open by fingerprint (two copies with different
+	// props are two rows): the link opens the first, and only the first carries the row's id
+	const first_fp = $derived.by(() => {
+		const m = new Map<string, string>();
+		for (const r of rows) if (!m.has(r.name)) m.set(r.name, r.fp);
+		return m;
+	});
 	$effect(() =>
 		follow_hash(
 			'island',
 			() => rows.map((r) => r.name),
 			(k) => {
 				query = '';
-				open = k;
+				open = first_fp.get(k) ?? null;
 			}
 		)
 	);
@@ -58,24 +66,24 @@
 	<thead>
 		<tr>
 			<th>island</th>
-			<th class="num sort" class:active={s.key === 'copies'} onclick={() => s.click('copies')}>copies<span class="arr">{s.arrow('copies')}</span></th>
+			<th class="num sort" class:active={s.key === 'copies'} onclick={() => s.click('copies')} {@attach pressable} aria-sort={s.aria('copies')}>copies<span class="arr">{s.arrow('copies')}</span></th>
 			<th>wake</th>
-			<th class="num sort" class:active={s.key === 'ssr_ms'} title="the component's server render time, per render" onclick={() => s.click('ssr_ms')}>SSR ms<span class="arr">{s.arrow('ssr_ms')}</span></th>
-			<th class="num sort" class:active={s.key === 'props_bytes'} title="the props sidecar as shipped (one per fingerprint)" onclick={() => s.click('props_bytes')}>props<span class="arr">{s.arrow('props_bytes')}</span></th>
+			<th class="num sort" class:active={s.key === 'ssr_ms'} title="the component's server render time, per render" onclick={() => s.click('ssr_ms')} {@attach pressable} aria-sort={s.aria('ssr_ms')}>SSR ms<span class="arr">{s.arrow('ssr_ms')}</span></th>
+			<th class="num sort" class:active={s.key === 'props_bytes'} title="the props sidecar as shipped (one per fingerprint)" onclick={() => s.click('props_bytes')} {@attach pressable} aria-sort={s.aria('props_bytes')}>props<span class="arr">{s.arrow('props_bytes')}</span></th>
 			<th title="JSON parses on the fast lane; devalue when a leaf needs it">lane</th>
-			<th class="num sort" class:active={s.key === 'refs'} title="props that point into page.data instead of shipping again" onclick={() => s.click('refs')}>seed refs<span class="arr">{s.arrow('refs')}</span></th>
-			{#if hasJs}<th class="num sort" class:active={s.key === 'js_sort'} title="unique bytes of the island's module and its preloads" onclick={() => s.click('js_sort')}>JS<span class="arr">{s.arrow('js_sort')}</span></th>{/if}
+			<th class="num sort" class:active={s.key === 'refs'} title="props that point into page.data instead of shipping again" onclick={() => s.click('refs')} {@attach pressable} aria-sort={s.aria('refs')}>seed refs<span class="arr">{s.arrow('refs')}</span></th>
+			{#if hasJs}<th class="num sort" class:active={s.key === 'js_sort'} title="the island's module and its chunks, shared code included; '· only it' is the part no other island needs" onclick={() => s.click('js_sort')} {@attach pressable} aria-sort={s.aria('js_sort')}>JS<span class="arr">{s.arrow('js_sort')}</span></th>{/if}
 			<th title="what the build found in the island's components">interactivity</th>
-			{#if hasClient}<th class="num sort" class:active={s.key === 'client_ms'} title="wake → hydrated in the browser, p50 (the runtime's beacon)" onclick={() => s.click('client_ms')}>hydrate ms<span class="arr">{s.arrow('client_ms')}</span></th>{/if}
-			<th></th>
+			{#if hasClient}<th class="num sort" class:active={s.key === 'client_ms'} title="wake → hydrated in the browser, p50 (the runtime's beacon)" onclick={() => s.click('client_ms')} {@attach pressable} aria-sort={s.aria('client_ms')}>hydrate ms<span class="arr">{s.arrow('client_ms')}</span></th>{/if}
+			<th><span class="sr-only">details</span></th>
 		</tr>
 	</thead>
 	<tbody>
 		{#each s.sorted as r (r.fp)}
-			<tr class="row" id={row_id('island', r.name)} class:open={open === r.fp} class:flag={!!r.advice} onclick={() => (open = open === r.fp ? null : r.fp)}>
+			<tr class="row" id={first_fp.get(r.name) === r.fp ? row_id('island', r.name) : undefined} class:open={open === r.fp} class:flag={!!r.advice} onclick={() => (open = open === r.fp ? null : r.fp)} {@attach pressable}>
 				<td class="fn"><span class="caret">{open === r.fp ? '▾' : '▸'}</span><b>{r.name}</b></td>
 				<td class="num">{r.copies > 1 ? `×${r.copies}` : '1'}</td>
-				<td><span class="chip" style="background:{wake_color(r.wake)}">{r.wake}</span></td>
+				<td><span class="chip" style="background:{wake_color(r.wake)};color:{ink_on(wake_color(r.wake))}">{r.wake}</span></td>
 				<td class="num">{r.ssr_ms === null ? '—' : fmt_ms(r.ssr_ms)}</td>
 				<td class="num bar-cell">
 					<div class="bar" style="width:{Math.max(2, (r.props_bytes / max_props) * 100)}%"></div>
@@ -85,7 +93,7 @@
 				<td class="num">{r.refs ? `${r.refs} → ${r.ref_keys.join(', ')}` : '—'}</td>
 				{#if hasJs}
 					<td class="num bar-cell">
-						{#if r.js_bytes !== null}<div class="bar js" style="width:{Math.max(2, (r.js_bytes / max_js) * 100)}%"></div><b>{fmt_bytes(r.js_bytes)}</b>{:else}—{/if}
+						{#if r.js_bytes !== null}<div class="bar js" style="width:{Math.max(2, (r.js_bytes / max_js) * 100)}%"></div><b>{fmt_bytes(r.js_bytes)}</b>{#if r.js_only !== null}<span class="only" title="what no other island on the page needs: what dropping or deferring it saves"> · {fmt_bytes(r.js_only)} only it</span>{/if}{:else}—{/if}
 					</td>
 				{/if}
 				<td class="marks" class:inert={r.marks === 0}>{marks_text(r)}</td>
@@ -199,6 +207,11 @@
 	.lane.dev {
 		color: var(--warn);
 		border: 1px solid #5a4a20;
+	}
+	.bar-cell .only {
+		position: relative;
+		opacity: 0.7;
+		font-weight: 400;
 	}
 	.bar-cell {
 		position: relative;

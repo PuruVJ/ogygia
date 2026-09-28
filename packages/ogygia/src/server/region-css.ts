@@ -26,5 +26,17 @@ function attr(value: string): string {
 export function region_css_tag(href: string, resolved: string): string {
 	const text = islandCssInline(href);
 	if (text !== null) return `<style data-ogygia-region-css="${attr(resolved)}">${text}</style>`;
+	// DEV: the href is the island's module (Vite serves component CSS only inside it; the runtime
+	// imports it for its styles). As a stylesheet link the browser fetched the JS a second time as
+	// CSS — an empty sheet, and an error per island in engines that are strict about the MIME type.
+	// As a modulepreload, the fetch is the one the runtime's import() uses. (Every runtime path finds
+	// these tags by `data-ogygia-region-css`, whatever their rel; a built app's hrefs are `.css`.)
+	if (!is_css_href(href)) return `<link rel="modulepreload" href="${attr(resolved)}" data-ogygia-region-css>`;
 	return `<link rel="stylesheet" href="${attr(resolved)}" data-ogygia-region-css>`;
+}
+
+/** `….css` or `….css?…` (string search: one per region CSS tag). */
+function is_css_href(href: string): boolean {
+	const q = href.indexOf('?');
+	return (q === -1 ? href : href.slice(0, q)).endsWith('.css');
 }

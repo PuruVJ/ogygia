@@ -7,8 +7,9 @@
 	 * profile's link, a trap catch on the dashboard, an upload).
 	 */
 	import { get_report, put_report } from './store.js';
+	import { report_request } from './report-request.js';
 
-	let { base, id }: { base: string; id: string } = $props();
+	let { base, id, ogpB64 = '' }: { base: string; id: string; ogpB64?: string } = $props();
 	let state_ = $state<'checking' | 'kept' | 'keeping' | 'failed' | 'none'>('checking');
 
 	async function keep() {
@@ -18,7 +19,9 @@
 				return;
 			}
 			state_ = 'keeping';
-			const res = await fetch(`${base}/report/${id}.dump`, { credentials: 'same-origin' });
+			// the page's .ogp bytes ride along (report-request.ts): this runs on idle, a separate request
+			// that a serverless host routes to any instance, rarely the one that rendered this page
+			const res = await report_request(base, id, 'dump', ogpB64);
 			if (!res.ok) throw new Error(String(res.status));
 			const dump = (await res.json()) as { meta: { id: string; created: number; trigger: string } };
 			state_ = (await put_report(dump)) ? 'kept' : 'failed';

@@ -9,6 +9,7 @@
 	import type { IslandRow } from './report-data.js';
 	import type { Visit } from '../visit.js';
 	import { fmt_bytes, fmt_ms } from './format.js';
+	import { pressable } from './press.js';
 
 	let { rows, visit = null }: { rows: IslandRow[]; visit?: Visit | null } = $props();
 
@@ -30,7 +31,8 @@
 		{ key: 'ssr', label: 'server ms', hint: 'render time on the server, per render', get: (r) => r.ssr_ms, fmt: (n) => `${fmt_ms(n)}` },
 		{ key: 'markup', label: 'markup', hint: 'the island’s HTML bytes', get: (r) => r.canonical_bytes || null, fmt: fmt_bytes },
 		{ key: 'props', label: 'props', hint: 'the props tail bytes the browser downloads for it', get: (r) => r.props_bytes || null, fmt: fmt_bytes },
-		{ key: 'js', label: 'JS', hint: 'the JS its wake loads (unique to it)', get: (r) => r.js_bytes, fmt: fmt_bytes },
+		{ key: 'js', label: 'JS', hint: 'the JS its wake loads (shared code included)', get: (r) => r.js_bytes, fmt: fmt_bytes },
+		{ key: 'js_only', label: 'JS only it', hint: 'the JS no other island on the page needs: what dropping or deferring it saves', get: (r) => r.js_only, fmt: fmt_bytes },
 		{ key: 'hydrate', label: 'hydrate ms', hint: 'wake to hydrated in your browser, p50', get: (r) => r.client?.p50_ms ?? null, fmt: (n) => `${fmt_ms(n)}` },
 		{ key: 'woke', label: 'woke at', hint: 'when it finished hydrating in this visit, ms after the click', get: (r) => visit_islands.get(r.fp)?.done ?? null, fmt: (n) => `${fmt_ms(n)}` },
 		{ key: 'first', label: 'first touch', hint: 'the first interaction inside it in this visit, ms after the click', get: (r) => firsts.get(r.fp) ?? null, fmt: (n) => `${fmt_ms(n)}` },
@@ -50,7 +52,8 @@
 		} else list.sort((a, b) => b.score - a.score);
 		return list;
 	});
-	const shade = (v: number | null, i: number) => (v === null || !max[i] ? 'transparent' : `rgba(240, 136, 62, ${0.08 + 0.72 * (v / max[i])})`);
+	// (capped at half strength: the cell's number stays 4.5:1 on its own shade in both themes)
+	const shade = (v: number | null, i: number) => (v === null || !max[i] ? 'transparent' : `rgba(240, 136, 62, ${0.06 + 0.44 * (v / max[i])})`);
 	const shown = $derived(scored.slice(0, 40));
 </script>
 
@@ -59,7 +62,7 @@
 		<tr>
 			<th>island</th>
 			{#each cols as c (c.key)}
-				<th class="num col" class:on={sort === c.key} title={c.hint} onclick={() => (sort = sort === c.key ? null : c.key)}>{c.label}</th>
+				<th class="num col" class:on={sort === c.key} title={c.hint} onclick={() => (sort = sort === c.key ? null : c.key)} {@attach pressable} aria-sort={sort === c.key ? 'descending' : 'none'}>{c.label}</th>
 			{/each}
 			<th class="num" title="how many of the columns it leads, summed as shares of each column’s max">cost</th>
 		</tr>

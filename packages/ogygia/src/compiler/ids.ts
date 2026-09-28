@@ -18,12 +18,23 @@ export const V_DEV_HMR_URL = 'virtual:ogygia/dev-hmr-url';
 // devtools is off. The `-url` sibling is what the handle imports (a served URL, like dev-hmr-url).
 export const V_DEVTOOLS_BOOT = 'virtual:ogygia/devtools-boot';
 export const V_DEVTOOLS_BOOT_URL = 'virtual:ogygia/devtools-boot-url';
+// The dock's build-time facts (island id → component name): a build has no dev middleware to ask,
+// so the lazily-loaded dock imports them. Empty on the dev server (the middleware serves them live).
+export const V_DEVTOOLS_META = 'virtual:ogygia/devtools-meta';
 export const V_ISLAND_DEPS = 'virtual:ogygia/island-deps';
 export const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
 export const V_SECRET = 'virtual:ogygia/secret';
 export const V_SIGN = 'virtual:ogygia/sign';
 export const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
 export const V_PROFILER_CONFIG = 'virtual:ogygia/profiler-config';
+/** THE PROFILER'S MAPS, carried as code: the server build's module map and every server chunk's
+ *  sourcemap, written into this module's chunk after the build (a file read by path does not survive
+ *  an adapter that traces imports or re-bundles; an import does). Imported only by the profiler, only
+ *  when it resolves a frame. Build + SSR + profiler on: the placeholder below, filled in closeBundle */
+export const V_PROFILER_MAPS = 'virtual:ogygia/profiler-maps';
+/** the string the maps module exports until the build fills it (build-time only: never in runtime code,
+ *  so the one literal in the output is the one to replace) */
+export const PROFILER_MAPS_PLACEHOLDER = '__ogygia_profiler_maps_placeholder__';
 export const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 export const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';

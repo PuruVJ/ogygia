@@ -88,6 +88,7 @@ import {
 	V_DEV_HMR_URL,
 	V_DEVTOOLS_BOOT,
 	V_DEVTOOLS_BOOT_URL,
+	V_DEVTOOLS_META,
 	V_ISLAND_DEPS,
 	V_TRANSPORT,
 	V_KIT_TRANSPORT,
@@ -98,6 +99,8 @@ import {
 	V_ROUTE_CSR,
 	V_REGION_ENDPOINT,
 	V_PROFILER_CONFIG,
+	V_PROFILER_MAPS,
+	PROFILER_MAPS_PLACEHOLDER,
 	V_RATE_LIMIT,
 	V_ROUTER_CONFIG,
 	V_SESSION_COOKIE,
@@ -207,6 +210,32 @@ function warn_undeclared_pkg_marks(id: string): void {
 /** The client-hooks boot snippet for a generated runtime entry: an import of the runtime runner and
  *  a call that dynamic-imports the app's `hooks.client.*` — empty when the app has none. Runs the
  *  file's `init` on boot for csr=false pages (the runner skips a csr=true document). */
+/**
+ * DEV: the folder `ogygia/runtime` resolves to — this package's own `exports["./runtime"]` (the
+ * dev boot imports that specifier). A published package points it at `dist/runtime` (= the
+ * prebuilt `runtime_dir`); this repo's workspace points it at `src/runtime` (`.ts` files). Null
+ * when it cannot be read (then `runtime_dir` stands). Once per runtime dir.
+ */
+const dev_runtimes = new Map<string, { dir: string; ts: boolean } | null>();
+function dev_runtime_of(runtime_dir: string): { dir: string; ts: boolean } | null {
+	if (dev_runtimes.has(runtime_dir)) return dev_runtimes.get(runtime_dir)!;
+	let out: { dir: string; ts: boolean } | null = null;
+	try {
+		const pkg_dir = path.dirname(path.dirname(runtime_dir));
+		const pkg = JSON.parse(fs.readFileSync(path.join(pkg_dir, 'package.json'), 'utf8'));
+		const exp = pkg?.exports?.['./runtime'];
+		const rel = typeof exp === 'string' ? exp : exp?.default;
+		if (typeof rel === 'string') {
+			const file = path.join(pkg_dir, rel);
+			if (fs.existsSync(file)) out = { dir: path.dirname(file), ts: file.endsWith('.ts') };
+		}
+	} catch {
+		out = null;
+	}
+	dev_runtimes.set(runtime_dir, out);
+	return out;
+}
+
 function client_hooks_boot(ctx: CompileCtx): { imports: string; call: string } {
 	if (!ctx.client_hooks) return { imports: '', call: '' };
 	const runner = `${ctx.runtime_dir}/client-hooks.js`.replace(BACKSLASH_G, '/');
@@ -598,7 +627,10 @@ export class Compiler {
 				if (!file.endsWith('.svelte') && !SCRIPT_MODULE_RE.test(file)) continue;
 				const src = ctx.read_file(file);
 				if (src == null) continue;
-				const { reads: r, sets } = context_string_keys(src, file.endsWith('.svelte') ? 'svelte' : 'script');
+				const { reads: r, sets } = context_string_keys(
+					src,
+					file.endsWith('.svelte') ? 'svelte' : 'script'
+				);
 				for (const k of sets) island_set.add(k);
 				if (r.length) reads.push({ file, keys: r });
 			}
@@ -663,7 +695,8 @@ export class Compiler {
 	#mark_registered_closures(result: TransformResult): void {
 		if (!this.#ctx!.is_dev) return;
 		for (const isl of result.islands ?? []) {
-			if (isl.componentPath) this.#closure_added.push(...this.mark_island_closure(isl.componentPath));
+			if (isl.componentPath)
+				this.#closure_added.push(...this.mark_island_closure(isl.componentPath));
 		}
 	}
 
@@ -941,7 +974,13 @@ export class Compiler {
 		if (id === RESOLVED(V_HYDRATE_FEATURES)) {
 			// The hydrate core's feature phase, from the same marks as the boot entry. Dev runs the
 			// kitchen-sink boot (`bootDev`), so it gets every hydrate-phase feature to match.
-			if (!ctx.is_build) return generateHydrateFeaturesSource({}, ctx.runtime_dir, true).code;
+			if (!ctx.is_build) {
+				// …from the runtime the dev boot actually runs (`ogygia/runtime`, as the app resolves
+				// it): a second copy would install the wire into slots the hydrate core never reads
+				const rt = dev_runtime_of(ctx.runtime_dir);
+				const code = generateHydrateFeaturesSource({}, rt?.dir ?? ctx.runtime_dir, true).code;
+				return rt?.ts ? code.split('.js";').join('.ts";') : code;
+			}
 			this.prescan();
 			// og.$ factories register before any island's props are revived (sync fn-ref resolution),
 			// i.e. with the hydrate core — not in the boot: the manifest reaches `ogygia/internal`, which
@@ -981,9 +1020,19 @@ export class Compiler {
 			if (!ctx.devtools) return `export {}`;
 			const ui_path = `${ctx.runtime_dir}/../devtools/ui.js`.replace(BACKSLASH_G, '/');
 			return (
+				// the dev server hands `define`s (the devtools gate among them) to the page as globals
+				// from Vite's env module: it must run before the dock reads the gate. Kit's own client
+				// (which loads it) comes later in the page, and the dock saw "off" — no dock at all
+				(is_dev ? `import '/@vite/env';\n` : '') +
 				`import { install_devtools_ui } from ${JSON.stringify(ui_path)};\n` +
 				`install_devtools_ui({ csr_true: true });\n`
 			);
+		}
+		if (id === RESOLVED(V_DEVTOOLS_META)) {
+			// a build: every island's component name, from the prescan (the dev server serves them live)
+			if (is_dev) return `export const names = {};`;
+			this.prescan();
+			return `export const names = ${JSON.stringify(this.region_names())};`;
 		}
 		if (id === RESOLVED(V_DEVTOOLS_BOOT_URL)) {
 			// The served URL the handle injects on csr=true pages. Empty in build/preview and when
@@ -1054,6 +1103,12 @@ export class Compiler {
 		}
 		if (id === RESOLVED(V_PROFILER_CONFIG)) {
 			return profiler_config_module(ssr, ctx.profiler_config);
+		}
+		if (id === RESOLVED(V_PROFILER_MAPS)) {
+			// a placeholder the build fills with the maps (vite/profiler-maps.ts); anything else: none
+			return ssr && ctx.is_build && ctx.profiler_config
+				? `export default ${JSON.stringify(PROFILER_MAPS_PLACEHOLDER)};`
+				: 'export default null;';
 		}
 		if (id === RESOLVED(V_FREEZE_CONFIG)) {
 			return freeze_config_module(ssr, ctx.freeze_config);
@@ -1162,6 +1217,7 @@ export class Compiler {
 		if (source === V_DEV_HMR_URL) return RESOLVED(V_DEV_HMR_URL);
 		if (source === V_DEVTOOLS_BOOT) return RESOLVED(V_DEVTOOLS_BOOT);
 		if (source === V_DEVTOOLS_BOOT_URL) return RESOLVED(V_DEVTOOLS_BOOT_URL);
+		if (source === V_DEVTOOLS_META) return RESOLVED(V_DEVTOOLS_META);
 		if (source === V_ISLAND_DEPS) return RESOLVED(V_ISLAND_DEPS);
 		if (source === V_KIT_TRANSPORT) return RESOLVED(V_KIT_TRANSPORT);
 		if (source === V_ROUTER_CSS) return RESOLVED(V_ROUTER_CSS);
@@ -1169,6 +1225,7 @@ export class Compiler {
 		if (source === V_SIGN) return RESOLVED(V_SIGN);
 		if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
 		if (source === V_PROFILER_CONFIG) return RESOLVED(V_PROFILER_CONFIG);
+		if (source === V_PROFILER_MAPS) return RESOLVED(V_PROFILER_MAPS);
 		if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);
 		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 		if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
@@ -1383,7 +1440,11 @@ export class Compiler {
 		// source form is what this pre-transform sees, before the `$app/*` shim rewrite below.
 		if (ctx.is_build && mentions_page_store(code)) {
 			const clean = id.split('?')[0].split('\\').join('/');
-			const kind = clean.endsWith('.svelte') ? 'svelte' : SCRIPT_MODULE_RE.test(clean) ? 'script' : null;
+			const kind = clean.endsWith('.svelte')
+				? 'svelte'
+				: SCRIPT_MODULE_RE.test(clean)
+					? 'script'
+					: null;
 			if (kind) {
 				const { keys, reason, pending } = page_data_keys_answer(code, clean, kind);
 				if (keys !== null) program.page_keys.set(clean, keys);
@@ -1595,7 +1656,11 @@ export class Compiler {
 		// island's closure kept Kit's real client page (never booted under csr=false), and a
 		// customer's shared boot helper read `page.data.user` as empty inside every public-page
 		// island. (csr=true hosts still pass virtual islands as `__component`.)
-		if (!ssr && island_graph.has(id_n) && (id_n.endsWith('.svelte') || SCRIPT_MODULE_RE.test(id_n))) {
+		if (
+			!ssr &&
+			island_graph.has(id_n) &&
+			(id_n.endsWith('.svelte') || SCRIPT_MODULE_RE.test(id_n))
+		) {
 			const rewritten = out.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
 				JSON.stringify(ctx.app_shims['$app/' + name])
 			);

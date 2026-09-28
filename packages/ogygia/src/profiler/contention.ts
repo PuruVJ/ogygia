@@ -28,7 +28,10 @@ export interface ContendingRequest {
 }
 
 export interface Contention {
+	/** the heaviest overlaps, at most 40 (count with `counts`, not this list) */
 	requests: ContendingRequest[];
+	/** every overlapping request tallied by kind, before the list was cut (absent on older reports) */
+	counts?: { self: number; self_ms: number; self_paths: string[]; other: number; hole: number };
 	/** the sum of the overlaps (a wall-time measure: two requests over one ms count twice) */
 	overlap_ms: number;
 	/** the upper bound on CPU the window lost to them, summed */
@@ -116,8 +119,18 @@ export function contention(input: ContentionInput): Contention | undefined {
 	const total_len = windows.reduce((a, w) => a + Math.max(0, w.end - w.start), 0) || 1;
 	if (!rows.length && !inflight.some((n) => n > 0)) return undefined;
 	rows.sort((a, b) => b.overlap_ms - a.overlap_ms);
+	// the tallies from EVERY row, before the list is cut to 40: a page calling its own server twenty
+	// times a render over three renders has sixty, and counting the cut list said 13
+	const self_rows = rows.filter((r) => r.kind === 'self');
 	return {
 		requests: rows.slice(0, 40),
+		counts: {
+			self: self_rows.length,
+			self_ms: round2(self_rows.reduce((s, r) => s + r.ms, 0)),
+			self_paths: [...new Set(self_rows.map((r) => r.path))].slice(0, 5),
+			other: rows.filter((r) => r.kind === 'other').length,
+			hole: rows.filter((r) => r.kind === 'hole').length
+		},
 		overlap_ms: round2(overlap_total),
 		cpu_max_ms: round2(cpu_total),
 		inflight_at_start: inflight,

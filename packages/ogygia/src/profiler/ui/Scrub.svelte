@@ -87,7 +87,7 @@
 		<text x="2" y={H + 13} font-size="10" fill="#6f8378">0</text>
 		<text x={W - 2} y={H + 13} font-size="10" fill="#6f8378" text-anchor="end">{fmt_ms(stacks.window_ms)} ms</text>
 	</svg>
-	<div class="bar">
+	<div class="scrub-bar">
 		<span class="hint">
 			{#if sel}
 				<b>{fmt_ms(sel.t0)}–{fmt_ms(sel.t1)} ms</b> · {fmt_ms(range.cpu_ms)} ms CPU, {fmt_ms(range.idle_ms)} ms idle
@@ -154,7 +154,7 @@
 		touch-action: none;
 		user-select: none;
 	}
-	.bar {
+	.scrub-bar {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;

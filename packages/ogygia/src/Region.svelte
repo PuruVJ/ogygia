@@ -827,7 +827,12 @@
 </script>
 
 <!-- svelte:head must be top-level (not inside {#if}); non-island/server modes leave it empty. -->
-<svelte:head>{@html head_html}</svelte:head>
+<!-- SERVER-AUTHORED HTML: every {@html} below carries a string only the server can make — head
+     links claimed once per request, a props sidecar the document tail may have taken instead.
+     When a region renders in the browser (nested in an island a snippet brought), the browser's
+     value differs by design, and hydration keeps the server's nodes: that is the behavior we
+     want, so each block tells Svelte (svelte-ignore) instead of it warning on every such page. -->
+<svelte:head><!-- svelte-ignore hydration_html_changed -->{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component ?? late_component}
 	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else if island_skip}<ogygia-region
@@ -837,13 +842,13 @@
 			data-ogygia-keep={__keep || undefined}
 			data-og-fp={island_fp || undefined}
 			data-og-skipped
-		></ogygia-region>{@html island_props_inline}{:else}<ogygia-region
+		></ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{:else}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
 			data-og-fp={island_fp || undefined}
-		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_inline}{/if}
+		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
 	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
@@ -857,7 +862,7 @@
 			hydrate-margin={__hydrateMargin || undefined}
 			endpoint={server_endpoint}
 			data-og-hole={server_identity || undefined}
-		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region>{@html server_props_script}{/if}
+		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{/if}
 {:else if is_lake}
 	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
 		<ogygia-region
@@ -887,7 +892,7 @@
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
-		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
+		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html held_props_script}
 	{/key}
 {:else if of}
 	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. On a

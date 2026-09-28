@@ -428,6 +428,11 @@ describe('more from the same snapshot', () => {
 		expect(m).toHaveLength(1);
 		expect(m[0]).toMatchObject({ name: 'toVM', calls: 48, total_ms: 30, alloc_per_call: 10_000 });
 		expect(m[0].per_call_ms).toBeCloseTo(0.625, 3);
+		// the same profile as 3 page renders: 30 ms is 10 per render, the 48 calls are one render's
+		// (coverage), so one call is 10 / 48, not 30 / 48
+		const m3 = memo_candidates(a, [{ key: 'k', name: 'toVM', url: '/app/src/lib/mappers.ts', line: 9, category: 'app', component: null, allocated: 480_000, share: 0.5, gc_ms: 1, pauses: 0 }], 8, 3);
+		expect(m3[0]).toMatchObject({ calls: 48, total_ms: 10, alloc_per_call: 3333 });
+		expect(m3[0].per_call_ms).toBeCloseTo(10 / 48, 3);
 	});
 	it('simulate_awaits: parallel starts a call with the one it waited for, cache makes it instant, remove takes it out', () => {
 		// a → b → c in a row, each 100 ms with 5 ms between; 50 ms of CPU after the last

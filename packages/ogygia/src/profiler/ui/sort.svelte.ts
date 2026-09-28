@@ -32,6 +32,11 @@ export function sortable<T>(rows: () => T[], initial_key: string) {
 		return key === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
 	}
 
+	/** The header's `aria-sort`: what a screen reader says the arrow means. */
+	function aria(k: string): 'ascending' | 'descending' | 'none' {
+		return key === k ? (dir === 'asc' ? 'ascending' : 'descending') : 'none';
+	}
+
 	return {
 		get key() {
 			return key;
@@ -40,6 +45,7 @@ export function sortable<T>(rows: () => T[], initial_key: string) {
 			return sorted;
 		},
 		click,
-		arrow
+		arrow,
+		aria
 	};
 }

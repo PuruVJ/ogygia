@@ -128,7 +128,7 @@
 		margin-bottom: 8px;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.muted b {
 		color: #94a3b8;

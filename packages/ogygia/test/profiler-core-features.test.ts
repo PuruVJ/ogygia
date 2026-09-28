@@ -172,6 +172,20 @@ describe('the instance was not alone', () => {
 		// 100..150 and 120..140 → union 50 of 100
 		expect(out.busy_share).toBe(0.5);
 	});
+	it('counts every overlapping request, not only the 40 it lists', () => {
+		// three renders calling their own server 20 times each, and one stranger
+		const reqs = Array.from({ length: 60 }, (_, i) => req(`/api/p/${i % 20}`, 100 + (i % 3) * 100 + 5, 10, 2));
+		reqs.push(req('/other', 110, 400, 50));
+		const out = contention({
+			requests: reqs,
+			windows: [{ start: 100, end: 190 }, { start: 200, end: 290 }, { start: 300, end: 390 }],
+			self_paths: new Set(Array.from({ length: 20 }, (_, i) => `/api/p/${i}`))
+		})!;
+		expect(out.requests).toHaveLength(40);
+		expect(out.counts).toMatchObject({ self: 60, self_ms: 600, other: 1, hole: 0 });
+		expect(out.counts!.self_paths).toHaveLength(5);
+	});
+
 	it('is absent when nothing overlapped', () => {
 		expect(contention({ requests: [req('/b', 400, 50, 10)], windows: [{ start: 100, end: 200 }] })).toBeUndefined();
 		expect(contention({ requests: [], windows: [] })).toBeUndefined();

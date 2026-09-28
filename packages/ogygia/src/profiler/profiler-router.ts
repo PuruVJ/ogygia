@@ -47,7 +47,7 @@ const V = { Dashboard, Report, Run, Login, Upload, Message, Compare, Site } as u
 /** One page's profile history: every page-mode report of it, oldest first, by median run. */
 export interface PageHistory {
 	page: string;
-	points: { id: string; created: number; median: number }[];
+	points: { id: string; created: number; median: number; score?: number }[];
 }
 
 /** What the router calls into the host for. Return types here ARE the components' `data` types. */
@@ -58,6 +58,10 @@ export interface ProfilerDeps {
 	auth_guard(c: Ctx): Promise<Response | undefined>;
 	/** The runtime's hydration beacon (POST, authed): browser-side island timings, joined by fingerprint. */
 	beacon(c: Ctx): Promise<Response>;
+	/** A recording window you start and stop (POST, authed): the server's CPU, calls and requests
+	 *  while a test (or the devtools Record tab) drives the app; stop answers the report's JSON. */
+	window_start(c: Ctx): Promise<Response>;
+	window_stop(c: Ctx): Promise<Response>;
 	/** Is this request logged in? The public bare report page gates its SERVER data on this (a share
 	 *  `#fragment` renders without it). */
 	authed(c: Ctx): Promise<boolean>;
@@ -70,6 +74,10 @@ export interface ProfilerDeps {
 		/** every tag key seen in the log (`tag()`), for the split-by control */
 		tag_keys: string[];
 		reports: ReportMeta[];
+		/** report id → its biggest slow pattern (what to fix first) and how many more it found */
+		top_fix: Record<string, { title: string; save_ms: number; wait: boolean; more: number }>;
+		/** the lines that slow two or more profiled pages, what fixing each gives back per page and in all */
+		site_fixes: import('./site-fixes.js').SiteFix[];
 		recording: boolean;
 		dev: boolean;
 		rss_mb: number;
@@ -86,14 +94,29 @@ export interface ProfilerDeps {
 	/** Two stored reports side by side (404 when either expired). */
 	/** `cmp` is null when this server no longer holds one of the reports: the page then compares
 	 *  from the browser's store (the ids come back so it can) */
-	compare(a: string | undefined, b: string | undefined): { base: string; cmp: Comparison | null; a: string; b: string };
+	compare(
+		a: string | undefined,
+		b: string | undefined
+	): { base: string; cmp: Comparison | null; a: string; b: string };
 	/** the whole-site pictures: this instance's rows, the sink's status, a URL the browser reads rows from */
-	site(c: Ctx): { base: string; rows: SinkRow[]; sink: { url: string; last: { at: number; ok: boolean; rows: number; error?: string } | null; buffered: number } | null; from: string | null; ephemeral: boolean };
+	site(c: Ctx): {
+		base: string;
+		rows: SinkRow[];
+		sink: {
+			url: string;
+			last: { at: number; ok: boolean; rows: number; error?: string } | null;
+			buffered: number;
+		} | null;
+		from: string | null;
+		ephemeral: boolean;
+	};
 	/** A caught request profiled again in full page mode with the inputs it was caught with. */
 	replay(id: string | undefined, c: Ctx): Promise<Response>;
 	/** DEV ONLY: a few lines of a local source file around a line (the row's source peek). */
 	source(c: Ctx): Promise<Response>;
-	run_page(c: Ctx): Response | { base: string; path: string; runs: number; format: string };
+	run_page(
+		c: Ctx
+	): Response | { base: string; path: string; runs: number; format: string; against?: string };
 	record_page(c: Ctx): Promise<Response>;
 	reset(c: Ctx): Response;
 	/** A tiny live-status poll for the sidebar (and, later, a hosted dashboard): is a recording
@@ -111,7 +134,9 @@ export interface ProfilerDeps {
 	 *  survives the instance that made it. Memory-only when no store is configured. */
 	report_load(id: string | undefined): Promise<StoredReport | undefined>;
 	/** The reports the backend holds (summaries), for the sidebar's shared list. Empty with no store. */
-	list_stored(limit?: number): Promise<{ id: string; label: string; page?: string; created: number }[]>;
+	list_stored(
+		limit?: number
+	): Promise<{ id: string; label: string; page?: string; created: number }[]>;
 	/** The login page for THIS url (`?next=` back here) when the UI is secret-gated; null when a
 	 *  login makes no sense (dev is open; no secret = no UI). */
 	login_url(c: Ctx): string | null;
@@ -124,20 +149,29 @@ export interface ProfilerDeps {
 		/** this page's other page-mode reports (page mode only) and the one just before this */
 		history: PageHistory | null;
 		prev: string | null;
+		/** against the previous profile of this page, when this server still holds it */
+		since: import('./compare.js').Since | null;
 		/** recorded on a dev server — the source peek is available */
 		dev: boolean;
 	}>;
-	report_json(stored: StoredReport): Response;
+	report_json(stored: StoredReport): Response | Promise<Response>;
 	report_dump_json(stored: StoredReport): Response;
 	/** ONE self-contained HTML file of the report (styles, runtime and island chunks inlined) —
 	 *  opens from disk with the islands live. A built app only; dev answers 400. */
 	report_html(stored: StoredReport, c: Ctx): Promise<Response>;
+	/** A report's standalone file, agent JSON or plain dump, built from the report the request
+	 *  carries (the page's .ogp bytes or the browser's kept copy): works on any instance. */
+	report_posted(c: Ctx, as: 'html' | 'json' | 'dump' | 'ogp'): Promise<Response>;
 	report_raw(stored: StoredReport): Promise<Response>;
 }
 
 /** Shared lookup for the report representations: the stored report (memory or the storage backend),
  *  or a thrown 404. */
-async function report_or_404<R>(d: ProfilerDeps, id: string | undefined, fn: (s: StoredReport) => R): Promise<Awaited<R>> {
+async function report_or_404<R>(
+	d: ProfilerDeps,
+	id: string | undefined,
+	fn: (s: StoredReport) => R
+): Promise<Awaited<R>> {
 	const s = await d.report_load(id);
 	if (!s) error(404, 'That report has expired.');
 	return await fn(s);
@@ -158,6 +192,9 @@ export function build_profiler_router(d: ProfilerDeps) {
 			'/status.json': { GET: (c) => c.json(d.status(c)) },
 			// the browser's hydration timings (runtime/beacon.ts) — behind the guard like everything else
 			'/beacon': { POST: (c) => d.beacon(c) },
+			// a window you start and stop around what a test does (ogygia/testing, the Record tab)
+			'/window/start': { POST: (c) => d.window_start(c) },
+			'/window/stop': { POST: (c) => d.window_stop(c) },
 			'/login': page(V.Login, {
 				load: (c) => d.login_props(c),
 				actions: { default: (c) => d.login(c) }
@@ -172,7 +209,9 @@ export function build_profiler_router(d: ProfilerDeps) {
 			'/reports.json': { GET: async (c) => c.json(await d.list_stored()) },
 			'/report/[id]': page(V.Report, {
 				load: async (c) => {
-					const stored = (await d.authed(c)) ? await d.report_load(c.params.id) : d.report_stored(c.params.id);
+					const stored = (await d.authed(c))
+						? await d.report_load(c.params.id)
+						: d.report_stored(c.params.id);
 					if (stored && (await d.authed(c)))
 						return { report: await d.report_view(stored), base: d.base, login: null, exists: true };
 					// Not logged in (or no such report): the page renders the share-link gate. When this
@@ -181,14 +220,25 @@ export function build_profiler_router(d: ProfilerDeps) {
 					return { report: null, base: d.base, login: d.login_url(c), exists: !!stored };
 				}
 			}),
+			// each representation also takes a POST that CARRIES the report (the page's .ogp bytes or
+			// the browser's kept copy): any instance can answer it, which on a serverless host is the
+			// only kind of request that finds the report at all
 			'/report/[id].json': {
-				GET: (c) => report_or_404(d, c.params.id, d.report_json)
+				GET: (c) => report_or_404(d, c.params.id, d.report_json),
+				POST: (c) => d.report_posted(c, 'json')
 			},
 			'/report/[id].html': {
-				GET: (c) => report_or_404(d, c.params.id, (s) => d.report_html(s, c))
+				GET: (c) => report_or_404(d, c.params.id, (s) => d.report_html(s, c)),
+				POST: (c) => d.report_posted(c, 'html')
 			},
 			'/report/[id].dump': {
-				GET: (c) => report_or_404(d, c.params.id, d.report_dump_json)
+				GET: (c) => report_or_404(d, c.params.id, d.report_dump_json),
+				POST: (c) => d.report_posted(c, 'dump')
+			},
+			// the encrypted .ogp, made by whichever instance answers from the kept copy the request
+			// carries (only a server holds the key, and on serverless rarely the one that recorded it)
+			'/report/[id].ogp': {
+				POST: (c) => d.report_posted(c, 'ogp')
 			},
 			'/report/[id]/raw': {
 				GET: (c) => report_or_404(d, c.params.id, d.report_raw)

@@ -3,8 +3,11 @@ import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	// (the profiler's server build writes hidden maps by itself; PROFILER_NO_SOURCEMAPS=1 builds without
+	// any, the way an app that turned them off does — what the answer key's `--no-maps` measures)
 	build: {
-		...(process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : {})
+		...(process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : {}),
+		...(process.env.PROFILER_NO_SOURCEMAPS ? { sourcemap: false } : {})
 	},
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [

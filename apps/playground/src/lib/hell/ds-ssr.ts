@@ -13,6 +13,7 @@ import type { Handle } from '@sveltejs/kit';
 import { renderToString as ionicRenderToString, type HydrateResults, type SerializeDocumentOptions } from '@ionic/core/hydrate';
 import { instrument, span } from 'ogygia/profiler';
 
+// PATTERN library-per-item (a full renderer run per tag) · PATTERN kept-per-render (it keeps ~60 MB each page)
 const render = (html: string, options?: SerializeDocumentOptions): Promise<HydrateResults> => ionicRenderToString(html, options);
 const renderToString = instrument(render, 'ds.render', (r, html) => ({
 	tag: /<(ion-[a-z-]+)/.exec(html)?.[1] ?? 'fragment',
@@ -59,6 +60,7 @@ export async function processDsTags(pageHtml: string): Promise<string> {
 	);
 
 	span('ds.splice', () => {
+		// PATTERN rescan-in-loop
 		for (const { tag, el } of rendered) html = html.replace(tag, el); // one pass over the document per tag
 	});
 
@@ -221,7 +223,8 @@ export const ds_ssr: Handle = async ({ event, resolve }) => {
 	if (!res.headers.get('content-type')?.includes('text/html')) return res;
 	// `?ds=fast` runs the efficient pass; the default stays the messy one the page is here to show.
 	// The variant rides on the span so the two reports name it in the compare.
-	const fast = event.url.searchParams.get('ds') === 'fast';
+	// (/hell-fixed, the page with the profiler's fixes applied, always takes the fast pass)
+	const fast = event.url.searchParams.get('ds') === 'fast' || event.url.pathname.startsWith('/hell-fixed');
 	const out = await span('ds.pass', () => (fast ? processDsTagsFast(doc) : processDsTags(doc)), (h) => ({ bytes: h.length, variant: fast ? 'fast' : 'messy' }));
 	// a new body: the original length / etag would truncate or mislabel it
 	const headers = new Headers(res.headers);

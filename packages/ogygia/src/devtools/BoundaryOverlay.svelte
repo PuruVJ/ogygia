@@ -363,7 +363,7 @@
 		color: #94a3b8;
 	}
 	.tip .mut {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.tip .mono {
 		color: #cbd5e1;

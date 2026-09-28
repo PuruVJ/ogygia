@@ -24,7 +24,7 @@
 	});
 </script>
 
-<h4>wire inspector — what the server shipped to this page</h4>
+<h3>wire inspector — what the server shipped to this page</h3>
 
 {#if model.renders.length === 0 && model.seeds.length === 0 && model.caps.length === 0}
 	<div class="muted">no server crossings recorded — needs a devtools build (the handle's side-channel feeds this).</div>
@@ -82,13 +82,13 @@
 {/if}
 
 <style>
-	h4 {
+	h3 {
 		margin: 0 0 8px;
 		font-size: 12px;
 		color: #5eead4;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.sec {
 		margin: 12px 0 4px;
@@ -131,7 +131,7 @@
 	}
 	.id {
 		margin-left: 7px;
-		color: #64748b;
+		color: #94a3b8;
 		font-size: 10px;
 	}
 </style>

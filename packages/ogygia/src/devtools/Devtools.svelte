@@ -20,6 +20,9 @@
 	import HubTab from './HubTab.svelte';
 	import NavTab from './NavTab.svelte';
 	import ProfilerTab from './ProfilerTab.svelte';
+	import PageTab from './PageTab.svelte';
+	import SessionTab from './SessionTab.svelte';
+	import HydrationTab from './HydrationTab.svelte';
 	import { onMount } from 'svelte';
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
 	import IslandDetail from './IslandDetail.svelte';
@@ -30,10 +33,15 @@
 	// `csrTrue` = mounted by the standalone boot on a Kit-hydrated (csr=true) page. The ogygia runtime
 	// never ran there, so there's no event bus and no islands to inspect — the window shows a notice
 	// pointing at a csr=false page instead of the (empty) instrument tabs.
-	let { csrTrue = false } = $props();
+	// `startOpen` = the launcher's click loaded this dock (a build loads it only on open): open at once.
+	let { csrTrue = false, startOpen = false } = $props();
+	const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 
 	const TABS = [
 		{ id: 'lens', label: 'Lens' },
+		{ id: 'page', label: 'Page' },
+		{ id: 'record', label: 'Record' },
+		{ id: 'hydration', label: 'Hydration' },
 		{ id: 'bytes', label: 'Bytes' },
 		{ id: 'wire', label: 'Wire' },
 		{ id: 'hub', label: 'Hub' },
@@ -178,15 +186,25 @@
 		overlay = false;
 	}
 
-	let copied = $state(false);
+	let copied = $state('');
 	async function copy_trace() {
+		const text = JSON.stringify(to_trace());
 		try {
-			await navigator.clipboard.writeText(JSON.stringify(to_trace()));
-			copied = true;
-			setTimeout(() => (copied = false), 1200);
+			// (no clipboard over plain http off localhost, a phone on the LAN; or the permission is refused)
+			if (!navigator.clipboard) throw new Error('no clipboard');
+			await navigator.clipboard.writeText(text);
+			copied = 'copied ✓';
 		} catch {
-			/* clipboard blocked — no-op */
+			// the button used to do nothing here: save the trace as a file instead
+			const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `ogygia-trace-${Date.now()}.json`;
+			a.click();
+			setTimeout(() => URL.revokeObjectURL(url), 1000);
+			copied = 'saved as a file';
 		}
+		setTimeout(() => (copied = ''), 1600);
 	}
 
 	// One-time setup: Alt+O toggle, the compiler's devtools metadata, and (re)starting the refresh timer
@@ -201,8 +219,9 @@
 		window.addEventListener('keydown', onkey);
 
 		// `names` (island id → component name) and `bytes` (island id → transitive dev-graph size) label
-		// the tabs with real names/costs. Best-effort — the endpoint only exists on a dev devtools build.
-		fetch('/__ogygia_devtools_meta')
+		// the tabs with real names/costs. Best-effort — the endpoint only exists on the dev server (a
+		// build carries its names in the dock's own module: ui-app.ts).
+		if (!LAZY) fetch('/__ogygia_devtools_meta')
 			.then((r) => (r.ok ? r.json() : null))
 			.then((meta) => {
 				if (!meta || typeof meta !== 'object') return;
@@ -212,7 +231,8 @@
 			})
 			.catch(() => {});
 
-		if (open) refresh_on();
+		if (startOpen && !open) set_open(true);
+		else if (open) refresh_on();
 		return () => {
 			window.removeEventListener('keydown', onkey);
 			refresh_off();
@@ -233,15 +253,16 @@
 			{...winDrag.attach}
 			{...winResize.attach}
 		>
-			<header class="hd" {...winHandle} role="toolbar" tabindex="-1" aria-label="ogygia devtools">
+			<!-- (a plain header: the tabs inside are the tablist; the title is the dock's heading) -->
+			<header class="hd" {...winHandle}>
 				<!-- Title bar = the drag zone. Only the two buttons on it are cancel zones, so most of the row
 				     (grip + title + spacer) is a generous grab area with a grab cursor. -->
 				<div class="bar">
 					<span class="grip" aria-hidden="true"></span>
-					<span class="ttl">ogygia devtools</span>
+					<h2 class="ttl">ogygia devtools</h2>
 					{#if !csrTrue}
-						<button class="trace" {...winCancel} title="copy an event trace to the clipboard" onclick={copy_trace}>
-							{copied ? 'copied ✓' : 'trace'}
+						<button class="trace" {...winCancel} title="copy an event trace to the clipboard (saved as a file where the clipboard is not allowed)" onclick={copy_trace}>
+							{copied || 'trace'}
 						</button>
 					{:else}
 						<span class="mode">csr=true</span>
@@ -249,9 +270,9 @@
 					<button class="x" {...winCancel} title="close" onclick={() => set_open(false)}>✕</button>
 				</div>
 				{#if !csrTrue}
-					<div class="tabs">
+					<div class="tabs" role="tablist" aria-label="devtools instruments">
 						{#each TABS as t}
-							<button class="tab" {...winCancel} data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
+							<button class="tab" {...winCancel} role="tab" aria-selected={tab === t.id} aria-controls="og-dt-panel" data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
 								{t.label}
 							</button>
 						{/each}
@@ -259,7 +280,8 @@
 				{/if}
 			</header>
 
-			<div class="body">
+			<!-- the panel scrolls: focusable so a keyboard can scroll it, labelled by the open tab -->
+			<div class="body" id="og-dt-panel" role="tabpanel" tabindex="0" aria-label={TABS.find((t) => t.id === tab)?.label ?? 'devtools'}>
 				{#if csrTrue}
 					<div class="notice" data-og-csr-notice>
 						<p class="h">This page runs on <code>csr=true</code>.</p>
@@ -273,6 +295,12 @@
 					<IslandDetail el={selected} {tick} onclose={() => (selected = null)} />
 				{:else if tab === 'lens'}
 					<LensTab {tick} bind:overlay bind:focus bind:selected bind:picking />
+				{:else if tab === 'page'}
+					<PageTab {tick} bind:focus bind:selected />
+				{:else if tab === 'record'}
+					<SessionTab {tick} />
+				{:else if tab === 'hydration'}
+					<HydrationTab {tick} bind:selected />
 				{:else if tab === 'bytes'}
 					<LedgerTab {tick} />
 				{:else if tab === 'wire'}
@@ -284,7 +312,7 @@
 				{:else if tab === 'timeline'}
 					<TimelineTab {tick} />
 				{:else if tab === 'profiler'}
-					<ProfilerTab {tick} />
+					<ProfilerTab {tick} bind:focus bind:selected />
 				{/if}
 			</div>
 
@@ -384,10 +412,16 @@
 		gap: 4px;
 	}
 	.ttl {
+		/* (a heading for assistive tech; it looks like the title it was) */
+		margin: 0 8px 0 0;
+		font-size: inherit;
 		font-weight: 700;
 		color: #5eead4;
-		margin-right: 8px;
 		letter-spacing: 0.02em;
+	}
+	.body:focus-visible {
+		outline: 2px solid rgba(94, 234, 212, 0.6);
+		outline-offset: -2px;
 	}
 	.tab {
 		padding: 4px 10px;

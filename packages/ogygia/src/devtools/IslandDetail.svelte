@@ -8,6 +8,8 @@
 	 * consumer of the DOM + bus, keyed by the selected `<ogygia-region>` element.
 	 */
 	import { parse } from 'devalue';
+	import { onDestroy } from 'svelte';
+	import { highlight, clear_highlight } from './highlight.js';
 	import {
 		region_info,
 		region_name,
@@ -17,7 +19,11 @@
 		region_props_sidecar
 	} from './regions.js';
 	import { snapshot } from './bus.js';
+	import { read_page } from './page.js';
+	import { profile_for, profiles_version, island_row } from './profile-store.js';
+	import { get_last_session, last_session_version } from './session.js';
 	import PropsTree from './PropsTree.svelte';
+	import { island_ledger } from './ledger-dom.js';
 
 	let { el, tick = 0, onclose } = $props();
 
@@ -50,6 +56,12 @@
 		{ name: 'interaction.replay', label: 'replay', c: '#8b5cf6' }
 	];
 
+	// its line of the exact byte ledger (a build: the page's island graph × the browser's sizes)
+	const ledger = $derived.by(() => {
+		tick;
+		return island_ledger(el?.getAttribute('entry'));
+	});
+
 	const model = $derived.by(() => {
 		tick;
 		const info = region_info(el);
@@ -69,6 +81,27 @@
 		const start = marks.find((m) => m.name === 'region.hydrate.start');
 		const done = marks.find((m) => m.name === 'region.hydrate.done');
 		const hydrateMs = start && done ? done.t - start.t : (rendered && rendered.ms) ?? null;
+		// what the browser measured of this island (the Page tab's row + the findings that name it)
+		let browser = null;
+		try {
+			const view = info.fp ? read_page() : null;
+			if (view) {
+				const row = view.report.rows.find((r) => r.fp === info.fp) ?? null;
+				const findings = view.report.findings.filter((f) => f.fps.includes(info.fp));
+				if (row || findings.length) browser = { row, findings };
+			}
+		} catch {
+			browser = null;
+		}
+		// what happened to it in the last recorded session (the Record tab): clicks, slow handlers, the
+		// requests its clicks caused and the server's split of each
+		last_session_version();
+		const sess = get_last_session();
+		const in_session = info.fp && sess ? (sess.report?.by_island?.[info.fp] ?? null) : null;
+		// what the last SSR profile of this page measured for it (the Profiler tab's run)
+		profiles_version();
+		const prof = profile_for(location.pathname);
+		const server = island_row(prof, info.fp, info.entry);
 		return {
 			info,
 			name: region_name(info.entry),
@@ -77,17 +110,22 @@
 			rendered,
 			marks: marks.map((m) => ({ ...m, off: m.t - t0 })),
 			hydrateMs,
+			browser,
+			server: server ? { row: server, at: prof.at, same: server.fp === info.fp } : null,
+			session: in_session,
 			props: decode_props(region_props_sidecar(el))
 		};
 	});
 
+	// scroll to it AND mark it for a moment: an island already on screen gave no sign at all
+	/** @type {ReturnType<typeof setTimeout> | undefined} */
+	let flash;
 	function locate() {
-		try {
-			el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		} catch {
-			/* detached */
-		}
+		highlight([el], model.name, true);
+		clearTimeout(flash);
+		flash = setTimeout(clear_highlight, 1400);
 	}
+	onDestroy(() => clearTimeout(flash));
 </script>
 
 <div class="detail" data-og-detail>
@@ -123,8 +161,61 @@
 		</div>
 	{/if}
 
+	{#if model.browser}
+		<div class="sec">in the browser <span class="secn">— measured on this visit</span></div>
+		<div class="rows" data-og-detail-browser>
+			{#if model.browser.row}
+				{@const r = model.browser.row}
+				<div class="row"><span class="rk">module load</span><span class="v">{r.load_ms} ms</span></div>
+				{#if r.queue_ms !== null}<div class="row"><span class="rk">waited for its turn</span><span class="v">{r.queue_ms} ms</span></div>{/if}
+				<div class="row"><span class="rk">hydrate step</span><span class="v">{r.hydrate_ms} ms{#if r.longtask_ms}<span class="muted"> · {r.longtask_ms} ms in long tasks</span>{/if}</span></div>
+				<div class="row"><span class="rk">awake at</span><span class="v">{Math.round(r.done)} ms<span class="muted"> after navigation</span></span></div>
+				{#if r.shift}<div class="row"><span class="rk">layout shift</span><span class="v">{r.shift}</span></div>{/if}
+			{/if}
+			{#each model.browser.findings as f, i (f.code + i)}
+				<div class="find {f.severity}">{f.message}</div>
+			{/each}
+		</div>
+	{/if}
+
+	{#if model.session}
+		{@const ss = model.session}
+		<div class="sec">in the last session <span class="secn">— what using it did (Record tab)</span></div>
+		<div class="rows" data-og-detail-session>
+			<div class="row"><span class="rk">clicks</span><span class="v">{ss.clicks}{#if ss.mutations}<span class="muted"> · {ss.mutations} DOM changes</span>{/if}</span></div>
+			{#each ss.slow as x, i (i)}
+				<div class="row"><span class="rk">slow interaction</span><span class="v">{Math.round(x.duration)} ms<span class="muted"> · handlers {Math.round(x.processing)} ms · {x.target}</span></span></div>
+			{/each}
+			{#each ss.requests.slice(0, 5) as q, i (q.url + i)}
+				<div class="row">
+					<span class="rk">asked the server</span>
+					<span class="v">{q.url} <b>{Math.round(q.ms)} ms</b>{#if q.status && q.status >= 400}<span class="muted"> · {q.status}</span>{/if}{#if q.server_ms !== null}<span class="muted"> · {Math.round(q.server_ms)} ms on the server{q.net_ms ? `, ${Math.round(q.net_ms)} ms waiting` : ''}{q.up ? ` (${q.up})` : ''}</span>{/if}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
+	{#if model.server}
+		{@const s = model.server.row}
+		<div class="sec">on the server <span class="secn">— last profile, {new Date(model.server.at).toLocaleTimeString()}{model.server.same ? '' : ' (same island, other props)'}</span></div>
+		<div class="rows" data-og-detail-server>
+			<div class="row"><span class="rk">render</span><span class="v">{s.ssr_ms !== null ? s.ssr_ms + ' ms' : 'not measured'}</span></div>
+			{#if s.props_bytes !== null}<div class="row"><span class="rk">props</span><span class="v">{kb(s.props_bytes)}{#if s.culprit}<span class="muted"> · not plain JSON: {s.culprit}</span>{/if}</span></div>{/if}
+			{#if s.seed_refs}<div class="row"><span class="rk">seed references</span><span class="v">{s.seed_refs}</span></div>{/if}
+			{#if s.client_p50_ms !== null}<div class="row"><span class="rk">hydrate (beacon)</span><span class="v">{s.client_p50_ms} ms{#if s.recovered}<span class="muted"> · recovered {s.recovered}×</span>{/if}</span></div>{/if}
+		</div>
+	{/if}
+
 	<div class="sec">cost</div>
 	<div class="rows">
+		{#if ledger}
+			<!-- a build: its files, weighed by the browser — what only it needs, and whom it shares with -->
+			<div class="row" data-og-detail-bytes><span class="rk">its code</span><span class="v">{kb(ledger.row.wire)} in {ledger.row.files} files{#if ledger.row.cold}<span class="muted"> · {ledger.row.cold} not loaded yet</span>{/if}</span></div>
+			<div class="row"><span class="rk">only it</span><span class="v">{kb(ledger.row.unique)}<span class="muted"> · what removing it would save</span></span></div>
+			{#if ledger.row.shared}
+				<div class="row"><span class="rk">shared</span><span class="v">{kb(ledger.row.shared)}{#if ledger.shares_with.length}<span class="muted"> · with {ledger.shares_with.slice(0, 4).join(', ')}{ledger.shares_with.length > 4 ? ` and ${ledger.shares_with.length - 4} more` : ''}</span>{/if}</span></div>
+			{/if}
+		{/if}
 		{#if model.t}
 			<div class="row"><span class="rk">js + deps</span><span class="v">{kb(model.t.bytes)}<span class="muted"> · {model.t.modules} mod</span></span></div>
 		{/if}
@@ -226,7 +317,7 @@
 	.secn {
 		text-transform: none;
 		letter-spacing: 0;
-		color: #64748b;
+		color: #94a3b8;
 		font-weight: 400;
 	}
 	.props {
@@ -260,7 +351,7 @@
 		color: #e2e8f0;
 	}
 	.off {
-		color: #64748b;
+		color: #94a3b8;
 		font-size: 10px;
 	}
 	.arm {
@@ -293,9 +384,23 @@
 		color: #e2e8f0;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.mono {
 		color: #cbd5e1;
+	}
+	.find {
+		margin-top: 4px;
+		padding: 4px 8px;
+		border-left: 3px solid #38bdf8;
+		background: rgba(148, 163, 184, 0.07);
+		border-radius: 4px;
+		line-height: 1.5;
+	}
+	.find.warn {
+		border-left-color: #f59e0b;
+	}
+	.find.error {
+		border-left-color: #ef4444;
 	}
 </style>

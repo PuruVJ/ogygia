@@ -13,8 +13,17 @@
 		region_transitive
 	} from './regions.js';
 
+	import { page_ledger } from './ledger-dom.js';
+
 	let { tick = 0 } = $props();
 	const IS_DEV = !!(import.meta.env && import.meta.env.DEV);
+
+	// THE EXACT LEDGER (a build): the page's island graph names every file each island needs, the
+	// browser says what each file weighed — each file counted once, and per island what only it needs
+	const exact = $derived.by(() => {
+		tick;
+		return page_ledger();
+	});
 
 	const model = $derived.by(() => {
 		tick; // refresh with the panel tick
@@ -64,7 +73,62 @@
 	});
 </script>
 
-<h4>byte ledger — JavaScript per island</h4>
+<h3>byte ledger — JavaScript per island</h3>
+{#if exact}
+	<div class="note" data-og-ledger-exact>
+		Every file each island needs, from the page's island graph, weighed by the browser (over the wire).
+		<b>only it</b> is what that island alone needs: what removing it would save. <b>shared</b> it shares with
+		other islands. The page total counts each file once.
+	</div>
+	<table>
+		<thead>
+			<tr><th>island</th><th>kind</th><th>files</th><th>loaded</th><th>only it</th><th>shared</th></tr>
+		</thead>
+		<tbody>
+			{#each exact.rows as row (row.entry)}
+				<tr>
+					<td title={row.entry}><span class="nm">{row.name}</span>{#if row.count > 1}<span class="muted"> ×{row.count}</span>{/if}</td>
+					<td>{row.kind}{row.kind === 'island' ? ' · ' + row.wake : ''}</td>
+					<td>{row.files}{#if row.cold}<span class="muted"> · {row.cold} cold</span>{/if}</td>
+					<td>{#if row.files > row.cold}{kb(row.wire)}{:else}<span class="muted">cold</span>{/if}</td>
+					<td><span class="strong">{kb(row.unique)}</span></td>
+					<td class="muted">{kb(row.shared)}</td>
+				</tr>
+			{/each}
+			<tr>
+				<td>ogygia runtime</td>
+				<td class="muted">every island</td>
+				<td>{exact.runtime.files}</td>
+				<td>{kb(exact.runtime.wire)}</td>
+				<td class="muted">—</td>
+				<td class="muted">—</td>
+			</tr>
+		</tbody>
+		<tfoot>
+			<tr>
+				<td>page</td>
+				<td class="muted">each file once</td>
+				<td>{exact.page.files}{#if exact.page.cold}<span class="muted"> · {exact.page.cold} cold</span>{/if}</td>
+				<td>{kb(exact.page.wire)}</td>
+				<td colspan="2" class="muted">{kb(exact.page.raw)} decoded</td>
+			</tr>
+		</tfoot>
+	</table>
+	{#if exact.shared.length}
+		<h3 class="sub">shared files</h3>
+		<table data-og-ledger-shared>
+			<tbody>
+				{#each exact.shared.slice(0, 8) as s (s.url)}
+					<tr>
+						<td title={s.url}>{basename(s.url)}</td>
+						<td>{kb(s.wire)}</td>
+						<td class="muted">{s.users.length > 4 ? `${s.users.slice(0, 3).join(', ')} and ${s.users.length - 3} more` : s.users.join(', ')}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
+{:else}
 <div class="note">
 	Each <b>+deps</b> figure is that island's <b>whole bundle</b> — the component plus every shared function
 	and utility it imports. Shared code is therefore counted in <em>every</em> island that uses it, so the
@@ -110,15 +174,19 @@
 		</tr>
 	</tfoot>
 </table>
+{/if}
 
 <style>
-	h4 {
+	h3 {
 		margin: 0 0 8px;
 		font-size: 12px;
 		color: #5eead4;
 	}
+	h3.sub {
+		margin-top: 12px;
+	}
 	.note {
-		color: #64748b;
+		color: #94a3b8;
 		margin-bottom: 6px;
 	}
 	table {
@@ -147,7 +215,7 @@
 		font-weight: 600;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.nm {
 		color: #e2e8f0;

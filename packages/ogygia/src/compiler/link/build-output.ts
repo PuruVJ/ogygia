@@ -137,9 +137,11 @@ export function report_seed_shaping(
 	bundle: Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>,
 	program: { page_key_reasons: Map<string, { why: string; line: number | null }> },
 	root: string
-): void {
+): Record<string, SeedWhy[]> {
+	/** per island entry that ships all: the modules in its closure whose reads could not be pinned */
+	const why_of: Record<string, SeedWhy[]> = {};
 	const readers = Object.keys(map.page).filter((e) => map.page[e]);
-	if (!readers.length) return;
+	if (!readers.length) return why_of;
 	const pinned = readers.filter((e) => Array.isArray(map.page_keys[e]));
 	const unpinned = readers.filter((e) => !Array.isArray(map.page_keys[e]));
 	const key_count = new Set(pinned.flatMap((e) => map.page_keys[e] ?? [])).size;
@@ -164,11 +166,16 @@ export function report_seed_shaping(
 		};
 		const blamed = new Map<string, { why: string; line: number | null }>();
 		for (const e of unpinned) {
+			const own = new Set<string>();
 			for (const chunk of closure(e)) {
 				for (const id of bundle[chunk]?.moduleIds ?? []) {
 					const clean = id.split('?')[0].split('\\').join('/');
 					const r = program.page_key_reasons.get(clean);
-					if (r && !blamed.has(clean)) blamed.set(clean, r);
+					if (!r) continue;
+					if (!blamed.has(clean)) blamed.set(clean, r);
+					if (own.has(clean)) continue;
+					own.add(clean);
+					(why_of[e] ??= []).push({ file: rel(clean), line: r.line, why: r.why });
 				}
 			}
 		}
@@ -178,4 +185,13 @@ export function report_seed_shaping(
 		if (!blamed.size) lines.push(`  (read through code the build never saw — a dependency, or a foreign fragment)`);
 	}
 	console.log(lines.join('\n'));
+	return why_of;
+}
+
+/** a module that made an island ship all of `page.data`: where (root-relative when inside the app)
+ *  and why — what the profiler points at when the island's own file reads nothing whole */
+export interface SeedWhy {
+	file: string;
+	line: number | null;
+	why: string;
 }

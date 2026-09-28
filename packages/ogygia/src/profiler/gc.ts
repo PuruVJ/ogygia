@@ -11,7 +11,7 @@
  * allocator gets the pause time it is responsible for, and the report can say "this 40 ms of GC
  * is toProductVM's structuredClone in ProductCard", which no table of allocators can. Pure.
  */
-import { categorize, clean_url, component_name_from_file, strip_bundler_suffix, type FrameCategory, type HeapNode } from './analyze.js';
+import { categorize, clean_url, component_name_from_file, strip_bundler_suffix, with_script_url, type FrameCategory, type HeapNode } from './analyze.js';
 
 export interface GcEvent {
 	/** ms on the profile's clock (from the window's start) */
@@ -37,6 +37,10 @@ export interface AllocSite {
 	caller_name?: string;
 	caller_url?: string;
 	caller_line?: number;
+	/** THE APP LINE this allocation is charged to, resolved to source: the site itself when it is
+	 *  the app's code, else the nearest app caller — so a builtin (`replace`, `structuredClone`)
+	 *  lands on the line of your code that called it. Set once the source map has run. */
+	at?: { path: string; line: number };
 }
 
 export interface AllocSlice {
@@ -76,6 +80,8 @@ export interface GcMaker {
 	category: FrameCategory;
 	component: string | null;
 	caller?: string;
+	/** the app line it is charged to (see `AllocSite.at`) */
+	at?: { path: string; line: number };
 	allocated: number;
 	/** share of everything allocated in the window */
 	share: number;
@@ -149,7 +155,7 @@ export function heap_sites(head: HeapNode, dict: Record<string, AllocSite>): Map
 	// `caller`: the nearest frame ABOVE that is the app's own code (a builtin like `replace` or
 	// `map` allocates on behalf of the app line that called it — that line is the useful name)
 	const visit = (node: HeapNode, parent_hash: number, app_above: { name: string; url: string; line: number } | undefined): void => {
-		const f = node.callFrame;
+		const f = with_script_url(node.callFrame);
 		const cat = categorize(f);
 		let name = f.functionName || '(anonymous)';
 		let is_comp = cat.category === 'component';
@@ -326,6 +332,7 @@ export function attribute_gc(input: {
 				category: d?.category ?? 'app',
 				component: d?.component ?? null,
 				...(d?.caller ? { caller: d.caller } : {}),
+				...(d?.at ? { at: d.at } : {}),
 				allocated,
 				share: total_bytes ? r2(allocated / total_bytes) : 0,
 				gc_ms: r2(gc_ms_by_key[id] ?? 0),

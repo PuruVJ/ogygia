@@ -585,6 +585,9 @@ importers:
 
   packages/ogygia:
     dependencies:
+      '@playwright/test':
+        specifier: ^1.40.0
+        version: 1.62.1
       '@sveltejs/kit':
         specifier: '>=2.70.2 <3'
         version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
@@ -604,6 +607,9 @@ importers:
       '@neodrag/svelte':
         specifier: 3.0.0-next.12
         version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
+      '@ogygia/tsdown-plugin-svelte':
+        specifier: workspace:*
+        version: link:../tsdown-plugin-svelte
       '@orama/orama':
         specifier: ^3.1.18
         version: 3.1.18
@@ -667,6 +673,34 @@ importers:
       vite:
         specifier: ^8.2.0
         version: 8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
+  packages/tsdown-plugin-svelte:
+    dependencies:
+      magic-string:
+        specifier: ^1.1.0
+        version: 1.1.0
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.2.0
+        version: 7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      svelte:
+        specifier: ^5.40.0
+        version: 5.56.8
+      svelte2tsx:
+        specifier: ^0.7.60
+        version: 0.7.60(svelte@5.56.8)(typescript@6.0.3)
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))

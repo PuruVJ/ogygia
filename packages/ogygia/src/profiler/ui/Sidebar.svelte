@@ -277,6 +277,10 @@
 	.recent a.cur {
 		background: var(--accent-deep);
 	}
+	/* (the faint grey is 4.2:1 on the dark accent fill) */
+	.recent a.cur .rm {
+		color: var(--text-dim);
+	}
 	.rl {
 		display: block;
 		font-size: 12.5px;

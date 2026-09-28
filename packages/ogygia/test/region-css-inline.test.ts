@@ -50,6 +50,15 @@ describe('region_css_tag', () => {
 		);
 	});
 
+	it("a dev module href (not .css) is a modulepreload, never a stylesheet link to JS", () => {
+		// the dev server's islandCss hands the island's module URL: fetched as CSS it was an empty sheet
+		// and a MIME error per island in strict engines; the runtime imports it for its styles
+		expect(region_css_tag('./@id/virtual:ogygia/island/abc123.js', './@id/virtual:ogygia/island/abc123.js')).toBe(
+			'<link rel="modulepreload" href="./@id/virtual:ogygia/island/abc123.js" data-ogygia-region-css>'
+		);
+		expect(region_css_tag('/a/b.css?v=2', '/a/b.css?v=2')).toContain('rel="stylesheet"');
+	});
+
 	it('attribute-escapes the identity href in both shapes', () => {
 		set_inline_css({ '/a.css': '.a{}' });
 		expect(region_css_tag('/a.css', '/a.css?v="1"&x=<')).toContain('data-ogygia-region-css="/a.css?v=&quot;1&quot;&amp;x=&lt;"');

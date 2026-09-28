@@ -1,0 +1,408 @@
+// THE DEVTOOLS PAGE TAB'S ANSWER KEY: load the playground's /dt-lab (every PLANTED island has one
+// problem the browser can measure, every DECOY is healthy), act like a hurried visitor, and check
+// the Page tab's report (`window.__ogygia_page()`, the same object the tab renders): each planted
+// problem found and pinned on its island, no decoy named by anything.
+//
+// Against a dev server you started (devtools is dev-only):
+//   cd apps/playground && OGYGIA_DEVTOOLS=1 node node_modules/vite/bin/vite.js dev --port 4183 --host 127.0.0.1
+//   node internal/bench/devtools-answer-key.mjs [base=http://127.0.0.1:4183] [--repeat=3]
+// Or let it start one:
+//   node internal/bench/devtools-answer-key.mjs --serve [--repeat=3]
+//
+// With --repeat, a planted problem must be found in at least two runs of three (the early click is a
+// race against the island's wake); a decoy must be quiet in every run. Exit code 1 on a failure.
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const flag = (name) => flags.find((f) => f.startsWith(`--${name}=`))?.slice(name.length + 3);
+const serve = flags.includes('--serve');
+const repeat = Math.max(1, Number(flag('repeat') ?? (serve ? 3 : 1)));
+const PORT = 4188;
+const base = args[0] ?? (serve ? `http://127.0.0.1:${PORT}` : 'http://127.0.0.1:4183');
+const app = fileURLToPath(new URL('../../apps/playground', import.meta.url));
+const { chromium } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
+
+/** finding code → the island it must name (null: a page-wide finding, named by nothing) */
+const PLANTED = {
+	'markup-changed': 'Clock',
+	'hydration-shift': 'Grower',
+	'long-hydrate': 'Heavy',
+	'hydrate-failed': 'Broken',
+	'early-click': 'LateClick',
+	'eager-offscreen': 'BelowEager',
+	'long-tasks': null
+};
+const DECOYS = ['Healthy', 'BelowLazy', 'OnClick'];
+/** findings that name the islands that SUFFERED (a decoy may wait behind a planted island) */
+const VICTIM = new Set(['queued']);
+
+async function start_server() {
+	const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'dev', '--port', String(PORT), '--host', '127.0.0.1', '--strictPort'], {
+		cwd: app,
+		env: { ...process.env, OGYGIA_DEVTOOLS: '1', ORIGIN: base },
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
+	let log = '';
+	child.stdout.on('data', (d) => (log += d));
+	child.stderr.on('data', (d) => (log += d));
+	for (let i = 0; i < 120; i++) {
+		try {
+			const r = await fetch(base + '/dt-lab');
+			if (r.ok) return child;
+		} catch {
+			// not up yet
+		}
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	child.kill();
+	throw new Error('dev server did not start:\n' + log.slice(-2000));
+}
+
+/** a profiler report of /dt-lab, recorded before the visit: the visit's beacon joins it, and the
+ *  report's browser findings must say what the Page tab says (null: the profiler is off here) */
+async function record_profile() {
+	for (let i = 0; i < 10; i++) {
+		const r = await fetch(`${base}/__profiler/page?p=/dt-lab&runs=1`, { redirect: 'manual' }).catch(() => null);
+		if (!r || r.status === 404) return null;
+		const id = r.headers.get('location')?.split('/').pop();
+		if (id) return id;
+		await new Promise((ok) => setTimeout(ok, 2000)); // 409: a background sample is running
+	}
+	return null;
+}
+
+async function one_run(browser) {
+	const report_id = await record_profile();
+	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+	await page.goto(base + '/dt-lab', { waitUntil: 'load' });
+	// a beat first: the browser ignores layout shifts within 500 ms after input (rightly — the visitor
+	// caused them), and the planted shift happens as the first islands wake
+	await page.waitForTimeout(900);
+	// the hurried visitor: straight to the island far down the page (it wakes on sight — the click
+	// lands before it is awake), and a click on the interaction island (its click IS its wake)
+	await page.locator('[data-dt="late-click"] button').click({ timeout: 5000 });
+	await page.locator('[data-dt="on-click"] button').click({ timeout: 5000 });
+	// the load CPU trace closes 8 s after boot: wait for it (the findings quote it)
+	await page.waitForTimeout(3500);
+	await page.waitForFunction(() => window.__ogygia_page?.()?.page.cpu.state !== 'recording', null, { timeout: 12_000 }).catch(() => {});
+	const view = await page.evaluate(() => {
+		const v = window.__ogygia_page?.();
+		// every file the page loaded is counted (not the first 200, not the browser's 250-entry buffer)
+		const files = { counted: v ? v.report.bytes.reduce((s, b) => s + b.count, 0) : 0, browser: performance.getEntriesByType('resource').filter((r) => !r.name.includes('/__profiler/')).length };
+		return v ? { files, findings: v.report.findings, regions: v.regions, rows: v.report.rows, shifts: v.page.shifts, cpu: v.cpu ? { busy: v.cpu.busy_ms, kinds: v.cpu.by_kind } : null, cpu_off: v.page.cpu.off } : null;
+	});
+	// and the tab shows what the data says: open the panel on Page, count the rendered findings
+	// (the layout is remembered per browser; open it only when it is closed)
+	if (!(await page.locator('[data-og-tab="page"]').count())) await page.locator('[data-og-panel-toggle]').click();
+	await page.locator('[data-og-tab="page"]').click();
+	await page.waitForTimeout(900);
+	const shown = await page.locator('[data-og-page-findings] li[data-code]').evaluateAll((els) => els.map((e) => e.getAttribute('data-code')));
+	// THE HYDRATION TAB: each island's status (scroll the edited one into view so it wakes and heals)
+	await page.locator('[data-dt="edited"]').scrollIntoViewIfNeeded();
+	await page.waitForTimeout(800);
+	await page.locator('[data-og-tab="hydration"]').click();
+	await page.waitForTimeout(800);
+	const hydration = Object.fromEntries(
+		await page.locator('[data-og-hydration] tr[data-status]').evaluateAll((rs) => rs.map((r) => [r.querySelector('.nm')?.firstChild?.textContent ?? '', r.getAttribute('data-status')]))
+	);
+	await page.close({ runBeforeUnload: true }); // the page hides: the final visit goes out
+	if (!view) throw new Error('window.__ogygia_page is missing: is this a devtools dev server?');
+	let report = null;
+	if (report_id)
+		// (the visit arrives first; the CPU trace, cut by island, a few seconds later)
+		for (let i = 0; i < 15 && !(report?.browser_findings?.length && report.by_island); i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			if (j) report = { browser_findings: (j.findings ?? []).filter((f) => f.fps || f.code === 'long-tasks'), by_island: j.browser?.cpu?.by_island ?? null, client: (j.findings ?? []).find((f) => f.code === 'client-hydrate') ?? null };
+		}
+	return { ...view, shown, hydration, report };
+}
+
+/** THIRD PARTIES (/dt-third): its "other origin" is this server under its other loopback name. The
+ *  Page tab and the profiler report must both name: the blocking script, the scripts loaded by a
+ *  script (3), the main-thread time, the island a third party edited — and never the healthy one. */
+async function third_run(browser) {
+	let report_id = null;
+	for (let i = 0; i < 10 && !report_id; i++) {
+		const r = await fetch(`${base}/__profiler/page?p=/dt-third&runs=1`, { redirect: 'manual' }).catch(() => null);
+		if (!r || r.status === 404) break;
+		report_id = r.headers.get('location')?.split('/').pop() ?? null;
+		if (!report_id) await new Promise((ok) => setTimeout(ok, 2000));
+	}
+	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+	await page.goto(base + '/dt-third', { waitUntil: 'load' });
+	await page.waitForTimeout(4000);
+	const view = await page.evaluate(() => {
+		const v = window.__ogygia_page?.();
+		return v ? { findings: v.report.findings.map((f) => ({ code: f.code, message: f.message })), tp: v.report.third_party } : null;
+	});
+	await page.close({ runBeforeUnload: true });
+	let report = null;
+	if (report_id)
+		for (let i = 0; i < 10 && !report?.some((f) => f.code === 'third-party'); i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			if (j) report = (j.findings ?? []).map((f) => ({ code: f.code, message: f.message }));
+		}
+	const grade_third = (label, findings) => {
+		if (!findings) return console.log(`  · ${label}: nothing to grade`), 0;
+		const has = (code, text) => findings.some((f) => f.code === code && (!text || f.message.includes(text)));
+		const checks = [
+			['blocking', has('third-party-blocking', 'localhost')],
+			['loaded by scripts', has('third-party', '3 of their scripts')],
+			['main-thread time', findings.some((f) => f.code === 'third-party' && /ran (\d+) ms/.test(f.message) && Number(/ran (\d+) ms/.exec(f.message)[1]) >= 100)],
+			['edited island', has('third-party-edits', 'ThirdTarget')],
+			// (the third-party findings never blame the healthy island; other lines may name it — its wake time)
+			['decoy quiet', !findings.some((f) => f.code.startsWith('third-party') && f.message.includes('Healthy'))]
+		];
+		const bad = checks.filter(([, ok]) => !ok).map(([n]) => n);
+		console.log(`  ${bad.length ? '✗' : '✓'} third parties in the ${label}: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}`);
+		return bad.length ? 0 : 1;
+	};
+	return grade_third('Page tab', view?.findings) + grade_third('profiler report', report);
+}
+
+/** STYLES (/dt-styles): the planted unscoped fallback (LabCard.svelte, in leak.css) and the 600
+ *  rules that match nothing (unused.css) must be named; the healthy island's scoped styles never.
+ *  And a page with nothing planted (/dt-lab) must raise neither. */
+async function styles_run(browser) {
+	const read = async (path) => {
+		const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+		await page.goto(base + path, { waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		const s = await page.evaluate(async () => {
+			const r = await window.__ogygia_styles?.();
+			return r ? { findings: r.findings.map((f) => ({ code: f.code, message: f.message })), unscoped: r.report.unscoped.map((u) => u.file), sheets: r.report.sheets.map((x) => ({ label: x.label, unmatched: x.unmatched, rules: x.rules })) } : null;
+		});
+		await page.close();
+		return s;
+	};
+	const lab = await read('/dt-styles');
+	const clean = await read('/dt-lab');
+	if (!lab || !clean) return console.log('  ✗ styles: no __ogygia_styles on the page'), 0;
+	const has = (s, code, text) => s.findings.some((f) => f.code === code && (!text || f.message.includes(text)));
+	const unused = lab.sheets.find((x) => x.label === 'unused.css');
+	const checks = [
+		['unscoped named', has(lab, 'css-unscoped', 'LabCard.svelte') && lab.unscoped.length === 1],
+		['the reason given', has(lab, 'css-unscoped', 'Unexpected token')],
+		['unmatched named', has(lab, 'css-unmatched', 'unused.css')],
+		['all 600 unmatched', unused?.unmatched === 600 && unused?.rules === 600],
+		['decoy quiet', !lab.findings.some((f) => f.message.includes('Healthy'))],
+		['clean page quiet', !has(clean, 'css-unscoped') && !has(clean, 'css-unmatched')]
+	];
+	const bad = checks.filter(([, ok]) => !ok).map(([n]) => n);
+	console.log(`  ${bad.length ? '✗' : '✓'} styles: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}`);
+	if (bad.length) console.log(`    lab: ${JSON.stringify(lab.findings)} · clean: ${JSON.stringify(clean.findings)}`);
+	return bad.length ? 0 : 1;
+}
+
+/** THE RUNTIME'S OWN WAIT (/dt-many, 320 islands, scrolled): no island may sit waiting for its turn
+ *  with nothing ahead of it. The `held-idle` finding is how the tools catch the scheduler holding
+ *  islands for no reason — it named round 46's bug (200 islands, ~63 ms each) when that bug was put
+ *  back. Silent here means the runtime hands out turns promptly. */
+async function held_run(browser) {
+	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+	await page.goto(base + '/dt-many', { waitUntil: 'load' });
+	await page.waitForTimeout(2500);
+	await page.mouse.wheel(0, 5000);
+	await page.waitForTimeout(2000);
+	const r = await page.evaluate(() => {
+		const v = window.__ogygia_page?.();
+		return v ? { held: v.report.findings.find((f) => f.code === 'held-idle')?.message ?? null, woke: v.report.rows.length } : null;
+	});
+	await page.close();
+	const ok = !!r && !r.held && r.woke >= 300;
+	console.log(`  ${ok ? '✓' : '✗'} runtime: ${r?.woke ?? 0} islands woke on /dt-many and none waited with nothing ahead${r?.held ? ` — ${r.held}` : ''}`);
+	return ok ? 1 : 0;
+}
+
+/** AN IN-APP NAVIGATION: /dt-lab → /dt-styles keeps Healthy (the same island, the same props: the
+ *  router reuses it, still awake) and the Page tab says so, rather than "nothing woke"; the styles
+ *  follow the new page; /dt-styles → /dt-nest keeps nothing and its islands are wakes. */
+async function nav_run(browser) {
+	const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+	await page.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await page.waitForTimeout(2500);
+	const go = async (to) => {
+		await page.evaluate((to) => {
+			const a = document.createElement('a');
+			a.href = to;
+			a.id = 'og-key-go';
+			a.textContent = 'go';
+			document.body.prepend(a);
+			a.click(); // the router takes a link's click (an in-app navigation, no reload)
+		}, to);
+		await page.waitForTimeout(2500);
+		return page.evaluate(async () => {
+			const v = window.__ogygia_page?.();
+			const s = await window.__ogygia_styles?.();
+			return { soft: !!window.__og_key_marker, nav: v?.nav?.to ?? null, rows: v?.report.rows.map((r) => r.name) ?? [], kept: (v?.kept ?? []).map((k) => k.name), css: s?.findings.map((f) => f.code) ?? [] };
+		});
+	};
+	await page.evaluate(() => (window.__og_key_marker = 1));
+	const a = await go('/dt-styles');
+	const b = await go('/dt-nest');
+	await page.close();
+	const checks = [
+		['a soft navigation', a.soft && b.soft && a.nav === '/dt-styles' && b.nav === '/dt-nest'],
+		['Healthy kept, nothing woke', a.kept.join() === 'Healthy' && a.rows.length === 0],
+		['styles follow the page', a.css.includes('css-unscoped') && !b.css.includes('css-unscoped')],
+		['the next page: wakes, nothing kept', b.kept.length === 0 && b.rows.includes('NestOuter')]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} navigation: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ a, b })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
+function grade(view) {
+	const name_of = new Map(view.regions.map((r) => [r.fp, r.name]));
+	const found = {};
+	const decoy_hits = [];
+	const extra = [];
+	for (const f of view.findings) {
+		const names = f.fps.map((fp) => name_of.get(fp) ?? fp);
+		if (!VICTIM.has(f.code)) for (const n of names) if (DECOYS.includes(n)) decoy_hits.push(`${f.code} names decoy ${n}`);
+		if (f.code in PLANTED) {
+			const want = PLANTED[f.code];
+			if (want === null || names.includes(want)) found[f.code] = true;
+		}
+		for (const n of names) {
+			const planted_for = Object.entries(PLANTED).filter(([, v]) => v === n).map(([k]) => k);
+			if (planted_for.length && !planted_for.includes(f.code) && !f.code.startsWith('vital-')) extra.push(`${f.code} also names ${n}`);
+		}
+	}
+	return { found, decoy_hits, extra };
+}
+
+const server = serve ? await start_server() : null;
+const browser = await chromium.launch();
+let failed = false;
+let cpu_fail = 0;
+let hyd_fail = 0;
+try {
+	const tally = Object.fromEntries(Object.keys(PLANTED).map((k) => [k, 0]));
+	var tally_report = {};
+	var report_runs = 0;
+	var report_cpu_ok = 0;
+	var report_held_ok = 0;
+	for (let i = 0; i < repeat; i++) {
+		const view = await one_run(browser);
+		const g = grade(view);
+		for (const k of Object.keys(g.found)) tally[k]++;
+		const codes = view.findings.map((f) => f.code).join(', ');
+		console.log(`run ${i + 1}: ${codes || 'no findings'}`);
+		// hydration: the planted statuses, the decoys clean
+		// (Edited: a page script rewrote it before the runtime first saw it — its remembered copy already
+		// carries the edit, so the browser sees a markup change; `healed` when the runtime saw it first)
+		const WANT = { Broken: ['failed'], Clock: ['changed'], Edited: ['healed', 'changed'], Healthy: ['clean'] };
+		const bad = Object.entries(WANT).filter(([n, s]) => !s.includes(view.hydration[n]));
+		if (bad.length) {
+			hyd_fail++;
+			console.log(`  ✗ hydration tab: ${bad.map(([n, s]) => `${n} ${view.hydration[n] ?? 'missing'} (want ${s.join('|')})`).join(', ')}`);
+		} else console.log(`  ✓ hydration tab: Broken failed · Clock changed · Edited ${view.hydration.Edited} · Healthy clean`);
+		// THE PROFILER REPORT of the same visit: the same planted problems, on the same islands
+		if (view.report) {
+			const r = grade({ ...view, findings: view.report.browser_findings });
+			for (const k of Object.keys(r.found)) tally_report[k] = (tally_report[k] ?? 0) + 1;
+			report_runs++;
+			const missed = Object.keys(PLANTED).filter((k) => !r.found[k]);
+			console.log(`  ${missed.length ? '·' : '✓'} profiler report: ${view.report.browser_findings.map((f) => f.code).join(', ') || 'no browser findings'}${missed.length ? ` (missed ${missed.join(', ')})` : ''}`);
+			for (const d of r.decoy_hits) {
+				console.log(`  ✗ profiler report: ${d}`);
+				failed = true;
+			}
+			// and the browser's CPU, cut by island on the server, names what ran
+			const heavy = view.report.browser_findings.find((f) => f.code === 'long-hydrate')?.message ?? '';
+			const outside = view.report.browser_findings.find((f) => f.code === 'long-tasks')?.message ?? '';
+			const ok = heavy.includes('Heavy.svelte') && outside.includes('mostly');
+			if (ok) report_cpu_ok++;
+			// the slowest wake is a queue, and the island that held it is the planted long hydrate
+			const held = view.report.client?.message?.includes('behind Heavy') && view.report.client?.fix?.includes('Heavy held the queue');
+			if (held) report_held_ok++;
+			console.log(`  ${held ? '✓' : '·'} profiler report: the slowest wake waited behind Heavy${held ? '' : ` — ${view.report.client?.message?.slice(0, 160) ?? 'no client-hydrate'}`}`);
+			console.log(`  ${ok ? '✓' : '·'} profiler report CPU: ${heavy.includes('Heavy.svelte') ? '✓' : '✗'} long hydrate names Heavy.svelte · ${outside.includes('mostly') ? '✓' : '✗'} page script named${ok ? '' : ` — ${heavy.slice(0, 140)} | ${outside.slice(0, 140)}`}`);
+		}
+		// (the counted list is taken a moment before the browser's: a file may land in between)
+		if (view.files.counted < view.files.browser - 3) {
+			console.log(`  ✗ files: the Page tab counts ${view.files.counted}, the browser loaded ${view.files.browser}`);
+			failed = true;
+		} else console.log(`  ✓ files: ${view.files.counted} counted of ${view.files.browser}`);
+		const missing_ui = view.findings.filter((f) => !view.shown.includes(f.code)).map((f) => f.code);
+		if (missing_ui.length) {
+			console.log(`  ✗ the Page tab does not show: ${missing_ui.join(', ')} (shown: ${view.shown.join(', ') || 'nothing'})`);
+			failed = true;
+		}
+		for (const d of g.decoy_hits) {
+			console.log(`  ✗ ${d}`);
+			failed = true;
+		}
+		for (const e of g.extra) console.log(`  · ${e}`);
+		for (const k of Object.keys(PLANTED)) if (!g.found[k] && process.env.DT_KEY_DEBUG) console.log(`  ? missed ${k}: shifts ${JSON.stringify(view.shifts)} rows ${JSON.stringify(view.rows.map((r) => [r.name, r.t0, r.done, r.shift]))}`);
+		for (const f of view.findings) if (!(f.code in PLANTED)) console.log(`  · unplanted ${f.code}: ${f.message.slice(0, 160)}`);
+		// THE MAIN THREAD: the browser's own sampler names the code behind each long task
+		if (!view.cpu) {
+			console.log(`  ✗ no CPU trace (${view.cpu_off ?? 'none'})`);
+			cpu_fail++;
+		} else {
+			const heavy = view.findings.find((f) => f.code === 'long-hydrate')?.message ?? '';
+			const outside = view.findings.find((f) => f.code === 'long-tasks')?.message ?? '';
+			const ok_heavy = heavy.includes('Heavy.svelte');
+			const ok_outside = outside.includes('mostly');
+			if (!ok_heavy || !ok_outside) cpu_fail++;
+			console.log(`  ${ok_heavy ? '✓' : '✗'} CPU: the long hydrate names Heavy.svelte · ${ok_outside ? '✓' : '✗'} the page script's long task is named — ${view.cpu.busy} ms busy (${view.cpu.kinds.map((k) => `${k.kind} ${Math.round(k.ms)}`).join(', ')})`);
+		}
+	}
+	const need = repeat >= 3 ? 2 : repeat;
+	// third parties: both the Page tab and the profiler report, graded per run
+	let third_ok = 0;
+	for (let i = 0; i < repeat; i++) third_ok += await third_run(browser);
+	if (third_ok < need * 2) failed = true;
+	console.log(`${third_ok >= need * 2 ? '✓' : '✗'} third parties: ${third_ok}/${repeat * 2} (Page tab + profiler report per run)`);
+	// styles: deterministic (no timing in it), so every run must hold
+	let styles_ok = 0;
+	for (let i = 0; i < repeat; i++) styles_ok += await styles_run(browser);
+	if (styles_ok < repeat) failed = true;
+	console.log(`${styles_ok === repeat ? '✓' : '✗'} styles: ${styles_ok}/${repeat}`);
+	// the runtime's scheduler: deterministic enough to hold in every run
+	let held_ok = 0;
+	for (let i = 0; i < repeat; i++) held_ok += await held_run(browser);
+	if (held_ok < repeat) failed = true;
+	console.log(`${held_ok === repeat ? '✓' : '✗'} runtime hands out turns promptly: ${held_ok}/${repeat}`);
+	let nav_ok = 0;
+	for (let i = 0; i < repeat; i++) nav_ok += await nav_run(browser);
+	if (nav_ok < repeat) failed = true;
+	console.log(`${nav_ok === repeat ? '✓' : '✗'} navigation (kept islands, styles, wakes): ${nav_ok}/${repeat}`);
+	if (repeat - cpu_fail < need) {
+		failed = true;
+		console.log(`✗ CPU naming held in ${repeat - cpu_fail}/${repeat} runs`);
+	} else console.log(`✓ CPU naming: ${repeat - cpu_fail}/${repeat}`);
+	if (repeat - hyd_fail < need) {
+		failed = true;
+		console.log(`✗ hydration statuses held in ${repeat - hyd_fail}/${repeat} runs`);
+	} else console.log(`✓ hydration statuses: ${repeat - hyd_fail}/${repeat}`);
+	if (report_runs) {
+		const rneed = report_runs >= 3 ? 2 : report_runs;
+		if (report_cpu_ok < rneed) failed = true;
+		console.log(`${report_cpu_ok >= rneed ? '✓' : '✗'} profiler report CPU naming: ${report_cpu_ok}/${report_runs}`);
+		if (report_held_ok < rneed) failed = true;
+		console.log(`${report_held_ok >= rneed ? '✓' : '✗'} profiler report names the island that held the queue (Heavy): ${report_held_ok}/${report_runs}`);
+		for (const code of Object.keys(PLANTED)) {
+			const n = tally_report[code] ?? 0;
+			if (n < rneed) failed = true;
+			console.log(`${n >= rneed ? '✓' : '✗'} profiler report ${code}${PLANTED[code] ? ` on ${PLANTED[code]}` : ''}: ${n}/${report_runs}`);
+		}
+	} else console.log('· no profiler report (the profiler is off on this server)');
+	for (const [code, n] of Object.entries(tally)) {
+		const ok = n >= need;
+		if (!ok) failed = true;
+		console.log(`${ok ? '✓' : '✗'} ${code}${PLANTED[code] ? ` on ${PLANTED[code]}` : ''}: ${n}/${repeat}`);
+	}
+} finally {
+	await browser.close();
+	server?.kill();
+}
+console.log(failed ? 'FAILED' : 'all planted found, no decoy named');
+process.exit(failed ? 1 : 0);

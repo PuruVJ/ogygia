@@ -26,6 +26,8 @@
 		"bench": "node internal/bench/build-all.ts && node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
 		"bench:build": "node internal/bench/build-all.ts",
 		"bench:run": "node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
+		"profiler:answer-key": "node internal/bench/profiler-answer-key.mjs --serve --build",
+		"profiler:answer-key:no-maps": "node internal/bench/profiler-answer-key.mjs --serve --build --no-maps",
 		"pub": "pnpm --filter ogygia publish",
 		"format": "oxfmt packages/ogygia/src packages/ogygia/test",
 		"format:check": "oxfmt --check packages/ogygia/src packages/ogygia/test"

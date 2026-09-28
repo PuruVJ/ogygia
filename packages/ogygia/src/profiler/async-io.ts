@@ -14,7 +14,7 @@
  * lifetimes here anyway.
  */
 import { nearest_app_site, register_profiler_file, type CallerSite } from './net.js';
-import { call_sites, is_profiler_file } from './frames.js';
+import { call_sites, file_of, is_profiler_file } from './frames.js';
 
 // so this module's own frames (the AsyncHook.init callback) are skipped when we
 // blame a caller, regardless of how the bundler renamed this file
@@ -27,6 +27,8 @@ export interface IoOp {
 	caller?: string;
 	/** raw caller location (bundled), resolved to source at report time */
 	caller_site?: CallerSite;
+	/** the caller's source position, for reading the call site's code */
+	caller_at?: { path: string; line: number };
 	/** init → destroy duration in ms — the time the code waited on this resource */
 	ms: number;
 	/** performance.now() at init — lets page mode window ops to a single representative render */
@@ -64,25 +66,31 @@ export interface IoRecorder {
 	stop(): IoOp[];
 	/** promises created while the recorder ran, and who created them (one stack per
 	 *  PROMISE_SAMPLE_EVERY promises — a counter otherwise) */
-	promises(): { count: number; top: { caller: string; share: number }[] };
+	promises(): { count: number; top: { caller: string; share: number; site?: CallerSite }[] };
 }
 
 /** a promise storm is counted, not stacked: one stack capture per this many promises */
 const PROMISE_SAMPLE_EVERY = 256;
 
-/** the nearest frame that belongs to the app OR a dependency (not Node, not the profiler),
- *  as `fn (dir/file:line)` — no regex, this runs once per sampled promise */
-function nearest_own_or_dep_site(): string | undefined {
+/** the nearest frame that belongs to the app OR a dependency (not Node, not the profiler): its
+ *  generated position in full, so the report can map it back to the source (a short `dir/file`
+ *  of a built chunk named `_page.server.ts.js`, which is no line anyone can open) — no regex,
+ *  this runs once per sampled promise */
+function nearest_own_or_dep_site(): CallerSite | undefined {
 	for (const site of call_sites(nearest_own_or_dep_site)) {
-		const file = site.getFileName();
+		const file = file_of(site);
 		if (!file || file.startsWith('node:') || file.includes('node:internal') || is_profiler_file(file)) continue;
-		const q = file.indexOf('?');
-		const clean = q === -1 ? file : file.slice(0, q);
-		const parts = clean.split('/');
-		const short = parts.slice(-2).join('/');
-		return `${site.getFunctionName() || '(anonymous)'} (${short}:${site.getLineNumber() ?? 0})`;
+		return { fn: site.getFunctionName() || '(anonymous)', file, line: site.getLineNumber() ?? 0, column: site.getColumnNumber() ?? 0 };
 	}
 	return undefined;
+}
+
+/** `fn (dir/file:line)` from a generated position: what a promise origin reads as when no
+ *  sourcemap maps it */
+export function short_site(s: CallerSite): string {
+	const q = s.file.indexOf('?');
+	const clean = q === -1 ? s.file : s.file.slice(0, q);
+	return `${s.fn} (${clean.split('/').slice(-2).join('/')}:${s.line})`;
 }
 
 /** Start timing I/O resources. Call `stop()` at the end of the window. */
@@ -98,7 +106,8 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 	const ops: IoOp[] = [];
 
 	let promise_count = 0;
-	const promise_sites = new Map<string, number>();
+	/** generated `fn\0file\0line` → how many sampled promises it made, and the site itself */
+	const promise_sites = new Map<string, { n: number; site: CallerSite | null }>();
 	const hook = async_hooks.createHook({
 		init(asyncId, type) {
 			if (type === 'PROMISE') {
@@ -107,8 +116,11 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 				// dependency's (a design system's renderer makes promises of its own, and that is
 				// the answer)
 				if (++promise_count % PROMISE_SAMPLE_EVERY === 0 && promise_sites.size < 200) {
-					const k = nearest_own_or_dep_site() ?? '(no frame outside node)';
-					promise_sites.set(k, (promise_sites.get(k) ?? 0) + 1);
+					const site = nearest_own_or_dep_site() ?? null;
+					const k = site ? site.fn + '\0' + site.file + '\0' + site.line : '';
+					const hit = promise_sites.get(k);
+					if (hit) hit.n++;
+					else promise_sites.set(k, { n: 1, site });
 				}
 				return;
 			}
@@ -133,13 +145,18 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 
 	return {
 		promises() {
-			const sampled = [...promise_sites.values()].reduce((a, b) => a + b, 0) || 1;
+			const sampled = [...promise_sites.values()].reduce((a, b) => a + b.n, 0) || 1;
 			return {
 				count: promise_count,
-				top: [...promise_sites.entries()]
-					.sort((a, b) => b[1] - a[1])
+				top: [...promise_sites.values()]
+					.sort((a, b) => b.n - a.n)
 					.slice(0, 8)
-					.map(([caller, n]) => ({ caller, share: Math.round((n / sampled) * 100) / 100 }))
+					.map(({ n, site }) => ({
+						caller: site ? short_site(site) : '(no frame outside node)',
+						share: Math.round((n / sampled) * 100) / 100,
+						// the generated position, mapped to the source when the report is built
+						...(site ? { site } : {})
+					}))
 			};
 		},
 		stop() {

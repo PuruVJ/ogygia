@@ -10,7 +10,8 @@ import { ds_ssr } from '$lib/hell/ds-ssr';
 // DEMO: give the profiler a durable SQLite store so reports survive a restart and the sidebar's
 // shared list fills. Swap for redisStore(...) / postgresStore(process.env.DATABASE_URL) in a real
 // deployment; this is the one line an app writes to make the profiler DB-backed.
-setProfilerStore(sqliteStore('.ogygia/profiles.db'));
+// (`OGYGIA_PROFILES_DB`: the e2e serverless spec gives each "fresh instance" an empty database)
+setProfilerStore(sqliteStore(process.env.OGYGIA_PROFILES_DB || '.ogygia/profiles.db'));
 
 // A trivial second handle to prove `ogygia.handle()` composes with `sequence()`.
 const passthrough: Handle = async ({ event, resolve }) => resolve(event);

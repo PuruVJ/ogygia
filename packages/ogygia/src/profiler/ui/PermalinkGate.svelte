@@ -34,7 +34,9 @@
 	let password = $state('');
 	let busy = $state(false);
 	let error = $state('');
-	let report = $state<{ a: Analysis; meta: ReportMeta; extras: ReportExtras; history?: PageHistory | null; prev?: string | null } | null>(null);
+	/** `kept`: this browser's own copy (the owner's report, on an instance that no longer has it),
+	 *  not a link someone shared: its owner can still share it on */
+	let report = $state<{ a: Analysis; meta: ReportMeta; extras: ReportExtras; history?: PageHistory | null; prev?: string | null; kept?: boolean } | null>(null);
 	/** THE BROWSER STORE: no fragment → this may be a report this browser kept (an ephemeral host
 	 *  no longer has it, or the server restarted). Looked up once, by the id in the URL. */
 	let looking = $state(!blob && typeof location !== 'undefined');
@@ -49,7 +51,7 @@
 				const metas = [dump.meta, ...(await Promise.all(kept.filter((k) => k.id !== dump.meta.id && k.page === dump.meta.page).map((k) => get_report(k.id)))).map((r) => (r?.dump as { meta: ReportMeta } | undefined)?.meta).filter((m): m is ReportMeta => !!m)];
 				const history = page_history(metas).find((h) => h.page === dump.meta.page) ?? null;
 				const i = history ? history.points.findIndex((p) => p.id === dump.meta.id) : -1;
-				report = { a: dump.analysis, meta: dump.meta, extras: dump.extras, history, prev: i > 0 ? history!.points[i - 1].id : null };
+				report = { a: dump.analysis, meta: dump.meta, extras: dump.extras, history, prev: i > 0 ? history!.points[i - 1].id : null, kept: true };
 			})
 			.finally(() => (looking = false));
 	}
@@ -75,7 +77,7 @@
 </script>
 
 {#if report}
-	<ReportBody a={report.a} meta={report.meta} {base} extras={report.extras} ogpB64={undefined} history={report.history ?? null} prev={report.prev ?? null} />
+	<ReportBody a={report.a} meta={report.meta} {base} extras={report.extras} ogpB64={undefined} history={report.history ?? null} prev={report.prev ?? null} kept={report.kept ?? false} />
 {:else}
 	<Shell {base} bare>
 		<div class="share-unlock">

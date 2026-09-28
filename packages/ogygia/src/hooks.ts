@@ -105,7 +105,7 @@ import {
 } from './server/head-presence.js';
 import { locate, assemble } from './server/document-assembly.js';
 import { error_route_is_csr_true, route_is_csr_true } from './context.js';
-import { merge_seed_ask, shape_page_data } from './server/seed-shape.js';
+import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -125,7 +125,7 @@ import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
-import { set_page_recorder, type PageSnapshot } from './page-seed-registry.js';
+import { set_ask_scope_opener, set_page_recorder, set_seed_ask_reader, type PageSnapshot } from './page-seed-registry.js';
 import { collect_remote_seed } from './server/remote-seed-gate.js';
 import { DocumentTail, runtime_bootstrap_tags, set_tail_reader } from './server/document-tail.js';
 import { region_css_tag } from './server/region-css.js';
@@ -139,7 +139,8 @@ import {
 import { json_culprit } from './seed-refs.js';
 import type { SeedAsk } from './server/seed-shape.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
-import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './devtools/schema.js';
+import { drop_dead_kit_resolves } from './server/dead-kit-resolves.js';
+import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.js';
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
@@ -147,6 +148,7 @@ const MAX_REGION_BODY = 2_000_000;
 // DEVTOOLS gate — server realm. The SSR bundle carries the `__OGYGIA_DEVTOOLS__` define; off → the
 // recorder is never installed and every `if (DEVTOOLS)` folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 /** High-res clock for server-realm devtools timestamps. */
 const dt_now = () =>
 	typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
@@ -197,6 +199,9 @@ type RequestBag = {
 	late_next: number;
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
+	/** the document carries Kit's client bootstrap (`__sveltekit_*` defined): Kit's streamed resolve
+	 *  scripts are live then. Without it (csr=false) they are dead, and throw — the handle drops them. */
+	kit_client?: boolean;
 	/** FREEZE: this render may be stored (capture in flight) — region capabilities minted
 	 *  during it go prerender-grade (the stored HTML outlives `regions.ttl`). */
 	freeze_capture: boolean;
@@ -227,9 +232,35 @@ set_ctx_recorder((key, value) => {
 	const bag = bag_of();
 	if (bag) bag.ctx.set(key, value);
 });
+// THE SERVER ROUTER'S DOCUMENT asks too: a router page (the profiler's own, an app's) is answered
+// before a Kit page bag exists, so its regions' asks are collected here, off the same `Request` (the
+// one stable identity, and no second ALS). The document reads them back and seeds like a Kit page.
+const doc_asks = new WeakMap<Request, { wanted: boolean; keys: SeedKeys | null }>();
+const request_of = () => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request;
+set_ask_scope_opener(() => {
+	const request = request_of();
+	if (request && !bags.has(request) && !doc_asks.has(request)) doc_asks.set(request, { wanted: false, keys: null });
+});
+// the regions' asks so far, for the server router's document (it builds its own seed)
+set_seed_ask_reader(() => {
+	const bag = bag_of();
+	if (bag) return { wanted: bag.seed_wanted, keys: bag.seed_keys };
+	const request = request_of();
+	const d = request ? doc_asks.get(request) : undefined;
+	return d ? { wanted: d.wanted, keys: d.keys } : undefined;
+});
 set_page_recorder((snapshot, seed, remotes, entry) => {
 	const bag = bag_of();
-	if (!bag) return;
+	if (!bag) {
+		// a router document's render: only the asks matter (it builds its own seed from its snapshot)
+		const request = request_of();
+		const d = request ? doc_asks.get(request) : undefined;
+		if (d && seed !== false) {
+			d.wanted = true;
+			d.keys = merge_seed_ask(d.keys, seed);
+		}
+		return;
+	}
 	// MERGE: the routeless document root records url/params/route from the router's seed first;
 	// Region.svelte's data/form/error/status record must not wipe them (and vice versa).
 	bag.page = { ...bag.page, ...snapshot };
@@ -340,20 +371,20 @@ set_source_recorder((tag) => {
 // concurrent SSR requests). Unreferenced ⇒ tree-shaken when the gate is off.
 const dt_buffers = new WeakMap<RequestBag, { events: DevtoolsEvent[]; seq: number }>();
 // Stamp the envelope with THIS request's own seq/clock and push into its buffer.
-if (DEVTOOLS)
-	set_server_devtools_recorder((input) => {
-		const bag = bag_of();
-		if (!bag) return;
-		const buf = dt_buffers.get(bag);
-		if (!buf) return;
-		buf.events.push({
-			...input,
-			v: DEVTOOLS_SCHEMA_VERSION,
-			seq: buf.seq++,
-			t: dt_now(),
-			realm: 'server'
-		});
-	});
+function dt_record(bag: RequestBag | undefined, input: DevtoolsEventInput): void {
+	const buf = bag ? dt_buffers.get(bag) : undefined;
+	if (!buf) return;
+	buf.events.push({
+		...input,
+		v: DEVTOOLS_SCHEMA_VERSION,
+		seq: buf.seq++,
+		t: dt_now(),
+		realm: 'server'
+	} as DevtoolsEvent);
+}
+// (render seams find their request through the async context; the seed step, which runs in the page
+// transform outside it, passes its bag to `dt_record` directly)
+if (DEVTOOLS) set_server_devtools_recorder((input) => dt_record(bag_of(), input));
 
 /** Cap on a batch POST body before `request.json()` buffers it. 32 endpoints × ~8.5kB (props cap
  *  8192 + URL overhead) ≈ 270kB; 512kB leaves margin. Rejected up front via `content-length`. */
@@ -881,7 +912,10 @@ class OgygiaHandle {
 			};
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
-			if (DEVTOOLS) dt_buffers.set(bag, { events: [], seq: 0 });
+			// (a BUILD with devtools on: only for a browser that opened the dock — its cookie — so
+			// no other visitor's page carries the side-channel)
+			if (DEVTOOLS && (!DEVTOOLS_LAZY || event.cookies.get('og_devtools') === '1'))
+				dt_buffers.set(bag, { events: [], seq: 0 });
 			// Hang the bag off the request for the rest of it — the render's own Kit store and the
 			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
 			// carry this same `Request` and find it.
@@ -967,6 +1001,16 @@ class OgygiaHandle {
 					bag.seed_reducers ?? undefined
 				);
 			}
+			// A page with no Kit client (csr=false) whose load returned promises nobody seeds (no
+			// island reads the page, or no island at all): Kit still streams its resolve scripts
+			// after the document, and each throws `__sveltekit_… is not defined` in the browser.
+			// Drop exactly those; everything else (late regions) passes.
+			if (
+				!bag.kit_client &&
+				!response.headers.has('content-length') &&
+				(response.headers.get('content-type') ?? '').includes('text/html')
+			)
+				return drop_dead_kit_resolves(response);
 			return response;
 		}
 		// POST to the endpoint = a BATCH frame stream (client-side navigation, single-flight): render a set
@@ -1058,6 +1102,7 @@ class OgygiaHandle {
 		// decide everything below, each found with one bounded scan (server/document-assembly.ts):
 		// `</head>` from the front, `</body>` from the back. The chunk is assembled ONCE at the end.
 		const t_start = performance.now();
+		if (bag && !bag.kit_client && html.includes('__sveltekit_')) bag.kit_client = true;
 		const spans = locate(html);
 		const head = spans.head_end === -1 ? null : html.slice(0, spans.head_end);
 
@@ -1307,7 +1352,7 @@ class OgygiaHandle {
 				)
 			);
 			if (DEVTOOLS)
-				record_server_event({
+				dt_record(bag, {
 					domain: 'server',
 					name: 'server.seed.injected',
 					kind: 'page',
@@ -1321,7 +1366,7 @@ class OgygiaHandle {
 				scripts.push(remote_script);
 				remote_seed_bytes = remote_script.length;
 				if (DEVTOOLS)
-					record_server_event({
+					dt_record(bag, {
 						domain: 'server',
 						name: 'server.seed.injected',
 						kind: 'remote',

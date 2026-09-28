@@ -9,7 +9,7 @@
 	import LocalReports from './LocalReports.svelte' with { wake: 'load' };
 	import type { ProfilerRoutes } from '../profiler-router.js';
 	let { data }: ProfilerRoutes['/'] = $props();
-	const { base, recent, routes, reports, recording, dev, rss_mb, inflight, history, by, tag_keys, trap, sampled, background_note } = $derived(data);
+	const { base, recent, routes, reports, top_fix, site_fixes, recording, dev, rss_mb, inflight, history, by, tag_keys, trap, sampled, background_note } = $derived(data);
 	const sampled_max = $derived(Math.max(...(sampled?.functions.map((f) => f.self_ms) ?? [0]), 0.01));
 
 	const time = (ms: number) => new Date(ms).toLocaleTimeString();
@@ -40,6 +40,8 @@
 		return a > 0 ? ((b - a) / a) * 100 : 0;
 	};
 </script>
+
+<svelte:head><title>profiler — dashboard</title></svelte:head>
 
 <Shell {base}>
 	<div class="head">
@@ -77,7 +79,7 @@
 				time went — components, functions, allocations, and outbound calls.
 			</p>
 			<form class="inline" action="{base}/run" method="get">
-				<label>path <input name="p" placeholder="/some/slow/page" size="24" /></label>
+				<label>path <input name="p" placeholder="/some/slow/page" size="24" required /></label>
 				<label>renders <input name="runs" value="5" size="3" /></label>
 				<label class="ogp-opt" title="Recommended on serverless: the report can't be kept in memory across invocations. Download the encrypted .ogp, then open it via Import.">
 					<input type="checkbox" name="format" value="ogp" /> <code>.ogp</code>
@@ -144,12 +146,13 @@
 		<section class="panel wide">
 		<h2>Pages over time</h2>
 		<p class="hint">
-			Every page profiled more than once: its median render per run, oldest to newest. A jump is a
-			regression — open the compare to see which component or function moved.
+			Every page profiled more than once: its median render per run, oldest to newest, and its page
+			score then and now. A jump is a regression — open the compare to see which component or function
+			moved.
 		</p>
 		<table>
 			<thead>
-				<tr><th>page</th><th>runs</th><th class="num">latest</th><th class="num">vs previous</th><th></th></tr>
+				<tr><th>page</th><th>runs</th><th class="num">latest</th><th class="num">vs previous</th><th class="num">score</th><th><span class="sr-only">actions</span></th></tr>
 			</thead>
 			<tbody>
 				{#each tracked as h (h.page)}
@@ -168,7 +171,38 @@
 						<td class="num" style="color:{d > 5 ? 'var(--bad)' : d < -5 ? 'var(--good)' : 'inherit'}"
 							>{d > 0 ? '+' : ''}{d.toFixed(0)}%</td
 						>
+						<td class="num" title="page score, before → now"
+							>{#if last.score !== undefined}{#if before.score !== undefined && before.score !== last.score}<span class="hint">{before.score} →</span> {/if}<b
+									style="color:{before.score !== undefined && last.score < before.score ? 'var(--bad)' : before.score !== undefined && last.score > before.score ? 'var(--good)' : 'inherit'}"
+									>{last.score}</b
+								>{/if}</td
+						>
 						<td><a href="{base}/compare/{before.id}/{last.id}">compare</a></td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+		</section>
+	{/if}
+
+	{#if site_fixes?.length}
+		<!-- FIX ONCE, FASTER EVERYWHERE: lines the latest reports of two or more pages share -->
+		<section class="panel wide">
+		<h2>Fix once, faster on every page</h2>
+		<p class="hint">Slow lines that show in the latest report of two or more pages. One change to each makes all of them faster: what it gives back per render, per page and in all.</p>
+		<table>
+			<thead>
+				<tr><th>line</th><th>what</th><th>pages</th><th class="num">in all</th></tr>
+			</thead>
+			<tbody>
+				{#each site_fixes as f (f.kind + f.where + f.line)}
+					<tr>
+						<td><code title={f.code}>{f.where}:{f.line}</code></td>
+						<td>{f.title}</td>
+						<td class="pages">
+							{#each f.pages as p, i (p.page)}{i ? ' · ' : ''}<a href="{base}/report/{p.report}">{p.page}</a> <span class="save">~{fmt_ms(p.ms)} ms</span>{/each}
+						</td>
+						<td class="num"><b>~{fmt_ms(f.total_ms)} ms</b></td>
 					</tr>
 				{/each}
 			</tbody>
@@ -181,7 +215,7 @@
 		<h2>Reports</h2>
 		<table>
 			<thead>
-				<tr><th>report</th><th>when</th><th class="num">window</th><th class="num">requests</th><th></th></tr>
+				<tr><th>report</th><th>when</th><th class="num">window</th><th class="num">requests</th><th>biggest fix</th><th><span class="sr-only">actions</span></th></tr>
 			</thead>
 			<tbody>
 				{#each reports as r (r.id)}
@@ -190,6 +224,13 @@
 						<td>{time(r.created)}</td>
 						<td class="num">{fmt_ms(r.duration_ms)} ms</td>
 						<td class="num">{r.requests.length}</td>
+						<td class="fix">
+							{#if top_fix?.[r.id]}
+								{@const t = top_fix[r.id]}
+								<a href="{base}/report/{r.id}#pattern-0">{t.title}</a>
+								<span class="save">~{fmt_ms(t.save_ms)} ms{t.wait ? ' of waiting' : ''}</span>{#if t.more}<span class="more"> · {t.more} more</span>{/if}
+							{:else}—{/if}
+						</td>
 						<td
 							>{#if prev_of.has(r.id)}<a href="{base}/compare/{prev_of.get(r.id)}/{r.id}"
 									>compare with previous</a
@@ -278,6 +319,19 @@
 </Shell>
 
 <style>
+	td.fix {
+		font-size: 12.5px;
+		max-width: 360px;
+	}
+	td.fix .save {
+		color: var(--c-orange);
+		font-weight: 600;
+		margin-left: 6px;
+		white-space: nowrap;
+	}
+	td.fix .more {
+		color: var(--text-faint);
+	}
 	.head {
 		display: flex;
 		align-items: flex-start;

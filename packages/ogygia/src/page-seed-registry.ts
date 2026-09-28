@@ -61,6 +61,33 @@ export function set_page_recorder(fn: Recorder | null): void {
 	recorder = fn;
 }
 
+/** What the page's regions asked for so far this request: whether any wants the seed, and which
+ *  `page.data` keys (`'all'` or a set; `null` until one asks). Undefined outside a request the
+ *  handle owns (no reader installed, or no bag). The server router's document reads it after its
+ *  render, so a router page seeds like a Kit page: only when an island reads it, only what is read. */
+type AskReader = () => { wanted: boolean; keys: import('./server/seed-shape.js').SeedKeys | null } | undefined;
+let ask_reader: AskReader | null = null;
+
+/** Server (`hooks.ts`) installs the reader beside the recorder. */
+export function set_seed_ask_reader(fn: AskReader | null): void {
+	ask_reader = fn;
+}
+
+export function read_seed_ask(): ReturnType<AskReader> {
+	return ask_reader?.();
+}
+
+/** Start collecting the regions' asks for a render outside a Kit page (the server router's document,
+ *  answered before a Kit page bag exists): the next `record_page` calls of this request count, and
+ *  `read_seed_ask` returns them. A no-op on the client or outside a request. */
+let ask_opener: (() => void) | null = null;
+export function set_ask_scope_opener(fn: (() => void) | null): void {
+	ask_opener = fn;
+}
+export function open_ask_scope(): void {
+	ask_opener?.();
+}
+
 /** Region.svelte calls this during SSR with Kit's real page; the client is a no-op. `seed: false`
  *  records the snapshot without asking for the client seed (no island on the page reads it);
  *  `remotes` names the remote modules this region's client can call (`null` = any). */

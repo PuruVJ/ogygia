@@ -246,6 +246,19 @@ export type RuntimeEventInput =
 	  }
 	| {
 			domain: 'runtime';
+			/** Svelte's own dev warning that the server and the browser disagreed while hydrating
+			 *  (`hydration_html_changed`, `hydration_attribute_changed`, `hydration_mismatch`…) */
+			name: 'svelte.hydration.warning';
+			/** Svelte's code, e.g. `hydration_html_changed` */
+			code: string;
+			message: string;
+			/** the component file the warning names, when it names one */
+			file?: string;
+			/** the island that was hydrating when it was raised */
+			fp?: string;
+	  }
+	| {
+			domain: 'runtime';
 			name: 'region.server.applied';
 			entry?: string;
 			endpoint?: string;

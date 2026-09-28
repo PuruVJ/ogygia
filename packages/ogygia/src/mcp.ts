@@ -27,6 +27,7 @@ import {
 import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.js';
 import { ogp_decode, is_ogp } from './profiler/crypto.js';
 import { report_json, is_dump } from './profiler/report.js';
+import { fix_impact } from './profiler/patterns.js';
 
 // ── regexes
 const TRAILING_SLASH_RE = /\/$/;
@@ -747,6 +748,10 @@ const median = (xs: number[]): number => {
 type ProfileReport = {
 	target?: { page?: string; request?: string; runs?: number[] };
 	dev?: boolean;
+	/** one render's critical path: its waiting caps what the wait fixes together take off */
+	timeline?: { wait_ms?: number } | null;
+	/** one render after every fix named, overlapping fixes counted once (forecast.ts) */
+	forecast?: import('./profiler/forecast.js').Forecast | null;
 	summary?: {
 		verdict?: string;
 		window_ms?: number;
@@ -759,6 +764,7 @@ type ProfileReport = {
 	budget?: Array<{ label?: string; category?: string; ms?: number; pct?: number }>;
 	hot_functions?: Array<{
 		name?: string;
+		label?: string | null;
 		file?: string;
 		line?: number;
 		category?: string;
@@ -781,17 +787,427 @@ type ProfileReport = {
 		allocators?: Array<{ name?: string; category?: string; self_bytes?: number }>;
 	};
 	links?: { html?: string; json?: string; cpuprofile?: string };
+	/** known slow shapes on the costliest lines, each with its sites, a fix and a saving */
+	patterns?: Array<{
+		kind?: string;
+		title?: string;
+		fix?: string;
+		evidence?: string;
+		save_ms?: number;
+		wait?: boolean;
+		kept_bytes?: number;
+		seed_bytes?: number;
+		example?: { before?: string; after?: string };
+		sites?: Array<{
+			file?: string;
+			line?: number;
+			/** a built chunk's line: the source module it came from */
+			module?: string;
+			code?: string;
+			via?: Array<{
+				file?: string;
+				line?: number;
+				module?: string;
+				code?: string;
+				in_loop?: boolean;
+			}>;
+			upstream_cache?: {
+				max_age?: number;
+				no_store?: boolean;
+				no_cache?: boolean;
+				private?: boolean;
+			};
+			rewrite?: { file: string; line: number; before: string; after: string };
+		}>;
+	}> | null;
+	/** the app lines that cost the most, every cost joined per line */
+	/** one render's time as a tree (drill.ts): phase → owner / call → line */
+	drill?: DrillShape | null;
+	/** against the previous profile of this page (compare.ts `Since`) */
+	/** this page's fixes that other profiled pages share: the same line slows them too */
+	shared?: {
+		kind: string;
+		title: string;
+		where: string;
+		line: number;
+		pages: { page: string; ms: number }[];
+		total_ms: number;
+	}[];
+	since?: {
+		prev: string;
+		a_ms?: number;
+		b_ms?: number;
+		same?: boolean;
+		moved: Array<{ path: string[]; kind: string; at?: string; d_ms: number; status: string }>;
+		order?: { earlier: string; kept_mb: number; requests_between: number };
+		fix_check?: { predicted_ms: number; measured_ms: number; verdict: string };
+		score?: { a: number; b: number; a_grade: string; b_grade: string; moved: { label: string; a: number; b: number }[] };
+	} | null;
+	ledger?: Array<{
+		file?: string;
+		line?: number;
+		code?: string;
+		cpu_ms?: number;
+		lib_ms?: number;
+		alloc_bytes?: number;
+		gc_ms?: number;
+		retained_bytes?: number;
+		libs?: Array<{ name?: string; pkg?: string }>;
+		merged?: { from: number; callee: string };
+	}> | null;
 };
 
-function render_profile(origin: string, r: ProfileReport): string {
+const kb_or_mb = (b: number) =>
+	b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
+
+/**
+ * THE PLAN: one ordered list of changes, each a place to edit and what it is worth per render —
+ * the slow patterns (memory and shipped-data ones first, then by ms saved), the work that builds
+ * data nothing reads (the drill's rows whose every key is unread: delete it), and a page load that
+ * waits on its layout for data it uses later. What an agent does first, second, third.
+ */
+function render_plan(r: ProfileReport): string {
+	const n = Math.max(1, r.target?.runs?.length ?? 1);
+	/** `key`: what the forecast calls the same saving (a pattern's title; `unread:<keys>` for work
+	 *  whose data nothing reads) */
+	type Step = { value: number; text: string; key?: string };
+	const steps: Step[] = [];
+	const first_sentence = (s = '') => {
+		const dot = s.indexOf('. ');
+		return dot === -1 ? s : s.slice(0, dot + 1);
+	};
+	// (a pattern inside work that goes away anyway is moot: deleting beats speeding up)
+	// every line under such a row (a wait row has none of its own: its calling lines), paths compared
+	// without a leading `src/` (the drill and the patterns spell them differently)
+	const gone_at = new Set<string>();
+	const place = (p: string) => (p.startsWith('src/') ? p.slice(4) : p);
+	const all_lines = (d: DrillShape) => {
+		if (d.at) gone_at.add(place(d.at));
+		for (const c of d.children ?? []) all_lines(c);
+	};
+	const note = (d: DrillShape) => {
+		if (d.fills?.length && d.fills.every((f) => !f.read)) return all_lines(d);
+		for (const c of d.children ?? []) note(c);
+	};
+	if (r.drill) note(r.drill);
+	const gone = (x: { file?: string; line?: number }) => gone_at.has(place(`${x.file}:${x.line}`));
+	for (const p of r.patterns ?? []) {
+		// moot when every site is in that work: its own line, or every line that called it
+		if (p.sites?.length && p.sites.every((x) => gone(x) || (!!x.via?.length && x.via.every(gone))))
+			continue;
+		const s = p.sites?.[0];
+		// the line to open: a looping caller, else the first caller of a helper, else the site
+		const at = s?.via?.find((v) => v.in_loop) ?? (p.wait ? s?.via?.[0] : undefined) ?? s;
+		// a built chunk's line (no sourcemap): which source module it is, then the chunk line
+		const where = at?.file
+			? at.module
+				? `${at.module} (built ${at.file}:${at.line})`
+				: `${at.file}:${at.line}`
+			: '';
+		const worth = p.kept_bytes
+			? `keeps ${kb_or_mb(p.kept_bytes)} alive per render`
+			: p.seed_bytes
+				? `ships ${kb_or_mb(p.seed_bytes)} per page view`
+				: `~${Math.round(((p.save_ms ?? 0) / (p.wait ? 1 : n)) * 10) / 10}ms per render`;
+		if (!p.kept_bytes && !p.seed_bytes && (p.save_ms ?? 0) <= 0) continue;
+		// a severe leak (8 MB+ a render: it ends in a crash) and a whole shipped seed lead; a small kept
+		// amount waits behind the time savings
+		const value =
+			(p.kept_bytes ?? 0) >= 8 * 1024 * 1024 || p.seed_bytes
+				? Infinity
+				: p.kept_bytes
+					? 0.5
+					: (p.save_ms ?? 0) / (p.wait ? 1 : n);
+		steps.push({
+			value,
+			key: p.title ?? p.kind,
+			text: `**${p.title ?? p.kind}** — ${where ? `\`${where}\` · ` : ''}${worth}. ${first_sentence(p.fix)}`
+		});
+	}
+	// the work for nothing, from the drill (topmost rows whose every key is unread)
+	const unread: { label: string; ms: number; keys: string[]; at?: string; line?: boolean }[] = [];
+	const walk = (d: DrillShape) => {
+		if (d.fills?.length && d.fills.every((f) => !f.read)) {
+			// a wait row has no place of its own: the line that made the call is the one to edit
+			const first_line = (m: DrillShape): string | undefined => {
+				for (const c of m.children ?? []) {
+					const at = c.kind === 'line' && c.at ? c.at : first_line(c);
+					if (at) return at;
+				}
+				return undefined;
+			};
+			const at = d.at ?? first_line(d);
+			unread.push({
+				label: d.label,
+				ms: d.ms,
+				keys: d.fills.map((f) => f.key),
+				...(at ? { at } : {}),
+				...(d.kind === 'line' || (!d.at && at) ? { line: true } : {})
+			});
+			return;
+		}
+		for (const c of d.children ?? []) walk(c);
+	};
+	if (r.drill) walk(r.drill);
+	// one step per set of keys: the same unread data in several rows (the helper's CPU, the line it was
+	// inlined onto, its garbage) is one deletion — its rows added up, named by the biggest
+	const by_keys = new Map<string, (typeof unread)[number]>();
+	for (const u of [...unread].sort((a, b) => b.ms - a.ms)) {
+		const k = u.keys.join(', ');
+		const had = by_keys.get(k);
+		if (!had) by_keys.set(k, { ...u });
+		else {
+			had.ms += u.ms;
+			// the place to edit is a LINE that fills the key (the load's `const freshest = …`), not
+			// where a helper it calls starts
+			if (u.line && u.at && !had.line) {
+				had.at = u.at;
+				had.line = true;
+			}
+		}
+	}
+	for (const u of [...by_keys.values()].filter((x) => x.ms >= 1)) {
+		steps.push({
+			value: u.ms,
+			key: `unread:${u.keys.join(', ')}`,
+			text: `**Delete work for data nothing reads** — ${u.label}${u.at ? ` (\`${u.at}\`)` : ''} builds only ${u.keys.join(', ')}: ~${Math.round(u.ms * 10) / 10}ms per render. Drop it from the load, or the key with it.`
+		});
+	}
+	// the page waiting on its layout for data it first uses later (source-read)
+	const chain = (r.findings ?? []).find(
+		(f) => f.code === 'parent-chain' && (f.message ?? '').includes('never needed the layout')
+	);
+	if (chain) {
+		const ms = Number((chain.message ?? '').match(/\(([\d.]+) ms later\)/)?.[1] ?? 0);
+		steps.push({ value: ms, text: `**Move \`await parent()\` down** — ${chain.message}` });
+	}
+	if (!steps.length) return '';
+	// IN THE FORECAST'S ORDER, WITH THE RENDER AFTER EACH: the forecast counted each saving once (a
+	// fix another covers folds into it) and ranked them; every step says what one render takes once
+	// it and every step above it are done — where to stop reads off the list. What the forecast does
+	// not count (memory, a freshness decision, the parent chain) keeps its own place: a leak that
+	// crashes the server still leads
+	const parts = r.forecast?.parts ?? [];
+	if (parts.length) {
+		const key_of = (p: (typeof parts)[number]) =>
+			p.kind === 'unread-work' ? `unread:${p.title.slice(p.title.indexOf('(') + 1, -1)}` : p.title;
+		const rank = new Map(parts.map((p, i) => [key_of(p), i]));
+		const covered = new Set(
+			parts.flatMap((p) =>
+				(p.with ?? []).map((w) =>
+					w.startsWith('Delete work for data nothing reads (')
+						? `unread:${w.slice(w.indexOf('(') + 1, -1)}`
+						: w
+				)
+			)
+		);
+		const kept: Step[] = [];
+		for (const s of steps) {
+			const i = s.key === undefined ? undefined : rank.get(s.key);
+			if (i === undefined) {
+				// covered by another step: said there, not again
+				if (s.key !== undefined && covered.has(s.key)) continue;
+				// not a time saving the forecast counts: after the counted ones (a severe leak stays first)
+				kept.push({ ...s, value: s.value === Infinity ? Infinity : -1 / (1 + s.value) });
+				continue;
+			}
+			const p = parts[i];
+			const also = p.with?.length ? ` Also covers: ${p.with.join('; ')}.` : '';
+			const after =
+				p.after_ms !== undefined
+					? ` → ~${Math.round(p.after_ms)}ms per render after this and the steps above.`
+					: '';
+			kept.push({ ...s, value: 1e9 - i, text: `${s.text}${also}${after}` });
+		}
+		steps.length = 0;
+		steps.push(...kept);
+	}
+	return steps
+		.sort((a, b) => b.value - a.value)
+		.slice(0, 8)
+		.map((s, i) => `${i + 1}. ${s.text}`)
+		.join('\n');
+}
+
+/** THE PATTERNS as an agent reads them: what, where (with the code and the caller lines), the fix */
+function render_patterns(r: ProfileReport): string {
+	// a CPU pattern's saving adds up every profiled render; a wait's is one render: per render here
+	const n = Math.max(1, r.target?.runs?.length ?? 1);
+	const per = (p: { save_ms?: number; wait?: boolean }) =>
+		Math.round(((p.save_ms ?? 0) / (p.wait ? 1 : n)) * 100) / 100;
+	return (r.patterns ?? [])
+		.slice(0, 8)
+		.map((p, i) => {
+			const sites = (p.sites ?? [])
+				.slice(0, 4)
+				.map((s) => {
+					const via = (s.via ?? [])
+						.slice(0, 3)
+						.map(
+							(v) =>
+								`\n      ← called from ${v.file}:${v.line}${v.in_loop ? ' (in a loop)' : ''}: \`${v.code ?? ''}\``
+						)
+						.join('');
+					// what the service's own Cache-Control allows, for a same-answer site
+					const uc = s.upstream_cache;
+					const said = uc?.no_store
+						? ' (the service says no-store: check before caching)'
+						: uc?.no_cache
+							? ' (the service says revalidate every reuse: cache only with a check, e.g. its ETag)'
+							: uc?.max_age
+								? ` (the service allows caching ${uc.max_age}s${uc.private ? ', per user' : ''})`
+								: uc?.private
+									? ' (the service marks it private: per user only)'
+									: '';
+					// the change, written out: replace these lines with this
+					const rw = s.rewrite
+						? `\n      Change at ${s.rewrite.file}:${s.rewrite.line}, replace:\n\`\`\`\n${s.rewrite.before}\n\`\`\`\n      with:\n\`\`\`\n${s.rewrite.after}\n\`\`\``
+						: '';
+					const loc = s.module ? `${s.module} (built ${s.file}:${s.line})` : `${s.file}:${s.line}`;
+					return `\n   - ${loc}: \`${s.code ?? ''}\`${said}${via}${rw}`;
+				})
+				.join('');
+			const whole = p.kind === 'same-document' || p.kind === 'almost-same-document';
+			const save = p.save_ms
+				? ` — saves ~${per(p)}ms${whole ? ' (the whole render, from a cache)' : p.wait ? ' of waiting' : ''} per render`
+				: '';
+			const example = p.example?.after
+				? `\n   Example: \`${p.example.before ?? ''}\` → \`${(p.example.after ?? '').split('\n').join(' ')}\``
+				: '';
+			return `${i + 1}. **${p.title}**${save}\n   ${p.evidence ?? ''}${sites}\n   Fix: ${p.fix ?? ''}${example}`;
+		})
+		.join('\n');
+}
+
+/** THE LEDGER as an agent reads it: one line of code per row, with every cost on it */
+type DrillShape = {
+	label: string;
+	ms: number;
+	kind: string;
+	at?: string;
+	calls?: number;
+	alone?: number;
+	runs?: [number, number];
+	cold?: number;
+	split?: {
+		calls: number;
+		theirs_ms?: number;
+		told?: number;
+		network_ms: number;
+		body_ms: number;
+		top?: { name: string; ms: number }[];
+	};
+	fills?: { key: string; read: boolean }[];
+	why?: string[];
+	children?: DrillShape[];
+};
+
+/** THE DRILL-DOWN as an agent reads it: an indented tree to the line (four levels below the
+ *  render: phase, load file, who, line), each row with the patterns found on it */
+function render_drill(root: DrillShape): string {
+	const KIND: Record<string, string> = {
+		cpu: 'CPU',
+		wait: 'waiting',
+		gap: 'nothing recorded',
+		lane: 'load file'
+	};
+	const out: string[] = [];
+	const walk = (n: DrillShape, depth: number) => {
+		// alone = nothing else in flight: the least a faster answer saves
+		const alone =
+			n.alone === undefined
+				? ''
+				: n.alone < 0.05
+					? ', always beside other calls'
+					: n.alone >= n.ms - 0.05
+						? ', alone'
+						: `, ${n.alone}ms alone`;
+		// its low–high over the renders: a difference inside it is noise
+		const spread =
+			(n.runs
+				? `, ${n.kind === 'wait' ? 'calls took ' : ''}${n.runs[0]}–${n.runs[1]}ms over renders`
+				: '') + (n.cold !== undefined ? `, ${n.cold}ms cold` : '');
+		const kind = KIND[n.kind]
+			? ` [${KIND[n.kind]}${n.calls && n.calls > 1 ? `, ${n.calls} ${n.kind === 'cpu' ? 'renders' : 'calls'}` : ''}${alone}${spread}]`
+			: '';
+		const at = n.at && n.kind !== 'line' && n.kind !== 'lane' ? ` @ ${n.at}` : '';
+		const why = n.why?.length ? ` — ${n.why.join(', ')}` : '';
+		// the page-data keys it feeds; all unread = its time bought nothing
+		const all_unread = !!n.fills?.length && n.fills.every((f) => !f.read);
+		const fills = n.fills?.length
+			? ` → ${n.fills.map((f) => (f.read || all_unread ? f.key : `${f.key} (unread)`)).join(', ')}${all_unread ? ' (NOTHING READS IT)' : ''}`
+			: '';
+		// an HTTP wait: each call's own clock, averaged — their side (Server-Timing), the rest, the body
+		const sp = n.split;
+		const per = (ms: number) => Math.round((ms / (sp?.calls || 1)) * 10) / 10;
+		const split = sp
+			? ` {${sp.calls > 1 ? 'each call' : 'the call'}: ${
+					sp.theirs_ms !== undefined
+						? `${per(sp.theirs_ms)}ms their side${sp.top ? ` (${sp.top.map((t) => `${t.name} ${per(t.ms)}`).join(', ')})` : ''}${sp.told && sp.told < sp.calls ? ` on ${sp.told} of ${sp.calls}` : ''}, ${per(sp.network_ms)}ms network & the rest`
+						: `${per(sp.network_ms)}ms until headers`
+				}, ${per(sp.body_ms)}ms body}`
+			: '';
+		// a helper line: the lines of yours that called it, inline
+		const from =
+			n.kind === 'line' && n.children?.length
+				? ` ← called from ${n.children.map((c) => `${c.at ?? c.label} (${c.ms}ms)`).join(', ')}`
+				: '';
+		out.push(
+			`${'  '.repeat(depth)}- ${n.kind === 'line' ? (n.at ?? n.label) : n.label}: ${n.ms}ms${kind}${at}${split}${from}${fills}${why}`
+		);
+		// a folded "N more" keeps its rows for the page and the sums; the digest names the fold only
+		if (depth < 3 && n.kind !== 'line' && n.kind !== 'more')
+			for (const c of n.children ?? []) walk(c, depth + 1);
+	};
+	for (const c of root.children ?? []) walk(c, 0);
+	return out.join('\n');
+}
+
+function render_ledger(r: ProfileReport): string {
+	// CPU, bytes and GC add up every profiled render: per render here, like the render time
+	const n = Math.max(1, r.target?.runs?.length ?? 1);
+	const ms = (x: number) => Math.round((x / n) * 100) / 100;
+	return (r.ledger ?? [])
+		.slice(0, 10)
+		.map((l) => {
+			const costs: string[] = [];
+			if (l.cpu_ms) costs.push(`${ms(l.cpu_ms)}ms CPU`);
+			if (l.lib_ms)
+				costs.push(
+					`${ms(l.lib_ms)}ms inside ${
+						(l.libs ?? [])
+							.map((x) => x.name)
+							.slice(0, 2)
+							.join(', ') || 'libraries'
+					}`
+				);
+			if (l.alloc_bytes) costs.push(`${kb_or_mb(l.alloc_bytes / n)} allocated`);
+			if (l.gc_ms) costs.push(`${ms(l.gc_ms)}ms GC`);
+			if (l.retained_bytes) costs.push(`${kb_or_mb(l.retained_bytes)} kept`);
+			if (l.merged)
+				costs.push(`CPU moved here from line ${l.merged.from} (V8 had inlined ${l.merged.callee})`);
+			return `- ${l.file}:${l.line} — ${costs.join(', ')}${l.code ? `\n  \`${l.code}\`` : ''}`;
+		})
+		.join('\n');
+}
+
+/** exported for the tests only (mcp.ts is not a package entry) */
+export function render_profile(origin: string, r: ProfileReport): string {
 	const target = r.target?.page ?? r.target?.request ?? '(unknown)';
 	const runs = r.target?.runs ?? [];
 	const s = r.summary ?? {};
+	// PER RENDER: the profile's CPU, budget and function times add up every run; the render time,
+	// the ledger and the patterns are one render. An agent reads them side by side, so every section
+	// here is one render's worth.
+	const n = Math.max(1, runs.length);
+	const per = (ms: number | undefined) => Math.round(((ms ?? 0) / n) * 100) / 100;
 	const head =
 		`# SSR profile — ${target}${runs.length ? ` · ${runs.length} run(s)` : ''}\n\n` +
 		`**${s.verdict ?? 'profiled'}** · render p50 ~${median(runs).toFixed(2)}ms` +
 		(runs.length ? ` (runs: ${runs.join(', ')})` : '') +
-		(s.busy_ms != null ? ` · CPU busy ${s.busy_ms}ms/${s.window_ms}ms (${s.busy_pct}%)` : '') +
+		(s.busy_ms != null
+			? ` · CPU busy ${per(s.busy_ms)}ms per render (${s.busy_pct}% of the window)`
+			: '') +
 		(s.rss_mb != null ? ` · RSS ${s.rss_mb} MB` : '');
 
 	// In dev, profiler instrumentation dominates the window — say so, so the numbers aren't over-read.
@@ -814,11 +1230,11 @@ function render_profile(origin: string, r: ProfileReport): string {
 	const kept_total = kept.reduce((sum, b) => sum + (b.ms ?? 0), 0) || 1;
 	const budget = kept
 		.slice(0, 8)
-		.map((b) => `- ${b.label}: ${b.ms}ms (${(((b.ms ?? 0) / kept_total) * 100).toFixed(1)}%)`)
+		.map((b) => `- ${b.label}: ${per(b.ms)}ms (${(((b.ms ?? 0) / kept_total) * 100).toFixed(1)}%)`)
 		.join('\n');
 	const budget_title = r.dev
-		? 'Where the time went (Vite + profiler overhead excluded; % of remaining app time)'
-		: 'Where the time went (profiler overhead excluded)';
+		? 'Where the time went (per render; Vite + profiler overhead excluded; % of remaining app time)'
+		: 'Where the time went (per render, profiler overhead excluded)';
 
 	// Hottest functions that aren't profiler noise, by self time.
 	const hot = (r.hot_functions ?? [])
@@ -828,14 +1244,13 @@ function render_profile(origin: string, r: ProfileReport): string {
 		.map((h, i) => {
 			// the heaviest call path into it, nearest caller first — enough to place it without the flame
 			const top = h.stacks?.[0];
-			const via =
-				top?.frames?.length
-					? `\n   ← ${top.frames
-							.slice(0, 5)
-							.map((f) => f.replace(/ \(.*\)$/, ''))
-							.join(' ← ')}${top.frames.length > 5 ? ' ← …' : ''}`
-					: '';
-			return `${i + 1}. ${h.name} — ${h.self_ms}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}${via}`;
+			const via = top?.frames?.length
+				? `\n   ← ${top.frames
+						.slice(0, 5)
+						.map((f) => f.replace(/ \(.*\)$/, ''))
+						.join(' ← ')}${top.frames.length > 5 ? ' ← …' : ''}`
+				: '';
+			return `${i + 1}. ${h.label ? `fn \`${h.label}\`` : h.name} — ${per(h.self_ms)}ms self${h.category ? ` [${h.category}]` : ''}${h.file ? ` · ${base(h.file)}${h.line ? `:${h.line}` : ''}` : ''}${via}`;
 		})
 		.join('\n');
 
@@ -844,7 +1259,7 @@ function render_profile(origin: string, r: ProfileReport): string {
 		.slice(0, 10)
 		.map(
 			(c) =>
-				`- ${c.name} ×${c.instances ?? 1} — ${c.self_ms}ms self${c.alloc_bytes ? `, ${Math.round(c.alloc_bytes / 1024)} KB alloc` : ''}`
+				`- ${c.name} ×${c.instances ?? 1} — ${per(c.self_ms)}ms self${c.alloc_bytes ? `, ${Math.round(c.alloc_bytes / 1024)} KB alloc` : ''}`
 		)
 		.join('\n');
 
@@ -859,13 +1274,72 @@ function render_profile(origin: string, r: ProfileReport): string {
 		? `\n\nFull report: ${origin}${r.links.html}${r.links.json ? ` · JSON: ${origin}${r.links.json}` : ''}${r.links.cpuprofile ? ` · .cpuprofile: ${origin}${r.links.cpuprofile}` : ''}`
 		: '';
 
+	// CPU pattern numbers add up every profiled render; waits are one render's
+	// the report's forecast counts fixes on the same lines once and adds deleted work; an older
+	// report: the plain sum, waits capped at the render's waiting
+	const fc = r.forecast;
+	const impact = fc
+		? undefined
+		: fix_impact(
+				(r.patterns ?? []).map((p) => ({ save_ms: p.save_ms ?? 0, wait: p.wait })),
+				median(runs),
+				runs.length || 1,
+				r.timeline?.wait_ms
+			);
+	const covered = (fc?.parts ?? []).filter((p) => p.with?.length);
+	const forecast_line =
+		fc && fc.now_ms > fc.after_ms
+			? `Doing all of it: ~${Math.round(fc.now_ms)}ms → ~${Math.round(fc.after_ms)}ms per render (−${Math.round(((fc.now_ms - fc.after_ms) / fc.now_ms) * 100)}%: ${[fc.cpu_ms ? `${fc.cpu_ms}ms CPU` : '', fc.wait_ms ? `${fc.wait_ms}ms waiting` : '', fc.delete_ms ? `${fc.delete_ms}ms of work for unread data` : ''].filter(Boolean).join(', ')}).${covered.length ? ` Counted once: ${covered.map((p) => `"${p.title}" covers ${p.with!.map((w) => `"${w}"`).join(', ')}`).join('; ')}.` : ''}${fc.answers ? ` Keeping the services' answers between renders too (a freshness decision: only where a slightly stale answer is fine): ~${Math.round(fc.answers.after_ms)}ms${fc.answers.measured ? ` (measured: the page rendered in ${Math.round(fc.answers.measured.ms)}ms with those answers served from memory, then the other fixes taken off)` : ''}.` : ''}${fc.cpu_now_ms && fc.cpu_after_ms && fc.cpu_after_ms < fc.cpu_now_ms * 0.9 ? ` Capacity: main-thread CPU ${Math.round(fc.cpu_now_ms)}ms → ~${Math.round(fc.cpu_after_ms)}ms a render after the CPU fixes, so one core serves ~${Math.round(1000 / fc.cpu_now_ms)} → ~${Math.round(1000 / fc.cpu_after_ms)} renders a second (waiting fixes cut latency, not this).` : ''}${fc.cache ? ' A cached copy of the whole document is a separate lever, not counted.' : ''}${fc.clamped ? ' (The savings claimed more waiting or CPU than the render had: held at what it used.)' : ''}${fc.partial ? ' Built without sourcemaps: fewer lines seen, so fewer fixes counted; the real time after them is likely lower.' : ''}\n`
+			: impact
+				? `Fixing all of these takes ~${Math.round(impact.render_ms - impact.after_ms)}ms off the ${Math.round(impact.render_ms)}ms render (${impact.pct}%).\n`
+				: '';
+	const patterns = forecast_line + render_patterns(r);
+	const ledger = render_ledger(r);
+	const plan = render_plan(r);
+	// SINCE THE LAST PROFILE of this page: did the change pay (what an agent iterating on a fix asks first)
+	const sn = r.since;
+	const since = !sn
+		? ''
+		: sn.order
+			? `Run order skews this: both ran on one server after renders that kept ${sn.order.kept_mb} MB alive each; restart between profiles to compare.`
+			: sn.same
+				? `No real change since the last profile (${sn.a_ms} → ${sn.b_ms}ms, within the runs' own spread).`
+				: `${sn.b_ms !== undefined && sn.a_ms !== undefined ? `${sn.b_ms - sn.a_ms > 0 ? '+' : ''}${Math.round((sn.b_ms - sn.a_ms) * 10) / 10}ms since the last profile (${sn.a_ms} → ${sn.b_ms}ms)` : 'Since the last profile'}${sn.moved.length ? ', mostly:\n' + sn.moved.map((m) => `- ${m.status} ${m.path[m.path.length - 1]}${m.at && m.kind !== 'line' ? ` @ ${m.at}` : ''}: ${m.d_ms > 0 ? '+' : ''}${m.d_ms}ms`).join('\n') : '.'}${sn.fix_check ? `\nThe fixed patterns promised ~${sn.fix_check.predicted_ms}ms; the render moved ${sn.fix_check.measured_ms}ms (${sn.fix_check.verdict}).` : ''}`;
 	return (
 		head +
 		dev_note +
+		(since
+			? `\n\n## Since your last profile of this page\n${since}` +
+				(sn?.score && sn.score.a !== sn.score.b
+					? `\nScore ${sn.score.a} → ${sn.score.b} (${sn.score.a_grade} → ${sn.score.b_grade})${sn.score.moved.length ? ': ' + sn.score.moved.map((m) => `${m.label} ${m.a} → ${m.b}`).join(', ') : ''}.`
+					: '')
+			: '') +
+		// the forecast heads the plan (said once); an older report's plain sum stays with the patterns
+		(plan
+			? `\n\n## Do this, in order (each: where to edit, and what it is worth)\n${fc ? forecast_line : ''}${plan}`
+			: '') +
+		// the same slow line on other profiled pages: fixed once, all of them faster
+		(r.shared?.length
+			? `\n\n## These fixes make other pages faster too\n${r.shared
+					.map(
+						(f) =>
+							`- \`${f.where}:${f.line}\` (${f.title}): ${f.pages.map((p) => `${p.page} ~${Math.round(p.ms * 10) / 10}ms`).join(', ')}; ~${Math.round(f.total_ms * 10) / 10}ms per render in all`
+					)
+					.join('\n')}`
+			: '') +
+		(patterns
+			? `\n\n## Slow patterns (fix these first)\n${plan && fc ? render_patterns(r) : patterns}`
+			: '') +
+		(r.drill
+			? `\n\n## Where one render went (${r.drill.ms}ms, down to the line; every level adds up)\n${render_drill(r.drill)}`
+			: '') +
+		(ledger ? `\n\n## The exact lines (your code, costliest first, per render)\n${ledger}` : '') +
 		(findings ? `\n\n## Findings\n${findings}` : '') +
 		(budget ? `\n\n## ${budget_title}\n${budget}` : '') +
-		(hot ? `\n\n## Hottest functions (self ms)\n${hot}` : '') +
-		(comps ? `\n\n## Components\n${comps}` : '') +
+		(hot ? `\n\n## Hottest functions (self ms per render)\n${hot}` : '') +
+		(comps
+			? `\n\n## Components (self ms per render; ×N = renders of it in one page render)\n${comps}`
+			: '') +
 		`\n\n## Network: ${net_line}  ·  Memory: ${mem_line}` +
 		links
 	);

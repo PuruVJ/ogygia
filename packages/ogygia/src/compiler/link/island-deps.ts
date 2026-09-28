@@ -464,7 +464,7 @@ export function island_deps_module(
 	out_dir_rel = '.svelte-kit'
 ): string {
 	if (!ssr)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -474,7 +474,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function fnManifest() { return null; }`;
 	return (
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
@@ -558,6 +558,15 @@ export function island_deps_module(
 		`export function islandPageKeys(entry) {\n` +
 		`  const all = load();\n` +
 		`  const map = all && typeof all.page_keys === 'object' && all.page_keys ? all.page_keys : null;\n` +
+		`  if (!map || !entry) return null;\n` +
+		`  const v = map[entry];\n` +
+		`  return Array.isArray(v) ? v : null;\n` +
+		`}\n` +
+		// Why this island ships all of \`page.data\`: the modules in its closure whose reads the build
+		// could not pin (file, line, why). Profiler builds only; \`null\` = none recorded.
+		`export function islandPageWhy(entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.page_why === 'object' && all.page_why ? all.page_why : null;\n` +
 		`  if (!map || !entry) return null;\n` +
 		`  const v = map[entry];\n` +
 		`  return Array.isArray(v) ? v : null;\n` +

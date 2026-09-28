@@ -125,7 +125,7 @@
 		margin-bottom: 8px;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.summary {
 		display: flex;
@@ -181,7 +181,7 @@
 	}
 	.via {
 		margin-left: 7px;
-		color: #64748b;
+		color: #94a3b8;
 		font-size: 10px;
 	}
 	table {

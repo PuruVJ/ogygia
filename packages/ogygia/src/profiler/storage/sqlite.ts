@@ -11,6 +11,9 @@
 import { createRequire } from 'node:module';
 import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.js';
 
+/** browser visits kept per page (the profiler reads the latest ten) */
+const MAX_VISITS_PER_PAGE = 20;
+
 const require = createRequire(import.meta.url);
 
 interface SyncDb {
@@ -99,6 +102,10 @@ export function sqliteStore(filename = '.ogygia/profiles.db'): ProfilerStore {
 			need()
 				.prepare('INSERT INTO visits (key,page,at,visit) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET at=excluded.at,visit=excluded.visit')
 				.run(rec.key, rec.page, rec.at, rec.visit);
+			// the newest MAX_VISITS_PER_PAGE per page (the profiler reads the latest ten)
+			need()
+				.prepare('DELETE FROM visits WHERE page = ? AND key NOT IN (SELECT key FROM visits WHERE page = ? ORDER BY at DESC LIMIT ?)')
+				.run(rec.page, rec.page, MAX_VISITS_PER_PAGE);
 		},
 		listVisits(page: string, limit = 10): ProfilerVisitRecord[] {
 			return need().prepare('SELECT key,page,at,visit FROM visits WHERE page = ? ORDER BY at DESC LIMIT ?').all(page, limit) as ProfilerVisitRecord[];

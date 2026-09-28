@@ -18,6 +18,7 @@
 	const cls = (d: number, floor = 0.5) => (d > floor ? 'worse' : d < -floor ? 'better' : '');
 	const comps = $derived(cmp.components.filter((r) => Math.abs(r.d_self) >= 0.05 || Math.abs(r.d_total) >= 0.5).slice(0, 40));
 	const fns = $derived(cmp.functions.filter((r) => Math.abs(r.d_self) >= 0.05).slice(0, 40));
+	const mb = (b: number) => (!b ? '—' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB');
 </script>
 
 	<h1>Compare <small>{cmp.a.label} → {cmp.b.label}</small></h1>
@@ -30,7 +31,7 @@
 
 	<h2>Summary</h2>
 	<table>
-		<thead><tr><th></th><th class="num">A</th><th class="num">B</th><th class="num">Δ</th></tr></thead>
+		<thead><tr><th><span class="sr-only">what</span></th><th class="num">A</th><th class="num">B</th><th class="num">Δ</th></tr></thead>
 		<tbody>
 			{#each cmp.summary as r (r.label)}
 				<tr>
@@ -42,6 +43,105 @@
 			{/each}
 		</tbody>
 	</table>
+
+	{#if cmp.order}
+		{@const o = cmp.order}
+		<!-- the run order trap: the later report ran on the heap the earlier one's renders filled -->
+		<p class="same-render">
+			<b>Run order changes this result.</b> Both ran on one server, and {o.earlier.toUpperCase()} kept {o.kept_mb} MB alive on every render.
+			{o.earlier === 'a' ? 'B' : 'A'} ran {o.requests_between} requests later on that fuller heap (more garbage collection, slower allocation), so it
+			reads slower than its code is. Restart the server between the two, or profile them in the other order, before trusting the difference.
+		</p>
+	{/if}
+
+	{#if cmp.render_same}
+		<!-- the ground truth: did the render get faster? When not, per-line moves are attribution -->
+		<p class="same-render">
+			<b>No real change in render time</b> ({fmt_ms(cmp.render_same.a_ms)} ms → {fmt_ms(cmp.render_same.b_ms)} ms, within the runs' own
+			spread of {fmt_ms(cmp.render_same.noise_ms)} ms). V8 decides what to inline differently from run to run, so the same CPU time can be
+			charged to a different line: the moves below are marked <i>shifted</i>, not fixed or worse. Waiting and memory keep their verdicts.
+		</p>
+	{/if}
+
+	{#if cmp.fix_check && !cmp.render_same}
+		{@const f = cmp.fix_check}
+		<!-- did the fix pay: what the fixed patterns promised against the render's measured change -->
+		<p class="fix-check {f.verdict}">
+			<b>
+				{#if f.verdict === 'as-expected'}The fix paid off as expected{:else if f.verdict === 'less'}The fix saved less than expected{:else}The fix saved more than expected{/if}
+			</b>: the patterns that went away or shrank were expected to save about {fmt_ms(f.predicted_ms)} ms per render, and the median
+			render got {f.measured_ms >= 0 ? `${fmt_ms(f.measured_ms)} ms faster` : `${fmt_ms(-f.measured_ms)} ms slower`}.
+			{#if f.verdict === 'less' && f.skewed}
+				Most likely the run order above, not the fix: B ran on the heap A filled, so it reads slower than its code is. Restart the server and profile B again first.
+			{:else if f.skewed}
+				B ran on the heap A filled (see above), so the real saving is likely larger still.
+			{:else if f.verdict === 'less'}
+				The time most likely moved: look for lines and patterns that got worse below, or a wait that grew. If nothing did, profile both again with more renders; the runs may just be noisy.
+			{:else if f.verdict === 'more'}
+				The change removed more than the patterns saw: a cost that sat under the reporting floor, or less garbage to collect.
+			{/if}
+		</p>
+	{/if}
+
+	{#if cmp.patterns?.length}
+		<h2>Slow patterns <span class="hint" style="font-weight:400">(what the change fixed, and what it brought in)</span></h2>
+		<table>
+			<thead><tr><th><span class="sr-only">what</span></th><th>pattern</th><th class="num">A</th><th class="num">B</th><th class="num">Δ</th></tr></thead>
+			<tbody>
+				{#each cmp.patterns as p (p.kind + '\0' + p.title)}
+					<tr>
+						<td class="status {p.status}">{p.status}</td>
+						<td class="fn">{p.title}</td>
+						<td class="num">{p.a_ms ? fmt_ms(p.a_ms) + ' ms' : '—'}</td>
+						<td class="num">{p.b_ms ? fmt_ms(p.b_ms) + ' ms' : '—'}</td>
+						<td class="num {cls(p.d_ms)}"><b>{sign(p.d_ms, 'ms')}</b>{#if p.wait}&nbsp;waiting{/if}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
+
+	{#if cmp.drill?.length}
+		<h2>Where one render's time moved <span class="hint" style="font-weight:400">(the rows of the drill-down that changed, down to the call or line that did it; one render each side)</span></h2>
+		<table>
+			<thead><tr><th><span class="sr-only">what</span></th><th>where</th><th class="num">A</th><th class="num">B</th><th class="num">Δ</th></tr></thead>
+			<tbody>
+				{#each cmp.drill as r, i (r.path.join('\0') + '\0' + i)}
+					<tr>
+						<td class="status {r.status}">{r.status}</td>
+						<td class="fn">
+							<span class="hint">{r.path.slice(0, -1).join(' › ')}{r.path.length > 1 ? ' › ' : ''}</span><b>{r.kind === 'line' ? (r.at ?? r.path[r.path.length - 1]) : r.path[r.path.length - 1]}</b>
+							{#if r.at && r.kind !== 'line' && r.kind !== 'lane'}<div class="code">{r.at}</div>{/if}
+						</td>
+						<!-- ≤: that side only had an "N more" fold, so the row is at most that -->
+						<td class="num">{r.upto === 'a' ? '≤ ' : ''}{r.a_ms ? fmt_ms(r.a_ms) + ' ms' : '—'}</td>
+						<td class="num">{r.upto === 'b' ? '≤ ' : ''}{r.b_ms ? fmt_ms(r.b_ms) + ' ms' : '—'}</td>
+						<td class="num {cls(r.d_ms)}"><b>{r.upto ? 'at least ' : ''}{sign(r.d_ms, 'ms')}</b></td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
+
+	{#if cmp.lines?.filter((l) => l.status !== 'same').length}
+		<h2>The exact lines <span class="hint" style="font-weight:400">(your costliest lines, per render, matched by their code so an edit above them does not lose them)</span></h2>
+		<table>
+			<thead><tr><th><span class="sr-only">what</span></th><th>line</th><th class="num">A</th><th class="num">B</th><th class="num">Δ</th><th class="num">made A → B</th><th class="num">kept A → B</th></tr></thead>
+			<tbody>
+				{#each cmp.lines.filter((l) => l.status !== 'same') as l (l.file + '\0' + l.code + '\0' + l.line)}
+					<tr>
+						<td class="status {l.status}">{l.status}</td>
+						<td class="fn"><code>{l.file}:{l.line}</code><div class="code">{l.code}</div></td>
+						<td class="num">{l.a_ms ? fmt_ms(l.a_ms) + ' ms' : '—'}</td>
+						<td class="num">{l.b_ms ? fmt_ms(l.b_ms) + ' ms' : '—'}</td>
+						<td class="num {cls(l.d_ms)}"><b>{sign(l.d_ms, 'ms')}</b></td>
+						<td class="num">{mb(l.a_bytes)} → {mb(l.b_bytes)}</td>
+						<td class="num">{mb(l.a_kept)} → {mb(l.b_kept)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
 
 	{#if cmp.phases.length}
 		<h2>Phases</h2>
@@ -142,7 +242,7 @@
 				<tr><th>function</th><th>where</th><th class="num">self A</th><th class="num">self B</th><th class="num">Δ</th><th class="num">calls</th></tr>
 			</thead>
 			<tbody>
-				{#each fns as r (r.name + r.file)}
+				{#each fns as r (r.key ?? r.name + r.file + ':' + r.line)}
 					<tr>
 						<td class="fn"><b>{r.name}</b>{#if r.only}<span class="hint"> only in {r.only.toUpperCase()}</span>{/if}</td>
 						<td class="file">{r.file}{#if r.line > 0}:{r.line}{/if}</td>
@@ -159,6 +259,54 @@
 	{/if}
 
 <style>
+	.status {
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+		color: var(--text-faint);
+	}
+	.status.fixed,
+	.status.better {
+		color: var(--good);
+	}
+	.status.new,
+	.status.worse {
+		color: var(--bad);
+	}
+	.status.shifted {
+		color: var(--text-faint);
+		font-style: italic;
+	}
+	.fix-check {
+		margin: 12px 0;
+		padding: 10px 14px;
+		border: 1px solid var(--line);
+		border-left: 3px solid var(--c-green, #4a9d6e);
+		border-radius: 8px;
+		background: var(--bg-panel);
+		font-size: 13.5px;
+		line-height: 1.5;
+	}
+	.fix-check.less {
+		border-left-color: var(--c-amber, #d4a017);
+	}
+	.same-render {
+		margin: 12px 0;
+		padding: 10px 14px;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--bg-panel);
+		font-size: 13.5px;
+		line-height: 1.5;
+	}
+	.code {
+		font-family: ui-monospace, monospace;
+		font-size: 11.5px;
+		color: var(--text-faint);
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-width: 520px;
+	}
 	.worse {
 		color: var(--bad);
 	}

@@ -5,6 +5,7 @@
 	// functions" phase on the timeline).
 	import { page } from '$app/state';
 	import { stockSummary } from './hell.remote';
+	// PATTERN seed-whole-read
 	const keys = Object.keys(page.data);
 	const n = (page.data.catalog?.products?.length as number | undefined) ?? 0;
 	const summary = await stockSummary();

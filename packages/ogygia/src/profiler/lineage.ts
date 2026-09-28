@@ -96,6 +96,24 @@ export function data_reads(source: string, names: readonly string[] = ['data']):
 	return [...keys];
 }
 
+/** The 1-based line of the first place the source takes the data WHOLE (`const d = $page.data`,
+ *  `fn(data)`, `...data`), or null when it only reads named keys. Same scan as `data_reads`. */
+export function whole_read_line(source: string, names: readonly string[] = ['data']): number | null {
+	const src = blank_comments(source);
+	const at = { pos: -1 };
+	const seen = new Set<string>();
+	for (const name of ['data', ...names]) {
+		if (seen.has(name)) continue;
+		seen.add(name);
+		scan(src, name, names.includes(name), new Set(), at);
+		if (at.pos >= 0) break;
+	}
+	if (at.pos < 0) return null;
+	let line = 1;
+	for (let i = source.indexOf('\n'); i !== -1 && i < at.pos; i = source.indexOf('\n', i + 1)) line++;
+	return line;
+}
+
 /** The source with its comments (`//`, block, HTML) and string contents blanked to spaces, so
  *  a word in prose or a URL never reads as code; positions are kept. A character walk. */
 export function blank_comments(src: string): string {
@@ -168,8 +186,12 @@ export function blank_comments(src: string): string {
 }
 
 /** one name's occurrences; returns true when the object was used whole somewhere */
-function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>): boolean {
+function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>, whole_at?: { pos: number }): boolean {
 	let whole = false;
+	// every `whole = true` below also remembers WHERE, the first time: the line to point at
+	const mark = (pos: number) => {
+		if (whole_at && whole_at.pos < 0) whole_at.pos = pos;
+	};
 	const n = src.length;
 	const len = name.length;
 	let i = 0;
@@ -182,7 +204,7 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>): b
 		if (i < n && is_ident(src.charCodeAt(i))) continue;
 		// a spread (`...data`): every key may be read
 		if (j >= 3 && src.charCodeAt(j - 1) === 46 && src.charCodeAt(j - 2) === 46 && src.charCodeAt(j - 3) === 46) {
-			if (bare_ok) whole = true;
+			if (bare_ok) (whole = true), mark(j);
 			continue;
 		}
 		// whose: bare (a data prop name), or `page.data` / `$page.data`
@@ -207,7 +229,7 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>): b
 			if (quote === 39 || quote === 34 || quote === 96) {
 				const close = src.indexOf(src[q], q + 1);
 				if (close > q) keys.add(src.slice(q + 1, close));
-			} else whole = true;
+			} else (whole = true), mark(j);
 			continue;
 		}
 		// `= data` after a destructuring pattern: walk back over `=` and spaces to the `}`
@@ -234,6 +256,7 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>): b
 			// `const alias = data` / `x = data`: the whole object under another name
 			if (c === 59 /* ; */ || c === 10 || k >= n) {
 				whole = true;
+				mark(j);
 				continue;
 			}
 		}
@@ -241,6 +264,7 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>): b
 		// an array, defaulted (`data ?? {}`) — every key may be read past this point
 		if (c === 41 /* ) */ || c === 93 /* ] */ || c === 63 /* ? */ || c === 124 /* | */ || c === 38 /* & */) {
 			whole = true;
+			mark(j);
 			continue;
 		}
 		// everything else is not a read of the data: a pattern member (`let { data } = …`), a
@@ -318,6 +342,8 @@ export interface LineageComponent {
 	reads: string[] | null;
 	/** it reads the whole object (a spread, a pass-through): every key may be read */
 	whole: boolean;
+	/** where (1-based line in `file`) it first takes the object whole, when the source said */
+	whole_line?: number;
 }
 
 export interface Lineage {
@@ -328,11 +354,14 @@ export interface Lineage {
 	/** keys shipped in the seed but read only on the server */
 	server_only: LineageKey[];
 	notes: string[];
+	/** every load's returned keys with the lines (1-based, in `from`) whose values end up in each
+	 *  (source-scan `key_sources`): what a wait made on one of those lines was for */
+	sources?: { key: string; from: string; lines: number[]; names?: string[] }[];
 }
 
 export interface LineageInput {
 	/** every component of the page with its reads (server components scanned; islands from the build) */
-	components: { name: string; file: string; island: boolean; reads: string[] | null }[];
+	components: { name: string; file: string; island: boolean; reads: string[] | null; whole_line?: number }[];
 	/** the loads and the keys they return, plus the waiting each did */
 	lanes: { file: string; keys: string[] | null; wait_ms?: number }[];
 	/** bytes per key in the seed */
@@ -343,7 +372,14 @@ export function build_lineage(input: LineageInput): Lineage | undefined {
 	const notes: string[] = [];
 	const components: LineageComponent[] = input.components.map((c) => {
 		const whole = c.reads?.includes('*') ?? false;
-		return { name: c.name, file: c.file, island: c.island, reads: c.reads ? c.reads.filter((k) => k !== '*') : null, whole };
+		return {
+			name: c.name,
+			file: c.file,
+			island: c.island,
+			reads: c.reads ? c.reads.filter((k) => k !== '*') : null,
+			whole,
+			...(whole && c.whole_line ? { whole_line: c.whole_line } : {})
+		};
 	});
 	// the universe of keys: what loads return, what the seed ships, what anyone reads
 	const from = new Map<string, string>();

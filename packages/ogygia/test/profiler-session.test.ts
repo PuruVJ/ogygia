@@ -131,6 +131,19 @@ describe('the profiler session in a large cookie jar', () => {
 	});
 });
 
+describe('the run page, from the dashboard form', () => {
+	it('takes a path typed without its slash, and still refuses another site', async () => {
+		const { run, token } = await setup();
+		const cookie = `og_profiler=${token}`;
+		const ok = await run(event('/__profiler/run?p=hell&runs=2', cookie, token));
+		expect(ok.status).toBe(200);
+		expect(await ok.text()).toContain('/hell');
+		for (const p of ['', '%20', 'https%3A%2F%2Fevil.test%2Fx', '%2F%2Fevil.test']) {
+			expect((await run(event(`/__profiler/run?p=${p}`, cookie, token))).status).toBe(400);
+		}
+	});
+});
+
 describe('describe_cookie_diagnosis', () => {
 	it('tells a dropped cookie, a duplicate, a wrong secret and no header apart', () => {
 		expect(

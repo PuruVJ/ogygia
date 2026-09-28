@@ -3,8 +3,9 @@
 	 *  string row builder). Sorts by self/total/per-call/alloc; a row expands to the component's
 	 *  full location and the call stacks that rendered it. */
 	import type { FrameStat } from '../analyze.js';
-	import { fmt_ms, fmt_pct, fmt_bytes, CATEGORY_COLOR } from './format.js';
+	import { fmt_ms, fmt_dur, fmt_pct, fmt_bytes, CATEGORY_COLOR } from './format.js';
 	import { sortable } from './sort.svelte.js';
+	import { pressable } from './press.js';
 	import FrameDetails from './FrameDetails.svelte';
 	import { row_id, follow_hash } from './row-anchor.svelte.js';
 
@@ -69,26 +70,26 @@
 			<th>component</th>
 			<th>file</th>
 			<th>self / total</th>
-			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')}
+			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')} {@attach pressable} aria-sort={s.aria('self_ms')}
 				>self ms<span class="arr">{s.arrow('self_ms')}</span></th
 			>
-			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')}
+			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')} {@attach pressable} aria-sort={s.aria('total_ms')}
 				>total ms<span class="arr">{s.arrow('total_ms')}</span></th
 			>
 			<th
 				class="num sort"
 				class:active={s.key === 'per'}
-				title="total ÷ renders — the cost of a single render"
-				onclick={() => s.click('per')}>per call<span class="arr">{s.arrow('per')}</span></th
+				title="one render of it: its time per page render ÷ how many times it rendered in one"
+				onclick={() => s.click('per')} {@attach pressable} aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
 			>
 			<th class="num">% of busy</th>
 			{#if hasSplit}
-				<th class="sort" class:active={s.key === 'markup_ms'} title="its own time split: Svelte writing the template (markup) vs its script and what it calls (logic); nested components in neither" onclick={() => s.click('markup_ms')}>markup / logic<span class="arr">{s.arrow('markup_ms')}</span></th>
+				<th class="sort" class:active={s.key === 'markup_ms'} title="its own time split: Svelte writing the template (markup) vs its script and what it calls (logic); nested components in neither" onclick={() => s.click('markup_ms')} {@attach pressable} aria-sort={s.aria('markup_ms')}>markup / logic<span class="arr">{s.arrow('markup_ms')}</span></th>
 			{/if}
 			{#if hasParent}<th title="the component that rendered most of it — the {'{#each}'} owner of a row">under</th>{/if}
 			{#if hasRuns}<th title="its time in each render, min · median · max — a cold first run or a flaky one is marked">per run</th>{/if}
 			{#if hasAlloc}
-				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')}
+				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')} {@attach pressable} aria-sort={s.aria('alloc')}
 					>alloc<span class="arr">{s.arrow('alloc')}</span></th
 				>
 			{/if}
@@ -101,12 +102,13 @@
 				id={row_id('comp', f.name)}
 				class:open={open === f.name}
 				onclick={() => (open = open === f.name ? null : f.name)}
+				{@attach pressable}
 			>
 				<td class="fn">
 					<span class="caret">{open === f.name ? '▾' : '▸'}</span>
 					<b>{f.name}</b>
 					{#if f.count > 1}
-						<span class="hint" title="{f.count} renders, {fmt_ms(f.total_ms / f.count)} ms each"
+						<span class="hint" title="{f.count} renders in one page render, {fmt_ms(f.per)} ms each"
 							>×{f.count}</span
 						>
 					{/if}
@@ -131,7 +133,7 @@
 				</td>
 				<td class="num"><b>{fmt_ms(f.self_ms)}</b></td>
 				<td class="num">{fmt_ms(f.total_ms)}</td>
-				<td class="num">{fmt_ms(f.per)}</td>
+				<td class="num">{f.count > 0 ? fmt_dur(f.per) : '—'}</td>
 				<td class="num">{fmt_pct(f.total_ms, busy)}</td>
 				{#if hasSplit}
 					<td class="split2">

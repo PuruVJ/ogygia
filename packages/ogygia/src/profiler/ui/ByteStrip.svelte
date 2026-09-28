@@ -84,7 +84,7 @@
 		</button>
 	{/each}
 	{#if strip.shadow_count}
-		<span class="key"><i style="background:{COLOR.shadow}"></i>shadow DOM inside the above <b>{fmt_bytes(strip.shadow_bytes)}</b> <span class="hint">{strip.shadow_count} roots</span></span>
+		<span class="key static"><i style="background:{COLOR.shadow}"></i>shadow DOM inside the above <b>{fmt_bytes(strip.shadow_bytes)}</b> <span class="hint">{strip.shadow_count} roots</span></span>
 	{/if}
 	<span class="hint">total {fmt_bytes(strip.total)}</span>
 </div>
@@ -134,6 +134,10 @@
 	}
 	.key.on {
 		text-decoration: underline;
+	}
+	/* a legend line that is not a filter: no hand, nothing to press */
+	.key.static {
+		cursor: default;
 	}
 	.key i {
 		width: 10px;

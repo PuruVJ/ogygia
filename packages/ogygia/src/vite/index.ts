@@ -7,6 +7,8 @@ import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
 import { islandBridge, content_css_key } from './island-bridge.js';
 import { island_sourcemaps_plugin } from './sourcemaps.js';
+import { server_sourcemaps_plugin } from './server-sourcemaps.js';
+import { install_dev_maps, install_dev_page_keys } from './dev-maps.js';
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
 import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
@@ -60,6 +62,8 @@ import {
 	kit_inline_style_threshold
 } from '../compiler/kit.js';
 import { load_kit_dirs } from './kit-dirs.js';
+import { write_module_map } from './module-map.js';
+import { fill_profiler_maps } from './profiler-maps.js';
 import { debarrel } from '../compiler/debarrel/plugin.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
@@ -274,9 +278,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		server_delta,
 		devtools
 	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
-	// The devtools value everything downstream reads (define, CompileCtx, dev middleware). The config
-	// hook coerces it to false for builds — devtools is dev-server-only and must never ship to prod.
+	// The devtools value everything downstream reads (define, CompileCtx, dev middleware). A build with
+	// it on gets the lazy form (`devtools_lazy`): launcher only, no measuring until someone opens it.
 	let devtools_effective = devtools;
+	/** a build with devtools on: launcher only, the dock loads on open */
+	let devtools_lazy = false;
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
 	// registry + the feature-mark bag (seeded from the two app-wide config flags), and the behavior
@@ -321,6 +327,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let is_ssr = false;
 	let content_scanned = false;
 	let sourcemap = false;
+	/** the server build's output, waiting for closeBundle to fill the profiler's maps module */
+	let maps_pending: { dir: string; bundle: Record<string, unknown> } | null = null;
 	let vite_server: ViteDevServer | null = null;
 	/** absolute path to Kit's internal wire-protocol module (deep import) */
 	let kit_wire_path: string | null = null;
@@ -457,19 +465,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// `kit_dirs`). An app building a second route tree from one source configures both.
 					await load_kit_dirs(path.resolve(userConfig.root ?? '.'));
 
-					// DEVTOOLS is dev-server-only, ENFORCED — a `devtools: true` left on for a build must
-					// never ship instrumentation to production (a consumer did exactly that: prod pages
-					// carried the server event side-channel + the dock). Coerce here, where the command is
-					// known, so the define below AND the CompileCtx/middleware gates all see the same value.
-					if (devtools_effective && env.command === 'build') {
-						devtools_effective = false;
-						if (isMainThread)
-							console.warn(
-								'[ogygia] devtools is dev-only — ignoring `devtools: true` for this build ' +
-									'(it never ships to production). Enable it for the dev server alone: ' +
-									'`ogygia({ devtools: command === "serve" })`.'
-							);
-					}
+					// DEVTOOLS IN A BUILD: the app decides (`devtools: mode !== 'production'`). A build then
+					// carries only a small launcher; the dock's code loads when someone opens it. Said once,
+					// loudly, so a `true` left on by accident is seen before it ships.
+					devtools_lazy = devtools_effective && env.command === 'build';
+					if (devtools_lazy && isMainThread)
+						console.warn(
+							'[ogygia] devtools is ON for this build: its pages carry the devtools launcher (the dock ' +
+								"loads only when opened). Keep it off for production: `ogygia({ devtools: mode !== 'production' })`."
+						);
 
 					if (profiler_secret_empty && env.command === 'build' && isMainThread) {
 						console.warn(
@@ -546,7 +550,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							// DEVTOOLS event-layer gate — off unless `ogygia({ devtools: true })` AND this is
 							// the dev server (coerced above; builds always get false). When false, every
 							// `if (DEVTOOLS) emit({…})` folds out and the bus tree-shakes away.
-							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools_effective)
+							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools_effective),
+							// a BUILD with devtools on: the dock and the page measuring wait until
+							// someone opens it (a cookie remembers that for the next loads)
+							__OGYGIA_DEVTOOLS_LAZY__: JSON.stringify(devtools_lazy)
 						},
 						server: {
 							fs: {
@@ -636,7 +643,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 				// Kit's internal wire-protocol + client remote-functions modules (deep-imported) and the
 				// app's universal hooks — resolved off the app root (see resolve_kit_paths).
-				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks } = resolve_kit_paths(root));
+				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks } =
+					resolve_kit_paths(root));
 
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
@@ -908,11 +916,30 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 			configureServer(server) {
 				vite_server = server;
+				// THE PROFILER IN DEV: Vite runs each server module as its transformed code, so a profile's
+				// lines are that code's; the maps back to the source live in Vite's module graph, not in
+				// `.map` files. The profiler (same process) asks through this (profiler/dev-maps.ts)
+				if (profiler_config) {
+					install_dev_maps(server);
+					// ...and which page.data keys each island's code reads (the build's seed answer)
+					install_dev_page_keys(
+						server,
+						(iid) => program.registry.get(program.by_id.get(iid) ?? '')?.componentPath,
+						root
+					);
+				}
 				// Devtools: serve the live `island id → component name` map so the dock can label a
 				// region "Counter" instead of a hashed entry. A middleware (not a virtual module) so it
 				// reads the CURRENT registry at request time — the dock fetches it after mount, by which
 				// point every island app-wide is registered, so the map is complete and never stale.
 				if (!devtools_effective) return;
+				// The browser's JS Self-Profiling API needs the document to opt in: every dev response
+				// carries the policy, so the Page tab can sample the main thread while islands wake
+				// (the trace stays in the page — runtime/beacon.ts). Dev only, like all of devtools.
+				server.middlewares.use((_req, res, next) => {
+					res.setHeader('document-policy', 'js-profiling');
+					next();
+				});
 				server.middlewares.use((req, res, next) => {
 					if ((req.url || '').split('?')[0] !== '/__ogygia_devtools_meta') return next();
 					// `names`: island id → component name (live registry). `bytes`: island id → its
@@ -1237,7 +1264,40 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				return compiler.patch_fn_manifest(code);
 			},
 
+			// THE PROFILER'S MAPS, FILLED: after every plugin's writeBundle (the chunks are final on disk)
+			// and BEFORE Kit's own sequential closeBundle runs the adapter, which copies what it finds
+			closeBundle: {
+				order: 'pre',
+				sequential: true,
+				handler() {
+					if (!maps_pending) return;
+					const { dir, bundle } = maps_pending;
+					maps_pending = null;
+					try {
+						fill_profiler_maps(dir, bundle, root);
+					} catch {
+						/* the profiler then reads the files beside the chunks, where they exist */
+					}
+				}
+			},
+
 			async writeBundle(_options, bundle) {
+				// THE MODULE MAP (server build, profiler on): which source module sits at which lines of
+				// each server chunk. A build without sourcemaps — the normal one — leaves the profiler only
+				// chunk names (`chunks/frames.js`): with this it still tells its own code, ogygia's and a
+				// bundled package's from the app's. Written beside the chunks, so it travels with them.
+				if (is_build && is_ssr && profiler_config && _options.dir) {
+					try {
+						write_module_map(_options.dir, bundle as Record<string, unknown>, root);
+					} catch {
+						/* a module map is a nicety: never fail the build over it */
+					}
+					// ...and the same, with every chunk's sourcemap, written INTO the profiler's maps module:
+					// the one copy that survives any adapter (vite/profiler-maps.ts) — in closeBundle
+					// below, once every plugin's writeBundle has run (Kit rewrites remote-function chunks
+					// in its own) and before Kit's closeBundle hands the output to the adapter
+					maps_pending = { dir: _options.dir, bundle: bundle as Record<string, unknown> };
+				}
 				// Client only — Kit builds SSR first, so Region.svelte reads this JSON at render
 				// (prerender / live SSR), not at SSR-bundle `load()` time.
 				//
@@ -1309,7 +1369,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// become the preload hints beside the runtime script.
 					compiler.runtime_chunk_filename()
 				);
-				report_seed_shaping(
+				const page_why = report_seed_shaping(
 					map,
 					bundle as Record<string, { type: string; moduleIds?: string[]; imports?: string[] }>,
 					program,
@@ -1375,6 +1435,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!profiler_config) map.contents = {};
 				const json = JSON.stringify({
 					...map,
+					// why an island ships all of page.data (the build's reasons, per entry): the profiler's
+					// seed finding points at that line; like `contents`, only with a profiler
+					...(profiler_config ? { page_why } : {}),
 					content_css,
 					css_inline,
 					fn_manifest: Object.fromEntries(compiler.dollar_hoists)
@@ -1382,7 +1445,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				emit_island_deps_handoff(root, json, kit_dirs(root).out_dir);
 			}
 		},
-		island_sourcemaps_plugin({ program, is_island_path })
+		island_sourcemaps_plugin({ program, is_island_path }),
+		server_sourcemaps_plugin(!!profiler_config)
 	];
 }
 

@@ -99,9 +99,10 @@ const is_handler_file = (url: string) => url.includes('hooks.server') || url.inc
 
 /** App functions called many times per render at a steady cost each: what a cache keyed on the
  *  argument would remove. Heuristic, from counts and cost alone: the report says so. */
-export function memo_candidates(a: Analysis, makers: GcMaker[] = [], limit = 8): MemoCandidate[] {
-	const runs = 1;
-	const budget = Math.max(a.busy_ms, 1);
+export function memo_candidates(a: Analysis, makers: GcMaker[] = [], limit = 8, runs = 1): MemoCandidate[] {
+	// UNITS: time and allocations add up every profiled render (`runs`); the call count is one
+	// render's (the coverage render). Everything here is per render.
+	const budget = Math.max(a.busy_ms / runs, 1);
 	// what the function allocated: the makers are the builtins it called (`structuredClone ←
 	// toProductVM (lib/mappers.ts:26)`), so match on the caller it names, plus itself when it
 	// allocates directly
@@ -119,13 +120,14 @@ export function memo_candidates(a: Analysis, makers: GcMaker[] = [], limit = 8):
 	for (const f of a.functions) {
 		// a component renders once per item by design; the candidates are the app's own functions
 		if (f.category !== 'app') continue;
-		const calls = (f.calls ?? 0) / runs;
+		const calls = f.calls ?? 0;
 		if (calls < 10 || GLUE_RE.test(f.name) || HANDLER_NAMES.has(f.name) || is_handler_file(f.url)) continue;
-		if (f.total_ms < Math.max(2, budget * 0.005)) continue;
-		const per_call = f.total_ms / calls;
+		const total = f.total_ms / runs;
+		if (total < Math.max(2, budget * 0.005)) continue;
+		const per_call = total / calls;
 		if (per_call < 0.02) continue;
 		const alloc = alloc_of(f);
-		out.push({ key: f.key, name: f.name, url: f.url, line: f.line, calls: Math.round(calls), total_ms: f.total_ms, per_call_ms: Math.round(per_call * 1000) / 1000, ...(alloc ? { alloc_per_call: Math.round(alloc / calls) } : {}), ...(f.parent ? { parent: f.parent } : {}) });
+		out.push({ key: f.key, name: f.name, url: f.url, line: f.line, calls: Math.round(calls), total_ms: Math.round(total * 100) / 100, per_call_ms: Math.round(per_call * 1000) / 1000, ...(alloc ? { alloc_per_call: Math.round(alloc / runs / calls) } : {}), ...(f.parent ? { parent: f.parent } : {}) });
 	}
 	return out.sort((x, y) => y.total_ms - x.total_ms).slice(0, limit);
 }
@@ -287,6 +289,8 @@ export interface RetainedSite {
 	component: string | null;
 	bytes: number;
 	share: number;
+	/** the app line it is charged to (the site when it is app code, else the nearest app caller) */
+	at?: { path: string; line: number };
 }
 
 export interface Retained {

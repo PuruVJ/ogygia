@@ -39,6 +39,8 @@
 	});
 
 	function state_of(r) {
+		// (a nested island rides the island around it: awake with it, never on its own)
+		if (r.kind === 'island' && r.rides) return r.hydrated ? 'rides its parent' : 'cold (with its parent)';
 		if (r.kind === 'island') return r.hydrated ? 'hydrated' : 'cold';
 		return r.hydrated ? 'filled' : 'pending';
 	}
@@ -81,7 +83,8 @@
 				onclick={() => { selected = r.el; picking = false; }}
 				title="inspect this region"
 			>
-				<td><span class="dot og-{r.kind}"></span><span class="nm">{name}</span></td>
+				<!-- the name is a button: Tab reaches the row, Enter opens it (the press bubbles to the row) -->
+				<td><span class="dot og-{r.kind}"></span><button class="nm rowbtn" onfocus={() => (focus = r.el)} onblur={() => (focus = null)}>{name}</button></td>
 				<td>{r.kind === 'island' ? r.wake : r.kind}</td>
 				<td class="mono">
 					{#if r.kind !== 'island'}<span class="muted">0 B</span>
@@ -201,6 +204,21 @@
 		color: #e2e8f0;
 		font-weight: 600;
 	}
+	/* a button that reads as the name it was */
+	.rowbtn {
+		all: unset;
+		cursor: pointer;
+	}
+	/* (after the reset: the name's own look) */
+	.rowbtn.nm {
+		color: #e2e8f0;
+		font-weight: 600;
+	}
+	.rowbtn:focus-visible {
+		outline: 2px solid rgba(94, 234, 212, 0.7);
+		outline-offset: 2px;
+		border-radius: 3px;
+	}
 	table {
 		border-collapse: collapse;
 		width: 100%;
@@ -233,7 +251,7 @@
 		box-shadow: inset 2px 0 0 #5eead4;
 	}
 	.muted {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.mono {
 		font-variant-numeric: tabular-nums;

@@ -3,20 +3,21 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { compile } from 'svelte/compiler';
+import { strip_markup_ts } from '@ogygia/tsdown-plugin-svelte';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The profiler UI ships as raw `.svelte` files in dist and is compiled by the
 // CONSUMER's Svelte pipeline (rendered through document(), hydrated as islands).
-// That pipeline preprocesses the SCRIPT and STYLE blocks but NOT template markup,
-// so any TypeScript-only syntax in a `{…}` expression survives preprocessing and
-// then blows up `svelte.compile` in the consumer's build (they hit exactly this:
-// `Report.svelte: Expected token }` on `{meta.runs!.length}`, and a postcss
-// "Unknown word PROFILER_STYLE" from a `<style>` literal caught in a script string).
+// Preprocessing transpiles the SCRIPT but never the template, and the build drops
+// `lang="ts"`, so a type left in a `{…}` expression once blew up the consumer's
+// `svelte.compile` (`Report.svelte: Expected token }` on `{meta.runs!.length}`,
+// and a postcss "Unknown word PROFILER_STYLE" from a `<style>` literal caught in a
+// script string). The build now cuts markup types too (scripts/strip-markup-ts.ts),
+// so templates may use TS like any Svelte app.
 //
-// This test reproduces the consumer faithfully: transpile each script TS→JS (drop
-// `lang="ts"`, as vitePreprocess+esbuild does), then compile for client AND server.
-// A TS non-null assertion or `as` cast left in the markup fails here just like it
-// fails in their CI. It's the guard that keeps the profiler UI portable.
+// This test reproduces what ships: the build's markup strip, each script TS→JS
+// (drop `lang="ts"`), then compile for client AND server. Anything the strip
+// misses fails here just like it would in a consumer's CI.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Every dir whose `.svelte` ships raw and gets compiled by the CONSUMER's Svelte pipeline. Add a dir
@@ -29,12 +30,12 @@ const files = dirs.flatMap((d) => {
 		.map((f) => abs + f);
 });
 
-/** Strip TS from the `<script lang="ts">` body and drop the lang attr — what the consumer's
- *  preprocess does before Svelte ever sees the file. Markup is left untouched (as it is in reality). */
-function to_consumer_js(source: string): string {
-	return source.replace(
-		/<script\b([^>]*)\blang=["']ts["']([^>]*)>([\s\S]*?)<\/script>/g,
-		(_m, pre: string, post: string, body: string) => {
+/** What the build ships: each `<script lang="ts">` body transpiled (what preprocess does, `lang`
+ *  kept), then the build's own `strip_markup_ts` cuts the markup's types and drops `lang`. */
+function to_consumer_js(source: string, filename: string): string {
+	const scripts_js = source.replace(
+		/<script\b([^>]*\blang=["']ts["'][^>]*)>([\s\S]*?)<\/script>/g,
+		(_m, attrs: string, body: string) => {
 			const js = ts.transpileModule(body, {
 				compilerOptions: {
 					target: ts.ScriptTarget.ESNext,
@@ -43,9 +44,10 @@ function to_consumer_js(source: string): string {
 					isolatedModules: true
 				}
 			}).outputText;
-			return `<script${pre}${post}>\n${js}</script>`;
+			return `<script${attrs}>\n${js}</script>`;
 		}
 	);
+	return strip_markup_ts(scripts_js, filename);
 }
 
 const name_of = (abs: string) => abs.slice(abs.lastIndexOf('/') + 1);
@@ -60,7 +62,7 @@ describe('shipped .svelte is consumer-compilable (no TS in template markup)', ()
 	for (const abs of files) {
 		const f = name_of(abs);
 		it(`${f} compiles after the consumer strips script TS`, () => {
-			const js = to_consumer_js(readFileSync(abs, 'utf8'));
+			const js = to_consumer_js(readFileSync(abs, 'utf8'), f);
 			// both generate targets — the consumer builds SSR (server) and hydration (client)
 			expect(() => compile(js, { filename: f, generate: 'server' })).not.toThrow();
 			expect(() => compile(js, { filename: f, generate: 'client' })).not.toThrow();

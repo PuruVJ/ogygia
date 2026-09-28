@@ -8,6 +8,7 @@
 	import type { SeedRow } from './report-data.js';
 	import { fmt_bytes } from './format.js';
 	import { row_id, follow_hash } from './row-anchor.svelte.js';
+	import { pressable } from './press.js';
 
 	let { rows, whole_by, total, seed_bytes }: { rows: SeedRow[]; whole_by: string[]; total: number; seed_bytes: number } = $props();
 	let picked = $state<string | null>(null);
@@ -25,7 +26,7 @@
 {/if}
 <div class="rows">
 	{#each rows as r (r.key)}
-		<div class="row" id={row_id('seed', r.key)} class:picked={picked === r.key} class:dropped={!r.shipped} onclick={() => (picked = picked === r.key ? null : r.key)} role="button" tabindex="-1">
+		<div class="row" id={row_id('seed', r.key)} class:picked={picked === r.key} class:dropped={!r.shipped} onclick={() => (picked = picked === r.key ? null : r.key)} role="button" tabindex="0" aria-expanded={picked === r.key} {@attach pressable}>
 			<span class="key"><code>{r.key}</code></span>
 			<div class="track">
 				<div class="fill" class:ref={r.reason === 'referenced'} class:whole={r.reason === 'whole'} style="width:{Math.max(0.5, r.pct)}%"></div>

@@ -28,7 +28,7 @@ export class Slugger {
 	}
 }
 
-/** The classic per-row cost: an `Intl.NumberFormat` built for every price. */
+/** The classic per-row cost: an `Intl.NumberFormat` built for every price. PATTERN formatter-per-call */
 export function formatPrice(n: number, currency: string, locale = 'en-US'): string {
 	return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(n);
 }
@@ -116,6 +116,7 @@ export function localizeLink(link: { label: string; description: string }, local
 export function interpolate(template: string, vars: Record<string, string>): string {
 	return template.replace(/\{(\w+)\}/g, (_, k: string) => escapeText(vars[k] ?? ''));
 }
+// PATTERN-SMALL string-build (real, ~1 ms: sits on the 1 ms-saving floor)
 export function escapeText(s: string): string {
 	let out = '';
 	for (let i = 0; i < s.length; i++) {

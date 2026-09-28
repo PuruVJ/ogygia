@@ -59,7 +59,8 @@
 	<span><i class="arrow"></i> started only once the other finished — the await that serialized them</span>
 	<span class="hint">{edges.length} serialized start{edges.length === 1 ? '' : 's'} · boxes in the same column ran together</span>
 </div>
-<div class="scroll" onmouseleave={() => (tip = null)}>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div class="scroll" onmouseleave={() => (tip = null)} tabindex="0" role="region" aria-label="the render's calls, scrolls sideways">
 	<svg width={W} {height} viewBox="0 0 {W} {height}" role="img" aria-label="the render's calls and which one waited for which">
 		<defs>
 			<marker id="aw-head" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#e0834a" /></marker>
@@ -71,6 +72,7 @@
 				onmouseenter={(ev) => show(`${n.label} — ${fmt_ms(n.t1 - n.t0)} ms, from ${fmt_ms(n.t0)} to ${fmt_ms(n.t1)} ms${n.caller ? ` · from ${n.caller}` : ''}`, ev)}
 				onmousemove={(ev) => show(`${n.label} — ${fmt_ms(n.t1 - n.t0)} ms, from ${fmt_ms(n.t0)} to ${fmt_ms(n.t1)} ms${n.caller ? ` · from ${n.caller}` : ''}`, ev)}
 				role="img"
+				aria-label="{n.label} — {fmt_ms(n.t1 - n.t0)} ms, from {fmt_ms(n.t0)} to {fmt_ms(n.t1)} ms"
 			>
 				<rect width={Math.max(2, x(n.t1) - x(n.t0))} height={H} rx="3" fill={color(n.kind)} opacity="0.85" />
 				<text x="4" y="13">{short(n.label, x(n.t1) - x(n.t0) - 6)}</text>
@@ -88,6 +90,7 @@
 				onmouseenter={(ev) => show(`${p.e.to} started ${fmt_ms(p.e.gap_ms)} ms after ${p.e.from} finished${p.e.at ? ` — awaited at ${p.e.at}` : ''}${p.e.callers && p.e.callers.length > 1 ? ` (${p.e.callers.join(' ← ')})` : ''}`, ev)}
 				onmousemove={(ev) => show(`${p.e.to} started ${fmt_ms(p.e.gap_ms)} ms after ${p.e.from} finished${p.e.at ? ` — awaited at ${p.e.at}` : ''}`, ev)}
 				role="img"
+				aria-label="{p.e.to} started {fmt_ms(p.e.gap_ms)} ms after {p.e.from} finished"
 			/>
 		{/each}
 	</svg>

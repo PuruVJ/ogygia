@@ -8,7 +8,7 @@ import type { Analysis, FrameCategory, GroupStat } from '../analyze.js';
 import type { NetCall, UpstreamTrace } from '../net.js';
 import type { IoOp } from '../async-io.js';
 import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.js';
-import { group_islands, hole_economics, island_js_bytes, island_name, island_rows_of } from '../report.js';
+import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.js';
 import type { HoleStat, IslandStat, SeedKeyStat } from '../../server/request-stats.js';
 import { io_kind } from '../async-io.js';
 import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.js';
@@ -33,6 +33,8 @@ export interface IslandRow {
 	ref_keys: string[];
 	/** unique bytes of module + preload hints (null when unweighed: dev, or an unreachable asset) */
 	js_bytes: number | null;
+	/** of `js_bytes`, what no other waking island uses (what dropping it would save) */
+	js_only: number | null;
 	/** each module with its bytes, heaviest first, and what the build packed into it */
 	modules: { url: string; bytes: number | null; inside: string[] | null }[];
 	interactivity: IslandStat['interactivity'];
@@ -53,7 +55,9 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 	const by_name = new Map(a.components.map((c) => [c.name, c]));
 	const client = new Map((extras.client ?? []).map((c) => [c.entry, c]));
 	const beacon_seen = client.size > 0;
-	return group_islands(island_rows_of(meta)).map((r) => {
+	const grouped = group_islands(island_rows_of(meta));
+	const only = island_js_unique(grouped, extras.weights);
+	return grouped.map((r) => {
 		const name = island_name(r);
 		const comp = by_name.get(name);
 		const cl = client.get(r.entry) ?? null;
@@ -61,6 +65,7 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null, inside: extras.contents?.[url] ?? null }))
 			.sort((x, y) => (y.bytes ?? -1) - (x.bytes ?? -1));
 		const js_bytes = island_js_bytes(r, extras.weights);
+		const js_only = only?.get(r.entry) ?? null;
 		const i = r.interactivity;
 		const marks = i ? i.handlers + i.state + i.effects + i.binds + i.actions : -1;
 		let advice: string | null = null;
@@ -74,7 +79,11 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 		else if (r.count >= 10 && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `${r.count} copies each wake on ${r.wake}${(r.variants ?? 1) > 1 ? ` with ${r.variants} different props sidecars` : ''}: one island around the list hydrates once, or wake: 'interaction' pays only when touched.`;
 		else if (!r.json && r.culprit) advice = `Its props use devalue because of ${r.culprit}: a string or number there puts them on the JSON lane.`;
-		else if (js_bytes !== null && js_bytes >= 150 * 1024) advice = `${fmt_bytes(js_bytes)} of JS for one island: the heaviest module below is the import to move server-side or behind a dynamic import.`;
+		else if (js_bytes !== null && js_bytes >= 150 * 1024)
+			advice =
+				js_only !== null && js_only < js_bytes * 0.3
+					? `${fmt_bytes(js_bytes)} of JS to wake it, but only ${fmt_bytes(js_only)} is its own: the rest is shared with other islands and loads anyway. Deferring it saves little; slim the shared code instead.`
+					: `${fmt_bytes(js_bytes)} of JS for one island${js_only !== null ? ` (${fmt_bytes(js_only)} of it only this island needs)` : ''}: the heaviest module below is the import to move server-side or behind a dynamic import.`;
 		else if (cl && cl.load_p50_ms >= cl.p50_ms * 0.6 && cl.p50_ms >= 50) advice = `In the browser most of its ${cl.p50_ms.toFixed(0)} ms is module load: an earlier preload or a smaller closure helps more than faster code.`;
 		return {
 			name,
@@ -91,6 +100,7 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 			refs: r.refs,
 			ref_keys: r.ref_keys,
 			js_bytes,
+			js_only,
 			modules,
 			interactivity: i,
 			marks,

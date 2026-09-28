@@ -30,9 +30,21 @@ export function call_sites(below: (...a: never[]) => unknown): NodeJS.CallSite[]
 	return Array.isArray(sites) ? (sites as NodeJS.CallSite[]) : [];
 }
 
+/** A call site's file: its script's name, or the `//# sourceURL` of code made from a string — how
+ *  the dev server's module runner evaluates every server module (`new AsyncFunction(code)`), where
+ *  `getFileName()` is empty and every frame looked like no file at all */
+export function file_of(site: NodeJS.CallSite): string | undefined {
+	return (
+		site.getFileName() ??
+		(site as { getScriptNameOrSourceURL?: () => string | undefined }).getScriptNameOrSourceURL?.() ??
+		undefined
+	);
+}
+
 /** Call at module load from any profiler module: its runtime file name joins the skip set. */
 export function register_profiler_file(): void {
-	const f = call_sites(register_profiler_file)[0]?.getFileName();
+	const s = call_sites(register_profiler_file)[0];
+	const f = s ? file_of(s) : undefined;
 	if (f) profiler_files.add(f);
 }
 

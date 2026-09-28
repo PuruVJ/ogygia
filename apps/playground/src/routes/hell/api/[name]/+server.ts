@@ -9,6 +9,22 @@ export const GET = async ({ url, params }: { url: URL; params: { name: string } 
 	// the upstream's own split of its time — the profiler reads Server-Timing off every response
 	// and draws it inside the wait ("their side: db 30 ms, render 8 ms")
 	const timing = `db;dur=${Math.round(ms * 0.7)};desc="postgres", render;dur=${Math.round(ms * 0.2)}, cache;dur=0;desc="miss"`;
+	// a LIVE answer: different on every call (stock ticks, a clock) — the same-answer decoy
+	if (params.name === 'live') {
+		return json({ name: 'live', at: Date.now(), tick: Math.random() }, { headers: { 'server-timing': timing, 'cache-control': 'no-store' } });
+	}
+	// a service that says how long its answer keeps: the profiler quotes it on a same-answer site
+	if (params.name === 'reviews') {
+		return json({ name: 'reviews', ms, payload: 'x'.repeat(2048) }, { headers: { 'server-timing': timing, 'cache-control': 'public, max-age=300' } });
+	}
+	// a catalog that stamps when it was generated: the same data every call but for `generatedAt` and a
+	// request id (the almost-same-answer plant)
+	if (params.name === 'catalog') {
+		return json(
+			{ name: 'catalog', items: Array.from({ length: 40 }, (_, i) => ({ id: `SKU-${i}`, title: `Item ${i}`, price: 10 + i })), generatedAt: new Date().toISOString(), requestId: Math.random().toString(36).slice(2, 10) },
+			{ headers: { 'server-timing': timing } }
+		);
+	}
 	if (params.name === 'recs') {
 		const f = url.searchParams.get('for') ?? 'P0';
 		return json({ name: 'recs', items: Array.from({ length: 6 }, (_, i) => `${f} + accessory ${i}`) }, { headers: { 'server-timing': timing } });

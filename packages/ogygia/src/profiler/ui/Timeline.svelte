@@ -7,7 +7,8 @@
 	 * striped = waiting; dark = nothing recorded.
 	 */
 	import { chain_steps, coalesce, PHASE_LABEL, type Timeline, type ViewSegment } from '../timeline.js';
-	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
+	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
+	import { pressable } from './press.js';
 
 	let {
 		t,
@@ -67,7 +68,8 @@
 	<span class="hint">solid = the CPU was running that · striped = the server was waiting · hover a block, click it to jump to its step</span>
 </div>
 
-<div class="bar" role="img" aria-label="the render, start to end" onmouseleave={() => (tip = null)}>
+<!-- a group: its segments are pressable (an image cannot hold buttons), each named for a reader -->
+<div class="bar" role="group" aria-label="the render, start to end" onmouseleave={() => (tip = null)}>
 	{#each view as s, i (i)}
 		<div
 			class="seg {s.kind}"
@@ -76,10 +78,18 @@
 			onmouseenter={(e) => (tip = { i, x: e.clientX, y: e.clientY })}
 			onmousemove={(e) => (tip = { i, x: e.clientX, y: e.clientY })}
 			onclick={() => pick(i)}
+			onfocus={(e) => {
+				// the keyboard gets the hover's detail, under the block
+				const r = e.currentTarget.getBoundingClientRect();
+				tip = { i, x: r.left, y: r.bottom };
+			}}
+			onblur={() => (tip = null)}
 			role="button"
-			tabindex="-1"
+			tabindex="0"
+			{@attach pressable}
+			aria-label="{s.kind === 'wait' ? 'wait: ' : ''}{s.label}"
 		>
-			{#if pct(s) > 5}<span>{s.kind === 'wait' ? 'wait: ' : ''}{s.label}</span>{/if}
+			{#if pct(s) > 5}<span style="color:{ink_on(dot(s))}">{s.kind === 'wait' ? 'wait: ' : ''}{s.label}</span>{/if}
 		</div>
 	{/each}
 </div>
@@ -108,7 +118,7 @@
 			<div class="dim">{CATEGORY_LABEL[s.category]} · {PHASE_LABEL[s.phase]}</div>
 		{:else if s.kind === 'wait'}
 			<div>waiting on {s.calls && s.calls.length > 1 ? `${s.calls.length} calls at once` : 'one call'} · {PHASE_LABEL[s.phase]}</div>
-			{#each (s.calls ?? []).slice(0, 8) as c (c.label)}
+			{#each (s.calls ?? []).slice(0, 8) as c, i (c.label + '\0' + i)}
 				<div class="mono">{c.label} <span class="dim">{fmt_ms(c.ms)} ms{c.caller ? ` · from ${c.caller}` : ''}</span></div>
 				{#if c.callers && c.callers.length > 1}
 					<div class="mono dim">  call path: {c.callers.join(' ← ')}</div>
@@ -175,6 +185,9 @@
 				<div class="wait" style="width:{(p.wait_ms / phase_total) * 100}%" title="waiting {fmt_ms(p.wait_ms)} ms"></div>
 			</div>
 			<span class="num">{fmt_ms(p.cpu_ms)} ms CPU{#if p.wait_ms >= 0.5} <span class="hint">+ {fmt_ms(p.wait_ms)} ms waiting</span>{/if}</span>
+			{#if p.top?.length}
+				<span class="who hint">{p.top.map((o) => `${o.label} ${fmt_ms(o.ms)} ms`).join(' · ')}</span>
+			{/if}
 		</div>
 	{/each}
 </div>
@@ -269,6 +282,8 @@
 		margin: 4px 0 0;
 		background: var(--bg-sunken);
 	}
+	/* no padding or border on a segment: hundreds of thin ones would each keep that much width and
+	   push the bar past its card. The divider is a shadow, the inset is on the label. */
 	.seg {
 		min-width: 0;
 		overflow: hidden;
@@ -277,14 +292,14 @@
 		font-weight: 600;
 		display: flex;
 		align-items: center;
-		padding: 0 4px;
-		border-right: 1px solid var(--bg-sunken)99;
+		box-shadow: inset -1px 0 0 color-mix(in srgb, var(--bg-sunken) 60%, transparent);
 		cursor: pointer;
 		color: var(--bg-sunken);
 	}
 	.seg span {
 		text-overflow: ellipsis;
 		overflow: hidden;
+		padding-left: 4px;
 	}
 	.seg.wait span {
 		color: var(--text);
@@ -449,6 +464,13 @@
 		font-variant-numeric: tabular-nums;
 		color: var(--text-dim);
 	}
+	/* whose CPU the phase was: under its bar, the full width after the name */
+	.prow .who {
+		grid-column: 2 / -1;
+		margin-top: -3px;
+		font-size: 11.5px;
+		overflow-wrap: anywhere;
+	}
 	.steps {
 		margin: 4px 0 0;
 		padding-left: 22px;
@@ -543,5 +565,19 @@
 		left: 0;
 		top: 13px;
 		font-size: 10px;
+	}
+	/* a phone: the label, the bar and the numbers of a lane / phase row stack instead of three
+	   fixed columns wider than the screen */
+	@media (max-width: 720px) {
+		.lane,
+		.prow {
+			grid-template-columns: minmax(0, 1fr);
+			gap: 2px;
+			margin-bottom: 6px;
+		}
+		.prow .who {
+			grid-column: 1 / -1;
+			margin-top: 0;
+		}
 	}
 </style>

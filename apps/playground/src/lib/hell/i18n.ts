@@ -29,6 +29,7 @@ function lookup(key: string, locale: string): string | undefined {
 	for (const l of chain) {
 		const table = CATALOG[l];
 		if (!table) continue;
+		// PATTERN scan-for-key
 		for (const [k, v] of Object.entries(table)) if (k === key) return v;
 	}
 	return undefined;

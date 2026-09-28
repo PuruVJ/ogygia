@@ -16,6 +16,7 @@
 import { fs, path } from './host.js';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
+import { unscoped_marker } from '../unscoped-css.js';
 
 export const FOUC_CSS_PREFIX = 'virtual:ogygia/fouc-css/';
 export const FOUC_SCOPED_PREFIX = 'virtual:ogygia/fouc-scoped/';
@@ -217,30 +218,40 @@ export function compileFoucScopedCss(
 	opts: {
 		/** Keep the `<script>` (already free of TS/dialects): a template reading `$store` from an
 		 *  imported store, or any script-declared name, only compiles WITH its script. Stripping it
-		 *  (the default, for sources that may still carry TypeScript) throws on such a template and
-		 *  falls back to UNSCOPED style bodies — which match nothing the SSR'd markup carries. */
+		 *  throws on such a template and falls back to UNSCOPED style bodies — which match nothing
+		 *  the SSR'd markup carries. Without it (a source that may still carry TypeScript), the
+		 *  source is tried whole first (Svelte reads `lang="ts"` itself), then script-stripped. */
 		keepScript?: boolean;
 	} = {}
 ) {
-	const input = opts.keepScript ? source : source.replace(SCRIPT_TAG, '');
-	try {
-		const result = compile(input, {
-			filename: abs,
-			generate: 'client',
-			css: 'external',
-			discloseVersion: false,
-			// a hole component may `await` at the top level (async Svelte); the CSS is the same either way
-			experimental: { async: true }
-		});
-		return result.css?.code ?? '';
-	} catch (err) {
-		if (opts.keepScript) {
-			console.warn(
-				`[ogygia] scoped CSS for ${abs} could not be compiled (${(err as Error).message.split('\n')[0]}) — shipping its style bodies unscoped`
-			);
+	// (the whole source first even when not preprocessed: stripping the script first made every
+	// template with a `bind:` or a script name throw, and the dev router leg shipped 11 of the
+	// profiler's 37 styled components unscoped)
+	const inputs = opts.keepScript ? [source] : [source, source.replace(SCRIPT_TAG, '')];
+	let err: unknown;
+	for (const input of inputs) {
+		try {
+			const result = compile(input, {
+				filename: abs,
+				generate: 'client',
+				css: 'external',
+				discloseVersion: false,
+				// a hole component may `await` at the top level (async Svelte); the CSS is the same either way
+				experimental: { async: true }
+			});
+			return result.css?.code ?? '';
+		} catch (e) {
+			err ??= e;
 		}
-		return extractRawStyleBodies(source);
 	}
+	const why = (err as Error).message.split('\n')[0];
+	if (opts.keepScript) {
+		console.warn(
+			`[ogygia] scoped CSS for ${abs} could not be compiled (${why}) — shipping its style bodies unscoped`
+		);
+	}
+	const raw = extractRawStyleBodies(source);
+	return raw ? unscoped_marker(abs, why) + raw : raw;
 }
 
 /** @param source */

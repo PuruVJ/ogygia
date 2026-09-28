@@ -1,0 +1,138 @@
+// DEVTOOLS IN A BUILD (a preview deploy with `devtools: true`): a visitor gets the launcher only (no
+// dock code, no server side-channel, no measuring); opening it loads the dock; from the next load
+// that browser is measured from the start and gets the server's events. Exit 1 on a failure.
+//
+//   cd apps/playground && OGYGIA_DEVTOOLS=1 pnpm build
+//   node node_modules/vite/bin/vite.js preview --port 4181 --host 127.0.0.1
+//   node internal/bench/devtools-build-check.mjs [base=http://127.0.0.1:4181]
+//   (rebuild without OGYGIA_DEVTOOLS afterwards: the e2e suite expects devtools off in the build)
+import { createRequire } from 'node:module';
+
+const base = process.argv[2] ?? 'http://127.0.0.1:4181';
+const { chromium } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
+const results = [];
+const check = (name, ok, extra = '') => {
+	results.push(ok);
+	console.log(`${ok ? '✓' : '✗'} ${name}${extra ? ` — ${extra}` : ''}`);
+};
+
+const html = await (await fetch(base + '/dt-lab')).text();
+check('a visitor\'s HTML has no server side-channel', !html.includes('application/ogygia-devtools'));
+
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', (e) => !e.message.includes('planted') && errors.push(e.message));
+let loaded = [];
+page.on('response', (r) => r.url().endsWith('.js') && loaded.push(r.url()));
+
+await page.goto(base + '/dt-lab', { waitUntil: 'load' });
+await page.waitForTimeout(1500);
+check('the launcher is there', (await page.locator('[data-og-panel-toggle]').count()) === 1);
+check('no dock until opened', (await page.locator('[data-og-win]').count()) === 0 && (await page.evaluate(() => typeof window.__ogygia_page)) === 'undefined');
+
+loaded = [];
+await page.locator('[data-og-panel-toggle]').click();
+await page.waitForTimeout(1500);
+check('opening loads the dock\'s code then', loaded.length >= 1, `${loaded.length} file(s)`);
+check('the dock opens with its tabs', (await page.locator('[data-og-tab]').count()) >= 7);
+check('the cookie remembers it', (await ctx.cookies()).some((c) => c.name === 'og_devtools' && c.value === '1'));
+await page.locator('[data-og-tab="page"]').click();
+await page.waitForTimeout(400);
+check('the Page tab asks for a reload on the first open', (await page.locator('[data-og-page-unmeasured]').count()) === 1);
+
+await page.reload({ waitUntil: 'load' });
+await page.waitForTimeout(3500);
+const view = await page.evaluate(() => {
+	const v = window.__ogygia_page?.();
+	return v ? v.report.findings.map((f) => f.code) : null;
+});
+check('after a reload the page is measured from the start', !!view && view.includes('long-hydrate') && view.includes('markup-changed'), JSON.stringify(view));
+const server = await page.evaluate(() => (window.__ogygia_devtools?.events() ?? []).filter((e) => e.realm === 'server').length);
+check('…and gets the server\'s events', server > 0, `${server}`);
+check('island names come from the build', (await page.evaluate(() => Object.keys(window.__ogygia_region_names ?? {}).length)) > 0);
+// THE BYTES TAB in a build: the exact ledger from the page's island graph, and its page total is
+// the real files' bytes (each once), checked against the files fetched straight from the server
+await page.locator('[data-og-tab="bytes"]').click();
+await page.waitForTimeout(600);
+check('Bytes: the exact ledger (island graph × the browser\'s sizes)', (await page.locator('[data-og-ledger-exact]').count()) === 1);
+// the build's names reach every tab (a built entry is og-region.<id>.js; the names key the bare id)
+const ledger_names = await page.locator('[data-og-ledger-exact] + table tbody .nm').allInnerTexts();
+check('the tabs name islands by their component in a build', ledger_names.includes('Heavy') && !ledger_names.some((n) => n.startsWith('og-region')), ledger_names.join(', '));
+const decoded_text = await page.locator('[data-og-ledger-exact] + table tfoot td').last().innerText().catch(() => '');
+const files = await page.evaluate(() => {
+	const abs = (h) => new URL(h, location.href).href;
+	const set = new Set();
+	for (const s of document.querySelectorAll('script[data-ogygia-graph]')) {
+		const w = JSON.parse(s.textContent);
+		for (const [entry, ids] of Object.entries(w.e)) {
+			set.add(abs(entry));
+			for (const i of ids) set.add(abs(w.h[i]));
+		}
+	}
+	const rt = document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src');
+	if (rt) set.add(abs(rt));
+	for (const l of document.querySelectorAll('link[data-ogygia-runtime-dep]')) set.add(abs(l.getAttribute('href')));
+	const loaded = new Set(performance.getEntriesByType('resource').map((r) => r.name));
+	// only the islands on THIS page count (a graph may list more entries than the page shows)
+	return [...set].filter((u) => loaded.has(u));
+});
+let on_disk = 0;
+for (const u of files) on_disk += (await (await fetch(u)).arrayBuffer()).byteLength;
+const shown_kb = Number.parseFloat(decoded_text);
+check('Bytes: the page total is the real files, each once', Math.abs(shown_kb - on_disk / 1024) <= 0.2, `shown ${decoded_text}, the ${files.length} loaded files are ${(on_disk / 1024).toFixed(1)} kB`);
+// an island's detail card carries its line of the ledger: its code, what only it needs, whom it shares with
+await page.locator('[data-og-tab="lens"]').click();
+await page.waitForTimeout(400);
+await page.locator('[data-og-win] tbody tr', { hasText: 'Heavy' }).first().click();
+await page.waitForTimeout(600);
+const detail_bytes = await page.locator('[data-og-detail]').innerText().catch(() => '');
+check('an island card shows its code: files, only it, shared with', detail_bytes.includes('its code') && detail_bytes.includes('only it') && detail_bytes.includes('shared'), detail_bytes.split('\n').filter((l) => l.includes('code') || l.includes('only it') || l.includes('shared')).join(' | ').slice(0, 200));
+// STYLES in a build: the Page tab reads the page's sheets (devtools' own never among them), the
+// planted unscoped fallback is named, and a clean page raises nothing
+const styles_of = () =>
+	page.evaluate(async () => {
+		const r = await window.__ogygia_styles?.();
+		return r ? { codes: r.findings.map((f) => f.code), unscoped: r.report.unscoped.map((u) => u.file), sheets: r.report.sheets.map((s) => `${s.label} ${s.unmatched}/${s.rules}`) } : null;
+	});
+const clean_styles = await styles_of();
+check('Styles: a clean page raises nothing (devtools\' own sheets left out)', !!clean_styles && clean_styles.codes.length === 0, JSON.stringify(clean_styles));
+await page.goto(base + '/dt-styles', { waitUntil: 'load' });
+await page.waitForTimeout(1500);
+const lab_styles = await styles_of();
+check('Styles: the planted unscoped component and the unmatched sheet are named', !!lab_styles && lab_styles.unscoped.join() === 'LabCard.svelte' && lab_styles.codes.includes('css-unmatched'), JSON.stringify(lab_styles));
+await page.locator('[data-og-tab="page"]').click();
+await page.waitForTimeout(800);
+check('Styles: the Page tab shows the sheets and the unscoped line', (await page.locator('[data-og-page-styles]').count()) === 1 && (await page.locator('[data-og-page-unscoped]').innerText().catch(() => '')).includes('LabCard.svelte'));
+check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+// THE OBSERVER EFFECT: measuring (the og_devtools cookie) must not change what it measures. The
+// same heavy page, loaded with and without it, one after the other (a server that drifts over the
+// run would bias blocks); the page's own main-thread time and its HTML size, medians of 6 each.
+{
+	const med = (xs) => [...xs].sort((a, b) => a - b)[xs.length >> 1];
+	const runs = { off: [], on: [] };
+	for (let i = 0; i < 6; i++) {
+		for (const mode of i % 2 ? ['on', 'off'] : ['off', 'on']) {
+			const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+			if (mode === 'on') await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+			const p = await c.newPage();
+			const cdp = await c.newCDPSession(p);
+			await cdp.send('Performance.enable');
+			await p.goto(base + '/hell-fixed', { waitUntil: 'load' });
+			await p.waitForTimeout(1500);
+			const m = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map((x) => [x.name, x.value]));
+			const html = await p.evaluate(() => performance.getEntriesByType('navigation')[0].transferSize);
+			runs[mode].push({ task: m.TaskDuration * 1000, html });
+			await c.close();
+		}
+	}
+	const task = med(runs.on.map((r) => r.task)) - med(runs.off.map((r) => r.task));
+	const html = med(runs.on.map((r) => r.html)) - med(runs.off.map((r) => r.html));
+	check('measuring costs the page little: its main thread and its HTML', task <= 60 && html <= 4096, `+${Math.round(task)} ms main thread, +${(html / 1024).toFixed(1)} KB HTML`);
+}
+await browser.close();
+
+const failed = results.filter((r) => !r).length;
+console.log(failed ? `FAILED (${failed})` : 'devtools in a build: launcher only until opened');
+process.exit(failed ? 1 : 0);

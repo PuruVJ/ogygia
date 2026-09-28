@@ -130,7 +130,7 @@
 				<table>
 					<thead><tr><th>function</th><th>where</th><th class="num">self ms</th><th class="num">windows</th></tr></thead>
 					<tbody>
-						{#each hot.slice(0, 20) as f (f.name + f.file)}
+						{#each hot.slice(0, 20) as f, i (f.name + '\0' + f.file + '\0' + i)}
 							<tr><td class="fn"><b>{f.name}</b></td><td class="file">{f.file} <span class="hint">{f.category}</span></td><td class="num">{fmt_ms(f.self_ms)}</td><td class="num">{f.windows}</td></tr>
 						{/each}
 					</tbody>

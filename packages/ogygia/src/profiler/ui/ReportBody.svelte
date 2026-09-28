@@ -10,7 +10,7 @@
 	 * raw numbers come last.
 	 */
 	import { derive_findings, span_rows, cold_rows, page_score_of } from '../report.js';
-	import { fmt_ms, fmt_pct, fmt_bytes, label_of, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
+	import { fmt_ms, fmt_pct, fmt_bytes, label_of, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
 	import {
 		build_treemap,
 		treemap_legend,
@@ -30,6 +30,8 @@
 	import SeedExplainer from './SeedExplainer.svelte' with { wake: 'load' };
 	import Shell from './Shell.svelte';
 	import ExportButton from './ExportButton.svelte' with { wake: 'load' };
+	// (awake on load: it sits in a closed <details>, and a tick made before a later wake is lost)
+	import WhatIf from './WhatIf.svelte' with { wake: 'load' };
 	import ScoreCard from './ScoreCard.svelte';
 	import Treemap from './Treemap.svelte' with { wake: 'load' };
 	import Flame from './Flame.svelte' with { wake: 'load' };
@@ -43,6 +45,11 @@
 	import Scrub from './Scrub.svelte' with { wake: 'load' };
 	import RenderSteps from './RenderSteps.svelte' with { wake: 'load' };
 	import AllocStrip from './AllocStrip.svelte';
+	import Ledger from './Ledger.svelte';
+	import Patterns from './Patterns.svelte';
+	import Drill from './Drill.svelte';
+	import { unread_rows } from '../drill.js';
+	import { PATTERN_LABEL, fix_impact } from '../patterns.js';
 	import OnThisPage from './OnThisPage.svelte' with { wake: 'load' };
 	import OneClock from './OneClock.svelte' with { wake: 'load' };
 	import ByteStrip from './ByteStrip.svelte' with { wake: 'load' };
@@ -50,11 +57,14 @@
 	import IslandHeatmap from './IslandHeatmap.svelte' with { wake: 'load' };
 	import DomTravel from './DomTravel.svelte' with { wake: 'load' };
 	import KeepLocal from './KeepLocal.svelte' with { wake: 'load' };
+	import DownloadHtml from './DownloadHtml.svelte' with { wake: 'load' };
+	import { OGP_ELEMENT_ID } from './report-request.js';
 	import { island_rows_of, island_name } from '../report.js';
 	import { PHASE_LABEL } from '../timeline.js';
 	import { sync_io, memo_candidates, span_values } from '../insights.js';
 	import { render_steps } from '../steps.js';
 	import { row_href } from './row-anchor.svelte.js';
+	import type { Since } from '../compare.js';
 	import type { Analysis } from '../analyze.js';
 	import type { ReportMeta, ReportExtras } from '../report.js';
 	import type { PageHistory } from '../profiler-router.js';
@@ -68,7 +78,9 @@
 		ogpB64,
 		history = null,
 		prev = null,
-		dev = false
+		since = null,
+		dev = false,
+		kept = false
 	}: {
 		a: Analysis;
 		meta: ReportMeta;
@@ -77,7 +89,11 @@
 		ogpB64?: string;
 		history?: PageHistory | null;
 		prev?: string | null;
+		/** against the previous profile of this page (the server's comparison, cut for the top) */
+		since?: Since | null;
 		dev?: boolean;
+		/** rendered from this browser's own kept copy (the owner's): it can still be shared */
+		kept?: boolean;
 	} = $props();
 	const fmt_kb = (b: number) => `${Math.round(b / 1024)} KB`;
 	// The ogygia page score — derived here from the same meta+extras the findings read, so the card
@@ -110,6 +126,87 @@
 	const net = extras.net.filter((c) => c.ms >= 0);
 	const net_total = net.reduce((s, c) => s + c.ms + (c.body_ms ?? 0), 0);
 	const findings = derive_findings(a, meta, extras);
+	// what fixing every slow pattern is worth, against the median render (page mode) or the window
+	const render_ms = meta.runs?.length ? [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)] : a.duration_ms;
+	// a CPU pattern's numbers cover every profiled render; a wait pattern's, one
+	const renders = meta.runs?.length || 1;
+	// the report's own forecast (overlapping fixes counted once, moot ones left out, deleted work in);
+	// an older report without one: the plain sum, waits capped at the render's waiting
+	const fc = extras.forecast;
+	const old = fc ? undefined : fix_impact(extras.patterns ?? [], render_ms, renders, a.timeline?.wait_ms);
+	const impact = fc
+		? { render_ms: fc.now_ms, after_ms: fc.after_ms, pct: fc.now_ms > 0 ? Math.round(((fc.now_ms - fc.after_ms) / fc.now_ms) * 100) : 0, cpu_ms: fc.cpu_ms, wait_ms: fc.wait_ms, delete_ms: fc.delete_ms }
+		: old
+			? { ...old, delete_ms: 0 }
+			: undefined;
+	/** fixes whose saving another on the same lines already covers: counted once */
+	const covered = (fc?.parts ?? []).filter((p) => p.with?.length);
+	// START HERE: the first three patterns (already ranked: a severe leak, then the biggest saving),
+	// each with the line to open — a wrapper's caller line when the site is a thin wrapper
+	/** `after`: one render once this and every step above it are done (the forecast's running total);
+	 *  `also`: the fixes on the same lines this one already covers */
+	type Start = { i: number | string; label: string; where: string; worth: string; href: string; value: number; after?: number; also?: string[] };
+	const all_patterns: Start[] = (extras.patterns ?? []).map((p, i) => {
+		const s = p.sites[0];
+		// the caller that loops, else (a wait in a helper) the first line that called the helper
+		const at = s?.via?.find((v) => v.in_loop) ?? (p.wait ? s?.via?.[0] : undefined) ?? s;
+		const worth = p.kept_bytes
+			? `keeps ${fmt_bytes(p.kept_bytes)} a render${p.requests_left !== undefined ? `, heap full in ~${p.requests_left} requests` : ''}`
+			: p.seed_bytes
+				? `ships ${fmt_bytes(p.seed_bytes)} a page view`
+				: p.wait
+					? p.kind === 'same-document' || p.kind === 'almost-same-document'
+						? `~${fmt_ms(p.save_ms)} ms: the whole render, served from a cache`
+						: `~${fmt_ms(p.save_ms)} ms less waiting`
+					: `~${fmt_ms(p.save_ms / renders)} ms less CPU a render`;
+		// memory and seed lead where they are (they are sorted first for a reason); time, by ms a render
+		// (a leak that crashes the server, 8 MB+ a render, and a whole shipped seed lead; a small kept
+		// amount waits behind the time savings — the same rule as the agent's plan)
+		const value = (p.kept_bytes ?? 0) >= 8 * 1048576 || p.seed_bytes ? Infinity : p.kept_bytes ? -1 : p.wait ? p.save_ms : p.save_ms / renders;
+		return { i, label: PATTERN_LABEL[p.kind], where: at ? `${at.file}:${at.line}` : '', worth, href: `#pattern-${i}`, value };
+	});
+	const from_patterns = all_patterns.slice(0, 3);
+	// WORK FOR DATA NOTHING READS (the drill-down's rows whose every key is unread): all of it goes,
+	// so it ranks with the patterns by its ms in one render
+	const unread = unread_rows(extras.drill);
+	const unread_ms = unread.reduce((s, r) => s + r.ms, 0);
+	// a pattern inside that work (the date parsing in a function that builds only an unread key) is
+	// moot: deleting it beats speeding it up
+	const gone_names = new Set(unread.map((r) => r.label));
+	const gone_at = new Set(unread.flatMap((r) => (r.at ? [r.at] : [])));
+	const moot = (i: number | string) => {
+		const p = typeof i === 'number' ? extras.patterns?.[i] : undefined;
+		return !!p && p.sites.every((s) => gone_at.has(`${s.file}:${s.line}`) || (s.fn ? gone_names.has(s.fn.split(' ')[0]) : false));
+	};
+	// WITH A FORECAST: its order (each saving once, a covered fix folded into the one that covers it)
+	// and its running total after each step; memory and a shipped seed still lead
+	const from_forecast: Start[] | undefined = fc?.parts.length
+		? [
+				...all_patterns.filter((s) => s.value === Infinity || s.value === -1),
+				...fc.parts.flatMap((p, rank): Start[] => {
+					if (p.kind === 'unread-work') {
+						const keys = p.title.slice(p.title.indexOf('(') + 1, -1);
+						// the place to edit: a LINE row that fills the key (the load's line), else the biggest row
+						const rows = unread.filter((r) => r.keys.join(', ') === keys);
+						const row = rows.find((r) => r.kind === 'line' && r.at) ?? rows[0];
+						return [{ i: `unread-${rank}`, label: 'Work for data nothing reads', where: row?.at ?? row?.label ?? '', worth: `~${fmt_ms(p.ms)} ms a render (${keys})`, href: '#drill', value: 1e9 - rank, ...(p.after_ms !== undefined ? { after: p.after_ms } : {}) }];
+					}
+					const at = (extras.patterns ?? []).findIndex((x) => x.title === p.title);
+					if (at === -1) return [];
+					return [{ ...all_patterns[at], value: 1e9 - rank, ...(p.after_ms !== undefined ? { after: p.after_ms } : {}), ...(p.with?.length ? { also: p.with } : {}) }];
+				})
+			]
+		: undefined;
+	const start_here: Start[] = (
+		from_forecast ?? [
+			...from_patterns.filter((s) => unread_ms < 1 || !moot(s.i)),
+			...(unread_ms >= 1
+				? [{ i: 'unread', label: 'Work for data nothing reads', where: unread[0].at ?? unread[0].label, worth: `~${fmt_ms(unread_ms)} ms a render (${[...new Set(unread.flatMap((r) => r.keys))].slice(0, 3).join(', ')})`, href: '#drill', value: unread_ms }]
+				: [])
+		]
+	)
+		.sort((x, y) => y.value - x.value)
+		.slice(0, 3);
 	// group the findings by the area they touch, so "what to fix" reads as a few labelled clusters,
 	// not one wall — warnings float to the top of each cluster
 	const FCAT_ORDER = ['Network', 'CPU', 'Memory', 'Data & seed', 'Islands & delivery', 'Overview'];
@@ -138,19 +235,21 @@
 	const hasAlloc = allocByName.size > 0;
 	const hasCounts = a.components.some((c) => c.calls != null) || a.functions.some((f) => f.calls != null);
 
+	// PER CALL: the time adds up every render, the call count is ONE render's (the coverage render),
+	// so one call is the time per render over the calls in a render
 	const withExtras = <T extends { name: string; total_ms: number; calls?: number }>(f: T) => {
 		const count = f.calls ?? 0;
-		return { ...f, per: f.total_ms / (count > 0 ? count : 1), count, alloc: allocByName.get(f.name) ?? null };
+		return { ...f, per: f.total_ms / renders / (count > 0 ? count : 1), count, alloc: allocByName.get(f.name) ?? null };
 	};
 	const compRows = a.components.map(withExtras);
-	const fnRows = a.functions.slice(0, 80).map(withExtras);
 	const compMaxTotal = Math.max(...a.components.map((c) => c.total_ms), 1);
 
 	const stats: { value: string; label: string }[] = [
 		{ value: fmt_ms(meta.duration_ms) + ' ms', label: 'window' },
 		{ value: busy_pct.toFixed(0) + '%', label: 'CPU busy' },
 		{ value: net.length ? fmt_ms(net_total) + ' ms' : '0', label: `network (${net.length} calls)` },
-		{ value: fmt_ms(extras.gc_attr ? extras.gc_attr.summary.total_ms : a.gc_ms) + ' ms', label: 'garbage collection' },
+		// per render, the unit of the render time and the lines (the window holds every run)
+		{ value: fmt_ms((extras.gc_attr ? extras.gc_attr.summary.total_ms : a.gc_ms) / renders) + ' ms', label: renders > 1 ? 'garbage collection per render' : 'garbage collection' },
 		{ value: String(meta.requests.length), label: 'requests in window' }
 	];
 	if (extras.gc) stats.push({ value: fmt_ms(extras.gc.max_ms) + ' ms', label: `GC pause max (${extras.gc.count})` });
@@ -213,6 +312,35 @@
 	const deopt_rows = a.deopts ?? [];
 	const sync_rows = sync_io(a);
 	const memo_rows = memo_candidates(a, gc_attr?.makers ?? []);
+	// THE FUNCTIONS TABLE: the 80 with the most self time, plus every function another part of the
+	// report links to (`#fn=<key>`). A slow pattern's line, a path's middle frame or a leak's maker
+	// often has little self time; without its row the link opened nothing (43 of 67 on a heavy page).
+	const fn_key = (f: { key?: string; name: string; url?: string }) => f.key ?? f.name + ' ' + f.url;
+	const linked = new Set<string>();
+	for (const f of findings) if (f.anchor?.startsWith('fn:')) linked.add(f.anchor.slice(3));
+	for (const l of extras.ledger ?? []) if (l.fn) linked.add(l.fn);
+	for (const p of extras.patterns ?? [])
+		for (const s of p.sites) {
+			if (s.fn) linked.add(s.fn);
+			for (const v of s.via ?? []) if (v.fn) linked.add(v.fn);
+		}
+	const walk_path = (n: import('../analyze.js').PathNode) => {
+		if (n.key && n.category !== 'component') linked.add(n.key);
+		for (const c of n.children) walk_path(c);
+	};
+	for (const g of a.paths ?? []) walk_path(g.tree);
+	for (const s of sync_rows) linked.add(s.key);
+	for (const m of memo_rows) linked.add(m.key);
+	for (const d of deopt_rows) linked.add(d.key);
+	const fnRows = [
+		...a.functions.slice(0, 80),
+		...a.functions.slice(80).filter((f) => linked.has(fn_key(f)))
+	].map(withExtras);
+	// the rows a `#fn=` link can reach: a key outside them gets no link (a library frame with no
+	// time of its own sits on a path but has no row)
+	const fn_keys = fnRows.map(fn_key);
+	const fn_known = new Set(fn_keys);
+	const anchor_ok = (anchor: string) => !anchor.startsWith('fn:') || fn_known.has(anchor.slice(3));
 	const promises = extras.promises ?? null;
 	const promises_per_render = promises ? Math.round(promises.count / Math.max(meta.runs?.length ?? 1, 1)) : 0;
 	const retained = extras.retained ?? null;
@@ -248,21 +376,26 @@
 		>
 	</h1>
 	<div class="actions">
-		{#if ogpB64}<ExportButton id={meta.id} {ogpB64} />{/if}
-		{#if ogpB64}<ShareLink id={meta.id} {base} />{/if}
+		{#if meta.trigger === 'page' && meta.page}
+			<!-- fix the code, then this: the same page profiled again, opened as a comparison with this report -->
+			<a
+				class="btn primary"
+				href="{base}/run?p={encodeURIComponent(meta.page)}&runs={meta.runs?.length || 3}&against={meta.id}"
+				title="Profile {meta.page} again and compare it with this report: which patterns and lines your change fixed">Profile again &amp; compare</a
+			>
+		{/if}
+		<!-- the buttons read the page's .ogp bytes from the one element below when clicked
+		     (report-request.ts page_ogp), never as a prop each: five copies were 1.2 MB -->
+		{#if ogpB64 || kept}<ExportButton id={meta.id} {base} />{/if}
+		{#if ogpB64 || kept}<ShareLink id={meta.id} {base} />{/if}
 		<KeepLocal {base} id={meta.id} />
-		<a
-			class="btn"
-			href="{base}/report/{meta.id}.html"
-			download="ogygia-profile-{meta.id}.html"
-			title="One HTML file with everything inlined — opens from disk, islands live. Built app only."
-			>Download<span class="sub">.html</span></a
-		>
+		<DownloadHtml {base} id={meta.id} />
 		<a class="btn" href="{base}/view">Import<span class="sub">.ogp</span></a>
 	</div>
+	{#if ogpB64}{@html `<script type="application/octet-stream" id="${OGP_ELEMENT_ID}">${ogpB64}</script>`}{/if}
 	<p class="hint">
 		<a href={base}>← dashboard</a> ·
-		<a href="{base}/report/{meta.id}.json" download="ogygia-profile-{meta.id}.json">JSON</a> (agents) ·
+		<DownloadHtml {base} id={meta.id} as="json" link /> (agents) ·
 		<a href="{base}/report/{meta.id}/raw" download="ogygia-profile-{meta.id}.cpuprofile">.cpuprofile</a>
 		(DevTools / speedscope) · Export is an
 		encrypted <code>.ogp</code> — re-open it with Import (needs this profiler's key)
@@ -277,6 +410,70 @@
 	<!-- ═══════════════ 1 · WHAT TO FIX ═══════════════ -->
 	<div class="part"><span class="part-n">1</span><span class="part-t">What to fix</span></div>
 
+	{#if since}
+		<!-- SINCE THE LAST PROFILE of this page: did the change pay, and which rows moved -->
+		<section class="since">
+			{#if since.score && since.score.a !== since.score.b}
+				{@const ds = since.score.b - since.score.a}
+				<p data-since-score>
+					<b class={ds < 0 ? 'warn' : 'good'}>Score {since.score.a} → {since.score.b}</b> ({since.score.a_grade} → {since.score.b_grade}){#if since.score.moved.length}: {since.score.moved.map((m) => `${m.label} ${m.a} → ${m.b}`).join(', ')}{/if}.
+				</p>
+			{/if}
+			{#if since.browser}
+				<!-- the browser's findings, each report read with its own visit -->
+				<p data-since-browser>
+					<b>In the browser</b>{#if since.browser.fixed.length}: <span class="good">fixed {since.browser.fixed.join(' · ')}</span>{/if}{#if since.browser.added.length}{since.browser.fixed.length ? ';' : ':'} <span class="warn">new {since.browser.added.join(' · ')}</span>{/if}.
+				</p>
+			{/if}
+			{#if since.assets}
+				{@const d = since.assets}
+				{@const line = (c: { name: string; contains?: string[] }) => `${c.name}${c.contains ? ` (${c.contains.join(', ')})` : ''}`}
+				<!-- the files behind a JS move: known by what they hold (hashed names change every build) -->
+				<p data-since-assets>
+					<b class={d.js.b > d.js.a ? 'warn' : 'good'}>JS at start {fmt_bytes(d.js.a)} → {fmt_bytes(d.js.b)}</b>{d.lazy_js.a !== d.lazy_js.b ? ` (loads later ${fmt_bytes(d.lazy_js.a)} → ${fmt_bytes(d.lazy_js.b)})` : ''}{#if d.added.length}; new: {d.added.map((c) => `${line(c)} ${fmt_bytes(c.b)}${c.lazy ? ' later' : ''}`).join('; ')}{/if}{#if d.grew.length}; grew: {d.grew.map((c) => `${line(c)} ${fmt_bytes(c.a)} → ${fmt_bytes(c.b)}`).join('; ')}{/if}{#if d.shrank.length}; shrank: {d.shrank.map((c) => `${line(c)} ${fmt_bytes(c.a)} → ${fmt_bytes(c.b)}`).join('; ')}{/if}{#if d.removed.length}; gone: {d.removed.map((c) => `${line(c)} ${fmt_bytes(c.a)}`).join('; ')}{/if}{#if d.to_start.length}; now at start (it loaded later before — an island's wake changed?): {d.to_start.map((c) => `${line(c)} ${fmt_bytes(c.b)}`).join('; ')}{/if}{#if d.to_later.length}; now loads later: {d.to_later.map((c) => `${line(c)} ${fmt_bytes(c.b)}`).join('; ')}{/if}.
+				</p>
+			{/if}
+			{#if since.order}
+				<p><b>Run order changes this comparison:</b> both ran on one server after a render that kept {since.order.kept_mb} MB alive each time, so the later one ran on a fuller heap. Restart between profiles to compare.</p>
+			{:else if since.same}
+				<p><b>No real change since your last profile</b>{#if since.a_ms !== undefined && since.b_ms !== undefined}&nbsp;({fmt_ms(since.a_ms)} → {fmt_ms(since.b_ms)} ms, within the runs' own spread){/if}.</p>
+			{:else if since.a_ms !== undefined && since.b_ms !== undefined}
+				{@const d = since.b_ms - since.a_ms}
+				<p>
+					<b class={d > 0 ? 'warn' : 'good'}>{d > 0 ? '+' : '−'}{fmt_ms(Math.abs(d))} ms</b> since your last profile ({fmt_ms(since.a_ms)} → {fmt_ms(since.b_ms)} ms){#if since.moved.length}, mostly:{:else}.{/if}
+				</p>
+			{/if}
+			{#if !since.order && !since.same && since.moved.length}
+				<ul>
+					{#each since.moved as r, i (r.path.join('\0') + i)}
+						<li>
+							<span class="status {r.status}">{r.status}</span>
+							{r.path[r.path.length - 1]}{#if r.at && r.kind !== 'line'} <code>{r.at}</code>{/if}
+							<b class={r.d_ms > 0 ? 'warn' : 'good'}>{r.d_ms > 0 ? '+' : '−'}{fmt_ms(Math.abs(r.d_ms))} ms</b>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+			{#if since.fix_check && !since.same && !since.order}<p class="hint">The fixed patterns promised ~{fmt_ms(since.fix_check.predicted_ms)} ms; the render moved {fmt_ms(since.fix_check.measured_ms)} ms.</p>{/if}
+			<a class="btn" href="{base}/compare/{since.prev}/{meta.id}">Compare in full</a>
+		</section>
+	{/if}
+
+	{#if start_here.length}
+		<!-- START HERE: the three biggest fixes, each with the line to open and what it is worth -->
+		<ol class="start">
+			{#each start_here as s (s.i)}
+				<li>
+					<a href={s.href}><b>{s.label}</b></a>
+					{#if s.where}<code>{s.where}</code>{/if}
+					<span class="worth">{s.worth}</span>
+					{#if s.after !== undefined}<span class="then" title="one render once this and every step above it are done">→ ~{fmt_ms(s.after)} ms</span>{/if}
+					{#if s.also?.length}<span class="hint">also covers {s.also.join('; ')}</span>{/if}
+				</li>
+			{/each}
+		</ol>
+	{/if}
+
 	{#if warn_count}<p class="findings-lead"><b>{warn_count}</b> thing{warn_count === 1 ? '' : 's'} worth fixing, grouped by area. The rest are context.</p>{/if}
 	<div class="fgrid">
 		{#each finding_groups as g (g.label)}
@@ -286,13 +483,66 @@
 					<div class="finding" class:warn={f.severity === 'warn'}>
 						<p class="fmsg">{f.message}</p>
 						{#if f.fix}<p class="ffix">{f.fix}</p>{/if}
-						{#if f.anchor}<a class="fshow" href={row_href(f.anchor)}>show the row ↓</a>{/if}
+						{#if f.pattern !== undefined && extras.patterns?.[f.pattern]}
+							<a class="fshow fpat" href="#pattern-{f.pattern}">same problem as “{PATTERN_LABEL[extras.patterns[f.pattern].kind]}” ↓</a>
+						{/if}
+						{#if f.anchor && anchor_ok(f.anchor)}<a class="fshow" href={row_href(f.anchor)}>show the row ↓</a>{/if}
 						{#if f.file && !f.anchor}<span class="ffile">{f.file}{#if f.line}:{f.line}{/if}</span>{/if}
 					</div>
 				{/each}
 			</section>
 		{/each}
 	</div>
+
+	{#if extras.drill}
+		<section class="panel" id="drill">
+			<h2>Where one render went <span class="hint" style="font-weight:400">(down to the line)</span></h2>
+			<Drill root={extras.drill} />
+		</section>
+	{/if}
+
+	{#if extras.patterns?.length}
+		<section class="panel">
+			<h2>Slow patterns</h2>
+			{#if impact && impact.render_ms > impact.after_ms}
+				<p class="impact">
+					Fixing all of these takes about <b>{fmt_ms(impact.render_ms - impact.after_ms)} ms</b> off the {fmt_ms(impact.render_ms)} ms
+					render (<b>{impact.pct}%</b>): about {fmt_ms(impact.after_ms)} ms after.
+					<span class="hint">
+						{[impact.cpu_ms ? `${fmt_ms(impact.cpu_ms)} ms of CPU` : '', impact.wait_ms ? `${fmt_ms(impact.wait_ms)} ms of waiting` : '', impact.delete_ms ? `${fmt_ms(impact.delete_ms)} ms of work for data nothing reads` : ''].filter(Boolean).join(', ')} per render.
+						{#if covered.length}
+							Fixes on the same lines count once: {covered.map((p) => `“${p.title}” covers ${p.with!.map((w) => `“${w}”`).join(', ')}`).join('; ')}.
+						{/if}
+						{#if fc?.answers}Keeping the services’ answers between renders too (if they may be a little stale): about <b>{fmt_ms(fc.answers.after_ms)} ms</b>{#if fc.answers.measured}, measured: the page rendered in {fmt_ms(fc.answers.measured.ms)} ms with those answers served from memory{/if}.{/if}
+						{#if fc?.cpu_now_ms && fc.cpu_after_ms && fc.cpu_after_ms < fc.cpu_now_ms * 0.9}
+							{@const lambda_gbs = (ms: number) => ((ms / 1000) * (meta.lambda_mb ?? 0)) / 1024 * 1e6}
+							Capacity: the main thread spends {fmt_ms(fc.cpu_now_ms)} ms of CPU a render, about {fmt_ms(fc.cpu_after_ms)} ms after the CPU fixes, so one core serves about <b>{Math.round(1000 / fc.cpu_now_ms)} → {Math.round(1000 / fc.cpu_after_ms)}</b> renders a second (the waiting fixes cut how long a visitor waits, not this).
+							{#if meta.lambda_mb}On Lambda at {meta.lambda_mb} MB, billed for the whole render, waits included: about {Math.round(lambda_gbs(impact.render_ms)).toLocaleString('en')} → {Math.round(lambda_gbs(impact.after_ms)).toLocaleString('en')} GB-seconds per million renders.{/if}
+						{/if}
+						{#if fc?.cache}A cached copy of the whole document is a separate lever, not in this number.{/if}
+						{#if fc?.clamped}The savings claimed more waiting or CPU than the render had (they overlap more than the lines show): each is held at what the render used.{/if}
+						{#if fc?.partial}Built without sourcemaps: the profiler saw fewer lines, so fewer fixes; the real time after them is likely lower.{/if}
+					</span>
+				</p>
+			{/if}
+			{#if fc?.parts.length}
+				<details class="whatif-box">
+					<summary>Pick the fixes you will make</summary>
+					<WhatIf parts={fc.parts} now_ms={fc.now_ms} caps={fc.caps} />
+				</details>
+			{/if}
+			<p class="hint">Known slow habits spotted on your costliest lines, and the numbers that back each one. Biggest win first.</p>
+			<Patterns patterns={extras.patterns} busy_ms={a.busy_ms} {renders} fns={fn_keys} />
+		</section>
+	{/if}
+
+	{#if extras.ledger?.length}
+		<section class="panel">
+			<h2>The exact lines</h2>
+			<p class="hint">Your own lines that cost the most, with every cost on the line{renders > 1 ? `, per render (the average of ${renders})` : ''}. Click a place to open its function.</p>
+			<Ledger lines={extras.ledger} patterns={extras.patterns ?? []} {renders} fns={fn_keys} />
+		</section>
+	{/if}
 
 	<div class="grid">
 		<section class="panel">
@@ -305,8 +555,8 @@
 			<div class="budget">
 				{#each budget as s}
 					<div
-						style="width:{s.pct}%;background:{CATEGORY_COLOR[s.cat]}"
-						title="{s.label} — {fmt_ms(s.ms)} ms ({s.pct.toFixed(1)}%)"
+						style="width:{s.pct}%;background:{CATEGORY_COLOR[s.cat]};color:{ink_on(CATEGORY_COLOR[s.cat])}"
+						title="{s.label} — {fmt_ms(s.ms / renders)} ms{renders > 1 ? ' per render' : ''} ({s.pct.toFixed(1)}%)"
 					>
 						{s.pct > 8 ? `${s.label} ${s.pct.toFixed(0)}%` : ''}
 					</div>
@@ -353,7 +603,7 @@
 				they share and all of them go. Each graph reads left to right: the caller to fix, the chain of calls, the hot
 				functions (lit) at the end. Link width is the time that flowed through; click a node for its row.
 			</p>
-			<Paths paths={a.paths} busy={a.busy_ms} />
+			<Paths paths={a.paths} busy={a.busy_ms} fns={fn_keys} />
 		</section>
 	{/if}
 
@@ -428,16 +678,16 @@
 			<section class="panel">
 			<h2>Who caused the GC <span class="hint" style="font-weight:400">(each pause joined to what filled the heap before it)</span></h2>
 			<div class="summary">
-				<div class="stat"><b>{gc_attr.summary.count}</b><span>pauses · {gc_attr.summary.minor} minor · {gc_attr.summary.major} major{gc_attr.summary.incremental ? ` · ${gc_attr.summary.incremental} incremental` : ''}</span></div>
-				<div class="stat"><b>{fmt_ms(gc_attr.summary.total_ms)} ms</b><span>in GC · longest {fmt_ms(gc_attr.summary.max_ms)} ms</span></div>
-				<div class="stat"><b>{gc_attr.summary.allocated_mb} MB</b><span>allocated in the window · {gc_attr.summary.alloc_rate_mb_s} MB/s</span></div>
+				<div class="stat"><b>{gc_attr.summary.count}</b><span>pauses in the window · {gc_attr.summary.minor} minor · {gc_attr.summary.major} major{gc_attr.summary.incremental ? ` · ${gc_attr.summary.incremental} incremental` : ''}</span></div>
+				<div class="stat"><b>{fmt_ms(gc_attr.summary.total_ms / renders)} ms</b><span>in GC{renders > 1 ? ' per render' : ''} · longest pause {fmt_ms(gc_attr.summary.max_ms)} ms</span></div>
+				<div class="stat"><b>{Math.round((gc_attr.summary.allocated_mb / renders) * 10) / 10} MB</b><span>allocated{renders > 1 ? ' per render' : ' in the window'} · {gc_attr.summary.alloc_rate_mb_s} MB/s</span></div>
 				{#if gc_attr.summary.retained_mb !== undefined}<div class="stat"><b>{gc_attr.summary.retained_mb > 0 ? '+' : ''}{gc_attr.summary.retained_mb} MB</b><span>heap held at the end vs the start{gc_attr.summary.retained_mb <= 5 ? ' — the rest was churn' : ' — something keeps what it allocates'}</span></div>{/if}
 				{#if gc_attr.summary.overhead_ms >= 0.5}<div class="stat"><b>−{fmt_ms(gc_attr.summary.overhead_ms)} ms</b><span>the profiler's own garbage, taken out ({fmt_ms(gc_attr.summary.measured_ms)} ms measured)</span></div>{/if}
 			</div>
 			{#if gc_attr.makers.length}
 				{@const with_pauses = gc_attr.makers.some((m) => m.pauses > 0)}
 			{@const with_comp = gc_attr.makers.some((m) => m.component)}
-				<h3 class="sub-h">Garbage makers <span class="hint">allocators by the pause time their allocations caused</span></h3>
+				<h3 class="sub-h">Garbage makers <span class="hint">allocators by the pause time their allocations caused{renders > 1 ? ', per render' : ''}</span></h3>
 				<table>
 					<thead><tr><th>function</th>{#if with_comp}<th>in</th>{/if}<th>where</th><th class="num">allocated</th><th class="num">share</th><th class="num">GC ms caused</th>{#if with_pauses}<th class="num">pauses</th>{/if}</tr></thead>
 					<tbody>
@@ -446,9 +696,9 @@
 								<td class="fn"><b>{m.name}</b>{#if m.caller && m.caller !== m.name}<span class="hint"> ← {m.caller}</span>{/if}</td>
 								{#if with_comp}<td class="fn">{m.component ?? '—'}</td>{/if}
 								<td class="file">{m.url ? `${m.url.split('/').slice(-3).join('/')}:${m.line}` : ''} <span class="hint">{m.category}</span></td>
-								<td class="num">{fmt_mb(m.allocated)}</td>
+								<td class="num">{fmt_mb(m.allocated / renders)}</td>
 								<td class="num">{Math.round(m.share * 100)}%</td>
-								<td class="num"><b>{fmt_ms(m.gc_ms)}</b></td>
+								<td class="num"><b>{fmt_ms(m.gc_ms / renders)}</b></td>
 								{#if with_pauses}<td class="num">{m.pauses}</td>{/if}
 							</tr>
 						{/each}
@@ -456,7 +706,7 @@
 				</table>
 			{/if}
 			{#if gc_attr.components.length}
-				<p class="hint">By component: {#each gc_attr.components.slice(0, 6) as c, i (c.name)}{#if i > 0}, {/if}<b>{c.name}</b> {fmt_ms(c.gc_ms)} ms of GC for {fmt_mb(c.allocated)}{/each}.</p>
+				<p class="hint">By component: {#each gc_attr.components.slice(0, 6) as c, i (c.name)}{#if i > 0}, {/if}<b>{c.name}</b> {fmt_ms(c.gc_ms / renders)} ms of GC for {fmt_mb(c.allocated / renders)}{/each}{renders > 1 ? ', per render' : ''}.</p>
 			{/if}
 			{#if gc_attr.pauses.length}
 				<h3 class="sub-h">The pauses <span class="hint">when, what kind, and what was allocated since the previous one</span></h3>
@@ -529,7 +779,7 @@
 						<thead><tr><th>call</th><th>module</th><th class="num">calls</th><th class="num">ms</th><th>from</th></tr></thead>
 						<tbody>
 							{#each sync_rows as s (s.key)}
-								<tr><td class="fn"><a href={row_href(`fn:${s.key}`)}><b>{s.name}</b></a></td><td class="file">{s.module}</td><td class="num">{s.calls ?? '—'}</td><td class="num">{fmt_ms(s.total_ms)}</td><td class="file">{s.callers.join(' ← ') || '—'}</td></tr>
+								<tr><td class="fn"><a href={fn_known.has(s.key) ? row_href(`fn:${s.key}`) : undefined}><b>{s.name}</b></a></td><td class="file">{s.module}</td><td class="num">{s.calls ?? '—'}</td><td class="num">{fmt_ms(s.total_ms)}</td><td class="file">{s.callers.join(' ← ') || '—'}</td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -542,7 +792,7 @@
 						<thead><tr><th>function</th><th>where</th><th class="num">/ render</th><th class="num">per call</th><th class="num">total ms</th><th class="num">alloc / call</th><th>under</th></tr></thead>
 						<tbody>
 							{#each memo_rows as m (m.key)}
-								<tr><td class="fn"><a href={row_href(`fn:${m.key}`)}><b>{m.name}</b></a></td><td class="file">{m.url}:{m.line}</td><td class="num">{m.calls}</td><td class="num">{m.per_call_ms} ms</td><td class="num">{fmt_ms(m.total_ms)}</td><td class="num">{m.alloc_per_call ? fmt_bytes(m.alloc_per_call) : '—'}</td><td class="fn">{m.parent ?? '—'}</td></tr>
+								<tr><td class="fn"><a href={fn_known.has(m.key) ? row_href(`fn:${m.key}`) : undefined}><b>{m.name}</b></a></td><td class="file">{m.url}:{m.line}</td><td class="num">{m.calls}</td><td class="num">{m.per_call_ms} ms</td><td class="num">{fmt_ms(m.total_ms)}</td><td class="num">{m.alloc_per_call ? fmt_bytes(m.alloc_per_call) : '—'}</td><td class="fn">{m.parent ?? '—'}</td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -556,7 +806,7 @@
 						<tbody>
 							{#each deopt_rows.slice(0, 20) as d (d.key)}
 								<tr>
-									<td class="fn"><a href={row_href(`fn:${d.key}`)}><b>{d.name}</b></a></td>
+									<td class="fn"><a href={fn_known.has(d.key) ? row_href(`fn:${d.key}`) : undefined}><b>{d.name}</b></a></td>
 									<td class="file">{d.url}{#if d.line > 0}:{d.line}{/if} <span class="hint">{CATEGORY_LABEL[d.category]}</span></td>
 									<td class="num">{d.count}</td>
 									<td class="fn">{Object.entries(d.reasons).sort((x, y) => y[1] - x[1]).map(([r, n]) => `${r} ×${n}`).join(', ')}</td>
@@ -623,8 +873,9 @@
 		<section class="panel">
 		<h2>The seed, explained <span class="hint" style="font-weight:400">({fmt_kb(og.seed_bytes)}{#if og.seed_culprit} · devalue because of <code>{og.seed_culprit}</code>{:else if og.seed_json} · json{/if})</span></h2>
 		<p class="hint">
-			Every top-level <code>page.data</code> key, sized, and why it ships: <span style="color:#e8734a">read</span> by an island's
-			client code, <span style="color:#5b8fd6">referenced</span> by an island's props, or <span style="color:#d9a03d">whole</span>
+			<!-- (a colour swatch beside plain text: the words themselves must stay 4.5:1 in both themes) -->
+			Every top-level <code>page.data</code> key, sized, and why it ships: <i class="sw" style="background:#e8734a"></i>read by an island's
+			client code, <i class="sw" style="background:#5b8fd6"></i>referenced by an island's props, or <i class="sw" style="background:#d9a03d"></i>whole
 			because an island reads page.data without naming keys. Greyed keys were left out by seed shaping.
 		</p>
 		<SeedExplainer rows={seed.rows} whole_by={seed.whole_by} total={seed.total} seed_bytes={og.seed_bytes} />
@@ -634,6 +885,40 @@
 		<section class="panel">
 		<h2>The document, byte by byte <span class="hint" style="font-weight:400">({fmt_bytes(extras.strip.total)} — what each byte the server wrote is, in the order it left)</span></h2>
 		<ByteStrip strip={extras.strip} names={fp_names} nav={visit ? { res_start: visit.nav.res_start, res_end: visit.nav.res_end } : null} />
+		</section>
+	{/if}
+	{#if extras.assets}
+		{@const pa = extras.assets}
+		<section class="panel" id="page-weight">
+		<h2>What the page loads <span class="hint" style="font-weight:400">({fmt_bytes(pa.totals.wire)} on the wire at start · {fmt_bytes(pa.totals.js)} of JS in {pa.totals.js_files} files{#if pa.totals.lazy_js} · {fmt_bytes(pa.totals.lazy_js)} more on demand{/if})</span></h2>
+		<p class="hint">
+			Every file the document makes the browser fetch at start, weighed through the app: its scripts, each
+			<code>modulepreload</code> and what it imports, a Kit-hydrated page's route code, the islands that wake at load,
+			stylesheets, fonts and images. Code that loads only when an island wakes later is marked <b>on demand</b>.
+			<b>Blocks</b> = must arrive before the first paint.
+		</p>
+		<table class="weight">
+			<thead><tr><th>file</th><th>kind</th><th>how</th><th class="num">size</th><th class="num">wire</th><th>holds</th></tr></thead>
+			<tbody>
+				{#each pa.assets.slice(0, 25) as x (x.url)}
+					<tr class:lazy={x.lazy}>
+						<td class="file" title={x.url}>{x.url.split('?')[0].split('/').pop()}</td>
+						<td>{x.kind}{#if x.blocking} <b class="warn">blocks</b>{/if}{#if x.lazy} <span class="hint">on demand</span>{/if}</td>
+						<td class="hint">{x.via}</td>
+						<td class="num">{fmt_bytes(x.bytes)}</td>
+						<td class="num">{fmt_bytes(x.wire)}</td>
+						<td class="hint">{x.contains ? x.contains.join(', ') : ''}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+		{#if pa.assets.length > 25}<p class="hint">…and {pa.assets.length - 25} smaller files.</p>{/if}
+		{#if pa.missed.length}<p class="hint">Not weighed: {pa.missed.slice(0, 5).map((u) => u.split('/').pop()).join(', ')}{pa.missed.length > 5 ? ` and ${pa.missed.length - 5} more` : ''}.</p>{/if}
+		</section>
+	{:else if extras.assets_missing}
+		<section class="panel" id="page-weight">
+		<h2>What the page loads</h2>
+		<p class="hint">Not weighed: {extras.assets_missing}.</p>
 		</section>
 	{/if}
 
@@ -667,7 +952,7 @@
 				One row per island — its copies merge, however many props sidecars they ship (<b>×N</b>). <b>SSR ms</b> is the component's server render per
 				page render; <b>props</b> is what the sidecar ships; <b>seed refs</b> are props that point into page.data instead
 				of shipping twice{#if hasJs}; <b>JS</b> is the unique weight of the island's module and its preloads{/if};
-				<b>interactivity</b> is what the build found in its components — an <span style="color:#d9a03d">inert</span> island
+				<b>interactivity</b> is what the build found in its components — an <span style="color:var(--warn)">inert</span> island
 				loads JS for markup that never changes{#if hasClient}; <b>hydrate ms</b> is what your own browser reported (wake to
 				hydrated, p50){:else}. Open the page in this browser while logged in and the runtime reports each island's hydration
 				time back here{/if}. A <span class="dotflag-inline">!</span> marks a row with advice — open it.
@@ -850,8 +1135,10 @@
 			divided by the {span_runs} render{span_runs === 1 ? '' : 's'} in this recording. A span appears on the
 			timeline as "in &lt;name&gt;" wherever a call or a gap sits inside it. <b>total</b> is the spans' summed
 			duration, <b>self</b> is that minus the child spans inside them, <b>wall</b> counts overlaps once (∥ marks spans
-			that ran together): wall is what the render paid. A span that carries an attribute with a few distinct
-			values (a tag, a table, a key) gets a <b>by</b> table under it: what each value cost.
+			that ran together, ×N the most at once): wall is what the render paid. When spans overlap, one span's
+			start to end is mostly waiting behind the others, so <b>share</b> under p50 is its fair part of the wall.
+			A span that carries an attribute with a few distinct values (a tag, a table, a key) gets a <b>by</b> table
+			under it: each value's share, and the shares add up to the span's wall.
 		</p>
 		<table>
 			<thead>
@@ -869,8 +1156,10 @@
 						<td class="num">{(s.count / span_runs) % 1 === 0 ? s.count / span_runs : (s.count / span_runs).toFixed(1)}</td>
 						<td class="num">{fmt_ms(s.total_ms / span_runs)}</td>
 						<td class="num" class:dimcell={s.self_ms < s.total_ms * 0.2}>{fmt_ms(s.self_ms / span_runs)}</td>
-						<td class="num"><b>{fmt_ms(s.wall_ms / span_runs)}</b>{#if s.count > 1 && s.wall_ms < s.total_ms * 0.6}<span class="hint" title="the spans overlap: they ran together"> ∥</span>{/if}</td>
-						<td class="num">{fmt_ms(s.p50_ms)}</td>
+						<td class="num"><b>{fmt_ms(s.wall_ms / span_runs)}</b>{#if s.count > 1 && s.wall_ms < s.total_ms * 0.6}<span class="hint" title="the spans overlap: they ran together{s.peak ? `, up to ${s.peak} at once` : ''}"> ∥{s.peak ? ` ×${s.peak}` : ''}</span>{/if}</td>
+						<td class="num"
+							>{fmt_ms(s.p50_ms)}{#if s.share_p50_ms !== undefined && s.count > 1 && s.wall_ms < s.total_ms * 0.6}<div class="hint" title="one span's fair part of the wall: its start to end is mostly waiting behind the others">share {fmt_ms(s.share_p50_ms)}</div>{/if}</td
+						>
 						<td class="num">{fmt_ms(s.max_ms)}</td>
 						<td>{#if s.cache}{s.cache.hit} hit · <span class:warn={s.cache.miss > 0}>{s.cache.miss} miss</span>{:else}—{/if}</td>
 						<td class="num">{s.errors || (s.open ? `${s.open} open` : '—')}</td>
@@ -881,15 +1170,16 @@
 								<div class="bygrid">
 									<div class="byh">by {k}</div>
 									<div class="byh"></div>
-									<div class="byh num" title="overlaps counted once">wall ms</div>
+									<div class="byh num" title="its fair part of the span's wall: at each instant the wall is split among the spans open then, so the rows add up to the span's wall">share ms</div>
 									<div class="byh num" title="summed durations">total ms</div>
 									<div class="byh num">per render</div>
 									<div class="byh num">p50</div>
 									<div class="byh num">max</div>
 									{#each rows as r (r.value)}
+										{@const share = r.share_ms ?? r.wall_ms}
 										<div class="byv"><code>{r.value}</code></div>
-										<div class="bybar"><i style="width:{Math.max(1, (r.wall_ms / Math.max(rows[0].wall_ms, 0.01)) * 100)}%"></i></div>
-										<div class="num"><b>{fmt_ms(r.wall_ms / span_runs)}</b></div>
+										<div class="bybar"><i style="width:{Math.max(1, (share / Math.max(...rows.map((x) => x.share_ms ?? x.wall_ms), 0.01)) * 100)}%"></i></div>
+										<div class="num"><b>{fmt_ms(share / span_runs)}</b></div>
 										<div class="num">{fmt_ms(r.total_ms / span_runs)}</div>
 										<div class="num">{(r.count / span_runs) % 1 === 0 ? r.count / span_runs : (r.count / span_runs).toFixed(1)}×</div>
 										<div class="num">{r.p50_ms ? fmt_ms(r.p50_ms) : '—'}</div>
@@ -966,8 +1256,9 @@
 	</h2>
 	<p class="hint">
 		<b>self</b> = the component's own code, excluding nested components. <b>total</b> = self plus
-		everything it calls. Sort by self to find who burns CPU, by total for the most expensive subtree.{#if hasCounts}
-			<b>×N</b> is how many times it rendered.{/if}{#if hasAlloc} <b>alloc</b> is the memory allocated under it (sampled), nested components excluded — sort by it to find who makes the garbage.{/if}
+		everything it calls. Sort by self to find who burns CPU, by total for the most expensive subtree.{#if renders > 1}
+			Self and total add up all {renders} renders (divide by {renders} for one); <b>per call</b> is one render of the component.{/if}{#if hasCounts}
+			<b>×N</b> is how many times it rendered in one page render.{/if}{#if hasAlloc} <b>alloc</b> is the memory allocated under it (sampled), nested components excluded — sort by it to find who makes the garbage.{/if}
 	</p>
 	{#if compRows.length}
 		<ComponentsTable rows={compRows} busy={a.busy_ms} {hasAlloc} maxTotal={compMaxTotal} {base} {dev} />
@@ -979,8 +1270,9 @@
 	<section class="panel">
 	<h2>Hot functions <span class="hint" style="font-weight:400">(click a column to sort)</span></h2>
 	<p class="hint">
-		Every function on the server, by time spent inside it.{#if hasCounts}
-			<b>×N</b> is the exact call count (from V8 coverage).{/if}
+		Every function on the server, by time spent inside it.{#if renders > 1}
+			Self and total add up all {renders} renders (divide by {renders} for one); <b>per call</b> is one call.{/if}{#if hasCounts}
+			<b>×N</b> is the exact call count in one render (from V8 coverage).{/if}
 	</p>
 	{#if !a.sourcemapped}
 		<p class="hint warn">
@@ -988,6 +1280,7 @@
 			server chunks (build with server sourcemaps) and "where" maps back to your source files.
 		</p>
 	{/if}
+	{#if fnRows.length > 80}<p class="hint">The 80 with the most self time, and {fnRows.length - 80} more that other parts of this report link to.</p>{/if}
 	<FunctionsTable rows={fnRows} {hasAlloc} {base} {dev} />
 	</section>
 
@@ -997,7 +1290,7 @@
 		<p class="hint">Sampled heap allocations during the window — who creates the objects (and the GC pressure).</p>
 		<table>
 			<thead>
-				<tr><th>function</th><th>where</th><th></th><th class="num">self</th><th class="num">total</th></tr>
+				<tr><th>function</th><th>where</th><th><span class="sr-only">kind of code</span></th><th class="num">self</th><th class="num">total</th></tr>
 			</thead>
 			<tbody>
 				{#each heap as h}
@@ -1005,7 +1298,7 @@
 						<td class="fn"><b>{h.name}</b></td>
 						<td class="file">{h.url}{#if h.line > 0}:{h.line}{/if}</td>
 						<td
-							><span class="chip" style="background:{CATEGORY_COLOR[h.category]}"
+							><span class="chip" style="background:{CATEGORY_COLOR[h.category]};color:{ink_on(CATEGORY_COLOR[h.category])}"
 								>{CATEGORY_LABEL[h.category]}</span
 							></td
 						>
@@ -1063,13 +1356,13 @@
 	<h2>Time by file</h2>
 	{#if files.length}
 		<table>
-			<thead><tr><th>file</th><th></th><th class="num">self ms</th><th class="num">% of busy</th></tr></thead>
+			<thead><tr><th>file</th><th><span class="sr-only">kind of code</span></th><th class="num">self ms</th><th class="num">% of busy</th></tr></thead>
 			<tbody>
 				{#each files as f}
 					<tr>
 						<td class="file">{f.key}</td>
 						<td
-							><span class="chip" style="background:{CATEGORY_COLOR[f.category]}"
+							><span class="chip" style="background:{CATEGORY_COLOR[f.category]};color:{ink_on(CATEGORY_COLOR[f.category])}"
 								>{CATEGORY_LABEL[f.category]}</span
 							></td
 						>
@@ -1111,12 +1404,12 @@
 				host every cold instance pays this on its first request.
 			</p>
 			<table>
-				<thead><tr><th>file</th><th></th><th class="num">cold ms</th><th class="num">warm ms</th><th class="num">extra</th></tr></thead>
+				<thead><tr><th>file</th><th><span class="sr-only">kind of code</span></th><th class="num">cold ms</th><th class="num">warm ms</th><th class="num">extra</th></tr></thead>
 				<tbody>
 					{#each cold.slice(0, 20) as r (r.file)}
 						<tr>
 							<td class="file">{r.file}</td>
-							<td><span class="chip" style="background:{CATEGORY_COLOR[r.category]}">{CATEGORY_LABEL[r.category]}</span></td>
+							<td><span class="chip" style="background:{CATEGORY_COLOR[r.category]};color:{ink_on(CATEGORY_COLOR[r.category])}">{CATEGORY_LABEL[r.category]}</span></td>
 							<td class="num">{fmt_ms(r.cold_ms)}</td>
 							<td class="num">{fmt_ms(r.warm_ms)}</td>
 							<td class="num"><b>+{fmt_ms(r.extra_ms)}</b></td>
@@ -1261,7 +1554,7 @@
 	}
 	.fgrid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
 		gap: 14px;
 		align-items: start;
 		margin-bottom: 8px;
@@ -1325,11 +1618,81 @@
 	.fshow {
 		font-size: 12px;
 	}
+	.since {
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		padding: 10px 14px;
+		margin: 0 0 12px;
+		font-size: 13.5px;
+	}
+	.since p {
+		margin: 0 0 6px;
+	}
+	.since ul {
+		margin: 0 0 8px;
+		padding-left: 18px;
+	}
+	.since .status {
+		font-size: 11px;
+		text-transform: uppercase;
+		color: var(--text-dim);
+		margin-right: 6px;
+	}
+	.start {
+		margin: 0 0 16px;
+		padding: 12px 16px 12px 34px;
+		background: var(--bg-panel);
+		border: 1px solid var(--line);
+		border-radius: var(--r-lg);
+		display: grid;
+		gap: 6px;
+		font-size: 14px;
+	}
+	.start li {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2px 10px;
+		align-items: baseline;
+		min-width: 0;
+	}
+	.start li::marker {
+		color: var(--c-orange);
+		font-weight: 700;
+	}
+	.start code {
+		font-family: var(--font-mono);
+		font-size: 12.5px;
+		color: var(--text-dim);
+		overflow-wrap: anywhere;
+	}
+	.start .worth {
+		color: var(--c-orange);
+		font-size: 13px;
+	}
+	.start .then {
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 12px;
+		color: var(--c-green, currentColor);
+		margin-left: 6px;
+	}
+	.impact {
+		margin: 0 0 8px;
+		font-size: 14px;
+	}
+	.impact b {
+		color: var(--c-orange);
+	}
+	.fpat {
+		color: var(--c-orange);
+		margin-right: 10px;
+	}
 	.ffile {
 		font-family: var(--font-mono);
 		font-size: 11.5px;
 		color: var(--text-faint);
 		margin-left: 6px;
+		/* a full file:// path must wrap inside its card, never widen the page */
+		overflow-wrap: anywhere;
 	}
 	.scanned {
 		overflow-wrap: anywhere;
@@ -1417,5 +1780,20 @@
 		color: #06120c;
 		font-weight: 700;
 		font-size: 10px;
+	}
+	table.weight td.file {
+		font-family: var(--mono, ui-monospace, monospace);
+		max-width: 16rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	/* files that load later read quieter — in the faint ink, never by fading it below a readable 4.5:1 */
+	table.weight tr.lazy td {
+		color: var(--text-faint);
+	}
+	table.weight .num {
+		text-align: right;
+		white-space: nowrap;
 	}
 </style>

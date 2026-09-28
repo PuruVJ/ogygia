@@ -85,23 +85,27 @@ Then open the dashboard and **log in** with the secret. The profiler sets a sess
 
 ## Sharper names with source maps
 
-Production bundles rename and inline code. Thus some frames show as `(anonymous)`, or point at a chunk file. Build with server source maps, and the profiler maps each frame back to its source file and recovers the original names:
+Production bundles rename and inline code, so without source maps a frame points at a chunk file. With the profiler on, the **server** build writes hidden source maps by itself: `.map` files beside the server chunks, with no `//# sourceMappingURL` comment. Nothing to set up. The profiler reads them to map each frame back to its source file and line, with the original names, on whatever host runs the build.
 
-```ts
-// vite.config.ts
-export default defineConfig({
-  build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined,
-  // ...plugins
-});
-```
+- **They stay on the server.** A browser never loads a server chunk, and the client build gets no maps from this: Kit copies the server build's setting into the client build, and ogygia turns it back off there.
+- **The cost is disk space.** The playground's server output grows from about 6 MB to 12 MB.
+- **Your own choice wins.** Set `build.sourcemap` yourself (`false` to turn them off, `true` for maps everywhere) and ogygia leaves it alone.
+- **They survive any adapter.** An adapter copies what the server code imports, not files read by path: Vercel's leaves the `.map` files behind, and adapter-node re-bundles the chunks with maps of its own that point back at files it does not ship. So the build also writes the maps (and which source module sits at which chunk line) into one server module that only the profiler imports, the first time it reads a profile. It ships with every adapter, a request never loads it, and the profiler follows an adapter's own map through it back to your source. It also carries your source text, so the checks that read a load or a component line by line work on a host with no `src/` folder.
+- **That module stays small.** It keeps the source text of your own `src/` code only (not your packages' text, not imported `.json` data) and is gzipped: a 34 MB set of maps on a large app ships as 4 MB. Reading a profile unpacks it once, into about 11 MB of memory.
 
-Then build with the flag set:
+The report header shows **sourcemapped** when it operated.
 
-```bash
-PROFILER_SOURCEMAPS=1 vite build
-```
+## On the dev server
 
-The report header shows **sourcemapped** when it operated. Keep it off for normal builds. Set it on when you hunt a problem.
+`vite dev` works too, with the same findings. Vite runs each server module as transformed code built from a string, which hides where things came from in four ways, and the profiler handles each:
+- **Lines.** A profile's lines are the transformed code's. The maps back to your source live in Vite's module graph, not in `.map` files, and the ogygia plugin hands them to the profiler.
+- **Callers.** A stack frame of such code has no file name, only its `sourceURL`. The profiler reads that.
+- **Call counts.** Coverage names such a script `/app/x.ts`, while the CPU profile says `file:///app/x.ts`, so the counts are matched by script id.
+- **Memory.** The memory sampler leaves such a script unnamed. The profiler names it from the CPU profile.
+
+Vite's pre-bundled dependencies (`node_modules/.vite/`) are filed as the package they are. That includes Svelte's own runtime, even in a shared chunk named `dev-Cl0b.js`.
+
+Which `page.data` keys each island reads is a build's answer (the dev server's seed ships whole). On the dev server the plugin runs the build's same analysis when the profiler asks: the island's component, the app modules it imports, and a helper it hands the page to, one level deep. So "ships all page data" and "waits for a late island" work there too. The seed the dev server sends is unchanged. Timings on the dev server are the dev server's, so compare forecasts on a build.
 
 ## Cost and safety
 

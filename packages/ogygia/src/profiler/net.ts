@@ -9,6 +9,7 @@
  */
 
 import type { AsyncLocalStorage } from 'node:async_hooks';
+import { may_be_chunk, module_category, module_lookup } from './module-map.js';
 
 // ── regexes
 // (Kit's server runtime is bundled into the app's output chunks, outside node_modules — its
@@ -22,6 +23,17 @@ const is_internal_or_dep = (file: string): boolean =>
 	file.includes('/runtime/app/') ||
 	file.includes('\\runtime\\server\\') ||
 	file.includes('\\runtime\\app\\');
+/** a frame in a BUILT server chunk whose line the module map files under a package (Kit's runtime
+ *  bundled into `output/server/index.js`, a bundled library): not the app's caller, though its file
+ *  sits outside node_modules. Only chunk paths are looked up (the map is read once per folder) */
+const lookup = module_lookup();
+const in_bundled_package = (file: string, line: number): boolean => {
+	// (a relative script name too — `./chunks/x.js` on Lambda: the lookup resolves it)
+	if (!may_be_chunk(file)) return false;
+	const id = lookup(file, line);
+	return !!id && !!module_category(id);
+};
+
 /** the file's base name without its query (`/a/b/c.ts?x` → `c.ts`) */
 const base_name = (file: string): string => {
 	const q = file.indexOf('?');
@@ -49,6 +61,11 @@ export interface NetCall {
 	bytes?: number;
 	/** wire/transfer size from `content-length` (compressed when `encoding` is set) */
 	transfer_bytes?: number;
+	/** a fingerprint of the decoded body (`<fnv1a>:<length>`): identical across renders = the same
+	 *  answer every time, one to cache across requests */
+	body_hash?: string;
+	/** the request carried a cookie or an authorization header: its answer may be per user */
+	personal?: boolean;
 	/** response `content-encoding` (gzip / br / …) when compressed */
 	encoding?: string;
 	/** short response `content-type` (params stripped) */
@@ -72,6 +89,10 @@ export interface NetCall {
 	caller_chain?: CallerSite[];
 	/** the resolved call path: `fetchStock (lib/stock.ts:9)` ← `load (routes/+page.server.ts:44)` */
 	callers?: string[];
+	/** the caller's source position (the first app frame), for reading the call site's code */
+	caller_at?: { path: string; line: number };
+	/** the next app frame out (who called the caller): a helper's call site in its caller */
+	outer_at?: { path: string; line: number };
 	/** the upstream's own `Server-Timing` entries: what THEIR side spent the wait on */
 	timings?: ServerTiming[];
 	/** the upstream's own profiler's picture of this request (nested trace), when it answered */
@@ -98,7 +119,21 @@ function is_token(s: string): boolean {
 	if (!s.length) return false;
 	for (let i = 0; i < s.length; i++) {
 		const c = s.charCodeAt(i);
-		const ok = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 33 || (c >= 35 && c <= 39) || c === 42 || c === 43 || c === 45 || c === 46 || c === 94 || c === 95 || c === 96 || c === 124 || c === 126;
+		const ok =
+			(c >= 48 && c <= 57) ||
+			(c >= 65 && c <= 90) ||
+			(c >= 97 && c <= 122) ||
+			c === 33 ||
+			(c >= 35 && c <= 39) ||
+			c === 42 ||
+			c === 43 ||
+			c === 45 ||
+			c === 46 ||
+			c === 94 ||
+			c === 95 ||
+			c === 96 ||
+			c === 124 ||
+			c === 126;
 		if (!ok) return false;
 	}
 	return true;
@@ -130,14 +165,20 @@ export function parse_server_timing(header: string | null | undefined): ServerTi
 }
 
 // Capturing a stack on every call has a cost, so only do it while recording.
-let capture_stacks = false;
+// ONE SWITCH FOR EVERY COPY OF THIS MODULE: the dev server can evaluate it again (a reload, a dep
+// re-optimise) while the first copy's fetch wrapper stays installed — "still ours", so not wrapped
+// again — and that wrapper read its own copy's switch, never turned on: every call lost its caller.
+const NET_STATE = Symbol.for('ogygia.profiler.net-state');
+const shared = ((globalThis as Record<symbol, unknown>)[NET_STATE] ??= { stacks: false }) as {
+	stacks: boolean;
+};
 export function set_stack_capture(on: boolean): void {
-	capture_stacks = on;
+	shared.stacks = on;
 }
 
 // The profiler's own module files (frames.ts): registered at load so a caller lookup skips them
 // whatever the bundler named them. Re-exported for the other profiler modules.
-import { call_sites, register_profiler_file, is_profiler_file } from './frames.js';
+import { call_sites, file_of, register_profiler_file, is_profiler_file } from './frames.js';
 export { register_profiler_file };
 register_profiler_file();
 
@@ -158,9 +199,14 @@ export interface CallerSite {
  * code. Shared by the network patch and the async_hooks I/O tracker. */
 export function nearest_app_site(): CallerSite | undefined {
 	for (const site of call_sites(nearest_app_site)) {
-		const file = site.getFileName();
+		const file = file_of(site);
 		if (!file) continue;
-		if (is_profiler_file(file) || file.startsWith('node:') || is_internal_or_dep(file)) {
+		if (
+			is_profiler_file(file) ||
+			file.startsWith('node:') ||
+			is_internal_or_dep(file) ||
+			in_bundled_package(file, site.getLineNumber() ?? 0)
+		) {
 			continue;
 		}
 		return {
@@ -179,9 +225,15 @@ export function nearest_app_site(): CallerSite | undefined {
 export function app_call_chain(limit = 5): CallerSite[] {
 	const out: CallerSite[] = [];
 	for (const site of call_sites(app_call_chain)) {
-		const file = site.getFileName();
+		const file = file_of(site);
 		if (!file) continue;
-		if (is_profiler_file(file) || file.startsWith('node:') || is_internal_or_dep(file)) continue;
+		if (
+			is_profiler_file(file) ||
+			file.startsWith('node:') ||
+			is_internal_or_dep(file) ||
+			in_bundled_package(file, site.getLineNumber() ?? 0)
+		)
+			continue;
 		out.push({
 			fn: site.getFunctionName() || '(anonymous)',
 			file,
@@ -204,6 +256,9 @@ export interface NetContext {
 	route: string | null;
 	path: string | null;
 	on_net(call: NetCall): void;
+	/** the profiler's what-if render: an answer kept from the timed renders, for a call this request
+	 *  makes (`GET <url>`), instead of making it — undefined = make the call */
+	answer?(method: string, url: string): Response | undefined;
 }
 
 type Emit = (call: NetCall) => void;
@@ -212,6 +267,67 @@ let installed = false;
 // The active emit sink, kept module-level so `ensure_fetch_patched` can RE-wrap `globalThis.fetch` with
 // the same sink after something replaces it.
 let net_emit: Emit | null = null;
+/** the current request's kept-answer lookup (its context's `answer`), set by install */
+let net_answer: ((method: string, url: string) => Response | undefined) | null = null;
+
+// KEPT ANSWERS: while the profiler asks, the body of every GET that answered 2xx, by `GET <url>`
+// (the last one wins), so a later render can be served them from memory — "keep the services'
+// answers" measured, not estimated. Bounded: a body over KEEP_ONE is not kept, and past KEEP_ALL
+// nothing more is.
+const KEEP_ONE = 1024 * 1024;
+const KEEP_ALL = 8 * 1024 * 1024;
+let keep_bodies = false;
+let kept_bytes = 0;
+const kept = new Map<string, { status: number; headers: [string, string][]; body: Uint8Array }>();
+/** each GET's FIRST answer in the recording too: against the last, what changed between renders */
+const kept_first = new Map<string, Uint8Array>();
+
+/** start (clearing what was kept) or stop keeping answers */
+export function keep_answers(on: boolean): void {
+	keep_bodies = on;
+	if (on) {
+		kept.clear();
+		kept_first.clear();
+		kept_bytes = 0;
+	}
+}
+
+/** drop every kept answer */
+export function drop_answers(): void {
+	kept.clear();
+	kept_first.clear();
+	kept_bytes = 0;
+}
+
+/**
+ * WHAT CHANGED IN AN ANSWER between the first render and the last: the one stretch that differs
+ * (the bytes before it and after it are the same), and that stretch as text with a little around
+ * it — a timestamp, a request id. Undefined when either answer was not kept, or they are the same.
+ */
+export function answer_diff(key: string): { bytes: number; size: number; text: string } | undefined {
+	const a = kept_first.get(key);
+	const b = kept.get(key)?.body;
+	if (!a || !b) return undefined;
+	let pre = 0;
+	const min = Math.min(a.length, b.length);
+	while (pre < min && a[pre] === b[pre]) pre++;
+	if (pre === a.length && pre === b.length) return undefined;
+	let suf = 0;
+	while (suf < min - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+	const bytes = Math.max(a.length, b.length) - pre - suf;
+	const from = Math.max(0, pre - 24);
+	const to = Math.min(b.length, b.length - suf + 8);
+	let text = new TextDecoder().decode(b.subarray(from, to));
+	if (text.length > 90) text = text.slice(0, 89) + '…';
+	return { bytes, size: Math.max(a.length, b.length), text };
+}
+
+/** a kept answer as a fresh Response, or undefined */
+export function kept_answer(key: string): Response | undefined {
+	const k = kept.get(key);
+	if (!k) return undefined;
+	return new Response(k.body.slice(), { status: k.status, headers: k.headers });
+}
 // Brands OUR wrapper so a re-assert never wraps our own wrapper (which would count every call twice).
 const OG_FETCH_PATCH = Symbol.for('ogygia.profiler.net.fetch-patch');
 
@@ -224,6 +340,7 @@ export async function install_net_capture(
 	als: AsyncLocalStorage<NetContext>,
 	fallback: Emit
 ): Promise<void> {
+	net_answer = (method, url) => als.getStore()?.answer?.(method, url);
 	net_emit = (call: NetCall) => {
 		const ctx = als.getStore();
 		if (ctx) {
@@ -298,7 +415,12 @@ function patch_fetch(emit: Emit): void {
  * the same recorder. Idempotent (the brand), nothing when capture is not installed.
  */
 export function wrap_event_fetch<F extends typeof globalThis.fetch>(f: F): F {
-	if (!net_emit || typeof f !== 'function' || (f as F & { [OG_FETCH_PATCH]?: boolean })[OG_FETCH_PATCH]) return f;
+	if (
+		!net_emit ||
+		typeof f !== 'function' ||
+		(f as F & { [OG_FETCH_PATCH]?: boolean })[OG_FETCH_PATCH]
+	)
+		return f;
 	return wrap_fetch(f, net_emit) as F;
 }
 
@@ -330,7 +452,9 @@ export function encode_trace(t: UpstreamTrace): string {
 	let top = t.top ?? [];
 	let s = '';
 	for (;;) {
-		s = Buffer.from(JSON.stringify({ ...t, ...(top.length ? { top } : {}) }), 'utf8').toString('base64');
+		s = Buffer.from(JSON.stringify({ ...t, ...(top.length ? { top } : {}) }), 'utf8').toString(
+			'base64'
+		);
 		if (s.length <= MAX_TRACE_CHARS || !top.length) break;
 		top = top.slice(0, -1);
 	}
@@ -342,9 +466,18 @@ export function decode_trace(h: string | null | undefined): UpstreamTrace | unde
 	try {
 		const t = JSON.parse(Buffer.from(h, 'base64').toString('utf8')) as Partial<UpstreamTrace>;
 		if (typeof t?.ms !== 'number' || !Number.isFinite(t.ms)) return undefined;
-		const out: UpstreamTrace = { ms: t.ms, cpu_ms: Number(t.cpu_ms) || 0, wait_ms: Number(t.wait_ms) || 0, calls: Number(t.calls) || 0 };
+		const out: UpstreamTrace = {
+			ms: t.ms,
+			cpu_ms: Number(t.cpu_ms) || 0,
+			wait_ms: Number(t.wait_ms) || 0,
+			calls: Number(t.calls) || 0
+		};
 		if (typeof t.route === 'string' || t.route === null) out.route = t.route;
-		if (Array.isArray(t.top)) out.top = t.top.filter((x) => x && typeof x.url === 'string' && typeof x.ms === 'number').slice(0, 8).map((x) => ({ url: x.url.slice(0, 200), ms: x.ms }));
+		if (Array.isArray(t.top))
+			out.top = t.top
+				.filter((x) => x && typeof x.url === 'string' && typeof x.ms === 'number')
+				.slice(0, 8)
+				.map((x) => ({ url: x.url.slice(0, 200), ms: x.ms }));
 		if (typeof t.profiler === 'string') out.profiler = t.profiler.slice(0, 200);
 		return out;
 	} catch {
@@ -368,6 +501,9 @@ function wrap_fetch(orig: typeof globalThis.fetch, emit: Emit): typeof globalThi
 					? input.href
 					: ((input as Request)?.url ?? '');
 		const method = init?.method ?? ((input as Request)?.method || 'GET');
+		// the what-if render: this call's answer, kept from the timed renders, served from memory
+		const canned = net_answer?.(method.toUpperCase(), url);
+		if (canned) return canned;
 		const call: NetCall = {
 			start: performance.now(),
 			epoch: Date.now(),
@@ -380,21 +516,33 @@ function wrap_fetch(orig: typeof globalThis.fetch, emit: Emit): typeof globalThi
 			route: null,
 			path: null
 		};
-		if (capture_stacks) {
+		if (shared.stacks) {
 			const chain = app_call_chain();
 			call.caller_site = chain[0];
 			if (chain.length > 1) call.caller_chain = chain;
 		}
 		capture_req_payload(init, call);
+		// PERSONAL: the request carried who is asking (a cookie, an authorization header): its answer can
+		// differ per user even when it never changed across this recording's renders (one user)
+		try {
+			const h = new Headers(
+				init?.headers ?? (input instanceof Request ? input.headers : undefined)
+			);
+			if (h.has('cookie') || h.has('authorization')) call.personal = true;
+		} catch {
+			/* exotic headers: unknown */
+		}
 		emit(call);
 		try {
 			// NESTED TRACES: while a recording runs, ask the upstream for its own timeline of this
 			// call (an ogygia profiler there answers with `x-og-trace`); a header on a copy of init,
 			// the caller's object untouched
 			let init2 = init;
-			if (capture_stacks) {
+			if (shared.stacks) {
 				try {
-					const h = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+					const h = new Headers(
+						init?.headers ?? (input instanceof Request ? input.headers : undefined)
+					);
 					h.set(TRACE_HEADER, '1');
 					init2 = { ...init, headers: h };
 				} catch {
@@ -510,6 +658,9 @@ function capture_req_payload(init: RequestInit | undefined, call: NetCall): void
 	}
 }
 
+/** a body is fingerprinted over this many bytes at most (with its full length) */
+const BODY_HASH_MAX = 4 * 1024 * 1024;
+
 /** Count the DECODED response body size by draining a CLONE in the background (the original is left
  *  untouched). Sets `call.bytes` when done — the render finishes first, so it's ready by report time. */
 function count_decoded(res: Response, call: NetCall): void {
@@ -521,16 +672,57 @@ function count_decoded(res: Response, call: NetCall): void {
 	}
 	const stream = clone.body;
 	if (!stream) return;
+	// (never an answer for someone: a call that carried a cookie or an authorization)
+	const keep =
+		keep_bodies && !call.personal && call.method === 'GET' && res.status >= 200 && res.status < 300;
+	const status = res.status;
 	void (async () => {
 		try {
 			const reader = stream.getReader();
 			let total = 0;
+			let parts: Uint8Array[] | null = keep ? [] : null;
+			// a fingerprint of the body (FNV-1a over its first BODY_HASH_MAX bytes, and its length):
+			// the same GET answering the same bytes in every render is an answer to cache across requests
+			let h = 0x811c9dc5;
 			for (;;) {
 				const { done, value } = await reader.read();
 				if (done) break;
+				if (value) {
+					const n = Math.min(value.byteLength, Math.max(0, BODY_HASH_MAX - total));
+					for (let i = 0; i < n; i++) h = Math.imul(h ^ value[i], 0x01000193);
+				}
 				total += value?.byteLength ?? 0;
+				if (parts && value) {
+					if (total > KEEP_ONE) parts = null;
+					else parts.push(value);
+				}
 			}
 			call.bytes = total;
+			call.body_hash = (h >>> 0).toString(16) + ':' + total;
+			if (parts && keep_bodies) {
+				const key = `GET ${call.url}`;
+				const before = kept.get(key)?.body.byteLength ?? 0;
+				if (kept_bytes - before + total <= KEEP_ALL) {
+					const body = new Uint8Array(total);
+					let at = 0;
+					for (const p of parts) {
+						body.set(p, at);
+						at += p.byteLength;
+					}
+					const headers: [string, string][] = [];
+					clone.headers.forEach((v, k) => {
+						// the body is kept DECODED: its encoding and length headers no longer describe it
+						if (k !== 'content-encoding' && k !== 'content-length' && k !== 'transfer-encoding')
+							headers.push([k, v]);
+					});
+					kept.set(key, { status, headers, body });
+					kept_bytes += total - before;
+					if (!kept_first.has(key) && kept_bytes + total <= KEEP_ALL) {
+						kept_first.set(key, body);
+						kept_bytes += total;
+					}
+				}
+			}
 		} catch {
 			/* stream errored mid-read — leave the size to the wrap_body / transfer fallback */
 		}
@@ -613,7 +805,7 @@ function instrument_client_request(
 		route: null,
 		path: null
 	};
-	if (capture_stacks) {
+	if (shared.stacks) {
 		const chain = app_call_chain();
 		call.caller_site = chain[0];
 		if (chain.length > 1) call.caller_chain = chain;

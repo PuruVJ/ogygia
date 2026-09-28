@@ -23,6 +23,7 @@ export interface ProductVM {
 
 const memo = new WeakMap<Product, ProductVM>();
 
+// PATTERN cache-never-hits · PATTERN-SMALL deep-copy (real, ~2 ms: can fall under the 1 ms-saving floor)
 export function toProductVM(input: Product): ProductVM {
 	const hit = memo.get(input);
 	if (hit) return hit;

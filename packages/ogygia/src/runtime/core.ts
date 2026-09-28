@@ -39,7 +39,8 @@ import { preload_island_graph } from './island-graph-preload.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
-import { beacon_hydrated } from './beacon.js';
+import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning } from './beacon.js';
+import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 import {
@@ -999,12 +1000,15 @@ class OgygiaRegion extends HTMLElement {
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
+			const t_turn = now_ms();
 			const ssr_html = this.#ssr_html;
+			// (dev: a Svelte hydration warning raised in this step is this island's)
+			if (import.meta.env.DEV) set_hydrating(this);
 			this.#app = core.hydrate_island(this, entry, mod, ssr_html);
 			this.#ssr_html = null; // awake (or not ours): the server copy has done its job
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
-			beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html); // the profiler's browser half (no-op without its tag)
+			beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
@@ -1014,6 +1018,8 @@ class OgygiaRegion extends HTMLElement {
 				});
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
+			// the beacon's CPU window stops waiting for this one, and the visit reports it (no-op without it)
+			beacon_failed(this, (err as { message?: string })?.message ?? String(err));
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
@@ -1259,6 +1265,21 @@ export function boot(installers: Array<() => void> = []): void {
 	for (const install of installers) install();
 
 	if (import.meta.env.DEV) apply_dev_head_region_css();
+
+	// THE BEACON from boot (the profiler's own visit, or the devtools Page tab): vitals, shifts, long
+	// tasks, first clicks and the CPU sampler start before any island wakes — a page whose islands
+	// never wake, or that has none, still reports. One querySelector and out without the tag.
+	beacon_watch();
+
+	// DEV: Svelte's hydration warnings (the server and the browser disagreed; Svelte kept the
+	// server's value, so only the console knew) reach the devtools and the profiler's browser half
+	if (import.meta.env.DEV) {
+		tap_svelte_warnings();
+		on_svelte_warning((w) => {
+			beacon_warning(w);
+			if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'svelte.hydration.warning', code: w.code, message: w.message, ...(w.file ? { file: w.file } : {}), ...(w.fp ? { fp: w.fp } : {}) });
+		});
+	}
 
 	if (DEVTOOLS) {
 		// Publish `window.__ogygia_devtools` so instruments + our own e2e can read the stream with no

@@ -1,4 +1,9 @@
-import adapter from '@sveltejs/adapter-vercel';
+import vercel from '@sveltejs/adapter-vercel';
+import node from '@sveltejs/adapter-node';
+
+// PLAYGROUND_ADAPTER=node builds with adapter-node (it re-bundles the server output, the way the
+// Amplify deployments do): what the profiler's embedded maps are checked against
+const adapter = process.env.PLAYGROUND_ADAPTER === 'node' ? () => node() : (o) => vercel(o);
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
 

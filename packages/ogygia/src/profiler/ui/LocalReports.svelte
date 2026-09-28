@@ -27,7 +27,7 @@
 {#if loaded && rows.length}
 	<h2>Kept in this browser <span class="hint" style="font-weight:400">({rows.length} — reports this browser stored itself; they outlive the server)</span></h2>
 	<table>
-		<thead><tr><th>when</th><th>page</th><th class="num">median</th><th>on this server</th><th></th></tr></thead>
+		<thead><tr><th>when</th><th>page</th><th class="num">median</th><th>on this server</th><th><span class="sr-only">actions</span></th></tr></thead>
 		<tbody>
 			{#each rows as r (r.id)}
 				{@const prev = prev_of(r)}

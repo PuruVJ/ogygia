@@ -4,6 +4,7 @@
 //
 // Instrumented with `span` / `tag` from ogygia/profiler — the waits the sampler cannot see
 // (the database pool, a cache lookup, a queue drain) get names, the request gets a tenant.
+// PATTERN almost-same-document: every render stamps fresh ids (the web-component renderer's c-id / s-id, the cards' data-track)
 import { readFile } from 'node:fs/promises';
 import type { PageServerLoad } from './$types';
 import { span, tag } from 'ogygia/profiler';
@@ -14,11 +15,13 @@ async function queryDatabase(ms: number): Promise<{ rows: number }> {
 	return { rows: ms * 3 };
 }
 
+// PATTERN same-answer: the test services answer the same bytes on every render (nothing is cached)
 async function callService(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/hell/api/${name}?ms=${ms}`);
 	return res.json();
 }
 
+// PATTERN waits-in-a-row (called once per card, one after another)
 async function fetchStock(origin: string, id: string): Promise<{ id: string; stock: number }> {
 	const res = await fetch(`${origin}/hell/api/product/${id}?ms=6`);
 	return res.json();
@@ -26,6 +29,7 @@ async function fetchStock(origin: string, id: string): Promise<{ id: string; sto
 
 // A wait NO hook can see: a queue drained over event-loop turns (setImmediate is not an I/O
 // primitive), the shape of a promise chain inside a driver — without a span it is "nothing recorded".
+// PATTERN yield-per-item
 async function drainQueue(turns: number): Promise<number> {
 	for (let i = 0; i < turns; i++) await new Promise((r) => setImmediate(r));
 	return turns;
@@ -80,6 +84,7 @@ export const load: PageServerLoad = async ({ url, params, parent }) => {
 		stock[s.id] = s.stock;
 	}
 	return {
+		// PATTERN render-per-item: every product becomes a ProductCard island on every request
 		catalog: span('cms.catalog', () => catalog(), (c) => ({ rows: c.products.length })),
 		stock,
 		session,

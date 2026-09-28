@@ -38,5 +38,16 @@ export function follow_hash(kind: RowKind, keys: () => string[], open: (key: str
 	};
 	apply();
 	window.addEventListener('hashchange', apply);
-	return () => window.removeEventListener('hashchange', apply);
+	// the same link pressed again (scrolled back up, "show the row" once more): the hash does not
+	// change, so no hashchange fires, and the press did nothing
+	const again = (e: MouseEvent) => {
+		const a = (e.target as Element | null)?.closest?.('a');
+		const href = a?.getAttribute('href');
+		if (href && href === location.hash) setTimeout(apply, 0);
+	};
+	document.addEventListener('click', again);
+	return () => {
+		window.removeEventListener('hashchange', apply);
+		document.removeEventListener('click', again);
+	};
 }

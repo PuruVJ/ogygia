@@ -11,38 +11,151 @@ The devtools are a dock that mounts on each `csr = false` page, and x-rays the i
 
 ## Enabling
 
-One flag in the Vite plugin. It is compiled behind a gate. Thus, when off (the default), the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. It is meant for development. Keep it off in production.
+One flag in the Vite plugin. It is compiled behind a gate. Thus, when off (the default), the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. You decide where it is on:
 
 ```ts title=vite.config.ts
 import { ogygia } from 'ogygia/vite';
 
-export default {
+export default defineConfig(({ mode }) => ({
   plugins: [
-    ogygia({ devtools: !!process.env.OGYGIA_DEVTOOLS }),   // on when OGYGIA_DEVTOOLS=1
-    // or just `ogygia({ devtools: true })` in a dev-only config
+    ogygia({ devtools: mode !== 'production' }),   // dev server and preview builds, never production
   ],
-};
+}));
 ```
 
-Then run with `OGYGIA_DEVTOOLS=1`. A launcher appears at the bottom of each `csr = false` page.
+A launcher appears at the bottom of each `csr = false` page.
+
+### What measuring costs the page
+
+Devtools measures the page it shows, so it must not change what it measures. Loaded one after the other with measuring on and off, a heavy page (17,000 elements, 30 islands) takes about 15 ms more main-thread time and 1.6 KB more HTML (the server's events), with no measurable change in server time. With the dock open, each tab does at most a few ms of its own work every 3 seconds, and never a long task. `internal/bench/devtools-build-check.mjs` checks the first two numbers on every run.
+
+### In a build (a preview deploy)
+
+With the flag on in a build, a page carries only a small launcher (about 10 KB of JS with the event recorder). The dock itself (its code, every tab, its CSS) loads when someone opens it. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
+
+Opening the dock once sets an `og_devtools` cookie in that browser. From the next load on, that browser's pages are measured from the start (the Page tab), and the server adds its event data to them (the Wire and Timeline tabs). Every other visitor gets neither. The first time you open it on a page, the Page tab asks you to reload.
+
+Two things stay dev-only: the Main thread section's CPU sampling needs a `Document-Policy: js-profiling` response header (the dev server sends it; set it on your preview host to have it there), and a Kit-hydrated (`csr = true`) page gets no dock in a build.
 
 ## The dock
 
-The launcher peeks up from the bottom edge. Hover to show it. Click (or **Alt+O**) to open the panel. The panel drags by its title bar, and resizes from each edge. Its position, size, and open state **persist** across reloads. It lives in a shadow root. Thus nothing from the CSS of your page can reach it, and its own styles cannot leak out.
+The launcher peeks up from the bottom edge. Hover to show it. Click (or **Alt+O**) to open the panel. The panel drags by its title bar, and resizes from each edge. Its position, size, and open state **persist** across reloads. It lives in a shadow root. Thus nothing from the CSS of your page can reach it, and its own styles cannot leak out. **trace** copies an event trace to the clipboard. Where the browser refuses the clipboard (plain http off localhost, like a phone on your network), it saves the trace as a file instead.
 
 ## Instruments
 
 - **Lens**: the boundary overlay. Set it on, and each `<ogygia-region>` on the page is boxed and labelled by name, tinted by kind (island / lake / hole), and dashed while cold. A roster lists them with kind, wake schedule, JS cost, and hydration state. Hover a row, and its box lights up on the page, and the reverse. "Pick on page" lets you click a region to inspect it.
-- **Bytes**: the byte ledger. Real over-the-wire JS per island entry chunk (from `PerformanceResourceTiming`), plus `+deps`: the full transitive bundle of each island. Thus you see the *real* cost, not only the wrapper. Shared code is counted in each island that imports it. Thus the figures overlap, and the page total over-counts what ships one time.
+- **Page**: what the browser saw of this visit. See [The Page tab](#the-page-tab).
+- **Record**: press record, use the page, press stop. See [Recording a session](#recording-a-session).
+- **Hydration**: each island's hydration status, and what differed. See [The Hydration tab](#the-hydration-tab).
+- **Bytes**: the byte ledger. In a build, it reads every file each island needs from the page's island graph, and weighs each file as the browser loaded it. Per island it shows the files and their size, **only it** (the bytes no other island needs: what removing that island would save), and **shared**. The page total counts each file once, and a list names the shared files and the islands that use each. The runtime's files get their own row. An island that has not woken yet shows its files as cold. On the dev server (no island graph, unbundled modules), it shows each island's entry chunk and an estimate of its whole bundle, where shared code counts once per island.
 - **Wire**: all that the server shipped across a boundary: the devalue props per island, the page/query seeds, capabilities.
 - **Hub**: the identity spine. Per `Ref` id: its kind, resolve count, reunion (memo-hit) count, and disposal.
 - **Nav**: per-region SPA-navigation decisions (keep / patch / mount / remove), with timing. Thus you see the reconciler at work.
 - **Timeline**: client-realm events on a time axis, one lane per region, with hydrate bars.
-- **Profiler**: embeds the run page of the [SSR profiler](/docs/profiler/overview) (needs `ogygia({ profiler: true })`).
+- **Profiler**: runs the [SSR profiler](/docs/profiler/overview) on this page, right in the dock (needs `ogygia({ profiler: true })`). It shows the score, the server render time and what it would be after the fixes, the findings, the heaviest components, and the outbound calls. Each island's server row joins the island on the page: hover to light it up, click to open it. The island's detail card then shows the same numbers under "on the server". The full report is one click away.
+
+## The Page tab
+
+The Page tab reads the same browser data the [profiler's beacon](/docs/profiler/reading-reports) sends, but live, on your own page. Nothing leaves the page. It shows:
+
+- **Vitals**: TTFB, FCP, LCP, CLS and INP, rated good, needs work, or poor by the web-vitals lines. Long tasks too.
+- **Findings**: what the browser measured going wrong. Each one names its islands. Hover it, and the islands light up on the page. Click an island chip, and its detail card opens.
+- **Island wakes**: a waterfall, one row per island. Each row splits into three parts: the module load, the wait for its turn (islands hydrate one per task, viewport first), and the hydrate step itself. FCP, LCP, DCL and load are marked on the axis.
+- **Main thread**: the browser's own sampler (the JS Self-Profiling API, in Chromium) records the first 8 seconds of the page. It shows busy time by kind of code (your app, ogygia, Svelte, packages, a page script, the browser, devtools itself), and the functions that ran, with file and line. Each island row shows the CPU inside its hydrate window. "Record 5 s" samples again while you use the page (a click, a nav). The dev server sends the `Document-Policy: js-profiling` header this needs. The trace stays in the page.
+- **Blocked the first paint**: the files that held the first paint back.
+- **Styles**: every stylesheet on the page, linked or inline, with its rules, its size, whether it held the first paint, and how many of its rules match nothing on the page right now. Devtools' own styles are left out. Content that appears later (a menu, a dialog) counts as unmatched until it is open, so open it and press **check again**.
+- **Files by type**: count and bytes for scripts, styles, images, fonts and fetches. Every file counts, not only the first ones: the browser's resource list stops at 250 entries unless asked for more, and the page asks.
+- **Since your last load**: change the code, and the page reloads. The tab then lists what changed on this page since the load before: findings fixed and new (by island), islands whose hydrate step got faster or slower, and vitals that moved. Small wobbles are left out. Each page's last load is kept in this browser tab only.
+- **What this browser cannot measure**: Safari reports no layout shifts, long tasks or CPU samples. A finding that needs one of them cannot appear there, so the tab says which ones are missing, rather than let their absence look clean.
+
+The findings it can name:
+
+| Finding | What the browser saw |
+| --- | --- |
+| failed to hydrate | The island threw while it loaded or mounted. It shows its server HTML and does nothing. |
+| threw away the server HTML | Svelte discarded the server DOM and rendered again (a flash, and a double render). |
+| markup changed | The island rendered different markup in the browser than on the server. The finding shows the first difference. |
+| clicked before it woke | A visitor pressed the island before it was awake. The first click did nothing. (An island with `wake: 'interaction'` is exempt: its first click is its wake, and is replayed.) |
+| hydrating moved the layout | A layout shift came from inside the island, just after it woke. |
+| long hydrate | The hydrate step was one task of 50 ms or more. The page could not respond meanwhile. With a CPU trace, it names the function that took the time. |
+| waited for its turn | The island had its code, but waited behind other islands. The finding names them. |
+| slow module | The island waited a long time for its code. |
+| eager below the fold | A `wake: 'load'` or `'idle'` island starts below the first screen. `wake: 'visible'` would load its code later. |
+| woke late | An island on the first screen woke a second or more after the page looked done (LCP). |
+| largest paint repainted | The LCP element sits in an island that changed its markup as it woke. |
+| never woke | A `wake: 'load'` island is still asleep three seconds after load. |
+| long tasks | Long tasks ran outside any hydration: page scripts held the main thread. With a CPU trace, it names the script and line; without one, the browser's long-animation-frame records name the script. |
+| other origins | Scripts from other origins: their size, the main-thread time they took, the files they held the first paint with, and the scripts they loaded that the page never names (how a tag manager adds code). A well-known service gets its kind (tag manager, analytics, session replay, chat, A/B testing…) and advice for that kind. |
+| another origin held the first paint | A script or style from another origin blocked the first paint. |
+| another origin may have edited an island | An island did not wake from the server's markup (it changed, was healed, recovered or failed), and scripts from another origin ran before it woke. |
+| Svelte warned while hydrating | On the dev server: Svelte's own hydration warning (the server and the browser disagreed, and Svelte kept the server's value, so the screen does not show it). With the island that was hydrating, when that is known. |
+| empty children slot | An awake island shows its children in a slot with nothing in it. An island's children are the server's HTML: children behind a condition that was false on the server cannot appear in the browser. |
+| styles shipped without their scope | ogygia builds the CSS for lakes, holes and router pages itself. When it cannot compile a component's scoped styles, it ships the raw style body, whose rules then apply to the whole page: a `.row` in it restyles every `.row`. The build marks such CSS, and the finding names the component and the reason. The build log has the full message. |
+| held with nothing ahead | An island had its code but waited for its turn while no other island was hydrating and nothing on the first screen was still loading, past the start gate. Nothing on the page explains it: ogygia's scheduler held the island. It is ogygia's cost, not your page's; the finding asks you to report it. |
+| rules that match nothing | Half or more of the page's CSS rules, 20 KB or more of them, match nothing on the page. The finding names the sheets that hold them. |
+
+On the dev server, modules load one by one. Thus load times run higher than in a build. The other findings hold in both.
+
+After an in-app navigation (ogygia's router swaps the page without a reload), the tab reports on the new page: its findings and island rows count from the navigation. An island on both pages with the same props is kept by the router, still awake, with no code to load and nothing to hydrate. The tab lists those as kept, so a page whose islands were all reused does not read as "nothing woke". The Styles section reads the new page's sheets. The vitals stay the first page's load, labelled as such, since a navigation paints nothing the browser reports. The load CPU trace is the first page's too; record the main thread again for this one.
+
+::: tip Checked against planted problems
+The playground's `/dt-lab` page plants one problem per island, next to healthy decoys. `internal/bench/devtools-answer-key.mjs` loads it like a hurried visitor, and checks that each problem is found on its island and that no decoy is named. `/dt-third` plants other origins (a blocking script that edits an island, a script that loads three more). `/dt-styles` plants an unscoped component and a sheet of 600 rules for markup the page does not have. On `/dt-many` (320 islands, scrolled) the key checks the runtime itself: no island may wait with nothing ahead of it. `internal/bench/devtools-click-check.mjs` presses every button, link, row and chip in every tab on each lab page: each press must change something, throw nothing, and stay on the page. `internal/bench/profiler-click-check.mjs` does the same on a profiler report, the dashboard and the compare page. The same key checks the profiler's report of the same visits. `internal/bench/all-keys.mjs` runs every key, each against the server it needs.
+:::
+
+## Recording a session
+
+The Record tab measures what you do, not only the page load. Press **Record**, use the page (click, type, scroll, navigate), press **Stop**. The tab then lists what that stretch did. Each finding points at its elements: hover lights them up on the page, and "show on the page" scrolls there.
+
+A session survives a full page load (a plain link, a form post, a reload): the page saves its part as it goes away, and the next page's devtools picks the session up. The report covers every page on one clock, with each page load marked on the timeline. Islands keep the names they had on their own page. The browser's CPU samples stop at a full page load (the sampler cannot be carried over); everything else carries on.
+
+With the profiler on, **and the server** (on by default) records the server over the same stretch. "On the server, meanwhile" then lists the requests your actions made, the server's hottest code across them, its outbound calls, and its findings. A slow request also gets **profile it on the server**: one click profiles that exact request and shows where its time went. The session's timeline puts everything on one clock, and each request bar shows its server part and, inside that, the upstream wait.
+
+| Finding | What was measured |
+| --- | --- |
+| slow interaction | A click or key press took 100 ms or more to show a result. It splits the time into waiting, the handlers, and painting, and names the function that ran (from the CPU sampler), or the script (from the browser's long animation frames). |
+| repeated clicks | The same element was clicked 3 or more times within a second: to a visitor, nothing seemed to happen. |
+| dead click | A click changed nothing: no DOM change it could cause, no request, no navigation. |
+| late answer | A click's island changed only after half a second: show a reaction at once. |
+| long tasks | Main-thread tasks of 50 ms or more, and the function behind them. |
+| layout moved by itself | A layout shift no input caused, and the island it came from. |
+| requests | Failed ones (status 400 and up), slow ones (a second or more), and the same request sent again and again. |
+| islands | Islands that woke during the session, and any that failed, threw away their server HTML, or were healed. |
+| errors | Uncaught errors, unhandled rejections, and `console.error` calls. |
+| DOM churn | An island (or code outside islands) that changed the DOM hundreds of times. |
+| heap growth | The JS heap grew by 5 MB or more. |
+| slow navigation | An in-app navigation took half a second or more. |
+
+::: tip Checked against planted problems
+The playground's `/dt-session` page plants one problem per island (a slow handler, a late answer, a late banner, repeated and failed requests, an error, DOM churn), with a dead button and a healthy decoy. `internal/bench/devtools-session-key.mjs` records a session there like a visitor would, and checks that each problem is found and named, and that the decoy is never named.
+:::
+
+## The Hydration tab
+
+Each island on the page, with its status:
+
+- **failed**: its module threw while it loaded or mounted, with the error.
+- **recovered**: Svelte threw the server DOM away and rendered again, with the runtime's reason.
+- **healed**: another script edited it before it woke; the runtime put the server markup back.
+- **markup changed**: the browser's first render differs from the server's. Click the row for the difference: the server's markup against the browser's, with only the changed pieces and a little context around them.
+- **clean**, or **asleep** (not woken yet).
+
+Hover a row, and the island lights up on the page. Click a row with a difference to see it; click any other row to open the island's card.
+
+A script that edits an island before ogygia's runtime has started shows as **markup changed**, not healed: the runtime's copy of the server markup already carries the edit. The difference then shows the edit.
+
+An island inside another awake island does not wake on its own: it rides the hydration of the island around it. It shows as clean (with "rides …, the island around it") once that island is awake, never as asleep.
+
+## The profile on the page
+
+After a run, the Profiler tab lists **On this page**: the costs it measured that have a place on the page. These are the heaviest islands, the components (by the elements they rendered, on the dev server), a span split by element tag, the declarative shadow roots the server wrote (and how many the browser refused), and the largest paint. Hover one, and its elements light up. Click it to pin the highlight and scroll there.
 
 ## Inspecting one island
 
-Click a roster row, or use "pick on page" and click a region. Its detail card opens: identity, the full cost breakdown, its decoded props (as a collapsible tree, with hub-ref chips), and a client-lifecycle mini-timeline (connected → scheduled → woke → hydrated).
+Click a roster row, or use "pick on page" and click a region. Its detail card opens: identity, the full cost breakdown, its decoded props (as a collapsible tree, with hub-ref chips), and a client-lifecycle mini-timeline (connected → scheduled → woke → hydrated). Under "in the browser", it shows the island's row from the Page tab (module load, wait, hydrate step, layout shift), and each finding that names it. In a build, "cost" shows its code: the files it needs and their size, **only it** (the bytes no other island needs, which is what removing it would save), and what it shares, with which islands.
+
+## Keyboard and screen readers
+
+The dock is a heading with a tab list: the tabs are announced as tabs, with the open one selected, and the panel below them is a region you can focus and scroll with the keyboard. Its text meets 4.5:1 contrast. Everything you can click, Tab reaches: a row's name is a button, so Enter opens the row as a click does. `internal/bench/devtools-a11y-check.mjs` checks every tab with axe, measures the contrast of each text against the background under it, and fails on any control only a mouse can press.
 
 ::: tip
 The devtools never mount on [profiler](/docs/profiler/overview) pages, the embedded frame of the Profiler tab included. Thus the tools never x-ray themselves.

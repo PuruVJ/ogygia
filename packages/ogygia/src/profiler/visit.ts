@@ -41,12 +41,31 @@ export interface VisitIsland {
 	t0: number;
 	/** modules in hand */
 	loaded: number;
+	/** its scheduler turn came (after the module; islands hydrate one per task) */
+	turn?: number;
 	/** `data-hydrated` set */
 	done: number;
 	recovered?: boolean;
 	/** the island's markup changed between the server and the hydrated DOM */
 	changed?: boolean;
+	/** another script edited it before it woke; the runtime put the server markup back */
+	healed?: boolean;
 	ssr_bytes?: number;
+}
+
+export interface VisitRegion {
+	fp: string;
+	entry?: string;
+	/** its `wake` attribute (none on a default, wake-at-load island) */
+	wake?: string;
+	/** a deferred hole */
+	defer?: boolean;
+	hydrated?: boolean;
+	/** it threw while it loaded or mounted: the error */
+	failed?: string;
+	/** document px */
+	top: number;
+	height: number;
 }
 
 export interface VisitShift {
@@ -66,12 +85,29 @@ export interface Visit {
 	nav: VisitNav;
 	paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string };
 	resources: VisitResource[];
+	/** every file by type, when `resources` lists only some (the first 200, the blocking ones first) */
+	resource_totals?: { type: string; count: number; transfer: number; size: number }[];
+	/** how many files the page loaded in all */
+	resources_all?: number;
 	longtasks: { t: number; ms: number }[];
 	islands: VisitIsland[];
 	/** the first interaction inside an island: fingerprint, when, what kind */
 	firsts: { fp: string; t: number; type: string }[];
 	shifts: VisitShift[];
 	marks?: { name: string; t0?: number; ms: number }[];
+	/** every region on the page as the visit ended (where it sits, how it wakes, whether it woke) */
+	regions?: VisitRegion[];
+	/** the vitals as of this message */
+	vitals?: { ttfb?: number; fcp?: number; lcp?: number; cls?: number; inp?: number };
+	/** main-thread ms per script URL (long animation frames, from the page's start) */
+	scripts?: { url: string; ms: number; count: number }[];
+	/** the page's origin as the browser had it */
+	origin?: string;
+	/** entry types the visiting browser cannot observe (Safari: `layout-shift`, `longtask`): what
+	 *  they would measure is unknown, not zero */
+	unsupported?: string[];
+	/** Svelte's hydration warnings (dev) */
+	warnings?: { code: string; message: string; file?: string; fp?: string }[];
 	viewport?: [number, number];
 	ua?: string;
 }
@@ -94,6 +130,7 @@ const rect = (v: unknown): [number, number, number, number] | undefined => {
 	return r.every((n) => Number.isFinite(n)) ? (r.map((n) => Math.round(n)) as [number, number, number, number]) : undefined;
 };
 const FP_RE = /^[0-9a-f]{8,32}$/;
+const KNOWN_TYPES = new Set(['layout-shift', 'longtask', 'event', 'largest-contentful-paint', 'long-animation-frame']);
 
 /** A beacon body's `visit` → a bounded Visit, or null when it is not one. */
 export function parse_visit(page: unknown, raw: unknown): Visit | null {
@@ -161,10 +198,13 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		const done = num(i?.done);
 		if (!fp || t0 === undefined || done === undefined) continue;
 		const out: VisitIsland = { fp, t0, loaded: Math.min(Math.max(t0, num(i.loaded) ?? t0), Math.max(t0, done)), done: Math.max(t0, done) };
+		const turn = num(i.turn);
+		if (turn !== undefined && turn >= out.loaded && turn <= out.done) out.turn = turn;
 		const entry = str(i.entry, 300);
 		if (entry) out.entry = entry;
 		if (i.recovered === true) out.recovered = true;
 		if (i.changed === true) out.changed = true;
+		if (i.healed === true) out.healed = true;
 		const sb = num(i.ssr_bytes, 1e8);
 		if (sb !== undefined) out.ssr_bytes = sb;
 		islands.push(out);
@@ -198,6 +238,68 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		marks.push({ name, ms, ...(t0 !== undefined ? { t0 } : {}) });
 	}
 	if (marks.length) visit.marks = marks;
+	const regions: VisitRegion[] = [];
+	for (const r of (Array.isArray(v.regions) ? v.regions : []).slice(0, MAX_ISLANDS) as Record<string, unknown>[]) {
+		const fp = typeof r?.fp === 'string' && FP_RE.test(r.fp) ? r.fp : undefined;
+		const top = Number(r?.top);
+		const height = num(r?.height, 1e6);
+		if (!fp || !Number.isFinite(top) || Math.abs(top) > 1e7 || height === undefined) continue;
+		const out: VisitRegion = { fp, top: Math.round(top), height };
+		const entry = str(r.entry, 300);
+		if (entry) out.entry = entry;
+		const wake = str(r.wake, 24);
+		if (wake) out.wake = wake;
+		if (r.defer === true) out.defer = true;
+		if (r.hydrated === true) out.hydrated = true;
+		if (typeof r.failed === 'string') out.failed = r.failed.slice(0, 300);
+		regions.push(out);
+	}
+	if (regions.length) visit.regions = regions;
+	const scripts: NonNullable<Visit['scripts']> = [];
+	for (const s of (Array.isArray(v.scripts) ? v.scripts : []).slice(0, 50) as Record<string, unknown>[]) {
+		const url = str(s?.url, 300);
+		const ms = num(s?.ms);
+		if (!url || ms === undefined) continue;
+		scripts.push({ url, ms, count: num(s.count, 1e6) ?? 1 });
+	}
+	if (scripts.length) visit.scripts = scripts;
+	const warnings: NonNullable<Visit['warnings']> = [];
+	for (const w of (Array.isArray(v.warnings) ? v.warnings : []).slice(0, 50) as Record<string, unknown>[]) {
+		const code = str(w?.code, 80);
+		const message = str(w?.message, 400);
+		if (!code || !message) continue;
+		const file = str(w.file, 300);
+		const fp = typeof w.fp === 'string' && FP_RE.test(w.fp) ? w.fp : undefined;
+		warnings.push({ code, message, ...(file ? { file } : {}), ...(fp ? { fp } : {}) });
+	}
+	if (warnings.length) visit.warnings = warnings;
+	const unsupported = (Array.isArray(v.unsupported) ? v.unsupported : []).filter((t): t is string => typeof t === 'string' && KNOWN_TYPES.has(t));
+	if (unsupported.length) visit.unsupported = unsupported;
+	const origin = str(v.origin, 200);
+	if (origin && (origin.startsWith('http://') || origin.startsWith('https://'))) visit.origin = origin;
+	const totals: NonNullable<Visit['resource_totals']> = [];
+	for (const t of (Array.isArray(v.resource_totals) ? v.resource_totals : []).slice(0, 12) as Record<string, unknown>[]) {
+		const type = str(t?.type, 16);
+		const count = num(t?.count, 1e6);
+		if (!type || count === undefined) continue;
+		totals.push({ type, count, transfer: num(t.transfer, 1e11) ?? 0, size: num(t.size, 1e11) ?? 0 });
+	}
+	const all_n = num(v.resources_all, 1e6);
+	if (totals.length && all_n !== undefined && all_n > resources.length) {
+		visit.resource_totals = totals;
+		visit.resources_all = all_n;
+	}
+	const vr = v.vitals as Record<string, unknown> | undefined;
+	if (vr && typeof vr === 'object') {
+		const vitals: NonNullable<Visit['vitals']> = {};
+		for (const k of ['ttfb', 'fcp', 'lcp', 'inp'] as const) {
+			const n = num(vr[k]);
+			if (n !== undefined) vitals[k] = n;
+		}
+		const cls = num(vr.cls, 100);
+		if (cls !== undefined) vitals.cls = cls;
+		if (Object.keys(vitals).length) visit.vitals = vitals;
+	}
 	const vp = rect([...(Array.isArray(v.viewport) ? v.viewport : []), 0, 0]);
 	if (vp && vp[0] > 0 && vp[1] > 0) visit.viewport = [vp[0], vp[1]];
 	const ua = str(v.ua, 200);
@@ -222,11 +324,25 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		nav: { ...a.nav, ...b.nav },
 		paints: { ...a.paints, ...b.paints },
 		resources: b.resources.length >= a.resources.length ? b.resources : a.resources,
+		// (the record that saw more files: the later one, as a rule)
+		...((b.resources_all ?? 0) >= (a.resources_all ?? 0)
+			? b.resource_totals
+				? { resource_totals: b.resource_totals, resources_all: b.resources_all }
+				: {}
+			: { resource_totals: a.resource_totals, resources_all: a.resources_all }),
 		longtasks: by(a.longtasks, b.longtasks, (l) => `${l.t}|${l.ms}`),
 		islands: by(a.islands, b.islands, (i) => `${i.fp}|${i.t0}`),
 		firsts: by(a.firsts, b.firsts, (f) => f.fp),
 		shifts: by(a.shifts, b.shifts, (s) => `${s.t}|${s.value}`),
 		...(a.marks || b.marks ? { marks: by(a.marks ?? [], b.marks ?? [], (m) => `${m.name}|${m.t0 ?? ''}|${m.ms}`) } : {}),
+		// (the later record's picture of each region wins: it woke, or failed, since)
+		...(a.regions || b.regions ? { regions: by(a.regions ?? [], b.regions ?? [], (r) => r.fp) } : {}),
+		...(a.vitals || b.vitals ? { vitals: { ...a.vitals, ...b.vitals } } : {}),
+		// (each record carries the frames so far: the later one has them all)
+		...(b.scripts ?? a.scripts ? { scripts: b.scripts ?? a.scripts } : {}),
+		...(b.origin ?? a.origin ? { origin: b.origin ?? a.origin } : {}),
+		...(b.unsupported ?? a.unsupported ? { unsupported: b.unsupported ?? a.unsupported } : {}),
+		...(b.warnings ?? a.warnings ? { warnings: b.warnings ?? a.warnings } : {}),
 		...(b.viewport ?? a.viewport ? { viewport: b.viewport ?? a.viewport } : {}),
 		...(b.ua ?? a.ua ? { ua: b.ua ?? a.ua } : {})
 	};
@@ -279,6 +395,8 @@ export function one_clock(
 ): OneClock {
 	const lanes: ClockLane[] = [];
 	const notes: string[] = [];
+	if (visit.resources_all && visit.resources_all > visit.resources.length)
+		notes.push(`The page loaded ${visit.resources_all} files; the lanes show ${visit.resources.length} of them (every render-blocking file, then the earliest). The counts and bytes by type cover all of them.`);
 	const nav = visit.nav;
 	let end = Math.max(nav.res_end, nav.load ?? 0, nav.dcl ?? 0, visit.paints.lcp ?? 0);
 	// SERVER: the profiled render, aligned so it ENDS at the first byte — a different request than

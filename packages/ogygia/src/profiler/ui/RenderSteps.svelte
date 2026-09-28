@@ -37,7 +37,7 @@
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
 <div class="stepper" tabindex="0" onkeydown={keys} role="group" aria-label="the render step by step">
-	<div class="track" role="img" aria-label="the render's steps in order">
+	<div class="track" role="group" aria-label="the render's steps in order">
 		{#each steps.steps as s (s.i)}
 			<button
 				class="seg"

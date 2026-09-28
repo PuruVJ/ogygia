@@ -36,6 +36,9 @@ export const islandPageKeys = (_entry: string): string[] | null => page_keys;
 export function set_page_keys(v: string[] | null) {
 	page_keys = v;
 }
+export const islandPageWhy = (
+	_entry: string
+): { file: string; line: number | null; why: string }[] | null => null;
 // `islandRemotes(entry)` — the build's per-entry list of callable remote id-hashes (fail-open
 // null). A test sets it with `set_island_remotes(...)` to check what Region records per region.
 let island_remotes: string[] | null = null;

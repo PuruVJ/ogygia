@@ -14,6 +14,9 @@
  */
 import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.js';
 
+/** browser visits kept per page (the profiler reads the latest ten) */
+const MAX_VISITS_PER_PAGE = 20;
+
 interface PgLike {
 	query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 	end?(): Promise<void>;
@@ -78,7 +81,10 @@ export function postgresStore(client: PgLike | string, opts: { schema?: string; 
 			await (await need()).query(`DELETE FROM ${R} WHERE id NOT IN (SELECT id FROM ${R} ORDER BY created DESC LIMIT $1)`, [keep]);
 		},
 		async putVisit(rec: ProfilerVisitRecord) {
-			await (await need()).query(`INSERT INTO ${V} (key,page,at,visit) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (key) DO UPDATE SET at=EXCLUDED.at,visit=EXCLUDED.visit`, [rec.key, rec.page, rec.at, rec.visit]);
+			const db = await need();
+			await db.query(`INSERT INTO ${V} (key,page,at,visit) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (key) DO UPDATE SET at=EXCLUDED.at,visit=EXCLUDED.visit`, [rec.key, rec.page, rec.at, rec.visit]);
+			// the newest MAX_VISITS_PER_PAGE per page (the profiler reads the latest ten)
+			await db.query(`DELETE FROM ${V} WHERE page = $1 AND key NOT IN (SELECT key FROM ${V} WHERE page = $1 ORDER BY at DESC LIMIT $2)`, [rec.page, MAX_VISITS_PER_PAGE]);
 		},
 		async listVisits(page: string, limit = 10): Promise<ProfilerVisitRecord[]> {
 			const { rows } = await (await need()).query(`SELECT key,page,at,visit FROM ${V} WHERE page = $1 ORDER BY at DESC LIMIT $2`, [page, limit]);

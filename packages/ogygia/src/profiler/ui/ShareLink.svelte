@@ -8,8 +8,10 @@
 	 * recipient disclaimer past the universal-safe size. No `$effect`; all state moves on click/submit.
 	 */
 	import { encode_permalink, is_webkit_capped, MAX_PERMALINK_CHARS } from './permalink.js';
+	import { get_report } from './store.js';
+	import { report_request } from './report-request.js';
 
-	let { id, base }: { id: string; base: string } = $props();
+	let { id, base, ogpB64 = '' }: { id: string; base: string; ogpB64?: string } = $props();
 
 	// WebKit check needs `navigator` — false during SSR, corrected on hydrate.
 	const capped = typeof navigator !== 'undefined' && is_webkit_capped();
@@ -32,9 +34,16 @@
 		url = '';
 		note = '';
 		try {
-			const res = await fetch(`${base}/report/${id}.dump`, { credentials: 'same-origin' });
-			if (!res.ok) throw new Error('fetch');
-			const blob = await encode_permalink(await res.json(), password);
+			// this browser's kept copy first (no request at all), else ask with the report carried along:
+			// on a serverless host a plain fetch by id lands on an instance that never had it
+			const kept = await get_report(id);
+			let dump: unknown = kept?.dump;
+			if (!dump) {
+				const res = await report_request(base, id, 'dump', ogpB64);
+				if (!res.ok) throw new Error('fetch');
+				dump = await res.json();
+			}
+			const blob = await encode_permalink(dump, password);
 			if (blob.length > MAX_PERMALINK_CHARS) {
 				err = `This report is ~${Math.round(blob.length / 1024)} KB encoded — too big for a link. Download the .ogp and share the file instead.`;
 				return;

@@ -23,6 +23,7 @@
 		ogpB64={data.report.ogpB64}
 		history={data.report.history}
 		prev={data.report.prev}
+		since={data.report.since}
 		dev={data.report.dev}
 	/>
 {:else}

@@ -64,6 +64,8 @@ export interface TimelineCall {
 	callers?: string[];
 	/** the upstream's own Server-Timing: what their side spent the wait on */
 	timings?: { name: string; ms: number; desc?: string }[];
+	/** a fetch: of `ms`, the part spent reading the body after the headers came */
+	body_ms?: number;
 }
 
 export interface TimelineInput {
@@ -76,6 +78,17 @@ export interface TimelineInput {
 	runs?: { start: number; end: number }[];
 	/** every async resource the hooks saw (waits or not): a gap is named after what was pending */
 	pending?: { start: number; end: number; label: string; kind: string }[];
+	/** the app's `handle` functions that live outside the hooks file: name → file stem
+	 *  (source-scan `handle_parts`), so their work after `resolve()` reads as hooks, not "other":
+	 *  the function itself anywhere on a stack, or any code in its module on a stack nothing else
+	 *  claims */
+	hooks?: ReadonlyMap<string, string>;
+	/** the profiled request's Kit route id (`/latecomer`, `/(app)/p/[id]`): a sample under ANOTHER
+	 *  route's page or layout file is another request's work, set aside */
+	route?: string;
+	/** windows (performance.now() ms) whose samples are another visitor's as much as the profiled
+	 *  render's (a render of the same page overlapped): set aside by time */
+	set_aside?: { start: number; end: number }[];
 }
 
 /** Which call started only once another finished: the await that serialized them. */
@@ -116,9 +129,12 @@ export interface Segment {
 	category: FrameCategory;
 	phase: Phase;
 	/** wait: every call in flight during the segment */
-	calls?: { label: string; ms: number; caller?: string; callers?: string[]; timings?: TimelineCall['timings'] }[];
+	calls?: { label: string; ms: number; caller?: string; callers?: string[]; timings?: TimelineCall['timings']; body_ms?: number }[];
 	/** the innermost `span()` this segment sits inside, when any */
 	within?: string;
+	/** cpu: the Kit load file on its stack (`routes/+page.server.ts`) — the load a helper in
+	 *  `$lib` ran for */
+	lane?: string;
 	/** gap: the async resources that were pending across it — what the wait most likely was */
 	pending?: string[];
 }
@@ -127,6 +143,8 @@ export interface PhaseRow {
 	phase: Phase;
 	cpu_ms: number;
 	wait_ms: number;
+	/** whose CPU it was: the owners holding a tenth or more of it, biggest first (at most 3) */
+	top?: { label: string; ms: number }[];
 }
 
 export interface ParallelGroup {
@@ -165,6 +183,9 @@ export interface LoadChain {
 	serial_ms: number;
 	/** a `parent()` frame was seen under the page load (else inferred from the timing alone) */
 	explicit: boolean;
+	/** from the page load's source (set at report time): its `await parent()` line, the names that
+	 *  sets, the first line reading one (null: none), and the awaits between that waited for nothing */
+	parent_use?: { line: number; names: string[]; first_use: number | null; awaits_before_use: number };
 }
 
 export interface Timeline {
@@ -183,6 +204,18 @@ export interface Timeline {
 	/** THE CAUSALITY GRAPH of the waits: every call as a box in a lane, and an edge wherever a
 	 *  call started only once another had finished (the await that serialized them) */
 	awaits?: { nodes: AwaitNode[]; edges: AwaitEdge[] };
+	/** WHAT RAN INSIDE each app owner: the deepest app function on the stack of its samples (an
+	 *  arrow, a callback, the owner itself), with its ms. An owner is the nearest NAMED function, so
+	 *  this is the only record of which of its arrows held the time. Keyed by the owner's label. */
+	inner?: Record<string, InnerFn[]>;
+}
+
+export interface InnerFn {
+	/** the function's name, `(anonymous)` for an arrow */
+	name: string;
+	/** its own start, `file:line` (short path) */
+	file: string;
+	ms: number;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -217,10 +250,14 @@ export function load_lane_of(text: string): Pick<LoadLane, 'file' | 'level' | 'k
 const OGYGIA_SERVER_RE = /\/ogygia\/(?:src|dist)\/(?!profiler\/)/;
 
 /** The Kit phase of ONE frame, or null when the frame says nothing about it. */
-export function phase_of_frame(f: FrameInfo): Phase | null {
+export function phase_of_frame(f: FrameInfo, hooks?: ReadonlyMap<string, string>): Phase | null {
 	if (f.name === 'inject_client_seeds') return 'ogygia';
 	const url = f.url;
 	if (!url) return null;
+	// a handle from another module (`sequence(ds_ssr, …)`): what it does after `await resolve()` runs
+	// with nothing of Kit below it, so only its own name and file say it is a hook
+	const stem = hooks?.get(f.name);
+	if (stem && is_in_file(url, stem)) return 'hooks';
 	if (OGYGIA_SERVER_RE.test(url)) return 'ogygia';
 	// a remote function's own code is deeper than the component or load that awaited it, so it
 	// wins the leaf-first walk: its CPU and its waits read as "remote functions"
@@ -234,12 +271,30 @@ export function phase_of_frame(f: FrameInfo): Phase | null {
 }
 
 /** Walk a stack leaf → root; the first frame that names a phase wins (the deepest decision). */
-export function phase_of_stack(frames: FrameInfo[]): Phase {
+export function phase_of_stack(frames: FrameInfo[], hooks?: ReadonlyMap<string, string>): Phase {
 	for (const f of frames) {
-		const p = phase_of_frame(f);
+		const p = phase_of_frame(f, hooks);
 		if (p) return p;
 	}
+	// nothing of Kit, a component or a load on the stack: an async continuation, rooted at whatever
+	// function resumed (`processDsTags` after its await, not the handle that called it). When its code
+	// is in a handle's own module, it is that hook's work. Only as the last word: a helper from that
+	// module called under a component was already decided by the component above
+	if (hooks?.size) {
+		for (const f of frames) {
+			if (!f.url) continue;
+			for (const stem of hooks.values()) if (is_in_file(f.url, stem)) return 'hooks';
+		}
+	}
 	return 'other';
+}
+
+/** does `url` name a file whose stem is `stem` (`…/ds-ssr.ts`, `…/ds-ssr.js`, `ds-ssr.ts`)? */
+function is_in_file(url: string, stem: string): boolean {
+	const at = url.lastIndexOf(stem + '.');
+	if (at === -1) return false;
+	const before = url.charCodeAt(at - 1);
+	return at === 0 || before === 47 /* / */ || before === 92 /* \ */;
 }
 
 /** The frame a CPU segment is charged to: the deepest component, else the deepest named app
@@ -270,6 +325,13 @@ export function owner_of_stack(frames: FrameInfo[]): {
 	if (comp) return pick(comp, comp.name);
 	if (app) return pick(app, app.name);
 	if (dep) return pick(dep, dep.pkg ? `${dep.name} (${dep.pkg})` : dep.name);
+	// NO NAMED FRAME OF YOURS: a file's top-level code running as it loads (its module function, on
+	// its first line), or a nameless callback with nothing named above it (an arrow after an await) —
+	// named by where it is, not "(anonymous)"
+	const anon = frames.find((f) => f.category === 'app' && f.url);
+	if (anon) return pick(anon, anon.line <= 1 ? `module load (${short(anon.url)})` : `fn @ ${short(anon.url)}:${anon.line}`);
+	const anon_dep = frames.find((f) => f.category === 'dependency' && f.pkg);
+	if (anon_dep) return pick(anon_dep, `${anon_dep.line <= 1 ? 'module load' : '(anonymous)'} (${anon_dep.pkg})`);
 	const top = frames[0];
 	if (!top) return { label: 'unknown', file: '', category: 'unknown' };
 	if (top.category === 'gc') return { label: 'garbage collection', file: '', category: 'gc' };
@@ -307,6 +369,12 @@ export function build_timeline(
 		/** the nearest Kit load file on the stack, and whether Kit's `parent()` is above the sample */
 		lane: ReturnType<typeof load_lane_of>;
 		in_parent: boolean;
+		/** packages app code called into on this stack */
+		entered: string[];
+		/** no app code on the stack: the package it runs in (a library's own async continuation) */
+		orphan_pkg: string | undefined;
+		/** the deepest app function on the stack (what inside the owner ran) */
+		inner: FrameInfo | undefined;
 	}
 	const stack_memo = new Map<number, Described>();
 	const describe = (id: number): Described => {
@@ -322,11 +390,32 @@ export function build_timeline(
 		const idle = !!leaf && (leaf.category === 'idle' || leaf.name === '(root)' || leaf.name === '(program)');
 		let lane: Described['lane'] = null;
 		let in_parent = false;
-		for (const f of frames) {
+		/** packages app code calls into on this stack, and the outermost package when no app code is on it */
+		const entered: string[] = [];
+		let root_pkg: string | undefined;
+		let has_app = false;
+		let inner: FrameInfo | undefined;
+		for (let k = 0; k < frames.length; k++) {
+			const f = frames[k];
 			if (!lane && f.url && APP_LOAD_FILE_RE.test(f.url)) lane = load_lane_of(f.url);
 			if (f.name === 'parent' && KIT_LOAD_RE.test(f.url)) in_parent = true;
+			if (f.category === 'app' || f.category === 'component') {
+				if (!has_app) inner = f;
+				has_app = true;
+				const child = frames[k - 1];
+				if (child?.category === 'dependency' && child.pkg && !entered.includes(child.pkg)) entered.push(child.pkg);
+			} else if (f.category === 'dependency' && f.pkg) root_pkg = f.pkg;
 		}
-		const d = { owner: owner_of_stack(frames), phase: phase_of_stack(frames), idle, lane, in_parent };
+		const d = {
+			owner: owner_of_stack(frames),
+			phase: phase_of_stack(frames, input.hooks),
+			idle,
+			lane,
+			in_parent,
+			entered,
+			orphan_pkg: has_app ? undefined : root_pkg,
+			inner
+		};
 		stack_memo.set(id, d);
 		return d;
 	};
@@ -335,6 +424,8 @@ export function build_timeline(
 		t1: number;
 		owner: ReturnType<typeof owner_of_stack>;
 		phase: Phase;
+		/** the load file on the stack (`routes/+page.server.ts`) */
+		lane?: string;
 	}
 	const cpu: Cpu[] = [];
 	const lanes = new Map<string, LoadLane>();
@@ -348,15 +439,31 @@ export function build_timeline(
 	const samples = profile.samples ?? [];
 	const deltas = profile.timeDeltas ?? [];
 	let t_us = profile.startTime;
+	/** package → the phase of the code that last called into it. A library that goes on working after
+	 *  an await (its own promise chain, a timer loop) has no app frame under it; that work belongs to
+	 *  whoever last called in — the same rule the functions table uses for a library's async work */
+	const entry_phase = new Map<string, Phase>();
+	/** owner label → `name\0file:line` of the deepest app function → ms */
+	const inner_ms = new Map<string, Map<string, number>>();
 	for (let i = 0; i < samples.length; i++) {
 		const d = deltas[i] ?? 0;
 		t_us += d;
 		const t = input.perf_start + (t_us - profile.startTime) / 1000;
-		if (t < w0 || t > w1 || d <= 0) continue;
-		const info = describe(samples[i]);
-		if (info.idle) continue;
+		if (t > w1 || d <= 0) continue;
+		const described = describe(samples[i]);
+		if (described.idle) continue;
+		for (const pkg of described.entered) entry_phase.set(pkg, described.phase);
+		if (t < w0) continue;
+		const inherited = described.phase === 'other' && described.orphan_pkg ? entry_phase.get(described.orphan_pkg) : undefined;
+		const info = inherited ? { ...described, phase: inherited } : described;
 		const s0 = Math.max(t - d / 1000, w0) - w0;
 		const s1 = t - w0;
+		const o = info.owner;
+		if (info.inner && (o.category === 'app' || o.category === 'component')) {
+			const m = inner_ms.get(o.label) ?? inner_ms.set(o.label, new Map()).get(o.label)!;
+			const k = `${info.inner.name}\0${short(info.inner.url)}:${info.inner.line}`;
+			m.set(k, (m.get(k) ?? 0) + s1 - s0);
+		}
 		if (info.lane) {
 			const row = lane_row(info.lane);
 			row.t0 = Math.min(row.t0, s0);
@@ -370,10 +477,11 @@ export function build_timeline(
 			last &&
 			last.owner.label === info.owner.label &&
 			last.phase === info.phase &&
+			last.lane === info.lane?.file &&
 			s0 - last.t1 <= (d / 1000) * 2
 		) {
 			last.t1 = s1;
-		} else cpu.push({ t0: s0, t1: s1, owner: info.owner, phase: info.phase });
+		} else cpu.push({ t0: s0, t1: s1, owner: info.owner, phase: info.phase, ...(info.lane ? { lane: info.lane.file } : {}) });
 	}
 
 	// ── wait intervals from the calls inside the window ──
@@ -429,10 +537,15 @@ export function build_timeline(
 		if (b - a <= 0) continue;
 		const mid = (a + b) / 2;
 		while (ci < cpu.length && cpu[ci].t1 <= a) ci++;
-		const on_cpu = ci < cpu.length && cpu[ci].t0 <= mid && mid < cpu[ci].t1 ? cpu[ci] : null;
+		const cpu_here = ci < cpu.length && cpu[ci].t0 <= mid && mid < cpu[ci].t1 ? cpu[ci] : null;
 		// SPANS are the overlay: the innermost one open at this instant names what a call or a gap
 		// sits inside — "GET api/x, in db.user"; a gap with no call becomes "waiting in db.user"
 		const all_active = waits.filter((w) => w.t0 <= mid && mid < w.t1);
+		// the profiler's OWN CPU inside a wait is the wait going on, as if the profiler were not there:
+		// its slivers chopped one 31 ms wait into pieces, each repeating the whole call (callers,
+		// Server-Timing) — a third of the timeline's bytes. Outside a wait it stays drawn (the bar is
+		// honest) and out of the totals, as before.
+		const on_cpu = cpu_here && !(cpu_here.owner.category === 'profiler' && all_active.length) ? cpu_here : null;
 		const open_spans = all_active.filter((w) => w.call.kind === 'span');
 		const inner = open_spans.length
 			? open_spans.reduce((m, w) => (w.call.ms < m.call.ms ? w : m), open_spans[0])
@@ -449,6 +562,7 @@ export function build_timeline(
 				file: on_cpu.owner.file,
 				category: on_cpu.owner.category,
 				phase: on_cpu.phase,
+				...(on_cpu.lane ? { lane: on_cpu.lane } : {}),
 				...(inner ? { within: inner.call.label } : {})
 			};
 		} else {
@@ -459,7 +573,8 @@ export function build_timeline(
 					ms: round2(w.call.ms),
 					caller: w.call.caller,
 					...(w.call.callers && w.call.callers.length > 1 ? { callers: w.call.callers } : {}),
-					...(w.call.timings ? { timings: w.call.timings } : {})
+					...(w.call.timings ? { timings: w.call.timings } : {}),
+					...(w.call.body_ms ? { body_ms: w.call.body_ms } : {})
 				}));
 				// the phase of the code that started the (longest) call wins over "what ran before"
 				const owner = active.reduce((m, w) => (w.call.ms > m.call.ms ? w : m), active[0]);
@@ -511,6 +626,7 @@ export function build_timeline(
 			prev.phase === seg.phase &&
 			prev.detail === seg.detail &&
 			prev.within === seg.within &&
+			prev.lane === seg.lane &&
 			(prev.pending?.join() ?? '') === (seg.pending?.join() ?? '')
 		) {
 			prev.t1 = b;
@@ -520,6 +636,8 @@ export function build_timeline(
 		s.t0 = round2(s.t0);
 		s.t1 = round2(s.t1);
 	}
+	// a stretch that rounds to nothing is nothing (a sliver between two ticks)
+	for (let i = segments.length - 1; i >= 0; i--) if (segments[i].t1 <= segments[i].t0 && segments.length > 1) segments.splice(i, 1);
 
 	// ── totals + phases ──
 	let cpu_ms = 0,
@@ -531,6 +649,8 @@ export function build_timeline(
 		if (!r) phase_map.set(p, (r = { phase: p, cpu_ms: 0, wait_ms: 0 }));
 		return r;
 	};
+	/** phase → owner label → CPU ms: who a phase's CPU was */
+	const phase_owners = new Map<Phase, Map<string, number>>();
 	let overhead_ms = 0;
 	for (const s of segments) {
 		const len = s.t1 - s.t0;
@@ -540,13 +660,33 @@ export function build_timeline(
 		} else if (s.kind === 'cpu') {
 			cpu_ms += len;
 			phase_row(s.phase).cpu_ms += len;
+			let m = phase_owners.get(s.phase);
+			if (!m) phase_owners.set(s.phase, (m = new Map()));
+			// a library's work is many small functions: one package, one owner (`render2 (@acme/ui)`,
+			// `getNamedItem (@acme/ui)` → `@acme/ui`), and Node's own the same
+			const open = s.label.lastIndexOf(' (');
+			const who =
+				s.category === 'dependency' && open !== -1 && s.label.endsWith(')')
+					? s.label.slice(open + 2, -1)
+					: s.category === 'node'
+						? 'node core'
+						: s.label;
+			m.set(who, (m.get(who) ?? 0) + len);
 		} else if (s.kind === 'wait') {
 			wait_ms += len;
 			phase_row(s.phase).wait_ms += len;
 		} else gap_ms += len;
 	}
 	const phases = [...phase_map.values()]
-		.map((r) => ({ phase: r.phase, cpu_ms: round2(r.cpu_ms), wait_ms: round2(r.wait_ms) }))
+		.map((r) => {
+			// the owners that are a real part of it (a tenth or more of its CPU), biggest first
+			const top = [...(phase_owners.get(r.phase) ?? [])]
+				.filter(([, ms]) => ms >= r.cpu_ms * 0.1 && ms >= 0.5)
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, 3)
+				.map(([label, ms]) => ({ label, ms: round2(ms) }));
+			return { phase: r.phase, cpu_ms: round2(r.cpu_ms), wait_ms: round2(r.wait_ms), ...(top.length ? { top } : {}) };
+		})
 		.sort((x, y) => y.cpu_ms + y.wait_ms - (x.cpu_ms + x.wait_ms));
 
 	const timeline: Timeline = {
@@ -561,6 +701,20 @@ export function build_timeline(
 	};
 	timeline.parallelizable = find_parallelizable(timeline);
 	timeline.awaits = await_graph(input, w0, w1);
+	// what ran inside each owner, kept only where it was more than the owner itself
+	const inner: Record<string, InnerFn[]> = {};
+	for (const [owner, m] of inner_ms) {
+		const list = [...m]
+			.map(([k, ms]) => {
+				const z = k.indexOf('\0');
+				return { name: k.slice(0, z), file: k.slice(z + 1), ms: round2(ms) };
+			})
+			.filter((f) => f.ms > 0)
+			.sort((a, b) => b.ms - a.ms)
+			.slice(0, 12);
+		if (list.some((f) => f.name !== owner)) inner[owner] = list;
+	}
+	if (Object.keys(inner).length) timeline.inner = inner;
 
 	// ── Kit's load lanes + the parent() chain ──
 	for (const [file, list] of lane_waits) {

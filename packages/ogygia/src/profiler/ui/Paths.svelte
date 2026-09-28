@@ -9,7 +9,9 @@
 	import { fmt_ms, fmt_pct, CATEGORY_COLOR } from './format.js';
 	import { row_href } from './row-anchor.svelte.js';
 
-	let { paths, busy }: { paths: PathGroup[]; busy: number } = $props();
+	let { paths, busy, fns }: { paths: PathGroup[]; busy: number; fns?: string[] } = $props();
+	// a middle frame (a library's renderer with no time of its own) may have no functions-table row
+	const known = $derived(fns ? new Set(fns) : null);
 
 	const COL = 236;
 	const ROW = 30;
@@ -53,7 +55,7 @@
 		return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
 	};
 	const stroke = (n: PathNode, total: number) => 1 + 7 * Math.min(1, n.ms / Math.max(total, 0.01));
-	const href = (n: PathNode) => (!n.key ? null : n.category === 'component' ? row_href(`comp:${n.name}`) : row_href(`fn:${n.key}`));
+	const href = (n: PathNode) => (!n.key ? null : n.category === 'component' ? row_href(`comp:${n.name}`) : known && !known.has(n.key) ? null : row_href(`fn:${n.key}`));
 	const short = (s: string, max = 19) => (s.length > max ? s.slice(0, max - 1) + '…' : s);
 </script>
 
@@ -77,8 +79,10 @@
 			<span><i class="sw"></i> a call between them</span>
 			<span><i class="ln"></i> link width and the thin bar under a node = its share of the path's {fmt_ms(g.ms)} ms</span>
 		</div>
-		<div class="scroll">
-			<svg width={l.width} height={l.height} viewBox="0 0 {l.width} {l.height}" role="img" aria-label="the call path from {g.owner.name} to its hot functions">
+		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+		<div class="scroll" tabindex="0" role="region" aria-label="call path from {g.owner.name}, scrolls sideways">
+			<!-- a group, not an image: its nodes are links (an image cannot hold anything to press) -->
+			<svg width={l.width} height={l.height} viewBox="0 0 {l.width} {l.height}" role="group" aria-label="the call path from {g.owner.name} to its hot functions">
 				{#each l.nodes as n (n.n.key + n.x + n.y)}
 					{#if n.parent}
 						<path d={link(n.parent, n)} fill="none" stroke={n.n.hot ? '#e8734a' : '#3a4250'} stroke-width={stroke(n.n, g.ms)} opacity="0.85" />

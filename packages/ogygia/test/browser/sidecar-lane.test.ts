@@ -147,14 +147,15 @@ test('one IntersectionObserver per rootMargin, shared by every element; once_vis
 	observe(document.getElementById('c')!, '200px', (i) => seen.push('c:' + i));
 	expect(observer_count()).toBe(with_zero + 1); // a distinct margin → one more observer
 	observe(document.getElementById('c')!, '200px', (i) => seen.push('c2:' + i));
-	expect(observer_count()).toBe(with_zero + 1); // same margin → shared (and the callback replaced)
+	expect(observer_count()).toBe(with_zero + 1); // same margin → shared (both callbacks kept)
 	await expect
 		.poll(() => seen.filter((s) => s.startsWith('a') || s.startsWith('b')).length)
 		.toBe(2);
 	expect(seen).toContain('a:true');
 	expect(seen).toContain('b:true');
-	expect(seen.some((s) => s === 'c:false')).toBe(false); // replaced before it reported
-	expect(seen).toContain('c2:false');
+	// two watchers of one element both hear it (one replacing the other hid a visible island from the
+	// hydration scheduler: observe-shared.test.ts)
+	await expect.poll(() => seen.includes('c:false') && seen.includes('c2:false')).toBe(true);
 	stop_a();
 	stop_b();
 	let fired = 0;

@@ -33,7 +33,8 @@ import runtime_url from 'virtual:ogygia/runtime-url';
 import { freeze_capture_active } from './freeze/capture.js';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import { kit_render_context, type KitPage } from './server/kit-context.js';
-import { record_page } from './page-seed-registry.js';
+import { open_ask_scope, read_seed_ask, record_page } from './page-seed-registry.js';
+import { shape_page_data } from './server/seed-shape.js';
 
 const AMP_G = /&/g;
 const LT_G = /</g;
@@ -112,7 +113,9 @@ function kit_page_context(options: DocumentOptions): KitPage {
 			form: page.form,
 			error: page.error
 		},
-		'all', // the routeless document root: its islands' reads are not known here — ship whole
+		// the routeless document root asks for nothing itself: the regions inside it record their own
+		// asks (their build knows what each island reads), and the seed below follows them
+		false,
 		[]
 	);
 	return page;
@@ -134,6 +137,8 @@ export async function document(
 ): Promise<Response> {
 	// `<Region of>` accepts exactly what callers hold — a region value or its promise. Rendered inside
 	// the current request so css-claiming and props capture key off the live RequestEvent.
+	// the regions' seed asks of THIS render are collected (a router page has no Kit page bag)
+	open_ask_scope();
 	const r = await render(Region as unknown as Component<{ of: unknown }>, {
 		props: { of: await of },
 		context: kit_render_context(kit_page_context(options))
@@ -162,8 +167,14 @@ export async function document(
 	}
 	// Page-state seed (`$app/state` inside islands) — the same `application/ogygia-page` side-channel the
 	// handle injects for a Kit page, built here from the caller's snapshot (router-rendered pages).
-	if (options.pageState) {
+	// SEED ONLY WHEN READ, ONLY WHAT IS READ — the law a Kit page's seed follows: the regions rendered
+	// above recorded their asks. None asked → no island reads the page, nothing ships (a profiler
+	// report page shipped its whole 2.9 MB report here, read by nobody). Outside a request the handle
+	// owns there are no asks to read, and the whole slice ships as before.
+	const ask = options.pageState ? read_seed_ask() : undefined;
+	if (options.pageState && (!ask || ask.wanted)) {
 		const s = options.pageState;
+		const data = ask ? shape_page_data(s.data, ask.keys) : s.data;
 		// Same lanes as the handle's seed: native JSON when the slice is JSON-exact, devalue otherwise.
 		const payload = PageSeed.serialize(
 			{
@@ -171,13 +182,13 @@ export async function document(
 				params: s.params as Record<string, string> | undefined,
 				route: s.route,
 				status: s.status,
-				data: s.data,
+				data,
 				form: s.form,
 				error: s.error
 			},
 			(v: unknown) => stringify(v, page_seed_reducers),
 			// (form/error absent → serialized as null, which is JSON)
-			analyze(s.data).json && analyze(s.form ?? null).json && analyze(s.error ?? null).json
+			analyze(data).json && analyze(s.form ?? null).json && analyze(s.error ?? null).json
 		);
 		if (payload) {
 			const format = payload.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '';

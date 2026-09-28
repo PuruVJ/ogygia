@@ -12,6 +12,7 @@ import Shell from '$lib/rtr/Shell.svelte';
 import Inner from '$lib/rtr/Inner.svelte';
 import Home from '$lib/rtr/Home.svelte';
 import Deep from '$lib/rtr/Deep.svelte';
+import Reader from '$lib/rtr/Reader.svelte';
 
 // v2: layouts are named table→table wrappers; nesting = spreading a wrapped sub-table. Deep's `data`
 // merges shell.who + inner.nav (Kit's cascade), so it needs no load of its own. Endpoints are the
@@ -22,6 +23,9 @@ const inner = layout('inner', Inner, { load: () => ({ nav: 'sidebar-42' }) });
 const app = routes(
 	shell({
 		'/': page(Home),
+		// ROUTER SEED (e2e/router-seed.spec.ts): an island here reads `page.data.who`; `big` is read by
+		// nobody and must never ship
+		'/reader': page(Reader, { load: () => ({ big: 'x'.repeat(200_000) }) }),
 		...inner({ '/deep': page(Deep) }),
 		// STREAMED page: first yield flushes instantly (skeleton), the late yield swaps in down
 		// the same response — with an island inside that wakes on adoption (e2e/stream-page.ts).

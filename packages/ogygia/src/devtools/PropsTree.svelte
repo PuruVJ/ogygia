@@ -97,7 +97,7 @@
 	.tw {
 		display: inline-block;
 		width: 12px;
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.leaf {
 		padding-left: 12px;
@@ -106,11 +106,11 @@
 		color: #7dd3fc;
 	}
 	.c {
-		color: #64748b;
+		color: #94a3b8;
 		margin: 0 5px 0 1px;
 	}
 	.prev {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.str {
 		color: #6ee7b7;
@@ -127,7 +127,7 @@
 		color: #f0abfc;
 	}
 	.nul {
-		color: #64748b;
+		color: #94a3b8;
 	}
 	.ref {
 		display: inline-flex;

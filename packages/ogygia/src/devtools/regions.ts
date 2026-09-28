@@ -27,17 +27,22 @@ export interface RegionInfo {
 	entry: string | null;
 	fp: string | null;
 	hydrated: boolean;
+	/** a region inside an awake island: it does not wake itself, it rides the island's hydration
+	 *  (`data-nested`) — awake when that island is, with no `data-hydrated` of its own */
+	rides?: Element;
 }
 
 export function region_info(el: Element): RegionInfo {
 	const kind = region_kind(el);
+	const parent = el.hasAttribute('data-nested') ? (el.parentElement?.closest('ogygia-region') ?? undefined) : undefined;
 	return {
 		el,
 		kind,
 		wake: el.getAttribute('wake') || (kind === 'hole' ? 'fetch' : 'load'),
 		entry: el.getAttribute('entry'),
 		fp: el.getAttribute('data-og-fp'),
-		hydrated: el.hasAttribute('data-hydrated')
+		hydrated: el.hasAttribute('data-hydrated') || !!parent?.hasAttribute('data-hydrated'),
+		...(parent ? { rides: parent } : {})
 	};
 }
 
@@ -68,11 +73,15 @@ export function short_chunk(url: string | null): string {
 	return b.length > 24 ? b.slice(0, 23) + '…' : b;
 }
 
-/** The island id (`<hash>` in `virtual:ogygia/island/<hash>.js`) from an entry URL, or ''. */
+/** The island id from an entry URL, or '': `<id>` in the dev server's `virtual:ogygia/island/<id>.js`
+ *  and in a build's `og-region.<id>.js` (the name maps key the bare id — with the prefix left on, every
+ *  tab in a build showed hashes). */
 export function island_id(entry: string | null | undefined): string {
 	if (!entry) return '';
-	return basename(entry).replace(JS_EXT_RE, '');
+	const id = basename(entry).replace(JS_EXT_RE, '');
+	return id.startsWith(BUILT_PREFIX) ? id.slice(BUILT_PREFIX.length) : id;
 }
+const BUILT_PREFIX = 'og-region.';
 
 /**
  * The compiler's `island id → component name` map (dev-only), published on `window` by the
@@ -121,10 +130,21 @@ export function timing_for(entry: string): PerformanceResourceTiming | undefined
 	if (typeof performance === 'undefined') return undefined;
 	const base = basename(entry);
 	if (!base) return undefined;
+	return timing_index().get(base);
+}
+
+// the resource list by basename, rebuilt only when it grows: every island asked on every tick, and
+// each ask split every resource's URL (18 ms per 3 s on a page with 64 files and 30 islands)
+let index_len = -1;
+let index = new Map<string, PerformanceResourceTiming>();
+function timing_index(): Map<string, PerformanceResourceTiming> {
 	const res = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
-	let found: PerformanceResourceTiming | undefined;
-	for (const r of res) if (basename(r.name) === base) found = r; // last match wins (a re-fetch)
-	return found;
+	if (res.length !== index_len) {
+		index = new Map();
+		for (const r of res) index.set(basename(r.name), r); // last match wins (a re-fetch)
+		index_len = res.length;
+	}
+	return index;
 }
 
 /** Over-the-wire + decoded bytes for a chunk entry (0/0 when not yet loaded or size hidden). */

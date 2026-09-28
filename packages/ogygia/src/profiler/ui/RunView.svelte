@@ -17,8 +17,9 @@
 		base,
 		path,
 		runs,
-		format
-	}: { base: string; path: string; runs: number; format: string } = $props();
+		format,
+		against = ''
+	}: { base: string; path: string; runs: number; format: string; against?: string } = $props();
 
 	// A busy worker answers /page with 409 (one recording per worker — the V8 profiler is process-wide).
 	// There's no server-side queue to rely on (a serverless worker is recycled within ~30s), so the QUEUE
@@ -79,6 +80,8 @@
 				try {
 					const keep = (await res.json()) as { id?: string; url?: string; dump?: { meta: { id: string; created: number; trigger: string } } };
 					if (keep.url) url = keep.url;
+					// asked to check a fix: open the new report compared with the one it was run against
+					if (against && keep.id) url = `${base}/compare/${against}/${keep.id}`;
 					if (keep.dump) {
 						phase = 'Keeping the report in this browser…';
 						await put_report(keep.dump);

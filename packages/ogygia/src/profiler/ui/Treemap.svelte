@@ -215,7 +215,7 @@
 
 <div class="crumb">
 	{#if stack.length === 1}
-		<span style="color:#7d8590">click a box to zoom in</span>
+		<span style="color:var(--text-faint)">click a box to zoom in</span>
 	{:else}
 		{stack.slice(1).map((n) => n.label).join(' › ')} —
 		<a href="#top" onclick={zoomOut}>zoom out</a>
@@ -231,7 +231,7 @@
 {#if tip}
 	<div class="tree-tip" style="display:block;left:{tip.x}px;top:{tip.y}px">
 		<b>{tip.node.label}</b>
-		{#if tip.node.sub}<br /><span style="color:#7d8590">{tip.node.sub}</span>{/if}
+		{#if tip.node.sub}<br /><span style="color:var(--text-faint)">{tip.node.sub}</span>{/if}
 		<br />{tip.node.value} ms{#if tip.node.pct != null} · {tip.node.pct}% of busy{/if}
 	</div>
 {/if}

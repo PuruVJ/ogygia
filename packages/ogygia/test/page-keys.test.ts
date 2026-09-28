@@ -85,6 +85,22 @@ describe('page_data_keys — doubt goes to all', () => {
 	});
 });
 
+describe('page_data_keys — a branch the browser never takes', () => {
+	it("a read under typeof window === 'undefined' or import.meta.env.SSR is not the client's", () => {
+		// Region's own server-side snapshot: every island rendering a <Region> read as taking it whole
+		expect(svelte(`<script>\n\timport { page } from '$app/state';\n\tif (typeof window === 'undefined') {\n\t\trecord({ data: page.data });\n\t}\n\tconst l = page.data._locale;\n</script>`)).toEqual(['_locale']);
+		expect(ts(`import { page } from '$app/state';\nexport const x = import.meta.env.SSR ? page.data : page.data.a;`)).toEqual(['a']);
+		expect(ts(`import { page } from '$app/state';\nexport const x = typeof document == 'undefined' && send(page.data);`)).toEqual([]);
+	});
+	it("the client branch still counts: typeof window !== 'undefined', and the else of a server test", () => {
+		expect(ts(`import { page } from '$app/state';\nif (typeof window !== 'undefined') send(page.data);`)).toBe('all');
+		expect(ts(`import { page } from '$app/state';\nif ('undefined' === typeof window) {} else { send(page.data); }`)).toBe('all');
+		expect(ts(`import { page } from '$app/state';\nif (!import.meta.env.SSR) send(page.data);`)).toBe('all');
+		// any other test: both branches are the client's
+		expect(ts(`import { page } from '$app/state';\nif (flag) send(page.data);`)).toBe('all');
+	});
+});
+
 describe('merge_page_keys', () => {
 	it('unions sets, all absorbs, null is identity', () => {
 		expect([...(merge_page_keys(new Set(['a']), new Set(['b'])) as Set<string>)].sort()).toEqual(['a', 'b']);

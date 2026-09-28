@@ -186,7 +186,9 @@ export interface OgygiaOptions {
 	 *
 	 * - `false` (default) — the gate is off; every emit folds to `if (false)` and the bus tree-shakes
 	 *   out of the runtime chunk. Zero cost.
-	 * - `true` — emit on (dev or a prod build that asks for it, e.g. the REPL's prod switch).
+	 * - `true` — on, wherever you turn it on. In a build (a preview deploy) the pages carry only a
+	 *   small launcher: the dock's code loads when someone opens it, and the page is measured from
+	 *   the next load on. You decide where: `ogygia({ devtools: mode !== 'production' })`.
 	 */
 	devtools?: boolean;
 

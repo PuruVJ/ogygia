@@ -2,8 +2,9 @@
 	/** Hot-functions table — a `wake:'load'` island with reactive column sort, a name/file filter,
 	 *  and an expandable row per function (full location + its heaviest call stacks). */
 	import type { FrameStat } from '../analyze.js';
-	import { fmt_ms, fmt_bytes, CATEGORY_COLOR, CATEGORY_LABEL } from './format.js';
+	import { fmt_ms, fmt_dur, fmt_bytes, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
 	import { sortable } from './sort.svelte.js';
+	import { pressable } from './press.js';
 	import FrameDetails from './FrameDetails.svelte';
 	import { row_id, follow_hash } from './row-anchor.svelte.js';
 
@@ -58,21 +59,21 @@
 		<tr>
 			<th>function</th>
 			<th>where</th>
-			<th></th>
-			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')}
+			<th><span class="sr-only">kind of code</span></th>
+			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')} {@attach pressable} aria-sort={s.aria('self_ms')}
 				>self ms<span class="arr">{s.arrow('self_ms')}</span></th
 			>
-			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')}
+			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')} {@attach pressable} aria-sort={s.aria('total_ms')}
 				>total ms<span class="arr">{s.arrow('total_ms')}</span></th
 			>
 			<th
 				class="num sort"
 				class:active={s.key === 'per'}
-				title="total ÷ calls — the cost of a single call"
-				onclick={() => s.click('per')}>per call<span class="arr">{s.arrow('per')}</span></th
+				title="one call: its time per render ÷ its calls in one render"
+				onclick={() => s.click('per')} {@attach pressable} aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
 			>
 			{#if hasAlloc}
-				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')}
+				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')} {@attach pressable} aria-sort={s.aria('alloc')}
 					>alloc<span class="arr">{s.arrow('alloc')}</span></th
 				>
 			{/if}
@@ -85,12 +86,13 @@
 				id={row_id('fn', row_key(f))}
 				class:open={open === row_key(f)}
 				onclick={() => (open = open === row_key(f) ? null : row_key(f))}
+				{@attach pressable}
 			>
 				<td class="fn">
 					<span class="caret">{open === row_key(f) ? '▾' : '▸'}</span>
-					<b>{f.name}</b>
+					{#if f.label}<b title="an anonymous function: its own first line">fn</b> <code class="fnlabel">{f.label}</code>{:else}<b>{f.name}</b>{/if}
 					{#if f.count > 1}
-						<span class="hint" title="{f.count} calls, {fmt_ms(f.total_ms / f.count)} ms each"
+						<span class="hint" title="{f.count} calls in one render, {fmt_ms(f.per)} ms each"
 							>×{f.count}</span
 						>
 					{/if}
@@ -103,14 +105,14 @@
 				<td
 					><span
 						class="chip"
-						style="background:{CATEGORY_COLOR[f.category]}"
+						style="background:{CATEGORY_COLOR[f.category]};color:{ink_on(CATEGORY_COLOR[f.category])}"
 						title={f.pkg ? `${CATEGORY_LABEL[f.category]} · ${f.pkg}` : CATEGORY_LABEL[f.category]}
 						>{f.pkg ?? CATEGORY_LABEL[f.category]}</span
 					></td
 				>
 				<td class="num"><b>{fmt_ms(f.self_ms)}</b></td>
 				<td class="num">{fmt_ms(f.total_ms)}</td>
-				<td class="num">{fmt_ms(f.per)}</td>
+				<td class="num">{f.count > 0 ? fmt_dur(f.per) : '—'}</td>
 				{#if hasAlloc}<td class="num">{f.alloc ? fmt_bytes(f.alloc) : '—'}</td>{/if}
 			</tr>
 			{#if open === row_key(f)}

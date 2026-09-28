@@ -1,6 +1,7 @@
 <script lang="ts">
 	// THE OGYGIA PAGE SCORE, shown Lighthouse-style: one ring with the number + grade, then the
-	// sub-scores it is made of (JS shipped, hydration, seed, server, layout) each on its own bar, and
+	// sub-scores it is made of (JS at start, weight, blocking, HTML, data, hydration, server, loading,
+	// stability, responsiveness) each on its own bar with the points it cost, what was left out, and
 	// the single biggest win to take first. Pure presentation — the number comes from page_score
 	// (score.ts). Colour by score so the eye lands on the red bar.
 	import type { PageScore } from '../score.js';
@@ -31,11 +32,12 @@
 			</div>
 		</div>
 		<div class="ring-cap">
-			<h2>ogygia score</h2>
+			<h2>page score</h2>
 			<p class="hint">
-				scored on what ogygia controls — least JS, clean hydration, small seed &amp; server render,
-				stable layout. Missing measurements (no visits, no server timing) drop out, they don't cost
-				points.
+				scored on what a visitor pays for, whatever built the page: all the JS at start, the weight
+				on the wire, what blocks the first paint, the HTML, the data shipped, the server render,
+				hydration, and the browser's vitals. Smooth curves: every byte and millisecond counts. A
+				category with no measurement is left out, never a free 100.
 			</p>
 			{#if score.worst}
 				<p class="win">
@@ -59,8 +61,19 @@
 				<div class="track">
 					<div class="meter" style="width:{c.score}%;background:{tone(c.score)}"></div>
 				</div>
+				{#if c.lost || c.detail?.length}
+					<p class="cat-detail">
+						{#if c.lost}<span class="lost">−{c.lost} pts</span>{/if}
+						{#if c.detail?.length}{c.detail.join(' · ')}{/if}
+					</p>
+				{/if}
 			</div>
 		{/each}
+		{#if score.missing.length}
+			<p class="missing">
+				Left out: {#each score.missing as m, i (m.key)}{i ? '; ' : ''}<b>{m.label}</b> ({m.why}){/each}.
+			</p>
+		{/if}
 	</div>
 </section>
 
@@ -165,6 +178,23 @@
 		height: 100%;
 		border-radius: 999px;
 		transition: width 0.4s ease;
+	}
+	.cat-detail {
+		margin: 0.2rem 0 0;
+		font-size: 0.72rem;
+		color: var(--text-dim);
+		line-height: 1.35;
+	}
+	.lost {
+		color: var(--warn);
+		margin-right: 0.4rem;
+		font-variant-numeric: tabular-nums;
+	}
+	.missing {
+		margin: 0.4rem 0 0;
+		font-size: 0.72rem;
+		color: var(--text-dim);
+		line-height: 1.4;
 	}
 	@media (max-width: 640px) {
 		.scorecard {

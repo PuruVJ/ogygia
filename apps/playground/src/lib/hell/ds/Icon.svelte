@@ -10,6 +10,7 @@
 		chevron: 'M9 6l6 6-6 6',
 		flag: 'M4 22V4h12l-1 4 1 4H4',
 		filter: 'M3 4h18l-7 9v6l-4 2v-8z',
+		// PATTERN table-per-call
 		...Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`icon-${i}`, `M${i} ${i}h${i}v${i}z`]))
 	};
 	const d = ICONS[name] ?? ICONS.file;

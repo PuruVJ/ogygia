@@ -42,10 +42,13 @@
 			/* no clipboard (insecure context) — the text is selectable */
 		}
 	}
-	// SOURCE PEEK (dev server only): the lines around the position, from `<base>/source`.
-	let peek = $state<{ start: number; line: number; lines: string[] } | null>(null);
+	// SOURCE PEEK: the code around the hot lines. The report carries it (`f.src`, captured at report
+	// time from the sourcemap's embedded copy), so it shows on a deployed host, in an export and in a
+	// share link. Only when the report has none does the dev server read the local file.
+	let fetched = $state<{ start: number; line: number; lines: string[] } | null>(null);
+	const peek = $derived(f.src ? { start: f.src.start, line: f.line, lines: f.src.lines } : fetched);
 	$effect(() => {
-		if (!dev || !base || !f.path || !is_abs(f.path) || f.line <= 0) return;
+		if (f.src || !dev || !base || !f.path || !is_abs(f.path) || f.line <= 0) return;
 		// widen the peek to the hot lines when they sit below the function's first line
 		const to = last_hot > f.line ? `&to=${Math.min(last_hot, f.line + 60)}` : '';
 		const url = `${base}/source?p=${encodeURIComponent(f.path)}&l=${f.line}${to}`;
@@ -53,7 +56,7 @@
 		fetch(url, { headers: { accept: 'application/json' } })
 			.then((r) => (r.ok ? r.json() : null))
 			.then((j) => {
-				if (live && j && Array.isArray(j.lines)) peek = j;
+				if (live && j && Array.isArray(j.lines)) fetched = j;
 			})
 			.catch(() => {});
 		return () => {
@@ -85,6 +88,24 @@
 						<code>:{l.line}</code> <span class="dim">{fmt_ms(l.ms)} ms</span>
 					</span>
 				{/each}
+			</div>
+		{/if}
+		{#if f.callees?.length}
+			<div class="callees">
+				<span class="k">inside it</span>
+				<ul>
+					{#if f.self_ms > 0 && f.total_ms > 0}
+						<li><i style="width:{Math.max(2, (f.self_ms / f.total_ms) * 80)}px"></i><b>its own lines</b><span class="dim">{fmt_ms(f.self_ms)} ms · {Math.round((f.self_ms / f.total_ms) * 100)}%</span></li>
+					{/if}
+					{#each f.callees as c (c.key)}
+						<li class:faint={c.category !== 'app' && c.category !== 'component'}>
+							<i style="width:{Math.max(2, c.share * 80)}px"></i>
+							<b>{c.name}</b>
+							{#if c.file}<code class="cf">{c.file}</code>{/if}
+							<span class="dim">{fmt_ms(c.ms)} ms · {Math.round(c.share * 100)}%</span>
+						</li>
+					{/each}
+				</ul>
 			</div>
 		{/if}
 		{#if peek}
@@ -208,6 +229,43 @@
 	}
 	.dim {
 		color: var(--text-faint);
+	}
+	.callees {
+		display: flex;
+		gap: 10px;
+		align-items: baseline;
+		margin: 0 0 8px;
+		font-size: 12px;
+	}
+	.callees ul {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 2px;
+		min-width: 0;
+	}
+	.callees li {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 2px 8px;
+	}
+	.callees li i {
+		display: inline-block;
+		height: 8px;
+		background: var(--c-blue);
+		border-radius: 2px;
+	}
+	.callees li.faint b {
+		font-weight: 500;
+		color: var(--text-dim);
+	}
+	.cf {
+		font-family: ui-monospace, monospace;
+		font-size: 11px;
+		color: var(--text-faint);
+		word-break: break-all;
 	}
 	.stacks {
 		display: grid;

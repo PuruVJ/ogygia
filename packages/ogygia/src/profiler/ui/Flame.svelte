@@ -164,7 +164,7 @@
 {#if tip}
 	<div class="flame-tip" style="display:block;left:{tip.x}px;top:{tip.y}px">
 		<b>{tip.node.n}</b><br />total {tip.node.t.toFixed(2)} ms · self {tip.node.s.toFixed(2)} ms
-		{#if tip.node.f}<br /><span style="color:#7d8590">{tip.node.f}</span>{/if}
+		{#if tip.node.f}<br /><span style="color:var(--text-faint)">{tip.node.f}</span>{/if}
 	</div>
 {/if}
 
