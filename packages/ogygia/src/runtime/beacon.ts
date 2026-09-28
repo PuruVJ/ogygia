@@ -157,6 +157,30 @@ export function beacon_hole_failed(h: HoleFailed): void {
 	visit_holes_failed.push(h);
 	if (early_visit_done) resend_soon();
 }
+const FONT_EXT = new Set(['woff', 'woff2', 'ttf', 'otf']);
+const IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg']);
+const LINK_AS: Record<string, string> = { style: 'css', script: 'script', font: 'font', image: 'img', fetch: 'fetch' };
+
+/**
+ * A file's type, for the byte counts and the lanes: its extension first, then the `<link>` that
+ * fetched it (`as`), then what started it. A `link` initiator is NOT a stylesheet by itself: a
+ * `<link rel=preload>` fetches whatever its `as` says — a hole's preload fetches HTML, from a URL
+ * with no extension, and every first-screen hole answer landed in the CSS column (and One clock's
+ * CSS lane). (Chromium reports a modulepreload's initiator as `other`; its `.js` decides anyway.)
+ */
+export function resource_type(ext: string, initiator: string, link_as?: string): string {
+	if (FONT_EXT.has(ext)) return 'font';
+	if (ext === 'css') return 'css';
+	if (ext === 'js' || ext === 'mjs') return 'script';
+	if (IMG_EXT.has(ext)) return 'img';
+	if (initiator === 'link') return (link_as && LINK_AS[link_as]) || (link_as ? 'other' : 'css');
+	if (initiator === 'css') return 'css';
+	if (initiator === 'script') return 'script';
+	if (initiator === 'img') return 'img';
+	if (initiator === 'fetch' || initiator === 'xmlhttprequest' || initiator === 'beacon') return 'fetch';
+	return 'other';
+}
+
 export interface HoleAnswered {
 	/** the hole's island id (its endpoint's `?id=`) */
 	id: string;
@@ -428,18 +452,16 @@ function build_visit(): Record<string, unknown> | null {
 		const slash = path.lastIndexOf('/');
 		return dot > slash ? path.slice(dot + 1).toLowerCase() : '';
 	};
-	const FONT = new Set(['woff', 'woff2', 'ttf', 'otf']);
-	const IMG = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg']);
-	const type_of = (r: PerformanceResourceTiming): string => {
-		const it = r.initiatorType;
-		const ext = ext_of(r.name);
-		if (FONT.has(ext)) return 'font';
-		if (it === 'css' || it === 'link' || ext === 'css') return 'css';
-		if (it === 'script' || ext === 'js' || ext === 'mjs') return 'script';
-		if (it === 'img' || IMG.has(ext)) return 'img';
-		if (it === 'fetch' || it === 'xmlhttprequest' || it === 'beacon') return 'fetch';
-		return 'other';
-	};
+	// what each <link> fetched as (a preload's `as`, a modulepreload's script): a link is not a
+	// stylesheet only — the island graph's modulepreloads and the holes' fetch preloads are links too
+	const link_as = new Map<string, string>();
+	try {
+		for (const l of document.querySelectorAll<HTMLLinkElement>('link[href][as], link[rel="modulepreload"][href]'))
+			link_as.set(l.href, l.getAttribute('as') ?? 'script');
+	} catch {
+		/* no document */
+	}
+	const type_of = (r: PerformanceResourceTiming): string => resource_type(ext_of(r.name), r.initiatorType, link_as.get(r.name));
 	let resources: Record<string, unknown>[] = [];
 	// every file by type (the counts and bytes of ALL of them), next to the first 200 in detail
 	const totals = new Map<string, { type: string; count: number; transfer: number; size: number }>();

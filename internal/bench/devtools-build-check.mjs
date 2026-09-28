@@ -52,6 +52,11 @@ check('after a reload the page is measured from the start', !!view && view.inclu
 const server = await page.evaluate(() => (window.__ogygia_devtools?.events() ?? []).filter((e) => e.realm === 'server').length);
 check('…and gets the server\'s events', server > 0, `${server}`);
 check('island names come from the build', (await page.evaluate(() => Object.keys(window.__ogygia_region_names ?? {}).length)) > 0);
+// a JS file is script, whatever fetched it (a link initiator read as a stylesheet put a hole's
+// preload in the CSS column; a modulepreload must never go the same way)
+const js_as_css = await page.evaluate(() => (window.__ogygia_page?.()?.page.visit?.resources ?? []).filter((r) => r.type === 'css' && /\.m?js(\?|$)/.test(r.url)).map((r) => r.url.split('/').pop()));
+const preloaded = await page.evaluate(() => document.querySelectorAll('link[rel="modulepreload"]').length);
+check('a modulepreloaded JS file counts as script, not CSS', js_as_css.length === 0, `${js_as_css.length} of the page's JS as CSS (${preloaded} modulepreload links): ${js_as_css.slice(0, 4).join(', ')}`);
 // THE BYTES TAB in a build: the exact ledger from the page's island graph, and its page total is
 // the real files' bytes (each once), checked against the files fetched straight from the server
 await page.locator('[data-og-tab="bytes"]').click();

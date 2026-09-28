@@ -310,6 +310,8 @@ async function holes_run(browser) {
 		const out = await page.locator('[data-og-page-holes] .row').evaluateAll((rows) =>
 			rows.map((r) => ({ name: r.querySelector('.name')?.textContent ?? '', failed: r.hasAttribute('data-og-hole-failed'), segs: [...r.querySelectorAll('.seg')].map((s) => [...s.classList].find((c) => c.startsWith('h-'))) }))
 		);
+		// the holes' preload links fetch HTML: counted as fetch, never as CSS
+		out.types = await page.evaluate(() => [...new Set((window.__ogygia_page?.()?.page.visit?.resources ?? []).filter((r) => r.url.includes('__ogygia__')).map((r) => r.type))]);
 		await page.close();
 		return out;
 	};
@@ -344,6 +346,7 @@ async function holes_run(browser) {
 			'the waterfall: five answers, the last waited for a slot',
 			wf_queue.length === 5 && [1, 2].includes(wf_queue.filter((r) => r.segs.includes('h-slot')).length) && wf_queue.every((r) => r.segs.includes('h-render'))
 		],
+		['a hole preload counts as fetch, not CSS', wf_queue.types.length === 1 && wf_queue.types[0] === 'fetch'],
 		['the waterfall: the broken hole in red', wf_lab.some((r) => r.failed && r.name === 'BrokenHole') && wf_lab.filter((r) => !r.failed).length === 2],
 		['the report: a lane per hole, the slot wait in it', !queue_report || (clock_lanes.length === 5 && clock_lanes[4] === 'QueueHole 5' && clock_amber >= 1)],
 		['the dashboard, who held the slots', slots.includes('waited for a render slot') && slots.includes('held mostly by QueueHole') && slots.includes('BrokenHole')],
@@ -353,7 +356,7 @@ async function holes_run(browser) {
 		['the report splits the slow wait', !report_id || (!!slow_in_report?.message.includes('SlowHole') && slow_in_report.message.includes('the server render') && slow_in_report.fix.startsWith('The server render is the wait'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, clock_lanes, clock_amber, wf_queue, wf_lab, slots: slots.slice(0, 600), walled, open, in_report, slow_in_report })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, clock_lanes, clock_amber, wf_queue, types: wf_queue.types, wf_lab, slots: slots.slice(0, 600), walled, open, in_report, slow_in_report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 
