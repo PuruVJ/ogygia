@@ -10,6 +10,7 @@
 	import { first_difference, rate } from './page-insights.js';
 	import { beacon_record_cpu } from '../runtime/beacon.js';
 	import { read_styles, scan_unscoped, styles_findings } from './styles.js';
+	import { hole_segments, HOLE_SEG_LABEL } from './hole-segments.js';
 
 	let { tick = 0, focus = $bindable(null), selected = $bindable(null) } = $props();
 
@@ -79,35 +80,10 @@
 		return { end, lines, x };
 	});
 
-	/**
-	 * A hole's bar, cut where the browser and the server timed it: before its request left (the page
-	 * busy, the runtime's queue), the server's wait for a render slot, the server render, then the
-	 * rest (network, the body, the swap). Without a timing, one segment: the wait.
-	 * @param {import('./page-insights.js').HoleWait} h
-	 */
-	function hole_segs(h) {
-		const shown = h.shown_at ?? 0;
-		const at = shown + h.wait_ms;
-		/** @type {{ k: string; a: number; b: number }[]} */
-		const out = [];
-		if (h.left_at === undefined) return [{ k: 'wait', a: shown, b: at }];
-		const left = h.left_at;
-		if (left > shown) out.push({ k: 'before', a: shown, b: left });
-		let t = left;
-		if (h.server_queue_ms) out.push({ k: 'slot', a: t, b: (t += h.server_queue_ms) });
-		if (h.server_ms !== undefined) out.push({ k: 'render', a: t, b: (t += h.server_ms) });
-		else if (h.first_at !== undefined) out.push({ k: 'server', a: t, b: (t = h.first_at) });
-		if (at > t) out.push({ k: 'rest', a: t, b: at });
-		return out;
-	}
-	const SEG_TITLE = /** @type {Record<string, string>} */ ({
-		wait: 'waiting for its answer',
-		before: 'before its request left',
-		slot: 'waiting for a render slot on the server',
-		render: 'the server render',
-		server: 'waiting on the server',
-		rest: 'network, the body and the swap'
-	});
+	// a hole's bar, cut where the browser and the server timed it (the profiler's One clock cuts it
+	// the same way: hole-segments.ts)
+	const hole_segs = hole_segments;
+	const SEG_TITLE = HOLE_SEG_LABEL;
 
 	const kb = (/** @type {number} */ n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
 	const ms = (/** @type {number} */ n) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : Math.round(n) + ' ms');

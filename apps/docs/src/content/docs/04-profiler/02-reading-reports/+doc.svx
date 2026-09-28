@@ -559,6 +559,8 @@ The JSON report (`/report/<id>.json`) carries the same locations and call stacks
 
 A page report opens with the whole visit on one time axis. The server's render (its phases: hooks, load, render, ogygia) is placed so it ends at the first byte of the document; then the HTML arriving; then every file the browser fetched, one lane per kind (css, script, font, img, fetch), render-blocking ones dashed; the main thread's long tasks; each island waking, module load in light blue and hydration in green; and the paints, DOM ready and load as dashed lines, the first interaction inside each island as marks. The bars with a white outline are the critical path, listed under the drawing in order with why each is on it: the biggest part of the server render, the wait for the first byte, the last render-blocking stylesheet before first paint, and what the largest paint sat in (an image, or the island whose markup it is).
 
+Each hole gets its own lane: its answer from the moment its request left, cut into the wait for a render slot on the server, the server render, and the network and swap. It is the same cut the devtools Page tab draws, from the same code. Copies of one component are numbered.
+
 The visit comes from your own browser: the beacon records it while you look at the page (any page, while logged in to the profiler) and hands it to the server and to the browser's own store. A report on a long-lived host joins the server's copy; a report on an ephemeral host joins the browser's, in the browser. When the profiled render is longer than the visit's time to first byte (a cache, a faster instance), the server bar is clipped and says so.
 
 ## The document, byte by byte

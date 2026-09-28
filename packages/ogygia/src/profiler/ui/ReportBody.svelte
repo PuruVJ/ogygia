@@ -295,6 +295,9 @@
 	// every island fingerprint on the page → its component name (the browser's pictures are keyed by fingerprint)
 	const fp_names: Record<string, string> = {};
 	for (const r of island_rows_of(meta)) fp_names[r.fp] = island_name(r);
+	// each hole id → its component (and props, for a single copy): One clock's hole lanes
+	const hole_names: Record<string, string> = {};
+	for (const h of holes) if (h.name) hole_names[h.id] = h.props && h.count <= 1 ? `${h.name} ${h.props}` : h.name;
 	const visit = extras.visit ?? null;
 	const server_clock = a.timeline ? { window_ms: a.timeline.window_ms, phases: a.timeline.phases.map((p) => ({ phase: p.phase, label: PHASE_LABEL[p.phase] ?? p.phase, cpu_ms: p.cpu_ms, wait_ms: p.wait_ms })) } : null;
 	const page_path = meta.page ?? meta.request?.path ?? null;
@@ -1015,7 +1018,7 @@
 		{#if page_path}
 			<section class="panel">
 			<h2>One clock <span class="hint" style="font-weight:400">(the server's render, the HTML arriving, every file, the main thread, each island waking, the paints — from the click)</span></h2>
-			<OneClock server={server_clock} {visit} page={page_path} names={fp_names} />
+			<OneClock server={server_clock} {visit} page={page_path} names={fp_names} {hole_names} />
 			</section>
 		{/if}
 		{#if vitals}

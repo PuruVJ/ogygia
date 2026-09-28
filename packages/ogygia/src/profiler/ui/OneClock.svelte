@@ -15,12 +15,14 @@
 		server,
 		visit = null,
 		page,
-		names = {}
+		names = {},
+		hole_names = {}
 	}: {
 		server: { window_ms: number; phases: { phase: string; label?: string; cpu_ms: number; wait_ms: number }[] } | null;
 		visit?: Visit | null;
 		page: string;
 		names?: Record<string, string>;
+		hole_names?: Record<string, string>;
 	} = $props();
 
 	let v = $state<Visit | null>(visit);
@@ -36,7 +38,7 @@
 			})
 			.finally(() => (looked = true));
 	}
-	const clock = $derived(v ? one_clock(v, server, names) : null);
+	const clock = $derived(v ? one_clock(v, server, names, hole_names) : null);
 
 	const W = 1000;
 	const ROW = 16;
@@ -59,7 +61,14 @@
 		other: '#6b7280',
 		task: '#ff7b72',
 		'island-load': '#79c0ff',
-		'island-hydrate': '#2ea043'
+		'island-hydrate': '#2ea043',
+		// a hole's answer (the devtools waterfall's colours)
+		'hole-wait': '#475569',
+		'hole-before': '#475569',
+		'hole-slot': '#f59e0b',
+		'hole-render': '#a78bfa',
+		'hole-server': '#c4b5fd',
+		'hole-rest': '#7dd3fc'
 	};
 	const MARK: Record<string, string> = { fcp: '#8a94a2', lcp: '#d9a03d', dcl: '#8a94a2', load: '#8a94a2', first: '#6ca8e0', mark: '#a371f7' };
 	const color = (b: ClockBar) => COLOR[b.kind] ?? (b.kind.startsWith('server-') ? '#4d9c6b' : '#6b7280');
@@ -148,7 +157,7 @@
 	{/if}
 	{#each clock.notes as n (n)}<p class="hint">{n}</p>{/each}
 	<p class="hint">
-		The server bar is the profiled render placed so it ends at this visit's first byte; everything else is what this browser measured on the same clock. Islands show module load (light) then hydration (dark). A striped-looking gap before first paint with nothing in the lanes is the browser parsing and laying out.
+		The server bar is the profiled render placed so it ends at this visit's first byte; everything else is what this browser measured on the same clock. Islands show module load (light) then hydration (dark). Each hole's lane is its answer: grey before its request left, amber waiting for a render slot on the server, violet the server render, blue the network and the swap (the devtools Page tab draws the same). A striped-looking gap before first paint with nothing in the lanes is the browser parsing and laying out.
 	</p>
 {:else if looked}
 	<p class="hint">No visit of <code>{page}</code> from this browser yet. Open the page once while logged in to the profiler, then come back: the beacon records the visit into this browser and (on a long-lived host) into the server.</p>

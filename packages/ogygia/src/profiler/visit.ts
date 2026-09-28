@@ -6,6 +6,7 @@
  * the server keeps a few per page). `one_clock` lays a visit out against the server's render on
  * one clock — the report's first picture.
  */
+import { hole_segments, HOLE_SEG_LABEL } from '../devtools/hole-segments.js';
 
 export interface VisitNav {
 	/** ms from navigation start */
@@ -111,7 +112,7 @@ export interface Visit {
 	/** holes whose answer never came, by island id (the report's hole rows name them) */
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
 	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
-	holes_answered?: { id: string; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
+	holes_answered?: { id: string; n: number; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
 	viewport?: [number, number];
 	ua?: string;
 }
@@ -302,6 +303,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		const render = num(h.render);
 		holes_answered.push({
 			id,
+			// (an older beacon sends no place: its list held each id once)
+			n: num(h.n, 1000) ?? holes_answered.length,
 			start,
 			t,
 			below_fold: h.below_fold === true,
@@ -382,7 +385,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.unsupported ?? a.unsupported ? { unsupported: b.unsupported ?? a.unsupported } : {}),
 		...(b.warnings ?? a.warnings ? { warnings: b.warnings ?? a.warnings } : {}),
 		...(a.holes_failed || b.holes_failed ? { holes_failed: by(a.holes_failed ?? [], b.holes_failed ?? [], (h) => h.id) } : {}),
-		...(a.holes_answered || b.holes_answered ? { holes_answered: by(a.holes_answered ?? [], b.holes_answered ?? [], (h) => h.id) } : {}),
+		...(a.holes_answered || b.holes_answered ? { holes_answered: by(a.holes_answered ?? [], b.holes_answered ?? [], (h) => `${h.n}:${h.id}`) } : {}),
 		...(b.viewport ?? a.viewport ? { viewport: b.viewport ?? a.viewport } : {}),
 		...(b.ua ?? a.ua ? { ua: b.ua ?? a.ua } : {})
 	};
@@ -406,7 +409,7 @@ export interface ClockBar {
 
 export interface ClockLane {
 	name: string;
-	/** server | document | network | main | islands */
+	/** server | document | network | main | islands | holes */
 	group: string;
 	bars: ClockBar[];
 }
@@ -431,7 +434,9 @@ const RESOURCE_TYPES = ['css', 'script', 'font', 'img', 'fetch', 'other'];
 export function one_clock(
 	visit: Visit,
 	server: { window_ms: number; phases: { phase: string; label?: string; cpu_ms: number; wait_ms: number }[] } | null,
-	names: Record<string, string> = {}
+	names: Record<string, string> = {},
+	/** a hole's name by its island id (the report's hole rows) */
+	hole_names: Record<string, string> = {}
 ): OneClock {
 	const lanes: ClockLane[] = [];
 	const notes: string[] = [];
@@ -517,6 +522,41 @@ export function one_clock(
 			end = Math.max(end, i.done);
 		}
 		lanes.push({ name: `islands (${islands.length})`, group: 'islands', bars });
+	}
+	// HOLES: each first answer, cut as the devtools waterfall cuts it (hole-segments.ts): before its
+	// request left, the server's render-slot wait, the render, the rest. One lane per hole (a few)
+	const holes = [...(visit.holes_answered ?? [])].sort((a, b) => (a.left ?? a.start) - (b.left ?? b.start)).slice(0, 12);
+	// copies of one component share a name: numbered, in the order they left
+	const copies = new Map<string, number>();
+	for (const h of holes) copies.set(h.id, (copies.get(h.id) ?? 0) + 1);
+	const seen = new Map<string, number>();
+	for (const h of holes) {
+		const k = (seen.get(h.id) ?? 0) + 1;
+		seen.set(h.id, k);
+		const base_name = hole_names[h.id] ?? `hole ${h.id.slice(0, 8)}`;
+		const name = copies.get(h.id)! > 1 ? `${base_name} ${k}` : base_name;
+		const shown_at = Math.max(visit.paints.fcp ?? 0, h.start);
+		const segs = hole_segments({
+			shown_at,
+			wait_ms: Math.max(0, h.t - shown_at),
+			...(h.left !== undefined ? { left_at: h.left, first_at: h.first } : {}),
+			...(h.queue !== undefined ? { server_queue_ms: h.queue } : {}),
+			...(h.render !== undefined ? { server_ms: h.render } : {})
+		});
+		lanes.push({
+			name,
+			group: 'holes',
+			bars: segs.map((s) => ({
+				id: `hole:${h.id}:${s.k}`,
+				lane: 'holes',
+				label: `${name} · ${HOLE_SEG_LABEL[s.k]}`,
+				t0: s.a,
+				t1: s.b,
+				kind: `hole-${s.k}`,
+				detail: `${Math.round(s.b - s.a)} ms · its fallback stood ${Math.round(h.t - shown_at)} ms${h.below_fold ? ' (below the first screen)' : ''}`
+			}))
+		});
+		end = Math.max(end, h.t);
 	}
 	const marks: OneClock['marks'] = [];
 	if (visit.paints.fcp !== undefined) marks.push({ label: 'first paint', t: visit.paints.fcp, kind: 'fcp' });

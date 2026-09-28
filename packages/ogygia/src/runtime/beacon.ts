@@ -160,6 +160,8 @@ export function beacon_hole_failed(h: HoleFailed): void {
 export interface HoleAnswered {
 	/** the hole's island id (its endpoint's `?id=`) */
 	id: string;
+	/** its place in the visit's list (copies of one component share the id) */
+	n: number;
 	/** when its fetch started, and when its answer replaced the fallback (page time, ms) */
 	start: number;
 	t: number;
@@ -209,6 +211,7 @@ export function hole_request_times(
 	return null;
 }
 let visit_holes_answered: HoleAnswered[] = [];
+let holes_answered_els = new WeakSet<Element>();
 /** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
  *  The element is read (id, place) only while measuring. */
 export function beacon_hole_answered(el: Element, start: number): void {
@@ -222,10 +225,20 @@ export function beacon_hole_answered(el: Element, start: number): void {
 	} catch {
 		id = '';
 	}
-	if (!id || visit_holes_answered.some((x) => x.id === id)) return;
+	// each hole ELEMENT once: copies of one component share the id (their props differ)
+	if (!id || holes_answered_els.has(el)) return;
+	holes_answered_els.add(el);
 	const rect = el.getBoundingClientRect();
 	const times = hole_request_times(el.getAttribute('endpoint') ?? '', performance.now());
-	visit_holes_answered.push({ id, start: Math.round(start), t: Math.round(performance.now()), below_fold: rect.top + scrollY > innerHeight, ...(times ?? {}) });
+	visit_holes_answered.push({
+		id,
+		// its place in this visit's list: the early message and the final one fold by it
+		n: visit_holes_answered.length,
+		start: Math.round(start),
+		t: Math.round(performance.now()),
+		below_fold: rect.top + scrollY > innerHeight,
+		...(times ?? {})
+	});
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
@@ -1005,6 +1018,7 @@ export function _reset_beacon(): void {
 	visit_warnings = [];
 	visit_holes_failed = [];
 	visit_holes_answered = [];
+	holes_answered_els = new WeakSet();
 	visit_marks = [];
 	visit_paints = {};
 	snapshots = [];

@@ -118,6 +118,41 @@ describe('visit + one clock', () => {
 		// no server timeline, no server lane
 		expect(one_clock(v, null).lanes[0].group).toBe('document');
 	});
+
+	it('one_clock: a lane per hole, its answer cut as the devtools waterfall cuts it', () => {
+		const v = parse_visit('/p', {
+			...raw,
+			holes_answered: [
+				// preloaded: left before the paint, waited 890 ms for a slot, rendered in 900
+				{ id: 'aaaaaaaaaaaa', start: 300, t: 1900, below_fold: false, left: 10, first: 1805, end: 1810, queue: 890, render: 900 },
+				// no timing: one segment, the wait
+				{ id: 'bbbbbbbbbbbb', start: 300, t: 700, below_fold: true }
+			]
+		})!;
+		const clock = one_clock(v, null, {}, { aaaaaaaaaaaa: 'QueueHole' });
+		const holes = clock.lanes.filter((l) => l.group === 'holes');
+		expect(holes.map((l) => l.name)).toEqual(['QueueHole', 'hole bbbbbbbb']);
+		expect(holes[0].bars.map((b) => [b.kind, b.t0, b.t1])).toEqual([
+			['hole-slot', 10, 900],
+			['hole-render', 900, 1800],
+			['hole-rest', 1800, 1900]
+		]);
+		expect(holes[0].bars[0].label).toBe('QueueHole · waiting for a render slot on the server');
+		expect(holes[1].bars.map((b) => b.kind)).toEqual(['hole-wait']);
+		expect(holes[1].bars[0].detail).toContain('below the first screen');
+		expect(clock.end).toBeGreaterThanOrEqual(1900);
+		// two copies of one component (one id, other props): two lanes, numbered; folding the early
+		// message with the final one keeps both
+		const two = parse_visit('/p', {
+			...raw,
+			holes_answered: [
+				{ id: 'aaaaaaaaaaaa', n: 0, start: 300, t: 1000, below_fold: false },
+				{ id: 'aaaaaaaaaaaa', n: 1, start: 300, t: 1900, below_fold: false }
+			]
+		})!;
+		expect(merge_visits(two, two).holes_answered).toHaveLength(2);
+		expect(one_clock(two, null, {}, { aaaaaaaaaaaa: 'QueueHole' }).lanes.filter((l) => l.group === 'holes').map((l) => l.name)).toEqual(['QueueHole 1', 'QueueHole 2']);
+	});
 });
 
 describe('data river', () => {
