@@ -266,6 +266,8 @@ export type RuntimeEventInput =
 			bytes: number;
 			/** True for an SWR/live re-apply (not the first paint). */
 			revalidate: boolean;
+			/** The first answer: ms from the fetch's start to the swap (how long the fallback showed). */
+			wait_ms?: number;
 	  }
 	| {
 			/** A hole's answer did not arrive. Without this the page keeps the fallback and nothing

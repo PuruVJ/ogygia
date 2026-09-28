@@ -7,7 +7,7 @@
 import { beacon_page } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, type Failure, type HoleFailure, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
+import { analyze_page, type Failure, type HoleFailure, type HoleWait, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
@@ -93,6 +93,37 @@ function island_code(): IslandCode[] {
 		const t = region_transitive(r.entry);
 		if (!t?.top?.length && !t?.barrels?.length) continue;
 		out.push({ fp: r.fp ?? undefined, name: region_name(r.entry), bytes: t.bytes, top: t.top ?? [], barrels: t.barrels ?? [] });
+	}
+	return out;
+}
+
+/** How long each hole's fallback showed before its first answer (since the last navigation), and
+ *  whether it sits on the first screen. */
+export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWait[] {
+	const out: HoleWait[] = [];
+	const seen = new Set<string>();
+	for (const e of snapshot()) {
+		if (e.name !== 'region.server.applied' || e.wait_ms === undefined || e.t < since) continue;
+		const key = e.endpoint ?? e.entry ?? '';
+		if (seen.has(key)) continue;
+		seen.add(key);
+		const el = e.endpoint ? document.querySelector(`ogygia-region[endpoint="${CSS.escape(e.endpoint)}"]`) : null;
+		let id = '';
+		try {
+			id = e.endpoint ? (new URL(e.endpoint, location.href).searchParams.get('id') ?? '') : '';
+		} catch {
+			id = '';
+		}
+		const rect = el?.getBoundingClientRect();
+		// how long the visitor SAW the fallback: from the first paint (or the hole's own start, when
+		// later: one woken by a scroll) to the swap. The fetch step alone undercounts: a prefetch may
+		// have started the request earlier, and the fallback was on screen since the paint anyway
+		const start = Math.max(fcp, since, e.t - e.wait_ms);
+		out.push({
+			name: (id && region_names()[id]) || (e.entry ? region_name(e.entry) : 'a hole'),
+			wait_ms: Math.max(0, Math.round(e.t - start)),
+			below_fold: !!rect && rect.top + scrollY > innerHeight
+		});
 	}
 	return out;
 }
@@ -233,7 +264,9 @@ export function read_page(): PageView | null {
 	const with_visit: PageInput = base.visit ? { ...base, visit: { ...base.visit, origin: location.origin } } : base;
 	const holes = hole_failures();
 	const code = island_code();
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}) };
+	// (after a navigation there is no new first paint: the navigation's start stands in for it)
+	const waits = hole_waits(nav?.t ?? -Infinity, nav ? 0 : (with_visit.visit?.paints?.fcp ?? 0));
+	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

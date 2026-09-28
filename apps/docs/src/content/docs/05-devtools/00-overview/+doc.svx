@@ -94,6 +94,7 @@ The findings it can name:
 | held with nothing ahead | An island had its code but waited for its turn while no other island was hydrating and nothing on the first screen was still loading, past the start gate. Nothing on the page explains it: ogygia's scheduler held the island. It is ogygia's cost, not your page's; the finding asks you to report it. |
 | a barrel imported whole | On the dev server: an island's module graph still holds a re-export barrel (little code of its own, many modules behind it), so everything it re-exports rides into the island. The finding names the barrel and how many modules come with it. With `ogygia({ barrels })` on, the build log says why that one was left. |
 | one module is most of an island | On the dev server: one module is 40% or more of an island's code, 30 KB or more of it (dev code, unminified: shares, not shipped bytes). The island card lists its heaviest modules too. |
+| a hole answered late | A hole on the first screen showed its fallback for a second or more before its answer came. The time runs from the first paint to the swap. A hole woken by a scroll is left out. Give it a `maxAge`, start its data sooner, or render it with the page. The profiler's Holes section has its server time. |
 | rules that match nothing | Half or more of the page's CSS rules, 20 KB or more of them, match nothing on the page. The finding names the sheets that hold them. |
 
 On the dev server, modules load one by one. Thus load times run higher than in a build. The other findings hold in both.

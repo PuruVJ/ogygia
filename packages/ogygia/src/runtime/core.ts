@@ -373,6 +373,8 @@ class OgygiaRegion extends HTMLElement {
 	#fetching = false;
 	/** Bounded automatic retries after a failed defer/SWR fetch. */
 	#fetch_attempts = 0;
+	/** when this hole's first fetch started (devtools: how long its fallback showed) */
+	#fetch_started = 0;
 	/** Frame-store address (endpoint call) this region is fetching, so disconnect can release it. */
 	#frame_address: string | null = null;
 	/** Unsubscribe from the frame store (a defer region binds to its address). */
@@ -798,7 +800,9 @@ class OgygiaRegion extends HTMLElement {
 				entry: this.getAttribute('entry') || undefined,
 				endpoint: this.getAttribute('endpoint') || undefined,
 				bytes: html.length,
-				revalidate
+				revalidate,
+				// the first answer: how long the fallback showed, from the fetch's start (retries included)
+				...(!revalidate && this.#fetch_started ? { wait_ms: Math.round(performance.now() - this.#fetch_started) } : {})
 			});
 		this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
 	}
@@ -856,6 +860,7 @@ class OgygiaRegion extends HTMLElement {
 			return;
 		}
 		this.#fetching = true;
+		if (DEVTOOLS && !this.#fetch_started) this.#fetch_started = performance.now();
 		// Per-element relevance signal: aborting it (on disconnect / {#if}-toggle) skips the APPLY.
 		// The network fetch is owned by the frame store, keyed by `address`, shared across twins and
 		// aborted only when the last waiter abandons — so one element toggling off never kills a fetch

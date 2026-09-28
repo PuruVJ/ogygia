@@ -57,6 +57,16 @@ export interface PageInput {
 	hole_failures?: HoleFailure[];
 	/** each island's app code in dev (the dev server's module graph; devtools only) */
 	island_code?: IslandCode[];
+	/** how long each hole's fallback showed before its answer (the bus; devtools only) */
+	hole_waits?: HoleWait[];
+}
+
+export interface HoleWait {
+	name: string;
+	/** ms from the hole's fetch start to its answer's swap */
+	wait_ms: number;
+	/** below the first screen (its fallback is not what the visitor looks at first) */
+	below_fold: boolean;
 }
 
 export interface IslandCode {
@@ -166,6 +176,8 @@ const SHIFT_WINDOW_MS = 600;
 const LONG_HYDRATE_MS = 50;
 /** waiting this long for a turn after the module arrived */
 const LONG_QUEUE_MS = 150;
+/** a hole on the first screen whose fallback showed this long (a skeleton a visitor stares at) */
+const SLOW_HOLE_MS = 1000;
 /** a wait with nothing ahead this long is the scheduler's own (its viewport snapshot waits at most
  *  48 ms by design, and its first report lands within a frame or two) */
 const HELD_IDLE_MS = 40;
@@ -623,6 +635,19 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				fix: 'That one module is where the island’s weight is: split it (one module per piece), load it when it is needed, or render it on the server.',
 				fps: c.fp ? [c.fp] : []
 			});
+	}
+
+	// ── a hole on the first screen whose answer came slowly: its fallback is what the visitor saw ──
+	const slow_holes = (page.hole_waits ?? []).filter((h) => !h.below_fold && h.wait_ms >= SLOW_HOLE_MS).sort((a, b) => b.wait_ms - a.wait_ms);
+	if (slow_holes.length) {
+		const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+		findings.push({
+			code: 'hole-slow',
+			severity: slow_holes[0].wait_ms >= SLOW_HOLE_MS * 1.5 ? 'warn' : 'info',
+			message: `${list(slow_holes.map((h) => `${h.name} (${secs(h.wait_ms)})`))} showed ${slow_holes.length === 1 ? 'its' : 'their'} fallback on the first screen that long before ${slow_holes.length === 1 ? 'its' : 'their'} answer came.`,
+			fix: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+			fps: []
+		});
 	}
 
 	// ── holes whose answer never came: the page keeps the fallback, and in a build nothing says why ──

@@ -157,6 +157,29 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('hole-failed');
 	});
 
+	it('a hole whose fallback sat on the first screen long is named; a quick or scrolled-to one is not', () => {
+		const r = analyze_page(
+			page({
+				hole_waits: [
+					{ name: 'SlowHole', wait_ms: 1600, below_fold: false },
+					{ name: 'Greeting', wait_ms: 300, below_fold: false },
+					{ name: 'Footer', wait_ms: 4000, below_fold: true }
+				]
+			}),
+			[],
+			[],
+			3000
+		);
+		const f = r.findings.filter((x) => x.code === 'hole-slow');
+		expect(f).toHaveLength(1);
+		expect(f[0].severity).toBe('warn');
+		expect(f[0].message).toContain('SlowHole (1.6 s)');
+		expect(f[0].message).not.toContain('Greeting');
+		expect(f[0].message).not.toContain('Footer');
+		const mild = analyze_page(page({ hole_waits: [{ name: 'SlowHole', wait_ms: 1100, below_fold: false }] }), [], [], 3000);
+		expect(mild.findings.find((x) => x.code === 'hole-slow')?.severity).toBe('info');
+	});
+
 	it('held with nothing ahead: the scheduler’s own wait is named, and only that', () => {
 		// the round-46 shape: woken by a scroll long after load, code in hand, 70 ms with nothing ahead
 		const idle = analyze_page(page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1070, done: 1071 }] }), [region('v', 'Scrolled', 'visible')], [], 2000);

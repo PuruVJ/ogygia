@@ -269,8 +269,10 @@ async function holes_run(browser) {
 		await page.goto(base + path, { waitUntil: 'load' });
 		// (the broken hole retries twice, 0.5 s then 1 s apart, before it gives up)
 		await page.waitForTimeout(4500);
-		const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'hole-failed').map((x) => x.message));
+		const all = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((x) => ({ code: x.code, message: x.message })));
 		await ctx.close();
+		const f = all.filter((x) => x.code === 'hole-failed').map((x) => x.message);
+		f.slow = all.filter((x) => x.code === 'hole-slow').map((x) => x.message);
 		return f;
 	};
 	// the profiler's report of the same broken visit names the hole too (the beacon carries it)
@@ -291,10 +293,13 @@ async function holes_run(browser) {
 		['the healthy hole quiet', !lab.some((m) => m.includes('Greeting'))],
 		['the refused hole, redirected', walled.length === 1 && walled[0].includes('Greeting') && walled[0].includes('redirected to /hole-wall/account')],
 		['no wall, no finding', open.length === 0],
+		// (SlowHole's server render waits 1.5 s: its fallback held the first screen that long)
+		['the slow hole, named', lab.slow.length === 1 && lab.slow[0].includes('SlowHole')],
+		['the quick hole never slow', !lab.slow.some((m) => m.includes('Greeting')) && open.slow.length === 0],
 		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, walled, open })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, walled, open })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 
