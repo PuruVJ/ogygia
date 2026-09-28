@@ -305,8 +305,11 @@ export function collectIslandDepModulepreloads(
 	const summarize = (s: string) => {
 		const url = s.startsWith('/') ? s : '/' + s;
 		if (contents[url]) return;
-		const ids = bundle[s]?.moduleIds ?? [];
-		if (ids.length) contents[url] = summarize_chunk_contents(ids);
+		const chunk = bundle[s];
+		const ids = chunk?.moduleIds ?? [];
+		// (the bundler's rendered length per module: the heaviest named first)
+		const mods = (chunk as { modules?: Record<string, { renderedLength?: number }> } | undefined)?.modules;
+		if (ids.length) contents[url] = summarize_chunk_contents(ids, 6, 5, mods ? (id) => mods[id]?.renderedLength ?? 0 : undefined);
 	};
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type !== 'chunk') continue;
@@ -329,12 +332,19 @@ const SRC_IN_PATH_RE = /\/src\/(.+)$/;
  * `src/`), then the packages, the framework runtimes named plainly. Capped; the tail is "+N more".
  * @internal exported for the tests
  */
-export function summarize_chunk_contents(module_ids: readonly string[], max_files = 6, max_pkgs = 5): string[] {
+export function summarize_chunk_contents(module_ids: readonly string[], max_files = 6, max_pkgs = 5, size_of?: (id: string) => number): string[] {
 	const files: string[] = [];
 	const pkgs: string[] = [];
-	const add = (list: string[], v: string) => {
+	// the rendered bytes behind each listed name (a package sums its modules): with the bundler's
+	// sizes, the heaviest are named first — a 68 KB component used to sit behind "+N more" when six
+	// small files came before it in module order. Names only: the list is a chunk's identity
+	// across builds (sizes change every build).
+	const bytes = new Map<string, number>();
+	const add = (list: string[], v: string, raw: string) => {
 		if (!list.includes(v)) list.push(v);
+		if (size_of) bytes.set(v, (bytes.get(v) ?? 0) + (size_of(raw) || 0));
 	};
+	const ordered = (list: string[]) => (size_of ? [...list].sort((a, b) => (bytes.get(b) ?? 0) - (bytes.get(a) ?? 0)) : list);
 	for (const raw of module_ids) {
 		if (!raw || raw.startsWith('\0') || raw.startsWith('virtual:')) continue;
 		const id = raw.split('\\').join('/').split('?')[0];
@@ -342,18 +352,18 @@ export function summarize_chunk_contents(module_ids: readonly string[], max_file
 		const nm = id.lastIndexOf('/node_modules/');
 		if (nm !== -1) {
 			const pkg = PKG_IN_PATH_RE.exec(id.slice(nm))?.[1];
-			if (pkg === 'svelte') add(pkgs, 'svelte runtime');
-			else if (pkg === 'ogygia') add(pkgs, 'ogygia runtime');
-			else if (pkg) add(pkgs, pkg);
+			if (pkg === 'svelte') add(pkgs, 'svelte runtime', raw);
+			else if (pkg === 'ogygia') add(pkgs, 'ogygia runtime', raw);
+			else if (pkg) add(pkgs, pkg, raw);
 			continue;
 		}
-		if (/\/ogygia\/(?:src|dist)\//.test(id)) add(pkgs, 'ogygia runtime');
+		if (/\/ogygia\/(?:src|dist)\//.test(id)) add(pkgs, 'ogygia runtime', raw);
 		else {
 			const rel = SRC_IN_PATH_RE.exec(id);
-			add(files, rel ? 'src/' + rel[1] : id.split('/').slice(-2).join('/'));
+			add(files, rel ? 'src/' + rel[1] : id.split('/').slice(-2).join('/'), raw);
 		}
 	}
-	const out = [...files.slice(0, max_files), ...pkgs.slice(0, max_pkgs)];
+	const out = [...ordered(files).slice(0, max_files), ...ordered(pkgs).slice(0, max_pkgs)];
 	const more = files.length - Math.min(files.length, max_files) + (pkgs.length - Math.min(pkgs.length, max_pkgs));
 	if (more > 0) out.push(`+${more} more`);
 	return out;

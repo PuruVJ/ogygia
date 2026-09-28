@@ -191,6 +191,17 @@ describe('collectIslandDepModulepreloads', () => {
 			).toEqual(['src/lib/a.ts', 'src/lib/f0.ts', 'src/lib/f1.ts', 'src/lib/f2.ts', 'src/lib/f3.ts', 'src/lib/f4.ts', 'svelte runtime', 'ogygia runtime', '@sveltejs/kit', '@scope/pkg', 'date-fns', '+4 more']);
 		});
 
+		test('with the bundler’s sizes, the heaviest are named first (a big file is never hidden in "+N more")', () => {
+			const ids = [...Array.from({ length: 7 }, (_, i) => `/app/src/lib/small${i}.ts`), '/app/src/lib/Icons.svelte', '/app/node_modules/tiny/i.js', '/app/node_modules/big/i.js'];
+			const size = (id: string) => (id.includes('Icons') ? 68_000 : id.includes('/big/') ? 40_000 : 100);
+			const out = summarize_chunk_contents(ids, 6, 5, size);
+			expect(out[0]).toBe('src/lib/Icons.svelte');
+			expect(out.slice(6, 8)).toEqual(['big', 'tiny']);
+			expect(out.at(-1)).toBe('+2 more');
+			// without sizes: the module order, as before
+			expect(summarize_chunk_contents(ids)[0]).toBe('src/lib/small0.ts');
+		});
+
 		test('every chunk the build emitted is summarized, not only the ones islands pull', () => {
 			const { contents } = collectIslandDepModulepreloads({
 				...bundle,
