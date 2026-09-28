@@ -363,6 +363,41 @@ async function holes_run(browser) {
 /** AN ISLAND'S CODE (/dt-code, dev): Toolbar imports a barrel whole (its side effect keeps the
  *  barrel rewrite off it) and an icon set that is most of its weight. Both named on Toolbar; the
  *  Healthy decoy never; a page without them raises neither. */
+/** PRELOADS DOWNLOADED AGAIN (/dt-preload): a fetch preload without `crossorigin` (the plant) goes
+ *  unused and the file comes down twice; the decoy's matches and is used. Named in the Page tab and
+ *  in the profiler's report of the same visit; the decoy never; a page without preloads quiet. */
+async function preload_run(browser) {
+	const read = async (path) => {
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + path, { waitUntil: 'load' });
+		await page.waitForTimeout(2500);
+		const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'preload-unused').map((x) => ({ message: x.message, fix: x.fix })));
+		await page.close();
+		return f;
+	};
+	const rec = await fetch(`${base}/__profiler/page?p=/dt-preload&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const lab = await read('/dt-preload');
+	const clean = await read('/dt-lab');
+	let in_report = null;
+	if (report_id)
+		for (let i = 0; i < 8 && !in_report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			in_report = j?.findings?.find((f) => f.code === 'preload-unused')?.message ?? null;
+		}
+	const checks = [
+		['the planted preload, named with its bytes', lab.length === 1 && lab[0].message.startsWith('planted (') && lab[0].message.includes('twice')],
+		['the fix names crossorigin', lab[0]?.fix.includes('A fetch preload needs `crossorigin`') ?? false],
+		['the decoy never', !lab.some((f) => f.message.includes('decoy'))],
+		['a page without preloads quiet', clean.length === 0],
+		['the profiler report names it', !report_id || (in_report?.includes('In the browser: planted (') ?? false)]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} preloads: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, clean, in_report })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 async function code_run(browser) {
 	const read = async (path) => {
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -537,6 +572,10 @@ try {
 	for (let i = 0; i < repeat; i++) holes_ok += await holes_run(browser);
 	if (holes_ok < repeat) failed = true;
 	console.log(`${holes_ok === repeat ? '✓' : '✗'} holes whose answer never came: ${holes_ok}/${repeat}`);
+	let preload_ok = 0;
+	for (let i = 0; i < repeat; i++) preload_ok += await preload_run(browser);
+	if (preload_ok < repeat) failed = true;
+	console.log(`${preload_ok === repeat ? '✓' : '✗'} preloads downloaded again: ${preload_ok}/${repeat}`);
 	let code_ok = 0;
 	for (let i = 0; i < repeat; i++) code_ok += await code_run(browser);
 	if (code_ok < repeat) failed = true;

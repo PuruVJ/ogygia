@@ -212,7 +212,7 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 	return {
 		// (the vitals are the first page's: no finding about this page may lean on them)
 		vitals: {},
-		visit: page.visit ? { ...(page.visit as PageInput['visit']), paints: {}, nav: {}, resources: [] } : null,
+		visit: page.visit ? { ...(page.visit as PageInput['visit']), paints: {}, nav: {}, resources: [], preload_misses: [] } : null,
 		islands: page.islands.filter((i) => i.t0 >= t).map((i) => ({ ...i, t0: i.t0 - t, loaded: i.loaded - t, done: i.done - t, ...(i.turn !== undefined ? { turn: i.turn - t } : {}) })),
 		firsts: shift(page.firsts),
 		shifts: shift(page.shifts),

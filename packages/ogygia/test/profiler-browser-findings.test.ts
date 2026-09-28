@@ -137,6 +137,18 @@ test('a hole that kept its fallback reaches the report, named from the hole rows
 	expect(f[1].message).toContain('failed 3 times (status 500)');
 });
 
+test('a preload downloaded again reaches the report, even on a page with no island', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		islands: [],
+		preload_misses: [{ url: 'https://a.test/dt-preload/data/planted', type: 'fetch', bytes: 28081, as: 'fetch', crossorigin: null }, { url: 7 }]
+	})!;
+	expect(v.preload_misses).toHaveLength(1);
+	expect(merge_visits(v, { ...v, preload_misses: undefined }).preload_misses).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'preload-unused');
+	expect(f?.message).toContain('In the browser: planted (27.4 KB) was preloaded, then downloaded again');
+});
+
 test('a hole answered late: waited from the first paint, split by its server time', () => {
 	const v = parse_visit('/lab', {
 		...raw,

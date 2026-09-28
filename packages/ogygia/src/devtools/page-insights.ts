@@ -46,6 +46,8 @@ export interface PageInput {
 		/** URLs the document itself names (its scripts, preloads, their imports): a script not among
 		 *  them was loaded at runtime by another script */
 		named?: string[];
+		/** files a preload fetched and something else downloaded again (the preload went unused) */
+		preload_misses?: PreloadMiss[];
 	} | null;
 	islands: PageIsland[];
 	firsts: { fp: string; t: number; type: string }[];
@@ -60,6 +62,17 @@ export interface PageInput {
 	island_code?: IslandCode[];
 	/** how long each hole's fallback showed before its answer (the bus; devtools only) */
 	hole_waits?: HoleWait[];
+}
+
+export interface PreloadMiss {
+	url: string;
+	/** what the preload fetched as (font, fetch, script, css, img…) */
+	type: string;
+	/** the second download's bytes on the wire */
+	bytes: number;
+	/** the preload link's `as` and `crossorigin` (null: none) */
+	as: string;
+	crossorigin: string | null;
 }
 
 export interface HoleWait {
@@ -707,6 +720,35 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 								? 'The server answered quickly and the request left on time: the wait came after the first byte (a large answer, its styles, or the swap) or on the network.'
 								: 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
 							: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+			fps: []
+		});
+	}
+
+	// ── preloaded, then downloaded again: the preload did not match the request and went unused ──
+	const misses = page.visit?.preload_misses ?? [];
+	if (misses.length) {
+		const file = (u: string) => {
+			const q = u.indexOf('?');
+			const p = q === -1 ? u : u.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1) || u;
+		};
+		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
+		const why = (m: PreloadMiss) =>
+			m.type === 'font' && m.crossorigin === null
+				? 'a font always loads in CORS mode: its preload needs `crossorigin`'
+				: m.type === 'fetch' && m.crossorigin === null
+					? 'a fetch preload needs `crossorigin` (`anonymous` for a same-origin `fetch()`, `use-credentials` for `credentials: "include"`)'
+					: m.type === 'fetch' || m.type === 'font'
+						? `its \`crossorigin="${m.crossorigin}"\` does not match the request's credentials`
+						: m.type === 'script'
+							? 'a module script is preloaded with `<link rel="modulepreload">`, not `rel="preload" as="script"`'
+							: 'its `as` or `crossorigin` does not match how the page requests the file';
+		const wasted = misses.reduce((a, m) => a + m.bytes, 0);
+		findings.push({
+			code: 'preload-unused',
+			severity: 'warn',
+			message: `${list(misses.map((m) => `${file(m.url)} (${kb(m.bytes)})`))} ${misses.length === 1 ? 'was' : 'were'} preloaded, then downloaded again: the browser could not use the preload${misses.length === 1 ? '' : 's'}, and the page paid ${kb(wasted)} twice.`,
+			fix: `${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}. The preload and the request must match exactly, or the browser fetches the file again.`,
 			fps: []
 		});
 	}

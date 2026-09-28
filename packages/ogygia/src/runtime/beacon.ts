@@ -455,12 +455,17 @@ function build_visit(): Record<string, unknown> | null {
 	// what each <link> fetched as (a preload's `as`, a modulepreload's script): a link is not a
 	// stylesheet only — the island graph's modulepreloads and the holes' fetch preloads are links too
 	const link_as = new Map<string, string>();
+	// (and its crossorigin: what a double download's fix turns on)
+	const link_co = new Map<string, string | null>();
 	try {
-		for (const l of document.querySelectorAll<HTMLLinkElement>('link[href][as], link[rel="modulepreload"][href]'))
+		for (const l of document.querySelectorAll<HTMLLinkElement>('link[href][as], link[rel="modulepreload"][href]')) {
 			link_as.set(l.href, l.getAttribute('as') ?? 'script');
+			link_co.set(l.href, l.getAttribute('crossorigin'));
+		}
 	} catch {
 		/* no document */
 	}
+	const preload_misses: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[] = [];
 	const type_of = (r: PerformanceResourceTiming): string => resource_type(ext_of(r.name), r.initiatorType, link_as.get(r.name));
 	let resources: Record<string, unknown>[] = [];
 	// every file by type (the counts and bytes of ALL of them), next to the first 200 in detail
@@ -478,6 +483,18 @@ function build_visit(): Record<string, unknown> | null {
 			t.transfer += r.transferSize || 0;
 			t.size += r.decodedBodySize || 0;
 			totals.set(type, t);
+		}
+		// PRELOADED, THEN DOWNLOADED AGAIN: one URL fetched by a preload link and again by something
+		// else, the second time over the network (its body came down, not from the cache). The
+		// browser could not use the preload — its crossorigin or credentials did not match the
+		// request (a font preload without `crossorigin` is the classic) — and paid for the file twice
+		const by_url = new Map<string, PerformanceResourceTiming[]>();
+		for (const r of all) (by_url.get(r.name) ?? by_url.set(r.name, []).get(r.name)!).push(r);
+		for (const [url, list] of by_url) {
+			if (list.length < 2 || preload_misses.length >= 20) continue;
+			const pre = list.find((r) => r.initiatorType === 'link');
+			const again = list.find((r) => r !== pre && r.initiatorType !== 'link' && r.encodedBodySize > 0 && r.transferSize >= r.encodedBodySize);
+			if (pre && again) preload_misses.push({ url: url.slice(0, 500), type: type_of(pre), bytes: again.transferSize, as: link_as.get(url) ?? '', crossorigin: link_co.get(url) ?? null });
 		}
 		// the detail: every render-blocking file (they explain the first paint), then the earliest
 		const blocking = (r: PerformanceResourceTiming) => (r as { renderBlockingStatus?: string }).renderBlockingStatus === 'blocking';
@@ -523,6 +540,7 @@ function build_visit(): Record<string, unknown> | null {
 		paints: visit_paints,
 		resources,
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
+		...(preload_misses.length ? { preload_misses } : {}),
 		longtasks: visit_longtasks,
 		islands: visit_islands,
 		firsts: visit_firsts,

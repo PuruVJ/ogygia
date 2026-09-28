@@ -314,6 +314,7 @@ The visit the beacon sends is read with the same analysis as the devtools [Page 
 - an eager island below the first screen
 - a first-screen island that woke long after the page looked done, or the largest paint repainting inside one
 - long tasks outside any hydration
+- a file that was preloaded and then downloaded again, because the preload did not match the request
 - a hole whose answer never came, and why (a redirect, a whole page, a failed request)
 - a first-screen hole that showed its fallback for a second or more. The report adds how much of that wait was the hole's server render. It finds the hole's own requests in the server's request log, since the browser makes them after the recording ends. When the render is most of the wait, the fix is on the server. It also splits out time waiting for a render slot (a server process renders 4 holes at a time) and time before the request left. When the server answered quickly, the request started late or was held on its way.
 

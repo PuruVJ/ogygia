@@ -157,6 +157,25 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('hole-failed');
 	});
 
+	it('a preload the browser could not use, and paid for twice: named, with the fix for its kind', () => {
+		const miss = (url: string, type: string, crossorigin: string | null, bytes = 20480) => ({ url, type, bytes, as: type === 'css' ? 'style' : type, crossorigin });
+		const r = analyze_page(
+			page({ visit: { preload_misses: [miss('https://a.test/fonts/inter.woff2', 'font', null, 40960), miss('https://a.test/api/data?x=1', 'fetch', 'use-credentials')] } }),
+			[],
+			[],
+			2000
+		);
+		const f = r.findings.find((x) => x.code === 'preload-unused')!;
+		expect(f.severity).toBe('warn');
+		expect(f.message).toContain('inter.woff2 (40.0 KB) and data (20.0 KB) were preloaded, then downloaded again');
+		expect(f.message).toContain('paid 60.0 KB twice');
+		expect(f.fix).toContain('A font always loads in CORS mode: its preload needs `crossorigin`');
+		expect(f.fix).toContain('Its `crossorigin="use-credentials"` does not match');
+		const script = analyze_page(page({ visit: { preload_misses: [miss('https://a.test/app.js', 'script', null)] } }), [], [], 2000);
+		expect(script.findings.find((x) => x.code === 'preload-unused')!.fix).toContain('modulepreload');
+		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('preload-unused');
+	});
+
 	it('a hole whose fallback sat on the first screen long is named; a quick or scrolled-to one is not', () => {
 		const r = analyze_page(
 			page({

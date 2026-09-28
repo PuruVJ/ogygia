@@ -57,7 +57,7 @@ export function browser_page_report(
 	hole_server?: (id: string) => number | undefined
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? (by_entry.get(entry) ?? name_from_entry(entry)) : fp.slice(0, 8));
@@ -83,6 +83,7 @@ export function browser_page_report(
 			viewport: visit.viewport,
 			...(visit.scripts ? { scripts: visit.scripts } : {}),
 			...(visit.warnings ? { warnings: visit.warnings } : {}),
+			...(visit.preload_misses ? { preload_misses: visit.preload_misses } : {}),
 			...(third ? { origin: third.origin, ...(third.named ? { named: third.named } : {}) } : {})
 		},
 		islands: visit.islands,

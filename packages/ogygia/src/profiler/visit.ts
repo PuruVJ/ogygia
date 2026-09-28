@@ -111,6 +111,8 @@ export interface Visit {
 	warnings?: { code: string; message: string; file?: string; fp?: string }[];
 	/** holes whose answer never came, by island id (the report's hole rows name them) */
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
+	/** files a preload fetched and something else downloaded again: the preload went unused */
+	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[];
 	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
 	holes_answered?: { id: string; n: number; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
 	viewport?: [number, number];
@@ -288,6 +290,15 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		holes_failed.push({ id, reason, ...(final_path ? { final_path } : {}), ...(message ? { message } : {}), attempts: num(h.attempts, 10) ?? 1 });
 	}
 	if (holes_failed.length) visit.holes_failed = holes_failed;
+	const preload_misses: NonNullable<Visit['preload_misses']> = [];
+	for (const m of (Array.isArray(v.preload_misses) ? v.preload_misses : []).slice(0, 20) as Record<string, unknown>[]) {
+		const url = str(m?.url, 500);
+		const type = str(m?.type, 20);
+		const bytes = num(m?.bytes, 1e9);
+		if (!url || !type || bytes === undefined) continue;
+		preload_misses.push({ url, type, bytes, as: str(m.as, 20) ?? '', crossorigin: typeof m.crossorigin === 'string' ? m.crossorigin.slice(0, 20) : null });
+	}
+	if (preload_misses.length) visit.preload_misses = preload_misses;
 	const holes_answered: NonNullable<Visit['holes_answered']> = [];
 	for (const h of (Array.isArray(v.holes_answered) ? v.holes_answered : []).slice(0, 30) as Record<string, unknown>[]) {
 		const id = str(h?.id, 40);
@@ -384,6 +395,8 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.origin ?? a.origin ? { origin: b.origin ?? a.origin } : {}),
 		...(b.unsupported ?? a.unsupported ? { unsupported: b.unsupported ?? a.unsupported } : {}),
 		...(b.warnings ?? a.warnings ? { warnings: b.warnings ?? a.warnings } : {}),
+		// (each record carries the whole list so far: the later one has them all)
+		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
 		...(a.holes_failed || b.holes_failed ? { holes_failed: by(a.holes_failed ?? [], b.holes_failed ?? [], (h) => h.id) } : {}),
 		...(a.holes_answered || b.holes_answered ? { holes_answered: by(a.holes_answered ?? [], b.holes_answered ?? [], (h) => `${h.n}:${h.id}`) } : {}),
 		...(b.viewport ?? a.viewport ? { viewport: b.viewport ?? a.viewport } : {}),
