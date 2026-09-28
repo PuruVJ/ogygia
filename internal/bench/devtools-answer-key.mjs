@@ -281,6 +281,8 @@ async function holes_run(browser) {
 	const lab = await read('/dt-holes');
 	const walled = await read('/hole-wall', 'redirect');
 	const open = await read('/hole-wall');
+	// five holes of 0.9 s: the server renders four at a time, the fifth waits for a slot
+	const queue = await read('/dt-hole-queue');
 	let in_report = null;
 	let slow_in_report = null;
 	if (report_id)
@@ -297,13 +299,18 @@ async function holes_run(browser) {
 		['no wall, no finding', open.length === 0],
 		// (SlowHole's server render waits 1.5 s: its fallback held the first screen that long)
 		['the slow hole, named', lab.slow.length === 1 && lab.slow[0].includes('SlowHole')],
+		['the slow hole, its server render', lab.slow.length === 1 && lab.slow[0].includes('the server render') && !lab.slow[0].includes('render slot')],
+		[
+			'the queued hole, its render slot',
+			queue.slow.length === 1 && queue.slow[0].includes('waiting for a render slot on the server') && queue.slow[0].split('QueueHole (').length - 1 <= 2
+		],
 		['the quick hole never slow', !lab.slow.some((m) => m.includes('Greeting')) && open.slow.length === 0],
 		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))],
 		// the report joins the visit's hole requests from its log: the wait is the server render
-		['the report splits the slow wait', !report_id || (!!slow_in_report?.message.includes('SlowHole') && slow_in_report.message.includes('of it the server render') && slow_in_report.fix.startsWith('The server render is the wait'))]
+		['the report splits the slow wait', !report_id || (!!slow_in_report?.message.includes('SlowHole') && slow_in_report.message.includes('the server render') && slow_in_report.fix.startsWith('The server render is the wait'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, walled, open, in_report, slow_in_report })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, walled, open, in_report, slow_in_report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 

@@ -106,12 +106,17 @@ export function browser_page_report(
 		...(visit.holes_answered?.length
 			? {
 					hole_waits: visit.holes_answered.map((h) => {
-						const server_ms = hole_server?.(h.id);
+						// the recorded render (the request log) first, else the answer's own Server-Timing
+						const server_ms = hole_server?.(h.id) ?? h.render;
+						const shown_at = Math.max(visit.paints?.fcp ?? 0, h.start);
 						return {
 							name: hole_name?.(h.id) ?? `the hole ${h.id}`,
-							wait_ms: Math.max(0, Math.round(h.t - Math.max(visit.paints?.fcp ?? 0, h.start))),
+							wait_ms: Math.max(0, Math.round(h.t - shown_at)),
 							below_fold: h.below_fold,
-							...(server_ms !== undefined ? { server_ms } : {})
+							shown_at,
+							...(server_ms !== undefined ? { server_ms } : {}),
+							...(h.queue !== undefined ? { server_queue_ms: h.queue } : {}),
+							...(h.left !== undefined ? { left_at: h.left, first_at: h.first, end_at: h.end } : {})
 						};
 					})
 				}

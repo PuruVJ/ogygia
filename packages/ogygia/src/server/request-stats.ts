@@ -127,6 +127,8 @@ export interface HoleRequestStats {
 	/** `hit` served from the render cache; `miss` rendered and stored; `none` = no cache (ttl 0) */
 	cache: 'hit' | 'miss' | 'none';
 	ttl: number;
+	/** ms it waited for a render slot (the server renders a few holes at a time); absent on a hit */
+	queue_ms?: number;
 }
 
 const stats = new WeakMap<Request, OgygiaRequestStats>();

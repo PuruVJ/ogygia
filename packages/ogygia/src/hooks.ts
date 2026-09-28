@@ -1657,28 +1657,44 @@ class OgygiaHandle {
 		props: Record<string, unknown>,
 		cache?: { key: string; ttl: number },
 		/** the profiler's hole economics: what the cache did for this request */
-		report?: (outcome: 'hit' | 'miss' | 'none') => void
+		report?: (outcome: 'hit' | 'miss' | 'none') => void,
+		/** filled when the render ran: its wait for a slot in the gate, and its time in it */
+		timing?: { queue_ms?: number; render_ms?: number }
 	): Promise<string | null> {
 		// R6/G2: the ONE cache-fronted render seam. `cached_render` serves a memo when the hole opted
 		// into a positive `maxAge` (key carries the session seal — a per-user render never crosses
 		// users); on a miss it runs the render_body below. The ENDPOINT wraps its render in the
 		// concurrency gate + timeout (the inline-island path, sharing `cached_render`, does not).
+		const render_body = async (): Promise<string> => {
+			const mod = await load();
+			const rendered = render(mod.default as Component<Record<string, unknown>>, {
+				props,
+				context: kit_render_context()
+			});
+			return await Promise.race([
+				Promise.resolve(rendered).then((out) => out.body as string),
+				new Promise<never>((_, rej) =>
+					setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
+				)
+			]);
+		};
 		try {
 			return await cached_render(
-				() =>
-					render_gate.run(async () => {
-						const mod = await load();
-						const rendered = render(mod.default as Component<Record<string, unknown>>, {
-							props,
-							context: kit_render_context()
-						});
-						return await Promise.race([
-							Promise.resolve(rendered).then((out) => out.body as string),
-							new Promise<never>((_, rej) =>
-								setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
-							)
-						]);
-					}),
+				() => {
+					if (!timing) return render_gate.run(render_body);
+					// the wait for a slot, and the time in it. A slot is held for the whole render,
+					// awaits included: a hole waiting on slow data keeps the next one queued
+					const asked = performance.now();
+					return render_gate.run(async () => {
+						const entered = performance.now();
+						timing.queue_ms = entered - asked;
+						try {
+							return await render_body();
+						} finally {
+							timing.render_ms = performance.now() - entered;
+						}
+					});
+				},
 				cache,
 				Date.now(),
 				report
@@ -1970,9 +1986,29 @@ class OgygiaHandle {
 			ttl > 0
 				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
 				: undefined;
-		const body = await this.#render_component(load, props, cache, (outcome) =>
-			record_hole_stats(event.request, { kind: 'hole', id, cache: outcome, ttl })
-		);
+		const timing: { queue_ms?: number; render_ms?: number } = {};
+		let outcome: 'hit' | 'miss' | 'none' = 'none';
+		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing);
+		// (the profiler's hole economics, with the wait for a render slot: a hole's time on the
+		// server is its queue AND its render)
+		record_hole_stats(event.request, {
+			kind: 'hole',
+			id,
+			cache: outcome,
+			ttl,
+			...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {})
+		});
+		// the same split for the browser (devtools, the profiler's beacon), as Server-Timing. Only for
+		// a browser that measures (dev, the devtools cookie, the profiler's flag): no other visitor's
+		// answer tells how loaded the server is
+		const timed =
+			timing.queue_ms !== undefined &&
+			(import.meta.env.DEV ||
+				(DEVTOOLS && event.cookies.get('og_devtools') === '1') ||
+				event.cookies.get('og_profiler_beacon') === '1');
+		const server_timing: Record<string, string> = timed
+			? { 'server-timing': `og-queue;dur=${timing.queue_ms!.toFixed(1)}, og-render;dur=${(timing.render_ms ?? 0).toFixed(1)}` }
+			: {};
 		if (body === null) {
 			return region_response('Region render failed', { status: 500 });
 		}
@@ -2020,7 +2056,8 @@ class OgygiaHandle {
 				// `ttl` → `private, max-age=ttl`. `private` keeps shared/CDN caches out (responses are
 				// cookie-personalized) while still letting THIS browser reuse the response.
 				'cache-control': cache_control,
-				...renew_headers
+				...renew_headers,
+				...server_timing
 			}
 		});
 	}

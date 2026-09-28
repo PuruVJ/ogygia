@@ -176,6 +176,29 @@ describe('analyze_page', () => {
 		expect(f[0].message).toContain('SlowHole (1.6 s)');
 		expect(f[0].message).not.toContain('Greeting');
 		expect(f[0].message).not.toContain('Footer');
+		// the gate: five holes, three requests at a time. The fourth and fifth left only as a slot
+		// freed (900 ms after the paint), then waited 900 ms on the server
+		const q = (n: number, left: number) => ({ name: `Q${n}`, below_fold: false, shown_at: 100, left_at: left, first_at: left + 880, end_at: left + 900, wait_ms: left + 910 - 100 });
+		const gated = analyze_page(page({ hole_waits: [q(1, 100), q(2, 100), q(3, 100), q(4, 1000), q(5, 1000)] }), [], [], 3000).findings.find((x) => x.code === 'hole-slow')!;
+		expect(gated.message).toContain('Q4 (1.8 s: 900 ms before its request left, 880 ms waiting on the server)');
+		expect(gated.message).not.toContain('Q1');
+		expect(gated.fix).toContain('runs 3 hole requests at a time, and 3 were ahead of it');
+		// left late with nothing ahead: the page was busy, not the gate
+		const busy = analyze_page(page({ hole_waits: [q(1, 1100)] }), [], [], 3000).findings.find((x) => x.code === 'hole-slow')!;
+		expect(busy.fix).toMatch(/^Its request left late/);
+		// left on time, the server took it all (the browser's first byte, no recorded render)
+		const srv = analyze_page(page({ hole_waits: [{ name: 'S', below_fold: false, shown_at: 100, left_at: 110, first_at: 1500, end_at: 1510, wait_ms: 1420 }] }), [], [], 3000).findings.find((x) => x.code === 'hole-slow')!;
+		expect(srv.message).toContain('S (1.4 s: 1.4 s waiting on the server)');
+		expect(srv.fix).toMatch(/^The server is the wait/);
+		// the server's render slots were full (its Server-Timing said): the queue, not the render
+		const slot = analyze_page(
+			page({ hole_waits: [{ name: 'Q5', below_fold: false, shown_at: 100, left_at: 110, first_at: 1900, end_at: 1910, wait_ms: 1820, server_queue_ms: 890, server_ms: 900 }] }),
+			[],
+			[],
+			3000
+		).findings.find((x) => x.code === 'hole-slow')!;
+		expect(slot.message).toContain('Q5 (1.8 s: 890 ms waiting for a render slot on the server, 900 ms the server render)');
+		expect(slot.fix).toMatch(/^It waited on the server for a render slot: a server process renders 4 holes at a time/);
 		const mild = analyze_page(page({ hole_waits: [{ name: 'SlowHole', wait_ms: 1100, below_fold: false }] }), [], [], 3000);
 		expect(mild.findings.find((x) => x.code === 'hole-slow')?.severity).toBe('info');
 	});

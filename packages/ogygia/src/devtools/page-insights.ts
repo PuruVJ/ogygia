@@ -10,6 +10,7 @@
  * none (the lab page's decoys hold that line).
  */
 import { without_comments } from '../runtime/beacon.js';
+import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.js';
 import { fn_label, type CpuSummary } from './cpu.js';
 import { third_party, third_party_findings, type ThirdParty } from './third-party.js';
 
@@ -67,9 +68,21 @@ export interface HoleWait {
 	wait_ms: number;
 	/** below the first screen (its fallback is not what the visitor looks at first) */
 	below_fold: boolean;
-	/** its server render, per request, when known (the profiler recorded the hole's requests) */
+	/** its server render, per request, when known (the profiler recorded the hole's requests, or
+	 *  the answer's Server-Timing said) */
 	server_ms?: number;
+	/** its wait on the server for a render slot, before the render (Server-Timing / the profiler) */
+	server_queue_ms?: number;
+	/** page times: when the fallback began to count (the paint, or the hole's own start), and its
+	 *  request as the browser timed it — left, first byte back, last byte. They split the wait. */
+	shown_at?: number;
+	left_at?: number;
+	first_at?: number;
+	end_at?: number;
 }
+
+/** The runtime runs this many hole requests at once (runtime/session.ts `server_gate`). */
+const HOLE_GATE = 3;
 
 export interface IslandCode {
 	fp?: string;
@@ -643,20 +656,55 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const slow_holes = (page.hole_waits ?? []).filter((h) => !h.below_fold && h.wait_ms >= SLOW_HOLE_MS).sort((a, b) => b.wait_ms - a.wait_ms);
 	if (slow_holes.length) {
 		const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
-		// where the wait went, when the server's time is known: the render, or before and around it
-		const server = (h: HoleWait) => (h.server_ms === undefined ? '' : `, ${h.server_ms >= 1000 ? secs(h.server_ms) : `${Math.round(h.server_ms)} ms`} of it the server render`);
-		const known = slow_holes.filter((h) => h.server_ms !== undefined);
-		const render_bound = known.length > 0 && known.every((h) => h.server_ms! >= h.wait_ms * 0.6);
-		const elsewhere = known.length > 0 && known.every((h) => h.server_ms! < h.wait_ms * 0.4);
+		const dur = (ms: number) => (ms >= 1000 ? secs(ms) : `${Math.round(ms)} ms`);
+		// WHERE THE WAIT WENT. Before its request left (the gate, a busy page, a late wake), then the
+		// server: its render when the profiler recorded it, else the browser's wait for the first byte
+		const all = page.hole_waits ?? [];
+		const split = (h: HoleWait) => {
+			const shown = h.shown_at ?? -Infinity;
+			const before = h.left_at !== undefined && h.shown_at !== undefined ? Math.max(0, h.left_at - shown) : undefined;
+			const ttfb = h.first_at !== undefined && h.left_at !== undefined ? Math.max(0, h.first_at - Math.max(h.left_at, shown)) : undefined;
+			// hole requests in flight as it left (or ending just then: the slot it took): the gate was full
+			const ahead =
+				h.left_at === undefined
+					? 0
+					: all.filter((o) => o !== h && o.left_at !== undefined && o.end_at !== undefined && o.left_at < h.left_at! && o.end_at >= h.left_at! - 50).length;
+			return { before, queue: h.server_queue_ms, server: h.server_ms ?? ttfb, rendered: h.server_ms !== undefined, ahead };
+		};
+		const parts = (h: HoleWait) => {
+			const s = split(h);
+			const out: string[] = [];
+			if (s.before !== undefined && s.before >= 200) out.push(`${dur(s.before)} before its request left`);
+			if (s.queue !== undefined && s.queue >= 200) out.push(`${dur(s.queue)} waiting for a render slot on the server`);
+			if (s.server !== undefined && s.server >= 50) out.push(`${dur(s.server)} ${s.rendered ? 'the server render' : 'waiting on the server'}`);
+			return out.length ? `: ${out.join(', ')}` : '';
+		};
+		const splits = slow_holes.map(split);
+		// the server's render slots were full: slow holes ahead held them while they awaited data
+		const slotted = splits.every((s, i) => s.queue !== undefined && s.queue >= slow_holes[i].wait_ms * 0.4);
+		const late = !slotted && splits.every((s, i) => s.before !== undefined && s.before >= slow_holes[i].wait_ms * 0.4);
+		const gated = late && splits.some((s) => s.ahead >= HOLE_GATE);
+		const known = splits.filter((s) => s.server !== undefined);
+		const render_bound = !late && !slotted && known.length === splits.length && splits.every((s, i) => s.server! >= slow_holes[i].wait_ms * 0.6);
+		const elsewhere = !late && !slotted && known.length === splits.length && splits.every((s, i) => s.server! < slow_holes[i].wait_ms * 0.4);
+		const ahead = Math.max(...splits.map((s) => s.ahead));
 		findings.push({
 			code: 'hole-slow',
 			severity: slow_holes[0].wait_ms >= SLOW_HOLE_MS * 1.5 ? 'warn' : 'info',
-			message: `${list(slow_holes.map((h) => `${h.name} (${secs(h.wait_ms)}${server(h)})`))} showed ${slow_holes.length === 1 ? 'its' : 'their'} fallback on the first screen that long before ${slow_holes.length === 1 ? 'its' : 'their'} answer came.`,
-			fix: render_bound
-				? 'The server render is the wait: give the hole a maxAge if its answer is the same for a while, start its data sooner (or in parallel), or render it with the page if it is the same for every visitor.'
-				: elsewhere
-					? 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
-					: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+			message: `${list(slow_holes.map((h) => `${h.name} (${secs(h.wait_ms)}${parts(h)})`))} showed ${slow_holes.length === 1 ? 'its' : 'their'} fallback on the first screen that long before ${slow_holes.length === 1 ? 'its' : 'their'} answer came.`,
+			fix: slotted
+				? `It waited on the server for a render slot: a server process renders ${REGION_RENDER_CONCURRENCY} holes at a time, and each holds its slot while it awaits its data, so slow holes make the next one wait (every visitor’s, on that process). Make the slow holes answer sooner (a maxAge, faster data), or put fewer of them on one page. The Server-Timing on its answer has the split.`
+				: gated
+				? `It waited for its turn: the runtime runs ${HOLE_GATE} hole requests at a time, and ${ahead} were ahead of it. Put fewer holes on the first screen (render the ones that are the same for every visitor with the page, or merge small ones into one), or make the ones ahead answer sooner (a maxAge).`
+				: late
+					? 'Its request left late: the page was busy (long tasks) when it was due, or the hole woke late. The long tasks and the wake order on this tab show which.'
+					: render_bound
+						? `${splits.every((s) => s.rendered) ? 'The server render' : 'The server'} is the wait: give the hole a maxAge if its answer is the same for a while, start its data sooner (or in parallel), or render it with the page if it is the same for every visitor.`
+						: elsewhere
+							? splits.every((s) => s.before !== undefined)
+								? 'The server answered quickly and the request left on time: the wait came after the first byte (a large answer, its styles, or the swap) or on the network.'
+								: 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
+							: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
 			fps: []
 		});
 	}

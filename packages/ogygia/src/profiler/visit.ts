@@ -111,7 +111,7 @@ export interface Visit {
 	/** holes whose answer never came, by island id (the report's hole rows name them) */
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
 	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
-	holes_answered?: { id: string; start: number; t: number; below_fold: boolean }[];
+	holes_answered?: { id: string; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
 	viewport?: [number, number];
 	ua?: string;
 }
@@ -293,7 +293,22 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		const start = num(h?.start);
 		const t = num(h?.t);
 		if (!id || start === undefined || t === undefined || t < start) continue;
-		holes_answered.push({ id, start, t, below_fold: h.below_fold === true });
+		// the browser's timing of its request, kept only whole and in order
+		const left = num(h.left);
+		const first = num(h.first);
+		const end = num(h.end);
+		const timed = left !== undefined && first !== undefined && end !== undefined && left <= first && first <= end;
+		const queue = num(h.queue);
+		const render = num(h.render);
+		holes_answered.push({
+			id,
+			start,
+			t,
+			below_fold: h.below_fold === true,
+			...(timed ? { left, first, end } : {}),
+			...(queue !== undefined ? { queue } : {}),
+			...(render !== undefined ? { render } : {})
+		});
 	}
 	if (holes_answered.length) visit.holes_answered = holes_answered;
 	const unsupported =(Array.isArray(v.unsupported) ? v.unsupported : []).filter((t): t is string => typeof t === 'string' && KNOWN_TYPES.has(t));

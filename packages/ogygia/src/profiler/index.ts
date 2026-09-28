@@ -5112,10 +5112,11 @@ class Profiler {
 		const visit = own_visit();
 		// THE VISIT'S HOLE REQUESTS: the recording ends with the page's render, so a hole's own
 		// request (made by the browser afterwards) is not in it. The request log still holds it: the
-		// visit's holes, requested within a minute of its start, give each hole's server time
+		// visit's holes, requested within a minute of its start, give each hole's server render (its
+		// wait for a render slot taken out: the beacon's Server-Timing tells that part apart)
 		const answered = new Set((visit?.holes_answered ?? []).map((h) => h.id));
 		const hole_requests = answered.size
-			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: e.ms }))
+			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)) }))
 			: [];
 		return {
 			...(visit ? { visit } : {}),

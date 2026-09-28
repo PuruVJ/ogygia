@@ -156,7 +156,7 @@ test('a hole answered late: waited from the first paint, split by its server tim
 		browser_findings(browser_page_report(v, rows, undefined, undefined, (id) => names[id], () => server)).filter((x) => x.code === 'hole-slow');
 	const bound = slow(1400);
 	expect(bound).toHaveLength(1);
-	expect(bound[0].message).toContain('SlowHole (1.5 s, 1.4 s of it the server render)');
+	expect(bound[0].message).toContain('SlowHole (1.5 s: 1.4 s the server render)');
 	expect(bound[0].message).not.toContain('Greeting');
 	expect(bound[0].message).not.toContain('Footer');
 	expect(bound[0].fix).toMatch(/^The server render is the wait/);

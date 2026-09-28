@@ -4,7 +4,7 @@
  * `window.__ogygia_page()` (dev-only, devtools builds) so the planted-problem answer key and e2e
  * read the same report the tab shows without opening the panel.
  */
-import { beacon_page } from '../runtime/beacon.js';
+import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
 import { analyze_page, type Failure, type HoleFailure, type HoleWait, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
@@ -119,10 +119,16 @@ export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWai
 		// later: one woken by a scroll) to the swap. The fetch step alone undercounts: a prefetch may
 		// have started the request earlier, and the fallback was on screen since the paint anyway
 		const start = Math.max(fcp, since, e.t - e.wait_ms);
+		// its request as the browser timed it: splits the wait into before it left, and the server
+		const times = e.endpoint ? hole_request_times(e.endpoint, e.t) : null;
 		out.push({
 			name: (id && region_names()[id]) || (e.entry ? region_name(e.entry) : 'a hole'),
 			wait_ms: Math.max(0, Math.round(e.t - start)),
-			below_fold: !!rect && rect.top + scrollY > innerHeight
+			below_fold: !!rect && rect.top + scrollY > innerHeight,
+			shown_at: Math.round(start),
+			...(times ? { left_at: times.left, first_at: times.first, end_at: times.end } : {}),
+			...(times?.render !== undefined ? { server_ms: times.render } : {}),
+			...(times?.queue !== undefined ? { server_queue_ms: times.queue } : {})
 		});
 	}
 	return out;

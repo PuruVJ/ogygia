@@ -165,6 +165,48 @@ export interface HoleAnswered {
 	t: number;
 	/** below the first screen when it swapped: its fallback was not what the visitor looked at */
 	below_fold: boolean;
+	/** its request, as the browser timed it (page time): left, first byte back, last byte */
+	left?: number;
+	first?: number;
+	end?: number;
+	/** the server's split (Server-Timing): its wait for a render slot, and the render */
+	queue?: number;
+	render?: number;
+}
+
+/** The browser's timing of the request that answered a hole: the latest one for its URL done by
+ *  `by` (the swap). It may predate the runtime (the document preloads first-screen holes). `left`
+ *  is when it went on the wire (`requestStart`: after any wait for a connection), not when it was
+ *  asked for. Null when the resource buffer has none (full, or no Resource Timing). */
+export function hole_request_times(
+	endpoint: string,
+	by: number
+): { left: number; first: number; end: number; queue?: number; render?: number } | null {
+	try {
+		const url = new URL(endpoint, location.href).href;
+		let hit: PerformanceResourceTiming | undefined;
+		for (const e of performance.getEntriesByName(url, 'resource') as PerformanceResourceTiming[])
+			if (e.responseStart > 0 && e.responseEnd <= by + 1) hit = e;
+		if (!hit) return null;
+		// the server's own split, when it sent one (to a measuring browser only): its wait for a
+		// render slot, and the render
+		let queue: number | undefined;
+		let render: number | undefined;
+		for (const s of hit.serverTiming ?? []) {
+			if (s.name === 'og-queue') queue = Math.round(s.duration);
+			else if (s.name === 'og-render') render = Math.round(s.duration);
+		}
+		return {
+			left: Math.round(hit.requestStart || hit.startTime),
+			first: Math.round(hit.responseStart),
+			end: Math.round(hit.responseEnd),
+			...(queue !== undefined ? { queue } : {}),
+			...(render !== undefined ? { render } : {})
+		};
+	} catch {
+		/* no Resource Timing */
+	}
+	return null;
 }
 let visit_holes_answered: HoleAnswered[] = [];
 /** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
@@ -182,7 +224,8 @@ export function beacon_hole_answered(el: Element, start: number): void {
 	}
 	if (!id || visit_holes_answered.some((x) => x.id === id)) return;
 	const rect = el.getBoundingClientRect();
-	visit_holes_answered.push({ id, start: Math.round(start), t: Math.round(performance.now()), below_fold: rect.top + scrollY > innerHeight });
+	const times = hole_request_times(el.getAttribute('endpoint') ?? '', performance.now());
+	visit_holes_answered.push({ id, start: Math.round(start), t: Math.round(performance.now()), below_fold: rect.top + scrollY > innerHeight, ...(times ?? {}) });
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
