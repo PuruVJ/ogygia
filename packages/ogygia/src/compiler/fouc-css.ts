@@ -17,6 +17,7 @@ import { fs, path } from './host.js';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
 import { unscoped_marker } from '../unscoped-css.js';
+import { blank_styles } from './blank-styles.js';
 
 export const FOUC_CSS_PREFIX = 'virtual:ogygia/fouc-css/';
 export const FOUC_SCOPED_PREFIX = 'virtual:ogygia/fouc-scoped/';
@@ -301,7 +302,8 @@ function extractRawStyleBodies(source: string) {
 export function listStaticImportSpecs(source: string, filename: string) {
 	const specs: string[] = [];
 	try {
-		const ast = parse(source, { filename, modern: true });
+		// (blanked styles: a raw SCSS `<style>` threw here and dropped to the regex fallback)
+		const ast = parse(blank_styles(source), { filename, modern: true });
 		const scripts = [ast.instance, ast.module].filter(Boolean);
 		for (const block of scripts) {
 			const content = block?.content;

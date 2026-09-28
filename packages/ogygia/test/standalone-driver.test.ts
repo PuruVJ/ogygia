@@ -60,6 +60,18 @@ describe('standalone driver (no Vite)', () => {
 		expect(result!.code).toContain('ogygia'); // generated glue references the runtime
 	});
 
+	test('a host whose raw <style lang="scss"> the CSS parser rejects still gets its island, style untouched', () => {
+		// `#{$i}` threw css_expected_identifier in the parse, and the host's region import was left a
+		// plain import in silence: the island never became one
+		const { compiler } = make_compiler();
+		const style = `<style lang="scss">\n@for $i from 1 through 3 { :global(.ql-indent-#{$i}) { padding-left: #{$i * 3}em; } }\n</style>`;
+		const src = `<script>\nimport TabGroup from 'some-pkg/tabs' with { wake: 'load' };\n</script>\n<TabGroup />\n${style}`;
+		const result = compiler.transform(src, `${ROOT}/src/lib/ScssHost.svelte`, { ssr: true }) as { code: string; islands: unknown[] } | null;
+		expect(result).not.toBeNull();
+		expect(result!.islands.length).toBeGreaterThan(0);
+		expect(result!.code).toContain(style);
+	});
+
 	test('Compiler.transform is memoized (same source → same result object)', () => {
 		const { compiler } = make_compiler();
 		const src = `<script>\nimport TabGroup from 'some-pkg/tabs' with { wake: 'load' };\n</script>\n<TabGroup />`;

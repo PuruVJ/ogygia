@@ -19,6 +19,7 @@
 import { parse } from 'svelte/compiler';
 import { fs } from '../host.js';
 import { parse_module } from '../parse/oxc.js';
+import { blank_styles } from '../blank-styles.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Node = Record<string, any>;
@@ -209,11 +210,6 @@ export function parse_roots(code: string, id: string, kind: 'svelte' | 'script')
 	return roots;
 }
 
-const STYLE_BLOCK_RE = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
-/** Replace the inside of every `<style>` with spaces (newlines kept, so line numbers hold). */
-function blank_styles(code: string): string {
-	return code.replace(STYLE_BLOCK_RE, (m, inner: string) => m.slice(0, m.length - inner.length - 8) + inner.replace(/[^\n]/g, ' ') + '</style>');
-}
 
 // ── the analysis ───────────────────────────────────────────────────────────────────────────────
 

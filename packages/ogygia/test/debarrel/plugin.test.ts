@@ -227,3 +227,15 @@ describe('ogygia({ barrels }) wiring', () => {
 		expect(out!.code).toBe(`import { Action } from 'svelte/action';\nimport { util } from '${f.id('lib/util.ts')}';\nimport { deep } from '@vendor/pkg/src/types';`);
 	});
 });
+
+describe('the report names the components it had to skip', () => {
+	it('skipped components are counted and listed, with or without rewrites', async () => {
+		const { format_report } = await import('../../src/compiler/debarrel/plugin.js');
+		const base = { files: 10, importers: 0, imports: 0, names: 0, first_ms: 0, last_ms: 100, barrels: new Map(), skipped: new Set(['/app/src/A.svelte', '/app/src/B.svelte']) };
+		const none = format_report(base, '/app', 8);
+		expect(none).toContain('2 components skipped (could not be parsed; their imports stay on their barrels): src/A.svelte, src/B.svelte');
+		const some = format_report({ ...base, importers: 1, imports: 1, names: 1, barrels: new Map([['/app/src/lib/index.ts', { names: 1, importers: new Set(['/app/src/C.svelte']) }]]) }, '/app', 1);
+		expect(some).toContain('src/A.svelte and 1 more');
+		expect(format_report({ ...base, skipped: new Set() }, '/app', 8)).not.toContain('skipped');
+	});
+});

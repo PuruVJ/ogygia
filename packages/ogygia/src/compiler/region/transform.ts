@@ -17,6 +17,19 @@ import {
 } from './emit.js';
 import type { FileIR, SvelteNode, HostImport, RegionMark } from './ir.js';
 import type * as NodePath from 'node:path';
+import { blank_styles } from '../blank-styles.js';
+
+/** A host the parser still cannot read keeps its region imports as plain imports (no island):
+ *  said once per file, never skipped in silence. The Svelte compiler reports the error itself. */
+const warned_unparsed = new Set<string>();
+function warn_unparsed(id: string, err: unknown): void {
+	if (warned_unparsed.has(id)) return;
+	warned_unparsed.add(id);
+	const e = err as { code?: string; start?: { line?: number; column?: number }; message?: string };
+	console.warn(
+		`[ogygia] regions: skipped ${id}: ${e.code ?? (e.message ?? 'parse error').split('\n')[0].slice(0, 80)}${e.start?.line ? ` at ${e.start.line}:${(e.start.column ?? 0) + 1}` : ''} — its region imports stay plain imports`
+	);
+}
 
 /** The resolved context the adapter/driver threads into a host transform. */
 interface HostCtx {
@@ -879,8 +892,10 @@ function transform_csr_true_host(
 ) {
 	let ast: SvelteNode;
 	try {
-		ast = parse(source, { modern: true, filename: id });
-	} catch {
+		// the styles are never read here, and a raw `<style lang="scss">` throws in the CSS parser
+		ast = parse(blank_styles(source), { modern: true, filename: id });
+	} catch (err) {
+		warn_unparsed(id, err);
 		return null;
 	}
 	const ms = new MagicString(source);
@@ -1459,8 +1474,12 @@ class FileCompilation {
 
 		let ast: SvelteNode;
 		try {
-			ast = parse(source, { modern: true, filename: id });
-		} catch {
+			// blanked styles: a raw SCSS `<style>` threw here, and the host's region imports were
+			// left untransformed in silence (its islands never became islands). The host `<style>`
+			// is still read below, by offset, from the original source.
+			ast = parse(blank_styles(source), { modern: true, filename: id });
+		} catch (err) {
+			warn_unparsed(id, err);
 			return { done: null };
 		}
 

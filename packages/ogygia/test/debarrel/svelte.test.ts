@@ -70,6 +70,43 @@ describe('rewrite_svelte', () => {
 		expect(out).not.toContain('Button.svelte');
 	});
 
+	it('a <style lang="scss"> the CSS parser rejects no longer skips the file; the style stays byte-identical', async () => {
+		// `#{$i}` and `@for` threw css_expected_identifier in Svelte's parser, and the whole file was
+		// skipped: its barrel imports stayed, and its island shipped the whole barrel
+		const style = `<style lang="scss">\n@for $i from 1 through 3 {\n\t:global(.ql-indent-#{$i}) { padding-left: #{$i * 3}em; }\n}\n@each $k in a, b { .x-#{$k} { color: red } }\n</style>`;
+		f = fixture({ ...lib(), 'src/App.svelte': `<script>\n\timport { Button, util } from '$lib';\n</script>\n\n<Button>{util}</Button>\n${style}\n` });
+		const out = await f.rewrite('src/App.svelte');
+		expect(out).toBe(`<script>\n\timport Button from '${f.id('lib/Button.svelte')}';\nimport { util } from '${f.id('lib/util.ts')}';\n</script>\n\n<Button>{util}</Button>\n${style}\n`);
+	});
+
+	it('a script AFTER the style block is rewritten at the right place (the blanking keeps every offset)', async () => {
+		const style = `<style lang="scss">\n.a { .b-#{$x} { color: red } }\n</style>`;
+		f = fixture({ ...lib(), 'src/App.svelte': `${style}\n<script lang="ts">\n\timport { util } from '$lib';\n\tconst label = '<style>not css</style>';\n</script>\n<p>{util}{label}</p>` });
+		expect(await f.rewrite('src/App.svelte')).toBe(
+			`${style}\n<script lang="ts">\n\timport { util } from '${f.id('lib/util.ts')}';\n\tconst label = '<style>not css</style>';\n</script>\n<p>{util}{label}</p>`
+		);
+	});
+
+	it('blank_styles: only style content, newlines kept, a <style> string inside a script untouched', async () => {
+		const { blank_styles } = await import('../../src/compiler/debarrel/svelte.js');
+		const src = `<script>const s = '<style>x{}</style>';</script>\n<STYLE lang="scss">\n.a-#{$i} {}\n</STYLE>\n<styles-not>keep</styles-not>`;
+		const out = blank_styles(src);
+		expect(out.length).toBe(src.length);
+		expect(out).toContain(`const s = '<style>x{}</style>';`);
+		expect(out).toContain('<STYLE lang="scss">\n' + ' '.repeat('.a-#{$i} {}'.length) + '\n</STYLE>');
+		expect(out).toContain('<styles-not>keep</styles-not>');
+	});
+
+	it('a component that still cannot be parsed is reported (code and position), never skipped in silence', async () => {
+		const { rewrite_svelte } = await import('../../src/compiler/debarrel/svelte.js');
+		const why: { code: string; line?: number }[] = [];
+		const r = await rewrite_svelte(`<script>import { A } from './barrel';</script>\n<div>\n<p>{unclosed</p>`, '/x/Broken.svelte', async () => null, {}, (w) => why.push(w));
+		expect(r).toBeNull();
+		expect(why).toHaveLength(1);
+		expect(why[0].code).toBeTruthy();
+		expect(why[0].line).toBeGreaterThan(1);
+	});
+
 	it('no script, a component that imports no barrel, and a syntax error all leave the file alone', async () => {
 		f = fixture({
 			...lib(),

@@ -75,9 +75,12 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 		// per-file durations would count the same waiting many times over
 		first_ms: 0,
 		last_ms: 0,
-		barrels: new Map<string, { names: number; importers: Set<string> }>()
+		barrels: new Map<string, { names: number; importers: Set<string> }>(),
+		/** components the parser could not read: their imports were left on their barrels */
+		skipped: new Set<string>()
 	});
 	let report = fresh_report();
+	const warned = new Set<string>();
 
 	// One index per plugin instance. Resolution goes through Vite via whichever plugin context last
 	// handed us its `resolve` — `buildStart` first, then every `transform` (any context resolves the
@@ -161,7 +164,16 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 			};
 			const policy = policy_for(code);
 			const result = importer.endsWith('.svelte')
-				? await rewrite_svelte(code, importer, lookup, policy)
+				? await rewrite_svelte(code, importer, lookup, policy, (why) => {
+						// never in silence: a skipped component keeps every barrel it imports, and its island
+						// ships them whole. Once per file (a dev server re-transforms on every edit).
+						report.skipped.add(importer);
+						if (warned.has(importer)) return;
+						warned.add(importer);
+						console.warn(
+							`[ogygia] barrels: skipped ${short(importer, root)}: ${why.code}${why.line ? ` at ${why.line}:${why.column ?? 1}` : ''} — its imports stay on their barrels`
+						);
+					})
 				: await rewrite_module(code, importer, lookup, policy);
 			// The importer no longer imports the barrels it was rewritten away from: watch them (and
 			// what their maps depend on) so an edit still re-transforms this file in dev. A virtual
@@ -208,8 +220,17 @@ const n = (v: number) => v.toLocaleString('en-US');
  *  `limit` biggest and a count of the rest (`Infinity` for every one). */
 export function format_report(r: ReturnType<typeof debarrel_report_shape>, root: string, limit: number): string {
 	const span_s = ((r.last_ms - r.first_ms) / 1000).toFixed(2);
+	// components the parser could not read keep their barrels: said in every report, named
+	const skipped = r.skipped?.size
+		? [
+				`  ${n(r.skipped.size)} component${r.skipped.size === 1 ? '' : 's'} skipped (could not be parsed; their imports stay on their barrels): ${[...r.skipped]
+					.slice(0, limit)
+					.map((id) => short(id, root))
+					.join(', ')}${r.skipped.size > limit ? ` and ${n(r.skipped.size - limit)} more` : ''}`
+			]
+		: [];
 	if (r.importers === 0)
-		return `[ogygia] barrels: ${n(r.files)} files scanned, no barrel imports to rewrite (${span_s} s)`;
+		return [`[ogygia] barrels: ${n(r.files)} files scanned, no barrel imports to rewrite (${span_s} s)`, ...skipped].join('\n');
 	const head =
 		`[ogygia] barrels: ${n(r.importers)} of ${n(r.files)} files rewritten — ${n(r.imports)} barrel imports → leaves ` +
 		`(${n(r.names)} names), ${n(r.barrels.size)} barrels bypassed, ${span_s} s first to last transform`;
@@ -222,7 +243,7 @@ export function format_report(r: ReturnType<typeof debarrel_report_shape>, root:
 	);
 	const rest = sorted.length - top.length;
 	if (rest > 0) rows.push(`  … and ${n(rest)} more barrel${rest === 1 ? '' : 's'} (\`barrels: { report: 'all' }\` lists every one)`);
-	return [head, ...rows].join('\n');
+	return [head, ...rows, ...skipped].join('\n');
 }
 
 /** The report record's shape (for `format_report`'s signature — the value lives in the closure). */
@@ -234,6 +255,7 @@ function debarrel_report_shape() {
 		names: 0,
 		first_ms: 0,
 		last_ms: 0,
-		barrels: new Map<string, { names: number; importers: Set<string> }>()
+		barrels: new Map<string, { names: number; importers: Set<string> }>(),
+		skipped: new Set<string>() as Set<string> | undefined
 	};
 }
