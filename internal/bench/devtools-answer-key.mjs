@@ -298,6 +298,35 @@ async function holes_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** AN ISLAND'S CODE (/dt-code, dev): Toolbar imports a barrel whole (its side effect keeps the
+ *  barrel rewrite off it) and an icon set that is most of its weight. Both named on Toolbar; the
+ *  Healthy decoy never; a page without them raises neither. */
+async function code_run(browser) {
+	const read = async (path) => {
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + path, { waitUntil: 'load' });
+		// the dev sizes arrive with the dock's mount: open it
+		await page.waitForTimeout(1500);
+		if (!(await page.locator('[data-og-tab]').count())) await page.click('[data-og-panel-toggle]').catch(() => {});
+		await page.waitForTimeout(1500);
+		const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code.startsWith('island-')).map((x) => ({ code: x.code, message: x.message })));
+		await page.close();
+		return f;
+	};
+	const lab = await read('/dt-code');
+	const clean = await read('/dt-lab');
+	const has = (code, text) => lab.some((f) => f.code === code && f.message.includes(text));
+	const checks = [
+		['the barrel, on Toolbar', has('island-barrel', 'Toolbar still imports a barrel whole: src/lib/dtcode/index.ts')],
+		['the heavy module, on Toolbar', has('island-heavy-module', "Icons.svelte is") && has('island-heavy-module', "of Toolbar's code")],
+		['the decoy quiet', !lab.some((f) => f.message.includes('Healthy'))],
+		['a clean page quiet', clean.length === 0]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} island code: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, clean })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 function grade(view) {
 	const name_of = new Map(view.regions.map((r) => [r.fp, r.name]));
 	const found = {};
@@ -420,6 +449,10 @@ try {
 	for (let i = 0; i < repeat; i++) holes_ok += await holes_run(browser);
 	if (holes_ok < repeat) failed = true;
 	console.log(`${holes_ok === repeat ? '✓' : '✗'} holes whose answer never came: ${holes_ok}/${repeat}`);
+	let code_ok = 0;
+	for (let i = 0; i < repeat; i++) code_ok += await code_run(browser);
+	if (code_ok < repeat) failed = true;
+	console.log(`${code_ok === repeat ? '✓' : '✗'} island code (barrel, heavy module): ${code_ok}/${repeat}`);
 	if (repeat - cpu_fail < need) {
 		failed = true;
 		console.log(`✗ CPU naming held in ${repeat - cpu_fail}/${repeat} runs`);

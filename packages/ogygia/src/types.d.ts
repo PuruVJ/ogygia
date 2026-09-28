@@ -288,7 +288,10 @@ interface Window {
 	// `names`: island id → component name (tab labels). `bytes`: island id → transitive dev-module
 	// size (the Bytes tab's real-cost estimate). Absent off a devtools build.
 	__ogygia_region_names?: Record<string, string>;
-	__ogygia_region_bytes?: Record<string, { bytes: number; modules: number }>;
+	__ogygia_region_bytes?: Record<
+		string,
+		{ bytes: number; modules: number; top?: { file: string; bytes: number }[]; barrels?: { file: string; fanout: number }[] }
+	>;
 }
 
 // Rune globals used by the `.svelte.ts` shims. Those files are compiled by the CONSUMER's

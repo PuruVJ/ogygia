@@ -218,6 +218,13 @@
 		{/if}
 		{#if model.t}
 			<div class="row"><span class="rk">js + deps</span><span class="v">{kb(model.t.bytes)}<span class="muted"> · {model.t.modules} mod</span></span></div>
+			{#if model.t.top?.length}
+				<!-- where the island's weight is: its heaviest modules, as shares (dev code, unminified) -->
+				<div class="row" data-og-detail-top><span class="rk">heaviest</span><span class="v">{#each model.t.top.slice(0, 3) as m, i (m.file)}{i ? ' · ' : ''}{m.file.split('/').pop()} <span class="muted">{Math.round((m.bytes / model.t.bytes) * 100)}%</span>{/each}</span></div>
+			{/if}
+			{#if model.t.barrels?.length}
+				<div class="row" data-og-detail-barrel><span class="rk">barrel</span><span class="v">{model.t.barrels[0].file} <span class="muted">· {model.t.barrels[0].fanout} modules ride along</span></span></div>
+			{/if}
 		{/if}
 		{#if model.chunk?.loaded}
 			<div class="row"><span class="rk">entry chunk</span><span class="v">{kb(model.chunk.wire)}<span class="muted"> wire · {kb(model.chunk.raw)} raw</span></span></div>

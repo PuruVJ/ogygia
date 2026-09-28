@@ -62,8 +62,8 @@ function is_glue(mod: ByteGraphModule): boolean {
  */
 export function island_subgraph_bytes(
 	modules: Iterable<ByteGraphModule>
-): Record<string, { bytes: number; modules: number }> {
-	const out: Record<string, { bytes: number; modules: number }> = {};
+): Record<string, IslandBytes> {
+	const out: Record<string, IslandBytes> = {};
 	for (const mod of modules) {
 		const url = mod.url || mod.id || '';
 		const m = ISLAND_RE.exec(url);
@@ -74,6 +74,8 @@ export function island_subgraph_bytes(
 		let bytes = 0;
 		let count = 0;
 		let steps = 0;
+		const each: { file: string; bytes: number }[] = [];
+		const barrels: { file: string; fanout: number }[] = [];
 		while (stack.length && steps++ < 20000) {
 			const n = stack.pop()!;
 			if (seen.has(n)) continue;
@@ -82,16 +84,50 @@ export function island_subgraph_bytes(
 			// descend into their large subgraphs (keeps the number app-focused and the walk cheap).
 			if (is_framework(n)) continue;
 			// Traverse into everything else (incl. the island's own entry glue) to reach the component...
-			for (const dep of n.importedModules ?? []) stack.push(dep);
+			let fanout = 0;
+			for (const dep of n.importedModules ?? []) {
+				stack.push(dep);
+				if (!is_framework(dep)) fanout++;
+			}
 			// ...but count only the app modules — the component + its child components / utils.
 			if (is_glue(n)) continue;
 			const code = n.transformResult?.code;
 			if (typeof code === 'string') {
 				bytes += code.length;
 				count++;
+				const file = short_url(n);
+				each.push({ file, bytes: code.length });
+				// a BARREL the island still imports whole: little code of its own, many app modules
+				// behind it (a pure re-export index). Every module behind it rides into the island.
+				if (fanout >= BARREL_FANOUT && code.length <= fanout * BARREL_BYTES_PER_EXPORT) barrels.push({ file, fanout });
 			}
 		}
-		if (count > 0 && (!out[iid] || out[iid].bytes < bytes)) out[iid] = { bytes, modules: count };
+		if (count > 0 && (!out[iid] || out[iid].bytes < bytes)) {
+			each.sort((a, b) => b.bytes - a.bytes);
+			out[iid] = { bytes, modules: count, top: each.slice(0, 5), ...(barrels.length ? { barrels: barrels.sort((a, b) => b.fanout - a.fanout).slice(0, 3) } : {}) };
+		}
 	}
 	return out;
+}
+
+/** An island's app code in dev: the total, its heaviest modules, and any barrel it pulls whole. */
+export interface IslandBytes {
+	bytes: number;
+	modules: number;
+	/** the heaviest modules (served size, heaviest first): what to look at first */
+	top?: { file: string; bytes: number }[];
+	/** re-export barrels still in the island's graph, with how many app modules each drags in */
+	barrels?: { file: string; fanout: number }[];
+}
+
+/** a barrel re-exports at least this many app modules… */
+const BARREL_FANOUT = 6;
+/** …with about this much code of its own per module (an `export … from` line, transformed) */
+const BARREL_BYTES_PER_EXPORT = 160;
+
+/** A module's served path, query dropped; a file outside the root (`/@fs/…`) by its last parts. */
+function short_url(n: ByteGraphModule): string {
+	const u = (n.url || n.id || '').split('?')[0];
+	if (u.startsWith('/@fs/')) return u.split('/').slice(-3).join('/');
+	return u.startsWith('/') ? u.slice(1) : u;
 }

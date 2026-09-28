@@ -55,6 +55,19 @@ export interface PageInput {
 	empty_slots?: string[];
 	/** holes whose answer never came (the bus; devtools only) */
 	hole_failures?: HoleFailure[];
+	/** each island's app code in dev (the dev server's module graph; devtools only) */
+	island_code?: IslandCode[];
+}
+
+export interface IslandCode {
+	fp?: string;
+	name: string;
+	/** the island's app code, served size in dev */
+	bytes: number;
+	/** its heaviest modules */
+	top: { file: string; bytes: number }[];
+	/** re-export barrels still imported whole, with the app modules each drags in */
+	barrels: { file: string; fanout: number }[];
 }
 
 export interface HoleFailure {
@@ -587,6 +600,30 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix: 'Render the children on the server and hide them (the hidden attribute, or CSS) instead of wrapping them in {#if}; or make the part that appears later its own island inside the component.',
 			fps: empty
 		});
+
+	// ── an island's code: a barrel it still imports whole, one module most of its weight ──
+	// (dev code is unbundled and unminified: shares and module names, not shipped bytes)
+	const kb = (n: number) => `${Math.round(n / 1024)} KB`;
+	for (const c of page.island_code ?? []) {
+		const b = c.barrels[0];
+		if (b)
+			findings.push({
+				code: 'island-barrel',
+				severity: 'warn',
+				message: `${c.name} still imports a barrel whole: ${b.file}, and the ${b.fanout} modules behind it ride into the island${c.barrels.length > 1 ? ` (and ${c.barrels.length - 1} more barrel${c.barrels.length > 2 ? 's' : ''})` : ''}. A Svelte component is never side-effect free to the bundler, so what the island does not use still ships.`,
+				fix: `Import what the island uses from its own file, or turn on ogygia({ barrels }). If it is on, the build log names why this one was left ("barrels: skipped …").`,
+				fps: c.fp ? [c.fp] : []
+			});
+		const big = c.top[0];
+		if (big && c.bytes >= 30 * 1024 && big.bytes >= c.bytes * 0.4 && c.top.length > 1)
+			findings.push({
+				code: 'island-heavy-module',
+				severity: 'info',
+				message: `${big.file.split('/').pop()} is ${Math.round((big.bytes / c.bytes) * 100)}% of ${c.name}'s code (${kb(big.bytes)} of ${kb(c.bytes)} in dev).`,
+				fix: 'That one module is where the island’s weight is: split it (one module per piece), load it when it is needed, or render it on the server.',
+				fps: c.fp ? [c.fp] : []
+			});
+	}
 
 	// ── holes whose answer never came: the page keeps the fallback, and in a build nothing says why ──
 	for (const h of page.hole_failures ?? []) {

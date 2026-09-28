@@ -22,7 +22,25 @@ describe('island_subgraph_bytes', () => {
 		const comp = mod('/src/lib/Counter.svelte', 'y'.repeat(200), [child]);
 		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [comp]);
 		const out = island_subgraph_bytes([entry]);
-		expect(out.abc123).toEqual({ bytes: 300, modules: 2 }); // component + child, NOT the entry glue
+		expect(out.abc123).toMatchObject({ bytes: 300, modules: 2 }); // component + child, NOT the entry glue
+		// its heaviest modules, heaviest first (the served paths)
+		expect(out.abc123.top).toEqual([
+			{ file: 'src/lib/Counter.svelte', bytes: 200 },
+			{ file: 'src/lib/Child.svelte', bytes: 100 }
+		]);
+		expect(out.abc123.barrels).toBeUndefined();
+	});
+
+	it('a barrel the island still imports whole: little code, many app modules behind it', () => {
+		const leaves = Array.from({ length: 8 }, (_, i) => mod(`/src/lib/ui/Part${i}.svelte`, 'p'.repeat(300)));
+		const barrel = mod('/src/lib/ui/index.ts', 'e'.repeat(8 * 60), leaves);
+		// a module with many imports AND real code of its own is a component, not a barrel
+		const busy = mod('/src/lib/Busy.svelte', 'b'.repeat(8 * 400), leaves.slice(0, 8));
+		const comp = mod('/src/lib/Toolbar.svelte', 'y'.repeat(200), [barrel, busy]);
+		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [comp]);
+		const out = island_subgraph_bytes([entry]);
+		expect(out.abc123.barrels).toEqual([{ file: 'src/lib/ui/index.ts', fanout: 8 }]);
+		expect(out.abc123.top?.[0].file).toBe('src/lib/Busy.svelte');
 	});
 
 	it('prunes the framework (svelte / ogygia runtime) — shared once per page, not per island', () => {

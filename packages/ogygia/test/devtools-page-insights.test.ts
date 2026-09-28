@@ -116,6 +116,26 @@ describe('analyze_page', () => {
 		expect(f?.fps).toEqual(['e']);
 	});
 
+	it('an island’s code: a barrel imported whole, and one module most of its weight', () => {
+		const r = analyze_page(
+			page({
+				island_code: [
+					{ fp: 't', name: 'Toolbar', bytes: 52_000, top: [{ file: 'src/lib/Icons.svelte', bytes: 42_000 }, { file: 'src/lib/Toolbar.svelte', bytes: 1_700 }], barrels: [{ file: 'src/lib/ui/index.ts', fanout: 8 }] },
+					// small, or spread out: nothing to say
+					{ fp: 'h', name: 'Healthy', bytes: 1_400, top: [{ file: 'src/lib/Healthy.svelte', bytes: 1_400 }], barrels: [] },
+					{ fp: 's', name: 'Spread', bytes: 60_000, top: [{ file: 'a.ts', bytes: 20_000 }, { file: 'b.ts', bytes: 20_000 }], barrels: [] }
+				]
+			}),
+			[],
+			[],
+			2000
+		);
+		const f = r.findings.filter((x) => x.code.startsWith('island-'));
+		expect(f.map((x) => `${x.code}:${x.fps.join()}`)).toEqual(['island-barrel:t', 'island-heavy-module:t']);
+		expect(f[0].message).toContain('Toolbar still imports a barrel whole: src/lib/ui/index.ts, and the 8 modules behind it');
+		expect(f[1].message).toContain("Icons.svelte is 81% of Toolbar's code (41 KB of 51 KB in dev)");
+	});
+
 	it('a hole whose answer never came is an error, with the cause and where to look', () => {
 		const r = analyze_page(
 			page({

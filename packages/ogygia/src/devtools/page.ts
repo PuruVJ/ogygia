@@ -6,8 +6,8 @@
  */
 import { beacon_page } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
-import { all_regions, region_name, region_names } from './regions.js';
-import { analyze_page, type Failure, type HoleFailure, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
+import { all_regions, region_name, region_names, region_transitive } from './regions.js';
+import { analyze_page, type Failure, type HoleFailure, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
@@ -78,6 +78,21 @@ export function failures(since = last_nav()?.t ?? -Infinity): Failure[] {
 			seen.add(key);
 			out.push({ fp: e.fp, message: e.message });
 		}
+	}
+	return out;
+}
+
+/** Each island on the page with its dev code breakdown (the dev server's module graph: heaviest
+ *  modules, barrels still imported whole). Once per component: copies share a module graph. */
+function island_code(): IslandCode[] {
+	const out: IslandCode[] = [];
+	const seen = new Set<string>();
+	for (const r of all_regions()) {
+		if (r.kind !== 'island' || !r.entry || seen.has(r.entry)) continue;
+		seen.add(r.entry);
+		const t = region_transitive(r.entry);
+		if (!t?.top?.length && !t?.barrels?.length) continue;
+		out.push({ fp: r.fp ?? undefined, name: region_name(r.entry), bytes: t.bytes, top: t.top ?? [], barrels: t.barrels ?? [] });
 	}
 	return out;
 }
@@ -217,7 +232,8 @@ export function read_page(): PageView | null {
 	// live page already holds the script elements other scripts added — so parse time decides)
 	const with_visit: PageInput = base.visit ? { ...base, visit: { ...base.visit, origin: location.origin } } : base;
 	const holes = hole_failures();
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}) };
+	const code = island_code();
+	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
