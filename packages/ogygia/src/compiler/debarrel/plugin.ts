@@ -25,8 +25,12 @@ import { BarrelIndex, type ExportMap, type Host } from './barrel.js';
 import { matches_any, normalize_options, type DebarrelOptions } from './options.js';
 import { rewrite_module, type RewritePolicy } from './rewrite.js';
 import { rewrite_svelte } from './svelte.js';
+import { is_script_request } from '../script-request.js';
 
 const IMPORTER_RE = /\.(?:[cm]?[jt]sx?|svelte|svelte\.[jt]s)$/;
+
+/** (re-exported for the tests: the check itself is shared with the island transform) */
+export { is_script_request };
 const NODE_MODULES_RE = /[\\/]node_modules[\\/]/;
 const QUERY_RE = /[?#].*$/;
 const BACKSLASH_G = /\\/g;
@@ -126,6 +130,9 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 
 	const is_importer = (id: string): boolean => {
 		if (id.includes('\0')) return false;
+		// decided on the FULL id: `Foo.svelte?svelte&type=style&lang.css` is the component's CSS,
+		// not the component (3,233 false "skipped" warnings in one build came from these)
+		if (!is_script_request(id)) return false;
 		const clean = id.replace(QUERY_RE, '');
 		if (!IMPORTER_RE.test(clean)) return false;
 		if (o.importer_include.length) return matches_any(o.importer_include, clean, clean);

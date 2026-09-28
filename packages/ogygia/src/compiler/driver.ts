@@ -30,6 +30,7 @@ import {
 	kit_dirs
 } from './kit.js';
 import { run_module_macros } from './macros/pipeline.js';
+import { is_script_request } from './script-request.js';
 import {
 	generateHydrateFeaturesSource,
 	generateRuntimeEntrySource,
@@ -1525,6 +1526,9 @@ export class Compiler {
 			id_n.endsWith('.svelte') && is_island_path(bare_v) && registry.get(bare_v)?.portable === true;
 		if (
 			id_n.endsWith('.svelte') &&
+			// the component's script only: `Foo.svelte?svelte&type=style&lang.css` is its CSS (the
+			// query is gone from `id_n`, so decide on the full id)
+			is_script_request(id) &&
 			(!is_island_path(bare_v) || portable_entry) &&
 			// declared `ogygia.files` surfaces transform unconditionally (full app-source citizenship);
 			// undeclared node_modules `.svelte` keeps the legacy hint sniff

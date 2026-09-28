@@ -51,6 +51,41 @@ const build_ids = async (cfg: ReturnType<typeof config>) => {
 	return { out, ids: module_ids(out).map((m) => m.split('?')[0]) };
 };
 
+describe('which ids are importers', () => {
+	it('the script only: a style sub-module or a raw/url/worker request is not the component', async () => {
+		const { is_script_request } = await import('../../src/compiler/debarrel/plugin.js');
+		expect(is_script_request('/x/Foo.svelte')).toBe(true);
+		expect(is_script_request('/x/Foo.svelte?v=123')).toBe(true); // a cache query on the real module
+		expect(is_script_request('/x/Foo.svelte?og-region=1')).toBe(true);
+		expect(is_script_request('/x/Foo.svelte?svelte&type=script&lang.ts')).toBe(true);
+		expect(is_script_request('/x/Foo.svelte?svelte&type=style&lang.css')).toBe(false);
+		expect(is_script_request('/x/Foo.svelte?svelte&type=style&lang.scss')).toBe(false);
+		expect(is_script_request('/x/a.ts?raw')).toBe(false);
+		expect(is_script_request('/x/a.ts?url')).toBe(false);
+		expect(is_script_request('/x/a.ts?worker&inline')).toBe(false);
+	});
+
+	it('a build with extracted component CSS warns about nothing and still rewrites the component', async () => {
+		// vite-plugin-svelte serves each component's CSS as `Foo.svelte?svelte&type=style&lang.css`:
+		// counted as a Svelte importer, the parser ran over plain CSS and every component with a
+		// <style> was reported "skipped" (3,233 false warnings in one production build)
+		f = fixture({ ...app(), 'src/App.svelte': `<script lang="ts">\n\timport { Card } from '$lib';\n</script>\n<Card />\n<p class="x">x</p>\n<style>\n\t.x { color: red }\n</style>` });
+		const cfg = config(f);
+		cfg.plugins = [cfg.plugins[0], svelte({ configFile: false, emitCss: true })];
+		const warns: string[] = [];
+		const orig = console.warn;
+		console.warn = (...a: unknown[]) => void warns.push(a.map(String).join(' '));
+		try {
+			const { ids } = await build_ids(cfg);
+			expect(ids, 'the component was still rewritten: the unused leaf is gone').not.toContain(f.id('lib/Unused.svelte'));
+			expect(ids).toContain(f.id('lib/Card.svelte'));
+		} finally {
+			console.warn = orig;
+		}
+		expect(warns.filter((w) => w.includes('barrels: skipped'))).toEqual([]);
+	});
+});
+
 describe('vite build', () => {
 	it('the barrel and its unused leaves are not in the bundle; the used leaves are; the package barrel is bypassed too', async () => {
 		f = fixture(app());
