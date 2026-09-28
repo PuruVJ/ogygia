@@ -129,6 +129,8 @@ export interface HoleRequestStats {
 	ttl: number;
 	/** ms it waited for a render slot (the server renders a few holes at a time); absent on a hit */
 	queue_ms?: number;
+	/** its component's name (the server manifest's): names the hole where no page row does */
+	name?: string;
 }
 
 const stats = new WeakMap<Request, OgygiaRequestStats>();

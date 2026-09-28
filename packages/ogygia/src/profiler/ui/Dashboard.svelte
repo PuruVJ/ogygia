@@ -9,7 +9,7 @@
 	import LocalReports from './LocalReports.svelte' with { wake: 'load' };
 	import type { ProfilerRoutes } from '../profiler-router.js';
 	let { data }: ProfilerRoutes['/'] = $props();
-	const { base, recent, routes, reports, top_fix, site_fixes, recording, dev, rss_mb, inflight, history, by, tag_keys, trap, sampled, background_note } = $derived(data);
+	const { base, recent, routes, reports, top_fix, site_fixes, holes, recording, dev, rss_mb, inflight, history, by, tag_keys, trap, sampled, background_note } = $derived(data);
 	const sampled_max = $derived(Math.max(...(sampled?.functions.map((f) => f.self_ms) ?? [0]), 0.01));
 
 	const time = (ms: number) => new Date(ms).toLocaleTimeString();
@@ -240,6 +240,39 @@
 				{/each}
 			</tbody>
 		</table>
+		</section>
+	{/if}
+
+	{#if holes}
+		<section class="panel wide" data-hole-slots>
+			<h2>Holes on this server <span class="hint" style="font-weight:400">({holes.rendered} rendered, {holes.slots} render slots per process)</span></h2>
+			{#if holes.summary}
+				<p class="warn">{holes.summary}</p>
+			{:else}
+				<p class="hint">No hole waited for a render slot. Each render holds one of the {holes.slots} slots through its awaits, so slow holes would make the next ones wait.</p>
+			{/if}
+			<table>
+				<thead>
+					<tr
+						><th>hole</th><th class="num">requests</th><th class="num">cache hits</th><th class="num">failed</th><th class="num">render ms</th
+						><th class="num" title="mean wait for a render slot per rendered request (worst in brackets)">slot wait ms</th
+						><th class="num" title="its part of all the time the render slots were held">slot time</th></tr
+					>
+				</thead>
+				<tbody>
+					{#each holes.rows as h (h.id)}
+						<tr>
+							<td class="fn">{h.name}</td>
+							<td class="num">{h.requests}</td>
+							<td class="num">{h.hits}</td>
+							<td class="num">{h.failed}</td>
+							<td class="num">{h.requests - h.hits - h.failed ? fmt_ms(h.render_ms) : '—'}</td>
+							<td class="num">{h.queue_ms ? fmt_ms(h.queue_ms) : '0'}{#if h.queue_max_ms >= 50} <span class="hint">({fmt_ms(h.queue_max_ms)})</span>{/if}</td>
+							<td class="num">{Math.round(h.slot_share * 100)}%</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		</section>
 	{/if}
 

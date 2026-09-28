@@ -24,7 +24,7 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
-import { islands as island_modules, island_url } from 'virtual:ogygia/server-manifest';
+import { islands as island_modules, island_url, island_name } from 'virtual:ogygia/server-manifest';
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.js';
@@ -1996,7 +1996,9 @@ class OgygiaHandle {
 			id,
 			cache: outcome,
 			ttl,
-			...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {})
+			...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
+			// (a manifest from an older build has no names: the stub's `undefined`)
+			...(island_name?.[id] ? { name: island_name[id] } : {})
 		});
 		// the same split for the browser (devtools, the profiler's beacon), as Server-Timing. Only for
 		// a browser that measures (dev, the devtools cookie, the profiler's flag): no other visitor's

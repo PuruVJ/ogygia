@@ -283,6 +283,9 @@ async function holes_run(browser) {
 	const open = await read('/hole-wall');
 	// five holes of 0.9 s: the server renders four at a time, the fifth waits for a slot
 	const queue = await read('/dt-hole-queue');
+	// the profiler's dashboard, across the server: the queue seen, and QueueHole holding the slots
+	const dash = await (await fetch(`${base}/__profiler`)).text().catch(() => '');
+	const slots = dash.slice(dash.indexOf('data-hole-slots'), dash.indexOf('Slowest routes'));
 	let in_report = null;
 	let slow_in_report = null;
 	if (report_id)
@@ -304,13 +307,14 @@ async function holes_run(browser) {
 			'the queued hole, its render slot',
 			queue.slow.length === 1 && queue.slow[0].includes('waiting for a render slot on the server') && queue.slow[0].split('QueueHole (').length - 1 <= 2
 		],
+		['the dashboard, who held the slots', slots.includes('waited for a render slot') && slots.includes('held mostly by QueueHole') && slots.includes('BrokenHole')],
 		['the quick hole never slow', !lab.slow.some((m) => m.includes('Greeting')) && open.slow.length === 0],
 		['the profiler report names it', !report_id || (in_report?.includes('BrokenHole') && in_report.includes('status 500'))],
 		// the report joins the visit's hole requests from its log: the wait is the server render
 		['the report splits the slow wait', !report_id || (!!slow_in_report?.message.includes('SlowHole') && slow_in_report.message.includes('the server render') && slow_in_report.fix.startsWith('The server render is the wait'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, walled, open, in_report, slow_in_report })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} holes: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, slow: lab.slow, queue: queue.slow, slots: slots.slice(0, 600), walled, open, in_report, slow_in_report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 

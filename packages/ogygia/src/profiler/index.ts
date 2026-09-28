@@ -85,6 +85,7 @@ import {
 } from './report.js';
 import { load_lane_of } from './timeline.js';
 import { parse_visit, merge_visits, type Visit } from './visit.js';
+import { hole_slots } from './hole-slots.js';
 import { client_windows, type ClientWindows } from './client-windows.js';
 import { byte_strip, type ByteStrip } from './byte-strip.js';
 import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.js';
@@ -3902,6 +3903,8 @@ class Profiler {
 			),
 			// the lines that slow two or more pages: fixed once, every one of them faster
 			site_fixes: this.#site_fixes(),
+			// holes across the server: their renders, their cache, and who held the render slots
+			holes: hole_slots(this.#ring),
 			recording: this.#recorder_busy || this.#recording_active(),
 			dev: this.dev,
 			rss_mb: Math.round(process.memoryUsage().rss / 1048576),

@@ -415,6 +415,12 @@ A slow line in a shared helper (a price formatter, an i18n lookup) shows in the 
 
 A report's JSON and the agent's digest carry the same list for that page (`shared`: "These fixes make other pages faster too"), so an agent fixing one page knows which fix pays twice.
 
+## Holes on this server
+
+The dashboard lists every hole the server answered since it started: requests, cache hits, failed renders, the mean render, the mean wait for a render slot (the worst in brackets), and each hole's part of the time the slots were held. A server process renders 4 holes at a time. A render holds its slot through its awaits, so a hole waiting on slow data keeps the next hole, any visitor's, in line. When holes waited, a line above the table says how many, how long, and which holes held the slots. That is where to look first.
+
+On a host that runs one request per instance (AWS Lambda), nothing waits for a slot. The table still shows each hole's render and cache.
+
 ## Compare two reports, and history
 
 Every page-mode report of the same page joins that page's history: the dashboard draws the medians over time and marks a jump; a report links to **compare with the previous run**. The compare page puts two reports side by side (any two): summary deltas, phases, every component and function by the size of its change, and the findings that appeared or went away. A positive delta reads red: the second report is slower.

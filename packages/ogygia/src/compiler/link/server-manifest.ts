@@ -23,11 +23,18 @@ export function server_manifest_module(
 	devUrlFor: (virtualPath: string) => string,
 	publicUrlFor: (iid: string) => string
 ): string {
-	if (!ssr) return `export const islands = {};\nexport const island_url = {};`;
+	if (!ssr) return `export const islands = {};\nexport const island_url = {};\nexport const island_name = {};`;
 	const entries: string[] = [];
 	const urls: string[] = [];
+	const names: string[] = [];
 	for (const [iid, virtualPath] of program.by_id) {
-		if (!program.registry.get(virtualPath)?.server) continue;
+		const reg = program.registry.get(virtualPath);
+		if (!reg?.server) continue;
+		// id → its component's name (`SlowHole` from `…/SlowHole.svelte`): the profiler names a hole
+		// request by it (neither URL carries the name: both are keyed by the id)
+		const file = reg.componentPath ?? '';
+		const base = file.slice(file.lastIndexOf('/') + 1);
+		if (base.endsWith('.svelte')) names.push(`  ${JSON.stringify(iid)}: ${JSON.stringify(base.slice(0, -7))}`);
 		entries.push(`  ${JSON.stringify(iid)}: () => import(${JSON.stringify(virtualPath)})`);
 		// id → the URL `islandCss()` is keyed by, so the handle can ship a server-picked hole's
 		// CSS with its response (a page that never imported the component still styles it). In a
@@ -39,6 +46,7 @@ export function server_manifest_module(
 	}
 	return (
 		`export const islands = {\n${entries.join(',\n')}\n};\n` +
-		`export const island_url = {\n${urls.join(',\n')}\n};`
+		`export const island_url = {\n${urls.join(',\n')}\n};\n` +
+		`export const island_name = {\n${names.join(',\n')}\n};`
 	);
 }

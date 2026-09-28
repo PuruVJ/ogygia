@@ -78,6 +78,8 @@ export interface ProfilerDeps {
 		top_fix: Record<string, { title: string; save_ms: number; wait: boolean; more: number }>;
 		/** the lines that slow two or more profiled pages, what fixing each gives back per page and in all */
 		site_fixes: import('./site-fixes.js').SiteFix[];
+		/** the holes the server rendered: render, cache, and who held the render slots others waited for */
+		holes: import('./hole-slots.js').HoleSlots | null;
 		recording: boolean;
 		dev: boolean;
 		rss_mb: number;
