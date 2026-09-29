@@ -112,6 +112,38 @@ check('Styles: the planted unscoped component and the unmatched sheet are named'
 await page.locator('[data-og-tab="page"]').click();
 await page.waitForTimeout(800);
 check('Styles: the Page tab shows the sheets and the unscoped line', (await page.locator('[data-og-page-styles]').count()) === 1 && (await page.locator('[data-og-page-unscoped]').innerText().catch(() => '')).includes('LabCard.svelte'));
+// CACHE HEADERS: the islands' files and the runtime are named by their content; the host must cache
+// them for good. Served as the build serves them (SvelteKit's immutable policy): quiet. The same
+// page through a planted proxy that rewrites them to `no-cache`: named, with the header seen.
+{
+	const cache_of = (p) =>
+		p.evaluate(async () => {
+			const r = await window.__ogygia_cache?.();
+			return r ? { files: r.probes.length, headers: [...new Set(r.probes.map((x) => x.cache_control))], findings: r.findings.map((f) => f.message) } : null;
+		});
+	await page.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await page.waitForTimeout(800);
+	const clean = await cache_of(page);
+	check('Cache: every content-named file is probed, and the build’s immutable policy is quiet', !!clean && clean.files >= 3 && clean.findings.length === 0, JSON.stringify(clean));
+	const planted = await ctx.newPage();
+	await planted.route(
+		(url) => url.pathname.includes('/_app/immutable/og-'),
+		async (route) => {
+			const res = await route.fetch();
+			await route.fulfill({ response: res, headers: { ...res.headers(), 'cache-control': 'no-cache' } });
+		}
+	);
+	await planted.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await planted.waitForTimeout(1200);
+	const bad = await cache_of(planted);
+	check(
+		'Cache: a proxy that serves them `no-cache` is named, with the header and the runtime',
+		// every probed file counted; the heaviest (the runtime) named first
+		!!bad && bad.findings.length === 1 && bad.findings[0].startsWith(`${bad.files} of the page's content-named files (the runtime, `) && bad.findings[0].includes('`no-cache`') && !bad.findings[0].includes('og-region'),
+		JSON.stringify(bad)
+	);
+	await planted.close();
+}
 check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // THE OBSERVER EFFECT: measuring (the og_devtools cookie) must not change what it measures. The
 // same heavy page, loaded with and without it, one after the other (a server that drifts over the

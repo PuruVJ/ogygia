@@ -11,6 +11,7 @@
 	import { beacon_record_cpu } from '../runtime/beacon.js';
 	import { read_styles, scan_unscoped, styles_findings } from './styles.js';
 	import { hole_segments, HOLE_SEG_LABEL } from './hole-segments.js';
+	import { cache_findings, probe_cache } from './cache-headers.js';
 
 	let { tick = 0, focus = $bindable(null), selected = $bindable(null) } = $props();
 
@@ -30,17 +31,29 @@
 		}
 		styles_busy = false;
 	}
+	// HOW THE HOST CACHES THE ISLANDS' FILES (cache-headers.ts): asked once per page, beside the styles
+	let cache = $state(/** @type {import('./cache-headers.js').CacheProbe[] | null} */ (null));
+	async function check_cache() {
+		try {
+			cache = await probe_cache(document);
+		} catch {
+			cache = null;
+		}
+	}
 	// again after an in-app navigation (a new page, new sheets): keyed on the navigation's time — a
 	// number, so the ticks that rebuild the view do not re-run a check that queries every selector
 	const nav_key = $derived(view?.nav?.t ?? 0);
 	$effect(() => {
 		nav_key;
-		const id = setTimeout(check_styles, nav_key ? 400 : 60);
+		const id = setTimeout(() => {
+			check_styles();
+			check_cache();
+		}, nav_key ? 400 : 60);
 		return () => clearTimeout(id);
 	});
 	const findings = $derived.by(() => {
 		if (!view) return [];
-		const extra = styles ? styles_findings(styles).map((f) => ({ ...f, fps: /** @type {string[]} */ ([]) })) : [];
+		const extra = [...(styles ? styles_findings(styles) : []), ...(cache ? cache_findings(cache) : [])].map((f) => ({ ...f, fps: /** @type {string[]} */ ([]) }));
 		// errors, then warnings, then notes: the report's own order (a stable sort keeps the rest)
 		const order = /** @type {Record<string, number>} */ ({ error: 0, warn: 1, info: 2 });
 		return [...view.report.findings, ...extra].sort((a, b) => order[a.severity] - order[b.severity]);

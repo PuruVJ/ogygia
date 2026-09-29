@@ -302,6 +302,8 @@ declare global {
 		__ogygia_session?: import('./session-insights.js').SessionReport;
 		/** the Page tab's styles check, run fresh (tests read what the tab shows) */
 		__ogygia_styles?: () => Promise<{ report: import('./styles.js').StylesReport; findings: import('./styles.js').StylesFinding[] }>;
+		/** the Page tab's cache check (how the host caches the content-named files), run fresh */
+		__ogygia_cache?: () => Promise<{ probes: import('./cache-headers.js').CacheProbe[]; findings: import('./styles.js').StylesFinding[] }>;
 	}
 }
 
@@ -313,6 +315,12 @@ export function install_page_hook(): void {
 			const report = read_styles(document, { match: true });
 			report.unscoped = await scan_unscoped(document);
 			return { report, findings: styles_findings(report) };
+		};
+	if (typeof window !== 'undefined' && !window.__ogygia_cache)
+		window.__ogygia_cache = async () => {
+			const { probe_cache, cache_findings } = await import('./cache-headers.js');
+			const probes = await probe_cache(document);
+			return { probes, findings: cache_findings(probes) };
 		};
 	// the picture the next load of this page is read against (the dev loop: change, reload, compare)
 	if (typeof window !== 'undefined' && !hooked_hide) {
