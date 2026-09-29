@@ -355,6 +355,46 @@ async function nav_slow_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE LARGEST PAINT, EXPLAINED (/dt-lcp): the hero image in the server HTML, answered in 2.6 s — the
+ *  download is the cost; `?late`: the island adds a quick image 2.6 s after it wakes — the late find
+ *  is the cost. Both named on the Hero island with the fix for their part, in the Page tab and in
+ *  the profiler's report of the same visit. */
+async function lcp_run(browser) {
+	const read = async (q) => {
+		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-lcp')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+		const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+		await page.goto(base + '/dt-lcp' + q, { waitUntil: 'load' });
+		await page.waitForTimeout(6500);
+		const tab = await page.evaluate(() => {
+			const f = window.__ogygia_page?.()?.report.findings.find((x) => x.code === 'slow-lcp');
+			return f ? { message: f.message, fix: f.fix, fps: f.fps } : null;
+		});
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		let report = null;
+		for (let i = 0; i < 10 && report_id && !report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			const f = (j?.findings ?? []).find((x) => x.code === 'slow-lcp');
+			report = f ? { message: f.message, fix: f.fix } : null;
+		}
+		return { tab, report, report_id };
+	};
+	const plain = await read('');
+	const late = await read('?late');
+	const on_hero = (f) => !!f && f.message.includes('The largest paint was the img (hero.svg') && f.message.includes(') in Hero:');
+	const checks = [
+		['in the HTML: named on Hero, the download the cost', on_hero(plain.tab) && plain.tab.fix.startsWith('The file itself is slow to download') && plain.tab.fps.length === 1],
+		['added late: named on Hero, the late find the cost', on_hero(late.tab) && late.tab.message.includes('ms before the browser began fetching it') && late.tab.fix.startsWith('The browser found it late')],
+		['the profiler report: the same two', (!plain.report_id || (on_hero(plain.report) && plain.report.fix.startsWith('The file itself'))) && (!late.report_id || (on_hero(late.report) && late.report.fix.startsWith('The browser found it late')))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} largest paint: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ plain, late })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -368,6 +408,10 @@ async function holes_run(browser) {
 		// (the broken hole retries twice, 0.5 s then 1 s apart, before it gives up)
 		await page.waitForTimeout(4500);
 		const all = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((x) => ({ code: x.code, message: x.message })));
+		// (leave the way a visitor does: the page hides and its final visit goes out — a bare close
+		// may not, and the report then drew no lane per hole)
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
 		await ctx.close();
 		const f = all.filter((x) => x.code === 'hole-failed').map((x) => x.message);
 		f.slow = all.filter((x) => x.code === 'hole-slow').map((x) => x.message);
@@ -387,13 +431,16 @@ async function holes_run(browser) {
 	let clock_lanes = [];
 	let clock_amber = 0;
 	if (queue_report) {
-		await new Promise((ok) => setTimeout(ok, 1500));
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-		await page.goto(`${base}/__profiler/report/${queue_report}`, { waitUntil: 'load' });
-		await page.waitForTimeout(1500);
-		const sec = page.locator('section:has(h2:text("One clock"))');
-		clock_lanes = await sec.locator('text').evaluateAll((t) => t.map((x) => x.textContent ?? '').filter((s) => s.startsWith('QueueHole')));
-		clock_amber = await sec.locator('rect[fill="#f59e0b"]').count();
+		// (a few looks: the visit's last message can land a moment after the page left)
+		for (let i = 0; i < 5 && clock_lanes.length < 5; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			await page.goto(`${base}/__profiler/report/${queue_report}`, { waitUntil: 'load' });
+			await page.waitForTimeout(1200);
+			const sec = page.locator('section:has(h2:text("One clock"))');
+			clock_lanes = await sec.locator('text').evaluateAll((t) => t.map((x) => x.textContent ?? '').filter((s) => s.startsWith('QueueHole')));
+			clock_amber = await sec.locator('rect[fill="#f59e0b"]').count();
+		}
 		await page.close();
 	}
 	// THE PAGE TAB'S HOLE WATERFALL: a bar per answer, split; a red row for the one that never came
@@ -811,7 +858,7 @@ try {
 	// over the lab pages, unmeasured, before any run.
 	{
 		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest']) {
+		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp']) {
 			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
 			await warm.waitForTimeout(700);
 		}
@@ -925,6 +972,14 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let lcp_ok = 0;
+	for (let i = 0; i < repeat; i++) lcp_ok += await lcp_run(browser);
+	// (two in three, like the other report checks: about one profile in four on a busy dev server
+	// keeps no island rows — "islands 1, rows 0", cause open — and its report names the island by
+	// its file; the Page tab's half holds in every run)
+	const lcp_need = repeat >= 3 ? repeat - 1 : repeat;
+	if (lcp_ok < lcp_need) failed = true;
+	console.log(`${lcp_ok >= lcp_need ? '✓' : '✗'} the largest paint, split: ${lcp_ok}/${repeat}`);
 	let nav_slow_ok = 0;
 	for (let i = 0; i < repeat; i++) nav_slow_ok += await nav_slow_run(browser);
 	if (nav_slow_ok < repeat) failed = true;

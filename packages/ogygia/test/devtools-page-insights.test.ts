@@ -174,6 +174,29 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('the largest paint, explained (slow-lcp): the element, its island, its four parts, the fix for the most of it', () => {
+		const hero = 'https://a.test/hero.png';
+		const at = (paints: object, resources: object[], nav = { res_start: 120 }) => page({ vitals: { lcp: (paints as { lcp: number }).lcp }, visit: { ...page().visit!, nav, paints, resources: resources as never } });
+		const run = (p: PageInput) => analyze_page(p, [region('h', 'Hero')], [], 9000).findings.find((f) => f.code === 'slow-lcp');
+		// the download is the cost
+		const load = run(at({ lcp: 3000, lcp_url: hero, lcp_tag: 'img', lcp_fp: 'h' }, [{ url: hero, type: 'img', start: 150, req_start: 160, end: 2950 }]))!;
+		expect(load.severity).toBe('info');
+		expect(load.message).toBe('LCP is 3000 ms (needs work; good is ≤ 2500 ms). The largest paint was the img (hero.png) in Hero: 120 ms until the HTML\'s first byte, 40 ms before the browser began fetching it, 2790 ms downloading it, 50 ms more before it painted.');
+		expect(load.fix).toMatch(/^The file itself is slow to download/);
+		expect(load.fps).toEqual(['h']);
+		// found late
+		expect(run(at({ lcp: 3000, lcp_url: hero, lcp_tag: 'img' }, [{ url: hero, type: 'img', start: 2600, end: 2900 }]))!.fix).toMatch(/^The browser found it late/);
+		// ready but not painted
+		expect(run(at({ lcp: 3000, lcp_url: hero, lcp_tag: 'img' }, [{ url: hero, type: 'img', start: 150, end: 400 }]))!.fix).toMatch(/^It was ready but did not paint/);
+		// text: first byte, then render; the first byte the cost
+		const text = run(at({ lcp: 3000, lcp_tag: 'h1' }, [], { res_start: 2800 }))!;
+		expect(text.message).toContain('The largest paint was the h1: 2800 ms until the HTML\'s first byte, 200 ms more before it painted.');
+		expect(text.fix).toMatch(/^The server's first byte is most of it/);
+		// a good LCP: nothing; no paints: the bare vital
+		expect(codes(analyze_page(at({ lcp: 900, lcp_tag: 'h1' }, []), [], [], 9000))).not.toContain('slow-lcp');
+		expect(codes(analyze_page(page({ vitals: { lcp: 3000 }, visit: { ...page().visit!, nav: {} } }), [], [], 9000))).toContain('vital-lcp');
+	});
+
 	it('a slow in-app navigation: its split, the islands after it, the fix for the part that cost most; a quick one never', () => {
 		const nav = (to: string, t: number, fetched: number, styled: number, swapped: number) => ({ from: '/a', to, type: 'link', t, fetched, styled, swapped });
 		const r = analyze_page(

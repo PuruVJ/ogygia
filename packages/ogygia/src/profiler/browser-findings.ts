@@ -78,7 +78,9 @@ export function browser_page_report(
 	};
 	const by_file = new Map(rows.map((r) => [file_of(r.entry), r.name]));
 	const named = (entry: string) => by_entry.get(entry) ?? by_file.get(file_of(entry)) ?? name_from_entry(entry);
-	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? (by_entry.get(entry) ?? name_from_entry(entry)) : fp.slice(0, 8));
+	// (by its fingerprint, else by its island's file: the same component with other props — the
+	// visited page's query changed them — has another fingerprint, never another file)
+	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? named(entry) : fp.slice(0, 8));
 	const regions: RegionFact[] = (visit.regions ?? []).map((r) => {
 		const kind = r.defer ? 'hole' : r.wake === 'none' ? 'lake' : 'island';
 		return { fp: r.fp, name: name_of(r.fp, r.entry), kind, wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'), hydrated: !!r.hydrated, top: r.top, height: r.height };

@@ -88,7 +88,7 @@ export interface PageInput {
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 		warnings?: { code: string; message: string; file?: string; fp?: string }[];
 		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string };
-		resources?: { url: string; type: string; start: number; end: number; transfer?: number; size?: number; blocking?: boolean }[];
+		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean }[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
 		viewport?: [number, number];
@@ -654,11 +654,11 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	for (const v of vitals) {
 		if (v.rating === 'good') continue;
 		const head = `${v.label} is ${v.key === 'cls' ? v.value : `${Math.round(v.value)} ms`} (${v.rating === 'poor' ? 'poor' : 'needs work'}; good is ${v.key === 'cls' ? '≤ ' + LIMITS[v.key][0] : '≤ ' + LIMITS[v.key][0] + ' ms'}).`;
-		const why = v.key === 'inp' ? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin, page.interaction_cpu) : null;
-		// (the slowest interaction explained is its own finding, in place of the bare INP: the
-		// profiler words INP from all its visits, and keeps this one visit's explanation)
+		const why = v.key === 'inp' ? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin, page.interaction_cpu) : v.key === 'lcp' ? explain_lcp(page, name_of) : null;
+		// (the slowest interaction and the largest paint, explained, are their own findings in place of
+		// the bare vital: the profiler words the vitals from all its visits, and keeps this visit's why)
 		findings.push({
-			code: why ? 'slow-interaction' : `vital-${v.key}`,
+			code: why ? (v.key === 'inp' ? 'slow-interaction' : 'slow-lcp') : `vital-${v.key}`,
 			severity: v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
@@ -1044,6 +1044,54 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		longtask_ms: round(longtask_ms),
 		third_party: tp
 	};
+}
+
+/**
+ * THE LARGEST PAINT, EXPLAINED: the element, the island it is in, and its four parts — the wait for
+ * the HTML's first byte, the delay before the browser began fetching its resource (the image found
+ * late: in CSS, added by a script, lazy), the resource's download, and the delay after it arrived
+ * before it painted (blocking CSS or scripts, or the element shown by a script). A text paint has
+ * no resource: first byte, then render. The fix is for the part that cost most.
+ */
+function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
+	const p = page.visit?.paints;
+	const lcp = p?.lcp ?? page.vitals.lcp;
+	const ttfb = page.visit?.nav?.res_start;
+	if (typeof lcp !== 'number' || typeof ttfb !== 'number' || !(lcp > 0)) return null;
+	const file = (u: string) => {
+		const q = u.indexOf('?');
+		const s = q === -1 ? u : u.slice(0, q);
+		return s.slice(s.lastIndexOf('/') + 1) || u;
+	};
+	const res = p?.lcp_url ? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url) : undefined;
+	const what = `${p?.lcp_tag ? `the ${p.lcp_tag}` : 'an element'}${p?.lcp_url ? ` (${file(p.lcp_url)})` : ''}${p?.lcp_fp ? ` in ${name_of(p.lcp_fp)}` : ''}`;
+	const ms = (n: number) => `${Math.round(Math.max(0, n))} ms`;
+	type Part = { key: 'ttfb' | 'delay' | 'load' | 'render'; ms: number; text: string };
+	let parts: Part[];
+	if (res) {
+		const asked = res.req_start ?? res.start;
+		parts = [
+			{ key: 'ttfb', ms: ttfb, text: `${ms(ttfb)} until the HTML's first byte` },
+			{ key: 'delay', ms: asked - ttfb, text: `${ms(asked - ttfb)} before the browser began fetching it` },
+			{ key: 'load', ms: res.end - asked, text: `${ms(res.end - asked)} downloading it` },
+			{ key: 'render', ms: lcp - res.end, text: `${ms(lcp - res.end)} more before it painted` }
+		];
+	} else {
+		parts = [
+			{ key: 'ttfb', ms: ttfb, text: `${ms(ttfb)} until the HTML's first byte` },
+			{ key: 'render', ms: lcp - ttfb, text: `${ms(lcp - ttfb)} more before it painted` }
+		];
+	}
+	const top = parts.reduce((a, b) => (b.ms > a.ms ? b : a));
+	const fix =
+		top.key === 'ttfb'
+			? "The server's first byte is most of it: make the page's own render faster (the profiler's report of this page names the slow load), or cache it."
+			: top.key === 'delay'
+				? 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.'
+				: top.key === 'load'
+					? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
+					: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
+	return { message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.`, fix, fps: p?.lcp_fp ? [p.lcp_fp] : [] };
 }
 
 /** One long-frame script, told: `BusyTimer.svelte's planted_busy_timer (a timer, 400 ms)`. */

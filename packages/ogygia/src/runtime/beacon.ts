@@ -672,9 +672,13 @@ function build_visit(): Record<string, unknown> | null {
 		// the detail: every render-blocking file (they explain the first paint), then the earliest
 		const blocking = (r: PerformanceResourceTiming) => (r as { renderBlockingStatus?: string }).renderBlockingStatus === 'blocking';
 		const keep = all.filter(blocking).slice(0, MAX_DETAIL_RESOURCES);
+		// …and the largest paint's own file, always (its timing splits the LCP: a late one — an image a
+		// script added after a dev server's 250 modules — fell past the cut)
+		const lcp_res = visit_paints.lcp_url ? all.find((r) => r.name === visit_paints.lcp_url) : undefined;
+		if (lcp_res && !keep.includes(lcp_res)) keep.push(lcp_res);
 		for (const r of all) {
 			if (keep.length >= MAX_DETAIL_RESOURCES) break;
-			if (!blocking(r)) keep.push(r);
+			if (!blocking(r) && r !== lcp_res) keep.push(r);
 		}
 		keep.sort((a, b) => a.startTime - b.startTime);
 		resources = keep
