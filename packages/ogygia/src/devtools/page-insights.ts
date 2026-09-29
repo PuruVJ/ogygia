@@ -57,6 +57,12 @@ export interface PageNav {
 	styled: number;
 	/** the swap committed: the new page shows */
 	swapped: number;
+	/** the fetch split, from the page request's timing: the wait for the first byte, the download */
+	server?: number;
+	download?: number;
+	bytes?: number;
+	/** the request began before the click (a hover prefetch) */
+	prefetched?: boolean;
 }
 
 export interface InteractionCpuInput {
@@ -894,8 +900,18 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const woke = page.islands.filter((i) => i.t0 >= n.t && i.t0 < next);
 		const wake_end = woke.length ? Math.max(...woke.map((i) => i.done)) : n.swapped;
 		const heaviest = woke.map((i) => ({ name: name_of(i.fp), ms: i.done - (i.turn ?? i.loaded) })).sort((a, b) => b.ms - a.ms)[0];
+		// the fetch, split by the page request's own timing: the server's first byte, the download
+		const kb_of = (b: number) => (b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`);
+		const known = n.server !== undefined && n.download !== undefined;
+		// (a prefetched page's request began before the click: how much earlier, from its own timing)
+		const head_start = known && n.prefetched ? Math.max(0, n.server! + n.download! - fetch_ms) : 0;
+		const fetch_text = n.prefetched
+			? `${Math.round(fetch_ms)} ms still waiting for the page after the click (prefetched on hover${known ? ` ${Math.round(head_start)} ms earlier: the server took ${Math.round(n.server!)} ms to answer` : ''})`
+			: `${Math.round(fetch_ms)} ms fetching the page from the server${known ? ` (${Math.round(n.server!)} ms waiting for its first byte, ${Math.round(n.download!)} ms downloading${n.bytes ? ` ${kb_of(n.bytes)}` : ''})` : ''}`;
+		// a heavy page: its download, not the server's answer, is most of the fetch
+		const heavy_page = known && n.download! > n.server!;
 		const parts = [
-			{ key: 'fetch', ms: fetch_ms, text: `${Math.round(fetch_ms)} ms fetching the page from the server` },
+			{ key: 'fetch', ms: fetch_ms, text: fetch_text },
 			{ key: 'styles', ms: styles_ms, text: `${Math.round(styles_ms)} ms loading its stylesheets` },
 			{ key: 'swap', ms: swap_ms, text: `${Math.round(swap_ms)} ms swapping it in` }
 		];
@@ -907,7 +923,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				`The in-app navigation to ${n.to} took ${Math.round(ms)} ms before the new page showed: ${parts.map((p) => p.text).join(', ')}.` +
 				(woke.length ? ` Then ${woke.length === 1 ? 'its island woke' : `${woke.length} islands woke`} over ${Math.round(Math.max(0, wake_end - n.swapped))} ms${heaviest && heaviest.ms >= 20 ? ` (${heaviest.name} ${Math.round(heaviest.ms)} ms to hydrate)` : ''}.` : ''),
 			fix:
-				top.key === 'fetch'
+				top.key === 'fetch' && heavy_page
+					? `The page itself is the wait: ${n.bytes ? `${kb_of(n.bytes)} of HTML` : 'its HTML'} took longer to download than the server took to answer. Send less (render below-the-fold parts later, trim repeated markup and inline data), and make sure it is compressed.`
+					: top.key === 'fetch'
 					? "The server's answer is the wait: make that page's load faster (profile the page itself: its report names the slow load), or render it with less. The router starts the fetch at the click, so the server's time is the visitor's."
 					: top.key === 'styles'
 						? "Its stylesheets were not in the browser yet: the router waits for them so the page never shows unstyled. Share one stylesheet across pages, or keep each page's small, so the next page's are cached or quick."

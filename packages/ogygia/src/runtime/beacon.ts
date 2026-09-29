@@ -884,14 +884,38 @@ interface NavRec {
 	fetched: number;
 	styled: number;
 	swapped: number;
+	/** the page's address as fetched: its resource timing splits the fetch */
+	href?: string;
 }
-let visit_navs: NavRec[] = [];
+/** …and the fetch split, from the page request's own timing: the wait for the server's first
+ *  byte, the download and its bytes; `prefetched` when the request began before the click (the
+ *  router's hover prefetch: the page was already on its way) */
+type NavOut = Omit<NavRec, 'href'> & { server?: number; download?: number; bytes?: number; prefetched?: true };
+let visit_navs: NavOut[] = [];
 export function beacon_nav(n: NavRec): void {
 	const o = owner();
 	// (an older owning copy has no such entry: stay quiet)
 	if (o) return o.beacon_nav?.(n);
 	if (!collecting() || visit_navs.length >= 20) return;
-	visit_navs.push({ from: n.from.slice(0, 300), to: n.to.slice(0, 300), type: (n.type || 'link').slice(0, 20), t: r2(n.t), fetched: r2(n.fetched), styled: r2(n.styled), swapped: r2(n.swapped) });
+	let split: Pick<NavOut, 'server' | 'download' | 'bytes' | 'prefetched'> = {};
+	try {
+		// the page request: the latest fetch of that address that was done by the time it arrived
+		const entries = n.href ? (performance.getEntriesByName(n.href) as PerformanceResourceTiming[]) : [];
+		let e: PerformanceResourceTiming | undefined;
+		for (const x of entries) if (x.initiatorType === 'fetch' && x.responseEnd <= n.fetched + 1 && (!e || x.startTime > e.startTime)) e = x;
+		if (e && e.responseStart > 0) {
+			const asked = e.requestStart > 0 ? e.requestStart : e.startTime;
+			split = {
+				server: r2(Math.max(0, e.responseStart - asked)),
+				download: r2(Math.max(0, e.responseEnd - e.responseStart)),
+				...(e.transferSize || e.encodedBodySize ? { bytes: e.transferSize || e.encodedBodySize } : {}),
+				...(e.startTime < n.t - 1 ? { prefetched: true as const } : {})
+			};
+		}
+	} catch {
+		split = {};
+	}
+	visit_navs.push({ from: n.from.slice(0, 300), to: n.to.slice(0, 300), type: (n.type || 'link').slice(0, 20), t: r2(n.t), fetched: r2(n.fetched), styled: r2(n.styled), swapped: r2(n.swapped), ...split });
 	resend_soon();
 }
 

@@ -285,6 +285,16 @@ async function nav_slow_run(browser) {
 	await page.waitForSelector('[data-nav-page="fast"]', { timeout: 10_000 }).catch(() => {});
 	await page.waitForTimeout(1500);
 	const back = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((f) => f.code === 'slow-navigation').map((f) => f.message));
+	// the same slow page, its link hovered first (the router prefetches it): named as prefetched,
+	// with how much earlier its request began
+	// (a short hover: the page's 800 ms answer is still most of the way off at the click, so the
+	// navigation stays past the 400 ms a slow one starts at)
+	await page.hover('[data-nav-go="slow-hover"]');
+	await page.waitForTimeout(150);
+	await page.click('[data-nav-go="slow-hover"]');
+	await page.waitForSelector('[data-nav-page="slow"]', { timeout: 10_000 }).catch(() => {});
+	await page.waitForTimeout(1500);
+	const hovered = await page.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-navigation')?.message ?? null);
 	await page.goto('about:blank');
 	await page.waitForTimeout(300);
 	await page.close();
@@ -308,11 +318,14 @@ async function nav_slow_run(browser) {
 	const checks = [
 		['a soft navigation', slow.soft],
 		['the Page tab names it, the server’s fetch the most of it, and the island after', !!slow.m && slow.m.startsWith('The in-app navigation to /dt-nav-slow took') && fetch_most(slow.m) && slow.m.includes('Then its island woke')],
+		['the fetch split: the server’s first byte, the download', !!slow.m && slow.m.includes('ms waiting for its first byte,') && slow.m.includes('ms downloading')],
 		['the fast one back: never', back.length === 0],
-		['the profiler report: the same one, only it', !report_id || (!!report && report.length === 1 && report[0].includes('In the browser: The in-app navigation to /dt-nav-slow') && fetch_most(report[0]))]
+		['hovered first: prefetched, the head start said', !!hovered && hovered.includes('still waiting for the page after the click (prefetched on hover') && hovered.includes('ms earlier: the server took')],
+		// (the report lists the visit's slowest: the plain click first, then the hovered one)
+		['the profiler report: the slow ones, never the fast', !report_id || (!!report && report.length >= 1 && report.every((m) => m.includes('In the browser: The in-app navigation to /dt-nav-slow')) && fetch_most(report[0]))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} slow navigation: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, back, report })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} slow navigation: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, back, hovered, report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 

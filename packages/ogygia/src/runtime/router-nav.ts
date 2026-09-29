@@ -754,7 +754,7 @@ export async function navigate(
 	r.nav_target = null; // applied — a later same-address click is a refresh, not a duplicate
 	// (the profiler's browser half, through the boot's link — this lazy chunk imports no boot
 	// module; a no-op without the profiler's tag or devtools)
-	boot_link().beacon_nav({ from: from.pathname + from.search, to: dest.pathname + dest.search, type, t: nav_t0, fetched: nav_fetched, styled: nav_styled, swapped: performance.now() });
+	boot_link().beacon_nav({ from: from.pathname + from.search, to: dest.pathname + dest.search, type, t: nav_t0, fetched: nav_fetched, styled: nav_styled, swapped: performance.now(), href: url.href });
 	if (DEVTOOLS)
 		dt_emit({
 			domain: 'nav',

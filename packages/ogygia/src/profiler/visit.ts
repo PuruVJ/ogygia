@@ -346,7 +346,22 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (!to || t === undefined || fetched === undefined || styled === undefined || swapped === undefined) continue;
 		// (in order, or it is not a navigation's clock)
 		if (!(t <= fetched && fetched <= styled && styled <= swapped)) continue;
-		navs.push({ from: str(n.from, 300) ?? '', to, type: str(n.type, 20) ?? 'link', t, fetched, styled, swapped });
+		const server = num(n.server, 3_600_000);
+		const download = num(n.download, 3_600_000);
+		const bytes = num(n.bytes, 1e9);
+		navs.push({
+			from: str(n.from, 300) ?? '',
+			to,
+			type: str(n.type, 20) ?? 'link',
+			t,
+			fetched,
+			styled,
+			swapped,
+			...(server !== undefined ? { server } : {}),
+			...(download !== undefined ? { download } : {}),
+			...(bytes !== undefined ? { bytes } : {}),
+			...(n.prefetched === true ? { prefetched: true } : {})
+		});
 	}
 	if (navs.length) visit.navs = navs;
 	const it = v.interaction as Record<string, unknown> | undefined;

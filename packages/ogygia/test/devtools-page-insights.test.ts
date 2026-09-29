@@ -200,6 +200,19 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page({ visit: { ...page().visit!, navs: [nav('/quick', 0, 200, 210, 250)] } }), [], [], 5000))).not.toContain('slow-navigation');
 	});
 
+	it('a slow navigation’s fetch, split by the page request’s timing: the server, a heavy page, a prefetch', () => {
+		const one = (extra: object, fetched = 820) => analyze_page(page({ visit: { ...page().visit!, navs: [{ from: '/a', to: '/p', type: 'link', t: 0, fetched, styled: fetched + 5, swapped: fetched + 10, ...extra }] } }), [], [], 5000).findings.find((x) => x.code === 'slow-navigation')!;
+		const server = one({ server: 800, download: 15, bytes: 2048 });
+		expect(server.message).toContain('820 ms fetching the page from the server (800 ms waiting for its first byte, 15 ms downloading 2 KB)');
+		expect(server.fix).toMatch(/^The server's answer is the wait/);
+		// the download is most of it: the page itself is the cost
+		const heavy = one({ server: 120, download: 690, bytes: 900 * 1024 });
+		expect(heavy.fix).toMatch(/^The page itself is the wait: 900 KB of HTML took longer to download/);
+		// prefetched on hover: the wait left after the click, and how much earlier the request began
+		const pre = one({ server: 800, download: 10, prefetched: true }, 430);
+		expect(pre.message).toContain('430 ms still waiting for the page after the click (prefetched on hover 380 ms earlier: the server took 800 ms to answer)');
+	});
+
 	it('held for a failing first-screen island: not ogygia’s wait, and queued names what it was held for', () => {
 		// BelowReady (below the fold) had its code at 60 and hydrated at 750; SlowFail (first screen)
 		// was loading from 50 until it failed at 740 — the scheduler's viewport-first hold
