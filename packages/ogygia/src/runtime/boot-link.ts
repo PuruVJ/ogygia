@@ -15,6 +15,7 @@ import { parse_region_html } from './parse-html.js';
 import { runtime_session } from './session.js';
 import { regions_in_shadow } from './connected.js';
 import { yield_task } from './schedule.js';
+import { beacon_nav } from './beacon.js';
 
 export function link_boot(): void {
 	slots.boot ??= {
@@ -29,6 +30,7 @@ export function link_boot(): void {
 		parse_region_html,
 		runtime_session,
 		regions_in_shadow,
-		yield_task
+		yield_task,
+		beacon_nav
 	};
 }

@@ -136,6 +136,8 @@ export type BootLink = {
 	runtime_session: typeof import('./session.js').runtime_session;
 	regions_in_shadow: typeof import('./connected.js').regions_in_shadow;
 	yield_task: typeof import('./schedule.js').yield_task;
+	/** the router's navigation, timed for the profiler's beacon (a no-op without it) */
+	beacon_nav: typeof import('./beacon.js').beacon_nav;
 };
 export type RouterLink = {
 	document_key: typeof import('./router.js').document_key;

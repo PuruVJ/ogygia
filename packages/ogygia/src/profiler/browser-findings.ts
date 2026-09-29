@@ -104,6 +104,7 @@ export function browser_page_report(
 			...(visit.scripts ? { scripts: visit.scripts } : {}),
 			...(visit.warnings ? { warnings: visit.warnings } : {}),
 			...(visit.preload_misses ? { preload_misses: visit.preload_misses } : {}),
+			...(visit.navs ? { navs: visit.navs } : {}),
 			// (named from the report's island rows, by the identity each one carries)
 			...(visit.entry_fallbacks
 				? { entry_fallbacks: visit.entry_fallbacks.map((f) => ({ ...f, name: named(f.entry) })) }

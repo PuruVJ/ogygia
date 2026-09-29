@@ -45,6 +45,20 @@ export interface PageInteraction {
 
 /** The slowest interaction, sampled (JS Self-Profiling): the functions that ran while it waited and
  *  in its handlers, by their source-mapped names. `t`: which interaction (its start). */
+/** One in-app navigation (the router's body swap), on the page's clock. */
+export interface PageNav {
+	from: string;
+	to: string;
+	type: string;
+	t: number;
+	/** the new page's HTML arrived */
+	fetched: number;
+	/** its stylesheets were in */
+	styled: number;
+	/** the swap committed: the new page shows */
+	swapped: number;
+}
+
 export interface InteractionCpuInput {
 	t: number;
 	/** the frames' lines are the source's (mapped through a source map): else a line is the served
@@ -85,6 +99,8 @@ export interface PageInput {
 		/** the slowest interaction (the one INP reports), split by phase, with the scripts of the long
 		 *  frames around it; `island` on a script when the reader could name the island its file is */
 		interaction?: PageInteraction;
+		/** the in-app navigations in this document */
+		navs?: PageNav[];
 	} | null;
 	islands: PageIsland[];
 	firsts: { fp: string; t: number; type: string }[];
@@ -250,6 +266,10 @@ const SLOW_HOLE_MS = 1000;
 /** a wait with nothing ahead this long is the scheduler's own (its viewport snapshot waits at most
  *  48 ms by design, and its first report lands within a frame or two) */
 const HELD_IDLE_MS = 40;
+/** an in-app navigation this long before the new page shows is felt (a click that seems to do
+ *  nothing); twice past a second, a warning */
+const SLOW_NAV_MS = 400;
+const SLOW_NAV_WARN_MS = 1000;
 /** a module load this slow */
 const SLOW_LOAD_MS = 800;
 /** an above-the-fold island still asleep this long after the largest paint */
@@ -855,6 +875,43 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: dead.length ? 'error' : 'warn',
 			message: `${gone.length === 1 ? 'An island' : `${gone.length} islands`} could not load ${gone.length === 1 ? 'its own file' : 'their own files'} (${list(gone.map((f) => f.src.slice(f.src.lastIndexOf('/') + 1)))}): this page came from a cache that outlived the build that made it. ${parts.join('. ')}.`,
 			fix: "Keep the previous build's `_app/immutable/` files as long as your HTML stays cached (a CDN, a service worker) — a cached page then runs its own build throughout — or purge the cached HTML when you deploy.",
+			fps: []
+		});
+	}
+
+	// ── a slow in-app navigation: the router's swap, split by where its time went ──
+	const navs = page.visit?.navs ?? [];
+	const slow_navs = navs
+		.map((n, i) => ({ n, ms: n.swapped - n.t, next: navs[i + 1]?.t ?? Infinity }))
+		.filter((x) => x.ms >= SLOW_NAV_MS)
+		.sort((a, b) => b.ms - a.ms)
+		.slice(0, 3);
+	for (const { n, ms, next } of slow_navs) {
+		const fetch_ms = n.fetched - n.t;
+		const styles_ms = n.styled - n.fetched;
+		const swap_ms = n.swapped - n.styled;
+		// what the new page woke after it showed (its islands, until the next navigation)
+		const woke = page.islands.filter((i) => i.t0 >= n.t && i.t0 < next);
+		const wake_end = woke.length ? Math.max(...woke.map((i) => i.done)) : n.swapped;
+		const heaviest = woke.map((i) => ({ name: name_of(i.fp), ms: i.done - (i.turn ?? i.loaded) })).sort((a, b) => b.ms - a.ms)[0];
+		const parts = [
+			{ key: 'fetch', ms: fetch_ms, text: `${Math.round(fetch_ms)} ms fetching the page from the server` },
+			{ key: 'styles', ms: styles_ms, text: `${Math.round(styles_ms)} ms loading its stylesheets` },
+			{ key: 'swap', ms: swap_ms, text: `${Math.round(swap_ms)} ms swapping it in` }
+		];
+		const top = parts.reduce((a, b) => (b.ms > a.ms ? b : a));
+		findings.push({
+			code: 'slow-navigation',
+			severity: ms >= SLOW_NAV_WARN_MS ? 'warn' : 'info',
+			message:
+				`The in-app navigation to ${n.to} took ${Math.round(ms)} ms before the new page showed: ${parts.map((p) => p.text).join(', ')}.` +
+				(woke.length ? ` Then ${woke.length === 1 ? 'its island woke' : `${woke.length} islands woke`} over ${Math.round(Math.max(0, wake_end - n.swapped))} ms${heaviest && heaviest.ms >= 20 ? ` (${heaviest.name} ${Math.round(heaviest.ms)} ms to hydrate)` : ''}.` : ''),
+			fix:
+				top.key === 'fetch'
+					? "The server's answer is the wait: make that page's load faster (profile the page itself: its report names the slow load), or render it with less. The router starts the fetch at the click, so the server's time is the visitor's."
+					: top.key === 'styles'
+						? "Its stylesheets were not in the browser yet: the router waits for them so the page never shows unstyled. Share one stylesheet across pages, or keep each page's small, so the next page's are cached or quick."
+						: 'The swap itself is heavy: a large page body to parse and put in, or many islands to reconcile. Send less HTML (render below-the-fold parts later), or split the page.',
 			fps: []
 		});
 	}

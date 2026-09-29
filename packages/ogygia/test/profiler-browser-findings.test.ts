@@ -212,6 +212,15 @@ test("a failed island's wake → failure span is kept (what held the islands bel
 	expect(parse_visit('/lab', { ...raw, regions: [{ fp, failed: 'x', failed_span: [800, 50], top: 0, height: 0 }] })!.regions?.[0].failed_span).toBeUndefined();
 });
 
+test('in-app navigations reach the report: parsed, merged once, out-of-order clocks dropped', () => {
+	const n = { from: '/a', to: '/slow', type: 'link', t: 1000, fetched: 1820, styled: 1830, swapped: 1850 };
+	const v = parse_visit('/lab', { ...raw, navs: [n, { ...n, to: '/bad', fetched: 900 }, { to: 7 }] })!;
+	expect(v.navs).toHaveLength(1);
+	expect(merge_visits(v, v).navs).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'slow-navigation');
+	expect(f?.message).toContain('In the browser: The in-app navigation to /slow took 850 ms before the new page showed: 820 ms fetching the page from the server');
+});
+
 test('a preload downloaded again reaches the report, even on a page with no island', () => {
 	const v = parse_visit('/lab', {
 		...raw,

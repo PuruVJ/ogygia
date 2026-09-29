@@ -314,6 +314,7 @@ The visit the beacon sends is read with the same analysis as the devtools [Page 
 - an eager island below the first screen
 - a first-screen island that woke long after the page looked done, or the largest paint repainting inside one
 - long tasks outside any hydration
+- a slow in-app navigation (the router's page swap): how long the fetch, the stylesheets and the swap took, and the islands the new page woke after
 - the slowest interaction, when it was slow: the island it landed in, and whether the time went to waiting (behind an island hydrating, or a named script), its handlers, or the paint. The report's INP line comes from all visits; this one explains the report's own visit.
 - a file that was preloaded and then downloaded again, because the preload did not match the request
 - an island whose own file was gone, so the page (from a cache that outlived its build) ran it on the current build's code

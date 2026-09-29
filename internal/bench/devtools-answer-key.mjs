@@ -267,6 +267,55 @@ async function nav_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** A SLOW IN-APP NAVIGATION (/dt-nav-fast → /dt-nav-slow, whose load waits 800 ms; back is the
+ *  decoy, fast): named with its split (the server's fetch the most of it) in the Page tab after the
+ *  navigation and in the profiler's report of the same document; the navigation back never. */
+async function nav_slow_run(browser) {
+	const rec = await fetch(`${base}/__profiler/page?p=/dt-nav-fast&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+	await page.goto(base + '/dt-nav-fast', { waitUntil: 'load' });
+	await page.waitForTimeout(1500);
+	await page.evaluate(() => (window.__og_key_soft = 1));
+	await page.click('[data-nav-go="slow"]');
+	await page.waitForSelector('[data-nav-page="slow"]', { timeout: 10_000 }).catch(() => {});
+	await page.waitForTimeout(1500);
+	const slow = await page.evaluate(() => ({ soft: window.__og_key_soft === 1, m: window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-navigation')?.message ?? null }));
+	await page.click('[data-nav-go="fast"]');
+	await page.waitForSelector('[data-nav-page="fast"]', { timeout: 10_000 }).catch(() => {});
+	await page.waitForTimeout(1500);
+	const back = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((f) => f.code === 'slow-navigation').map((f) => f.message));
+	await page.goto('about:blank');
+	await page.waitForTimeout(300);
+	await page.close();
+	let report = null;
+	for (let i = 0; i < 10 && report_id && !report?.length; i++) {
+		await new Promise((ok) => setTimeout(ok, 1000));
+		const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+		report = (j?.findings ?? []).filter((f) => f.code === 'slow-navigation').map((f) => f.message);
+	}
+	// the fetch is the most of it: its ms are the largest of the three quoted
+	const fetch_most = (m) => {
+		const n = (label) => {
+			const at = m?.indexOf(label) ?? -1;
+			if (at < 0) return NaN;
+			const head = m.slice(0, at).trimEnd();
+			return Number(head.slice(head.lastIndexOf(' ') + 1));
+		};
+		const f = n(' ms fetching the page');
+		return f >= 700 && f > n(' ms loading its stylesheets') && f > n(' ms swapping it in');
+	};
+	const checks = [
+		['a soft navigation', slow.soft],
+		['the Page tab names it, the server’s fetch the most of it, and the island after', !!slow.m && slow.m.startsWith('The in-app navigation to /dt-nav-slow took') && fetch_most(slow.m) && slow.m.includes('Then its island woke')],
+		['the fast one back: never', back.length === 0],
+		['the profiler report: the same one, only it', !report_id || (!!report && report.length === 1 && report[0].includes('In the browser: The in-app navigation to /dt-nav-slow') && fetch_most(report[0]))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} slow navigation: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, back, report })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -825,6 +874,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let nav_slow_ok = 0;
+	for (let i = 0; i < repeat; i++) nav_slow_ok += await nav_slow_run(browser);
+	if (nav_slow_ok < repeat) failed = true;
+	console.log(`${nav_slow_ok === repeat ? '✓' : '✗'} a slow in-app navigation, split: ${nav_slow_ok}/${repeat}`);
 	let held_fail_ok = 0;
 	for (let i = 0; i < repeat; i++) held_fail_ok += await held_fail_run(browser);
 	if (held_fail_ok < repeat) failed = true;

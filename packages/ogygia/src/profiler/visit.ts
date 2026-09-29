@@ -7,7 +7,7 @@
  * one clock — the report's first picture.
  */
 import { hole_segments, HOLE_SEG_LABEL } from '../devtools/hole-segments.js';
-import type { PageInteraction } from '../devtools/page-insights.js';
+import type { PageInteraction, PageNav } from '../devtools/page-insights.js';
 
 export interface VisitNav {
 	/** ms from navigation start */
@@ -123,6 +123,8 @@ export interface Visit {
 	refetched?: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; hole?: string; runtime?: boolean }[];
 	/** the slowest interaction (INP's), by phase, with the scripts of the long frames around it */
 	interaction?: PageInteraction;
+	/** the in-app navigations (router body swaps): start, page fetched, styles in, swap committed */
+	navs?: PageNav[];
 	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
 	holes_answered?: { id: string; n: number; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
 	viewport?: [number, number];
@@ -334,6 +336,19 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		refetched.push({ url, how, bytes, ms: num(f.ms, 600_000) ?? 0, ...(entry ? { entry } : {}), ...(hole ? { hole } : {}), ...(f.runtime === true ? { runtime: true } : {}) });
 	}
 	if (refetched.length) visit.refetched = refetched;
+	const navs: PageNav[] = [];
+	for (const n of (Array.isArray(v.navs) ? v.navs : []).slice(0, 20) as Record<string, unknown>[]) {
+		const to = str(n?.to, 300);
+		const t = num(n?.t, 3_600_000);
+		const fetched = num(n?.fetched, 3_600_000);
+		const styled = num(n?.styled, 3_600_000);
+		const swapped = num(n?.swapped, 3_600_000);
+		if (!to || t === undefined || fetched === undefined || styled === undefined || swapped === undefined) continue;
+		// (in order, or it is not a navigation's clock)
+		if (!(t <= fetched && fetched <= styled && styled <= swapped)) continue;
+		navs.push({ from: str(n.from, 300) ?? '', to, type: str(n.type, 20) ?? 'link', t, fetched, styled, swapped });
+	}
+	if (navs.length) visit.navs = navs;
 	const it = v.interaction as Record<string, unknown> | undefined;
 	if (it && typeof it === 'object') {
 		const name = str(it.name, 40);
@@ -460,6 +475,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		// (each record carries the whole list so far: the later one has them all)
 		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
+		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)
 		...(a.interaction || b.interaction ? { interaction: !a.interaction ? b.interaction : !b.interaction ? a.interaction : b.interaction.ms >= a.interaction.ms ? b.interaction : a.interaction } : {}),
 		...(a.entry_fallbacks || b.entry_fallbacks ? { entry_fallbacks: by(a.entry_fallbacks ?? [], b.entry_fallbacks ?? [], (f) => f.entry) } : {}),

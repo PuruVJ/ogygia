@@ -62,11 +62,12 @@ interface BeaconApi {
 	beacon_hole_failed: typeof beacon_hole_failed;
 	beacon_hole_answered?: typeof beacon_hole_answered;
 	beacon_entry_fallback?: typeof beacon_entry_fallback;
+	beacon_nav?: typeof beacon_nav;
 }
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback };
+	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_nav };
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -712,6 +713,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),
 		...(refetched.length ? { refetched } : {}),
+		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
 		islands: visit_islands,
 		firsts: visit_firsts,
@@ -871,6 +873,28 @@ function make_profiler(): SelfProfiler | null {
 /** islands that failed to hydrate (never `data-hydrated`), with the error: the CPU window does not
  *  wait for them, and the visit reports them */
 const failed_fps = new Map<string, string>();
+/** THE IN-APP NAVIGATIONS (the router's body swaps), each on the page's clock: its start, the page
+ *  fetched, its stylesheets in, the swap committed. A slow one is a cost the document's own timing
+ *  never shows; the islands the new page woke are in the visit's island list, after `swapped`. */
+interface NavRec {
+	from: string;
+	to: string;
+	type: string;
+	t: number;
+	fetched: number;
+	styled: number;
+	swapped: number;
+}
+let visit_navs: NavRec[] = [];
+export function beacon_nav(n: NavRec): void {
+	const o = owner();
+	// (an older owning copy has no such entry: stay quiet)
+	if (o) return o.beacon_nav?.(n);
+	if (!collecting() || visit_navs.length >= 20) return;
+	visit_navs.push({ from: n.from.slice(0, 300), to: n.to.slice(0, 300), type: (n.type || 'link').slice(0, 20), t: r2(n.t), fetched: r2(n.fetched), styled: r2(n.styled), swapped: r2(n.swapped) });
+	resend_soon();
+}
+
 export function beacon_failed(el: Element, message?: string, since?: number): void {
 	const o = owner();
 	if (o) return o.beacon_failed(el, message, since);
@@ -1311,6 +1335,7 @@ export function _reset_beacon(): void {
 	opted = undefined;
 	failed_fps.clear();
 	failed_spans.clear();
+	visit_navs = [];
 	seen_resources = [];
 	visit_islands = [];
 	visit_firsts = [];

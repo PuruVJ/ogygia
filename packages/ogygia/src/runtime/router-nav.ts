@@ -530,6 +530,11 @@ export async function navigate(
 
 	const dt_t0 = DEVTOOLS ? dt_now() : 0;
 	let dt_reconciled = false;
+	// THE NAVIGATION'S OWN CLOCK (the beacon's: a slow in-app navigation is a page's cost the
+	// document timing never sees): its start, the page fetched, its styles in, the swap committed
+	const nav_t0 = performance.now();
+	let nav_fetched = nav_t0;
+	let nav_styled = nav_t0;
 	if (DEVTOOLS)
 		dt_emit({
 			domain: 'nav',
@@ -577,6 +582,7 @@ export async function navigate(
 		location.href = url.href;
 		return;
 	}
+	nav_fetched = performance.now();
 	page_cache.delete(url.href); // one-shot; always fresh on real navigation
 
 	// REDIRECT: the fetch may have landed on a different href (a Kit `redirect()` in load, a
@@ -641,6 +647,7 @@ export async function navigate(
 	// until the swap, so adding the sheets early is invisible.
 	await preload_stylesheets(doc.head);
 	if (gen !== nav_gen) return;
+	nav_styled = performance.now();
 	// The transition starts in a task of its own: everything above is a finished task by then, and
 	// the frame it captures is not the one that parsed 2 MB of HTML.
 	await yield_task();
@@ -745,6 +752,9 @@ export async function navigate(
 	r.doc_key = document_key(dest);
 	r.current_url = dest;
 	r.nav_target = null; // applied — a later same-address click is a refresh, not a duplicate
+	// (the profiler's browser half, through the boot's link — this lazy chunk imports no boot
+	// module; a no-op without the profiler's tag or devtools)
+	boot_link().beacon_nav({ from: from.pathname + from.search, to: dest.pathname + dest.search, type, t: nav_t0, fetched: nav_fetched, styled: nav_styled, swapped: performance.now() });
 	if (DEVTOOLS)
 		dt_emit({
 			domain: 'nav',

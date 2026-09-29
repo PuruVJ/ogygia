@@ -174,6 +174,32 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('a slow in-app navigation: its split, the islands after it, the fix for the part that cost most; a quick one never', () => {
+		const nav = (to: string, t: number, fetched: number, styled: number, swapped: number) => ({ from: '/a', to, type: 'link', t, fetched, styled, swapped });
+		const r = analyze_page(
+			page({
+				visit: { ...page().visit!, navs: [nav('/slow', 1000, 1820, 1830, 1850), nav('/quick', 3000, 3050, 3052, 3060)] },
+				islands: [{ fp: 'h', t0: 1855, loaded: 1860, turn: 1870, done: 1980 }]
+			}),
+			[region('h', 'Heavy')],
+			[],
+			5000
+		);
+		const f = r.findings.filter((x) => x.code === 'slow-navigation');
+		expect(f).toHaveLength(1);
+		expect(f[0].severity).toBe('info');
+		expect(f[0].message).toBe('The in-app navigation to /slow took 850 ms before the new page showed: 820 ms fetching the page from the server, 10 ms loading its stylesheets, 20 ms swapping it in. Then its island woke over 130 ms (Heavy 110 ms to hydrate).');
+		expect(f[0].fix).toMatch(/^The server's answer is the wait/);
+		// the stylesheets, or the swap, the most of it: their fixes; past a second, a warning
+		const styles = analyze_page(page({ visit: { ...page().visit!, navs: [nav('/css', 0, 100, 1300, 1320)] } }), [], [], 5000).findings.find((x) => x.code === 'slow-navigation')!;
+		expect(styles.severity).toBe('warn');
+		expect(styles.fix).toMatch(/^Its stylesheets were not in the browser yet/);
+		const swap = analyze_page(page({ visit: { ...page().visit!, navs: [nav('/big', 0, 50, 60, 600)] } }), [], [], 5000).findings.find((x) => x.code === 'slow-navigation')!;
+		expect(swap.fix).toMatch(/^The swap itself is heavy/);
+		expect(swap.message).not.toContain('woke');
+		expect(codes(analyze_page(page({ visit: { ...page().visit!, navs: [nav('/quick', 0, 200, 210, 250)] } }), [], [], 5000))).not.toContain('slow-navigation');
+	});
+
 	it('held for a failing first-screen island: not ogygia’s wait, and queued names what it was held for', () => {
 		// BelowReady (below the fold) had its code at 60 and hydrated at 750; SlowFail (first screen)
 		// was loading from 50 until it failed at 740 — the scheduler's viewport-first hold
