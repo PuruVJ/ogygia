@@ -28,6 +28,7 @@ const app = path.join(repo, 'apps/playground');
 const version_file = path.join(app, 'src/lib/dtcache/version.ts');
 const { chromium } = createRequire(path.join(repo, 'package.json'))('playwright');
 const PORT = 4197;
+const PROFILER_KEY = 'cache-check-profiler';
 const BASE = `http://127.0.0.1:${PORT}`;
 // (inside the app: a built server resolves its dependencies through the app's node_modules)
 const tmp = path.join(app, '.cache-check');
@@ -65,7 +66,7 @@ function build(version, name = version) {
 
 async function serve(dir) {
 	const child = spawn(process.execPath, [dir], {
-		env: { ...process.env, PORT: String(PORT), ORIGIN: BASE, OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef' },
+		env: { ...process.env, PORT: String(PORT), ORIGIN: BASE, OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef', OGYGIA_PROFILER_SECRET: PROFILER_KEY },
 		stdio: 'ignore'
 	});
 	for (let i = 0; i < 60; i++) {
@@ -221,6 +222,18 @@ try {
 	check('stale-gone: each island falls back to its stable name, fresh, and runs build 2 (none left dead)', g.probe === 'v2' && g.twin === 'v2' && g.steady === 'steady' && g.hole === 'v2', JSON.stringify(g));
 	check('stale-gone: no uncaught error on the page', gone_errors.length === 0, gone_errors.slice(0, 2).join(' | '));
 	await gone_ctx.close();
+
+	// ── the profiler: two profiles of one build keep every island's file ────────────────────────
+	// ("since your last profile": island files changed / kept — what a deploy costs a returning
+	// visitor; within one build, nothing may read as changed)
+	{
+		const profile = async () =>
+			(await fetch(`${BASE}/__profiler/page?p=/dt-cache&runs=1&format=json`, { headers: { 'x-profiler-key': PROFILER_KEY } })).json().catch(() => null);
+		await profile();
+		const second = await profile();
+		const isl = second?.since?.islands;
+		check('profiler: a second profile of one build keeps every island file (none changed)', !!isl && isl.moved.length === 0 && isl.kept >= 3 && !isl.all_moved, JSON.stringify(isl ?? second?.since ?? second?.error ?? null).slice(0, 200));
+	}
 
 	// ── a page from before content hashing ──────────────────────────────────────────────────────
 	const html2 = await (await fetch(BASE + '/dt-cache')).text();

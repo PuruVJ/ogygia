@@ -28,7 +28,9 @@ let loaded = [];
 page.on('response', (r) => r.url().endsWith('.js') && loaded.push(r.url()));
 
 await page.goto(base + '/dt-lab', { waitUntil: 'load' });
-await page.waitForTimeout(1500);
+// (the launcher is a lazy chunk: on a server's cold first requests it can take past a fixed wait)
+await page.waitForSelector('[data-og-panel-toggle]', { timeout: 10_000 }).catch(() => {});
+await page.waitForTimeout(500);
 check('the launcher is there', (await page.locator('[data-og-panel-toggle]').count()) === 1);
 check('no dock until opened', (await page.locator('[data-og-win]').count()) === 0 && (await page.evaluate(() => typeof window.__ogygia_page)) === 'undefined');
 

@@ -265,6 +265,53 @@ export interface Since {
 	assets?: import('./page-assets.js').AssetsDiff;
 	/** the browser's findings fixed and new (both reports with a visit), as `code (islands)` */
 	browser?: { fixed: string[]; added: string[] };
+	/** which islands changed file between the two builds (what a returning visitor downloads again) */
+	islands?: IslandFilesDiff;
+}
+
+/**
+ * WHAT A DEPLOY COSTS A RETURNING VISITOR. Each island's file is named by its content, so between two
+ * profiles of one page an island either KEPT its file (a returning visitor's cache still serves it) or
+ * MOVED to a new one (downloaded again). Islands keyed by identity (`entry`), files by location
+ * (`module_url`); `bytes` weighs a moved island's new file when the second build weighed it.
+ * `all_moved`: every island moved — when their code did not all change, the build's names are not
+ * stable (SvelteKit bakes its version, the build time by default, into its client chunk: pin
+ * `kit.version.name`). Null when there is nothing to compare (a page without islands, or a build from
+ * before content hashing, where a file's name never moved).
+ */
+export interface IslandFilesDiff {
+	moved: { name: string; bytes: number | null }[];
+	kept: number;
+	/** the moved files' bytes, where weighed */
+	bytes: number;
+	all_moved: boolean;
+}
+
+export function island_files_diff(
+	a: readonly { entry: string; name: string; module_url: string }[],
+	b: readonly { entry: string; name: string; module_url: string }[],
+	weight?: (url: string) => number | undefined
+): IslandFilesDiff | null {
+	const before = new Map(a.map((r) => [r.entry, r.module_url]));
+	const moved: IslandFilesDiff['moved'] = [];
+	let kept = 0;
+	const seen = new Set<string>();
+	for (const r of b) {
+		if (seen.has(r.entry)) continue;
+		seen.add(r.entry);
+		const was = before.get(r.entry);
+		// (a build from before content hashing loads the identity itself: its name never moved)
+		if (was === undefined || was === r.entry || r.module_url === r.entry) continue;
+		if (was === r.module_url) kept++;
+		else moved.push({ name: r.name, bytes: weight?.(r.module_url) ?? null });
+	}
+	if (!moved.length && !kept) return null;
+	return {
+		moved,
+		kept,
+		bytes: moved.reduce((s, m) => s + (m.bytes ?? 0), 0),
+		all_moved: moved.length >= 3 && kept === 0
+	};
 }
 
 export interface DrillDelta {

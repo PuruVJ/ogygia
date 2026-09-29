@@ -197,7 +197,7 @@ async function read_timed(
 	text += dec.decode();
 	return { text, chunks };
 }
-import { compare_reports, page_history, type Since } from './compare.js';
+import { compare_reports, island_files_diff, page_history, type Since } from './compare.js';
 import { label_call, phase_of_frame } from './timeline.js';
 import { gzip_large } from './compress.js';
 import { io_kind } from './async-io.js';
@@ -4914,10 +4914,18 @@ class Profiler {
 			} catch {
 				browser = undefined;
 			}
+			// which islands changed file between the two builds: what a returning visitor downloads again
+			let islands: Since['islands'];
+			try {
+				islands = island_files_diff(island_rows_of(P.meta), island_rows_of(stored.meta), (u) => stored.weights?.[u]) ?? undefined;
+			} catch {
+				islands = undefined;
+			}
 			return {
 				prev: P.meta.id,
 				...(score ? { score } : {}),
 				...(browser ? { browser } : {}),
+				...(islands ? { islands } : {}),
 				...(assets ? { assets } : {}),
 				...(render ? { a_ms: render.a, b_ms: render.b } : {}),
 				...(cmp.render_same ? { same: true } : {}),

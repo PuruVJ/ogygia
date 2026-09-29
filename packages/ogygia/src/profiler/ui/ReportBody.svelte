@@ -428,6 +428,14 @@
 					<b>In the browser</b>{#if since.browser.fixed.length}: <span class="good">fixed {since.browser.fixed.join(' · ')}</span>{/if}{#if since.browser.added.length}{since.browser.fixed.length ? ';' : ':'} <span class="warn">new {since.browser.added.join(' · ')}</span>{/if}.
 				</p>
 			{/if}
+			{#if since.islands}
+				{@const isl = since.islands}
+				<!-- what the deploy costs a returning visitor: each island keeps its file (its cache still
+				     serves it) or moves to a new one (downloaded again) -->
+				<p data-since-islands>
+					<b class={isl.moved.length ? 'warn' : 'good'}>Island files: {isl.moved.length} changed, {isl.kept} kept</b>{#if isl.moved.length}{' '}— a returning visitor downloads {isl.bytes ? fmt_bytes(isl.bytes) + ' ' : ''}again for {isl.moved.slice(0, 6).map((m) => m.name).join(', ')}{isl.moved.length > 6 ? ` and ${isl.moved.length - 6} more` : ''}{/if}.{#if isl.all_moved}{' '}Every island changed: if their code did not, the build's names are not stable. SvelteKit bakes its version (the build time, by default) into its client code — set <code>kit.version.name</code> to your commit.{/if}
+				</p>
+			{/if}
 			{#if since.assets}
 				{@const d = since.assets}
 				{@const line = (c: { name: string; contains?: string[] }) => `${c.name}${c.contains ? ` (${c.contains.join(', ')})` : ''}`}
