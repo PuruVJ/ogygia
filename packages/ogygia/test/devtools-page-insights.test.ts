@@ -174,6 +174,28 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('the worst shifts, explained (shift-cause): the burst, what moved, the cause just before, its fix', () => {
+		const text = 'div "Paragraph 1"';
+		const run = (over: Partial<PageInput>, regions: RegionFact[] = []) => analyze_page(page({ vitals: { cls: 0.2 }, ...over }), regions, [], 9000).findings.find((f) => f.code === 'shift-cause');
+		// an image arrived with no size: the shift 40 ms later; an earlier small burst (3 s before) is not the worst
+		const img = run({ shifts: [{ t: 500, value: 0.02, tag: 'h2' }, { t: 3540, value: 0.15, tag: text }, { t: 3900, value: 0.03, tag: text }], visit: { ...page().visit!, resources: [{ url: 'https://a.test/hero.png', type: 'img', start: 3000, end: 3500 }] } })!;
+		expect(img.message).toBe('CLS is 0.2 (needs work; good is ≤ 0.1). The worst burst of shifts added 0.18, over 2 shifts in 360 ms: what moved was div "Paragraph 1" (0.18). It came right after the image hero.png arrived: it had no size set, so the page made room when it loaded.');
+		expect(img.fix).toMatch(/^Set the image's `width` and `height`/);
+		// a hole's answer swapped in (shown at 100, 380 ms wait: swapped at 480)
+		const hole = run({ shifts: [{ t: 490, value: 0.2, tag: text }], hole_waits: [{ name: 'TallHole', wait_ms: 380, below_fold: false, shown_at: 100 }] })!;
+		expect(hole.message).toContain("right after the hole TallHole's answer swapped in");
+		expect(hole.fix).toMatch(/^Give the hole a fallback/);
+		// an island hydrated: named on it, and the moved island's fp pinned
+		const isl = run({ shifts: [{ t: 610, value: 0.2, fp: 'g' }], islands: [{ fp: 'g', t0: 100, loaded: 300, done: 600 }] }, [region('g', 'Grower')])!;
+		expect(isl.message).toContain('what moved was Grower (0.2). It came right after Grower hydrated');
+		expect(isl.fps).toEqual(['g']);
+		// a web font; and nothing timed nearby: the unknown fix
+		expect(run({ shifts: [{ t: 810, value: 0.2, tag: text }], visit: { ...page().visit!, resources: [{ url: 'https://a.test/f.woff2', type: 'font', start: 200, end: 800 }] } })!.fix).toMatch(/^Match the fallback font's metrics/);
+		expect(run({ shifts: [{ t: 5000, value: 0.2, tag: text }] })!.fix).toMatch(/^Nothing the page timed explains it/);
+		// a good CLS: nothing
+		expect(codes(analyze_page(page({ vitals: { cls: 0.05 }, shifts: [{ t: 10, value: 0.05 }] }), [], [], 9000))).not.toContain('shift-cause');
+	});
+
 	it('the largest paint, explained (slow-lcp): the element, its island, its four parts, the fix for the most of it', () => {
 		const hero = 'https://a.test/hero.png';
 		const at = (paints: object, resources: object[], nav = { res_start: 120 }) => page({ vitals: { lcp: (paints as { lcp: number }).lcp }, visit: { ...page().visit!, nav, paints, resources: resources as never } });

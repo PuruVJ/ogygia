@@ -120,6 +120,8 @@ interface Shift {
 	t: number;
 	value: number;
 	fp?: string;
+	/** the element that moved, told briefly */
+	tag?: string;
 	from?: [number, number, number, number];
 	to?: [number, number, number, number];
 }
@@ -400,7 +402,9 @@ function observe_vitals(): void {
 			cls += e.value;
 			if (visit_shifts.length < 60) {
 				const src = e.sources?.[0];
-				visit_shifts.push({ t: r2(e.startTime), value: Math.round(e.value * 10000) / 10000, ...(src?.node ? { fp: fp_of(src.node) } : {}), ...(src?.previousRect ? { from: rect_of(src.previousRect) } : {}), ...(src?.currentRect ? { to: rect_of(src.currentRect) } : {}) });
+				// (the element that moved, told briefly, for a shift outside any island: `p "Lorem…"`)
+				const tag = src?.node ? describe_target(src.node) : '';
+				visit_shifts.push({ t: r2(e.startTime), value: Math.round(e.value * 10000) / 10000, ...(src?.node ? { fp: fp_of(src.node) } : {}), ...(tag ? { tag } : {}), ...(src?.previousRect ? { from: rect_of(src.previousRect) } : {}), ...(src?.currentRect ? { to: rect_of(src.currentRect) } : {}) });
 			}
 		}
 		v.cls = Math.round(cls * 1000) / 1000;

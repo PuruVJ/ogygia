@@ -403,6 +403,46 @@ async function lcp_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE WORST SHIFTS, EXPLAINED (/dt-cls): an image with no size set pushes the text down as it
+ *  loads; `?hole`: a hole whose answer is far taller than its fallback does. Each must be named as
+ *  the cause of the worst burst, with its fix, in the Page tab and in the profiler's report. */
+async function cls_run(browser) {
+	const read = async (q) => {
+		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-cls')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+		const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+		await page.goto(base + '/dt-cls' + q, { waitUntil: 'load' });
+		await page.waitForTimeout(3000);
+		const tab = await page.evaluate(() => {
+			const f = window.__ogygia_page?.()?.report.findings.find((x) => x.code === 'shift-cause');
+			return f ? { message: f.message, fix: f.fix } : null;
+		});
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		let report = null;
+		for (let i = 0; i < 10 && report_id && !report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			const f = (j?.findings ?? []).find((x) => x.code === 'shift-cause');
+			report = f ? { message: f.message, fix: f.fix } : null;
+		}
+		return { tab, report, report_id };
+	};
+	const img = await read('');
+	const hole = await read('?hole');
+	const by_img = (f) => !!f && f.message.includes('right after the image hero.svg arrived') && f.fix.startsWith("Set the image's `width` and `height`");
+	const by_hole = (f) => !!f && f.message.includes("right after the hole TallHole's answer swapped in") && f.fix.startsWith('Give the hole a fallback the size of its answer');
+	const checks = [
+		['an image with no size: named the cause, what moved named', by_img(img.tab) && img.tab.message.includes('what moved was div "Paragraph 1')],
+		['a hole taller than its fallback: named the cause', by_hole(hole.tab)],
+		['the profiler report: the same two', (!img.report_id || by_img(img.report)) && (!hole.report_id || by_hole(hole.report))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} worst shifts: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ img, hole })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -866,7 +906,7 @@ try {
 	// over the lab pages, unmeasured, before any run.
 	{
 		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp']) {
+		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls']) {
 			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
 			await warm.waitForTimeout(700);
 		}
@@ -980,6 +1020,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let cls_ok = 0;
+	for (let i = 0; i < repeat; i++) cls_ok += await cls_run(browser);
+	if (cls_ok < repeat) failed = true;
+	console.log(`${cls_ok === repeat ? '✓' : '✗'} the worst shifts, explained: ${cls_ok}/${repeat}`);
 	let lcp_ok = 0;
 	for (let i = 0; i < repeat; i++) lcp_ok += await lcp_run(browser);
 	// (two in three, like the other report checks: on a dev server that had re-run the app's hooks, a

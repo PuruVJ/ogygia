@@ -113,7 +113,7 @@ export interface PageInput {
 	} | null;
 	islands: PageIsland[];
 	firsts: { fp: string; t: number; type: string }[];
-	shifts: { t: number; value: number; fp?: string }[];
+	shifts: { t: number; value: number; fp?: string; tag?: string }[];
 	longtasks: { t: number; ms: number }[];
 	snapshots?: { fp: string; ssr: string; hydrated: string; final?: string }[];
 	/** awake islands showing a children slot with nothing in it (read off the DOM; devtools only) */
@@ -654,11 +654,19 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	for (const v of vitals) {
 		if (v.rating === 'good') continue;
 		const head = `${v.label} is ${v.key === 'cls' ? v.value : `${Math.round(v.value)} ms`} (${v.rating === 'poor' ? 'poor' : 'needs work'}; good is ${v.key === 'cls' ? '≤ ' + LIMITS[v.key][0] : '≤ ' + LIMITS[v.key][0] + ' ms'}).`;
-		const why = v.key === 'inp' ? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin, page.interaction_cpu) : v.key === 'lcp' ? explain_lcp(page, name_of) : null;
-		// (the slowest interaction and the largest paint, explained, are their own findings in place of
-		// the bare vital: the profiler words the vitals from all its visits, and keeps this visit's why)
+		const why =
+			v.key === 'inp'
+				? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin, page.interaction_cpu)
+				: v.key === 'lcp'
+					? explain_lcp(page, name_of)
+					: v.key === 'cls'
+						? explain_cls(page, rows, name_of)
+						: null;
+		// (the slowest interaction, the largest paint and the worst shifts, explained, are their own
+		// findings in place of the bare vital: the profiler words the vitals from all its visits, and
+		// keeps this visit's why)
 		findings.push({
-			code: why ? (v.key === 'inp' ? 'slow-interaction' : 'slow-lcp') : `vital-${v.key}`,
+			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : 'shift-cause') : `vital-${v.key}`,
 			severity: v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
@@ -1092,6 +1100,86 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 					? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
 					: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
 	return { message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.`, fix, fps: p?.lcp_fp ? [p.lcp_fp] : [] };
+}
+
+/**
+ * THE WORST LAYOUT SHIFTS, EXPLAINED: CLS scores the worst burst of shifts (a session: shifts under a
+ * second apart, five seconds at most). This names what moved in it (the island, else the element),
+ * and what made it move — by what happened just before its biggest shift: a hole's answer swapped
+ * in, an image arrived with no size set, a web font swapped in, an island hydrated. The fix is the
+ * cause's; an unknown one says what to look at.
+ */
+function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
+	const shifts = [...page.shifts].sort((a, b) => a.t - b.t);
+	if (!shifts.length) return null;
+	// the sessions: a new one after a second's gap, or past five seconds long
+	let best: typeof shifts = [];
+	let best_sum = 0;
+	let cur: typeof shifts = [];
+	let cur_sum = 0;
+	for (const s of shifts) {
+		if (cur.length && (s.t - cur[cur.length - 1].t > 1000 || s.t - cur[0].t > 5000)) {
+			cur = [];
+			cur_sum = 0;
+		}
+		cur.push(s);
+		cur_sum += s.value;
+		if (cur_sum > best_sum) {
+			best = cur.slice();
+			best_sum = cur_sum;
+		}
+	}
+	if (!best.length) return null;
+	// what moved: by island, else by the element, the biggest first
+	const moved = new Map<string, number>();
+	for (const s of best) {
+		const who = s.fp ? name_of(s.fp) : s.tag || 'an element';
+		moved.set(who, (moved.get(who) ?? 0) + s.value);
+	}
+	const top = [...moved].sort((a, b) => b[1] - a[1]).slice(0, 3);
+	const round3 = (n: number) => Math.round(n * 1000) / 1000;
+	// what made it move: the event just before the burst's biggest shift (within a quarter second)
+	const big = best.reduce((a, b) => (b.value > a.value ? b : a));
+	const WINDOW = 250;
+	const file = (u: string) => {
+		const q = u.indexOf('?');
+		const s = q === -1 ? u : u.slice(0, q);
+		return s.slice(s.lastIndexOf('/') + 1) || u;
+	};
+	type Cause = { at: number; kind: 'hole' | 'img' | 'font' | 'island'; name: string };
+	const causes: Cause[] = [];
+	for (const h of page.hole_waits ?? []) if (h.shown_at !== undefined) causes.push({ at: h.shown_at + h.wait_ms, kind: 'hole', name: h.name });
+	for (const r of page.visit?.resources ?? []) {
+		if (r.type === 'img') causes.push({ at: r.end, kind: 'img', name: file(r.url) });
+		else if (r.type === 'font') causes.push({ at: r.end, kind: 'font', name: file(r.url) });
+	}
+	for (const r of rows) causes.push({ at: r.done, kind: 'island', name: r.name });
+	let cause: Cause | undefined;
+	for (const c of causes) if (c.at <= big.t + 5 && big.t - c.at <= WINDOW && (!cause || c.at > cause.at)) cause = c;
+	const because =
+		!cause
+			? ''
+			: cause.kind === 'hole'
+				? ` It came right after ${cause.name.startsWith('the hole') ? cause.name : `the hole ${cause.name}`}'s answer swapped in: the answer is not the size of its fallback.`
+				: cause.kind === 'img'
+					? ` It came right after the image ${cause.name} arrived: it had no size set, so the page made room when it loaded.`
+					: cause.kind === 'font'
+						? ` It came right after the web font ${cause.name} arrived: text re-laid out in it.`
+						: ` It came right after ${cause.name} hydrated: the island's size changed as it woke.`;
+	const fix = !cause
+		? 'Nothing the page timed explains it: look for content added above what is on screen (a banner, an ad, a late script), or an animation that moves layout instead of `transform`.'
+		: cause.kind === 'hole'
+			? 'Give the hole a fallback the size of its answer (a placeholder with a fixed or `min-height`), so the swap changes nothing around it.'
+			: cause.kind === 'img'
+				? 'Set the image\'s `width` and `height` (or an `aspect-ratio`) so its space is kept before it loads.'
+				: cause.kind === 'font'
+					? 'Match the fallback font\'s metrics (`size-adjust`, `ascent-override`), or preload the font, so the swap does not move text.'
+					: 'Render the island at its final size on the server (the same content, or a placeholder of that height), so waking it changes nothing on screen.';
+	return {
+		message: `The worst burst of shifts added ${round3(best_sum)}, ${best.length === 1 ? 'in one shift' : `over ${best.length} shifts in ${Math.round(best[best.length - 1].t - best[0].t)} ms`}: what moved was ${list(top.map(([n, v]) => `${n} (${round3(v)})`))}.${because}`,
+		fix,
+		fps: [...new Set(best.map((s) => s.fp).filter((f): f is string => !!f))]
+	};
 }
 
 /** One long-frame script, told: `BusyTimer.svelte's planted_busy_timer (a timer, 400 ms)`. */

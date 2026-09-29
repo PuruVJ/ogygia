@@ -77,6 +77,8 @@ export interface VisitShift {
 	value: number;
 	/** the island whose node moved, when one did */
 	fp?: string;
+	/** the element that moved, told briefly */
+	tag?: string;
 	/** [x, y, w, h] before and after, in viewport px */
 	from?: [number, number, number, number];
 	to?: [number, number, number, number];
@@ -241,6 +243,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (t === undefined || value === undefined) continue;
 		const out: VisitShift = { t, value };
 		if (typeof s.fp === 'string' && FP_RE.test(s.fp)) out.fp = s.fp;
+		const tag = str(s.tag, 100);
+		if (tag) out.tag = tag;
 		const from = rect(s.from);
 		const to = rect(s.to);
 		if (from) out.from = from;

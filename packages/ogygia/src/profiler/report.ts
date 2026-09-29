@@ -470,7 +470,9 @@ export interface ReportExtras {
 	/** re-export barrels each island file still holds, with how many modules each brings */
 	barrels?: Record<string, { name: string; fanout: number }[]>;
 	/** the visit's own hole requests from the request log (made after the recording): server ms each */
-	hole_requests?: { id: string; ms: number }[];
+	/** `name`: the hole's component, from its own request (a hole the profiled render did not have —
+	 *  the visited page's query put it there — is named all the same) */
+	hole_requests?: { id: string; ms: number; name?: string }[];
 	/** the visit's in-app navigations, server side: the page request each one made (by its start `t`,
 	 *  the page clock) — its ms, the CPU it burned, its outbound calls */
 	nav_requests?: { t: number; ms: number; cpu_ms: number; net_ms: number; net_count: number; inflight?: number }[];
@@ -1215,7 +1217,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const hole_by_id = new Map((own_requests(meta).find((r) => r.og?.hole_rows?.length)?.og?.hole_rows ?? []).map((h) => [h.id, h]));
 		const hole_name = (id: string) => {
 			const h = hole_by_id.get(id);
-			return h ? hole_label(h) : `the hole ${id}`;
+			if (h) return hole_label(h);
+			const own = (extras.hole_requests ?? []).find((r) => r.id === id && r.name)?.name;
+			return own ?? `the hole ${id}`;
 		};
 		// (the hole's server render beside its browser wait: the visit's own requests of it, else
 		// the ones the recording holds, per request)
