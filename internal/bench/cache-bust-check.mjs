@@ -15,10 +15,14 @@
 //                fetched fresh and runs build 2 — none is left dead
 //   pre-hash   — a page from before content hashing (no `src`, the runtime by its stable name): the
 //                stable-name shims carry it to build 2's code
+//   refetched  — a proxy in front rewrites `_app/immutable/` to `no-cache`: a returning visitor's
+//                browser revalidates every file it has, and the profiler's report names them (the
+//                runtime first); the same visit straight to the server is quiet
 //
 //   node internal/bench/cache-bust-check.mjs            (builds twice: ~3 min)
 import fs from 'node:fs';
 import path from 'node:path';
+import http from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -64,14 +68,14 @@ function build(version, name = version) {
 	return { dir: out, entries: handoff.entries ?? {} };
 }
 
-async function serve(dir) {
+async function serve(dir, port = PORT) {
 	const child = spawn(process.execPath, [dir], {
-		env: { ...process.env, PORT: String(PORT), ORIGIN: BASE, OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef', OGYGIA_PROFILER_SECRET: PROFILER_KEY },
+		env: { ...process.env, PORT: String(port), ORIGIN: BASE, OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef', OGYGIA_PROFILER_SECRET: PROFILER_KEY },
 		stdio: 'ignore'
 	});
 	for (let i = 0; i < 60; i++) {
 		try {
-			await fetch(BASE + '/');
+			await fetch(`http://127.0.0.1:${port}/`);
 			return child;
 		} catch {
 			await new Promise((ok) => setTimeout(ok, 250));
@@ -233,6 +237,119 @@ try {
 		const second = await profile();
 		const isl = second?.since?.islands;
 		check('profiler: a second profile of one build keeps every island file (none changed)', !!isl && isl.moved.length === 0 && isl.kept >= 3 && !isl.all_moved, JSON.stringify(isl ?? second?.since ?? second?.error ?? null).slice(0, 200));
+	}
+
+	// ── refetched: a host that does not let the browser keep the content-named files ────────────
+	// The server moves behind a proxy on BASE that passes everything through and rewrites the
+	// `cache-control` of `_app/immutable/` to `no-cache` (a CDN rule or a custom server in front, as
+	// met in the field). A browser loads the page once (its cache fills), the profiler records it,
+	// and the browser comes back: every content-named file is revalidated (a 304 each), and the
+	// report's own visit (the first after the recording) must name them. The same, through a proxy
+	// that changes nothing, must be quiet: its files come from the cache.
+	{
+		await stop(server);
+		const INNER = PORT + 2;
+		server = await serve(two.dir, INNER);
+		const through = (rewrite) =>
+			http.createServer((req, res) => {
+				const up = http.request({ host: '127.0.0.1', port: INNER, path: req.url, method: req.method, headers: req.headers }, (r) => {
+					const headers = { ...r.headers };
+					if (rewrite && req.url.startsWith('/_app/immutable/')) {
+						headers['cache-control'] = rewrite;
+						// (`no-store`: a host that also drops the validators — nothing to revalidate with)
+						if (rewrite === 'no-store') {
+							delete headers.etag;
+							delete headers['last-modified'];
+						}
+					}
+					res.writeHead(r.statusCode ?? 502, headers);
+					r.pipe(res);
+				});
+				up.on('error', () => res.writeHead(502).end());
+				req.pipe(up);
+			});
+		const visit = async (rewrite, dir) => {
+			const proxy = through(rewrite);
+			await new Promise((ok) => proxy.listen(PORT, '127.0.0.1', ok));
+			const ctx = await chromium.launchPersistentContext(path.join(tmp, dir), { viewport: { width: 1280, height: 900 } });
+			// the profiler's own browser, logged in: the server adds its beacon to the page, and takes
+			// the beacon's posts (the session; the flag follows it)
+			await ctx.addCookies([
+				{ name: 'og_profiler', value: PROFILER_KEY, url: BASE },
+				{ name: 'og_profiler_beacon', value: '1', url: BASE }
+			]);
+			const p = await ctx.newPage();
+			const statuses = [];
+			p.on('response', (r) => r.url().includes('/_app/immutable/') && statuses.push(r.status()));
+			await p.goto(BASE + '/dt-cache', { waitUntil: 'load' });
+			await ran(p);
+			// (past the report's second of clock slack: else the warm-up visit reads as the report's own)
+			await p.waitForTimeout(1600);
+			const rec = await fetch(`${BASE}/__profiler/page?p=/dt-cache&runs=1&format=json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+			const id = rec?.id ?? rec?.report?.id ?? null;
+			// (a link, the return a visitor makes; with `no-store`, a reload: the browser had every
+			// file a moment ago)
+			statuses.length = 0;
+			if (rewrite === 'no-store') await p.reload({ waitUntil: 'load' });
+			else await p.goto(BASE + '/dt-cache', { waitUntil: 'load' });
+			await ran(p);
+			// what the browser itself saw, each URL once — the counts the report must quote: files that
+			// came back as a 304 (headers only, no body), and files that came down whole on a reload
+			const seen = await p.evaluate(() => {
+				const re = new Set();
+				const down = new Set();
+				const reload = performance.getEntriesByType('navigation')[0].type === 'reload';
+				for (const r of performance.getEntriesByType('resource')) {
+					if (!r.name.includes('/_app/immutable/') || !(r.transferSize > 0)) continue;
+					if (r.encodedBodySize === 0) re.add(r.name);
+					else if (reload && r.transferSize >= r.encodedBodySize) down.add(r.name);
+				}
+				return { revalidated: re.size, downloaded: down.size };
+			});
+			// (the beacon posts its visit on the page's hide)
+			await p.goto('about:blank');
+			let finding = null;
+			let report = null;
+			for (let i = 0; i < 10 && id && !finding; i++) {
+				await new Promise((ok) => setTimeout(ok, 700));
+				report = await fetch(`${BASE}/__profiler/report/${id}.json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+				finding = report?.findings?.find((f) => f.code === 'files-fetched-again')?.message ?? null;
+			}
+			await ctx.close();
+			await new Promise((ok) => proxy.close(ok));
+			return {
+				id,
+				finding,
+				has_visit: !!report?.browser?.visit,
+				not_modified: statuses.filter((s) => s === 304).length,
+				loads: statuses.length,
+				seen
+			};
+		};
+		const planted = await visit('no-cache', 'profile-refetch');
+		check(
+			'refetched: the return visit revalidated the content-named files (304s)',
+			planted.not_modified >= 4,
+			`${planted.not_modified} of ${planted.loads} immutable requests answered 304`
+		);
+		// every file the browser revalidated is counted, each once (a 304 is headers only, no body:
+		// the shape the beacon reads), and no island is left as a file name
+		check(
+			'refetched: the profiler report counts every file the browser revalidated, islands by name',
+			planted.seen.revalidated >= 4 && !!planted.finding && planted.finding.includes(`${planted.seen.revalidated} were revalidated with the server (`) && !planted.finding.includes('og-region.'),
+			JSON.stringify({ seen: planted.seen, id: planted.id, finding: planted.finding?.slice(0, 260) ?? null })
+		);
+		// a host that sends `no-store` and no validators: on a reload every file comes down whole
+		const stored = await visit('no-store', 'profile-refetch-store');
+		check(
+			'refetched: `no-store` — on a reload the report counts every file that came down again, with its bytes',
+			stored.seen.downloaded >= 4 && stored.seen.revalidated === 0 && !!stored.finding && stored.finding.includes(`${stored.seen.downloaded} came down again on this reload (`) && stored.finding.includes('KB)') && !stored.finding.includes('og-region.'),
+			JSON.stringify({ seen: stored.seen, finding: stored.finding?.slice(0, 260) ?? null })
+		);
+		const clean = await visit(null, 'profile-refetch-clean');
+		check('refetched: served as built (immutable), the same return visit is quiet', !!clean.id && clean.has_visit && !clean.finding && clean.not_modified === 0, JSON.stringify(clean));
+		await stop(server);
+		server = await serve(two.dir);
 	}
 
 	// ── a page from before content hashing ──────────────────────────────────────────────────────

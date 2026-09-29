@@ -275,8 +275,9 @@ export function read_page(): PageView | null {
 	// live page already holds the script elements other scripts added — so parse time decides)
 	// (an island whose own file was gone, named as every tab names it)
 	const fallbacks = base.visit?.entry_fallbacks?.map((f) => ({ ...f, name: region_name(f.entry) }));
+	const refetched = base.visit?.refetched?.map((f) => (f.entry ? { ...f, name: region_name(f.entry) } : f));
 	const with_visit: PageInput = base.visit
-		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}) } }
+		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}) } }
 		: base;
 	const holes = hole_failures();
 	const code = island_code();

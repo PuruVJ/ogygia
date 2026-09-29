@@ -154,6 +154,33 @@ test("an island whose own file was gone reaches the report, named from the islan
 	expect(g?.message).toContain('Menu woke on the current build');
 });
 
+test('content-named files fetched again reach the report, named from the island rows, even with no island awake', () => {
+	const entry = rows[0]?.entry ?? '/_app/immutable/og-region.0123456789ab.js';
+	const v = parse_visit('/lab', {
+		...raw,
+		islands: [],
+		refetched: [
+			{ url: 'https://a.test/_app/immutable/og-region.0123456789ab.Hh12Kk34.js', how: 'revalidated', bytes: 0, ms: 20, entry },
+			{ url: 'https://a.test/_app/immutable/og-runtime.Zz99.js', how: 'revalidated', bytes: 0, ms: 35, runtime: true },
+			{ url: 'https://a.test/x.js', how: 'cached', bytes: 1 },
+			{ url: 7 }
+		]
+	})!;
+	expect(v.refetched).toHaveLength(2);
+	expect(merge_visits(v, { ...v, refetched: undefined }).refetched).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'files-fetched-again');
+	expect(f?.message).toContain('In the browser: The browser asked the server again for 2 files it already had');
+	expect(f?.message).toContain(`(the runtime and ${rows[0]?.name ?? 'og-region.0123456789ab.Hh12Kk34.js'})`);
+	// an island a hole's answer carried: the page's render never saw it, so it is named by its hole
+	const in_hole = parse_visit('/lab', {
+		...raw,
+		refetched: [{ url: 'https://a.test/_app/immutable/og-region.fedcba987654.Qq11.js', how: 'revalidated', bytes: 0, ms: 9, entry: './_app/immutable/og-region.fedcba987654.js', hole: '040dd4f0cdb2' }]
+	})!;
+	expect(in_hole.refetched?.[0].hole).toBe('040dd4f0cdb2');
+	const g = browser_findings(browser_page_report(in_hole, rows, undefined, undefined, (id) => (id === '040dd4f0cdb2' ? 'HoleProbe' : `the hole ${id}`))).find((x) => x.code === 'files-fetched-again');
+	expect(g?.message).toContain('(the island in HoleProbe)');
+});
+
 test('a preload downloaded again reaches the report, even on a page with no island', () => {
 	const v = parse_visit('/lab', {
 		...raw,

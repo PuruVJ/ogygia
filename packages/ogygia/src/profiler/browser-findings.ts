@@ -57,7 +57,7 @@ export function browser_page_report(
 	hole_server?: (id: string) => number | undefined
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to
@@ -96,6 +96,17 @@ export function browser_page_report(
 			// (named from the report's island rows, by the identity each one carries)
 			...(visit.entry_fallbacks
 				? { entry_fallbacks: visit.entry_fallbacks.map((f) => ({ ...f, name: named(f.entry) })) }
+				: {}),
+			// (an island known from the page's render by its name; one a hole's answer carried — the
+			// page's render never saw it — as the island in that hole)
+			...(visit.refetched
+				? {
+						refetched: visit.refetched.map((f) => {
+							if (!f.entry) return f;
+							const own = by_entry.get(f.entry) ?? by_file.get(file_of(f.entry));
+							return { ...f, name: own ?? (f.hole && hole_name ? `the island in ${hole_name(f.hole)}` : named(f.entry)) };
+						})
+					}
 				: {}),
 			...(third ? { origin: third.origin, ...(third.named ? { named: third.named } : {}) } : {})
 		},

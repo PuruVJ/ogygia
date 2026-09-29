@@ -174,6 +174,35 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('content-named files fetched again: revalidated (a round trip each) and downloaded on a reload, heaviest named first', () => {
+		const re = (file: string, how: 'revalidated' | 'downloaded', bytes: number, ms: number, extra: object = {}) => ({ url: `https://a.test/_app/immutable/${file}`, how, bytes, ms, ...extra });
+		const f = analyze_page(
+			page({
+				visit: {
+					refetched: [
+						// (Chrome reports a 304 with no body: bytes 0)
+						re('og-region.a.Hh12.js', 'revalidated', 0, 40, { entry: '/_app/immutable/og-region.a.js', name: 'Probe' }),
+						re('og-runtime.Kk34.js', 'revalidated', 0, 60, { runtime: true }),
+						re('chunks/B1c2.js?v=1', 'revalidated', 3000, 30),
+						re('og-region.b.Mm56.js', 'downloaded', 20480, 90, { name: 'Heavy' })
+					]
+				}
+			}),
+			[],
+			[],
+			2000
+		).findings.find((x) => x.code === 'files-fetched-again')!;
+		expect(f.severity).toBe('warn');
+		expect(f.message).toContain('asked the server again for 4 files it already had');
+		// slowest first; the requests overlap, so the slowest is quoted, never the sum
+		expect(f.message).toContain('3 were revalidated with the server (the runtime, Probe and B1c2.js): a round trip each, the slowest 60 ms, for files that cannot change');
+		expect(f.message).toContain('one came down again on this reload (Heavy, 20 KB) though the browser had just loaded it');
+		expect(f.fix).toContain('max-age=31536000, immutable');
+		const one = analyze_page(page({ visit: { refetched: [re('x.js', 'revalidated', 900, 12)] } }), [], [], 2000).findings.find((x) => x.code === 'files-fetched-again')!;
+		expect(one.message).toContain('for a file it already had: one was revalidated with the server (x.js): a round trip each (12 ms), for a file that cannot change');
+		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('files-fetched-again');
+	});
+
 	it('a preload the browser could not use, and paid for twice: named, with the fix for its kind', () => {
 		const miss = (url: string, type: string, crossorigin: string | null, bytes = 20480) => ({ url, type, bytes, as: type === 'css' ? 'style' : type, crossorigin });
 		const r = analyze_page(

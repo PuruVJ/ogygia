@@ -316,6 +316,7 @@ The visit the beacon sends is read with the same analysis as the devtools [Page 
 - long tasks outside any hydration
 - a file that was preloaded and then downloaded again, because the preload did not match the request
 - an island whose own file was gone, so the page (from a cache that outlived its build) ran it on the current build's code
+- content-named files (under `_app/immutable/`) the browser asked for again though it had them. Either each was revalidated (a round trip, answered 304), or on a reload it came down whole. The host did not let the browser keep them. Islands are named, and an island that came inside a hole's answer is named by its hole. A first visit's downloads never count.
 - a hole whose answer never came, and why (a redirect, a whole page, a failed request)
 - a first-screen hole that showed its fallback for a second or more. The report adds how much of that wait was the hole's server render. It finds the hole's own requests in the server's request log, since the browser makes them after the recording ends. When the render is most of the wait, the fix is on the server. It also splits out time waiting for a render slot (a server process renders 4 holes at a time) and time before the request left. When the server answered quickly, the request started late or was held on its way.
 

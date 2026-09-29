@@ -51,6 +51,9 @@ export interface PageInput {
 		/** islands whose own file failed to load and fell back to their stable name (the page came
 		 *  from a build whose files are gone); `name` when the reader could name the island */
 		entry_fallbacks?: { entry: string; src: string; recovered: boolean; name?: string }[];
+		/** content-named files the browser fetched again (revalidated, or downloaded on a reload);
+		 *  `name` when the reader could name the island */
+		refetched?: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; runtime?: boolean; name?: string }[];
 	} | null;
 	islands: PageIsland[];
 	firsts: { fp: string; t: number; type: string }[];
@@ -778,6 +781,38 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: dead.length ? 'error' : 'warn',
 			message: `${gone.length === 1 ? 'An island' : `${gone.length} islands`} could not load ${gone.length === 1 ? 'its own file' : 'their own files'} (${list(gone.map((f) => f.src.slice(f.src.lastIndexOf('/') + 1)))}): this page came from a cache that outlived the build that made it. ${parts.join('. ')}.`,
 			fix: "Keep the previous build's `_app/immutable/` files as long as your HTML stays cached (a CDN, a service worker) — a cached page then runs its own build throughout — or purge the cached HTML when you deploy.",
+			fps: []
+		});
+	}
+
+	// ── content-named files fetched again: the host does not let the browser keep them ──
+	const again = page.visit?.refetched ?? [];
+	if (again.length) {
+		const name = (f: (typeof again)[number]) => {
+			if (f.name) return f.name;
+			if (f.runtime) return 'the runtime';
+			const q = f.url.indexOf('?');
+			const p = q === -1 ? f.url : f.url.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1);
+		};
+		// the costliest first, so the names that fit are the files that cost most: a revalidation's
+		// cost is its round trip (a 304 reports no body), a download's its bytes
+		const revalidated = again.filter((f) => f.how === 'revalidated').sort((a, b) => b.ms - a.ms);
+		const downloaded = again.filter((f) => f.how === 'downloaded').sort((a, b) => b.bytes - a.bytes);
+		const parts: string[] = [];
+		if (revalidated.length) {
+			// (the requests overlap: the slowest is what the page waited, not their sum)
+			parts.push(
+				`${revalidated.length === 1 ? 'one was' : `${revalidated.length} were`} revalidated with the server (${list(revalidated.map(name))}): a round trip each${revalidated.length === 1 ? ` (${Math.round(revalidated[0].ms)} ms)` : `, the slowest ${Math.round(revalidated[0].ms)} ms`}, for ${revalidated.length === 1 ? 'a file' : 'files'} that cannot change`
+			);
+		}
+		if (downloaded.length)
+			parts.push(`${downloaded.length === 1 ? 'one' : downloaded.length} came down again on this reload (${list(downloaded.map(name))}, ${kb(downloaded.reduce((a, f) => a + f.bytes, 0))}) though the browser had just loaded ${downloaded.length === 1 ? 'it' : 'them'}`);
+		findings.push({
+			code: 'files-fetched-again',
+			severity: 'warn',
+			message: `The browser asked the server again for ${again.length === 1 ? 'a file it already had' : `${again.length} files it already had`}: ${parts.join('; ')}. Their names change with their content, so a browser can keep them for good.`,
+			fix: "Serve `_app/immutable/` with `cache-control: public, max-age=31536000, immutable` (SvelteKit's adapters do; a proxy, a CDN rule or a custom server in front can override it). The devtools Page tab shows the header the host sends.",
 			fps: []
 		});
 	}

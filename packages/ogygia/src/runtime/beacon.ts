@@ -304,6 +304,8 @@ let seen_resources: PerformanceResourceTiming[] = [];
 const MAX_SEEN_RESOURCES = 3000;
 /** the files a visit lists one by one (the rest are in its totals by type) */
 const MAX_DETAIL_RESOURCES = 200;
+/** content-named files fetched again, at most (a page's own; the count past it is not worth more) */
+const MAX_REFETCHED = 40;
 
 function observe_vitals(): void {
 	if (vitals || typeof PerformanceObserver === 'undefined') return;
@@ -488,6 +490,7 @@ function build_visit(): Record<string, unknown> | null {
 	const preload_misses: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[] = [];
 	const type_of = (r: PerformanceResourceTiming): string => resource_type(ext_of(r.name), r.initiatorType, link_as.get(r.name));
 	let resources: Record<string, unknown>[] = [];
+	const refetched: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; hole?: string; runtime?: true }[] = [];
 	// every file by type (the counts and bytes of ALL of them), next to the first 200 in detail
 	const totals = new Map<string, { type: string; count: number; transfer: number; size: number }>();
 	let all_n = 0;
@@ -515,6 +518,50 @@ function build_visit(): Record<string, unknown> | null {
 			const pre = list.find((r) => r.initiatorType === 'link');
 			const again = list.find((r) => r !== pre && r.initiatorType !== 'link' && r.encodedBodySize > 0 && r.transferSize >= r.encodedBodySize);
 			if (pre && again) preload_misses.push({ url: url.slice(0, 500), type: type_of(pre), bytes: again.transferSize, as: link_as.get(url) ?? '', crossorigin: link_co.get(url) ?? null });
+		}
+		// CONTENT-NAMED FILES FETCHED AGAIN: a file under `/immutable/` is named by its content, so a
+		// browser that has it should never ask again. Revalidated (a 304: the body came from the cache
+		// but the headers from the server, so the transfer is smaller than the body) means the host
+		// did not let the browser keep it (its bytes are unknown then: a 304 reports no body, so the
+		// cost is the round trip); downloaded in full on a reload means the same, only worse
+		// (the browser had it a moment ago). A first visit's downloads say nothing, and are left out.
+		// (a cross-origin file without Timing-Allow-Origin reports zeros: it is never counted)
+		const reload = nav!.type === 'reload';
+		const origin = location.origin;
+		// each island's location → its identity, and the hole whose answer carried it (the server's
+		// render of the page never saw that island, so the report names it by its hole)
+		const entry_of = new Map<string, { entry: string; hole?: string }>();
+		for (const el of document.querySelectorAll('ogygia-region[src][entry]')) {
+			const src = el.getAttribute('src')!;
+			try {
+				const host = el.parentElement?.closest('ogygia-region[endpoint]');
+				const hole = host ? (new URL(host.getAttribute('endpoint')!, location.href).searchParams.get('id') ?? '') : '';
+				entry_of.set(new URL(src, document.baseURI).href, { entry: el.getAttribute('entry')!, ...(hole ? { hole: hole.slice(0, 40) } : {}) });
+			} catch {
+				/* not a URL */
+			}
+		}
+		const runtime_src = (document.querySelector('script[data-ogygia-runtime]') as HTMLScriptElement | null)?.src ?? '';
+		const counted = new Set<string>();
+		for (const r of all) {
+			if (refetched.length >= MAX_REFETCHED || counted.has(r.name) || !r.name.startsWith(origin) || !r.name.includes('/immutable/')) continue;
+			const body = r.encodedBodySize;
+			if (!(r.transferSize > 0)) continue;
+			// Chrome reports a 304 as headers only (transfer ~300 B) with NO body (0: the body came from
+			// the cache); a browser that reports the cached body has a transfer under it. A full download
+			// has both, the transfer at least the body.
+			const how = body === 0 || r.transferSize < body ? 'revalidated' : reload ? 'downloaded' : null;
+			if (!how) continue;
+			counted.add(r.name);
+			const island = entry_of.get(r.name);
+			refetched.push({
+				url: r.name.slice(0, 500),
+				how,
+				bytes: body,
+				ms: r2(r.duration),
+				...(island ? { entry: island.entry.slice(0, 300), ...(island.hole ? { hole: island.hole } : {}) } : {}),
+				...(r.name === runtime_src ? { runtime: true } : {})
+			});
 		}
 		// the detail: every render-blocking file (they explain the first paint), then the earliest
 		const blocking = (r: PerformanceResourceTiming) => (r as { renderBlockingStatus?: string }).renderBlockingStatus === 'blocking';
@@ -561,6 +608,7 @@ function build_visit(): Record<string, unknown> | null {
 		resources,
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),
+		...(refetched.length ? { refetched } : {}),
 		longtasks: visit_longtasks,
 		islands: visit_islands,
 		firsts: visit_firsts,
