@@ -174,6 +174,20 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('the first paint, explained (slow-fcp): first byte, the HTML, what blocked it, the rest; the fix for the costliest', () => {
+		const run = (over: object, fcp = 2400) => analyze_page(page({ vitals: { fcp }, ...over } as never), [], [], 9000).findings.find((f) => f.code === 'slow-fcp');
+		const css = run({ visit: { ...page().visit!, nav: { res_start: 100, res_end: 150 }, paints: { fcp: 2400 }, resources: [{ url: 'https://a.test/slow.css?v=1', type: 'css', start: 160, end: 2360, blocking: true }, { url: 'https://a.test/quick.css', type: 'css', start: 160, end: 300, blocking: true }] } })!;
+		expect(css.message).toBe('FCP is 2400 ms (needs work; good is ≤ 1800 ms). The first paint came after 100 ms until the HTML\'s first byte, 50 ms downloading the HTML, 2210 ms waiting for 2 files that block the paint (the slowest slow.css, 2200 ms), 40 ms more before it painted.');
+		expect(css.fix).toMatch(/^The paint waits for slow.css/);
+		// the main thread busy after everything arrived
+		const busy = run({ visit: { ...page().visit!, nav: { res_start: 100, res_end: 150 }, paints: { fcp: 2400 }, resources: [] }, longtasks: [{ t: 300, ms: 1900 }] })!;
+		expect(busy.message).toContain('2250 ms more before it painted (1900 ms of it long tasks)');
+		expect(busy.fix).toMatch(/^Everything had arrived, but the main thread was busy/);
+		// the first byte, and the HTML's download, the costliest
+		expect(run({ visit: { ...page().visit!, nav: { res_start: 2000, res_end: 2050 }, paints: { fcp: 2400 }, resources: [] } })!.fix).toMatch(/^The server's first byte is most of it/);
+		expect(run({ visit: { ...page().visit!, nav: { res_start: 100, res_end: 2100 }, paints: { fcp: 2400 }, resources: [] } })!.fix).toMatch(/^The HTML itself is slow to arrive/);
+	});
+
 	it('the first byte, explained (slow-ttfb): each step before it, the server’s Server-Timing, the fix for the costliest', () => {
 		const run = (phases: object, server_timing?: object[]) => analyze_page(page({ vitals: { ttfb: 1500 }, visit: { ...page().visit!, nav: { res_start: 1500, phases, ...(server_timing ? { server_timing } : {}) } as never } }), [], [], 9000).findings.find((f) => f.code === 'slow-ttfb');
 		const server = run({ dns: 12, connect: 20, tls: 30, wait: 1400 }, [{ name: 'render', ms: 250, desc: 'the page render' }, { name: 'db', ms: 900, desc: 'the database' }])!;

@@ -683,12 +683,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 						? explain_cls(page, rows, name_of)
 						: v.key === 'ttfb'
 							? explain_ttfb(page)
-							: null;
+							: v.key === 'fcp'
+								? explain_fcp(page)
+								: null;
 		// (the slowest interaction, the largest paint and the worst shifts, explained, are their own
 		// findings in place of the bare vital: the profiler words the vitals from all its visits, and
 		// keeps this visit's why)
 		findings.push({
-			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : v.key === 'ttfb' ? 'slow-ttfb' : 'shift-cause') : `vital-${v.key}`,
+			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : v.key === 'ttfb' ? 'slow-ttfb' : v.key === 'fcp' ? 'slow-fcp' : 'shift-cause') : `vital-${v.key}`,
 			severity: v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
@@ -1122,6 +1124,46 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 					? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
 					: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
 	return { message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.`, fix, fps: p?.lcp_fp ? [p.lcp_fp] : [] };
+}
+
+/**
+ * THE FIRST PAINT, EXPLAINED: its four parts — the wait for the HTML's first byte, the HTML's own
+ * download, the files that blocked the paint after it (stylesheets, classic scripts in the head:
+ * the slowest named), and the rest before the paint (the main thread busy: long tasks before it).
+ * The fix is the costliest part's.
+ */
+function explain_fcp(page: PageInput): { message: string; fix: string; fps: string[] } | null {
+	const nav = page.visit?.nav as { res_start?: number; res_end?: number } | undefined;
+	const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp;
+	if (typeof fcp !== 'number' || typeof nav?.res_start !== 'number') return null;
+	const first = nav.res_start;
+	const html_end = Math.max(first, nav.res_end ?? first);
+	const blockers = (page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp);
+	const blocked_until = blockers.reduce((m, r) => Math.max(m, r.end), html_end);
+	const slowest = blockers.reduce<(typeof blockers)[number] | undefined>((a, r) => (!a || r.end - r.start > a.end - a.start ? r : a), undefined);
+	const busy = page.longtasks.filter((t) => t.t < fcp && t.t + t.ms > blocked_until).reduce((a, t) => a + Math.min(t.t + t.ms, fcp) - Math.max(t.t, blocked_until), 0);
+	const ms = (n: number) => `${Math.round(Math.max(0, n))} ms`;
+	const file = (u: string) => {
+		const q = u.indexOf('?');
+		const s = q === -1 ? u : u.slice(0, q);
+		return s.slice(s.lastIndexOf('/') + 1) || u;
+	};
+	const parts = [
+		{ key: 'ttfb', ms: first, text: `${ms(first)} until the HTML's first byte` },
+		{ key: 'html', ms: html_end - first, text: `${ms(html_end - first)} downloading the HTML` },
+		{ key: 'blocking', ms: blocked_until - html_end, text: `${ms(blocked_until - html_end)} waiting for ${blockers.length === 1 ? 'a file that blocks' : `${blockers.length} files that block`} the paint${slowest ? ` (the slowest ${file(slowest.url)}, ${ms(slowest.end - slowest.start)})` : ''}` },
+		{ key: 'render', ms: fcp - blocked_until, text: `${ms(fcp - blocked_until)} more before it painted${busy >= 50 ? ` (${ms(busy)} of it long tasks)` : ''}` }
+	].filter((p) => p.ms >= 1 || p.key === 'ttfb');
+	const top = parts.reduce((a, b) => (b.ms > a.ms ? b : a));
+	const fix =
+		top.key === 'ttfb'
+			? "The server's first byte is most of it: see the first-byte finding (and the profiler's report of this page) for where the server's time went."
+			: top.key === 'html'
+				? 'The HTML itself is slow to arrive: send less of it (render below-the-fold parts later, trim inline data), and make sure it is compressed.'
+				: top.key === 'blocking'
+					? `The paint waits for ${slowest ? file(slowest.url) : 'blocking files'}: inline the few rules the first screen needs and load the rest without blocking, and give scripts in the head \`defer\` or \`type="module"\`.`
+					: 'Everything had arrived, but the main thread was busy: a script ran before the first paint. Move it after (defer it, or run it on idle).';
+	return { message: `The first paint came after ${parts.map((p) => p.text).join(', ')}.`, fix, fps: [] };
 }
 
 /**

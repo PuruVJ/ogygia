@@ -483,6 +483,38 @@ async function ttfb_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE FIRST PAINT, EXPLAINED (/dt-fcp): a head stylesheet answered in 2.4 s blocks it — named as
+ *  the costliest part, with the non-blocking fix, in the Page tab and the profiler's report. */
+async function fcp_run(browser) {
+	const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-fcp')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+	await page.goto(base + '/dt-fcp', { waitUntil: 'load' });
+	await page.waitForTimeout(1500);
+	const tab = await page.evaluate(() => {
+		const f = window.__ogygia_page?.()?.report.findings.find((x) => x.code === 'slow-fcp');
+		return f ? { message: f.message, fix: f.fix } : null;
+	});
+	await page.goto('about:blank');
+	await page.waitForTimeout(300);
+	await page.close();
+	let report = null;
+	for (let i = 0; i < 10 && report_id && !report; i++) {
+		await new Promise((ok) => setTimeout(ok, 1000));
+		const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+		const f = (j?.findings ?? []).find((x) => x.code === 'slow-fcp');
+		report = f ? { message: f.message, fix: f.fix } : null;
+	}
+	const by_css = (f) => !!f && f.message.includes('waiting for a file that blocks the paint (the slowest slow.css') && f.fix.startsWith('The paint waits for slow.css');
+	const checks = [
+		['the blocking stylesheet named, the costliest part', by_css(tab)],
+		['the profiler report: the same', !report_id || by_css(report)]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} first paint: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ tab, report })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -946,7 +978,7 @@ try {
 	// over the lab pages, unmeasured, before any run.
 	{
 		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls', '/dt-ttfb?fast']) {
+		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls', '/dt-ttfb?fast', '/dt-fcp']) {
 			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
 			await warm.waitForTimeout(700);
 		}
@@ -1060,6 +1092,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let fcp_ok = 0;
+	for (let i = 0; i < repeat; i++) fcp_ok += await fcp_run(browser);
+	if (fcp_ok < repeat) failed = true;
+	console.log(`${fcp_ok === repeat ? '✓' : '✗'} the first paint, explained: ${fcp_ok}/${repeat}`);
 	let ttfb_ok = 0;
 	for (let i = 0; i < repeat; i++) ttfb_ok += await ttfb_run(browser);
 	if (ttfb_ok < repeat) failed = true;
