@@ -65,6 +65,8 @@ export interface VisitRegion {
 	hydrated?: boolean;
 	/** it threw while it loaded or mounted: the error */
 	failed?: string;
+	/** a failed island's wake → its failure (page clock) */
+	failed_span?: [number, number];
 	/** document px */
 	top: number;
 	height: number;
@@ -266,7 +268,13 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (wake) out.wake = wake;
 		if (r.defer === true) out.defer = true;
 		if (r.hydrated === true) out.hydrated = true;
-		if (typeof r.failed === 'string') out.failed = r.failed.slice(0, 300);
+		if (typeof r.failed === 'string') {
+			out.failed = r.failed.slice(0, 300);
+			// (its wake → its failure: it was loading, holding the others' turns, meanwhile)
+			const s = r.failed_span;
+			if (Array.isArray(s) && s.length === 2 && typeof s[0] === 'number' && typeof s[1] === 'number' && s[0] >= 0 && s[1] >= s[0] && s[1] < MAX_MS)
+				out.failed_span = [s[0], s[1]];
+		}
 		regions.push(out);
 	}
 	if (regions.length) visit.regions = regions;

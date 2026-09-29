@@ -82,7 +82,16 @@ export function failures(since = last_nav()?.t ?? -Infinity): Failure[] {
 			if (seen.has(key)) continue;
 			if (e.t < since && !(e.fp && document.querySelector(`ogygia-region[data-og-fp="${CSS.escape(e.fp)}"]:not([data-hydrated])`))) continue;
 			seen.add(key);
-			out.push({ fp: e.fp, message: e.message });
+			// its wake (the start event before it): the span it was loading, holding the others' turns
+			let start: number | undefined;
+			for (let j = i - 1; j >= 0 && e.fp; j--) {
+				const s = ev[j];
+				if (s.name === 'region.hydrate.start' && s.fp === e.fp) {
+					start = s.t;
+					break;
+				}
+			}
+			out.push({ fp: e.fp, message: e.message, ...(start !== undefined ? { span: [start, e.t] as [number, number] } : {}) });
 		}
 	}
 	return out;

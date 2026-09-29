@@ -171,6 +171,8 @@ export interface RegionFact {
 export interface Failure {
 	fp?: string;
 	message: string;
+	/** its wake → the failure (page clock): the island was loading, and held its turn, meanwhile */
+	span?: [number, number];
 }
 
 export type Rating = 'good' | 'fair' | 'poor';
@@ -455,15 +457,41 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			}
 		}
 		const top = [...ahead].sort((x, y) => y[1] - x[1]).slice(0, 3);
+		// what a below-the-fold island was HELD for: a first-screen island still loading its code in
+		// the wait (viewport first holds the ready ones below it, up to a second) — a failed one too
+		const held_for = new Map<string, { ms: number; failed: boolean }>();
+		for (const q of queued) {
+			if (!q.below_fold) continue;
+			const a = q.t0 + q.load_ms;
+			const b = a + (q.queue_ms ?? 0);
+			const spans: { name: string; s: number; e: number; failed: boolean }[] = rows.filter((o) => o !== q && !o.below_fold).map((o) => ({ name: o.name, s: o.t0, e: o.t0 + o.load_ms, failed: false }));
+			for (const f of failures) {
+				if (!f.span || !f.fp) continue;
+				const top_px = by_fp.get(f.fp)?.top;
+				if (typeof top_px === 'number' && vh && top_px >= vh) continue;
+				spans.push({ name: name_of(f.fp), s: f.span[0], e: f.span[1], failed: true });
+			}
+			for (const sp of spans) {
+				const hit = Math.min(b, sp.e) - Math.max(a, sp.s);
+				if (hit >= 50) held_for.set(sp.name, { ms: Math.max(held_for.get(sp.name)?.ms ?? 0, hit), failed: sp.failed });
+			}
+		}
+		const holders = [...held_for].sort((x, y) => y[1].ms - x[1].ms).slice(0, 3);
+		const held_ms = holders[0]?.[1].ms ?? 0;
 		findings.push({
 			code: 'queued',
 			severity: 'info',
 			message:
 				`${list(queued.map((r) => `${r.name} (${r.queue_ms} ms)`))} had its code but waited for its turn` +
-				(top.length && top[0][1] >= 10
-					? `, behind ${list(top.map(([n, m]) => `${n} (${Math.round(m)} ms)`))}: islands hydrate one per task, viewport first.`
-					: ': islands hydrate after the page is parsed and painted, one per task, viewport first.'),
-			fix: 'The islands ahead of it are the cost. Make them lighter, or move islands that are not needed at load to wake=\'visible\' or \'idle\'.',
+				(holders.length && held_ms >= (top[0]?.[1] ?? 0)
+					? `, held for ${list(holders.map(([n, h]) => `${n} (${Math.round(h.ms)} ms${h.failed ? ', which then failed' : ''})`))} on the first screen, still loading ${holders.length === 1 ? 'its' : 'their'} code: viewport first, the islands a visitor sees wake before the ones below.`
+					: top.length && top[0][1] >= 10
+						? `, behind ${list(top.map(([n, m]) => `${n} (${Math.round(m)} ms)`))}: islands hydrate one per task, viewport first.`
+						: ': islands hydrate after the page is parsed and painted, one per task, viewport first.'),
+			fix:
+				holders.length && held_ms >= (top[0]?.[1] ?? 0)
+					? `The first-screen island${holders.length === 1 ? '' : 's'} loading slowly ${holders.length === 1 ? 'is' : 'are'} the cost: make ${holders.length === 1 ? 'its' : 'their'} code smaller or faster to load${holders.some(([, h]) => h.failed) ? ' (and fix the one that failed)' : ''}. The hold is bounded (a second), so a module that never comes cannot stall the rest.`
+					: 'The islands ahead of it are the cost. Make them lighter, or move islands that are not needed at load to wake=\'visible\' or \'idle\'.',
 			fps: queued.map((r) => r.fp)
 		});
 	}
@@ -493,6 +521,16 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				busy.push([steps[i][0], steps[i][1]]);
 				if (r.below_fold && !o.below_fold) busy.push([o.t0, o.t0 + o.load_ms]);
 			}
+			// …and a first-screen island that FAILED: it is no row (it never hydrated), but it was
+			// loading from its wake to its failure, and the scheduler held this one for it meanwhile
+			// (a slow first compile of the failing island read as ogygia's own wait)
+			if (r.below_fold)
+				for (const f of failures) {
+					if (!f.span || !f.fp) continue;
+					const top = by_fp.get(f.fp)?.top;
+					if (typeof top === 'number' && vh && top >= vh) continue;
+					busy.push([f.span[0], f.span[1]]);
+				}
 			busy.sort((x, y) => x[0] - y[0]);
 			let covered = 0;
 			let at = a;

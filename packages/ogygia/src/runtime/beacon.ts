@@ -871,13 +871,17 @@ function make_profiler(): SelfProfiler | null {
 /** islands that failed to hydrate (never `data-hydrated`), with the error: the CPU window does not
  *  wait for them, and the visit reports them */
 const failed_fps = new Map<string, string>();
-export function beacon_failed(el: Element, message?: string): void {
+export function beacon_failed(el: Element, message?: string, since?: number): void {
 	const o = owner();
-	if (o) return o.beacon_failed(el, message);
+	if (o) return o.beacon_failed(el, message, since);
 	if (!collecting()) return;
 	const fp = el.getAttribute('data-og-fp');
-	if (fp) failed_fps.set(fp, (message ?? '').slice(0, 300));
+	if (!fp) return;
+	failed_fps.set(fp, (message ?? '').slice(0, 300));
+	// its wake → now: it was loading (and held the turns of islands below the fold) meanwhile
+	if (typeof since === 'number') failed_spans.set(fp, [r2(since), r2(performance.now())]);
 }
+const failed_spans = new Map<string, [number, number]>();
 
 const MEASURED_TYPES = ['layout-shift', 'longtask', 'event', 'largest-contentful-paint', 'long-animation-frame'];
 /** `{ unsupported: [...] }` for the entry types this browser cannot observe, or `{}`. */
@@ -919,7 +923,7 @@ function visit_regions(): Record<string, unknown>[] {
 				...(el.getAttribute('wake') ? { wake: el.getAttribute('wake')! } : {}),
 				...(el.getAttribute('render') === 'defer' ? { defer: true } : {}),
 				...(el.hasAttribute('data-hydrated') ? { hydrated: true } : {}),
-				...(failed !== undefined ? { failed } : {}),
+				...(failed !== undefined ? { failed, ...(failed_spans.has(fp) ? { failed_span: failed_spans.get(fp) } : {}) } : {}),
 				top: Math.round(box.top + sy),
 				height: Math.round(box.height)
 			});
@@ -1306,6 +1310,7 @@ export function _reset_beacon(): void {
 	icpu_caught = null;
 	opted = undefined;
 	failed_fps.clear();
+	failed_spans.clear();
 	seen_resources = [];
 	visit_islands = [];
 	visit_firsts = [];

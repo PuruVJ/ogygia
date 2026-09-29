@@ -593,6 +593,42 @@ async function inp_cpu_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** HELD FOR A FAILING ISLAND (/dt-held): a first-screen island whose module takes 700 ms and then
+ *  throws, and a ready island below the fold the scheduler holds for it (viewport first). The wait
+ *  is explained: `held-idle` (ogygia's own unexplained wait) must stay quiet, and `queued` must say
+ *  what it was held for — in the Page tab and in the profiler's report of the same visit. */
+async function held_fail_run(browser) {
+	const rec = await fetch(`${base}/__profiler/page?p=/dt-held&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+	await page.goto(base + '/dt-held', { waitUntil: 'load' });
+	await page.waitForTimeout(3000);
+	const view = await page.evaluate(() => {
+		const v = window.__ogygia_page?.();
+		return { codes: v?.report.findings.map((f) => f.code) ?? [], queued: v?.report.findings.find((f) => f.code === 'queued')?.message ?? '', held: v?.report.rows.find((r) => r.name === 'BelowReady')?.queue_ms ?? 0 };
+	});
+	await page.goto('about:blank');
+	await page.waitForTimeout(300);
+	await page.close();
+	let report = null;
+	for (let i = 0; i < 10 && report_id && !report?.queued; i++) {
+		await new Promise((ok) => setTimeout(ok, 1000));
+		const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+		if (j) report = { codes: (j.findings ?? []).map((f) => f.code), queued: (j.findings ?? []).find((f) => f.code === 'queued')?.message ?? '' };
+	}
+	const says = (m) => m.includes('held for SlowFail (') && m.includes('which then failed) on the first screen');
+	const checks = [
+		['the hold happened (BelowReady waited for SlowFail)', view.held >= 400],
+		['the failing island named', view.codes.includes('hydrate-failed')],
+		['never called ogygia’s own wait', !view.codes.includes('held-idle')],
+		['queued says what it was held for', says(view.queued)],
+		['the profiler report: the same, and no held-idle', !report_id || (!!report && says(report.queued) && !report.codes.includes('held-idle'))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} held for a failing island: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ view, report })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 async function code_run(browser) {
 	const read = async (path) => {
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -779,6 +815,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let held_fail_ok = 0;
+	for (let i = 0; i < repeat; i++) held_fail_ok += await held_fail_run(browser);
+	if (held_fail_ok < repeat) failed = true;
+	console.log(`${held_fail_ok === repeat ? '✓' : '✗'} held for a failing island, explained: ${held_fail_ok}/${repeat}`);
 	let icpu_ok = 0;
 	for (let i = 0; i < repeat; i++) icpu_ok += await inp_cpu_run(browser);
 	if (icpu_ok < repeat) failed = true;

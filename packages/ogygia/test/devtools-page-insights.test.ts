@@ -174,6 +174,23 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('held for a failing first-screen island: not ogygia’s wait, and queued names what it was held for', () => {
+		// BelowReady (below the fold) had its code at 60 and hydrated at 750; SlowFail (first screen)
+		// was loading from 50 until it failed at 740 — the scheduler's viewport-first hold
+		const base = page({ islands: [{ fp: 'b', t0: 50, loaded: 60, done: 752, turn: 750 }] });
+		const regions = [region('b', 'BelowReady', 'load', { top: 3000 }), region('s', 'SlowFail', 'load', { top: 100, hydrated: false })];
+		const held = analyze_page(base, regions, [{ fp: 's', message: 'planted', span: [50, 740] }], 3000);
+		expect(codes(held)).not.toContain('held-idle');
+		const q = held.findings.find((f) => f.code === 'queued')!;
+		expect(q.message).toContain('BelowReady (690 ms) had its code but waited for its turn, held for SlowFail (680 ms, which then failed) on the first screen, still loading its code');
+		expect(q.fix).toContain('(and fix the one that failed)');
+		// without the failure's span (an older beacon), the wait reads as unexplained: the old answer
+		expect(codes(analyze_page(base, regions, [{ fp: 's', message: 'planted' }], 3000))).toContain('held-idle');
+		// a failing island BELOW the fold explains nothing about a below-the-fold wait
+		const below = analyze_page(base, [regions[0], region('s', 'SlowFail', 'load', { top: 5000, hydrated: false })], [{ fp: 's', message: 'planted', span: [50, 740] }], 3000);
+		expect(codes(below)).toContain('held-idle');
+	});
+
 	describe('the slowest interaction, explained (slow-interaction)', () => {
 		const origin = 'https://a.test';
 		const at = (over: Partial<PageInput['visit'] & object>) => ({ ...page().visit!, origin, ...over });

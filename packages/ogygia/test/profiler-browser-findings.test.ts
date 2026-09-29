@@ -204,6 +204,14 @@ test('the slowest interaction reaches the report: parsed, the slower of two reco
 	}
 });
 
+test("a failed island's wake → failure span is kept (what held the islands below the fold); junk is not", () => {
+	const fp = '0123456789abcdef';
+	const v = parse_visit('/lab', { ...raw, regions: [{ fp, failed: 'planted', failed_span: [50, 740], top: 100, height: 20 }, { fp: 'fedcba9876543210', failed: 'x', failed_span: [9, 'a'], top: 0, height: 0 }] })!;
+	expect(v.regions?.[0].failed_span).toEqual([50, 740]);
+	expect(v.regions?.[1].failed_span).toBeUndefined();
+	expect(parse_visit('/lab', { ...raw, regions: [{ fp, failed: 'x', failed_span: [800, 50], top: 0, height: 0 }] })!.regions?.[0].failed_span).toBeUndefined();
+});
+
 test('a preload downloaded again reaches the report, even on a page with no island', () => {
 	const v = parse_visit('/lab', {
 		...raw,

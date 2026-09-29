@@ -1058,7 +1058,7 @@ class OgygiaRegion extends HTMLElement {
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			// the beacon's CPU window stops waiting for this one, and the visit reports it (no-op without it)
-			beacon_failed(this, (err as { message?: string })?.message ?? String(err));
+			beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0);
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
