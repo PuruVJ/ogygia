@@ -108,7 +108,11 @@ async function one_run(browser) {
 	const hydration = Object.fromEntries(
 		await page.locator('[data-og-hydration] tr[data-status]').evaluateAll((rs) => rs.map((r) => [r.querySelector('.nm')?.firstChild?.textContent ?? '', r.getAttribute('data-status')]))
 	);
-	await page.close({ runBeforeUnload: true }); // the page hides: the final visit goes out
+	// leave the way a visitor does: the page hides and the final visit goes out (a bare close may not
+	// fire the hide; the report then keeps the early visit)
+	await page.goto('about:blank');
+	await page.waitForTimeout(300);
+	await page.close();
 	if (!view) throw new Error('window.__ogygia_page is missing: is this a devtools dev server?');
 	let report = null;
 	if (report_id)
@@ -139,10 +143,16 @@ async function third_run(browser) {
 		const v = window.__ogygia_page?.();
 		return v ? { findings: v.report.findings.map((f) => ({ code: f.code, message: f.message })), tp: v.report.third_party } : null;
 	});
-	await page.close({ runBeforeUnload: true });
+	// leave the way a visitor does: the page hides and the beacon sends its final visit (a bare close
+	// may not fire the hide, and the report kept the early visit, before the edited island's rows)
+	await page.goto('about:blank');
+	await page.waitForTimeout(300);
+	await page.close();
 	let report = null;
+	// (until every finding the plant makes is in: the island rows land after the scripts' timings)
+	const complete = (r) => !!r && ['third-party', 'third-party-blocking', 'third-party-edits'].every((c) => r.some((f) => f.code === c));
 	if (report_id)
-		for (let i = 0; i < 10 && !report?.some((f) => f.code === 'third-party'); i++) {
+		for (let i = 0; i < 12 && !complete(report); i++) {
 			await new Promise((ok) => setTimeout(ok, 1000));
 			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
 			if (j) report = (j.findings ?? []).map((f) => ({ code: f.code, message: f.message }));
