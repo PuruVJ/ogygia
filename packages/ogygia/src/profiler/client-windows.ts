@@ -60,6 +60,34 @@ function top_of(a: Analysis): WindowFn[] {
 		.map((f) => ({ name: f.label && f.name.startsWith('(anonymous') ? f.label : f.name, file: f.url, line: f.line || null, category: f.category, self_ms: f.self_ms, total_ms: f.total_ms }));
 }
 
+/** THE SLOWEST INTERACTION'S TWO SPANS, analyzed: what ran while its input waited, and what its
+ *  handlers ran (the island's own code, by its source-mapped name — the long frames only name the
+ *  event dispatcher it came through). A span too short for the sampler says nothing. */
+export interface InteractionCpu {
+	/** the interaction's start (the page clock): which interaction of the visit this is */
+	t: number;
+	/** the frames went through a source map (their lines are the source's) */
+	mapped: boolean;
+	wait: { ms: number; top: WindowFn[] } | null;
+	handler: { ms: number; top: WindowFn[] } | null;
+}
+export function interaction_windows(
+	profile: CpuProfile,
+	spans: { t: number; wait: readonly [number, number]; handler: readonly [number, number] },
+	run: (p: CpuProfile) => Analysis
+): InteractionCpu {
+	let mapped = false;
+	const one = (s: readonly [number, number]) => {
+		if (s[1] - s[0] < MIN_WINDOW_MS) return null;
+		const a = run(window_profile(profile, [s]));
+		mapped ||= a.sourcemapped;
+		return { ms: Math.round(a.busy_ms * 10) / 10, top: top_of(a) };
+	};
+	const wait = one(spans.wait);
+	const handler = one(spans.handler);
+	return { t: spans.t, mapped, wait, handler };
+}
+
 /** Each island's hydrate window and the long tasks outside them, analyzed. `run` is the report's
  *  own analysis (its resolver, renamer and chunk categories). */
 export function client_windows(profile: CpuProfile, visit: Visit, run: (p: CpuProfile) => Analysis): ClientWindows {

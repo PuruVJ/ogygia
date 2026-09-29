@@ -441,6 +441,8 @@ function observe_vitals(): void {
 				...(fp ? { fp } : {})
 			};
 		}
+		// (after the batch: every entry of it is folded in)
+		if (visit_interaction) interaction_seen(visit_interaction);
 	});
 	observe('longtask', (entries) => {
 		for (const e of entries) if (visit_longtasks.length < 100) visit_longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
@@ -839,7 +841,15 @@ let cpu: SelfProfiler | null = null;
 let cpu_sent = false;
 const CPU_WINDOW_MS = 8000;
 /** devtools: the load trace, and any recording started from the Page tab, kept in the page */
-let cpu_kept: { trace: unknown; from: number; to: number; label: string }[] = [];
+let cpu_kept: CpuKept[] = [];
+/** a kept trace; an interaction's carries its spans (the wait, the handlers) */
+export interface CpuKept {
+	trace: unknown;
+	from: number;
+	to: number;
+	label: string;
+	spans?: { t: number; wait: [number, number]; handler: [number, number] };
+}
 /** why there is no trace: 'unsupported' (no API), 'no-policy' (the document did not opt in) */
 let cpu_off: string | null = null;
 let cpu_started_at = 0;
@@ -963,11 +973,81 @@ async function flush_cpu(hiding: boolean): Promise<void> {
 		return;
 	}
 	if (DEVTOOLS && trace) cpu_kept = [{ trace, from: cpu_started_at, to: performance.now(), label: 'page load' }, ...cpu_kept.slice(0, 4)];
+	// the load is sampled: now wait, sampling, for a slow interaction (never while hiding)
+	if (!hiding) start_interaction_cpu();
 	const url = endpoint();
 	if (!url || !trace) return;
 	const body = JSON.stringify({ page: location.pathname, cpu: trace });
 	// keepalive bodies are capped at 64 KB; a trace is bigger — a plain fetch while the page lives,
 	// keepalive when it is going away and it fits (one that cannot fit would only fail)
+	const keepalive = hiding && body.length <= KEEPALIVE_MAX;
+	if (hiding && !keepalive) return;
+	try {
+		fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
+			// best effort
+		});
+	} catch {
+		// no fetch
+	}
+}
+
+// A CPU PROFILE OF THE SLOWEST INTERACTION. The load trace ends once the islands woke; a click after
+// that ran unsampled, and the long frames name only the entry point it ran through (Svelte sends
+// every event through one dispatcher). So once the load trace is out, the same browser — the
+// profiler's own, or a devtools one: the policy gates it exactly as the load trace — samples again,
+// waiting for an interaction of 200 ms or more. The first one stops it a moment after its paint and
+// the trace goes out with the interaction's two spans (the wait before its handlers, the handlers),
+// for the server to name what ran in each. None within a minute: stopped, nothing sent.
+let icpu: SelfProfiler | null = null;
+let icpu_timer: ReturnType<typeof setTimeout> | null = null;
+let icpu_done = false;
+const ICPU_MAX_MS = 60_000;
+const ICPU_SLOW_MS = 200;
+/** the interaction the running sampler caught, when one did */
+let icpu_caught: { t: number; wait: [number, number]; handler: [number, number] } | null = null;
+
+function start_interaction_cpu(): void {
+	if (icpu || icpu_done || !collecting()) return;
+	icpu = make_profiler();
+	if (!icpu) return;
+	icpu_timer = setTimeout(() => void stop_interaction_cpu(false), ICPU_MAX_MS);
+}
+
+/** the event observer saw a new slowest interaction: a slow one ends the sampling shortly after */
+function interaction_seen(i: Interaction): void {
+	if (!icpu || icpu_caught || i.ms < ICPU_SLOW_MS) return;
+	const handlers_at = i.t + i.delay;
+	icpu_caught = { t: i.t, wait: [i.t, handlers_at], handler: [handlers_at, handlers_at + i.processing] };
+	if (icpu_timer) clearTimeout(icpu_timer);
+	// (a moment for the rest of its entries and its paint; the trace then holds all of it)
+	icpu_timer = setTimeout(() => void stop_interaction_cpu(false), 300);
+}
+
+async function stop_interaction_cpu(hiding: boolean): Promise<void> {
+	if (!icpu) return;
+	const p = icpu;
+	icpu = null;
+	icpu_done = true;
+	if (icpu_timer) clearTimeout(icpu_timer);
+	icpu_timer = null;
+	let trace: unknown;
+	try {
+		trace = await p.stop();
+	} catch {
+		return;
+	}
+	let caught = icpu_caught;
+	if (!trace || !caught) return;
+	// (entries of the same interaction that arrived after it was caught widen its spans)
+	const i = visit_interaction;
+	if (i && i.t === caught.t) {
+		const handlers_at = i.t + i.delay;
+		caught = { t: i.t, wait: [i.t, handlers_at], handler: [handlers_at, handlers_at + i.processing] };
+	}
+	if (DEVTOOLS) cpu_kept = [{ trace, from: caught.wait[0], to: caught.handler[1], label: 'interaction', spans: caught }, ...cpu_kept.slice(0, 4)];
+	const url = endpoint();
+	if (!url) return;
+	const body = JSON.stringify({ page: location.pathname, cpu: trace, interaction: caught });
 	const keepalive = hiding && body.length <= KEEPALIVE_MAX;
 	if (hiding && !keepalive) return;
 	try {
@@ -1054,6 +1134,7 @@ function on_hide(): void {
 	flush_vitals();
 	flush_visit(true);
 	void flush_cpu(true);
+	void stop_interaction_cpu(true);
 }
 
 function schedule(): void {
@@ -1185,7 +1266,7 @@ export interface BeaconPage {
 	marks: { name: string; ms: number; t0?: number }[];
 	snapshots: { fp: string; ssr: string; hydrated: string; final?: string }[];
 	/** the main thread, sampled (JS Self-Profiling): the load trace and recordings, newest first */
-	cpu: { state: 'recording' | 'done' | 'off'; off?: string | null; traces: { trace: unknown; from: number; to: number; label: string }[] };
+	cpu: { state: 'recording' | 'done' | 'off'; off?: string | null; traces: CpuKept[] };
 }
 export function beacon_page(): BeaconPage | null {
 	const o = owner();
@@ -1218,6 +1299,11 @@ export function _reset_beacon(): void {
 	cpu_sent = false;
 	cpu_kept = [];
 	cpu_off = null;
+	icpu = null;
+	if (icpu_timer) clearTimeout(icpu_timer);
+	icpu_timer = null;
+	icpu_done = false;
+	icpu_caught = null;
 	opted = undefined;
 	failed_fps.clear();
 	seen_resources = [];

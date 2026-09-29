@@ -172,6 +172,20 @@ check('Styles: the Page tab shows the sheets and the unscoped line', (await page
 	check('INP in a build: the slow handler, on SlowSave, its own handler', !!save && save.includes('in SlowSave') && save.includes("SlowSave's own click handler"), save ?? 'no finding');
 	const busy = await inp_of('busy');
 	check('INP in a build: the queued click names BusyTimer’s timer, not a chunk hash', !!busy && busy.includes('in QuickCount') && busy.includes('BusyTimer') && busy.includes('a timer'), busy ?? 'no finding');
+	// a click after the load, sampled: the page cannot source-map a build's frames, so a minified
+	// function in a chunk is never quoted — the frames' reading stands
+	{
+		const p = await ctx.newPage();
+		await p.goto(base + '/dt-inp', { waitUntil: 'load' });
+		const state = await p.waitForFunction(() => window.__ogygia_page?.()?.page.cpu.state === 'done', null, { timeout: 30_000 }).then(() => 'done').catch(() => 'no trace');
+		await p.waitForTimeout(500);
+		const b = await p.locator('[data-inp="save"]').boundingBox();
+		await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+		await p.waitForTimeout(1500);
+		const r = await p.evaluate(() => ({ traces: window.__ogygia_page?.()?.page.cpu.traces.map((t) => t.label) ?? [], m: window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-interaction')?.message ?? null }));
+		await p.close();
+		check('INP in a build, sampled after the load: no minified function quoted', !!r.m && r.m.includes("SlowSave's own click handler") && !r.m.includes('sampled'), JSON.stringify({ state, ...r }));
+	}
 }
 check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // THE OBSERVER EFFECT: measuring (the og_devtools cookie) must not change what it measures. The

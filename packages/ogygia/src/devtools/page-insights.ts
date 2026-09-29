@@ -11,7 +11,7 @@
  */
 import { without_comments } from '../runtime/beacon.js';
 import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.js';
-import { fn_label, type CpuSummary } from './cpu.js';
+import { fn_label, fn_label as label_of, type CpuFn, type CpuSummary } from './cpu.js';
 import { third_party, third_party_findings, type ThirdParty } from './third-party.js';
 
 export interface PageIsland {
@@ -43,7 +43,20 @@ export interface PageInteraction {
 	scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; island?: string }[];
 }
 
+/** The slowest interaction, sampled (JS Self-Profiling): the functions that ran while it waited and
+ *  in its handlers, by their source-mapped names. `t`: which interaction (its start). */
+export interface InteractionCpuInput {
+	t: number;
+	/** the frames' lines are the source's (mapped through a source map): else a line is the served
+	 *  code's, and only the function and its file are quoted */
+	mapped?: boolean;
+	wait: { ms: number; top: CpuFn[] } | null;
+	handler: { ms: number; top: CpuFn[] } | null;
+}
+
 export interface PageInput {
+	/** the slowest interaction's CPU, when a trace of it was taken */
+	interaction_cpu?: InteractionCpuInput;
 	vitals: { ttfb?: number; fcp?: number; lcp?: number; cls?: number; inp?: number };
 	visit: {
 		nav?: { dcl?: number; load?: number; res_start?: number; dom_interactive?: number };
@@ -574,7 +587,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	for (const v of vitals) {
 		if (v.rating === 'good') continue;
 		const head = `${v.label} is ${v.key === 'cls' ? v.value : `${Math.round(v.value)} ms`} (${v.rating === 'poor' ? 'poor' : 'needs work'}; good is ${v.key === 'cls' ? '≤ ' + LIMITS[v.key][0] : '≤ ' + LIMITS[v.key][0] + ' ms'}).`;
-		const why = v.key === 'inp' ? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin) : null;
+		const why = v.key === 'inp' ? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin, page.interaction_cpu) : null;
 		// (the slowest interaction explained is its own finding, in place of the bare INP: the
 		// profiler words INP from all its visits, and keeps this one visit's explanation)
 		findings.push({
@@ -910,8 +923,13 @@ function describe_script(s: NonNullable<PageInteraction['scripts']>[number]): st
 		const p = q === -1 ? s.url : s.url.slice(0, q);
 		who = p.slice(p.lastIndexOf('/') + 1) || 'a script';
 	}
-	const inv = s.invoker;
-	const kind = inv.startsWith('TimerHandler')
+	const kind = script_kind(s.invoker);
+	return `${who}${s.fn ? `'s ${s.fn}` : ''} (${kind ? `${kind}, ` : ''}${Math.round(s.ms)} ms)`;
+}
+
+/** What ran a long-frame script, from its invoker: a timer, an animation frame, a promise, … */
+function script_kind(inv: string): string {
+	return inv.startsWith('TimerHandler')
 		? 'a timer'
 		: inv.startsWith('FrameRequestCallback')
 			? 'an animation frame'
@@ -922,7 +940,6 @@ function describe_script(s: NonNullable<PageInteraction['scripts']>[number]): st
 					: inv.includes('.on')
 						? 'an event handler'
 						: '';
-	return `${who}${s.fn ? `'s ${s.fn}` : ''} (${kind ? `${kind}, ` : ''}${Math.round(s.ms)} ms)`;
 }
 
 /** THE SLOWEST INTERACTION, explained: where it landed, which phase cost the time, and what held
@@ -931,7 +948,8 @@ function explain_interaction(
 	i: PageInteraction | undefined,
 	rows: readonly IslandRow[],
 	name_of: (fp: string | undefined) => string,
-	origin: string | undefined
+	origin: string | undefined,
+	cpu?: InteractionCpuInput
 ): { message: string; fix: string; fps: string[] } | null {
 	if (!i || !(i.delay + i.processing + i.presentation > 0)) return null;
 	const what = i.name === 'click' || i.name.startsWith('pointer') || i.name.startsWith('mouse') ? 'a click' : i.name.startsWith('key') ? 'a key press' : `a ${i.name}`;
@@ -967,13 +985,38 @@ function explain_interaction(
 			return true;
 		}
 	};
-	const handler_text = !handler
-		? ''
-		: i.fp && handler.invoker.includes('.on') && own_origin(handler.url)
-			? `${name_of(i.fp)}'s own ${i.name} handler`
-			: describe_script(handler);
+	// SAMPLED: when a trace of this interaction was taken, the function that ran — by its real name
+	// and line — over what the frames could tell (the app's own code first: a Svelte internal or the
+	// browser under it is not what a reader changes)
+	const sampled = cpu && Math.abs(cpu.t - i.t) < 2 ? cpu : undefined;
+	// (only a frame that reads as source: a built chunk's minified `Ce` in `og-region.x.js:1` tells a
+	// reader less than the frames do — the profiler source-maps a build's, the page cannot)
+	const readable = (f: CpuFn) => f.file.endsWith('.svelte') || f.file.startsWith('src/') || f.file.includes('/src/');
+	const pick = (s: { ms: number; top: CpuFn[] } | null | undefined) => {
+		const f = s?.top.find((x) => x.kind === 'app') ?? s?.top[0];
+		return f && readable(f) ? f : undefined;
+	};
+	const handler_fn = pick(sampled?.handler);
+	const wait_fn = pick(sampled?.wait);
+	// (a line of the served code is not the source's: without a map, the function and its file only)
+	const fn_label = (f: CpuFn) => (sampled?.mapped ? label_of(f) : label_of({ ...f, line: null }));
+	const own_handler = !!handler && !!i.fp && handler.invoker.includes('.on') && own_origin(handler.url);
+	const handler_text = handler_fn
+		? `${own_handler || (!handler && i.fp) ? `${name_of(i.fp)}'s ${fn_label(handler_fn)}` : fn_label(handler_fn)}, ${Math.round(handler_fn.self_ms)} ms sampled`
+		: !handler
+			? ''
+			: own_handler
+				? `${name_of(i.fp)}'s own ${i.name} handler`
+				: describe_script(handler);
+	// the wait: an island hydrating says it all; else the sampled function, with what the frames
+	// add (the timer or promise that ran it)
+	const wait_text = hydrating.length
+		? behind
+		: wait_fn
+			? `the main thread was running ${fn_label(wait_fn)}, ${Math.round(wait_fn.self_ms)} ms sampled${of_phase('delay')[0] && script_kind(of_phase('delay')[0].invoker) ? `, run by ${script_kind(of_phase('delay')[0].invoker)}` : ''}`
+			: behind;
 	const parts = phases.map((p) => {
-		if (p.key === 'delay' && behind && p.ms >= 16) return `${p.text} (${behind})`;
+		if (p.key === 'delay' && wait_text && p.ms >= 16) return `${p.text} (${wait_text})`;
 		if (p.key === 'handler' && handler_text && p.ms >= 16) return `${p.text} (mostly ${handler_text})`;
 		return p.text;
 	});

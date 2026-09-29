@@ -521,6 +521,75 @@ async function inp_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE SLOWEST INTERACTION, SAMPLED (/dt-inp): the frames name only Svelte's event dispatcher, so the
+ *  handler's own function comes from a CPU trace — the load trace for a click during the load, the
+ *  interaction sampler (started once the load trace is out) for a click after it. Both must name
+ *  SlowSave's `save`, in the Page tab and in the profiler's report of the same visit; the queued
+ *  click must name BusyTimer's timer function. */
+async function inp_cpu_run(browser) {
+	const read = async (mode, late) => {
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + '/dt-inp', { waitUntil: 'load' });
+		await page.waitForTimeout(1800);
+		const done = () => page.waitForFunction(() => window.__ogygia_page?.()?.page.cpu.state === 'done', null, { timeout: 30_000 }).catch(() => {});
+		// late: past the load trace (the interaction sampler is running then)
+		if (late) {
+			await done();
+			await page.waitForTimeout(500);
+		}
+		const at = async (sel) => {
+			const b = await page.locator(sel).boundingBox();
+			return [b.x + b.width / 2, b.y + b.height / 2];
+		};
+		if (mode === 'save') await page.mouse.click(...(await at('[data-inp="save"]')));
+		else {
+			const count = await at('[data-inp="count"]');
+			await page.mouse.click(...(await at('[data-inp="busy"]')));
+			await page.waitForTimeout(80);
+			await page.mouse.click(...count);
+		}
+		// early: the load trace, which holds the click, ends later
+		if (!late) await done();
+		await page.waitForTimeout(1200);
+		const m = await page.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-interaction')?.message ?? null);
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		return m;
+	};
+	const in_report = async (id, needle) => {
+		for (let i = 0; i < 10 && id; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null);
+			const m = j?.findings?.find((f) => f.code === 'slow-interaction')?.message ?? null;
+			if (m?.includes(needle)) return m;
+		}
+		return null;
+	};
+	const record = async () => (await fetch(`${base}/__profiler/page?p=/dt-inp&runs=1`, { redirect: 'manual' }).catch(() => null))?.headers.get('location')?.split('/').pop() ?? null;
+	const late_id = await record();
+	const late = await read('save', true);
+	const late_report = await in_report(late_id, "SlowSave's save (SlowSave.svelte");
+	const early_id = await record();
+	const early = await read('save', false);
+	const early_report = await in_report(early_id, "SlowSave's save (SlowSave.svelte");
+	const busy = await read('busy', true);
+	// (the dev server's browser frames carry the served code's lines, not the source's: the function
+	// and its file are quoted, never a wrong line)
+	const sampled = (m) => !!m && m.includes("(mostly SlowSave's save (SlowSave.svelte), ") && m.includes('ms sampled)');
+	const checks = [
+		['late click (the interaction sampler): the Page tab names save', sampled(late)],
+		// (the line: the dev server's browser frames are not source-mapped yet, in either tool)
+		['late click: the profiler report names save', !late_id || sampled(late_report)],
+		['early click (the load trace): the Page tab names save', sampled(early)],
+		['early click: the profiler report names save', !early_id || sampled(early_report)],
+		['queued click: the wait names the timer’s function, run by a timer', !!busy && busy.includes('the main thread was running planted_busy_timer (BusyTimer.svelte), ') && busy.includes('run by a timer')]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} interactions sampled: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ late, late_report, early, early_report, busy })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 async function code_run(browser) {
 	const read = async (path) => {
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -707,6 +776,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let icpu_ok = 0;
+	for (let i = 0; i < repeat; i++) icpu_ok += await inp_cpu_run(browser);
+	if (icpu_ok < repeat) failed = true;
+	console.log(`${icpu_ok === repeat ? '✓' : '✗'} the slowest interaction sampled (its function named): ${icpu_ok}/${repeat}`);
 	let code_ok = 0;
 	for (let i = 0; i < repeat; i++) code_ok += await code_run(browser);
 	if (code_ok < repeat) failed = true;

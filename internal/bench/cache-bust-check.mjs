@@ -352,6 +352,37 @@ try {
 		server = await serve(two.dir);
 	}
 
+	// ── the slowest interaction, sampled, in a build ────────────────────────────────────────────
+	// The profiler's own browser (logged in: the server sets the profiling policy) samples the load,
+	// then waits, sampling, for a slow interaction. A click after the load trace is out: the trace
+	// reaches the report, and a frame it cannot name (a build's minified chunk) is never quoted.
+	{
+		const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-inp'), { viewport: { width: 1280, height: 900 } });
+		await ctx.addCookies([
+			{ name: 'og_profiler', value: PROFILER_KEY, url: BASE },
+			{ name: 'og_profiler_beacon', value: '1', url: BASE }
+		]);
+		const rec = await fetch(`${BASE}/__profiler/page?p=/dt-inp&runs=1&format=json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+		const p = await ctx.newPage();
+		await p.goto(BASE + '/dt-inp', { waitUntil: 'load' });
+		// past the load trace (8 s, or longer while islands still wake): the interaction sampler runs
+		await p.waitForTimeout(11_000);
+		const b = await p.locator('[data-inp="save"]').boundingBox();
+		await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+		await p.waitForTimeout(1500);
+		await p.goto('about:blank');
+		let m = null;
+		for (let i = 0; i < 10 && rec?.id && !m?.includes('sampled'); i++) {
+			await new Promise((ok) => setTimeout(ok, 700));
+			const j = await fetch(`${BASE}/__profiler/report/${rec.id}.json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+			m = j?.findings?.find((f) => f.code === 'slow-interaction')?.message ?? null;
+		}
+		await ctx.close();
+		// (a build ships no browser maps yet: the sampled frame is a minified function in a chunk, which
+		// is never quoted — the island's own handler, from the frames, stands)
+		check('inp: in a build, the report never quotes a minified function; the island’s handler stands', !!m && m.includes("(mostly SlowSave's own click handler)") && !m.includes('sampled'), m ?? `no finding (report ${rec?.id ?? 'none'})`);
+	}
+
 	// ── a page from before content hashing ──────────────────────────────────────────────────────
 	const html2 = await (await fetch(BASE + '/dt-cache')).text();
 	const runtime_loc = two.entries[runtime_id];

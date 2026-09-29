@@ -236,6 +236,35 @@ describe('analyze_page', () => {
 			expect(f.fps).toEqual([]);
 		});
 
+		it('sampled: the handler’s function by name; its line only when the frames were source-mapped', () => {
+			const fn = (name: string, file: string, line: number, kind: 'app' | 'svelte' | 'dependency' = 'app', self_ms = 250) => ({ name, file, line, kind, self_ms, total_ms: self_ms });
+			const run = (cpu: object, over: object = {}) =>
+				find(analyze_page({ ...page({ vitals: { inp: 300 }, visit: at({ interaction: it_of({ scripts: [{ url: `${origin}/_app/immutable/chunks/events-B1q.js`, fn: 'handle_event_propagation', invoker: 'DOCUMENT.onclick', ms: 268, phase: 'handler' }], ...over }) }) }), interaction_cpu: { t: 1000, wait: null, ...cpu } as never }, [region('s', 'SlowSave')], [], 3000))!.message;
+			// mapped: the source's line; the app's own code over a Svelte internal above it
+			expect(run({ mapped: true, handler: { ms: 260, top: [fn('set', 'svelte/internal/client/runtime.js', 90, 'svelte', 5), fn('save', 'src/lib/dtinp/SlowSave.svelte', 6)] } })).toContain("(mostly SlowSave's save (SlowSave.svelte:6), 250 ms sampled)");
+			// unmapped (a dev server's served code): the function and its file, never a wrong line
+			expect(run({ handler: { ms: 260, top: [fn('save', '/src/lib/dtinp/SlowSave.svelte', 18)] } })).toContain("(mostly SlowSave's save (SlowSave.svelte), 250 ms sampled)");
+			// a build's minified frame in a chunk: never quoted; the frames' reading stands
+			expect(run({ mapped: false, handler: { ms: 260, top: [fn('d', 'client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js', 1)] } })).toContain("(mostly SlowSave's own click handler)");
+			// another interaction's trace (a different start): not this one's
+			expect(run({ t: 5000, mapped: true, handler: { ms: 260, top: [fn('save', 'src/lib/dtinp/SlowSave.svelte', 6)] } })).not.toContain('sampled');
+		});
+
+		it('sampled: the wait names the function that held the thread, and what ran it', () => {
+			const m = find(
+				analyze_page(
+					{
+						...page({ vitals: { inp: 350 }, visit: at({ interaction: it_of({ fp: 'q', delay: 330, processing: 2, presentation: 18, scripts: [{ url: `${origin}/src/lib/BusyTimer.svelte`, fn: 'planted_busy_timer', invoker: 'TimerHandler:setTimeout', ms: 400, phase: 'delay' }] }) }) }),
+						interaction_cpu: { t: 1000, mapped: true, wait: { ms: 330, top: [{ name: 'planted_busy_timer', file: 'src/lib/dtinp/BusyTimer.svelte', line: 9, kind: 'app', self_ms: 328, total_ms: 328 }] }, handler: null }
+					},
+					[region('q', 'QuickCount')],
+					[],
+					3000
+				)
+			)!.message;
+			expect(m).toContain('330 ms before its handlers could run (the main thread was running planted_busy_timer (BusyTimer.svelte:9), 328 ms sampled, run by a timer)');
+		});
+
 		it('a good INP says nothing; an INP without the interaction keeps the bare vital', () => {
 			expect(codes(analyze_page(page({ vitals: { inp: 120 }, visit: at({ interaction: it_of({ ms: 120 }) }) }), [], [], 3000))).not.toContain('slow-interaction');
 			const bare = analyze_page(page({ vitals: { inp: 300 } }), [], [], 3000);

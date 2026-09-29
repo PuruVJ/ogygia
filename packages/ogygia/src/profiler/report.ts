@@ -9,7 +9,7 @@ import type { Analysis, HeapAllocator } from './analyze.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import type { ClientWindows } from './client-windows.js';
+import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
 import { runtime_scripts, type PageAssets, type RuntimeScripts } from './page-assets.js';
 import { unscoped_finding } from '../unscoped-css.js';
@@ -480,6 +480,8 @@ export interface ReportExtras {
 	/** the browser's CPU profile of the page's hydration (the profiler user's latest visit) */
 	/** `windows`: the same trace cut to each island's hydrate window and the long tasks outside them */
 	client_cpu?: { analysis: Analysis; at: number; sample_ms: number; windows?: ClientWindows };
+	/** the visit's slowest interaction, sampled: what ran while it waited, and in its handlers */
+	interaction_cpu?: InteractionCpu;
 	/** a caught request's inputs (path + query, the kept headers): the "profile it again" button */
 	replay?: { path: string; headers: Record<string, string> };
 	/** the browser's picture of a visit to this page (the beacon) — the one-clock timeline joins it */
@@ -1222,7 +1224,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			const n = e ? e.hit + e.miss + e.none : 0;
 			return e && n ? e.ms / n : undefined;
 		};
-		out.push(...browser_findings(browser_page_report(extras.visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server)));
+		out.push(...browser_findings(browser_page_report(extras.visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu)));
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
@@ -3153,6 +3155,8 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 									}
 								}
 							: {}),
+						// the visit's slowest interaction, sampled: what ran while it waited, and in its handlers
+						...(extras.interaction_cpu ? { interaction_cpu: extras.interaction_cpu } : {}),
 						...(extras.client_cpu
 							? {
 									cpu: {

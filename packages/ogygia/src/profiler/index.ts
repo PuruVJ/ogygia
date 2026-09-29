@@ -86,7 +86,7 @@ import {
 import { load_lane_of } from './timeline.js';
 import { parse_visit, merge_visits, type Visit } from './visit.js';
 import { hole_slots } from './hole-slots.js';
-import { client_windows, type ClientWindows } from './client-windows.js';
+import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.js';
 import { byte_strip, type ByteStrip } from './byte-strip.js';
 import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.js';
 import { BEACON_STANDALONE_JS } from './beacon-standalone.js';
@@ -417,6 +417,8 @@ export interface StoredReport {
 	replay?: { path: string; headers: Record<string, string> };
 	/** the browser's CPU profile of hydration carried by an uploaded dump */
 	client_cpu?: { analysis: Analysis; at: number; sample_ms: number; windows?: ClientWindows };
+	/** the slowest interaction's CPU (its wait, its handlers) carried by an uploaded dump */
+	interaction_cpu?: InteractionCpu;
 	/** the browser's picture of a visit to this page (the beacon), the latest at report time */
 	visit?: Visit;
 	/** the rendered document as a byte strip (page mode: the last run's body) */
@@ -880,6 +882,8 @@ class Profiler {
 	readonly #client_cpu: boolean;
 	/** the browser's CPU profile of hydration, per page path (the profiler user's latest visit) */
 	readonly #client_cpus = new Map<string, { analysis: Analysis; at: number; sample_ms: number; windows?: ClientWindows }>();
+	/** per page, the slowest interaction's CPU (its wait and its handlers), the latest trace */
+	readonly #interaction_cpus = new Map<string, InteractionCpu & { at: number }>();
 	/** the beacon's visits per page (the browser's picture of a page load), a few kept each */
 	readonly #visits = new Map<string, Visit[]>();
 	/** THE SINK: rows an ephemeral host posts out before it dies (see sink.ts) */
@@ -4991,6 +4995,7 @@ class Profiler {
 			...(e.vitals ? { vitals: e.vitals } : {}),
 			...(e.client_marks ? { client_marks: e.client_marks } : {}),
 			...(e.client_cpu ? { client_cpu: e.client_cpu } : {}),
+			...(e.interaction_cpu ? { interaction_cpu: e.interaction_cpu } : {}),
 			...(e.alloc ? { alloc: e.alloc } : {}),
 			...(e.contention ? { contention: e.contention } : {}),
 			...(e.lineage ? { lineage: e.lineage } : {}),
@@ -5129,8 +5134,13 @@ class Profiler {
 		const hole_requests = answered.size
 			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)) }))
 			: [];
+		// THE VISIT'S SLOWEST INTERACTION, SAMPLED: the page's latest interaction trace, when it is this
+		// visit's (the same interaction start, on the page clock)
+		const icpu = stored.interaction_cpu ?? (stored.meta.page ? this.#interaction_cpus.get(stored.meta.page) : undefined);
+		const interaction_cpu = icpu && visit?.interaction && Math.abs(icpu.t - visit.interaction.t) < 2 ? icpu : undefined;
 		return {
 			...(visit ? { visit } : {}),
+			...(interaction_cpu ? { interaction_cpu } : {}),
 			...(hole_requests.length ? { hole_requests } : {}),
 			...(stored.strip ? { strip: stored.strip } : {}),
 			...(stored.assets ? { assets: stored.assets } : {}),
@@ -5261,7 +5271,13 @@ class Profiler {
 	/** The browser's CPU profile (Chromium's JS Self-Profiling trace) → the same analysis as the
 	 *  server's: components, functions, flame. Categories come from the chunk contents the build
 	 *  recorded, since a client chunk's URL says nothing about what it holds. */
-	async #ingest_client_cpu(page: string, trace: unknown, origin?: string): Promise<boolean> {
+	async #ingest_client_cpu(
+		page: string,
+		trace: unknown,
+		origin?: string,
+		/** the slowest interaction's spans: this trace is that interaction's, not the load's */
+		interaction?: { t: number; wait: [number, number]; handler: [number, number] }
+	): Promise<boolean> {
 		const profile = self_profile_to_cpuprofile(trace);
 		if (!profile) return false;
 		// THE APP'S OWN SCRIPTS BY THEIR LOCAL FILE: the browser names a frame by URL; its source map
@@ -5329,11 +5345,27 @@ class Profiler {
 		};
 		const renamer = chunk_component_renamer((p) => chunkContents(served(p)));
 		const run = (p: CpuProfile) => analyze(p, resolver, undefined, undefined, renamer, url_hint);
+		// AN INTERACTION'S TRACE: only its two spans are read, and the load's analysis stays as it was
+		if (interaction) {
+			if (this.#interaction_cpus.size >= 50 && !this.#interaction_cpus.has(page))
+				this.#interaction_cpus.delete(this.#interaction_cpus.keys().next().value!);
+			this.#interaction_cpus.set(page, { ...interaction_windows(profile, interaction, run), at: Date.now() });
+			return true;
+		}
 		const analysis = run(profile);
 		// CUT BY ISLAND: the same load's visit (the trace goes out 8–20 s after the page started, the
 		// visit before it) gives each island's hydrate window — what ran inside it, by name
 		const visit = this.#visits.get(page)?.at(-1);
 		const windows = visit && Date.now() - visit.at < 120_000 ? client_windows(profile, visit, run) : undefined;
+		// a slow interaction DURING the load (the load trace holds it; the interaction sampler starts
+		// only once this trace is out): its spans are cut from this trace
+		const i = visit && Date.now() - visit.at < 120_000 ? visit.interaction : undefined;
+		if (i && i.ms >= 200 && i.t * 1000 >= profile.startTime && (i.t + i.ms) * 1000 <= profile.endTime) {
+			const at = i.t + i.delay;
+			if (this.#interaction_cpus.size >= 50 && !this.#interaction_cpus.has(page))
+				this.#interaction_cpus.delete(this.#interaction_cpus.keys().next().value!);
+			this.#interaction_cpus.set(page, { ...interaction_windows(profile, { t: i.t, wait: [i.t, at], handler: [at, at + i.processing] }, run), at: Date.now() });
+		}
 		if (this.#client_cpus.size >= 50 && !this.#client_cpus.has(page))
 			this.#client_cpus.delete(this.#client_cpus.keys().next().value!);
 		this.#client_cpus.set(page, { analysis, at: Date.now(), sample_ms: analysis.duration_ms, ...(windows ? { windows } : {}) });
@@ -5407,7 +5439,15 @@ class Profiler {
 			page.length <= 500 &&
 			this.#client_cpu
 		) {
-			if (!(await this.#ingest_client_cpu(page, cpu, ctx.url.origin)))
+			// (an interaction's trace carries its spans: two numbers each, on the page's clock)
+			const it = (body as { interaction?: { t?: unknown; wait?: unknown; handler?: unknown } })?.interaction;
+			const pair = (v: unknown): [number, number] | null =>
+				Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n < 3_600_000) && v[1] >= v[0] ? [v[0], v[1]] : null;
+			const wait = pair(it?.wait);
+			const handler = pair(it?.handler);
+			const spans = it && typeof it.t === 'number' && Number.isFinite(it.t) && wait && handler ? { t: it.t, wait, handler } : undefined;
+			if (it && !spans) return new Response(null, { status: 400 });
+			if (!(await this.#ingest_client_cpu(page, cpu, ctx.url.origin, spans)))
 				return new Response(null, { status: 400 });
 		}
 		const now = Date.now();

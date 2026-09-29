@@ -7,7 +7,7 @@
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, type Failure, type HoleFailure, type HoleWait, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
+import { analyze_page, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
@@ -262,6 +262,35 @@ export function unmeasured(cpu_off?: string | null): string[] {
 	return out;
 }
 
+/** The slowest interaction's trace (taken after the load, kept in the page), read over its two
+ *  spans — the same cut the profiler makes on its copy. Memoized per trace. */
+const icpu_memo = new WeakMap<object, InteractionCpuInput>();
+function interaction_cpu_of(page: BeaconPage): InteractionCpuInput | null {
+	// its own trace, or — a slow interaction during the load, before that sampler started — the
+	// load trace, which holds it
+	let kept = page.cpu.traces.find((t) => t.label === 'interaction' && t.spans);
+	if (!kept) {
+		const i = page.visit?.interaction as { t: number; ms: number; delay: number; processing: number } | undefined;
+		const load = page.cpu.traces.find((t) => t.label === 'page load');
+		if (!i || i.ms < 200 || !load || i.t < load.from || i.t + i.ms > load.to) return null;
+		const at = i.t + i.delay;
+		kept = { ...load, spans: { t: i.t, wait: [i.t, at], handler: [at, at + i.processing] } };
+	}
+	if (!kept.spans || !is_trace(kept.trace)) return null;
+	const hit = icpu_memo.get(kept.trace as object);
+	if (hit && hit.t === kept.spans.t) return hit;
+	const { t, wait, handler } = kept.spans;
+	const MIN = 20;
+	const windows = [
+		...(wait[1] - wait[0] >= MIN ? [{ fp: 'wait', from: wait[0], to: wait[1] }] : []),
+		...(handler[1] - handler[0] >= MIN ? [{ fp: 'handler', from: handler[0], to: handler[1] }] : [])
+	];
+	const s = analyze_cpu(kept.trace, windows, [], location.href);
+	const out: InteractionCpuInput = { t, wait: s.islands.wait ?? null, handler: s.islands.handler ?? null };
+	icpu_memo.set(kept.trace as object, out);
+	return out;
+}
+
 /** The island a script file belongs to, when it is one's own file (by its location or identity). */
 function island_of_file(url: string): { island?: string } {
 	const base = (u: string) => {
@@ -302,7 +331,8 @@ export function read_page(): PageView | null {
 	const code = island_code();
 	// (after a navigation there is no new first paint: the navigation's start stands in for it)
 	const waits = hole_waits(nav?.t ?? -Infinity, nav ? 0 : (with_visit.visit?.paints?.fcp ?? 0));
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}) };
+	const icpu = interaction_cpu_of(page);
+	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

@@ -12,7 +12,7 @@
 import { analyze_page, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.js';
 import type { CodeKind, CpuFn, CpuSummary } from '../devtools/cpu.js';
 import type { FrameCategory } from './analyze.js';
-import type { ClientWindows, WindowFn } from './client-windows.js';
+import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.js';
 import type { Visit } from './visit.js';
 
 /** codes the report makes from its own data */
@@ -61,7 +61,9 @@ export function browser_page_report(
 	/** a hole's name from its island id (the report's hole rows) */
 	hole_name?: (id: string) => string,
 	/** a hole's server render per request, from its recorded requests */
-	hole_server?: (id: string) => number | undefined
+	hole_server?: (id: string) => number | undefined,
+	/** the visit's slowest interaction, sampled: its wait and its handlers, by function */
+	interaction_cpu?: InteractionCpu
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
 	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length) return null;
@@ -89,7 +91,9 @@ export function browser_page_report(
 			regions.push({ fp: i.fp, name: name_of(i.fp, i.entry), kind: 'island', wake: rows.find((r) => r.fp === i.fp) ? 'load' : '', hydrated: true });
 		}
 	const failures = (visit.regions ?? []).filter((r) => r.failed !== undefined).map((r) => ({ fp: r.fp, message: r.failed || 'it threw' }));
+	const span = (s: InteractionCpu['wait']) => (s ? { ms: s.ms, top: s.top.map(as_fn) } : null);
 	const input: PageInput = {
+		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
 		vitals: visit.vitals ?? {},
 		visit: {
 			nav: visit.nav,
