@@ -24,7 +24,9 @@ test.use({ baseURL: base });
 test.beforeAll(async () => {
 	srv = await spawn_server({
 		cmd: 'pnpm',
-		args: ['--dir', playground, 'dev', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+		// (`--force`: a cold dep optimizer every run, the case that bit — a dependency found late
+		// re-optimized and reloaded the page, closing a dock just opened; the first test checks none is)
+		args: ['--dir', playground, 'dev', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1', '--force'],
 		cwd: repo,
 		env: { OGYGIA_DEVTOOLS: '1', ORIGIN: base },
 		url: `${base}/interaction`,
@@ -85,6 +87,34 @@ async function wait_for_event(
 }
 
 test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, page view', () => {
+	test('a cold dev server: opening the dock and its tabs finds no dependency late (no re-optimize, no reload)', async ({ page }) => {
+		// from the first visit on: the dev server's startup optimized everything a page and the dock
+		// import (the app's code by its crawl, ogygia's client and dock deps by its include list), so
+		// nothing may be found late — not by the page's first load (the dock's code loads with it),
+		// not by opening the dock
+		const from = srv!.logs.join('').length;
+		let navs = 0;
+		page.on('framenavigated', (f) => f === page.mainFrame() && navs++);
+		await page.goto('/interaction', { waitUntil: 'load' });
+		await page.waitForTimeout(2500);
+		navs = 0;
+		await page.click('[data-og-panel-toggle]');
+		const open = await page.locator('[data-og-win]').waitFor({ timeout: 20_000 }).then(() => true).catch(() => false);
+		for (const t of await page.locator('[data-og-tab]').all()) {
+			await t.click().catch(() => {});
+			await page.waitForTimeout(250);
+		}
+		await page.waitForTimeout(2500);
+		const late = srv!.logs
+			.join('')
+			.slice(from)
+			.split('\n')
+			.filter((l) => l.includes('optimized dependencies changed') || l.includes('dependency optimized') || l.includes('dependencies optimized'));
+		check('the dock opened, and stayed open through every tab', open && (await page.locator('[data-og-win]').count()) === 1);
+		check('no reload while the dock was open', navs === 0, `${navs} reload(s)`);
+		check('no dependency found late', late.length === 0, late.slice(0, 3).join(' | '));
+	});
+
 	test('schema, server realm, panel tabs, event-driven wake/replay, identity spine, nav, trace, timeline', async ({
 		page
 	}) => {

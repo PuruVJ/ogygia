@@ -38,7 +38,8 @@ function real(name: string): string {
 const FILES: Record<string, string> = {
 	'package.json': '{ "name": "installed-app", "private": true, "type": "module" }\n',
 	'svelte.config.js': "import { ogygia } from 'ogygia/vite';\nexport default { extensions: ogygia.extensions(), preprocess: [...ogygia.preprocess()], kit: {} };\n",
-	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia(), sveltekit()] };\n",
+	// (devtools on, the way an app turns it on in dev: its dock's packages must be found up front)
+	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()] };\n",
 	'src/app.html': '<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',
 	'src/routes/+page.ts': 'export const csr = false;\n',
 	// an island with a snippet prop (its children: they cross as a wired value) …
@@ -78,7 +79,7 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		fs.mkdirSync(path.join(nm, 'ogygia'), { recursive: true });
 		const tgz = execFileSync('pnpm', ['pack', '--pack-destination', app], { cwd: pkg, encoding: 'utf8' }).trim().split('\n').at(-1)!;
 		execFileSync('tar', ['-xzf', path.isAbsolute(tgz) ? tgz : path.join(app, path.basename(tgz)), '-C', path.join(nm, 'ogygia'), '--strip-components=1']);
-		for (const dep of ['svelte', '@sveltejs', 'vite', 'devalue', 'esm-env', 'estree-walker', 'magic-string', 'rolldown', 'tinyglobby'])
+		for (const dep of ['svelte', '@sveltejs', 'vite', 'devalue', 'esm-env', 'estree-walker', 'magic-string', 'rolldown', 'tinyglobby', '@neodrag'])
 			fs.symlinkSync(real(dep), path.join(nm, dep));
 		srv = await spawn_server({
 			cmd: process.execPath,
@@ -114,7 +115,15 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 
 		// ONE COPY: every ogygia module the browser loaded is ogygia's own file, each once — none
 		// from the dep optimizer's bundle (where a second copy of its state would live)
-		const loaded = await page.evaluate(() => performance.getEntriesByType('resource').map((r) => new URL(r.name).pathname));
+		// (by path AND query, Vite's `v=` / `t=` stamps aside: a component with styles is requested twice
+		// by design — its module, and its `?svelte&type=style` sheet — and that is not a second copy)
+		const loaded = await page.evaluate(() =>
+			performance.getEntriesByType('resource').map((r) => {
+				const u = new URL(r.name);
+				for (const k of ['v', 't']) u.searchParams.delete(k);
+				return u.pathname + u.search;
+			})
+		);
 		const own = loaded.filter((p) => p.includes('/node_modules/ogygia/'));
 		check('the page loads ogygia’s runtime and its slots from ogygia’s own files', own.some((p) => p.endsWith('/runtime/slots.js')) && own.some((p) => p.endsWith('/runtime/hydrate-core.js')), own.length + ' files');
 		check('each ogygia file once', new Set(own).size === own.length, own.filter((p, i) => own.indexOf(p) !== i).join(', '));
@@ -124,5 +133,23 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 			.map(([id]) => id);
 		check('the dep optimizer bundled no part of ogygia', !!meta && bundled.length === 0, bundled.join(', '));
 		check('…while it still bundles ogygia’s dependencies, shared with the app', !!meta && 'svelte' in (meta.optimized ?? {}), Object.keys(meta?.optimized ?? {}).slice(0, 6).join(', '));
+	});
+
+	test('opening the devtools dock on a cold server finds nothing late: no re-optimize, no reload', async ({ page }) => {
+		// (the first test settled the page; from here on, the log must stay quiet)
+		const from = srv!.logs.join('').length;
+		let navs = 0;
+		page.on('framenavigated', (f) => f === page.mainFrame() && navs++);
+		await page.goto(`${base}/`, { waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		const loaded = navs;
+		await page.click('[data-og-panel-toggle]');
+		const open = await page.locator('[data-og-win]').waitFor({ timeout: 20_000 }).then(() => true).catch(() => false);
+		for (const t of await page.locator('[data-og-tab]').all()) await t.click().catch(() => {});
+		await page.waitForTimeout(3000);
+		const late = srv!.logs.join('').slice(from).split('\n').filter((l) => l.includes('optimized dependencies changed') || l.includes('new dependencies optimized') || l.includes('dependency optimized') || l.includes('dependencies optimized'));
+		check('the dock opened, and stayed open', open && (await page.locator('[data-og-win]').count()) === 1);
+		check('no page reload after the dock was opened', navs === loaded, `${navs - loaded} reload(s)`);
+		check('no dependency found late (each one re-optimizes and reloads the page)', late.length === 0, late.slice(0, 3).join(' | '));
 	});
 });

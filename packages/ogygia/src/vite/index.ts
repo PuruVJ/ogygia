@@ -536,8 +536,22 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// forces one up-front optimize pass and removes the first-minutes cliff. Dev server
 					// only; a build has a real client graph. The app's own `include` is preserved by Vite
 					// (it merges plugin `include` arrays).
+					// …and what ogygia's own client code imports in dev: `svelte/server` (a region snippet's
+					// static capture — a build drops it, the dev server serves it) and, with devtools on, the
+					// dock's drag and resize. Found late, each one re-optimized and RELOADED the page — a
+					// dock opened in that moment closed again (the devtools suite's cold-start timeouts).
+					// (the dock's are ogygia's own dependencies: named through it, `ogygia > …`, the way Vite
+					// includes a dependency of an excluded package)
 					const dev_island_deps =
-						env.command === 'serve' ? ['svelte', 'svelte/internal/client', 'devalue'] : [];
+						env.command === 'serve'
+							? [
+									'svelte',
+									'svelte/internal/client',
+									'svelte/server',
+									'devalue',
+									...(devtools_effective ? ['ogygia > @neodrag/svelte', 'ogygia > @neodrag/svelte/resize'] : [])
+								]
+							: [];
 					// ONE OGYGIA IN THE DEV BROWSER: ogygia itself is never pre-bundled. An installed
 					// ogygia (not a workspace link) would be: the boot's `ogygia/runtime` went into
 					// `.vite/deps` while everything the compiler writes — the island modules and their
