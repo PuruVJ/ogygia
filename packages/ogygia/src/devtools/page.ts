@@ -262,6 +262,22 @@ export function unmeasured(cpu_off?: string | null): string[] {
 	return out;
 }
 
+/** The island a script file belongs to, when it is one's own file (by its location or identity). */
+function island_of_file(url: string): { island?: string } {
+	const base = (u: string) => {
+		const q = u.indexOf('?');
+		const p = q === -1 ? u : u.slice(0, q);
+		return p.slice(p.lastIndexOf('/') + 1);
+	};
+	const file = base(url);
+	if (!file) return {};
+	for (const r of all_regions()) {
+		const src = r.el.getAttribute('src');
+		if (r.entry && ((src && base(src) === file) || base(r.entry) === file)) return { island: region_name(r.entry) };
+	}
+	return {};
+}
+
 export function read_page(): PageView | null {
 	const page = beacon_page();
 	if (!page) return null;
@@ -276,8 +292,11 @@ export function read_page(): PageView | null {
 	// (an island whose own file was gone, named as every tab names it)
 	const fallbacks = base.visit?.entry_fallbacks?.map((f) => ({ ...f, name: region_name(f.entry) }));
 	const refetched = base.visit?.refetched?.map((f) => (f.entry ? { ...f, name: region_name(f.entry) } : f));
+	// the slowest interaction's scripts, named by the island whose file each is (its location, or its
+	// identity) — a built chunk name tells the reader nothing
+	const interaction = base.visit?.interaction ? { ...base.visit.interaction, scripts: base.visit.interaction.scripts?.map((s) => ({ ...s, ...island_of_file(s.url) })) } : undefined;
 	const with_visit: PageInput = base.visit
-		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}) } }
+		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}) } }
 		: base;
 	const holes = hole_failures();
 	const code = island_code();

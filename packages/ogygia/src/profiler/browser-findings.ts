@@ -27,6 +27,13 @@ export interface BrowserFinding {
 	fps: string[];
 }
 
+/** `og-region.<id>.<hash>.js` → `og-region.<id>.js` (a location's identity); anything else as is. */
+function identity_file(file: string): string {
+	if (!file.startsWith('og-region.')) return file;
+	const parts = file.split('.');
+	return parts.length === 4 ? `${parts[0]}.${parts[1]}.${parts[3]}` : file;
+}
+
 function name_from_entry(entry: string): string {
 	const q = entry.indexOf('?');
 	const path = q === -1 ? entry : entry.slice(0, q);
@@ -99,6 +106,19 @@ export function browser_page_report(
 				: {}),
 			// (an island known from the page's render by its name; one a hole's answer carried — the
 			// page's render never saw it — as the island in that hole)
+			// (the slowest interaction's scripts named by the island whose file each is: a location is
+			// its identity plus a content hash, so the identity file is the location minus that segment)
+			...(visit.interaction
+				? {
+						interaction: {
+							...visit.interaction,
+							scripts: visit.interaction.scripts?.map((s) => {
+								const own = by_file.get(identity_file(file_of(s.url)));
+								return own ? { ...s, island: own } : s;
+							})
+						}
+					}
+				: {}),
 			...(visit.refetched
 				? {
 						refetched: visit.refetched.map((f) => {

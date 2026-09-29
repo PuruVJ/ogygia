@@ -174,6 +174,76 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	describe('the slowest interaction, explained (slow-interaction)', () => {
+		const origin = 'https://a.test';
+		const at = (over: Partial<PageInput['visit'] & object>) => ({ ...page().visit!, origin, ...over });
+		const it_of = (over: object) => ({ name: 'click', t: 1000, ms: 300, delay: 5, processing: 270, presentation: 25, target: 'button "Save"', fp: 's', ...over });
+		const find = (r: ReturnType<typeof analyze_page>) => r.findings.find((f) => f.code === 'slow-interaction');
+
+		it("its own handler: the island clicked, the button, the phases, and the island's handler (Svelte's dispatcher never named)", () => {
+			const r = analyze_page(
+				page({ vitals: { inp: 300 }, visit: at({ interaction: it_of({ scripts: [{ url: `${origin}/_app/immutable/chunks/events-B1q.js`, fn: 'handle_event_propagation', invoker: 'DOCUMENT.onclick', ms: 268, phase: 'handler' }] }) }) }),
+				[region('s', 'SlowSave')],
+				[],
+				3000
+			);
+			const f = find(r)!;
+			// (the vital's rating sets the severity: 200–500 ms needs work)
+			expect(f.severity).toBe('info');
+			expect(f.message).toContain('INP is 300 ms (needs work; good is ≤ 200 ms). The slowest was a click on button "Save" in SlowSave: 5 ms before its handlers could run, 270 ms in its handlers (mostly SlowSave\'s own click handler), 25 ms to paint the next frame.');
+			expect(f.message).not.toContain('handle_event_propagation');
+			expect(f.fix).toMatch(/^The handler itself is the cost/);
+			expect(f.fps).toEqual(['s']);
+			// (in place of the bare vital, never beside it)
+			expect(codes(r)).not.toContain('vital-inp');
+		});
+
+		it('another origin’s listener keeps its own name', () => {
+			const f = find(analyze_page(page({ vitals: { inp: 300 }, visit: at({ interaction: it_of({ scripts: [{ url: 'https://tags.example/t.js', fn: 'track', invoker: 'DOCUMENT.onclick', ms: 250, phase: 'handler' }] }) }) }), [region('s', 'SlowSave')], [], 3000))!;
+			expect(f.message).toContain("(mostly t.js's track (an event handler, 250 ms))");
+		});
+
+		it('it waited behind an island hydrating: named, and the fix is about waking later', () => {
+			const f = find(
+				analyze_page(
+					page({ vitals: { inp: 320 }, islands: [{ fp: 'h', t0: 100, loaded: 900, done: 1300 }], visit: at({ interaction: it_of({ fp: 'q', target: 'button "Count"', delay: 290, processing: 10, presentation: 20 }) }) }),
+					[region('q', 'QuickCount'), region('h', 'Heavy')],
+					[],
+					3000
+				)
+			)!;
+			expect(f.message).toContain('in QuickCount: 290 ms before its handlers could run (Heavy was hydrating)');
+			expect(f.fix).toMatch(/^The input waited for islands to hydrate/);
+		});
+
+		it('it waited behind a script in a long frame: the script, its function and what ran it', () => {
+			const f = find(
+				analyze_page(
+					page({ vitals: { inp: 350 }, visit: at({ interaction: it_of({ fp: 'q', delay: 330, processing: 2, presentation: 18, scripts: [{ url: `${origin}/src/lib/BusyTimer.svelte?t=1`, fn: 'planted_busy_timer', invoker: 'TimerHandler:setTimeout', ms: 400, phase: 'delay' }] }) }) }),
+					[region('q', 'QuickCount')],
+					[],
+					3000
+				)
+			)!;
+			expect(f.message).toContain("(the main thread was running BusyTimer.svelte's planted_busy_timer (a timer, 400 ms))");
+			expect(f.fix).toMatch(/^The input waited for other work on the main thread/);
+		});
+
+		it('the paint cost most: said so; a key press outside any island reads as such', () => {
+			const f = find(analyze_page(page({ vitals: { inp: 260 }, visit: at({ interaction: it_of({ name: 'keydown', fp: undefined, target: 'input[name=q]', delay: 10, processing: 40, presentation: 210 }) }) }), [], [], 3000))!;
+			expect(f.message).toContain('The slowest was a key press on input[name=q] outside any island: 10 ms before its handlers could run, 40 ms in its handlers, 210 ms to paint the next frame.');
+			expect(f.fix).toMatch(/^Painting the result is the cost/);
+			expect(f.fps).toEqual([]);
+		});
+
+		it('a good INP says nothing; an INP without the interaction keeps the bare vital', () => {
+			expect(codes(analyze_page(page({ vitals: { inp: 120 }, visit: at({ interaction: it_of({ ms: 120 }) }) }), [], [], 3000))).not.toContain('slow-interaction');
+			const bare = analyze_page(page({ vitals: { inp: 300 } }), [], [], 3000);
+			expect(codes(bare)).toContain('vital-inp');
+			expect(codes(bare)).not.toContain('slow-interaction');
+		});
+	});
+
 	it('content-named files fetched again: revalidated (a round trip each) and downloaded on a reload, heaviest named first', () => {
 		const re = (file: string, how: 'revalidated' | 'downloaded', bytes: number, ms: number, extra: object = {}) => ({ url: `https://a.test/_app/immutable/${file}`, how, bytes, ms, ...extra });
 		const f = analyze_page(

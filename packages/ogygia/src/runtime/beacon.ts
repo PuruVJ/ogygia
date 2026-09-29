@@ -128,6 +128,32 @@ let visit_shifts: Shift[] = [];
 let visit_longtasks: { t: number; ms: number }[] = [];
 /** main-thread ms per script URL (query off), from long animation frames */
 let visit_scripts = new Map<string, { ms: number; count: number }>();
+/** THE SLOWEST INTERACTION (the one INP reports), split the way the browser times it: the wait
+ *  before its handlers ran, the handlers, and the paint after. `target`: what was clicked, told
+ *  briefly; `fp`: the island it was in */
+interface Interaction {
+	name: string;
+	t: number;
+	ms: number;
+	delay: number;
+	processing: number;
+	presentation: number;
+	target: string;
+	fp?: string;
+}
+let visit_interaction: Interaction | null = null;
+/** the slowest interaction's id and its span so far (its entries arrive one by one) */
+let visit_interaction_id = 0;
+let visit_interaction_span: { start: number; ps: number; pe: number; end: number } | null = null;
+/** the last long animation frames, each with the scripts that ran in it: what the slowest
+ *  interaction waited behind, or ran, is read from the frames around it when the visit is built */
+interface Frame {
+	start: number;
+	end: number;
+	scripts: { url: string; fn: string; invoker: string; start: number; ms: number }[];
+}
+let visit_frames: Frame[] = [];
+const MAX_FRAMES = 40;
 /** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 let visit_warnings: { code: string; message: string; file?: string; fp?: string; t: number }[] = [];
 
@@ -297,6 +323,16 @@ const fp_of = (node: unknown): string | undefined => {
 	const el = node && (node as Node).nodeType === 1 ? (node as Element) : node && (node as Node).nodeType === 3 ? (node as Node).parentElement : null;
 	return el?.closest?.(ISLAND_SEL)?.getAttribute('data-og-fp') ?? undefined;
 };
+/** What was clicked, told briefly: `button "Save"`, `a#home`, `input[name=q]`. No selector engine. */
+function describe_target(node: Node | null | undefined): string {
+	const el = node && node.nodeType === 1 ? (node as Element) : node?.parentElement;
+	if (!el) return '';
+	const tag = el.tagName.toLowerCase();
+	const id = el.id ? `#${el.id.slice(0, 30)}` : '';
+	const name = el.getAttribute('name');
+	const label = el.getAttribute('aria-label') ?? (tag === 'input' || tag === 'select' || tag === 'textarea' ? '' : (el.textContent ?? '').trim().slice(0, 30));
+	return `${tag}${id}${name ? `[name=${name.slice(0, 30)}]` : ''}${label ? ` "${label}"` : ''}`;
+}
 const rect_of = (r: DOMRectReadOnly | undefined): [number, number, number, number] | undefined => (r ? [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : undefined);
 
 /** every resource entry the observer saw (the browser's own buffer stops at 250 by default) */
@@ -367,13 +403,43 @@ function observe_vitals(): void {
 		v.cls = Math.round(cls * 1000) / 1000;
 	});
 	observe('event', (entries) => {
-		for (const e of entries as (PerformanceEntry & { interactionId?: number })[]) {
+		for (const e of entries as (PerformanceEntry & { interactionId?: number; processingStart?: number; processingEnd?: number; target?: Node | null })[]) {
 			if (!e.interactionId) continue;
 			const d = r2(e.duration);
+			// ONE INTERACTION IS SEVERAL ENTRIES (pointerdown, pointerup, click; keydown, keyup) of the
+			// same length: the first alone has none of the click's handlers (a pointerdown's are
+			// trivial), so every entry of the slowest interaction is folded in — its handlers run from
+			// the earliest entry's start to the latest one's end, and it waited until the first began
+			const same = visit_interaction_id === e.interactionId;
+			if (!same && v.inp !== undefined && d <= v.inp) continue;
 			if (v.inp === undefined || d > v.inp) {
 				v.inp = d;
 				resend_soon();
 			}
+			const ps = e.processingStart ?? e.startTime;
+			const pe = e.processingEnd ?? ps;
+			const fold = same ? visit_interaction_span : null;
+			const span = (visit_interaction_span = {
+				start: fold ? Math.min(fold.start, e.startTime) : e.startTime,
+				ps: fold ? Math.min(fold.ps, ps) : ps,
+				pe: fold ? Math.max(fold.pe, pe) : pe,
+				end: fold ? Math.max(fold.end, e.startTime + e.duration) : e.startTime + e.duration
+			});
+			visit_interaction_id = e.interactionId;
+			// (the click or the key press names it, over the pointer entries; the target is read now:
+			// the node may be gone by the time the visit is built)
+			const named = !same || e.name === 'click' || e.name === 'keydown' ? e : null;
+			const fp = named ? fp_of(e.target) : visit_interaction?.fp;
+			visit_interaction = {
+				name: named ? e.name : visit_interaction!.name,
+				t: r2(span.start),
+				ms: r2(span.end - span.start),
+				delay: r2(Math.max(0, span.ps - span.start)),
+				processing: r2(Math.max(0, span.pe - span.ps)),
+				presentation: r2(Math.max(0, span.end - span.pe)),
+				target: named ? describe_target(e.target) || visit_interaction?.target || '' : visit_interaction!.target,
+				...(fp ? { fp } : {})
+			};
 		}
 	});
 	observe('longtask', (entries) => {
@@ -383,7 +449,20 @@ function observe_vitals(): void {
 	// name each script that ran in them — a third party's cost is measured even before the CPU
 	// sampler starts, and where the sampler cannot see into it
 	observe('long-animation-frame', (entries) => {
-		for (const e of entries as (PerformanceEntry & { scripts?: { sourceURL?: string; duration?: number }[] })[])
+		for (const e of entries as (PerformanceEntry & { scripts?: { sourceURL?: string; duration?: number; startTime?: number; invoker?: string; sourceFunctionName?: string }[] })[]) {
+			// each frame, kept briefly, with its scripts: what an interaction waited behind or ran
+			visit_frames.push({
+				start: r2(e.startTime),
+				end: r2(e.startTime + e.duration),
+				scripts: (e.scripts ?? []).slice(0, 8).map((s) => ({
+					url: (s.sourceURL ?? '').slice(0, 300),
+					fn: (s.sourceFunctionName ?? '').slice(0, 80),
+					invoker: (s.invoker ?? '').slice(0, 120),
+					start: r2(s.startTime ?? e.startTime),
+					ms: r2(s.duration ?? 0)
+				}))
+			});
+			if (visit_frames.length > MAX_FRAMES) visit_frames.shift();
 			for (const s of e.scripts ?? []) {
 				const url = s.sourceURL ?? '';
 				if (!url || !(s.duration && s.duration > 0)) continue;
@@ -395,6 +474,7 @@ function observe_vitals(): void {
 					cur.count++;
 				} else if (visit_scripts.size < 100) visit_scripts.set(key, { ms: s.duration, count: 1 });
 			}
+		}
 	});
 	// the first interaction inside each island: capture phase, one entry per fingerprint
 	const seen = new Set<string>();
@@ -454,6 +534,27 @@ function flush_vitals(): void {
 	vitals_sent = true;
 	// `at` = this visit (its navigation start): the copy inside the visit and this one fold into one
 	send(JSON.stringify({ page: location.pathname, at: Math.round(performance.timeOrigin), vitals }));
+}
+
+/** The slowest interaction with the scripts of the long frames it overlapped, each put in the phase
+ *  it started in: `delay` (the input waited behind it), `handler` (it ran the interaction's
+ *  handlers), `paint` (after them, before the next frame). The heaviest few. */
+function interaction_with_scripts(i: Interaction): Interaction & { scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint' }[] } {
+	const end = i.t + i.ms;
+	const handlers_at = i.t + i.delay;
+	const paint_at = handlers_at + i.processing;
+	const out: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint' }[] = [];
+	for (const f of visit_frames) {
+		if (f.end < i.t || f.start > end) continue;
+		for (const s of f.scripts) {
+			// (a script that ended before the input landed is not in the way; one that runs through it is)
+			if (s.start + s.ms < i.t || s.start > end || !(s.ms > 0)) continue;
+			const phase = s.start < handlers_at ? 'delay' : s.start <= paint_at ? 'handler' : 'paint';
+			out.push({ url: s.url, fn: s.fn, invoker: s.invoker, ms: s.ms, phase });
+		}
+	}
+	out.sort((a, b) => b.ms - a.ms);
+	return out.length ? { ...i, scripts: out.slice(0, 6) } : { ...i };
 }
 
 /** the visit as one object: the server's copy has no snapshots (they are big and the browser
@@ -613,6 +714,7 @@ function build_visit(): Record<string, unknown> | null {
 		islands: visit_islands,
 		firsts: visit_firsts,
 		shifts: visit_shifts,
+		...(visit_interaction ? { interaction: interaction_with_scripts(visit_interaction) } : {}),
 		...(visit_scripts.size ? { scripts: [...visit_scripts].map(([url, s]) => ({ url, ms: r2(s.ms), count: s.count })).sort((a, b) => b.ms - a.ms).slice(0, 50) } : {}),
 		regions: visit_regions(),
 		...(visit_warnings.length ? { warnings: visit_warnings.slice() } : {}),
@@ -1124,6 +1226,10 @@ export function _reset_beacon(): void {
 	visit_shifts = [];
 	visit_longtasks = [];
 	visit_scripts = new Map();
+	visit_interaction = null;
+	visit_interaction_id = 0;
+	visit_interaction_span = null;
+	visit_frames = [];
 	visit_warnings = [];
 	visit_holes_failed = [];
 	visit_holes_answered = [];

@@ -28,6 +28,21 @@ export interface PageIsland {
 	ssr_bytes?: number;
 }
 
+export interface PageInteraction {
+	name: string;
+	t: number;
+	ms: number;
+	/** input → its handlers began (the main thread was busy) */
+	delay: number;
+	/** the handlers */
+	processing: number;
+	/** handlers done → the next frame painted */
+	presentation: number;
+	target: string;
+	fp?: string;
+	scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; island?: string }[];
+}
+
 export interface PageInput {
 	vitals: { ttfb?: number; fcp?: number; lcp?: number; cls?: number; inp?: number };
 	visit: {
@@ -54,6 +69,9 @@ export interface PageInput {
 		/** content-named files the browser fetched again (revalidated, or downloaded on a reload);
 		 *  `name` when the reader could name the island */
 		refetched?: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; runtime?: boolean; name?: string }[];
+		/** the slowest interaction (the one INP reports), split by phase, with the scripts of the long
+		 *  frames around it; `island` on a script when the reader could name the island its file is */
+		interaction?: PageInteraction;
 	} | null;
 	islands: PageIsland[];
 	firsts: { fp: string; t: number; type: string }[];
@@ -555,11 +573,16 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// ── the vitals themselves ──
 	for (const v of vitals) {
 		if (v.rating === 'good') continue;
+		const head = `${v.label} is ${v.key === 'cls' ? v.value : `${Math.round(v.value)} ms`} (${v.rating === 'poor' ? 'poor' : 'needs work'}; good is ${v.key === 'cls' ? '≤ ' + LIMITS[v.key][0] : '≤ ' + LIMITS[v.key][0] + ' ms'}).`;
+		const why = v.key === 'inp' ? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin) : null;
+		// (the slowest interaction explained is its own finding, in place of the bare INP: the
+		// profiler words INP from all its visits, and keeps this one visit's explanation)
 		findings.push({
-			code: `vital-${v.key}`,
+			code: why ? 'slow-interaction' : `vital-${v.key}`,
 			severity: v.rating === 'poor' ? 'warn' : 'info',
-			message: `${v.label} is ${v.key === 'cls' ? v.value : `${Math.round(v.value)} ms`} (${v.rating === 'poor' ? 'poor' : 'needs work'}; good is ${v.key === 'cls' ? '≤ ' + LIMITS[v.key][0] : '≤ ' + LIMITS[v.key][0] + ' ms'}).`,
-			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : []
+			message: why ? `${head} ${why.message}` : head,
+			...(why ? { fix: why.fix } : {}),
+			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? []
 		});
 	}
 
@@ -877,6 +900,93 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		longtask_ms: round(longtask_ms),
 		third_party: tp
 	};
+}
+
+/** One long-frame script, told: `BusyTimer.svelte's planted_busy_timer (a timer, 400 ms)`. */
+function describe_script(s: NonNullable<PageInteraction['scripts']>[number]): string {
+	let who = s.island ?? '';
+	if (!who) {
+		const q = s.url.indexOf('?');
+		const p = q === -1 ? s.url : s.url.slice(0, q);
+		who = p.slice(p.lastIndexOf('/') + 1) || 'a script';
+	}
+	const inv = s.invoker;
+	const kind = inv.startsWith('TimerHandler')
+		? 'a timer'
+		: inv.startsWith('FrameRequestCallback')
+			? 'an animation frame'
+			: inv.includes('requestIdleCallback')
+				? 'an idle callback'
+				: inv.includes('.then') || inv.startsWith('Promise')
+					? 'a promise'
+					: inv.includes('.on')
+						? 'an event handler'
+						: '';
+	return `${who}${s.fn ? `'s ${s.fn}` : ''} (${kind ? `${kind}, ` : ''}${Math.round(s.ms)} ms)`;
+}
+
+/** THE SLOWEST INTERACTION, explained: where it landed, which phase cost the time, and what held
+ *  it — an island hydrating, a script in a long frame, the handler's own code, or the paint. */
+function explain_interaction(
+	i: PageInteraction | undefined,
+	rows: readonly IslandRow[],
+	name_of: (fp: string | undefined) => string,
+	origin: string | undefined
+): { message: string; fix: string; fps: string[] } | null {
+	if (!i || !(i.delay + i.processing + i.presentation > 0)) return null;
+	const what = i.name === 'click' || i.name.startsWith('pointer') || i.name.startsWith('mouse') ? 'a click' : i.name.startsWith('key') ? 'a key press' : `a ${i.name}`;
+	const where = i.fp ? `in ${name_of(i.fp)}` : 'outside any island';
+	const on = i.target ? ` on ${i.target}` : '';
+	const ms = (n: number) => `${Math.round(n)} ms`;
+	const phases = [
+		{ key: 'delay' as const, ms: i.delay, text: `${ms(i.delay)} before its handlers could run` },
+		{ key: 'handler' as const, ms: i.processing, text: `${ms(i.processing)} in its handlers` },
+		{ key: 'paint' as const, ms: i.presentation, text: `${ms(i.presentation)} to paint the next frame` }
+	];
+	const top = phases.reduce((a, b) => (b.ms > a.ms ? b : a));
+	const scripts = i.scripts ?? [];
+	const of_phase = (p: 'delay' | 'handler' | 'paint') => scripts.filter((s) => s.phase === p);
+	// what the input waited behind: islands hydrating then (their hydrate step overlapped the wait),
+	// else the scripts of the long frames that ran in it
+	const wait_end = i.t + i.delay;
+	const hydrating = rows.filter((r) => r.fp !== i.fp && Math.min(r.done, wait_end) - Math.max(r.done - r.hydrate_ms, i.t) > 1);
+	const behind = hydrating.length
+		? `${list(hydrating.map((r) => r.name))} ${hydrating.length === 1 ? 'was' : 'were'} hydrating`
+		: of_phase('delay').length
+			? `the main thread was running ${list(of_phase('delay').slice(0, 3).map(describe_script))}`
+			: '';
+	const handler = of_phase('handler')[0];
+	// Svelte delegates events: the frame names its one dispatcher (or, built, a minified function in
+	// a chunk), never the island's handler it called. A page-origin event handler for a click inside
+	// an island is that island's own; another origin's listener keeps its name (a third party's)
+	const own_origin = (url: string) => {
+		if (!origin) return true;
+		try {
+			return new URL(url, origin).origin === origin;
+		} catch {
+			return true;
+		}
+	};
+	const handler_text = !handler
+		? ''
+		: i.fp && handler.invoker.includes('.on') && own_origin(handler.url)
+			? `${name_of(i.fp)}'s own ${i.name} handler`
+			: describe_script(handler);
+	const parts = phases.map((p) => {
+		if (p.key === 'delay' && behind && p.ms >= 16) return `${p.text} (${behind})`;
+		if (p.key === 'handler' && handler_text && p.ms >= 16) return `${p.text} (mostly ${handler_text})`;
+		return p.text;
+	});
+	const message = `The slowest was ${what}${on} ${where}: ${parts[0]}, ${parts[1]}, ${parts[2]}.`;
+	const fix =
+		top.key === 'delay'
+			? hydrating.length
+				? 'The input waited for islands to hydrate: wake the ones not needed at once later (wake="visible" or "idle"), or make their hydration lighter, so a click is never queued behind it.'
+				: 'The input waited for other work on the main thread: split that long task (yield between steps with `await new Promise(r => setTimeout(r))`), or move it off the main thread, or run it when the visitor is not interacting.'
+			: top.key === 'handler'
+				? 'The handler itself is the cost: update the screen first and do the heavy part after the next frame (`requestAnimationFrame` then `setTimeout`), do less per event, or move the work to a worker.'
+				: 'Painting the result is the cost: the handler changed a lot of the page. Change less per update (a shorter list, `content-visibility: auto` for off-screen parts), and avoid reading layout right after writing it.';
+	return { message, fix, fps: i.fp ? [i.fp] : [] };
 }
 
 function list(names: string[]): string {

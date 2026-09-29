@@ -181,6 +181,29 @@ test('content-named files fetched again reach the report, named from the island 
 	expect(g?.message).toContain('(the island in HoleProbe)');
 });
 
+test('the slowest interaction reaches the report: parsed, the slower of two records kept, a built island file named', () => {
+	const row = rows[0];
+	const fp = row?.fp ?? '0123456789abcdef';
+	// a location is its identity plus a content hash: the script's file names the island
+	const loc = (row?.entry ?? '/_app/immutable/og-region.0123456789ab.js').replace(/\.js$/, '.Hh12Kk34.js');
+	const interaction = (ms: number) => ({ name: 'click', t: 900, ms, delay: 3, processing: ms - 20, presentation: 17, target: 'button "Save"', fp, scripts: [{ url: `https://a.test${loc}`, fn: 'Ce', invoker: 'HTMLButtonElement.onclick', ms: ms - 25, phase: 'handler' }, { url: 7, phase: 'handler' }, { url: 'x.js', ms: 5, phase: 'elsewhere' }] });
+	const v = parse_visit('/lab', { ...raw, vitals: { inp: 320 }, interaction: interaction(320) })!;
+	expect(v.interaction?.scripts).toHaveLength(1);
+	expect(v.interaction?.target).toBe('button "Save"');
+	const lighter = parse_visit('/lab', { ...raw, vitals: { inp: 240 }, interaction: interaction(240) })!;
+	expect(merge_visits(v, lighter).interaction?.ms).toBe(320);
+	expect(merge_visits(lighter, v).interaction?.ms).toBe(320);
+	// junk is dropped whole
+	expect(parse_visit('/lab', { ...raw, interaction: { name: 'click' } })!.interaction).toBeUndefined();
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'slow-interaction');
+	expect(f?.message).toContain('In the browser: INP is 320 ms');
+	if (row) {
+		expect(f?.message).toContain(`a click on button "Save" in ${row.name}`);
+		// a same-origin event handler for a click in the island is the island's own
+		expect(f?.message).toContain(`(mostly ${row.name}'s own click handler)`);
+	}
+});
+
 test('a preload downloaded again reaches the report, even on a page with no island', () => {
 	const v = parse_visit('/lab', {
 		...raw,

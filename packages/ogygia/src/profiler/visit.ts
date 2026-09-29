@@ -7,6 +7,7 @@
  * one clock — the report's first picture.
  */
 import { hole_segments, HOLE_SEG_LABEL } from '../devtools/hole-segments.js';
+import type { PageInteraction } from '../devtools/page-insights.js';
 
 export interface VisitNav {
 	/** ms from navigation start */
@@ -118,6 +119,8 @@ export interface Visit {
 	/** content-named files (`/immutable/`) the browser fetched again: revalidated (a 304), or
 	 *  downloaded in full on a reload. `entry`: the island whose file it is; `runtime`: the runtime's */
 	refetched?: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; hole?: string; runtime?: boolean }[];
+	/** the slowest interaction (INP's), by phase, with the scripts of the long frames around it */
+	interaction?: PageInteraction;
 	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
 	holes_answered?: { id: string; n: number; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
 	viewport?: [number, number];
@@ -323,6 +326,33 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		refetched.push({ url, how, bytes, ms: num(f.ms, 600_000) ?? 0, ...(entry ? { entry } : {}), ...(hole ? { hole } : {}), ...(f.runtime === true ? { runtime: true } : {}) });
 	}
 	if (refetched.length) visit.refetched = refetched;
+	const it = v.interaction as Record<string, unknown> | undefined;
+	if (it && typeof it === 'object') {
+		const name = str(it.name, 40);
+		const t = num(it.t);
+		const ms = num(it.ms);
+		if (name && t !== undefined && ms !== undefined) {
+			const fp = typeof it.fp === 'string' && FP_RE.test(it.fp) ? it.fp : undefined;
+			const phases = new Set(['delay', 'handler', 'paint']);
+			const scripts: NonNullable<PageInteraction['scripts']> = [];
+			for (const s of (Array.isArray(it.scripts) ? it.scripts : []).slice(0, 6) as Record<string, unknown>[]) {
+				const sms = num(s?.ms);
+				if (sms === undefined || typeof s.phase !== 'string' || !phases.has(s.phase)) continue;
+				scripts.push({ url: str(s.url, 300) ?? '', fn: str(s.fn, 80) ?? '', invoker: str(s.invoker, 120) ?? '', ms: sms, phase: s.phase as 'delay' | 'handler' | 'paint' });
+			}
+			visit.interaction = {
+				name,
+				t,
+				ms,
+				delay: num(it.delay) ?? 0,
+				processing: num(it.processing) ?? 0,
+				presentation: num(it.presentation) ?? 0,
+				target: str(it.target, 100) ?? '',
+				...(fp ? { fp } : {}),
+				...(scripts.length ? { scripts } : {})
+			};
+		}
+	}
 	const holes_answered: NonNullable<Visit['holes_answered']> = [];
 	for (const h of (Array.isArray(v.holes_answered) ? v.holes_answered : []).slice(0, 30) as Record<string, unknown>[]) {
 		const id = str(h?.id, 40);
@@ -422,6 +452,8 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		// (each record carries the whole list so far: the later one has them all)
 		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
+		// (the slower interaction of the two records: INP is the worst)
+		...(a.interaction || b.interaction ? { interaction: !a.interaction ? b.interaction : !b.interaction ? a.interaction : b.interaction.ms >= a.interaction.ms ? b.interaction : a.interaction } : {}),
 		...(a.entry_fallbacks || b.entry_fallbacks ? { entry_fallbacks: by(a.entry_fallbacks ?? [], b.entry_fallbacks ?? [], (f) => f.entry) } : {}),
 		...(a.holes_failed || b.holes_failed ? { holes_failed: by(a.holes_failed ?? [], b.holes_failed ?? [], (h) => h.id) } : {}),
 		...(a.holes_answered || b.holes_answered ? { holes_answered: by(a.holes_answered ?? [], b.holes_answered ?? [], (h) => `${h.n}:${h.id}`) } : {}),

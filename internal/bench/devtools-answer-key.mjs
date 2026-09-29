@@ -446,6 +446,81 @@ async function preload_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE SLOWEST INTERACTION (/dt-inp): SlowSave's click runs 260 ms in its own handler; a click on
+ *  QuickCount just after BusyTimer's waits behind BusyTimer's 400 ms timer; QuickCount alone is
+ *  quick. The INP finding must name the island clicked, the phase that cost the time, and (for the
+ *  wait) the timer — in the Page tab and in the profiler's report of the same visit. (Raw mouse
+ *  clicks: Playwright's click waits for the page to be idle, so a queued click would never queue.) */
+async function inp_run(browser) {
+	const read = async (mode) => {
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + '/dt-inp', { waitUntil: 'load' });
+		await page.waitForTimeout(1800);
+		const box = async (sel) => {
+			const b = await page.locator(sel).boundingBox();
+			return b ? [b.x + b.width / 2, b.y + b.height / 2] : [0, 0];
+		};
+		if (mode === 'save') await page.mouse.click(...(await box('[data-inp="save"]')));
+		if (mode === 'busy') {
+			const count = await box('[data-inp="count"]');
+			await page.mouse.click(...(await box('[data-inp="busy"]')));
+			await page.waitForTimeout(80);
+			await page.mouse.click(...count);
+		}
+		if (mode === 'count') await page.mouse.click(...(await box('[data-inp="count"]')));
+		// (the browser reports an interaction's timing after its next paint: give it a moment)
+		await page.waitForTimeout(1000);
+		const out = await page.evaluate(() => {
+			const r = window.__ogygia_page?.()?.report;
+			const f = r?.findings.find((x) => x.code === 'slow-interaction' || x.code === 'vital-inp');
+			return { inp: r?.vitals.find((v) => v.key === 'inp')?.value ?? null, message: f?.message ?? null, fix: f?.fix ?? null, fps: f?.fps ?? [] };
+		});
+		// leave the page the way a visitor does: the beacon sends its final visit on the hide (a fixed
+		// wait raced its timed resend on a loaded machine, and the report kept the visit before the click)
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		return out;
+	};
+	const rec = await fetch(`${base}/__profiler/page?p=/dt-inp&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const save = await read('save');
+	const busy = await read('busy');
+	const count = await read('count');
+	let in_report = null;
+	if (report_id)
+		for (let i = 0; i < 8 && !in_report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			in_report = j?.findings?.find((f) => f.code === 'slow-interaction')?.message ?? null;
+		}
+	// the phases, read back out of the message: they must add up to the INP (within a frame's rounding)
+	const phase_ms = (m) => {
+		const n = (label) => {
+			const at = m?.indexOf(label) ?? -1;
+			if (at < 0) return NaN;
+			const head = m.slice(0, at).trimEnd();
+			return Number(head.slice(head.lastIndexOf(' ') + 1));
+		};
+		return [n(' ms before its handlers'), n(' ms in its handlers'), n(' ms to paint')];
+	};
+	const sums = (r) => {
+		const p = phase_ms(r.message);
+		return p.every(Number.isFinite) && Math.abs(p[0] + p[1] + p[2] - r.inp) <= 3;
+	};
+	const checks = [
+		['slow handler: named on SlowSave, the Save button, in its own handler', !!save.message && save.message.includes('a click on button "Save" in SlowSave') && save.message.includes("(mostly SlowSave's own click handler)") && save.fix?.startsWith('The handler itself is the cost') && save.fps.length === 1],
+		['slow handler: its phases add up to the INP', sums(save)],
+		['queued click: on QuickCount, waited, behind BusyTimer’s timer', !!busy.message && busy.message.includes('in QuickCount') && busy.message.includes('before its handlers could run (the main thread was running') && busy.message.includes('planted_busy_timer (a timer') && busy.fix?.startsWith('The input waited for other work')],
+		['queued click: its phases add up to the INP', sums(busy)],
+		['the quick click alone: no INP finding', count.message === null && (count.inp ?? 0) < 200],
+		['the profiler report explains the same click', !report_id || (in_report?.includes("SlowSave's own click handler") ?? false)]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} interactions: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ save, busy, count, in_report })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 async function code_run(browser) {
 	const read = async (path) => {
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -628,6 +703,10 @@ try {
 	for (let i = 0; i < repeat; i++) preload_ok += await preload_run(browser);
 	if (preload_ok < repeat) failed = true;
 	console.log(`${preload_ok === repeat ? '✓' : '✗'} preloads downloaded again: ${preload_ok}/${repeat}`);
+	let inp_ok = 0;
+	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
+	if (inp_ok < repeat) failed = true;
+	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
 	let code_ok = 0;
 	for (let i = 0; i < repeat; i++) code_ok += await code_run(browser);
 	if (code_ok < repeat) failed = true;

@@ -144,6 +144,35 @@ check('Styles: the Page tab shows the sheets and the unscoped line', (await page
 	);
 	await planted.close();
 }
+// THE SLOWEST INTERACTION in a build: chunk names are hashes and functions are minified, so the
+// explanation must name islands by the build's names — the clicked one, and the one whose timer the
+// click waited behind (its script file is that island's own)
+{
+	const inp_of = async (mode) => {
+		const p = await ctx.newPage();
+		await p.goto(base + '/dt-inp', { waitUntil: 'load' });
+		await p.waitForTimeout(1500);
+		const center = async (sel) => {
+			const b = await p.locator(sel).boundingBox();
+			return [b.x + b.width / 2, b.y + b.height / 2];
+		};
+		if (mode === 'save') await p.mouse.click(...(await center('[data-inp="save"]')));
+		else {
+			const count = await center('[data-inp="count"]');
+			await p.mouse.click(...(await center('[data-inp="busy"]')));
+			await p.waitForTimeout(80);
+			await p.mouse.click(...count);
+		}
+		await p.waitForTimeout(1000);
+		const m = await p.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-interaction')?.message ?? null);
+		await p.close();
+		return m;
+	};
+	const save = await inp_of('save');
+	check('INP in a build: the slow handler, on SlowSave, its own handler', !!save && save.includes('in SlowSave') && save.includes("SlowSave's own click handler"), save ?? 'no finding');
+	const busy = await inp_of('busy');
+	check('INP in a build: the queued click names BusyTimer’s timer, not a chunk hash', !!busy && busy.includes('in QuickCount') && busy.includes('BusyTimer') && busy.includes('a timer'), busy ?? 'no finding');
+}
 check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // THE OBSERVER EFFECT: measuring (the og_devtools cookie) must not change what it measures. The
 // same heavy page, loaded with and without it, one after the other (a server that drifts over the
