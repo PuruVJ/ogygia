@@ -5316,7 +5316,9 @@ class Profiler {
 				}
 			}
 		}
-		const resolver = rewritten ? await this.#make_resolver() : undefined;
+		// (a build's browser chunks are mapped from the maps the build embedded, by their URL too: a
+		// host whose server has no client files still names the app's functions by their source line)
+		const resolver = rewritten || !this.dev ? await this.#make_resolver() : undefined;
 		const url_hint = (
 			url: string,
 			name: string

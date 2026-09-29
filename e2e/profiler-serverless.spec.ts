@@ -141,7 +141,9 @@ test.describe('profiler on a serverless host', () => {
 		await expect(async () => {
 			const j = await (await page.request.get(`${ORIGIN}/__profiler/report/${id}.json`)).json();
 			const comps: { name: string; file: string }[] = j.browser?.cpu?.components ?? [];
-			const islands = comps.filter((c) => island_files.some((f) => c.file.endsWith(f)));
+			// (named by its chunk, or — the build's browser maps ride in the server's profiler module —
+			// by its source file, mapped)
+			const islands = comps.filter((c) => island_files.some((f) => c.file.endsWith(f)) || (c.file.startsWith('src/') && c.file.endsWith('.svelte')));
 			// the islands here hydrate in a few ms each and the browser samples every ~10 ms: one visit's
 			// trace can miss them by chance. A trace that came in for this visit and missed: visit again
 			// (each visit's trace replaces the last)

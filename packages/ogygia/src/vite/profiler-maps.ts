@@ -15,6 +15,7 @@ import zlib from 'node:zlib';
 import { PROFILER_MAPS_PLACEHOLDER } from '../compiler/ids.js';
 import { GZ_PREFIX } from '../profiler/embedded-maps.js';
 import { build_module_map } from './module-map.js';
+import { client_maps_stash } from './server-sourcemaps.js';
 
 /** the payload the profiler reads (profiler/embedded-maps.ts) */
 export interface ProfilerMaps {
@@ -77,6 +78,27 @@ export function fill_profiler_maps(
 		const slim = slim_map(raw, path.dirname(file), src);
 		if (slim !== undefined) maps[c.fileName] = slim;
 	}
+	// THE BROWSER'S CHUNKS: the client build moved its hidden maps off the served output into the
+	// stash (vite/server-sourcemaps.ts). The ones for chunks that carry the app's own code are kept,
+	// under `client/<app dir>/immutable/…` (how the profiler keys a browser frame, whether it names a
+	// local file or the URL: embedded-maps.ts); a runtime's or a package's chunk is left out (its
+	// names are what the build already tells). The stash is removed either way.
+	const client_dir = path.join(dir, '..', 'client');
+	const stash = client_maps_stash(client_dir);
+	for (const rel of list_maps(stash)) {
+		let raw: string;
+		try {
+			raw = fs.readFileSync(path.join(stash, rel), 'utf8');
+		} catch {
+			continue;
+		}
+		const chunk = rel.slice(0, -'.map'.length);
+		const at = path.join(client_dir, chunk);
+		if (!maps_app_code(raw, path.dirname(at), src)) continue;
+		const slim = slim_map(raw, path.dirname(at), src);
+		if (slim !== undefined) maps['client/' + chunk.split(path.sep).join('/')] = slim;
+	}
+	fs.rmSync(stash, { recursive: true, force: true });
 	// the module map from the chunks AS WRITTEN: a plugin can rewrite a chunk after the bundle was
 	// generated (Kit tree-shakes remote-function chunks in its writeBundle), and its lines are the
 	// ones the profile will name
@@ -135,6 +157,37 @@ export function fill_profiler_maps(
 }
 
 const is_data = (source: string) => source.endsWith('.json');
+
+/** every `.map` under `dir`, relative to it (none when it does not exist) */
+function list_maps(dir: string): string[] {
+	const out: string[] = [];
+	const walk = (d: string) => {
+		let entries: fs.Dirent[];
+		try {
+			entries = fs.readdirSync(d, { withFileTypes: true });
+		} catch {
+			return;
+		}
+		for (const e of entries) {
+			const p = path.join(d, e.name);
+			if (e.isDirectory()) walk(p);
+			else if (e.name.endsWith('.map')) out.push(path.relative(dir, p));
+		}
+	};
+	walk(dir);
+	return out;
+}
+
+/** does this map's code come (in part) from the app's own files (a source under `src`) */
+function maps_app_code(raw: string, chunk_dir: string, src: string): boolean {
+	try {
+		const map = JSON.parse(raw) as { sources?: unknown; sourceRoot?: unknown };
+		const root = typeof map.sourceRoot === 'string' ? map.sourceRoot : '';
+		return Array.isArray(map.sources) && map.sources.some((s) => typeof s === 'string' && path.resolve(chunk_dir, root + s).startsWith(src));
+	} catch {
+		return false;
+	}
+}
 
 /**
  * A CHUNK'S MAP, CUT TO WHAT THE PROFILER READS: the mappings and names whole (every frame's line

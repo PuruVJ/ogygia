@@ -104,6 +104,31 @@ describe('fill_profiler_maps', () => {
 		// the other chunk is untouched
 		expect(fs.readFileSync(path.join(dir, 'chunks/a.js'), 'utf8')).toBe(lib);
 	});
+
+	it("embeds the browser's maps for the app's own chunks from the stash, and removes the stash", () => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'og-cmaps-'));
+		const dir = path.join(root, '.svelte-kit/output/server');
+		const stash = path.join(root, '.svelte-kit/ogygia-client-maps/_app/immutable');
+		fs.mkdirSync(path.join(dir, 'chunks'), { recursive: true });
+		fs.mkdirSync(path.join(stash, 'chunks'), { recursive: true });
+		// an island's chunk (the app's code, 5 folders below the root) and a runtime-only chunk
+		fs.writeFileSync(path.join(stash, 'og-region.a1.Hh12.js.map'), JSON.stringify({ version: 3, sources: ['../../../../../src/lib/Save.svelte'], sourcesContent: ['<script>function save() {}</script>'], names: ['save'], mappings: 'AAAAA' }));
+		fs.writeFileSync(path.join(stash, 'chunks/rt.js.map'), JSON.stringify({ version: 3, sources: ['../../../../../../node_modules/svelte/src/x.js'], mappings: 'AAAA' }));
+		const maps_code = `var maps = "${PROFILER_MAPS_PLACEHOLDER}";\nexport { maps as default };\n`;
+		fs.writeFileSync(path.join(dir, 'chunks/profiler-maps.js'), maps_code);
+		const bundle = { 'chunks/profiler-maps.js': { type: 'chunk', fileName: 'chunks/profiler-maps.js', code: maps_code, modules: {} } };
+		expect(fill_profiler_maps(dir, bundle, root)).toBe(true);
+		const out = fs.readFileSync(path.join(dir, 'chunks/profiler-maps.js'), 'utf8');
+		const literal: string = JSON.parse(out.slice(out.indexOf('= ') + 2, out.indexOf(';\n')));
+		const payload = JSON.parse(zlib.gunzipSync(Buffer.from(literal.slice(GZ_PREFIX.length), 'base64')).toString('utf8'));
+		const island = payload.maps['client/_app/immutable/og-region.a1.Hh12.js'];
+		expect(island).toBeDefined();
+		expect(JSON.parse(island).sourcesContent).toEqual(['<script>function save() {}</script>']);
+		// a chunk with none of the app's code is left out
+		expect(payload.maps['client/_app/immutable/chunks/rt.js']).toBeUndefined();
+		// the stash is gone: nothing of it can reach a deploy
+		expect(fs.existsSync(path.join(root, '.svelte-kit/ogygia-client-maps'))).toBe(false);
+	});
 });
 
 describe('embedded_key', () => {
@@ -115,6 +140,16 @@ describe('embedded_key', () => {
 			'entries/pages/_page.svelte.js'
 		);
 		expect(embedded_key('/app/build/server/chunks/x-abc.js')).toBeUndefined();
+	});
+	it('a browser chunk: the same key from a local copy of the client output or from its URL', () => {
+		const key = 'client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js';
+		expect(embedded_key('/srv/app/build/client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js')).toBe(key);
+		expect(embedded_key('/app/.svelte-kit/output/client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js')).toBe(key);
+		expect(embedded_key('https://site.test/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js?v=2')).toBe(key);
+		// a custom app dir, a nested chunk
+		expect(embedded_key('https://site.test/base/assets/immutable/chunks/Ab12.js')).toBe('client/assets/immutable/chunks/Ab12.js');
+		// not a content-named browser file
+		expect(embedded_key('https://site.test/favicon.png')).toBeUndefined();
 	});
 });
 

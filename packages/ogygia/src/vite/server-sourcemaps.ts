@@ -6,10 +6,15 @@
  * (Amplify, Lambda).
  *
  * After Kit's own config hook (`order: 'post'`): that is where Kit marks the build as the server one.
- * Kit then starts the CLIENT build with the server's `sourcemap` setting copied in; maps there would
- * be served to anyone, so the client build gets them back off — when this turned them on. An app's
- * own `build.sourcemap` choice wins both ways.
+ * Kit then starts the CLIENT build with the server's `sourcemap` setting copied in. Maps left in the
+ * client output would be served to anyone, so the client build keeps them hidden and MOVES them out
+ * of its output the moment it has written it — into `.svelte-kit/ogygia-client-maps/`, which no
+ * adapter copies. The server build (whose writeBundle ran this client build, and whose closeBundle
+ * comes before Kit's adapter) then embeds the app's own ones into the profiler's maps module
+ * (vite/profiler-maps.ts): the browser's CPU traces name the app's functions by their source line.
+ * An app's own `build.sourcemap` choice wins both ways (its maps are its to serve, or not to make).
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Plugin } from 'vite';
 
@@ -18,8 +23,18 @@ import type { Plugin } from 'vite';
  *  keep their own answer) */
 const SERVER_MAPS = Symbol.for('ogygia.server-hidden-maps');
 
+/** where the client build's maps are kept, off the served output: `<kit outDir>/ogygia-client-maps` */
+export const CLIENT_MAPS_DIR = 'ogygia-client-maps';
+
+/** `<kit outDir>/output/client` → `<kit outDir>/ogygia-client-maps` */
+export function client_maps_stash(client_dir: string): string {
+	return path.join(client_dir, '..', '..', CLIENT_MAPS_DIR);
+}
+
 export function server_sourcemaps_plugin(profiler_on: boolean): Plugin {
 	const g = globalThis as { [SERVER_MAPS]?: Set<string> };
+	/** this instance is the client build of a server build that got hidden maps from us */
+	let client_ours = false;
 	return {
 		name: 'ogygia:server-sourcemaps',
 		config: {
@@ -35,9 +50,36 @@ export function server_sourcemaps_plugin(profiler_on: boolean): Plugin {
 					ours.add(root);
 					return { build: { sourcemap: 'hidden' } };
 				}
-				// the client build: what it inherited from the server build was ours, not the app's
-				if (ours.has(root) && config.build?.sourcemap === 'hidden')
-					return { build: { sourcemap: false } };
+				// the client build: what it inherited from the server build was ours, not the app's —
+				// kept hidden, and moved off the output below
+				if (ours.has(root) && config.build?.sourcemap === 'hidden') client_ours = true;
+			}
+		},
+		// THE CLIENT'S MAPS, OFF THE OUTPUT: every `.map` this build wrote moves to the stash, before any
+		// other step (Kit's own, an adapter's) can copy the output; the stash starts empty each build
+		writeBundle: {
+			order: 'post',
+			sequential: true,
+			handler(options, bundle) {
+				if (!client_ours || !options.dir) return;
+				const stash = client_maps_stash(options.dir);
+				fs.rmSync(stash, { recursive: true, force: true });
+				// (a chunk's map is written beside it, and not always listed in the bundle: each file's
+				// `<file>.map` is looked for, and any listed `.map` too)
+				const maps = new Set<string>();
+				for (const file of Object.keys(bundle)) maps.add(file.endsWith('.map') ? file : file + '.map');
+				for (const file of maps) {
+					const from = path.join(options.dir, file);
+					if (!fs.existsSync(from)) continue;
+					const to = path.join(stash, file);
+					try {
+						fs.mkdirSync(path.dirname(to), { recursive: true });
+						fs.renameSync(from, to);
+					} catch {
+						// never leave one behind: a map that cannot be kept is deleted
+						fs.rmSync(from, { force: true });
+					}
+				}
 			}
 		}
 	};

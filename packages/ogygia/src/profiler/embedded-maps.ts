@@ -55,7 +55,17 @@ export const embedded_maps = (): EmbeddedMaps | null => ready;
 export function embedded_key(path: string): string | undefined {
 	const p = path.split('\\').join('/');
 	const at = p.lastIndexOf('/output/server/');
-	if (at === -1) return undefined;
+	if (at === -1) {
+		// A BROWSER CHUNK (`client/<app dir>/immutable/…`): named by a local copy of the client output
+		// (`build/client/_app/immutable/x.js`) or by its URL (`https://site/_app/immutable/x.js`, a host
+		// whose server has no client files) — the part from the app dir on is the same
+		const imm = p.lastIndexOf('/immutable/');
+		if (imm <= 0) return undefined;
+		const app = p.lastIndexOf('/', imm - 1);
+		if (app === -1) return undefined;
+		const q = p.indexOf('?', imm);
+		return 'client/' + p.slice(app + 1, q === -1 ? undefined : q);
+	}
 	// the app root this chunk path sits under: an absolute source path is the app's only below it
 	const kit = p.lastIndexOf('/.svelte-kit/', at);
 	if (kit !== -1 && kit + '/.svelte-kit'.length === at) roots.add(p.slice(0, kit));
@@ -67,7 +77,8 @@ const roots = new Set<string>();
 
 /** where the maps' relative sources are resolved from: the chunk's folder under a stand-in root */
 const VIRTUAL_ROOT = '/ROOT';
-const VIRTUAL_SERVER = VIRTUAL_ROOT + '/.svelte-kit/output/server/';
+const VIRTUAL_OUTPUT = VIRTUAL_ROOT + '/.svelte-kit/output/';
+const VIRTUAL_SERVER = VIRTUAL_OUTPUT + 'server/';
 const VIRTUAL_SRC = VIRTUAL_ROOT + '/src/';
 
 /** `a/b/../c/./d` → `a/c/d` (posix, absolute input) */
@@ -145,7 +156,8 @@ function source_index(): Map<string, string> | undefined {
 			} catch {
 				continue;
 			}
-			const dir = VIRTUAL_SERVER + key.slice(0, key.lastIndexOf('/') + 1);
+			// (a browser chunk's sources are relative to the client output: `client/…` under output/)
+			const dir = (key.startsWith('client/') ? VIRTUAL_OUTPUT : VIRTUAL_SERVER) + key.slice(0, key.lastIndexOf('/') + 1);
 			const list = map.sources ?? [];
 			for (let i = 0; i < list.length; i++) {
 				const text = map.sourcesContent?.[i];

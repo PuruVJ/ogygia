@@ -116,6 +116,23 @@ try {
 	console.log('building three times…');
 	const one = build('v1');
 	const two = build('v2');
+	// NO MAP IS SERVED: the profiler's build makes the browser's maps (hidden) and moves them into the
+	// server's profiler module — none may be left in the client output, nor in the stash they passed by
+	{
+		const maps = [];
+		const walk = (d) => {
+			for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+				const p = path.join(d, e.name);
+				if (e.isDirectory()) walk(p);
+				else if (e.name.endsWith('.map')) maps.push(path.relative(two.dir, p));
+			}
+		};
+		walk(path.join(two.dir, 'client'));
+		check('no source map in the served client output', maps.length === 0, maps.slice(0, 3).join(', '));
+		check('…and the stash they passed through is gone', !fs.existsSync(path.join(app, '.svelte-kit', 'ogygia-client-maps')));
+		const js = fs.readFileSync(path.join(two.dir, 'client', two.entries[Object.keys(two.entries).find((k) => k.includes('og-runtime'))].replace(/^\//, '')), 'utf8');
+		check('…and no chunk points at one', !js.includes('sourceMappingURL'));
+	}
 	// the same source again: nothing may move (a name that changes with no change costs every cache)
 	const again = build('v2', 'v2-again');
 	fs.writeFileSync(version_file, original_version);
@@ -378,9 +395,9 @@ try {
 			m = j?.findings?.find((f) => f.code === 'slow-interaction')?.message ?? null;
 		}
 		await ctx.close();
-		// (a build ships no browser maps yet: the sampled frame is a minified function in a chunk, which
-		// is never quoted — the island's own handler, from the frames, stands)
-		check('inp: in a build, the report never quotes a minified function; the island’s handler stands', !!m && m.includes("(mostly SlowSave's own click handler)") && !m.includes('sampled'), m ?? `no finding (report ${rec?.id ?? 'none'})`);
+		// (the build's browser maps ride in the server's profiler module, never in the served output:
+		// the minified frame is named by its source function and line)
+		check('inp: in a build, the report names the handler’s function by its source line', !!m && m.includes("(mostly SlowSave's save (SlowSave.svelte:5), ") && m.includes('ms sampled'), m ?? `no finding (report ${rec?.id ?? 'none'})`);
 	}
 
 	// ── a page from before content hashing ──────────────────────────────────────────────────────
