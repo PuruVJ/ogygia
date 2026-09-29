@@ -538,9 +538,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// (it merges plugin `include` arrays).
 					const dev_island_deps =
 						env.command === 'serve' ? ['svelte', 'svelte/internal/client', 'devalue'] : [];
+					// ONE OGYGIA IN THE DEV BROWSER: ogygia itself is never pre-bundled. An installed
+					// ogygia (not a workspace link) would be: the boot's `ogygia/runtime` went into
+					// `.vite/deps` while everything the compiler writes — the island modules and their
+					// `ogygia/internal`, `virtual:ogygia/hydrate-features` — imports ogygia's files by
+					// path, so the page ran two copies of its stateful modules (slots, the devtools bus,
+					// the island graph). The wire installed into one `slots` and the hydrate core read the
+					// other: every island with a snippet prop failed ("wired prop but no wire feature").
+					// A linked ogygia (this repo, every test) is never pre-bundled; excluding it makes an
+					// installed one the same single graph. Its own dependencies (svelte, devalue) are
+					// still pre-bundled, once, shared with the app.
 					return {
 						ssr: { noExternal: ['esm-env', 'ogygia', ...declared_pkg_names] },
-						optimizeDeps: { exclude: declared_pkg_names, include: dev_island_deps },
+						optimizeDeps: { exclude: ['ogygia', ...declared_pkg_names], include: dev_island_deps },
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
@@ -573,6 +583,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			configResolved(config) {
 				root = config.root;
 				base = config.base || '';
+				// ogygia keeps itself out of the dep optimizer (one copy in the dev browser, see the
+				// `config` hook); an app that lists part of it in its own `include` brings the second
+				// copy back — say so, once, instead of a hydration error far from the cause
+				if (config.command === 'serve') {
+					const own = (config.optimizeDeps?.include ?? []).filter((d) => d === 'ogygia' || d.startsWith('ogygia/'));
+					if (own.length)
+						config.logger.warn(
+							`[ogygia] optimizeDeps.include lists ${own.join(', ')}: ogygia must not be pre-bundled in dev (the page would run two copies of its runtime, and islands with snippet props fail to hydrate). Remove ${own.length === 1 ? 'it' : 'them'}.`
+						);
+				}
 				// SvelteKit exposes appDir via a build-time `define` (its `config` hook runs before any
 				// `configResolved`, so it's present whatever the plugin order). We read it so our runtime +
 				// island chunks are emitted AND referenced under the user's real appDir — a hardcoded `_app`
