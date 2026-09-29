@@ -8,7 +8,7 @@ import { configure_build_cache } from '../build-cache.js';
 import { islandBridge, content_css_key } from './island-bridge.js';
 import { island_sourcemaps_plugin } from './sourcemaps.js';
 import { server_sourcemaps_plugin } from './server-sourcemaps.js';
-import { install_dev_maps, install_dev_page_keys } from './dev-maps.js';
+import { install_dev_client_maps, install_dev_maps, install_dev_page_keys } from './dev-maps.js';
 import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
 import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
@@ -940,6 +940,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// `.map` files. The profiler (same process) asks through this (profiler/dev-maps.ts)
 				if (profiler_config) {
 					install_dev_maps(server);
+					// ...and the browser's modules, for the traces the browser sends
+					install_dev_client_maps(server);
 					// ...and which page.data keys each island's code reads (the build's seed answer)
 					install_dev_page_keys(
 						server,

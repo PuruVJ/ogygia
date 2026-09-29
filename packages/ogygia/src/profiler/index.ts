@@ -1723,10 +1723,20 @@ class Profiler {
 						| ((id: string) => string | undefined)
 						| undefined)
 				: undefined;
+			// ...and the browser's modules, by the URL path the dev server served them at
+			const dev_client_map = this.dev
+				? ((globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.profiler.dev-client-maps')] as
+						| ((url: string) => string | undefined)
+						| undefined)
+				: undefined;
 			return sourcemap_resolver(
 				(p) => {
 					if (dev_map && p.endsWith('.map')) {
 						const m = dev_map(p.slice(0, -4));
+						if (m) return m;
+					}
+					if (dev_client_map && p.startsWith('/') && p.endsWith('.map')) {
+						const m = dev_client_map(p.slice(0, -4));
 						if (m) return m;
 					}
 					for (const base of is_abs(p) ? [''] : bases) {
@@ -5291,6 +5301,17 @@ class Profiler {
 				const file = find(n.callFrame.url);
 				if (file) {
 					n.callFrame.url = file;
+					rewritten++;
+				}
+			}
+		}
+		// THE DEV SERVER: the browser ran each module as served, named by its URL — its map is in the
+		// client module graph under that URL's path (vite/dev-maps.ts), so the frame keeps the path
+		if (this.dev && origin) {
+			for (const n of profile.nodes) {
+				const u = n.callFrame.url;
+				if (u.startsWith(origin + '/')) {
+					n.callFrame.url = u.slice(origin.length);
 					rewritten++;
 				}
 			}

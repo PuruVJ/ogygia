@@ -10,6 +10,7 @@ import { all_regions, region_name, region_names, region_transitive } from './reg
 import { analyze_page, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
+import { with_source_lines } from './source-lines.js';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
 
 export interface PageView {
@@ -278,7 +279,7 @@ function interaction_cpu_of(page: BeaconPage): InteractionCpuInput | null {
 	}
 	if (!kept.spans || !is_trace(kept.trace)) return null;
 	const hit = icpu_memo.get(kept.trace as object);
-	if (hit && hit.t === kept.spans.t) return hit;
+	if (hit && hit.t === kept.spans.t) return interaction_lines(hit);
 	const { t, wait, handler } = kept.spans;
 	const MIN = 20;
 	const windows = [
@@ -288,7 +289,28 @@ function interaction_cpu_of(page: BeaconPage): InteractionCpuInput | null {
 	const s = analyze_cpu(kept.trace, windows, [], location.href);
 	const out: InteractionCpuInput = { t, wait: s.islands.wait ?? null, handler: s.islands.handler ?? null };
 	icpu_memo.set(kept.trace as object, out);
-	return out;
+	return interaction_lines(out);
+}
+
+/** the interaction's functions with the source's lines (a served line is not the source's): read
+ *  from the files' inline maps; `mapped` once every app function has its line */
+function interaction_lines(i: InteractionCpuInput): InteractionCpuInput {
+	const w = i.wait ? with_source_lines(i.wait.top) : null;
+	const h = i.handler ? with_source_lines(i.handler.top) : null;
+	return {
+		...i,
+		mapped: (w?.mapped ?? true) && (h?.mapped ?? true),
+		wait: i.wait && w ? { ...i.wait, top: w.fns } : null,
+		handler: i.handler && h ? { ...i.handler, top: h.fns } : null
+	};
+}
+
+/** the load's CPU with the source's lines, in every list the tabs and findings quote */
+export function summary_lines(s: CpuSummary | null): CpuSummary | null {
+	if (!s) return s;
+	const islands: CpuSummary['islands'] = {};
+	for (const [fp, v] of Object.entries(s.islands)) islands[fp] = { ...v, top: with_source_lines(v.top).fns };
+	return { ...s, fns: with_source_lines(s.fns).fns, islands, outside: { ...s.outside, top: with_source_lines(s.outside.top).fns } };
 }
 
 /** The island a script file belongs to, when it is one's own file (by its location or identity). */
@@ -314,7 +336,7 @@ export function read_page(): PageView | null {
 	const nav = last_nav();
 	const load = page.cpu.traces.find((t) => t.label === 'page load');
 	// (the load trace belongs to the first page: after a navigation, only a new recording is this page's)
-	const cpu = load && !nav ? cpu_of(page, load.trace) : null;
+	const cpu = load && !nav ? summary_lines(cpu_of(page, load.trace)) : null;
 	const base = nav ? since_nav(page, nav.t) : (page as unknown as PageInput);
 	// third parties: every origin but this one (what the server's HTML named is not known here — the
 	// live page already holds the script elements other scripts added — so parse time decides)

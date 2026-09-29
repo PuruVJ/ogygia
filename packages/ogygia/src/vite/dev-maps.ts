@@ -122,6 +122,41 @@ function runner_offset(): number {
 type MapLike = { version?: number; mappings?: string; [k: string]: unknown };
 type Graph = { getModuleById(id: string): { transformResult?: { map?: MapLike | null } | null } | undefined };
 
+/**
+ * THE BROWSER'S MODULES, TOO: a CPU trace from the browser names a frame by the URL the dev server
+ * served (`/src/lib/Save.svelte?t=…`) at the SERVED code's lines — a `.svelte` file's compiled output,
+ * not its source. The client module graph holds each served module's map (the browser runs the code
+ * as served: no header to shift by). Looked up by the URL's path, then with its query minus Vite's
+ * `t=` / `v=` stamps (a virtual island id keeps its own query).
+ */
+export const DEV_CLIENT_MAPS = Symbol.for('ogygia.profiler.dev-client-maps');
+
+type ClientGraph = { urlToModuleMap?: Map<string, { transformResult?: { map?: { mappings?: unknown } | null } | null }> };
+
+export function install_dev_client_maps(server: ViteDevServer): void {
+	const graph = () =>
+		(server as unknown as { environments?: Record<string, { moduleGraph?: ClientGraph }> }).environments?.client?.moduleGraph;
+	(globalThis as Record<symbol, unknown>)[DEV_CLIENT_MAPS] = (url: string): string | undefined => {
+		const by_url = graph()?.urlToModuleMap;
+		if (!by_url) return undefined;
+		const q = url.indexOf('?');
+		const path = q === -1 ? url : url.slice(0, q);
+		const keys = [path];
+		if (q !== -1) {
+			const kept = url
+				.slice(q + 1)
+				.split('&')
+				.filter((p) => !p.startsWith('t=') && !p.startsWith('v='));
+			if (kept.length) keys.unshift(`${path}?${kept.join('&')}`);
+		}
+		for (const k of keys) {
+			const map = by_url.get(k)?.transformResult?.map;
+			if (map && typeof map.mappings === 'string') return JSON.stringify(map);
+		}
+		return undefined;
+	};
+}
+
 export function install_dev_maps(server: ViteDevServer): void {
 	const offset = runner_offset();
 	const graph = () => {

@@ -6,7 +6,7 @@
 	 * waterfall of every island's wake (module → turn → hydrate, against FCP / LCP / DCL / load), the
 	 * files that blocked the first paint, and the bytes by type. The analysis is page-insights.ts.
 	 */
-	import { read_page, cpu_of } from './page.js';
+	import { read_page, cpu_of, summary_lines } from './page.js';
 	import { first_difference, rate } from './page-insights.js';
 	import { beacon_record_cpu } from '../runtime/beacon.js';
 	import { read_styles, scan_unscoped, styles_findings } from './styles.js';
@@ -151,7 +151,9 @@
 	const traces = $derived(view?.page.cpu.traces ?? []);
 	const cpu = $derived.by(() => {
 		const t = traces[Math.min(pick, traces.length - 1)];
-		return t && view ? cpu_of(view.page, t.trace) : null;
+		// (with the source's lines: the served code's are not; `view` changes on each tick, so a file's
+		// map read since the last one shows up then)
+		return t && view ? summary_lines(cpu_of(view.page, t.trace)) : null;
 	});
 	async function record() {
 		recording = true;

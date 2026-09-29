@@ -551,6 +551,9 @@ async function inp_cpu_run(browser) {
 		// early: the load trace, which holds the click, ends later
 		if (!late) await done();
 		await page.waitForTimeout(1200);
+		// (the first look reads each quoted file's inline map; the next one has the source's lines)
+		await page.evaluate(() => window.__ogygia_page?.());
+		await page.waitForTimeout(600);
 		const m = await page.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-interaction')?.message ?? null);
 		await page.goto('about:blank');
 		await page.waitForTimeout(300);
@@ -569,21 +572,21 @@ async function inp_cpu_run(browser) {
 	const record = async () => (await fetch(`${base}/__profiler/page?p=/dt-inp&runs=1`, { redirect: 'manual' }).catch(() => null))?.headers.get('location')?.split('/').pop() ?? null;
 	const late_id = await record();
 	const late = await read('save', true);
-	const late_report = await in_report(late_id, "SlowSave's save (SlowSave.svelte");
+	const late_report = await in_report(late_id, "SlowSave's save (SlowSave.svelte:5)");
 	const early_id = await record();
 	const early = await read('save', false);
-	const early_report = await in_report(early_id, "SlowSave's save (SlowSave.svelte");
+	const early_report = await in_report(early_id, "SlowSave's save (SlowSave.svelte:5)");
 	const busy = await read('busy', true);
-	// (the dev server's browser frames carry the served code's lines, not the source's: the function
-	// and its file are quoted, never a wrong line)
-	const sampled = (m) => !!m && m.includes("(mostly SlowSave's save (SlowSave.svelte), ") && m.includes('ms sampled)');
+	// the SOURCE's line (`function save()` is line 5): the dev server serves the component compiled, so
+	// the frame's own line is the compiled output's — the Page tab maps it through the module's inline
+	// map, the profiler through the dev server's client module graph
+	const sampled = (m) => !!m && m.includes("(mostly SlowSave's save (SlowSave.svelte:5), ") && m.includes('ms sampled)');
 	const checks = [
 		['late click (the interaction sampler): the Page tab names save', sampled(late)],
-		// (the line: the dev server's browser frames are not source-mapped yet, in either tool)
-		['late click: the profiler report names save', !late_id || sampled(late_report)],
+		['late click: the profiler report names save, at its source line', !late_id || sampled(late_report)],
 		['early click (the load trace): the Page tab names save', sampled(early)],
 		['early click: the profiler report names save', !early_id || sampled(early_report)],
-		['queued click: the wait names the timer’s function, run by a timer', !!busy && busy.includes('the main thread was running planted_busy_timer (BusyTimer.svelte), ') && busy.includes('run by a timer')]
+		['queued click: the wait names the timer’s function, run by a timer', !!busy && busy.includes('the main thread was running planted_busy_timer (BusyTimer.svelte:8), ') && busy.includes('run by a timer')]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
 	console.log(`  ${bad.length ? '✗' : '✓'} interactions sampled: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ late, late_report, early, early_report, busy })}` : ''}`);
