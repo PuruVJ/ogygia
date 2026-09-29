@@ -671,6 +671,8 @@ interface Ctx extends NetContext {
 const MAX_SPANS_PER_REQUEST = 2000;
 const MAX_WINDOW_SPANS = 20_000;
 const MAX_TAGS = 16;
+/** the process's live profiler (the newest): an older one's background timers stand down */
+const LIVE_PROFILER = Symbol.for('ogygia.profiler.live');
 
 interface WindowCapture {
 	profile: CpuProfile;
@@ -980,6 +982,29 @@ class Profiler {
 			}
 		}
 		this.#sample = options.sample ? options.sample : null;
+		// THE PROCESS'S LIVE PROFILER is the newest: the dev server re-runs the app's hooks on an edit
+		// and `ogygia.handle()` builds a new one, while this one's background timers would go on
+		// recording — sampling the process twice, and windows of two recorder locks overlapping
+		// (request-stats' detail is counted for that). An older one's timers stand down at their next tick.
+		(globalThis as Record<symbol, unknown>)[LIVE_PROFILER] = this;
+	}
+
+	/** A newer profiler took this process over (a dev server that re-ran the app's hooks). */
+	#superseded(): boolean {
+		return (globalThis as Record<symbol, unknown>)[LIVE_PROFILER] !== this;
+	}
+
+	/** Stand down: the background timers stop (a sink sends what it holds first). */
+	#retire(): void {
+		if (this.#trap_timer) clearTimeout(this.#trap_timer);
+		if (this.#sample_timer) clearTimeout(this.#sample_timer);
+		this.#trap_timer = null;
+		this.#sample_timer = null;
+		if (this.#sink_timer) {
+			clearInterval(this.#sink_timer);
+			this.#sink_timer = null;
+			void this.#sink_flush();
+		}
 	}
 
 	// ---- background: the trap and the always-on sampler ----------------------
@@ -1012,6 +1037,7 @@ class Profiler {
 	async #trap_cycle(): Promise<void> {
 		const t = this.#trap!;
 		this.#trap_timer = null;
+		if (this.#superseded()) return this.#retire();
 		const keep = t.keep ?? 3;
 		if (this.#trap_caught >= keep) return;
 		// a page profile is waiting for the recorder: let it have it, come back after
@@ -1079,6 +1105,7 @@ class Profiler {
 	async #sample_cycle(): Promise<void> {
 		const s = this.#sample!;
 		this.#sample_timer = null;
+		if (this.#superseded()) return this.#retire();
 		const every_ms = (s.every ?? 60) * 1000;
 		if (this.#page_waiting) return this.#schedule_sample(Math.min(every_ms, 2000));
 		if (!this.#try_acquire_recorder()) return this.#schedule_sample(Math.min(every_ms, 5000));
@@ -5936,6 +5963,11 @@ class Profiler {
 	/** Post the buffered rows as NDJSON to the sink. One post in flight at a time; a failure keeps
 	 *  the rows for the next try (the buffer drops its oldest request rows when full). */
 	async #sink_flush(): Promise<void> {
+		// (a superseded profiler sends what it holds this once, then its timer stops)
+		if (this.#sink_timer && this.#superseded()) {
+			clearInterval(this.#sink_timer);
+			this.#sink_timer = null;
+		}
 		if (!this.#sink_url || this.#sink_inflight || !this.#sink.size) return;
 		this.#sink_inflight = true;
 		const rows = this.#sink.size;

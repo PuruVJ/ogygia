@@ -2918,6 +2918,18 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		expect(dash).toContain('Always-on sampling');
 		expect(dash).toMatch(/[1-9]\d* windows? so far/);
 	}, 15_000);
+
+	it('a newer profiler in the process takes over: the older one’s sampler stands down', async () => {
+		// the dev server re-runs the app's hooks on an edit and builds a new profiler; the old one's
+		// timers must not go on recording beside it
+		const old = profiler({ secret: 'prof-key', sample: { every: 1, window: 100, interval: 10 } });
+		await old({ event: make_event('/arm'), resolve: async () => new Response('ok') });
+		profiler({ secret: 'prof-key' }); // the newer one (no sampler of its own)
+		await new Promise((r) => setTimeout(r, 2600)); // past two of the old one's cycles
+		const dash = await (await old({ event: make_event('/__profiler'), resolve: async () => new Response('no') })).text();
+		// its first cycle found itself superseded: no window was ever taken
+		expect(dash).not.toMatch(/[1-9]\d* windows? so far/);
+	}, 15_000);
 });
 
 describe('instrument (ogygia/profiler): every call of a function becomes a span', () => {
