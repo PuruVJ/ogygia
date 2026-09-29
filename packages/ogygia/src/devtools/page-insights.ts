@@ -45,6 +45,17 @@ export interface PageInteraction {
 
 /** The slowest interaction, sampled (JS Self-Profiling): the functions that ran while it waited and
  *  in its handlers, by their source-mapped names. `t`: which interaction (its start). */
+/** The document's steps before its first byte (ms). */
+export interface NavPhases {
+	redirect?: number;
+	worker?: number;
+	dns?: number;
+	connect?: number;
+	tls?: number;
+	/** the request until the server's first byte */
+	wait?: number;
+}
+
 /** One in-app navigation (the router's body swap), on the page's clock. */
 export interface PageNav {
 	from: string;
@@ -82,7 +93,16 @@ export interface PageInput {
 	interaction_cpu?: InteractionCpuInput;
 	vitals: { ttfb?: number; fcp?: number; lcp?: number; cls?: number; inp?: number };
 	visit: {
-		nav?: { dcl?: number; load?: number; res_start?: number; dom_interactive?: number };
+		nav?: {
+			dcl?: number;
+			load?: number;
+			res_start?: number;
+			dom_interactive?: number;
+			/** the steps before the first byte, each only when it took time */
+			phases?: NavPhases;
+			/** the document's own Server-Timing entries */
+			server_timing?: { name: string; ms: number; desc?: string }[];
+		};
 		/** main-thread ms per script URL, from long animation frames (from the page's start) */
 		scripts?: { url: string; ms: number; count: number }[];
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
@@ -661,12 +681,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 					? explain_lcp(page, name_of)
 					: v.key === 'cls'
 						? explain_cls(page, rows, name_of)
-						: null;
+						: v.key === 'ttfb'
+							? explain_ttfb(page)
+							: null;
 		// (the slowest interaction, the largest paint and the worst shifts, explained, are their own
 		// findings in place of the bare vital: the profiler words the vitals from all its visits, and
 		// keeps this visit's why)
 		findings.push({
-			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : 'shift-cause') : `vital-${v.key}`,
+			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : v.key === 'ttfb' ? 'slow-ttfb' : 'shift-cause') : `vital-${v.key}`,
 			severity: v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
@@ -1100,6 +1122,38 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 					? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
 					: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
 	return { message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.`, fix, fps: p?.lcp_fp ? [p.lcp_fp] : [] };
+}
+
+/**
+ * THE WAIT FOR THE FIRST BYTE, EXPLAINED: the steps the browser timed before it (a redirect, a
+ * service worker starting, the DNS lookup, the connection and its TLS, the request until the
+ * server answered), and — when the document carries it — what the server's own Server-Timing says
+ * its wait went to. The fix is the costliest step's.
+ */
+function explain_ttfb(page: PageInput): { message: string; fix: string; fps: string[] } | null {
+	const p = page.visit?.nav?.phases;
+	if (!p) return null;
+	const ms = (n: number) => `${Math.round(n)} ms`;
+	const steps = [
+		{ key: 'redirect', ms: p.redirect ?? 0, text: `${ms(p.redirect ?? 0)} in redirects` },
+		{ key: 'worker', ms: p.worker ?? 0, text: `${ms(p.worker ?? 0)} starting a service worker` },
+		{ key: 'dns', ms: p.dns ?? 0, text: `${ms(p.dns ?? 0)} looking up the address` },
+		{ key: 'connect', ms: (p.connect ?? 0) + (p.tls ?? 0), text: `${ms((p.connect ?? 0) + (p.tls ?? 0))} connecting${p.tls ? ` (${ms(p.tls)} of it TLS)` : ''}` },
+		{ key: 'wait', ms: p.wait ?? 0, text: `${ms(p.wait ?? 0)} waiting for the server's answer` }
+	].filter((s) => s.ms >= 1);
+	if (!steps.length) return null;
+	const top = steps.reduce((a, b) => (b.ms > a.ms ? b : a));
+	const st = (page.visit?.nav?.server_timing ?? []).filter((s) => s.ms >= 1).sort((a, b) => b.ms - a.ms).slice(0, 4);
+	const said = st.length ? ` The server's Server-Timing says: ${list(st.map((s) => `${s.desc || s.name} ${ms(s.ms)}`))}.` : '';
+	const fix =
+		top.key === 'redirect'
+			? 'The redirects are the cost: link to the final address (the trailing slash, https, the locale) so the browser asks once.'
+			: top.key === 'worker'
+				? "The service worker's start is the cost: keep it small, or turn on navigation preload so the page's request leaves while it starts."
+				: top.key === 'dns' || top.key === 'connect'
+					? 'Reaching the server is the cost: serve the page from closer to the visitor (a CDN at the edge), and keep the connection modern (HTTP/2 or 3, TLS 1.3).'
+					: "The server's answer is the cost: profile the page (its report names the slow load and the lines in it), cache the HTML where it is the same for everyone, or stream it so the first byte leaves before the slow part.";
+	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}`, fix, fps: [] };
 }
 
 /**

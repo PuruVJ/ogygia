@@ -443,6 +443,46 @@ async function cls_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE FIRST BYTE, EXPLAINED (/dt-ttfb, /dt-ttfb-go): a load that waits 1 s and says why in its
+ *  Server-Timing (the database most of it); a redirect that takes 1.1 s before the fast page. Each
+ *  named with its step, in the Page tab and in the profiler's report. */
+async function ttfb_run(browser) {
+	const read = async (path) => {
+		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-ttfb')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+		const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+		await page.goto(base + path, { waitUntil: 'load' });
+		await page.waitForTimeout(2000);
+		const tab = await page.evaluate(() => {
+			const f = window.__ogygia_page?.()?.report.findings.find((x) => x.code === 'slow-ttfb');
+			return f ? { message: f.message, fix: f.fix } : null;
+		});
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		let report = null;
+		for (let i = 0; i < 10 && report_id && !report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			const f = (j?.findings ?? []).find((x) => x.code === 'slow-ttfb');
+			report = f ? { message: f.message, fix: f.fix } : null;
+		}
+		return { tab, report, report_id };
+	};
+	const slow = await read('/dt-ttfb');
+	const redirected = await read('/dt-ttfb-go');
+	const by_server = (f) => !!f && f.message.includes("ms waiting for the server's answer") && f.message.includes('the database 720 ms') && f.fix.startsWith("The server's answer is the cost");
+	const by_redirect = (f) => !!f && f.message.includes('ms in redirects') && f.fix.startsWith('The redirects are the cost');
+	const checks = [
+		["a slow load: the server's wait, its Server-Timing quoted", by_server(slow.tab)],
+		['a slow redirect: the redirect the cost', by_redirect(redirected.tab)],
+		['the profiler report: the same two', (!slow.report_id || by_server(slow.report)) && (!redirected.report_id || by_redirect(redirected.report))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} first byte: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, redirected })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -906,7 +946,7 @@ try {
 	// over the lab pages, unmeasured, before any run.
 	{
 		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls']) {
+		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls', '/dt-ttfb?fast']) {
 			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
 			await warm.waitForTimeout(700);
 		}
@@ -1020,6 +1060,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let ttfb_ok = 0;
+	for (let i = 0; i < repeat; i++) ttfb_ok += await ttfb_run(browser);
+	if (ttfb_ok < repeat) failed = true;
+	console.log(`${ttfb_ok === repeat ? '✓' : '✗'} the first byte, explained: ${ttfb_ok}/${repeat}`);
 	let cls_ok = 0;
 	for (let i = 0; i < repeat; i++) cls_ok += await cls_run(browser);
 	if (cls_ok < repeat) failed = true;

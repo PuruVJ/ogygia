@@ -545,6 +545,22 @@ function flush_vitals(): void {
 	send(JSON.stringify({ page: visit_page(), at: Math.round(performance.timeOrigin), vitals }));
 }
 
+/** The navigation's steps before its first byte, each only when it took time (ms). */
+function nav_phases(n: PerformanceNavigationTiming): { phases?: Record<string, number> } {
+	const p: Record<string, number> = {};
+	const put = (k: string, v: number) => {
+		if (v > 0.5) p[k] = r2(v);
+	};
+	put('redirect', n.redirectEnd - n.redirectStart);
+	if (n.workerStart > 0) put('worker', n.fetchStart - n.workerStart);
+	put('dns', n.domainLookupEnd - n.domainLookupStart);
+	const tls = n.secureConnectionStart > 0 ? n.connectEnd - n.secureConnectionStart : 0;
+	put('connect', n.connectEnd - n.connectStart - tls);
+	put('tls', tls);
+	put('wait', n.responseStart - n.requestStart);
+	return Object.keys(p).length ? { phases: p } : {};
+}
+
 /** The slowest interaction with the scripts of the long frames it overlapped, each put in the phase
  *  it started in: `delay` (the input waited behind it), `handler` (it ran the interaction's
  *  handlers), `paint` (after them, before the next frame). The heaviest few. */
@@ -716,7 +732,15 @@ function build_visit(): Record<string, unknown> | null {
 			...(nav.loadEventEnd ? { load: r2(nav.loadEventEnd) } : {}),
 			...(nav.transferSize ? { transfer: nav.transferSize } : {}),
 			...(nav.decodedBodySize ? { size: nav.decodedBodySize } : {}),
-			...(nav.nextHopProtocol ? { protocol: nav.nextHopProtocol } : {})
+			...(nav.nextHopProtocol ? { protocol: nav.nextHopProtocol } : {}),
+			// THE WAIT FOR THE FIRST BYTE, step by step: redirects, a service worker starting, the DNS
+			// lookup, the connection (and its TLS), then the request until the server's first byte —
+			// what TTFB is made of (only the steps that took time)
+			...nav_phases(nav),
+			// the document's own Server-Timing (what the server says its time went to), the first few
+			...(nav.serverTiming?.length
+				? { server_timing: nav.serverTiming.slice(0, 8).map((s) => ({ name: s.name.slice(0, 40), ms: r2(s.duration), ...(s.description ? { desc: s.description.slice(0, 80) } : {}) })) }
+				: {})
 		},
 		paints: visit_paints,
 		resources,

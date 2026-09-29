@@ -7,7 +7,7 @@
  * one clock — the report's first picture.
  */
 import { hole_segments, HOLE_SEG_LABEL } from '../devtools/hole-segments.js';
-import type { PageInteraction, PageNav } from '../devtools/page-insights.js';
+import type { NavPhases, PageInteraction, PageNav } from '../devtools/page-insights.js';
 
 export interface VisitNav {
 	/** ms from navigation start */
@@ -21,6 +21,10 @@ export interface VisitNav {
 	transfer?: number;
 	size?: number;
 	protocol?: string;
+	/** the steps before the first byte (ms, each only when it took time) */
+	phases?: NavPhases;
+	/** the document's own Server-Timing entries */
+	server_timing?: { name: string; ms: number; desc?: string }[];
 }
 
 export interface VisitResource {
@@ -177,6 +181,24 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	}
 	const proto = str(nav_raw.protocol, 16);
 	if (proto) nav.protocol = proto;
+	const ph = nav_raw.phases as Record<string, unknown> | undefined;
+	if (ph && typeof ph === 'object') {
+		const phases: NavPhases = {};
+		for (const k of ['redirect', 'worker', 'dns', 'connect', 'tls', 'wait'] as const) {
+			const n = num(ph[k]);
+			if (n !== undefined && n > 0) phases[k] = n;
+		}
+		if (Object.keys(phases).length) nav.phases = phases;
+	}
+	const st: NonNullable<VisitNav['server_timing']> = [];
+	for (const s of (Array.isArray(nav_raw.server_timing) ? nav_raw.server_timing : []).slice(0, 8) as Record<string, unknown>[]) {
+		const name = str(s?.name, 40);
+		const ms = num(s?.ms);
+		if (!name || ms === undefined) continue;
+		const desc = str(s.desc, 80);
+		st.push({ name, ms, ...(desc ? { desc } : {}) });
+	}
+	if (st.length) nav.server_timing = st;
 	const paints_raw = (v.paints ?? {}) as Record<string, unknown>;
 	const paints: Visit['paints'] = {};
 	for (const k of ['fcp', 'lcp'] as const) {

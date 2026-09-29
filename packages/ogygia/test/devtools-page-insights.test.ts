@@ -174,6 +174,18 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
 	});
 
+	it('the first byte, explained (slow-ttfb): each step before it, the server’s Server-Timing, the fix for the costliest', () => {
+		const run = (phases: object, server_timing?: object[]) => analyze_page(page({ vitals: { ttfb: 1500 }, visit: { ...page().visit!, nav: { res_start: 1500, phases, ...(server_timing ? { server_timing } : {}) } as never } }), [], [], 9000).findings.find((f) => f.code === 'slow-ttfb');
+		const server = run({ dns: 12, connect: 20, tls: 30, wait: 1400 }, [{ name: 'render', ms: 250, desc: 'the page render' }, { name: 'db', ms: 900, desc: 'the database' }])!;
+		expect(server.message).toBe("TTFB is 1500 ms (needs work; good is ≤ 800 ms). Before the page's first byte: 12 ms looking up the address, 50 ms connecting (30 ms of it TLS), 1400 ms waiting for the server's answer. The server's Server-Timing says: the database 900 ms and the page render 250 ms.");
+		expect(server.fix).toMatch(/^The server's answer is the cost/);
+		expect(run({ redirect: 1100, wait: 300 })!.fix).toMatch(/^The redirects are the cost/);
+		expect(run({ worker: 900, wait: 400 })!.fix).toMatch(/^The service worker's start is the cost/);
+		expect(run({ dns: 400, connect: 500, tls: 400, wait: 100 })!.fix).toMatch(/^Reaching the server is the cost/);
+		// no steps recorded: the bare vital
+		expect(codes(analyze_page(page({ vitals: { ttfb: 1500 } }), [], [], 9000))).toContain('vital-ttfb');
+	});
+
 	it('the worst shifts, explained (shift-cause): the burst, what moved, the cause just before, its fix', () => {
 		const text = 'div "Paragraph 1"';
 		const run = (over: Partial<PageInput>, regions: RegionFact[] = []) => analyze_page(page({ vitals: { cls: 0.2 }, ...over }), regions, [], 9000).findings.find((f) => f.code === 'shift-cause');
