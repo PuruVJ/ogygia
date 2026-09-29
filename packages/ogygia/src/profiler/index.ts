@@ -5144,6 +5144,20 @@ class Profiler {
 		const hole_requests = answered.size
 			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)) }))
 			: [];
+		// THE VISIT'S NAVIGATIONS, SERVER SIDE: each in-app navigation fetched a page, and that request
+		// is in the log — what the server did with the wait the browser saw (its CPU, its outbound
+		// calls, the rest). Matched by path, the latest one that started between a prefetch's reach
+		// (10 s before the click) and the page's arrival, on the one epoch clock
+		const nav_requests = (visit?.navs ?? []).map((n) => {
+			const lo = visit!.at + n.t - 10_000;
+			const hi = visit!.at + n.fetched + 50;
+			let hit: RequestEntry | undefined;
+			for (const e of this.#ring) {
+				if (e.internal || e.method !== 'GET' || e.path + (e.search ?? '') !== n.to || e.ts < lo || e.ts > hi) continue;
+				if (!hit || e.ts > hit.ts) hit = e;
+			}
+			return hit ? { t: n.t, ms: Math.round(hit.ms), cpu_ms: Math.round(hit.cpu_ms), net_ms: Math.round(hit.net_ms), net_count: hit.net_count, ...(hit.inflight ? { inflight: hit.inflight } : {}) } : null;
+		}).filter((x): x is NonNullable<typeof x> => !!x);
 		// THE VISIT'S SLOWEST INTERACTION, SAMPLED: the page's latest interaction trace, when it is this
 		// visit's (the same interaction start, on the page clock)
 		const icpu = stored.interaction_cpu ?? (stored.meta.page ? this.#interaction_cpus.get(stored.meta.page) : undefined);
@@ -5152,6 +5166,7 @@ class Profiler {
 			...(visit ? { visit } : {}),
 			...(interaction_cpu ? { interaction_cpu } : {}),
 			...(hole_requests.length ? { hole_requests } : {}),
+			...(nav_requests.length ? { nav_requests } : {}),
 			...(stored.strip ? { strip: stored.strip } : {}),
 			...(stored.assets ? { assets: stored.assets } : {}),
 			...(stored.assets_missing ? { assets_missing: stored.assets_missing } : {}),

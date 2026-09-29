@@ -63,6 +63,9 @@ export interface PageNav {
 	bytes?: number;
 	/** the request began before the click (a hover prefetch) */
 	prefetched?: boolean;
+	/** the page request on the server (the profiler's request log): its ms, the CPU it burned, its
+	 *  outbound calls — what the server did with the wait */
+	on_server?: { ms: number; cpu_ms: number; net_ms: number; net_count: number; inflight?: number };
 }
 
 export interface InteractionCpuInput {
@@ -916,15 +919,30 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			{ key: 'swap', ms: swap_ms, text: `${Math.round(swap_ms)} ms swapping it in` }
 		];
 		const top = parts.reduce((a, b) => (b.ms > a.ms ? b : a));
+		// THE SERVER'S SIDE of the fetch (the profiler's request log): running code, outbound calls,
+		// or waiting on something that is neither
+		const srv = n.on_server;
+		const srv_other = srv ? Math.max(0, srv.ms - srv.cpu_ms - srv.net_ms) : 0;
+		const srv_top = !srv ? null : srv.cpu_ms >= srv.net_ms && srv.cpu_ms >= srv_other ? 'cpu' : srv.net_ms >= srv_other ? 'net' : 'other';
+		const server_sentence = srv
+			? ` On the server that page took ${srv.ms} ms: ${srv.cpu_ms} ms running code, ${srv.net_count ? `${srv.net_ms} ms waiting on ${srv.net_count} outbound call${srv.net_count === 1 ? '' : 's'}` : 'no outbound calls'}, and ${srv_other} ms waiting on something else${srv.inflight ? ` (${srv.inflight} other request${srv.inflight === 1 ? ' was' : 's were'} running: its CPU is shared)` : ''}.`
+			: '';
 		findings.push({
 			code: 'slow-navigation',
 			severity: ms >= SLOW_NAV_WARN_MS ? 'warn' : 'info',
 			message:
 				`The in-app navigation to ${n.to} took ${Math.round(ms)} ms before the new page showed: ${parts.map((p) => p.text).join(', ')}.` +
+				(top.key === 'fetch' && !heavy_page ? server_sentence : '') +
 				(woke.length ? ` Then ${woke.length === 1 ? 'its island woke' : `${woke.length} islands woke`} over ${Math.round(Math.max(0, wake_end - n.swapped))} ms${heaviest && heaviest.ms >= 20 ? ` (${heaviest.name} ${Math.round(heaviest.ms)} ms to hydrate)` : ''}.` : ''),
 			fix:
 				top.key === 'fetch' && heavy_page
 					? `The page itself is the wait: ${n.bytes ? `${kb_of(n.bytes)} of HTML` : 'its HTML'} took longer to download than the server took to answer. Send less (render below-the-fold parts later, trim repeated markup and inline data), and make sure it is compressed.`
+					: top.key === 'fetch' && srv_top === 'cpu'
+					? "The server's own code is the wait: profile that page (its report names the slow load or component and the lines in it), and render less on it."
+					: top.key === 'fetch' && srv_top === 'net'
+					? "The page's outbound calls are the wait: run them in parallel instead of one after another, cache the ones that repeat, or move the slow one out of the page's load (stream it, or a hole)."
+					: top.key === 'fetch' && srv_top === 'other'
+					? "The server waited on something that is neither its code nor an outbound call it could see: a timer, a lock, a connection pool, a database driver that does not use fetch. Look at what that page's load awaits."
 					: top.key === 'fetch'
 					? "The server's answer is the wait: make that page's load faster (profile the page itself: its report names the slow load), or render it with less. The router starts the fetch at the click, so the server's time is the visitor's."
 					: top.key === 'styles'

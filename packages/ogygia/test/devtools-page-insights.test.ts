@@ -209,6 +209,14 @@ describe('analyze_page', () => {
 		const heavy = one({ server: 120, download: 690, bytes: 900 * 1024 });
 		expect(heavy.fix).toMatch(/^The page itself is the wait: 900 KB of HTML took longer to download/);
 		// prefetched on hover: the wait left after the click, and how much earlier the request began
+		// the server side (the profiler's request log): where its time went, and the fix for the most of it
+		const wait = one({ server: 800, download: 15, on_server: { ms: 804, cpu_ms: 30, net_ms: 0, net_count: 0 } });
+		expect(wait.message).toContain('On the server that page took 804 ms: 30 ms running code, no outbound calls, and 774 ms waiting on something else.');
+		expect(wait.fix).toMatch(/^The server waited on something that is neither its code nor an outbound call/);
+		const calls = one({ server: 800, download: 15, on_server: { ms: 800, cpu_ms: 40, net_ms: 700, net_count: 3, inflight: 2 } });
+		expect(calls.message).toContain('40 ms running code, 700 ms waiting on 3 outbound calls, and 60 ms waiting on something else (2 other requests were running: its CPU is shared).');
+		expect(calls.fix).toMatch(/^The page's outbound calls are the wait/);
+		expect(one({ server: 800, download: 15, on_server: { ms: 800, cpu_ms: 650, net_ms: 50, net_count: 1 } }).fix).toMatch(/^The server's own code is the wait/);
 		const pre = one({ server: 800, download: 10, prefetched: true }, 430);
 		expect(pre.message).toContain('430 ms still waiting for the page after the click (prefetched on hover 380 ms earlier: the server took 800 ms to answer)');
 	});

@@ -438,8 +438,27 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		await page.click('[data-og-tab="profiler"]');
 		check('profiler tab: no iframe', (await page.locator('[data-og-profiler] iframe').count()) === 0);
 		await page.locator('[data-og-profiler] input.n').fill('2');
+		const log_from = srv!.logs.join('').length;
 		await page.click('[data-og-profile-run]');
-		await page.locator('[data-og-profile-head]').waitFor({ timeout: 100_000 });
+		// (a rare miss in full runs: the profiler answered 200 and the head never drew — say what the
+		// dock showed and what the server logged, so the next one names its cause)
+		const drew = await page
+			.locator('[data-og-profile-head]')
+			.waitFor({ timeout: 100_000 })
+			.then(() => true)
+			.catch(() => false);
+		if (!drew) {
+			const dock = (await page.locator('[data-og-profiler]').innerText().catch(() => '(no dock)')).slice(0, 300);
+			const logged = srv!.logs
+				.join('')
+				.slice(log_from)
+				.split('\n')
+				.filter((l) => /reload|optimiz|error/i.test(l))
+				.slice(0, 5)
+				.join(' | ');
+			check('profiler tab: the run drew its head', false, `dock: ${dock} — server: ${logged || '(nothing)'} — url: ${page.url()}`);
+			return;
+		}
 		check('profiler tab: the render time shows', /server render/.test(await page.locator('[data-og-profile-head]').innerText()));
 		const rows = page.locator('[data-og-profile-islands] tbody tr.here');
 		check('profiler tab: island rows joined to islands on this page', (await rows.count()) > 0);

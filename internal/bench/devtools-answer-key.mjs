@@ -322,8 +322,34 @@ async function nav_slow_run(browser) {
 		['the fast one back: never', back.length === 0],
 		['hovered first: prefetched, the head start said', !!hovered && hovered.includes('still waiting for the page after the click (prefetched on hover') && hovered.includes('ms earlier: the server took')],
 		// (the report lists the visit's slowest: the plain click first, then the hovered one)
-		['the profiler report: the slow ones, never the fast', !report_id || (!!report && report.length >= 1 && report.every((m) => m.includes('In the browser: The in-app navigation to /dt-nav-slow')) && fetch_most(report[0]))]
+		['the profiler report: the slow ones, never the fast', !report_id || (!!report && report.length >= 1 && report.every((m) => m.includes('In the browser: The in-app navigation to /dt-nav-slow')) && fetch_most(report[0]))],
+		// the report joins the page request's server side (the request log): the plant's load waits on a
+		// timer — no outbound call, little code — so most of it is "something else"
+		['the report: the server side of the fetch, the wait on a timer', !report_id || (!!report && /On the server that page took \d+ ms: \d+ ms running code, no outbound calls, and \d+ ms waiting on something else/.test(report[0] ?? ''))]
 	];
+	// A VISIT THAT NEVER COMES BACK: land, navigate away, leave from there. The visit is the landing
+	// page's (the document's story): its report must hold the navigation — the beacon once filed the
+	// rest of the visit under the page the address bar showed when it sent, where it was never read
+	{
+		const rec2 = await fetch(`${base}/__profiler/page?p=/dt-nav-fast&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const id2 = rec2?.headers.get('location')?.split('/').pop() ?? null;
+		const p2 = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+		await p2.goto(base + '/dt-nav-fast', { waitUntil: 'load' });
+		await p2.waitForTimeout(1500);
+		await p2.click('[data-nav-go="slow"]');
+		await p2.waitForSelector('[data-nav-page="slow"]', { timeout: 10_000 }).catch(() => {});
+		await p2.waitForTimeout(1500);
+		await p2.goto('about:blank');
+		await p2.waitForTimeout(300);
+		await p2.close();
+		let away = null;
+		for (let i = 0; i < 10 && id2 && !away; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${id2}.json`)).json().catch(() => null);
+			away = (j?.findings ?? []).find((f) => f.code === 'slow-navigation')?.message ?? null;
+		}
+		checks.push(['navigated away for good: the landing page’s report still holds it', !id2 || (away?.includes('to /dt-nav-slow') ?? false)]);
+	}
 	const bad = checks.filter(([, ok]) => !ok);
 	console.log(`  ${bad.length ? '✗' : '✓'} slow navigation: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, back, hovered, report })}` : ''}`);
 	return bad.length ? 0 : 1;
@@ -779,6 +805,18 @@ let failed = false;
 let cpu_fail = 0;
 let hyd_fail = 0;
 try {
+	// WARM THE SERVER FIRST: a dev server just started compiles each island's module on its first
+	// request, so the first visit's islands all wake a second late — true of that visit (and a
+	// late-interactive finding then names the decoys), but not what the plants measure. One pass
+	// over the lab pages, unmeasured, before any run.
+	{
+		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest']) {
+			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
+			await warm.waitForTimeout(700);
+		}
+		await warm.close();
+	}
 	const tally = Object.fromEntries(Object.keys(PLANTED).map((k) => [k, 0]));
 	var tally_report = {};
 	var report_runs = 0;

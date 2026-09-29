@@ -66,7 +66,7 @@ export function browser_page_report(
 	interaction_cpu?: InteractionCpu
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to

@@ -345,6 +345,8 @@ const MAX_DETAIL_RESOURCES = 200;
 const MAX_REFETCHED = 40;
 
 function observe_vitals(): void {
+	// (the page this document loaded as: its visit is filed there, whatever the router does later)
+	visit_page();
 	if (vitals || typeof PerformanceObserver === 'undefined') return;
 	const v: Vitals = (vitals = {});
 	try {
@@ -536,7 +538,7 @@ function flush_vitals(): void {
 	if (vitals_sent || !vitals || !Object.keys(vitals).length) return;
 	vitals_sent = true;
 	// `at` = this visit (its navigation start): the copy inside the visit and this one fold into one
-	send(JSON.stringify({ page: location.pathname, at: Math.round(performance.timeOrigin), vitals }));
+	send(JSON.stringify({ page: visit_page(), at: Math.round(performance.timeOrigin), vitals }));
 }
 
 /** The slowest interaction with the scripts of the long frames it overlapped, each put in the phase
@@ -738,6 +740,21 @@ function build_visit(): Record<string, unknown> | null {
  *  torn down before a write on hide can finish) and FINAL (on hide, with the last paints, the
  *  islands' final markup and the shifts). The server and the store fold the two by navigation
  *  start. */
+/**
+ * THE PAGE A VISIT BELONGS TO: the one the document loaded as. The visit is the document's whole
+ * story — its load, its vitals, and every in-app navigation after it (the router's body swaps keep
+ * the document) — so it, its vitals and its CPU traces are filed under the page the visitor landed
+ * on, never under wherever the address bar is when a later message leaves: a navigation to /b then
+ * filed the rest of /a's visit (the navigation itself among it) under /b, where /a's report never
+ * looks. Read at boot (observe_vitals), and on first use after a reset.
+ */
+let landing_page: string | null = null;
+function visit_page(): string {
+	// (no document location — a server, a test — has no page to file under yet: read again later)
+	if (landing_page === null && typeof location !== 'undefined') landing_page = location.pathname;
+	return landing_page ?? '/';
+}
+
 function flush_visit(final: boolean): void {
 	if (visit_sent) return;
 	const visit = build_visit();
@@ -754,10 +771,10 @@ function flush_visit(final: boolean): void {
 		}
 	}
 	if (!endpoint()) return; // devtools alone: nothing leaves the page
-	send(JSON.stringify({ page: location.pathname, visit }), () =>
-		JSON.stringify({ page: location.pathname, visit: { ...visit, resources: [], regions: [], islands: [] } })
+	send(JSON.stringify({ page: visit_page(), visit }), () =>
+		JSON.stringify({ page: visit_page(), visit: { ...visit, resources: [], regions: [], islands: [] } })
 	);
-	void store_visit({ key: `${location.pathname}|${visit.at}`, page: location.pathname, at: visit.at as number, visit, snapshots });
+	void store_visit({ key: `${visit_page()}|${visit.at}`, page: visit_page(), at: visit.at as number, visit, snapshots });
 }
 
 // THE BROWSER STORE: the same IndexedDB the profiler UI reads (`ui/store.ts` — one schema, two
@@ -1029,7 +1046,7 @@ async function flush_cpu(hiding: boolean): Promise<void> {
 	if (!hiding) start_interaction_cpu();
 	const url = endpoint();
 	if (!url || !trace) return;
-	const body = JSON.stringify({ page: location.pathname, cpu: trace });
+	const body = JSON.stringify({ page: visit_page(), cpu: trace });
 	// keepalive bodies are capped at 64 KB; a trace is bigger — a plain fetch while the page lives,
 	// keepalive when it is going away and it fits (one that cannot fit would only fail)
 	const keepalive = hiding && body.length <= KEEPALIVE_MAX;
@@ -1099,7 +1116,7 @@ async function stop_interaction_cpu(hiding: boolean): Promise<void> {
 	if (DEVTOOLS) cpu_kept = [{ trace, from: caught.wait[0], to: caught.handler[1], label: 'interaction', spans: caught }, ...cpu_kept.slice(0, 4)];
 	const url = endpoint();
 	if (!url) return;
-	const body = JSON.stringify({ page: location.pathname, cpu: trace, interaction: caught });
+	const body = JSON.stringify({ page: visit_page(), cpu: trace, interaction: caught });
 	const keepalive = hiding && body.length <= KEEPALIVE_MAX;
 	if (hiding && !keepalive) return;
 	try {
@@ -1360,6 +1377,7 @@ export function _reset_beacon(): void {
 	failed_fps.clear();
 	failed_spans.clear();
 	visit_navs = [];
+	landing_page = null;
 	seen_resources = [];
 	visit_islands = [];
 	visit_firsts = [];
