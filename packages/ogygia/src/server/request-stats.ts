@@ -154,10 +154,19 @@ export function hole_stats_of(request: Request): HoleRequestStats | undefined {
 	return hole_stats.get(request);
 }
 
-/** The profiler turns detail on for a recording; off, the handle records totals only. */
+/**
+ * The profiler turns detail on for a recording; off, the handle records totals only. COUNTED, not a
+ * switch: the flag is the process's, while a recorder lock is one profiler instance's — and two can
+ * live at once (the dev server re-runs the app's hooks on an edit and `ogygia.handle()` builds a new
+ * profiler, while the old one's sample and trap timers still record). The first window to end then
+ * turned detail off under the other's render: its report kept no island rows ("islands 1, rows 0")
+ * and named its islands by their files. On while any window records.
+ */
 export function set_request_stats_detail(on: boolean): void {
-	detailed = on;
+	detail_depth = on ? detail_depth + 1 : Math.max(0, detail_depth - 1);
+	detailed = detail_depth > 0;
 }
+let detail_depth = 0;
 
 export function request_stats_detailed(): boolean {
 	return detailed;

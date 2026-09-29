@@ -1400,13 +1400,14 @@ class Profiler {
 			}
 		};
 		set_span_recorder(span_recorder);
-		// DETAIL from ogygia's handle (per-island rows, the seed explainer, hole notes) costs a little
-		// per region — asked for only while this window records (server/request-stats.ts).
-		set_request_stats_detail(true);
 		const iomod = opts.light ? null : await import('./async-io.js').catch(() => null);
 		let io_rec = iomod ? await iomod.record_async_io() : null;
 
 		let heap_head: HeapNode | null = null;
+		// DETAIL from ogygia's handle (per-island rows, the seed explainer, hole notes) costs a little
+		// per region — asked for only while this window records (server/request-stats.ts). Counted, so
+		// turned on right at the `try` whose `finally` turns it off: every on has its off
+		set_request_stats_detail(true);
 		try {
 			await session.post('Profiler.enable');
 			await session.post('Profiler.setSamplingInterval', { interval: interval_us });

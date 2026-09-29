@@ -379,6 +379,14 @@ async function lcp_run(browser) {
 			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
 			const f = (j?.findings ?? []).find((x) => x.code === 'slow-lcp');
 			report = f ? { message: f.message, fix: f.fix } : null;
+			// (an island named by its file: the report kept no island rows — say what its recorded
+			// requests held, the open "islands 1, rows 0" case)
+			if (report && !report.message.includes(') in Hero:'))
+				report.why = {
+					islands: j?.ogygia?.islands ?? null,
+					rows: Array.isArray(j?.ogygia?.island_rows) ? j.ogygia.island_rows.length : null,
+					requests: (j?.requests ?? []).map((r) => `${r.method} ${r.path} ${r.status} ${r.internal ? 'own' : 'other'} ${r.ms}ms inflight=${r.inflight}`)
+				};
 		}
 		return { tab, report, report_id };
 	};
@@ -974,9 +982,9 @@ try {
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
 	let lcp_ok = 0;
 	for (let i = 0; i < repeat; i++) lcp_ok += await lcp_run(browser);
-	// (two in three, like the other report checks: about one profile in four on a busy dev server
-	// keeps no island rows — "islands 1, rows 0", cause open — and its report names the island by
-	// its file; the Page tab's half holds in every run)
+	// (two in three, like the other report checks: on a dev server that had re-run the app's hooks, a
+	// profile could keep no island rows — two profilers' windows shared one detail switch; it is
+	// counted now — and its report named the island by its file. A miss prints its report's rows)
 	const lcp_need = repeat >= 3 ? repeat - 1 : repeat;
 	if (lcp_ok < lcp_need) failed = true;
 	console.log(`${lcp_ok >= lcp_need ? '✓' : '✗'} the largest paint, split: ${lcp_ok}/${repeat}`);
