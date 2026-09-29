@@ -57,9 +57,8 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 		app_shims: {},
 		is_build: false,
 		content_presets: null,
-		extra_scan_roots: [], // REPL scans nothing beyond the virtual /repl tree
-		extra_router_modules: [], // no server router in the browser REPL
 		profiler_config: null, // no SSR profiler in the browser REPL
+		freeze_config: null, // no frozen pages in the browser REPL
 		devtools: false // the REPL shows compiler output; no devtools instruments to bake
 	});
 }
@@ -274,7 +273,8 @@ export class ReplDriver {
 		this.#files = files;
 		const host_id = '/repl/' + host_rel.replace(/^\/+/, '');
 		const src = files[host_rel] ?? '';
-		const emitFile = () => {};
+		// the REPL writes no bundle: an emitted island entry gets no reference id
+		const emitFile = () => '';
 		// A leg returns its transformed host AND its Compiler — the SSR leg's Compiler carries the real
 		// linker Program (registry / region kinds / marks) the Regions view reads.
 		const leg = async (ssr: boolean): Promise<{ code: string | null; compiler: Compiler }> => {
@@ -322,7 +322,7 @@ export class ReplDriver {
 		try {
 			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
 			compiler.configure(repl_ctx(markdown_config));
-			const r = await compiler.transform_module(src, host_id, { ssr: true, emitFile: () => {} });
+			const r = await compiler.transform_module(src, host_id, { ssr: true, emitFile: () => '' });
 			return { ssr: r?.code ?? src, regions: extract_regions(compiler) };
 		} catch (e) {
 			return { ssr: null, regions: [], error: e instanceof Error ? e.message : String(e) };
