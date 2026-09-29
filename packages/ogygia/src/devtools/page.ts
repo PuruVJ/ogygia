@@ -273,7 +273,11 @@ export function read_page(): PageView | null {
 	const base = nav ? since_nav(page, nav.t) : (page as unknown as PageInput);
 	// third parties: every origin but this one (what the server's HTML named is not known here — the
 	// live page already holds the script elements other scripts added — so parse time decides)
-	const with_visit: PageInput = base.visit ? { ...base, visit: { ...base.visit, origin: location.origin } } : base;
+	// (an island whose own file was gone, named as every tab names it)
+	const fallbacks = base.visit?.entry_fallbacks?.map((f) => ({ ...f, name: region_name(f.entry) }));
+	const with_visit: PageInput = base.visit
+		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}) } }
+		: base;
 	const holes = hole_failures();
 	const code = island_code();
 	// (after a navigation there is no new first paint: the navigation's start stands in for it)

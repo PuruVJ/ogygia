@@ -62,7 +62,9 @@ test.describe('wake gate: island wakes start after DOMContentLoaded and a painte
 		const entries = await page.evaluate(() =>
 			[...document.querySelectorAll('ogygia-region[entry]')].map((r) => ({
 				wake: r.getAttribute('wake'),
-				url: new URL(r.getAttribute('entry')!, location.href).href
+				// its identity (the graph's key) and the file a wake fetches (its location, when built)
+				url: new URL(r.getAttribute('entry')!, location.href).href,
+				file: new URL(r.getAttribute('src') ?? r.getAttribute('entry')!, location.href).href
 			}))
 		);
 		const hinted = await page.evaluate(() =>
@@ -83,7 +85,7 @@ test.describe('wake gate: island wakes start after DOMContentLoaded and a painte
 				(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).domContentLoadedEventStart === 0)
 		);
 		const before = await script_requests(page);
-		const early = gated.filter((e) => !hinted.includes(e.url) && before.includes(e.url));
+		const early = gated.filter((e) => !hinted.includes(e.file) && before.includes(e.file));
 		check('held: no gated island entry was requested', early.length === 0, JSON.stringify(early));
 		check('held: no island hydrated', (await page.locator('ogygia-region[data-hydrated]').count()) === 0);
 

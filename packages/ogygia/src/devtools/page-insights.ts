@@ -48,6 +48,9 @@ export interface PageInput {
 		named?: string[];
 		/** files a preload fetched and something else downloaded again (the preload went unused) */
 		preload_misses?: PreloadMiss[];
+		/** islands whose own file failed to load and fell back to their stable name (the page came
+		 *  from a build whose files are gone); `name` when the reader could name the island */
+		entry_fallbacks?: { entry: string; src: string; recovered: boolean; name?: string }[];
 	} | null;
 	islands: PageIsland[];
 	firsts: { fp: string; t: number; type: string }[];
@@ -749,6 +752,32 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'warn',
 			message: `${list(misses.map((m) => `${file(m.url)} (${kb(m.bytes)})`))} ${misses.length === 1 ? 'was' : 'were'} preloaded, then downloaded again: the browser could not use the preload${misses.length === 1 ? '' : 's'}, and the page paid ${kb(wasted)} twice.`,
 			fix: `${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}. The preload and the request must match exactly, or the browser fetches the file again.`,
+			fps: []
+		});
+	}
+
+	// ── an island's own file was gone: this page outlived its build (a cache kept the HTML) ──
+	const gone = page.visit?.entry_fallbacks ?? [];
+	if (gone.length) {
+		const name = (f: (typeof gone)[number]) => {
+			if (f.name) return f.name;
+			const q = f.entry.indexOf('?');
+			const p = q === -1 ? f.entry : f.entry.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1);
+		};
+		const woke = gone.filter((f) => f.recovered);
+		const dead = gone.filter((f) => !f.recovered);
+		const parts: string[] = [];
+		if (woke.length)
+			parts.push(
+				`${list(woke.map(name))} woke on the current build's code through ${woke.length === 1 ? 'its' : 'their'} stable name${woke.length === 1 ? '' : 's'}: the page's HTML and ${woke.length === 1 ? 'that island' : 'those islands'} now come from different builds`
+			);
+		if (dead.length) parts.push(`${list(dead.map(name))} stayed asleep: ${dead.length === 1 ? 'its' : 'their'} stable name failed too`);
+		findings.push({
+			code: 'island-file-gone',
+			severity: dead.length ? 'error' : 'warn',
+			message: `${gone.length === 1 ? 'An island' : `${gone.length} islands`} could not load ${gone.length === 1 ? 'its own file' : 'their own files'} (${list(gone.map((f) => f.src.slice(f.src.lastIndexOf('/') + 1)))}): this page came from a cache that outlived the build that made it. ${parts.join('. ')}.`,
+			fix: "Keep the previous build's `_app/immutable/` files as long as your HTML stays cached (a CDN, a service worker) — a cached page then runs its own build throughout — or purge the cached HTML when you deploy.",
 			fps: []
 		});
 	}

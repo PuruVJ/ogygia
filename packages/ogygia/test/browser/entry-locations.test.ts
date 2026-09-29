@@ -5,7 +5,7 @@
 //
 // The map is module state shared by every test in this file: each test uses its own URLs.
 import { describe, expect, test } from 'vitest';
-import { entry_location, import_entry, island_entry_of, note_entry_location } from '../../src/runtime/entry-locations.js';
+import { entry_location, import_entry, island_entry_of, note_entry_location, on_entry_fallback } from '../../src/runtime/entry-locations.js';
 import { island_module_url, warm_island_module, is_warmed_module } from '../../src/runtime/region-endpoint-url.js';
 import { register_island_graph } from '../../src/runtime/island-graph-preload.js';
 import { encode_island_graph } from '../../src/island-graph.js';
@@ -111,6 +111,28 @@ describe('import_entry: the location, then the identity fresh, once', () => {
 		note_entry_location(identity, '/test/browser/fixtures/gone-Ii99Jj00.js');
 		const m = await import_entry<{ default: string }>(identity, LOCATED + '?t=5');
 		expect(m.default).toBe('located');
+	});
+});
+
+describe('a fallback is reported (the runtime wires devtools and the beacon to it)', () => {
+	test('recovered, and not: each once, with the identity and the location that failed', async () => {
+		const reports: { entry: string; src: string; recovered: boolean }[] = [];
+		on_entry_fallback((r) => reports.push(r));
+		const ok = IDENTITY + '?t=7';
+		note_entry_location(ok, '/test/browser/fixtures/gone-Kk11Ll22.js');
+		await import_entry(ok);
+		const bad = '/test/browser/fixtures/gone-Mm33Nn44.js';
+		note_entry_location(bad, '/test/browser/fixtures/gone-Oo55Pp66.js');
+		await import_entry(bad).catch(() => {});
+		await expect.poll(() => reports.length).toBe(2);
+		expect(reports[0]).toEqual({ entry: ok, src: abs('/test/browser/fixtures/gone-Kk11Ll22.js'), recovered: true });
+		expect(reports[1]).toMatchObject({ entry: bad, recovered: false });
+		// a load that worked reports nothing
+		const fine = IDENTITY + '?t=8';
+		note_entry_location(fine, LOCATED + '?t=8');
+		await import_entry(fine);
+		await new Promise((r) => setTimeout(r, 50));
+		expect(reports).toHaveLength(2);
 	});
 });
 

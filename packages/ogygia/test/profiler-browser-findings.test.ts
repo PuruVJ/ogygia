@@ -137,6 +137,23 @@ test('a hole that kept its fallback reaches the report, named from the hole rows
 	expect(f[1].message).toContain('failed 3 times (status 500)');
 });
 
+test("an island whose own file was gone reaches the report, named from the island rows", () => {
+	const entry = rows[0]?.entry ?? '/_app/immutable/og-region.0123456789ab.js';
+	const v = parse_visit('/lab', {
+		...raw,
+		entry_fallbacks: [{ entry, src: '/_app/immutable/og-region.0123456789ab.Gone1234.js', recovered: true }, { entry: 7 }]
+	})!;
+	expect(v.entry_fallbacks).toHaveLength(1);
+	expect(merge_visits(v, v).entry_fallbacks).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'island-file-gone');
+	expect(f?.message).toContain('In the browser: An island could not load its own file (og-region.0123456789ab.Gone1234.js)');
+	if (rows[0]) expect(f?.message).toContain(`${rows[0].name} woke on the current build`);
+	// the page wrote its entry relative to itself (a nested route): named all the same, by its file
+	const nested = parse_visit('/lab', { ...raw, entry_fallbacks: [{ entry: '../../src/lib/Menu.svelte', src: '/gone.js', recovered: true }] })!;
+	const g = browser_findings(browser_page_report(nested, rows)).find((x) => x.code === 'island-file-gone');
+	expect(g?.message).toContain('Menu woke on the current build');
+});
+
 test('a preload downloaded again reaches the report, even on a page with no island', () => {
 	const v = parse_visit('/lab', {
 		...raw,

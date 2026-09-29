@@ -57,9 +57,18 @@ export function browser_page_report(
 	hole_server?: (id: string) => number | undefined
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
+	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to
+	// the page (`./…`, `../../…` on a nested route) where the rows hold it root-relative
+	const file_of = (entry: string) => {
+		const q = entry.indexOf('?');
+		const p = q === -1 ? entry : entry.slice(0, q);
+		return p.slice(p.lastIndexOf('/') + 1);
+	};
+	const by_file = new Map(rows.map((r) => [file_of(r.entry), r.name]));
+	const named = (entry: string) => by_entry.get(entry) ?? by_file.get(file_of(entry)) ?? name_from_entry(entry);
 	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? (by_entry.get(entry) ?? name_from_entry(entry)) : fp.slice(0, 8));
 	const regions: RegionFact[] = (visit.regions ?? []).map((r) => {
 		const kind = r.defer ? 'hole' : r.wake === 'none' ? 'lake' : 'island';
@@ -84,6 +93,10 @@ export function browser_page_report(
 			...(visit.scripts ? { scripts: visit.scripts } : {}),
 			...(visit.warnings ? { warnings: visit.warnings } : {}),
 			...(visit.preload_misses ? { preload_misses: visit.preload_misses } : {}),
+			// (named from the report's island rows, by the identity each one carries)
+			...(visit.entry_fallbacks
+				? { entry_fallbacks: visit.entry_fallbacks.map((f) => ({ ...f, name: named(f.entry) })) }
+				: {}),
 			...(third ? { origin: third.origin, ...(third.named ? { named: third.named } : {}) } : {})
 		},
 		islands: visit.islands,

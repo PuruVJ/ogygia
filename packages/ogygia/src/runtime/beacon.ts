@@ -61,11 +61,12 @@ interface BeaconApi {
 	beacon_warning: typeof beacon_warning;
 	beacon_hole_failed: typeof beacon_hole_failed;
 	beacon_hole_answered?: typeof beacon_hole_answered;
+	beacon_entry_fallback?: typeof beacon_entry_fallback;
 }
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered };
+	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback };
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -235,6 +236,25 @@ export function hole_request_times(
 	return null;
 }
 let visit_holes_answered: HoleAnswered[] = [];
+
+/** An island whose LOCATION failed to load and fell back to its identity fetched fresh
+ *  (runtime/entry-locations.ts): the page came from a build whose files are gone. */
+export interface EntryFallback {
+	/** the identity (the stable URL) */
+	entry: string;
+	/** the location that failed */
+	src: string;
+	/** the fresh identity loaded (false: that failed too) */
+	recovered: boolean;
+}
+let visit_entry_fallbacks: EntryFallback[] = [];
+export function beacon_entry_fallback(f: EntryFallback): void {
+	const o = owner();
+	if (o) return o.beacon_entry_fallback?.(f);
+	if (!collecting() || visit_entry_fallbacks.length >= 20 || visit_entry_fallbacks.some((x) => x.entry === f.entry)) return;
+	visit_entry_fallbacks.push({ entry: f.entry.slice(0, 300), src: f.src.slice(0, 300), recovered: f.recovered });
+	if (early_visit_done) resend_soon();
+}
 let holes_answered_els = new WeakSet<Element>();
 /** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
  *  The element is read (id, place) only while measuring. */
@@ -550,6 +570,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(visit_warnings.length ? { warnings: visit_warnings.slice() } : {}),
 		...(visit_holes_failed.length ? { holes_failed: visit_holes_failed.slice() } : {}),
 		...(visit_holes_answered.length ? { holes_answered: visit_holes_answered.slice() } : {}),
+		...(visit_entry_fallbacks.length ? { entry_fallbacks: visit_entry_fallbacks.slice() } : {}),
 		...(visit_marks.length ? { marks: visit_marks } : {}),
 		// the vitals so far, in every visit message (the early one, the final one): a visit whose
 		// hide-time vitals message never left still reports them
@@ -1058,6 +1079,7 @@ export function _reset_beacon(): void {
 	visit_warnings = [];
 	visit_holes_failed = [];
 	visit_holes_answered = [];
+	visit_entry_fallbacks = [];
 	holes_answered_els = new WeakSet();
 	visit_marks = [];
 	visit_paints = {};

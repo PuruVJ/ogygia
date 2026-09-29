@@ -13,6 +13,15 @@
 /** absolute identity → absolute location */
 const locations = new Map<string, string>();
 
+/** A load that fell back to its identity: who hears about it (the runtime registers the devtools
+ *  and beacon reporter at boot). This module imports nothing: app code (a portable snippet) uses it
+ *  too, and must not pull the runtime's reporting into the app's chunks. */
+export type EntryFallbackReport = { entry: string; src: string; recovered: boolean };
+let fallback_reporter: ((report: EntryFallbackReport) => void) | null = null;
+export function on_entry_fallback(reporter: (report: EntryFallbackReport) => void): void {
+	fallback_reporter = reporter;
+}
+
 function absolute(url: string, base?: string): string {
 	try {
 		return new URL(url, base ?? location.href).href;
@@ -59,5 +68,16 @@ function fresh_identity_url(entry: string, base?: string): string | null {
 export function import_entry<T>(entry: string, url: string = entry_location(entry) ?? entry): Promise<T> {
 	const loaded = import(/* @vite-ignore */ url) as Promise<T>;
 	const fresh = fresh_identity_url(entry);
-	return fresh ? loaded.catch(() => import(/* @vite-ignore */ fresh) as Promise<T>) : loaded;
+	if (!fresh) return loaded;
+	return loaded.catch(() => {
+		const retry = import(/* @vite-ignore */ fresh) as Promise<T>;
+		// said out loud: the page's HTML is one build, this island's code the current one (devtools'
+		// timeline, and the beacon — the Page tab and the profiler name it)
+		const report = (recovered: boolean) => fallback_reporter?.({ entry, src: url, recovered });
+		retry.then(
+			() => report(true),
+			() => report(false)
+		);
+		return retry;
+	});
 }

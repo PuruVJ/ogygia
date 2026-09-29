@@ -159,7 +159,7 @@ Each island still has a stable name, `og-region.<id>.js`. It is the island's ide
 When a cache serves an older page after a deploy:
 
 - If that build's files are still on your server or CDN, the page runs its own build's code throughout.
-- If they are gone, each island loads its stable name fresh and wakes on the current build's code. The runtime file itself cannot recover this way, so keep the previous build's `_app/immutable/` files as long as your HTML stays cached. The same holds for SvelteKit's own files.
+- If they are gone, each island loads its stable name fresh and wakes on the current build's code. The devtools Page tab and the profiler report name each island this happened to. The runtime file itself cannot recover this way, so keep the previous build's `_app/immutable/` files as long as your HTML stays cached. The same holds for SvelteKit's own files.
 
 Two settings make redeploys cheap:
 

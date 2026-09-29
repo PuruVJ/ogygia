@@ -12,7 +12,7 @@ import {
 	island_module_url,
 	RegionAnswerRefused
 } from './region-endpoint-url.js';
-import { island_entry_of, import_entry } from './entry-locations.js';
+import { island_entry_of, import_entry, on_entry_fallback } from './entry-locations.js';
 import {
 	is_awake,
 	is_deferred,
@@ -40,7 +40,7 @@ import { preload_island_graph } from './island-graph-preload.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
-import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered } from './beacon.js';
+import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback } from './beacon.js';
 import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
@@ -1302,6 +1302,12 @@ export function boot(installers: Array<() => void> = []): void {
 	// What the lazy chunks use from the boot, handed over through the registry (./boot-link.ts).
 	link_boot();
 	for (const install of installers) install();
+	// An island whose file was gone (this page outlived its build) woke through its stable name:
+	// the devtools timeline and the beacon hear it (entry-locations.ts imports neither)
+	on_entry_fallback((report) => {
+		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'entry.fallback', ...report });
+		beacon_entry_fallback(report);
+	});
 
 	if (import.meta.env.DEV) apply_dev_head_region_css();
 

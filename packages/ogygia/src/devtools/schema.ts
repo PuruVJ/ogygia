@@ -288,6 +288,19 @@ export type RuntimeEventInput =
 			final: boolean;
 	  }
 	| {
+			/** An island's LOCATION (its content-hashed file) failed to load, and it woke — or tried
+			 *  to — through its IDENTITY fetched fresh: the page's HTML came from a build whose files
+			 *  are gone (a cache outlived it). Its code is now the current build's. */
+			domain: 'runtime';
+			name: 'entry.fallback';
+			/** the identity (the stable URL) */
+			entry: string;
+			/** the location that failed */
+			src: string;
+			/** the fresh identity loaded (false: it failed too, the island stays asleep) */
+			recovered: boolean;
+	  }
+	| {
 			domain: 'runtime';
 			name: 'interaction.replay';
 			entry?: string;

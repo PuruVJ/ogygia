@@ -157,6 +157,23 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('hole-failed');
 	});
 
+	it("an island whose own file was gone: the page outlived its build — woke on the current code, or stayed asleep", () => {
+		const fb = (name: string, recovered: boolean) => ({ entry: `/_app/immutable/og-region.${name}.js`, src: `/_app/immutable/og-region.${name}.Ab12Cd34.js`, recovered, name: name === 'x' ? undefined : name });
+		const woke = analyze_page(page({ visit: { entry_fallbacks: [fb('Probe', true), fb('Twin', true)] } }), [], [], 2000).findings.find((f) => f.code === 'island-file-gone')!;
+		expect(woke.severity).toBe('warn');
+		expect(woke.message).toContain('2 islands could not load their own files (og-region.Probe.Ab12Cd34.js and og-region.Twin.Ab12Cd34.js)');
+		expect(woke.message).toContain('Probe and Twin woke on the current build');
+		expect(woke.message).toContain('now come from different builds');
+		expect(woke.fix).toContain("Keep the previous build's `_app/immutable/` files");
+		const dead = analyze_page(page({ visit: { entry_fallbacks: [fb('Probe', false)] } }), [], [], 2000).findings.find((f) => f.code === 'island-file-gone')!;
+		expect(dead.severity).toBe('error');
+		expect(dead.message).toContain('Probe stayed asleep: its stable name failed too');
+		// unnamed: its file stands in
+		const unnamed = analyze_page(page({ visit: { entry_fallbacks: [fb('x', true)] } }), [], [], 2000).findings.find((f) => f.code === 'island-file-gone')!;
+		expect(unnamed.message).toContain('og-region.x.js woke');
+		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('island-file-gone');
+	});
+
 	it('a preload the browser could not use, and paid for twice: named, with the fix for its kind', () => {
 		const miss = (url: string, type: string, crossorigin: string | null, bytes = 20480) => ({ url, type, bytes, as: type === 'css' ? 'style' : type, crossorigin });
 		const r = analyze_page(

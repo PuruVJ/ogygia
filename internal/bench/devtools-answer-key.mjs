@@ -363,6 +363,54 @@ async function holes_run(browser) {
 /** AN ISLAND'S CODE (/dt-code, dev): Toolbar imports a barrel whole (its side effect keeps the
  *  barrel rewrite off it) and an icon set that is most of its weight. Both named on Toolbar; the
  *  Healthy decoy never; a page without them raises neither. */
+/** AN ISLAND'S FILE GONE (/dt-cache, served as a page from a build whose files are deleted): Probe's
+ *  region names a location that 404s. The island must wake through its stable name, and the Page tab
+ *  and the profiler's report of the same visit must say this page outlived its build — naming Probe,
+ *  never the islands whose files loaded. The page as served is quiet. */
+async function fallback_run(browser) {
+	// (asked as a browser asks for a page: the server adds the profiler's beacon tag only to a document)
+	const live = await (await fetch(base + '/dt-cache', { headers: { accept: 'text/html', 'sec-fetch-dest': 'document' } })).text();
+	// Probe's open tag (the page's first island) gets a location that no longer exists (`src` goes
+	// last, like the server's; the dev server's entries are virtual ids, so it is found by place)
+	const stale = live.replace(/(<ogygia-region entry="[^"]+" wake="load"[^>]*?)>/, '$1 src="/__gone__/og-region.probe.Gone1234.js">');
+	const read = async (html) => {
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		if (html) await page.route(base + '/dt-cache', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: html }));
+		await page.goto(base + '/dt-cache', { waitUntil: 'load' });
+		await page.waitForFunction(() => document.querySelector('[data-probe="probe"][data-ran]'), null, { timeout: 8000 }).catch(() => {});
+		// (the report lands after the fresh import; the page view reads the beacon's visit on its tick)
+		await page.waitForTimeout(2000);
+		const out = await page.evaluate(() => ({
+			probe_ran: document.querySelector('[data-probe="probe"]')?.getAttribute('data-ran') ?? null,
+			findings: (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'island-file-gone').map((x) => ({ message: x.message, severity: x.severity }))
+		}));
+		await page.close();
+		return out;
+	};
+	const rec = await fetch(`${base}/__profiler/page?p=/dt-cache&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const planted = await read(stale);
+	const clean = await read(null);
+	let in_report = null;
+	if (report_id)
+		for (let i = 0; i < 8 && !in_report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			in_report = j?.findings?.find((f) => f.code === 'island-file-gone')?.message ?? null;
+		}
+	const f = planted.findings[0];
+	const checks = [
+		['the island still woke (through its stable name)', planted.probe_ran === 'v1'],
+		['named: Probe, woke on the current build', !!f && f.message.includes('Probe') && f.message.includes('woke on the current build') && f.severity === 'warn'],
+		['the islands whose files loaded, never', !!f && !f.message.includes('Twin') && !f.message.includes('Steady')],
+		['the page as served is quiet', clean.findings.length === 0],
+		['the profiler report names it', !report_id || (in_report?.includes('Probe') ?? false)]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} file gone: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ planted, clean, in_report })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** PRELOADS DOWNLOADED AGAIN (/dt-preload): a fetch preload without `crossorigin` (the plant) goes
  *  unused and the file comes down twice; the decoy's matches and is used. Named in the Page tab and
  *  in the profiler's report of the same visit; the decoy never; a page without preloads quiet. */
@@ -572,6 +620,10 @@ try {
 	for (let i = 0; i < repeat; i++) holes_ok += await holes_run(browser);
 	if (holes_ok < repeat) failed = true;
 	console.log(`${holes_ok === repeat ? '✓' : '✗'} holes whose answer never came: ${holes_ok}/${repeat}`);
+	let fallback_ok = 0;
+	for (let i = 0; i < repeat; i++) fallback_ok += await fallback_run(browser);
+	if (fallback_ok < repeat) failed = true;
+	console.log(`${fallback_ok === repeat ? '✓' : '✗'} an island's file gone: ${fallback_ok}/${repeat}`);
 	let preload_ok = 0;
 	for (let i = 0; i < repeat; i++) preload_ok += await preload_run(browser);
 	if (preload_ok < repeat) failed = true;
