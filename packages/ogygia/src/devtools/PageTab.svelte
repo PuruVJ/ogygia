@@ -190,7 +190,7 @@
 				{#if s.added.length}<p class="bad">new: {s.added.join(' · ')}</p>{/if}
 				{#if s.moved.length}
 					<p>
-						{#each s.moved as m, i (m.what)}{i ? ' · ' : ''}<span class={m.better ? 'good' : 'bad'}>{m.what} {m.unit ? ms(m.a) : m.a} → {m.unit ? ms(m.b) : m.b}</span>{/each}
+						{#each s.moved as m, i (m.what)}{i ? ' · ' : ''}<span class={m.better ? 'good' : 'bad'}>{m.what} {m.unit ? ms(m.a) : m.a} → {m.unit ? ms(m.b) : m.b}{#if m.part}<span class="muted" data-og-page-since-part>, mostly {m.part.label} {ms(m.part.a)} → {ms(m.part.b)}</span>{/if}</span>{/each}
 					</p>
 				{/if}
 			</div>

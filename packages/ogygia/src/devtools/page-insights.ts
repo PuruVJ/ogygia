@@ -1151,11 +1151,77 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 
 /**
  * A VITAL'S PARTS, as numbers (the same splits the explanations word): TTFB by its steps, FCP by
- * first byte / HTML / blocking / render, LCP by first byte / delay / download / render. What the
- * profiler's "since your last profile" compares, to say which part of a moved vital moved. Null
+ * first byte / HTML / blocking / render, LCP by first byte / delay / download / render, INP by the
+ * slowest interaction's wait / handlers / paint. What "since your last profile" (the profiler) and
+ * "since your last load" (the Page tab) compare, to say which part of a moved vital moved. Null
  * when the visit cannot tell.
  */
-export function vital_parts(page: PageInput, key: 'ttfb' | 'fcp' | 'lcp'): { key: string; label: string; ms: number }[] | null {
+export type PartedVital = 'ttfb' | 'fcp' | 'lcp' | 'inp';
+export interface VitalPart {
+	key: string;
+	label: string;
+	ms: number;
+}
+export interface VitalMove {
+	key: 'ttfb' | 'fcp' | 'lcp' | 'cls' | 'inp';
+	a: number;
+	b: number;
+	/** the part of a split vital that moved most (≥ 50 ms, else left out) */
+	part?: { label: string; a: number; b: number };
+}
+
+/** a vital moved when it changed by at least this much AND a fifth of the old value (CLS: this much) */
+const VITAL_FLOOR = { ttfb: 50, fcp: 100, lcp: 100, inp: 40, cls: 0.05 } as const;
+/** the part named only when it moved at least this much */
+const PART_FLOOR_MS = 50;
+
+/**
+ * WHICH VITALS MOVED between two visits of a page, past the noise, and for a split vital the part
+ * that moved most. ONE rule for both tools: the profiler's "since your last profile" and the Page
+ * tab's "since your last load" read the same moves. `parts(side, key)` gives a side's parts.
+ */
+export function vitals_moved(
+	a: Record<string, number | undefined>,
+	b: Record<string, number | undefined>,
+	parts: (side: 'a' | 'b', key: PartedVital) => VitalPart[] | null
+): VitalMove[] {
+	const out: VitalMove[] = [];
+	for (const key of ['ttfb', 'fcp', 'lcp', 'cls', 'inp'] as const) {
+		const x = a[key];
+		const y = b[key];
+		if (typeof x !== 'number' || typeof y !== 'number') continue;
+		const d = Math.abs(y - x);
+		const moved = key === 'cls' ? d >= VITAL_FLOOR.cls : d >= Math.max(VITAL_FLOOR[key], x * 0.2);
+		if (!moved) continue;
+		const m: VitalMove = { key, a: x, b: y };
+		if (key !== 'cls') {
+			const pa = parts('a', key);
+			const pb = parts('b', key);
+			if (pa && pb) {
+				let best: VitalMove['part'];
+				for (const q of pb) {
+					const was = pa.find((p) => p.key === q.key);
+					if (!was) continue;
+					if (!best || Math.abs(q.ms - was.ms) > Math.abs(best.b - best.a)) best = { label: q.label, a: Math.round(was.ms), b: Math.round(q.ms) };
+				}
+				if (best && Math.abs(best.b - best.a) >= PART_FLOOR_MS) m.part = best;
+			}
+		}
+		out.push(m);
+	}
+	return out;
+}
+export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | null {
+	if (key === 'inp') {
+		// (the slowest interaction's own three phases, as its explanation words them)
+		const i = page.visit?.interaction;
+		if (!i || !(i.delay + i.processing + i.presentation > 0)) return null;
+		return [
+			{ key: 'delay', label: 'the wait before its handlers', ms: i.delay },
+			{ key: 'handler', label: 'its handlers', ms: i.processing },
+			{ key: 'paint', label: 'painting the next frame', ms: i.presentation }
+		];
+	}
 	const nav = page.visit?.nav as { res_start?: number; res_end?: number; phases?: NavPhases } | undefined;
 	if (key === 'ttfb') {
 		const p = nav?.phases;

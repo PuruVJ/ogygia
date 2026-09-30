@@ -7,7 +7,7 @@
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { analyze_page, vital_parts, type PartedVital, type VitalPart, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
 import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
@@ -26,6 +26,8 @@ export interface PageView {
 	unmeasured: string[];
 	/** against the previous load of this same page (this tab, this session): what changed */
 	since: SinceLoad | null;
+	/** the split vitals' parts (the document's own load only): what the next load's "since" compares */
+	parts?: Partial<Record<PartedVital, VitalPart[]>>;
 	/** after an in-app navigation: islands the router KEPT from the page before (the same island with
 	 *  the same props on both pages — still awake, no code, no hydrate). Without them, a page whose
 	 *  islands were all reused read as "nothing woke" */
@@ -417,6 +419,14 @@ export function read_page(): PageView | null {
 		view.kept = regions.filter((r) => r.kind === 'island' && r.hydrated && !woke.has(r.fp)).map((r) => ({ fp: r.fp, name: r.name }));
 	}
 	// (the first page of this document only: after an in-app navigation the vitals are not this page's)
+	if (!nav) {
+		const parts: NonNullable<PageView['parts']> = {};
+		for (const k of ['ttfb', 'fcp', 'lcp', 'inp'] as const) {
+			const p = vital_parts(input, k);
+			if (p) parts[k] = p;
+		}
+		view.parts = parts;
+	}
 	const prev = nav ? null : previous_load();
 	if (prev) view.since = since_load(prev, snapshot_of(view));
 	return view;
@@ -486,6 +496,7 @@ function snapshot_of(v: PageView): LoadSnapshot {
 		at: Date.now(),
 		findings: v.report.findings.map((f) => ({ code: f.code, names: f.fps.map((fp) => name.get(fp) ?? fp) })),
 		islands: v.report.rows.map((r) => ({ name: r.name, load_ms: r.load_ms, hydrate_ms: r.hydrate_ms })),
-		vitals: v.report.vitals.map((x) => ({ key: x.key, value: x.value }))
+		vitals: v.report.vitals.map((x) => ({ key: x.key, value: x.value })),
+		...(v.parts ? { parts: v.parts } : {})
 	};
 }

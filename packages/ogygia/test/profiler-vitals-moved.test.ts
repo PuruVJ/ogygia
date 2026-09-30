@@ -23,14 +23,22 @@ describe('vitals_moved', () => {
 		const moved = vitals_moved(a.vitals, b.vitals, (side, key) => vital_parts(side === 'a' ? a : b, key));
 		expect(moved).toEqual([{ key: 'lcp', a: 500, b: 3000, part: { label: 'its download', a: 290, b: 2790 } }]);
 	});
-	it('the noise floor: 100 ms and a fifth of the old value (CLS 0.05); a missing side says nothing', () => {
+	it('the noise floor: per vital (TTFB 50, FCP/LCP 100, INP 40 ms) and a fifth of the old value; CLS 0.05; a missing side says nothing', () => {
 		const none = () => null;
-		expect(vitals_moved({ lcp: 2000, ttfb: 300, cls: 0.1, inp: 180 }, { lcp: 2300, ttfb: 390, cls: 0.12, inp: 150 }, none)).toEqual([]);
+		expect(vitals_moved({ lcp: 2000, ttfb: 300, cls: 0.1, inp: 180 }, { lcp: 2300, ttfb: 350, cls: 0.12, inp: 150 }, none)).toEqual([]);
+		expect(vitals_moved({ ttfb: 100 }, { ttfb: 160 }, none)).toEqual([{ key: 'ttfb', a: 100, b: 160 }]);
 		expect(vitals_moved({ cls: 0.02, inp: 120 }, { cls: 0.2, inp: 400 }, none)).toEqual([
 			{ key: 'cls', a: 0.02, b: 0.2 },
 			{ key: 'inp', a: 120, b: 400 }
 		]);
 		expect(vitals_moved({ lcp: 900 }, {}, none)).toEqual([]);
+	});
+	it('INP: the phase that grew is named (its handlers)', () => {
+		const inp = (processing: number): PageInput => ({ ...lcp_page(450, 500), vitals: { inp: 30 + processing + 16 }, visit: { interaction: { t: 900, ms: 30 + processing + 16, name: 'click', delay: 30, processing, presentation: 16 } } as PageInput['visit'] });
+		const a = inp(40);
+		const b = inp(400);
+		const moved = vitals_moved(a.vitals, b.vitals, (side, key) => vital_parts(side === 'a' ? a : b, key));
+		expect(moved).toEqual([{ key: 'inp', a: 86, b: 446, part: { label: 'its handlers', a: 40, b: 400 } }]);
 	});
 	it('the parts are the explanation’s own numbers (one split, never two that drift)', () => {
 		const p = lcp_page(2950, 3000);

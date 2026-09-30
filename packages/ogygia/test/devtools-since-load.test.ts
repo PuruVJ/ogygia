@@ -33,6 +33,19 @@ test('fixed, new, and what moved', () => {
 	expect(s.moved.every((m) => m.better)).toBe(true);
 });
 
+test('a moved vital names its part that moved most (the shared rule); a module load needs 50 ms', () => {
+	const parts = (load: number) => ({ lcp: [{ key: 'ttfb', label: 'the first byte', ms: 100 }, { key: 'load', label: 'its download', ms: load }] });
+	const prev = snap({ vitals: [{ key: 'lcp', value: 2900 }], parts: parts(2700), islands: [{ name: 'Hero', load_ms: 60, hydrate_ms: 3 }, { name: 'Big', load_ms: 100, hydrate_ms: 3 }] });
+	const now = snap({ vitals: [{ key: 'lcp', value: 500 }], parts: parts(300), islands: [{ name: 'Hero', load_ms: 90, hydrate_ms: 3 }, { name: 'Big', load_ms: 400, hydrate_ms: 3 }] });
+	const s = since_load(prev, now)!;
+	expect(s.moved).toEqual([
+		{ what: 'LCP', a: 2900, b: 500, unit: 'ms', better: true, part: { label: 'its download', a: 2700, b: 300 } },
+		{ what: 'Big load', a: 100, b: 400, unit: 'ms', better: false }
+	].sort((x, y) => Math.abs(y.b - y.a) / y.a - Math.abs(x.b - x.a) / x.a));
+	// (an older picture without parts: the vital, no part)
+	expect(since_load({ ...prev, parts: undefined }, now)!.moved.find((m) => m.what === 'LCP')!.part).toBeUndefined();
+});
+
 test('the same finding on another island is a new one; another page compares to nothing', () => {
 	const prev = snap({ findings: [{ code: 'long-hydrate', names: ['Heavy'] }] });
 	const now = snap({ findings: [{ code: 'long-hydrate', names: ['Other'] }] });

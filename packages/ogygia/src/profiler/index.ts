@@ -4963,7 +4963,7 @@ class Profiler {
 				const va = this.#report_extras(P).visit;
 				const vb = this.#report_extras(stored).visit;
 				if (va && vb) {
-					const input = (v: Visit): PageInput => ({ vitals: v.vitals ?? {}, visit: { nav: v.nav, paints: v.paints, resources: v.resources }, islands: [], firsts: [], shifts: [], longtasks: [] });
+					const input = (v: Visit): PageInput => ({ vitals: v.vitals ?? {}, visit: { nav: v.nav, paints: v.paints, resources: v.resources, interaction: v.interaction }, islands: [], firsts: [], shifts: [], longtasks: [] });
 					const moved = vitals_moved(va.vitals ?? {}, vb.vitals ?? {}, (side, key) => vital_parts(input(side === 'a' ? va : vb), key));
 					if (moved.length) vitals = moved;
 				}
