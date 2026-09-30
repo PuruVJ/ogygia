@@ -200,6 +200,17 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page({ vitals: { ttfb: 1500 } }), [], [], 9000))).toContain('vital-ttfb');
 	});
 
+	it('the Page tab quotes the profiler’s last run of the page (devtools only), or says how to get one', () => {
+		const at = (over: object) => analyze_page({ ...page({ vitals: { ttfb: 1500 }, visit: { ...page().visit!, nav: { res_start: 1500, phases: { wait: 1450 } } as never } }), ...over } as PageInput, [], [], 9000).findings.find((f) => f.code === 'slow-ttfb')!.message;
+		// the profiler's own report: no such sentence (it is a profile)
+		expect(at({})).not.toContain('profile');
+		// devtools, no run yet: how to find out
+		expect(at({ server_profiles: {} })).toContain('Profile this page (the Profiler tab) to see where the server’s time went.');
+		// devtools, a run: quoted
+		expect(at({ server_profiles: {}, server_profile: { ago_min: 3, render_ms: 1003, top: 'Mostly waiting, but no HTTP calls were seen', calls: 0, calls_ms: 0 } })).toContain("The profiler's last run of this page (3 min ago): the server render took 1003 ms, no outbound calls; it says: Mostly waiting, but no HTTP calls were seen.");
+		expect(at({ server_profiles: {}, server_profile: { ago_min: 0.2, render_ms: 900, top: null, calls: 2, calls_ms: 640 } })).toContain('(just now): the server render took 900 ms, 2 outbound calls (640 ms).');
+	});
+
 	it('the worst shifts, explained (shift-cause): the burst, what moved, the cause just before, its fix', () => {
 		const text = 'div "Paragraph 1"';
 		const run = (over: Partial<PageInput>, regions: RegionFact[] = []) => analyze_page(page({ vitals: { cls: 0.2 }, ...over }), regions, [], 9000).findings.find((f) => f.code === 'shift-cause');

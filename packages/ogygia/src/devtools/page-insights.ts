@@ -88,7 +88,24 @@ export interface InteractionCpuInput {
 	handler: { ms: number; top: CpuFn[] } | null;
 }
 
+/** THE PROFILER'S LAST RUN OF A PAGE, in brief (devtools: the dock's profile store, shared with the
+ *  Profiler tab) — what the server did when it rendered that page */
+export interface ServerProfileBrief {
+	/** minutes since the run */
+	ago_min: number;
+	render_ms: number;
+	/** its top cost, in its own words (the report's first warning, else its heaviest component) */
+	top: string | null;
+	calls: number;
+	calls_ms: number;
+}
+
 export interface PageInput {
+	/** DEVTOOLS ONLY (the profiler's report is itself a profile): the profiler's last run of this
+	 *  page, and of the pages it navigated to by path. Present (even empty) means: say what the server
+	 *  did, or how to find out */
+	server_profiles?: Record<string, ServerProfileBrief>;
+	server_profile?: ServerProfileBrief;
 	/** the slowest interaction's CPU, when a trace of it was taken */
 	interaction_cpu?: InteractionCpuInput;
 	vitals: { ttfb?: number; fcp?: number; lcp?: number; cls?: number; inp?: number };
@@ -965,6 +982,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message:
 				`The in-app navigation to ${n.to} took ${Math.round(ms)} ms before the new page showed: ${parts.map((p) => p.text).join(', ')}.` +
 				(top.key === 'fetch' && !heavy_page ? server_sentence : '') +
+				// (devtools: the profiler's last run of the page it went to, when its request log is not here)
+				(top.key === 'fetch' && !heavy_page && !srv && page.server_profiles ? server_says(page.server_profiles[n.to.split('?')[0]]).replace('this page', 'that page') : '') +
 				(woke.length ? ` Then ${woke.length === 1 ? 'its island woke' : `${woke.length} islands woke`} over ${Math.round(Math.max(0, wake_end - n.swapped))} ms${heaviest && heaviest.ms >= 20 ? ` (${heaviest.name} ${Math.round(heaviest.ms)} ms to hydrate)` : ''}.` : ''),
 			fix:
 				top.key === 'fetch' && heavy_page
@@ -1172,6 +1191,13 @@ function explain_fcp(page: PageInput): { message: string; fix: string; fps: stri
  * server answered), and — when the document carries it — what the server's own Server-Timing says
  * its wait went to. The fix is the costliest step's.
  */
+/** What the profiler's last run of the page says the server did (or how to find out). */
+function server_says(brief: ServerProfileBrief | undefined): string {
+	if (!brief) return ' Profile this page (the Profiler tab) to see where the server’s time went.';
+	const ago = brief.ago_min < 1 ? 'just now' : `${Math.round(brief.ago_min)} min ago`;
+	return ` The profiler's last run of this page (${ago}): the server render took ${Math.round(brief.render_ms)} ms${brief.calls ? `, ${brief.calls} outbound call${brief.calls === 1 ? '' : 's'} (${Math.round(brief.calls_ms)} ms)` : ', no outbound calls'}${brief.top ? `; it says: ${brief.top}` : ''}.`;
+}
+
 function explain_ttfb(page: PageInput): { message: string; fix: string; fps: string[] } | null {
 	const p = page.visit?.nav?.phases;
 	if (!p) return null;
@@ -1195,7 +1221,9 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
 				: top.key === 'dns' || top.key === 'connect'
 					? 'Reaching the server is the cost: serve the page from closer to the visitor (a CDN at the edge), and keep the connection modern (HTTP/2 or 3, TLS 1.3).'
 					: "The server's answer is the cost: profile the page (its report names the slow load and the lines in it), cache the HTML where it is the same for everyone, or stream it so the first byte leaves before the slow part.";
-	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}`, fix, fps: [] };
+	// (devtools: the server's side from the Profiler tab's last run of this page, when the wait is it)
+	const profiled = page.server_profiles && top.key === 'wait' ? server_says(page.server_profile) : '';
+	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}${profiled}`, fix, fps: [] };
 }
 
 /**

@@ -7,7 +7,8 @@
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact } from './page-insights.js';
+import { analyze_page, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
 import { with_source_lines } from './source-lines.js';
@@ -332,6 +333,33 @@ export function summary_lines(s: CpuSummary | null): CpuSummary | null {
 	return { ...s, fns: with_source_lines(s.fns).fns, islands, outside: { ...s.outside, top: with_source_lines(s.outside.top).fns } };
 }
 
+/** THE PROFILER'S LAST RUN OF A PAGE, in brief: from the dock's profile store (the Profiler tab's
+ *  runs, shared data — never the report re-fetched), for the Page tab's server-side sentences. */
+function server_brief(path: string): ServerProfileBrief | undefined {
+	const p = profile_for(path);
+	if (!p) return undefined;
+	// its word on where the TIME went (the Page tab asks about a wait): the first of these it raised
+	const TIME_CODES = ['mostly-waiting', 'phases', 'top-component', 'top-cpu'];
+	let said: string | undefined;
+	for (const code of TIME_CODES) {
+		said = p.findings.find((f) => f.code === code)?.message;
+		if (said) break;
+	}
+	// (its own words, without their closing period: the sentence around it adds one)
+	const trim = (m: string) => {
+		const s = m.length > 200 ? m.slice(0, 200) + '…' : m;
+		return s.endsWith('.') ? s.slice(0, -1) : s;
+	};
+	const comp = [...p.components].sort((a, b) => b.self_ms - a.self_ms)[0];
+	return {
+		ago_min: Math.max(0, (Date.now() - p.at) / 60_000),
+		render_ms: p.render_ms,
+		top: said ? trim(said) : comp ? `${comp.name} (${Math.round(comp.self_ms)} ms of its own)` : null,
+		calls: p.network?.count ?? 0,
+		calls_ms: p.network?.total_ms ?? 0
+	};
+}
+
 /** The island a script file belongs to, when it is one's own file (by its location or identity). */
 function island_of_file(url: string): { island?: string } {
 	const base = (u: string) => {
@@ -373,7 +401,15 @@ export function read_page(): PageView | null {
 	// (after a navigation there is no new first paint: the navigation's start stands in for it)
 	const waits = hole_waits(nav?.t ?? -Infinity, nav ? 0 : (with_visit.visit?.paints?.fcp ?? 0));
 	const icpu = interaction_cpu_of(page);
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}) };
+	// the profiler's last runs (the Profiler tab's): of this page, and of each page it navigated to
+	const server_profiles: Record<string, ServerProfileBrief> = {};
+	for (const n of with_visit.visit?.navs ?? []) {
+		const path = n.to.split('?')[0];
+		const b = server_brief(path);
+		if (b) server_profiles[path] = b;
+	}
+	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
+	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

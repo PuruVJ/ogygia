@@ -471,15 +471,39 @@ async function ttfb_run(browser) {
 	};
 	const slow = await read('/dt-ttfb');
 	const redirected = await read('/dt-ttfb-go');
+	// THE PROFILER, NATIVE IN THE PAGE TAB: no profile yet — the finding says how to find the server's
+	// side; one run from the dock's Profiler tab (shared data) — the finding quotes what it found
+	let before = null;
+	let after = null;
+	{
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		const msg = () => page.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'slow-ttfb')?.message ?? null);
+		await page.goto(base + '/dt-ttfb', { waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		before = await msg();
+		await page.click('[data-og-panel-toggle]');
+		await page.click('[data-og-tab="profiler"]');
+		await page.locator('[data-og-profiler] input.n').fill('1');
+		await page.click('[data-og-profile-run]');
+		await page.locator('[data-og-profile-head]').waitFor({ timeout: 60_000 }).catch(() => {});
+		await page.reload({ waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		after = await msg();
+		await page.close();
+	}
 	const by_server = (f) => !!f && f.message.includes("ms waiting for the server's answer") && f.message.includes('the database 720 ms') && f.fix.startsWith("The server's answer is the cost");
 	const by_redirect = (f) => !!f && f.message.includes('ms in redirects') && f.fix.startsWith('The redirects are the cost');
 	const checks = [
 		["a slow load: the server's wait, its Server-Timing quoted", by_server(slow.tab)],
 		['a slow redirect: the redirect the cost', by_redirect(redirected.tab)],
-		['the profiler report: the same two', (!slow.report_id || by_server(slow.report)) && (!redirected.report_id || by_redirect(redirected.report))]
+		['the profiler report: the same two', (!slow.report_id || by_server(slow.report)) && (!redirected.report_id || by_redirect(redirected.report))],
+		// (never in the report: it is itself a profile)
+		['the report never says to profile the page', !slow.report_id || !slow.report?.message.includes('Profile this page')],
+		['the Page tab, no profile yet: says how to find the server’s side', !!before && before.includes('Profile this page (the Profiler tab)')],
+		['after one run in the dock: quotes it (the wait, no calls)', !!after && after.includes("The profiler's last run of this page (just now): the server render took") && after.includes('no outbound calls; it says: Mostly waiting')]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} first byte: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, redirected })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} first byte: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ slow, redirected, before, after })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 
