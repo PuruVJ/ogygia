@@ -111,6 +111,55 @@ test('dev: the check compares each restored host with Svelte’s children, and n
 	expect(document.querySelector('script[type="application/ogygia-restore-check"]')).toBeNull();
 });
 
+test('text a render trimmed inside a custom element it did not render comes back through the planned host above', async () => {
+	const inner = '<rich-text><p>a</p>\n\t\t<p>b</p></rich-text>';
+	await served(`<demo-card class="own">${inner}</demo-card>`);
+	restore(document);
+	// (the fake stamps its c-id on every tagged element it saw; the whitespace between is the point)
+	expect((document.querySelector('rich-text')!.childNodes[1] as Text).data).toBe('\n\t\t');
+});
+
+test('the dev check reads class as tokens and style as declarations, an empty one as absent', async () => {
+	const inner = '<p style="" class="">x</p><p style="--cols: 4">y</p>';
+	// a serializer that normalizes class and style on every element it writes
+	const normalizing = (h: string) => fake_scoped(h).split(' style=""').join('').split(' class=""').join('').split('--cols: 4"').join('--cols: 4;"');
+	const s = await transformMarkup(doc(island(`<demo-card class="own">${inner}</demo-card>`)), normalizing, { kind: 'document', dev: true });
+	const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
+	document.head.insertAdjacentHTML('beforeend', SHEET);
+	document.body.innerHTML = check_script(s.check!) + body;
+	let diff = '';
+	document.addEventListener('ogygia:restore-mismatch', (e) => (diff = (e as CustomEvent).detail.diff), { once: true });
+	restore(document);
+	expect(diff).toBe('');
+});
+
+test('a DOM without adoptable sheets or CSS.escape (jsdom): a <style> per root', async () => {
+	await served('<demo-card class="own"> x </demo-card>');
+	const desc = Object.getOwnPropertyDescriptor(ShadowRoot.prototype, 'adoptedStyleSheets')!;
+	const escape = CSS.escape;
+	Object.defineProperty(ShadowRoot.prototype, 'adoptedStyleSheets', { configurable: true, get: () => undefined, set: () => {} });
+	(CSS as { escape?: unknown }).escape = undefined;
+	try {
+		expect(restore(document)).toBe(1);
+	} finally {
+		Object.defineProperty(ShadowRoot.prototype, 'adoptedStyleSheets', desc);
+		CSS.escape = escape;
+	}
+	const root = document.querySelector('demo-card')!.shadowRoot!;
+	expect(root.querySelector('style')!.textContent).toContain('b{color');
+});
+
+test('a planned host inside a declarative shadow root the page shipped is restored too', async () => {
+	const s = await transformMarkup(doc(island('<div class="wrap"><template shadowrootmode="open"><demo-card class="own"> deep </demo-card></template></div>')), fake_scoped, { kind: 'document' });
+	const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
+	document.head.insertAdjacentHTML('beforeend', SHEET);
+	document.body.setHTMLUnsafe(body);
+	expect(restore(document)).toBe(1);
+	const card = document.querySelector('.wrap')!.shadowRoot!.querySelector('demo-card')!;
+	expect(card.shadowRoot!.querySelector('b')!.textContent).toBe('Card title');
+	expect(card.innerHTML).toBe(' deep ');
+});
+
 test('self-contained: the function source runs on its own (the handle inlines it)', async () => {
 	await served('<demo-card class="own"> inline </demo-card>');
 	const standalone = new Function(`return (${restore.toString()})`)() as typeof restore;

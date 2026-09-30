@@ -4,7 +4,7 @@
  * exactly what the browser's restorer needs — or strips everything, for a host without a plan.
  */
 import { describe, expect, it } from 'vitest';
-import { mark, settle, transformMarkup } from '../src/server/reversible.js';
+import { localizeMarks, mark, settle, transformMarkup } from '../src/server/reversible.js';
 import { fake_scoped } from './fixtures/fake-scoped-render.js';
 
 const island = (inner: string) => `<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
@@ -102,9 +102,35 @@ describe('settle', () => {
 		expect(s.check).toEqual({ 0: ' Sign in ' });
 	});
 
+	it('a host ogygia will not restore gets no comment marks (its element children still carry their tag)', () => {
+		const m = mark(doc('<demo-card><!--x--> text <p>y</p></demo-card>'), 'document', false)!;
+		expect(m.html).toContain('<demo-card og-u="0"><!--x--> text <p og-c="0.2">y</p></demo-card>');
+	});
+
+	it('a planned host that is also a tagged child carries one attribute reset: its own', async () => {
+		const html = page('<demo-card class="own"><demo-link class="inner">x</demo-link></demo-card>');
+		const s = await transformMarkup(html, fake_scoped, { kind: 'document' });
+		const at = s.html.indexOf('<demo-link');
+		const inner = s.html.slice(at, s.html.indexOf('>', at));
+		expect(inner).toContain('og-h="1"');
+		expect(inner.split(' og-r=').length).toBe(2);
+		// (the host's reset: the renderer's c-id gone, its class back, its og-keep attribute kept)
+		expect(inner).toContain(`og-r="{&quot;c-id&quot;:null,&quot;class&quot;:&quot;inner&quot;}"`);
+	});
+
 	it('settle alone drops marks of hosts the transform never planned', () => {
 		const m = mark('<demo-card><p> x </p></demo-card>', 'region', false)!;
 		const s = settle(m.html, m.record);
 		expect(s.html).toBe('<demo-card><p> x </p></demo-card>');
+	});
+});
+
+describe('localizeMarks', () => {
+	it('renumbers a block’s marks from 0 for a cache key, and puts the document’s ids back after', () => {
+		const block = '<demo-card og-h="41" class="x"><!--og-c 41.0 t--> a <demo-card og-h="42" og-c="41.1">b</demo-card><!--og-t 41.3--> </demo-card>';
+		const local = localizeMarks(block);
+		expect(local.html).toBe('<demo-card og-h="0" class="x"><!--og-c 0.0 t--> a <demo-card og-h="1" og-c="0.1">b</demo-card><!--og-t 0.3--> </demo-card>');
+		const rendered = local.html.replace('class="x"', 'class="x sc-h" og-shadow="k"');
+		expect(local.back(rendered)).toBe(block.replace('class="x"', 'class="x sc-h" og-shadow="k"'));
 	});
 });

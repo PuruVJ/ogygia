@@ -26,10 +26,12 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	const doc: Document = (root as Node).ownerDocument ?? (root as Document);
 	const head = document.head;
 	const W = window as unknown as {
-		__og_sheets?: Map<string, CSSStyleSheet | string>;
+		__og_sheets?: Map<string, { sheet: CSSStyleSheet | null; css: string }>;
 		__og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[];
 	};
 	const sheets = (W.__og_sheets ??= new Map());
+	// (a DOM without `CSS.escape` — jsdom — gets a quote-safe escape for the attribute selectors)
+	const esc = (s: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : s.split('\\').join('\\\\').split('"').join('\\"'));
 	// A constructed sheet can only be adopted by a root in the document that made it: a root made in
 	// an answer's inert fragment (or an incoming page's parsed document) adopts once its host is in
 	// the page — `restore_adopt()`, called right after the insertion, in the same task.
@@ -40,27 +42,28 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	if (root !== document && (root as ParentNode).querySelectorAll) {
 		for (const el of Array.from((root as ParentNode).querySelectorAll('[data-og-head]'))) {
 			const key = el.getAttribute('data-og-head')!;
-			if (head.querySelector(`[data-og-head="${CSS.escape(key)}"]`)) el.remove();
+			if (head.querySelector(`[data-og-head="${esc(key)}"]`)) el.remove();
 			else head.appendChild(el);
 		}
 	}
 
-	const sheet_for = (key: string): CSSStyleSheet | string | null => {
+	const sheet_for = (key: string): { sheet: CSSStyleSheet | null; css: string } | null => {
 		const have = sheets.get(key);
 		if (have) return have;
-		const sel = `template[data-og-head="${CSS.escape(key)}"]`;
+		const sel = `template[data-og-head="${esc(key)}"]`;
 		// (an incoming page carries its sheets in its own head until the swap)
 		const tpl = ((doc !== document && doc.head?.querySelector(sel)) || head.querySelector(sel)) as HTMLTemplateElement | null;
 		if (!tpl) return null;
 		const css = tpl.content.textContent ?? '';
-		let made: CSSStyleSheet | string = css;
+		let sheet: CSSStyleSheet | null = null;
 		try {
-			const s = new CSSStyleSheet();
-			s.replaceSync(css);
-			made = s;
+			sheet = new CSSStyleSheet();
+			sheet.replaceSync(css);
 		} catch {
 			// no constructable stylesheets: a <style> per root
+			sheet = null;
 		}
+		const made = { sheet, css };
 		sheets.set(key, made);
 		return made;
 	};
@@ -155,13 +158,30 @@ export function restore(root: Document | DocumentFragment | Element): number {
 			const ex = x as Element;
 			const ey = y as Element;
 			for (const attr of Array.from(ex.attributes))
-				if (ey.getAttribute(attr.name) !== attr.value) return `${here} <${ex.localName}>: Svelte has ${attr.name}="${attr.value}", the restored markup has ${ey.hasAttribute(attr.name) ? `"${ey.getAttribute(attr.name)}"` : 'none'}`;
+				if (norm(attr.name, attr.value) !== norm(attr.name, ey.getAttribute(attr.name))) return `${here} <${ex.localName}>: Svelte has ${attr.name}="${attr.value}", the restored markup has ${ey.hasAttribute(attr.name) ? `"${ey.getAttribute(attr.name)}"` : 'none'}`;
 			if (ex.localName.indexOf('-') === -1)
-				for (const attr of Array.from(ey.attributes)) if (!ex.hasAttribute(attr.name)) return `${here} <${ex.localName}>: the restored markup adds ${attr.name}="${attr.value}"`;
+				for (const attr of Array.from(ey.attributes)) if (!ex.hasAttribute(attr.name) && norm(attr.name, attr.value) !== null) return `${here} <${ex.localName}>: the restored markup adds ${attr.name}="${attr.value}"`;
 			const deeper = differ(x, y, `${here} <${ex.localName}>`);
 			if (deeper) return deeper;
 		}
 		return null;
+	};
+	/** An attribute as it matters, not as a serializer wrote it: `class` as its set of tokens, `style`
+	 *  as its declarations, an empty value as absent (Svelte's hydration reads neither; a render's
+	 *  serializer rewrites both). */
+	const norm = (name: string, value: string | null): string | null => {
+		if (value === null || value.trim() === '') return name === 'class' || name === 'style' ? null : value;
+		if (name === 'class') return value.split(/\s+/).filter(Boolean).sort().join(' ');
+		if (name === 'style')
+			return value
+				.split(';')
+				.map((d) => {
+					const c = d.indexOf(':');
+					return c === -1 ? d.trim() : `${d.slice(0, c).trim().toLowerCase()}:${d.slice(c + 1).trim().replace(/\s+/g, ' ')}`;
+				})
+				.filter(Boolean)
+				.join(';');
+		return value;
 	};
 	const describe = (n: Node): string =>
 		n.nodeType === 3 ? `the text ${JSON.stringify((n as Text).data)}` : n.nodeType === 8 ? `the comment <!--${(n as Comment).data}-->` : `<${(n as Element).localName}>`;
@@ -178,10 +198,21 @@ export function restore(root: Document | DocumentFragment | Element): number {
 
 	// 1. stand-ins first: a Svelte child can be one (a block in the tree's `<p>`), and the children are
 	//    found by their tags below
-	swap_stand_ins(root as ParentNode);
+	// …in the root, and in every open shadow root already there (a declarative one the page shipped:
+	// `querySelectorAll` never enters them), deeper roots after the ones holding them
+	const scopes: ParentNode[] = [root as ParentNode];
+	for (let q = 0; q < scopes.length; q++) {
+		const walk = doc.createTreeWalker(scopes[q] as Node, 1 /* SHOW_ELEMENT */);
+		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+			const sr = (n as Element).shadowRoot;
+			if (sr && sr.mode === 'open') scopes.push(sr);
+		}
+	}
+	for (const scope of scopes) swap_stand_ins(scope);
 
-	// 2. the planned hosts, innermost first
-	const hosts = Array.from((root as ParentNode).querySelectorAll('[og-h]'));
+	// 2. the planned hosts, innermost first (a deeper shadow root's hosts before its host's)
+	const hosts: Element[] = [];
+	for (const scope of scopes) hosts.push(...Array.from(scope.querySelectorAll('[og-h]')));
 	for (let x = hosts.length - 1; x >= 0; x--) {
 		const host = hosts[x] as HTMLElement;
 		const k = host.getAttribute('og-h')!;
@@ -193,13 +224,18 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		}
 		const shadow = host.attachShadow({ mode: 'open' });
 		const own: CSSStyleSheet[] = [];
+		// (a DOM without adoptable sheets — jsdom has the constructor but no adoptedStyleSheets — gets a
+		// <style> per root, like a browser without constructable sheets)
+		const adoptable = Array.isArray(shadow.adoptedStyleSheets);
 		for (const key of keys) {
 			const s = sheet_for(key);
-			if (typeof s === 'string') {
+			if (!s) continue;
+			if (s.sheet && adoptable) own.push(s.sheet);
+			else {
 				const style = doc.createElement('style');
-				style.textContent = s;
+				style.textContent = s.css;
 				shadow.appendChild(style);
-			} else if (s) own.push(s);
+			}
 		}
 		if (own.length) {
 			if (live) shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets, ...own];

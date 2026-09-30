@@ -127,7 +127,9 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   restructured ship as stand-ins; `data-og-head` assets go into `<head>` once per key. In dev, each
   restored host is checked against Svelte's markup. The context says which it is
   (`ctx.kind`: `'document'` or `'region'`) and carries `csr` and the `event`; it may be async.
-  `transformMarkup` and `restore` from `ogygia/markup` run the same round trip in a test.
+  `transformMarkup` and `restore` from `ogygia/markup` run the same round trip in a test (jsdom
+  included; `checkScript` adds the dev check), and `localizeMarks` gives a caching transform stable
+  mark ids. Hosts inside a declarative shadow root the page shipped are restored too.
 - **`isOgygiaPage()` from `'ogygia'` — which world shared code is in.** A store or helper used on
   both a csr=false ogygia page and a csr=true Kit page often has to behave differently on each. The
   fact already existed inside ogygia (the server reads the request's route against the build-time

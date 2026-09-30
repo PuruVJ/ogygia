@@ -283,7 +283,9 @@ Kit-free and import-free: it runs in the non-SvelteKit half of a monorepo, or in
 | `scanRegions(html)` | Yields every region in a document (island, lake or hole), with its span and attributes. |
 | `liftRegions(html)` · `restoreRegions(shell, regions)` | Lift the regions out around a foreign SSR pass, and splice them back with the marks the pass stamped. |
 | `transformMarkup(html, transform, { kind, csr, dev })` | The server round trip of `handle({ transform })`: mark, your transform, settle. |
-| `restore(root)` | The browser half, on a parsed document or fragment. |
+| `checkScript(check)` | The dev check's payload (`settled.check` with `dev: true`), to put in front of the markup so `restore` checks each host. |
+| `localizeMarks(block)` | Renumbers a block's marks from 0 for a render cache key; `.back(rendered)` puts the document's ids back. |
+| `restore(root)` | The browser half, on a parsed document or fragment (jsdom included). |
 
 ## `ogygia/app`
 

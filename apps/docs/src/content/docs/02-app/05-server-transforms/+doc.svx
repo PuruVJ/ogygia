@@ -58,6 +58,20 @@ An `og-h` host without `og-shadow` is left exactly as Svelte wrote it. Use that 
 
 Every other `og-*` mark is ogygia's (`og-c` on each child, `og-t` before text a serializer could trim). Carry it along wherever you move a node. None of it reaches the final DOM.
 
+A mark comment stands right before its node. If your renderer marks each node it moves with a comment of its own (a relocation marker), do not put that marker between ogygia's mark and its node, at least on `og-h` hosts: ogygia would read the node as dropped, and the restore would put it back twice.
+
+### A transform that caches its renders
+
+ogygia numbers hosts across the whole document, so the same block carries other ids on another page, and a render cache keyed on the block's markup never hits. `localizeMarks` renumbers a block's marks from 0 for the cache key, and maps the document's ids back onto the render:
+
+```ts
+import { localizeMarks } from 'ogygia/markup';
+
+const local = localizeMarks(block);
+const rendered = cache.get(local.html) ?? cache.set(local.html, await render(local.html)).get(local.html);
+return local.back(rendered);
+```
+
 ## Stylesheets
 
 Tag head assets with `data-og-head="key"`, anywhere in a document or an answer:
@@ -90,7 +104,7 @@ Your tree lives in the light DOM, so the HTML parser applies its rules to it in 
 
 ## The dev check
 
-In dev, ogygia sends each planned host's original children with the page, and the restore compares every host with them after restoring it: node types, tags, text, comments and attributes. A difference is an error in the console, naming the first node that differs, and an `ogygia:restore-mismatch` event:
+In dev, ogygia sends each planned host's original children with the page, and the restore compares every host with them after restoring it: node types, tags, text, comments and attributes (`class` as its set of tokens, `style` as its declarations, either one empty as absent: a serializer's rewrite of those paints the same). A difference is an error in the console, naming the first node that differs, and an `ogygia:restore-mismatch` event:
 
 ```
 [ogygia] the transform broke hydration markup: <my-button> > [1]: Svelte has <i>, the restored markup has nothing
@@ -101,13 +115,16 @@ In dev, ogygia sends each planned host's original children with the page, and th
 `ogygia/markup` runs the same round trip outside the app, for a test that harvests markup and runs your transform over it:
 
 ```ts
-import { transformMarkup, restore } from 'ogygia/markup';
+import { transformMarkup, checkScript, restore } from 'ogygia/markup';
 
 const settled = await transformMarkup(islandHtml, renderComponents, { kind: 'region', dev: true });
 const tpl = document.createElement('template');
-tpl.innerHTML = settled.html;
+// (the dev check's payload in front: restore then compares each host with Svelte's markup)
+tpl.innerHTML = checkScript(settled.check ?? {}) + settled.html;
 restore(tpl.content);
 // tpl.content now holds what hydration will see
 ```
+
+`restore` runs in jsdom as it is: without adoptable stylesheets it gives each shadow root a `<style>`.
 
 `ogygia/markup` also has `scanRegions`, `liftRegions` and `restoreRegions`, for a pass that needs to know where regions are. It imports nothing, so it runs anywhere.

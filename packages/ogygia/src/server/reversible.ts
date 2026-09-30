@@ -529,7 +529,12 @@ export function mark(html: string, kind: TransformKind, csr: boolean): { html: s
 		}
 		if (tok.t === 'text' || tok.t === 'comment') {
 			const parent = top();
-			if (parent && parent.host !== -1 && in_body) {
+			if (parent && parent.host !== -1 && in_body && !hosts.get(parent.host)!.planned) {
+				// a host ogygia will not restore: only its element children carry a tag (the stand-in
+				// pass reads those); a comment before a text or comment node would sit between a
+				// position-based adopter's own marker and its node
+				parent.next++;
+			} else if (parent && parent.host !== -1 && in_body) {
 				const i = parent.next++;
 				const rec = hosts.get(parent.host)!;
 				if (tok.t === 'text') {
@@ -639,9 +644,24 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 		pending_text = null;
 		const rec = record.hosts.get(p.k);
 		const was = p.og === 'c' ? rec?.children.get(p.i)?.text : rec?.texts.get(p.i);
-		if (!plan.has(p.k) || was === undefined) {
-			// no plan (or nothing to compare): the mark goes
+		if (was === undefined) {
 			out[p.comment_at] = '';
+			return;
+		}
+		if (!plan.has(p.k)) {
+			// a host with no plan: its mark goes. But a render around it may still have trimmed or dropped
+			// the text (a planned host's serializer writes everything below it): then it becomes a text
+			// mark of the nearest planned host above, which puts it back when it is restored
+			out[p.comment_at] = '';
+			if (text === null || decode(text) !== decode(was)) {
+				for (let s = stack.length - 1; s >= 0; s--) {
+					const a = stack[s].host;
+					if (a === -1 || !plan.has(a)) continue;
+					const ra = record.hosts.get(a);
+					if (ra) out[p.comment_at] = `<!--og-t ${a}.${ra.text_next++} ${comment_json(decode(was))}-->`;
+					break;
+				}
+			}
 			return;
 		}
 		if (p.og === 't') {
@@ -742,6 +762,10 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 			// the rewrite
 			const remove = new Set<string>();
 			let add = '';
+			// ONE attribute reset per element: a planned host's own (it honours og-keep) wins over its
+			// reset as a tagged child of the host above (the same attributes, without og-keep)
+			let reset: Record<string, string | null> | null = null;
+			let planned_host = false;
 			if (og_h) {
 				const k = Number(og_h.value);
 				if (og_h.name === 'og-u' || !plan.has(k)) {
@@ -749,21 +773,21 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 					remove.add('og-shadow');
 					remove.add('og-keep');
 				} else {
+					planned_host = true;
 					const keep = new Set((attrs.find((a) => a.name === 'og-keep')?.value ?? '').split(' ').filter(Boolean));
-					const diff = attr_diff(attrs, record.hosts.get(k)?.attrs ?? {}, keep);
-					if (diff) add += ` og-r="${esc_attr(JSON.stringify(diff))}"`;
+					reset = attr_diff(attrs, record.hosts.get(k)?.attrs ?? {}, keep);
 				}
 			}
 			if (og_c) {
 				const dot = og_c.value.indexOf('.');
 				const k = Number(og_c.value.slice(0, dot));
 				if (!plan.has(k)) remove.add('og-c');
-				else {
+				else if (!planned_host) {
 					const was = record.hosts.get(k)?.children.get(Number(og_c.value.slice(dot + 1)))?.attrs ?? {};
-					const diff = attr_diff(attrs, was, new Set());
-					if (diff) add += ` og-r="${esc_attr(JSON.stringify(diff))}"`;
+					reset = attr_diff(attrs, was, new Set());
 				}
 			}
+			if (reset) add += ` og-r="${esc_attr(JSON.stringify(reset))}"`;
 			if (stand_in) {
 				add += ` tag="${name}"`;
 				stand_ins++;
@@ -810,6 +834,66 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 /** The dev check's payload: each planned Svelte-owned host's original children, by its id. */
 export function check_script(check: Record<string, string>): string {
 	return `<script type="application/ogygia-restore-check">${script_json(check)}</script>`;
+}
+
+/** The host id right after `at` (digits), and where they end. */
+function read_id(s: string, at: number): { id: number; end: number } | null {
+	let n = 0;
+	let j = at;
+	while (j < s.length && s.charCodeAt(j) >= 48 && s.charCodeAt(j) <= 57) n = n * 10 + (s.charCodeAt(j++) - 48);
+	return j === at ? null : { id: n, end: j };
+}
+
+const MARK_PREFIXES = ['og-h="', 'og-u="', 'og-c="', '<!--og-c ', '<!--og-t '];
+
+/** Rewrite every host id in ogygia's marks through `map` (ids it lacks stay). */
+function remap(html: string, map: (id: number) => number | undefined): string {
+	let out = '';
+	let pos = 0;
+	for (;;) {
+		let best = -1;
+		let len = 0;
+		for (const p of MARK_PREFIXES) {
+			const at = html.indexOf(p, pos);
+			if (at !== -1 && (best === -1 || at < best)) {
+				best = at;
+				len = p.length;
+			}
+		}
+		if (best === -1) return out + html.slice(pos);
+		const r = read_id(html, best + len);
+		if (!r) {
+			out += html.slice(pos, best + len);
+			pos = best + len;
+			continue;
+		}
+		const to = map(r.id);
+		out += html.slice(pos, best + len) + (to === undefined ? r.id : to);
+		pos = r.end;
+	}
+}
+
+/**
+ * STABLE MARKS FOR A CACHING TRANSFORM. ogygia numbers hosts across the whole document, so the same
+ * block carries other ids on another page, and a render cache keyed on its markup never hits.
+ * `localizeMarks(block)` renumbers the block's marks from 0 (in order of appearance): cache on the
+ * result, then `back(rendered)` puts the document's ids back on whatever the render returned.
+ *
+ * ```ts
+ * const local = localizeMarks(block);
+ * const rendered = cache.get(local.html) ?? cache.set(local.html, await render(local.html));
+ * return local.back(rendered);
+ * ```
+ */
+export function localizeMarks(html: string): { html: string; back: (rendered: string) => string } {
+	const to_local = new Map<number, number>();
+	const local = remap(html, (id) => {
+		let l = to_local.get(id);
+		if (l === undefined) to_local.set(id, (l = to_local.size));
+		return l;
+	});
+	const to_doc = new Map([...to_local].map(([d, l]) => [l, d]));
+	return { html: local, back: (rendered) => remap(rendered, (id) => to_doc.get(id)) };
 }
 
 /**
