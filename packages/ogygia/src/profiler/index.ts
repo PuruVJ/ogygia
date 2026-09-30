@@ -88,6 +88,7 @@ import { parse_visit, merge_visits, type Visit } from './visit.js';
 import { hole_slots } from './hole-slots.js';
 import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.js';
 import { byte_strip, type ByteStrip } from './byte-strip.js';
+import { stream_tail } from './stream-tail.js';
 import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.js';
 import { BEACON_STANDALONE_JS } from './beacon-standalone.js';
 import { build_river, load_return_keys, seed_key_bytes, type River } from './river.js';
@@ -4179,7 +4180,11 @@ class Profiler {
 					: PER_RENDER_TIMEOUT_MS;
 				return with_timeout(
 					event.fetch(p, {
-						headers: { ...(replay?.headers ?? {}), ...extra, 'x-og-profiler-internal': '1' }
+						// AS A BROWSER LOADS IT: a page navigation. A load's streamed promises stream only to a
+						// navigation (the document ships, then a script per settle); any other fetch gets them
+						// settled on the server first — another render than a visitor's, and one chunk, so the
+						// byte strip never showed what held the document open
+						headers: { 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document', accept: 'text/html', ...(replay?.headers ?? {}), ...extra, 'x-og-profiler-internal': '1' }
 					}),
 					ms,
 					'render timed out (the page or one of its upstream calls did not return in time)'
@@ -4609,7 +4614,12 @@ class Profiler {
 			if (last_body) {
 				try {
 					s.strip = byte_strip(last_body);
-					if (last_chunks.length > 1) s.strip.chunks = last_chunks;
+					if (last_chunks.length > 1) {
+						s.strip.chunks = last_chunks;
+						// (what held it open: the late tail after the longest pause, by page.data key)
+						const tail = stream_tail(last_body, s.strip, last_chunks);
+						if (tail) s.strip.tail = tail;
+					}
 				} catch {
 					// a document the scanner cannot walk: no strip
 				}
@@ -5664,6 +5674,8 @@ class Profiler {
 	 *  never sees it; a stray flag with no session posts to a guarded route and gets nothing. */
 	async #beacon_tag(event: RequestEvent): Promise<string | null> {
 		if (!this.ui_enabled) return null;
+		// (never in the profiler's own renders: they ask as a page navigation, and the tag is not the page's)
+		if (event.request.headers.get('x-og-profiler-internal') === '1') return null;
 		const dest = event.request.headers.get('sec-fetch-dest');
 		if (
 			dest

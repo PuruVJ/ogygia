@@ -484,6 +484,46 @@ async function cls_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE DOCUMENT HELD OPEN (/dt-stream): the load's `reviews` streams for 1.2 s, the document stays
+ *  open, and both islands wake only after its end — Healthy reads nothing late and waits all the
+ *  same. Named `page.data.reviews` with both islands, in the Page tab and the profiler's report (its
+ *  render now asks as a page navigation, so it streams as a visitor's does: the tail after the
+ *  pause). `?quick` settles in 10 ms: nothing said. */
+async function stream_run(browser) {
+	const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-stream')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	const read = async (q) => {
+		const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+		await page.goto(base + '/dt-stream' + q, { waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		const f = await page.evaluate(() => window.__ogygia_page?.()?.report.findings.find((x) => x.code === 'html-held-open') ?? null);
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		return f;
+	};
+	const tab = await read('');
+	const quick = await read('?quick');
+	let report = null;
+	let tail = null;
+	for (let i = 0; i < 10 && report_id && !report; i++) {
+		await new Promise((ok) => setTimeout(ok, 1000));
+		const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+		report = (j?.findings ?? []).find((x) => x.code === 'html-held-open') ?? null;
+		tail = j?.strip?.tail ?? null;
+	}
+	const named = (f) => !!f && f.message.includes('`page.data.reviews`') && f.message.includes('Healthy') && f.message.includes('Reviews') && f.fix.includes("render: 'deferred'");
+	const checks = [
+		['the Page tab: held by page.data.reviews, both islands waited', named(tab) && tab.fps.length === 2],
+		['the quick twin: nothing said', !quick],
+		['the profiler: its render streamed, the tail held by reviews', !report_id || (tail?.keys?.some((k) => k.key === 'reviews') && tail.late_ms - tail.early_ms >= 1000)],
+		['the profiler report: the same finding, with the server side', !report_id || (named(report) && report.message.includes('on the server the last'))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} held open: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ tab, quick, report, tail })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** THE FIRST BYTE, EXPLAINED (/dt-ttfb, /dt-ttfb-go): a load that waits 1 s and says why in its
  *  Server-Timing (the database most of it); a redirect that takes 1.1 s before the fast page. Each
  *  named with its step, in the Page tab and in the profiler's report. */
@@ -1083,7 +1123,7 @@ try {
 	// over the lab pages, unmeasured, before any run.
 	{
 		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls', '/dt-ttfb?fast', '/dt-fcp']) {
+		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls', '/dt-ttfb?fast', '/dt-fcp', '/dt-stream?quick']) {
 			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
 			await warm.waitForTimeout(700);
 		}
@@ -1205,6 +1245,10 @@ try {
 	for (let i = 0; i < repeat; i++) fcp_ok += await fcp_run(browser);
 	if (fcp_ok < repeat) failed = true;
 	console.log(`${fcp_ok === repeat ? '✓' : '✗'} the first paint, explained: ${fcp_ok}/${repeat}`);
+	let stream_ok = 0;
+	for (let i = 0; i < repeat; i++) stream_ok += await stream_run(browser);
+	if (stream_ok < repeat) failed = true;
+	console.log(`${stream_ok === repeat ? '✓' : '✗'} the document held open, explained: ${stream_ok}/${repeat}`);
 	let ttfb_ok = 0;
 	for (let i = 0; i < repeat; i++) ttfb_ok += await ttfb_run(browser);
 	if (ttfb_ok < repeat) failed = true;

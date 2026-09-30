@@ -538,7 +538,7 @@ Under the causality graph, **What if…** lets you change a call and see the ren
 
 Three things no single hot function shows. **Synchronous I/O** inside the render, `readFileSync`, `execSync`, a sync compression, with the app caller: while it runs nothing else on the instance moves. **Promises per render**: the async hook counts every promise (one stack in 256 is captured for attribution); tens of thousands per render is an allocation and a microtask each, a cost spread too thin to show as a function. **Memoization candidates**: app functions called many times per render at a steady cost each, with the allocation per call; if the result depends only on the argument, a cache keyed on it runs the function once per distinct value. The last one is a heuristic from counts and cost, and the report says so.
 
-The byte strip also carries, for a page that streamed, when each chunk of the document left the server: hover a segment for the moment its bytes went out.
+The byte strip also carries, for a page that streamed, when each chunk of the document left the server: hover a segment for the moment its bytes went out. The profiler asks for the page as a browser does (a page navigation), so a load's streamed promises stream in its render just as they do for a visitor. When the document paused a long time before its last part, the report names what held it open: each streamed promise by its `page.data` key and when it left. Islands wake only once the whole document is in, so a slow streamed promise holds every island on the page, even one that reads nothing late. The finding **the document held open** says so, with the islands that waited when a browser visited.
 
 ## What the profiler takes out of every number
 

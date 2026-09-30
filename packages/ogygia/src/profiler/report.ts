@@ -9,6 +9,7 @@ import type { Analysis, HeapAllocator } from './analyze.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
+import { explain_held_open, type HeldOpen } from '../devtools/page-insights.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
 import { runtime_scripts, type PageAssets, type RuntimeScripts } from './page-assets.js';
@@ -1208,6 +1209,16 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		ogygia_findings(og, meta, extras, info, warn);
 	}
 	page_weight_findings(meta, extras, info, warn);
+	// what held the profiled render's document open: its streamed promises by page.data key
+	const tail = extras.strip?.tail;
+	const held_open: HeldOpen | undefined = tail?.keys.length
+		? { side: 'server', keys: tail.keys.map((k) => ({ key: k.key, at: k.left_ms })), early_ms: tail.early_ms, early_bytes: tail.early_bytes, late_ms: tail.late_ms, late_bytes: tail.late_bytes, islands: island_rows_of(meta).length }
+		: undefined;
+	// (no visit: the render alone says it — the same finding, from the server's side)
+	if (!extras.visit && held_open) {
+		const f = explain_held_open({ vitals: {}, visit: null, islands: [], firsts: [], shifts: [], longtasks: [], held_open }, [], (fp) => fp);
+		if (f) warn(f.code, f.message, { fix: f.fix });
+	}
 	// THE BROWSER'S FINDINGS: the devtools Page tab's analysis of the visit, word for word
 	if (extras.visit) {
 		// third parties: every origin but the page's; what the page names = everything weighed from its
@@ -1236,7 +1247,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// (each in-app navigation with its page request's server side, from the request log)
 		const nav_req = new Map((extras.nav_requests ?? []).map((r) => [r.t, r]));
 		const visit = nav_req.size && extras.visit.navs ? { ...extras.visit, navs: extras.visit.navs.map((n) => (nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n)) } : extras.visit;
-		out.push(...browser_findings(browser_page_report(visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev)));
+		out.push(...browser_findings(browser_page_report(visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev, held_open)));
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
@@ -3267,7 +3278,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 					total: extras.strip.total,
 					by_kind: extras.strip.by_kind,
 					shadow_count: extras.strip.shadow_count,
-					segments: extras.strip.segments
+					segments: extras.strip.segments,
+					...(extras.strip.chunks ? { chunks: extras.strip.chunks } : {}),
+					...(extras.strip.tail ? { tail: extras.strip.tail } : {})
 				}
 			: null,
 		// the data river (page mode): calls → loads → page.data keys → islands, plus the keys nothing reads

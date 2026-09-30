@@ -9,7 +9,7 @@
  * Findings the report already makes its own way are left to it: a recovery (hydration-mismatch),
  * an island that never woke (never-hydrated), the vitals, the render-blocking files.
  */
-import { analyze_page, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.js';
+import { analyze_page, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.js';
 import type { CodeKind, CpuFn, CpuSummary } from '../devtools/cpu.js';
 import type { FrameCategory } from './analyze.js';
 import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.js';
@@ -65,7 +65,9 @@ export function browser_page_report(
 	/** the visit's slowest interaction, sampled: its wait and its handlers, by function */
 	interaction_cpu?: InteractionCpu,
 	/** recorded on the dev server (a page compiles on its first request there) */
-	dev?: boolean
+	dev?: boolean,
+	/** what held the profiled render's document open (its streamed promises by key, server side) */
+	held_open?: HeldOpen
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
 	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp) return null;
@@ -98,6 +100,7 @@ export function browser_page_report(
 	const span = (s: InteractionCpu['wait']) => (s ? { ms: s.ms, top: s.top.map(as_fn) } : null);
 	const input: PageInput = {
 		...(dev ? { dev: true } : {}),
+		...(held_open ? { held_open } : {}),
 		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
 		vitals: visit.vitals ?? {},
 		visit: {

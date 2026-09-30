@@ -37,6 +37,8 @@ interface Registry {
 	settled?: Map<number, { ok: boolean; value: unknown }>;
 	/** Full reviver map (defer + settled + app transport decoders) used to parse a streamed resolve. */
 	revivers?: Record<string, (payload: never) => unknown>;
+	/** When each resolve arrived (ms from the navigation), stamped by the inline bootstrap. */
+	t?: Record<number, number>;
 }
 
 function reg(): Registry {

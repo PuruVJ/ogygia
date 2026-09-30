@@ -111,12 +111,20 @@ export interface PageInput {
 	server_profile?: ServerProfileBrief;
 	/** the slowest interaction's CPU, when a trace of it was taken */
 	interaction_cpu?: InteractionCpuInput;
+	/** what held the document open: its streamed promises by `page.data` key — when each settled
+	 *  (`side` 'server': left the server, ms into the render, from the profiled render's chunks;
+	 *  'browser': arrived, ms from the navigation, stamped by the resolve global) */
+	held_open?: HeldOpen;
 	vitals: { ttfb?: number; fcp?: number; lcp?: number; cls?: number; inp?: number };
 	visit: {
 		nav?: {
 			dcl?: number;
 			load?: number;
 			res_start?: number;
+			/** the document's last byte */
+			res_end?: number;
+			/** the document's body, decoded (bytes) */
+			size?: number;
 			dom_interactive?: number;
 			/** the steps before the first byte, each only when it took time */
 			phases?: NavPhases;
@@ -274,6 +282,69 @@ export interface IslandRow {
 }
 
 export type Severity = 'error' | 'warn' | 'info';
+export interface HeldOpen {
+	side: 'server' | 'browser';
+	keys: { key: string | null; at: number }[];
+	/** server side: the early part's last byte left at `early_ms`, the tail's (`late_bytes`) at `late_ms` */
+	early_ms?: number;
+	early_bytes?: number;
+	late_ms?: number;
+	late_bytes?: number;
+	/** server side: the islands the page renders (the finding needs some to be about) */
+	islands?: number;
+}
+
+/**
+ * The page seed's defer ids → the `page.data` key each stands for (top level and one level down):
+ * the seed (`application/ogygia-page`, the flat devalue form) holds a defer marker `[name, i]` per
+ * streamed promise, the marker's payload the id the streamed resolve script settles. From the whole
+ * document's HTML or the seed script's own text. indexOf only.
+ */
+export function defer_keys(html: string, marker = 'OgygiaDefer'): Map<number, string> {
+	const out = new Map<number, string>();
+	let text = html;
+	const at = html.indexOf('application/ogygia-page');
+	if (at !== -1) {
+		const open = html.indexOf('>', at);
+		const close = html.indexOf('</script', open);
+		if (open === -1 || close === -1) return out;
+		text = html.slice(open + 1, close);
+	}
+	let arr: unknown[];
+	try {
+		const parsed = JSON.parse(text);
+		if (!Array.isArray(parsed)) return out;
+		arr = parsed;
+	} catch {
+		return out;
+	}
+	// (every value is an index into the array; a reducer is [name, index])
+	const id_of = (i: unknown): number | null => {
+		const v = typeof i === 'number' ? arr[i] : undefined;
+		if (!Array.isArray(v) || v[0] !== marker) return null;
+		let p: unknown = arr[v[1] as number];
+		if (Array.isArray(p)) p = arr[p[0] as number];
+		return typeof p === 'number' ? p : null;
+	};
+	const root = arr[0] as Record<string, unknown> | undefined;
+	const data = root && typeof root.data === 'number' ? arr[root.data] : undefined;
+	if (!data || typeof data !== 'object' || Array.isArray(data)) return out;
+	for (const [key, idx] of Object.entries(data as Record<string, unknown>)) {
+		const id = id_of(idx);
+		if (id !== null) {
+			out.set(id, key);
+			continue;
+		}
+		const inner = typeof idx === 'number' ? arr[idx] : undefined;
+		if (inner && typeof inner === 'object' && !Array.isArray(inner))
+			for (const [k2, i2] of Object.entries(inner as Record<string, unknown>)) {
+				const id2 = id_of(i2);
+				if (id2 !== null) out.set(id2, `${key}.${k2}`);
+			}
+	}
+	return out;
+}
+
 export interface PageFinding {
 	code: string;
 	severity: Severity;
@@ -563,6 +634,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 					: 'The islands ahead of it are the cost. Make them lighter, or move islands that are not needed at load to wake=\'visible\' or \'idle\'.',
 			fps: queued.map((r) => r.fp)
 		});
+	}
+
+	// ── the document held open: every island waited for its end ──
+	{
+		const f = explain_held_open(page, rows, name_of);
+		if (f) findings.push(f);
 	}
 
 	// ── held with nothing ahead: the runtime's own wait ──
@@ -1263,6 +1340,74 @@ export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | nu
 		{ key: 'load', label: 'its download', ms: res.end - asked },
 		{ key: 'render', label: 'painting it', ms: lcp - res.end }
 	];
+}
+
+/** the document stayed open at least this long after its first byte (the browser side), or its tail
+ *  came this long after the rest (the server side) */
+const HELD_OPEN_MS = 250;
+
+/**
+ * THE DOCUMENT HELD OPEN: the page painted early, but its HTML kept coming — and islands wake only
+ * once the whole document is in (DOMContentLoaded, the wake gate), so every island waited for its
+ * end, even one that reads nothing late. Usually a load's streamed promise: the response stays open
+ * until the last one settles. From the browser (the navigation's first and last byte, the paint,
+ * the islands' hydrate steps after the end) and, when known, what held it (`held_open`: each streamed
+ * promise by its `page.data` key and when it settled). With no visit, the profiled render alone
+ * says it (its chunks: the early part, then the tail after the longest pause).
+ */
+export function explain_held_open(page: PageInput, rows: readonly IslandRow[], name_of: (fp: string) => string): PageFinding | null {
+	const ms = (n: number) => `${Math.round(n)} ms`;
+	const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
+	const held = page.held_open;
+	// the streamed promises that settled last (within a few ms of the last one): what held it
+	const last_at = held?.keys.length ? Math.max(...held.keys.map((k) => k.at)) : undefined;
+	const holders = held && last_at !== undefined ? held.keys.filter((k) => k.at >= last_at - 20) : [];
+	const holder_text = holders.length
+		? holders.map((k) => (k.key ? `\`page.data.${k.key}\`` : 'a streamed promise')).filter((x, i, a) => a.indexOf(x) === i).join(', ')
+		: '';
+	const fix_streamed =
+		'A promise the load returns without awaiting streams, and the document stays open until it settles, so every island waits for it. If the islands need the value anyway, await it in the load: the page ships with it, and nothing waits after. If only one part of the page needs it, make that part a server island (`render: \'deferred\'`): it loads after the page, and the page\'s islands wake without it.';
+	const nav = page.visit?.nav;
+	const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp;
+	if (nav && typeof nav.res_start === 'number' && typeof nav.res_end === 'number') {
+		const open = nav.res_end - nav.res_start;
+		if (open < HELD_OPEN_MS || typeof fcp !== 'number' || fcp > nav.res_end - 150) return null;
+		const end = nav.res_end;
+		// the islands whose hydrate step came only after the document's end
+		const waited = rows.filter((r) => r.done - r.hydrate_ms >= end - 5);
+		if (!waited.length) return null;
+		const first = Math.min(...waited.map((r) => r.done - r.hydrate_ms));
+		const names = waited.slice(0, 4).map((r) => name_of(r.fp) || r.name);
+		const more = waited.length > names.length ? ` and ${waited.length - names.length} more` : '';
+		const why = holder_text
+			? held!.side === 'server'
+				? `; on the server the last ${kb(held!.late_bytes ?? 0)} left ${ms((held!.late_ms ?? 0) - (held!.early_ms ?? 0))} after the rest, held by ${holder_text}`
+				: `; it was held by ${holder_text}, settled at ${ms(last_at!)}`
+			: '';
+		const big = !holder_text && (nav.size ?? 0) >= 300_000;
+		return {
+			code: 'html-held-open',
+			severity: end - fcp >= 300 ? 'warn' : 'info',
+			message: `The page painted at ${ms(fcp)}, but its HTML kept coming until ${ms(end)} (${ms(open)} after its first byte)${why}. Islands wake only once the whole document is in (DOMContentLoaded${nav.dcl ? ` at ${ms(nav.dcl)}` : ''}), so ${names.join(', ')}${more} waited: the first hydrated at ${ms(first)}, ${ms(first - fcp)} after the paint.`,
+			fix: holder_text
+				? fix_streamed
+				: big
+					? `The HTML itself is large (${kb(nav.size!)}): its download is the wait. Ship less markup: page long lists, move what is below the fold into a server island (\`render: 'deferred'\`), and keep big data out of the page seed.`
+					: `Something kept the response open after its first part: usually a promise a load returns without awaiting (it streams, and the document ends only when it settles), or a proxy that buffers. The profiler's report of this page names what the late bytes were. ${fix_streamed}`,
+			fps: waited.map((r) => r.fp)
+		};
+	}
+	// no visit: the profiled render alone (its tail left the server long after the rest)
+	if (!held || held.side !== 'server' || !holder_text || !held.islands) return null;
+	const pause = (held.late_ms ?? 0) - (held.early_ms ?? 0);
+	if (pause < HELD_OPEN_MS) return null;
+	return {
+		code: 'html-held-open',
+		severity: 'warn',
+		message: `The document streamed: its first ${kb(held.early_bytes ?? 0)} left the server ${ms(held.early_ms ?? 0)} into the render, but it stayed open until ${ms(held.late_ms ?? 0)}, held by ${holder_text}. In the browser, islands wake only once the whole document is in (DOMContentLoaded), so the page's ${held.islands} island${held.islands === 1 ? '' : 's'} wait${held.islands === 1 ? 's' : ''} ${ms(pause)} longer for it.`,
+		fix: fix_streamed,
+		fps: []
+	};
 }
 
 /**

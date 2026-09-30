@@ -696,10 +696,17 @@ function build_visit(): Record<string, unknown> | null {
 		// script added after a dev server's 250 modules — fell past the cut)
 		const lcp_res = visit_paints.lcp_url ? all.find((r) => r.name === visit_paints.lcp_url) : undefined;
 		if (lcp_res && !keep.includes(lcp_res)) keep.push(lcp_res);
-		for (const r of all) {
-			if (keep.length >= MAX_DETAIL_RESOURCES) break;
-			if (!blocking(r) && r !== lcp_res) keep.push(r);
-		}
+		// …then everything that is not a script (the holes' answers, fetches, images, styles, fonts),
+		// then the scripts, each by when it started: a dev server's hundreds of modules pushed the holes'
+		// own requests past the cut (a hole's waterfall and its fetch type went missing)
+		const kept = new Set(keep);
+		for (const pass of [false, true])
+			for (const r of all) {
+				if (keep.length >= MAX_DETAIL_RESOURCES) break;
+				if (kept.has(r) || (type_of(r) === 'script') !== pass) continue;
+				kept.add(r);
+				keep.push(r);
+			}
 		keep.sort((a, b) => a.startTime - b.startTime);
 		resources = keep
 			.map((r) => ({

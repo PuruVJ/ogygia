@@ -7,12 +7,14 @@
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, vital_parts, type PartedVital, type VitalPart, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { analyze_page, defer_keys, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
 import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
 import { with_source_lines } from './source-lines.js';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
+import { PAGE_DEFER_KEY, PAGE_DEFER_REGISTRY_KEY } from '../page-defer.js';
+import { PAGE_SEED_SELECTOR } from '../runtime/seeds.js';
 
 export interface PageView {
 	page: BeaconPage;
@@ -205,6 +207,17 @@ export function cpu_of(page: BeaconPage, trace: unknown): CpuSummary | null {
 }
 
 /** The last in-app navigation (the router's body swap): where to, and when it started. */
+/** This document's streamed promises, each by its `page.data` key (the seed) and when its resolve
+ *  arrived (the inline bootstrap's stamp): what held the document open. Null: nothing streamed. */
+export function held_open(): HeldOpen | null {
+	const reg = (globalThis as unknown as Record<symbol, { t?: Record<number, number> } | undefined>)[PAGE_DEFER_REGISTRY_KEY];
+	const t = reg?.t;
+	if (!t) return null;
+	const names = defer_keys(document.querySelector(PAGE_SEED_SELECTOR)?.textContent ?? '', PAGE_DEFER_KEY);
+	const keys = Object.entries(t).map(([id, at]) => ({ key: names.get(Number(id)) ?? null, at: Math.round(at) }));
+	return keys.length ? { side: 'browser', keys: keys.sort((a, b) => a.at - b.at) } : null;
+}
+
 export function last_nav(): { to: string; t: number } | null {
 	const ev = snapshot();
 	for (let i = ev.length - 1; i >= 0; i--) {
@@ -411,7 +424,9 @@ export function read_page(): PageView | null {
 		if (b) server_profiles[path] = b;
 	}
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
+	// (the document's own streamed promises: after an in-app navigation they are the page before's)
+	const held = nav ? null : held_open();
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

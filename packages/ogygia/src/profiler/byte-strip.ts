@@ -43,6 +43,8 @@ export interface ByteStrip {
 	/** when each chunk of the document LEFT the server (end offset, ms after the render began) —
 	 *  present when the page streamed in more than one chunk */
 	chunks?: { end: number; t: number }[];
+	/** what held the document open after its early part (stream-tail.ts), when it paused long */
+	tail?: import('./stream-tail.js').StreamTail;
 }
 
 /** When a byte left the server, from the chunk stamps: the chunk that carried it. */
