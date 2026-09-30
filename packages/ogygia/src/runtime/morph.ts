@@ -660,6 +660,12 @@ function carry_shadows(src: Element, dst: Element): void {
 		const root = (s as Element).shadowRoot;
 		if (!root || root.mode !== 'open' || (d as Element).shadowRoot) continue;
 		const copy = (d as Element).attachShadow({ mode: 'open', delegatesFocus: root.delegatesFocus });
+		// (attached in the answer's inert document: no custom element registry until the restorer
+		// initializes it after the insertion — else nothing inside it upgrades)
+		if ((copy as ShadowRoot & { customElementRegistry?: unknown }).customElementRegistry === null) {
+			const w = globalThis as { __og_init?: ShadowRoot[] };
+			(w.__og_init ??= []).push(copy);
+		}
 		for (const c of Array.from(root.childNodes)) copy.appendChild(clone(c));
 		try {
 			if (root.adoptedStyleSheets.length) copy.adoptedStyleSheets = [...root.adoptedStyleSheets];

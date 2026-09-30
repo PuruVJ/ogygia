@@ -8,6 +8,7 @@ import { afterEach, expect, test } from 'vitest';
 import { check_script, transformMarkup } from '../../src/server/reversible.js';
 import { restore, restore_adopt } from '../../src/runtime/restore.js';
 import { fake_scoped } from '../fixtures/fake-scoped-render.js';
+import { init_shadow_registries } from '../../src/runtime/parse-html.js';
 
 const SHEET = '<template data-og-head="demo-card.shadow">b{color:rgb(255, 0, 0)}</template>';
 const island = (inner: string) => `<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
@@ -158,6 +159,58 @@ test('a planned host inside a declarative shadow root the page shipped is restor
 	const card = document.querySelector('.wrap')!.shadowRoot!.querySelector('demo-card')!;
 	expect(card.shadowRoot!.querySelector('b')!.textContent).toBe('Card title');
 	expect(card.innerHTML).toBe(' deep ');
+});
+
+// (a root attached in an inert document has no registry. Some engines keep it null after the
+// insertion (measured in Edge: nothing inside upgraded, `attachInternals` threw), and the runtime then
+// calls `customElements.initialize` on it; the Chromium these tests run in assigns it on insertion.
+// So here the two tests below guard the upgrade path end to end, not the null case itself.)
+test('a root restored in an answer’s inert fragment gets the page’s registry after insertion: what is inside upgrades', async () => {
+	let constructed = 0;
+	if (!customElements.get('demo-internal'))
+		customElements.define(
+			'demo-internal',
+			class extends HTMLElement {
+				constructor() {
+					super();
+					this.attachInternals(); // throws on an element no registry upgraded
+					constructed++;
+				}
+			}
+		);
+	// the component's tree holds a custom element (a button in the host's shadow form)
+	const tree = (h: string) => fake_scoped(h).split('<b class="sc-demo-card">Card title</b>').join('<b class="sc-demo-card">Card title</b><demo-internal></demo-internal>');
+	const s = await transformMarkup('<demo-card class="x"> hi </demo-card>', (h) => SHEET + tree(h), { kind: 'region' });
+	const tpl = document.createElement('template');
+	tpl.innerHTML = s.html;
+	restore(tpl.content);
+	document.body.appendChild(tpl.content);
+	restore_adopt();
+	const inner = document.querySelector('demo-card')!.shadowRoot!.querySelector('demo-internal')!;
+	expect(constructed).toBe(1);
+	expect(inner.constructor).not.toBe(HTMLElement);
+});
+
+test('a declarative shadow root parsed in an inert fragment gets the page’s registry after insertion (no transform needed)', async () => {
+	let constructed = 0;
+	if (!customElements.get('demo-internal-2'))
+		customElements.define(
+			'demo-internal-2',
+			class extends HTMLElement {
+				constructor() {
+					super();
+					this.attachInternals();
+					constructed++;
+				}
+			}
+		);
+	const tpl = document.createElement('template');
+	tpl.setHTMLUnsafe('<div class="host"><template shadowrootmode="open"><demo-internal-2></demo-internal-2></template></div>');
+	const host = document.createElement('section');
+	host.appendChild(tpl.content);
+	document.body.appendChild(host);
+	init_shadow_registries(host);
+	expect(constructed).toBe(1);
 });
 
 test('self-contained: the function source runs on its own (the handle inlines it)', async () => {

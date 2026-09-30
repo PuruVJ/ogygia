@@ -118,6 +118,17 @@ describe('settle', () => {
 		expect(inner).toContain(`og-r="{&quot;c-id&quot;:null,&quot;class&quot;:&quot;inner&quot;}"`);
 	});
 
+	it('a tagged child that is a host ogygia won’t restore keeps the attributes its runtime adopts it by', async () => {
+		// a server-owned host around an island (planned) with a plain server-owned host among its children
+		const html = doc(`<demo-card class="shell"><demo-skip data-x="1">nav</demo-skip><ogygia-region wake="none">${island('<b>i</b>')}</ogygia-region></demo-card>`);
+		const adopt = (h: string) => fake_scoped(h).split('<demo-skip').join('<demo-skip s-id="4"');
+		const s = await transformMarkup(html, adopt, { kind: 'document' });
+		const at = s.html.indexOf('<demo-skip');
+		const skip = s.html.slice(at, s.html.indexOf('>', at));
+		expect(skip).toContain('s-id="4"');
+		expect(skip).not.toContain('og-r');
+	});
+
 	it('settle alone drops marks of hosts the transform never planned', () => {
 		const m = mark('<demo-card><p> x </p></demo-card>', 'region', false)!;
 		const s = settle(m.html, m.record);

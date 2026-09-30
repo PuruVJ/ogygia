@@ -1,6 +1,6 @@
 import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
-import { parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.js';
+import { init_shadow_registries, parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.js';
 import { runtime_session } from './session.js';
 import {
 	capability_expired,
@@ -794,6 +794,7 @@ class OgygiaRegion extends HTMLElement {
 		if (morph) morph(this, Array.from(frag.childNodes));
 		else this.replaceChildren(frag);
 		restore_adopt_sheets();
+		init_shadow_registries(this);
 		this.#done = true;
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
@@ -841,6 +842,7 @@ class OgygiaRegion extends HTMLElement {
 			else this.replaceChildren(...nodes);
 		}
 		restore_adopt_sheets();
+		init_shadow_registries(this);
 		this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 	}
 
@@ -1168,6 +1170,7 @@ class OgygiaRegion extends HTMLElement {
 		slots.lakes.settle_in(frag);
 		this.replaceChildren(frag);
 		restore_adopt_sheets();
+		init_shadow_registries(this);
 		if (interactive) {
 			await this.#live_hydrate(desc.props);
 		} else {

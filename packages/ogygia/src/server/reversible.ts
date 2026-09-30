@@ -782,7 +782,9 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 				const dot = og_c.value.indexOf('.');
 				const k = Number(og_c.value.slice(0, dot));
 				if (!plan.has(k)) remove.add('og-c');
-				else if (!planned_host) {
+				// (a tagged child that is itself a host ogygia won't restore is server markup: its own runtime
+				// adopts it by the attributes the render gave it — they are not Svelte's to reset)
+				else if (!planned_host && og_h?.name !== 'og-u') {
 					const was = record.hosts.get(k)?.children.get(Number(og_c.value.slice(dot + 1)))?.attrs ?? {};
 					reset = attr_diff(attrs, was, new Set());
 				}

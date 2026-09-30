@@ -60,3 +60,25 @@ export function restore_markup(root: ParentNode): void {
 export function restore_adopt_sheets(): void {
 	(globalThis as { __og_restore_adopt?: () => void }).__og_restore_adopt?.();
 }
+
+/**
+ * Shadow roots attached while the markup sat in an inert document — a declarative shadow root the
+ * parse above attached, a restored one — get no custom element registry in a browser with scoped
+ * registries, and keep none once inserted: nothing inside them upgrades (an element that calls
+ * `attachInternals` in its constructor throws). Give each the page's registry, right after the
+ * insertion. A browser without scoped registries never nulls it (and has no `initialize`): a no-op.
+ */
+export function init_shadow_registries(under: Node): void {
+	const ce = customElements as CustomElementRegistry & { initialize?: (root: Node) => void };
+	if (typeof ce.initialize !== 'function') return;
+	const scopes: Node[] = [under];
+	for (let q = 0; q < scopes.length; q++) {
+		const walk = document.createTreeWalker(scopes[q], 1 /* SHOW_ELEMENT */);
+		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+			const sr = (n as Element).shadowRoot as (ShadowRoot & { customElementRegistry?: unknown }) | null;
+			if (!sr) continue;
+			if (sr.customElementRegistry === null) ce.initialize(sr);
+			scopes.push(sr);
+		}
+	}
+}

@@ -28,6 +28,7 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	const W = window as unknown as {
 		__og_sheets?: Map<string, { sheet: CSSStyleSheet | null; css: string }>;
 		__og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[];
+		__og_init?: ShadowRoot[];
 	};
 	const sheets = (W.__og_sheets ??= new Map());
 	// (a DOM without `CSS.escape` — jsdom — gets a quote-safe escape for the attribute selectors)
@@ -223,6 +224,10 @@ export function restore(root: Document | DocumentFragment | Element): number {
 			continue;
 		}
 		const shadow = host.attachShadow({ mode: 'open' });
+		// A root attached in a document without a browsing context (an answer's inert fragment, an
+		// incoming page) gets no custom element registry, and keeps none after the insertion: nothing
+		// inside it would upgrade. `restore_adopt()` initializes it once its host is in the page.
+		if (!live) (W.__og_init ??= []).push(shadow);
 		const own: CSSStyleSheet[] = [];
 		// (a DOM without adoptable sheets — jsdom has the constructor but no adoptedStyleSheets — gets a
 		// <style> per root, like a browser without constructable sheets)
@@ -289,7 +294,16 @@ export function restore(root: Document | DocumentFragment | Element): number {
  *  answer's insertion or a router swap, in the same task: no paint in between). A host the insertion
  *  discarded (a morph kept the live one) is dropped. */
 export function restore_adopt(): void {
-	const W = window as unknown as { __og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[] };
+	const W = window as unknown as { __og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[]; __og_init?: ShadowRoot[] };
+	// first: roots attached outside the page get the page's registry, so what is inside them upgrades
+	// (a browser without scoped registries never nulls it, and has no `initialize`)
+	const bare = W.__og_init;
+	if (bare?.length) {
+		W.__og_init = [];
+		const ce = customElements as CustomElementRegistry & { initialize?: (root: Node) => void };
+		for (const root of bare)
+			if (root.host.isConnected && (root as ShadowRoot & { customElementRegistry?: unknown }).customElementRegistry === null) ce.initialize?.(root);
+	}
 	const list = W.__og_adopt;
 	if (!list?.length) return;
 	W.__og_adopt = [];
