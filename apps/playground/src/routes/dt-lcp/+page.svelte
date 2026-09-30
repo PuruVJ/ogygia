@@ -6,7 +6,9 @@
 	import { page } from '$app/state';
 	import Hero from '$lib/dtlcp/Hero.svelte' with { wake: 'load' };
 	const late = page.url.searchParams.has('late');
+	// `?quick`: the same hero answered in 300 ms — the fast twin "since your last profile" compares
+	const quick = page.url.searchParams.has('quick');
 </script>
 
 <h1>lcp lab</h1>
-<Hero {late} />
+<Hero {late} {quick} />

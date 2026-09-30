@@ -392,14 +392,40 @@ async function lcp_run(browser) {
 	};
 	const plain = await read('');
 	const late = await read('?late');
+	// SINCE YOUR LAST PROFILE, THE VITALS: a profile of /dt-lcp with the slow hero, then one with the
+	// quick twin — the second report's comparison must say LCP fell, and that its download is the
+	// part that shrank
+	let since = null;
+	{
+		const visit_after = async (q) => {
+			const r = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-lcp')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+			const id = r?.headers.get('location')?.split('/').pop() ?? null;
+			const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+			await page.goto(base + '/dt-lcp' + q, { waitUntil: 'load' });
+			await page.waitForTimeout(4000);
+			await page.goto('about:blank');
+			await page.waitForTimeout(300);
+			await page.close();
+			return id;
+		};
+		await visit_after('');
+		const id = await visit_after('?quick');
+		for (let i = 0; i < 10 && id && !since; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const k = await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null);
+			since = k?.since?.vitals ?? null;
+		}
+	}
 	const on_hero = (f) => !!f && f.message.includes('The largest paint was the img (hero.svg') && f.message.includes(') in Hero:');
 	const checks = [
 		['in the HTML: named on Hero, the download the cost', on_hero(plain.tab) && plain.tab.fix.startsWith('The file itself is slow to download') && plain.tab.fps.length === 1],
 		['added late: named on Hero, the late find the cost', on_hero(late.tab) && late.tab.message.includes('ms before the browser began fetching it') && late.tab.fix.startsWith('The browser found it late')],
-		['the profiler report: the same two', (!plain.report_id || (on_hero(plain.report) && plain.report.fix.startsWith('The file itself'))) && (!late.report_id || (on_hero(late.report) && late.report.fix.startsWith('The browser found it late')))]
+		['the profiler report: the same two', (!plain.report_id || (on_hero(plain.report) && plain.report.fix.startsWith('The file itself'))) && (!late.report_id || (on_hero(late.report) && late.report.fix.startsWith('The browser found it late')))],
+		// (the slow hero, then its quick twin: LCP fell, and the part that fell is the download)
+		['since your last profile: LCP fell, its download the part', !plain.report_id || (!!since && since.some((v) => v.key === 'lcp' && v.b < v.a && v.part?.label === 'its download' && v.part.b < v.part.a))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} largest paint: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ plain, late })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} largest paint: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ plain, late, since })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 

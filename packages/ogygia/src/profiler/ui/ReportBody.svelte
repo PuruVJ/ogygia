@@ -428,6 +428,14 @@
 					<b>In the browser</b>{#if since.browser.fixed.length}: <span class="good">fixed {since.browser.fixed.join(' · ')}</span>{/if}{#if since.browser.added.length}{since.browser.fixed.length ? ';' : ':'} <span class="warn">new {since.browser.added.join(' · ')}</span>{/if}.
 				</p>
 			{/if}
+			{#if since.vitals}
+				<!-- the vitals each report's own visit measured, and the part of each that moved most -->
+				{@const label = (k: string) => (k === 'cls' ? 'CLS' : k.toUpperCase())}
+				{@const val = (k: string, v: number) => (k === 'cls' ? String(v) : `${fmt_ms(v)} ms`)}
+				<p data-since-vitals>
+					<b class={since.vitals.some((v) => v.b > v.a) ? 'warn' : 'good'}>Vitals</b>: {since.vitals.map((v) => `${label(v.key)} ${val(v.key, v.a)} → ${val(v.key, v.b)}${v.part ? ` (${v.part.label} ${fmt_ms(v.part.a)} → ${fmt_ms(v.part.b)} ms)` : ''}`).join('; ')}.
+				</p>
+			{/if}
 			{#if since.islands}
 				{@const isl = since.islands}
 				<!-- what the deploy costs a returning visitor: each island keeps its file (its cache still

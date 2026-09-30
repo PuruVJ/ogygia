@@ -1150,6 +1150,56 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 }
 
 /**
+ * A VITAL'S PARTS, as numbers (the same splits the explanations word): TTFB by its steps, FCP by
+ * first byte / HTML / blocking / render, LCP by first byte / delay / download / render. What the
+ * profiler's "since your last profile" compares, to say which part of a moved vital moved. Null
+ * when the visit cannot tell.
+ */
+export function vital_parts(page: PageInput, key: 'ttfb' | 'fcp' | 'lcp'): { key: string; label: string; ms: number }[] | null {
+	const nav = page.visit?.nav as { res_start?: number; res_end?: number; phases?: NavPhases } | undefined;
+	if (key === 'ttfb') {
+		const p = nav?.phases;
+		if (!p) return null;
+		return [
+			{ key: 'redirect', label: 'redirects', ms: p.redirect ?? 0 },
+			{ key: 'worker', label: 'the service worker', ms: p.worker ?? 0 },
+			{ key: 'dns', label: 'the address lookup', ms: p.dns ?? 0 },
+			{ key: 'connect', label: 'connecting', ms: (p.connect ?? 0) + (p.tls ?? 0) },
+			{ key: 'wait', label: "the server's answer", ms: p.wait ?? 0 }
+		];
+	}
+	const first = nav?.res_start;
+	if (typeof first !== 'number') return null;
+	if (key === 'fcp') {
+		const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp;
+		if (typeof fcp !== 'number') return null;
+		const html_end = Math.max(first, nav?.res_end ?? first);
+		const blocked_until = (page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp).reduce((m, r) => Math.max(m, r.end), html_end);
+		return [
+			{ key: 'ttfb', label: 'the first byte', ms: first },
+			{ key: 'html', label: 'the HTML download', ms: html_end - first },
+			{ key: 'blocking', label: 'the files that block the paint', ms: blocked_until - html_end },
+			{ key: 'render', label: 'the rest before the paint', ms: fcp - blocked_until }
+		];
+	}
+	const p = page.visit?.paints;
+	const lcp = p?.lcp ?? page.vitals.lcp;
+	if (typeof lcp !== 'number') return null;
+	const res = p?.lcp_url ? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url) : undefined;
+	if (!res) return [
+		{ key: 'ttfb', label: 'the first byte', ms: first },
+		{ key: 'render', label: 'the render', ms: lcp - first }
+	];
+	const asked = res.req_start ?? res.start;
+	return [
+		{ key: 'ttfb', label: 'the first byte', ms: first },
+		{ key: 'delay', label: 'finding the image', ms: asked - first },
+		{ key: 'load', label: 'its download', ms: res.end - asked },
+		{ key: 'render', label: 'painting it', ms: lcp - res.end }
+	];
+}
+
+/**
  * THE FIRST PAINT, EXPLAINED: its four parts — the wait for the HTML's first byte, the HTML's own
  * download, the files that blocked the paint after it (stylesheets, classic scripts in the head:
  * the slowest named), and the rest before the paint (the main thread busy: long tasks before it).

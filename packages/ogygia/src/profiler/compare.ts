@@ -267,6 +267,52 @@ export interface Since {
 	browser?: { fixed: string[]; added: string[] };
 	/** which islands changed file between the two builds (what a returning visitor downloads again) */
 	islands?: IslandFilesDiff;
+	/** the browser's vitals that moved (each report's own visit), and for TTFB / FCP / LCP the part
+	 *  of it that moved most — "LCP 1.2 s → 2.6 s: its download 300 → 1700 ms" */
+	vitals?: VitalMove[];
+}
+
+export interface VitalMove {
+	key: 'ttfb' | 'fcp' | 'lcp' | 'cls' | 'inp';
+	a: number;
+	b: number;
+	part?: { label: string; a: number; b: number };
+}
+
+/**
+ * THE VITALS THAT MOVED between two visits: past a noise floor (100 ms and a fifth of the old value;
+ * CLS 0.05), and for a split vital the part that moved most. `parts` reads a visit's split (the
+ * shared page-insights splits); `a` / `b` the vitals.
+ */
+export function vitals_moved(
+	a: Record<string, number | undefined>,
+	b: Record<string, number | undefined>,
+	parts: (side: 'a' | 'b', key: 'ttfb' | 'fcp' | 'lcp') => { key: string; label: string; ms: number }[] | null
+): VitalMove[] {
+	const out: VitalMove[] = [];
+	for (const key of ['ttfb', 'fcp', 'lcp', 'cls', 'inp'] as const) {
+		const x = a[key];
+		const y = b[key];
+		if (typeof x !== 'number' || typeof y !== 'number') continue;
+		const moved = key === 'cls' ? Math.abs(y - x) >= 0.05 : Math.abs(y - x) >= Math.max(100, x * 0.2);
+		if (!moved) continue;
+		const m: VitalMove = { key, a: x, b: y };
+		if (key === 'ttfb' || key === 'fcp' || key === 'lcp') {
+			const pa = parts('a', key);
+			const pb = parts('b', key);
+			if (pa && pb) {
+				let best: VitalMove['part'];
+				for (const q of pb) {
+					const was = pa.find((p) => p.key === q.key);
+					if (!was) continue;
+					if (!best || Math.abs(q.ms - was.ms) > Math.abs(best.b - best.a)) best = { label: q.label, a: Math.round(was.ms), b: Math.round(q.ms) };
+				}
+				if (best && Math.abs(best.b - best.a) >= 50) m.part = best;
+			}
+		}
+		out.push(m);
+	}
+	return out;
 }
 
 /**

@@ -197,7 +197,8 @@ async function read_timed(
 	text += dec.decode();
 	return { text, chunks };
 }
-import { compare_reports, island_files_diff, page_history, type Since } from './compare.js';
+import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.js';
+import { vital_parts, type PageInput } from '../devtools/page-insights.js';
 import { label_call, phase_of_frame } from './timeline.js';
 import { gzip_large } from './compress.js';
 import { io_kind } from './async-io.js';
@@ -4956,6 +4957,19 @@ class Profiler {
 			} catch {
 				browser = undefined;
 			}
+			// THE VITALS THAT MOVED (each report's own visit), and the part of each that moved most
+			let vitals: Since['vitals'];
+			try {
+				const va = this.#report_extras(P).visit;
+				const vb = this.#report_extras(stored).visit;
+				if (va && vb) {
+					const input = (v: Visit): PageInput => ({ vitals: v.vitals ?? {}, visit: { nav: v.nav, paints: v.paints, resources: v.resources }, islands: [], firsts: [], shifts: [], longtasks: [] });
+					const moved = vitals_moved(va.vitals ?? {}, vb.vitals ?? {}, (side, key) => vital_parts(input(side === 'a' ? va : vb), key));
+					if (moved.length) vitals = moved;
+				}
+			} catch {
+				vitals = undefined;
+			}
 			// which islands changed file between the two builds: what a returning visitor downloads again
 			let islands: Since['islands'];
 			try {
@@ -4967,6 +4981,7 @@ class Profiler {
 				prev: P.meta.id,
 				...(score ? { score } : {}),
 				...(browser ? { browser } : {}),
+				...(vitals ? { vitals } : {}),
 				...(islands ? { islands } : {}),
 				...(assets ? { assets } : {}),
 				...(render ? { a_ms: render.a, b_ms: render.b } : {}),
