@@ -241,7 +241,8 @@ const TOOLS = [
 			'islands hydrate (scrolls to trigger `visible` islands; optionally clicks a selector to trigger an ' +
 			'`interaction` one), then returns the ACTUAL runtime story per island from the devtools event bus: ' +
 			'SSR → wire → connected → woke → hydrated (with timings), plus anomalies (SSR’d-but-never-connected, ' +
-			'hydration failures). Requires the app to be a devtools build (OGYGIA_DEVTOOLS=1) and Playwright ' +
+			'hydration failures), and for an app with a server transform any host the restore reached too late or ' +
+			'could not put back exactly. Requires the app to be a devtools build (OGYGIA_DEVTOOLS=1) and Playwright ' +
 			'installed. Use this to see what really happened instead of reasoning from source.',
 		inputSchema: {
 			type: 'object',
@@ -569,7 +570,8 @@ function render_story(url: string, events: DtEvent[]): string {
 	const by_fp = new Map<string, DtEvent[]>();
 	const global: DtEvent[] = [];
 	for (const e of events) {
-		if (typeof e.fp === 'string') {
+		// (a hole's server render carries no fingerprint: it is not an island, and never "connects")
+		if (typeof e.fp === 'string' && e.fp) {
 			const arr = by_fp.get(e.fp) ?? [];
 			arr.push(e);
 			by_fp.set(e.fp, arr);
@@ -654,6 +656,17 @@ function render_story(url: string, events: DtEvent[]): string {
 	);
 }
 
+/** What the page's restorer said (an app with `ogygia.handle({ transform })`), or '' when nothing. */
+function restore_section(events: { type: string; detail: { host?: string; diff?: string } }[]): string {
+	if (!events.length) return '';
+	const lines = events.map((e) =>
+		e.type === 'ogygia:restore-late'
+			? `- a host (#${e.detail.host ?? '?'}) already had a shadow root when the restore reached it: something upgraded it first (a module script before the restorer, or an insertion ogygia did not make). It was left as served, so its island will heal or re-render.`
+			: `- the transform broke hydration markup: ${e.detail.diff ?? `<${e.detail.host ?? '?'}>`}. Carry every og-* mark along, and render og-h hosts only by their plan (<slot> wrappers, og-shadow, og-keep).`
+	);
+	return `\n\n## ⚠️ Server transform (${events.length})\n${lines.join('\n')}`;
+}
+
 /** Load a REAL page in a headless browser, let its islands hydrate, and read the devtools stream. */
 async function tool_debug(args: Attrs): Promise<ToolResult> {
 	const url = String(args.url ?? '');
@@ -684,6 +697,15 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 	}
 	try {
 		const page = await browser.newPage();
+		// the app's server transform (ogygia.handle({ transform })): a host the restore reached too late,
+		// or one it could not put back exactly (the dev check) — listened for before the page's own
+		// inline restorer runs
+		await page.addInitScript(() => {
+			const w = window as unknown as { __og_restore_events?: { type: string; detail: unknown }[] };
+			const list: { type: string; detail: unknown }[] = (w.__og_restore_events = []);
+			for (const type of ['ogygia:restore-late', 'ogygia:restore-mismatch'])
+				document.addEventListener(type, (e) => list.push({ type, detail: (e as CustomEvent).detail }), true);
+		});
 		try {
 			await page.goto(url, { waitUntil: 'load', timeout: 15000 });
 		} catch (e) {
@@ -722,7 +744,10 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 		)) as {
 			events: DtEvent[];
 		};
-		return text(render_story(url, trace.events ?? []));
+		const restores = (await page.evaluate(
+			() => (window as unknown as { __og_restore_events?: unknown[] }).__og_restore_events ?? []
+		)) as { type: string; detail: { host?: string; diff?: string } }[];
+		return text(render_story(url, trace.events ?? []) + restore_section(restores));
 	} finally {
 		await browser.close();
 	}

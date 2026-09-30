@@ -265,6 +265,26 @@ export const handle = ogygia.handle();
 
 `handle(options)` is the SvelteKit server handle. It serves the signed region endpoint (per-hole loads, and the single-flight navigation batch), and injects client seeds.
 
+| Option | What it does |
+| --- | --- |
+| `endpoint` | The region endpoint's path. Default `/__ogygia__`. |
+| `transform(html, { kind, csr, event })` | Post-processes every document (`kind: 'document'`) and every region answer (`kind: 'region'`), and may reshape Svelte-owned markup: ogygia restores it before anything hydrates. See [Server transforms](/docs/app/server-transforms). |
+
+## `ogygia/markup`
+
+```ts
+import { scanRegions, liftRegions, restoreRegions, transformMarkup, restore } from 'ogygia/markup';
+```
+
+Kit-free and import-free: it runs in the non-SvelteKit half of a monorepo, or in a test.
+
+| Export | What it is |
+| --- | --- |
+| `scanRegions(html)` | Yields every region in a document (island, lake or hole), with its span and attributes. |
+| `liftRegions(html)` · `restoreRegions(shell, regions)` | Lift the regions out around a foreign SSR pass, and splice them back with the marks the pass stamped. |
+| `transformMarkup(html, transform, { kind, csr, dev })` | The server round trip of `handle({ transform })`: mark, your transform, settle. |
+| `restore(root)` | The browser half, on a parsed document or fragment. |
+
 ## `ogygia/app`
 
 Island-safe replacements for `$app/navigation` (a csr=false page has no Kit client):
