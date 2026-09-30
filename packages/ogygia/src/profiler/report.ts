@@ -1236,7 +1236,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// (each in-app navigation with its page request's server side, from the request log)
 		const nav_req = new Map((extras.nav_requests ?? []).map((r) => [r.t, r]));
 		const visit = nav_req.size && extras.visit.navs ? { ...extras.visit, navs: extras.visit.navs.map((n) => (nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n)) } : extras.visit;
-		out.push(...browser_findings(browser_page_report(visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu)));
+		out.push(...browser_findings(browser_page_report(visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev)));
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);

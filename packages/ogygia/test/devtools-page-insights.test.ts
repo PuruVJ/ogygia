@@ -200,6 +200,21 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page({ vitals: { ttfb: 1500 } }), [], [], 9000))).toContain('vital-ttfb');
 	});
 
+	it('a first byte beyond the render: on the dev server, the page compiling (a note, reload); elsewhere, before the render', () => {
+		const at = (dev: boolean, wait = 3800, ssr = 210) =>
+			analyze_page({ ...page({ vitals: { ttfb: wait }, visit: { ...page().visit!, nav: { res_start: wait, phases: { wait }, server_timing: [{ name: 'ssr', ms: ssr, desc: 'SvelteKit render' }] } as never } }), ...(dev ? { dev: true } : {}) } as PageInput, [], [], 9000).findings.find((f) => f.code === 'slow-ttfb')!;
+		const dev = at(true);
+		expect(dev.message).toContain('Of the 3800 ms wait, the render was 210 ms; the other 3590 ms came before it — on the dev server, the page compiling on its first request.');
+		expect(dev.fix).toMatch(/^Reload the page/);
+		// (the dev server's own cost: a note, not a warning, whatever the rating)
+		expect(dev.severity).toBe('info');
+		const prod = at(false);
+		expect(prod.message).toContain('the other 3590 ms came before it (a hook, a proxy, a cold start).');
+		expect(prod.severity).toBe('warn');
+		// the render is most of the wait: no split
+		expect(at(true, 1000, 950).message).not.toContain('Of the');
+	});
+
 	it('the Page tab quotes the profiler’s last run of the page (devtools only), or says how to get one', () => {
 		const at = (over: object) => analyze_page({ ...page({ vitals: { ttfb: 1500 }, visit: { ...page().visit!, nav: { res_start: 1500, phases: { wait: 1450 } } as never } }), ...over } as PageInput, [], [], 9000).findings.find((f) => f.code === 'slow-ttfb')!.message;
 		// the profiler's own report: no such sentence (it is a profile)

@@ -101,6 +101,9 @@ export interface ServerProfileBrief {
 }
 
 export interface PageInput {
+	/** measured on the dev server (it compiles a page on its first request: a slow first byte there is
+	 *  not the app's) */
+	dev?: boolean;
 	/** DEVTOOLS ONLY (the profiler's report is itself a profile): the profiler's last run of this
 	 *  page, and of the pages it navigated to by path. Present (even empty) means: say what the server
 	 *  did, or how to find out */
@@ -708,7 +711,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// keeps this visit's why)
 		findings.push({
 			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : v.key === 'ttfb' ? 'slow-ttfb' : v.key === 'fcp' ? 'slow-fcp' : 'shift-cause') : `vital-${v.key}`,
-			severity: v.rating === 'poor' ? 'warn' : 'info',
+			// (a why that is the dev server's own cost — a page compiling on its first request — is a note)
+			severity: why && 'note' in why && why.note ? 'info' : v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
 			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? []
@@ -1198,7 +1202,7 @@ function server_says(brief: ServerProfileBrief | undefined): string {
 	return ` The profiler's last run of this page (${ago}): the server render took ${Math.round(brief.render_ms)} ms${brief.calls ? `, ${brief.calls} outbound call${brief.calls === 1 ? '' : 's'} (${Math.round(brief.calls_ms)} ms)` : ', no outbound calls'}${brief.top ? `; it says: ${brief.top}` : ''}.`;
 }
 
-function explain_ttfb(page: PageInput): { message: string; fix: string; fps: string[] } | null {
+function explain_ttfb(page: PageInput): { message: string; fix: string; fps: string[]; note?: boolean } | null {
 	const p = page.visit?.nav?.phases;
 	if (!p) return null;
 	const ms = (n: number) => `${Math.round(n)} ms`;
@@ -1213,8 +1217,19 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
 	const top = steps.reduce((a, b) => (b.ms > a.ms ? b : a));
 	const st = (page.visit?.nav?.server_timing ?? []).filter((s) => s.ms >= 1).sort((a, b) => b.ms - a.ms).slice(0, 4);
 	const said = st.length ? ` The server's Server-Timing says: ${list(st.map((s) => `${s.desc || s.name} ${ms(s.ms)}`))}.` : '';
-	const fix =
-		top.key === 'redirect'
+	// THE WAIT, SPLIT BY THE RENDER: SvelteKit's render time rides the document's Server-Timing (the
+	// profiler's `ssr` entry, for its own user); what the wait holds beyond it came before the render
+	// or around it — on the dev server, mostly the page compiling on its first request
+	const ssr = (page.visit?.nav?.server_timing ?? []).find((s) => s.name === 'ssr');
+	const beyond = ssr && p.wait ? Math.max(0, p.wait - ssr.ms) : 0;
+	const compiling = !!page.dev && top.key === 'wait' && beyond >= Math.max(300, (p.wait ?? 0) / 2);
+	const split =
+		top.key === 'wait' && ssr && beyond >= 200
+			? ` Of the ${ms(p.wait ?? 0)} wait, the render was ${ms(ssr.ms)}; the other ${ms(beyond)} came before it${compiling ? ' — on the dev server, the page compiling on its first request' : ' (a hook, a proxy, a cold start)'}.`
+			: '';
+	const fix = compiling
+		? 'Reload the page: on the dev server a page is compiled on its first request, and that is most of this first byte. A build (or a second visit) shows the real one.'
+		: top.key === 'redirect'
 			? 'The redirects are the cost: link to the final address (the trailing slash, https, the locale) so the browser asks once.'
 			: top.key === 'worker'
 				? "The service worker's start is the cost: keep it small, or turn on navigation preload so the page's request leaves while it starts."
@@ -1222,8 +1237,8 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
 					? 'Reaching the server is the cost: serve the page from closer to the visitor (a CDN at the edge), and keep the connection modern (HTTP/2 or 3, TLS 1.3).'
 					: "The server's answer is the cost: profile the page (its report names the slow load and the lines in it), cache the HTML where it is the same for everyone, or stream it so the first byte leaves before the slow part.";
 	// (devtools: the server's side from the Profiler tab's last run of this page, when the wait is it)
-	const profiled = page.server_profiles && top.key === 'wait' ? server_says(page.server_profile) : '';
-	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}${profiled}`, fix, fps: [] };
+	const profiled = page.server_profiles && top.key === 'wait' && !compiling ? server_says(page.server_profile) : '';
+	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}${split}${profiled}`, fix, fps: [], ...(compiling ? { note: true } : {}) };
 }
 
 /**

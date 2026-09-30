@@ -63,7 +63,9 @@ export function browser_page_report(
 	/** a hole's server render per request, from its recorded requests */
 	hole_server?: (id: string) => number | undefined,
 	/** the visit's slowest interaction, sampled: its wait and its handlers, by function */
-	interaction_cpu?: InteractionCpu
+	interaction_cpu?: InteractionCpu,
+	/** recorded on the dev server (a page compiles on its first request there) */
+	dev?: boolean
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
 	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp) return null;
@@ -95,6 +97,7 @@ export function browser_page_report(
 	const failures = (visit.regions ?? []).filter((r) => r.failed !== undefined).map((r) => ({ fp: r.fp, message: r.failed || 'it threw', ...(r.failed_span ? { span: r.failed_span } : {}) }));
 	const span = (s: InteractionCpu['wait']) => (s ? { ms: s.ms, top: s.top.map(as_fn) } : null);
 	const input: PageInput = {
+		...(dev ? { dev: true } : {}),
 		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
 		vitals: visit.vitals ?? {},
 		visit: {

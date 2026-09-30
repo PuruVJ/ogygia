@@ -409,7 +409,7 @@ export function read_page(): PageView | null {
 		if (b) server_profiles[path] = b;
 	}
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
-	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}) };
+	const input: PageInput = { ...with_visit, empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
