@@ -5186,6 +5186,19 @@ class Profiler {
 			}
 			return hit ? { t: n.t, ms: Math.round(hit.ms), cpu_ms: Math.round(hit.cpu_ms), net_ms: Math.round(hit.net_ms), net_count: hit.net_count, ...(hit.inflight ? { inflight: hit.inflight } : {}) } : null;
 		}).filter((x): x is NonNullable<typeof x> => !!x);
+		// THE VISIT'S OWN DOCUMENT REQUEST, SERVER SIDE: the log's entry for the page request this visit
+		// made (its path, started within the visit's first byte) — how long the server's handler held it
+		// beside the browser's wait for the first byte, so a gap between the render and TTFB is told
+		// apart: before the handler (a proxy, a cold start, the network) or inside it
+		let doc_request: { ms: number } | undefined;
+		if (visit?.nav && stored.meta.page) {
+			const path = stored.meta.page.split('?')[0];
+			for (const e of this.#ring) {
+				if (e.internal || e.method !== 'GET' || e.path !== path) continue;
+				if (e.ts < visit.at - 500 || e.ts > visit.at + visit.nav.res_start + 500) continue;
+				doc_request = { ms: Math.round(e.ms) };
+			}
+		}
 		// THE VISIT'S SLOWEST INTERACTION, SAMPLED: the page's latest interaction trace, when it is this
 		// visit's (the same interaction start, on the page clock)
 		const icpu = stored.interaction_cpu ?? (stored.meta.page ? this.#interaction_cpus.get(stored.meta.page) : undefined);
@@ -5195,6 +5208,7 @@ class Profiler {
 			...(interaction_cpu ? { interaction_cpu } : {}),
 			...(hole_requests.length ? { hole_requests } : {}),
 			...(nav_requests.length ? { nav_requests } : {}),
+			...(doc_request ? { doc_request } : {}),
 			...(stored.strip ? { strip: stored.strip } : {}),
 			...(stored.assets ? { assets: stored.assets } : {}),
 			...(stored.assets_missing ? { assets_missing: stored.assets_missing } : {}),

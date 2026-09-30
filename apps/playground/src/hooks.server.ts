@@ -66,6 +66,23 @@ const auth_wall: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
+// THE TTFB-GAP LAB (/dt-gap): a visitor's request is held 900 ms where the profiler's own renders
+// (`x-og-profiler-internal`) are not, so the browser's first byte and the server's render part.
+// `?front`: held IN FRONT of ogygia.handle() — before the profiler's handler takes the request (like
+// a proxy or an auth hop); `?inside`: held after it — inside the handler, outside the render.
+const gap_wait = (event: Parameters<Handle>[0]['event'], mode: string) =>
+	event.url.pathname === '/dt-gap' && event.url.searchParams.has(mode) && !event.request.headers.get('x-og-profiler-internal')
+		? new Promise((ok) => setTimeout(ok, 900))
+		: null;
+const gap_front: Handle = async ({ event, resolve }) => {
+	await gap_wait(event, 'front');
+	return resolve(event);
+};
+const gap_inside: Handle = async ({ event, resolve }) => {
+	await gap_wait(event, 'inside');
+	return resolve(event);
+};
+
 // The SSR profiler is NOT wired here — it's configured entirely in vite.config.ts (`profiler: true`)
 // and ogygia.handle() dynamically imports + mounts it internally. UI at /__profiler (dev = open;
 // prod needs ?key=<OGYGIA_PROFILER_SECRET>).
@@ -75,7 +92,9 @@ export const handle = sequence(
 	ds_ssr,
 	doc_test,
 	auth_wall,
+	gap_front,
 	ogygiaHandle(),
+	gap_inside,
 	corrupt_detector_region,
 	passthrough
 );

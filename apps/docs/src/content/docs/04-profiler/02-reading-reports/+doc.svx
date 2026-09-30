@@ -299,7 +299,7 @@ When every render takes longer than the one before, the report says so: about ho
 
 ## The browser against the server
 
-With the beacon on (open the page while logged in), the report also shows what your browser measured for the page: TTFB, first paint, LCP, CLS and INP, next to the server's median render. Two gaps matter, and each gets a finding: TTFB far above the render is what sits in front of the server (a cold instance, a proxy, the network); LCP far above TTFB is what the browser does after the HTML arrives (assets, fonts, hydration). Either way the answer is not the SSR code.
+With the beacon on (open the page while logged in), the report also shows what your browser measured for the page: TTFB, first paint, LCP, CLS and INP, next to the server's median render. Two gaps matter, and each gets a finding: TTFB far above the render is what sits in front of the server (a cold instance, a proxy, the network); LCP far above TTFB is what the browser does after the HTML arrives (assets, fonts, hydration). Either way the answer is not the SSR code. The TTFB gap is split for the report's own visit. The browser timed its redirects and connection. The request log says how long the server's handler held that very request. So the gap reads as connecting, before the handler took the request (a proxy, a CDN, a cold start), or inside the handler past the render (a hook that awaits something), with the fix for the biggest.
 
 ### What went wrong in the browser
 

@@ -539,6 +539,46 @@ async function fcp_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** THE TTFB GAP, SPLIT (/dt-gap, the profiler's report): the page renders at once, the app's hooks
+ *  hold a visitor's request 900 ms in front of ogygia.handle() (`?front`) or behind it (`?inside`).
+ *  The report's ttfb-gap must put the time on the right side of the server's handler. */
+async function gap_run(browser) {
+	const read = async (mode) => {
+		await fetch(`${base}/dt-gap`); // (warm: the gap is the hook's, not a first compile)
+		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent('/dt-gap')}&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+		if (!report_id) return null;
+		const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+		await page.goto(`${base}/dt-gap?${mode}`, { waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		for (let i = 0; i < 10; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			const f = (j?.findings ?? []).find((x) => x.code === 'ttfb-gap');
+			if (f) return { message: f.message, fix: f.fix };
+		}
+		return { message: '', fix: '' };
+	};
+	const front = await read('front');
+	const inside = await read('inside');
+	const ms_of = (m, label) => {
+		const at = m.indexOf(label);
+		if (at < 0) return NaN;
+		const head = m.slice(0, at).trimEnd();
+		return Number(head.slice(head.lastIndexOf(' ') + 1));
+	};
+	const checks = [
+		['held in front of the handler: before it took the request', !front || (ms_of(front.message, " ms before the server's handler took the request") >= 700 && front.fix.startsWith('The request waited before this server took it'))],
+		['held behind it: inside the handler, past the render', !inside || (ms_of(inside.message, ' ms inside the handler beyond the render') >= 700 && inside.fix.startsWith('The server held the request past its render'))]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} ttfb gap: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ front, inside })}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -1116,6 +1156,10 @@ try {
 	for (let i = 0; i < repeat; i++) inp_ok += await inp_run(browser);
 	if (inp_ok < repeat) failed = true;
 	console.log(`${inp_ok === repeat ? '✓' : '✗'} the slowest interaction explained: ${inp_ok}/${repeat}`);
+	let gap_ok = 0;
+	for (let i = 0; i < repeat; i++) gap_ok += await gap_run(browser);
+	if (gap_ok < repeat) failed = true;
+	console.log(`${gap_ok === repeat ? '✓' : '✗'} the ttfb gap, split: ${gap_ok}/${repeat}`);
 	let fcp_ok = 0;
 	for (let i = 0; i < repeat; i++) fcp_ok += await fcp_run(browser);
 	if (fcp_ok < repeat) failed = true;

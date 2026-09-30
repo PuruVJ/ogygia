@@ -476,6 +476,8 @@ export interface ReportExtras {
 	/** the visit's in-app navigations, server side: the page request each one made (by its start `t`,
 	 *  the page clock) — its ms, the CPU it burned, its outbound calls */
 	nav_requests?: { t: number; ms: number; cpu_ms: number; net_ms: number; net_count: number; inflight?: number }[];
+	/** the visit's own document request as the server's handler held it (the request log) */
+	doc_request?: { ms: number };
 	/** browser-side hydration timings joined by fingerprint (the runtime's beacon) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals from the same beacon */
@@ -2633,11 +2635,35 @@ function accuracy_findings(
 				}
 			);
 		} else if (ttfb > 0 && ttfb >= server * 2 && ttfb - server >= 200) {
+			// THE GAP, SPLIT (the report's own visit): the browser's steps before the request left, then
+			// the request until the first byte — of which the server's handler held so much (the request
+			// log), the render within it; what is left of the wait was before the handler took it
+			const own = extras.visit?.nav;
+			const ph = own?.phases;
+			const held = extras.doc_request?.ms;
+			let split = '';
+			let where: 'connect' | 'before' | 'inside' | null = null;
+			if (ph && held !== undefined) {
+				const connect = (ph.redirect ?? 0) + (ph.worker ?? 0) + (ph.dns ?? 0) + (ph.connect ?? 0) + (ph.tls ?? 0);
+				const before = Math.max(0, (ph.wait ?? 0) - held);
+				const inside = Math.max(0, held - server);
+				where = connect >= before && connect >= inside ? 'connect' : before >= inside ? 'before' : 'inside';
+				split = ` In the report's own visit (TTFB ${fmt_ms(own!.res_start)} ms): ${fmt_ms(connect)} ms redirecting and connecting, ${fmt_ms(before)} ms before the server's handler took the request, and ${fmt_ms(inside)} ms inside the handler beyond the render.`;
+			}
 			warn(
 				'ttfb-gap',
-				`TTFB in the browser is ${fmt_ms(ttfb)} ms but this server rendered the page in ${fmt_ms(server)} ms: ${fmt_ms(ttfb - server)} ms sits between the two — a cold instance, a proxy, or the network.`,
+				`TTFB in the browser is ${fmt_ms(ttfb)} ms but this server rendered the page in ${fmt_ms(server)} ms: ${fmt_ms(ttfb - server)} ms sits between the two${where ? '.' : ' — a cold instance, a proxy, or the network.'}${split}`,
 				{
-					fix: 'Look at the cold-start section and at what fronts the server (a CDN, an auth proxy): the render is not where that time goes.'
+					fix:
+						where === 'connect'
+							? 'The connection is the cost: redirects to drop, or a server far from the visitor (serve it from the edge, keep TLS and HTTP modern).'
+							: where === 'before'
+								? 'The request waited before this server took it: a proxy or CDN in front, a cold instance starting, or the network. Look at what fronts the server, and at the cold-start section.'
+								: where === 'inside'
+									? meta.dev
+										? "The server held the request past its render: on the dev server a first request compiles the page (profile a build for its real TTFB), or a hook before the render awaits something."
+										: 'The server held the request past its render: a hook before or after the render (auth, a session lookup, a redirect check) awaits something. Profile it with the handle, not only the page.'
+									: 'Look at the cold-start section and at what fronts the server (a CDN, an auth proxy): the render is not where that time goes.'
 				}
 			);
 		} else {
