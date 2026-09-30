@@ -44,7 +44,7 @@
  * For the FULL round-trip — lift the regions out, run the foreign renderer over what is left, splice
  * them back — use {@link liftRegions} / {@link restoreRegions} (below). Restore transplants the marks
  * a scoped renderer stamps on the placeholder onto the region, unions `class`, and touches only
- * attributes, never light DOM. All three are also exported, Kit-free, from `ogygia/rewrite`, for the
+ * attributes, never light DOM. All three are also exported, Kit-free, from `ogygia/markup`, for the
  * non-SvelteKit half of a monorepo where these SSR passes usually live.
  */
 

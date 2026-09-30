@@ -124,9 +124,9 @@
 			"types": "./dist/profiler/storage/postgres.d.ts",
 			"default": "./src/profiler/storage/postgres.ts"
 		},
-		"./rewrite": {
-			"types": "./dist/server/split-regions.d.ts",
-			"default": "./src/server/split-regions.ts"
+		"./markup": {
+			"types": "./dist/markup.d.ts",
+			"default": "./src/markup.ts"
 		},
 		"./router": {
 			"types": "./dist/router/index.d.ts",
@@ -382,9 +382,9 @@
 				"types": "./dist/profiler/storage/postgres.d.ts",
 				"default": "./dist/profiler/storage/postgres.js"
 			},
-			"./rewrite": {
-				"types": "./dist/server/split-regions.d.ts",
-				"default": "./dist/server/split-regions.js"
+			"./markup": {
+				"types": "./dist/markup.d.ts",
+				"default": "./dist/markup.js"
 			},
 			"./router": {
 				"types": "./dist/router/index.d.ts",

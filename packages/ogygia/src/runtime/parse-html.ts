@@ -48,3 +48,15 @@ export function attach_declarative_shadows(root: DocumentFragment | ShadowRoot):
 		attach_declarative_shadows(shadow);
 	}
 }
+
+/** The app's transform reshaped this markup (server/reversible.ts): restore it before anything reads
+ *  it. The restorer is the page's own (the handle inlines it only when the app has a transform), so
+ *  the runtime carries none of it — without one, this is a no-op. */
+export function restore_markup(root: ParentNode): void {
+	(globalThis as { __og_restore?: (root: ParentNode) => number }).__og_restore?.(root);
+}
+
+/** Adopt the keyed sheets of roots restored outside the page, right after their insertion. */
+export function restore_adopt_sheets(): void {
+	(globalThis as { __og_restore_adopt?: () => void }).__og_restore_adopt?.();
+}

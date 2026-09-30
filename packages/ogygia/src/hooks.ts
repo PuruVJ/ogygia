@@ -107,6 +107,8 @@ import { locate, assemble } from './server/document-assembly.js';
 import { error_route_is_csr_true, route_is_csr_true } from './context.js';
 import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
+import { check_script, mark, settle, STAND_IN_CSS, type TransformKind } from './server/reversible.js';
+import { restore, restore_adopt } from './runtime/restore.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
 import { analyze, index_seed, set_measure_memo_reader, type MeasureMemo } from './seed-refs.js';
@@ -732,15 +734,35 @@ async function capture_freeze(
 	return { entry, response: freeze_response(entry, 'stored') };
 }
 
+/**
+ * Is this document Kit-hydrated (csr=true)? A build-time ROUTE FACT (context.ts, the PAGE-CSR
+ * invariant), never a scan of the document; the bounded string probe covers only a routeless response
+ * (`route.id` null), where Kit's boot sits in the last bytes before `</body>`. An ERROR RENDER reads the
+ * error twin of the map: Kit renders `+error.svelte` from the layout branch alone (the page's
+ * `csr = false` is dropped), and the regions recorded Kit's `page.error` into the bag as they rendered
+ * — the same fact Region.svelte decided its own inline/island form on, so the two cannot disagree.
+ */
+function csr_page_of(html: string, body_end: number, event?: RequestEvent, bag?: RequestBag): boolean {
+	return event?.route?.id != null
+		? bag?.page?.error != null
+			? error_route_is_csr_true(event.route.id)
+			: route_is_csr_true(event.route.id)
+		: body_end !== -1 && html_has_kit_bootstrap(html, body_end);
+}
+
+/** The restorer, inline (runtime/restore.ts — self-contained, so its source runs as is): restores the
+ *  document now, and stays as `__og_restore` / `__og_restore_adopt` for hole answers and router swaps. */
+const RESTORER_SCRIPT = `<script data-og-restore>(function(){var r=${restore.toString()};window.__og_restore=r;window.__og_restore_adopt=${restore_adopt.toString()};r(document)})()</script>`;
+
 class OgygiaHandle {
 	readonly #endpoint: string;
-	/** Optional post-render transform for a server-rendered region answer — see OgygiaHandleOptions. */
-	readonly #transform_hole: OgygiaHandleOptions['transformHole'];
+	/** The app's server transform (documents and region answers) — see OgygiaHandleOptions. */
+	readonly #transform: OgygiaHandleOptions['transform'];
 	readonly render_rate: RateLimiter;
 	readonly probe_rate: RateLimiter;
 
 	constructor(options: OgygiaHandleOptions = {}) {
-		this.#transform_hole = options.transformHole;
+		this.#transform = options.transform;
 		// Stored WITHOUT a base prefix. Getting the app's absolute base path inside a hook has no
 		// public, forward-compatible API — `base` from `$app/paths` is deprecated (removed in Kit 3)
 		// and `resolve()` is page-relative here — so instead of prefixing the base we match the request
@@ -936,7 +958,7 @@ class OgygiaHandle {
 			try {
 				response = await resolve(event, {
 					transformPageChunk: async ({ html }) =>
-						this.inject_client_seeds(html, store?.state, event, bag)
+						this.inject_client_seeds(this.#transform ? await this.#transform_document(html, event, bag) : html, store?.state, event, bag)
 				});
 			} finally {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
@@ -1090,6 +1112,40 @@ class OgygiaHandle {
 	}
 
 	/**
+	 * THE APP'S TRANSFORM ON A DOCUMENT (server/reversible.ts): the chunk carrying `</head>` (the
+	 * document; a streamed tail chunk passes untouched) is marked, handed to the transform, settled.
+	 * Then the head gets the transform's `data-og-head` assets (deduped) and, when the parser would have
+	 * restructured a tag, the stand-ins' sheet; the body gets the restorer — inline, before `</body>`,
+	 * so it runs before any island wakes, before Kit starts, and before a deferred module upgrades a
+	 * host. It also stays on the page as a global for the runtime's hole answers and router swaps.
+	 */
+	async #transform_document(html: string, event: RequestEvent, bag: RequestBag): Promise<string> {
+		const head_end = html.indexOf('</head>');
+		if (head_end === -1) return html;
+		const csr = csr_page_of(html, html.lastIndexOf('</body>'), event, bag);
+		const marked = mark(html, 'document', csr);
+		const out = await this.#transform!(marked ? marked.html : html, { kind: 'document', csr, event });
+		const s = marked ? settle(out, marked.record, { dev }) : null;
+		const doc = s ? s.html : out;
+		const head = (s?.head.join('') ?? '') + (s?.stand_ins ? `<style data-og-stand-ins>${STAND_IN_CSS}</style>` : '');
+		const body = (s?.check ? check_script(s.check) : '') + RESTORER_SCRIPT;
+		const h = doc.indexOf('</head>');
+		const b = doc.lastIndexOf('</body>');
+		if (h === -1 || b === -1 || b < h) return doc;
+		return doc.slice(0, h) + head + doc.slice(h, b) + body + doc.slice(b);
+	}
+
+	/** THE APP'S TRANSFORM ON A REGION ANSWER: marked, transformed, settled. The runtime restores it
+	 *  before insertion (and hoists its `data-og-head` assets), so no stand-in sheet is needed. */
+	async #transform_region(html: string, event: RequestEvent): Promise<string> {
+		const marked = mark(html, 'region', false);
+		const out = await this.#transform!(marked ? marked.html : html, { kind: 'region', csr: false, event });
+		if (!marked) return out;
+		const s = settle(out, marked.record, { dev });
+		return s.check ? s.html + check_script(s.check) : s.html;
+	}
+
+	/**
 	 * Document-level side-channels: one page snapshot + optional remote query seed.
 	 * Skips Kit-booted (csr=true) pages which serialize remotes themselves.
 	 */
@@ -1114,12 +1170,7 @@ class OgygiaHandle {
 		// map: Kit renders `+error.svelte` from the layout branch alone (the page's `csr = false` is
 		// dropped), and the regions recorded Kit's `page.error` into the bag as they rendered — the
 		// same fact Region.svelte decided its own inline/island form on, so the two cannot disagree.
-		const csr_page =
-			event?.route?.id != null
-				? bag?.page?.error != null
-					? error_route_is_csr_true(event.route.id)
-					: route_is_csr_true(event.route.id)
-				: spans.body_end !== -1 && html_has_kit_bootstrap(html, spans.body_end);
+		const csr_page = csr_page_of(html, spans.body_end, event, bag);
 		if (csr_page) {
 			let head_inject = '';
 			if (head !== null) {
@@ -2029,12 +2080,10 @@ class OgygiaHandle {
 		// runtime, or by a CDN (ESI) — where a `./_app/…` entry would 404 (server/hole-urls.ts).
 		let html = absolutize_hole_html(region_css_links(id) + body, event.url);
 
-		// The region analog of Kit's `transformPageChunk`: a consumer post-processes the fully assembled
-		// answer (e.g. a web-component server-render so it ships declarative shadow DOM). Runs on the
-		// final body, so HEAD's `content-length` below and the GET body agree. See OgygiaHandleOptions.
-		if (this.#transform_hole) {
-			html = await this.#transform_hole(html, { id, event });
-		}
+		// The app's transform, on the fully assembled answer — marked before it, settled after it, so
+		// the runtime can restore what the transform moved before the answer goes in. Runs on the final
+		// body, so HEAD's `content-length` below and the GET body agree. See OgygiaHandleOptions.
+		if (this.#transform) html = await this.#transform_region(html, event);
 
 		if (method === 'HEAD') {
 			return region_response(null, {
@@ -2074,19 +2123,25 @@ export interface OgygiaHandleOptions {
 	 */
 	endpoint?: string;
 	/**
-	 * Post-process a server-rendered REGION answer's HTML before it is sent — the region analog of Kit's
-	 * `transformPageChunk`. A region answer (a deferred hole, a lake remount) is rendered on this signed
-	 * endpoint, OUTSIDE Kit's page pipeline, so `transformPageChunk` can never reach it; this is the seam
-	 * that can. Runs once per answer, on the fully assembled body (region CSS links + component HTML,
-	 * already root-absolutized), and its return value is what ships (and sets `content-length` on a HEAD).
-	 * `html` in, `html` out — vendor-neutral; a consumer runs here the same HTML transform it applies to
-	 * the page (e.g. a web-component server-render, so the answer ships declarative shadow DOM). Keep it
-	 * pure and fast: it is on the hole's response path. `id` is the region's signed identity; `event` is
-	 * the Kit request. May be async.
+	 * Post-process the HTML ogygia sends — every document (the chunk carrying `</head>`; a streamed
+	 * tail passes untouched) and every region answer (a hole, a lake remount) — e.g. a web-component
+	 * server render. `html` in, `html` out, may be async; it is on the response path, so keep it fast.
+	 *
+	 * It may reshape Svelte-owned markup. ogygia marks the HTML before the call and restores in the
+	 * browser, before anything hydrates, what the transform moved:
+	 * - a custom element marked `og-h` is one ogygia restores (in Svelte-owned markup, above it, or in
+	 *   a region answer). To reshape it, render its plan: its slot positions as `<slot>` elements
+	 *   wrapping the moved children, `og-shadow="key …"` (the keyed sheets for its shadow root), and
+	 *   optionally `og-keep="attr …"` (attributes you added that survive the restore; never per-render
+	 *   state). One without `og-shadow` is left exactly as Svelte wrote it.
+	 * - `<template data-og-head="key">css</template>` is a shadow sheet; `<style>` / `<link>` with
+	 *   `data-og-head="key"` apply to the page. Both go into `<head>`, once per key.
+	 * - everything else `og-*` is ogygia's: carry it along wherever you move a node; it is gone from
+	 *   the final DOM.
 	 */
-	transformHole?: (
+	transform?: (
 		html: string,
-		ctx: { id: string; event: RequestEvent }
+		ctx: { kind: TransformKind; csr: boolean; event: RequestEvent }
 	) => string | Promise<string>;
 }
 
@@ -2112,7 +2167,7 @@ export { document, type DocumentOptions } from './document.js';
 // The region round-trip for an app that runs a third-party SSR/hydration pass over the document and
 // must not reshape island bytes: `scanRegions()` walks the `<ogygia-region>` subtrees;
 // `liftRegions()` / `restoreRegions()` take them out and splice them back (marks merged). Also on
-// the Kit-free `ogygia/rewrite` export, for the non-SvelteKit half of a monorepo.
+// the Kit-free `ogygia/markup` export, for the non-SvelteKit half of a monorepo.
 export {
 	scanRegions,
 	liftRegions,

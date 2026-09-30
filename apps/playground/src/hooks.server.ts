@@ -6,6 +6,7 @@ import { setProfilerStore } from 'ogygia/profiler/storage';
 import { sqliteStore } from 'ogygia/profiler/storage/sqlite';
 import DocTest from '$lib/doctest/DocTest.svelte';
 import { ds_ssr } from '$lib/hell/ds-ssr';
+import { scoped_render } from '$lib/restorelab/scoped-render';
 
 // DEMO: give the profiler a durable SQLite store so reports survive a restart and the sidebar's
 // shared list fills. Swap for redisStore(...) / postgresStore(process.env.DATABASE_URL) in a real
@@ -93,7 +94,8 @@ export const handle = sequence(
 	doc_test,
 	auth_wall,
 	gap_front,
-	ogygiaHandle(),
+	// (the restore lab, e2e/restore.spec.ts: a scoped web-component render as the app's transform)
+	ogygiaHandle(process.env.OGYGIA_RESTORE_LAB ? { transform: (html) => scoped_render(html) } : {}),
 	gap_inside,
 	corrupt_detector_region,
 	passthrough

@@ -47,6 +47,20 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   `e2e/seed-shape` proves a 300 KB load key never reaches the seed while the island still reads
   its key after hydration, and the control island that hands `page.data` to a helper ships
   everything; `e2e/seed-refs` proves props references survive shaping.
+- **`ogygia/rewrite` is now `ogygia/markup`.** The Kit-free markup module keeps `scanRegions`,
+  `liftRegions` and `restoreRegions`, and also carries `transformMarkup` (the server round trip of
+  `ogygia.handle({ transform })`: mark, the transform, settle) and `restore` (the browser half), for
+  tests that run a transform over harvested markup. There is no `ogygia/rewrite` alias; change the
+  import specifier.
+
+### Removed
+
+- **`transformHole`.** The region-answer hook that briefly sat next to `transformPageChunk` is gone:
+  `ogygia.handle({ transform })` covers region answers (`ctx.kind === 'region'`) and documents
+  alike, so one function treats a hole the way it treats the page.
+- **`regions.preload`.** The page now carries each island's chunk list as data and the runtime
+  preloads an island's whole graph when it wakes (see Changed), so there is nothing left to choose.
+  Setting the key is a build error that says why and asks you to remove it.
 
 ### Added
 
@@ -83,7 +97,7 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   the DEV console line, and the profiler (the Islands table's recovered island shows the specific
   cause, and its advice appends the why). Named by observable evidence only, never a specific tool.
   DEV / devtools only — a prod build with devtools off DCEs the diagnosis. `test/browser/island-self-heal`.
-- **`ogygia/rewrite` — the region round-trip for an app that runs a third-party SSR pass over the
+- **`ogygia/markup` — the region round-trip for an app that runs a third-party SSR pass over the
   final HTML** (a web-component server render, a translation proxy, an A/B injector). Alongside the
   existing `scanRegions`, the module now exports `liftRegions(html)` → `{ shell, regions }` (every
   top-level `<ogygia-region>` becomes an `<og-lift data-i="N">` ELEMENT placeholder — an element,
@@ -95,11 +109,156 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   region's light DOM (so it cannot shift the child-index an island — or an island nested in a lifted
   lake — hydrates against). `LiftedRegion.kind` classifies island/lake/hole and `.withInner()`
   reshapes a lake/hole. The whole module is a zero-import tokenizer, so it is exported Kit-free at
-  `ogygia/rewrite` (and stays on `ogygia/server`), usable from the non-SvelteKit half of a monorepo
-  where these SSR passes live. Field-tested migrating a customer's QDS/Stencil middleware from
-  per-tag DSD to a whole-document scoped render: 14 islands byte-identical pre/post, zero runtime
+  `ogygia/markup` (and stays on `ogygia/server`), usable from the non-SvelteKit half of a monorepo
+  where these SSR passes live. (It shipped in development builds as `ogygia/rewrite`; that name is
+  gone, with no alias.) Field-tested moving a design system's middleware from per-tag declarative
+  shadow DOM to a whole-document scoped render: 14 islands byte-identical pre/post, zero runtime
   discards. `test/split-regions` (round-trip: mark transplant, class union, no-clobber, nested
   region, unknown/closeless placeholder, leading-comment survival).
+- **`ogygia.handle({ transform })` — server transforms that may reshape Svelte-owned markup.** One
+  transform for every document and every region answer (a hole, a lake remount). A region answer
+  is rendered on the signed endpoint, outside Kit's page pipeline, so the app's
+  `transformPageChunk` never reached it; `transform` does, on the fully assembled answer, before
+  it ships. ogygia marks the HTML before the transform and restores in the browser, before anything
+  hydrates, what it moved: a custom element marked `og-h` is rendered with its plan (`<slot>`
+  wrappers around the moved children, `og-shadow` naming its keyed shadow sheets, optional
+  `og-keep`), and comes back as a shadow root holding the rendered tree, with Svelte's children
+  back in its light DOM exactly as Svelte rendered them. Start tags the HTML parser would have
+  restructured ship as stand-ins; `data-og-head` assets go into `<head>` once per key. In dev, each
+  restored host is checked against Svelte's markup. The context says which it is
+  (`ctx.kind`: `'document'` or `'region'`) and carries `csr` and the `event`; it may be async.
+  `transformMarkup` and `restore` from `ogygia/markup` run the same round trip in a test.
+- **`isOgygiaPage()` from `'ogygia'` — which world shared code is in.** A store or helper used on
+  both a csr=false ogygia page and a csr=true Kit page often has to behave differently on each. The
+  fact already existed inside ogygia (the server reads the request's route against the build-time
+  csr=true set, the client reads Kit's bootstrap); it is now a stable public export, so app code no
+  longer reaches into `ogygia/internal` or reads `requestEvent()` itself. Outside a request it
+  returns `true` (no page means nothing Kit-hydrated).
+- **The build warns when island code reads a context nothing bridges.** A component inside an
+  island that reads a page or layout context set with plain Svelte `setContext` gets `undefined` on
+  a csr=false page (the layout's `<script>` never runs in the browser), renders a different tree,
+  and Svelte throws its server DOM away. The compiler now finds it: it follows the import binding
+  through the AST (a named, aliased or namespace import from `'svelte'` or `'ogygia'`, never a text
+  match) and warns for a key an island reads that neither the app (through an ogygia provider) nor
+  the island's own code provides, so a context library set and read inside one island never trips
+  it. The runtime's recovery diagnostic also names context loss as a candidate cause, for the
+  partial-bridge case a build scan cannot see. The fix it points to: `setContext` / `<Provide>` /
+  `createContext` from `'ogygia'`.
+- **The discard warning says what Svelte threw, and which cause the evidence points to.** The
+  runtime hides Svelte's own "Failed to hydrate" log for its strict first attempt, so the warning
+  could only name the drift the pre-hydrate check saw, which the repair may already have fixed. It
+  now appends the strict attempt's error, and reads the evidence three ways: a throw after repair
+  (a residue survived), drift but no throw (a mismatch the repair does not model), or an intact
+  node sequence and no throw (a `{#if}` or other block took a different branch on the client, and
+  nothing touched the DOM).
+- **Profiler: `profiler: { onDemand: true }` costs nothing until the dashboard is opened.** The
+  profiler module (`node:inspector`, crypto, its UI) is imported only when a request reaches the
+  profiler path. Until then the handle goes straight to the core: no import, no always-on request
+  log, no per-request wrap, so a serverless instance's first request no longer pays the profiler's
+  import in its TTFB. The trade is history: collection starts from the first visit to the
+  dashboard. Off by default.
+- **`ogygia/testing` — the devtools and the profiler as test primitives.** Any runner, any page
+  driver: `page()` (the load as the browser measured it: vitals, each island's wake, the findings),
+  `hydration()` (every island's status, with the diff of a changed one), `record(actions)` (what
+  your actions did: slow interactions and the function behind each, dead or repeated clicks,
+  requests with the server's own split, long tasks, shifts, errors) and `profile(path)` (the SSR
+  profiler's report). `withOgygia(test, expect)` wraps Playwright (ogygia does not import it) with
+  matchers such as `toMeetBudget`, `toHydrateCleanly` and `toHaveNoFindings`, and attaches each
+  report to its test; `createOgygia(driver)` and `ogygiaMatchers` cover Puppeteer, WebdriverIO,
+  Vitest or Jest. Reports are plain JSON, and `compare` / `toMarkdown` diff two runs in CI. Needs
+  `ogygia({ devtools: true })` on the server (dev, or a preview build for a browser carrying the
+  `og_devtools=1` cookie); `profile()` needs the profiler.
+- **Devtools: a Page tab, and Hydration, Record, Bytes and native Profiler tabs.** The Page tab
+  reads the load the way the browser saw it: the vitals, findings that name their islands, an
+  island wake waterfall (module, turn, hydrate), main-thread CPU, styles (unscoped CSS, rules that
+  match nothing), third parties, what this browser cannot measure, what moved since your last load,
+  and the islands kept across an in-app navigation. Hydration lists every island's status with a
+  diff; Record captures a session of your own actions; Bytes is the exact per-island ledger; the
+  Profiler tab runs the SSR profiler inside the dock. An island that waits for its turn with
+  nothing ahead of it (the runtime's own hold) is named `held-idle`. Every control is reachable by
+  keyboard, and the dock reports what its own measuring cost. On a Kit-hydrated (csr=true) page,
+  where ogygia's runtime never boots, the dock no longer dead-ends: it says why the island tools are
+  absent and shows the Page tab. The profiler report gains the same browser findings from the
+  beacon's visit, CPU cut by island, the scripts the runtime loaded, third parties and browser
+  limits; the growth check no longer calls a capped cache a leak.
+- **Every vital is explained, in the Page tab and the profiler report, in place of the bare
+  number.** One shared page analysis feeds both tools, so they say the same thing:
+  - **First byte (TTFB)**: the steps the browser timed (redirects, a service worker starting, DNS,
+    connect and TLS, the wait for the server), the document's own `Server-Timing` (the profiler's
+    render and CPU entries join it), and the fix for the costliest step. When the first byte is far
+    above the server's render, the report splits the gap for its own visit: the browser's
+    redirects and connection, the time before the server's handler took the request (a proxy, a
+    CDN, a cold start: the request log says how long the handler held that very request), and time
+    inside the handler past the render (a hook that awaits). On the dev server, a wait that is
+    mostly the page compiling on its first request reads as such, as a note, with "reload for the
+    real first byte". When the server's wait is the cause, the Page tab quotes the Profiler tab's
+    last run of that page (render time, outbound calls, where the time went), or says to run one.
+  - **First paint (FCP)**: the wait for the first byte, the HTML's download, the files that blocked
+    the paint (the slowest named) and the rest before it (its long tasks).
+  - **Largest paint (LCP)**: the element and the island it sits in, split into first byte, the
+    delay before the browser began fetching its file, the download and the delay before it painted
+    (a text paint: first byte, then render). The beacon always keeps the LCP file in its detailed
+    list.
+  - **Layout shift (CLS)**: the worst burst of shifts, what moved in it (the island, else the
+    element) and what made it move: the event just before its biggest shift (a hole's answer
+    swapped in, an image with no size arrived, a web font swapped in, an island hydrated), with
+    that cause's fix.
+  - **Slowest interaction (INP)**: the interaction with every entry folded (a click is a
+    pointerdown, a pointerup and a click of one length), split into the wait, the handlers and the
+    paint, and what held it: an island hydrating, a named script (its function, and the timer,
+    promise or frame that ran it), or the island's own handler. After the load trace, the
+    profiler's browser samples again and waits up to a minute for an interaction of 200 ms or
+    more, so the report quotes the handler's own function where frames could only name Svelte's
+    dispatcher.
+  - **Slow in-app navigation**: the router times each navigation (start, page fetched, stylesheets
+    in, swap committed); a navigation of 400 ms or more is named (a warning past a second) with the
+    three parts, the page request's own timing (first byte, download and bytes, whether a hover
+    prefetch started it early), the islands the new page woke, and the fix for the part that cost
+    most. The report joins the navigation's page request from the request log: the code it ran on
+    the server, its outbound calls, and the rest.
+  - **The document held open**: islands wake after `DOMContentLoaded`, which is the document's last
+    byte, so a streamed load promise holds every island, even ones that read nothing late. Both
+    tools now name that case and the `page.data` key that settled last.
+  - **What moved since your last load / profile**: the Page tab ("since your last load") and the
+    report ("since your last profile") use one rule to say which vital moved and which of its parts
+    moved it, INP included, plus islands whose load or hydrate moved.
+- **Holes, seen from both sides.** A hole whose answer never came (redirected, a whole document, or
+  a failed request) was silent in a build: the page kept its fallback. The runtime now emits
+  `region.server.failed` (the cause, the attempt, whether a retry follows), and the Page tab and the
+  report name the hole and the cause (a handle in front of ogygia took the islands endpoint, or the
+  hole's render failed). A first-screen hole whose fallback held for a second or more is named,
+  timed from the first paint to the swap and split by its server time. The hole endpoint sends its
+  wait for a render slot and its render as `Server-Timing` (`og-queue`, `og-render`) to a measuring
+  browser only (dev, the devtools cookie, the profiler's flag), so a slow hole's wait splits into
+  before the request left, the render-slot queue, and the server render. The Page tab draws a
+  waterfall of hole answers cut the same way (a failed hole is a red row with its reason), the
+  report's One clock gets a lane per hole, and the profiler dashboard lists every hole the server
+  answered (requests, cache hits, failed renders, mean render, slot wait, share of slot time) and
+  names the holes that held the render slots when others waited.
+- **What makes an island heavy.** The profiler report names one module that is 40% or more of an
+  island's own code (20 KB or more), and a re-export barrel an island still ships whole (little
+  code of its own, six or more modules behind it: a side effect, or the barrel pass is off).
+  Svelte's and Kit's own code, the runtimes and devalue never count as the island's own. A chunk's
+  contents list its heaviest files first, by the bundler's rendered size, instead of six files in
+  module order. On the dev server the Page tab raises the same two findings from the module graph,
+  and the island card lists its heaviest modules and the barrel.
+- **Caching and deploys, as a returning visitor pays for them.** Both tools name an island whose
+  content-hashed file was gone and that woke on another build's code (a warning when it woke, an
+  error when it stayed asleep); files a `<link rel="preload">` fetched that something downloaded
+  again (a crossorigin or credentials mismatch), with the bytes paid twice; and the content-named
+  files a returning visitor's browser asked for again (revalidated, or downloaded whole on a
+  reload), islands named. The Page tab asks the server how it caches each island file and the
+  runtime, and names those served without a long cache, heaviest first. Since your last profile,
+  the report says which islands changed file after a deploy (downloaded again, with the bytes) and
+  which kept theirs; when every island changed, it asks whether their code did, since SvelteKit
+  bakes its build time into its client code unless `kit.version.name` is pinned.
+- **Browser frames by their source line.** On the dev server a sampled browser frame named the
+  compiled output's line; the profiler now maps it through the dev server's client module graph,
+  and the Page tab through each quoted file's inline map. In a build with the profiler on, the
+  client build writes hidden source maps, moves each one off the output the moment it is written,
+  and embeds the maps of the app's chunks in the profiler's server module; no map is served, none
+  is left on disk, and no chunk points at one. A frame with no map drops its line rather than
+  quoting a wrong one, and a minified name is never quoted.
 - **Region CSS obeys Kit's `inlineStyleThreshold`: small region sheets ship inline, not as
   render-blocking links.** A region's CSS travels with the region — an island's, a held dual's, a
   content body's, a hole answer's sheets are linked per rendered region (`data-ogygia-region-css`)
@@ -381,8 +540,8 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   reason to. The runtime contradicted it: every visible island idle-imported its module a second
   after load, so a customer home page pulled 1.1 MB of below-the-fold island code for visitors who
   never scrolled (535 KB at the load event, 1.6 MB one second later, nothing new on scroll). The
-  idle warm is gone; a visible island's chunk is requested at intersection. A page that wants every
-  island's bytes early keeps `regions.preload: 'all'` (low-priority hints from the HTML). The hover
+  idle warm is gone; a visible island's chunk is requested at intersection. (Later in this release
+  `regions.preload` itself went away: the runtime preloads an island's whole graph at its wake.) The hover
   warm of `interaction` islands and the router's prefetch warm are unchanged. `e2e/visible-below`:
   an island 4000 px down makes no request for three seconds, then fetches, hydrates and counts on
   scroll.
@@ -489,6 +648,141 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   ids, the loud guard), the playground `/nested-hole` fixture (a deferred hole in `lib/holes/`
   carrying every permutation through snippets), and `e2e/nested-hole.spec.ts` (each carried island
   hydrates on the far side).
+- **An island's `<svelte:head>` survives a head other scripts edited, and every head node has one
+  owner.** Svelte hydrates `<svelte:head>` by finding its marker in the one shared `document.head`
+  and walking the nodes after it. By wake time a third party (a design-system or monitoring
+  inject, a hoisted sheet) has usually edited the head, and one foreign node in the range sent the
+  walk into `set_attribute()` on a non-element, which threw and discarded the whole island. On a
+  document Kit does not own, the runtime now removes the head's hydration markers before any
+  island head runs (looped and branched heads included), so Svelte takes its own fallback and
+  renders the head block fresh. That re-render then needed rules, now applied by every head write
+  and removal: the PAGE owns the head the server sent and everything the router or runtime inserts
+  for it; an ISLAND owns what its `<svelte:head>` adds, and only its own teardown removes it;
+  anything else (a third-party inject) is never removed, as in Kit's own router. While an island's
+  head content is live, the page's identical copies retire (never a stylesheet link), so a JSON-LD
+  block or a preload is in the head once, and the island's reactive `<title>` wins over the stale
+  server one. Before this, a client navigation away from such an island could delete the next
+  page's description, canonical and `og:*` tags. `test/browser/head-ownership`,
+  `e2e/head-ownership`.
+- **A lake's or island's scoped CSS keeps its Svelte scope hash.** The client CSS handoff for a
+  `wake: 'none'` region (and any island) compiled the raw component with its `<script>` stripped
+  and no preprocessor, so a `<style lang="scss">` component, or a template that reads a script
+  name, fell back to shipping its style bodies unscoped: `.x` instead of `.x.svelte-<hash>`, which
+  matched any element on the page reusing the class (a header lake restyled an unrelated
+  breadcrumb). The load now runs the preprocessor and keeps the script, as the hole CSS leg already
+  did, and the router-page CSS leg (same latent bug) and TypeScript in markup compile scoped too.
+  A fallback that still ships unscoped is marked in the CSS and reported. `test/fouc-scope-leak`.
+- **A raw `<style lang="scss">` no longer makes the compiler skip a component in silence.** The
+  barrel rewrite and the island transform parse a component before any preprocessor runs, and
+  Svelte's parser reads `<style>` as CSS: valid SCSS (`#{$i}`, `@each`, `@for`) threw, the file
+  was skipped with nothing logged, its barrel imports stayed (the island shipped the whole barrel)
+  and its region imports stayed plain imports. Every `<style>` body is now blanked to spaces before
+  those parses (offsets kept), and a component that still cannot be parsed warns once with the
+  parser's code and position. A vite-plugin-svelte style request
+  (`Foo.svelte?svelte&type=style&lang.css`) is no longer mistaken for the component either, which
+  had produced thousands of false "skipped" warnings in one build.
+- **A morph never hides the focused element from assistive tech.** A hole's fetched closed render
+  can carry `aria-hidden="true"` on a container the visitor's click had just focused (a dropdown's
+  options in the light DOM). The browser blocks `aria-hidden` on an ancestor of the focused element,
+  so the panel never opened, and it breaks WAI-ARIA. The morph skips applying it to a subtree that
+  holds the active element, and after every morph sweeps it off the focused element's ancestor
+  chain, whether it arrived by an attribute sync or a cloned subtree. `test/morph`.
+- **A morph leaves an upgraded web component's own state alone.** The morph already kept the
+  attributes a self-owned element gave itself. Now: a self-owned parent (an upgraded custom element,
+  `<dialog>`, `<details>`) keeps the children it gave itself (the render's new children still come
+  in), so a fallback and an answer sharing a design-system trigger no longer strip and re-upgrade
+  it (a flicker on about half of hard reloads); and an UPGRADED custom element's host attributes
+  belong to the live DOM entirely, never added, updated or removed, because a fresh render carries
+  different per-render ids and scope classes, and writing them made the component lose its
+  hydrated shadow and render its content twice. `<dialog>` and `<details>` still sync attributes
+  (only `open` is theirs). Hydration repair uses a strict version of the morph that does NOT keep
+  self-owned children: a node a web component added inside a nested custom element is exactly what
+  Svelte's hydration cursor then landed on, and the island discarded its server DOM. `test/morph`,
+  `test/browser/repair-web-component-upgrade`.
+- **A hole's answer morphs over its fallback on every schedule, not only `interaction`.** A
+  deferred hole on any schedule can swap over a fallback that a foreign runtime already made
+  interactive: a mega menu's `wake: 'idle'` hole whose fallback items upgrade a second after load,
+  and a visitor opens one before the answer lands. Replacing the children destroyed the opened item
+  and the answer's new levels were never seen. Every hole answer now morphs (keyed on `id`, so the
+  opened element keeps its instance, shadow root and open state and the new content grafts under
+  it), and the morph feature is shipped whenever the app has deferred holes, installed at boot.
+  `test/browser/hole-morph-live-fallback`.
+- **Region and hole HTML is parsed aware of declarative shadow DOM.** A fetched answer rendered as
+  web components can carry `<template shadowrootmode>`. `createContextualFragment` leaves such a
+  template inert by spec, so a host that draws its box from its shadow swapped in at 0 height and
+  flickered until its own runtime re-upgraded it. One parser (`runtime/parse-html.ts`) now serves
+  every region, hole and repair parse through `Element.setHTMLUnsafe()`, the algorithm the document
+  uses on first load, with a by-hand attach step for engines that render declarative shadow DOM but
+  predate it. It still parses into an inert template, so nothing upgrades there. An island nested
+  in a fetched hole now repairs against its pristine markup, captured while the fragment was still
+  disconnected, instead of a live DOM a web-component runtime may already have edited.
+- **An island of ours on a Kit document waits until Kit has applied its page.** On a csr=true
+  document the `$app/state` shim reads Kit's page through the bridge Kit's client entry publishes,
+  while an island inside a lake or a hole's answer wakes on its own schedule. An early wake read
+  `page.data` as `{}`, took the empty `{#if}` branch and discarded its server DOM (a header search
+  bar vanished on about one prod load in three). The wake now holds, server HTML on screen, until
+  Kit's page reports a real status (`status !== -1`, set when Kit's `start()` applies the page), a
+  reactive signal with no polling and no timeout. In dev, a wait past 5 s warns once and says
+  whether Kit's entry never evaluated or `start()` never finished. `test/browser/kit-page-thread`.
+- **An island's page seed follows dynamic imports.** The seed-key walk read only the static
+  closure, so a component `await import`ed inside an island (the lazy-widget pattern) had its
+  `page.data` reads dropped, and the build shipped a seed that looked pinned but was incomplete:
+  the lazy branch rendered a different tree and the island discarded its server DOM for signed-in
+  visitors. The seed now unions over static and dynamic imports (the closure remote seeding
+  already used); modulepreload hints still follow static imports only. `test/island-deps`.
+- **A branded snippet runs in place; only a crossing uses its portable form.** A zero-argument
+  `{#snippet}` handed to a plain component is branded, in case the component forwards it into an
+  island, and it used to be replaced by its portable form everywhere, running as an isolated app
+  even inside its own tree: no host context (a CMS block renderer in a tab rendered an empty panel),
+  no host scope class (host CSS never matched), and an island inside it wrote a second props
+  sidecar with a duplicate `og-props-<fp>` id. Now the snippet stays a plain Svelte snippet in its
+  own tree, and only a crossing (an island's props, a baked server-picked region) swaps the portable
+  form in. Only the document tail stamps `id="og-props-<fp>"`. `e2e/snippet-in-place`.
+- **Deferred holes outlive a CDN-cached document.** A page whose load sets a shared-cache header
+  (`public, s-maxage=604800`) is served from a CDN for days, but its holes were signed for the
+  region TTL: every visitor of the cached copy got a 403 for every hole, silently. The handle now
+  notes the cache-control a load sets, and an anonymous hole minted in that render is signed for
+  twice the shared-cache life (s-maxage, else max-age, plus stale-while-revalidate; private,
+  no-store or no-cache: no extension), capped. Session holes are never extended. And the runtime retries
+  an expired capability once with `renew=1`: the endpoint re-signs only an app-minted, anonymous
+  address expired by at most 8 days, answers `no-store` with the fresh URL, and the hole adopts it.
+  `ogygia({ regionTtl })` is now `regions: { ttl }` (see Changed). `e2e/cached-document-holes`.
+- **Island entries and the runtime are content-hashed.** An island's client entry lived at
+  `og-region.<iid>.js`, a name that never changed while its content did, served immutable:
+  browsers ran the last build's island code after a deploy, or 404'd its chunks. The runtime's name
+  hashed ogygia's sources, not the chunks it imports. Each file is now emitted under its content
+  hash (`og-region.<iid>.<hash>.js`, `og-runtime-<features>.<hash>.js`); the stable name stays the
+  island's identity (the entry attribute, handoff keys, fingerprints) and the server writes the
+  hashed location next to it. A location that fails to load falls back once to the stable name,
+  fetched fresh, and each stable name is still written as a re-export of its location, so pages
+  cached before the deploy keep working.
+- **`requestEvent()` answers under Kit's own page render too.** It read only ogygia's render-root
+  context, and Kit's page render sets that context to `{ page }` alone, so every component rendered
+  as part of the page itself (layouts, a CMS renderer's blocks) got `null`. A per-request SSR id
+  counter keyed on it fell back to a process-wide one, and a server render cache keyed on those ids
+  never hit. It now falls back to the request reader the handle installs. `test/kit-context`.
+- **Router: land where a real navigation would.** The router's page fetch sent `fetch`'s default
+  `Accept: */*`; a server that answers that with a redirect (to the home page, say) had the router
+  follow it, rewrite the address bar and never navigate to a page served by another app on the same
+  origin. Every router fetch (navigation, prefetch, history) now sends the browser's document
+  `Accept`. A response the router will not render (not an ogygia page, a Kit-hydrated page, a
+  cross-origin landing) is handed to the browser as a navigation to the address the visitor
+  CLICKED, and the address bar takes a redirect target only once the router renders it. A
+  web-component link that re-dispatches the click on its inner `<a>` starts one navigation, not
+  two, and a navigation chunk that fails to load falls back to a browser navigation instead of a
+  dead link. `e2e/router-document-fetch`.
+- **A scroll-woken island no longer waits on the scheduler.** The shared `IntersectionObserver`
+  dropped a watcher when a `visible` island woke, which hid that island from the scheduler's
+  viewport-first ordering; scroll-woken islands waited 62–84 ms for nothing. It keeps every watcher
+  now.
+- **Dev: an installed ogygia runs as one copy in the browser.** Vite pre-bundled an installed (not
+  linked) ogygia's runtime while every compiler-written import loads ogygia's files by path, so the
+  page ran two copies of its stateful modules and every island with a snippet prop failed ("wired
+  prop but no wire feature"). ogygia now keeps itself out of the dep optimizer, as a workspace link
+  already was, and warns when an app's `optimizeDeps.include` lists it. `e2e/dev-installed`.
+- **Dev: nothing is discovered late on a cold dev server.** On a cold dep optimizer the first load
+  found `svelte/server` (a region snippet imports it) and the devtools dock's drag packages late;
+  each re-optimized and reloaded the page, closing a dock just opened. They are declared up front.
 
 ### Changed
 
@@ -649,7 +943,56 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   already had (the waking click is still replayed). `ogygia({ regions: { preload: 'all' } })`
   restores the previous behaviour; `'none'` emits no code hints at all (a load island fetches on
   import). Far-below-the-fold wakes on slow networks are the one thing that gets later under the
-  default — set `'all'` if that matters more than the bytes.
+  default — set `'all'` if that matters more than the bytes. (Superseded later in this release: the
+  runtime now preloads an island's whole graph at its wake and `regions.preload` is removed; see
+  below.)
+- **The boot never loads Svelte, and it is four files fetched in one round trip.** Svelte's client
+  runtime is one shared chunk (~200 KB), and the runtime's boot reached it statically four ways, so
+  it downloaded first thing, ahead of the page's LCP image and before any island needed it.
+  Features are still static and sized by the app's marks, but each now lands in one of two chunks
+  the compiler generates: the boot (core plus Svelte-free features) and the hydrate phase
+  (context, live, wire, remote seeds), which rides the one `import()` the runtime already made
+  with Svelte. Island-side code (the `$app/navigation` shim, `ogygia/app`, the remote-functions
+  client stub) reaches the runtime through a navigation handle on the document instead of importing
+  runtime modules, and the runtime's lazy chunks reach boot helpers through a registry, so the
+  bundler no longer splits the boot into shared files. Measured on the playground: the boot went
+  from 155 KB with Svelte's runtime to 56 KB with none, and from 13 files to 4 (the runtime's own
+  code in one). The runtime tag also carries a `modulepreload` for each of its static imports, so they
+  download with it instead of one round trip later; the runtime chunk is found by its exact name,
+  so an app with `hooks.client` (whose runtime name differs) gets those hints too.
+- **The runtime goes right before the page's JavaScript, not first in the head.** Putting the
+  runtime bootstrap first in `<head>` kept it ahead of any script that edits islands, but also made
+  it the page's first request, ahead of its stylesheets and its LCP image preload. It now goes
+  immediately before the first `<script>` or `<link rel="modulepreload">` in the head: still ahead
+  of every piece of JavaScript, with meta, title, stylesheets, preconnects and image or font
+  preloads keeping their place in front of it (last in the head when the head has no JavaScript).
+  `test/head-presence`.
+- **Island wakes start after the page has painted, at background priority.** The runtime boots
+  before `DOMContentLoaded`, and a `load`, `idle`, `media` or in-viewport `visible` island started
+  its import right there, so island code downloaded beside the page's first paint and its LCP
+  image. Every wake that loads code now waits for `DOMContentLoaded` and one painted frame (then
+  stays open, so SPA swaps and late regions pass straight through), and `load`, `visible` and
+  `media` wakes start through `scheduler.postTask` at `'background'` priority, so rendering wins
+  the main thread first. `interaction` wakes never wait (the click is replayed at once), hole HTML
+  is not gated (it is content, not code), and a Kit document keeps Kit's pace. `e2e/wake-gate`.
+- **An island's whole graph preloads at its wake, never from the HTML.** A modulepreload hint in
+  the HTML fetches when the parser meets it, before the page painted and for islands that may never
+  wake; without one, an island's `import()` finds its chunks one parse at a time. The server now
+  writes each island's chunk list as data (one inert JSON script in the document tail, every chunk
+  named once), and when an island starts to load (its wake, the hover warm-up, the router's
+  next-page warm) the runtime inserts a modulepreload for each of its chunks not yet linked, in the
+  same task as its `import()`. The whole graph downloads in parallel the moment it may start, and
+  an island that never wakes downloads nothing. A csr=true document keeps its low-priority tail
+  hint for `load` islands, since Kit wakes those. `regions.preload` is removed.
+  `test/island-graph`, `test/browser/island-graph-preload`.
+- **`regionTtl` is now `regions: { ttl }`.** The capability TTL moved into the regions subsystem;
+  the old key is a config error that names the new spelling.
+- **The server's island graph and region scanner stop allocating per item.** An island's chunk
+  list was deduped with a quadratic `includes` per chunk, per instance; it is one map (a Set only
+  for portable-snippet entries), and a second instance of an entry reuses the list already
+  recorded (21 islands × 400 chunks: 1.68 → 0.60 ms per render). `scanRegions` / `liftRegions`
+  compare case-folded char codes instead of slicing and lower-casing a string per tag check
+  (1 MB page: 4.5 → 1.9 ms).
 
 ### Fixed
 
@@ -733,6 +1076,36 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   root `+layout.ts` (csr=false) was invisible, so ogygia predicted "client build stays" while Kit
   skipped it, and every island 404'd. Same app as above (two route trees sharing files by link).
   Regression cases in `test/csr-skip.test.ts`.
+- **Profiler: login survives a large cookie jar and a host that keeps one `Set-Cookie`.** A user
+  signed in to the profiled app looped on the profiler's login page. Auth now accepts any
+  `og_profiler` value in the raw `Cookie` header, not only the one Kit's parser kept (a stale
+  duplicate first, or a malformed neighbour, no longer hides a valid session). Login and logout set
+  the session alone and the beacon flag follows on the next response, because a host that flattens
+  headers kept only the last `Set-Cookie`. A request that still arrives without a session after
+  login lands on the login page with a one-line diagnosis (dropped on the way, duplicates, or a
+  secret that differs between instances), and the server logs facts only, never a value.
+  `test/profiler-session`.
+- **Profiler: one live profiler per process on the dev server.** The dev server re-runs the app's
+  hooks on an edit and builds a new profiler while the old one's timers still record: the process
+  was sampled twice, and the first recording window to end switched off the per-request detail
+  under the other's render (its report lost its island rows). The newest profiler marks itself
+  live and an older one's background timers stand down (its sink sends what it holds first), and
+  detail is counted, so one window can no longer end another's.
+- **Profiler: its renders ask as a page navigation.** ogygia streams a load's promises only to a
+  navigation request, and the profiler's page renders did not send one, so it profiled a different
+  render than visitors got. They now do, and streamed pages stream in the report as they do for a
+  visitor.
+- **Profiler beacon fixes.** A visit over 64 KB is sent (an ordinary request while the page is
+  open, a slim one on hide). A file a `<link>` fetched is typed by its extension, then the link's
+  own `as`, then the initiator, so a hole's `<link rel="preload" as="fetch">` is HTML, not CSS. A
+  visit stays filed under the page the document loaded as, so after an in-app navigation the rest
+  of the visit still reaches the landing page's report. The page's own requests are kept ahead of
+  scripts at the beacon's 200-file cut.
+- **Devtools and profiler: a wait for a failing first-screen island is not ogygia's.** The
+  scheduler holds a ready island below the fold while a first-screen island loads. An island that
+  then failed had no hydration row, so the wait read as `held-idle`, ogygia's own unexplained
+  hold. A failure now carries its wake-to-failure span, `held-idle` counts it, and the queued
+  island says what it was held for.
 
 Found while rebuilding a large production site header (static mega menu, per-visitor holes, a
 `wake: 'interaction'` search) on top of a Kit app that also has `csr = true` pages.

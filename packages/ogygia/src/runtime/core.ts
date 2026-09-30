@@ -1,6 +1,6 @@
 import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
-import { parse_region_html } from './parse-html.js';
+import { parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.js';
 import { runtime_session } from './session.js';
 import {
 	capability_expired,
@@ -325,6 +325,9 @@ export function region_fragment(html: string): { frag: DocumentFragment; ready: 
 				new Promise<void>((r) => setTimeout(r, 5000))
 			])
 		: Promise.resolve();
+	// The app's transform reshaped the answer: restore it first — before the pristine copies below,
+	// before the morph, before any upgrade (the fragment is inert: nothing upgrades in it)
+	restore_markup(frag);
 	// Pre-capture each nested self-hydrating island's PRISTINE markup while the fragment is still
 	// disconnected. Once inserted, a swapped-in foreign runtime (a web-component upgrade) can reach a raw
 	// custom element inside the island — attaching a shadow, its normalization dropping neighbouring
@@ -790,6 +793,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.#app && region_hydrate_schedule(this)) this.#ssr_html = fragment_markup(frag);
 		if (morph) morph(this, Array.from(frag.childNodes));
 		else this.replaceChildren(frag);
+		restore_adopt_sheets();
 		this.#done = true;
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
@@ -836,6 +840,7 @@ class OgygiaRegion extends HTMLElement {
 			if (morph) morph(this, nodes);
 			else this.replaceChildren(...nodes);
 		}
+		restore_adopt_sheets();
 		this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 	}
 
@@ -1162,6 +1167,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.isConnected) return;
 		slots.lakes.settle_in(frag);
 		this.replaceChildren(frag);
+		restore_adopt_sheets();
 		if (interactive) {
 			await this.#live_hydrate(desc.props);
 		} else {

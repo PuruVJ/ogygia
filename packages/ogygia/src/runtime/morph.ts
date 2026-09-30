@@ -639,7 +639,40 @@ function sync_form_props(from: Element, to: Element): void {
 
 /** `importNode(node, true)` — a deep copy owned by this document, carrying the source namespace. */
 function clone(node: Node): Node {
-	return owner_document(node).importNode(node, true);
+	const copy = owner_document(node).importNode(node, true);
+	// (a page whose app has a server transform: answers arrive restored, their hosts' shadow roots
+	// attached before insertion — the copy must keep them)
+	if (node.nodeType === ELEMENT && (globalThis as { __og_restore?: unknown }).__og_restore) carry_shadows(node as Element, copy as Element);
+	return copy;
+}
+
+/**
+ * `importNode` never copies a shadow root (unless it was made clonable), so a host restored in an
+ * answer's fragment would arrive with its rendered tree gone. Walk the source and the copy in lockstep
+ * (a deep copy has the same elements in the same order) and carry each open root across: its children
+ * copied the same way, its adopted sheets, and sheets still waiting for the host to be in the page
+ * (the restorer adopts those right after the insertion).
+ */
+function carry_shadows(src: Element, dst: Element): void {
+	const a = owner_document(src).createTreeWalker(src, 1 /* SHOW_ELEMENT */);
+	const b = owner_document(dst).createTreeWalker(dst, 1);
+	for (let s: Node | null = src, d: Node | null = dst; s && d; s = a.nextNode(), d = b.nextNode()) {
+		const root = (s as Element).shadowRoot;
+		if (!root || root.mode !== 'open' || (d as Element).shadowRoot) continue;
+		const copy = (d as Element).attachShadow({ mode: 'open', delegatesFocus: root.delegatesFocus });
+		for (const c of Array.from(root.childNodes)) copy.appendChild(clone(c));
+		try {
+			if (root.adoptedStyleSheets.length) copy.adoptedStyleSheets = [...root.adoptedStyleSheets];
+		} catch {
+			// sheets made for another document: the restorer's pending list covers ours
+		}
+		const pending = (root as ShadowRoot & { __og_pending?: CSSStyleSheet[] }).__og_pending;
+		if (pending) {
+			(copy as ShadowRoot & { __og_pending?: CSSStyleSheet[] }).__og_pending = pending;
+			const w = globalThis as { __og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[] };
+			(w.__og_adopt ??= []).push({ shadow: copy, sheets: pending });
+		}
+	}
 }
 
 /** The owning document, falling back to the ambient `document` for detached nodes. */

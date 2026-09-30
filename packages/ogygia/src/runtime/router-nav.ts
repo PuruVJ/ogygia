@@ -624,6 +624,9 @@ export async function navigate(
 	// (and stop SPA behaviour from here on).
 	const marker = doc.querySelector('meta[name="ogygia-router"]');
 	if (!marker) return hand_off();
+	// The app's transform reshaped the incoming page: restore it before anything reads it (the
+	// reconcile, the islands' copies). The restorer is the page's own global, when the app has one.
+	(globalThis as { __og_restore?: (root: ParentNode) => number }).__og_restore?.(doc);
 
 	// Ours to render. A redirect REPLACES the intermediate URL (browser semantics), so the back
 	// button skips it.
@@ -710,6 +713,8 @@ export async function navigate(
 			session().settle_lakes_in(document.body);
 			dispose_scope('page');
 		}
+		// (roots restored in the incoming page adopt their keyed sheets now that they are in this one)
+		(globalThis as { __og_restore_adopt?: () => void }).__og_restore_adopt?.();
 		// ONE COPY of island head content: an island KEPT across the swap still renders its head live,
 		// and the merge above put the next page's server copy of the same content in beside it — retire
 		// that copy now that the reconcile has settled which islands stayed (runtime/session.ts).
