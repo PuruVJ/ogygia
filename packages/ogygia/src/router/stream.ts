@@ -20,6 +20,7 @@
  * Streaming's honest trades (documented): status/title/headers flush with the first yield — a
  * late error can't change an already-sent 200, and Server-Timing set after the flush is lost.
  */
+import { escape_text } from '../escape.js';
 
 /** The slot id for the page position (one streamed slot per page in v1). */
 export const PAGE_SLOT_ID = 'pg';
@@ -162,11 +163,6 @@ export function stream_document(
 	return new Response(body, { status: res.status, headers });
 }
 
-const AMP_RE = /&/g;
-const LT_RE = /</g;
-const GT_RE = />/g;
-const escape_text = (s: string) =>
-	s.replace(AMP_RE, '&amp;').replace(LT_RE, '&lt;').replace(GT_RE, '&gt;');
 
 /** The in-slot failure card (message escaped) — a stream must never end broken or empty. */
 export function error_card_html(e: unknown): string {

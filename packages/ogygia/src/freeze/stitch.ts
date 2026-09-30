@@ -18,6 +18,8 @@
 /** Cheap presence probe — the capture uses it to flag entries; serves use it to skip the scan. */
 export const STITCH_HOLE_RE = /<ogygia-region\b[^>]*\bstitch\b[^>]*>/;
 
+import { escape_amp_quot } from '../escape.js';
+
 // Hoisted tokens for the balanced scan (regions NEST — a hole's fallback can contain regions).
 const REGION_TOKEN_RE = /<ogygia-region\b[^>]*>|<\/ogygia-region>/g;
 const STITCH_ATTR_RE = /\bstitch\b/;
@@ -26,8 +28,6 @@ const STITCH_ATTR_RE = /\bstitch\b/;
 const STITCH_EDGE_RE = /\bstitch="edge"/;
 const ENDPOINT_ATTR_RE = /\bendpoint="([^"]*)"/;
 const AMP_RE = /&amp;/g;
-const ATTR_AMP_G = /&/g;
-const ATTR_QUOTE_G = /"/g;
 
 /** How a stitch hole fills: `'serve'` = the ORIGIN re-renders + splices on every serve (per-visitor
  *  page, edge-bypassed) · `'edge'` = the CDN fills an ESI include per request (the shell stays
@@ -77,9 +77,7 @@ export function esi_rewrite(html: string, page_path = '/'): string {
 	let last = 0;
 	for (const h of holes) {
 		const abs = new URL(h.endpoint, 'http://o' + page_path);
-		const src = (abs.pathname + abs.search)
-			.replace(ATTR_AMP_G, '&amp;')
-			.replace(ATTR_QUOTE_G, '&quot;');
+		const src = escape_amp_quot(abs.pathname + abs.search);
 		out += html.slice(last, h.start);
 		out += `<esi:remove>${html.slice(h.start, h.end)}</esi:remove><esi:include src="${src}" onerror="continue"/>`;
 		last = h.end;

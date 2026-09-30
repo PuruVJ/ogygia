@@ -1,6 +1,8 @@
 import { frameAddress } from '../frame.js';
 import { kit_hydrates_page } from './kit-boot.js';
 import { init_shadow_registries, parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.js';
+import { wire_classes_for } from './wire-classes.js';
+import { mark_region_changed, region_changed, unwatch_region, watch_region } from './drift-watch.js';
 import { runtime_session } from './session.js';
 import {
 	capability_expired,
@@ -53,6 +55,9 @@ import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
+// the profiler's browser half: only where the profiler or devtools can read it (a plain import of
+// dist/ without the define keeps it). Every `if (BEACON) beacon_…()` folds out otherwise.
+const BEACON = typeof __OGYGIA_BEACON__ !== 'undefined' ? __OGYGIA_BEACON__ : true;
 
 /** Above this many characters an island keeps no server copy (its hydration falls back to
  *  Svelte's own recovery on a mismatch) — a bound on memory, not a behaviour anyone tunes. */
@@ -367,6 +372,18 @@ class OgygiaRegion extends HTMLElement {
 	 *  DOM drifted, instead of letting Svelte re-render the island client-side. Dropped once the
 	 *  island is awake. `null` for a nested region (rides its parent) and above SSR_SNAPSHOT_MAX. */
 	#ssr_html: string | null = null;
+	/** Counted in drift-watch.ts's sleeping islands (paired: one watch, one unwatch). */
+	#watching = false;
+	#watch(): void {
+		if (this.#watching) return;
+		this.#watching = true;
+		watch_region();
+	}
+	#unwatch(): void {
+		if (!this.#watching) return;
+		this.#watching = false;
+		unwatch_region();
+	}
 	/** True after a successful HTML swap — failures leave this false so a later schedule can retry. */
 	#done = false;
 	/** In-flight `#apply` run. `#apply` awaits the region's stylesheet before swapping, so anyone
@@ -512,8 +529,14 @@ class OgygiaRegion extends HTMLElement {
 		// snapshot: inside a just-swapped hole a foreign runtime may already have upgraded a custom element
 		// here, so the live DOM is no longer the server's bytes. A top-level island (no stash) snapshots
 		// live as before — there the runtime connected before anything else could touch it.
-		if (!deferred && this.#ssr_html === null)
-			this.#ssr_html = (this as unknown as PristineHost)[PRISTINE_SSR] ?? snapshot_markup(this);
+		if (!deferred && this.#ssr_html === null) {
+			const pristine = (this as unknown as PristineHost)[PRISTINE_SSR];
+			this.#ssr_html = pristine ?? snapshot_markup(this);
+			// (a pristine copy predates this connect: the live DOM may already differ, so it compares)
+			if (pristine != null) mark_region_changed(this);
+		}
+		// while it sleeps with a copy, a touch marks it for the comparison at its wake (drift-watch.ts)
+		if (this.#ssr_html !== null) this.#watch();
 		if (slots.lakes.wait_for_boundary(this, boundary)) return;
 		this.#scheduled = true;
 		const when = region_schedule(this);
@@ -790,7 +813,10 @@ class OgygiaRegion extends HTMLElement {
 		// feature is now selected whenever the app has deferred holes — see link/runtime-entry.ts).
 		const morph = slots.morph;
 		// A hydrating hole's server markup IS the answer (see #ssr_html) — copied before it goes in.
-		if (!this.#app && region_hydrate_schedule(this)) this.#ssr_html = fragment_markup(frag);
+		if (!this.#app && region_hydrate_schedule(this)) {
+			this.#ssr_html = fragment_markup(frag);
+			this.#watch(); // (the swap below is itself a touch: a hydrating hole compares, as before)
+		}
 		if (morph) morph(this, Array.from(frag.childNodes));
 		else this.replaceChildren(frag);
 		restore_adopt_sheets();
@@ -799,7 +825,7 @@ class OgygiaRegion extends HTMLElement {
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
 		slots.lakes.after_html_swap(this, { revalidate });
-		if (!revalidate && this.#fetch_started) beacon_hole_answered(this, this.#fetch_started);
+		if (BEACON && !revalidate && this.#fetch_started) beacon_hole_answered(this, this.#fetch_started);
 		if (DEVTOOLS)
 			dt_emit({
 				domain: 'runtime',
@@ -889,11 +915,22 @@ class OgygiaRegion extends HTMLElement {
 		try {
 			// Network → STORE (never straight to DOM). N regions with the same address ⇒ one request;
 			// a stale response can't overwrite a newer one (the store tickets at request time).
-			const html = await slots.frames?.ensure(
-				address,
-				this.#frame_fetcher(endpoint, !!opts.revalidate),
-				{ force: opts.revalidate }
-			);
+			// A first fetch joins the holes starting with it in ONE batch request (frame-nav.ts
+			// `join_batch`) — not a cacheable hole (`ttl`: its GET is the browser cache's to answer)
+			// and not an expired capability (only its own GET renews it).
+			const frames = slots.frames;
+			if (!opts.revalidate && frames?.join && !endpoint.includes('&ttl=') && !capability_expired(endpoint))
+				await frames.join(endpoint);
+			const run = () =>
+				frames?.ensure(address, this.#frame_fetcher(endpoint, !!opts.revalidate), { force: opts.revalidate });
+			let html: string | undefined;
+			try {
+				html = await run();
+			} catch (err) {
+				// the batch it joined did not carry it: its own fetch, now (not a failure, no retry wait)
+				if ((err as { name?: string })?.name !== 'OgygiaBatchMiss' || outer.aborted) throw err;
+				html = await run();
+			}
 			// Network went to the STORE, not the DOM: the write notifies our subscriber (set in
 			// #server), which is the single apply path. If our subscription was severed (disconnect)
 			// or a twin already applied before us, this is a no-op. `outer.aborted` / relevance is
@@ -927,7 +964,7 @@ class OgygiaRegion extends HTMLElement {
 				} catch {
 					/* an endpoint URL cannot fail to parse here; stay quiet if it does */
 				}
-				if (id)
+				if (BEACON && id)
 					beacon_hole_failed({
 						id,
 						reason: refused ? err.reason : 'error',
@@ -1036,7 +1073,9 @@ class OgygiaRegion extends HTMLElement {
 			const entry = island_entry_of(this);
 			if (!entry) return;
 			hydrate_started(this); // a viewport island in flight holds ready islands below the fold
-			const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
+			// (with the module: the transportable classes its props and context carry — runtime/wire-classes.ts)
+			// The island's module first: its graph links go in before the lazy runtime chunks' own preloads.
+			const [mod, core] = await Promise.all([load_island(entry), hydrate_core(), wire_classes_for(this)]);
 			t_loaded = now_ms();
 			if (!this.isConnected) return;
 			// An island of OURS on a Kit-hydrated document reads Kit's page through the bridge Kit's
@@ -1048,13 +1087,17 @@ class OgygiaRegion extends HTMLElement {
 			// ── the turn: everything below is one synchronous step ──
 			const t_turn = now_ms();
 			const ssr_html = this.#ssr_html;
+			// Was the island touched while it slept (runtime/drift-watch.ts)? Read HERE, before the
+			// hydrate step edits it (lakes lifted): an untouched island skips the parse-and-compare.
+			const touched = ssr_html === null || region_changed(this);
 			// (dev: a Svelte hydration warning raised in this step is this island's)
 			if (import.meta.env.DEV) set_hydrating(this);
-			this.#app = core.hydrate_island(this, entry, mod, ssr_html);
+			this.#app = core.hydrate_island(this, entry, mod, ssr_html, touched);
 			this.#ssr_html = null; // awake (or not ours): the server copy has done its job
+			this.#unwatch();
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
-			beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
+			if (BEACON) beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
@@ -1064,8 +1107,11 @@ class OgygiaRegion extends HTMLElement {
 				});
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
+			// (a failed island stops being watched; its copy, if kept, counts as changed from here)
+			if (this.#watching) mark_region_changed(this);
+			this.#unwatch();
 			// the beacon's CPU window stops waiting for this one, and the visit reports it (no-op without it)
-			beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0);
+			if (BEACON) beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0);
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
@@ -1197,7 +1243,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.isConnected) return;
 		const entry = island_entry_of(this);
 		if (!entry) return;
-		const [core, mod] = await Promise.all([hydrate_core(), load_island(entry)]);
+		const [mod, core] = await Promise.all([load_island(entry), hydrate_core()]);
 		if (!this.isConnected) return;
 		await this.#kit_page_ready(core);
 		if (!this.isConnected) return;
@@ -1211,6 +1257,9 @@ class OgygiaRegion extends HTMLElement {
 	disconnectedCallback() {
 		connected_regions.delete(this);
 		unregister_region(this);
+		// out of the document nothing watches it: a copy it keeps is compared if it wakes again
+		if (this.#watching) mark_region_changed(this);
+		this.#unwatch();
 		// A disconnect now always means the island is gone: the reconcile nav MOVES kept nodes with
 		// insertBefore (no detach, no disconnect), and the fallback is a full swap where old islands
 		// genuinely leave.
@@ -1315,7 +1364,7 @@ export function boot(installers: Array<() => void> = []): void {
 	// the devtools timeline and the beacon hear it (entry-locations.ts imports neither)
 	on_entry_fallback((report) => {
 		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'entry.fallback', ...report });
-		beacon_entry_fallback(report);
+		if (BEACON) beacon_entry_fallback(report);
 	});
 
 	if (import.meta.env.DEV) apply_dev_head_region_css();
@@ -1323,14 +1372,14 @@ export function boot(installers: Array<() => void> = []): void {
 	// THE BEACON from boot (the profiler's own visit, or the devtools Page tab): vitals, shifts, long
 	// tasks, first clicks and the CPU sampler start before any island wakes — a page whose islands
 	// never wake, or that has none, still reports. One querySelector and out without the tag.
-	beacon_watch();
+	if (BEACON) beacon_watch();
 
 	// DEV: Svelte's hydration warnings (the server and the browser disagreed; Svelte kept the
 	// server's value, so only the console knew) reach the devtools and the profiler's browser half
 	if (import.meta.env.DEV) {
 		tap_svelte_warnings();
 		on_svelte_warning((w) => {
-			beacon_warning(w);
+			if (BEACON) beacon_warning(w);
 			if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'svelte.hydration.warning', code: w.code, message: w.message, ...(w.file ? { file: w.file } : {}), ...(w.fp ? { fp: w.fp } : {}) });
 		});
 	}

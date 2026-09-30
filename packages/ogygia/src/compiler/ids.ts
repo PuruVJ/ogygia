@@ -57,6 +57,10 @@ export const V_TRANSPORT = 'virtual:ogygia/transport';
  *  app crosses regions/wired-values over the wire, an empty map for a pure-island app (no dead codecs). */
 export const V_KIT_TRANSPORT = 'virtual:ogygia/kit-transport';
 export const V_TRANSPORTABLES = 'virtual:ogygia/transportables';
+/** What an island entry imports for the transportable codecs: the SERVER's eager registration (the
+ *  region endpoint decodes signed props of any island); empty in the browser, where the runtime
+ *  loads an island's classes from `V_TRANSPORTABLES`' lazy map. */
+export const V_TRANSPORTABLES_EAGER = 'virtual:ogygia/transportables-eager';
 /** `ogygia({ freeze })` policy (SERVER only; client: null) — the switch for the freeze
  *  read/write path in `ogygia.handle()`. Live adapters enter via `freeze.configure()`. */
 export const V_FREEZE_CONFIG = 'virtual:ogygia/freeze-config';

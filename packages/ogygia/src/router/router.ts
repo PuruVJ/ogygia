@@ -9,6 +9,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Component } from 'svelte';
 import { document } from '../document.js';
+import { escape_text } from '../escape.js';
 import { region } from '../region.js';
 import LayoutChain from './LayoutChain.svelte';
 import RawHtml from '../RawHtml.svelte';
@@ -133,12 +134,7 @@ export function when<T extends PageDef | Endpoint>(gate: (c: Ctx) => boolean, en
 const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
 // A mounted document's title lands in a RAW head string — escape it (every text-into-markup
 // emitter escapes; the wire is trusted federation, the law is unconditional).
-const AMP_RE = /&/g;
-const LT_RE = /</g;
-const GT_RE = />/g;
 const LAST_SLASH_RE = /\/$/;
-const escape_text = (s: string) =>
-	s.replace(AMP_RE, '&amp;').replace(LT_RE, '&lt;').replace(GT_RE, '&gt;');
 
 export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions = {}): Router<T> {
 	const base = (opts.base ?? '').replace(LAST_SLASH_RE, '');

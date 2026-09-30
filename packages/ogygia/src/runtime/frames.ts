@@ -10,8 +10,8 @@
  */
 import { slots } from './slots.js';
 import { subscribe, ensure, abandon } from './frame-store.js';
-import { streamFrames } from './frame-nav.js';
+import { join_batch, streamFrames } from './frame-nav.js';
 
 export function install() {
-	slots.frames = { subscribe, ensure, abandon, stream: streamFrames };
+	slots.frames = { subscribe, ensure, abandon, stream: streamFrames, join: join_batch };
 }

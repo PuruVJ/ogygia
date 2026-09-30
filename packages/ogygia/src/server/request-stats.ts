@@ -154,6 +154,31 @@ export function hole_stats_of(request: Request): HoleRequestStats | undefined {
 	return hole_stats.get(request);
 }
 
+/** One hole rendered inside a BATCH request (the page's first-load holes, a navigation's): the
+ *  profiler logs each as its own hole request, timed by its own render within the batch. */
+export interface BatchHoleStats extends HoleRequestStats {
+	/** the hole's own time in the batch: its wait for a slot and its render (ms) */
+	ms: number;
+	/** 200 rendered; 500 its render failed */
+	status: number;
+}
+
+/** The batch streams: its holes settle AFTER the handle returned (and the profiler logged the
+ *  request), so each is handed on as it lands — to the profiler that asked, or nowhere. */
+let batch_listener: ((request: Request, s: BatchHoleStats) => void) | null = null;
+
+export function set_batch_hole_listener(fn: ((request: Request, s: BatchHoleStats) => void) | null): void {
+	batch_listener = fn;
+}
+
+export function has_batch_hole_listener(): boolean {
+	return batch_listener !== null;
+}
+
+export function record_batch_hole_stats(request: Request, s: BatchHoleStats): void {
+	batch_listener?.(request, s);
+}
+
 /**
  * The profiler turns detail on for a recording; off, the handle records totals only. COUNTED, not a
  * switch: the flag is the process's, while a recorder lock is one profiler instance's — and two can

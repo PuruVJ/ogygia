@@ -34,6 +34,7 @@
 	import { document_tail, island_graph_script, modulepreload_tag } from './server/document-tail.js';
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
+	import { escape_amp, escape_amp_quot, escape_attr } from './escape.js';
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
@@ -474,7 +475,7 @@
 	// Adjacent sidecar (no tail: a hole response, a baked ticket, a router document, a test render):
 	// self-contained, never seed-relative.
 	const island_props_inline = $derived(
-		island_props_tail || !island_wire ? '' : props_sidecar(island_fp, island_wire.wire(null))
+		island_props_tail || !island_wire ? '' : props_sidecar(island_fp, island_wire.wire(null), 'adjacent', island_wire.wire_modules)
 	);
 
 	// THE ISLAND GRAPH (island-graph.ts): the chunks this island's code needs, as DATA. The runtime
@@ -592,7 +593,7 @@
 	// A hydrating hole's props: ADJACENT and self-contained (the hole's HTML is spliced by the
 	// runtime), unkeyed, in whichever lane the props qualify for (props-wire.ts).
 	const server_wire = $derived(nested || !__hydrate ? null : plan_props_wire(__props, __entry));
-	const server_props_script = $derived(server_wire ? props_sidecar('', server_wire.wire(null)) : '');
+	const server_props_script = $derived(server_wire ? props_sidecar('', server_wire.wire(null), 'adjacent', server_wire.wire_modules) : '');
 	// The hole's IDENTITY — the fingerprint of its region id + canonical props, the same function on
 	// both legs (runtime/hash.ts), so the client leg computes the SAME value the server emitted. The
 	// runtime keys the server-minted facts (endpoint, props sidecar) on it: when Kit gives up
@@ -625,7 +626,7 @@
 	const server_fetch_preload = $derived.by(() => {
 		// Only `defer: 'load'`: start the endpoint fetch during HTML parse (warms the per-hole load).
 		if (nested || building || __defer !== 'load' || !server_endpoint) return '';
-		const href_attr = server_endpoint.split('&').join('&amp;');
+		const href_attr = escape_amp(server_endpoint);
 		return LT + 'link rel="preload" as="fetch" crossorigin="anonymous" href="' + href_attr + '"' + GT;
 	});
 	// The fetch preload STAYS in the head: it starts the hole's content request during the HTML parse
@@ -661,8 +662,8 @@
 	// `nested` and marks the lake's inside, so the islands and holes authored in there emit their
 	// real regions and wake on the runtime, which Kit never touches.
 	const lake_attrs = $derived.by(() => {
-		const esc = (v) =>
-			String(v).split('&').join('&amp;').split('"').join('&quot;').split(LT).join('&lt;');
+		/** @param {unknown} v */
+		const esc = (v) => escape_attr(String(v));
 		let s = ' entry="' + esc(__entry || '') + '" wake="none" remount="' + esc(__remount) + '"';
 		if (lake_swr) s += ' when="' + esc(__when) + '"';
 		if (__maxAge != null) s += ' max-age="' + esc(String(__maxAge)) + '"';
@@ -755,7 +756,7 @@
 	// imports the entry only for stamped islands — an unrendered registry block ships nothing.
 	const kit_island_meta = $derived.by(() => {
 		if (!is_island || !island_inline || !island_entry || !claim_kit_island(island_entry)) return '';
-		const content = String(island_entry).split('&').join('&amp;').split('"').join('&quot;');
+		const content = escape_amp_quot(String(island_entry));
 		return LT + 'meta name="ogygia-kit-island" content="' + content + '"' + GT;
 	});
 

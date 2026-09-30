@@ -12,14 +12,14 @@
  * Fire-and-forget and after paint: a failing `init` warns but never blocks island hydration, and the
  * dynamic import means the file (and its deps) load only where Kit didn't — never on a csr=true page.
  */
-import { KitBoot } from './kit-boot.js';
+import { kit_hydrates_page } from './kit-boot.js';
 
 type ClientHooksModule = { init?: (input?: unknown) => unknown };
 
 export function run_app_client_hooks(loader: () => Promise<ClientHooksModule>): void {
 	if (typeof document === 'undefined') return;
 	// csr=true document → Kit boots and runs hooks.client itself; do not run it again.
-	if (KitBoot.document_has(document)) return;
+	if (kit_hydrates_page()) return; // (the session's one cached answer — never a second probe)
 	Promise.resolve()
 		.then(loader)
 		.then((m) => m.init?.())

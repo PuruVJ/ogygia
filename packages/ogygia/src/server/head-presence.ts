@@ -17,8 +17,11 @@
  * unnested `[^>]*`, so `.test()` is linear — no backtracking on any input.
  *
  * The patterns are module constants (compiled once), never rebuilt per call: these predicates run on
- * the page HTML during every SSR response transform.
+ * the page HTML during every SSR response transform. They STAY regexes: measured against hand-written
+ * scans (a tag walk, a rare-needle-first search), the engine's compiled matcher was 2–4× faster on
+ * real heads, allocation-free either way. `dedupe_head_links` is hand-written: it won.
  */
+import { is_word } from './html-scan.js';
 
 /** A real `<meta name="ogygia-router" …>` element — a page opting a route out of view transitions. */
 const ROUTER_META_RE = /<meta\b[^>]*\bname=["']ogygia-router["']/i;
@@ -45,12 +48,23 @@ export function page_declares_speculation_rules(html: string): boolean {
 	return SPECULATION_RULES_RE.test(html);
 }
 
-// Hoisted (they run on every SSR head transform). All single bounded `[^>]*`/attr runs — linear, no
-// backtracking; a documented (HTML-escaped) tag carries `&lt;`, never a literal `<link`, so prose
-// in a code block can't match (same law as the predicates above).
-const LINK_TAG_RE = /<link\b[^>]*>/g;
-const LINK_REL_RE = /\brel=["']([^"']*)["']/;
-const LINK_HREF_RE = /\bhref=["']([^"']*)["']/;
+/** The value of the first `\b<attr>=` + quote in `[from, to)`, up to the next quote of either kind
+ *  (case-sensitive, as the `rel` / `href` probes always were), or `undefined`. */
+function quoted_attr(s: string, from: number, to: number, attr: string): string | undefined {
+	const n = attr.length;
+	for (let i = s.indexOf(attr, from); i !== -1 && i + n + 2 <= to; i = s.indexOf(attr, i + 1)) {
+		if (is_word(s.charCodeAt(i - 1)) || s.charCodeAt(i + n) !== 61 /* = */) continue;
+		const q = s.charCodeAt(i + n + 1);
+		if (q !== 34 && q !== 39) continue;
+		const start = i + n + 2;
+		let end = start;
+		for (; end < to; end++) {
+			const c = s.charCodeAt(end);
+			if (c === 34 || c === 39) return s.slice(start, end);
+		}
+	}
+	return undefined;
+}
 
 /**
  * Drop duplicate `<link>` tags in the HEAD — one pass over the head slice, two families:
@@ -72,29 +86,55 @@ export function dedupe_head_links(head: string): string {
 	if (!head.includes('<link')) return head;
 	const sheets = new Set<string>();
 	const hints = new Set<string>();
-	return head.replace(LINK_TAG_RE, (tag) => {
-		const rel = LINK_REL_RE.exec(tag)?.[1];
+	// (the kept spans are joined once at the end, and only when a duplicate was dropped)
+	let out: string[] | null = null;
+	let kept = 0;
+	// (each tag's scan resumes after its `>`, as the global match did; `<link` exactly — the probe
+	// never folded case)
+	for (let lt = head.indexOf('<link'), gt = 0; lt !== -1; lt = head.indexOf('<link', gt + 1)) {
+		if (is_word(head.charCodeAt(lt + 5))) {
+			gt = lt;
+			continue;
+		}
+		gt = head.indexOf('>', lt);
+		if (gt === -1) break; // an unclosed `<link` is not a tag (nor is any after it)
+		const from = lt + 5;
+		const rel = quoted_attr(head, from, gt, 'rel');
 		const seen = rel === 'stylesheet' ? sheets : rel === 'modulepreload' ? hints : null;
-		if (seen === null) return tag;
-		const href = LINK_HREF_RE.exec(tag)?.[1];
-		if (href === undefined) return tag;
-		if (seen.has(href)) return '';
-		seen.add(href);
-		return tag;
-	});
+		if (seen === null) continue;
+		const href = quoted_attr(head, from, gt, 'href');
+		if (href === undefined) continue;
+		if (!seen.has(href)) {
+			seen.add(href);
+			continue;
+		}
+		(out ??= []).push(head.slice(kept, lt));
+		kept = gt + 1;
+	}
+	if (out === null) return head;
+	out.push(head.slice(kept));
+	return out.join('');
 }
 
 // The whole runtime bootstrap element (tag + empty body), the `<head …>` open tag, the first piece
 // of JavaScript the head carries (a `<script>`, or a `<link rel="modulepreload">` that fetches one),
 // and the `</head>` close. Same law as the predicates above: a literal `<script` / `<head` / `<link`,
-// one bounded `[^>]*` each, linear.
+// one bounded `[^>]*` each, linear. (Kept as regexes, measured: see above.) The last two are global
+// so a search starts at an offset (`lastIndex`) instead of on a sliced copy of the head.
 // …together with the modulepreload hints for its imports that follow it (document-tail.ts
 // `runtime_bootstrap_tags`): they move as one unit.
 const RUNTIME_SCRIPT_ELEMENT_RE =
 	/<script\b[^>]*\bdata-ogygia-runtime\b[^>]*><\/script>(?:<link\b[^>]*\bdata-ogygia-runtime-dep\b[^>]*>)*/i;
 const HEAD_OPEN_RE = /<head\b[^>]*>/i;
-const FIRST_JS_RE = /<script\b|<link\b[^>]*\brel=["']?modulepreload\b/i;
-const HEAD_CLOSE_RE = /<\/head\s*>/i;
+const FIRST_JS_G = /<script\b|<link\b[^>]*\brel=["']?modulepreload\b/gi;
+const HEAD_CLOSE_G = /<\/head\s*>/gi;
+
+/** The first match of a global pattern at or after `from` (its index), or -1. */
+function search_from(re: RegExp, s: string, from: number): number {
+	re.lastIndex = from;
+	const m = re.exec(s);
+	return m ? m.index : -1;
+}
 
 /**
  * Put the runtime bootstrap BEFORE ALL OF THE PAGE'S JAVASCRIPT in `<head>` — immediately ahead of
@@ -129,12 +169,10 @@ export function runtime_first(head: string, runtime: string | null): string {
 	const open = HEAD_OPEN_RE.exec(rest);
 	// no `<head>` in this slice (a routeless document's inner head): search the whole content
 	const from = open ? open.index + open[0].length : 0;
-	const js = FIRST_JS_RE.exec(rest.slice(from));
-	let at: number;
-	if (js) at = from + js.index;
-	else {
-		const close = HEAD_CLOSE_RE.exec(rest.slice(from));
-		at = close ? from + close.index : rest.length;
+	let at = search_from(FIRST_JS_G, rest, from);
+	if (at === -1) {
+		const close = search_from(HEAD_CLOSE_G, rest, from);
+		at = close === -1 ? rest.length : close;
 	}
 	if (found && found.index === at) return head;
 	return rest.slice(0, at) + tag + rest.slice(at);

@@ -11,8 +11,7 @@
  * raw secret so the id-salt domain stays separate.
  */
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
-
-const HEX64 = /^[0-9a-f]{64}$/;
+import { is_lower_hex } from './endpoint.js';
 const MAC_INFO = Buffer.from('ogygia-mac-v1');
 const ID_SALT_INFO = Buffer.from('ogygia-id-salt-v1');
 const utf8 = new TextEncoder();
@@ -66,7 +65,7 @@ export class Hmac {
 
 	static verify(secret: string, message: string, sig: string): boolean {
 		// Reject non-hex / wrong length before Buffer work (L-HMAC charset precheck).
-		if (typeof sig !== 'string' || !HEX64.test(sig)) return false;
+		if (typeof sig !== 'string' || !is_lower_hex(sig, 64)) return false;
 		const expected = Hmac.sha256(derive_mac_key(secret), message);
 		try {
 			return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(sig, 'hex'));

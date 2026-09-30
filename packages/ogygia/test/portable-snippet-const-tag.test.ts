@@ -50,7 +50,7 @@ const synth_of = (source: string) =>
 		.find((s?: string) => !!s && s.includes('./flags'))!;
 
 const compiles = (synth: string) =>
-	compile(synth.replace("import 'virtual:ogygia/transportables';", ''), {
+	compile(synth.replace("import 'virtual:ogygia/transportables-eager';", ''), {
 		filename: 'entry.svelte',
 		generate: 'client'
 	}).js.code;

@@ -52,3 +52,31 @@ export const REGION_ID_RE = /^[0-9a-f]{12}$/;
  * reach the response header, though the MAC is the real guard.
  */
 export const REGION_TTL_RE = /^(|[0-9]{1,7})$/;
+
+// The per-request gates, as char loops (measured ~2× the anchored patterns above, which stay the
+// documented shape): every hole request runs both before its HMAC.
+
+/** {@link REGION_ID_RE}: exactly 12 lowercase hex chars. */
+export function is_region_id(s: string): boolean {
+	return is_lower_hex(s, 12);
+}
+
+/** {@link REGION_TTL_RE}: empty, or 1–7 ASCII digits. */
+export function is_region_ttl(s: string): boolean {
+	if (s.length > 7) return false;
+	for (let i = 0; i < s.length; i++) {
+		const c = s.charCodeAt(i);
+		if (c < 48 || c > 57) return false;
+	}
+	return true;
+}
+
+/** Exactly `n` chars of `[0-9a-f]`. */
+export function is_lower_hex(s: string, n: number): boolean {
+	if (s.length !== n) return false;
+	for (let i = 0; i < n; i++) {
+		const c = s.charCodeAt(i);
+		if (!((c >= 48 && c <= 57) || (c >= 97 && c <= 102))) return false;
+	}
+	return true;
+}

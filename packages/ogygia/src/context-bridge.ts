@@ -173,10 +173,20 @@ export function collect_provided_context(start: Element | null): Map<string, unk
 		el = el.parentElement;
 	}
 	// Page-level root from the drop-in `setContext` (emitted once by the handle before `</body>`).
-	if (typeof document !== 'undefined') {
-		fold(parse_ctx(document.querySelector(`script[${PAGE_CTX_MARKER}]`)?.textContent));
-	}
+	if (typeof document !== 'undefined') fold(page_ctx());
 	return map;
+}
+
+/** The page's context root, found and parsed ONCE per document (every island's hydrate asks; a
+ *  search of the whole DOM each time grew with the page). A router swap brings the next page's. */
+let page_ctx_cache: { value: Record<string, unknown> | undefined } | null = null;
+let page_ctx_reset = false;
+function page_ctx(): Record<string, unknown> | undefined {
+	if (!page_ctx_reset) {
+		page_ctx_reset = true;
+		document.addEventListener('og:after-swap', () => (page_ctx_cache = null));
+	}
+	return (page_ctx_cache ??= { value: parse_ctx(document.querySelector(`script[${PAGE_CTX_MARKER}]`)?.textContent) }).value;
 }
 
 /** A typed context handle: callable to make a `<Provide>` entry, `.get()` to read (typed). */

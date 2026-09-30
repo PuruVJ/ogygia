@@ -20,13 +20,8 @@ import { regionBindingVirtualId, lazyEntryVirtualId } from '../ids.js';
  * - the body itself (which may contain nested self-describing `<ogygia-region>` island markup).
  */
 function render_html_source(moduleUrl: string): string {
-	return (
-		`(props) => { const r = __ogRegionRender(__ogRegionComp, { props }); ` +
-		`const own = __ogRegionCss(${JSON.stringify(moduleUrl)}).map((h) => ` +
-		`'<link rel="stylesheet" href="' + h + '" data-ogygia-region-css>').join(''); ` +
-		`const nested = (r.head.match(/<link\\b[^>]*data-ogygia-region-css[^>]*>/g) || []).join(''); ` +
-		`return own + nested + r.body; }`
-	);
+	// (the render itself is ogygia's one shared helper — never a copy per binding in the server bundle)
+	return `(props) => __ogRegionHtml(__ogRegionComp, ${JSON.stringify(moduleUrl)}, props)`;
 }
 
 /**
@@ -62,42 +57,25 @@ export function island_entry_source(
 	exportName?: string
 ): string {
 	return (
-		`import 'virtual:ogygia/transportables';\n` +
-		`import { hydrate as __og_h, unmount as __og_u } from 'svelte';\n` +
-		`import { NestedProvider as __og_NP } from 'ogygia/internal';\n` +
+		`import 'virtual:ogygia/transportables-eager';\n` +
 		component_import_line(`__OgygiaComp_${iid}`, componentPath, exportName) +
 		'\n' +
 		`export default __OgygiaComp_${iid};\n` +
-		// The FOREIGN-HYDRATE CONTRACT (fragment federation): a stitched fragment's island entry
-		// may be woken by ANOTHER app's runtime. Svelte's hydrate/unmount carry module-level state
-		// (hydration cursor, effect context), so the call must run against THIS build's svelte
-		// instance — the consuming runtime only schedules and delegates. The hydration ENVELOPE is
-		// prepared here too: anchor conventions belong to the svelte that compiled this entry, so
-		// the consumer must never shape them. Same-origin wakes ignore these exports entirely.
-		//
-		// Hydrate through THIS build's NestedProvider, mirroring the local runtime's call shape:
-		// the SSR children were rendered through the provider's dynamic-component branch (the
-		// `<!--[0-->` marker), so a bare-component hydrate walks one marker layer short — svelte
-		// aborts mid-walk and client-re-renders ("Failed to hydrate … appendChild" per island,
-		// recovery-invisible but noisy, and the SSR claim is lost). This was round 9's intended
-		// contract; the edit that shipped hydrated the bare component instead.
-		// `options.recover === false`: the consumer's self-heal (hydrate-core.ts) asks THIS svelte
-		// to throw on a mismatch instead of re-rendering; the envelope is re-checked per call because
-		// a restore from the server markup drops it.
+		// The FOREIGN-HYDRATE CONTRACT (fragment federation, src/entry-hydrate.ts): another app's
+		// runtime wakes this entry through these exports, against THIS build's svelte. Everything
+		// after the mark is cut when the entry is served for an app that does not federate, and from
+		// every server leg (compiler/driver.ts): same-origin wakes never call them.
+		FOREIGN_HYDRATE_MARK +
+		`import { og_entry_hydrate as __og_hy, og_entry_unmount as __og_unmount } from 'ogygia/internal';\n` +
 		`export function __og_hydrate(target, props, options) {\n` +
-		`\tconst first = target.firstChild;\n` +
-		`\tif (!(first && first.nodeType === 8 && first.data === '[')) {\n` +
-		`\t\ttarget.insertBefore(document.createComment('['), target.firstChild);\n` +
-		`\t\ttarget.appendChild(document.createComment(']'));\n` +
-		`\t}\n` +
-		`\tconst recovery = options && options.recover === false ? { recover: false } : {};\n` +
-		`\treturn __og_h(__og_NP, { target, props: { component: __OgygiaComp_${iid}, props }, ...recovery });\n` +
+		`\treturn __og_hy(__OgygiaComp_${iid}, target, props, options);\n` +
 		`}\n` +
-		`export function __og_unmount(app) {\n` +
-		`\treturn __og_u(app);\n` +
-		`}\n`
+		`export { __og_unmount };\n`
 	);
 }
+
+/** Where an island entry's foreign-hydrate exports begin (compiler/driver.ts cuts from here). */
+export const FOREIGN_HYDRATE_MARK = '// og:foreign-hydrate\n';
 
 /**
  * The island WRAPPER (`.svelte`) — a MOUNTABLE component that renders `<ogygia-region>` on its wake
@@ -239,12 +217,10 @@ export function make_region_binding(opts: {
 		bindingSsrSource:
 			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) +
 			'\n' +
-			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
-			`import { render as __ogRegionRender } from 'svelte/server';\n` +
 			// The page never imported this server-picked component, so its scoped CSS is on no page
-			// stylesheet. Prefix the render with the island's `<link>`s (the client hoists them to
-			// <head>). Resolved on the SSR leg only — the client binding stays metadata-only.
-			`import { islandCss as __ogRegionCss } from 'virtual:ogygia/island-deps';\n` +
+			// stylesheet: the render is prefixed with the island's `<link>`s (the client hoists them to
+			// <head>). SSR leg only — the client binding stays metadata-only.
+			`import { makeRegionEndpoint as __ogRegionSign, render_region_html as __ogRegionHtml } from 'ogygia/internal/server';\n` +
 			`export default { ${meta}, __component: __ogRegionComp, __sign: __ogRegionSign, ` +
 			`__renderHtml: ${render_html_source(opts.moduleUrl)} };\n`,
 		bindingClientSource: `export default { ${meta} };\n`,
@@ -286,9 +262,7 @@ function wrapper_attach_binding(opts: {
 			`import __OgygiaWrap from ${JSON.stringify(opts.wrapperPath)};\n` +
 			component_import_line('__ogRegionComp', opts.componentPath, opts.exportName) +
 			'\n' +
-			`import { makeRegionEndpoint as __ogRegionSign } from 'ogygia/internal/server';\n` +
-			`import { render as __ogRegionRender } from 'svelte/server';\n` +
-			`import { islandCss as __ogRegionCss } from 'virtual:ogygia/island-deps';\n` +
+			`import { makeRegionEndpoint as __ogRegionSign, render_region_html as __ogRegionHtml } from 'ogygia/internal/server';\n` +
 			`Object.assign(__OgygiaWrap, { ${meta}, __component: __ogRegionComp, __sign: __ogRegionSign, ` +
 			`__renderHtml: ${render_html_source(opts.moduleUrl)} });\n` +
 			`export default __OgygiaWrap;\n`,

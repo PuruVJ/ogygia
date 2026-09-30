@@ -100,18 +100,30 @@ function apply_region(region: Element, ri: number, recs: FieldRec[]): void {
 export function arm_form_restore(pathKey: string): void {
 	const recs = store.get(pathKey);
 	if (!recs) return;
-	const region_list = () => Array.from(document.querySelectorAll('ogygia-region'));
+	// The page's regions read ONCE per arming (a read per hydrated island made each navigation
+	// regions × regions); re-read only when a hydrated region is not in the list (a hole brought it).
+	let regions = Array.from(document.querySelectorAll('ogygia-region'));
 
-	region_list().forEach((region, ri) => {
+	regions.forEach((region, ri) => {
 		if (region.hasAttribute('data-hydrated')) apply_region(region, ri, recs);
 	});
 
 	const on_hydrated = (e: Event) => {
 		const region = e.target;
 		if (!(region instanceof Element) || region.localName !== 'ogygia-region') return;
-		const ri = region_list().indexOf(region);
+		let ri = regions.indexOf(region);
+		if (ri < 0) {
+			regions = Array.from(document.querySelectorAll('ogygia-region'));
+			ri = regions.indexOf(region);
+		}
 		if (ri >= 0) apply_region(region, ri, recs);
 	};
+	// (a hole's answer can put regions anywhere, shifting the indices: read the list again after one)
+	const on_answer = () => (regions = Array.from(document.querySelectorAll('ogygia-region')));
 	document.addEventListener('ogygia:hydrated', on_hydrated, true);
-	setTimeout(() => document.removeEventListener('ogygia:hydrated', on_hydrated, true), 5000);
+	document.addEventListener('ogygia:server', on_answer, true);
+	setTimeout(() => {
+		document.removeEventListener('ogygia:hydrated', on_hydrated, true);
+		document.removeEventListener('ogygia:server', on_answer, true);
+	}, 5000);
 }

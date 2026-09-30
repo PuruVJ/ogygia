@@ -45,6 +45,8 @@ export interface SidecarWire {
 	readonly canonical?: string;
 	readonly refs?: { count: number; keys: readonly string[] };
 	culprit?(): string | null;
+	/** the transportable classes the props carry (stamped on the sidecar for the browser) */
+	readonly wire_modules?: readonly string[];
 }
 
 /** The island facts a region hands over with its plan, for the profiler's Islands table. */
@@ -244,7 +246,7 @@ export class DocumentTail {
 		const rows: IslandStat[] | null = detail ? [] : null;
 		for (const [fp, s] of this.#props) {
 			const w = s.wire.wire(seed);
-			out += props_sidecar(fp, w, 'tail');
+			out += props_sidecar(fp, w, 'tail', s.wire.wire_modules);
 			if (rows) {
 				rows.push({
 					fp,

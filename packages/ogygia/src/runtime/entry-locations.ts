@@ -22,12 +22,24 @@ export function on_entry_fallback(reporter: (report: EntryFallbackReport) => voi
 	fallback_reporter = reporter;
 }
 
+/** Resolved URLs by base + url: every wake, warm and graph read asks again for the same few
+ *  entries, and each ask was a `new URL()` parse (bounded: cleared past a few thousand). */
+const resolved_urls = new Map<string, string>();
+
 function absolute(url: string, base?: string): string {
+	const b = base ?? location.href;
+	const key = b + '\n' + url;
+	const hit = resolved_urls.get(key);
+	if (hit !== undefined) return hit;
+	let out: string;
 	try {
-		return new URL(url, base ?? location.href).href;
+		out = new URL(url, b).href;
 	} catch {
-		return url;
+		out = url;
 	}
+	if (resolved_urls.size > 4000) resolved_urls.clear();
+	resolved_urls.set(key, out);
+	return out;
 }
 
 /** Remember where an entry is served from. `base`: the document the pair was read from. */

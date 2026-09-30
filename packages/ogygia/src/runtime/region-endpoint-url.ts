@@ -110,9 +110,18 @@ export function island_module_url(entry: string, base?: string): string {
 	const located = entry_location(entry, base);
 	if (located) return located;
 	if (entry.startsWith('/') || ABSOLUTE_URL_SCHEME.test(entry)) return entry;
-	const resolved = new URL(entry, base ?? location.href);
-	return resolved.pathname + resolved.search + resolved.hash;
+	const b = base ?? location.href;
+	const key = b + '\n' + entry;
+	const hit = module_urls.get(key);
+	if (hit !== undefined) return hit;
+	const resolved = new URL(entry, b);
+	const out = resolved.pathname + resolved.search + resolved.hash;
+	if (module_urls.size > 4000) module_urls.clear();
+	module_urls.set(key, out);
+	return out;
 }
+/** A relative entry resolved against its document, by base + entry (asked on every wake and warm). */
+const module_urls = new Map<string, string>();
 
 // ── the ONE island-module warmer ─────────────────────────────────────────────
 // Every "get this island's JS into the module cache before it's needed" call site funnels here:

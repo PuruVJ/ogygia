@@ -72,6 +72,36 @@ export function yield_task(): Promise<void> {
  * Holding island code back until the page has painted is `after_document_painted`'s job.
  */
 export function background_start(fn: () => void): void {
+	// ONE background task drains every start queued meanwhile (a task per island: each hydrate turn
+	// outranked the next island's start, so its import began late); it yields past a time budget
+	background_queue.push(fn);
+	if (!background_armed) {
+		background_armed = true;
+		post_background(drain_background);
+	}
+}
+
+const background_queue: (() => void)[] = [];
+let background_armed = false;
+/** a drain yields to the page after this long, and continues in a new background task */
+const BACKGROUND_BUDGET_MS = 30;
+
+function drain_background(): void {
+	const until = performance.now() + BACKGROUND_BUDGET_MS;
+	let i = 0;
+	try {
+		while (i < background_queue.length) {
+			background_queue[i++]();
+			if (performance.now() >= until) break;
+		}
+	} finally {
+		background_queue.splice(0, i);
+		if (background_queue.length) post_background(drain_background);
+		else background_armed = false;
+	}
+}
+
+function post_background(fn: () => void): void {
 	const s = (globalThis as { scheduler?: { postTask?: (cb: () => void, o?: { priority?: string }) => unknown } })
 		.scheduler;
 	if (s && typeof s.postTask === 'function') {

@@ -42,6 +42,9 @@ import { analyze, json_culprit, plan_seed_refs, SEED_REF_KEY, type SeedIndex } f
 export const WIRE_FORMAT_ATTR = 'data-og-format';
 /** The one non-devalue format: plain JSON, read with `JSON.parse`. */
 export const WIRE_FORMAT_JSON = 'json';
+/** On a props sidecar: the transportable classes its props carry (tag paths, space-separated) —
+ *  what the browser loads before it decodes them. */
+export const WIRE_CLASSES_ATTR = 'data-og-wire';
 
 /** Island props cross classes, stores, snippets, og.$ fns and resumable deriveds. */
 const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
@@ -67,7 +70,9 @@ function register_prop_kinds(): void {
 export function stringify_props(
 	value: unknown,
 	entry: string,
-	seed_refs: ((v: unknown) => unknown) | null = null
+	seed_refs: ((v: unknown) => unknown) | null = null,
+	/** collects the tag path (the part before `#`) of every transportable class these props carry */
+	wire_out: Set<string> | null = null
 ): string {
 	register_prop_kinds();
 	try {
@@ -76,7 +81,17 @@ export function stringify_props(
 		// not run on it, and devalue never descends into it.
 		const reducers: Record<string, (v: unknown) => unknown> = {};
 		if (seed_refs) reducers[SEED_REF_KEY] = seed_refs;
-		reducers[REF_WIRE_KEY] = ref_reducer(PROP_FAMILIES);
+		const minted = ref_reducer(PROP_FAMILIES);
+		reducers[REF_WIRE_KEY] = wire_out
+			? (v) => {
+					const ref = minted(v);
+					if (ref && ref.k === 'wire' && typeof ref.t === 'string') {
+						const hash = ref.t.lastIndexOf('#');
+						wire_out.add(hash === -1 ? ref.t : ref.t.slice(0, hash));
+					}
+					return ref;
+				}
+			: minted;
 		return stringify(value, reducers);
 	} catch (e) {
 		const detail = e instanceof Error ? e.message : String(e);
@@ -103,6 +118,9 @@ export interface PropsWire {
 	/** Live region-snippet entry URLs riding in these props (the preloads they need). Only a
 	 *  devalue payload can carry one — a live snippet is a branded function, never plain JSON. */
 	readonly live_entries: readonly string[];
+	/** The transportable classes these props carry, by tag path (root-relative module): the browser
+	 *  loads just these before decoding (it no longer loads every transportable up front). */
+	readonly wire_modules: readonly string[];
 	/** The sidecar text for the wire. `seed` is the page seed's index when the seed ships (then a
 	 *  props subtree that is a seed node crosses as a reference), `null` when it does not. */
 	wire(seed: SeedIndex | null): WireText;
@@ -146,18 +164,21 @@ export function plan_props_wire(value: unknown, entry: string): PropsWire {
 			canonical,
 			json: true,
 			live_entries: [],
+			wire_modules: [],
 			wire: (seed) => once(seed, () => (escaped ??= { text: escape_script_text(canonical), json: true })),
 			refs,
 			culprit: () => null
 		};
 	}
-	const canonical = stringify_props(value, entry, null);
+	const wire_modules = new Set<string>();
+	const canonical = stringify_props(value, entry, null, wire_modules);
 	const plain: WireText = { text: canonical, json: false };
 	let culprit: string | null | undefined;
 	return {
 		canonical,
 		json: false,
 		live_entries: live_entries_in(canonical),
+		wire_modules: [...wire_modules],
 		wire: (seed) => once(seed, () => plain),
 		refs,
 		culprit: () => (culprit === undefined ? (culprit = json_culprit(value)) : culprit)
@@ -192,7 +213,7 @@ export type SidecarPlace = 'tail' | 'adjacent';
  * for the reconciler; in the TAIL also `id`, for an O(1) `getElementById` lookup by the runtime),
  * unkeyed otherwise; the format attribute names the JSON lane.
  */
-export function props_sidecar(fp: string, w: WireText, place: SidecarPlace = 'adjacent'): string {
+export function props_sidecar(fp: string, w: WireText, place: SidecarPlace = 'adjacent', wire_modules: readonly string[] = []): string {
 	// An `id` must be unique in the document, and only the document TAIL can promise that: it emits
 	// one sidecar per fingerprint for the whole page. An ADJACENT sidecar (a hole's answer, a baked or
 	// crossing render root) may repeat a fingerprint the tail — or another root — already carries, so
@@ -201,6 +222,8 @@ export function props_sidecar(fp: string, w: WireText, place: SidecarPlace = 'ad
 		'<script type="application/ogygia-props" data-ogygia-props' +
 		(fp ? `="${fp}"` + (place === 'tail' ? ` id="og-props-${fp}"` : '') : '') +
 		(w.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '') +
+		// (the transportable classes the browser loads before it decodes these props)
+		(wire_modules.length ? ` ${WIRE_CLASSES_ATTR}="${wire_modules.join(' ').replaceAll('"', '&quot;')}"` : '') +
 		'>' +
 		w.text +
 		'</script>'

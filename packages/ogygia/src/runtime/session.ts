@@ -57,16 +57,22 @@ export class RuntimeSession {
 	/** At boot: everything already in <head> came from the server — the page owns it. */
 	adopt_document_head(): void {
 		if (typeof document === 'undefined') return;
-		for (const n of document.head.childNodes) this.page_head.add(n);
+		for (const n of document.head.children) this.page_head.add(n);
 	}
 
 	/** After an island's hydrate: the head elements it added (not in `before`, not page-owned) are
 	 *  that island's; then retire the page's copies of them. */
 	record_island_head(before: ReadonlySet<Node>): void {
+		let added = false;
 		for (const n of document.head.children) {
-			if (!before.has(n) && !this.page_head.has(n)) this.island_head.add(n);
+			if (!before.has(n) && !this.page_head.has(n)) {
+				this.island_head.add(n);
+				added = true;
+			}
 		}
-		this.retire_page_head_copies();
+		// (an island that added nothing to the head has no page copy to retire: no serializing every
+		// page head element on each of the page's hydrates)
+		if (added) this.retire_page_head_copies();
 	}
 
 	/**

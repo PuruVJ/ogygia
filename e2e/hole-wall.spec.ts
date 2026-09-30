@@ -35,7 +35,8 @@ for (const mode of ['redirect', 'document'] as const) {
 		check(`${mode}: fallback still there`, (await page.locator('[data-wall-fallback]').count()) === 1);
 		check(`${mode}: no greeting (the endpoint never answered)`, (await page.locator('[data-server-greeting]').count()) === 0);
 		check(`${mode}: nothing of the account page inside the document`, (await page.locator('[data-wall-skeleton], [data-account]').count()) === 0);
-		check(`${mode}: the csr meta of the injected page is NOT in this document`, (await page.locator('meta[name="ogygia-csr"]').count()) === 0);
+		// (this csr=false page carries its own `content="false"` fact; the injected page's is `true`)
+		check(`${mode}: the csr meta of the injected page is NOT in this document`, (await page.locator('meta[name="ogygia-csr"][content="true"]').count()) === 0);
 		check(`${mode}: region not marked hydrated`, (await page.locator('ogygia-region[render="defer"][data-hydrated]').count()) === 0);
 		check(`${mode}: exactly ONE hole request (no retry of a deterministic refusal)`, hole_requests.length === 1, String(hole_requests.length));
 		check(`${mode}: no page errors`, errs.length === 0, errs.slice(0, 2).join('; '));

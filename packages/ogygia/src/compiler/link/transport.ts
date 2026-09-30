@@ -53,14 +53,30 @@ export function source_crosses_wire(src: string): boolean {
 }
 
 /**
- * `virtual:ogygia/transportables` emitter — the eager-registration manifest: side-effect-import every
- * module that defines a transportable class so their `[ogygia.wire]` codecs register before any island
- * decodes props. Imported by every island entry (client hydrate AND server render), so an island
- * receiving a transportable prop never has to import the class itself. Empty (a no-op, tree-shaken)
- * when the app has no transportables. `modules` is the Program's set of transportable module paths.
+ * `virtual:ogygia/transportables` emitter — where the `[ogygia.wire]` codecs come from, so an island
+ * receiving a transportable prop never has to import the class itself. Per leg:
+ * - SERVER: side-effect-imports every module that defines a transportable class (the region endpoint
+ *   decodes signed props of any island; loaded once per process).
+ * - CLIENT: NO eager import — every island page used to download every transportable class of the
+ *   app. It exports `wire_loaders`, a class module's tag path (root-relative, the part of a tag
+ *   before `#`) → a lazy import; the runtime loads just the ones an island's props carry (the server
+ *   stamps them on its props sidecar) before it decodes them.
+ * `modules` is the Program's set of transportable module paths (absolute); `rel` makes a tag path.
  */
-export function transportables_module(modules: Iterable<string>): string {
-	const imports: string[] = [];
-	for (const abs of modules) imports.push(`import ${JSON.stringify(abs)};`);
-	return imports.join('\n') + '\n';
+export function transportables_module(
+	modules: Iterable<string>,
+	ssr: boolean,
+	rel: (abs: string) => string,
+	/** the app sends wired values through Kit's `transport` (remote functions, loads): those decode
+	 *  synchronously, whenever they arrive — every class must be in before any island wakes */
+	crosses_wire = false
+): string {
+	if (ssr) {
+		const imports: string[] = [];
+		for (const abs of modules) imports.push(`import ${JSON.stringify(abs)};`);
+		return imports.join('\n') + '\nexport const wire_loaders = {};\nexport const wire_all = false;\n';
+	}
+	const entries: string[] = [];
+	for (const abs of modules) entries.push(`${JSON.stringify(rel(abs))}: () => import(${JSON.stringify(abs)})`);
+	return `export const wire_loaders = {${entries.join(', ')}};\nexport const wire_all = ${crosses_wire && entries.length > 0};\n`;
 }

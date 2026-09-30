@@ -47,6 +47,9 @@
  * attributes, never light DOM. All three are also exported, Kit-free, from `ogygia/markup`, for the
  * non-SvelteKit half of a monorepo where these SSR passes usually live.
  */
+import { escape_amp_quot } from '../escape.js';
+// (the regex `\s` the attribute rules were written in — wider than the tag scan's HTML whitespace)
+import { is_space as is_re_space } from './html-scan.js';
 
 export type RegionKind = 'island' | 'lake' | 'hole';
 
@@ -141,18 +144,63 @@ function raw_text_end(html: string, from: number, tag: 'script' | 'style'): numb
 	}
 }
 
-const ATTR_RE = /([^\s/>=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s/>]+))?/g;
+/** A char that ends an attribute NAME: `\s`, `/`, `>`, `=`. */
+function name_stop(c: number): boolean {
+	return c === 47 || c === 62 || c === 61 || is_re_space(c);
+}
 
-/** Parse a tag's attribute run (everything between the tag name and its `>`) into a lower-cased map
- *  with quotes stripped. Shared by the region opener and the `<og-lift>` placeholder on restore. */
-function parse_attr_string(inner: string): Record<string, string> {
+/** A char that ends an UNQUOTED value: `\s`, `/`, `>`. */
+function value_stop(c: number): boolean {
+	return c === 47 || c === 62 || is_re_space(c);
+}
+
+/**
+ * Parse a tag's attribute run (everything between the tag name and its `>`) into a lower-cased map
+ * with quotes stripped. Shared by the region opener and the `<og-lift>` placeholder on restore.
+ *
+ * Hand-written (measured faster, no match arrays) with the rules the pattern
+ * `([^\s/>=]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s/>]+))?` had, quirks included: a value is a closed
+ * `"…"`, else a closed `'…'`, else an unquoted run (which may start with an unclosed quote — then
+ * the first and last characters are stripped, as before); `=` with no value leaves the name valueless.
+ * @internal Exported for test/regex-replacements.test.ts.
+ */
+export function parse_attr_string(inner: string): Record<string, string> {
 	const attrs: Record<string, string> = {};
-	ATTR_RE.lastIndex = 0;
-	let m: RegExpExecArray | null;
-	while ((m = ATTR_RE.exec(inner))) {
-		let value = m[2] ?? '';
-		if (value && (value[0] === '"' || value[0] === "'")) value = value.slice(1, -1);
-		attrs[m[1].toLowerCase()] = value;
+	const n = inner.length;
+	let i = 0;
+	while (i < n) {
+		if (name_stop(inner.charCodeAt(i))) {
+			i++;
+			continue;
+		}
+		const name_start = i;
+		while (i < n && !name_stop(inner.charCodeAt(i))) i++;
+		const name = inner.slice(name_start, i);
+		let value = '';
+		let j = i;
+		while (j < n && is_re_space(inner.charCodeAt(j))) j++;
+		if (inner.charCodeAt(j) === 61 /* = */) {
+			j++;
+			while (j < n && is_re_space(inner.charCodeAt(j))) j++;
+			const q = inner.charCodeAt(j);
+			let end = -1;
+			if (q === 34 || q === 39) {
+				const close = inner.indexOf(q === 34 ? '"' : "'", j + 1);
+				if (close !== -1) end = close + 1;
+			}
+			if (end === -1) {
+				let k = j;
+				while (k < n && !value_stop(inner.charCodeAt(k))) k++;
+				if (k > j) end = k;
+			}
+			if (end !== -1) {
+				value = inner.slice(j, end);
+				i = end;
+				const f = value.charCodeAt(0);
+				if (f === 34 || f === 39) value = value.slice(1, -1);
+			}
+		}
+		attrs[name.toLowerCase()] = value;
 	}
 	return attrs;
 }
@@ -305,9 +353,7 @@ const CLASS_ATTR_RE = /(\sclass\s*=\s*)("[^"]*"|'[^']*'|[^\s/>]+)/i;
 const TRAILING_SELF_CLOSE_RE = /\s*\/\s*$/;
 // Trailing whitespace at the end of an opening-tag head.
 const TRAILING_WS_RE = /\s+$/;
-// Attribute-value escapes for re-emitting a transplanted mark.
-const AMP_RE = /&/g;
-const DQUOT_RE = /"/g;
+// Attribute-value escapes for re-emitting a transplanted mark: escape.ts `escape_amp_quot`.
 
 export interface LiftedRegion {
 	/** `island` bytes must be restored VERBATIM (reshaping them breaks hydration); a `lake` / `hole`
@@ -388,7 +434,7 @@ export function liftRegions(html: string): LiftResult {
 
 /** Escape a value for re-emission inside a double-quoted attribute. */
 function escape_attr(value: string): string {
-	return value.replace(AMP_RE, '&amp;').replace(DQUOT_RE, '&quot;');
+	return escape_amp_quot(value);
 }
 
 /** Merge the renderer's `class` marks into the region's opening-tag head, unioning tokens with any

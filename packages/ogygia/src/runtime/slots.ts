@@ -98,6 +98,9 @@ export type FrameOps = {
 	 * frames feature ⇒ no `render="defer"` holes to batch ⇒ the call never fires anyway.
 	 */
 	stream(endpoints: string[]): Promise<void>;
+	/** Holes that start fetching in the same task go out as one batch (frame-nav.ts `join_batch`);
+	 *  await it, then `ensure` joins the batch's reservation. */
+	join?(endpoint: string): Promise<void>;
 };
 
 // ── nav ──────────────────────────────────────────────────────────────────

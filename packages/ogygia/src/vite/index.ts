@@ -576,7 +576,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools_effective),
 							// a BUILD with devtools on: the dock and the page measuring wait until
 							// someone opens it (a cookie remembers that for the next loads)
-							__OGYGIA_DEVTOOLS_LAZY__: JSON.stringify(devtools_lazy)
+							__OGYGIA_DEVTOOLS_LAZY__: JSON.stringify(devtools_lazy),
+							// the profiler's browser half (runtime/beacon.ts) ships only to an app that
+							// can read it: the profiler configured, or devtools. Everywhere else every
+							// `if (BEACON) …` folds out and the module leaves the boot (a quarter of it)
+							__OGYGIA_BEACON__: JSON.stringify(profiler_config !== null || devtools_effective || devtools_lazy)
 						},
 						server: {
 							fs: {

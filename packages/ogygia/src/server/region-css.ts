@@ -10,14 +10,7 @@
  * value, and the router keys a head `<style>` on it across swaps.
  */
 import { islandCssInline } from 'virtual:ogygia/island-deps';
-
-const AMP_G = /&/g;
-const QUOT_G = /"/g;
-const LT_G = /</g;
-
-function attr(value: string): string {
-	return value.replace(AMP_G, '&amp;').replace(QUOT_G, '&quot;').replace(LT_G, '&lt;');
-}
+import { escape_attr as attr } from '../escape.js';
 
 /**
  * @param href the handoff's public href (the `islandCss()` value — the inline lookup key)

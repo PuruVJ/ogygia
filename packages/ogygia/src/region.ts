@@ -21,10 +21,8 @@ import RawHtml from './RawHtml.svelte';
 /** Brand so the transport can recognize a region without false-matching plain objects. */
 import { REGION_BRAND } from './region-brand.js';
 import { kit_render_context } from './server/kit-context.js';
+import { region_css_links } from './server/html-scan.js';
 export { REGION_BRAND };
-
-// ── regexes
-const REGION_CSS_LINK_G = /<link\b[^>]*data-ogygia-region-css[^>]*>/g;
 
 /** Schedule options for a held region. `wake` = when its JS runs; `margin` = IntersectionObserver
  * rootMargin for `wake: 'visible'`. Merged OVER the binding's baked schedule (from a `wake:` mark) —
@@ -267,7 +265,7 @@ function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
 				});
 				// Keep nested regions' stylesheet links — a body's server-picked blocks emit their
 				// `<link data-ogygia-region-css>` via head, and dropping head would ship them unstyled.
-				const nested = (r.head.match(REGION_CSS_LINK_G) || []).join('');
+				const nested = region_css_links(r.head);
 				// Spread copies only enumerable own props → drops `then`, so `await` settles here.
 				return { ...inline, html: nested + r.body };
 			};

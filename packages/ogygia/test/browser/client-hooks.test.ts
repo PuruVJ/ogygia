@@ -4,8 +4,11 @@
 // hooks.client load either way. The csr fact is read off `<meta name="ogygia-csr">` (KitBoot).
 import { expect, test, afterEach } from 'vitest';
 import { run_app_client_hooks } from '../../src/runtime/client-hooks.js';
+import { runtime_session } from '../../src/runtime/session.js';
 
 function set_csr(value: 'true' | 'false' | null): void {
+	// (the runtime reads the fact once per document and caches it; these tests flip it in one document)
+	runtime_session.kit_page = undefined;
 	document.head.querySelectorAll('meta[name="ogygia-csr"]').forEach((m) => m.remove());
 	if (value !== null) {
 		const meta = document.createElement('meta');

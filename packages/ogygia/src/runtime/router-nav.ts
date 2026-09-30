@@ -797,6 +797,13 @@ export async function navigate(
 	// per-navigation hook for code that a body swap's inert <script> tags can never run. Also
 	// fired once on initial load by the runtime boot, so ONE listener covers every page view.
 	document.dispatchEvent(new Event('og:page-load'));
+	// The navigation is done: nothing is in flight to abort. Drop its controller — its abort listener
+	// closes over this call's scope, and kept the parsed document and its HTML alive until the next
+	// navigation (~1 MB, thousands of nodes) — and the in-flight address with it.
+	if (gen === nav_gen) {
+		nav_abort = null;
+		if (r.nav_target === url.href) r.nav_target = null;
+	}
 	// new <body> -> re-evaluate eager/viewport preload links on the freshly-swapped page
 	r.scan_preload_links();
 }
@@ -972,6 +979,9 @@ function preload_stylesheets(new_head: HTMLHeadElement): Promise<unknown> {
 	for (const node of Array.from(new_head.children)) {
 		if (node.tagName !== 'LINK' || node.getAttribute('rel') !== 'stylesheet') continue;
 		if (is_dangerous_head_node(node)) continue;
+		// A disabled link never loads (Kit's stand-in for a sheet it inlined, `disabled media="(max-width:
+		// 0)"`): waiting for it held every navigation to the full cap. The head merge still copies it.
+		if (node.hasAttribute('disabled')) continue;
 		const key = head_node_key(node);
 		if (present.has(key)) continue;
 		present.add(key);

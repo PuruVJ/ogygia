@@ -12,8 +12,11 @@ describe('build_parcel / done_parcel', () => {
 			'<template data-ogygia-slot="SIG"><p>hi</p></template>'
 		);
 	});
-	test('refuses HTML that would break out of the template box (falls back to fetch)', () => {
-		expect(build_parcel('SIG', 'x</template><script>bad()</script>')).toBeNull();
+	test('length-frames HTML that carries its own </template (it can never close the box)', () => {
+		const html = 'x</TEMPLATE><script>bad()</script>';
+		expect(build_parcel('SIG', html)).toBe(
+			`<template data-ogygia-slot="SIG" data-og-len="${html.length}">${html}</template>`
+		);
 	});
 	test('done sentinel uses the reserved slot', () => {
 		expect(done_parcel()).toBe('<template data-ogygia-slot="__ogygia_done__"></template>');

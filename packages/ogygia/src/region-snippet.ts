@@ -29,6 +29,7 @@ import { register_kind, mint } from './ref.js';
 import { kit_render_context, kit_request_event } from './server/kit-context.js';
 import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
 import { PORTABLE_FORM, with_portable_forms } from './portable-form.js';
+import { analyze } from './seed-refs.js';
 import { import_entry } from './runtime/entry-locations.js';
 
 /**
@@ -276,6 +277,9 @@ export function region_snippet(input: Snippet | RawRegionSnippet): RegionSnippet
  */
 export function prepare_region_props(input: Record<string, unknown>): Record<string, unknown> {
 	if (BROWSER) return input; // freezing is an SSR capture; the client revives from the descriptor
+	// JSON-exact props hold no function at any depth, so no snippet to freeze or swap: skip both walks.
+	// (The measure is cached per props object, and the props wire asks for the same one right after.)
+	if (analyze(input).json) return input;
 	// A branded snippet (at any depth) crosses in its PORTABLE form, so this island's server body
 	// renders the same shape its client revives (portable-form.ts).
 	const props = with_portable_forms(input);

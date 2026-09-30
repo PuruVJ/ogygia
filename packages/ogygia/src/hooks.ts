@@ -90,8 +90,8 @@ import { register_fn_kind } from './fn-transport.js';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
-	REGION_ID_RE,
-	REGION_TTL_RE,
+	is_region_id,
+	is_region_ttl,
 	capability_expiry
 } from './server/endpoint.js';
 import { build_parcel, done_parcel } from './server/stream-regions.js';
@@ -108,6 +108,7 @@ import { error_route_is_csr_true, route_is_csr_true } from './context.js';
 import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { check_script, mark, settle, STAND_IN_CSS, type TransformKind } from './server/reversible.js';
+import { hole_graph_script } from './server/hole-graph.js';
 import { restore, restore_adopt } from './runtime/restore.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -136,6 +137,8 @@ import { set_late_recorder, set_late_taker, type LateRegion } from './late-regio
 import {
 	record_request_stats,
 	record_hole_stats,
+	record_batch_hole_stats,
+	has_batch_hole_listener,
 	request_stats_detailed,
 	type SeedKeyStat
 } from './server/request-stats.js';
@@ -205,6 +208,10 @@ type RequestBag = {
 	/** the document carries Kit's client bootstrap (`__sveltekit_*` defined): Kit's streamed resolve
 	 *  scripts are live then. Without it (csr=false) they are dead, and throw — the handle drops them. */
 	kit_client?: boolean;
+	/** the app's transform (#transform_document): what goes before `</head>` (its head assets, the
+	 *  stand-ins' sheet) and first before `</body>` (the dev check, the restorer) — in the one assembly */
+	transform_head?: string;
+	transform_body?: string;
 	/** FREEZE: this render may be stored (capture in flight) — region capabilities minted
 	 *  during it go prerender-grade (the stored HTML outlives `regions.ttl`). */
 	freeze_capture: boolean;
@@ -537,6 +544,9 @@ const DOUBLE_QUOTE_G = /"/g;
 /** Stamped into the head of a csr=true document: the runtime reads it (`kit_hydrates_page`)
  *  instead of scanning the page's inline scripts for Kit's bootstrap. */
 const CSR_META = '<meta name="ogygia-csr" content="true">';
+const CSR_FALSE_META = '<meta name="ogygia-csr" content="false">';
+/** the og.$ factory script, per manifest object (the build's, the same every request) */
+const fnm_script_cache = new WeakMap<object, string>();
 
 /** Stamped into SERVED-FROM-STORE documents (never the fresh `stored` response): the runtime
  *  reads it so `render: 'live'` lakes treat first mount as a STALE mount and revalidate —
@@ -742,6 +752,47 @@ async function capture_freeze(
  * `csr = false` is dropped), and the regions recorded Kit's `page.error` into the bag as they rendered
  * — the same fact Region.svelte decided its own inline/island form on, so the two cannot disagree.
  */
+type SeedCodecs = {
+	seed_reducers: Record<string, (v: unknown) => unknown>;
+	seed_stringify: typeof stringify;
+};
+const NO_TRANSPORT = {};
+const seed_codec_cache = new WeakMap<object, SeedCodecs>();
+
+/** The seed's devalue reducers — the app's transport encoders merged with the defer markers — and a
+ *  stringify bound to them, made once per transport object (Kit hands the same one every request). */
+function seed_codecs(transport: Record<string, { encode: (v: unknown) => unknown }> | undefined): SeedCodecs {
+	const key = transport ?? NO_TRANSPORT;
+	let hit = seed_codec_cache.get(key);
+	if (!hit) {
+		const encoders = Object.fromEntries(Object.entries(transport ?? {}).map(([name, codec]) => [name, codec.encode]));
+		const seed_reducers = { ...encoders, ...page_seed_reducers };
+		hit = { seed_reducers, seed_stringify: ((v: unknown) => stringify(v, seed_reducers)) as typeof stringify };
+		seed_codec_cache.set(key, hit);
+	}
+	return hit;
+}
+
+/** `</body>` as bytes (ASCII: the same in every UTF-8 document). */
+const BODY_CLOSE_BYTES = [60, 47, 98, 111, 100, 121, 62];
+
+/** Does `</body>` end in `chunk` — searched backwards from its end, where it sits — or straddle the
+ *  boundary with the previous chunk's last bytes (`carry`, at most 6)? No decode. */
+function has_body_close(carry: Uint8Array, chunk: Uint8Array): boolean {
+	const at_bytes = (buf: Uint8Array, i: number) => {
+		for (let k = 0; k < 7; k++) if (buf[i + k] !== BODY_CLOSE_BYTES[k]) return false;
+		return true;
+	};
+	for (let i = chunk.lastIndexOf(60); i !== -1; i = i === 0 ? -1 : chunk.lastIndexOf(60, i - 1)) if (at_bytes(chunk, i)) return true;
+	if (!carry.length) return false;
+	// the seam: the carry, then the chunk's first bytes
+	const seam = new Uint8Array(carry.length + Math.min(6, chunk.length));
+	seam.set(carry);
+	seam.set(chunk.subarray(0, seam.length - carry.length), carry.length);
+	for (let i = 0; i + 7 <= seam.length; i++) if (at_bytes(seam, i)) return true;
+	return false;
+}
+
 function csr_page_of(html: string, body_end: number, event?: RequestEvent, bag?: RequestBag): boolean {
 	return event?.route?.id != null
 		? bag?.page?.error != null
@@ -1083,7 +1134,7 @@ class OgygiaHandle {
 			return region_response('Bad Request', { status: 400 });
 		}
 		const calls = parsed.filter((e): e is string => typeof e === 'string').slice(0, MAX_BATCH);
-		const render = (endpoint: string) => this.#render_capability(endpoint, event);
+		const render = (endpoint: string) => this.#render_capability(endpoint, event, true);
 		const encoder = new TextEncoder();
 
 		const stream = new ReadableStream<Uint8Array>({
@@ -1126,13 +1177,11 @@ class OgygiaHandle {
 		const marked = mark(html, 'document', csr);
 		const out = await this.#transform!(marked ? marked.html : html, { kind: 'document', csr, event });
 		const s = marked ? settle(out, marked.record, { dev }) : null;
-		const doc = s ? s.html : out;
-		const head = (s?.head.join('') ?? '') + (s?.stand_ins ? `<style data-og-stand-ins>${STAND_IN_CSS}</style>` : '');
-		const body = (s?.check ? check_script(s.check) : '') + RESTORER_SCRIPT;
-		const h = doc.indexOf('</head>');
-		const b = doc.lastIndexOf('</body>');
-		if (h === -1 || b === -1 || b < h) return doc;
-		return doc.slice(0, h) + head + doc.slice(h, b) + body + doc.slice(b);
+		// (its head assets and the restorer ride the seed injection's ONE assembly of the document —
+		// no splice here, which was another full copy the assembly then re-located)
+		bag.transform_head = (s?.head.join('') ?? '') + (s?.stand_ins ? `<style data-og-stand-ins>${STAND_IN_CSS}</style>` : '');
+		bag.transform_body = (s?.check ? check_script(s.check) : '') + RESTORER_SCRIPT;
+		return s ? s.html : out;
 	}
 
 	/** THE APP'S TRANSFORM ON A REGION ANSWER: marked, transformed, settled. The runtime restores it
@@ -1159,7 +1208,6 @@ class OgygiaHandle {
 		// decide everything below, each found with one bounded scan (server/document-assembly.ts):
 		// `</head>` from the front, `</body>` from the back. The chunk is assembled ONCE at the end.
 		const t_start = performance.now();
-		if (bag && !bag.kit_client && html.includes('__sveltekit_')) bag.kit_client = true;
 		const spans = locate(html);
 		const head = spans.head_end === -1 ? null : html.slice(0, spans.head_end);
 
@@ -1171,6 +1219,9 @@ class OgygiaHandle {
 		// dropped), and the regions recorded Kit's `page.error` into the bag as they rendered — the
 		// same fact Region.svelte decided its own inline/island form on, so the two cannot disagree.
 		const csr_page = csr_page_of(html, spans.body_end, event, bag);
+		// (Kit's client is on the page exactly when the route is Kit-hydrated: the route fact, never a
+		// search of the whole document for its bootstrap on every chunk)
+		if (csr_page && bag) bag.kit_client = true;
 		if (csr_page) {
 			let head_inject = '';
 			if (head !== null) {
@@ -1192,7 +1243,9 @@ class OgygiaHandle {
 			// props and dies (a footer's subscription form did). Rendered against NO seed: the page /
 			// remote / context seeds stay off a csr=true page — Kit hydrates the tree and serializes
 			// its own remotes — and a sidecar written without a seed carries its values whole.
-			const tail = spans.body_end !== -1 && bag ? bag.tail.render(null) : '';
+			// (the app's transform: its head assets before `</head>`, the restorer first before `</body>`)
+			if (head !== null && bag?.transform_head) head_inject = bag.transform_head + head_inject;
+			const tail = spans.body_end !== -1 && bag ? (bag.transform_body ?? '') + bag.tail.render(null) : '';
 			if (head === null && !tail) return html;
 			// The runtime an island inside a lake emitted goes before the head's JavaScript here too
 			// (see the csr=false path below): its regions keep their server markup from the first connect.
@@ -1219,7 +1272,9 @@ class OgygiaHandle {
 		// Every check and the link dedupe run on the HEAD SLICE only: that is where the hints, the
 		// sheets and the tags they look for live, so the body is never scanned.
 		let head_out: string | null = null;
-		let head_inject = '';
+		// (the route fact for the runtime and the router: a csr=false document says so, and the
+		// browser reads one meta instead of probing every inline script for Kit's bootstrap)
+		let head_inject = head !== null ? CSR_FALSE_META : '';
 		if (head !== null) {
 			// Dedupe the region-emitted modulepreload hints (each island instance emits its own dep
 			// block, so shared deps repeat) and the stylesheet links (a layout's real-wrapper island is
@@ -1270,13 +1325,16 @@ class OgygiaHandle {
 		// render the early chunks have no `</body>` AND no rendered island yet — so the captured page
 		// data (Region records it during the island render) isn't ready. Gating here means the seed is
 		// built once, after the render, with the real `data`.
+		// (the app's transform: its head assets and the stand-ins' sheet, in this same assembly)
+		if (head !== null && bag?.transform_head) head_inject = bag.transform_head + head_inject;
 		if (spans.body_end === -1) return assemble(html, spans, head_out, head_inject, '');
 
 		// A page on which NO region rendered has no island to feed: no tail, no seed, no remote seed,
 		// no fn manifest, no context bridge — it pays nothing below. `bag.page` is recorded by every
 		// Region render (islands, holes, lakes, held regions alike), so it is the one fact to read.
 		const rendered = !!bag && bag.page !== null;
-		const scripts: string[] = [];
+		// (the app's transform: the dev check and the restorer go first before `</body>`)
+		const scripts: string[] = bag?.transform_body ? [bag.transform_body] : [];
 		if (!rendered) {
 			this.append_devtools_seed(scripts, bag);
 			return assemble(html, spans, head_out, head_inject, scripts.join(''));
@@ -1316,11 +1374,8 @@ class OgygiaHandle {
 		// Merge the app's universal `transport` ENCODERS (custom types the app teaches Kit) with the
 		// DeferRef/SettledRef marker reducers, so a load's custom types round-trip into islands — not
 		// just built-in devalue types. A no-op for the common promise-free / transport-free seed.
-		const transport_encoders = Object.fromEntries(
-			Object.entries(state?.transport ?? {}).map(([name, codec]) => [name, codec.encode])
-		);
-		const seed_reducers = { ...transport_encoders, ...page_seed_reducers };
-		const seed_stringify = ((v: unknown) => stringify(v, seed_reducers)) as typeof stringify;
+		// (built once per app transport — the same object on every request — not per request)
+		const { seed_reducers, seed_stringify } = seed_codecs(state?.transport);
 		// ONE walk of the seed tree (seed-refs.ts `analyze`, against the request's shared memo — the
 		// tail's index above already measured every node; a shaped root is a few lookups) answers
 		// every question below: a streamed promise inside (stage or settle), JSON-exact (the native
@@ -1431,10 +1486,15 @@ class OgygiaHandle {
 		// complete; null here). Executing-inline is the same CSP class as the defer bootstrap.
 		const fnm = fnManifest();
 		if (fnm) {
-			const entries = Object.entries(fnm)
-				.map(([tag, src]) => `${JSON.stringify(tag)}:(${src})`)
-				.join(',');
-			const fnm_script = `<script data-ogygia-fnm>globalThis.__OG_FNM=Object.assign(globalThis.__OG_FNM||{},{${entries}});</script>`;
+			// (the manifest is the build's: its script is written once, not per request)
+			let fnm_script = fnm_script_cache.get(fnm);
+			if (fnm_script === undefined) {
+				const entries = Object.entries(fnm)
+					.map(([tag, src]) => `${JSON.stringify(tag)}:(${src})`)
+					.join(',');
+				fnm_script = `<script data-ogygia-fnm>globalThis.__OG_FNM=Object.assign(globalThis.__OG_FNM||{},{${entries}});</script>`;
+				fnm_script_cache.set(fnm, fnm_script);
+			}
 			scripts.push(fnm_script);
 			fnm_bytes = fnm_script.length;
 		}
@@ -1455,8 +1515,9 @@ class OgygiaHandle {
 		// source carrying a literal `$`), no intermediate copies of the body.
 		const out = assemble(html, spans, head_out, head_inject, scripts.join(''));
 		// OGYGIA'S OWN COST, for the profiler's request log (server/request-stats.ts): what this
-		// transform took and what it added. One WeakMap write; nothing when no profiler reads it.
-		if (event) {
+		// transform took and what it added. One WeakMap write — and none at all in an app without the
+		// profiler (the only reader), so no stats object per request there.
+		if (event && profilerConfig) {
 			const size = bag!.tail.size;
 			record_request_stats(event.request, {
 				transform_ms: Math.round((performance.now() - t_start) * 100) / 100,
@@ -1561,22 +1622,22 @@ class OgygiaHandle {
 		if (!source) return response;
 		const reader = source.getReader();
 		const encoder = new TextEncoder();
-		const decoder = new TextDecoder();
 		const stream = new ReadableStream<Uint8Array>({
 			async start(controller) {
 				// 1. Forward Kit's document through `</body></html>` (one enqueue in practice). Kit streams
 				//    its (dead) resolve scripts only AFTER this, as separate chunks. Carry the last six
 				//    decoded characters across reads so a `</body>` split over a chunk boundary is still
 				//    detected — never the whole document (a second 2.6 MB copy, rescanned per chunk).
-				let carry = '';
+				// (searched as BYTES, backwards from the chunk's end, where `</body>` sits: decoding a whole
+				// document just to look at its last bytes was a 2.4 MB string per streamed page)
+				let carry: Uint8Array = new Uint8Array(0);
 				try {
 					for (;;) {
 						const { value, done } = await reader.read();
 						if (done) break;
 						controller.enqueue(value);
-						const probe = carry + decoder.decode(value, { stream: true });
-						if (probe.includes('</body>')) break;
-						carry = probe.slice(-6);
+						if (has_body_close(carry, value)) break;
+						carry = value.length >= 6 ? value.subarray(value.length - 6) : value;
 					}
 				} catch {
 					/* fall through — resolution streaming below still runs */
@@ -1709,7 +1770,9 @@ class OgygiaHandle {
 		/** the profiler's hole economics: what the cache did for this request */
 		report?: (outcome: 'hit' | 'miss' | 'none') => void,
 		/** filled when the render ran: its wait for a slot in the gate, and its time in it */
-		timing?: { queue_ms?: number; render_ms?: number }
+		timing?: { queue_ms?: number; render_ms?: number },
+		/** the endpoint request's URL: the answer's island graph is made root-absolute against it */
+		base?: URL
 	): Promise<string | null> {
 		// R6/G2: the ONE cache-fronted render seam. `cached_render` serves a memo when the hole opted
 		// into a positive `maxAge` (key carries the session seal — a per-user render never crosses
@@ -1722,7 +1785,12 @@ class OgygiaHandle {
 				context: kit_render_context()
 			});
 			return await Promise.race([
-				Promise.resolve(rendered).then((out) => out.body as string),
+				// (with the island graph its islands wrote into the head: the endpoint ships the body
+				// only, and without it a hole's islands loaded their chunks in a waterfall)
+				Promise.resolve(rendered).then((out) => {
+					const body = out.body as string;
+					return !base || body === KEEP_FALLBACK_HTML ? body : hole_graph_script(out.head as string, base) + body;
+				}),
 				new Promise<never>((_, rej) =>
 					setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
 				)
@@ -1806,7 +1874,7 @@ class OgygiaHandle {
 
 	/** The charset/length half of the gate (the renewal gate pairs it with its own expiry rule). */
 	#capability_shape_ok(id: string, payload: string, ttl_raw: string): boolean {
-		return REGION_ID_RE.test(id) && payload.length <= MAX_REGION_PROPS_LEN && REGION_TTL_RE.test(ttl_raw);
+		return is_region_id(id) && payload.length <= MAX_REGION_PROPS_LEN && is_region_ttl(ttl_raw);
 	}
 
 	/**
@@ -1880,7 +1948,11 @@ class OgygiaHandle {
 	 */
 	async #render_capability(
 		endpoint: string,
-		event: RequestEvent
+		event: RequestEvent,
+		/** A BATCH parcel is the hole's answer: through the app's transform like its own request, and
+		 *  logged for the profiler as a hole request. A freeze stitch splices into a stored document
+		 *  and stays as it was. */
+		batch = false
 	): Promise<{ slot: string; html: string } | null> {
 		const q = endpoint.indexOf('?');
 		if (q === -1) return null;
@@ -1906,7 +1978,30 @@ class OgygiaHandle {
 			ttl > 0
 				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
 				: undefined;
-		const body = await this.#render_component(load, props, cache);
+		// (the profiler logs each batched hole as its own hole request — only when one listens)
+		const stats = batch && has_batch_hole_listener();
+		const t0 = stats ? performance.now() : 0;
+		const timing: { queue_ms?: number; render_ms?: number } = {};
+		let outcome: 'hit' | 'miss' | 'none' = 'none';
+		const body = await this.#render_component(
+			load,
+			props,
+			cache,
+			stats ? (o) => (outcome = o) : undefined,
+			stats ? timing : undefined,
+			event.url
+		);
+		if (stats)
+			record_batch_hole_stats(event.request, {
+				kind: 'hole',
+				id,
+				cache: outcome,
+				ttl,
+				...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
+				...(island_name?.[id] ? { name: island_name[id] } : {}),
+				ms: performance.now() - t0,
+				status: body === null ? 500 : 200
+			});
 		if (body === null || body.length > MAX_REGION_BODY) return null;
 		// "Keep the fallback": the parcel carries the marker alone (no CSS links, nothing to hoist).
 		if (body === KEEP_FALLBACK_HTML) return { slot: sig, html: KEEP_FALLBACK_HTML };
@@ -1914,7 +2009,11 @@ class OgygiaHandle {
 		// inside the `<template>` box), so a batched server-island still styles a page that never
 		// imported its component. URLs inside are made root-absolute: `asset()` made them relative
 		// to THIS request, and the parcel lands in a page at any depth (server/hole-urls.ts).
-		return { slot: sig, html: absolutize_hole_html(region_css_links(id) + body, event.url) };
+		let html = absolutize_hole_html(region_css_links(id) + body, event.url);
+		// The app's transform, as on the hole's own answer (render_region): a batched hole is the same
+		// answer, and the runtime restores both the same way.
+		if (batch && this.#transform) html = await this.#transform_region(html, event);
+		return { slot: sig, html };
 	}
 
 	/**
@@ -2038,7 +2137,7 @@ class OgygiaHandle {
 				: undefined;
 		const timing: { queue_ms?: number; render_ms?: number } = {};
 		let outcome: 'hit' | 'miss' | 'none' = 'none';
-		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing);
+		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing, event.url);
 		// (the profiler's hole economics, with the wait for a render slot: a hole's time on the
 		// server is its queue AND its render)
 		record_hole_stats(event.request, {

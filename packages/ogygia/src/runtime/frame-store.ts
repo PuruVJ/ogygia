@@ -18,7 +18,7 @@
 // (ticket, inflight, reserve, evict). No DOM, no Svelte. Unit-tested in test/frame-store.test.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { Frame } from '../frame.js';
-import { watch, notify, watcher_count } from '../ref.js';
+import { watch, notify, watcher_count } from '../ref-watch.js';
 
 export type FrameFetcher = (signal: AbortSignal) => Promise<string>;
 
@@ -100,6 +100,12 @@ export function peek(a: string): { v: number; html: string } | null {
 	return e && e.html != null ? { v: e.v, html: e.html } : null;
 }
 
+/** Nothing applied and nothing in flight at this address (a batch may take it on). */
+export function is_idle(a: string): boolean {
+	const e = entries.get(a);
+	return !e || (e.html == null && !e.inflight);
+}
+
 /** Next request ticket for an address. External channels (streaming, mutations) use this too. */
 export function ticket(a: string): number {
 	return ++entry(a).seq;
@@ -168,9 +174,15 @@ export function release(a: string): void {
 	const held = e?.inflight;
 	if (!e || !held?.fail || e.html != null) return;
 	e.inflight = null;
-	held.fail(new Error('ogygia batch: no frame for ' + a));
+	const miss = new Error('ogygia batch: no frame for ' + a);
+	miss.name = BATCH_MISS;
+	held.fail(miss);
 	schedule_evict(a, e);
 }
+
+/** The error a joined reservation rejects with when its batch ended without its frame: the binder's
+ *  own fetch runs at once (nothing failed — the batch just did not carry it). */
+export const BATCH_MISS = 'OgygiaBatchMiss';
 
 /**
  * Subscribe to writes at an address. If content is ALREADY applied, the callback fires immediately

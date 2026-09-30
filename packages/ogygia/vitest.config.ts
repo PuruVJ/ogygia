@@ -38,6 +38,7 @@ export default defineConfig({
 			'virtual:ogygia/island-deps': fileURLToPath(new URL('./test/_stubs/virtual-island-deps.ts', import.meta.url)),
 			'virtual:ogygia/devtools-meta': fileURLToPath(new URL('./test/_stubs/virtual-devtools-meta.ts', import.meta.url)),
 			'virtual:ogygia/hydrate-features': fileURLToPath(new URL('./test/_stubs/virtual-hydrate-features.ts', import.meta.url)),
+			'virtual:ogygia/transportables': fileURLToPath(new URL('./test/_stubs/virtual-transportables.ts', import.meta.url)),
 			'virtual:ogygia/kit-wire': fileURLToPath(new URL('./test/_stubs/virtual-kit-wire.ts', import.meta.url)),
 			'virtual:ogygia/region-endpoint': fileURLToPath(new URL('./test/_stubs/virtual-region-endpoint.ts', import.meta.url)),
 			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url)),

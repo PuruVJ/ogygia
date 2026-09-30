@@ -82,12 +82,10 @@ interface HubRegistry {
 	scope_disposers: Map<Scope, Set<() => void>>;
 	/** continuity name → owning code tag (collision guard: one name, one kind of thing). */
 	keep_owner: Map<string, string>;
-	/** WATCHERS — id → callbacks fired when fresh data SETTLES for that id (hub v2, phase W).
-	 *  Browser only; the request-scoped server path never watches. */
-	watchers: Map<string, Set<(live: unknown) => void>>;
 }
 
 import { emit as dt_emit } from './devtools/bus.js';
+import { batch, notify, watchers } from './ref-watch.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -106,8 +104,7 @@ function registry(): HubRegistry {
 		]),
 		instance_kind: new WeakMap(),
 		scope_disposers: new Map(),
-		keep_owner: new Map(),
-		watchers: new Map()
+		keep_owner: new Map()
 	});
 }
 
@@ -296,7 +293,7 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 			// that data into the live instance (via the kind's merge) and notifies watchers — the
 			// reactive graph resumes in place. With no watchers this is byte-for-byte the old
 			// early-return, so reunification-by-identity (stores, snippets) is untouched.
-			const w = reg.watchers.get(ref.i);
+			const w = watchers().get(ref.i);
 			if (w !== undefined && w.size > 0) {
 				const kind = reg.kinds.get(ref.k);
 				if (kind?.merge !== undefined) {
@@ -393,90 +390,13 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 	return instance;
 }
 
-/**
- * WATCH — subscribe to fresh data settling for a hub id (hub v2, phase W). Returns an
- * unsubscribe fn. THE one subscription primitive: region frames, streamed page-data, live
- * refresh — every "a value arrives later for this identity" channel routes through here
- * instead of owning its own subscriber set. Browser-only in practice (the request-scoped
- * server never re-settles an id within one render).
- */
-export function watch(id: string, cb: (live: unknown) => void): () => void {
-	const reg = registry();
-	let set = reg.watchers.get(id);
-	if (set === undefined) reg.watchers.set(id, (set = new Set()));
-	set.add(cb);
-	return () => {
-		const s = reg.watchers.get(id);
-		if (s === undefined) return;
-		s.delete(cb);
-		if (s.size === 0) reg.watchers.delete(id);
-	};
-}
-
-/**
- * Notify watchers that fresh data settled for `id`. Called by resolve's live-merge path AND
- * directly by subsystems that push a value in (a region frame landing, a streamed promise
- * resolving) — those pass the settled value; resolve's path passes the merged live instance.
- * A throwing watcher never blocks the others.
- */
-export function notify(id: string, live: unknown): void {
-	// During a batch (phase B), buffer instead of firing — a later id overwrites an earlier one,
-	// so each watched id notifies at most once, with its FINAL value, after the whole batch decodes.
-	if (batch_depth > 0) {
-		(batch_pending ??= new Map()).set(id, live);
-		return;
-	}
-	notify_now(id, live);
-}
-
-function notify_now(id: string, live: unknown): void {
-	const set = registry().watchers.get(id);
-	if (set === undefined) return;
-	for (const cb of [...set]) {
-		try {
-			cb(live);
-		} catch {
-			/* one watcher's throw must not starve the rest */
-		}
-	}
-}
-
-// ── batch (phase B): resolve a bag of refs as ONE transaction — decode everything, THEN notify.
-// Without this, resolving refs one-by-one lets a watcher fire between two merges and observe a
-// torn cross-ref state (cart merged, user not yet). Reentrant via a depth counter.
-let batch_depth = 0;
-let batch_pending: Map<string, unknown> | null = null;
-
-/**
- * Run `fn` with watch notifications BUFFERED, flushing them once when the outermost batch exits.
- * Wrap any operation that resolves several refs at once (a context parse, a props decode, a nav's
- * ref bag) so cross-ref invariants hold before any watcher reacts. Returns `fn`'s result.
- */
-export function batch<T>(fn: () => T): T {
-	batch_depth++;
-	try {
-		return fn();
-	} finally {
-		batch_depth--;
-		if (batch_depth === 0) {
-			const pending = batch_pending;
-			batch_pending = null;
-			if (pending !== undefined && pending !== null) {
-				for (const [id, live] of pending) notify_now(id, live);
-			}
-		}
-	}
-}
+// WATCH / NOTIFY / BATCH live in ref-watch.ts (the boot needs only them, never the whole hub);
+// re-exported here so the hub stays the one import for everything identity.
+export { watch, notify, batch, watcher_count } from './ref-watch.js';
 
 /** Resolve a bag of refs as one transaction (sugar over {@link batch}). */
 export function resolve_batch(refs: readonly Ref[], scope: boolean | Scope): unknown[] {
 	return batch(() => refs.map((r) => resolve(r, scope)));
-}
-
-/** How many watchers are registered for `id` — lets a subsystem that owns lifecycle around a
- *  hub id (fetch dedupe, eviction TTL) make refcount decisions without a parallel subscriber set. */
-export function watcher_count(id: string): number {
-	return registry().watchers.get(id)?.size ?? 0;
 }
 
 /** Devalue custom-type name for hub refs on the wire (the ONE key every seam will converge on). */

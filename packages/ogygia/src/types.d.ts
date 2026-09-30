@@ -198,6 +198,9 @@ declare const __OGYGIA_SERVER_DELTA__: boolean;
 declare const __OGYGIA_DEVTOOLS__: boolean;
 /** a build with devtools on: launcher only; the dock and the page measuring start once opened */
 declare const __OGYGIA_DEVTOOLS_LAZY__: boolean;
+/** the profiler's browser half ships (the profiler or devtools is configured); otherwise every
+ *  `if (BEACON) …` folds out and runtime/beacon.ts leaves the bundle */
+declare const __OGYGIA_BEACON__: boolean;
 
 declare module 'virtual:ogygia/router-css' {
 	// Generated component→CSS registrations for the server router — side-effect only.
@@ -217,6 +220,12 @@ declare module 'virtual:ogygia/transport' {
 /** The hydrate-phase features the app's marks selected (compiler/link/runtime-entry.ts). */
 declare module 'virtual:ogygia/hydrate-features' {
 	export function install(): void;
+}
+declare module 'virtual:ogygia/transportables' {
+	/** client: a transportable class module's tag path → its lazy import (server: empty, eager) */
+	export const wire_loaders: Record<string, () => Promise<unknown>>;
+	/** client: the app sends wired values through Kit's transport — every class loads with every island */
+	export const wire_all: boolean;
 }
 declare module 'virtual:ogygia/kit-wire' {
 	export function stringify_remote_arg(value: unknown, transport: unknown): string;

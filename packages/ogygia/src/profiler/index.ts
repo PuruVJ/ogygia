@@ -206,7 +206,9 @@ import { io_kind } from './async-io.js';
 import {
 	hole_stats_of,
 	request_stats_of,
-	set_request_stats_detail
+	set_batch_hole_listener,
+	set_request_stats_detail,
+	type BatchHoleStats
 } from '../server/request-stats.js';
 import { chunkBarrels, chunkContents, chunkHeavy, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
@@ -989,6 +991,29 @@ class Profiler {
 		// recording — sampling the process twice, and windows of two recorder locks overlapping
 		// (request-stats' detail is counted for that). An older one's timers stand down at their next tick.
 		(globalThis as Record<symbol, unknown>)[LIVE_PROFILER] = this;
+		// the holes a batch request renders land after the request is logged: each joins the log as it lands
+		if (!this.#disabled) set_batch_hole_listener((request, s) => this.#batch_hole(request, s));
+	}
+
+	/** Logged requests by their Request (a batch's holes find their request here), and the holes that
+	 *  settled before their request was logged. */
+	readonly #logged = new WeakMap<Request, RequestEntry>();
+	readonly #early_holes = new WeakMap<Request, BatchHoleStats[]>();
+
+	/** ONE HOLE OF A BATCH, logged as its own hole request — the shape every hole reading here knows
+	 *  (the cache table, the render slots, a visit's holes): its own time within the batch, no CPU of
+	 *  its own (the batch request carries that). */
+	#batch_hole(request: Request, s: BatchHoleStats): void {
+		const base = this.#logged.get(request);
+		if (!base) {
+			const early = this.#early_holes.get(request);
+			if (early) early.push(s);
+			else this.#early_holes.set(request, [s]);
+			return;
+		}
+		const { ms, status, ...hole } = s;
+		this.#ring.push({ ...base, ms: round2(ms), cpu_ms: 0, status, hole, og: undefined });
+		if (this.#ring.length > this.ring_size) this.#ring.shift();
 	}
 
 	/** A newer profiler took this process over (a dev server that re-ran the app's hooks). */
@@ -5983,6 +6008,14 @@ class Profiler {
 		}
 		this.#ring.push(entry);
 		if (this.#ring.length > this.ring_size) this.#ring.shift();
+		if (request) {
+			this.#logged.set(request, entry);
+			const early = this.#early_holes.get(request);
+			if (early) {
+				this.#early_holes.delete(request);
+				for (const s of early) this.#batch_hole(request, s);
+			}
+		}
 		if (this.#sink_url && !entry.internal) {
 			this.#sink.push({
 				k: 'req',

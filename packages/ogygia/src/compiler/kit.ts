@@ -137,8 +137,20 @@ const OPTION_FILE_RE = /(?:^|[/\\])\+(?:page|layout)(?:\.server)?\.(?:js|ts)$/;
 const BLOCK_COMMENT_G = /\/\*[\s\S]*?\*\//g;
 const LINE_COMMENT_G = /^[ \t]*\/\/.*$/gm;
 
+/** Each option file's `csr`, read once until a route file changes (`clear_route_csr_cache`): every
+ *  transform asks for its route's chain of option files, cache hits included, and each read was a
+ *  file read (or an ENOENT throw) per directory level. */
+const _csr_of_file = new Map<string, boolean | undefined>();
+
 /** Read `export const csr = true|false` from a route options file; `undefined` if unset/absent. */
-export function read_csr(file: string) {
+export function read_csr(file: string): boolean | undefined {
+	if (_csr_of_file.has(file)) return _csr_of_file.get(file);
+	const v = read_csr_uncached(file);
+	_csr_of_file.set(file, v);
+	return v;
+}
+
+function read_csr_uncached(file: string): boolean | undefined {
 	try {
 		let src = fs.readFileSync(file, 'utf-8');
 		// Strip comments so a COMMENTED-OUT `export const csr = …` never wins the (first-match) regex —
@@ -501,6 +513,7 @@ export function hasAnyCsrTrueRoute(routesDir: string): boolean {
 
 /** Drop the memoized csr-topology answers (a route/`csr`-export add/remove invalidates them). */
 export function clear_route_csr_cache(): void {
+	_csr_of_file.clear();
 	_has_csr_true.clear();
 	_page_worlds.clear();
 	_page_freeze.clear();

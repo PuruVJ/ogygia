@@ -2320,7 +2320,7 @@ class FileCompilation {
 					: markup;
 				const synth =
 					`<script${lang}>\n` +
-					`\timport 'virtual:ogygia/transportables';\n` +
+					`\timport 'virtual:ogygia/transportables-eager';\n` +
 					cleaned_imports.map((imp) => `\t${imp}\n`).join('') +
 					(prop_names.length
 						? `\t// svelte-ignore state_referenced_locally\n\tlet { ${prop_names.join(', ')} } = $props();\n`

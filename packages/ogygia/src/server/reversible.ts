@@ -25,6 +25,7 @@
  * Pure string work over one tokenizer pass each (indexOf-driven, no regex, no DOM): it runs on every
  * response of an app that configures a transform.
  */
+import { escape_amp_quot } from '../escape.js';
 
 // ─── tokenizer ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -89,15 +90,57 @@ function raw_end(html: string, from: number, name: string): number {
 	}
 }
 
-function* tokens(html: string): Generator<Tok> {
-	const n = html.length;
-	let i = 0;
-	while (i < n) {
-		const lt = html.indexOf('<', i);
-		if (lt === -1) {
-			yield { t: 'text', start: i, end: n };
-			return;
+/** A tag name, lower-cased only when it has an upper-case letter (the common case allocates nothing
+ *  beyond the slice). */
+function tag_name(html: string, from: number, to: number): string {
+	const name = html.slice(from, to);
+	for (let k = from; k < to; k++) {
+		const c = html.charCodeAt(k);
+		if (c >= 65 && c <= 90) return name.toLowerCase();
+	}
+	return name;
+}
+
+/**
+ * The tokenizer: ONE token object, rewritten in place by each `next()` (a document is tens of
+ * thousands of tokens; an object per token, or a generator, is garbage the collector pays for on
+ * every request). Read a token's fields before the next `next()`.
+ */
+class Lexer {
+	t: Tok['t'] = 'text';
+	name = '';
+	start = 0;
+	end = 0;
+	name_end = 0;
+	self = false;
+	#html: string;
+	#i = 0;
+	/** the raw-text element just opened: its body is the next token */
+	#raw = '';
+	constructor(html: string) {
+		this.#html = html;
+	}
+	#set(t: Tok['t'], start: number, end: number): true {
+		this.t = t;
+		this.start = start;
+		this.end = end;
+		this.#i = end;
+		return true;
+	}
+	next(): boolean {
+		const html = this.#html;
+		const n = html.length;
+		let i = this.#i;
+		if (this.#raw) {
+			const name = this.#raw;
+			this.#raw = '';
+			const re = raw_end(html, i, name);
+			if (re > i) return this.#set('raw', i, re);
+			i = this.#i = re;
 		}
+		if (i >= n) return false;
+		const lt = html.indexOf('<', i);
+		if (lt === -1) return this.#set('text', i, n);
 		const c1 = html.charCodeAt(lt + 1);
 		const is_tag = is_alpha(c1) || (c1 === 47 && is_alpha(html.charCodeAt(lt + 2))) || c1 === 33 || c1 === 63;
 		if (!is_tag) {
@@ -116,42 +159,27 @@ function* tokens(html: string): Generator<Tok> {
 				}
 				j = nx + 1;
 			}
-			yield { t: 'text', start: i, end: j };
-			i = j;
-			continue;
+			return this.#set('text', i, j);
 		}
-		if (lt > i) yield { t: 'text', start: i, end: lt };
+		if (lt > i) return this.#set('text', i, lt);
 		if (html.startsWith('<!--', lt)) {
 			const close = html.indexOf('-->', lt + 4);
-			const end = close === -1 ? n : close + 3;
-			yield { t: 'comment', start: lt, end };
-			i = end;
-			continue;
+			return this.#set('comment', lt, close === -1 ? n : close + 3);
 		}
-		if (c1 === 33 || c1 === 63) {
-			const gt = tag_end(html, lt);
-			yield { t: 'other', start: lt, end: gt + 1 };
-			i = gt + 1;
-			continue;
-		}
+		if (c1 === 33 || c1 === 63) return this.#set('other', lt, tag_end(html, lt) + 1);
 		if (c1 === 47) {
 			const ne = read_name(html, lt + 2);
-			const gt = tag_end(html, lt);
-			yield { t: 'end', name: html.slice(lt + 2, ne).toLowerCase(), start: lt, end: gt + 1 };
-			i = gt + 1;
-			continue;
+			this.name = tag_name(html, lt + 2, ne);
+			return this.#set('end', lt, tag_end(html, lt) + 1);
 		}
 		const ne = read_name(html, lt + 1);
-		const name = html.slice(lt + 1, ne).toLowerCase();
+		const name = tag_name(html, lt + 1, ne);
 		const gt = tag_end(html, lt);
-		const self = html.charCodeAt(gt - 1) === 47;
-		yield { t: 'start', name, start: lt, end: gt + 1, name_end: ne, self };
-		i = gt + 1;
-		if (RAW.has(name) && !self) {
-			const re = raw_end(html, i, name);
-			if (re > i) yield { t: 'raw', start: i, end: re };
-			i = re;
-		}
+		this.name = name;
+		this.name_end = ne;
+		this.self = html.charCodeAt(gt - 1) === 47;
+		if (RAW.has(name) && !this.self) this.#raw = name;
+		return this.#set('start', lt, gt + 1);
 	}
 }
 
@@ -164,6 +192,11 @@ interface Attr {
 	start: number;
 	end: number;
 }
+
+/** (the attributes of a tag nobody asked about: one shared empty list, never an allocation per tag) */
+const NO_ATTRS: readonly Attr[] = Object.freeze([]) as readonly Attr[];
+/** (nothing to remove from a tag without ogygia's marks; only a tag with marks ever adds to its set) */
+const NO_REMOVE = new Set<string>();
 
 function parse_attrs(html: string, from: number, to: number): Attr[] {
 	const out: Attr[] = [];
@@ -242,15 +275,18 @@ export function decode(s: string): string {
 	}
 }
 
-function esc_attr(s: string): string {
-	return s.split('&').join('&amp;').split('"').join('&quot;');
-}
+// (a clean value — nearly all — is two native searches and no copy; measured against split/join)
+const esc_attr = escape_amp_quot;
 /** JSON safe inside an HTML comment: no `--`, no `>`. */
 function comment_json(v: unknown): string {
-	return JSON.stringify(v).split('-').join('\\u002d').split('>').join('\\u003e');
+	return replace_all(replace_all(JSON.stringify(v), '-', '\\u002d'), '>', '\\u003e');
 }
 function script_json(v: unknown): string {
-	return JSON.stringify(v).split('<').join('\\u003c');
+	return replace_all(JSON.stringify(v), '<', '\\u003c');
+}
+/** `replaceAll` behind a native search: no copy when there is nothing to replace. */
+function replace_all(s: string, from: string, to: string): string {
+	return s.indexOf(from) === -1 ? s : s.replaceAll(from, to);
 }
 
 // ─── the open-element stack, with the parser's implied closes ──────────────────────────────────────
@@ -282,64 +318,95 @@ interface Frame {
 	region?: 'island' | 'lake' | 'hole';
 }
 
-function in_scope(stack: Frame[], name: string, extra?: Set<string>): number {
+/** The open-element stack, with a count of the open elements the parser's implied closes ask about:
+ *  a start tag checks "is a `<p>` (an `<a>`, a `<li>` …) open?" — almost always no, answered by a
+ *  count instead of a walk of the stack on every tag. Mutate it only through `push` / `cut`. */
+type Stack<F extends { name: string } = Frame> = F[] & {
+	/** per frame, the tracked name's slot (-1: untracked) — kept beside the frames, small integers */
+	slots?: number[];
+	/** per tracked name, how many are open */
+	open?: number[];
+};
+const TRACKED = new Map(['a', 'nobr', 'button', 'form', 'li', 'dd', 'dt', 'p', 'td', 'th', 'tr'].map((n, i) => [n, i]));
+
+function push<F extends { name: string }>(stack: Stack<F>, f: F): void {
+	const slot = TRACKED.get(f.name) ?? -1;
+	(stack.slots ??= []).push(slot);
+	if (slot !== -1) (stack.open ??= new Array(TRACKED.size).fill(0))[slot]++;
+	stack.push(f);
+}
+
+/** Close the elements from `k` up. */
+function cut<F extends { name: string }>(stack: Stack<F>, k: number): void {
+	const slots = stack.slots;
+	if (slots) {
+		const open = stack.open;
+		if (open) for (let j = slots.length - 1; j >= k; j--) if (slots[j] !== -1) open[slots[j]]--;
+		slots.length = k;
+	}
+	stack.length = k;
+}
+
+/** The index of the open `name` in scope, or -1. (A stand-in `<og-as tag="a">` is not an `<a>` to
+ *  the parser: the element's own name is what counts.) */
+function in_scope(stack: Stack<{ name: string }>, name: string, extra?: Set<string>): number {
+	const slot = TRACKED.get(name);
+	if (slot === undefined || !stack.open?.[slot]) return -1;
 	for (let k = stack.length - 1; k >= 0; k--) {
 		const f = stack[k];
-		if ((f.as ?? f.name) === name) return k;
+		if (f.name === name) return k;
 		if (SCOPE.has(f.name) || extra?.has(f.name)) return -1;
 	}
 	return -1;
 }
 const BUTTON_SCOPE = new Set(['button']);
 const LIST_SCOPE = new Set(['ol', 'ul']);
+/** `implied_close`: the parser ignores this start tag (a form in a form) */
+const DROP = -2;
 
 /** What the parser does to the stack BEFORE inserting start tag `name`: the index of the element it
- *  would close (and everything above it), or -1. `drop`: the parser ignores the tag (a form in a form). */
-function implied_close(stack: Frame[], name: string): { close: number; drop?: boolean } {
-	if (name === 'a') return { close: in_scope(stack, 'a') };
-	if (name === 'nobr') return { close: in_scope(stack, 'nobr') };
-	if (name === 'button') return { close: in_scope(stack, 'button') };
-	if (name === 'form') {
-		const f = in_scope(stack, 'form');
-		return f === -1 ? { close: -1 } : { close: -1, drop: true };
-	}
+ *  would close (and everything above it), -1 for nothing, or `DROP` (it ignores the tag). A number,
+ *  never an object: this runs on every start tag. */
+function implied_close(stack: Stack<{ name: string }>, name: string): number {
+	if (name === 'a' || name === 'nobr' || name === 'button') return in_scope(stack, name);
+	if (name === 'form') return in_scope(stack, 'form') === -1 ? -1 : DROP;
 	if (name === 'li') {
 		const li = in_scope(stack, 'li', LIST_SCOPE);
-		if (li !== -1) return { close: li };
+		if (li !== -1) return li;
 	}
 	if (name === 'dd' || name === 'dt') {
-		const a = in_scope(stack, 'dd');
-		const b = in_scope(stack, 'dt');
-		const k = Math.max(a, b);
-		if (k !== -1) return { close: k };
+		const k = Math.max(in_scope(stack, 'dd'), in_scope(stack, 'dt'));
+		if (k !== -1) return k;
 	}
 	if (P_CLOSERS.has(name)) {
 		const p = in_scope(stack, 'p', BUTTON_SCOPE);
-		if (p !== -1) return { close: p };
+		if (p !== -1) return p;
 		if (HEADINGS.has(name)) {
 			const top = stack[stack.length - 1];
-			if (top && HEADINGS.has(top.as ?? top.name)) return { close: stack.length - 1 };
+			if (top && HEADINGS.has(top.name)) return stack.length - 1;
 		}
 	}
 	if (name === 'option' || name === 'optgroup') {
 		const top = stack[stack.length - 1];
-		if (top && (top.as ?? top.name) === 'option') return { close: stack.length - 1 };
+		if (top && top.name === 'option') return stack.length - 1;
 	}
 	if (name === 'td' || name === 'th') {
 		const k = Math.max(in_scope(stack, 'td'), in_scope(stack, 'th'));
-		if (k !== -1) return { close: k };
+		if (k !== -1) return k;
 	}
 	if (name === 'tr') {
 		const k = in_scope(stack, 'tr');
-		if (k !== -1) return { close: k };
+		if (k !== -1) return k;
 	}
-	return { close: -1 };
+	return -1;
 }
 
-function pop_to(stack: Frame[], name: string): void {
+/** An end tag: close up to the innermost element of that name (a stand-in answers to its real tag,
+ *  whose end tag the settle pass rewrites). */
+function pop_to(stack: Stack<{ name: string; as?: string }>, name: string): void {
 	for (let k = stack.length - 1; k >= 0; k--) {
 		if ((stack[k].as ?? stack[k].name) === name) {
-			stack.length = k;
+			cut(stack, k);
 			return;
 		}
 	}
@@ -385,6 +452,11 @@ interface HostRecord {
 	inner_end: number;
 }
 
+/** (the record of a host ogygia won't restore: shared, never written) */
+const NO_RECORD: Record<string, string> = Object.freeze({}) as Record<string, string>;
+const NO_CHILDREN: HostRecord['children'] = new Map();
+const NO_TEXTS: HostRecord['texts'] = new Map();
+
 export interface MarkRecord {
 	kind: TransformKind;
 	source: string;
@@ -405,15 +477,15 @@ const attr_map = (attrs: Attr[]): Record<string, string> => {
  */
 function plan_hosts(html: string, kind: TransformKind, csr: boolean): boolean[] {
 	const planned: boolean[] = [];
-	const stack: { name: string; host: number; owned: boolean; foreign: boolean }[] = [];
+	const stack: Stack<{ name: string; host: number; owned: boolean; foreign: boolean }> = [];
 	let in_body = kind !== 'document';
-	for (const tok of tokens(html)) {
+	for (const tok = new Lexer(html); tok.next(); ) {
 		if (tok.t === 'start') {
 			const name = tok.name;
 			if (name === 'body') in_body = true;
-			const { close, drop } = implied_close(stack as unknown as Frame[], name);
-			if (close !== -1) stack.length = close;
-			if (drop) continue;
+			const close = implied_close(stack, name);
+			if (close === DROP) continue;
+			if (close !== -1) cut(stack, close);
 			const parent = stack[stack.length - 1];
 			const foreign = name === 'svg' || name === 'math' || !!parent?.foreign;
 			let owned = (name === 'body' && kind === 'document' && csr) || (parent ? parent.owned : false);
@@ -425,12 +497,26 @@ function plan_hosts(html: string, kind: TransformKind, csr: boolean): boolean[] 
 			}
 			// Svelte-owned markup starts here: every host above it gets the plan
 			if (owned && !(parent ? parent.owned : false)) for (const f of stack) if (f.host !== -1) planned[f.host] = true;
-			if (!(VOID.has(name) || (tok.self && foreign))) stack.push({ name, host, owned, foreign });
+			if (!(VOID.has(name) || (tok.self && foreign))) push(stack, { name, host, owned, foreign });
 		} else if (tok.t === 'end') {
-			pop_to(stack as unknown as Frame[], tok.name);
+			pop_to(stack, tok.name);
 		}
 	}
 	return planned;
+}
+
+/** Is there any custom element (in a document: after `<body`) — a hop from `<` to `<` reading only
+ *  tag names, no tokenization. Most pages of most apps have none, and then there is nothing to mark. */
+function has_custom_element(html: string, document: boolean): boolean {
+	let at = document ? html.indexOf('<body') : 0;
+	if (at === -1) return false;
+	for (at = html.indexOf('<', at); at !== -1; at = html.indexOf('<', at + 1)) {
+		if (!is_alpha(html.charCodeAt(at + 1))) continue;
+		const ne = read_name(html, at + 1);
+		const dash = html.indexOf('-', at + 1);
+		if (dash !== -1 && dash < ne && is_custom(tag_name(html, at + 1, ne), false)) return true;
+	}
+	return false;
 }
 
 /**
@@ -439,32 +525,35 @@ function plan_hosts(html: string, kind: TransformKind, csr: boolean): boolean[] 
  * transform then gets the HTML as is, and settle has nothing to do).
  */
 export function mark(html: string, kind: TransformKind, csr: boolean): { html: string; record: MarkRecord } | null {
-	if (html.indexOf('-') === -1) return null;
+	if (!has_custom_element(html, kind === 'document')) return null;
 	const planned = plan_hosts(html, kind, csr);
 	if (!planned.length) return null;
 	const out: string[] = [];
 	let pos = 0;
 	const hosts = new Map<number, HostRecord>();
 	let next_k = 0;
-	const stack: Frame[] = [];
+	const stack: Stack = [];
 	let in_body = kind !== 'document';
 	let last_was_pre_start = false;
 
 	const top = () => stack[stack.length - 1];
 	const under_now = () => (top() ? top().under : -1);
 
-	for (const tok of tokens(html)) {
+	for (const tok = new Lexer(html); tok.next(); ) {
 		if (tok.t === 'start') {
 			const name = tok.name;
 			if (name === 'body') in_body = true;
-			const { close, drop } = implied_close(stack, name);
-			if (close !== -1) stack.length = close;
-			if (drop) continue;
+			const close = implied_close(stack, name);
+			if (close === DROP) continue;
+			if (close !== -1) cut(stack, close);
 			const parent = top();
 			const foreign = name === 'svg' || name === 'math' || !!parent?.foreign;
 			const custom = in_body && is_custom(name, foreign);
 			const child_of_host = !!parent && parent.host !== -1 && in_body;
-			const attrs = name === 'ogygia-region' || name === 'template' || custom || child_of_host ? parse_attrs(html, tok.name_end, tok.end - 1) : [];
+			// attributes are read only where something records them: a region's kind, a template's
+			// shadow mode, a host ogygia restores, a child of one (a host it won't restore records none)
+			const recorded = (custom && planned[next_k] === true) || (child_of_host && planned[parent.host] === true);
+			const attrs = name === 'ogygia-region' || name === 'template' || recorded ? parse_attrs(html, tok.name_end, tok.end - 1) : (NO_ATTRS as Attr[]);
 			// (a Kit-hydrated document: Svelte owns its whole body, lakes and holes aside)
 			let owned = (name === 'body' && kind === 'document' && csr) || (parent ? parent.owned : false);
 			if (name === 'ogygia-region') owned = region_kind(attrs) === 'island';
@@ -475,18 +564,20 @@ export function mark(html: string, kind: TransformKind, csr: boolean): { html: s
 			if (child_of_host && !shadow_tpl) {
 				const i = parent.next++;
 				insert += ` og-c="${parent.host}.${i}"`;
-				hosts.get(parent.host)!.children.set(i, { attrs: attr_map(attrs) });
+				if (planned[parent.host]) hosts.get(parent.host)!.children.set(i, { attrs: attr_map(attrs) });
 			}
 			let host = -1;
 			if (custom) {
 				host = next_k++;
 				const is_planned = planned[host] ?? false;
+				// (a host ogygia won't restore: its marks are stripped whatever the transform does —
+				// nothing about it is recorded, no maps made)
 				hosts.set(host, {
 					planned: is_planned,
 					owned,
-					attrs: attr_map(attrs),
-					children: new Map(),
-					texts: new Map(),
+					attrs: is_planned ? attr_map(attrs) : NO_RECORD,
+					children: is_planned ? new Map() : NO_CHILDREN,
+					texts: is_planned ? new Map() : NO_TEXTS,
 					text_next: 0,
 					inner_start: tok.end,
 					inner_end: tok.end
@@ -498,7 +589,7 @@ export function mark(html: string, kind: TransformKind, csr: boolean): { html: s
 				pos = tok.name_end;
 			}
 			if (!(VOID.has(name) || (tok.self && foreign))) {
-				stack.push({
+				push(stack, {
 					name,
 					host,
 					next: 0,
@@ -520,7 +611,7 @@ export function mark(html: string, kind: TransformKind, csr: boolean): { html: s
 						const f = stack[j];
 						if (f.host !== -1) hosts.get(f.host)!.inner_end = tok.start;
 					}
-					stack.length = k;
+					cut(stack, k);
 					break;
 				}
 			}
@@ -620,17 +711,32 @@ function rewrite_start(html: string, tok: { start: number; end: number; name_end
 }
 
 export function settle(html: string, record: MarkRecord, opts: { dev?: boolean } = {}): Settled {
-	// pass 1: the planned hosts the transform gave a plan
+	// pass 1: the planned hosts the transform gave a plan — only the tags carrying `og-shadow`, found
+	// by one forward indexOf walk (no second tokenization; never a per-tag search, which is quadratic
+	// in the gap to the next mark)
 	const plan = new Set<number>();
-	for (const tok of tokens(html)) {
-		if (tok.t !== 'start' || html.indexOf('og-shadow', tok.start) === -1 || html.indexOf('og-shadow', tok.start) > tok.end) continue;
-		const attrs = parse_attrs(html, tok.name_end, tok.end - 1);
-		const h = attrs.find((a) => a.name === 'og-h');
-		if (h && attrs.some((a) => a.name === 'og-shadow')) plan.add(Number(h.value));
+	for (let at = html.indexOf(' og-shadow='); at !== -1; at = html.indexOf(' og-shadow=', at + 11)) {
+		const lt = html.lastIndexOf('<', at);
+		if (lt === -1) continue;
+		const gt = tag_end(html, lt);
+		if (gt < at) continue; // (a `<` inside an attribute value: not this tag's start)
+		const h = parse_attrs(html, read_name(html, lt + 1), gt).find((a) => a.name === 'og-h');
+		if (h) plan.add(Number(h.value));
 	}
+	/** Does the tag at `[from, to)` hold `needle`? A forward-only cursor: tags come in document order,
+	 *  so each occurrence is searched for once (a search from every tag is quadratic in the gaps). */
+	const within = (needle: string) => {
+		let at = html.indexOf(needle);
+		return (from: number, to: number) => {
+			if (at !== -1 && at < from) at = html.indexOf(needle, from);
+			return at !== -1 && at < to;
+		};
+	};
+	const og_in = within(' og-');
+	const head_in = within('data-og-head');
 	const out: string[] = [];
 	let pos = 0;
-	const stack: Frame[] = [];
+	const stack: Stack = [];
 	const head: string[] = [];
 	const head_keys = new Set<string>();
 	let head_cut: { start: number; name: string; depth: number; key: string } | null = null;
@@ -671,7 +777,7 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 		out[p.comment_at] = text !== null && decode(text) === decode(was) ? `<!--og-c ${p.k}.${p.i} t-->` : `<!--og-c ${p.k}.${p.i} t ${comment_json(decode(was))}-->`;
 	};
 
-	for (const tok of tokens(html)) {
+	for (const tok = new Lexer(html); tok.next(); ) {
 		// inside a head asset being lifted out of a document's body: nothing to rewrite until its end
 		if (head_cut) {
 			if (tok.t === 'end' && tok.name === head_cut.name && --head_cut.depth === 0) {
@@ -716,17 +822,13 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 		}
 		if (tok.t === 'start') {
 			const name = tok.name;
-			const { close, drop } = implied_close(stack, name);
+			const implied = implied_close(stack, name);
+			const drop = implied === DROP;
+			const close = drop ? -1 : implied;
 			const parent = stack[stack.length - 1];
-			const has_og = (() => {
-				const at = html.indexOf(' og-', tok.start);
-				return at !== -1 && at < tok.end;
-			})();
-			const head_attr = (() => {
-				const at = html.indexOf('data-og-head', tok.start);
-				return at !== -1 && at < tok.end;
-			})();
-			const attrs = has_og || head_attr || close !== -1 ? parse_attrs(html, tok.name_end, tok.end - 1) : [];
+			const has_og = og_in(tok.start, tok.end);
+			const head_attr = head_in(tok.start, tok.end);
+			const attrs = has_og || head_attr || close !== -1 ? parse_attrs(html, tok.name_end, tok.end - 1) : (NO_ATTRS as Attr[]);
 			// a head asset in a document's body: lifted into the head (deduped by key)
 			if (doc && head_attr && !has_og) {
 				const key = attrs.find((a) => a.name === 'data-og-head')?.value;
@@ -756,11 +858,11 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 				if (introduced || trigger?.introduced || (drop && introduced)) stand_in = true;
 			}
 			if (!stand_in) {
-				if (close !== -1) stack.length = close;
+				if (close !== -1) cut(stack, close);
 				if (drop) continue;
 			}
-			// the rewrite
-			const remove = new Set<string>();
+			// the rewrite (a tag without ogygia's marks has nothing to remove: no Set made for it)
+			const remove = has_og ? new Set<string>() : NO_REMOVE;
 			let add = '';
 			// ONE attribute reset per element: a planned host's own (it honours og-keep) wins over its
 			// reset as a tagged child of the host above (the same attributes, without og-keep)
@@ -800,7 +902,7 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 			}
 			const is_void = VOID.has(name) || (tok.self && foreign);
 			if (!is_void)
-				stack.push({ name: stand_in ? 'og-as' : name, as: stand_in ? name : undefined, host: is_host ? Number(og_h!.value) : -1, next: 0, owned: false, under: -1, introduced, foreign });
+				push(stack, { name: stand_in ? 'og-as' : name, as: stand_in ? name : undefined, host: is_host ? Number(og_h!.value) : -1, next: 0, owned: false, under: -1, introduced, foreign });
 			continue;
 		}
 		if (tok.t === 'end') {
@@ -813,7 +915,7 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 						out.push(html.slice(pos, tok.start), '</og-as>');
 						pos = tok.end;
 					}
-					stack.length = k;
+					cut(stack, k);
 					break;
 				}
 			}
@@ -846,33 +948,29 @@ function read_id(s: string, at: number): { id: number; end: number } | null {
 	return j === at ? null : { id: n, end: j };
 }
 
-const MARK_PREFIXES = ['og-h="', 'og-u="', 'og-c="', '<!--og-c ', '<!--og-t '];
 
 /** Rewrite every host id in ogygia's marks through `map` (ids it lacks stay). */
 function remap(html: string, map: (id: number) => number | undefined): string {
+	// ONE forward walk over `og-` (a search per prefix at every step is quadratic when one prefix is
+	// rare or absent), then what follows says which mark it is: `og-h="` / `og-u="` / `og-c="`, or the
+	// comments `<!--og-c ` / `<!--og-t `. The input itself comes back when no id moves.
 	let out = '';
 	let pos = 0;
-	for (;;) {
-		let best = -1;
-		let len = 0;
-		for (const p of MARK_PREFIXES) {
-			const at = html.indexOf(p, pos);
-			if (at !== -1 && (best === -1 || at < best)) {
-				best = at;
-				len = p.length;
-			}
-		}
-		if (best === -1) return out + html.slice(pos);
-		const r = read_id(html, best + len);
-		if (!r) {
-			out += html.slice(pos, best + len);
-			pos = best + len;
-			continue;
-		}
+	for (let a = html.indexOf('og-'); a !== -1; a = html.indexOf('og-', a + 3)) {
+		const c = html.charCodeAt(a + 3);
+		let id_at = -1;
+		if ((c === 104 || c === 117 || c === 99) && html.charCodeAt(a + 4) === 61 && html.charCodeAt(a + 5) === 34) id_at = a + 6;
+		else if ((c === 99 || c === 116) && html.charCodeAt(a + 4) === 32 && html.startsWith('<!--', a - 4)) id_at = a + 5;
+		if (id_at === -1) continue;
+		const r = read_id(html, id_at);
+		if (!r) continue;
 		const to = map(r.id);
-		out += html.slice(pos, best + len) + (to === undefined ? r.id : to);
+		if (to === undefined || to === r.id) continue;
+		out += html.slice(pos, id_at) + to;
 		pos = r.end;
+		a = r.end - 3;
 	}
+	return pos === 0 ? html : out + html.slice(pos);
 }
 
 /**

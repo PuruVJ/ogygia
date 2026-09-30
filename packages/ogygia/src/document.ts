@@ -37,9 +37,7 @@ import { kit_render_context, type KitPage } from './server/kit-context.js';
 import { open_ask_scope, read_seed_ask, record_page } from './page-seed-registry.js';
 import { shape_page_data } from './server/seed-shape.js';
 
-const AMP_G = /&/g;
-const LT_G = /</g;
-const GT_G = />/g;
+import { escape_text } from './escape.js';
 const TITLE_TAG_RE = /<title[\s>]/i;
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import {
@@ -79,9 +77,6 @@ export interface DocumentOptions {
 		error?: unknown;
 	};
 }
-
-const escape_text = (s: string) =>
-	s.replace(AMP_G, '&amp;').replace(LT_G, '&lt;').replace(GT_G, '&gt;');
 
 /** The `page` object Kit's server `$app/state` answers from (Kit's `props.page` shape), built from
  *  the caller's seed when the router passed one, else from the live request (URL, status) with

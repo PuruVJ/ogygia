@@ -15,6 +15,7 @@ export { default as Region } from './Region.svelte';
 // The foreign-hydrate contract (fragment federation) hydrates through the PRODUCER'S
 // NestedProvider — the native runtime's exact call shape, compiled by the producer's build.
 export { default as NestedProvider } from './NestedProvider.svelte';
+export { og_entry_hydrate, og_entry_unmount } from './entry-hydrate.js';
 export { isNested, setNested, documentIsCsrTrue } from './context.js';
 
 // Transportable-class registration. Generated code appended to app modules imports

@@ -48,7 +48,7 @@ const synth_of = (source: string) =>
 		.find((s?: string) => !!s && s.includes('og-scope-probe'))!;
 
 const compiled = (synth: string) =>
-	compile(synth.replace("import 'virtual:ogygia/transportables';", ''), {
+	compile(synth.replace("import 'virtual:ogygia/transportables-eager';", ''), {
 		filename: 'entry.svelte',
 		generate: 'server'
 	});

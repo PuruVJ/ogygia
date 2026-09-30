@@ -577,7 +577,10 @@ export function hydrate_island(
 	/** The island's server markup as it connected (core.ts) — the HYDRATION SOURCE OF TRUTH. When
 	 *  the live DOM drifted from it while the island slept, hydration is retried against it before
 	 *  any client render. `null` = no copy (a huge island, an older path): Svelte's own recovery. */
-	ssr_html: string | null = null
+	ssr_html: string | null = null,
+	/** Was the island's markup touched since that copy (runtime/drift-watch.ts, read by the element
+	 *  before this step edits it)? `false` skips the comparison: nothing could have drifted. */
+	touched = true
 ): IslandHandle | null {
 	// Seed SSR-resolved remote queries + document page snapshot once before hydrate.
 	seed_remote_once();
@@ -658,10 +661,12 @@ export function hydrate_island(
 	// The head as it stands before this island renders into it: whatever the hydrate adds is the
 	// island's own (runtime/session.ts — who owns each node in <head>). The step is synchronous, so
 	// nothing else writes the head in between.
-	const head_before: ReadonlySet<Node> = new Set(document.head.childNodes);
+	// (elements only: ownership is only ever asked of elements — the head's comments, two per island's
+	// head block, made this copy grow as islands × head nodes)
+	const head_before: ReadonlySet<Node> = new Set(document.head.children);
 	let lifted: LiftedLake[] | null = slots.lakes.lift(region);
 	const drift =
-		ssr_html !== null && region.isConnected
+		ssr_html !== null && touched && region.isConnected
 			? repair_if_drifted(region, ssr_html)
 			: { repaired: false, reason: null };
 	const repaired = drift.repaired;

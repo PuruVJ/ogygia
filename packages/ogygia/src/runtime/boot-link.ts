@@ -17,6 +17,11 @@ import { regions_in_shadow } from './connected.js';
 import { yield_task } from './schedule.js';
 import { beacon_nav } from './beacon.js';
 
+// (the profiler's browser half ships only where something reads it: see `__OGYGIA_BEACON__`; a
+// plain import of dist/ without the define keeps it)
+const BEACON = typeof __OGYGIA_BEACON__ !== 'undefined' ? __OGYGIA_BEACON__ : true;
+const no_beacon_nav: typeof beacon_nav = () => {};
+
 export function link_boot(): void {
 	slots.boot ??= {
 		kit_hydrates_page,
@@ -31,6 +36,6 @@ export function link_boot(): void {
 		runtime_session,
 		regions_in_shadow,
 		yield_task,
-		beacon_nav
+		beacon_nav: BEACON ? beacon_nav : no_beacon_nav
 	};
 }
