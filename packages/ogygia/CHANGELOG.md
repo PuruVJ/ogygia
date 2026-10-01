@@ -130,6 +130,11 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   `transformMarkup` and `restore` from `ogygia/markup` run the same round trip in a test (jsdom
   included; `checkScript` adds the dev check), and `localizeMarks` gives a caching transform stable
   mark ids. Hosts inside a declarative shadow root the page shipped are restored too.
+  A custom element's `class` is shared with its component (state it puts on its own host: a theme,
+  a position): restore gives it Svelte's tokens plus the ones the render added, and after the
+  island hydrates — Svelte writes `class` whole — the component's tokens as they were just before
+  the hydrate are put back. Svelte's own tokens always win. The dev check asks only that Svelte's
+  tokens are all on such a host.
 - **`isOgygiaPage()` from `'ogygia'` — which world shared code is in.** A store or helper used on
   both a csr=false ogygia page and a csr=true Kit page often has to behave differently on each. The
   fact already existed inside ogygia (the server reads the request's route against the build-time
@@ -2346,12 +2351,19 @@ becomes a global opt-out plugin feature. Config and exports get a single surface
   reload.
 - **`ogygia.script()`.** An inline `<script>` string from ONE plain object: exactly one payload
   key (`run`, a self-contained function called with `args`; or `json`, `ld`, `importmap`,
-  `speculation`) beside the tag's attributes (`type: 'module'`, `async`, `blocking: 'render'`,
-  `nonce`, `id`, `data-*`, `nomodule`). A bare function with trailing args stays the shortcut:
-  `script(fn, a, b)` is `{ run: fn, args: [a, b] }`. The object spreads, so a preset is a plain
-  object. TypeScript refuses what a browser silently ignores (`async` on an inline classic script,
-  `args` that do not match `run`). Each `<` in an arg or a data payload is escaped, and each
-  `</script` in the code. Thus nothing can break out of the tag.
+  `speculation`) beside the tag's attributes (`type: 'module'`, `async`, `nonce`, `id`, `data-*`,
+  `nomodule`). A bare function with trailing args stays the shortcut: `script(fn, a, b)` is
+  `{ run: fn, args: [a, b] }`. The object spreads, so a preset is a plain object. `run` may be an
+  arrow, a `function`, or a method (`{ run() { … } }`). A module script declares the modules it
+  needs in `imports` (`{ carousel: url }`): static `import * as` lines no bundler can rewrite, handed
+  to `run` as one object first (`run: ({ carousel }, …args)`); a `run` the bundler rewrote (an
+  `import()` inside it) is refused with that fix. TypeScript refuses what a browser silently
+  ignores or JSON silently changes (`async` on an inline classic script, `args` that do not match
+  `run`, a `Date` / `Map` / function arg). Each `<` in an arg or a data payload is escaped; in the
+  code each `</script` and each `<!--`. Thus nothing can break out of the tag.
+  **Fixed** against the earlier `script(fn, ...args)`: an arg or code holding `<!--<script>`
+  swallowed the rest of the page (the tokenizer's escaped state), and an `undefined` arg between
+  others was a syntax error. Existing calls need no change.
 - **`Fallback<P>` type.** Types the fallback slot of a deferred island. `svelte-check` type-checks
   raw source. Thus the fallback must live on the component. This type gives its props a shape.
 - **`ogygia/internal/compiler`.** The pure transform engine (the island transform + FOUC-CSS graph +

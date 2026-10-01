@@ -48,8 +48,11 @@ test('the document: a shadow root with the tree, Svelte’s children back exactl
 	expect(host.shadowRoot!.querySelector('slot')!.assignedNodes().length).toBeGreaterThan(0);
 	expect(host.shadowRoot!.adoptedStyleSheets.length).toBe(1);
 	expect(getComputedStyle(host.shadowRoot!.querySelector('b')!).color).toBe('rgb(255, 0, 0)');
-	// the host: Svelte's class, the renderer's og-keep attribute, no ogygia marks
-	expect(host.getAttribute('class')).toBe('own');
+	// the host: Svelte's class (plus the token the render put on its own host — a custom element's
+	// class is shared with its component; restore.ts `reset`), the renderer's og-keep attribute, no
+	// ogygia marks
+	expect(host.getAttribute('class')).toBe('own sc-demo-card-h');
+	expect((host as Element & { __og_svelte_class?: string }).__og_svelte_class).toBe('own');
 	expect(host.getAttribute('data-title')).toBe('Card');
 	expect([...host.attributes].map((a) => a.name).filter((n) => n.startsWith('og-'))).toEqual([]);
 	expect(document.body.innerHTML.includes('og-c')).toBe(false);
@@ -132,6 +135,36 @@ test('the dev check reads class as tokens and style as declarations, an empty on
 	document.addEventListener('ogygia:restore-mismatch', (e) => (diff = (e as CustomEvent).detail.diff), { once: true });
 	restore(document);
 	expect(diff).toBe('');
+});
+
+test('a custom element keeps the class tokens its render added beside Svelte’s (recorded for the hydrate); a plain element gets Svelte’s alone', async () => {
+	const check = async (inner: string, edit: (h: string) => string) => {
+		const s = await transformMarkup(doc(island(`<demo-card class="own">${inner}</demo-card>`)), (h) => edit(fake_scoped(h)), { kind: 'document', dev: true });
+		const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
+		document.head.insertAdjacentHTML('beforeend', SHEET);
+		document.body.innerHTML = check_script(s.check!) + body;
+		let diff = '';
+		document.addEventListener('ogygia:restore-mismatch', (e) => (diff = (e as CustomEvent).detail.diff), { once: true });
+		const quiet = console.error;
+		console.error = () => {};
+		try {
+			restore(document);
+		} finally {
+			console.error = quiet;
+		}
+		return diff;
+	};
+	const slider = () => document.querySelector('x-slider') as Element & { __og_svelte_class?: string };
+	// the component adds `bottom center` to its own host: kept beside Svelte's, Svelte's recorded, no report
+	expect(await check('<x-slider class="gap-6">a</x-slider>', (h) => h.split('class="gap-6"').join('class="gap-6 bottom center"'))).toBe('');
+	expect(slider().getAttribute('class')).toBe('gap-6 bottom center');
+	expect(slider().__og_svelte_class).toBe('gap-6');
+	// a token of Svelte's the render dropped comes back; the component's stays
+	expect(await check('<x-slider class="gap-6 wide">a</x-slider>', (h) => h.split('class="gap-6 wide"').join('class="gap-6 bottom"'))).toBe('');
+	expect(slider().getAttribute('class')).toBe('gap-6 wide bottom');
+	// a plain element is Svelte's alone: exactly Svelte's class again
+	expect(await check('<p class="gap-6">a</p>', (h) => h.split('class="gap-6"').join('class="gap-6 extra"'))).toBe('');
+	expect(document.querySelector('demo-card p')!.getAttribute('class')).toBe('gap-6');
 });
 
 test('a DOM without adoptable sheets or CSS.escape (jsdom): a <style> per root', async () => {

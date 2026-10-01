@@ -19,6 +19,7 @@ import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } from './seeds.js';
 import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './region-attrs.js';
 import { boot_link, slots, type LiftedLake } from './slots.js';
+import { keep_host_classes, note_host_classes } from './host-classes.js';
 import { install as install_hydrate_features } from 'virtual:ogygia/hydrate-features';
 import { emit as dt_emit } from '../devtools/bus.js';
 // Re-exported for core's wake paths: observing Kit's reactive page needs Svelte, so it lives in this
@@ -766,6 +767,9 @@ export function hydrate_island(
 		// that attempt by design, so without this the recovery warning below could never say WHY the
 		// walk failed — only that the pre-hydrate check saw drift, which repair may well have fixed.
 		let strict_error: unknown = null;
+		// (a web component's own class tokens on its host: Svelte's hydration writes `class` whole —
+		// runtime/host-classes.ts puts the component's back after it)
+		const host_classes = note_host_classes(region);
 		try {
 			out = quietly(() => attempt(false));
 			healed = repaired;
@@ -773,6 +777,7 @@ export function hydrate_island(
 			strict_error = err;
 			out = attempt(true);
 		}
+		keep_host_classes(host_classes);
 		if (healed) {
 			// The reason is the "why" — recorded on the element so DOM inspection shows it, carried on
 			// the devtools event, and appended to the console line. Empty string when unknown.
@@ -890,10 +895,12 @@ export function hydrate_live(
 		return null;
 	}
 	const provided_ctx = capture_region_ids(region, () => slots.context?.(region));
+	const host_classes = note_host_classes(region);
 	const app = hydrate(LiveHost, {
 		target: region,
 		props: { component: mod.default, initialProps: prop_guard.wrap(props, entry) },
 		...(provided_ctx ? { context: provided_ctx } : {})
 	});
+	keep_host_classes(host_classes);
 	return handle(app, unmount_app, entry, true);
 }

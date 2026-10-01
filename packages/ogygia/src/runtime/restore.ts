@@ -69,20 +69,37 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		return made;
 	};
 
+	/** Attributes back to Svelte's. A custom element's `class` has two owners — Svelte, and the
+	 *  component, which may put state on its own host — so there it becomes Svelte's tokens PLUS the
+	 *  ones the render added, and Svelte's are recorded on the element (`__og_svelte_class`): the
+	 *  island's hydrate puts the component's back after Svelte writes `class` whole
+	 *  (runtime/host-classes.ts). Unless the render kept `class` as its own (`og-keep`). */
 	const reset = (el: Element) => {
 		const r = el.getAttribute('og-r');
+		const custom = el.localName.indexOf('-') !== -1 && (' ' + (el.getAttribute('og-keep') ?? '') + ' ').indexOf(' class ') === -1;
+		let svelte_class: string | null | undefined;
 		if (r) {
 			try {
 				const diff = JSON.parse(r) as Record<string, string | null>;
 				for (const name in diff) {
 					const v = diff[name];
-					if (v === null) el.removeAttribute(name);
+					if (custom && name === 'class') {
+						svelte_class = v;
+						const own = new Set((v ?? '').split(' '));
+						let theirs = '';
+						for (const t of Array.from(el.classList)) if (!own.has(t)) theirs += ' ' + t;
+						const merged = ((v ?? '') + theirs).trim();
+						if (merged) el.setAttribute('class', merged);
+						else el.removeAttribute('class');
+					} else if (v === null) el.removeAttribute(name);
 					else el.setAttribute(name, v);
 				}
 			} catch {
 				// a mangled diff: leave the attributes
 			}
 		}
+		// (no class in the diff: the render left it as Svelte's)
+		if (custom) (el as Element & { __og_svelte_class?: string }).__og_svelte_class = svelte_class === undefined ? (el.getAttribute('class') ?? '') : (svelte_class ?? '');
 		el.removeAttribute('og-r');
 	};
 
@@ -158,9 +175,15 @@ export function restore(root: Document | DocumentFragment | Element): number {
 			if (x.nodeType !== 1) continue;
 			const ex = x as Element;
 			const ey = y as Element;
-			for (const attr of Array.from(ex.attributes))
-				if (norm(attr.name, attr.value) !== norm(attr.name, ey.getAttribute(attr.name))) return `${here} <${ex.localName}>: Svelte has ${attr.name}="${attr.value}", the restored markup has ${ey.hasAttribute(attr.name) ? `"${ey.getAttribute(attr.name)}"` : 'none'}`;
-			if (ex.localName.indexOf('-') === -1)
+			// A web-component host may carry more than Svelte gave it: extra attributes, and class
+			// tokens its own component adds to its host (a theme, a position) — Svelte's tokens must all
+			// be there. A plain element compares exactly.
+			const custom = ex.localName.indexOf('-') !== -1;
+			for (const attr of Array.from(ex.attributes)) {
+				if (custom && attr.name === 'class' ? within(attr.value, ey.getAttribute('class')) : norm(attr.name, attr.value) === norm(attr.name, ey.getAttribute(attr.name))) continue;
+				return `${here} <${ex.localName}>: Svelte has ${attr.name}="${attr.value}", the restored markup has ${ey.hasAttribute(attr.name) ? `"${ey.getAttribute(attr.name)}"` : 'none'}`;
+			}
+			if (!custom)
 				for (const attr of Array.from(ey.attributes)) if (!ex.hasAttribute(attr.name) && norm(attr.name, attr.value) !== null) return `${here} <${ex.localName}>: the restored markup adds ${attr.name}="${attr.value}"`;
 			const deeper = differ(x, y, `${here} <${ex.localName}>`);
 			if (deeper) return deeper;
@@ -183,6 +206,12 @@ export function restore(root: Document | DocumentFragment | Element): number {
 				.filter(Boolean)
 				.join(';');
 		return value;
+	};
+	/** Every class token of `want` is in `got`. */
+	const within = (want: string, got: string | null): boolean => {
+		const have = new Set((got ?? '').split(/\s+/));
+		for (const t of want.split(/\s+/)) if (t && !have.has(t)) return false;
+		return true;
 	};
 	const describe = (n: Node): string =>
 		n.nodeType === 3 ? `the text ${JSON.stringify((n as Text).data)}` : n.nodeType === 8 ? `the comment <!--${(n as Comment).data}-->` : `<${(n as Element).localName}>`;
