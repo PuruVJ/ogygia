@@ -21,7 +21,7 @@ The runtime surface. Import the namespace (`import * as ogygia from 'ogygia'`) o
 | `isRegion` | function | Type guard for a held region value. |
 | `transport` | hook value | The Kit `transport` entry that lets a held region cross the wire. |
 | `wire` | macro | Declare the codec of a transportable class with `static wire = import.meta.og.wire({ encode, decode })`. It is a compile-time macro, not an importable symbol. See [shared state](/docs/data-state/state-context#sharing-state). |
-| `script` | function | Serialize a self-contained function into a blocking inline `<script>` string. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts). |
+| `script` | function | An inline `<script>` string: a self-contained function (`run`), or JSON / JSON-LD / an import map / speculation rules, with typed attributes. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts). |
 | `preload` | function | Warm the HTML of a deferred/live region now, before its binder wakes: `preload(region(…))`. See [held regions](/docs/regions/held-regions). |
 | `preference` | function | A persisted, site-wide client choice that flips a CSS state with no shipped JS beyond one pre-paint script: the theme / code-language / tabs primitive. |
 | `createContext` | function | Typed sugar over a string context key: `createContext('key')`, callable for a `<Provide>` entry, `.get()` to read. See [state & context](/docs/data-state/state-context). |
@@ -49,7 +49,7 @@ Authored on a component import, not called:
 
 A csr=false page has no client until islands wake. Thus all that must run **before the first paint** must be a plain inline `<script>` in the HTML. That covers the theme set (no dark-mode flash), the start of a deferred font, or an early flag read. To hand-write that string is awkward. A literal `</script>` inside a Svelte component closes the own script of the component. That is why people reach for `String.fromCharCode(60)` tricks.
 
-`script(fn, ...args)` removes that. Pass a function. Get back a `<script>…</script>` string. It is only a string. Thus `{@html}` it where you want the tag, usually `<svelte:head>`.
+`script()` removes that. It takes ONE plain object: exactly one payload key, beside the attributes of the tag. A bare function with trailing args is the shortcut for a plain classic script: `script(fn, a, b)` is `{ run: fn, args: [a, b] }`. You get back a `<script>…</script>` string. It is only a string. Thus `{@html}` it where you want the tag, usually `<svelte:head>`.
 
 ```svelte
 <script>
@@ -58,7 +58,7 @@ A csr=false page has no client until islands wake. Thus all that must run **befo
 </script>
 
 <svelte:head>
-  <!-- No-flash theme, runs before paint -->
+  <!-- No-flash theme, runs before paint (the shortcut) -->
   {@html ogygia.script(() => {
     try {
       const t = localStorage.getItem('theme');
@@ -66,19 +66,38 @@ A csr=false page has no client until islands wake. Thus all that must run **befo
     } catch {}
   })}
 
-  <!-- Deferred font — the hashed URL is closed-over data, so pass it as an arg -->
-  {@html ogygia.script((href) => {
-    addEventListener('load', () => {
-      const l = document.createElement('link');
-      l.rel = 'stylesheet';
-      l.href = href;
-      document.head.appendChild(l);
-    }, { once: true });
-  }, fontUrl)}
+  <!-- Deferred font: the hashed URL is closed-over data, so pass it in `args` -->
+  {@html ogygia.script({
+    run: (href) => {
+      addEventListener('load', () => {
+        const l = document.createElement('link');
+        l.rel = 'stylesheet';
+        l.href = href;
+        document.head.appendChild(l);
+      }, { once: true });
+    },
+    args: [fontUrl],
+    type: 'module'
+  })}
+
+  <!-- Data: structured data for search engines -->
+  {@html ogygia.script({ ld: { '@context': 'https://schema.org', '@type': 'Article', headline } })}
 </svelte:head>
 ```
 
-The function is inlined through `Function.prototype.toString`. Thus it must be **self-contained**: only browser globals, no imports, and no closed-over variables (they do not exist at runtime). For values that you would otherwise close over, pass them as trailing `args`. They are JSON-serialized, and given to the function as parameters. Each `</script` in the body is escaped. Thus it cannot break out of the tag.
+| Payload key | Tag | What it is |
+| --- | --- | --- |
+| `run` (+ `args`) | `<script>` or `<script type="module">` | A self-contained function, called with `args`. |
+| `json` | `type="application/json"` | Data for code on the page (`JSON.parse(el.textContent)`). |
+| `ld` | `type="application/ld+json"` | Structured data for search engines. |
+| `importmap` | `type="importmap"` | Bare specifiers for the module scripts of the page. |
+| `speculation` | `type="speculationrules"` | The pages the browser may prefetch or prerender. |
+
+Attributes sit in the same object. `id`, `nonce` and any `data-*` work on every kind. `true` writes a bare attribute. `false`, `null` and `undefined` leave it out. Values are escaped. The object spreads, so a preset is a plain object: `script({ ...base, run })`.
+
+A `run` script is CLASSIC by default. It runs where it stands, before the parser goes on. Thus in `<head>` it runs before the first paint. `type: 'module'` gives it its own scope and `import()`, and it runs after the document is parsed. A module also takes `async: true` (run as soon as it is ready) and `blocking: 'render'` (hold the first paint until it ran). It awaits an `async` `run`. Thus with `blocking: 'render'` the paint waits for async work too. `async` and `defer` do nothing on an inline classic script, so TypeScript refuses them there. It also refuses `args` that do not match the parameters of `run`, and a data script with code or with its own `type`.
+
+The function is inlined through `Function.prototype.toString`. Thus it must be **self-contained**: only browser globals, no imports, and no closed-over variables (they do not exist at runtime). For values that you would otherwise close over, pass them in `args`. They are JSON-serialized, and given to the function as parameters. Each `<` in an arg or in a data payload is escaped, and each `</script` in the code. Thus nothing can break out of the tag.
 
 ## `ogygia/vite`
 

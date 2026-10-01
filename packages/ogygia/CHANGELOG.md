@@ -2344,10 +2344,14 @@ becomes a global opt-out plugin feature. Config and exports get a single surface
   in a preset. The TTL is **signed into the endpoint**. Thus a harvested URL cannot be pointed again
   at a longer cache. This is what lets a prerendered (PPR) hole cache safely, without a freeze on
   reload.
-- **`ogygia.script(fn, ...args)`.** Serialize a self-contained function into a blocking inline
-  `<script>` string (a no-flash theme, a deferred font loader, …). Trailing `args` are
-  JSON-serialized, and passed in as parameters. Each `</script` in the body is escaped. Thus it
-  cannot break out of the tag.
+- **`ogygia.script()`.** An inline `<script>` string from ONE plain object: exactly one payload
+  key (`run`, a self-contained function called with `args`; or `json`, `ld`, `importmap`,
+  `speculation`) beside the tag's attributes (`type: 'module'`, `async`, `blocking: 'render'`,
+  `nonce`, `id`, `data-*`, `nomodule`). A bare function with trailing args stays the shortcut:
+  `script(fn, a, b)` is `{ run: fn, args: [a, b] }`. The object spreads, so a preset is a plain
+  object. TypeScript refuses what a browser silently ignores (`async` on an inline classic script,
+  `args` that do not match `run`). Each `<` in an arg or a data payload is escaped, and each
+  `</script` in the code. Thus nothing can break out of the tag.
 - **`Fallback<P>` type.** Types the fallback slot of a deferred island. `svelte-check` type-checks
   raw source. Thus the fallback must live on the component. This type gives its props a shape.
 - **`ogygia/internal/compiler`.** The pure transform engine (the island transform + FOUC-CSS graph +
