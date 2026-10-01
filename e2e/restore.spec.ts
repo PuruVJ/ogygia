@@ -55,8 +55,10 @@ test('the island inside a reshaped host hydrates as is, and stays interactive', 
 	expect(facts.healed).toBe(0);
 	expect(facts.shadow_title).toBe('Card title');
 	expect(facts.sheets).toBe(1);
-	// Svelte's class back, the renderer's kept attribute stays, the whitespace the render trimmed is back
-	expect(facts.host_class).toBe('own');
+	// Svelte's class back (beside the token the render put on its own host: a custom element's class is
+	// shared with its component — runtime/restore.ts `reset`, kept through the island's hydrate), the
+	// renderer's kept attribute stays, the whitespace the render trimmed is back
+	expect(facts.host_class).toBe('own sc-demo-card-h');
 	expect(facts.kept).toBe(true);
 	expect(facts.light).toContain('some   text');
 	expect(facts.marks).toBe(0);
