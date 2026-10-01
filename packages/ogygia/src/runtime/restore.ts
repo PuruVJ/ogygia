@@ -29,6 +29,7 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		__og_sheets?: Map<string, { sheet: CSSStyleSheet | null; css: string }>;
 		__og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[];
 		__og_init?: ShadowRoot[];
+		__og_class_watch?: { mo: MutationObserver; hosts: Set<Element> };
 	};
 	const sheets = (W.__og_sheets ??= new Map());
 	// (a DOM without `CSS.escape` — jsdom — gets a quote-safe escape for the attribute selectors)
@@ -38,6 +39,45 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	// the page — `restore_adopt()`, called right after the insertion, in the same task.
 	const live = doc === document;
 	let restored = 0;
+
+	/**
+	 * A KIT-HYDRATED page (csr=true) is hydrated by Kit's own start, which ogygia does not run — so
+	 * the island hydrate's put-back of a component's class tokens (runtime/host-classes.ts) never
+	 * runs there. Instead each restored custom element is watched once: Kit's hydrate writes its
+	 * `class` whole, to exactly Svelte's tokens; the first write that leaves exactly those gets back
+	 * every token it dropped (the component's, the render's `sc-*`), read from the value just before
+	 * that write. A component only ever adds and removes its own tokens, so no later state of the
+	 * host equals Svelte's alone. One observer for all of them; a host leaves the watch at that
+	 * write, and the observer goes when the last one has.
+	 */
+	const watch_classes = live && document.querySelector('meta[name="ogygia-csr"][content="true"]') !== null;
+	const watch = (el: Element) => {
+		let w = W.__og_class_watch;
+		if (!w) {
+			const hosts = new Set<Element>();
+			const mo = new MutationObserver((records) => {
+				for (let i = 0; i < records.length; i++) {
+					const host = records[i].target as Element & { __og_svelte_class?: string };
+					if (!hosts.has(host)) continue;
+					// this record's NEW value: the next record's old value for the same host, else the current one
+					let now: string | null | undefined;
+					for (let j = i + 1; j < records.length && now === undefined; j++) if (records[j].target === host) now = records[j].oldValue;
+					if (now === undefined) now = host.getAttribute('class');
+					if ((now ?? '') !== host.__og_svelte_class) continue;
+					hosts.delete(host);
+					const own = new Set((now ?? '').split(' '));
+					for (const t of (records[i].oldValue ?? '').split(' ')) if (t && !own.has(t)) host.classList.add(t);
+				}
+				if (hosts.size === 0) {
+					mo.disconnect();
+					W.__og_class_watch = undefined;
+				}
+			});
+			w = W.__og_class_watch = { mo, hosts };
+		}
+		w.hosts.add(el);
+		w.mo.observe(el, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+	};
 
 	// 0. head assets an answer carries (`data-og-head`): into the page's head once per key
 	if (root !== document && (root as ParentNode).querySelectorAll) {
@@ -99,7 +139,10 @@ export function restore(root: Document | DocumentFragment | Element): number {
 			}
 		}
 		// (no class in the diff: the render left it as Svelte's)
-		if (custom) (el as Element & { __og_svelte_class?: string }).__og_svelte_class = svelte_class === undefined ? (el.getAttribute('class') ?? '') : (svelte_class ?? '');
+		if (custom) {
+			(el as Element & { __og_svelte_class?: string }).__og_svelte_class = svelte_class === undefined ? (el.getAttribute('class') ?? '') : (svelte_class ?? '');
+			if (watch_classes) watch(el);
+		}
 		el.removeAttribute('og-r');
 	};
 

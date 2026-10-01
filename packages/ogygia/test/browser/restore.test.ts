@@ -167,6 +167,44 @@ test('a custom element keeps the class tokens its render added beside Svelte’s
 	expect(document.querySelector('demo-card p')!.getAttribute('class')).toBe('gap-6');
 });
 
+test('a Kit-hydrated page: the first whole write to Svelte’s tokens gets back what it dropped; the component’s own later removals stand', async () => {
+	const meta = document.createElement('meta');
+	meta.name = 'ogygia-csr';
+	meta.content = 'true';
+	document.head.append(meta);
+	const W = window as { __og_class_watch?: { hosts: Set<Element> } };
+	try {
+		await served('<demo-card class="own"> x </demo-card><demo-card class="other"> y </demo-card>');
+		restore(document);
+		const [a, b] = Array.from(document.querySelectorAll('demo-card'));
+		expect(W.__og_class_watch!.hosts.size).toBe(2);
+		a.classList.add('bottom', 'center'); // the component's first render (before Kit's hydrate)
+		a.className = 'own'; // Kit's hydrate: Svelte's tokens, whole
+		await Promise.resolve();
+		expect(a.className).toBe('own sc-demo-card-h bottom center');
+		// the component drops one of its own later: it stays dropped (the host left the watch)
+		a.classList.remove('center');
+		await Promise.resolve();
+		expect(a.className).toBe('own sc-demo-card-h bottom');
+		expect(W.__og_class_watch!.hosts.size).toBe(1);
+		// a write and the component's add in ONE batch: the write's own dropped tokens come back
+		b.className = 'other';
+		b.classList.add('later');
+		await Promise.resolve();
+		expect(b.className).toBe('other later sc-demo-card-h');
+		expect(W.__og_class_watch).toBeUndefined(); // the last host had its write: the observer is gone
+	} finally {
+		meta.remove();
+		W.__og_class_watch = undefined;
+	}
+});
+
+test('a csr=false page arms no class watch (the island hydrate puts the tokens back)', async () => {
+	await served('<demo-card class="own"> x </demo-card>');
+	restore(document);
+	expect((window as { __og_class_watch?: unknown }).__og_class_watch).toBeUndefined();
+});
+
 test('a DOM without adoptable sheets or CSS.escape (jsdom): a <style> per root', async () => {
 	await served('<demo-card class="own"> x </demo-card>');
 	const desc = Object.getOwnPropertyDescriptor(ShadowRoot.prototype, 'adoptedStyleSheets')!;

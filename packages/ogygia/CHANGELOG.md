@@ -134,7 +134,9 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
   a position): restore gives it Svelte's tokens plus the ones the render added, and after the
   island hydrates — Svelte writes `class` whole — the component's tokens as they were just before
   the hydrate are put back. Svelte's own tokens always win. The dev check asks only that Svelte's
-  tokens are all on such a host.
+  tokens are all on such a host. On a Kit-hydrated (csr=true) page, where Kit's own start hydrates
+  and ogygia runs no hydrate to wrap, the restorer watches each such host once: the first write
+  that leaves exactly Svelte's tokens (Kit's hydrate) gets back every token it dropped.
 - **`isOgygiaPage()` from `'ogygia'` — which world shared code is in.** A store or helper used on
   both a csr=false ogygia page and a csr=true Kit page often has to behave differently on each. The
   fact already existed inside ogygia (the server reads the request's route against the build-time
