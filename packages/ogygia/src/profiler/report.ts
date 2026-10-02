@@ -6,6 +6,7 @@
  */
 
 import type { Analysis, FrameStat, HeapAllocator } from './analyze.js';
+import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
@@ -1586,7 +1587,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			const same = page_path ? others.filter((r) => r.path === page_path).length : 0;
 			warn(
 				'busy-instance',
-				`${others_n} other request${others_n === 1 ? '' : 's'} ran on this instance during the profiled render${win > 1 ? 's' : ''} (${top}${others_n > 3 ? ', …' : ''}), in flight for ${Math.round(ct.busy_share * 100)}% of the window: up to ${fmt_ms(ct.cpu_max_ms)} ms of its wall time was the event loop serving them, and the render's own numbers carry that wait.${a.other_requests_ms ? ` The samples under other pages' code (${fmt_ms(a.other_requests_ms / win)} ms a render) were set aside: no line of theirs is in this report.` : ''}${same ? (meta.runs_set_aside ? ` ${same} of them asked for this same page; the ${meta.runs_set_aside} render${meta.runs_set_aside === 1 ? '' : 's'} they overlapped ${meta.runs_set_aside === 1 ? 'was' : 'were'} left out, so this report reads the ${meta.runs?.length ?? 0} that ran clean.` : ` ${same} of them asked for this same page: their work runs through the same lines and cannot be told apart from the profiled render's (every render overlapped one), so this report's CPU reads high — up to ${same + 1}× on the lines they share.`) : ''}`,
+				`${others_n} other request${others_n === 1 ? '' : 's'} ran on this instance during the profiled render${win > 1 ? 's' : ''} (${top}${others_n > 3 ? ', …' : ''}), in flight for ${Math.round(ct.busy_share * 100)}% of the window: up to ${fmt_ms(ct.cpu_max_ms)} ms of its wall time was the event loop serving them, and the render's own numbers carry that wait.${a.other_requests_ms ? ` The samples under other pages' code (${fmt_ms(a.other_requests_ms / win)} ms a render) were set aside, and so were the slow lines in their page files — but a shared helper they called after an await has no frame of theirs left to tell it by, and may still show here: profile again on a quiet instance to be sure.` : ''}${same ? (meta.runs_set_aside ? ` ${same} of them asked for this same page; the ${meta.runs_set_aside} render${meta.runs_set_aside === 1 ? '' : 's'} they overlapped ${meta.runs_set_aside === 1 ? 'was' : 'were'} left out, so this report reads the ${meta.runs?.length ?? 0} that ran clean.` : ` ${same} of them asked for this same page: their work runs through the same lines and cannot be told apart from the profiled render's (every render overlapped one), so this report's CPU reads high — up to ${same + 1}× on the lines they share.`) : ''}`,
 				{
 					fix: 'Record again on a quiet instance, or read the CPU numbers (they exclude the others) rather than the wall time. Sustained, this is what horizontal scaling or a worker pool is for.'
 				}
@@ -1617,7 +1618,10 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	// DATA LINEAGE: keys fetched for nobody, keys shipped for the server alone
 	const ln = extras.lineage;
 	if (ln) {
-		const unread = ln.unread.filter((k) => k.from);
+		// (a key another page's load returned — a visitor of that page overlapping the renders — is
+		// not this page's to read)
+		const route = own_requests(meta).find((r) => r.route)?.route ?? meta.request?.route;
+		const unread = ln.unread.filter((k) => k.from && !(route && another_routes_file(route, k.from)));
 		if (unread.length) {
 			const names = unread
 				.slice(0, 4)

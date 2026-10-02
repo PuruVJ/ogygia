@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, route_dirs, route_file_of, type CpuProfile } from '../src/profiler/analyze.js';
+import { analyze, another_routes_file, route_dirs, route_file_of, type CpuProfile } from '../src/profiler/analyze.js';
 
 // The sampler hears the whole process: another visitor's page answered while the profiled one
 // rendered must not read as the profiled page's code.
@@ -19,6 +19,15 @@ describe('route files', () => {
 		expect(d.own('src')).toBe('(app)/p/[id]');
 		expect(d.own('built')).toBe('(app)/p/_id_');
 		expect(d.above('src')).toEqual(['', '(app)', '(app)/p', '(app)/p/[id]']);
+	});
+	it("another route's page file is another visitor's; this route's, its layouts, endpoints and shared code never", () => {
+		expect(another_routes_file('/latecomer', 'src/routes/inferno/+page.server.ts')).toBe(true);
+		expect(another_routes_file('/latecomer', '/app/src/routes/inferno/+page.server.ts')).toBe(true);
+		expect(another_routes_file('/latecomer', 'routes/latecomer/+page.server.ts')).toBe(false);
+		expect(another_routes_file('/latecomer', 'routes/+layout.server.ts')).toBe(false);
+		expect(another_routes_file('/latecomer', 'src/routes/api/+server.ts')).toBe(false);
+		// (a shared helper cannot be told apart by its path: never set aside by this)
+		expect(another_routes_file('/latecomer', 'src/lib/inferno/catalog.ts')).toBe(false);
 	});
 });
 

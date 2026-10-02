@@ -15,6 +15,7 @@ import {
 	type TimelineInput
 } from './timeline.js';
 import { handle_parts } from './source-scan.js';
+import { another_routes_file } from './route-files.js';
 import { app_relative } from './app-path.js';
 
 export interface CallFrame {
@@ -483,43 +484,9 @@ const is_component_name = (name: string): boolean =>
  * frame that V8 samples inside a component, and to tell the file's OWN function
  * (the component) from a same-cased helper class defined in it. Undefined for
  * a non-component file. */
-/** a route's page or layout file, by its folder under `src/routes` (`form: 'src'`) or its built
- *  chunk under `entries/pages` (`'built'`: `[id]` written `_id_`); undefined for any other file */
-export function route_file_of(
-	path: string
-): { dir: string; page: boolean; form: 'src' | 'built' } | undefined {
-	const read = (marker: string, form: 'src' | 'built', page: string, layout: string[]) => {
-		const at = path.lastIndexOf(marker);
-		if (at === -1) return undefined;
-		const rel = path.slice(at + marker.length);
-		const slash = rel.lastIndexOf('/');
-		const base = rel.slice(slash + 1);
-		const dir = slash === -1 ? '' : rel.slice(0, slash);
-		if (base.startsWith(page)) return { dir, page: true, form };
-		if (layout.some((l) => base.startsWith(l))) return { dir, page: false, form };
-		return undefined;
-	};
-	return (
-		read('/src/routes/', 'src', '+page', ['+layout', '+error']) ??
-		read('/entries/pages/', 'built', '_page', ['_layout', '_error'])
-	);
-}
-
-/** a route id's own folder and the folders above it (whose layouts it renders in), per form */
-export function route_dirs(route: string): {
-	own: (form: 'src' | 'built') => string;
-	above: (form: 'src' | 'built') => string[];
-} {
-	const segs = route.split('/').filter(Boolean);
-	const built = segs.map((s) => s.split('[').join('_').split(']').join('_'));
-	const prefixes = (list: string[]) => list.map((_, i) => list.slice(0, i + 1).join('/'));
-	const src_above = ['', ...prefixes(segs)];
-	const built_above = ['', ...prefixes(built)];
-	return {
-		own: (form) => (form === 'src' ? segs : built).join('/'),
-		above: (form) => (form === 'src' ? src_above : built_above)
-	};
-}
+// (which route a file is, and whether another visitor's: route-files.ts — re-exported, the tests and
+// the CPU analysis read them from here)
+export { route_file_of, route_dirs, another_routes_file } from './route-files.js';
 
 export function component_name_from_file(url: string): string | undefined {
 	const m = SVELTE_BASENAME_RE.exec(url);
@@ -1530,12 +1497,8 @@ export function analyze(
 	// never set aside by this — only what sits under a different page's file
 	const foreign_ids = new Set<number>();
 	if (timeline_input?.route) {
-		const mine = route_dirs(timeline_input.route);
-		const foreign = (url: string): boolean => {
-			const f = route_file_of(clean_url(url));
-			if (!f) return false;
-			return f.page ? f.dir !== mine.own(f.form) : !mine.above(f.form).includes(f.dir);
-		};
+		const route = timeline_input.route;
+		const foreign = (url: string): boolean => another_routes_file(route, clean_url(url));
 		const walk = (id: number, under: boolean) => {
 			const r = resolved.get(id);
 			const here = under || (!!r && foreign(r.url));

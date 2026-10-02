@@ -36,6 +36,7 @@ import {
 	chunk_component_renamer,
 	heap_by_component,
 	sourcemap_resolver,
+	another_routes_file,
 	type Analysis,
 	type CallFrame,
 	type CpuProfile,
@@ -3288,6 +3289,16 @@ class Profiler {
 				}
 			}
 		}
+		// ANOTHER PAGE'S LINES: a visitor of another page overlapping every render (constant traffic,
+		// so no render ran clean to keep) brings its own load's lines into the window — its waits, its
+		// allocations, its CPU after an await (no frame of its page file left to set it aside by). A
+		// pattern whose every site is in another route's page or layout file is not this page's
+		const route = own_requests(s.meta).find((r) => r.route)?.route ?? s.meta.request?.route;
+		if (route)
+			for (let i = patterns.length - 1; i >= 0; i--) {
+				const sites = patterns[i].sites;
+				if (sites.length && sites.every((x) => another_routes_file(route, x.path || x.file))) patterns.splice(i, 1);
+			}
 		// biggest saving first — except a severe leak (8 MB+ kept per render), which leads: it ends
 		// in an out-of-memory crash, not a slow page
 		const severe = (p: Pattern) =>
@@ -4397,8 +4408,23 @@ class Profiler {
 			// tells it apart — but the clock does. A render an outside request of this path overlapped
 			// is left out, its samples set aside, when at least one render ran clean
 			const target_path = target.split('?')[0];
+			// …AND A VISITOR OF ANOTHER PAGE: its load's lines, its allocations, its calls all land in
+			// the same window (/latecomer profiled while /inferno was asked for read inferno's patterns
+			// as its own). A request the render made itself (its own API, served by this process) is the
+			// render's: one whose path is a call the renders made is never "another visitor"
+			const own_calls = new Set<string>();
+			for (const c of cap.net) {
+				try {
+					own_calls.add(new URL(c.url, 'http://x').pathname);
+				} catch {
+					/* not a URL */
+				}
+			}
 			const outside = this.#ring.filter(
-				(e) => !e.internal && e.pt !== undefined && e.path === target_path
+				(e) =>
+					!e.internal &&
+					e.pt !== undefined &&
+					(e.path === target_path || (!own_calls.has(e.path.split('?')[0]) && !e.path.startsWith(this.base)))
 			);
 			const mixed_at = run_windows.map((w) =>
 				outside.some((e) => e.pt! < w.end && (e.ms > 0 ? e.pt! + e.ms : Infinity) > w.start)
@@ -4480,6 +4506,7 @@ class Profiler {
 			// the cold render's per-file cost (the warm figures come from the main analysis at report time)
 			let cold: ReportMeta['cold'];
 			mem_mark('after the answer renders');
+			const cold_route = this.#ring.find((e) => e.internal && e.path === target_path && e.route)?.route;
 			if (cold_cap && warmup_ms !== undefined) {
 				try {
 					// one "run" spanning the cold render: its CPU by owner, grouped as the drill-down groups
@@ -4493,7 +4520,8 @@ class Profiler {
 						p,
 						await this.#make_resolver(),
 						undefined,
-						{ perf_start: cold_cap.perf_start, window: whole, calls: [], runs: [whole] },
+						// (the route too: another page's request in the cold window is set aside like a warm run's)
+						{ perf_start: cold_cap.perf_start, window: whole, calls: [], runs: [whole], ...(cold_route ? { route: cold_route } : {}) },
 						undefined,
 						this.#module_hint
 					);
