@@ -135,7 +135,7 @@ export interface PageInput {
 		scripts?: { url: string; ms: number; count: number }[];
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 		warnings?: { code: string; message: string; file?: string; fp?: string; t?: number }[];
-		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true };
+		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true };
 		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean }[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
@@ -863,6 +863,21 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				fix: 'Make the island render the same markup on both sides (see the markup finding), or keep the hero out of the island.',
 				fps: [hit.fp]
 			});
+	}
+
+	// ── the largest paint marked loading="lazy": the browser holds its fetch until layout says it
+	// is on screen, behind every other image — a mistake on any page, fast or slow (a fast page only
+	// hides it) ──
+	const lp = page.visit?.paints;
+	if (lp?.lcp_lazy) {
+		const file = lp.lcp_url ? lp.lcp_url.slice(lp.lcp_url.lastIndexOf('/') + 1).split('?')[0] : '';
+		findings.push({
+			code: 'lcp-lazy',
+			severity: 'warn',
+			message: `The largest paint (${lp.lcp_tag ?? 'img'}${file ? ` ${file}` : ''}${lp.lcp_fp ? ` in ${by_fp.get(lp.lcp_fp)?.name ?? lp.lcp_fp.slice(0, 8)}` : ''}) carries loading="lazy": the browser waits to fetch it until layout says it is on screen, and puts it behind the page's other downloads.`,
+			fix: 'Drop `loading="lazy"` on images of the first screen (keep it for the ones below), and give the hero `fetchpriority="high"`.',
+			fps: lp.lcp_fp ? [lp.lcp_fp] : []
+		});
 	}
 
 	// ── a wake-at-load island that never woke ──

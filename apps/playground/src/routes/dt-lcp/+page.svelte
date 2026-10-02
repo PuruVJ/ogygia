@@ -8,7 +8,9 @@
 	const late = page.url.searchParams.has('late');
 	// `?quick`: the same hero answered in 300 ms — the fast twin "since your last profile" compares
 	const quick = page.url.searchParams.has('quick');
+	// `?lazy`: the hero carries loading="lazy" (the plant); a lazy image far below is the decoy
+	const lazy = page.url.searchParams.has('lazy');
 </script>
 
 <h1>lcp lab</h1>
-<Hero {late} {quick} />
+<Hero {late} {quick} {lazy} />

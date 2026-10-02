@@ -52,6 +52,21 @@ describe('rate', () => {
 	});
 });
 
+describe('the largest paint marked lazy', () => {
+	it('named, with its file and island; a largest paint without it quiet', () => {
+		const at = (lazy: boolean) =>
+			analyze_page(
+				page({ visit: { nav: { res_start: 5 }, paints: { fcp: 20, lcp: 300, lcp_tag: 'img', lcp_url: 'http://x/hero.jpg?w=2', lcp_fp: 'hero', ...(lazy ? { lcp_lazy: true as const } : {}) }, resources: [], viewport: [1280, 800] } }),
+				[region('hero', 'Hero')],
+				[],
+				500
+			).findings.find((f) => f.code === 'lcp-lazy');
+		expect(at(true)?.message).toContain('The largest paint (img hero.jpg in Hero) carries loading="lazy"');
+		expect(at(true)?.fix).toContain('fetchpriority="high"');
+		expect(at(false)).toBeUndefined();
+	});
+});
+
 describe('a shift the dev server made', () => {
 	it('right after a component\'s CSS module arrived (dev): a note that it is the dev server\'s; on a build, not', () => {
 		const at = (dev: boolean) =>

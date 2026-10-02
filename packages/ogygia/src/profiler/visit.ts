@@ -94,7 +94,7 @@ export interface Visit {
 	at: number;
 	nav: VisitNav;
 	/** (`lcp_replaced`: its element was taken out while its island stayed — rendered again) */
-	paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true };
+	paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true };
 	resources: VisitResource[];
 	/** every file by type, when `resources` lists only some (the first 200, the blocking ones first) */
 	resource_totals?: { type: string; count: number; transfer: number; size: number }[];
@@ -216,6 +216,7 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	const lcp_tag = str(paints_raw.lcp_tag, 40);
 	if (lcp_tag) paints.lcp_tag = lcp_tag;
 	if (paints_raw.lcp_replaced === true) paints.lcp_replaced = true;
+	if (paints_raw.lcp_lazy === true) paints.lcp_lazy = true;
 	const resources: VisitResource[] = [];
 	for (const r of (Array.isArray(v.resources) ? v.resources : []).slice(0, MAX_RESOURCES) as Record<string, unknown>[]) {
 		const url = str(r?.url, 500);

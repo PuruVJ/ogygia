@@ -1457,6 +1457,39 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} a long session of navigations: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ first, plain, after_lcp, lab, kit_first, kit_next })}` : ''}`);
 	}
+	// THE LARGEST PAINT MARKED loading="lazy" (/dt-lcp?lazy: the hero lazy, a lazy image far below
+	// as the decoy): named on Hero in the Page tab and the profiler's report; the plain hero quiet
+	{
+		const read = async (q) => {
+			const rec = await fetch(`${base}/__profiler/page?p=/dt-lcp&runs=1`, { redirect: 'manual' }).catch(() => null);
+			const id = rec?.headers.get('location')?.split('/').pop();
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + '/dt-lcp' + q, { waitUntil: 'load' });
+			await page.waitForTimeout(3500);
+			const tab = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((f) => f.code === 'lcp-lazy').map((f) => f.message));
+			await page.goto('about:blank');
+			let report = null;
+			for (let i = 0; i < 6 && id && report === null; i++) {
+				await new Promise((ok) => setTimeout(ok, 800));
+				const j = await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null);
+				const f = j?.findings?.find((x) => x.code === 'lcp-lazy');
+				if (f) report = f.message;
+			}
+			await page.close();
+			return { tab, report };
+		};
+		const lazy = await read('?lazy');
+		const plain = await read('?quick');
+		const checks = [
+			['the lazy hero named on Hero', lazy.tab.length === 1 && lazy.tab[0].includes('hero.svg in Hero') && lazy.tab[0].includes('loading="lazy"')],
+			['the lazy image far below never', !lazy.tab.some((m) => m.includes('below'))],
+			['the profiler report names it', lazy.report?.startsWith('In the browser: The largest paint (img hero.svg in Hero)') ?? false],
+			['the plain hero quiet', plain.tab.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
+	}
 	// A LATE PAINT REACHES THE REPORT WITHOUT THE HIDE-TIME MESSAGE (/dt-lcp's slow hero lands after
 	// the early visit): the tab is closed hard, no page hide — the visit sent again after the paint
 	// carries it, so the profiler's report still names the slow largest paint

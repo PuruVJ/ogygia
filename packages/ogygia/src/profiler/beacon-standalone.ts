@@ -33,7 +33,7 @@ export function standalone_beacon(): void {
 
 	const r2 = (n: number) => Math.round(n * 100) / 100;
 	const vitals: Record<string, number> = {};
-	const paints: { fcp?: number; lcp?: number; lcp_url?: string; lcp_tag?: string } = {};
+	const paints: { fcp?: number; lcp?: number; lcp_url?: string; lcp_tag?: string; lcp_lazy?: true } = {};
 	const shifts: { t: number; value: number }[] = [];
 	const longtasks: { t: number; ms: number }[] = [];
 	const observers: PerformanceObserver[] = [];
@@ -74,6 +74,7 @@ export function standalone_beacon(): void {
 		vitals.lcp = paints.lcp = r2(e.startTime);
 		paints.lcp_url = e.url || undefined;
 		paints.lcp_tag = e.element?.tagName ? e.element.tagName.toLowerCase() : undefined;
+		paints.lcp_lazy = e.element?.getAttribute?.('loading') === 'lazy' ? true : undefined;
 		again();
 	});
 	try {
