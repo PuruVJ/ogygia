@@ -43,11 +43,15 @@ const collect = () =>
 		);
 		return window.__og_clickables.length;
 	});
+// (click, wait for the tabs, click again if they did not come: on a cold dev server the launcher is
+// there before its dock code is, and a click then does nothing — the next tab click waited 30 s for a
+// dock that never opened, in the first run against a fresh server)
 const open_dock = async () => {
-	if (!(await page.locator('[data-og-tab]').count())) {
+	for (let i = 0; i < 4 && !(await page.locator('[data-og-tab]').count()); i++) {
 		await page.click('[data-og-panel-toggle]');
-		await page.waitForTimeout(700);
+		await page.waitForSelector('[data-og-tab]', { timeout: 3000 }).catch(() => {});
 	}
+	await page.waitForTimeout(300);
 };
 
 let failed = 0;
