@@ -3011,6 +3011,12 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 		assets,
 		...(extras.assets_missing ? { assets_missing: extras.assets_missing } : {}),
 		htmlBytes: extras.strip?.total ?? pa?.html.bytes ?? null,
+		// the bytes the browser fetched for nothing: pixels past what each box shows, preloads nothing used
+		...(() => {
+			const img = (visit?.images_oversized ?? []).reduce((s, i) => s + i.bytes * Math.max(0, 1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1])), 0);
+			const pre = (visit?.preloads_unused ?? []).reduce((s, p) => s + p.bytes, 0);
+			return img + pre >= 10 * 1024 ? { wasted: { bytes: Math.round(img + pre), images: Math.round(img), preloads: pre } } : {};
+		})(),
 		hasIslands: islands.length > 0,
 		browserSeen: client.length > 0 || !!visit,
 		recovered: client.reduce((s, c) => s + c.recovered, 0),

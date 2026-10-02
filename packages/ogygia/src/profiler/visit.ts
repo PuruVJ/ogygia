@@ -127,6 +127,8 @@ export interface Visit {
 	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** images whose pixels are 4× or more what their box shows (the screen counted), files ≥ 50 KB */
 	images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+	/** preloads (image, font, stylesheet) nothing on the page used 3 s after load */
+	preloads_unused?: { url: string; as: string; bytes: number }[];
 	/** the page's size in elements, when 1,500 or more (depth 0: past 60,000, only counted) */
 	dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
 	/** islands whose own file failed to load and fell back to their stable name */
@@ -384,6 +386,13 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		images_oversized.push({ url, natural, shown, dpr, bytes, ...(fp ? { fp } : {}) });
 	}
 	if (images_oversized.length) visit.images_oversized = images_oversized;
+	const preloads_unused: NonNullable<Visit['preloads_unused']> = [];
+	for (const p of (Array.isArray(v.preloads_unused) ? v.preloads_unused : []).slice(0, 30) as Record<string, unknown>[]) {
+		const url = str(p?.url, 500);
+		const as = p?.as === 'image' || p?.as === 'font' || p?.as === 'style' ? p.as : undefined;
+		if (url && as) preloads_unused.push({ url, as, bytes: num(p.bytes, 1e9) ?? 0 });
+	}
+	if (preloads_unused.length) visit.preloads_unused = preloads_unused;
 	const d = v.dom as Record<string, unknown> | undefined;
 	const nodes = num(d?.nodes, 1e7);
 	if (d && nodes) {
@@ -598,6 +607,8 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.font_faces ?? a.font_faces ? { font_faces: b.font_faces ?? a.font_faces } : {}),
 		...(b.images_oversized ?? a.images_oversized ? { images_oversized: b.images_oversized ?? a.images_oversized } : {}),
 		...(b.dom ?? a.dom ? { dom: b.dom ?? a.dom } : {}),
+		// (asked once 3 s after load: the record that has it)
+		...(b.preloads_unused ?? a.preloads_unused ? { preloads_unused: b.preloads_unused ?? a.preloads_unused } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)

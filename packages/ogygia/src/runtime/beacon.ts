@@ -1607,6 +1607,22 @@ function flush(): void {
 	if (!early_visit_done) {
 		early_visit_done = true;
 		flush_visit(false);
+		send_after_preload_check();
+	}
+}
+
+/** A page with image, font or stylesheet preloads: the visit once more after the 3 s past load
+ *  that tells a preload nothing used — a visitor who leaves without the page hiding cleanly (a
+ *  closed tab, a crash) would otherwise never send it. resend_soon waits 1.5 s itself. */
+function send_after_preload_check(): void {
+	try {
+		if (!document.querySelector('link[rel="preload"][as="image"]:not([imagesrcset]), link[rel="preload"][as="font"], link[rel="preload"][as="style"]')) return;
+		if (document.readyState === 'complete') {
+			const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+			setTimeout(resend_soon, Math.max(0, 1700 - (performance.now() - (nav?.loadEventEnd ?? 0))));
+		} else addEventListener('load', () => setTimeout(resend_soon, 1700), { once: true });
+	} catch {
+		/* no document */
 	}
 }
 

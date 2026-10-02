@@ -74,6 +74,9 @@ export interface ScoreInputs {
 	assets_missing?: string;
 	/** the HTML document, decoded bytes (null: not captured) */
 	htmlBytes: number | null;
+	/** what a browser visit fetched for nothing: pixels past what each image's box shows, preloads
+	 *  nothing used (said in the page weight's note; the score stays the weighed bytes') */
+	wasted?: { bytes: number; images: number; preloads: number };
 	/** does the page have islands at all (hydration integrity is about islands) */
 	hasIslands: boolean;
 	/** hydrations that discarded the server DOM and re-rendered */
@@ -194,7 +197,11 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: wt,
 			weight: 10,
 			value: `${fmt_bytes(a.wire)} on the wire`,
-			note: wt >= 90 ? 'Light on the wire.' : `${fmt_bytes(a.wire)} crosses the network before the page is complete (HTML, scripts, styles, fonts, images at start). Slow connections pay for every one.`
+			note:
+				(wt >= 90 ? 'Light on the wire.' : `${fmt_bytes(a.wire)} crosses the network before the page is complete (HTML, scripts, styles, fonts, images at start). Slow connections pay for every one.`) +
+				(inp.wasted
+					? ` A visit fetched ${fmt_bytes(inp.wasted.bytes)} for nothing: ${[inp.wasted.images ? `${fmt_bytes(inp.wasted.images)} of image pixels bigger than their boxes` : '', inp.wasted.preloads ? `${fmt_bytes(inp.wasted.preloads)} of preloads nothing used` : ''].filter(Boolean).join(' and ')}.`
+					: '')
 		});
 		const blocking_eff = a.blocking + a.blocking_count * 8 * KB; // each blocking request costs a round trip too
 		const bl = curve(blocking_eff, CURVES.blocking[0], CURVES.blocking[1]);

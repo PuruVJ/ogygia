@@ -72,7 +72,7 @@ export function browser_page_report(
 	held_open?: HeldOpen
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.hole_batches?.length && !visit.restores?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp && !visit.dom && !visit.images_oversized?.length && !visit.font_faces?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.hole_batches?.length && !visit.restores?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp && !visit.dom && !visit.images_oversized?.length && !visit.font_faces?.length && !visit.preloads_unused?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to
@@ -117,6 +117,7 @@ export function browser_page_report(
 			...(visit.font_faces ? { font_faces: visit.font_faces } : {}),
 			...(visit.images_oversized ? { images_oversized: visit.images_oversized } : {}),
 			...(visit.dom ? { dom: visit.dom } : {}),
+			...(visit.preloads_unused ? { preloads_unused: visit.preloads_unused } : {}),
 			...(visit.navs ? { navs: visit.navs } : {}),
 			// (named from the report's island rows, by the identity each one carries)
 			...(visit.entry_fallbacks

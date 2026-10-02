@@ -172,3 +172,13 @@ describe('page_score', () => {
 		expect(s.missing.find((m) => m.key === 'stability')?.why).toBe('no shifts from Safari');
 	});
 });
+
+describe('what a visit fetched for nothing', () => {
+	test('the page weight says it, and the score stays the weighed bytes', () => {
+		const plain = page_score(lean);
+		const with_waste = page_score({ ...lean, wasted: { bytes: 340 * KB, images: 336 * KB, preloads: 4 * KB } });
+		const w = with_waste.categories.find((c) => c.key === 'weight')!;
+		expect(w.note).toBe('Light on the wire. A visit fetched 340 KB for nothing: 336 KB of image pixels bigger than their boxes and 4 KB of preloads nothing used.');
+		expect(with_waste.score).toBe(plain.score);
+	});
+});
