@@ -433,6 +433,10 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 		expect(codes(a, { ...base, page: '/x', run_status: 200, run_bytes: 5000 })).toContain(
 			'low-confidence'
 		);
+		// a real page (200, a real body) that renders fast: a calm note, not a warning
+		const f = derive_findings(a, { ...base, page: '/x', run_status: 200, run_bytes: 5000, runs: [0.4, 0.5, 0.6] } as never, { net: [], mem: [] } as never).find((x) => x.code === 'low-confidence')!;
+		expect(f.severity).toBe('info');
+		expect(f.message).toMatch(/^This page renders in about 0\.50 ms: only \d+ CPU samples? and no component took measurable time — there is little here to make faster/);
 	});
 
 	it('does NOT cry low-confidence on a real render', () => {

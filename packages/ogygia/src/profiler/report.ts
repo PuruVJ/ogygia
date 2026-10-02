@@ -870,13 +870,15 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					`shell, or a cached stub). The profile below is not representative.`
 			);
 		} else if (a.components.length === 0 && a.sample_count < 200) {
-			// no component work AND barely any samples: either a non-render or a page so fast there is
-			// nothing to see. Either way the verdict can't be trusted — say so instead of dressing it up.
-			warn(
+			// no component work AND barely any samples: the page answered 200 with a real body (the
+			// branches above took the rest), so it is FAST — a note that says so, not a warning: it read
+			// as a warning on 25 of the playground's pages that simply render in a millisecond
+			const runs = [...(meta.runs ?? [])].sort((x, y) => x - y);
+			const ms = runs.length ? runs[runs.length >> 1] : undefined;
+			info(
 				'low-confidence',
-				`Only ${a.sample_count} CPU sample${a.sample_count === 1 ? '' : 's'} and no components were ` +
-					`seen — the render was too fast or too small to profile accurately. If the page is genuinely ` +
-					`instant it may be cached/prerendered; otherwise the wrong URL was profiled.`
+				`${ms !== undefined ? `This page renders in about ${fmt_ms(ms)} ms: o` : 'O'}nly ${a.sample_count} CPU sample${a.sample_count === 1 ? '' : 's'} and no component took measurable time — there is little here to make faster, and too little for the numbers below to be exact. ` +
+					`(Expected a heavier page? A cached or prerendered answer looks like this too: check the URL.)`
 			);
 		}
 		if (meta.warmup_ms !== undefined && meta.runs?.length) {
@@ -1369,10 +1371,12 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		);
 	}
 
-	if (a.gc_ms > a.busy_ms * 0.15 && a.gc_ms > 5) {
+	// (5 ms of collection PER RENDER: the window's total over a page that mostly sleeps — 6 ms of GC in
+	// 10 ms of CPU across two 800 ms renders — read as "60% of busy time", true and trivial)
+	if (a.gc_ms > a.busy_ms * 0.15 && a.gc_ms / runs_of(meta) > 5) {
 		warn(
 			'gc-heavy',
-			`Garbage collection took ${fmt_pct(a.gc_ms, a.busy_ms)} of busy time — see the allocators for who creates the garbage.`
+			`Garbage collection took ${fmt_pct(a.gc_ms, a.busy_ms)} of busy time (${fmt_ms(pr(a.gc_ms))} ms${per_r}) — see the allocators for who creates the garbage.`
 		);
 	}
 	// WHAT A RENDER LEAVES BEHIND: the heap kept after one more render and a full collection
