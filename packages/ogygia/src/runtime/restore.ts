@@ -30,6 +30,7 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		__og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[];
 		__og_init?: ShadowRoot[];
 		__og_class_watch?: { mo: MutationObserver; hosts: Set<Element> };
+		__og_restore_log?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[];
 	};
 	const sheets = (W.__og_sheets ??= new Map());
 	// (a DOM without `CSS.escape` — jsdom — gets a quote-safe escape for the attribute selectors)
@@ -267,6 +268,16 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		if (!diff) return;
 		console.error(`[ogygia] the transform broke hydration markup: ${diff}`);
 		host.dispatchEvent(new CustomEvent('ogygia:restore-mismatch', { bubbles: true, detail: { host: host.localName, diff } }));
+		log('mismatch', host, diff);
+	};
+
+	/** What went wrong, kept for whoever reads it later (the devtools, the profiler's beacon): the
+	 *  restorer runs while the page parses — before any listener of theirs exists. */
+	const log = (kind: 'late' | 'mismatch', host: Element, diff?: string) => {
+		const list = (W.__og_restore_log ??= []);
+		if (list.length >= 50) return;
+		const island = host.closest('ogygia-region')?.getAttribute('data-og-fp') ?? undefined;
+		list.push({ kind, host: host.localName, t: Math.round(performance.now()), ...(diff ? { diff: diff.slice(0, 300) } : {}), ...(island ? { island } : {}) });
 	};
 
 	// 1. stand-ins first: a Svelte child can be one (a block in the tree's `<p>`), and the children are
@@ -293,6 +304,7 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		if (host.shadowRoot) {
 			// upgraded before the restore reached it: leave it as served, say so
 			host.dispatchEvent(new CustomEvent('ogygia:restore-late', { bubbles: true, detail: { host: k } }));
+			log('late', host);
 			continue;
 		}
 		const shadow = host.attachShadow({ mode: 'open' });

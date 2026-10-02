@@ -262,3 +262,34 @@ test('a hole answered late: waited from the first paint, split by its server tim
 	expect(slow(undefined)[0].message).toContain('SlowHole (1.5 s)');
 	expect(slow(undefined)[0].fix).toContain('Holes section');
 });
+
+test('a server transform’s restore gone wrong rides the visit: a late host named in the report', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		restores: [{ kind: 'late', host: 'demo-card', t: 21 }, { kind: 'odd', host: 'x' }, { kind: 'mismatch', host: 'x-nav', t: 30, diff: 'Svelte has <i>, the restored markup has nothing' }]
+	})!;
+	expect(v.restores).toHaveLength(2);
+	expect(merge_visits(v, { ...v, restores: undefined }).restores).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, []));
+	expect(f.find((x) => x.code === 'restore-late')?.message).toContain('<demo-card> was upgraded by its component before ogygia restored it');
+	expect(f.find((x) => x.code === 'restore-mismatch')?.message).toContain('Svelte has <i>');
+});
+
+test('holes in one batch request: a batched hole’s wait is the server’s, never the gate’s; a refused batch is named', () => {
+	const part = (id: string, at: number) => ({ id, start: 100, t: at + 5, below_fold: false, left: 110, first: at, end: at, batch: 4 });
+	const v = parse_visit('/lab', {
+		...raw,
+		paints: { fcp: 100 },
+		holes_answered: [part('a1', 150), part('a2', 150), part('a3', 150), part('a4', 1310)],
+		hole_batches: [{ sent: 4, delivered: 0, status: 405, ids: ['a1', 'a2', 'a3', 'a4'] }, { sent: 'x' }, { sent: 2, delivered: 3, status: 200, ids: [] }]
+	})!;
+	expect(v.holes_answered?.[3].batch).toBe(4);
+	expect(v.hole_batches).toHaveLength(1);
+	expect(merge_visits(v, { ...v, hole_batches: undefined }).hole_batches).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [], undefined, undefined, () => 'BatchHole'));
+	const slow = f.find((x) => x.code === 'hole-slow')!;
+	expect(slow.message).toContain('BatchHole (1.2 s: 1.2 s waiting on the server, its part of one request for 4 holes)');
+	expect(slow.fix).not.toContain('hole requests at a time');
+	const missed = f.find((x) => x.code === 'hole-batch-missed')!;
+	expect(missed.message).toContain('The one request for 4 holes (BatchHole ×4) was answered 405');
+});

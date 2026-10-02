@@ -32,6 +32,24 @@ export function fnv1a(s: string): string {
 	return (a >>> 0).toString(16).padStart(8, '0') + (b >>> 0).toString(16).padStart(8, '0');
 }
 
+/** WHICH COPY of a hole: copies of one component share its id, and differ by their props. The key is
+ *  a short hash of the props PAYLOAD as it rides in the hole's signed endpoint (`?props=`) — the one
+ *  string the server's request, the page's note and the browser's report all hold, verbatim. */
+export function hole_copy_key(payload: string): string {
+	return fnv1a32(payload).toString(36);
+}
+
+/** The copy key of a hole endpoint (its `props` parameter), or '' when it has none. */
+export function hole_copy_of(endpoint: string): string {
+	let at = endpoint.indexOf('&props=');
+	if (at === -1) at = endpoint.indexOf('?props=');
+	if (at === -1) return '';
+	at += 7;
+	const end = endpoint.indexOf('&', at);
+	// (the payload is base64url: the same characters raw and decoded)
+	return hole_copy_key(endpoint.slice(at, end === -1 ? endpoint.length : end));
+}
+
 /** FNV-1a 32-bit over a string → uint32. The NUMERIC sibling for callers that bucket/mod rather
  *  than compare (experiment splits, build-cache keys) — no BigInt, no hex round-trip. This is THE
  *  one shared implementation; the driver/vite copies were folded into it. */

@@ -473,7 +473,7 @@ export interface ReportExtras {
 	/** the visit's own hole requests from the request log (made after the recording): server ms each */
 	/** `name`: the hole's component, from its own request (a hole the profiled render did not have —
 	 *  the visited page's query put it there — is named all the same) */
-	hole_requests?: { id: string; ms: number; name?: string }[];
+	hole_requests?: { id: string; ms: number; name?: string; p?: string }[];
 	/** the visit's in-app navigations, server side: the page request each one made (by its start `t`,
 	 *  the page clock) — its ms, the CPU it burned, its outbound calls */
 	nav_requests?: { t: number; ms: number; cpu_ms: number; net_ms: number; net_count: number; inflight?: number }[];
@@ -1061,7 +1061,8 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	const ser = a.functions.filter(
 		(f) => f.pkg === 'devalue' || (f.name === 'stringify' && f.category === 'dependency')
 	);
-	const ser_ms = ser.reduce((s, f) => s + f.self_ms, 0);
+	// (Kit's own copy of the server load data is its own finding — kit-uneval — not counted twice here)
+	const ser_ms = Math.max(0, ser.reduce((s, f) => s + f.self_ms, 0) - kit_load_serialize_ms(a));
 	if (ser_ms >= a.busy_ms * 0.1 && ser_ms >= 5) {
 		warn(
 			'serialization',
@@ -1228,17 +1229,26 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const origin = extras.visit.origin || page_origin(extras.assets);
 		const third = origin ? { origin, named: extras.assets?.assets.map((a) => a.url), by_host: cpu_by_host(extras) } : undefined;
 		const hole_by_id = new Map((own_requests(meta).find((r) => r.og?.hole_rows?.length)?.og?.hole_rows ?? []).map((h) => [h.id, h]));
-		const hole_name = (id: string) => {
+		// (a COPY by its key when the visit said which — copies of one component share the id and
+		// differ by props; without a key, a component with several copies is named bare: no copy's
+		// props stand for the others)
+		const hole_name = (id: string, p?: string) => {
 			const h = hole_by_id.get(id);
-			if (h) return hole_label(h);
+			if (h) {
+				const copy = p ? h.copies?.find((c) => c.p === p) : undefined;
+				if (copy) return hole_label({ ...h, props: copy.props });
+				return (h.copies?.length ?? 0) > 1 && h.name ? h.name : hole_label(h);
+			}
 			const own = (extras.hole_requests ?? []).find((r) => r.id === id && r.name)?.name;
 			return own ?? `the hole ${id}`;
 		};
-		// (the hole's server render beside its browser wait: the visit's own requests of it, else
-		// the ones the recording holds, per request)
+		// (the hole's server render beside its browser wait: the visit's own requests of it — of
+		// that copy, when known — else the ones the recording holds, per request)
 		const econ = hole_economics(meta);
-		const hole_server = (id: string) => {
-			const own = (extras.hole_requests ?? []).filter((r) => r.id === id);
+		const hole_server = (id: string, p?: string) => {
+			const of_id = (extras.hole_requests ?? []).filter((r) => r.id === id);
+			const of_copy = p ? of_id.filter((r) => r.p === p) : [];
+			const own = of_copy.length ? of_copy : of_id;
 			if (own.length) return own.reduce((a, r) => a + r.ms, 0) / own.length;
 			const e = econ.get(id);
 			const n = e ? e.hit + e.miss + e.none : 0;
@@ -2200,6 +2210,29 @@ function ogygia_findings(
 
 /** Kit-shaped findings: the load lanes and the parent() chain, universal loads, and the client
  *  router's serialization of load data. */
+/** ms of devalue work done for Kit's copy of the server load data: each devalue function's own time,
+ *  by the share of its call paths that pass through Kit's serializer (`add_node`, data_serializer.js,
+ *  or render_response). A function with no recorded paths counts only when it is `uneval` itself. */
+export function kit_load_serialize_ms(a: Analysis): number {
+	let ms = 0;
+	for (const f of a.functions) {
+		if (f.pkg !== 'devalue') continue;
+		const stacks = f.stacks ?? [];
+		if (!stacks.length) {
+			if (f.name === 'uneval') ms += f.self_ms;
+			continue;
+		}
+		let kit = 0;
+		let all = 0;
+		for (const s of stacks) {
+			all += s.ms;
+			if (s.frames.some((fr) => fr.n === 'add_node' || fr.n === 'render_response' || fr.f.indexOf('data_serializer') !== -1)) kit += s.ms;
+		}
+		if (all > 0) ms += f.self_ms * (kit / all);
+	}
+	return ms;
+}
+
 function kit_findings(a: Analysis, meta: ReportMeta, info: Say, warn: Say): void {
 	const tl = a.timeline;
 	if (tl?.chain) {
@@ -2245,18 +2278,28 @@ function kit_findings(a: Analysis, meta: ReportMeta, info: Say, warn: Say): void
 			);
 		}
 	}
-	// KIT'S UNEVAL: the client router's copy of the load data. ogygia's islands take their data by
-	// props and the seed — on a csr=false page this cost is gone.
-	const uneval = a.functions.filter((f) => f.pkg === 'devalue' && f.name === 'uneval');
-	const uneval_ms = uneval.reduce((s, f) => s + f.self_ms, 0);
+	// KIT'S COPY OF THE SERVER LOAD DATA: Kit `devalue.uneval`s each server load result as it
+	// arrives (page/data_serializer.js `add_node`) — on EVERY page. A csr=true page puts it in the
+	// HTML for the client router; a csr=false page never reads it (render.js uses it only with csr):
+	// built on every request, dropped. Measured on a 250 KB load: about a third of the server's CPU.
+	// (anchored on devalue's heaviest function: uneval's own frame holds little — its inner walk and
+	// stringify do the work)
+	const uneval = a.functions.filter((f) => f.pkg === 'devalue').sort((x, y) => y.self_ms - x.self_ms);
+	const kit_ms = kit_load_serialize_ms(a);
 	const runs = meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1;
-	if (uneval_ms >= 3 && uneval_ms >= a.busy_ms * 0.03) {
+	if (uneval.length && kit_ms >= 3 && kit_ms >= a.busy_ms * 0.03) {
+		// (the profiled render went through ogygia's csr=false path: its request carries ogygia's stats)
+		const csr_false = meta.requests.some((r) => r.internal && r.og);
 		info(
 			'kit-uneval',
-			`Kit serialized the load data for its client router: ${fmt_ms(uneval_ms / runs)} ms per render (devalue.uneval). This page has csr on.`,
+			csr_false
+				? `Kit serialized this page's server load data: ${fmt_ms(kit_ms / runs)} ms per render (devalue.uneval). On a csr=false page nothing reads that copy — Kit builds it on every request and drops it.`
+				: `Kit serialized the load data for its client router: ${fmt_ms(kit_ms / runs)} ms per render (devalue.uneval). This page has csr on.`,
 			{
 				anchor: `fn:${uneval[0].key}`,
-				fix: 'With ogygia islands on a csr=false page this cost is zero — the islands get their data from props and the seed, and the document stays static.'
+				fix: csr_false
+					? 'Only less load data helps: return from the server loads (+page.server.ts, +layout.server.ts) only what this page renders. Islands get what they read from ogygia’s own seed, shaped apart from it. The work is Kit’s, not yours.'
+					: 'Return from the server load only what the page renders: Kit serializes all of it into the HTML for its client router. (csr=false does not make it free — Kit still builds the copy and drops it — so less data is the fix either way.)'
 			}
 		);
 	}

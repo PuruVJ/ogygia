@@ -825,7 +825,10 @@ class OgygiaRegion extends HTMLElement {
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
 		slots.lakes.after_html_swap(this, { revalidate });
-		if (BEACON && !revalidate && this.#fetch_started) beacon_hole_answered(this, this.#fetch_started);
+		if (BEACON && !revalidate && this.#fetch_started) {
+			const ep = this.getAttribute('endpoint');
+			beacon_hole_answered(this, this.#fetch_started, ep ? slots.frames?.batch_times?.(ep) : undefined);
+		}
 		if (DEVTOOLS)
 			dt_emit({
 				domain: 'runtime',

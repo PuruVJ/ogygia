@@ -26,7 +26,7 @@
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
 	import { runtime_bootstrap } from './server/entry-location.js';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
-	import { fingerprint_of } from './runtime/hash.js';
+	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
 	import { asset } from '$app/paths';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
@@ -352,7 +352,8 @@
 	// ── slot crossing: an island's children render IN-PLACE, the client ADOPTS them ──
 	// The marker id fencing THIS island's children to its payload pointer. Server-assigned; the client
 	// reads it back from the serialized descriptor, never regenerates it.
-	const slot_id = next_slot_id();
+	// (counted per island entry: another island's async timing never shifts this one's id)
+	const slot_id = next_slot_id(untrack(() => island_entry) ?? '');
 	const has_slot_children = $derived(!nested && island_children != null);
 	// The BODY-side children: a server-convention snippet (`(renderer) => …`) that emits EXACTLY ONE
 	// element — `<ogygia-slot>` wrapping the natural children — with no extra snippet-layer anchors.
@@ -615,7 +616,7 @@
 	}
 	// Every document: note the hole's schedule + cache policy for the profiler's hole economics.
 	if (tail && is_server && !nested)
-		tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0, island_component?.name ?? '', __props);
+		untrack(() => tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0, island_component?.name ?? '', __props, server_endpoint ? hole_copy_of(server_endpoint) : ''));
 
 	// A hydrating hole's island graph — the same data as `island_graph_hrefs`: the runtime preloads it
 	// when the hole's island wakes (phase 2, after its HTML landed). Every document: the runtime, not

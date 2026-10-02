@@ -5220,7 +5220,7 @@ class Profiler {
 		// wait for a render slot taken out: the beacon's Server-Timing tells that part apart)
 		const answered = new Set((visit?.holes_answered ?? []).map((h) => h.id));
 		const hole_requests = answered.size
-			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)), ...(e.hole!.name ? { name: e.hole!.name } : {}) }))
+			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)), ...(e.hole!.name ? { name: e.hole!.name } : {}), ...(e.hole!.p ? { p: e.hole!.p } : {}) }))
 			: [];
 		// THE VISIT'S NAVIGATIONS, SERVER SIDE: each in-app navigation fetched a page, and that request
 		// is in the log — what the server did with the wait the browser saw (its CPU, its outbound

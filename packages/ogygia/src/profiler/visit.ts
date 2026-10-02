@@ -132,7 +132,11 @@ export interface Visit {
 	/** the in-app navigations (router body swaps): start, page fetched, styles in, swap committed */
 	navs?: PageNav[];
 	/** holes whose first answer came: fetch start and swap (page time), and whether below the fold */
-	holes_answered?: { id: string; n: number; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number }[];
+	holes_answered?: { id: string; n: number; start: number; t: number; below_fold: boolean; left?: number; first?: number; end?: number; queue?: number; render?: number; batch?: number; p?: string }[];
+	/** batch requests that carried fewer holes than they were sent for (each then fetched alone) */
+	hole_batches?: { sent: number; delivered: number; status: number; refused?: 'redirected' | 'document'; final_url?: string; ids: string[] }[];
+	/** a server transform's restore gone wrong: a host upgraded first (`late`), or not Svelte's (`mismatch`) */
+	restores?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[];
 	viewport?: [number, number];
 	ua?: string;
 }
@@ -430,6 +434,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		const timed = left !== undefined && first !== undefined && end !== undefined && left <= first && first <= end;
 		const queue = num(h.queue);
 		const render = num(h.render);
+		const batch = num(h.batch, 32);
+		const p = str(h.p, 16);
 		holes_answered.push({
 			id,
 			// (an older beacon sends no place: its list held each id once)
@@ -439,10 +445,35 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 			below_fold: h.below_fold === true,
 			...(timed ? { left, first, end } : {}),
 			...(queue !== undefined ? { queue } : {}),
-			...(render !== undefined ? { render } : {})
+			...(render !== undefined ? { render } : {}),
+			...(batch !== undefined && batch >= 1 ? { batch } : {}),
+			...(p ? { p } : {})
 		});
 	}
 	if (holes_answered.length) visit.holes_answered = holes_answered;
+	const hole_batches: NonNullable<Visit['hole_batches']> = [];
+	for (const b of (Array.isArray(v.hole_batches) ? v.hole_batches : []).slice(0, 10) as Record<string, unknown>[]) {
+		const sent = num(b?.sent, 32);
+		const delivered = num(b?.delivered, 32);
+		const status = num(b?.status, 999);
+		if (sent === undefined || delivered === undefined || status === undefined || delivered > sent) continue;
+		const refused = b.refused === 'redirected' || b.refused === 'document' ? b.refused : undefined;
+		const final_url = str(b.final_url, 300);
+		const ids = (Array.isArray(b.ids) ? b.ids : []).slice(0, 32).map((x) => str(x, 40) ?? '');
+		hole_batches.push({ sent, delivered, status, ...(refused ? { refused } : {}), ...(final_url ? { final_url } : {}), ids });
+	}
+	if (hole_batches.length) visit.hole_batches = hole_batches;
+	const restores: NonNullable<Visit['restores']> = [];
+	for (const r of (Array.isArray(v.restores) ? v.restores : []).slice(0, 20) as Record<string, unknown>[]) {
+		const kind = r?.kind === 'late' || r?.kind === 'mismatch' ? r.kind : null;
+		const host = str(r?.host, 60);
+		const t = num(r?.t);
+		if (!kind || !host || t === undefined) continue;
+		const diff = str(r.diff, 300);
+		const island = str(r.island, 40);
+		restores.push({ kind, host, t, ...(diff ? { diff } : {}), ...(island ? { island } : {}) });
+	}
+	if (restores.length) visit.restores = restores;
 	const unsupported =(Array.isArray(v.unsupported) ? v.unsupported : []).filter((t): t is string => typeof t === 'string' && KNOWN_TYPES.has(t));
 	if (unsupported.length) visit.unsupported = unsupported;
 	const origin = str(v.origin, 200);
@@ -522,6 +553,9 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(a.entry_fallbacks || b.entry_fallbacks ? { entry_fallbacks: by(a.entry_fallbacks ?? [], b.entry_fallbacks ?? [], (f) => f.entry) } : {}),
 		...(a.holes_failed || b.holes_failed ? { holes_failed: by(a.holes_failed ?? [], b.holes_failed ?? [], (h) => h.id) } : {}),
 		...(a.holes_answered || b.holes_answered ? { holes_answered: by(a.holes_answered ?? [], b.holes_answered ?? [], (h) => `${h.n}:${h.id}`) } : {}),
+		// (the later message holds every batch the earlier one did, and maybe more)
+		...(a.hole_batches || b.hole_batches ? { hole_batches: (b.hole_batches?.length ?? 0) >= (a.hole_batches?.length ?? 0) ? b.hole_batches : a.hole_batches } : {}),
+		...(a.restores || b.restores ? { restores: (b.restores?.length ?? 0) >= (a.restores?.length ?? 0) ? b.restores : a.restores } : {}),
 		...(b.viewport ?? a.viewport ? { viewport: b.viewport ?? a.viewport } : {}),
 		...(b.ua ?? a.ua ? { ua: b.ua ?? a.ua } : {})
 	};

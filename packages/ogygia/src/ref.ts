@@ -52,6 +52,12 @@ export interface RefKind {
 	encode(value: object): { t?: string; d?: unknown };
 	/** Receiving side: rebuild a live value from the ref. */
 	decode(ref: Ref): unknown;
+	/** An id DERIVED from the descriptor, for a kind whose decode reads only `d` and whose instances
+	 *  hold no state: equal descriptors ARE the same value, so they may share the id — and a render
+	 *  mints the same id every time (the HTML, the island's fingerprint and every cache keyed on them
+	 *  stay put across requests). `undefined` (or no hook) → a fresh random id, as every stateful kind
+	 *  needs (a store, a class instance: identity is the point). */
+	stable_id?(d: unknown): string | undefined;
 	/** SESSION continuity: name this ref to promote its instance to tab lifetime (browser only). */
 	keep_name?(ref: Ref): string | undefined;
 	/** Reconcile a kept live instance with a freshly arrived ref (default: kept wins untouched). */
@@ -139,7 +145,8 @@ export function mint(value: unknown, only?: ReadonlySet<string>): Ref | undefine
 		const { t, d } = kind.encode(value as object);
 		let i = reg.ids.get(value as object);
 		if (i === undefined) {
-			i = mint_id();
+			// (a stateless kind names it by its content: the same on every render)
+			i = kind.stable_id?.(d) ?? mint_id();
 			reg.ids.set(value as object, i);
 		}
 		const ref: Ref = { k: kind.k, i, d };

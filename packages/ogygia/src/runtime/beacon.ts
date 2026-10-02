@@ -17,6 +17,7 @@
  * here runs on the hydration path itself: samples are batched and sent on idle or when the page
  * hides.
  */
+import { hole_copy_of } from './hash.js';
 
 interface Sample {
 	fp: string;
@@ -61,13 +62,14 @@ interface BeaconApi {
 	beacon_warning: typeof beacon_warning;
 	beacon_hole_failed: typeof beacon_hole_failed;
 	beacon_hole_answered?: typeof beacon_hole_answered;
+	beacon_hole_batch_missed?: typeof beacon_hole_batch_missed;
 	beacon_entry_fallback?: typeof beacon_entry_fallback;
 	beacon_nav?: typeof beacon_nav;
 }
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_nav };
+	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_hole_batch_missed, beacon_entry_fallback, beacon_nav };
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -228,6 +230,51 @@ export interface HoleAnswered {
 	/** the server's split (Server-Timing): its wait for a render slot, and the render */
 	queue?: number;
 	render?: number;
+	/** it came in ONE batch request with this many holes (`left` the batch's, `first`/`end` its
+	 *  own part's landing, out of order) — no request of its own */
+	batch?: number;
+	/** which copy (runtime/hash.ts `hole_copy_of` its endpoint): copies of one component share the id */
+	p?: string;
+}
+
+/** A batch request that carried fewer holes than it was sent for (runtime/frame-nav.ts). */
+export interface HoleBatchMiss {
+	sent: number;
+	delivered: number;
+	status: number;
+	refused?: 'redirected' | 'document';
+	final_url?: string;
+	/** the holes' island ids */
+	ids: string[];
+}
+let visit_hole_batches: HoleBatchMiss[] = [];
+
+/** The restorer's log (runtime/restore.ts `__og_restore_log`): its late and mismatched hosts. */
+function restore_log(): { restores?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[] } {
+	const log = (globalThis as { __og_restore_log?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[] }).__og_restore_log;
+	return log?.length ? { restores: log.slice(0, 20) } : {};
+}
+export function beacon_hole_batch_missed(m: Omit<HoleBatchMiss, 'ids'> & { endpoints: string[] }): void {
+	const o = owner();
+	if (o) return o.beacon_hole_batch_missed?.(m);
+	if (!collecting() || visit_hole_batches.length >= 10) return;
+	const ids: string[] = [];
+	for (const e of m.endpoints.slice(0, 32)) {
+		try {
+			ids.push(new URL(e, location.href).searchParams.get('id') ?? '');
+		} catch {
+			ids.push('');
+		}
+	}
+	visit_hole_batches.push({
+		sent: m.sent,
+		delivered: m.delivered,
+		status: m.status,
+		...(m.refused ? { refused: m.refused } : {}),
+		...(m.final_url ? { final_url: m.final_url.slice(0, 300) } : {}),
+		ids
+	});
+	if (early_visit_done) resend_soon();
 }
 
 /** The browser's timing of the request that answered a hole: the latest one for its URL done by
@@ -287,10 +334,10 @@ export function beacon_entry_fallback(f: EntryFallback): void {
 let holes_answered_els = new WeakSet<Element>();
 /** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
  *  The element is read (id, place) only while measuring. */
-export function beacon_hole_answered(el: Element, start: number): void {
+export function beacon_hole_answered(el: Element, start: number, batch?: { left: number; at: number; size: number }): void {
 	const o = owner();
 	// (an older owning copy has no such entry: stay quiet)
-	if (o) return o.beacon_hole_answered?.(el, start);
+	if (o) return o.beacon_hole_answered?.(el, start, batch);
 	if (!collecting() || visit_holes_answered.length >= 30) return;
 	let id = '';
 	try {
@@ -302,7 +349,10 @@ export function beacon_hole_answered(el: Element, start: number): void {
 	if (!id || holes_answered_els.has(el)) return;
 	holes_answered_els.add(el);
 	const rect = el.getBoundingClientRect();
-	const times = hole_request_times(el.getAttribute('endpoint') ?? '', performance.now());
+	// a batched hole has no request of its own: the batch's departure, and its own part's landing
+	const times = batch
+		? { left: Math.round(batch.left), first: Math.round(batch.at), end: Math.round(batch.at), batch: batch.size }
+		: hole_request_times(el.getAttribute('endpoint') ?? '', performance.now());
 	visit_holes_answered.push({
 		id,
 		// its place in this visit's list: the early message and the final one fold by it
@@ -310,6 +360,8 @@ export function beacon_hole_answered(el: Element, start: number): void {
 		start: Math.round(start),
 		t: Math.round(performance.now()),
 		below_fold: rect.top + scrollY > innerHeight,
+		// which copy (copies of one component share the id): its server requests carry the same key
+		p: hole_copy_of(el.getAttribute('endpoint') ?? ''),
 		...(times ?? {})
 	});
 	if (early_visit_done) resend_soon();
@@ -765,6 +817,10 @@ function build_visit(): Record<string, unknown> | null {
 		...(visit_warnings.length ? { warnings: visit_warnings.slice() } : {}),
 		...(visit_holes_failed.length ? { holes_failed: visit_holes_failed.slice() } : {}),
 		...(visit_holes_answered.length ? { holes_answered: visit_holes_answered.slice() } : {}),
+		...(visit_hole_batches.length ? { hole_batches: visit_hole_batches.slice() } : {}),
+		// a server transform's restore that went wrong (runtime/restore.ts keeps the log: it ran
+		// while the page parsed)
+		...restore_log(),
 		...(visit_entry_fallbacks.length ? { entry_fallbacks: visit_entry_fallbacks.slice() } : {}),
 		...(visit_marks.length ? { marks: visit_marks } : {}),
 		// the vitals so far, in every visit message (the early one, the final one): a visit whose
@@ -1430,6 +1486,7 @@ export function _reset_beacon(): void {
 	visit_warnings = [];
 	visit_holes_failed = [];
 	visit_holes_answered = [];
+	visit_hole_batches = [];
 	visit_entry_fallbacks = [];
 	holes_answered_els = new WeakSet();
 	visit_marks = [];

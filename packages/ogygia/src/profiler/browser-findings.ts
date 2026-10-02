@@ -58,10 +58,10 @@ export function browser_page_report(
 	rows: readonly { fp: string; entry: string; name: string }[],
 	windows?: ClientWindows,
 	third?: { origin: string; named?: string[]; by_host: Map<string, number> | null },
-	/** a hole's name from its island id (the report's hole rows) */
-	hole_name?: (id: string) => string,
-	/** a hole's server render per request, from its recorded requests */
-	hole_server?: (id: string) => number | undefined,
+	/** a hole's name from its island id (the report's hole rows); with `p`, that copy's (its props) */
+	hole_name?: (id: string, p?: string) => string,
+	/** a hole's server render per request, from its recorded requests; with `p`, that copy's */
+	hole_server?: (id: string, p?: string) => number | undefined,
 	/** the visit's slowest interaction, sampled: its wait and its handlers, by function */
 	interaction_cpu?: InteractionCpu,
 	/** recorded on the dev server (a page compiles on its first request there) */
@@ -70,7 +70,7 @@ export function browser_page_report(
 	held_open?: HeldOpen
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.hole_batches?.length && !visit.restores?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to
@@ -165,18 +165,35 @@ export function browser_page_report(
 			? {
 					hole_waits: visit.holes_answered.map((h) => {
 						// the recorded render (the request log) first, else the answer's own Server-Timing
-						const server_ms = hole_server?.(h.id) ?? h.render;
+						// (this COPY's, when the beacon said which: copies of one component share the id)
+						const server_ms = hole_server?.(h.id, h.p) ?? h.render;
 						const shown_at = Math.max(visit.paints?.fcp ?? 0, h.start);
 						return {
-							name: hole_name?.(h.id) ?? `the hole ${h.id}`,
+							name: hole_name?.(h.id, h.p) ?? `the hole ${h.id}`,
 							wait_ms: Math.max(0, Math.round(h.t - shown_at)),
 							below_fold: h.below_fold,
 							shown_at,
 							...(server_ms !== undefined ? { server_ms } : {}),
 							...(h.queue !== undefined ? { server_queue_ms: h.queue } : {}),
-							...(h.left !== undefined ? { left_at: h.left, first_at: h.first, end_at: h.end } : {})
+							...(h.left !== undefined ? { left_at: h.left, first_at: h.first, end_at: h.end } : {}),
+							...(h.batch !== undefined ? { batch_size: h.batch } : {})
 						};
 					})
+				}
+			: {}),
+		// a server transform's restore gone wrong (the same words as the Page tab)
+		...(visit.restores?.length ? { restore_events: visit.restores } : {}),
+		// batch requests that did not carry their holes (each then fetched on its own)
+		...(visit.hole_batches?.length
+			? {
+					hole_batches: visit.hole_batches.map((b) => ({
+						sent: b.sent,
+						delivered: b.delivered,
+						status: b.status,
+						...(b.refused ? { refused: b.refused } : {}),
+						...(b.final_url ? { final_url: b.final_url } : {}),
+						names: b.ids.map((id) => (id && hole_name?.(id)) || 'a hole')
+					}))
 				}
 			: {})
 	};

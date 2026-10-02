@@ -188,6 +188,21 @@ check('Styles: the Page tab shows the sheets and the unscoped line', (await page
 	}
 }
 check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+// HOLES IN ONE BATCH, in a build: /dt-batch's four `visible` holes go out as ONE request (the
+// built runtime's batching, not dev's), and the Page tab reads the slow one's wait from its own part
+// of it — the server, never the browser's request gate.
+{
+	const p = await ctx.newPage();
+	const posts = [];
+	p.on('request', (r) => { if (r.url().includes('__ogygia__')) posts.push(r.method()); });
+	await p.goto(base + '/dt-batch', { waitUntil: 'load' });
+	await p.waitForTimeout(3000);
+	const slow = await p.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'hole-slow')?.message ?? null);
+	check('Batch: four visible holes, one request', posts.filter((m) => m === 'POST').length === 1 && !posts.includes('GET'), posts.join(','));
+	check('Batch: the slow hole, its part of the batch', !!slow && slow.includes('its part of one request for 4 holes') && slow.includes('BatchHole'), String(slow));
+	await p.close();
+}
+
 // THE OBSERVER EFFECT: measuring (the og_devtools cookie) must not change what it measures. The
 // same heavy page, loaded with and without it, one after the other (a server that drifts over the
 // run would bias blocks); the page's own main-thread time and its HTML size, medians of 6 each.

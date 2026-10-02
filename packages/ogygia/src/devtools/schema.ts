@@ -270,6 +270,39 @@ export type RuntimeEventInput =
 			wait_ms?: number;
 	  }
 	| {
+			/** Holes went out as ONE batch request (runtime/frame-nav.ts): the page's holes that
+			 *  started together, or a navigation's. One request, a part per hole as each renders. */
+			domain: 'runtime';
+			name: 'region.batch.sent';
+			/** this batch, on this page (its parts and its end carry it) */
+			batch: number;
+			/** `page`: holes that started together; `nav`: an in-app navigation's */
+			kind: 'page' | 'nav';
+			/** the holes' endpoints */
+			endpoints: string[];
+	  }
+	| {
+			/** One hole's answer landed out of its batch (when it rendered: out of order). */
+			domain: 'runtime';
+			name: 'region.batch.part';
+			batch: number;
+			endpoint: string;
+	  }
+	| {
+			/** A batch request ended. The holes it did not carry fetch on their own right after. */
+			domain: 'runtime';
+			name: 'region.batch.done';
+			batch: number;
+			sent: number;
+			/** holes whose answer it carried */
+			delivered: number;
+			/** the response's status (0: the request itself failed) */
+			status: number;
+			/** what answered, when it was not the batch: redirected to another URL, or a whole document */
+			refused?: 'redirected' | 'document';
+			final_url?: string;
+	  }
+	| {
 			/** A hole's answer did not arrive. Without this the page keeps the fallback and nothing
 			 *  anywhere says why (in a build the runtime is silent). */
 			domain: 'runtime';

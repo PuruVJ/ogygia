@@ -55,6 +55,12 @@ const corrupt_detector_region: Handle = async ({ event, resolve }) => {
 const auth_wall: Handle = async ({ event, resolve }) => {
 	const mode = event.cookies.get('og-auth-wall');
 	if (mode && event.url.pathname.startsWith('/__ogygia__')) {
+		// `post`: only the BATCH request (a POST) is refused — a firewall rule or a method filter that
+		// allows GET on the path (/dt-batch: the holes still fill, each on its own request)
+		if (mode === 'post') {
+			if (event.request.method === 'POST') return new Response('Method Not Allowed', { status: 405 });
+			return resolve(event);
+		}
 		if (mode === 'redirect') redirect(302, '/hole-wall/account/');
 		if (mode === 'document') {
 			return new Response(

@@ -190,11 +190,14 @@ export class DocumentTail {
 
 	/** Note a deferred hole the page rendered (every document, not only Kit-hydrated ones): its
 	 *  schedule and cache policy, for the profiler's hole economics. */
-	note_hole(id: string, when: string, hydrate: string | null, ttl: number, name = '', props: unknown = undefined): void {
+	note_hole(id: string, when: string, hydrate: string | null, ttl: number, name = '', props: unknown = undefined, copy = ''): void {
 		const key = `${id}\0${when}\0${hydrate ?? ''}\0${ttl}`;
-		const have = this.#hole_notes.get(key);
+		let have = this.#hole_notes.get(key);
 		if (have) have.count++;
-		else this.#hole_notes.set(key, { id, name, props: props_preview(props), when, hydrate, ttl, count: 1 });
+		else this.#hole_notes.set(key, (have = { id, name, props: props_preview(props), when, hydrate, ttl, count: 1 }));
+		// each copy by its key (the browser's report and the hole's requests name the copy by it)
+		if (copy && (have.copies?.length ?? 0) < 12 && !have.copies?.some((c) => c.p === copy))
+			(have.copies ??= []).push({ p: copy, props: have.count === 1 ? have.props : props_preview(props) });
 	}
 
 	/** The holes noted on this page. */

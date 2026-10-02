@@ -310,6 +310,14 @@ And two capabilities sit next to the islands, on the server. **Frozen pages** ma
 
 ### Fixed
 
+- **An island with children has the same fingerprint and the same bytes on every render.** Its
+  slot pointer's ref id was a random UUID, and slot ids counted across the whole page — with async
+  SSR, an island in an async branch got a new number per request. So every island with children
+  changed `data-og-fp` (what a client navigation reconciles by: such islands were patched on every
+  navigation) and its HTML on every request, missing a host's post-render cache, a freeze store
+  and an ETag. A stateless ref kind may now derive its id from its descriptor (`stable_id`): a
+  snippet by its slot id, its frozen HTML, or — only when JSON-exact — its live entry and props.
+  Slot ids count per island entry. Stores and class instances keep random ids.
 - **The runtime's hash module is no longer named `fingerprint.js`, which ad blockers were
   blocking — in production, for every user with a content blocker.** uBlock / AdBlock
   anti-fingerprinting filter lists match `fingerprint.js` by URL path. The module

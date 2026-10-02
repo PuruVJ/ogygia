@@ -2310,6 +2310,47 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			report_json(analyze(prof), m as never, '/p', { net: [], mem: [] } as never).kit.uneval_ms
 		).toBe(20);
 	});
+
+	it('kit-uneval on a csr=false page: Kit’s copy of the server load data, built and dropped; ogygia’s own serialization apart', () => {
+		const kit = '/app/node_modules/@sveltejs/kit/src/runtime/server/page/data_serializer.js';
+		const prof: CpuProfile = {
+			startTime: 0,
+			endTime: 100_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2, 5] },
+				{ id: 2, callFrame: frame('add_node', kit, 80), children: [3] },
+				{ id: 3, callFrame: frame('uneval', '/app/node_modules/devalue/src/uneval.js', 1), children: [4] },
+				{ id: 4, callFrame: frame('stringify_string', '/app/node_modules/devalue/src/utils.js', 87) },
+				// ogygia's own: the props on their way to the browser (devalue stringify, not under Kit)
+				{ id: 5, callFrame: frame('plan_props_wire', '/app/node_modules/ogygia/dist/server/props-wire.js', 10), children: [6] },
+				{ id: 6, callFrame: frame('stringify', '/app/node_modules/devalue/src/stringify.js', 1) }
+			],
+			samples: [3, 3, 4, 4, 4, 6],
+			timeDeltas: [10_000, 10_000, 10_000, 10_000, 10_000, 10_000]
+		};
+		const m = {
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [10],
+			run_status: 200,
+			run_bytes: 9000,
+			duration_ms: 60,
+			node: 'v',
+			// the profiled render went through ogygia's csr=false path (its stats are on it)
+			requests: [{ internal: true, og: { transform_ms: 1, islands: 1, hints: 0, holes: 0, seed_bytes: 0, remote_seed_bytes: 0, tail_bytes: 100, fnm_bytes: 0, ctx_bytes: 0, seed_json: true } }]
+		};
+		const a = analyze(prof);
+		const f = derive_findings(a, m as never, { net: [], mem: [] } as never);
+		const u = f.find((x) => x.code === 'kit-uneval')!;
+		// uneval 20 + stringify_string 30 under add_node: Kit's 50 ms; stringify 10 under ogygia: not Kit's
+		expect(u.message).toBe("Kit serialized this page's server load data: 50.0 ms per render (devalue.uneval). On a csr=false page nothing reads that copy — Kit builds it on every request and drops it.");
+		expect(u.fix).toMatch(/^Only less load data helps/);
+		// the serialization finding counts only the rest (10 ms of 60: over the 10% bar)
+		const s = f.find((x) => x.code === 'serialization');
+		expect(s?.message).toMatch(/^Serializing data took 10(\.0)? ms/);
+	});
 });
 
 describe('the accuracy round: hot lines, server-timing, call paths, cold start, run spread, vitals', () => {

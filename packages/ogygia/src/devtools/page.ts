@@ -7,7 +7,7 @@
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, defer_keys, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleFailure, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { analyze_page, defer_keys, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
 import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
@@ -122,6 +122,7 @@ function island_code(): IslandCode[] {
 export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWait[] {
 	const out: HoleWait[] = [];
 	const seen = new Set<string>();
+	const batched = batch_parts(since);
 	for (const e of snapshot()) {
 		if (e.name !== 'region.server.applied' || e.wait_ms === undefined || e.t < since) continue;
 		const key = e.endpoint ?? e.entry ?? '';
@@ -139,8 +140,10 @@ export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWai
 		// later: one woken by a scroll) to the swap. The fetch step alone undercounts: a prefetch may
 		// have started the request earlier, and the fallback was on screen since the paint anyway
 		const start = Math.max(fcp, since, e.t - e.wait_ms);
-		// its request as the browser timed it: splits the wait into before it left, and the server
-		const times = e.endpoint ? hole_request_times(e.endpoint, e.t) : null;
+		// its request as the browser timed it: splits the wait into before it left, and the server. A
+		// batched hole has no request of its own: the batch's start, and its own part's landing
+		const part = e.endpoint ? batched.get(e.endpoint) : undefined;
+		const times = part ? { left: part.left, first: part.at, end: part.at } : e.endpoint ? hole_request_times(e.endpoint, e.t) : null;
 		out.push({
 			name: (id && region_names()[id]) || (e.entry ? region_name(e.entry) : 'a hole'),
 			wait_ms: Math.max(0, Math.round(e.t - start)),
@@ -148,9 +151,65 @@ export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWai
 			...(e.endpoint ? { endpoint: e.endpoint } : {}),
 			shown_at: Math.round(start),
 			...(times ? { left_at: times.left, first_at: times.first, end_at: times.end } : {}),
-			...(times?.render !== undefined ? { server_ms: times.render } : {}),
-			...(times?.queue !== undefined ? { server_queue_ms: times.queue } : {})
+			...(times && 'render' in times && times.render !== undefined ? { server_ms: times.render } : {}),
+			...(times && 'queue' in times && times.queue !== undefined ? { server_queue_ms: times.queue } : {}),
+			...(part ? { batch_size: part.size } : {})
 		});
+	}
+	return out;
+}
+
+/** Each hole a batch request carried (since `since`): endpoint → the batch's start (the browser's
+ *  timing of the POST, else the send), its own part's landing, and the batch's size. */
+function batch_parts(since: number): Map<string, { left: number; at: number; size: number }> {
+	const out = new Map<string, { left: number; at: number; size: number }>();
+	const sent = new Map<number, { t: number; size: number; left?: number }>();
+	for (const e of snapshot()) {
+		if (e.t < since) continue;
+		if (e.name === 'region.batch.sent') sent.set(e.batch, { t: e.t, size: e.endpoints.length });
+		else if (e.name === 'region.batch.part') {
+			const b = sent.get(e.batch);
+			if (!b) continue;
+			b.left ??= batch_request_start(e.endpoint, b.t);
+			out.set(e.endpoint, { left: Math.round(b.left), at: Math.round(e.t), size: b.size });
+		}
+	}
+	return out;
+}
+
+/** When the browser sent the batch POST that left at about `sent` (its Resource Timing), or `sent`. */
+function batch_request_start(endpoint: string, sent: number): number {
+	try {
+		const u = new URL(endpoint, location.href);
+		let best: PerformanceResourceTiming | undefined;
+		for (const r of performance.getEntriesByName(u.origin + u.pathname, 'resource') as PerformanceResourceTiming[])
+			if (r.startTime >= sent - 5 && (!best || r.startTime < best.startTime)) best = r;
+		if (best) return best.requestStart || best.startTime;
+	} catch {
+		/* no Resource Timing */
+	}
+	return sent;
+}
+
+/** Batch requests that carried fewer holes than they were sent for (since `since`). */
+export function hole_batches(since = last_nav()?.t ?? -Infinity): HoleBatch[] {
+	const out: HoleBatch[] = [];
+	const sent = new Map<number, string[]>();
+	for (const e of snapshot()) {
+		if (e.t < since) continue;
+		if (e.name === 'region.batch.sent') sent.set(e.batch, e.endpoints);
+		else if (e.name === 'region.batch.done' && e.delivered < e.sent) {
+			const names = (sent.get(e.batch) ?? []).map((ep) => {
+				let id = '';
+				try {
+					id = new URL(ep, location.href).searchParams.get('id') ?? '';
+				} catch {
+					id = '';
+				}
+				return (id && region_names()[id]) || 'a hole';
+			});
+			out.push({ sent: e.sent, delivered: e.delivered, status: e.status, ...(e.refused ? { refused: e.refused } : {}), ...(e.final_url ? { final_url: e.final_url } : {}), names });
+		}
 	}
 	return out;
 }
@@ -415,6 +474,9 @@ export function read_page(): PageView | null {
 	const code = island_code();
 	// (after a navigation there is no new first paint: the navigation's start stands in for it)
 	const waits = hole_waits(nav?.t ?? -Infinity, nav ? 0 : (with_visit.visit?.paints?.fcp ?? 0));
+	const batches = hole_batches(nav?.t ?? -Infinity);
+	// (the restorer ran while the page parsed, before this dock: its log, since the last navigation)
+	const restores = ((window as { __og_restore_log?: RestoreEvent[] }).__og_restore_log ?? []).filter((e) => e.t >= (nav?.t ?? -Infinity));
 	const icpu = interaction_cpu_of(page);
 	// the profiler's last runs (the Profiler tab's): of this page, and of each page it navigated to
 	const server_profiles: Record<string, ServerProfileBrief> = {};
@@ -426,7 +488,7 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

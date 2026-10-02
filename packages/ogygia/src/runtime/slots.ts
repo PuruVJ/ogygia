@@ -101,6 +101,8 @@ export type FrameOps = {
 	/** Holes that start fetching in the same task go out as one batch (frame-nav.ts `join_batch`);
 	 *  await it, then `ensure` joins the batch's reservation. */
 	join?(endpoint: string): Promise<void>;
+	/** How the batch that carried a hole timed it (frame-nav.ts; the measuring browser only). */
+	batch_times?(endpoint: string): { left: number; at: number; size: number } | undefined;
 };
 
 // ── nav ──────────────────────────────────────────────────────────────────

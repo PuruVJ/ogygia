@@ -172,6 +172,24 @@ export interface PageInput {
 	island_code?: IslandCode[];
 	/** how long each hole's fallback showed before its answer (the bus; devtools only) */
 	hole_waits?: HoleWait[];
+	/** batch requests that did not carry all their holes (the bus; devtools only) */
+	hole_batches?: HoleBatch[];
+	/** what the restorer of a server transform reported (runtime/restore.ts `__og_restore_log`) */
+	restore_events?: RestoreEvent[];
+}
+
+/** A restored host that went wrong: upgraded by its component before the restore reached it
+ *  (`late`), or restored to markup that does not match Svelte's (`mismatch`, the dev check). */
+export interface RestoreEvent {
+	kind: 'late' | 'mismatch';
+	/** the host's tag */
+	host: string;
+	/** page time */
+	t: number;
+	/** the first difference (mismatch) */
+	diff?: string;
+	/** the island holding it, when one does */
+	island?: string;
 }
 
 export interface PreloadMiss {
@@ -204,6 +222,22 @@ export interface HoleWait {
 	left_at?: number;
 	first_at?: number;
 	end_at?: number;
+	/** it came in ONE batch request with the holes that started with it: how many (its own part
+	 *  landed when the server rendered it — `first_at` is that, out of order). No browser gate held it. */
+	batch_size?: number;
+}
+
+/** A batch request (runtime/frame-nav.ts) that carried fewer holes than it was sent for: the rest
+ *  fetched on their own right after it. */
+export interface HoleBatch {
+	sent: number;
+	delivered: number;
+	/** the response's status (0: the request failed) */
+	status: number;
+	refused?: 'redirected' | 'document';
+	final_url?: string;
+	/** the holes it was for (names) */
+	names: string[];
 }
 
 /** The runtime runs this many hole requests at once (runtime/session.ts `server_gate`). */
@@ -432,6 +466,30 @@ export function first_difference(a: string, b: string, span = 60): { at: number;
 	return { at: i, server: a.slice(from, i + span), now: b.slice(from, i + span) };
 }
 
+/** At the first difference `at`: an attribute of a CUSTOM ELEMENT empty on the server (`name=""`)
+ *  that the browser holds as `"true"` / `"false"` — written bare (Svelte hands a custom element its
+ *  attributes as values, and a bare one's is `true`; measured: `={true}` and `=""` agree on both
+ *  sides). Its name, the element's tag, the browser's value. */
+export function boolean_attr_at(server: string, now: string, at: number): { name: string; tag: string; now: 'true' | 'false' } | null {
+	if (at < 2 || server.charCodeAt(at - 1) !== 34 || server.charCodeAt(at - 2) !== 61 || server.charCodeAt(at) !== 34) return null;
+	const v = now.startsWith('true"', at) ? 'true' : now.startsWith('false"', at) ? 'false' : null;
+	if (!v) return null;
+	let s = at - 2;
+	while (s > 0) {
+		const c = server.charCodeAt(s - 1);
+		if (c === 32 || c === 10 || c === 9 || c === 60 || c === 34) break;
+		s--;
+	}
+	const name = server.slice(s, at - 2);
+	// the element it sits on: its tag, from the `<` before it (a custom element's name holds a `-`)
+	const lt = server.lastIndexOf('<', s);
+	if (!name || lt === -1) return null;
+	let e = lt + 1;
+	while (e < s && server.charCodeAt(e) !== 32 && server.charCodeAt(e) !== 10 && server.charCodeAt(e) !== 9) e++;
+	const tag = server.slice(lt + 1, e);
+	return tag.indexOf('-') !== -1 ? { name, tag, now: v } : null;
+}
+
 export function analyze_page(page: PageInput, regions: RegionFact[], failures: Failure[] = [], now = Infinity, cpu: CpuSummary | null = null): PageReport {
 	/** " — mostly in `fn (file:line)`" from the CPU trace, for a finding about this island (or '') */
 	const why_cpu = (fp: string | null): string => {
@@ -532,13 +590,17 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	if (changed.length) {
 		const snap = page.snapshots?.find((s) => s.fp === changed[0].fp);
 		const d = snap ? first_difference(snap.ssr, snap.hydrated) : null;
+		// a harmless-looking cause: a bare attribute on a custom element (`<my-card data-x>`, Svelte 5)
+		const bool = d && snap ? boolean_attr_at(without_comments(snap.ssr), without_comments(snap.hydrated), d.at) : null;
 		findings.push({
 			code: 'markup-changed',
 			severity: 'warn',
 			message:
 				`${list(changed.map((r) => r.name))} rendered different markup in the browser than on the server, so the page changes as it wakes.` +
 				(d ? ` First difference in ${changed[0].name}: server "${clip(d.server)}", browser "${clip(d.now)}".` : ''),
-			fix: 'Render the same thing on both sides: move time, random values, and browser-only reads (window, localStorage) into an effect or an event, or pass them in as props.',
+			fix: bool
+				? `\`${bool.name}\` on <${bool.tag}> is written bare: the server writes ${bool.name}="" and Svelte's hydrate sets it to "${bool.now}" — Svelte hands a custom element its attributes as values, and a bare attribute's value is \`true\`. So the island's markup changes as it wakes, and CSS or the component reading the value sees two. Give it a value, the same on both sides: \`${bool.name}=""\` (or \`${bool.name}="true"\` when the component reads it as a flag).`
+				: 'Render the same thing on both sides: move time, random values, and browser-only reads (window, localStorage) into an effect or an event, or pass them in as props.',
 			fps: changed.map((r) => r.fp)
 		});
 	}
@@ -919,8 +981,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			const before = h.left_at !== undefined && h.shown_at !== undefined ? Math.max(0, h.left_at - shown) : undefined;
 			const ttfb = h.first_at !== undefined && h.left_at !== undefined ? Math.max(0, h.first_at - Math.max(h.left_at, shown)) : undefined;
 			// hole requests in flight as it left (or ending just then: the slot it took): the gate was full
+			// (a batched hole took no slot: it rode one request with the others)
 			const ahead =
-				h.left_at === undefined
+				h.left_at === undefined || h.batch_size
 					? 0
 					: all.filter((o) => o !== h && o.left_at !== undefined && o.end_at !== undefined && o.left_at < h.left_at! && o.end_at >= h.left_at! - 50).length;
 			return { before, queue: h.server_queue_ms, server: h.server_ms ?? ttfb, rendered: h.server_ms !== undefined, ahead };
@@ -931,6 +994,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			if (s.before !== undefined && s.before >= 200) out.push(`${dur(s.before)} before its request left`);
 			if (s.queue !== undefined && s.queue >= 200) out.push(`${dur(s.queue)} waiting for a render slot on the server`);
 			if (s.server !== undefined && s.server >= 50) out.push(`${dur(s.server)} ${s.rendered ? 'the server render' : 'waiting on the server'}`);
+			// (its answer was one part of a batch: it landed when the server rendered it, not after the others)
+			if (h.batch_size && h.batch_size > 1) out.push(`its part of one request for ${h.batch_size} holes`);
 			return out.length ? `: ${out.join(', ')}` : '';
 		};
 		const splits = slow_holes.map(split);
@@ -959,6 +1024,57 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 								? 'The server answered quickly and the request left on time: the wait came after the first byte (a large answer, its styles, or the swap) or on the network.'
 								: 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
 							: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+			fps: []
+		});
+	}
+
+	// ── a server transform's restore that went wrong (runtime/restore.ts) ──
+	const late = (page.restore_events ?? []).filter((e) => e.kind === 'late');
+	if (late.length) {
+		const islands = [...new Set(late.map((e) => e.island).filter((x): x is string => !!x))];
+		const names = islands.map((fp) => by_fp.get(fp)?.name ?? fp.slice(0, 8));
+		findings.push({
+			code: 'restore-late',
+			severity: 'warn',
+			message: `${counted(late.map((e) => `<${e.host}>`))} ${late.length === 1 ? 'was' : 'were'} upgraded by ${late.length === 1 ? 'its' : 'their'} component before ogygia restored ${late.length === 1 ? 'it' : 'them'}: ${late.length === 1 ? 'it keeps' : 'they keep'} the server render's scoped form${names.length ? `, and ${list(names)} ${names.length === 1 ? 'hydrates' : 'hydrate'} against that (expect a heal or a client re-render)` : ''}.`,
+			fix: 'The component’s definition ran before ogygia’s restorer, which runs at the end of the body: a blocking <script> (no type=module, no defer) in the head, or before the host, defines it. Load the component library as a module or with defer — every module and deferred script runs after the restore.',
+			fps: islands
+		});
+	}
+	const broken = (page.restore_events ?? []).filter((e) => e.kind === 'mismatch');
+	if (broken.length) {
+		const islands = [...new Set(broken.map((e) => e.island).filter((x): x is string => !!x))];
+		findings.push({
+			code: 'restore-mismatch',
+			severity: 'warn',
+			message: `The server transform left ${counted(broken.map((e) => `<${e.host}>`))} different from what Svelte rendered, after ogygia restored it: ${clip(broken[0].diff ?? 'the children differ')}.`,
+			fix: 'The transform changed Svelte-owned markup ogygia could not put back: a child it dropped, or moved out of the plan’s <slot> wrappers, or a text it rewrote with no mark. Keep Svelte’s children inside the slot wrappers as they came; the island inside will otherwise heal or render again in the browser.',
+			fps: islands
+		});
+	}
+
+	// ── a batch request that did not carry its holes: each then fetched on its own ──
+	for (const b of page.hole_batches ?? []) {
+		const missed = b.sent - b.delivered;
+		if (missed <= 0) continue;
+		const what =
+			b.refused === 'redirected'
+				? `was redirected${b.final_url ? ` to ${path_of(b.final_url)}` : ''}`
+				: b.refused === 'document'
+					? `was answered with a page${b.final_url ? ` (${path_of(b.final_url)})` : ''}, not the holes`
+					: b.status === 0
+						? 'failed (the request itself)'
+						: b.status >= 400
+							? `was answered ${b.status}`
+							: `ended without ${missed === b.sent ? 'any of them' : `${missed} of them`}`;
+		const front = b.refused !== undefined || b.status === 405 || b.status === 403 || b.status === 401 || b.status === 404;
+		findings.push({
+			code: 'hole-batch-missed',
+			severity: missed === b.sent ? 'warn' : 'info',
+			message: `The one request for ${b.sent} holes (${counted(b.names)}) ${what}: ${missed === b.sent ? 'every one' : `${missed}`} then fetched on its own — ${missed + 1} requests instead of 1, each starting only after the batch ended.`,
+			fix: front
+				? 'Something in front of ogygia.handle() took the batch: a handle (auth, locale, a method filter) or a firewall / CDN rule that allows only GET on the islands endpoint. Let POST through to it there — it is the same signed capabilities as each GET, verified the same way.'
+				: 'The server could not render those holes in the batch (a render failed, or an answer was too large to box). Each hole’s own request then shows its error; the Network panel has the batch’s response.',
 			fps: []
 		});
 	}
@@ -1697,6 +1813,23 @@ function explain_interaction(
 				? 'The handler itself is the cost: update the screen first and do the heavy part after the next frame (`requestAnimationFrame` then `setTimeout`), do less per event, or move the work to a worker.'
 				: 'Painting the result is the cost: the handler changed a lot of the page. Change less per update (a shorter list, `content-visibility: auto` for off-screen parts), and avoid reading layout right after writing it.';
 	return { message, fix, fps: i.fp ? [i.fp] : [] };
+}
+
+/** Names with their copies counted: `BatchHole ×4`, `Menu and Cart ×2`. */
+function counted(names: string[]): string {
+	const n = new Map<string, number>();
+	for (const s of names) n.set(s, (n.get(s) ?? 0) + 1);
+	return list([...n].map(([s, c]) => (c > 1 ? `${s} ×${c}` : s)));
+}
+
+/** A URL's path (and query), for naming where something answered from. */
+function path_of(url: string): string {
+	try {
+		const u = new URL(url, 'http://x');
+		return u.pathname + u.search;
+	} catch {
+		return url;
+	}
 }
 
 function list(names: string[]): string {

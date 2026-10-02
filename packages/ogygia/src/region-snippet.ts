@@ -30,6 +30,7 @@ import { kit_render_context, kit_request_event } from './server/kit-context.js';
 import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
 import { PORTABLE_FORM, with_portable_forms } from './portable-form.js';
 import { analyze } from './seed-refs.js';
+import { fnv1a, fnv1a32 } from './runtime/hash.js';
 import { import_entry } from './runtime/entry-locations.js';
 
 /**
@@ -314,10 +315,15 @@ export const SLOT_MARKER_CLOSE = '</ogygia-slot>';
  * ids with its region id and can never collide with the page's. Off-request (a test, a tool, the
  * client) the process counter stands in. The request comes through the kit-context reader the
  * handle installs (no Vite virtual here — this module is imported by plain-Node consumers too).
+ *
+ * COUNTED PER `key` (the island's entry): with async SSR, regions start in the order their data
+ * arrives, so ONE counter for the page gave an island in an async branch a different number on each
+ * request (and every island after it). Per entry, an island's id moves only against another copy of
+ * the SAME island that started in a different order — rare, and still page-unique.
  */
-const slot_seq_by_request = new WeakMap<object, { prefix: string; n: number }>();
+const slot_seq_by_request = new WeakMap<object, { prefix: string; n: Map<string, { n: number; tag: string }> }>();
 let _slot_seq = 0;
-export function next_slot_id(): string {
+export function next_slot_id(key = ''): string {
 	const event = kit_request_event() as { url?: URL } | null;
 	if (event && typeof event === 'object') {
 		let seq = slot_seq_by_request.get(event);
@@ -326,9 +332,12 @@ export function next_slot_id(): string {
 			const hole = url?.pathname.endsWith(DEFAULT_ISLANDS_ENDPOINT)
 				? (url.searchParams.get('id') ?? '').slice(0, 6)
 				: '';
-			slot_seq_by_request.set(event, (seq = { prefix: hole ? hole + '-' : '', n: 0 }));
+			slot_seq_by_request.set(event, (seq = { prefix: hole ? hole + '-' : '', n: new Map() }));
 		}
-		return 'og' + seq.prefix + (++seq.n).toString(36);
+		// (each entry's tag hashed once per request: the next copies only count)
+		let c = seq.n.get(key);
+		if (!c) seq.n.set(key, (c = { n: 0, tag: key ? fnv1a32(key).toString(36) + '-' : '' }));
+		return 'og' + seq.prefix + c.tag + (++c.n).toString(36);
 	}
 	_slot_seq = (_slot_seq + 1) & 0x7fffffff;
 	return 'og' + _slot_seq.toString(36);
@@ -369,8 +378,28 @@ export function register_snippet_kind(): void {
 		},
 		decode(ref) {
 			return make(ref.d as RegionSnippetDescriptor);
-		}
+		},
+		stable_id: snippet_stable_id
 	});
+}
+
+/**
+ * A snippet's ref id from its descriptor: decode reads only `d` and a revived snippet holds no state,
+ * so equal descriptors are the same snippet — and a render names it the same every time (a random id
+ * here changed the fingerprint and the bytes of every island with children, on every request).
+ *  - `slot`: its slot id, already page-unique and stable (next_slot_id);
+ *  - `static`: a hash of its frozen HTML;
+ *  - `live`: a hash of its entry and props — only when the props are JSON-exact (seed-refs `analyze`,
+ *    the JSON lane's own rule): `JSON.stringify` turns a Map, a Set, a Date or a class instance into
+ *    something that two different values share, and those must not share a revived snippet.
+ *    Anything else keeps a random id.
+ */
+function snippet_stable_id(d: unknown): string | undefined {
+	const desc = d as RegionSnippetDescriptor;
+	if (desc.m === 'slot') return 'slot:' + desc.id;
+	if (desc.m === 'static') return 's' + fnv1a(desc.h);
+	if (desc.m === 'live' && analyze(desc.p).json) return 'l' + fnv1a(desc.e + '\0' + JSON.stringify(desc.p));
+	return undefined;
 }
 
 const SNIPPET_ONLY = new Set(['snippet']);

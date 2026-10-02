@@ -4,7 +4,7 @@
 // problem found and pinned on its island, no decoy named by anything.
 //
 // Against a dev server you started (devtools is dev-only):
-//   cd apps/playground && OGYGIA_DEVTOOLS=1 node node_modules/vite/bin/vite.js dev --port 4183 --host 127.0.0.1
+//   cd apps/playground && OGYGIA_DEVTOOLS=1 OGYGIA_RESTORE_LAB=1 node node_modules/vite/bin/vite.js dev --port 4183 --host 127.0.0.1
 //   node internal/bench/devtools-answer-key.mjs [base=http://127.0.0.1:4183] [--repeat=3]
 // Or let it start one:
 //   node internal/bench/devtools-answer-key.mjs --serve [--repeat=3]
@@ -42,7 +42,8 @@ const VICTIM = new Set(['queued']);
 async function start_server() {
 	const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'dev', '--port', String(PORT), '--host', '127.0.0.1', '--strictPort'], {
 		cwd: app,
-		env: { ...process.env, OGYGIA_DEVTOOLS: '1', ORIGIN: base },
+		// (the restore lab's transform too: /restore-lab and /dt-restore need it)
+		env: { ...process.env, OGYGIA_DEVTOOLS: '1', OGYGIA_RESTORE_LAB: '1', ORIGIN: base },
 		stdio: ['ignore', 'pipe', 'pipe']
 	});
 	let log = '';
@@ -660,6 +661,69 @@ async function gap_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
+/** HOLES IN ONE BATCH REQUEST: /dt-batch's four holes wake together (`visible`) and go out as one
+ *  POST; the fourth is slow on the server. Its wait must be split from its own part of the batch
+ *  (the server), never blamed on the browser's request gate. With `og-auth-wall=post` something in
+ *  front of ogygia refuses the batch (405): the finding names it and what it cost, and the holes still
+ *  fill (each on its own). The open page never says the batch missed. */
+async function batch_run(browser) {
+	const read = async (wall) => {
+		const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+		if (wall) await ctx.addCookies([{ name: 'og-auth-wall', value: wall, url: base }]);
+		const page = await ctx.newPage();
+		await page.goto(base + '/dt-batch', { waitUntil: 'load' });
+		await page.waitForTimeout(3500);
+		const all = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((x) => ({ code: x.code, message: x.message, fix: x.fix })));
+		const answered = await page.locator('[data-hole-answer]').count();
+		// the Page tab's waterfall: four rows, the slow one's server part drawn
+		if (!(await page.locator('[data-og-tab]').count())) await page.click('[data-og-panel-toggle]').catch(() => {});
+		await page.waitForTimeout(600);
+		await page.click('[data-og-tab="page"]').catch(() => {});
+		await page.waitForTimeout(1000);
+		const rows = await page.locator('[data-og-page-holes] .row').evaluateAll((rs) => rs.map((r) => [...r.querySelectorAll('.seg')].map((s) => [...s.classList].find((c) => c.startsWith('h-')))));
+		// (leave the way a visitor does: the final visit goes out on hide)
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await ctx.close();
+		return { slow: all.filter((x) => x.code === 'hole-slow'), missed: all.filter((x) => x.code === 'hole-batch-missed'), answered, rows };
+	};
+	// the profiler's report of each visit: the same two findings, from the beacon (no devtools)
+	const recorded = async (wall) => {
+		const rec = await fetch(`${base}/__profiler/page?p=/dt-batch&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const id = rec?.headers.get('location')?.split('/').pop() ?? null;
+		const seen = await read(wall);
+		let found = { slow: null, missed: null };
+		for (let i = 0; id && i < 8 && !(found.slow && (wall ? found.missed : true)); i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null);
+			found = { slow: j?.findings?.find((f) => f.code === 'hole-slow') ?? null, missed: j?.findings?.find((f) => f.code === 'hole-batch-missed') ?? null };
+		}
+		return { ...seen, report: found };
+	};
+	const open = await recorded(null);
+	const walled = await recorded('post');
+	const s = open.slow[0]?.message ?? '';
+	const m = walled.missed[0];
+	const checks = [
+		['the slow hole, named once', open.slow.length === 1 && s.startsWith('BatchHole (')],
+		['its wait: the server, its part of one request for 4', s.includes('waiting on the server') && s.includes('its part of one request for 4 holes')],
+		['never blamed on the request gate', !open.slow.some((f) => f.fix.includes('hole requests at a time'))],
+		['the open page: the batch never said to miss', open.missed.length === 0 && open.answered === 4],
+		['the waterfall: four rows, a server part on one', open.rows.length === 4 && open.rows.some((segs) => segs.includes('h-server'))],
+		['the refused batch: its status, its holes, its cost', walled.missed.length === 1 && m.message.includes('was answered 405') && m.message.includes('BatchHole ×4') && m.message.includes('5 requests instead of 1')],
+		['the refused batch: something in front of ogygia', !!m && m.fix.startsWith('Something in front of ogygia.handle()')],
+		['the refused batch: the holes still filled', walled.answered === 4],
+		['the profiler report: the slow hole, its part of the batch', !!open.report.slow && open.report.slow.message.includes('its part of one request for 4 holes') && !open.report.missed],
+		// (four copies of one component: the report names the slow COPY by its props, and that copy's
+		// own server render — never the four averaged)
+		['the profiler report: the slow copy, its own server render', !!open.report.slow && open.report.slow.message.includes('"slow":true') && /1\.\d s the server render/.test(open.report.slow.message)],
+		['the profiler report: the refused batch', !!walled.report.missed && walled.report.missed.message.includes('was answered 405') && walled.report.missed.message.includes('BatchHole ×4')]
+	];
+	const bad = checks.filter(([, ok]) => !ok);
+	console.log(`  ${bad.length ? '✗' : '✓'} batch: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ open, walled }).slice(0, 1500)}` : ''}`);
+	return bad.length ? 0 : 1;
+}
+
 /** HOLES WHOSE ANSWER NEVER CAME: /dt-holes plants a hole whose server render throws (500, every
  *  retry); the auth-wall cookie on /hole-wall makes a handle in front of ogygia's redirect the hole's
  *  request. Both must be named with their cause; the healthy holes (Greeting on /dt-holes, and on
@@ -1225,6 +1289,60 @@ try {
 	for (let i = 0; i < repeat; i++) holes_ok += await holes_run(browser);
 	if (holes_ok < repeat) failed = true;
 	console.log(`${holes_ok === repeat ? '✓' : '✗'} holes whose answer never came: ${holes_ok}/${repeat}`);
+	// A HOST UPGRADED BEFORE THE RESTORE (/dt-restore: a blocking head script defines `demo-card`): the
+	// late restore named with the island it broke; the `demo-link` beside it (restored fine) never
+	{
+		// (the profiler records this visit too: its report must say the same, from the beacon)
+		const rec = await fetch(`${base}/__profiler/page?p=/dt-restore&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + '/dt-restore', { waitUntil: 'load' });
+		await page.waitForTimeout(2500);
+		const r = await page.evaluate(() => ({
+			transformed: !!window.__og_restore_log || document.querySelector('demo-link')?.shadowRoot !== null,
+			late: window.__ogygia_page?.()?.report.findings.filter((f) => f.code === 'restore-late').map((f) => f.message) ?? []
+		}));
+		await page.goto('about:blank');
+		await page.waitForTimeout(300);
+		await page.close();
+		let in_report = null;
+		for (let i = 0; report_id && r.transformed && i < 8 && !in_report; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
+			in_report = j?.findings?.find((f) => f.code === 'restore-late')?.message ?? null;
+		}
+		const ok = r.late.length === 1 && r.late[0].startsWith('<demo-card> was upgraded by its component before ogygia restored it') && r.late[0].includes('LateCard') && !r.late[0].includes('demo-link');
+		const report_ok = !!in_report && in_report.includes('<demo-card> was upgraded by its component');
+		if (r.transformed && !(ok && report_ok)) failed = true;
+		console.log(`${!r.transformed ? '·' : ok && report_ok ? '✓' : '✗'} a host upgraded before the restore${!r.transformed ? ' (skipped: start the server with OGYGIA_RESTORE_LAB=1)' : ok && report_ok ? ': the Page tab and the profiler report' : ` — ${JSON.stringify({ ...r, in_report })}`}`);
+	}
+	// KIT'S COPY OF THE SERVER LOAD DATA (/bench-cms: csr=false, a 250 KB server load): Kit unevals it
+	// on every request and drops it — named so, apart from ogygia's own serialization (never twice)
+	{
+		const rec = await fetch(`${base}/__profiler/page?p=/bench-cms&runs=3`, { redirect: 'manual' }).catch(() => null);
+		const id = rec?.headers.get('location')?.split('/').pop();
+		const j = id ? await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null) : null;
+		const k = j?.findings?.find((f) => f.code === 'kit-uneval');
+		const ok = !!k && k.message.includes('On a csr=false page nothing reads that copy') && k.fix.startsWith('Only less load data helps');
+		if (!ok) failed = true;
+		console.log(`${ok ? '✓' : '✗'} Kit's copy of a csr=false page's load data: built and dropped${ok ? '' : ` — ${JSON.stringify(k)}`}`);
+	}
+	// A BARE ATTRIBUTE ON A CUSTOM ELEMENT (/restore-lab's `<demo-card data-lab-card>`): the server
+	// writes "", Svelte's hydrate "true" — the markup change is named with that cause and its fix
+	{
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + '/restore-lab', { waitUntil: 'load' });
+		await page.waitForTimeout(2500);
+		const fix = await page.evaluate(() => window.__ogygia_page?.()?.report.findings.find((f) => f.code === 'markup-changed')?.fix ?? '');
+		await page.close();
+		const ok = fix.startsWith('`data-lab-card` on <demo-card> is written bare') && fix.includes('`data-lab-card=""`');
+		if (!ok) failed = true;
+		console.log(`${ok ? '✓' : '✗'} a bare attribute on a custom element, named as the cause${ok ? '' : ` — ${fix}`}`);
+	}
+	let batch_ok = 0;
+	for (let i = 0; i < repeat; i++) batch_ok += await batch_run(browser);
+	if (batch_ok < repeat) failed = true;
+	console.log(`${batch_ok === repeat ? '✓' : '✗'} holes in one batch request: ${batch_ok}/${repeat}`);
 	let fallback_ok = 0;
 	for (let i = 0; i < repeat; i++) fallback_ok += await fallback_run(browser);
 	if (fallback_ok < repeat) failed = true;

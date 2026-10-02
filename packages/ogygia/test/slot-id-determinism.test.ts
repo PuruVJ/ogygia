@@ -33,6 +33,21 @@ describe('next_slot_id', () => {
 		expect(next_slot_id()).toBe('oga77ff8-2');
 	});
 
+	it('counted per island: another island starting first (async SSR) never shifts this one’s id', () => {
+		const a = page_event();
+		set_request_event_stub(() => a);
+		const header_first = next_slot_id('/entry/Login.js');
+		next_slot_id('/entry/Card.js');
+		const b = page_event();
+		set_request_event_stub(() => b);
+		// this time the card's data came first
+		next_slot_id('/entry/Card.js');
+		next_slot_id('/entry/Card.js');
+		expect(next_slot_id('/entry/Login.js')).toBe(header_first);
+		// two copies of one island: page-unique
+		expect(next_slot_id('/entry/Card.js')).not.toBe(next_slot_id('/entry/Card.js'));
+	});
+
 	it('off-request: unique, monotonic ids from the process counter', () => {
 		const a = next_slot_id();
 		const b = next_slot_id();

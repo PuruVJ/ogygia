@@ -127,6 +127,7 @@ import { createHash } from 'node:crypto';
 import { stringify } from 'devalue';
 import { serialize_provided_context } from './context-bridge.js';
 import { escape_script_text } from './escape.js';
+import { hole_copy_key } from './runtime/hash.js';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
 import { set_ask_scope_opener, set_page_recorder, set_seed_ask_reader, type PageSnapshot } from './page-seed-registry.js';
 import { collect_remote_seed } from './server/remote-seed-gate.js';
@@ -1999,6 +2000,7 @@ class OgygiaHandle {
 				ttl,
 				...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
 				...(island_name?.[id] ? { name: island_name[id] } : {}),
+				p: hole_copy_key(payload),
 				ms: performance.now() - t0,
 				status: body === null ? 500 : 200
 			});
@@ -2147,7 +2149,8 @@ class OgygiaHandle {
 			ttl,
 			...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
 			// (a manifest from an older build has no names: the stub's `undefined`)
-			...(island_name?.[id] ? { name: island_name[id] } : {})
+			...(island_name?.[id] ? { name: island_name[id] } : {}),
+			p: hole_copy_key(payload)
 		});
 		// the same split for the browser (devtools, the profiler's beacon), as Server-Timing. Only for
 		// a browser that measures (dev, the devtools cookie, the profiler's flag): no other visitor's

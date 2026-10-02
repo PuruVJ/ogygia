@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_page, first_difference, rate, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
+import { analyze_page, boolean_attr_at, first_difference, rate, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
 import { without_comments } from '../src/runtime/beacon.js';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({
@@ -482,6 +482,60 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('preload-unused');
 	});
 
+	it('a server transform’s restore gone wrong: a host upgraded first, and a mismatch, each named with its island', () => {
+		const r = analyze_page(
+			page({
+				restore_events: [
+					{ kind: 'late', host: 'demo-card', t: 20, island: 'f1' },
+					{ kind: 'late', host: 'demo-card', t: 21, island: 'f1' },
+					{ kind: 'mismatch', host: 'x-nav', t: 22, diff: '<x-nav> > [1]: Svelte has <i>, the restored markup has nothing' }
+				]
+			}),
+			[region('f1', 'LateCard')],
+			[],
+			3000
+		);
+		const late = r.findings.find((x) => x.code === 'restore-late')!;
+		expect(late.message).toBe("<demo-card> ×2 were upgraded by their component before ogygia restored them: they keep the server render's scoped form, and LateCard hydrates against that (expect a heal or a client re-render).");
+		expect(late.fps).toEqual(['f1']);
+		expect(late.fix).toMatch(/a blocking <script> \(no type=module, no defer\)/);
+		const mis = r.findings.find((x) => x.code === 'restore-mismatch')!;
+		expect(mis.message).toContain('<x-nav> different from what Svelte rendered, after ogygia restored it: <x-nav> > [1]: Svelte has <i>');
+		expect(analyze_page(page(), [], [], 3000).findings.some((x) => x.code.startsWith('restore-'))).toBe(false);
+	});
+
+	it('a bare attribute on a custom element (server "", browser "true") is named as the cause', () => {
+		const ssr = '<demo-card class="own" data-lab-card=""><button>count 0</button></demo-card>';
+		const hyd = '<demo-card class="own" data-lab-card="true"><button>count 0</button></demo-card>';
+		const d = first_difference(ssr, hyd)!;
+		expect(boolean_attr_at(ssr, hyd, d.at)).toEqual({ name: 'data-lab-card', tag: 'demo-card', now: 'true' });
+		// a plain element, or another kind of difference: not this cause
+		expect(boolean_attr_at('<p data-x="">a</p>', '<p data-x="true">a</p>', 11)).toBeNull();
+		expect(boolean_attr_at('<x-a data-x="1">', '<x-a data-x="2">', 13)).toBeNull();
+		const r = analyze_page(
+			page({ islands: [{ fp: 'f1', t0: 60, loaded: 80, turn: 80, done: 84, changed: true }], snapshots: [{ fp: 'f1', ssr, hydrated: hyd }] }),
+			[region('f1', 'LabCard')],
+			[],
+			3000
+		).findings.find((x) => x.code === 'markup-changed');
+		expect(r?.fix).toMatch(/^`data-lab-card` on <demo-card> is written bare/);
+	});
+
+	it('a batch request that did not carry its holes is named with what answered and what it cost', () => {
+		const find = (b: object) => analyze_page(page({ hole_batches: [b as never] }), [], [], 3000).findings.find((x) => x.code === 'hole-batch-missed');
+		const refused = find({ sent: 4, delivered: 0, status: 405, names: ['BatchHole', 'BatchHole', 'Cart', 'BatchHole'] })!;
+		expect(refused.severity).toBe('warn');
+		expect(refused.message).toBe('The one request for 4 holes (BatchHole ×3 and Cart) was answered 405: every one then fetched on its own — 5 requests instead of 1, each starting only after the batch ended.');
+		expect(refused.fix).toMatch(/^Something in front of ogygia\.handle\(\) took the batch/);
+		const bounced = find({ sent: 2, delivered: 0, status: 200, refused: 'redirected', final_url: 'https://x.test/account/?r=1', names: ['A', 'B'] })!;
+		expect(bounced.message).toContain('was redirected to /account/?r=1');
+		const partly = find({ sent: 3, delivered: 2, status: 200, names: ['A', 'B', 'C'] })!;
+		expect(partly.severity).toBe('info');
+		expect(partly.message).toContain('ended without 1 of them: 1 then fetched on its own — 2 requests instead of 1');
+		expect(partly.fix).toMatch(/^The server could not render those holes in the batch/);
+		expect(find({ sent: 3, delivered: 3, status: 200, names: [] })).toBeUndefined();
+	});
+
 	it('a hole whose fallback sat on the first screen long is named; a quick or scrolled-to one is not', () => {
 		const r = analyze_page(
 			page({
@@ -524,6 +578,13 @@ describe('analyze_page', () => {
 		).findings.find((x) => x.code === 'hole-slow')!;
 		expect(slot.message).toContain('Q5 (1.8 s: 890 ms waiting for a render slot on the server, 900 ms the server render)');
 		expect(slot.fix).toMatch(/^It waited on the server for a render slot: a server process renders 4 holes at a time/);
+		// BATCHED: four holes in one request, the last part landed 1.2 s in — the server, never the gate
+		// (even though, timed like separate requests, three others "were ahead" of it)
+		const b = (n: number, part: number) => ({ name: `B${n}`, below_fold: false, shown_at: 100, left_at: 110, first_at: part, end_at: part, wait_ms: part + 10 - 100, batch_size: 4 });
+		const batched = analyze_page(page({ hole_waits: [b(1, 150), b(2, 150), b(3, 150), b(4, 1310)] }), [], [], 3000).findings.find((x) => x.code === 'hole-slow')!;
+		expect(batched.message).toContain('B4 (1.2 s: 1.2 s waiting on the server, its part of one request for 4 holes)');
+		expect(batched.fix).toMatch(/^The server is the wait/);
+		expect(batched.fix).not.toContain('hole requests at a time');
 		const mild = analyze_page(page({ hole_waits: [{ name: 'SlowHole', wait_ms: 1100, below_fold: false }] }), [], [], 3000);
 		expect(mild.findings.find((x) => x.code === 'hole-slow')?.severity).toBe('info');
 	});
