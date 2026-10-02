@@ -64,12 +64,13 @@ interface BeaconApi {
 	beacon_hole_answered?: typeof beacon_hole_answered;
 	beacon_hole_batch_missed?: typeof beacon_hole_batch_missed;
 	beacon_entry_fallback?: typeof beacon_entry_fallback;
+	beacon_hole_fetched?: typeof beacon_hole_fetched;
 	beacon_nav?: typeof beacon_nav;
 }
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_hole_batch_missed, beacon_entry_fallback, beacon_nav };
+	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_hole_batch_missed, beacon_entry_fallback, beacon_hole_fetched, beacon_nav };
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -165,7 +166,8 @@ let visit_warnings: { code: string; message: string; file?: string; fp?: string;
 export function beacon_warning(w: { code: string; message: string; file?: string; fp?: string; t: number }): void {
 	const o = owner();
 	if (o) return o.beacon_warning(w);
-	if (!collecting() || visit_warnings.length >= 50) return;
+	if (!collecting()) return;
+	if (!make_room(visit_warnings, 50, (x) => x.t)) return;
 	visit_warnings.push(w);
 	if (early_visit_done) resend_soon();
 }
@@ -331,6 +333,22 @@ export function beacon_entry_fallback(f: EntryFallback): void {
 	visit_entry_fallbacks.push({ entry: f.entry.slice(0, 300), src: f.src.slice(0, 300), recovered: f.recovered });
 	if (early_visit_done) resend_soon();
 }
+/** each hole URL (absolute) → how many times the runtime asked the network for it */
+let hole_fetches = new Map<string, number>();
+/** The runtime asks for a hole's HTML (each ask, retries and re-asks included): what lets a
+ *  preload followed by a download read as used-then-asked-again, not as a preload the browser could
+ *  not use. */
+export function beacon_hole_fetched(endpoint: string): void {
+	const o = owner();
+	if (o) return o.beacon_hole_fetched?.(endpoint);
+	if (!collecting() || hole_fetches.size >= 200) return;
+	try {
+		const url = new URL(endpoint, location.href).href;
+		hole_fetches.set(url, (hole_fetches.get(url) ?? 0) + 1);
+	} catch {
+		/* not a URL */
+	}
+}
 let holes_answered_els = new WeakSet<Element>();
 /** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
  *  The element is read (id, place) only while measuring. */
@@ -367,12 +385,42 @@ export function beacon_hole_answered(el: Element, start: number, batch?: { left:
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
-let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string } = {};
+let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true } = {};
+/** the largest paint's element: still in the document when the visit is read, or replaced (an
+ *  island that rendered it again put a new one in its place — the hero painted twice). Only while
+ *  its island is still there: an in-app navigation away takes both, and replaces nothing */
+let lcp_el: Element | null = null;
+let lcp_region: Element | null = null;
 /** an island's markup as the server sent it and after it hydrated — the browser store only */
-let snapshots: { fp: string; ssr: string; hydrated: string; final?: string }[] = [];
+let snapshots: Snapshot[] = [];
 let visit_sent = false;
 const SNAPSHOT_CAP = 24_000;
 const MAX_SNAPSHOTS = 40;
+
+/** An island's markup as the server sent it, after it hydrated, and at the visit's end. A big
+ *  island keeps only the window around where the two first differ, without comments (`from`: where
+ *  the window starts in that text) — its first 24 KB would quote the cut, not the change. */
+export interface Snapshot {
+	fp: string;
+	ssr: string;
+	hydrated: string;
+	final?: string;
+	from?: number;
+}
+
+/** The snapshot of a changed island: whole when both fit, else the window around the change
+ *  (`a`, `b`: the two markups without comments, already made for the compare). */
+function snapshot_of(fp: string, ssr: string, now: string, a: string, b: string): Snapshot {
+	if (ssr.length <= SNAPSHOT_CAP && now.length <= SNAPSHOT_CAP) return { fp, ssr, hydrated: now };
+	const n = Math.min(a.length, b.length);
+	let i = 0;
+	while (i < n && a.charCodeAt(i) === b.charCodeAt(i)) i++;
+	let from = Math.max(0, i - SNAPSHOT_CAP / 4);
+	// (from a tag's start, so the window reads as markup)
+	const lt = a.indexOf('<', from);
+	if (lt !== -1 && lt <= i) from = lt;
+	return { fp, ssr: a.slice(from, from + SNAPSHOT_CAP), hydrated: b.slice(from, from + SNAPSHOT_CAP), from };
+}
 
 const fp_of = (node: unknown): string | undefined => {
 	const el = node && (node as Node).nodeType === 1 ? (node as Element) : node && (node as Node).nodeType === 3 ? (node as Node).parentElement : null;
@@ -440,6 +488,10 @@ function observe_vitals(): void {
 		visit_paints.lcp_fp = fp;
 		visit_paints.lcp_url = last.url || undefined;
 		visit_paints.lcp_tag = last.element?.tagName?.toLowerCase();
+		lcp_el = last.element ?? null;
+		lcp_region = lcp_el?.closest('ogygia-region') ?? null;
+		// (a later, larger paint after the early visit — a slow hero image: sent again)
+		if (early_visit_done) resend_soon();
 	});
 	let cls = 0;
 	// no shift at all is CLS 0 (a measurement), not "unknown" — where the browser can see shifts
@@ -452,7 +504,7 @@ function observe_vitals(): void {
 		for (const e of entries as (PerformanceEntry & { hadRecentInput?: boolean; value?: number; sources?: { node?: Node | null; previousRect?: DOMRectReadOnly; currentRect?: DOMRectReadOnly }[] })[]) {
 			if (e.hadRecentInput || typeof e.value !== 'number') continue;
 			cls += e.value;
-			if (visit_shifts.length < 60) {
+			if (make_room(visit_shifts, 60, (s) => s.t)) {
 				const src = e.sources?.[0];
 				// (the element that moved, told briefly, for a shift outside any island: `p "Lorem…"`)
 				const tag = src?.node ? describe_target(src.node) : '';
@@ -460,6 +512,8 @@ function observe_vitals(): void {
 			}
 		}
 		v.cls = Math.round(cls * 1000) / 1000;
+		// (a shift after the early visit: sent again, not left to the hide-time message)
+		if (early_visit_done) resend_soon();
 	});
 	observe('event', (entries) => {
 		for (const e of entries as (PerformanceEntry & { interactionId?: number; processingStart?: number; processingEnd?: number; target?: Node | null })[]) {
@@ -504,7 +558,7 @@ function observe_vitals(): void {
 		if (visit_interaction) interaction_seen(visit_interaction);
 	});
 	observe('longtask', (entries) => {
-		for (const e of entries) if (visit_longtasks.length < 100) visit_longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
+		for (const e of entries) if (make_room(visit_longtasks, 100, (l) => l.t)) visit_longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
 	});
 	// WHICH SCRIPT held the main thread, from the page's start (buffered): the long animation frames
 	// name each script that ran in them — a third party's cost is measured even before the CPU
@@ -694,7 +748,15 @@ function build_visit(): Record<string, unknown> | null {
 		for (const [url, list] of by_url) {
 			if (list.length < 2 || preload_misses.length >= 20) continue;
 			const pre = list.find((r) => r.initiatorType === 'link');
-			const again = list.find((r) => r !== pre && r.initiatorType !== 'link' && r.encodedBodySize > 0 && r.transferSize >= r.encodedBodySize);
+			const downloads = list.filter((r) => r !== pre && r.initiatorType !== 'link' && r.encodedBodySize > 0 && r.transferSize >= r.encodedBodySize);
+			const again = downloads[0];
+			// (a preload the server answered with an error: what follows is a retry, not a miss —
+			// the failure is its own finding)
+			if (((pre as (PerformanceResourceTiming & { responseStatus?: number }) | undefined)?.responseStatus ?? 0) >= 400) continue;
+			// (the runtime asked for a hole more often than the network served it: the preload WAS
+			// used, and the download is the runtime's own second ask — a hole fetched again after
+			// Kit rebuilt the page, a retry)
+			if (downloads.length < (hole_fetches.get(url) ?? 0)) continue;
 			if (pre && again) preload_misses.push({ url: url.slice(0, 500), type: type_of(pre), bytes: again.transferSize, as: link_as.get(url) ?? '', crossorigin: link_co.get(url) ?? null });
 		}
 		// CONTENT-NAMED FILES FETCHED AGAIN: a file under `/immutable/` is named by its content, so a
@@ -801,7 +863,7 @@ function build_visit(): Record<string, unknown> | null {
 				? { server_timing: nav.serverTiming.slice(0, 8).map((s) => ({ name: s.name.slice(0, 40), ms: r2(s.duration), ...(s.description ? { desc: s.description.slice(0, 80) } : {}) })) }
 				: {})
 		},
-		paints: visit_paints,
+		paints: lcp_el && !lcp_el.isConnected && lcp_region?.isConnected ? { ...visit_paints, lcp_replaced: true } : visit_paints,
 		resources,
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),
@@ -860,7 +922,8 @@ function flush_visit(final: boolean): void {
 		for (const s of snapshots) {
 			const el = document.querySelector(`ogygia-region[data-og-fp="${s.fp}"]`);
 			if (el) {
-				const html = el.innerHTML;
+				// (a windowed snapshot: the same window of the markup without comments)
+				const html = s.from === undefined ? el.innerHTML : without_comments(el.innerHTML).slice(s.from, s.from + SNAPSHOT_CAP);
 				if (html !== s.hydrated) s.final = html.slice(0, SNAPSHOT_CAP);
 			}
 		}
@@ -1026,6 +1089,10 @@ export function beacon_nav(n: NavRec): void {
 		}
 	} catch {
 		split = {};
+	}
+	if (first_nav_t === undefined) {
+		first_nav_t = n.t;
+		snapshot_firsts = snapshots.length;
 	}
 	visit_navs.push({ from: n.from.slice(0, 300), to: n.to.slice(0, 300), type: (n.type || 'link').slice(0, 20), t: r2(n.t), fetched: r2(n.fetched), styled: r2(n.styled), swapped: r2(n.swapped), ...split });
 	resend_soon();
@@ -1245,6 +1312,33 @@ function devtools_measures(): boolean {
 	return opted;
 }
 
+/** when the document's first in-app navigation started (its first page's record ends there) */
+let first_nav_t: number | undefined;
+/**
+ * Room in a capped list of the visit. Full: the oldest entry from AFTER the document's first in-app
+ * navigation goes — the page in view keeps its record (a long session of navigations filled the
+ * lists with the pages before it: one 320-island page left every later page with no islands at all,
+ * and the Page tab found nothing there), and the page the document loaded as keeps all of its own
+ * (the profiler's report is about that one). `false`: full of the first page's, the new one waits.
+ */
+/** how many snapshots the first page took (a snapshot has no time of its own) */
+let snapshot_firsts = 0;
+function snapshot_room(): boolean {
+	if (snapshots.length < MAX_SNAPSHOTS) return true;
+	if (first_nav_t === undefined || snapshots.length <= snapshot_firsts) return false;
+	snapshots.splice(snapshot_firsts, 1);
+	return true;
+}
+function make_room<T>(list: T[], cap: number, t_of: (x: T) => number): boolean {
+	if (list.length < cap) return true;
+	if (first_nav_t === undefined) return false;
+	const from = first_nav_t;
+	const i = list.findIndex((x) => t_of(x) >= from);
+	if (i === -1) return false;
+	list.splice(i, 1);
+	return true;
+}
+
 /** recording at all: the profiler's tag, or a devtools build (a lazy one: once opted in) */
 function collecting(): boolean {
 	return devtools_measures() || endpoint() !== null;
@@ -1262,13 +1356,18 @@ let early_visit_done = false;
 
 // A NEW WORST INTERACTION re-sends the visit a moment later (debounced; the server folds it into
 // the same visit): INP is only final on hide, and a hide-time message is the one most often lost
-// (a tab closed hard, a browser that drops beacons while unloading)
+// (a tab closed hard, a browser that drops beacons while unloading). So do a later largest paint,
+// a shift, a hole's answer or failure, an island waking late. At most RESEND_MAX times a page: a
+// page that keeps shifting would otherwise send its visit every couple of seconds for ever.
 let resend_timer: ReturnType<typeof setTimeout> | null = null;
+let resends = 0;
+const RESEND_MAX = 8;
 function resend_soon(): void {
-	if (!endpoint() || visit_sent) return;
+	if (!endpoint() || visit_sent || resends >= RESEND_MAX) return;
 	if (resend_timer) clearTimeout(resend_timer);
 	resend_timer = setTimeout(() => {
 		resend_timer = null;
+		resends++;
 		flush_visit(false);
 	}, 1500);
 }
@@ -1342,18 +1441,23 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 		...(reason ? { reason } : {})
 	});
 	let changed: boolean | undefined;
-	if (typeof ssr_html === 'string' && visit_islands.length < 400) {
+	const room = make_room(visit_islands, 400, (i) => i.t0);
+	if (typeof ssr_html === 'string' && room) {
 		const now = el.innerHTML;
 		// compared without comments: hydration re-anchors Svelte's block markers (`<!--[-->`), which
 		// nobody sees — only a change a visitor could see counts
-		changed = now !== ssr_html && without_comments(now) !== without_comments(ssr_html);
-		if (changed && snapshots.length < MAX_SNAPSHOTS) snapshots.push({ fp, ssr: ssr_html.slice(0, SNAPSHOT_CAP), hydrated: now.slice(0, SNAPSHOT_CAP) });
+		if (now !== ssr_html) {
+			const a = without_comments(ssr_html);
+			const b = without_comments(now);
+			changed = a !== b;
+			if (changed && snapshot_room()) snapshots.push(snapshot_of(fp, ssr_html, now, a, b));
+		} else changed = false;
 	}
 	// the early visit can leave before any island wakes (the boot schedules it; a page whose scripts
 	// block the wake idles first): an island waking after it re-sends the visit (debounced), rather
 	// than leaving the islands to the hide-time message, the one most often lost
 	if (early_visit_done) resend_soon();
-	if (visit_islands.length < 400) {
+	if (room) {
 		visit_islands.push({
 			fp,
 			...(el.getAttribute('entry') ? { entry: el.getAttribute('entry')! } : {}),
@@ -1428,7 +1532,7 @@ export interface BeaconPage {
 	shifts: Shift[];
 	longtasks: { t: number; ms: number }[];
 	marks: { name: string; ms: number; t0?: number }[];
-	snapshots: { fp: string; ssr: string; hydrated: string; final?: string }[];
+	snapshots: Snapshot[];
 	/** the main thread, sampled (JS Self-Profiling): the load trace and recordings, newest first */
 	cpu: { state: 'recording' | 'done' | 'off'; off?: string | null; traces: CpuKept[] };
 }
@@ -1472,6 +1576,8 @@ export function _reset_beacon(): void {
 	failed_fps.clear();
 	failed_spans.clear();
 	visit_navs = [];
+	first_nav_t = undefined;
+	snapshot_firsts = 0;
 	landing_page = null;
 	seen_resources = [];
 	visit_islands = [];
@@ -1489,11 +1595,14 @@ export function _reset_beacon(): void {
 	visit_hole_batches = [];
 	visit_entry_fallbacks = [];
 	holes_answered_els = new WeakSet();
+	hole_fetches = new Map();
 	visit_marks = [];
 	visit_paints = {};
+	lcp_el = lcp_region = null;
 	snapshots = [];
 	visit_sent = false;
 	early_visit_done = false;
+	resends = 0;
 }
 
 /** @internal tests */

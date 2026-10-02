@@ -35,6 +35,14 @@ export interface IoOp {
 	start: number;
 	/** still open when the window ended (long-lived socket, watcher) */
 	open?: boolean;
+	/** a timer's period, when it repeats (`setInterval`), else its delay (ms) */
+	repeat?: number;
+	delay?: number;
+	/** an open timer that does not hold the process (`.unref()`; Node's own `AbortSignal.timeout`) */
+	unref?: true;
+	/** page mode: every render left one of these open, from the same line (index.ts reads it
+	 *  across the runs, before the io is scoped to one) — a timer each render starts and never ends */
+	left_each_run?: true;
 }
 
 // I/O primitives worth timing. PROMISE is excluded (far too many, and it is CPU
@@ -102,14 +110,14 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 		return null; // no async_hooks (edge) — the fetch patch and wall/CPU split still work
 	}
 
-	const open = new Map<number, { t: number; type: string; site?: CallerSite }>();
+	const open = new Map<number, { t: number; type: string; site?: CallerSite; repeat?: number; delay?: number; timer?: { hasRef?: () => boolean } }>();
 	const ops: IoOp[] = [];
 
 	let promise_count = 0;
 	/** generated `fn\0file\0line` → how many sampled promises it made, and the site itself */
 	const promise_sites = new Map<string, { n: number; site: CallerSite | null }>();
 	const hook = async_hooks.createHook({
-		init(asyncId, type) {
+		init(asyncId, type, _trigger, resource) {
 			if (type === 'PROMISE') {
 				// a counter on every promise (cheap), a stack on one in PROMISE_SAMPLE_EVERY — the
 				// nearest frame that is not Node's own or the profiler's: the app's, or the
@@ -125,7 +133,17 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 				return;
 			}
 			if (open.size >= MAX || !TRACK.has(type)) return;
-			open.set(asyncId, { t: performance.now(), type, site: nearest_app_site() });
+			const s: { t: number; type: string; site?: CallerSite; repeat?: number; delay?: number; timer?: { hasRef?: () => boolean } } = { t: performance.now(), type, site: nearest_app_site() };
+			if (type === 'Timeout') {
+				// (Node's Timeout keeps its period on `_repeat` — null for a one-shot — and its delay on
+				// `_idleTimeout`: long-standing fields, read defensively. The timer itself is held only
+				// while it is open: whether it was unref'd is asked at the window's end)
+				const r = resource as { _repeat?: unknown; _idleTimeout?: unknown; hasRef?: () => boolean };
+				if (typeof r._repeat === 'number' && r._repeat > 0) s.repeat = r._repeat;
+				else if (typeof r._idleTimeout === 'number' && r._idleTimeout >= 0) s.delay = r._idleTimeout;
+				s.timer = r;
+			}
+			open.set(asyncId, s);
 		},
 		destroy(asyncId) {
 			const s = open.get(asyncId);
@@ -171,7 +189,10 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 						caller_site: s.site,
 						ms: round2(now - s.t),
 						start: s.t,
-						open: true
+						open: true,
+						...(s.repeat !== undefined ? { repeat: s.repeat } : {}),
+						...(s.delay !== undefined ? { delay: s.delay } : {}),
+						...(s.timer?.hasRef?.() === false ? { unref: true as const } : {})
 					});
 				}
 			}
@@ -179,6 +200,32 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 			return ops;
 		}
 	};
+}
+
+/**
+ * A timer a render starts and never ends: an interval (or a timeout of a second or more) still open
+ * after every render, started from the same line in each of them. One per render is the proof it is
+ * per render (a cache's single refresh timer, started on the first request, is one in all). Marked
+ * on the ops themselves (`left_each_run`), so the run kept for the waterfall carries it.
+ */
+export function mark_left_each_run(ops: IoOp[], windows: Array<{ start: number; end: number }>): void {
+	if (windows.length < 2) return;
+	const by_site = new Map<string, { runs: Set<number>; ops: IoOp[] }>();
+	for (const o of ops) {
+		if (!o.open || o.type !== 'Timeout' || !o.caller_site) continue;
+		// (a one-shot: a second or more, and holding the process — an unref'd one is Node's own
+		// `AbortSignal.timeout` behind a fetch, or a timer the app already let go of)
+		if (o.repeat === undefined && ((o.delay ?? 0) < 1000 || o.unref)) continue;
+		const ri = windows.findIndex((w) => o.start >= w.start && o.start <= w.end);
+		if (ri === -1) continue;
+		const s = o.caller_site;
+		const k = s.file + '\0' + s.line + '\0' + s.column;
+		const g = by_site.get(k) ?? { runs: new Set<number>(), ops: [] };
+		g.runs.add(ri);
+		g.ops.push(o);
+		by_site.set(k, g);
+	}
+	for (const g of by_site.values()) if (g.runs.size === windows.length) for (const o of g.ops) o.left_each_run = true;
 }
 
 /** A friendly bucket for a resource type, for the report. */

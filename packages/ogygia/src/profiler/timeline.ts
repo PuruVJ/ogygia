@@ -627,7 +627,8 @@ export function build_timeline(
 			prev.detail === seg.detail &&
 			prev.within === seg.within &&
 			prev.lane === seg.lane &&
-			(prev.pending?.join() ?? '') === (seg.pending?.join() ?? '')
+			(prev.pending?.join() ?? '') === (seg.pending?.join() ?? '') &&
+			call_id(prev) === call_id(seg)
 		) {
 			prev.t1 = b;
 		} else segments.push(seg);
@@ -803,16 +804,30 @@ export function await_graph(input: TimelineInput, w0: number, w1: number): { nod
 	return { nodes, edges };
 }
 
+/** A wait's call, told apart from another call of the same label by its whole duration (the label
+ *  groups by route — `GET /api?name=a` and `?name=b` read the same). A segment that is not one
+ *  call's wait is its label. */
+function call_id(s: Segment): string {
+	return s.kind === 'wait' && s.calls?.length === 1 ? `${s.label}\0${s.calls[0].ms}` : s.label;
+}
+
 /**
- * Awaits in a row: consecutive single-call waits on DIFFERENT calls with ≤ 5 ms of CPU between
- * them. Read off the COALESCED view (`coalesce`), where a wait chopped by microtask slivers is one
- * block again — on the raw segments the same call reappearing after a sliver broke every chain.
- * `at` indexes that view (the same one the UI draws).
+ * Awaits in a row: consecutive single-call waits on DIFFERENT calls with little CPU between them —
+ * 5 ms, or 5% of the chain's longest wait when that is more. Read off the COALESCED view
+ * (`coalesce`), where a wait chopped by microtask slivers is one block again — on the raw segments
+ * the same call reappearing after a sliver broke every chain. `at` indexes that view (the same one
+ * the UI draws).
+ *
+ * (The allowance scales: between a 1 s timer and a 700 ms call, the CPU of the server answering the
+ * page's own call to itself, or a collection, ran 3 to 9 ms run by run — the fixed 5 ms broke the
+ * chain in some runs and not others, and a 2.2 s finding came and went between two profiles of the
+ * same code. Next to waits that long, tens of ms of CPU are still nothing between.)
  */
 export function find_parallelizable(t: Timeline): ParallelGroup[] {
 	const view = coalesce(t);
 	const parallelizable: ParallelGroup[] = [];
-	let group: { at: number[]; labels: string[]; lens: number[] } | null = null;
+	let group: { at: number[]; labels: string[]; ids: string[]; lens: number[] } | null = null;
+	const limit = () => (group ? Math.max(5, Math.max(...group.lens) * 0.05) : 5);
 	const flush = () => {
 		if (group && group.at.length >= 2) {
 			const sum = group.lens.reduce((a, c) => a + c, 0);
@@ -828,21 +843,23 @@ export function find_parallelizable(t: Timeline): ParallelGroup[] {
 		const s = view[i];
 		if (s.kind === 'wait' && s.calls && s.calls.length === 1) {
 			const label = s.calls[0].label;
+			const id = call_id(s);
 			// the same call continuing after a hair of nothing: the chain's last link grows
-			if (group && group.labels[group.labels.length - 1] === label && cpu_between <= 5) {
+			if (group && group.ids[group.ids.length - 1] === id && cpu_between <= limit()) {
 				group.lens[group.lens.length - 1] += s.t1 - s.t0;
 				cpu_between = 0;
 				continue;
 			}
-			if (group && (cpu_between > 5 || group.labels.includes(label))) flush();
-			if (!group) group = { at: [], labels: [], lens: [] };
+			if (group && (cpu_between > limit() || group.ids.includes(id))) flush();
+			if (!group) group = { at: [], labels: [], ids: [], lens: [] };
 			group.at.push(i);
 			group.labels.push(label);
+			group.ids.push(id);
 			group.lens.push(s.t1 - s.t0);
 			cpu_between = 0;
 		} else if (s.kind === 'cpu') {
 			cpu_between += s.t1 - s.t0;
-			if (cpu_between > 5) flush();
+			if (cpu_between > limit()) flush();
 		} else if (s.kind === 'wait') flush(); // a parallel group already
 	}
 	flush();
@@ -867,7 +884,9 @@ export function coalesce(t: Timeline, min_ms = Math.max(t.window_ms * 0.012, 1))
 	const out: ViewSegment[] = [];
 	let small: Segment[] = [];
 	const len = (s: Segment) => s.t1 - s.t0;
-	const same = (a: Segment, b: Segment) => a.kind === b.kind && a.label === b.label && a.within === b.within;
+	// (one wait's two halves, not two calls of the same label: `GET /api?name=a` then `?name=b` label
+	// alike, and read as one call they hid a call from the awaits in a row)
+	const same = (a: Segment, b: Segment) => a.kind === b.kind && a.label === b.label && a.within === b.within && call_id(a) === call_id(b);
 	const fold = (list: Segment[]): ViewSegment => {
 		const by = new Map<string, { label: string; kind: Segment['kind']; ms: number; seg: Segment }>();
 		const kind_ms = { cpu: 0, wait: 0, gap: 0 };

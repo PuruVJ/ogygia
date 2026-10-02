@@ -5,11 +5,12 @@
  * components in `./ui/` (rendered through `document()`); this file is pure, testable logic.
  */
 
-import type { Analysis, HeapAllocator } from './analyze.js';
+import type { Analysis, FrameStat, HeapAllocator } from './analyze.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
 import { explain_held_open, type HeldOpen } from '../devtools/page-insights.js';
+import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
 import { runtime_scripts, type PageAssets, type RuntimeScripts } from './page-assets.js';
@@ -552,6 +553,54 @@ const fmt_ms = (n: number): string =>
 const fmt_pct = (part: number, whole: number): string =>
 	whole > 0 ? ((part / whole) * 100).toFixed(1) + '%' : '—';
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+/** The dev server's own packages: their work (module loading, transforms) exists only in dev. */
+const DEV_TOOLS = new Set(['vite', 'rolldown', 'rollup', 'esbuild', 'vite-node', 'vitefu', 'postcss', 'lightningcss', '@sveltejs/vite-plugin-svelte']);
+/** A sampled origin that is a dev tool's: `fn (vite)` — a package in the brackets, not a `file:line`. */
+export function dev_tool_caller(caller: string): boolean {
+	const open = caller.lastIndexOf('(');
+	if (open === -1 || !caller.endsWith(')')) return false;
+	const pkg = caller.slice(open + 1, -1);
+	return DEV_TOOLS.has(pkg) || pkg.startsWith('@rolldown/') || pkg.startsWith('@vitejs/');
+}
+const CALL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'return', 'await', 'function', 'catch', 'typeof', 'new', 'yield']);
+/**
+ * Where inside a hot function its time lands, when one line holds the biggest share and it is not
+ * the function's own first line: that line, its code, and the function it calls there. Once V8
+ * inlines a callee its time is the caller's own — a load "burning" 85 ms is often one call in it
+ * (measured on /inferno: newestReview inlined into load, named in one run of six). No regex.
+ */
+export function hot_line_of(f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'lines' | 'src'>, app_fns: ReadonlySet<string>): { line: number; ms: number; code: string; calls?: string } | null {
+	const top = f.lines?.[0];
+	if (!top || top.line === f.line || top.ms < f.self_ms * 0.4 || !f.src) return null;
+	const text = f.src.lines[top.line - f.src.start];
+	if (text === undefined) return null;
+	const code = text.trim();
+	if (!code) return null;
+	// the first call on the line to one of the app's own functions (the identifier right before a `(`):
+	// what V8 may have inlined — a builtin (`Math.max`, `new Date`) is the line's own work
+	let calls: string | undefined;
+	let start = -1;
+	for (let i = 0; i < code.length; i++) {
+		const c = code.charCodeAt(i);
+		const ident = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
+		if (ident) {
+			if (start === -1) start = i;
+			continue;
+		}
+		if (c === 40 && start !== -1) {
+			const name = code.slice(start, i);
+			// (an app function the profile names; or a plain call — not a method, not a constructor:
+			// a function inlined everywhere leaves no frame of its own to be named by)
+			const plain = (start === 0 || code.charCodeAt(start - 1) !== 46) && name.charCodeAt(0) >= 97 && name.charCodeAt(0) <= 122;
+			if (!CALL_KEYWORDS.has(name) && name !== f.name && (app_fns.has(name) || plain)) {
+				calls = name;
+				break;
+			}
+		}
+		start = -1;
+	}
+	return { line: top.line, ms: top.ms, code: code.length > 100 ? code.slice(0, 99) + '…' : code, ...(calls ? { calls } : {}) };
+}
 /** "most of it" only when it is (over half); the biggest of several smaller parts otherwise */
 const share_word = (part: number, whole: number): string =>
 	whole > 0 && part > whole * 0.5 ? 'most of it' : 'the biggest part';
@@ -1040,16 +1089,21 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	const hot = a.functions.find((f) => f.category === 'app' || f.category === 'dependency');
 	if (hot && hot.self_ms >= a.busy_ms * 0.2 && hot.self_ms >= 5) {
 		const from = hot.stacks?.[0]?.frames.find((fr) => fr.c === 'component' || fr.c === 'app');
+		const spot = hot_line_of(hot, new Set(a.functions.filter((f) => f.category === 'app').map((f) => f.name)));
 		warn(
 			'hot-function',
 			`${hot.label ? `The function at ${hot.url}:${hot.line} (\`${hot.label}\`)` : hot.name} burns ${fmt_ms(pr(hot.self_ms))} ms${per_r} (${fmt_pct(hot.self_ms, a.busy_ms)} of busy)${hot.label ? '' : ` at ${hot.url}:${hot.line}`}` +
 				(hot.calls ? `, ${hot.calls} calls per render` : '') +
 				(from ? `, called from ${from.n}` : '') +
-				'.',
+				'.' +
+				(spot
+					? ` ${share_word(spot.ms, hot.self_ms) === 'most of it' ? 'Most of it' : 'The biggest part'} lands on line ${spot.line}: \`${spot.code}\`` +
+						(spot.calls ? ` — ${spot.calls} is called there, and V8 counts a function it inlined as the caller's own time: look inside ${spot.calls}.` : '.')
+					: ''),
 			{
 				anchor: `fn:${hot.key}`,
 				file: hot.url,
-				line: hot.line,
+				line: spot?.line ?? hot.line,
 				fix:
 					hot.category === 'dependency'
 						? `It is ${hot.pkg}'s — cache or batch what you ask of it per request, and check the call count against what the page really needs.`
@@ -1257,7 +1311,8 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// (each in-app navigation with its page request's server side, from the request log)
 		const nav_req = new Map((extras.nav_requests ?? []).map((r) => [r.t, r]));
 		const visit = nav_req.size && extras.visit.navs ? { ...extras.visit, navs: extras.visit.navs.map((n) => (nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n)) } : extras.visit;
-		out.push(...browser_findings(browser_page_report(visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev, held_open)));
+		// (the blocking files: the report's own finding when it weighed the page; else the browser's timing)
+		out.push(...browser_findings(browser_page_report(visit, island_rows_of(meta), extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev, held_open)).filter((f) => f.code !== 'render-blocking' || !extras.assets));
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
@@ -1351,7 +1406,8 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		);
 	}
 	// SYNC I/O inside the render: blocks every other request on the instance
-	const sync = sync_io(a);
+	// (on the dev server, a read no app code called is the dev server loading modules: no build has it)
+	const sync = sync_io(a).filter((r) => !meta.dev || r.callers.length);
 	const sync_ms = sync.reduce((s, r) => s + r.total_ms, 0);
 	if (sync_ms >= 2) {
 		const top = sync[0];
@@ -1372,19 +1428,54 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	}
 	// PROMISE STORM: tens of thousands of promises per render is a cost no function shows
 	if (extras.promises) {
-		const per = meta.runs?.length
+		const all = meta.runs?.length
 			? extras.promises.count / meta.runs.length
 			: extras.promises.count;
+		// on the dev server, the dev server's own module loading (its file reads, its resolver) makes
+		// most of them: no build has it, and the app cannot change it — left out, and said so
+		const dev_share = meta.dev ? extras.promises.top.reduce((s, t) => s + (dev_tool_caller(t.caller) ? t.share : 0), 0) : 0;
+		const per = all * (1 - Math.min(dev_share, 1));
 		if (per >= 10_000) {
+			const rest = 1 - dev_share || 1;
 			const top = extras.promises.top
+				.filter((t) => !meta.dev || !dev_tool_caller(t.caller))
 				.slice(0, 3)
-				.map((t) => `${t.caller} ${Math.round(t.share * 100)}%`)
+				.map((t) => `${t.caller} ${Math.round((t.share / rest) * 100)}%`)
 				.join(', ');
+			const left_out = dev_share >= 0.05 ? ` (the dev server's own module loading made about ${Math.round(all - per).toLocaleString()} more, left out)` : '';
 			warn(
 				'promise-storm',
-				`${Math.round(per).toLocaleString()} promises per render. Each is an allocation and a microtask; at this volume they are a cost no single function shows.${top ? ` Mostly from: ${top}.` : ''}`,
+				`${Math.round(per).toLocaleString()} promises per render${left_out}. Each is an allocation and a microtask; at this volume they are a cost no single function shows.${top ? ` Mostly from: ${top}.` : left_out ? ' Their makers are spread thin: no one origin of the app’s stands out in the sample — profile again warm (the dev server’s loading crowds a first render).' : ''}`,
 				{
 					fix: 'Find the loop that awaits per item (a render per tag, a fetch per row) and do the work in one call, or on a plain array without async at all.'
+				}
+			);
+		}
+	}
+	// A TIMER EACH RENDER STARTS AND NEVER ENDS: still open after every render, from the same line
+	{
+		const by = new Map<string, { caller: string; n: number; repeat?: number; delay?: number; at?: { path: string; line: number } }>();
+		for (const o of extras.io ?? []) {
+			if (!o.left_each_run || !o.caller) continue;
+			const g = by.get(o.caller) ?? { caller: o.caller, n: 0, ...(o.repeat !== undefined ? { repeat: o.repeat } : { delay: o.delay }), ...(o.caller_at ? { at: o.caller_at } : {}) };
+			g.n++;
+			by.set(o.caller, g);
+		}
+		for (const g of [...by.values()].slice(0, 2)) {
+			const s = (ms: number) => (ms >= 1000 ? `${Math.round(ms / 100) / 10} s` : `${ms} ms`);
+			const what =
+				g.repeat !== undefined
+					? `starts an interval (every ${s(g.repeat)}) that is still running after the render`
+					: `schedules a ${s(g.delay ?? 0)} timer that is still waiting after the response went out`;
+			warn(
+				'render-leftover',
+				`Each render ${what}: ${g.caller}. Every render adds ${g.n === 1 ? 'one' : g.n} more — under traffic they pile up, each keeping its request's data in memory${g.repeat !== undefined ? ' and running on the instance’s CPU' : ''}.`,
+				{
+					fix:
+						g.repeat !== undefined
+							? 'Start it once for the process (at module level, or behind a flag set on first use) and share what it keeps fresh, or clear it when the work it serves is done. A render should leave nothing running.'
+							: 'Clear the timer when the work it guards finishes, or keep one process-wide timer (a cache sweep) instead of one per request.',
+					...(g.at ? { file: g.at.path, line: g.at.line } : {})
 				}
 			);
 		}
@@ -1882,6 +1973,27 @@ function ogygia_findings(
 		list.length <= max
 			? list.join(', ')
 			: `${list.slice(0, max).join(', ')} and ${list.length - max} more`;
+	// A FINGERPRINT THAT MOVED BETWEEN THE PROFILE'S OWN RENDERS: the same page, the same inputs —
+	// a prop made fresh per render (a time, a random id). The devtools' comparison (fp-drift.ts),
+	// ogygia's own ids (stores, class instances: random per render on purpose) left out.
+	const renders = meta.requests.filter((r) => r.internal && r.og?.island_rows?.length).map((r) => r.og!.island_rows!);
+	if (renders.length >= 2) {
+		const kept = (rows: IslandStat[]) => rows.map((r) => ({ entry: r.entry, fp: r.fp, ...(r.canonical !== undefined ? { props: r.canonical } : {}) }));
+		const moved = fp_compare(kept(renders[0]), kept(renders[renders.length - 1]));
+		if (moved.length) {
+			const name_of = (entry: string) => island_name(renders[0].find((r) => r.entry === entry) ?? entry);
+			const m = moved[0];
+			const whose = moved.length === 1 ? 'its' : `${name_of(m.entry)}'s`;
+			const said = m.path ? `${whose} prop \`${m.path}\` was ${m.was}, then ${m.now}` : m.was !== undefined ? `${whose} props went from …${m.was}… to …${m.now}…` : `${whose} props changed`;
+			info(
+				'fp-unstable',
+				`${names(moved.map((x) => name_of(x.entry)))} rendered with a different fingerprint on the profiler's renders of the same page: ${said}${moved.length > 1 ? ` (and ${moved.length - 1} more)` : ''}. If the page's data did not change between them, that value is made fresh on every render.`,
+				{
+					fix: 'The router compares fingerprints to keep a live island across a navigation, and the fingerprint is part of the page’s bytes: an island whose props change on every render is patched on every navigation, and a cache keyed on the HTML (a CDN, a post-render cache, a freeze store, an ETag) misses every time. Make the value the same for the same inputs: take it from load data, compute it in the browser (an effect), or leave it out of the props.'
+				}
+			);
+		}
+	}
 	// THE SEED EXPLAINED: which key weighs, who asked for it, and why everything ships when it does.
 	if (og.seed && og.seed_bytes > 0) {
 		const shipped = og.seed.keys.filter((k) => k.shipped);

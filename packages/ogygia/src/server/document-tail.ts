@@ -259,6 +259,7 @@ export class DocumentTail {
 					wake: s.meta?.wake ?? '',
 					props_bytes: w.text.length,
 					canonical_bytes: s.wire.canonical?.length ?? w.text.length,
+					...(s.wire.canonical !== undefined && s.wire.canonical.length <= 4096 ? { canonical: s.wire.canonical } : {}),
 					json: w.json,
 					culprit: w.json ? null : (s.wire.culprit?.() ?? null),
 					refs: s.wire.refs?.count ?? 0,

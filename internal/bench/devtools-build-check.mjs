@@ -33,6 +33,9 @@ await page.waitForSelector('[data-og-panel-toggle]', { timeout: 10_000 }).catch(
 await page.waitForTimeout(500);
 check('the launcher is there', (await page.locator('[data-og-panel-toggle]').count()) === 1);
 check('no dock until opened', (await page.locator('[data-og-win]').count()) === 0 && (await page.evaluate(() => typeof window.__ogygia_page)) === 'undefined');
+// (the leftovers watch wraps the timers and the global listeners: a visitor keeps the browser's own)
+const natives = () => page.evaluate(() => [window.setInterval, window.clearInterval, EventTarget.prototype.addEventListener, EventTarget.prototype.removeEventListener].every((f) => Function.prototype.toString.call(f).includes('[native code]')));
+check('a visitor keeps the browser\'s own timers and listeners', await natives());
 
 loaded = [];
 await page.locator('[data-og-panel-toggle]').click();
@@ -53,6 +56,7 @@ const view = await page.evaluate(() => {
 check('after a reload the page is measured from the start', !!view && view.includes('long-hydrate') && view.includes('markup-changed'), JSON.stringify(view));
 const server = await page.evaluate(() => (window.__ogygia_devtools?.events() ?? []).filter((e) => e.realm === 'server').length);
 check('…and gets the server\'s events', server > 0, `${server}`);
+check('…and what islands leave running is watched', !(await natives()));
 check('island names come from the build', (await page.evaluate(() => Object.keys(window.__ogygia_region_names ?? {}).length)) > 0);
 // a JS file is script, whatever fetched it (a link initiator read as a stylesheet put a hole's
 // preload in the CSS column; a modulepreload must never go the same way)

@@ -149,6 +149,7 @@ import {
 	find_same_answers,
 	find_wait_patterns,
 	heap_growth,
+	is_flat,
 	late_island_pattern,
 	render_per_item_pattern,
 	same_document_pattern,
@@ -202,7 +203,7 @@ import { compare_reports, island_files_diff, page_history, vitals_moved, type Si
 import { vital_parts, type PageInput } from '../devtools/page-insights.js';
 import { label_call, phase_of_frame } from './timeline.js';
 import { gzip_large } from './compress.js';
-import { io_kind } from './async-io.js';
+import { io_kind, mark_left_each_run } from './async-io.js';
 import {
 	hole_stats_of,
 	request_stats_of,
@@ -3742,6 +3743,10 @@ class Profiler {
 				const t = Date.now();
 				await render();
 				series.push(await settled());
+				// FLAT AFTER THREE: the verdict's line is 64 KB a render; well under half of it, with the
+				// settled heaps within 256 KB of each other, more renders cannot make it grow — each one
+				// is a render and a full collection (/inferno: 4 of its 9 s went here, for "it levels off")
+				if (i + 1 === 3 && is_flat(series)) break;
 				if (i + 1 === half)
 					half_head = (
 						(await session.post('HeapProfiler.getSamplingProfile')) as {
@@ -4230,25 +4235,37 @@ class Profiler {
 			// file against the warm renders. `?cold=0` skips it.
 			let cold_cap: WindowCapture | undefined;
 			const want_cold = q.get('cold') !== '0';
+			mem_mark('before the warm-up render');
 			for (let hop = 0; hop < 5; hop++) {
-				const t = performance.now();
+				let t = performance.now();
 				let res: Response | undefined;
+				let body = '';
 				try {
 					if (hop === 0 && want_cold) {
+						// (timed INSIDE the window: the recorder's own start and stop — the inspector
+						// session, the sampler, reading the profile — took ~400 ms, and every page read as
+						// a 400 ms cold start against a 1 ms warm render)
+						let t1 = 0;
 						cold_cap = await this.#capture_window(
 							interval,
 							async () => {
+								t = performance.now();
 								res = await fetch_render(target);
+								body = await res.text();
+								t1 = performance.now();
 							},
 							{ light: true }
 						);
-					} else res = await fetch_render(target);
+						if (res) warmup_ms = round2(t1 - t);
+					} else {
+						res = await fetch_render(target);
+						body = await res.text();
+						warmup_ms = round2(performance.now() - t);
+					}
 				} catch {
 					break; // warm-up failure surfaces on the real runs below
 				}
 				if (!res) break;
-				const body = await res.text();
-				warmup_ms = round2(performance.now() - t);
 				warm_status = res.status;
 				warm_bytes = body.length;
 				// fetch may follow same-origin redirects itself (res.redirected) or hand back the 3xx
@@ -4453,12 +4470,16 @@ class Profiler {
 				const k = call_group(label_call(c.method, c.url));
 				(wait_runs[k] ??= new Array(run_windows.length).fill(0))[ri] += c.ms + (c.body_ms ?? 0);
 			}
+			// TIMERS EVERY RENDER LEFT RUNNING, read before the io is scoped to one run: the same line
+			// started one in each render, and each is still open after them all
+			mark_left_each_run(cap.io_ops, run_windows);
 			// N identical renders → N copies of the same outbound calls. Keep one render's worth so
 			// the waterfall shows one request + its leaf calls, not the same handful ×N.
 			cap.window = scope_net_to_one_run(cap, run_windows) ?? undefined;
 			cap.runs = run_windows; // every run's window: the per-run component split
 			// the cold render's per-file cost (the warm figures come from the main analysis at report time)
 			let cold: ReportMeta['cold'];
+			mem_mark('after the answer renders');
 			if (cold_cap && warmup_ms !== undefined) {
 				try {
 					// one "run" spanning the cold render: its CPU by owner, grouped as the drill-down groups
@@ -4508,6 +4529,7 @@ class Profiler {
 			// WHAT A RENDER LEAVES BEHIND: one more render under a live-objects sampler, a full
 			// collection, then what is still alive by allocation site — outside the runs, and only
 			// when the budget has room for another render
+			mem_mark('after the answer renders and the cold analysis');
 			let retained: Retained | undefined;
 			// the pass's own wall time: a render with a heap sampler on and a full collection after it,
 			// the real price of each growth-check render (the warm-up time alone was half of it)
@@ -4531,6 +4553,7 @@ class Profiler {
 			// DOES IT KEEP GROWING? When one more render left memory behind, a few more renders with a
 			// full collection after each tell a leak (the heap climbs every time) from a bounded cache
 			// still filling (it levels off). Only when there is something to confirm and time for it.
+			mem_mark('after the retention render');
 			let growth: HeapGrowth | undefined;
 			if (retained && retained.total_bytes >= 256 * 1024) {
 				// the lowest-priority extra: on a serverless budget (Amplify: 25 s of work) it never takes
@@ -6204,7 +6227,7 @@ function mem_mark(step: string): void {
 	const m = process.memoryUsage();
 	const mb = (n: number) => Math.round(n / 1048576);
 	console.error(
-		`[ogygia/profiler] memory ${step}: rss ${mb(m.rss)} heap ${mb(m.heapUsed)} external ${mb(m.external)} buffers ${mb(m.arrayBuffers)} MB`
+		`[ogygia/profiler] memory ${step} @${Math.round(performance.now())} ms: rss ${mb(m.rss)} heap ${mb(m.heapUsed)} external ${mb(m.external)} buffers ${mb(m.arrayBuffers)} MB`
 	);
 }
 

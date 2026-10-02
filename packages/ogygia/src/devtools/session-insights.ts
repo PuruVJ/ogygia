@@ -223,6 +223,10 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 	const late: { i: number; after: number }[] = [];
 	s.clicks.forEach((c, i) => {
 		if (raged.has(c.target)) return;
+		// (only what looked like it does something: a click on text or a blank stretch that changes
+		// nothing is a visitor reading, not a broken control — a sweep of random clicks over a list of
+		// islands read as eight dead clicks)
+		if (!c.clickable) return;
 		if (c.fp) {
 			const first = s.mut_log.find((m) => m.t >= c.t && m.t <= c.t + 3000 && m.fp === c.fp);
 			if (!first && !navs.some((t) => t >= c.t && t <= c.t + 3000)) dead.push(i);

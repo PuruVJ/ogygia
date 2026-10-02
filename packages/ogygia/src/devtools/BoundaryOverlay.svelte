@@ -36,21 +36,25 @@
 	}
 	// A frame counter that advances only while the overlay is on — box rects follow scroll / hydration.
 	let frame = $state(0);
-	// One-time wiring (lifecycle, not an effect): Esc cancels a half-started pick, and a single rAF loop
-	// bumps `frame` while the overlay is on. Both read their reactive props live at call time.
+	// One-time wiring (lifecycle, not an effect): Esc cancels a half-started pick. It reads `picking`
+	// live at call time.
 	onMount(() => {
 		const onkey = (e) => {
 			if (e.key === 'Escape' && picking) picking = false;
 		};
 		window.addEventListener('keydown', onkey);
+		return () => window.removeEventListener('keydown', onkey);
+	});
+	// The rAF loop runs ONLY while the overlay is on (it follows the `overlay` prop, hence an effect):
+	// a loop left running with the overlay off asked the browser for a frame sixty times a second on
+	// every page with devtools, the dock closed — ~90 ms of main-thread work each 5 s of idle
+	$effect(() => {
+		if (!overlay) return;
 		let raf = requestAnimationFrame(function loop() {
-			if (overlay) frame++;
+			frame++;
 			raf = requestAnimationFrame(loop);
 		});
-		return () => {
-			window.removeEventListener('keydown', onkey);
-			cancelAnimationFrame(raf);
-		};
+		return () => cancelAnimationFrame(raf);
 	});
 
 	const boxes = $derived.by(() => {

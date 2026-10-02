@@ -32,6 +32,20 @@ export interface SessionClick {
 	target: string;
 	fp: string | null;
 	el: WeakRef<Element> | null;
+	/** it looked like it does something (a control, a link, a clickable role, a pointer cursor): a
+	 *  click on text or a blank stretch that changes nothing is no dead click */
+	clickable?: true;
+}
+
+const CLICKABLE = 'a[href],button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="option"],[onclick],[tabindex]:not([tabindex="-1"])';
+/** What a visitor takes for a control: one in its ancestry, or a pointer cursor where they clicked. */
+function looks_clickable(el: Element): boolean {
+	if (el.closest(CLICKABLE)) return true;
+	try {
+		return getComputedStyle(el).cursor === 'pointer';
+	} catch {
+		return false;
+	}
 }
 export interface SessionShift {
 	t: number;
@@ -318,7 +332,7 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		if (clicks.length >= 2000) return;
 		const el = e.target instanceof Element ? e.target : null;
 		if (el?.closest('[data-ogygia-devtools-host]')) return;
-		clicks.push({ t: r1(e.timeStamp), target: describe_el(el), fp: island_of(el)?.getAttribute('data-og-fp') ?? null, el: el ? new WeakRef(el) : null });
+		clicks.push({ t: r1(e.timeStamp), target: describe_el(el), fp: island_of(el)?.getAttribute('data-og-fp') ?? null, el: el ? new WeakRef(el) : null, ...(el && looks_clickable(el) ? { clickable: true as const } : {}) });
 	};
 	addEventListener('click', on_click, { capture: true, passive: true });
 	// every request (a PerformanceObserver: the resource buffer holds only 250, a dev page fills it)

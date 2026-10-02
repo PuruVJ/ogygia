@@ -11,6 +11,7 @@ const skip = new Set(['hell', 'inferno', 'latecomer', 'purgatory', 'purgatory-fi
 const dir = fileURLToPath(new URL('../../apps/playground/src/routes', import.meta.url));
 const routes = readdirSync(dir).filter((r) => !r.startsWith('+') && !r.startsWith('(') && !skip.has(r));
 const kinds = new Map();
+const warns = new Map();
 for (const r of routes) {
 	const t = Date.now();
 	try {
@@ -19,6 +20,8 @@ for (const r of routes) {
 		const j = await res.json();
 		const ks = (j.patterns ?? []).map((p) => p.kind);
 		for (const k of ks) kinds.set(k, [...(kinds.get(k) ?? []), r]);
+		// (the warnings too, by code: a finding firing on a page it should not is the same signal)
+		for (const f of j.findings ?? []) if (f.severity === 'warn' || f.severity === 'error') warns.set(f.code, [...(warns.get(f.code) ?? []), r]);
 		// one render: the median of the profiled runs (the report has no single render field)
 		const runs = [...(j.target?.runs ?? [])].sort((a, b) => a - b);
 		const render = runs.length ? runs[runs.length >> 1] : 0;
@@ -29,3 +32,5 @@ for (const r of routes) {
 }
 console.log('\nby kind:');
 for (const [k, rs] of kinds) console.log(`  ${k}: ${rs.join(' ')}`);
+console.log('\nwarnings by code:');
+for (const [k, rs] of [...warns].sort((a, b) => b[1].length - a[1].length)) console.log(`  ${k} (${rs.length}): ${rs.join(' ')}`);

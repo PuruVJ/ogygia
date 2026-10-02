@@ -181,7 +181,7 @@
 	{:else}
 		<div class="cap">page <span class="muted">· what the browser saw of this visit (dev server: modules load one by one, so load times run high)</span></div>
 
-		{#if view.since && (view.since.fixed.length || view.since.added.length || view.since.moved.length)}
+		{#if view.since && (view.since.fixed.length || view.since.added.length || view.since.moved.length || view.since.note)}
 			{@const s = view.since}
 			<!-- the dev loop: changed the code, reloaded — what changed on this page -->
 			<div class="since" data-og-page-since>
@@ -193,6 +193,7 @@
 						{#each s.moved as m, i (m.what)}{i ? ' · ' : ''}<span class={m.better ? 'good' : 'bad'}>{m.what} {m.unit ? ms(m.a) : m.a} → {m.unit ? ms(m.b) : m.b}{#if m.part}<span class="muted" data-og-page-since-part>, mostly {m.part.label} {ms(m.part.a)} → {ms(m.part.b)}</span>{/if}</span>{/each}
 					</p>
 				{/if}
+				{#if s.note}<p class="muted" data-og-page-since-note>{s.note}</p>{/if}
 			</div>
 		{/if}
 

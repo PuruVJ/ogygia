@@ -897,26 +897,45 @@ async function preload_run(browser) {
 		await page.close();
 		return f;
 	};
-	const rec = await fetch(`${base}/__profiler/page?p=/dt-preload&runs=1`, { redirect: 'manual' }).catch(() => null);
-	const report_id = rec?.headers.get('location')?.split('/').pop() ?? null;
+	// the report takes the browser visit that follows it
+	const record = async (path) => {
+		const rec = await fetch(`${base}/__profiler/page?p=${path}&runs=1`, { redirect: 'manual' }).catch(() => null);
+		return rec?.headers.get('location')?.split('/').pop() ?? null;
+	};
+	const named_in = async (id) => {
+		if (!id) return undefined;
+		for (let i = 0; i < 8; i++) {
+			await new Promise((ok) => setTimeout(ok, 1000));
+			const j = await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null);
+			const m = j?.findings?.find((f) => f.code === 'preload-unused')?.message;
+			if (m) return m;
+		}
+		return null;
+	};
+	const report_id = await record('/dt-preload');
 	const lab = await read('/dt-preload');
 	const clean = await read('/dt-lab');
-	let in_report = null;
-	if (report_id)
-		for (let i = 0; i < 8 && !in_report; i++) {
-			await new Promise((ok) => setTimeout(ok, 1000));
-			const j = await (await fetch(`${base}/__profiler/report/${report_id}.json`)).json().catch(() => null);
-			in_report = j?.findings?.find((f) => f.code === 'preload-unused')?.message ?? null;
-		}
+	// decoys: a hole's preload answered 500 (the runtime's retries download it again), and a hole the
+	// runtime asks for again after Kit rebuilt the page (the preload WAS used)
+	const retried = await read('/dt-holes');
+	const reasked = await read('/hole-kit-rebuild');
+	const in_report = await named_in(report_id);
+	// the same lab on a Kit-hydrated page: no runtime, the profiler's inline beacon reports the visit
+	const kit_id = await record('/dt-preload-kit');
+	if (kit_id) await read('/dt-preload-kit');
+	const kit_report = await named_in(kit_id);
 	const checks = [
 		['the planted preload, named with its bytes', lab.length === 1 && lab[0].message.startsWith('planted (') && lab[0].message.includes('twice')],
 		['the fix names crossorigin', lab[0]?.fix.includes('A fetch preload needs `crossorigin`') ?? false],
 		['the decoy never', !lab.some((f) => f.message.includes('decoy'))],
 		['a page without preloads quiet', clean.length === 0],
-		['the profiler report names it', !report_id || (in_report?.includes('In the browser: planted (') ?? false)]
+		['a failed hole preload, retried: quiet', retried.length === 0],
+		['a hole asked again after a rebuild: quiet', reasked.length === 0],
+		['the profiler report names it', in_report === undefined || (in_report?.includes('In the browser: planted (') ?? false)],
+		['…on a Kit page too', kit_report === undefined || ((kit_report?.includes('In the browser: planted (') ?? false) && !kit_report.includes('decoy'))]
 	];
 	const bad = checks.filter(([, ok]) => !ok);
-	console.log(`  ${bad.length ? '✗' : '✓'} preloads: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, clean, in_report })}` : ''}`);
+	console.log(`  ${bad.length ? '✗' : '✓'} preloads: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, clean, retried, reasked, in_report, kit_report })}` : ''}`);
 	return bad.length ? 0 : 1;
 }
 
@@ -1289,6 +1308,190 @@ try {
 	for (let i = 0; i < repeat; i++) holes_ok += await holes_run(browser);
 	if (holes_ok < repeat) failed = true;
 	console.log(`${holes_ok === repeat ? '✓' : '✗'} holes whose answer never came: ${holes_ok}/${repeat}`);
+	// A FINGERPRINT THAT MOVES ON EVERY RENDER (/dt-fp: Stamped's props carry the server's clock):
+	// two loads in one tab — the second names Stamped and the prop; Steady (the decoy) never; the first
+	// load has nothing to compare
+	{
+		const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+		const page = await ctx.newPage();
+		const read = () => page.evaluate(() => window.__ogygia_page?.()?.report.findings.filter((f) => f.code === 'fp-unstable').map((f) => f.message) ?? []);
+		await page.goto(base + '/dt-fp', { waitUntil: 'load' });
+		await page.waitForTimeout(1200);
+		const first = await read();
+		await page.reload({ waitUntil: 'load' });
+		await page.waitForTimeout(1200);
+		const second = await read();
+		await ctx.close();
+		// the profiler sees it across its own renders of the page (no browser needed)
+		const rec = await fetch(`${base}/__profiler/page?p=/dt-fp&runs=3`, { redirect: 'manual' }).catch(() => null);
+		const id = rec?.headers.get('location')?.split('/').pop();
+		const j = id ? await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null) : null;
+		const in_report = j?.findings?.find((f) => f.code === 'fp-unstable')?.message ?? '';
+		const ok = first.length === 0 && second.length === 1 && second[0].startsWith('Stamped got a new fingerprint since your last load of this page: its prop `stamp` was') && !second[0].includes('Steady');
+		const report_ok = in_report.startsWith("Stamped rendered with a different fingerprint on the profiler's renders of the same page: its prop `stamp`") && !in_report.includes('Steady');
+		if (!(ok && report_ok)) failed = true;
+		console.log(`${ok && report_ok ? '✓' : '✗'} a fingerprint that moves on every render, its prop named: the Page tab and the profiler report${ok && report_ok ? '' : ` — ${JSON.stringify({ first, second, in_report })}`}`);
+	}
+	// WHAT AN ISLAND LEFT RUNNING (/dt-leak: Ticker starts an interval and a window listener it never
+	// takes back; Tidy takes its own back): nothing on the first load; after an in-app navigation away,
+	// Ticker named with both and still running; after a navigation back (a new Ticker), still named
+	{
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		const read = () => page.evaluate(() => ({ soft: !!window.__og_key_marker, f: window.__ogygia_page?.()?.report.findings.filter((f) => f.code === 'island-leftover').map((f) => f.message) ?? [] }));
+		const go = async (sel) => {
+			await page.evaluate((sel) => document.querySelector(sel)?.click(), sel);
+			await page.waitForTimeout(1500);
+			return read();
+		};
+		await page.goto(base + '/dt-leak', { waitUntil: 'load' });
+		await page.waitForTimeout(1500);
+		await page.evaluate(() => (window.__og_key_marker = 1));
+		const first = await read();
+		const away = await go('[data-leak-go]');
+		const back = await go('[data-leak-back]');
+		await page.close();
+		const named = (r) => r.soft && r.f.length === 1 && r.f[0].startsWith("Ticker left an interval running and a window 'resize' listener attached") && r.f[0].includes('still running') && !r.f[0].includes('Tidy');
+		const checks = [
+			['the first load quiet', first.f.length === 0],
+			['away: Ticker, both, still running', named(away)],
+			['back: still Ticker (the copy that left)', named(back)],
+			['Tidy never', ![...away.f, ...back.f].some((m) => m.includes('Tidy'))]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} what an island left running: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ first, away, back })}` : ''}`);
+	}
+	// A BIG ISLAND'S CHANGE (/dt-big: ~40 KB islands; BigList's last attribute differs between the
+	// server and the browser, BigSteady's never): the change quoted is the real one (`data-track`), not
+	// where a 24 KB copy was cut; BigSteady never. Its largest paint repainted nothing (an attribute
+	// elsewhere) — while /dt-big-hero's heading, replaced as HeroSwap wakes, did
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(2000);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'markup-changed' || x.code === 'lcp-repaint').map((x) => ({ code: x.code, message: x.message })));
+			await page.close();
+			return f;
+		};
+		const big = await read('/dt-big');
+		const hero = await read('/dt-big-hero');
+		const changed = big.find((f) => f.code === 'markup-changed')?.message ?? '';
+		const checks = [
+			['BigList, its real change quoted', changed.startsWith('BigList rendered different markup') && changed.includes('server "data-track="') && changed.includes('browser "data-track="')],
+			['BigSteady never', !big.some((f) => f.message.includes('BigSteady'))],
+			['no repaint claimed for an attribute', !big.some((f) => f.code === 'lcp-repaint')],
+			['the replaced hero: repainted', hero.some((f) => f.code === 'lcp-repaint' && f.message.includes('inside HeroSwap'))]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} a big island's change, and a hero repainted: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ big, hero })}` : ''}`);
+	}
+	// THE DOCK CLOSED COSTS AN IDLE PAGE NOTHING: 5 s of an idle /dt-many (320 islands) with devtools
+	// on, the dock closed — the main thread's work stays near a page without devtools (an overlay rAF
+	// loop left running asked for a frame sixty times a second: ~90 ms each 5 s)
+	{
+		const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+		const page = await ctx.newPage();
+		const cdp = await ctx.newCDPSession(page);
+		await cdp.send('Performance.enable');
+		await page.goto(base + '/dt-many', { waitUntil: 'load' });
+		await page.waitForTimeout(4000);
+		const task = async () => (await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === 'TaskDuration').value;
+		const a = await task();
+		await page.waitForTimeout(5000);
+		const ms = Math.round(((await task()) - a) * 1000);
+		await ctx.close();
+		const ok = ms < 40;
+		if (!ok) failed = true;
+		console.log(`${ok ? '✓' : '✗'} the dock closed costs an idle page nothing — ${ms} ms of main-thread work in 5 s idle (limit 40)`);
+	}
+	// A LONG SESSION OF IN-APP NAVIGATIONS: the Page tab is about the page in view. Nothing of the pages
+	// before it carries over (Svelte's warnings from /detector, the slow paint of /dt-lcp); a page after
+	// two 320-island visits still has its islands recorded (/dt-lab's planted ones named); and a page
+	// SvelteKit's own router brought (a Kit-hydrated document) drops the first page's findings
+	{
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		const codes = () => page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((f) => f.code));
+		const go = async (to, wait = 3500) => {
+			await page.evaluate((to) => {
+				const a = document.createElement('a');
+				a.href = to;
+				document.body.prepend(a);
+				a.click();
+			}, to);
+			await page.waitForTimeout(wait);
+			return codes();
+		};
+		await page.goto(base + '/detector', { waitUntil: 'load' });
+		await page.waitForTimeout(2500);
+		const first = await codes();
+		const plain = await go('/plain');
+		await go('/dt-lcp', 6000);
+		const after_lcp = await go('/plain');
+		await go('/dt-many', 5000);
+		await go('/plain');
+		await go('/dt-many', 5000);
+		const lab = await go('/dt-lab', 5000);
+		await page.goto(base + '/dt-preload-kit', { waitUntil: 'load' });
+		await page.waitForTimeout(2500);
+		const kit_first = await codes();
+		const kit_next = await go('/score-lab-kit', 3000);
+		await page.close();
+		const checks = [
+			['Svelte’s warnings stay with their page', first.includes('svelte-hydration-warning') && !plain.includes('svelte-hydration-warning')],
+			['a slow paint stays with its page', !after_lcp.includes('slow-lcp')],
+			['after 640 islands, the next page’s still recorded', lab.includes('hydrate-failed') && lab.includes('markup-changed')],
+			['Kit’s own router: the first page’s findings left behind', kit_first.includes('preload-unused') && !kit_next.includes('preload-unused')]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} a long session of navigations: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ first, plain, after_lcp, lab, kit_first, kit_next })}` : ''}`);
+	}
+	// A LATE PAINT REACHES THE REPORT WITHOUT THE HIDE-TIME MESSAGE (/dt-lcp's slow hero lands after
+	// the early visit): the tab is closed hard, no page hide — the visit sent again after the paint
+	// carries it, so the profiler's report still names the slow largest paint
+	{
+		const rec = await fetch(`${base}/__profiler/page?p=/dt-lcp&runs=1`, { redirect: 'manual' }).catch(() => null);
+		const id = rec?.headers.get('location')?.split('/').pop();
+		const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+		await page.goto(base + '/dt-lcp', { waitUntil: 'load' });
+		await page.waitForTimeout(5500);
+		await page.close({ runBeforeUnload: false });
+		let named = false;
+		for (let i = 0; i < 6 && id && !named; i++) {
+			await new Promise((ok) => setTimeout(ok, 800));
+			const j = await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null);
+			named = !!j?.findings?.some((f) => f.code === 'slow-lcp');
+		}
+		const ok = !id || named;
+		if (!ok) failed = true;
+		console.log(`${ok ? '✓' : '✗'} a late paint reaches the report with the tab closed hard (the visit sent again)`);
+	}
+	// WHAT A SERVER RENDER LEFT RUNNING (/dt-timers: each render starts an interval and a 30 s timer it
+	// never ends; one process-wide interval and a cleared per-request timer are the decoys): the
+	// profiler's report names both plants, on their lines; neither decoy; a page without timers quiet
+	{
+		const leftovers_of = async (path) => {
+			const rec = await fetch(`${base}/__profiler/page?p=${path}&runs=3`, { redirect: 'manual' }).catch(() => null);
+			const id = rec?.headers.get('location')?.split('/').pop();
+			const j = id ? await (await fetch(`${base}/__profiler/report/${id}.json`)).json().catch(() => null) : null;
+			return j ? j.findings.filter((f) => f.code === 'render-leftover').map((f) => `${f.message} @${f.line}`) : null;
+		};
+		const lab = await leftovers_of('/dt-timers');
+		const clean = await leftovers_of('/dt-lab');
+		const checks = lab
+			? [
+					['the interval, on its line', lab.some((m) => m.startsWith('Each render starts an interval (every 1 s)') && m.includes('poll_prices') && m.endsWith('@9'))],
+					['the 30 s timer, on its line', lab.some((m) => m.startsWith('Each render schedules a 30 s timer') && m.includes('expire_later') && m.endsWith('@15'))],
+					['no decoy', lab.length === 2 && !lab.some((m) => m.includes('sweep_once') || m.includes('every 5 s') || m.includes('5 s timer'))],
+					['a page without timers quiet', clean?.length === 0]
+				]
+			: [['the profiler answered', false]];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} what a server render left running: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, clean })}` : ''}`);
+	}
 	// A HOST UPGRADED BEFORE THE RESTORE (/dt-restore: a blocking head script defines `demo-card`): the
 	// late restore named with the island it broke; the `demo-link` beside it (restored fine) never
 	{

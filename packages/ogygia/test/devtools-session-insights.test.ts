@@ -61,11 +61,14 @@ describe('analyze_session', () => {
 		const r = analyze_session(
 			base({
 				clicks: [
-					{ t: 100, target: 'button "late"', fp: 'b', el: null },
-					{ t: 300, target: 'button "late"', fp: 'b', el: null },
-					{ t: 500, target: 'button "late"', fp: 'b', el: null },
-					{ t: 2000, target: 'button "dead"', fp: null, el: null },
-					{ t: 3000, target: 'button "notice"', fp: 'c', el: null }
+					{ t: 100, target: 'button "late"', fp: 'b', el: null, clickable: true },
+					{ t: 300, target: 'button "late"', fp: 'b', el: null, clickable: true },
+					{ t: 500, target: 'button "late"', fp: 'b', el: null, clickable: true },
+					{ t: 2000, target: 'button "dead"', fp: null, el: null, clickable: true },
+					{ t: 3000, target: 'button "notice"', fp: 'c', el: null, clickable: true },
+					// text clicked in passing: it changed nothing, and it never claimed it would
+					{ t: 4000, target: 'p "some words"', fp: null, el: null },
+					{ t: 4500, target: 'p "in an island"', fp: 'c', el: null }
 				],
 				mut_log: [
 					{ t: 1600, fp: 'b' },
@@ -78,6 +81,7 @@ describe('analyze_session', () => {
 		expect(codes(r)).toEqual(expect.arrayContaining(['rage-click', 'dead-click', 'late-feedback']));
 		expect(r.findings.find((f) => f.code === 'dead-click')!.message).toContain('"dead"');
 		expect(r.findings.find((f) => f.code === 'dead-click')!.message).not.toContain('"late"');
+		expect(r.findings.find((f) => f.code === 'dead-click')!.message).toMatch(/^1 click changed nothing/);
 		expect(r.findings.find((f) => f.code === 'late-feedback')!.message).toContain('900 ms');
 	});
 
@@ -85,8 +89,8 @@ describe('analyze_session', () => {
 		const r = analyze_session(
 			base({
 				clicks: [
-					{ t: 100, target: 'a', fp: null, el: null },
-					{ t: 150, target: 'b', fp: 'a', el: null }
+					{ t: 100, target: 'a', fp: null, el: null, clickable: true },
+					{ t: 150, target: 'b', fp: 'a', el: null, clickable: true }
 				],
 				mut_log: [{ t: 200, fp: 'a' }]
 			}),

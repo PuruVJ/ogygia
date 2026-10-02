@@ -52,6 +52,44 @@ describe('rate', () => {
 	});
 });
 
+describe('dev compile on a first request', () => {
+	// Hero: wakes at 60, its code in at 1460 (1400 ms), done 1470 — LCP 180, so 1290 ms "late"
+	const late_page = (dev: boolean, compile_ms: number) =>
+		page({
+			...(dev ? { dev: true as const } : {}),
+			visit: {
+				nav: { res_start: 50, dcl: 200, load: 300 },
+				paints: { fcp: 150, lcp: 180 },
+				viewport: [1280, 800],
+				// its files, fetched in its load window: the server answered in `compile_ms` (two of them overlapping)
+				resources: [
+					{ url: '/src/lib/Hero.svelte', type: 'script', start: 70, end: 80 + compile_ms, req_start: 72, res_start: 72 + compile_ms },
+					{ url: '/src/lib/hero-util.ts', type: 'script', start: 80, end: 90 + compile_ms / 2, req_start: 82, res_start: 82 + compile_ms / 2 },
+					{ url: '/@vite/client', type: 'script', start: 70, end: 75, req_start: 71, res_start: 73 }
+				]
+			},
+			islands: [{ fp: 'hero', t0: 60, loaded: 1460, turn: 1462, done: 1470 }]
+		});
+	const late = (dev: boolean, compile_ms: number) => analyze_page(late_page(dev, compile_ms), [region('hero', 'Hero')], [], 3000).findings.find((f) => f.code === 'late-interactive');
+
+	it('late only because the dev server compiled its code: a note that says so', () => {
+		const f = late(true, 1100);
+		expect(f?.severity).toBe('info');
+		expect(f?.message).toContain('the dev server compiling its code on this first request');
+	});
+
+	it('late even without the compile, or not on the dev server: still a warning, said plainly', () => {
+		expect(late(true, 100)?.severity).toBe('warn');
+		expect(late(true, 100)?.message).not.toContain('dev server compiling');
+		expect(late(false, 1100)?.severity).toBe('warn');
+	});
+
+	it('slow module: the compile named', () => {
+		const r = analyze_page(late_page(true, 1100), [region('hero', 'Hero')], [], 3000);
+		expect(r.findings.find((f) => f.code === 'slow-module')?.message).toContain('the dev server compiling the files on this first request');
+	});
+});
+
 describe('analyze_page', () => {
 	it('a healthy page has no findings', () => {
 		const r = analyze_page(
@@ -650,17 +688,30 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page({ visit: { ...page().visit!, paints: { fcp: 420 }, resources: slow } }), [], [], 500))).toContain('render-blocking');
 	});
 
-	it('the largest paint in an island that changed on hydration', () => {
-		const r = analyze_page(
-			page({
-				visit: { ...page().visit!, paints: { fcp: 150, lcp: 180, lcp_fp: 'hero', lcp_tag: 'h1' } },
-				islands: [{ fp: 'hero', t0: 60, loaded: 80, done: 90, changed: true }]
-			}),
+	it('the largest paint in an island that rendered it again on hydration', () => {
+		const with_paints = (lcp_replaced?: true, recovered?: true) =>
+			analyze_page(
+				page({
+					visit: { ...page().visit!, paints: { fcp: 50, lcp: 70, lcp_fp: 'hero', lcp_tag: 'h1', ...(lcp_replaced ? { lcp_replaced } : {}) } },
+					islands: [{ fp: 'hero', t0: 60, loaded: 80, done: 90, changed: true, ...(recovered ? { recovered } : {}) }]
+				}),
+				[region('hero', 'Hero')],
+				[],
+				500
+			);
+		// its element taken out while the island stayed, or the island rebuilt: repainted
+		expect(codes(with_paints(true))).toContain('lcp-repaint');
+		expect(codes(with_paints(undefined, true))).toContain('lcp-repaint');
+		// changed elsewhere (an attribute), the element still there, painted before it woke: nothing repainted
+		expect(codes(with_paints())).not.toContain('lcp-repaint');
+		// the largest paint after it woke (the browser counted the island's own heading): repainted
+		const late = analyze_page(
+			page({ visit: { ...page().visit!, paints: { fcp: 50, lcp: 95, lcp_fp: 'hero', lcp_tag: 'h1' } }, islands: [{ fp: 'hero', t0: 60, loaded: 80, done: 90, changed: true }] }),
 			[region('hero', 'Hero')],
 			[],
 			500
 		);
-		expect(codes(r)).toContain('lcp-repaint');
+		expect(codes(late)).toContain('lcp-repaint');
 	});
 
 	it('long tasks outside hydration are the page scripts', () => {

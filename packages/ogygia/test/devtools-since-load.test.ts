@@ -54,3 +54,35 @@ test('the same finding on another island is a new one; another page compares to 
 	expect(s.added).toEqual(['long-hydrate (Other)']);
 	expect(since_load(prev, snap({ path: '/other' }))).toBeNull();
 });
+
+test('the last load was the dev server’s first compile: nothing "fixed" by the warm-up, loads compared without it', () => {
+	// measured on /dt-lab: every island's load 776 ms on the cold load, 33 ms on the reload
+	const prev = snap({
+		findings: [{ code: 'late-interactive', names: ['Heavy'] }, { code: 'long-hydrate', names: ['Heavy'] }],
+		islands: [{ name: 'Heavy', load_ms: 776, hydrate_ms: 140, compile_ms: 740 }, { name: 'Clock', load_ms: 776, hydrate_ms: 2, compile_ms: 740 }]
+	});
+	const now = snap({ islands: [{ name: 'Heavy', load_ms: 33, hydrate_ms: 5 }, { name: 'Clock', load_ms: 33, hydrate_ms: 2 }] });
+	const s = since_load(prev, now)!;
+	// the real fix still counts; the compile's own finding does not
+	expect(s.fixed).toEqual(['long-hydrate (Heavy)']);
+	expect(s.moved.map((m) => m.what)).toEqual(['Heavy hydrate']);
+	expect(s.note).toContain('the dev server compiling this page');
+	expect(s.note).toContain('one finding');
+	// the PAGE compiled on the last load's request (a 3.9 s first byte): its first byte, paints and
+	// their findings are not "fixed" either
+	const page_prev = snap({
+		page_compiled: true,
+		findings: [{ code: 'slow-ttfb', names: [] }, { code: 'slow-lcp', names: ['Grower'] }, { code: 'long-hydrate', names: ['Heavy'] }],
+		vitals: [{ key: 'ttfb', value: 3919 }, { key: 'lcp', value: 3936 }]
+	});
+	const page_now = snap({ vitals: [{ key: 'ttfb', value: 7 }, { key: 'lcp', value: 28 }] });
+	const p = since_load(page_prev, page_now)!;
+	expect(p.fixed).toEqual(['long-hydrate (Heavy)']);
+	expect(p.moved).toEqual([]);
+	expect(p.note).toContain("its first byte, its paints and its islands' loads are not compared");
+	// (an island's load, cold under the page's compile: not compared)
+	const cold_islands = since_load(snap({ page_compiled: true, islands: [{ name: 'Heavy', load_ms: 157, hydrate_ms: 5 }] }), snap({ islands: [{ name: 'Heavy', load_ms: 31, hydrate_ms: 5 }] }))!;
+	expect(cold_islands.moved).toEqual([]);
+	// a load that was not compiling: no note
+	expect(since_load(snap({ islands: [{ name: 'Heavy', load_ms: 33, hydrate_ms: 5 }] }), now)?.note).toBeUndefined();
+});

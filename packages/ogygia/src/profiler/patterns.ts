@@ -2202,6 +2202,22 @@ export interface HeapGrowth {
 
 /** A leak grows the same every render; a cache with a size limit grows, then stops. The second
  *  half's rate against the first half's tells them apart; under 64 KB a render is flat either way. */
+/** A growth series (the settled heap before, then after each render) that is FLAT: under 32 KB a
+ *  render (half of `heap_growth`'s line), and every settled reading after the first render within
+ *  256 KB of the others — more renders could not make it grow, so the check may stop. */
+export function is_flat(series: readonly number[]): boolean {
+	const n = series.length - 1;
+	if (n < 1) return false;
+	if ((series[n] - series[0]) / n >= 32 * 1024) return false;
+	let lo = Infinity;
+	let hi = -Infinity;
+	for (let i = 1; i <= n; i++) {
+		lo = Math.min(lo, series[i]);
+		hi = Math.max(hi, series[i]);
+	}
+	return hi - lo < 256 * 1024;
+}
+
 export function heap_growth(series: readonly number[]): HeapGrowth | undefined {
 	const n = series.length - 1;
 	if (n < 2) return undefined;

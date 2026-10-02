@@ -30,6 +30,9 @@ export interface IslandStat {
 	props_bytes: number;
 	/** canonical (unreferenced) props size — what the fingerprint hashes */
 	canonical_bytes: number;
+	/** that canonical text itself, when it is short (≤ 4 KB): the report compares an island across its
+	 *  renders and names the prop that moved its fingerprint */
+	canonical?: string;
 	/** the sidecar took the JSON lane */
 	json: boolean;
 	/** the first leaf that kept the props off the JSON lane, when devalue was used */

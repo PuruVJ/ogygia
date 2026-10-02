@@ -2311,6 +2311,30 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		).toBe(20);
 	});
 
+	it('fp-unstable: an island whose fingerprint moved between the profile’s own renders, its prop named; ogygia’s own ids never', () => {
+		const prof: CpuProfile = { startTime: 0, endTime: 10_000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [10_000] };
+		const og = (rows: object[]) => ({ transform_ms: 1, islands: rows.length, hints: 0, holes: 0, seed_bytes: 0, remote_seed_bytes: 0, tail_bytes: 100, fnm_bytes: 0, ctx_bytes: 0, seed_json: true, island_rows: rows });
+		const row = (fp: string, entry: string, name: string, canonical: string) => ({ fp, entry, name, module_url: entry, wake: 'load', props_bytes: 10, canonical_bytes: canonical.length, canonical, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], interactivity: null, count: 1 });
+		const meta = (a: object[], b: object[]) => ({
+			id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [10, 10], run_status: 200, run_bytes: 900, duration_ms: 20, node: 'v',
+			requests: [{ internal: true, og: og(a) }, { internal: true, og: og(b) }]
+		});
+		const steady = row('s1', '/Steady.js', 'Steady', '{"label":"x"}');
+		const f = derive_findings(
+			analyze(prof),
+			meta([row('a1', '/Stamped.js', 'Stamped', '{"stamp":1}'), steady], [row('a2', '/Stamped.js', 'Stamped', '{"stamp":2}'), steady]) as never,
+			{ net: [], mem: [] } as never
+		).find((x) => x.code === 'fp-unstable');
+		expect(f?.message).toBe("Stamped rendered with a different fingerprint on the profiler's renders of the same page: its prop `stamp` was 1, then 2. If the page's data did not change between them, that value is made fresh on every render.");
+		// only ogygia's own ids differ (a store's, random per render on purpose): quiet
+		const ids = derive_findings(
+			analyze(prof),
+			meta([row('c1', '/Cart.js', 'Cart', '[{"n":1},"8abbcc0c-8898-4cb0-b37d-30c8d0c5d149"]')], [row('c2', '/Cart.js', 'Cart', '[{"n":1},"bfa88d49-b4a9-4469-baad-ffe787a5fa4d"]')]) as never,
+			{ net: [], mem: [] } as never
+		);
+		expect(ids.some((x) => x.code === 'fp-unstable')).toBe(false);
+	});
+
 	it('kit-uneval on a csr=false page: Kit’s copy of the server load data, built and dropped; ogygia’s own serialization apart', () => {
 		const kit = '/app/node_modules/@sveltejs/kit/src/runtime/server/page/data_serializer.js';
 		const prof: CpuProfile = {

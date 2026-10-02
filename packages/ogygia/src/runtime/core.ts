@@ -42,7 +42,7 @@ import { preload_island_graph } from './island-graph-preload.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
-import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback } from './beacon.js';
+import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_hole_fetched } from './beacon.js';
 import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.js';
 import type { IslandHandle, IslandModule } from './hydrate-core.js';
 import { emit as dt_emit } from '../devtools/bus.js';
@@ -51,6 +51,7 @@ import {
 	ingest_server_events as dt_ingest_server
 } from '../devtools/sinks.js';
 import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
+import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../devtools/leftovers.js';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
@@ -110,6 +111,21 @@ function dt_ids(el: Element): { entry?: string; fp?: string } {
 	const entry = el.getAttribute('entry') || undefined;
 	const fp = el.getAttribute('data-og-fp') || undefined;
 	return { entry, fp };
+}
+
+/** An island instance starts, for the devtools' leftovers watch: its entry and file locations. */
+function dt_seen(el: Element): void {
+	const entry = el.getAttribute('entry');
+	if (!entry) return;
+	const urls: string[] = [];
+	for (const u of [entry, el.getAttribute('src')]) {
+		try {
+			if (u) urls.push(new URL(u, document.baseURI).href);
+		} catch {
+			/* not a URL */
+		}
+	}
+	dt_island_seen(el, entry, urls);
 }
 
 /** High-res clock for devtools timings (guarded — dead when devtools is off). */
@@ -599,6 +615,7 @@ class OgygiaRegion extends HTMLElement {
 	#frame_fetcher(endpoint: string, revalidate: boolean) {
 		return (signal: AbortSignal) =>
 			runtime_session.server_gate.run(async () => {
+				if (BEACON) beacon_hole_fetched(endpoint);
 				let res = await fetch(endpoint, {
 					credentials: 'same-origin',
 					cache: revalidate ? 'no-store' : 'default',
@@ -1064,7 +1081,10 @@ class OgygiaRegion extends HTMLElement {
 		const t0 = now_ms();
 		const dt_t0 = DEVTOOLS ? t0 : 0;
 		let t_loaded = t0;
-		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
+		if (DEVTOOLS) {
+			dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
+			dt_seen(this);
+		}
 		try {
 			// wait for full parse so the end-of-body props sidecars (and the seed) are in the DOM. On an
 			// SPA swap (and any post-load hydrate) the document is already parsed, so skip the await
@@ -1250,6 +1270,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.isConnected) return;
 		await this.#kit_page_ready(core);
 		if (!this.isConnected) return;
+		if (DEVTOOLS) dt_seen(this);
 		this.#live_app = core.hydrate_live(this, entry, mod, props);
 		if (!this.#live_app) return;
 		this.setAttribute('data-hydrated', '');
@@ -1266,6 +1287,7 @@ class OgygiaRegion extends HTMLElement {
 		// A disconnect now always means the island is gone: the reconcile nav MOVES kept nodes with
 		// insertBefore (no detach, no disconnect), and the fallback is a full swap where old islands
 		// genuinely leave.
+		if (DEVTOOLS && (this.#live_app || this.#app)) dt_island_gone(this, this.getAttribute('entry') ?? '');
 		if (this.#live_app) {
 			this.#live_app.dispose();
 			this.#live_app = null;
@@ -1397,6 +1419,9 @@ export function boot(installers: Array<() => void> = []): void {
 		// The devtools UI — one mounted Svelte app (launcher + tabbed window: Lens / Bytes / Timeline).
 		// A pure bus/DOM consumer, starting hidden (Alt+O). DCEs with the whole devtools graph when off.
 		dt_install_ui();
+		// What islands leave running after they leave the page (intervals, window/document listeners):
+		// watched from before the first island wakes
+		dt_watch_leftovers();
 		// Which optional features this per-app runtime shipped — the byte-ledger / boundary-lens read
 		// this to know what's even possible on the page. Names come off each installer's slot presence.
 		const features: string[] = [];

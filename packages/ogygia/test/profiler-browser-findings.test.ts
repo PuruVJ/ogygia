@@ -49,8 +49,9 @@ test('each planted problem, on its island, in the report', () => {
 	expect(by['long-hydrate'].message).toContain('Menu');
 	expect(by['hydration-shift'].fps).toEqual(['bbbbbbbb22222222']);
 	expect(by['eager-offscreen'].message).toContain('Below');
-	// the report makes these its own way
-	for (const code of ['recovered', 'never-woke', 'vital-cls', 'render-blocking']) expect(by[code]).toBeUndefined();
+	// the report makes these its own way (render-blocking too, when it weighed the page: report.ts
+	// drops the browser's then — on a dev server the browser's timing is all there is)
+	for (const code of ['recovered', 'never-woke', 'vital-cls']) expect(by[code]).toBeUndefined();
 	for (const f of found) expect(f.message.startsWith('In the browser: ')).toBe(true);
 });
 
@@ -111,6 +112,44 @@ test("a lazy island's code counts at start only when it loaded before the load e
 test('the inline beacon for pages without the runtime is valid JS', async () => {
 	const { BEACON_STANDALONE_JS } = await import('../src/profiler/beacon-standalone.ts');
 	expect(() => new Function(BEACON_STANDALONE_JS)).not.toThrow();
+});
+
+test('the inline beacon names a preload the browser downloaded again (a Kit page has no runtime beacon)', async () => {
+	const { BEACON_STANDALONE_JS } = await import('../src/profiler/beacon-standalone.ts');
+	const font = 'https://a.test/f.woff2';
+	const res = (name: string, initiatorType: string, transferSize: number, encodedBodySize: number) => ({ name, initiatorType, transferSize, encodedBodySize, decodedBodySize: encodedBodySize, startTime: 1, responseEnd: 2, duration: 1 });
+	const entries = [
+		res(font, 'link', 20_300, 20_000),
+		res(font, 'css', 20_300, 20_000),
+		// preloaded and then served from the preload: no body came down the second time
+		res('https://a.test/app.js', 'link', 5_300, 5_000),
+		res('https://a.test/app.js', 'script', 0, 5_000)
+	];
+	const links = [
+		{ href: font, getAttribute: (n: string) => (n === 'as' ? 'font' : null) },
+		{ href: 'https://a.test/app.js', getAttribute: (n: string) => (n === 'as' ? 'script' : n === 'crossorigin' ? '' : null) }
+	];
+	const listeners: Record<string, () => void> = {};
+	const sent: string[] = [];
+	const doc = {
+		visibilityState: 'hidden',
+		querySelector: (s: string) => (s.startsWith('meta') ? { getAttribute: () => '/__profiler/beacon' } : null),
+		querySelectorAll: () => links,
+		addEventListener: (t: string, f: () => void) => (listeners[t] = f)
+	};
+	class PO {
+		observe() {}
+		disconnect() {}
+		static supportedEntryTypes = ['paint'];
+	}
+	const perf = { timeOrigin: 0, getEntriesByType: (t: string) => (t === 'navigation' ? [{ requestStart: 1, responseStart: 5, responseEnd: 9 }] : t === 'resource' ? entries : []), setResourceTimingBufferSize() {} };
+	const run = new Function('window', 'document', 'performance', 'PerformanceObserver', 'navigator', 'location', 'innerWidth', 'innerHeight', 'addEventListener', 'fetch', BEACON_STANDALONE_JS);
+	run({}, doc, perf, PO, { userAgent: 'test', sendBeacon: (_: string, b: string) => (sent.push(b), true) }, { pathname: '/p', origin: 'https://a.test' }, 1, 1, () => {}, () => Promise.resolve());
+	listeners.DOMContentLoaded();
+	listeners.visibilitychange();
+	const visit = sent.map((b) => JSON.parse(b)).find((b) => b.visit)!.visit;
+	expect(visit.preload_misses).toEqual([{ url: font, type: 'font', bytes: 20_300, as: 'font', crossorigin: null }]);
+	expect(parse_visit('/p', visit)!.preload_misses).toHaveLength(1);
 });
 
 test('bad region records are dropped', () => {

@@ -134,8 +134,8 @@ export interface PageInput {
 		/** main-thread ms per script URL, from long animation frames (from the page's start) */
 		scripts?: { url: string; ms: number; count: number }[];
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
-		warnings?: { code: string; message: string; file?: string; fp?: string }[];
-		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string };
+		warnings?: { code: string; message: string; file?: string; fp?: string; t?: number }[];
+		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true };
 		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean }[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
@@ -163,7 +163,8 @@ export interface PageInput {
 	firsts: { fp: string; t: number; type: string }[];
 	shifts: { t: number; value: number; fp?: string; tag?: string }[];
 	longtasks: { t: number; ms: number }[];
-	snapshots?: { fp: string; ssr: string; hydrated: string; final?: string }[];
+	/** (`from`: a big island's window — where it starts in the markup without comments) */
+	snapshots?: { fp: string; ssr: string; hydrated: string; final?: string; from?: number }[];
 	/** awake islands showing a children slot with nothing in it (read off the DOM; devtools only) */
 	empty_slots?: string[];
 	/** holes whose answer never came (the bus; devtools only) */
@@ -176,6 +177,10 @@ export interface PageInput {
 	hole_batches?: HoleBatch[];
 	/** what the restorer of a server transform reported (runtime/restore.ts `__og_restore_log`) */
 	restore_events?: RestoreEvent[];
+	/** islands whose fingerprint moved between two loads of this page (devtools/fp-drift.ts) */
+	fp_drift?: { name: string; fp?: string; path?: string; was?: string; now?: string }[];
+	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
+	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
 }
 
 /** A restored host that went wrong: upgraded by its component before the restore reached it
@@ -386,6 +391,9 @@ export interface PageFinding {
 	fix?: string;
 	/** the islands it is about (to light up on the page) */
 	fps: string[];
+	/** it is the dev server's own first compile of the page (a slow first byte while the page compiled
+	 *  on its first request): a reload reads it warm, and "since your last load" does not call it fixed */
+	dev_compile?: true;
 }
 
 export interface PageReport {
@@ -769,11 +777,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 
 	// ── slow module loads ──
 	const slow = rows.filter((r) => r.load_ms >= SLOW_LOAD_MS);
+	const compiled = slow.filter((r) => dev_compile_ms(page, r) >= r.load_ms * 0.5);
 	if (slow.length)
 		findings.push({
 			code: 'slow-module',
 			severity: 'info',
-			message: `${list(slow.map((r) => `${r.name} (${r.load_ms} ms)`))} waited a long time for its code to arrive.`,
+			message:
+				`${list(slow.map((r) => `${r.name} (${r.load_ms} ms)`))} waited a long time for its code to arrive.` +
+				(compiled.length ? ` ${compiled.length === slow.length ? 'Most of the wait' : `For ${list(compiled.map((r) => r.name))}, most of it`} was the dev server compiling the files on this first request: reload for a warm reading.` : ''),
 			fix: 'Check the island\'s imports in the Bytes tab: a big dependency, or a chain of imports loaded one after another. (Dev serves modules one by one; a build is faster.)',
 			fps: slow.map((r) => r.fp)
 		});
@@ -793,18 +804,26 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const lcp = page.visit?.paints?.lcp ?? page.vitals.lcp;
 	if (typeof lcp === 'number') {
 		const late = rows.filter((r) => EAGER.has(r.wake) && !r.below_fold && r.done - lcp >= LATE_MS);
+		// (on the dev server, the gap that is its code compiling on this first request is the dev
+		// server's: late only for that reason, it is a note — a reload reads it warm)
+		const compiling = late.filter((r) => r.done - lcp - dev_compile_ms(page, r) < LATE_MS);
 		if (late.length)
 			findings.push({
 				code: 'late-interactive',
-				severity: 'warn',
-				message: `${list(late.map((r) => `${r.name} (${Math.round(r.done - lcp)} ms)`))} on the first screen woke long after the page looked finished (LCP ${Math.round(lcp)} ms). A visitor can click it and get nothing in that gap.`,
+				severity: compiling.length === late.length ? 'info' : 'warn',
+				message:
+					`${list(late.map((r) => `${r.name} (${Math.round(r.done - lcp)} ms)`))} on the first screen woke long after the page looked finished (LCP ${Math.round(lcp)} ms). A visitor can click it and get nothing in that gap.` +
+					(compiling.length ? ` ${compiling.length === late.length ? 'Most of the gap' : `For ${list(compiling.map((r) => r.name))}, most of it`} was the dev server compiling its code on this first request: reload for a warm reading.` : ''),
 				fix: 'Shrink what it loads and what hydrates before it, or render it as plain HTML (a lake) if it does not need to be interactive at once.',
 				fps: late.map((r) => r.fp)
 			});
-		// the largest paint sat in an island that changed on hydration: the LCP repaints
+		// the largest paint sat in an island that rendered it again on hydration: the LCP repaints.
+		// Proven by the island being rebuilt, by its element being taken out while the island stayed,
+		// or by the largest paint landing after the island woke (the browser counted the new one) —
+		// a changed attribute elsewhere in it (a tracking id) repaints nothing
 		const lcp_fp = page.visit?.paints?.lcp_fp;
 		const hit = lcp_fp ? rows.find((r) => r.fp === lcp_fp) : undefined;
-		if (hit && (hit.changed || hit.recovered))
+		if (hit && (hit.recovered || (hit.changed && (page.visit?.paints?.lcp_replaced || lcp >= hit.done))))
 			findings.push({
 				code: 'lcp-repaint',
 				severity: 'warn',
@@ -854,7 +873,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: why && 'note' in why && why.note ? 'info' : v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
-			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? []
+			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? [],
+			...(why && 'note' in why && why.note ? { dev_compile: true as const } : {})
 		});
 	}
 
@@ -1024,6 +1044,37 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 								? 'The server answered quickly and the request left on time: the wait came after the first byte (a large answer, its styles, or the swap) or on the network.'
 								: 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
 							: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+			fps: []
+		});
+	}
+
+	// ── an island whose fingerprint moved between two loads of the same page ──
+	const drift = page.fp_drift ?? [];
+	if (drift.length) {
+		const first = drift[0];
+		const whose = (d: (typeof drift)[number]) => (drift.length === 1 ? 'its' : `${d.name}'s`);
+		const said = (d: (typeof drift)[number]) =>
+			d.path ? `${whose(d)} prop \`${d.path}\` was ${d.was}, now ${d.now}` : d.was !== undefined ? `${whose(d)} props went from …${d.was}… to …${d.now}…` : `${whose(d)} props changed`;
+		findings.push({
+			code: 'fp-unstable',
+			severity: 'info',
+			message: `${list(drift.map((d) => d.name))} got a new fingerprint since your last load of this page: ${said(first)}${drift.length > 1 ? ` (and ${drift.length - 1} more)` : ''}. If the page's data did not change, that value is made fresh on every render.`,
+			fix: 'The router compares fingerprints to keep a live island across a navigation, and the fingerprint is part of the page’s bytes: an island whose props change on every render is patched on every navigation, and a cache keyed on the HTML (a CDN, a post-render cache, a freeze store, an ETag) misses every time. Make the value the same for the same inputs: take it from load data, compute it in the browser (an effect), or leave it out of the props.',
+			fps: drift.map((d) => d.fp).filter((x): x is string => !!x)
+		});
+	}
+
+	// ── what an island left running after it left the page ──
+	for (const l of page.leftovers ?? []) {
+		const what: string[] = [];
+		if (l.intervals) what.push(l.intervals === 1 ? 'an interval running' : `${l.intervals} intervals running`);
+		if (l.listeners.length) what.push(l.listeners.length === 1 ? `a ${l.listeners[0]} listener attached` : `${l.listeners.length} listeners attached (${counted(l.listeners)})`);
+		const ran = l.intervals ? ` (still running: ${l.fires} run${l.fires === 1 ? '' : 's'} so far${l.last_ago !== undefined ? `, the last ${l.last_ago < 1000 ? `${l.last_ago} ms` : `${(l.last_ago / 1000).toFixed(1)} s`} ago` : ''})` : '';
+		findings.push({
+			code: 'island-leftover',
+			severity: 'warn',
+			message: `${l.name} left ${list(what)} after it left the page${ran}. Each visit to its page adds another, and each keeps the island's state in memory.`,
+			fix: 'Take back what the island starts when it goes: return a cleanup from the `$effect` that started it (`clearInterval(id)`, `removeEventListener` with the same function and capture), or pass an AbortSignal and abort it there. The router keeps the document across navigations, so nothing a page left behind is cleared by the next page.',
 			fps: []
 		});
 	}
@@ -1816,6 +1867,32 @@ function explain_interaction(
 }
 
 /** Names with their copies counted: `BatchHole ×4`, `Menu and Cart ×2`. */
+/**
+ * On the dev server: how much of an island's code load was the server COMPILING files on this
+ * request — the time (overlaps counted once) the server took to answer each file fetched in its load
+ * window, when that took 80 ms or more (a transform: a warm dev server answers in a few). 0 off the
+ * dev server, or when the visit does not list the files.
+ */
+export function dev_compile_ms(page: Pick<PageInput, 'dev' | 'visit'>, r: Pick<IslandRow, 't0' | 'load_ms'>): number {
+	if (!page.dev) return 0;
+	const from = r.t0 - 5;
+	const to = r.t0 + r.load_ms + 5;
+	const spans: [number, number][] = [];
+	for (const f of page.visit?.resources ?? []) {
+		if (f.req_start === undefined || f.res_start === undefined || f.req_start < from || f.res_start > to) continue;
+		if (f.res_start - f.req_start >= 80) spans.push([f.req_start, f.res_start]);
+	}
+	spans.sort((a, b) => a[0] - b[0]);
+	let total = 0;
+	let end = -Infinity;
+	for (const [a, b] of spans) {
+		if (b <= end) continue;
+		total += b - Math.max(a, end);
+		end = b;
+	}
+	return total;
+}
+
 function counted(names: string[]): string {
 	const n = new Map<string, number>();
 	for (const s of names) n.set(s, (n.get(s) ?? 0) + 1);

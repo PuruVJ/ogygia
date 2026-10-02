@@ -15,8 +15,10 @@ import type { FrameCategory } from './analyze.js';
 import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.js';
 import type { Visit } from './visit.js';
 
-/** codes the report makes from its own data */
-const SKIP = new Set(['recovered', 'never-woke', 'render-blocking', 'vital-ttfb', 'vital-fcp', 'vital-lcp', 'vital-cls', 'vital-inp']);
+/** codes the report makes from its own data (render-blocking only when it weighed the page's files:
+ *  the report.ts caller drops the browser's then — on a dev server it weighs nothing, and the
+ *  browser's timing of the blocking file is all there is) */
+const SKIP = new Set(['recovered', 'never-woke', 'vital-ttfb', 'vital-fcp', 'vital-lcp', 'vital-cls', 'vital-inp']);
 
 export interface BrowserFinding {
 	severity: 'info' | 'warn';

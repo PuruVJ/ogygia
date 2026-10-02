@@ -6,8 +6,48 @@
  */
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
-import { all_regions, region_name, region_names, region_transitive } from './regions.js';
-import { analyze_page, defer_keys, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.js';
+import { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.js';
+import { leftover_state, owned_leftovers } from './leftovers.js';
+
+const FPS_KEY = 'ogygia:devtools:fps';
+/** props text kept per island (a longer one is compared by its fingerprint alone) */
+const FPS_PROPS_CAP = 8000;
+/** pages kept per tab */
+const FPS_PAGES_CAP = 20;
+let fps_memo: { at: string; drift: FpDrift[] } | null = null;
+
+/** This page load's islands against this tab's last load of the same page (fp-drift.ts): once per
+ *  load — the first call records this load for the next one. `nav` — the in-app navigation it follows. */
+function fp_drift(nav = 0): FpDrift[] {
+	const page = location.pathname + location.search;
+	const at = `${performance.timeOrigin}:${nav}:${page}`;
+	if (fps_memo?.at === at) return fps_memo.drift;
+	const now: KeptIsland[] = [];
+	for (const r of all_regions()) {
+		if (r.kind !== 'island' || !r.entry || !r.fp || r.rides) continue;
+		const text = region_props_sidecar(r.el);
+		now.push({ entry: r.entry, fp: r.fp, ...(text !== null && text.length <= FPS_PROPS_CAP ? { props: text } : {}) });
+	}
+	let store: Record<string, KeptIsland[]> = {};
+	try {
+		store = JSON.parse(sessionStorage.getItem(FPS_KEY) ?? '{}') as Record<string, KeptIsland[]>;
+	} catch {
+		store = {};
+	}
+	const drift = fp_compare(store[page] ?? [], now);
+	store[page] = now;
+	const pages = Object.keys(store);
+	for (let i = 0; i < pages.length - FPS_PAGES_CAP; i++) delete store[pages[i]];
+	try {
+		sessionStorage.setItem(FPS_KEY, JSON.stringify(store));
+	} catch {
+		/* full or blocked: the next load just compares nothing */
+	}
+	fps_memo = { at, drift };
+	return drift;
+}
+import { analyze_page, defer_keys, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
 import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
@@ -279,11 +319,40 @@ export function held_open(): HeldOpen | null {
 
 export function last_nav(): { to: string; t: number } | null {
 	const ev = snapshot();
+	let own: { to: string; t: number } | null = null;
 	for (let i = ev.length - 1; i >= 0; i--) {
 		const e = ev[i];
-		if (e.name === 'nav.start' && e.realm === 'client') return { to: e.to, t: e.t };
+		if (e.name === 'nav.start' && e.realm === 'client') {
+			own = { to: e.to, t: e.t };
+			break;
+		}
 	}
-	return null;
+	// a page change ogygia's router did not make (SvelteKit's own client router on a Kit-hydrated
+	// document): the URL moved to another page after the router's last navigation, or with none
+	const moved = url_moves.at(-1);
+	if (moved && (!own || (moved.t > own.t && moved.to.split('?')[0] !== own.to.split('?')[0]))) return moved;
+	return own;
+}
+
+/** each change of the page's path, as the dock saw it (history.pushState, a back or forward) */
+const url_moves: { to: string; t: number }[] = [];
+let watching_url = false;
+function watch_url(): void {
+	if (watching_url || typeof history === 'undefined') return;
+	watching_url = true;
+	let path = location.pathname;
+	const seen = () => {
+		if (location.pathname === path) return;
+		path = location.pathname;
+		url_moves.push({ to: location.pathname + location.search, t: performance.now() });
+		if (url_moves.length > 20) url_moves.shift();
+	};
+	const push = history.pushState;
+	history.pushState = function (this: History, ...args: Parameters<History['pushState']>) {
+		push.apply(this, args);
+		seen();
+	};
+	addEventListener('popstate', seen);
 }
 
 /**
@@ -294,16 +363,25 @@ export function last_nav(): { to: string; t: number } | null {
  */
 export function since_nav(page: BeaconPage, t: number): PageInput {
 	const shift = <T extends { t: number }>(xs: T[]) => xs.filter((x) => x.t >= t).map((x) => ({ ...x, t: x.t - t }));
+	const visit = page.visit as PageInput['visit'] | null;
+	const interaction = visit?.interaction && visit.interaction.t >= t ? { ...visit.interaction, t: visit.interaction.t - t } : undefined;
 	return {
 		// (the vitals are the first page's: no finding about this page may lean on them)
 		vitals: {},
-		visit: page.visit
+		visit: visit
 			? {
-					...(page.visit as PageInput['visit']),
+					...visit,
 					paints: {},
 					nav: {},
 					resources: [],
 					preload_misses: [],
+					refetched: [],
+					// (each script's main-thread time is the whole document's: no part of it is this page's alone)
+					scripts: [],
+					// Svelte's warnings while this page's islands hydrated, not the pages' before
+					warnings: (visit.warnings ?? []).filter((w) => (w.t ?? 0) >= t),
+					// the slowest interaction, when it happened on this page
+					interaction,
 					// (this page's navigation, on its clock like the islands: the one that brought it here)
 					navs: ((page.visit as PageInput['visit'])?.navs ?? []).filter((n) => n.t >= t - 1).map((n) => ({ ...n, t: n.t - t, fetched: n.fetched - t, styled: n.styled - t, swapped: n.swapped - t }))
 				}
@@ -477,7 +555,12 @@ export function read_page(): PageView | null {
 	const batches = hole_batches(nav?.t ?? -Infinity);
 	// (the restorer ran while the page parsed, before this dock: its log, since the last navigation)
 	const restores = ((window as { __og_restore_log?: RestoreEvent[] }).__og_restore_log ?? []).filter((e) => e.t >= (nav?.t ?? -Infinity));
+	// (against this tab's last load of the same page; an in-app navigation counts as a load of its page)
+	const drift = fp_drift(nav ? Math.round(nav.t) : 0).map((d) => ({ name: region_name(d.entry), fp: d.fp_now, ...(d.path ? { path: d.path } : {}), ...(d.was !== undefined ? { was: d.was, now: d.now } : {}) }));
 	const icpu = interaction_cpu_of(page);
+	// (whole tab: what an island of any earlier page left running is still running on this one)
+	const { regs, islands: seen } = leftover_state();
+	const leftovers = owned_leftovers(regs, seen, region_name, performance.now()).map(({ entry: _, ...l }) => l);
 	// the profiler's last runs (the Profiler tab's): of this page, and of each page it navigated to
 	const server_profiles: Record<string, ServerProfileBrief> = {};
 	for (const n of with_visit.visit?.navs ?? []) {
@@ -488,7 +571,7 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
@@ -523,6 +606,7 @@ declare global {
 
 export function install_page_hook(): void {
 	if (typeof window !== 'undefined' && !window.__ogygia_page) window.__ogygia_page = read_page;
+	if (typeof window !== 'undefined') watch_url();
 	if (typeof window !== 'undefined' && !window.__ogygia_styles)
 		window.__ogygia_styles = async () => {
 			const { read_styles, scan_unscoped, styles_findings } = await import('./styles.js');
@@ -572,8 +656,13 @@ function snapshot_of(v: PageView): LoadSnapshot {
 		path: location.pathname,
 		at: Date.now(),
 		findings: v.report.findings.map((f) => ({ code: f.code, names: f.fps.map((fp) => name.get(fp) ?? fp) })),
-		islands: v.report.rows.map((r) => ({ name: r.name, load_ms: r.load_ms, hydrate_ms: r.hydrate_ms })),
+		islands: v.report.rows.map((r) => {
+			// (on the dev server, the part of its load that was the server compiling its files)
+			const compile_ms = Math.round(dev_compile_ms({ dev: import.meta.env.DEV ? true : undefined, visit: v.page.visit as PageInput['visit'] }, r));
+			return { name: r.name, load_ms: r.load_ms, hydrate_ms: r.hydrate_ms, ...(compile_ms ? { compile_ms } : {}) };
+		}),
 		vitals: v.report.vitals.map((x) => ({ key: x.key, value: x.value })),
-		...(v.parts ? { parts: v.parts } : {})
+		...(v.parts ? { parts: v.parts } : {}),
+		...(v.report.findings.some((f) => f.dev_compile) ? { page_compiled: true as const } : {})
 	};
 }

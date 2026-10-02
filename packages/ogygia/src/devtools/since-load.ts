@@ -14,10 +14,14 @@ export interface LoadSnapshot {
 	/** epoch ms the picture was taken */
 	at: number;
 	findings: { code: string; names: string[] }[];
-	islands: { name: string; load_ms: number; hydrate_ms: number }[];
+	/** `compile_ms`: on the dev server, the part of its load that was the server compiling its files
+	 *  on that first request (page-insights `dev_compile_ms`) — not the code's own cost */
+	islands: { name: string; load_ms: number; hydrate_ms: number; compile_ms?: number }[];
 	vitals: { key: string; value: number }[];
 	/** each split vital's parts (page-insights `vital_parts`); older pictures have none */
 	parts?: Partial<Record<PartedVital, VitalPart[]>>;
+	/** the dev server compiled the page on this load's request (its first byte waited on that) */
+	page_compiled?: true;
 }
 
 export interface SinceLoad {
@@ -25,7 +29,14 @@ export interface SinceLoad {
 	fixed: string[];
 	added: string[];
 	moved: { what: string; a: number; b: number; unit: 'ms' | ''; better: boolean; part?: { label: string; a: number; b: number } }[];
+	/** what was left out of the compare, and why (the last load was the dev server's first compile) */
+	note?: string;
 }
+
+/** findings a dev server's first compile of the page can raise on its own (its islands' code arrives late) */
+const COMPILE_BORNE = new Set(['late-interactive', 'slow-module', 'queued']);
+/** …and, when the PAGE compiled on its request, everything that waited on its first byte */
+const PAGE_COMPILE_BORNE = new Set([...COMPILE_BORNE, 'slow-ttfb', 'slow-fcp', 'slow-lcp', 'vital-ttfb', 'vital-fcp', 'vital-lcp', 'render-blocking']);
 
 /** an island's step moved when it changed by at least this much (and 30%): a module load is noisier
  *  (the network, the dev server compiling), so it needs more */
@@ -38,24 +49,45 @@ export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at = Date.now(
 	const key = (f: { code: string; names: string[] }) => `${f.code}|${[...new Set(f.names)].sort().join(',')}`;
 	const had = new Set(prev.findings.map(key));
 	const has = new Set(now.findings.map(key));
-	const fixed = prev.findings.filter((f) => !has.has(key(f))).map(label);
+	// the last load was the dev server compiling this page's code for the first time: what that alone
+	// raised is not "fixed" now, and the islands' loads are compared without the compile
+	const compiled = !!prev.page_compiled || prev.islands.some((i) => (i.compile_ms ?? 0) >= i.load_ms * 0.5 && i.load_ms >= ISLAND_FLOOR_MS.load);
+	const borne = prev.page_compiled ? PAGE_COMPILE_BORNE : COMPILE_BORNE;
+	const gone = prev.findings.filter((f) => !has.has(key(f)));
+	const fixed = gone.filter((f) => !(compiled && borne.has(f.code))).map(label);
+	const set_aside = gone.length - fixed.length;
 	const added = now.findings.filter((f) => !had.has(key(f))).map(label);
 	const moved: SinceLoad['moved'] = [];
 	const table = (s: LoadSnapshot) => Object.fromEntries(s.vitals.map((v) => [v.key, v.value]));
 	for (const m of vitals_moved(table(prev), table(now), (side, k) => (side === 'a' ? prev : now).parts?.[k] ?? null))
-		moved.push({ what: m.key.toUpperCase(), a: m.a, b: m.b, unit: m.key === 'cls' ? '' : 'ms', better: m.b < m.a, ...(m.part ? { part: m.part } : {}) });
+		// (the page compiling on the last load's request held its first byte, and every paint after it)
+		if (!(prev.page_compiled && (m.key === 'ttfb' || m.key === 'fcp' || m.key === 'lcp')))
+			moved.push({ what: m.key.toUpperCase(), a: m.a, b: m.b, unit: m.key === 'cls' ? '' : 'ms', better: m.b < m.a, ...(m.part ? { part: m.part } : {}) });
 	for (const i of now.islands) {
 		const p = prev.islands.find((x) => x.name === i.name);
 		if (!p) continue;
 		// (its hydrate step, and its module load: a change that made the island's file heavier or lighter)
-		for (const step of ['hydrate', 'load'] as const) {
-			const was = step === 'hydrate' ? p.hydrate_ms : p.load_ms;
-			const is = step === 'hydrate' ? i.hydrate_ms : i.load_ms;
+		// (the page compiled on the last load's request: every module it served was cold — each one
+		// under the per-file line, all of them together a slower load — so loads are not compared)
+		for (const step of prev.page_compiled ? (['hydrate'] as const) : (['hydrate', 'load'] as const)) {
+			// (a load without the dev server's compile of it: the code's own arrival)
+			const was = step === 'hydrate' ? p.hydrate_ms : Math.max(0, p.load_ms - (p.compile_ms ?? 0));
+			const is = step === 'hydrate' ? i.hydrate_ms : Math.max(0, i.load_ms - (i.compile_ms ?? 0));
 			const d = is - was;
 			if (Math.abs(d) >= ISLAND_FLOOR_MS[step] && Math.abs(d) >= Math.max(was, is) * 0.3) moved.push({ what: `${i.name} ${step}`, a: was, b: is, unit: 'ms', better: d < 0 });
 		}
 	}
 	// the biggest moves first
 	moved.sort((x, y) => Math.abs(y.b - y.a) / (Math.abs(y.a) || 1) - Math.abs(x.b - x.a) / (Math.abs(x.a) || 1));
-	return { ago_ms: Math.max(0, at - prev.at), fixed, added, moved: moved.slice(0, 8) };
+	return {
+		ago_ms: Math.max(0, at - prev.at),
+		fixed,
+		added,
+		moved: moved.slice(0, 8),
+		...(compiled
+			? {
+					note: `The last load was the dev server compiling this page's code for the first time: ${prev.page_compiled ? "its first byte, its paints and its islands' loads are not compared" : "its islands' loads are compared without that"}${set_aside ? `, and what the compile alone raised (${set_aside === 1 ? 'one finding' : `${set_aside} findings`}) is not counted as fixed` : ''}.`
+				}
+			: {})
+	};
 }

@@ -27,7 +27,7 @@ export interface StoredVisit {
 	page: string;
 	at: number;
 	visit: unknown;
-	snapshots: { fp: string; ssr: string; hydrated: string; final?: string }[];
+	snapshots: { fp: string; ssr: string; hydrated: string; final?: string; from?: number }[];
 }
 
 function open_db(): Promise<IDBDatabase | null> {

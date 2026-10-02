@@ -12,6 +12,7 @@ import {
 	find_wait_patterns,
 	fix_impact,
 	heap_growth,
+	is_flat,
 	in_loop,
 	seed_whole_pattern,
 	stable_answers,
@@ -2079,6 +2080,17 @@ describe('heap growth check', () => {
 		const cache = heap_growth([100, 140, 170, 180, 181, 181, 181].map((x) => x * M))!;
 		expect(cache.levels_off).toBe(true);
 		expect(heap_growth([100 * M, 101 * M])).toBeUndefined();
+	});
+
+	it('flat after three renders: the check may stop (a leak, or a cache still filling, never)', () => {
+		const K = 1024;
+		// the settled heap barely moves: noise only
+		expect(is_flat([100 * M, 100 * M + 40 * K, 100 * M + 10 * K, 100 * M + 60 * K])).toBe(true);
+		// 1.2 MB a render (the /inferno plant): not flat
+		expect(is_flat([122.8, 124, 125.2, 126.5].map((x) => x * M))).toBe(false);
+		// a cache still filling (each reading 200 KB more, over the 256 KB spread): not flat
+		expect(is_flat([100 * M, 100 * M + 20 * K, 100 * M + 220 * K, 100 * M + 420 * K].map((x) => x - 400 * K))).toBe(false);
+		expect(is_flat([100 * M])).toBe(false);
 	});
 
 	it('the memory card says which, and a plateau is neither severe nor counted down', () => {
