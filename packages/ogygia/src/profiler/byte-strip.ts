@@ -40,6 +40,8 @@ export interface ByteStrip {
 	/** declarative shadow roots anywhere in the document, bytes — a design system's server render */
 	shadow_bytes: number;
 	shadow_count: number;
+	/** the elements the markup makes: the whole document's, and the islands holding the most */
+	elements?: { total: number; islands: { fp: string; n: number }[] };
 	/** when each chunk of the document LEFT the server (end offset, ms after the render began) —
 	 *  present when the page streamed in more than one chunk */
 	chunks?: { end: number; t: number }[];
@@ -123,7 +125,47 @@ export function byte_strip(html: string): ByteStrip {
 	const by_kind: Partial<Record<StripKind, number>> = {};
 	for (const s of out) by_kind[s.kind] = (by_kind[s.kind] ?? 0) + (s.end - s.start);
 	if (shadow_bytes) by_kind.shadow = shadow_bytes;
-	return { total: html.length, segments: out, by_kind, shadow_bytes, shadow_count };
+	// the elements the markup makes, the whole document's and each island's (what the browser counts)
+	const lower = html.toLowerCase();
+	const islands = out.filter((s) => s.kind === 'island' && s.label).map((s) => ({ fp: s.label!, n: count_elements(lower, s.start, s.end) }));
+	islands.sort((a, b) => b.n - a.n);
+	return { total: html.length, segments: out, by_kind, shadow_bytes, shadow_count, elements: { total: count_elements(lower, 0, lower.length), islands: islands.slice(0, 3) } };
+}
+
+/** Raw-text elements: their contents are text, not elements. A `<template>`'s contents (a
+ *  declarative shadow root's too) are not in the document's own elements either. */
+const OPAQUE = ['script', 'style', 'textarea', 'title', 'template', 'noscript'];
+
+/** The elements markup makes from `start` to `end`: each opening tag once, skipping comments and
+ *  the contents of raw-text elements and templates. `html` lowercased. No regex. */
+export function count_elements(html: string, start: number, end: number): number {
+	let n = 0;
+	let i = html.indexOf('<', start);
+	while (i !== -1 && i < end) {
+		const c = html.charCodeAt(i + 1);
+		if (c === 33 && html.startsWith('<!--', i)) {
+			const e = html.indexOf('-->', i + 4);
+			i = e === -1 ? -1 : html.indexOf('<', e + 3);
+			continue;
+		}
+		if (c >= 97 && c <= 122) {
+			n++;
+			let j = i + 1;
+			while (j < end) {
+				const d = html.charCodeAt(j);
+				if (!((d >= 97 && d <= 122) || (d >= 48 && d <= 57) || d === 45)) break;
+				j++;
+			}
+			const tag = html.slice(i + 1, j);
+			if (OPAQUE.includes(tag)) {
+				const close = html.indexOf('</' + tag, j);
+				i = close === -1 ? -1 : html.indexOf('<', close + 2);
+				continue;
+			}
+		}
+		i = html.indexOf('<', i + 1);
+	}
+	return n;
 }
 
 /** A segment's arrival at the browser, given the document's download span from navigation timing:

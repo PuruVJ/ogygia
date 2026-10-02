@@ -127,6 +127,8 @@ export interface Visit {
 	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** images whose pixels are 4× or more what their box shows (the screen counted), files ≥ 50 KB */
 	images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+	/** the page's size in elements, when 1,500 or more (depth 0: past 60,000, only counted) */
+	dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
 	/** islands whose own file failed to load and fell back to their stable name */
 	entry_fallbacks?: { entry: string; src: string; recovered: boolean }[];
 	/** content-named files (`/immutable/`) the browser fetched again: revalidated (a 304), or
@@ -382,6 +384,18 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		images_oversized.push({ url, natural, shown, dpr, bytes, ...(fp ? { fp } : {}) });
 	}
 	if (images_oversized.length) visit.images_oversized = images_oversized;
+	const d = v.dom as Record<string, unknown> | undefined;
+	const nodes = num(d?.nodes, 1e7);
+	if (d && nodes) {
+		const w = d.widest as Record<string, unknown> | undefined;
+		const islands: NonNullable<Visit['dom']>['islands'] = [];
+		for (const i of (Array.isArray(d.islands) ? d.islands : []).slice(0, 3) as Record<string, unknown>[]) {
+			const fp = str(i?.fp, 40);
+			const n = num(i?.nodes, nodes);
+			if (fp && n) islands.push({ fp, nodes: n });
+		}
+		visit.dom = { nodes, depth: num(d.depth, 10_000) ?? 0, deepest: str(d.deepest, 80) ?? '', widest: { at: str(w?.at, 80) ?? '', children: num(w?.children, nodes) ?? 0 }, islands };
+	}
 	const entry_fallbacks: NonNullable<Visit['entry_fallbacks']> = [];
 	for (const f of (Array.isArray(v.entry_fallbacks) ? v.entry_fallbacks : []).slice(0, 20) as Record<string, unknown>[]) {
 		const entry = str(f?.entry, 300);
@@ -583,6 +597,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
 		...(b.font_faces ?? a.font_faces ? { font_faces: b.font_faces ?? a.font_faces } : {}),
 		...(b.images_oversized ?? a.images_oversized ? { images_oversized: b.images_oversized ?? a.images_oversized } : {}),
+		...(b.dom ?? a.dom ? { dom: b.dom ?? a.dom } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)

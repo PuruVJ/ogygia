@@ -447,7 +447,7 @@ const LATE_MS = 1000;
 /** a wake-at-load island still asleep this long after the load event */
 const NEVER_MS = 3000;
 /** a page of this many elements or more is named (the beacon reports from the same count) */
-const DOM_LARGE = 1500;
+export const DOM_LARGE = 1500;
 /** early by less than this is a tie, not a lost click */
 const EARLY_SLACK_MS = 8;
 

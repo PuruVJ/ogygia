@@ -2813,6 +2813,24 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 			}
 		} as never).find((f) => f.code === 'lcp-gap')!;
 		expect(split.message).toContain('most of it (2190 ms) downloading the largest paint, hero.jpg.');
+		// A PAGE OF MANY ELEMENTS from the HTML (no visit measured it); a visit's count leads instead
+		const strip = { total: 1, segments: [], by_kind: {}, shadow_bytes: 0, shadow_count: 0, elements: { total: 3634, islands: [{ fp: 'ffff000011112222', n: 3601 }] } };
+		const og_meta = meta_page({
+			requests: [
+				{ ts: 0, internal: true, method: 'GET', path: '/p', route: '/p', status: 200, ms: 40, cpu_ms: 10, inflight: 0, net_ms: 0, net_count: 0, og: { transform_ms: 0.1, islands: 1, seed_bytes: 0, tail_bytes: 0, island_rows: [{ fp: 'ffff000011112222', entry: 'src/lib/DenseList.svelte', name: 'DenseList', module_url: '/_app/d.js', wake: 'load', props_bytes: 10, canonical_bytes: 10, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], count: 1 }] } }
+			]
+		});
+		const html_dom = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip } as never).find((f) => f.code === 'dom-large');
+		expect(html_dom?.message).toBe(
+			'The HTML makes 3,634 elements, 3,601 of them inside DenseList: an island hydrates over every element of its own, so it pays for all of them as it wakes.'
+		);
+		const both = derive_findings(analyze(p), og_meta as never, {
+			net: [],
+			mem: [],
+			strip,
+			visit: { at: 1, nav: { res_start: 5 }, paints: {}, resources: [], longtasks: [], islands: [], firsts: [], shifts: [], dom: { nodes: 3640, depth: 7, deepest: 'b', widest: { at: 'ul.dense', children: 1200 }, islands: [] } }
+		} as never).filter((f) => f.code === 'dom-large');
+		expect(both.map((f) => f.message.slice(0, 30))).toEqual(['In the browser: The page has 3']);
 		expect(split.fix).toContain('make it smaller');
 		const ttfb = say({ ttfb: 900, fcp: 950, lcp: 1000, cls: 0, inp: null }).find(
 			(f) => f.code === 'ttfb-gap'

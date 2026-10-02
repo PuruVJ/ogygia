@@ -49,6 +49,13 @@ describe('byte strip', () => {
 		expect(s.segments.find((x) => x.kind === 'script')!.label).toBe('src start.js');
 	});
 
+	it('counts the elements the markup makes: the document and each island; text, comments and templates are not elements', () => {
+		const s = byte_strip(doc);
+		// html head title script style link body p | region div template script | template | 4 scripts
+		expect(s.elements).toEqual({ total: 17, islands: [{ fp: '0000aaaa1111bbbb', n: 4 }] });
+		expect(byte_strip('<!-- <div><p> --><DIV class="a"><textarea><b>no</b></textarea><svg><path d="M0"/></svg></DIV>').elements?.total).toBe(4);
+	});
+
 	it('a document without ogygia at all, or a broken one, still strips', () => {
 		const s = byte_strip('<html><body><p>plain</p></body></html>');
 		expect(s.segments.map((x) => x.kind)).toEqual(['markup']);

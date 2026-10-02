@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { explain_held_open, lcp_font, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
+import { DOM_LARGE, explain_held_open, lcp_font, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -1292,6 +1292,28 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		ogygia_findings(og, meta, extras, info, warn);
 	}
 	page_weight_findings(meta, extras, info, warn);
+	// A PAGE OF MANY ELEMENTS, from the HTML itself (no visit, or a visit that did not measure it):
+	// the same words the browser's count gets, which leads when a visit has it
+	const els = extras.strip?.elements;
+	if (els && els.total >= DOM_LARGE && !extras.visit?.dom) {
+		const top = els.islands[0];
+		const row = top && top.n >= els.total * 0.3 ? island_rows_of(meta).find((r) => r.fp === top.fp) : undefined;
+		const name = row?.name || (top ? `the island ${top.fp.slice(0, 8)}` : '');
+		const held = top && top.n >= els.total * 0.3;
+		const n = (x: number) => x.toLocaleString('en-US');
+		warn(
+			'dom-large',
+			`The HTML makes ${n(els.total)} elements` +
+				(held
+					? `, ${n(top.n)} of them inside ${name}: an island hydrates over every element of its own, so it pays for all of them as it wakes.`
+					: ': every element costs the browser memory and style and layout work on each change.'),
+			{
+				fix: held
+					? `Render fewer at once in ${name}: page or window a long list (only what is on screen), and keep big static markup outside the island (a lake costs nothing to hydrate).`
+					: 'Render fewer at once: page or window long lists (only what is on screen), and flatten markup that nests wrappers for layout alone.'
+			}
+		);
+	}
 	// what held the profiled render's document open: its streamed promises by page.data key
 	const tail = extras.strip?.tail;
 	const held_open: HeldOpen | undefined = tail?.keys.length
