@@ -766,6 +766,53 @@ function oversized_images(): { url: string; natural: [number, number]; shown: [n
 	return out;
 }
 
+/** THE PAGE'S SIZE IN ELEMENTS, when it is big (1,500 or more): how many, the deepest nesting, the
+ *  element with the most children, and the islands holding the most of them (an island hydrates
+ *  over each of its own). One pass in document order (a parent always comes before its children);
+ *  asked again only when the count changed. */
+type DomShape = { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
+let dom_memo: { n: number; shape: DomShape | null } | null = null;
+function dom_shape(): DomShape | null {
+	const all = document.getElementsByTagName('*');
+	const n = all.length;
+	if (dom_memo?.n === n) return dom_memo.shape;
+	let shape: DomShape | null = null;
+	// (one pass is ~3.5 ms on 17,000 elements: past 60,000 the count alone says enough)
+	if (n >= 60_000) shape = { nodes: n, depth: 0, deepest: '', widest: { at: '', children: 0 }, islands: [] };
+	else if (n >= 1500) {
+		// (`ul.results`: its id, else its first own class — not the scoping class Svelte adds)
+		const brief = (el: Element) => {
+			let cls = '';
+			for (const c of el.classList)
+				if (!c.startsWith('svelte-')) {
+					cls = c;
+					break;
+				}
+			return `${el.tagName.toLowerCase()}${el.id ? `#${el.id.slice(0, 30)}` : cls ? `.${cls.slice(0, 30)}` : ''}`;
+		};
+		const depth_of = new Map<Element, number>();
+		let depth = 0;
+		let deepest: Element = all[0];
+		let widest: Element = all[0];
+		for (let i = 0; i < n; i++) {
+			const el = all[i];
+			const d = (el.parentElement ? (depth_of.get(el.parentElement) ?? 0) : 0) + 1;
+			depth_of.set(el, d);
+			if (d > depth) (depth = d), (deepest = el);
+			if (el.childElementCount > widest.childElementCount) widest = el;
+		}
+		const islands: { fp: string; nodes: number }[] = [];
+		for (const r of document.querySelectorAll(ISLAND_SEL)) {
+			const fp = r.getAttribute('data-og-fp');
+			if (fp) islands.push({ fp, nodes: r.getElementsByTagName('*').length });
+		}
+		islands.sort((a, b) => b.nodes - a.nodes);
+		shape = { nodes: n, depth, deepest: brief(deepest), widest: { at: brief(widest), children: widest.childElementCount }, islands: islands.slice(0, 3) };
+	}
+	dom_memo = { n, shape };
+	return shape;
+}
+
 /** the visit as one object: the server's copy has no snapshots (they are big and the browser
  *  store keeps them) */
 function build_visit(): Record<string, unknown> | null {
@@ -923,8 +970,10 @@ function build_visit(): Record<string, unknown> | null {
 		/* no stylesheets to read */
 	}
 	let oversized: ReturnType<typeof oversized_images> = [];
+	let dom: DomShape | null = null;
 	try {
 		oversized = oversized_images();
+		dom = dom_shape();
 	} catch {
 		/* no document */
 	}
@@ -960,6 +1009,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(preload_misses.length ? { preload_misses } : {}),
 		...(fonts.length ? { font_faces: fonts } : {}),
 		...(oversized.length ? { images_oversized: oversized } : {}),
+		...(dom ? { dom } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
@@ -1674,6 +1724,7 @@ export function _reset_beacon(): void {
 	landing_page = null;
 	seen_resources = [];
 	faces_memo = null;
+	dom_memo = null;
 	visit_islands = [];
 	visit_firsts = [];
 	visit_shifts = [];

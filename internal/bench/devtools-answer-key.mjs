@@ -1490,6 +1490,30 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// A PAGE OF MANY ELEMENTS (/dt-dom: DenseList, an island of ~3,600 — the plant; /dt-dom-static: the
+	// same list as page markup; /dt-big: ~1,000): the island named on /dt-dom, the static twin's size
+	// named with no island, /dt-big quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1000);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'dom-large').map((x) => ({ m: x.message, fps: x.fps })));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-dom');
+		const twin = await read('/dt-dom-static');
+		const small = await read('/dt-big');
+		const checks = [
+			['DenseList named, linked', lab.length === 1 && lab[0].m.includes('of them inside DenseList') && lab[0].m.includes('under ul.dense') && lab[0].fps.length === 1],
+			['the static twin: its size, no island', twin.length === 1 && !twin[0].m.includes('inside') && twin[0].fps.length === 0],
+			['a page of ~1,000 quiet', small.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} a page of many elements: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, twin, small })}` : ''}`);
+	}
 	// IMAGES SENT FAR BIGGER THAN SHOWN (/dt-img: big.png 2000×1333 in a 300×200 box — the plant;
 	// flat.png the same size but ~11 KB, right.png shown at its size, big.png in a hidden box — the
 	// decoys): only big.png named, on a 1× and a 2× screen; a page whose images fit quiet

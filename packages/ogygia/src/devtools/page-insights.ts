@@ -152,6 +152,9 @@ export interface PageInput {
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
 		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
 		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+		/** the page's size in elements, when 1,500 or more: the deepest nesting, the element with the
+		 *  most children, the islands holding the most (depth 0: past 60,000, only counted) */
+		dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
 		/** islands whose own file failed to load and fell back to their stable name (the page came
 		 *  from a build whose files are gone); `name` when the reader could name the island */
 		entry_fallbacks?: { entry: string; src: string; recovered: boolean; name?: string }[];
@@ -443,6 +446,8 @@ const SLOW_LOAD_MS = 800;
 const LATE_MS = 1000;
 /** a wake-at-load island still asleep this long after the load event */
 const NEVER_MS = 3000;
+/** a page of this many elements or more is named (the beacon reports from the same count) */
+const DOM_LARGE = 1500;
 /** early by less than this is a tie, not a lost click */
 const EARLY_SLACK_MS = 8;
 
@@ -923,6 +928,28 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message: `${list(big.length > 3 ? [...named, `${big.length - 3} more`] : named)} ${big.length === 1 ? 'is' : 'are'} sent far bigger than shown: about ${kb(big_waste)} of ${kb(big.reduce((n, i) => n + i.bytes, 0))} is pixels nobody sees.`,
 			fix: 'Serve each image near the size it shows at: a `srcset` with a few widths and a `sizes` that says how wide it shows (the browser picks the smallest that is sharp), or resize the file itself.',
 			fps: [...new Set(big.flatMap((i) => (i.fp ? [i.fp] : [])))]
+		});
+	}
+
+	// ── a page of many elements: each costs memory, style and layout work, and an island hydrates
+	// over every one of its own ──
+	const dom = page.visit?.dom;
+	if (dom && dom.nodes >= DOM_LARGE) {
+		const top = dom.islands[0];
+		const held = top && top.nodes >= dom.nodes * 0.3 ? top : undefined;
+		const n = (x: number) => x.toLocaleString('en-US');
+		findings.push({
+			code: 'dom-large',
+			severity: 'warn',
+			message:
+				`The page has ${n(dom.nodes)} elements${dom.depth ? ` (nested ${dom.depth} deep; the most children, ${n(dom.widest.children)}, under ${dom.widest.at})` : ''}` +
+				(held
+					? `, ${n(held.nodes)} of them inside ${name_of(held.fp)}: an island hydrates over every element of its own, so it pays for all of them as it wakes.`
+					: ': every element costs memory and style and layout work on each change.'),
+			fix: held
+				? `Render fewer at once in ${name_of(held.fp)}: page or window a long list (only what is on screen), and keep big static markup outside the island (a lake costs nothing to hydrate).`
+				: 'Render fewer at once: page or window long lists (only what is on screen), and flatten markup that nests wrappers for layout alone.',
+			fps: held ? [held.fp] : []
 		});
 	}
 

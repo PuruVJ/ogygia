@@ -77,6 +77,25 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('a page of many elements', () => {
+	type Dom = NonNullable<NonNullable<PageInput['visit']>['dom']>;
+	const at = (dom: Dom, regions: RegionFact[] = []) =>
+		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1280, 800], dom } }), regions, [], 3000).findings.find((f) => f.code === 'dom-large');
+	const base: Dom = { nodes: 3634, depth: 7, deepest: 'b', widest: { at: 'ul.dense', children: 1200 }, islands: [{ fp: 'ffff000011112222', nodes: 3601 }] };
+	it('names the island holding most of them, linked', () => {
+		const f = at(base, [{ fp: 'ffff000011112222', name: 'DenseList', kind: 'island' } as RegionFact]);
+		expect(f?.message).toBe(
+			'The page has 3,634 elements (nested 7 deep; the most children, 1,200, under ul.dense), 3,601 of them inside DenseList: an island hydrates over every element of its own, so it pays for all of them as it wakes.'
+		);
+		expect(f?.fps).toEqual(['ffff000011112222']);
+	});
+	it('an island with a small share is not blamed; a past-60,000 count says only the count; under 1,500 quiet', () => {
+		expect(at({ ...base, islands: [{ fp: 'a', nodes: 200 }] })?.fps).toEqual([]);
+		expect(at({ ...base, nodes: 70_000, depth: 0, islands: [] })?.message).toBe('The page has 70,000 elements: every element costs memory and style and layout work on each change.');
+		expect(at({ ...base, nodes: 1200 })).toBeUndefined();
+	});
+});
+
 describe('images sent far bigger than shown', () => {
 	const at = (images: NonNullable<NonNullable<PageInput['visit']>['images_oversized']>) =>
 		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1280, 800], images_oversized: images } }), [], [], 3000).findings.find((f) => f.code === 'image-oversized');
