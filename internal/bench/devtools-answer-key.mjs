@@ -1490,6 +1490,29 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// TEXT KEPT INVISIBLE BY ITS FONT (/dt-font: 'SlowFace' without font-display, 'SwapFace' with
+	// swap, both files 1.5 s): SlowFace named with its file and how late; SwapFace never; a page with
+	// no web font quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1500);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'font-invisible').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-font');
+		const clean = await read('/dt-lab');
+		const checks = [
+			['SlowFace named, its file and its wait', lab.length === 1 && lab[0].startsWith("Text in 'SlowFace' (slow.woff2,") && lab[0].includes('font-display is auto')],
+			['SwapFace never', !lab.some((m) => m.includes('SwapFace'))],
+			['a page without web fonts quiet', clean.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} text kept invisible by its font: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, clean })}` : ''}`);
+	}
 	// A LATE PAINT REACHES THE REPORT WITHOUT THE HIDE-TIME MESSAGE (/dt-lcp's slow hero lands after
 	// the early visit): the tab is closed hard, no page hide — the visit sent again after the paint
 	// carries it, so the profiler's report still names the slow largest paint

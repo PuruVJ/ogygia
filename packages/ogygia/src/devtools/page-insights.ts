@@ -179,6 +179,8 @@ export interface PageInput {
 	restore_events?: RestoreEvent[];
 	/** islands whose fingerprint moved between two loads of this page (devtools/fp-drift.ts) */
 	fp_drift?: { name: string; fp?: string; path?: string; was?: string; now?: string }[];
+	/** the page's `@font-face` rules (family, font-display, files; devtools only) */
+	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
 	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
 }
@@ -878,6 +880,28 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix: 'Drop `loading="lazy"` on images of the first screen (keep it for the ones below), and give the hero `fetchpriority="high"`.',
 			fps: lp.lcp_fp ? [lp.lcp_fp] : []
 		});
+	}
+
+	// ── text kept invisible by its web font: a face with font-display auto/block (the default) hides
+	// its text until the file arrives — up to 3 s — when the file lands after the first paint ──
+	const fcp_at = page.visit?.paints?.fcp ?? page.vitals.fcp;
+	if (page.font_faces?.length && typeof fcp_at === 'number') {
+		const late: { family: string; display: string; after: number; file: string }[] = [];
+		for (const r of page.visit?.resources ?? []) {
+			if (r.type !== 'font' || r.end - fcp_at < 100) continue;
+			const face = page.font_faces.find((f) => f.urls.includes(r.url));
+			if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
+			if (late.some((l) => l.family === face.family)) continue;
+			late.push({ family: face.family, display: face.display, after: Math.round(r.end - fcp_at), file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0] });
+		}
+		if (late.length)
+			findings.push({
+				code: 'font-invisible',
+				severity: 'warn',
+				message: `Text in ${list(late.map((l) => `'${l.family}' (${l.file}, ${l.after} ms after the first paint)`))} stayed invisible until its font arrived: font-display is ${late[0].display}, so the browser hides the text, up to 3 s, rather than show a fallback.`,
+				fix: 'Give the @font-face `font-display: swap` (the text shows in a fallback at once, then switches) or `optional` (no switch, no shift), and preload the font file the first screen needs.',
+				fps: []
+			});
 	}
 
 	// ── a wake-at-load island that never woke ──

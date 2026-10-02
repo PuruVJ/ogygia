@@ -52,6 +52,26 @@ describe('rate', () => {
 	});
 });
 
+describe('text kept invisible by its font', () => {
+	it('a font-display auto face whose file landed after the first paint; swap, or early, quiet', () => {
+		const at = (display: string, end: number) =>
+			analyze_page(
+				page({
+					visit: { nav: { res_start: 5 }, paints: { fcp: 100 }, viewport: [1280, 800], resources: [{ url: 'http://x/f/slow.woff2', type: 'font', start: 20, end }] },
+					font_faces: [{ family: 'SlowFace', display, urls: ['http://x/f/slow.woff2'] }]
+				}),
+				[],
+				[],
+				3000
+			).findings.find((f) => f.code === 'font-invisible');
+		expect(at('auto', 1600)?.message).toContain("Text in 'SlowFace' (slow.woff2, 1500 ms after the first paint) stayed invisible");
+		expect(at('block', 1600)).toBeDefined();
+		expect(at('swap', 1600)).toBeUndefined();
+		// arrived before the first paint: nothing was hidden on screen
+		expect(at('auto', 90)).toBeUndefined();
+	});
+});
+
 describe('the largest paint marked lazy', () => {
 	it('named, with its file and island; a largest paint without it quiet', () => {
 		const at = (lazy: boolean) =>

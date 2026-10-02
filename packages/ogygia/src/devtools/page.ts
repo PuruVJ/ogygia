@@ -394,6 +394,42 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 	};
 }
 
+/** The page's `@font-face` rules: each family, its `font-display`, and the files its `src` names
+ *  (absolute URLs). A cross-origin sheet the browser will not let us read is left out. No regex. */
+function font_faces(): { family: string; display: string; urls: string[] }[] {
+	const out: { family: string; display: string; urls: string[] }[] = [];
+	for (const sheet of document.styleSheets) {
+		let rules: CSSRuleList;
+		try {
+			rules = sheet.cssRules;
+		} catch {
+			continue; // cross-origin
+		}
+		for (const rule of rules) {
+			if (!(rule instanceof CSSFontFaceRule) || out.length >= 40) continue;
+			const style = rule.style;
+			const family = style.getPropertyValue('font-family').trim().split('"').join('').split("'").join('');
+			const display = style.getPropertyValue('font-display').trim() || 'auto';
+			const urls: string[] = [];
+			const src = style.getPropertyValue('src');
+			let at = src.indexOf('url(');
+			while (at !== -1 && urls.length < 6) {
+				const end = src.indexOf(')', at);
+				if (end === -1) break;
+				const raw = src.slice(at + 4, end).trim().split('"').join('').split("'").join('');
+				try {
+					urls.push(new URL(raw, sheet.href ?? location.href).href);
+				} catch {
+					/* not a URL */
+				}
+				at = src.indexOf('url(', end);
+			}
+			if (family && urls.length) out.push({ family, display, urls });
+		}
+	}
+	return out;
+}
+
 /** Awake islands whose children slot (`<ogygia-slot>`) holds nothing: children the server never
  *  rendered (the island adopts the server's HTML; it never renders them itself). */
 function empty_slots(): string[] {
@@ -561,6 +597,8 @@ export function read_page(): PageView | null {
 	// (whole tab: what an island of any earlier page left running is still running on this one)
 	const { regs, islands: seen } = leftover_state();
 	const leftovers = owned_leftovers(regs, seen, region_name, performance.now()).map(({ entry: _, ...l }) => l);
+	// (the document's fonts: only for the first page — a navigation's fonts are the page before's too)
+	const fonts = nav ? [] : font_faces();
 	// the profiler's last runs (the Profiler tab's): of this page, and of each page it navigated to
 	const server_profiles: Record<string, ServerProfileBrief> = {};
 	for (const n of with_visit.visit?.navs ?? []) {
@@ -571,7 +609,7 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(fonts.length ? { font_faces: fonts } : {}), ...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
