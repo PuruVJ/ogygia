@@ -601,6 +601,12 @@ export function hot_line_of(f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'li
 	}
 	return { line: top.line, ms: top.ms, code: code.length > 100 ? code.slice(0, 99) + '…' : code, ...(calls ? { calls } : {}) };
 }
+/** A render that mostly waited: on its timeline, waiting (calls, and what no hook saw) is 60% of a
+ *  render of 20 ms or more; with no timeline, the window's CPU under a quarter (the old reading). */
+export function mostly_waited(tl: { window_ms: number; wait_ms: number; gap_ms: number } | null | undefined, busy_pct: number): boolean {
+	if (!tl) return busy_pct < 25;
+	return tl.window_ms >= 20 && tl.wait_ms + tl.gap_ms >= tl.window_ms * 0.6;
+}
 /** "most of it" only when it is (over half); the biggest of several smaller parts otherwise */
 const share_word = (part: number, whole: number): string =>
 	whole > 0 && part > whole * 0.5 ? 'most of it' : 'the biggest part';
@@ -999,12 +1005,16 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			`Network calls ran back-to-back for ${fmt_ms(seq)} ms of the window — usually sequential awaits.`,
 			{ fix: 'Start independent calls together with Promise.all.' }
 		);
-	} else if (busy_pct < 25 && meta.trigger !== 'window') {
+	} else if (meta.trigger !== 'window' && (meta.run_status ?? 200) < 300 && mostly_waited(tl, busy_pct) && (net.length || !tl || tl.wait_ms >= tl.gap_ms)) {
+		// (read off ONE render's timeline, not the window: between the profiler's renders the process
+		// idles, and a page rendering in 0.4 ms read as "mostly waiting … likely a database" — so did a
+		// 404. A wait mostly no hook saw is the timeline's own finding, unseen-wait)
+		const part = tl ? `: ${fmt_ms(tl.wait_ms + tl.gap_ms)} of the ${fmt_ms(tl.window_ms)} ms render` : '';
 		info(
 			'mostly-waiting',
 			net.length
-				? 'Mostly waiting on the network, not computing.'
-				: 'Mostly waiting, but no HTTP calls were seen. The wait is likely a database/socket client or a timer.'
+				? `Mostly waiting on the network, not computing${part}.`
+				: `Mostly waiting, not computing${part}, and on no HTTP call: a timer, a file, or a database/socket client (the waiting table names it).`
 		);
 	}
 
