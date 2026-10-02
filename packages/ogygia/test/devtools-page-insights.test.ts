@@ -77,6 +77,25 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('images far below the first screen that loaded at start', () => {
+	const at = (images: NonNullable<NonNullable<PageInput['visit']>['images_eager_below']>) =>
+		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], images_eager_below: images } }), [{ fp: 'ffff000011112222', name: 'Gallery', kind: 'island' } as RegionFact], [], 3000).findings.find((f) => f.code === 'images-eager-below');
+	it('names each file once (×N for copies), how far down, the island; biggest first', () => {
+		const f = at([
+			{ url: 'http://x/i/thumb.jpg', top: 2700, bytes: 30_000, fp: 'ffff000011112222' },
+			{ url: 'http://x/i/right.png?a', top: 3420, bytes: 360_000 },
+			{ url: 'http://x/i/right.png?b', top: 3420, bytes: 360_000 }
+		]);
+		expect(f?.message).toBe(
+			"right.png ×2 (703 KB, 3.8 screens down) and thumb.jpg (29 KB, 3.0 screens down, in Gallery) load at start though far below the first screen: 732 KB that competed with the first screen's files for the network."
+		);
+		expect(f?.fps).toEqual(['ffff000011112222']);
+	});
+	it('under 100 KB in all: quiet', () => {
+		expect(at([{ url: 'http://x/i/a.jpg', top: 3000, bytes: 60_000 }])).toBeUndefined();
+	});
+});
+
 describe('preloaded, never used', () => {
 	it('names each file, what it is, and why nothing used it', () => {
 		const f = analyze_page(

@@ -1490,6 +1490,29 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// IMAGES FAR BELOW THE FIRST SCREEN THAT LOADED AT START (/dt-img-below: right.png?a and ?b 3,000px
+	// down, eager — the plants; the hero on the first screen, a lazy copy below, a small one below —
+	// the decoys): the two named once as ×2; /dt-img (all on the first screen) quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1000);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'images-eager-below').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-img-below');
+		const top = await read('/dt-img');
+		const checks = [
+			['the two eager ones named, once, ×2', lab.length === 1 && lab[0].startsWith('right.png ×2 (')],
+			['the hero, the lazy one and the small one never', lab.length === 1 && !lab[0].includes('flat.png') && !lab[0].includes('×3')],
+			['a page whose images are on the first screen quiet', top.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} images below the first screen at start: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, top })}` : ''}`);
+	}
 	// PRELOADED, NEVER USED (/dt-preload-never: right.png never shown, orphan.woff2 in no @font-face —
 	// the plants; flat.png in an <img>, big.png?bg as a CSS background, used.woff2 in an @font-face —
 	// the decoys): only the plants named, and only once 3 s have passed since load; /dt-preload's

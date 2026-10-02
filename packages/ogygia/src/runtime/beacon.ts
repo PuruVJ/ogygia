@@ -899,6 +899,33 @@ function dom_shape(): DomShape | null {
 	return shape;
 }
 
+/** IMAGES FAR BELOW THE FIRST SCREEN THAT LOADED AT START: a raster `<img>` whose top sits more
+ *  than a screen and a half down the document, not `loading="lazy"`, its file 20 KB or more, and
+ *  fetched before the page's load ended — its bytes competed with the first screen's files. A
+ *  hidden image (no box) is left out. Positions are the document's (the scroll added back). */
+function images_eager_below(load_end: number): { url: string; top: number; bytes: number; fp?: string }[] {
+	const out: { url: string; top: number; bytes: number; fp?: string }[] = [];
+	const fold = innerHeight * 1.5;
+	const imgs = document.images;
+	for (let i = 0; i < imgs.length && i < 300 && out.length < 10; i++) {
+		const img = imgs[i];
+		if (img.loading === 'lazy') continue;
+		const url = img.currentSrc || img.src;
+		if (!url || url.startsWith('data:')) continue;
+		const r = img.getBoundingClientRect();
+		if (!r.width || !r.height) continue;
+		const top = Math.round(r.top + scrollY);
+		if (top < fold) continue;
+		const e = performance.getEntriesByName(url, 'resource')[0] as PerformanceResourceTiming | undefined;
+		if (!e || (load_end > 0 && e.startTime > load_end)) continue;
+		const bytes = e.encodedBodySize || e.transferSize || 0;
+		if (bytes < 20_000) continue;
+		const fp = fp_of(img);
+		out.push({ url: url.slice(0, 500), top, bytes, ...(fp ? { fp } : {}) });
+	}
+	return out;
+}
+
 /** the visit as one object: the server's copy has no snapshots (they are big and the browser
  *  store keeps them) */
 function build_visit(): Record<string, unknown> | null {
@@ -1058,8 +1085,10 @@ function build_visit(): Record<string, unknown> | null {
 	let oversized: ReturnType<typeof oversized_images> = [];
 	let dom: DomShape | null = null;
 	let wasted: { url: string; as: string; bytes: number }[] | null = null;
+	let below: ReturnType<typeof images_eager_below> = [];
 	try {
 		oversized = oversized_images();
+		below = images_eager_below(nav.loadEventEnd);
 		dom = dom_shape();
 		wasted = preloads_never_used(nav.loadEventEnd);
 	} catch {
@@ -1099,6 +1128,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(oversized.length ? { images_oversized: oversized } : {}),
 		...(dom ? { dom } : {}),
 		...(wasted?.length ? { preloads_unused: wasted } : {}),
+		...(below.length ? { images_eager_below: below } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,

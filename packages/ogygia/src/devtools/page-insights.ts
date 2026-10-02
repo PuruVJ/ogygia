@@ -154,6 +154,8 @@ export interface PageInput {
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
 		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
 		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+		/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
+		images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
 		/** the page's size in elements, when 1,500 or more: the deepest nesting, the element with the
 		 *  most children, the islands holding the most (depth 0: past 60,000, only counted) */
 		dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
@@ -930,6 +932,32 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message: `${list(big.length > 3 ? [...named, `${big.length - 3} more`] : named)} ${big.length === 1 ? 'is' : 'are'} sent far bigger than shown: about ${kb(big_waste)} of ${kb(big.reduce((n, i) => n + i.bytes, 0))} is pixels nobody sees.`,
 			fix: 'Serve each image near the size it shows at: a `srcset` with a few widths and a `sizes` that says how wide it shows (the browser picks the smallest that is sharp), or resize the file itself.',
 			fps: [...new Set(big.flatMap((i) => (i.fp ? [i.fp] : [])))]
+		});
+	}
+
+	// ── images far below the first screen that loaded at start: their bytes competed with the
+	// first screen's ──
+	const below = page.visit?.images_eager_below ?? [];
+	const below_bytes = below.reduce((n, i) => n + i.bytes, 0);
+	if (below.length && below_bytes >= 100_000) {
+		const kb = (n: number) => `${Math.round(n / 1024)} KB`;
+		const file = (u: string) => u.slice(u.lastIndexOf('/') + 1).split('?')[0] || u;
+		const vh = page.visit?.viewport?.[1];
+		// (one file name several times — the same image with other queries, a grid of copies — said once, ×N)
+		const by_file = new Map<string, { n: number; bytes: number; top: number; fp?: string }>();
+		for (const i of below) {
+			const g = by_file.get(file(i.url));
+			if (g) (g.n++, (g.bytes += i.bytes), (g.top = Math.min(g.top, i.top)));
+			else by_file.set(file(i.url), { n: 1, bytes: i.bytes, top: i.top, ...(i.fp ? { fp: i.fp } : {}) });
+		}
+		const groups = [...by_file].sort((a, b) => b[1].bytes - a[1].bytes);
+		const named = groups.slice(0, 3).map(([f, g]) => `${f}${g.n > 1 ? ` ×${g.n}` : ''} (${kb(g.bytes)}, ${vh ? `${(g.top / vh).toFixed(1)} screens` : `${g.top}px`} down${g.fp ? `, in ${name_of(g.fp)}` : ''})`);
+		findings.push({
+			code: 'images-eager-below',
+			severity: 'warn',
+			message: `${list(groups.length > 3 ? [...named, `${groups.length - 3} more`] : named)} ${below.length === 1 ? 'loads' : 'load'} at start though far below the first screen: ${kb(below_bytes)} that competed with the first screen's files for the network.`,
+			fix: 'Give images below the first screen `loading="lazy"` (and their width and height, so nothing shifts when they arrive): the browser fetches them as the visitor scrolls near.',
+			fps: [...new Set(below.flatMap((i) => (i.fp ? [i.fp] : [])))]
 		});
 	}
 
