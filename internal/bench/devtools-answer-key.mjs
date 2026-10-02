@@ -1490,6 +1490,31 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// IMAGES SENT FAR BIGGER THAN SHOWN (/dt-img: big.png 2000×1333 in a 300×200 box — the plant;
+	// flat.png the same size but ~11 KB, right.png shown at its size, big.png in a hidden box — the
+	// decoys): only big.png named, on a 1× and a 2× screen; a page whose images fit quiet
+	{
+		const read = async (path, dpr) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 }, deviceScaleFactor: dpr });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1000);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'image-oversized').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const one = await read('/dt-img', 1);
+		const two = await read('/dt-img', 2);
+		const clean = await read('/dt-lcp', 1);
+		const checks = [
+			['big.png named with its sizes', one.length === 1 && one[0].startsWith('big.png (2000×1333, shown at 300×200) is sent far bigger than shown')],
+			['the screen counted (2×)', two.length === 1 && two[0].includes('on a 2× screen')],
+			['flat / right-sized / hidden never', ![...one, ...two].some((m) => m.includes('flat.png') || m.includes('right.png') || m.includes('more'))],
+			['a page whose images fit quiet', clean.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} images sent far bigger than shown: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ one, two, clean })}` : ''}`);
+	}
 	// TEXT KEPT INVISIBLE BY ITS FONT (/dt-font: 'SlowFace' without font-display, 'SwapFace' with
 	// swap, both files 1.5 s): SlowFace named with its file and how late; SwapFace never; a page with
 	// no web font quiet

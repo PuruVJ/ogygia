@@ -149,6 +149,9 @@ export interface PageInput {
 		preload_misses?: PreloadMiss[];
 		/** the `@font-face` rules behind the fonts it fetched (family, font-display, the fetched files) */
 		font_faces?: { family: string; display: string; urls: string[] }[];
+		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
+		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
+		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
 		/** islands whose own file failed to load and fell back to their stable name (the page came
 		 *  from a build whose files are gone); `name` when the reader could name the island */
 		entry_fallbacks?: { entry: string; src: string; recovered: boolean; name?: string }[];
@@ -903,6 +906,24 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				fix: 'Give the @font-face `font-display: swap` (the text shows in a fallback at once, then switches) or `optional` (no switch, no shift), and preload the font file the first screen needs.',
 				fps: []
 			});
+	}
+
+	// ── images sent far bigger than shown: the bytes past what the box shows are bytes nobody sees ──
+	const big = (page.visit?.images_oversized ?? [])
+		.map((i) => ({ ...i, waste: Math.round(i.bytes * (1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1]))) }))
+		.sort((a, b) => b.waste - a.waste);
+	const big_waste = big.reduce((n, i) => n + i.waste, 0);
+	if (big.length && big_waste >= 50_000) {
+		const kb = (n: number) => `${Math.round(n / 1024)} KB`;
+		const file = (u: string) => u.slice(u.lastIndexOf('/') + 1).split('?')[0] || u;
+		const named = big.slice(0, 3).map((i) => `${file(i.url)} (${i.natural[0]}×${i.natural[1]}, shown at ${i.shown[0]}×${i.shown[1]}${i.dpr !== 1 ? ` on a ${i.dpr}× screen` : ''}${i.fp ? ` in ${name_of(i.fp)}` : ''})`);
+		findings.push({
+			code: 'image-oversized',
+			severity: 'warn',
+			message: `${list(big.length > 3 ? [...named, `${big.length - 3} more`] : named)} ${big.length === 1 ? 'is' : 'are'} sent far bigger than shown: about ${kb(big_waste)} of ${kb(big.reduce((n, i) => n + i.bytes, 0))} is pixels nobody sees.`,
+			fix: 'Serve each image near the size it shows at: a `srcset` with a few widths and a `sizes` that says how wide it shows (the browser picks the smallest that is sharp), or resize the file itself.',
+			fps: [...new Set(big.flatMap((i) => (i.fp ? [i.fp] : [])))]
+		});
 	}
 
 	// ── a wake-at-load island that never woke ──

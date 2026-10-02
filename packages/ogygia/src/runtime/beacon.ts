@@ -730,6 +730,36 @@ function font_faces_of(fetched: ReadonlySet<string>): { family: string; display:
 	return out;
 }
 
+/** IMAGES SENT FAR BIGGER THAN SHOWN: a loaded raster `<img>` whose pixels are at least 4× what
+ *  its box shows on this screen (its device pixel ratio counted), and whose file is 50 KB or more —
+ *  the bytes past what the box shows are bytes nobody sees. A hidden image (no box), a vector one,
+ *  and one whose size the browser will not tell (cross-origin, no Timing-Allow-Origin) are left out.
+ *  One layout read per send, at most 300 images. No regex. */
+function oversized_images(): { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[] {
+	const out: ReturnType<typeof oversized_images> = [];
+	const dpr = devicePixelRatio || 1;
+	const imgs = document.images;
+	for (let i = 0; i < imgs.length && i < 300 && out.length < 10; i++) {
+		const img = imgs[i];
+		if (!img.complete || !img.naturalWidth || !img.naturalHeight) continue;
+		const url = img.currentSrc || img.src;
+		if (!url || url.startsWith('data:')) continue;
+		const q = url.indexOf('?');
+		const path = (q === -1 ? url : url.slice(0, q)).toLowerCase();
+		if (path.endsWith('.svg')) continue;
+		const w = img.clientWidth;
+		const h = img.clientHeight;
+		if (!w || !h) continue;
+		if (img.naturalWidth * img.naturalHeight < w * h * dpr * dpr * 4) continue;
+		const e = performance.getEntriesByName(url, 'resource')[0] as PerformanceResourceTiming | undefined;
+		const bytes = e ? e.encodedBodySize || e.transferSize : 0;
+		if (bytes < 50_000) continue;
+		const fp = fp_of(img);
+		out.push({ url: url.slice(0, 500), natural: [img.naturalWidth, img.naturalHeight], shown: [w, h], dpr: r2(dpr), bytes, ...(fp ? { fp } : {}) });
+	}
+	return out;
+}
+
 /** the visit as one object: the server's copy has no snapshots (they are big and the browser
  *  store keeps them) */
 function build_visit(): Record<string, unknown> | null {
@@ -886,6 +916,12 @@ function build_visit(): Record<string, unknown> | null {
 	} catch {
 		/* no stylesheets to read */
 	}
+	let oversized: ReturnType<typeof oversized_images> = [];
+	try {
+		oversized = oversized_images();
+	} catch {
+		/* no document */
+	}
 	return {
 		at: Math.round(performance.timeOrigin),
 		// (third parties are every other origin)
@@ -917,6 +953,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),
 		...(fonts.length ? { font_faces: fonts } : {}),
+		...(oversized.length ? { images_oversized: oversized } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,

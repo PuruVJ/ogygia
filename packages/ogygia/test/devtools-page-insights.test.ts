@@ -77,6 +77,23 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('images sent far bigger than shown', () => {
+	const at = (images: NonNullable<NonNullable<PageInput['visit']>['images_oversized']>) =>
+		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1280, 800], images_oversized: images } }), [], [], 3000).findings.find((f) => f.code === 'image-oversized');
+	it('names the image, its sizes and the bytes nobody sees; the biggest waste first', () => {
+		const f = at([
+			{ url: 'http://x/a/small-waste.jpg', natural: [800, 600], shown: [200, 150], dpr: 1, bytes: 60_000 },
+			{ url: 'http://x/a/big.png?v=1', natural: [2000, 1333], shown: [300, 200], dpr: 2, bytes: 352_000 }
+		]);
+		expect(f?.message).toBe(
+			'big.png (2000×1333, shown at 300×200 on a 2× screen) and small-waste.jpg (800×600, shown at 200×150) are sent far bigger than shown: about 368 KB of 402 KB is pixels nobody sees.'
+		);
+	});
+	it('a small total waste is quiet', () => {
+		expect(at([{ url: 'http://x/a/b.jpg', natural: [800, 600], shown: [400, 300], dpr: 1, bytes: 52_000 }])).toBeUndefined();
+	});
+});
+
 describe('the font the largest paint waited for', () => {
 	const visit = (display: string, lcp: number, lcp_url?: string): PageInput['visit'] => ({
 		nav: { res_start: 50 },
