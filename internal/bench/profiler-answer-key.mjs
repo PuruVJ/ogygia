@@ -33,8 +33,8 @@ const base = args[0] ?? (serve ? `http://127.0.0.1:${PORT}` : 'http://127.0.0.1:
 const app = fileURLToPath(new URL('../../apps/playground', import.meta.url));
 const root = join(app, 'src');
 // real, but under the report's 1 ms floor on a fast machine: V8 caches a regex, grows a string
-// as a rope, and reads a small file quickly
-const SMALL = new Set(['regexp-per-call', 'string-build', 'sync-io']);
+// as a rope (a small file read quickly is found by V8's call counts, not the samples: no longer here)
+const SMALL = new Set(['regexp-per-call', 'string-build']);
 
 /** The page's key, from its own comments. */
 function key_of(page) {

@@ -228,7 +228,7 @@
 							{#if top_fix?.[r.id]}
 								{@const t = top_fix[r.id]}
 								<a href="{base}/report/{r.id}#pattern-0">{t.title}</a>
-								<span class="save">~{fmt_ms(t.save_ms)} ms{t.wait ? ' of waiting' : ''}</span>{#if t.more}<span class="more"> · {t.more} more</span>{/if}
+								{#if t.save_ms >= 0.1}<span class="save">~{fmt_ms(t.save_ms)} ms{t.wait ? ' of waiting' : ''}</span>{/if}{#if t.more}<span class="more"> · {t.more} more</span>{/if}
 							{:else}—{/if}
 						</td>
 						<td

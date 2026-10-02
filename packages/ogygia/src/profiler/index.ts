@@ -47,6 +47,7 @@ import {
 	type HeapNode,
 	type SourceMapResolver
 } from './analyze.js';
+import { route_dirs as route_folders } from './route-files.js';
 import type { CallerSite, NetCall, NetContext } from './net.js';
 import { TRACE_HEADER, encode_trace } from './net.js';
 import type { IoOp } from './async-io.js';
@@ -159,6 +160,7 @@ import {
 	stable_answers,
 	varied_answers,
 	wait_save_on_path,
+	counted_sync_io,
 	type ConstantWork,
 	type HeapGrowth,
 	type LateIslandWait,
@@ -3299,6 +3301,31 @@ class Profiler {
 				const sites = patterns[i].sites;
 				if (sites.length && sites.every((x) => another_routes_file(route, x.path || x.file))) patterns.splice(i, 1);
 			}
+		// SYNC I/O TOO QUICK TO SAMPLE: a *Sync call V8 counted in the render, found in the route's
+		// own files (its page, the layouts above it, the hooks) — when the samples saw none
+		if (route && s.call_counts && !patterns.some((p) => p.kind === 'sync-io')) {
+			try {
+				const read = await this.#source_reader();
+				const { join } = await import('node:path');
+				const dirs = route_folders(route);
+				const rels: string[] = [];
+				const add = (dir: string, names: string[]) => {
+					for (const n of names) for (const ext of ['.ts', '.js']) rels.push(`routes/${dir ? dir + '/' : ''}${n}${ext}`);
+				};
+				for (const d of dirs.above('src')) add(d, ['+layout.server', '+layout']);
+				add(dirs.own('src'), ['+page.server', '+page']);
+				for (const ext of ['.ts', '.js']) rels.push(`hooks.server${ext}`);
+				const files: { path: string; file: string; text: string }[] = [];
+				for (const rel of rels) {
+					const text = read(rel);
+					if (text) files.push({ path: join(process.cwd(), 'src', rel), file: rel, text });
+				}
+				const p = counted_sync_io(s.call_counts, files);
+				if (p) patterns.push(p);
+			} catch {
+				// no file system: nothing to read the route's files from
+			}
+		}
 		// biggest saving first — except a severe leak (8 MB+ kept per render), which leads: it ends
 		// in an out-of-memory crash, not a slow page
 		const severe = (p: Pattern) =>

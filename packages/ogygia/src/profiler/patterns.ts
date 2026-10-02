@@ -1325,6 +1325,111 @@ const RULES: Rule[] = [
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * SYNC I/O TOO QUICK TO SAMPLE: a small file read on every request finishes under the CPU
+ * sampler's interval, so no sample lands on it, yet it blocks every other request on the server
+ * while the disk answers (a cold disk or a bigger file makes it long). V8's call counts (the
+ * coverage render) count Node's own `readFileSync` like any function: a *Sync call counted in the
+ * render, at a line of the route's own files inside a function the render ran (counted too), is
+ * one. Module top-level code runs once at start-up and is left out. Pure: the counts and the files'
+ * text in, the pattern out (undefined when nothing qualifies). No regex.
+ */
+export function counted_sync_io(counts: Readonly<Record<string, number>>, files: readonly { path: string; file: string; text: string }[]): Pattern | undefined {
+	const sync = new Map<string, number>();
+	const ran = new Set<string>();
+	for (const [k, n] of Object.entries(counts)) {
+		const z = k.indexOf('\0');
+		if (z === -1 || n <= 0) continue;
+		const name = k.slice(0, z);
+		const where = k.slice(z + 1);
+		if (where.startsWith('node:')) {
+			if (COUNTED_SYNC.has(name)) sync.set(name, Math.max(sync.get(name) ?? 0, n));
+		} else ran.add(name);
+	}
+	if (!sync.size) return undefined;
+	const names = [...sync.keys()];
+	const sites: PatternSite[] = [];
+	for (const f of files) {
+		const lines = f.text.split('\n');
+		// the enclosing functions' names, one per open brace (null: a block that is not a function's)
+		const stack: (string | null)[] = [];
+		let in_comment = false;
+		for (let i = 0; i < lines.length && sites.length < 6; i++) {
+			const raw = lines[i];
+			if (in_comment) {
+				if (raw.includes('*/')) in_comment = false;
+				continue;
+			}
+			const trimmed = raw.trimStart();
+			if (trimmed.startsWith('/*') && !trimmed.includes('*/')) {
+				in_comment = true;
+				continue;
+			}
+			const t = tokens(raw);
+			// the line's own name for a function it opens: `function x(`, `const x = (…) =>`, `x(…) {`
+			let named: string | null = null;
+			const fn_at = t.indexOf('function');
+			if (fn_at !== -1) named = t[fn_at + 1] === '*' ? (t[fn_at + 2] ?? null) : (t[fn_at + 1] ?? null);
+			else {
+				const decl = t.findIndex((x) => x === 'const' || x === 'let' || x === 'var');
+				const eq = decl === -1 ? -1 : t.indexOf('=', decl);
+				if (eq !== -1) {
+					// `= (…) =>` / `= async (…) =>` / `= x =>`: a function; `= items.map((y) => {` is not
+					const j = t[eq + 1] === 'async' ? eq + 2 : eq + 1;
+					const to = t.indexOf('=>', j);
+					if (to !== -1 && (t[j] === '(' || to === j + 1) && !t.slice(j, to).includes('.')) named = t[decl + 1] ?? null;
+				} else if (t.length > 2 && t[1] === '(' && t[t.length - 1] === '{' && !BLOCK_WORDS.has(t[0])) named = t[0];
+			}
+			let arrow = false;
+			for (let k = 0; k < t.length; k++) {
+				const x = t[k];
+				if (x === '{') stack.push(named);
+				else if (x === '}') stack.pop();
+				else if (x === '=>') arrow = true;
+				else if (t[k + 1] === '(' && names.includes(x) && t[k - 1] !== 'function') {
+					// inside a function: an open brace (a block of one), or a braceless arrow on this line
+					// (a block no function encloses — a top-level `if` — runs at start-up too)
+					let fn: string | null = null;
+					for (let s = stack.length - 1; s >= 0 && !fn; s--) fn = stack[s];
+					if (!fn && arrow) fn = named;
+					// (the function it sits in ran in the render: a helper never called is not this page's)
+					if (!fn || !ran.has(fn)) continue;
+					if (sites.some((s) => s.path === f.path && s.line === i + 1)) continue;
+					const code = raw.trim();
+					sites.push({
+						path: f.path,
+						file: f.file,
+						line: i + 1,
+						code: code.length > 140 ? code.slice(0, 139) + '…' : code,
+						...(fn ? { fn_name: fn } : {}),
+						cpu_ms: 0,
+						alloc_bytes: 0,
+						gc_ms: 0,
+						calls: sync.get(x),
+						in_loop: false
+					});
+				}
+			}
+		}
+	}
+	if (!sites.length) return undefined;
+	const rule = RULES.find((r) => r.kind === 'sync-io')!;
+	const said = [...new Set(sites.flatMap((s) => names.filter((n) => calls_name(s.code, [n]))))];
+	return {
+		kind: 'sync-io',
+		title: rule.title(sites.length, sites),
+		fix: rule.fix,
+		sites,
+		cost_ms: 0,
+		alloc_bytes: 0,
+		save_ms: 0,
+		evidence: `${said.map((n) => `${n} ×${sync.get(n)}`).join(', ')} per render (V8's call counts): too quick for the CPU sampler here, under a millisecond, but each call stops every other request on this server until the disk answers.`
+	};
+}
+const BLOCK_WORDS: ReadonlySet<string> = new Set(['if', 'for', 'while', 'switch', 'catch', 'with', 'return']);
+/** the *Sync calls V8's coverage counts under their own names (in Node's `node:` modules) */
+const COUNTED_SYNC: ReadonlySet<string> = new Set([...SYNC_IO, 'appendFileSync', 'mkdirSync', 'openSync', 'readSync', 'execFileSync', 'pbkdf2Sync', 'scryptSync']);
+
 export function find_patterns(input: PatternInput): Pattern[] {
 	const fns = new Map<string, FrameStat>();
 	for (const f of input.functions) fns.set(f.key, f);

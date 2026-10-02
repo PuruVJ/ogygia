@@ -6,6 +6,7 @@ import type { FrameStat } from '../src/profiler/analyze.js';
 import type { LedgerLine } from '../src/profiler/ledger.js';
 import {
 	cache_rules,
+	counted_sync_io,
 	find_cold_caches,
 	find_patterns,
 	find_same_answers,
@@ -2344,5 +2345,51 @@ describe('compare: an unchanged render makes CPU moves "shifted"', () => {
 			'same'
 		]);
 		expect(out.lines.map((l) => l.status)).toEqual(['shifted', 'new']);
+	});
+});
+
+describe('sync I/O too quick to sample, from V8 call counts', () => {
+	const page = [
+		"import { readFileSync, existsSync } from 'node:fs';",
+		"const config = readFileSync('config.json', 'utf8');",
+		'if (process.env.X) {',
+		"\treadFileSync('startup.txt');",
+		'}',
+		'/**',
+		" * readFileSync('in a comment') is not a call",
+		' */',
+		'function readManifest() {',
+		"\treturn existsSync('m.json') ? readFileSync('m.json', 'utf8').length : 0;",
+		'}',
+		'function neverCalled() {',
+		"\treturn readFileSync('other.json');",
+		'}',
+		'const rows = items.map((x) => {',
+		"\treturn readFileSync(x);",
+		'});',
+		"export const load = async ({ url }) => ({ size: readManifest(), at: statSync('x') });"
+	].join('\n');
+	const files = [{ path: '/app/src/routes/p/+page.server.ts', file: 'routes/p/+page.server.ts', text: page }];
+	const counts = {
+		'readFileSync\0node:fs': 1,
+		'existsSync\0node:fs': 1,
+		'statSync\0node:fs': 1,
+		'readManifest\0file:///app/src/routes/p/+page.server.ts': 1,
+		'load\0file:///app/src/routes/p/+page.server.ts': 1
+	};
+	it('a counted *Sync call inside a function the render ran is a site; start-up code, comments, helpers that never ran are not', () => {
+		const p = counted_sync_io(counts, files)!;
+		expect(p.kind).toBe('sync-io');
+		expect(p.sites.map((s) => [s.line, s.fn_name])).toEqual([
+			[10, 'readManifest'],
+			[18, 'load']
+		]);
+		expect(p.evidence).toBe(
+			"readFileSync ×1, existsSync ×1, statSync ×1 per render (V8's call counts): too quick for the CPU sampler here, under a millisecond, but each call stops every other request on this server until the disk answers."
+		);
+	});
+	it('no *Sync call counted in Node, or none in the route files: nothing', () => {
+		expect(counted_sync_io({ 'readManifest\0file:///x': 1 }, files)).toBeUndefined();
+		expect(counted_sync_io(counts, [{ ...files[0], text: 'export const load = () => ({});' }])).toBeUndefined();
 	});
 });

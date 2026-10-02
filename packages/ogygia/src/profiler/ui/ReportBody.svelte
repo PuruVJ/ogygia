@@ -154,7 +154,9 @@
 			? `keeps ${fmt_bytes(p.kept_bytes)} a render${p.requests_left !== undefined ? `, heap full in ~${p.requests_left} requests` : ''}`
 			: p.seed_bytes
 				? `ships ${fmt_bytes(p.seed_bytes)} a page view`
-				: p.wait
+				: p.kind === 'sync-io' && !p.cost_ms
+					? 'blocks the server on every request (too quick to time here)'
+					: p.wait
 					? p.kind === 'same-document' || p.kind === 'almost-same-document'
 						? `~${fmt_ms(p.save_ms)} ms: the whole render, served from a cache`
 						: `~${fmt_ms(p.save_ms)} ms less waiting`
