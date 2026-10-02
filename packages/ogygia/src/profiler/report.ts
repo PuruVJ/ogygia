@@ -1085,19 +1085,34 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			}
 		);
 	}
-	// HOT FUNCTION: one function (yours or a dependency's) burning a fifth of the CPU.
-	const hot = a.functions.find((f) => f.category === 'app' || f.category === 'dependency');
-	if (hot && hot.self_ms >= a.busy_ms * 0.2 && hot.self_ms >= 5) {
+	// HOT FUNCTION: one function (yours or a dependency's) burning a fifth of the CPU — or, when
+	// several share the top about evenly, the three together. (A page with three hogs at ~20% each had
+	// whichever crossed 20% this run named, and none in some runs: the finding came and went between
+	// two profiles of the same code. Named together, the crowd is there every run.)
+	const own = a.functions.filter((f) => f.category === 'app' || f.category === 'dependency');
+	const hot = own[0];
+	const top3 = own.slice(0, 3).filter((f) => f.self_ms >= 5);
+	const top3_ms = top3.reduce((s, f) => s + f.self_ms, 0);
+	const single = !!hot && hot.self_ms >= a.busy_ms * 0.2;
+	const crowd = !!hot && !single && top3.length === 3 && hot.self_ms >= a.busy_ms * 0.12 && top3_ms >= a.busy_ms * 0.4;
+	const where = (f: (typeof own)[number]) => (f.label ? `the function at ${f.url}:${f.line}` : `${f.name} (${f.url}:${f.line})`);
+	if (hot && hot.self_ms >= 5 && (single || crowd)) {
 		const from = hot.stacks?.[0]?.frames.find((fr) => fr.c === 'component' || fr.c === 'app');
 		const spot = hot_line_of(hot, new Set(a.functions.filter((f) => f.category === 'app').map((f) => f.name)));
+		// (close behind the top one: within a quarter of it — the next profile may rank them the other way)
+		const close = own.slice(1, 3).filter((f) => f.self_ms >= 5 && f.self_ms >= hot.self_ms * 0.75);
+		const spot_lead = crowd ? `In ${hot.name}, the biggest part` : spot && share_word(spot.ms, hot.self_ms) === 'most of it' ? 'Most of it' : 'The biggest part';
 		warn(
 			'hot-function',
-			`${hot.label ? `The function at ${hot.url}:${hot.line} (\`${hot.label}\`)` : hot.name} burns ${fmt_ms(pr(hot.self_ms))} ms${per_r} (${fmt_pct(hot.self_ms, a.busy_ms)} of busy)${hot.label ? '' : ` at ${hot.url}:${hot.line}`}` +
-				(hot.calls ? `, ${hot.calls} calls per render` : '') +
-				(from ? `, called from ${from.n}` : '') +
-				'.' +
+			(crowd
+				? `No one function dominates, but three together burn ${fmt_ms(pr(top3_ms))} ms${per_r} (${fmt_pct(top3_ms, a.busy_ms)} of busy): ${top3.map((f) => `${where(f)} ${fmt_pct(f.self_ms, a.busy_ms)}`).join(', ')}.`
+				: `${hot.label ? `The function at ${hot.url}:${hot.line} (\`${hot.label}\`)` : hot.name} burns ${fmt_ms(pr(hot.self_ms))} ms${per_r} (${fmt_pct(hot.self_ms, a.busy_ms)} of busy)${hot.label ? '' : ` at ${hot.url}:${hot.line}`}` +
+					(hot.calls ? `, ${hot.calls} calls per render` : '') +
+					(from ? `, called from ${from.n}` : '') +
+					'.' +
+					(close.length ? ` Close behind: ${close.map((f) => `${where(f)} ${fmt_pct(f.self_ms, a.busy_ms)}`).join(', ')}.` : '')) +
 				(spot
-					? ` ${share_word(spot.ms, hot.self_ms) === 'most of it' ? 'Most of it' : 'The biggest part'} lands on line ${spot.line}: \`${spot.code}\`` +
+					? ` ${spot_lead} lands on line ${spot.line}: \`${spot.code}\`` +
 						(spot.calls ? ` — ${spot.calls} is called there, and V8 counts a function it inlined as the caller's own time: look inside ${spot.calls}.` : '.')
 					: ''),
 			{
