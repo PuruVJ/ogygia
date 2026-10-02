@@ -72,6 +72,7 @@
 					<tr class="diffrow">
 						<td colspan="3">
 							<p class="muted">server markup against the browser's first render: <b class="del">−{diff.removed}</b> <b class="add">+{diff.added}</b> pieces{diff.partial ? ' (too many changes: only where they start)' : ''}</p>
+							{#if r.snap?.from !== undefined}<p class="muted" data-og-hyd-window>A big island: this is the part around its first change, about {Math.round(r.snap.from / 1024)} KB into its markup — later changes are not shown.</p>{/if}
 							{#each diff.hunks as h, i (i)}
 								<div class="hunk">
 									{#each h.ops as o, k (k)}<span class={o.op}>{o.text}</span>{/each}

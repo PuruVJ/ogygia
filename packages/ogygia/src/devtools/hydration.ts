@@ -18,7 +18,9 @@ export interface IslandHydration {
 	status: HydrationStatus;
 	reason: string;
 	el: Element;
-	snap: { ssr: string; hydrated: string } | null;
+	/** `from`: a big island keeps only the window around its first change (runtime/beacon.ts
+	 *  `snapshot_of`) — where that window starts in its markup without comments */
+	snap: { ssr: string; hydrated: string; from?: number } | null;
 }
 
 export function hydration_rows(): { rows: IslandHydration[]; measured: boolean } {
@@ -51,7 +53,7 @@ export function hydration_rows(): { rows: IslandHydration[]; measured: boolean }
 			status,
 			reason: w?.reason || attr || (r.rides ? `rides ${region_name(r.rides.getAttribute('entry'))}, the island around it (it wakes with it, not on its own)` : ''),
 			el: r.el,
-			snap: s ? { ssr: s.ssr, hydrated: s.hydrated } : null
+			snap: s ? { ssr: s.ssr, hydrated: s.hydrated, ...(s.from !== undefined ? { from: s.from } : {}) } : null
 		});
 	}
 	rows.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.name.localeCompare(b.name));
@@ -59,7 +61,7 @@ export function hydration_rows(): { rows: IslandHydration[]; measured: boolean }
 }
 
 /** The same, as plain data (no elements), with each changed island's diff — for tests. */
-export function hydration_report(): { measured: boolean; islands: { fp: string; name: string; wake: string; status: HydrationStatus; reason: string; diff: HtmlDiff | null }[] } {
+export function hydration_report(): { measured: boolean; islands: { fp: string; name: string; wake: string; status: HydrationStatus; reason: string; diff: HtmlDiff | null; window_from?: number }[] } {
 	const { rows, measured } = hydration_rows();
 	return {
 		measured,
@@ -69,7 +71,8 @@ export function hydration_report(): { measured: boolean; islands: { fp: string; 
 			wake: r.wake,
 			status: r.status,
 			reason: r.reason,
-			diff: r.snap && r.status !== 'clean' ? html_diff(r.snap.ssr, r.snap.hydrated) : null
+			diff: r.snap && r.status !== 'clean' ? html_diff(r.snap.ssr, r.snap.hydrated) : null,
+			...(r.snap?.from !== undefined ? { window_from: r.snap.from } : {})
 		}))
 	};
 }

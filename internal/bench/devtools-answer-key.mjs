@@ -1208,7 +1208,11 @@ try {
 		const warm = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 		for (const path of ['/dt-lab', '/dt-third', '/dt-inp', '/dt-held', '/dt-nav-fast', '/dt-nav-slow', '/dt-cache', '/dt-preload', '/dt-styles', '/dt-nest', '/dt-lcp', '/dt-cls', '/dt-ttfb?fast', '/dt-fcp', '/dt-stream?quick']) {
 			await warm.goto(base + path, { waitUntil: 'load' }).catch(() => {});
-			await warm.waitForTimeout(700);
+			// (until the islands that wake at load have — their code compiled — or 4 s, which a page with a
+			// planted failing island waits out: a fixed 0.7 s left Heavy's first compile to the first
+			// measured run, and the slowest wake was its own)
+			await warm.waitForFunction(() => !document.querySelector('ogygia-region[wake="load"]:not([data-hydrated])'), null, { timeout: 4000 }).catch(() => {});
+			await warm.waitForTimeout(300);
 		}
 		await warm.close();
 	}
@@ -1371,15 +1375,20 @@ try {
 			await page.goto(base + path, { waitUntil: 'load' });
 			await page.waitForTimeout(2000);
 			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'markup-changed' || x.code === 'lcp-repaint').map((x) => ({ code: x.code, message: x.message })));
+			// (the Hydration tab's diff of the big island: the real change, and said to be a window of it)
+			const hyd = await page.evaluate(async () => (await window.__ogygia_testing?.hydration())?.islands.find((i) => i.name === 'BigList') ?? null);
 			await page.close();
+			f.hyd = hyd;
 			return f;
 		};
 		const big = await read('/dt-big');
+		const diff_ops = big.hyd?.diff?.hunks?.flatMap((h) => h.ops) ?? [];
 		const hero = await read('/dt-big-hero');
 		const changed = big.find((f) => f.code === 'markup-changed')?.message ?? '';
 		const checks = [
 			['BigList, its real change quoted', changed.startsWith('BigList rendered different markup') && changed.includes('server "data-track="') && changed.includes('browser "data-track="')],
 			['BigSteady never', !big.some((f) => f.message.includes('BigSteady'))],
+			['the Hydration tab: the real change, said to be a window', diff_ops.some((o) => o.op === 'del' && o.text.includes('data-track')) && typeof big.hyd?.window_from === 'number'],
 			['no repaint claimed for an attribute', !big.some((f) => f.code === 'lcp-repaint')],
 			['the replaced hero: repainted', hero.some((f) => f.code === 'lcp-repaint' && f.message.includes('inside HeroSwap'))]
 		];
