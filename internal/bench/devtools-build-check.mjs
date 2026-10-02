@@ -232,6 +232,22 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	const html = med(runs.on.map((r) => r.html)) - med(runs.off.map((r) => r.html));
 	check('measuring costs the page little: its main thread and its HTML', task <= 60 && html <= 4096, `+${Math.round(task)} ms main thread, +${(html / 1024).toFixed(1)} KB HTML`);
 }
+// WHAT AN ISLAND LEFT RUNNING, in a build: its code is a built chunk (no `.svelte` file to name it
+// by), so the island is told by its file's location. An opted-in browser, /dt-leak → in-app → next
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	const p = await c.newPage();
+	await p.goto(base + '/dt-leak', { waitUntil: 'load' });
+	await p.waitForTimeout(2000);
+	await p.evaluate(() => document.querySelector('[data-leak-go]')?.click());
+	await p.waitForTimeout(2000);
+	await p.click('[data-og-panel-toggle]').catch(() => {});
+	await p.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+	const left = await p.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((f) => f.code === 'island-leftover').map((f) => f.message));
+	await c.close();
+	check('what an island left running is named in a build too', left.length === 1 && left[0].startsWith('Ticker left an interval running') && !left[0].includes('Tidy'), JSON.stringify(left).slice(0, 200));
+}
 await browser.close();
 
 const failed = results.filter((r) => !r).length;
