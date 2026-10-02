@@ -90,7 +90,7 @@ import { client_windows, interaction_windows, type ClientWindows, type Interacti
 import { byte_strip, type ByteStrip } from './byte-strip.js';
 import { stream_tail } from './stream-tail.js';
 import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.js';
-import { BEACON_STANDALONE_JS } from './beacon-standalone.js';
+import { BEACON_STANDALONE_TAG } from './beacon-standalone.js';
 import { build_river, load_return_keys, seed_key_bytes, type River } from './river.js';
 import { SinkBuffer, type SinkRow } from './sink.js';
 import {
@@ -5738,7 +5738,7 @@ class Profiler {
 		}
 		// (with the standalone beacon for a page that never boots the ogygia runtime: a Kit-hydrated
 		// page reports its vitals, long tasks and CPU too — it steps aside when the runtime is there)
-		return `<meta name="${BEACON_META}" content="${this.base}/beacon"><script data-ogygia-beacon>${BEACON_STANDALONE_JS}</script>`;
+		return `<meta name="${BEACON_META}" content="${this.base}/beacon">${BEACON_STANDALONE_TAG}`;
 	}
 
 	// ---- the handle -------------------------------------------------------
