@@ -147,6 +147,8 @@ export interface PageInput {
 		named?: string[];
 		/** files a preload fetched and something else downloaded again (the preload went unused) */
 		preload_misses?: PreloadMiss[];
+		/** the `@font-face` rules behind the fonts it fetched (family, font-display, the fetched files) */
+		font_faces?: { family: string; display: string; urls: string[] }[];
 		/** islands whose own file failed to load and fell back to their stable name (the page came
 		 *  from a build whose files are gone); `name` when the reader could name the island */
 		entry_fallbacks?: { entry: string; src: string; recovered: boolean; name?: string }[];
@@ -179,8 +181,6 @@ export interface PageInput {
 	restore_events?: RestoreEvent[];
 	/** islands whose fingerprint moved between two loads of this page (devtools/fp-drift.ts) */
 	fp_drift?: { name: string; fp?: string; path?: string; was?: string; now?: string }[];
-	/** the page's `@font-face` rules (family, font-display, files; devtools only) */
-	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
 	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
 }
@@ -885,11 +885,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// ── text kept invisible by its web font: a face with font-display auto/block (the default) hides
 	// its text until the file arrives — up to 3 s — when the file lands after the first paint ──
 	const fcp_at = page.visit?.paints?.fcp ?? page.vitals.fcp;
-	if (page.font_faces?.length && typeof fcp_at === 'number') {
+	const faces = page.visit?.font_faces;
+	if (faces?.length && typeof fcp_at === 'number') {
 		const late: { family: string; display: string; after: number; file: string }[] = [];
 		for (const r of page.visit?.resources ?? []) {
 			if (r.type !== 'font' || r.end - fcp_at < 100) continue;
-			const face = page.font_faces.find((f) => f.urls.includes(r.url));
+			const face = faces.find((f) => f.urls.includes(r.url));
 			if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
 			if (late.some((l) => l.family === face.family)) continue;
 			late.push({ family: face.family, display: face.display, after: Math.round(r.end - fcp_at), file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0] });
@@ -1424,6 +1425,28 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
  * before it painted (blocking CSS or scripts, or the element shown by a script). A text paint has
  * no resource: first byte, then render. The fix is for the part that cost most.
  */
+/** THE FONT THE LARGEST PAINT WAITED FOR: a text paint (no file of its own) that came within 200 ms
+ *  of a font file landing after the first paint, whose face hides its text until then (font-display
+ *  auto/block). The page's text was there all along, invisible: the font, not the server, set the
+ *  LCP. Shared by the Page tab's split and the profiler's LCP gap. */
+export function lcp_font(visit: PageInput['visit'] | null | undefined): { family: string; file: string; end: number } | null {
+	const p = visit?.paints;
+	const faces = visit?.font_faces;
+	if (!p || p.lcp_url || typeof p.lcp !== 'number' || typeof p.fcp !== 'number' || !faces?.length) return null;
+	let best: { family: string; file: string; end: number } | null = null;
+	for (const r of visit.resources ?? []) {
+		// (the file's end is the network's clock, the paint the main thread's: a paint may read up to
+		// 100 ms before the file it waited for)
+		if (r.type !== 'font' || r.end <= p.fcp || r.end - p.lcp > 100 || p.lcp - r.end > 200) continue;
+		const face = faces.find((f) => f.urls.includes(r.url));
+		if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
+		// (no later than the paint: the parts never run backwards)
+		const end = Math.min(r.end, p.lcp);
+		if (!best || end > best.end) best = { family: face.family, file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0], end };
+	}
+	return best;
+}
+
 function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
 	const p = page.visit?.paints;
 	const lcp = p?.lcp ?? page.vitals.lcp;
@@ -1437,9 +1460,16 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 	const res = p?.lcp_url ? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url) : undefined;
 	const what = `${p?.lcp_tag ? `the ${p.lcp_tag}` : 'an element'}${p?.lcp_url ? ` (${file(p.lcp_url)})` : ''}${p?.lcp_fp ? ` in ${name_of(p.lcp_fp)}` : ''}`;
 	const ms = (n: number) => `${Math.round(Math.max(0, n))} ms`;
-	type Part = { key: 'ttfb' | 'delay' | 'load' | 'render'; ms: number; text: string };
+	type Part = { key: 'ttfb' | 'delay' | 'load' | 'render' | 'font'; ms: number; text: string };
 	let parts: Part[];
-	if (res) {
+	const font = res ? null : lcp_font(page.visit);
+	if (font) {
+		parts = [
+			{ key: 'ttfb', ms: ttfb, text: `${ms(ttfb)} until the HTML's first byte` },
+			{ key: 'font', ms: font.end - ttfb, text: `${ms(font.end - ttfb)} waiting for its font '${font.family}' (${font.file}), the text invisible until it came` },
+			{ key: 'render', ms: lcp - font.end, text: `${ms(lcp - font.end)} more before it painted` }
+		];
+	} else if (res) {
 		const asked = res.req_start ?? res.start;
 		parts = [
 			{ key: 'ttfb', ms: ttfb, text: `${ms(ttfb)} until the HTML's first byte` },
@@ -1457,11 +1487,13 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 	const fix =
 		top.key === 'ttfb'
 			? "The server's first byte is most of it: make the page's own render faster (the profiler's report of this page names the slow load), or cache it."
-			: top.key === 'delay'
-				? 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.'
-				: top.key === 'load'
-					? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
-					: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
+			: top.key === 'font'
+				? "The text was there, hidden by its font: give the @font-face `font-display: swap` (or `optional`) and preload the font file, so the text paints at once."
+				: top.key === 'delay'
+					? 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.'
+					: top.key === 'load'
+						? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
+						: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
 	return { message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.`, fix, fps: p?.lcp_fp ? [p.lcp_fp] : [] };
 }
 
@@ -1568,6 +1600,13 @@ export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | nu
 	const lcp = p?.lcp ?? page.vitals.lcp;
 	if (typeof lcp !== 'number') return null;
 	const res = p?.lcp_url ? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url) : undefined;
+	const font = res ? null : lcp_font(page.visit);
+	if (font)
+		return [
+			{ key: 'ttfb', label: 'the first byte', ms: first },
+			{ key: 'font', label: `its font '${font.family}'`, ms: font.end - first },
+			{ key: 'render', label: 'the render', ms: lcp - font.end }
+		];
 	if (!res) return [
 		{ key: 'ttfb', label: 'the first byte', ms: first },
 		{ key: 'render', label: 'the render', ms: lcp - first }

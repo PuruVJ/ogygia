@@ -690,6 +690,46 @@ function interaction_with_scripts(i: Interaction): Interaction & { scripts?: { u
 	return out.length ? { ...i, scripts: out.slice(0, 6) } : { ...i };
 }
 
+/** The `@font-face` rules behind the fonts this page fetched: each family, its `font-display`
+ *  (`auto` when unset), and the fetched files its `src` names. What says whether a late font left
+ *  its text invisible. A cross-origin sheet the browser will not let us read is left out. No regex. */
+function font_faces_of(fetched: ReadonlySet<string>): { family: string; display: string; urls: string[] }[] {
+	const out: { family: string; display: string; urls: string[] }[] = [];
+	if (!fetched.size) return out;
+	for (const sheet of document.styleSheets) {
+		let rules: CSSRuleList;
+		try {
+			rules = sheet.cssRules;
+		} catch {
+			continue; // cross-origin
+		}
+		for (const rule of rules) {
+			if (out.length >= 12) return out;
+			if (!(rule instanceof CSSFontFaceRule)) continue;
+			const style = rule.style;
+			const src = style.getPropertyValue('src');
+			const urls: string[] = [];
+			let at = src.indexOf('url(');
+			while (at !== -1 && urls.length < 6) {
+				const end = src.indexOf(')', at);
+				if (end === -1) break;
+				const raw = src.slice(at + 4, end).trim().split('"').join('').split("'").join('');
+				try {
+					const url = new URL(raw, sheet.href ?? location.href).href.slice(0, 500);
+					if (fetched.has(url)) urls.push(url);
+				} catch {
+					/* not a URL */
+				}
+				at = src.indexOf('url(', end);
+			}
+			if (!urls.length) continue;
+			const family = style.getPropertyValue('font-family').trim().split('"').join('').split("'").join('').slice(0, 80);
+			out.push({ family, display: style.getPropertyValue('font-display').trim() || 'auto', urls });
+		}
+	}
+	return out;
+}
+
 /** the visit as one object: the server's copy has no snapshots (they are big and the browser
  *  store keeps them) */
 function build_visit(): Record<string, unknown> | null {
@@ -839,6 +879,13 @@ function build_visit(): Record<string, unknown> | null {
 	} catch {
 		resources = [];
 	}
+	// the @font-face rules behind the fonts it fetched (whether a late one hid its text)
+	let fonts: { family: string; display: string; urls: string[] }[] = [];
+	try {
+		fonts = font_faces_of(new Set(resources.filter((r) => r.type === 'font').map((r) => r.url as string)));
+	} catch {
+		/* no stylesheets to read */
+	}
 	return {
 		at: Math.round(performance.timeOrigin),
 		// (third parties are every other origin)
@@ -869,6 +916,7 @@ function build_visit(): Record<string, unknown> | null {
 		resources,
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),
+		...(fonts.length ? { font_faces: fonts } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,

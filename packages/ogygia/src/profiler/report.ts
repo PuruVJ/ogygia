@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { explain_held_open, type HeldOpen } from '../devtools/page-insights.js';
+import { explain_held_open, lcp_font, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -2829,11 +2829,18 @@ function accuracy_findings(
 			: (meta.request?.ms ?? 0);
 		const ttfb = v.ttfb ?? 0;
 		if (v.lcp - ttfb >= Math.max(500, ttfb) && server > 0) {
+			// (the report's own visit: a text paint that waited for a hidden font names that font)
+			const font = lcp_font(extras.visit);
 			warn(
 				'lcp-gap',
-				`In the browser LCP is ${fmt_ms(v.lcp)} ms while the server answered in ${fmt_ms(ttfb)} ms (TTFB; the render itself ${fmt_ms(server)} ms): ${fmt_ms(v.lcp - ttfb)} ms of the user's wait is after the HTML arrived — assets, fonts, hydration.`,
+				`In the browser LCP is ${fmt_ms(v.lcp)} ms while the server answered in ${fmt_ms(ttfb)} ms (TTFB; the render itself ${fmt_ms(server)} ms): ${fmt_ms(v.lcp - ttfb)} ms of the user's wait is after the HTML arrived — ` +
+					(font
+						? `the largest paint is text that waited for its font '${font.family}' (${font.file}, in at ${fmt_ms(font.end)} ms), invisible until it came.`
+						: 'assets, fonts, hydration.'),
 				{
-					fix: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.'
+					fix: font
+						? "Give the font's @font-face `font-display: swap` (or `optional`) and preload the file: the text paints with the HTML, and the server is not the bottleneck here."
+						: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.'
 				}
 			);
 		} else if (ttfb > 0 && ttfb >= server * 2 && ttfb - server >= 200) {

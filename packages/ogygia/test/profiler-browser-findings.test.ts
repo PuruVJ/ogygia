@@ -277,6 +277,19 @@ test('a preload downloaded again reaches the report, even on a page with no isla
 	expect(f?.message).toContain('In the browser: planted (27.4 KB) was preloaded, then downloaded again');
 });
 
+test('text a late font kept invisible reaches the report; a bad face record is dropped', () => {
+	const font = 'https://a.test/dt-font/slow.woff2';
+	const v = parse_visit('/dt-font', {
+		...raw,
+		resources: [{ url: font, type: 'font', start: 200, end: 1800 }],
+		font_faces: [{ family: 'SlowFace', display: 'auto', urls: [font] }, { family: 'Bad', display: 'auto', urls: [7] }]
+	})!;
+	expect(v.font_faces).toEqual([{ family: 'SlowFace', display: 'auto', urls: [font] }]);
+	expect(merge_visits(v, { ...v, font_faces: undefined }).font_faces).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'font-invisible');
+	expect(f?.message).toContain("In the browser: Text in 'SlowFace' (slow.woff2, 1550 ms after the first paint) stayed invisible");
+});
+
 test('a hole answered late: waited from the first paint, split by its server time', () => {
 	const v = parse_visit('/lab', {
 		...raw,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_page, boolean_attr_at, encoding_only, first_difference, rate, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
+import { analyze_page, boolean_attr_at, encoding_only, first_difference, lcp_font, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
 import { without_comments } from '../src/runtime/beacon.js';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({
@@ -57,8 +57,13 @@ describe('text kept invisible by its font', () => {
 		const at = (display: string, end: number) =>
 			analyze_page(
 				page({
-					visit: { nav: { res_start: 5 }, paints: { fcp: 100 }, viewport: [1280, 800], resources: [{ url: 'http://x/f/slow.woff2', type: 'font', start: 20, end }] },
-					font_faces: [{ family: 'SlowFace', display, urls: ['http://x/f/slow.woff2'] }]
+					visit: {
+						nav: { res_start: 5 },
+						paints: { fcp: 100 },
+						viewport: [1280, 800],
+						resources: [{ url: 'http://x/f/slow.woff2', type: 'font', start: 20, end }],
+						font_faces: [{ family: 'SlowFace', display, urls: ['http://x/f/slow.woff2'] }]
+					}
 				}),
 				[],
 				[],
@@ -69,6 +74,36 @@ describe('text kept invisible by its font', () => {
 		expect(at('swap', 1600)).toBeUndefined();
 		// arrived before the first paint: nothing was hidden on screen
 		expect(at('auto', 90)).toBeUndefined();
+	});
+});
+
+describe('the font the largest paint waited for', () => {
+	const visit = (display: string, lcp: number, lcp_url?: string): PageInput['visit'] => ({
+		nav: { res_start: 50 },
+		paints: { fcp: 100, lcp, ...(lcp_url ? { lcp_url } : {}) },
+		viewport: [1280, 800],
+		resources: [{ url: 'http://x/f/slow.woff2', type: 'font', start: 60, end: 2900 }],
+		font_faces: [{ family: 'SlowFace', display, urls: ['http://x/f/slow.woff2'] }]
+	});
+	it('a text paint right after a hidden face landed names it; swap, an image paint, or a paint long after, does not', () => {
+		expect(lcp_font(visit('auto', 2950))).toEqual({ family: 'SlowFace', file: 'slow.woff2', end: 2900 });
+		expect(lcp_font(visit('swap', 2950))).toBeNull();
+		expect(lcp_font(visit('auto', 2950, 'http://x/hero.jpg'))).toBeNull();
+		expect(lcp_font(visit('auto', 3500))).toBeNull();
+		// the paint read a little before the file's end (two clocks): still the font's, capped at the paint
+		expect(lcp_font(visit('auto', 2850))?.end).toBe(2850);
+		expect(lcp_font(visit('auto', 2700))).toBeNull();
+	});
+	it("the LCP's split and parts carry the font wait", () => {
+		const p = page({ visit: visit('auto', 2950), vitals: { lcp: 2950 } });
+		expect(vital_parts(p, 'lcp')?.map((x) => [x.key, Math.round(x.ms)])).toEqual([
+			['ttfb', 50],
+			['font', 2850],
+			['render', 50]
+		]);
+		const f = analyze_page(p, [], [], 4000).findings.find((x) => x.code === 'slow-lcp');
+		expect(f?.message).toContain("2850 ms waiting for its font 'SlowFace' (slow.woff2), the text invisible until it came");
+		expect(f?.fix).toContain('font-display: swap');
 	});
 });
 

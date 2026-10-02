@@ -123,6 +123,8 @@ export interface Visit {
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
 	/** files a preload fetched and something else downloaded again: the preload went unused */
 	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[];
+	/** the `@font-face` rules behind the fonts it fetched: family, font-display, the fetched files */
+	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** islands whose own file failed to load and fell back to their stable name */
 	entry_fallbacks?: { entry: string; src: string; recovered: boolean }[];
 	/** content-named files (`/immutable/`) the browser fetched again: revalidated (a 304), or
@@ -350,6 +352,15 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		preload_misses.push({ url, type, bytes, as: str(m.as, 20) ?? '', crossorigin: typeof m.crossorigin === 'string' ? m.crossorigin.slice(0, 20) : null });
 	}
 	if (preload_misses.length) visit.preload_misses = preload_misses;
+	const font_faces: NonNullable<Visit['font_faces']> = [];
+	for (const f of (Array.isArray(v.font_faces) ? v.font_faces : []).slice(0, 12) as Record<string, unknown>[]) {
+		const family = str(f?.family, 80);
+		const display = str(f?.display, 20);
+		const urls = (Array.isArray(f?.urls) ? f.urls : []).slice(0, 6).filter((u): u is string => typeof u === 'string' && u.length <= 500);
+		if (family === undefined || !display || !urls.length) continue;
+		font_faces.push({ family, display, urls });
+	}
+	if (font_faces.length) visit.font_faces = font_faces;
 	const entry_fallbacks: NonNullable<Visit['entry_fallbacks']> = [];
 	for (const f of (Array.isArray(v.entry_fallbacks) ? v.entry_fallbacks : []).slice(0, 20) as Record<string, unknown>[]) {
 		const entry = str(f?.entry, 300);
@@ -549,6 +560,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.warnings ?? a.warnings ? { warnings: b.warnings ?? a.warnings } : {}),
 		// (each record carries the whole list so far: the later one has them all)
 		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
+		...(b.font_faces ?? a.font_faces ? { font_faces: b.font_faces ?? a.font_faces } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)
