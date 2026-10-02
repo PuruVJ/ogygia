@@ -248,6 +248,26 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	await c.close();
 	check('what an island left running is named in a build too', left.length === 1 && left[0].startsWith('Ticker left an interval running') && !left[0].includes('Tidy'), JSON.stringify(left).slice(0, 200));
 }
+// THE FONTS AND IMAGES THE BEACON READS, in a build: a hidden font (/dt-font) and an image far bigger
+// than its box (/dt-img) are named from the visit the beacon builds, the decoys never
+{
+	const read = async (path, code) => {
+		const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+		await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+		const p = await c.newPage();
+		await p.goto(base + path, { waitUntil: 'load' });
+		await p.waitForTimeout(1500);
+		await p.click('[data-og-panel-toggle]').catch(() => {});
+		await p.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+		const f = await p.evaluate((code) => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === code).map((x) => x.message), code);
+		await c.close();
+		return f;
+	};
+	const font = await read('/dt-font', 'font-invisible');
+	check('a font that hid its text is named in a build too', font.length === 1 && font[0].startsWith("Text in 'SlowFace'") && !font[0].includes('SwapFace'), JSON.stringify(font).slice(0, 200));
+	const img = await read('/dt-img', 'image-oversized');
+	check('an image far bigger than shown is named in a build too', img.length === 1 && img[0].startsWith('big.png (2000×1333, shown at 300×200)') && !img[0].includes('flat.png'), JSON.stringify(img).slice(0, 200));
+}
 await browser.close();
 
 const failed = results.filter((r) => !r).length;

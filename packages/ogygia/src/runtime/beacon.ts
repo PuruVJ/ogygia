@@ -690,12 +690,18 @@ function interaction_with_scripts(i: Interaction): Interaction & { scripts?: { u
 	return out.length ? { ...i, scripts: out.slice(0, 6) } : { ...i };
 }
 
+let faces_memo: { key: string; faces: { family: string; display: string; urls: string[] }[] } | null = null;
+
 /** The `@font-face` rules behind the fonts this page fetched: each family, its `font-display`
  *  (`auto` when unset), and the fetched files its `src` names. What says whether a late font left
  *  its text invisible. A cross-origin sheet the browser will not let us read is left out. No regex. */
 function font_faces_of(fetched: ReadonlySet<string>): { family: string; display: string; urls: string[] }[] {
+	if (!fetched.size) return [];
+	// (each send asks again: the sheets are walked only when the fonts fetched changed)
+	const key = [...fetched].join('\n');
+	if (faces_memo?.key === key) return faces_memo.faces;
 	const out: { family: string; display: string; urls: string[] }[] = [];
-	if (!fetched.size) return out;
+	faces_memo = { key, faces: out };
 	for (const sheet of document.styleSheets) {
 		let rules: CSSRuleList;
 		try {
@@ -1667,6 +1673,7 @@ export function _reset_beacon(): void {
 	snapshot_firsts = 0;
 	landing_page = null;
 	seen_resources = [];
+	faces_memo = null;
 	visit_islands = [];
 	visit_firsts = [];
 	visit_shifts = [];
