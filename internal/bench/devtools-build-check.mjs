@@ -267,6 +267,21 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	check('a font that hid its text is named in a build too', font.length === 1 && font[0].startsWith("Text in 'SlowFace'") && !font[0].includes('SwapFace'), JSON.stringify(font).slice(0, 200));
 	const img = await read('/dt-img', 'image-oversized');
 	check('an image far bigger than shown is named in a build too', img.length === 1 && img[0].startsWith('big.png (2000×1333, shown at 300×200)') && !img[0].includes('flat.png'), JSON.stringify(img).slice(0, 200));
+	const dom = await read('/dt-dom', 'dom-large');
+	check('a page of many elements names its island in a build too', dom.length === 1 && dom[0].includes('of them inside DenseList'), JSON.stringify(dom).slice(0, 200));
+}
+// PRELOADS NOTHING USES, in a build: only once 3 s have passed since load
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	const p = await c.newPage();
+	await p.goto(base + '/dt-preload-never', { waitUntil: 'load' });
+	await p.waitForTimeout(3500);
+	await p.click('[data-og-panel-toggle]').catch(() => {});
+	await p.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+	const pre = await p.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'preload-never-used').map((x) => x.message));
+	await c.close();
+	check('a preload nothing uses is named in a build too', pre.length === 1 && pre[0].startsWith('right.png (image,') && pre[0].includes('orphan.woff2') && !pre[0].includes('flat.png'), JSON.stringify(pre).slice(0, 200));
 }
 await browser.close();
 

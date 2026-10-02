@@ -841,8 +841,7 @@ function preloads_never_used(load_end: number): { url: string; as: string; bytes
 
 /** THE PAGE'S SIZE IN ELEMENTS, when it is big (1,500 or more): how many, the deepest nesting, the
  *  element with the most children, and the islands holding the most of them (an island hydrates
- *  over each of its own). One pass in document order (a parent always comes before its children);
- *  asked again only when the count changed. */
+ *  over each of its own). One walk of the tree; asked again only when the count changed. */
 type DomShape = { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
 let dom_memo: { n: number; shape: DomShape | null } | null = null;
 function dom_shape(): DomShape | null {
@@ -850,7 +849,7 @@ function dom_shape(): DomShape | null {
 	const n = all.length;
 	if (dom_memo?.n === n) return dom_memo.shape;
 	let shape: DomShape | null = null;
-	// (one pass is ~3.5 ms on 17,000 elements: past 60,000 the count alone says enough)
+	// (one walk is ~0.9 ms on 17,000 elements: past 60,000 the count alone says enough)
 	if (n >= 60_000) shape = { nodes: n, depth: 0, deepest: '', widest: { at: '', children: 0 }, islands: [] };
 	else if (n >= 1500) {
 		// (`ul.results`: its id, else its first own class — not the scoping class Svelte adds)
@@ -863,16 +862,30 @@ function dom_shape(): DomShape | null {
 				}
 			return `${el.tagName.toLowerCase()}${el.id ? `#${el.id.slice(0, 30)}` : cls ? `.${cls.slice(0, 30)}` : ''}`;
 		};
-		const depth_of = new Map<Element, number>();
+		// (a walk down first children and across siblings, the depth a counter: no map of 17,000
+		// elements — 0.9 ms where a Map of depths took ~15)
 		let depth = 0;
-		let deepest: Element = all[0];
-		let widest: Element = all[0];
-		for (let i = 0; i < n; i++) {
-			const el = all[i];
-			const d = (el.parentElement ? (depth_of.get(el.parentElement) ?? 0) : 0) + 1;
-			depth_of.set(el, d);
+		const root = document.documentElement;
+		let deepest: Element = root;
+		let widest: Element = root;
+		let widest_n = root.childElementCount;
+		let el: Element | null = root;
+		let d = 1;
+		while (el) {
 			if (d > depth) (depth = d), (deepest = el);
-			if (el.childElementCount > widest.childElementCount) widest = el;
+			const kids = el.childElementCount;
+			if (kids > widest_n) (widest_n = kids), (widest = el);
+			const first: Element | null = el.firstElementChild;
+			if (first) {
+				el = first;
+				d++;
+				continue;
+			}
+			while (el && el !== root && !el.nextElementSibling) {
+				el = el.parentElement;
+				d--;
+			}
+			el = el && el !== root ? el.nextElementSibling : null;
 		}
 		const islands: { fp: string; nodes: number }[] = [];
 		for (const r of document.querySelectorAll(ISLAND_SEL)) {
@@ -880,7 +893,7 @@ function dom_shape(): DomShape | null {
 			if (fp) islands.push({ fp, nodes: r.getElementsByTagName('*').length });
 		}
 		islands.sort((a, b) => b.nodes - a.nodes);
-		shape = { nodes: n, depth, deepest: brief(deepest), widest: { at: brief(widest), children: widest.childElementCount }, islands: islands.slice(0, 3) };
+		shape = { nodes: n, depth, deepest: brief(deepest), widest: { at: brief(widest), children: widest_n }, islands: islands.slice(0, 3) };
 	}
 	dom_memo = { n, shape };
 	return shape;
