@@ -776,6 +776,8 @@ export interface PathDelta {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** finding codes about the recording's conditions, not the page's code (compare leaves them out) */
+const RUN_STATE_CODES = new Set(['cold-start', 'cold-instance', 'profiler-overhead', 'heap-filled-before', 'dev-mode', 'low-confidence', 'busy-instance', 'runs-set-aside', 'summary', 'phases']);
 const median = (xs: number[]) =>
 	xs.length ? [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] : 0;
 
@@ -1025,6 +1027,10 @@ export function compare_reports(
 	};
 	const a_codes = new Set(a.findings.map(code_of));
 	const b_codes = new Set(b.findings.map(code_of));
+	// what the RECORDING's conditions say, not the code: a cold start (the instance's first render
+	// of the page), the profiler's own cost, a heap earlier requests filled, the dev server, too few
+	// samples — present in one profile and not the next with the same code, so never "new" or "fixed"
+	const of_the_code = (f: string) => !RUN_STATE_CODES.has(code_of(f));
 	// paths by owner name
 	const paths = new Map<string, PathDelta>();
 	for (const g of A.paths ?? []) {
@@ -1092,8 +1098,8 @@ export function compare_reports(
 			// BY KIND (the code before the colon), not the text: a finding's numbers move every run, and
 			// by text every finding read as new. A kind only one side has is the change. Each text once
 			// (two findings can read the same, and a view keys the list by its text)
-			added: [...new Set(b.findings.filter((f) => !a_codes.has(code_of(f))))],
-			gone: [...new Set(a.findings.filter((f) => !b_codes.has(code_of(f))))]
+			added: [...new Set(b.findings.filter((f) => of_the_code(f) && !a_codes.has(code_of(f))))],
+			gone: [...new Set(a.findings.filter((f) => of_the_code(f) && !b_codes.has(code_of(f))))]
 		},
 		paths: [...paths.values()].sort((x, y) => Math.abs(y.d_ms) - Math.abs(x.d_ms)),
 		gc_makers: [...gc_makers.values()]

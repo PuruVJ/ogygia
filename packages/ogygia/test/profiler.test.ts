@@ -4465,6 +4465,13 @@ describe('compare + history', () => {
 		expect(new Set(c.functions.map((r) => r.key)).size).toBe(c.functions.length);
 		// a finding text that repeats is listed once
 		expect(c.findings).toEqual({ added: ['other'], gone: ['same text'] });
+		// what the recording's conditions say (a cold start, a heap earlier requests filled) is never
+		// "new" or "fixed": the same code profiled twice has it once and not the next time
+		const cold = compare_reports(
+			{ ...one('a'), findings: ['cold-start: The first render paid 40 ms…', 'n-plus-one: 12 calls…'] },
+			{ ...one('b'), findings: ['heap-filled-before: This profile started with 600 MB…'] }
+		);
+		expect(cold.findings).toEqual({ added: [], gone: ['n-plus-one: 12 calls…'] });
 	});
 
 	it('groups page reports into a per-page history, oldest first, by median', () => {
