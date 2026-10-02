@@ -386,6 +386,8 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 					warnings: (visit.warnings ?? []).filter((w) => (w.t ?? 0) >= t),
 					// the slowest interaction, when it happened on this page
 					interaction,
+					// the forced layouts of this page's time, on its clock like the islands
+					forced_layout: (visit.forced_layout ?? []).filter((f) => f.start >= t).map((f) => ({ ...f, start: f.start - t, end: f.end - t })),
 					// (this page's navigation, on its clock like the islands: the one that brought it here)
 					navs: ((page.visit as PageInput['visit'])?.navs ?? []).filter((n) => n.t >= t - 1).map((n) => ({ ...n, t: n.t - t, fetched: n.fetched - t, styled: n.styled - t, swapped: n.swapped - t }))
 				}

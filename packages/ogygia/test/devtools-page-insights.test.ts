@@ -77,6 +77,36 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('forced layout', () => {
+	const run = (forced: NonNullable<NonNullable<PageInput['visit']>['forced_layout']>) =>
+		analyze_page(
+			page({
+				visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], forced_layout: forced },
+				islands: [
+					{ fp: 'aaaa000011112222', entry: '/src/lib/Thrash.svelte', t0: 80, loaded: 90, turn: 95, done: 410 },
+					{ fp: 'bbbb000011112222', entry: '/src/lib/Batched.svelte', t0: 80, loaded: 90, turn: 410, done: 420 }
+				]
+			}),
+			[
+				{ fp: 'aaaa000011112222', name: 'Thrash', kind: 'island' } as RegionFact,
+				{ fp: 'bbbb000011112222', name: 'Batched', kind: 'island' } as RegionFact
+			],
+			[],
+			3000
+		).findings.find((f) => f.code === 'forced-layout');
+	it('the runtime task is put on the island whose hydration overlaps it most; a page script by its file', () => {
+		const f = run([
+			{ start: 81, end: 409, ms: 317, url: 'http://x/runtime/schedule.ts', fn: '' },
+			{ start: 900, end: 960, ms: 40, url: 'http://x/assets/widget.js?v=3', fn: 'measure' }
+		]);
+		expect(f?.message.startsWith('Thrash while it hydrated (317 ms) and widget.js (measure) (40 ms) made the browser recalculate style and layout')).toBe(true);
+		expect(f?.fps).toEqual(['aaaa000011112222']);
+	});
+	it('under 30 ms for each: quiet', () => {
+		expect(run([{ start: 411, end: 419, ms: 8, url: 'http://x/runtime/schedule.ts', fn: '' }])).toBeUndefined();
+	});
+});
+
 describe('images far below the first screen that loaded at start', () => {
 	const at = (images: NonNullable<NonNullable<PageInput['visit']>['images_eager_below']>) =>
 		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], images_eager_below: images } }), [{ fp: 'ffff000011112222', name: 'Gallery', kind: 'island' } as RegionFact], [], 3000).findings.find((f) => f.code === 'images-eager-below');

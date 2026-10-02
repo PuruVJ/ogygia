@@ -1490,6 +1490,29 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// FORCED LAYOUT (/dt-thrash: Thrash writes a width and reads it back 1,500 times as it wakes — the
+	// plant; Batched does every write before every read — the decoy): Thrash named on its island by
+	// its hydrate window (the browser blames the runtime's task), Batched never; /dt-big quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1000);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'forced-layout').map((x) => ({ m: x.message, fps: x.fps })));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-thrash');
+		const quiet = await read('/dt-big');
+		const checks = [
+			['Thrash named while it hydrated, linked', lab.length === 1 && lab[0].m.startsWith('Thrash while it hydrated (') && lab[0].fps.length === 1],
+			['Batched never, nor the runtime file', lab.length === 1 && !lab[0].m.includes('Batched') && !lab[0].m.includes('schedule')],
+			['a page that reads no layout mid-change quiet', quiet.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} forced layout: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, quiet })}` : ''}`);
+	}
 	// IMAGES FAR BELOW THE FIRST SCREEN THAT LOADED AT START (/dt-img-below: right.png?a and ?b 3,000px
 	// down, eager — the plants; the hero on the first screen, a lazy copy below, a small one below —
 	// the decoys): the two named once as ×2; /dt-img (all on the first screen) quiet

@@ -134,6 +134,8 @@ let visit_shifts: Shift[] = [];
 let visit_longtasks: { t: number; ms: number }[] = [];
 /** main-thread ms per script URL (query off), from long animation frames */
 let visit_scripts = new Map<string, { ms: number; count: number }>();
+/** scripts that forced style and layout (5 ms or more), each with its window on the page's clock */
+let visit_forced: { start: number; end: number; ms: number; url: string; fn: string }[] = [];
 /** THE SLOWEST INTERACTION (the one INP reports), split the way the browser times it: the wait
  *  before its handlers ran, the handlers, and the paint after. `target`: what was clicked, told
  *  briefly; `fp`: the island it was in */
@@ -566,7 +568,15 @@ function observe_vitals(): void {
 	// name each script that ran in them — a third party's cost is measured even before the CPU
 	// sampler starts, and where the sampler cannot see into it
 	observe('long-animation-frame', (entries) => {
-		for (const e of entries as (PerformanceEntry & { scripts?: { sourceURL?: string; duration?: number; startTime?: number; invoker?: string; sourceFunctionName?: string }[] })[]) {
+		for (const e of entries as (PerformanceEntry & { scripts?: { sourceURL?: string; duration?: number; startTime?: number; invoker?: string; sourceFunctionName?: string; forcedStyleAndLayoutDuration?: number }[] })[]) {
+			// the scripts that made the browser lay the page out mid-run (a read after a write), with
+			// when: an island's hydration runs inside the runtime's own task, so the report finds the
+			// island by its hydrate window, not by the script's file
+			for (const s of e.scripts ?? [])
+				if ((s.forcedStyleAndLayoutDuration ?? 0) >= 5 && make_room(visit_forced, 30, (f) => f.start)) {
+					const start = s.startTime ?? e.startTime;
+					visit_forced.push({ start: r2(start), end: r2(start + (s.duration ?? 0)), ms: r2(s.forcedStyleAndLayoutDuration ?? 0), url: (s.sourceURL ?? '').slice(0, 300), fn: (s.sourceFunctionName ?? '').slice(0, 80) });
+				}
 			// each frame, kept briefly, with its scripts: what an interaction waited behind or ran
 			visit_frames.push({
 				start: r2(e.startTime),
@@ -1129,6 +1139,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(dom ? { dom } : {}),
 		...(wasted?.length ? { preloads_unused: wasted } : {}),
 		...(below.length ? { images_eager_below: below } : {}),
+		...(visit_forced.length ? { forced_layout: visit_forced.slice() } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
@@ -1866,6 +1877,7 @@ export function _reset_beacon(): void {
 	visit_shifts = [];
 	visit_longtasks = [];
 	visit_scripts = new Map();
+	visit_forced = [];
 	visit_interaction = null;
 	visit_interaction_id = 0;
 	visit_interaction_span = null;

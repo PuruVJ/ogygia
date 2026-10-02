@@ -154,6 +154,9 @@ export interface PageInput {
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
 		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
 		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+		/** scripts that forced style and layout (5 ms or more): their window, the forced ms, the
+		 *  script's file and entry function (an island's hydration shows as the runtime's own task) */
+		forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
 		/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
 		images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
 		/** the page's size in elements, when 1,500 or more: the deepest nesting, the element with the
@@ -933,6 +936,42 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix: 'Serve each image near the size it shows at: a `srcset` with a few widths and a `sizes` that says how wide it shows (the browser picks the smallest that is sharp), or resize the file itself.',
 			fps: [...new Set(big.flatMap((i) => (i.fp ? [i.fp] : [])))]
 		});
+	}
+
+	// ── forced layout: a script read sizes after changing the page, so the browser laid it out again
+	// inside the task. An island's hydration runs in the runtime's own task: the island whose hydrate
+	// window overlaps the script most is the one named ──
+	const forced = page.visit?.forced_layout ?? [];
+	if (forced.length) {
+		const file = (u: string) => {
+			const q = u.indexOf('?');
+			const p = q === -1 ? u : u.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1) || 'an inline script';
+		};
+		const groups = new Map<string, { label: string; fp?: string; ms: number; n: number }>();
+		for (const f of forced) {
+			let best: PageIsland | undefined;
+			let best_overlap = 0;
+			for (const i of page.islands) {
+				const from = i.turn ?? i.loaded;
+				const overlap = Math.min(i.done, f.end) - Math.max(from, f.start);
+				if (overlap > best_overlap) (best_overlap = overlap), (best = i);
+			}
+			const key = best ? best.fp : `${f.url}\0${f.fn}`;
+			const label = best ? `${name_of(best.fp, best.entry)} while it hydrated` : `${file(f.url)}${f.fn ? ` (${f.fn})` : ''}`;
+			const g = groups.get(key);
+			if (g) (g.ms += f.ms), g.n++;
+			else groups.set(key, { label, ...(best ? { fp: best.fp } : {}), ms: f.ms, n: 1 });
+		}
+		const top = [...groups.values()].filter((g) => g.ms >= 30).sort((a, b) => b.ms - a.ms);
+		if (top.length)
+			findings.push({
+				code: 'forced-layout',
+				severity: 'warn',
+				message: `${list(top.slice(0, 3).map((g) => `${g.label} (${Math.round(g.ms)} ms)`))} made the browser recalculate style and layout in the middle of running: the code read sizes or positions (offsetWidth, getBoundingClientRect, getComputedStyle) after changing the page, so each read laid the page out again.`,
+				fix: 'Read every size first, then make every change (or put the changes in one requestAnimationFrame); never read layout between DOM writes in a loop. Sizes CSS can handle (width from the content, a fixed aspect ratio) need no read at all.',
+				fps: top.flatMap((g) => (g.fp ? [g.fp] : []))
+			});
 	}
 
 	// ── images far below the first screen that loaded at start: their bytes competed with the
