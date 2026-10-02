@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_page, boolean_attr_at, first_difference, rate, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
+import { analyze_page, boolean_attr_at, encoding_only, first_difference, rate, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
 import { without_comments } from '../src/runtime/beacon.js';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({
@@ -49,6 +49,34 @@ describe('rate', () => {
 		expect(rate('lcp', 4000)).toBe('poor');
 		expect(rate('cls', 0.05)).toBe('good');
 		expect(rate('cls', 0.3)).toBe('poor');
+	});
+});
+
+describe('a markup change that is only URL encoding', () => {
+	it('encoding_only: the same once decoded; a real change, or a stray %, is not', () => {
+		expect(encoding_only('<form action="?/remote=1a3/sign">', '<form action="?/remote=1a3%2Fsign">')).toBe(true);
+		expect(encoding_only('<p>a</p>', '<p>b</p>')).toBe(false);
+		expect(encoding_only('<p>50% off</p>', '<p>50% of</p>')).toBe(false);
+		expect(encoding_only('<p>x</p>', '<p>x</p>')).toBe(false);
+	});
+
+	it('a note, not markup-changed (which still names a real change beside it)', () => {
+		const r = analyze_page(
+			page({
+				islands: [{ fp: 'form', t0: 60, loaded: 80, done: 90, changed: true }, { fp: 'clock', t0: 60, loaded: 80, done: 90, changed: true }],
+				snapshots: [
+					{ fp: 'form', ssr: '<form action="?/remote=1a3/sign"></form>', hydrated: '<form action="?/remote=1a3%2Fsign"></form>' },
+					{ fp: 'clock', ssr: '<p>server</p>', hydrated: '<p>browser</p>' }
+				]
+			}),
+			[region('form', 'GuestbookForm'), region('clock', 'Clock')],
+			[],
+			500
+		);
+		expect(r.findings.find((f) => f.code === 'markup-encoded')?.message).toContain('GuestbookForm rendered the same markup');
+		const changed = r.findings.find((f) => f.code === 'markup-changed')?.message ?? '';
+		expect(changed.startsWith('Clock rendered different markup')).toBe(true);
+		expect(changed).not.toContain('GuestbookForm');
 	});
 });
 

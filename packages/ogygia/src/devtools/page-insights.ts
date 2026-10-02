@@ -453,6 +453,19 @@ export function rate(key: RatedVital['key'], value: number): Rating {
 	return value <= good ? 'good' : value < poor ? 'fair' : 'poor';
 }
 
+/** Two markups that differ, and differ only in percent-encoding (`a/b` against `a%2Fb`): equal
+ *  once both are decoded. A stray `%` that is not an escape (text reading "50%") makes it `false`. */
+export function encoding_only(a: string, b: string): boolean {
+	a = without_comments(a);
+	b = without_comments(b);
+	if (a === b || (!a.includes('%') && !b.includes('%'))) return false;
+	try {
+		return decodeURIComponent(a) === decodeURIComponent(b);
+	} catch {
+		return false;
+	}
+}
+
 /** Where two strings first differ, as a short "server … / now …" pair (the markup-changed proof). */
 export function first_difference(a: string, b: string, span = 60): { at: number; server: string; now: string } | null {
 	// (Svelte's block markers are re-anchored on hydration and nobody sees them)
@@ -594,7 +607,26 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		});
 
 	// ── the markup changed on hydration (no recovery: Svelte patched it in place) ──
-	const changed = rows.filter((r) => r.changed && !r.recovered);
+	// (an island whose two markups differ only in how a URL is percent-encoded — `a/b` against
+	// `a%2Fb`, a form action SvelteKit's server writes one way and its browser side the other — shows
+	// the same thing: a note, not "the page changes as it wakes")
+	const all_changed = rows.filter((r) => r.changed && !r.recovered);
+	const encoded = all_changed.filter((r) => {
+		const s = page.snapshots?.find((x) => x.fp === r.fp);
+		return !!s && encoding_only(s.ssr, s.hydrated);
+	});
+	const changed = all_changed.filter((r) => !encoded.includes(r));
+	if (encoded.length) {
+		const s = page.snapshots!.find((x) => x.fp === encoded[0].fp)!;
+		const d = first_difference(s.ssr, s.hydrated);
+		findings.push({
+			code: 'markup-encoded',
+			severity: 'info',
+			message: `${list(encoded.map((r) => r.name))} rendered the same markup in the browser but for how a URL is encoded${d ? ` (server "${clip(d.server)}", browser "${clip(d.now)}")` : ''}: the same address, nothing changes on screen.`,
+			fix: 'Nothing to fix for a visitor. If a test or a cache compares the HTML byte for byte, write the URL the same way on both sides (both encoded, or neither).',
+			fps: encoded.map((r) => r.fp)
+		});
+	}
 	if (changed.length) {
 		const snap = page.snapshots?.find((s) => s.fp === changed[0].fp);
 		const d = snap ? first_difference(snap.ssr, snap.hydrated) : null;
