@@ -906,7 +906,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
 			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? [],
-			...(why && 'note' in why && why.note ? { dev_compile: true as const } : {})
+			// (the page compiling on its first request: the first byte's note only — a dev CSS shift is not a compile)
+			...(v.key === 'ttfb' && why && 'note' in why && why.note ? { dev_compile: true as const } : {})
 		});
 	}
 
@@ -1708,7 +1709,7 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
  * in, an image arrived with no size set, a web font swapped in, an island hydrated. The fix is the
  * cause's; an unknown one says what to look at.
  */
-function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
+function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[]; note?: true } | null {
 	const shifts = [...page.shifts].sort((a, b) => a.t - b.t);
 	if (!shifts.length) return null;
 	// the sessions: a new one after a second's gap, or past five seconds long
@@ -1745,12 +1746,15 @@ function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: 
 		const s = q === -1 ? u : u.slice(0, q);
 		return s.slice(s.lastIndexOf('/') + 1) || u;
 	};
-	type Cause = { at: number; kind: 'hole' | 'img' | 'font' | 'island'; name: string };
+	type Cause = { at: number; kind: 'hole' | 'img' | 'font' | 'island' | 'devcss'; name: string };
 	const causes: Cause[] = [];
 	for (const h of page.hole_waits ?? []) if (h.shown_at !== undefined) causes.push({ at: h.shown_at + h.wait_ms, kind: 'hole', name: h.name });
 	for (const r of page.visit?.resources ?? []) {
 		if (r.type === 'img') causes.push({ at: r.end, kind: 'img', name: file(r.url) });
 		else if (r.type === 'font') causes.push({ at: r.end, kind: 'font', name: file(r.url) });
+		// (the dev server serves a component's CSS as a module — `X.svelte?svelte&type=style` — and
+		// adds it with JavaScript after the first paint; a build links it in the head)
+		else if (page.dev && r.url.includes('type=style')) causes.push({ at: r.end, kind: 'devcss', name: file(r.url) });
 	}
 	for (const r of rows) causes.push({ at: r.done, kind: 'island', name: r.name });
 	let cause: Cause | undefined;
@@ -1764,7 +1768,9 @@ function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: 
 					? ` It came right after the image ${cause.name} arrived: it had no size set, so the page made room when it loaded.`
 					: cause.kind === 'font'
 						? ` It came right after the web font ${cause.name} arrived: text re-laid out in it.`
-						: ` It came right after ${cause.name} hydrated: the island's size changed as it woke.`;
+						: cause.kind === 'devcss'
+							? ` It came right after ${cause.name}'s styles arrived: the dev server adds a component's CSS with JavaScript after the first paint, so the page re-laid out in them. A build links that CSS in the head — this shift is the dev server's, not your page's.`
+							: ` It came right after ${cause.name} hydrated: the island's size changed as it woke.`;
 	const fix = !cause
 		? 'Nothing the page timed explains it: look for content added above what is on screen (a banner, an ad, a late script), or an animation that moves layout instead of `transform`.'
 		: cause.kind === 'hole'
@@ -1773,11 +1779,15 @@ function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: 
 				? 'Set the image\'s `width` and `height` (or an `aspect-ratio`) so its space is kept before it loads.'
 				: cause.kind === 'font'
 					? 'Match the fallback font\'s metrics (`size-adjust`, `ascent-override`), or preload the font, so the swap does not move text.'
-					: 'Render the island at its final size on the server (the same content, or a placeholder of that height), so waking it changes nothing on screen.';
+					: cause.kind === 'devcss'
+						? 'Nothing to fix for this shift: check the page on a build (preview or deploy), where the CSS is in the head before the first paint.'
+						: 'Render the island at its final size on the server (the same content, or a placeholder of that height), so waking it changes nothing on screen.';
 	return {
 		message: `The worst burst of shifts added ${round3(best_sum)}, ${best.length === 1 ? 'in one shift' : `over ${best.length} shifts in ${Math.round(best[best.length - 1].t - best[0].t)} ms`}: what moved was ${list(top.map(([n, v]) => `${n} (${round3(v)})`))}.${because}`,
 		fix,
-		fps: [...new Set(best.map((s) => s.fp).filter((f): f is string => !!f))]
+		fps: [...new Set(best.map((s) => s.fp).filter((f): f is string => !!f))],
+		// (the dev server's own CSS injection: a note, like a page compiling on its first request)
+		...(cause?.kind === 'devcss' ? { note: true as const } : {})
 	};
 }
 

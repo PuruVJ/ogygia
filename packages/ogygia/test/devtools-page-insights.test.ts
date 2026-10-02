@@ -52,6 +52,27 @@ describe('rate', () => {
 	});
 });
 
+describe('a shift the dev server made', () => {
+	it('right after a component\'s CSS module arrived (dev): a note that it is the dev server\'s; on a build, not', () => {
+		const at = (dev: boolean) =>
+			analyze_page(
+				page({
+					...(dev ? { dev: true as const } : {}),
+					vitals: { cls: 0.26 },
+					visit: { nav: { res_start: 5 }, paints: { fcp: 30 }, viewport: [1280, 800], resources: [{ url: 'http://x/src/lib/Hero.svelte?svelte&type=style&lang.css', type: 'script', start: 36, end: 38 }] },
+					shifts: [{ t: 58, value: 0.26, tag: 'div "Fast HTML only"' }]
+				}),
+				[],
+				[],
+				500
+			).findings.find((f) => f.code === 'shift-cause' || f.code === 'vital-cls');
+		const dev = at(true)!;
+		expect(dev.severity).toBe('info');
+		expect(dev.message).toContain("Hero.svelte's styles arrived: the dev server adds a component's CSS with JavaScript");
+		expect(at(false)!.message).not.toContain('dev server');
+	});
+});
+
 describe('a markup change that is only URL encoding', () => {
 	it('encoding_only: the same once decoded; a real change, or a stray %, is not', () => {
 		expect(encoding_only('<form action="?/remote=1a3/sign">', '<form action="?/remote=1a3%2Fsign">')).toBe(true);
