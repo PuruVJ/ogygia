@@ -125,6 +125,8 @@ export interface Visit {
 	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[];
 	/** the `@font-face` rules behind the fonts it fetched: family, font-display, the fetched files */
 	font_faces?: { family: string; display: string; urls: string[] }[];
+	/** images whose pixels are 4× or more what their box shows (the screen counted), files ≥ 50 KB */
+	images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
 	/** islands whose own file failed to load and fell back to their stable name */
 	entry_fallbacks?: { entry: string; src: string; recovered: boolean }[];
 	/** content-named files (`/immutable/`) the browser fetched again: revalidated (a 304), or
@@ -361,6 +363,25 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		font_faces.push({ family, display, urls });
 	}
 	if (font_faces.length) visit.font_faces = font_faces;
+	const images_oversized: NonNullable<Visit['images_oversized']> = [];
+	const pair = (x: unknown, max: number): [number, number] | undefined => {
+		if (!Array.isArray(x) || x.length !== 2) return undefined;
+		const a = num(x[0], max);
+		const b = num(x[1], max);
+		return a && b ? [a, b] : undefined;
+	};
+	for (const i of (Array.isArray(v.images_oversized) ? v.images_oversized : []).slice(0, 10) as Record<string, unknown>[]) {
+		const url = str(i?.url, 500);
+		const natural = pair(i?.natural, 1e5);
+		const shown = pair(i?.shown, 1e5);
+		const dpr = num(i?.dpr, 10);
+		const bytes = num(i?.bytes, 1e9);
+		// (the beacon's own rule, held again: a record that breaks it is not one)
+		if (!url || !natural || !shown || !dpr || !bytes || natural[0] * natural[1] < shown[0] * shown[1] * dpr * dpr * 4) continue;
+		const fp = str(i.fp, 40);
+		images_oversized.push({ url, natural, shown, dpr, bytes, ...(fp ? { fp } : {}) });
+	}
+	if (images_oversized.length) visit.images_oversized = images_oversized;
 	const entry_fallbacks: NonNullable<Visit['entry_fallbacks']> = [];
 	for (const f of (Array.isArray(v.entry_fallbacks) ? v.entry_fallbacks : []).slice(0, 20) as Record<string, unknown>[]) {
 		const entry = str(f?.entry, 300);
@@ -561,6 +582,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		// (each record carries the whole list so far: the later one has them all)
 		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
 		...(b.font_faces ?? a.font_faces ? { font_faces: b.font_faces ?? a.font_faces } : {}),
+		...(b.images_oversized ?? a.images_oversized ? { images_oversized: b.images_oversized ?? a.images_oversized } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)

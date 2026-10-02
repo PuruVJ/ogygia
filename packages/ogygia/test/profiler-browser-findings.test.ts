@@ -290,6 +290,18 @@ test('text a late font kept invisible reaches the report; a bad face record is d
 	expect(f?.message).toContain("In the browser: Text in 'SlowFace' (slow.woff2, 1550 ms after the first paint) stayed invisible");
 });
 
+test('an image sent far bigger than shown reaches the report; a record that breaks the rule is dropped', () => {
+	const big = { url: 'https://a.test/dt-img/big.png', natural: [2000, 1333], shown: [300, 200], dpr: 1, bytes: 352_183 };
+	const v = parse_visit('/dt-img', {
+		...raw,
+		images_oversized: [big, { ...big, url: 'https://a.test/fits.png', natural: [300, 200] }, { ...big, natural: [2000] }]
+	})!;
+	expect(v.images_oversized).toEqual([big]);
+	expect(merge_visits(v, { ...v, images_oversized: undefined }).images_oversized).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'image-oversized');
+	expect(f?.message).toBe('In the browser: big.png (2000×1333, shown at 300×200) is sent far bigger than shown: about 336 KB of 344 KB is pixels nobody sees.');
+});
+
 test('a hole answered late: waited from the first paint, split by its server time', () => {
 	const v = parse_visit('/lab', {
 		...raw,

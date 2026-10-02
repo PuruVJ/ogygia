@@ -2794,6 +2794,26 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		expect(lcp.message).toContain(
 			'LCP is 2600 ms while the server answered in 120 ms (TTFB; the render itself 41.0 ms): 2480 ms of the user'
 		);
+		// (no visit to split it: the general words)
+		expect(lcp.message).toContain('assets, fonts, hydration.');
+		// the report's own visit splits it: the largest paint's download was most of the wait
+		const split = derive_findings(analyze(p), meta_page() as never, {
+			net: [],
+			mem: [],
+			vitals: { n: 2, ttfb: 120, fcp: 400, lcp: 2600, cls: 0.02, inp: null },
+			visit: {
+				at: 1,
+				nav: { res_start: 120 },
+				paints: { fcp: 400, lcp: 2600, lcp_url: 'https://a.test/img/hero.jpg?w=1' },
+				resources: [{ url: 'https://a.test/img/hero.jpg?w=1', type: 'img', start: 300, req_start: 310, end: 2500 }],
+				longtasks: [],
+				islands: [],
+				firsts: [],
+				shifts: []
+			}
+		} as never).find((f) => f.code === 'lcp-gap')!;
+		expect(split.message).toContain('most of it (2190 ms) downloading the largest paint, hero.jpg.');
+		expect(split.fix).toContain('make it smaller');
 		const ttfb = say({ ttfb: 900, fcp: 950, lcp: 1000, cls: 0, inp: null }).find(
 			(f) => f.code === 'ttfb-gap'
 		)!;

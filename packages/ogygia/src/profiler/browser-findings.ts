@@ -115,6 +115,7 @@ export function browser_page_report(
 			...(visit.warnings ? { warnings: visit.warnings } : {}),
 			...(visit.preload_misses ? { preload_misses: visit.preload_misses } : {}),
 			...(visit.font_faces ? { font_faces: visit.font_faces } : {}),
+			...(visit.images_oversized ? { images_oversized: visit.images_oversized } : {}),
 			...(visit.navs ? { navs: visit.navs } : {}),
 			// (named from the report's island rows, by the identity each one carries)
 			...(visit.entry_fallbacks

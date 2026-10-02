@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { explain_held_open, lcp_font, type HeldOpen } from '../devtools/page-insights.js';
+import { explain_held_open, lcp_font, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -2829,18 +2829,47 @@ function accuracy_findings(
 			: (meta.request?.ms ?? 0);
 		const ttfb = v.ttfb ?? 0;
 		if (v.lcp - ttfb >= Math.max(500, ttfb) && server > 0) {
-			// (the report's own visit: a text paint that waited for a hidden font names that font)
-			const font = lcp_font(extras.visit);
+			// (the report's own visit: a text paint that waited for a hidden font names that font;
+			// else the LCP's own split, when one part after the first byte is most of the wait)
+			const own = extras.visit;
+			const font = lcp_font(own);
+			const parts = own?.paints?.lcp_url
+				? vital_parts({ vitals: {}, visit: { nav: own.nav, paints: own.paints, resources: own.resources }, islands: [], firsts: [], shifts: [], longtasks: [] }, 'lcp')
+				: null;
+			const after = parts?.filter((x) => x.key !== 'ttfb') ?? [];
+			const top = after.length ? after.reduce((a, b) => (b.ms > a.ms ? b : a)) : null;
+			const gap = (own?.paints?.lcp ?? v.lcp) - ttfb;
+			const lcp_file = own?.paints?.lcp_url ? own.paints.lcp_url.slice(own.paints.lcp_url.lastIndexOf('/') + 1).split('?')[0] : '';
+			const part = !font && top && top.ms >= gap / 2 ? top : null;
+			const PART_WORDS: Record<string, [string, string]> = {
+				delay: [
+					`most of it (${fmt_ms(part?.ms ?? 0)} ms) before the browser began fetching the largest paint, ${lcp_file}.`,
+					'The browser found the largest paint late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"`, and preload it with `fetchpriority="high"`.'
+				],
+				load: [
+					`most of it (${fmt_ms(part?.ms ?? 0)} ms) downloading the largest paint, ${lcp_file}.`,
+					'The largest paint is slow to download: make it smaller (a modern format, sized to how it shows, `srcset`) and serve it from close by. The server is not the bottleneck here.'
+				],
+				render: [
+					`most of it (${fmt_ms(part?.ms ?? 0)} ms) after the largest paint, ${lcp_file}, had arrived: something held its paint.`,
+					'The largest paint was ready but did not paint: render-blocking styles or scripts, or an island that shows it on waking. Render it with the server HTML.'
+				]
+			};
+			const words = part ? PART_WORDS[part.key] : undefined;
 			warn(
 				'lcp-gap',
 				`In the browser LCP is ${fmt_ms(v.lcp)} ms while the server answered in ${fmt_ms(ttfb)} ms (TTFB; the render itself ${fmt_ms(server)} ms): ${fmt_ms(v.lcp - ttfb)} ms of the user's wait is after the HTML arrived — ` +
 					(font
 						? `the largest paint is text that waited for its font '${font.family}' (${font.file}, in at ${fmt_ms(font.end)} ms), invisible until it came.`
-						: 'assets, fonts, hydration.'),
+						: words
+							? words[0]
+							: 'assets, fonts, hydration.'),
 				{
 					fix: font
 						? "Give the font's @font-face `font-display: swap` (or `optional`) and preload the file: the text paints with the HTML, and the server is not the bottleneck here."
-						: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.'
+						: words
+							? words[1]
+							: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.'
 				}
 			);
 		} else if (ttfb > 0 && ttfb >= server * 2 && ttfb - server >= 200) {
