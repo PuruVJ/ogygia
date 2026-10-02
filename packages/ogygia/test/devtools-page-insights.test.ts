@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_page, boolean_attr_at, encoding_only, first_difference, lcp_font, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
+import { analyze_page, boolean_attr_at, encoding_only, first_difference, lcp_font, lcp_rivals, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
 import { without_comments } from '../src/runtime/beacon.js';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({
@@ -93,6 +93,27 @@ describe('images far below the first screen that loaded at start', () => {
 	});
 	it('under 100 KB in all: quiet', () => {
 		expect(at([{ url: 'http://x/i/a.jpg', top: 3000, bytes: 60_000 }])).toBeUndefined();
+	});
+	it('the ones whose download overlapped a slow hero are named in its LCP split', () => {
+		const hero = 'http://x/hero.jpg';
+		const visit: PageInput['visit'] = {
+			nav: { res_start: 20 },
+			paints: { fcp: 100, lcp: 2700, lcp_url: hero, lcp_tag: 'img' },
+			viewport: [1400, 900],
+			resources: [
+				{ url: hero, type: 'img', start: 40, req_start: 45, end: 2650 },
+				{ url: 'http://x/i/right.png?a', type: 'img', start: 50, end: 900 },
+				{ url: 'http://x/i/late.png', type: 'img', start: 2800, end: 3000 }
+			],
+			images_eager_below: [
+				{ url: 'http://x/i/right.png?a', top: 3400, bytes: 360_000 },
+				{ url: 'http://x/i/late.png', top: 3400, bytes: 200_000 }
+			]
+		};
+		expect(lcp_rivals(visit)).toEqual({ bytes: 360_000, files: ['right.png'] });
+		const f = analyze_page(page({ visit, vitals: { lcp: 2700 } }), [], [], 5000).findings.find((x) => x.code === 'slow-lcp');
+		expect(f?.message).toContain('Beside it, 352 KB of images far below the first screen downloaded (right.png).');
+		expect(f?.fix).toContain('`loading="lazy"`');
 	});
 });
 

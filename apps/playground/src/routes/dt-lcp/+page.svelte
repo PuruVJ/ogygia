@@ -10,7 +10,15 @@
 	const quick = page.url.searchParams.has('quick');
 	// `?lazy`: the hero carries loading="lazy" (the plant); a lazy image far below is the decoy
 	const lazy = page.url.searchParams.has('lazy');
+	// `?below`: two ~350 KB images far below the first screen, not lazy: they download beside the
+	// slow hero (the plant: named as what the hero's download shared the network with)
+	const below = page.url.searchParams.has('below');
 </script>
 
 <h1>lcp lab</h1>
 <Hero {late} {quick} {lazy} />
+{#if below}
+	<div style="height: 3000px"></div>
+	<img src="/dt-img/right.png?la" width="400" height="300" alt="planted: below, eager" />
+	<img src="/dt-img/right.png?lb" width="400" height="300" alt="planted: below, eager" />
+{/if}

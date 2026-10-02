@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { DOM_LARGE, explain_held_open, lcp_font, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
+import { DOM_LARGE, explain_held_open, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -2878,6 +2878,8 @@ function accuracy_findings(
 				]
 			};
 			const words = part ? PART_WORDS[part.key] : undefined;
+			// (a download, a late start or a font wait that shared the network with images nobody saw yet)
+			const rivals = font || part?.key === 'load' || part?.key === 'delay' ? lcp_rivals(own) : null;
 			warn(
 				'lcp-gap',
 				`In the browser LCP is ${fmt_ms(v.lcp)} ms while the server answered in ${fmt_ms(ttfb)} ms (TTFB; the render itself ${fmt_ms(server)} ms): ${fmt_ms(v.lcp - ttfb)} ms of the user's wait is after the HTML arrived — ` +
@@ -2885,13 +2887,16 @@ function accuracy_findings(
 						? `the largest paint is text that waited for its font '${font.family}' (${font.file}, in at ${fmt_ms(font.end)} ms), invisible until it came.`
 						: words
 							? words[0]
-							: 'assets, fonts, hydration.'),
+							: 'assets, fonts, hydration.') +
+					(rivals ? ` Beside it, ${fmt_bytes(rivals.bytes)} of images far below the first screen downloaded (${rivals.files.join(', ')}).` : ''),
 				{
-					fix: font
-						? "Give the font's @font-face `font-display: swap` (or `optional`) and preload the file: the text paints with the HTML, and the server is not the bottleneck here."
-						: words
-							? words[1]
-							: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.'
+					fix:
+						(font
+							? "Give the font's @font-face `font-display: swap` (or `optional`) and preload the file: the text paints with the HTML, and the server is not the bottleneck here."
+							: words
+								? words[1]
+								: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.') +
+						(rivals ? ' And give the images below the first screen `loading="lazy"`: they took a share of the network the largest paint needed.' : '')
 				}
 			);
 		} else if (ttfb > 0 && ttfb >= server * 2 && ttfb - server >= 200) {

@@ -1544,6 +1544,29 @@ export function lcp_font(visit: PageInput['visit'] | null | undefined): { family
 	return best;
 }
 
+/** WHAT THE LARGEST PAINT'S DOWNLOAD SHARED THE NETWORK WITH: images far below the first screen,
+ *  not lazy, whose own download overlapped the largest paint's file (or, a text paint, the wait from
+ *  the first byte to the paint). Shared by the Page tab's split and the profiler's LCP gap. */
+export function lcp_rivals(visit: PageInput['visit'] | null | undefined): { bytes: number; files: string[] } | null {
+	const below = visit?.images_eager_below;
+	const p = visit?.paints;
+	if (!visit || !below?.length || typeof p?.lcp !== 'number') return null;
+	const resources = visit.resources ?? [];
+	const res = p.lcp_url ? resources.find((r) => r.url === p.lcp_url) : undefined;
+	const from = res ? (res.req_start ?? res.start) : (visit.nav?.res_start ?? 0);
+	const to = res ? res.end : p.lcp;
+	let bytes = 0;
+	const files: string[] = [];
+	for (const i of below) {
+		const r = resources.find((x) => x.url === i.url);
+		if (!r || r.start >= to || r.end <= from) continue;
+		bytes += i.bytes;
+		const f = i.url.slice(i.url.lastIndexOf('/') + 1).split('?')[0];
+		if (!files.includes(f)) files.push(f);
+	}
+	return bytes ? { bytes, files } : null;
+}
+
 function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
 	const p = page.visit?.paints;
 	const lcp = p?.lcp ?? page.vitals.lcp;
@@ -1591,7 +1614,14 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 					: top.key === 'load'
 						? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
 						: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
-	return { message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.`, fix, fps: p?.lcp_fp ? [p.lcp_fp] : [] };
+	// (a download or a late start that shared the network with images nobody saw yet)
+	const rivals = top.key === 'load' || top.key === 'delay' || top.key === 'font' ? lcp_rivals(page.visit) : null;
+	const kb = (n: number) => `${Math.round(n / 1024)} KB`;
+	return {
+		message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.${rivals ? ` Beside it, ${kb(rivals.bytes)} of images far below the first screen downloaded (${rivals.files.join(', ')}).` : ''}`,
+		fix: rivals ? `${fix} And give the images below the first screen \`loading="lazy"\`: they took a share of the network the largest paint needed.` : fix,
+		fps: p?.lcp_fp ? [p.lcp_fp] : []
+	};
 }
 
 /**

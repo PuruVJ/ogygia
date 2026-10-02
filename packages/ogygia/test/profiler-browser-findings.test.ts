@@ -320,6 +320,28 @@ test('a preload nothing used reaches the report, on a visit with nothing else to
 	expect(f?.message).toContain('In the browser: right.png (image, 352.0 KB: no image on the page shows it) was preloaded, but nothing on the page used it 3 s after load');
 });
 
+test('images below the first screen that loaded at start reach the report', () => {
+	const v = parse_visit('/dt-img-below', {
+		at: 1,
+		nav: { req_start: 1, res_start: 100, res_end: 120 },
+		paints: {},
+		resources: [],
+		longtasks: [],
+		islands: [],
+		firsts: [],
+		shifts: [],
+		images_eager_below: [
+			{ url: 'https://a.test/dt-img/right.png?a', top: 3420, bytes: 360_473 },
+			{ url: 'https://a.test/dt-img/right.png?b', top: 3420, bytes: 360_473 },
+			{ url: 'https://a.test/x.png', top: 'far' }
+		]
+	})!;
+	expect(v.images_eager_below).toHaveLength(2);
+	expect(merge_visits(v, { ...v, images_eager_below: undefined }).images_eager_below).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'images-eager-below');
+	expect(f?.message).toContain('In the browser: right.png ×2 (704 KB, 3420px down) load at start though far below the first screen');
+});
+
 test('a hole answered late: waited from the first paint, split by its server time', () => {
 	const v = parse_visit('/lab', {
 		...raw,

@@ -129,6 +129,8 @@ export interface Visit {
 	images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
 	/** preloads (image, font, stylesheet) nothing on the page used 3 s after load */
 	preloads_unused?: { url: string; as: string; bytes: number }[];
+	/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
+	images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
 	/** the page's size in elements, when 1,500 or more (depth 0: past 60,000, only counted) */
 	dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
 	/** islands whose own file failed to load and fell back to their stable name */
@@ -393,6 +395,16 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (url && as) preloads_unused.push({ url, as, bytes: num(p.bytes, 1e9) ?? 0 });
 	}
 	if (preloads_unused.length) visit.preloads_unused = preloads_unused;
+	const images_eager_below: NonNullable<Visit['images_eager_below']> = [];
+	for (const i of (Array.isArray(v.images_eager_below) ? v.images_eager_below : []).slice(0, 10) as Record<string, unknown>[]) {
+		const url = str(i?.url, 500);
+		const top = num(i?.top, 1e7);
+		const bytes = num(i?.bytes, 1e9);
+		if (!url || top === undefined || !bytes) continue;
+		const fp = str(i.fp, 40);
+		images_eager_below.push({ url, top, bytes, ...(fp ? { fp } : {}) });
+	}
+	if (images_eager_below.length) visit.images_eager_below = images_eager_below;
 	const d = v.dom as Record<string, unknown> | undefined;
 	const nodes = num(d?.nodes, 1e7);
 	if (d && nodes) {
@@ -609,6 +621,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.dom ?? a.dom ? { dom: b.dom ?? a.dom } : {}),
 		// (asked once 3 s after load: the record that has it)
 		...(b.preloads_unused ?? a.preloads_unused ? { preloads_unused: b.preloads_unused ?? a.preloads_unused } : {}),
+		...(b.images_eager_below ?? a.images_eager_below ? { images_eager_below: b.images_eager_below ?? a.images_eager_below } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)
