@@ -2,6 +2,7 @@
 // The comment on each says which slow pattern the profiler should name (or that it must not).
 // PATTERN almost-same-document: the page is the same every render but for the Price island's live value
 import type { PageServerLoad } from './$types';
+import { readFlags } from '$lib/latecomer/flags';
 
 export const prerender = false;
 
@@ -12,6 +13,8 @@ async function get(origin: string, name: string, ms: number): Promise<{ name: st
 
 export const load: PageServerLoad = async ({ url, fetch }) => {
 	const origin = url.origin;
+	// (the flags read per request: planted in lib/latecomer/flags.ts)
+	if (readFlags() === 0) throw new Error('no flags');
 
 	// PATTERN late-island-wait: the reviews only feed an island that wakes when scrolled to
 	// (PATTERN same-answer too: the test service answers the same bytes every time)

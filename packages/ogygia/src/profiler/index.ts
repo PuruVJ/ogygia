@@ -126,7 +126,7 @@ import {
 	embedded_source,
 	load_embedded_maps
 } from './embedded-maps.js';
-import { route_imports } from './route-imports.js';
+import { module_imports, route_imports } from './route-imports.js';
 import { app_relative } from './app-path.js';
 import { fnv1a32 } from '../runtime/hash.js';
 import { attr_sites, doc_diff } from './doc-diff.js';
@@ -3319,6 +3319,19 @@ class Profiler {
 				for (const rel of rels) {
 					const text = read(rel);
 					if (text) files.push({ path: join(process.cwd(), 'src', rel), file: rel, text });
+				}
+				// …and the app modules they import, one step (a `$lib` helper that reads a file per
+				// request is the common case): each found once, at most 30
+				const own = new Set(files.map((f) => f.file));
+				for (const f of files.slice()) {
+					for (const rel of module_imports(f.file, f.text)) {
+						if (own.size >= 30 + rels.length) break;
+						if (own.has(rel)) continue;
+						const text = read(rel);
+						if (!text) continue;
+						own.add(rel);
+						files.push({ path: join(process.cwd(), 'src', rel), file: rel, text });
+					}
 				}
 				const p = counted_sync_io(s.call_counts, files);
 				if (p) patterns.push(p);

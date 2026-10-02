@@ -39,7 +39,7 @@ vi.mock('virtual:ogygia/profiler-maps', () => ({
 		}
 	})
 }));
-import { route_imports } from '../src/profiler/route-imports.js';
+import { module_imports, route_imports } from '../src/profiler/route-imports.js';
 import { sourcemap_resolver } from '../src/profiler/analyze.js';
 
 // The profiler's maps travel inside the code, so any adapter ships them; a map that points at another
@@ -279,6 +279,34 @@ describe('a chunk with no map: what a build does to lines', () => {
 		);
 		const at = (l: number) => r.resolve(chunk, l - 1, 0)?.line;
 		expect([2, 3, 4, 6, 7, 8, 9, 10, 11, 13].map(at)).toEqual([2, 3, 4, 7, 8, 8, 8, 8, 9, 9]);
+	});
+});
+
+describe('module_imports', () => {
+	it("a server file's $lib and relative script imports, resolved, with the files each may be; packages and components left out", () => {
+		const src = [
+			"import { readFileSync } from 'node:fs';",
+			"import { readFlags } from '$lib/latecomer/flags';",
+			'import {',
+			'\ta,',
+			'\tb',
+			"} from '../shared/util.js';",
+			"import Card from './Card.svelte';",
+			"export { c } from './c.ts';",
+			"const x = 'not/an/import';"
+		].join('\n');
+		expect(module_imports('routes/p/+page.server.ts', src)).toEqual([
+			'lib/latecomer/flags.ts',
+			'lib/latecomer/flags.js',
+			'lib/latecomer/flags',
+			'lib/latecomer/flags/index.ts',
+			'lib/latecomer/flags/index.js',
+			'routes/shared/util.ts',
+			'routes/shared/util.js',
+			'routes/shared/util/index.ts',
+			'routes/shared/util/index.js',
+			'routes/p/c.ts'
+		]);
 	});
 });
 
