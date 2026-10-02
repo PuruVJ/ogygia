@@ -77,6 +77,30 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('preloaded, never used', () => {
+	it('names each file, what it is, and why nothing used it', () => {
+		const f = analyze_page(
+			page({
+				visit: {
+					nav: { res_start: 5 },
+					paints: {},
+					viewport: [1280, 800],
+					preloads_unused: [
+						{ url: 'http://x/dt-img/right.png', as: 'image', bytes: 360_473 },
+						{ url: 'http://x/dt-font/orphan.woff2?v=2', as: 'font', bytes: 2048 }
+					]
+				}
+			}),
+			[],
+			[],
+			8000
+		).findings.find((x) => x.code === 'preload-never-used');
+		expect(f?.message).toBe(
+			'right.png (image, 352.0 KB: no image on the page shows it) and orphan.woff2 (font, 2.0 KB: no @font-face names it) were preloaded, but nothing on the page used them 3 s after load: the bytes competed with the files the first screen needed.'
+		);
+	});
+});
+
 describe('a page of many elements', () => {
 	type Dom = NonNullable<NonNullable<PageInput['visit']>['dom']>;
 	const at = (dom: Dom, regions: RegionFact[] = []) =>

@@ -1490,6 +1490,34 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// PRELOADED, NEVER USED (/dt-preload-never: right.png never shown, orphan.woff2 in no @font-face —
+	// the plants; flat.png in an <img>, big.png?bg as a CSS background, used.woff2 in an @font-face —
+	// the decoys): only the plants named, and only once 3 s have passed since load; /dt-preload's
+	// downloaded-twice plant is its own finding, never this one
+	{
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.goto(base + '/dt-preload-never', { waitUntil: 'load' });
+		const read = () => page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'preload-never-used').map((x) => x.message));
+		const early = await read();
+		await page.waitForTimeout(3500);
+		const late = await read();
+		await page.close();
+		const twice = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await twice.goto(base + '/dt-preload', { waitUntil: 'load' });
+		await twice.waitForTimeout(3500);
+		const other = await twice.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'preload-never-used').length);
+		await twice.close();
+		const m = late[0] ?? '';
+		const checks = [
+			['right.png and orphan.woff2 named', late.length === 1 && m.startsWith('right.png (image,') && m.includes('orphan.woff2 (font,')],
+			['the used ones never', !m.includes('flat.png') && !m.includes('big.png') && !m.includes('used.woff2')],
+			['not before 3 s after load', early.length === 0],
+			['a preload downloaded twice is not this', other === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} preloaded, never used: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ early, late, other })}` : ''}`);
+	}
 	// A PAGE OF MANY ELEMENTS (/dt-dom: DenseList, an island of ~3,600 — the plant; /dt-dom-static: the
 	// same list as page markup; /dt-big: ~1,000): the island named on /dt-dom, the static twin's size
 	// named with no island, /dt-big quiet

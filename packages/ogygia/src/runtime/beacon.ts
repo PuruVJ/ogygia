@@ -766,6 +766,79 @@ function oversized_images(): { url: string; natural: [number, number]; shown: [n
 	return out;
 }
 
+/** PRELOADED, NEVER USED: a `<link rel="preload">` of an image, a font or a stylesheet the page
+ *  fetched and, 3 s after load (when the browser itself warns), nothing on the page uses — no
+ *  `<img>` / `srcset` / CSS rule names the image, no `@font-face` the font, no stylesheet link the
+ *  sheet. Its bytes competed with what the first screen needed. A responsive preload
+ *  (`imagesrcset`) and anything a cross-origin sheet might use are left out (it cannot be read).
+ *  Asked once, after that moment; null before it. No regex. */
+let preloads_memo: { url: string; as: string; bytes: number }[] | null = null;
+function preloads_never_used(load_end: number): { url: string; as: string; bytes: number }[] | null {
+	if (preloads_memo) return preloads_memo;
+	if (!(load_end > 0) || performance.now() - load_end < 3000) return null;
+	const out: { url: string; as: string; bytes: number }[] = [];
+	const links = document.querySelectorAll<HTMLLinkElement>('link[rel="preload"][href][as]');
+	const css: string[] = [];
+	let opaque = false;
+	const faces = new Set<string>();
+	let sheets_read = false;
+	const read_sheets = () => {
+		if (sheets_read) return;
+		sheets_read = true;
+		for (const sheet of document.styleSheets) {
+			let rules: CSSRuleList;
+			try {
+				rules = sheet.cssRules;
+			} catch {
+				opaque = true;
+				continue;
+			}
+			for (const rule of rules) {
+				if (rule instanceof CSSFontFaceRule) {
+					const src = rule.style.getPropertyValue('src');
+					let at = src.indexOf('url(');
+					while (at !== -1) {
+						const end = src.indexOf(')', at);
+						if (end === -1) break;
+						try {
+							faces.add(new URL(src.slice(at + 4, end).trim().split('"').join('').split("'").join(''), sheet.href ?? location.href).href);
+						} catch {
+							/* not a URL */
+						}
+						at = src.indexOf('url(', end);
+					}
+				} else css.push(rule.cssText);
+			}
+		}
+	};
+	for (let i = 0; i < links.length && i < 30; i++) {
+		const l = links[i];
+		const as = l.getAttribute('as') ?? '';
+		if ((as !== 'image' && as !== 'font' && as !== 'style') || l.hasAttribute('imagesrcset')) continue;
+		const url = l.href;
+		const e = performance.getEntriesByName(url, 'resource')[0] as PerformanceResourceTiming | undefined;
+		if (!e) continue;
+		let used = false;
+		if (as === 'style') {
+			for (const s of document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]')) if (s.href === url) used = true;
+		} else if (as === 'image') {
+			for (const img of document.images) if (img.currentSrc === url || img.src === url || (img.srcset && img.srcset.includes(l.getAttribute('href') ?? url))) used = true;
+			if (!used) for (const s of document.querySelectorAll('source[srcset]')) if ((s.getAttribute('srcset') ?? '').includes(l.getAttribute('href') ?? url)) used = true;
+			if (!used) {
+				read_sheets();
+				const raw = l.getAttribute('href') ?? url;
+				used = opaque || css.some((t) => t.includes(url) || t.includes(raw));
+			}
+		} else {
+			read_sheets();
+			used = opaque || faces.has(url);
+		}
+		if (!used) out.push({ url: url.slice(0, 500), as, bytes: e.encodedBodySize || e.transferSize || 0 });
+	}
+	preloads_memo = out;
+	return out;
+}
+
 /** THE PAGE'S SIZE IN ELEMENTS, when it is big (1,500 or more): how many, the deepest nesting, the
  *  element with the most children, and the islands holding the most of them (an island hydrates
  *  over each of its own). One pass in document order (a parent always comes before its children);
@@ -971,9 +1044,11 @@ function build_visit(): Record<string, unknown> | null {
 	}
 	let oversized: ReturnType<typeof oversized_images> = [];
 	let dom: DomShape | null = null;
+	let wasted: { url: string; as: string; bytes: number }[] | null = null;
 	try {
 		oversized = oversized_images();
 		dom = dom_shape();
+		wasted = preloads_never_used(nav.loadEventEnd);
 	} catch {
 		/* no document */
 	}
@@ -1010,6 +1085,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(fonts.length ? { font_faces: fonts } : {}),
 		...(oversized.length ? { images_oversized: oversized } : {}),
 		...(dom ? { dom } : {}),
+		...(wasted?.length ? { preloads_unused: wasted } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
@@ -1725,6 +1801,7 @@ export function _reset_beacon(): void {
 	seen_resources = [];
 	faces_memo = null;
 	dom_memo = null;
+	preloads_memo = null;
 	visit_islands = [];
 	visit_firsts = [];
 	visit_shifts = [];

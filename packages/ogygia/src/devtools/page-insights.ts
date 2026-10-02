@@ -147,6 +147,8 @@ export interface PageInput {
 		named?: string[];
 		/** files a preload fetched and something else downloaded again (the preload went unused) */
 		preload_misses?: PreloadMiss[];
+		/** preloads (image, font, stylesheet) nothing on the page used 3 s after load */
+		preloads_unused?: { url: string; as: string; bytes: number }[];
 		/** the `@font-face` rules behind the fonts it fetched (family, font-display, the fetched files) */
 		font_faces?: { family: string; display: string; urls: string[] }[];
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
@@ -1276,6 +1278,25 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'warn',
 			message: `${list(misses.map((m) => `${file(m.url)} (${kb(m.bytes)})`))} ${misses.length === 1 ? 'was' : 'were'} preloaded, then downloaded again: the browser could not use the preload${misses.length === 1 ? '' : 's'}, and the page paid ${kb(wasted)} twice.`,
 			fix: `${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}. The preload and the request must match exactly, or the browser fetches the file again.`,
+			fps: []
+		});
+	}
+
+	// ── preloaded, never used: nothing on the page uses the file 3 s after load ──
+	const never = page.visit?.preloads_unused ?? [];
+	if (never.length) {
+		const file = (u: string) => {
+			const q = u.indexOf('?');
+			const p = q === -1 ? u : u.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1) || u;
+		};
+		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
+		const WHAT: Record<string, string> = { image: 'no image on the page shows it', font: 'no @font-face names it', style: 'no stylesheet link loads it' };
+		findings.push({
+			code: 'preload-never-used',
+			severity: 'warn',
+			message: `${list(never.map((p) => `${file(p.url)} (${p.as}${p.bytes ? `, ${kb(p.bytes)}` : ''}: ${WHAT[p.as] ?? 'nothing uses it'})`))} ${never.length === 1 ? 'was' : 'were'} preloaded, but nothing on the page used ${never.length === 1 ? 'it' : 'them'} 3 s after load: the bytes competed with the files the first screen needed.`,
+			fix: 'Remove the preload, or point it at the file the page really uses: the same URL the `<img>` or CSS asks for, the exact file the `@font-face` names.',
 			fps: []
 		});
 	}

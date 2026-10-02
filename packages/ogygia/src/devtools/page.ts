@@ -375,6 +375,8 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 					nav: {},
 					resources: [],
 					preload_misses: [],
+					// (the document's preloads: the first page's)
+					preloads_unused: [],
 					// (the document's fonts: a navigation's are the page before's too)
 					font_faces: [],
 					refetched: [],
