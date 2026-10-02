@@ -300,7 +300,9 @@ export function collectIslandDepModulepreloads(
 					if (f) acc = merge_facts(acc, f);
 				}
 			}
-			if (acc) interactivity[entryUrl] = acc;
+			// (a remote function it calls — a streaming query, a form, a command — changes it after it
+			// wakes with no handler of its own: a live clock, a remote form spread onto <form>)
+			if (acc) interactivity[entryUrl] = { ...acc, remotes: remotes[entryUrl].length };
 		}
 	}
 	// THE RUNTIME's own static imports, keyed by its URL like an island's: the few chunks it shares
@@ -428,6 +430,12 @@ export interface IslandInteractivityFacts {
 	effects: number;
 	binds: number;
 	actions: number;
+	/** remote modules its closure can call (set per island from the remotes scan) */
+	remotes?: number;
+	/** `{await …}` / `{#await …}` in its markup: a value that lands after it wakes */
+	awaits?: number;
+	/** context reads and rune-module imports: state another island can change */
+	shared?: number;
 	files: number;
 }
 
@@ -437,6 +445,11 @@ const STATE_RE = /\$state(?:\.raw)?\s*\(/g;
 const EFFECT_RE = /\$effect(?:\.pre)?\s*\(/g;
 const BIND_RE = /\sbind:[a-zA-Z]/g;
 const ACTION_RE = /\suse:[a-zA-Z]/g;
+const AWAIT_RE = /\{\s*(?:#\s*)?await\s/g;
+// shared state another island can change: a context read, or an import of a rune module
+// (`*.svelte.js` / `*.svelte.ts` — where shared `$state` lives). Conservative on purpose: "make it a
+// lake" on an island showing another island's live counter would freeze it
+const SHARED_RE = /\bgetContext\s*(?:<[^>]*>\s*)?\(|\bfrom\s*['"][^'"]+\.svelte\.(?:js|ts)['"]/g;
 const count = (src: string, re: RegExp) => (src.match(re) ?? []).length;
 
 /** Count a component source's interactivity markers. */
@@ -447,6 +460,8 @@ export function interactivity_facts(src: string): IslandInteractivityFacts {
 		effects: count(src, EFFECT_RE),
 		binds: count(src, BIND_RE),
 		actions: count(src, ACTION_RE),
+		awaits: count(src, AWAIT_RE),
+		shared: count(src, SHARED_RE),
 		files: 1
 	};
 }
@@ -459,6 +474,8 @@ function merge_facts(a: IslandInteractivityFacts | undefined, b: IslandInteracti
 		effects: a.effects + b.effects,
 		binds: a.binds + b.binds,
 		actions: a.actions + b.actions,
+		awaits: (a.awaits ?? 0) + (b.awaits ?? 0),
+		shared: (a.shared ?? 0) + (b.shared ?? 0),
 		files: a.files + b.files
 	};
 }

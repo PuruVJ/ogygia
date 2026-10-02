@@ -165,10 +165,24 @@ describe('collectIslandDepModulepreloads', () => {
 				effects: 1,
 				binds: 1,
 				actions: 1,
+				awaits: 0,
+				shared: 0,
 				files: 1
 			});
 			const { interactivity } = collectIslandDepModulepreloads(bundle, undefined, undefined, undefined, read);
-			expect(interactivity[FACADE]).toEqual({ handlers: 2, state: 1, effects: 1, binds: 1, actions: 1, files: 2 });
+			expect(interactivity[FACADE]).toEqual({ handlers: 2, state: 1, effects: 1, binds: 1, actions: 1, awaits: 0, shared: 0, remotes: 0, files: 2 });
+		});
+
+		test('an await in the markup is a value that lands after the wake (a live query, a promise)', () => {
+			expect(interactivity_facts('<p>{await c}</p>{#await p then v}{v}{/await}').awaits).toBe(2);
+			expect(interactivity_facts('<p>{c.current}</p>').awaits).toBe(0);
+		});
+
+		test('state another island can change: a context read, a rune module import', () => {
+			expect(interactivity_facts("<script>import { roomCtx } from '$lib/room-context.svelte.js'; const c = roomCtx.get();</script>{c.count}").shared).toBe(1);
+			expect(interactivity_facts("<script>import { getContext } from 'svelte'; const n = getContext('room');</script>").shared).toBe(1);
+			expect(interactivity_facts("<script lang=\"ts\">const g = getContext<string>('greeting');</script>").shared).toBe(1);
+			expect(interactivity_facts("<script>import X from './X.svelte';</script><X />").shared).toBe(0);
 		});
 
 		test('what is inside each chunk: app files first, packages named, the runtimes plainly, capped', () => {
@@ -234,6 +248,9 @@ describe('collectIslandDepModulepreloads', () => {
 				effects: 0,
 				binds: 0,
 				actions: 0,
+				awaits: 0,
+				shared: 0,
+				remotes: 0,
 				files: 1
 			});
 		});

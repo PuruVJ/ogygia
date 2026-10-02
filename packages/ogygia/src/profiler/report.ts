@@ -2089,14 +2089,17 @@ function ogygia_findings(
 				r.interactivity.state +
 				r.interactivity.effects +
 				r.interactivity.binds +
-				r.interactivity.actions ===
+				r.interactivity.actions +
+				(r.interactivity.remotes ?? 0) +
+				(r.interactivity.awaits ?? 0) +
+				(r.interactivity.shared ?? 0) ===
 				0
 	);
 	if (inert.length) {
 		const js = inert.reduce((s, r) => s + (island_js_bytes(r, extras.weights) ?? 0), 0);
 		warn(
 			'wake-inert',
-			`${names(inert.map(island_name))} wake${inert.length === 1 ? 's' : ''} (${names([...new Set(inert.map((r) => r.wake))])}) but the build found no event handlers, $state, $effect, bind: or use: in ${inert.length === 1 ? 'its' : 'their'} components` +
+			`${names(inert.map(island_name))} wake${inert.length === 1 ? 's' : ''} (${names([...new Set(inert.map((r) => r.wake))])}) but the build found no event handlers, $state, $effect, bind:, use:, remote function, await or shared state in ${inert.length === 1 ? 'its' : 'their'} components` +
 				(js ? ` — ${fmt_kb(js)} of JS loads for markup that never changes.` : '.'),
 			{
 				fix: "Ship them as lakes (wake: 'none'): the server markup stays, the module never downloads."

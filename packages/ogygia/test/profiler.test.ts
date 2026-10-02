@@ -1707,6 +1707,13 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const g = derive_findings(analyze(p1), meta as never, { net: [], mem: [] } as never);
 		expect(g.find((x) => x.code === 'wake-inert')!.message).not.toContain('KB of JS');
 		expect(g.find((x) => x.code === 'islands-js-heavy')).toBeUndefined();
+		// an island whose code calls a remote function (a streaming query, a form spread onto <form>)
+		// or awaits in its markup changes after it wakes with no handler of its own: never inert
+		for (const marks of [{ remotes: 1 }, { awaits: 1 }]) {
+			const live_rows = rows.map((r) => (r.fp === 'bbbbbbbbbbbbbbbb' ? { ...r, interactivity: { ...r.interactivity!, ...marks } } : r));
+			const live_meta = { ...meta, requests: meta.requests.map((r) => ((r as { og?: object }).og ? { ...r, og: { ...og, island_rows: live_rows } } : r)) };
+			expect(derive_findings(analyze(p1), live_meta as never, extras).find((x) => x.code === 'wake-inert')).toBeUndefined();
+		}
 	});
 
 	it('never-hydrated: the beacon reported other islands but not this one', () => {

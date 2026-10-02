@@ -56,6 +56,12 @@ export interface IslandInteractivity {
 	effects: number;
 	binds: number;
 	actions: number;
+	/** remote functions its code can call (a query that streams, a form, a command) and `await` in
+	 *  its markup: what changes it after it wakes without a handler of its own (older builds: absent) */
+	remotes?: number;
+	awaits?: number;
+	/** context reads and rune-module imports: state another island can change */
+	shared?: number;
 	/** `.svelte` files in the island's closure that were scanned */
 	files: number;
 }
