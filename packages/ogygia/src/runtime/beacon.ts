@@ -583,9 +583,12 @@ function observe_vitals(): void {
 			// island by its hydrate window, not by the script's file
 			// a long frame while the page scrolled: the visitor's scroll waited on it (the scripts in it,
 			// biggest first — a scroll handler's work shows as its invoker)
+			// (a frame's entry comes after it ends — often after the early visit already left, with no
+			// later send due: what it says — its scripts, a forced layout, a scroll it held — would wait
+			// for the page to hide, the send most often lost. /dt-thrash's forced layout missed one
+			// profile of three so. The visit goes again, debounced and capped)
+			if (early_visit_done) resend_soon();
 			if (e.duration >= 50 && scrolled_near(e.startTime) && make_room(visit_scroll_jank, 20, (j) => j.start)) {
-				// (it happens after the load's sends: the visit goes again, not only when the page hides)
-				if (early_visit_done) resend_soon();
 				visit_scroll_jank.push({
 					start: r2(e.startTime),
 					ms: r2(e.duration),
