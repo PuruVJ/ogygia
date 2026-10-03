@@ -209,7 +209,8 @@ export type RuntimeEventInput =
 			name: 'region.hydrate.done';
 			entry?: string;
 			fp?: string;
-			/** Wall-clock ms from hydrate start to mounted. */
+			/** Wall-clock ms from hydrate start to mounted: its `$effect`s and onMount included (they
+			 *  run in a microtask after Svelte's `hydrate()`; the event is sent after them). */
 			ms: number;
 	  }
 	| {

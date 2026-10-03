@@ -1121,13 +1121,12 @@ class OgygiaRegion extends HTMLElement {
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
 			this.setAttribute('data-hydrated', '');
 			if (BEACON) beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
-			if (DEVTOOLS)
-				dt_emit({
-					domain: 'runtime',
-					name: 'region.hydrate.done',
-					...dt_ids(this),
-					ms: now_ms() - dt_t0
-				});
+			// (after its effects: Svelte's `hydrate()` runs `$effect` and onMount in a microtask it queued
+			// during the call, and a microtask queued now runs after it — mounted means they ran)
+			if (DEVTOOLS) {
+				const ids = dt_ids(this);
+				queueMicrotask(() => dt_emit({ domain: 'runtime', name: 'region.hydrate.done', ...ids, ms: now_ms() - dt_t0 }));
+			}
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			// (a failed island stops being watched; its copy, if kept, counts as changed from here)
