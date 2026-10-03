@@ -582,6 +582,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// ── one row per island hydration (the latest per fingerprint: a re-wake after a nav replaces it) ──
 	const latest = new Map<string, PageIsland>();
 	for (const i of page.islands) latest.set(i.fp, i);
+	// (the dev server adds a component's CSS with JavaScript after the first paint: a shift right after
+	// one of those landed is the CSS's, not the island's waking — /blocks: the CSS at 42 ms, the shift
+	// at 47 ms, the island done at 64 ms, in and out of the island's window load to load. A build links
+	// its CSS in the head: none of this there)
+	const dev_css = page.dev ? (page.visit?.resources ?? []).filter((r) => r.url.includes('type=style')).map((r) => r.end) : [];
+	const by_dev_css = (t: number) => dev_css.some((e) => e <= t + 5 && t - e <= 250);
 	const rows: IslandRow[] = [];
 	for (const i of latest.values()) {
 		const fact = by_fp.get(i.fp);
@@ -589,7 +595,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// (the island's own work: its hydrate step and the effects Svelte runs right after it)
 		const end = work_end(i);
 		let shift = 0;
-		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= end + SHIFT_WINDOW_MS) shift += s.value;
+		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= end + SHIFT_WINDOW_MS && !by_dev_css(s.t)) shift += s.value;
 		let lt = 0;
 		for (const t of page.longtasks) {
 			const a = Math.max(t.t, lo);

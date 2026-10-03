@@ -106,6 +106,25 @@ describe('listeners that hold scrolling', () => {
 	});
 });
 
+describe("a shift the dev server's CSS made is not the island's waking", () => {
+	it('dev: a shift right after a component CSS module landed is left out; a build counts it', () => {
+		const at = (dev: boolean) =>
+			analyze_page(
+				page({
+					...(dev ? { dev: true } : {}),
+					visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], resources: [{ url: 'http://x/src/lib/CtaCounter.svelte?svelte&type=style&lang.css', type: 'other', start: 30, end: 42 }] },
+					islands: [{ fp: 'aaaa000011112222', entry: '/src/lib/CtaCounter.svelte', t0: 20, loaded: 40, turn: 45, done: 60 }],
+					shifts: [{ t: 47, value: 0.12, fp: 'aaaa000011112222' }]
+				}),
+				[{ fp: 'aaaa000011112222', name: 'CtaCounter', kind: 'island' } as RegionFact],
+				[],
+				3000
+			).findings.find((f) => f.code === 'hydration-shift');
+		expect(at(true)).toBeUndefined();
+		expect(at(false)?.message).toContain('Hydrating CtaCounter (CLS 0.12) moved the layout');
+	});
+});
+
 describe("an island's effects are its own work", () => {
 	it('effects run after hydrate() returns: the long task is the island\'s, the next island waited behind it', () => {
 		const r = analyze_page(
