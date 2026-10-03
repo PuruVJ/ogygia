@@ -944,6 +944,8 @@ interface Ctx {
 	intl_locals: ReadonlySet<string>;
 	/** names the function made TEXT above this line (`let out = ''`, `let html: string`) */
 	text_locals: ReadonlySet<string>;
+	/** names the function built a RegExp into above this line, each with the line that built it */
+	regexp_locals: ReadonlyMap<string, { line: number; code: string }>;
 	/** the next few source lines (a value scanned here and reassigned just below) */
 	after: readonly string[];
 }
@@ -973,6 +975,33 @@ function intl_locals(body: readonly string[]): Set<string> {
 			if (t[k + 1] === '=' && t[k + 2] === 'new' && t[k + 3] === 'Intl') out.add(t[k]);
 	}
 	return out;
+}
+/** the names in a function body that hold a RegExp built right there (`const re = new RegExp(…)`),
+ *  each with its line: `first` is the body's first line number */
+function regexp_locals(body: readonly string[], first: number): Map<string, { line: number; code: string }> {
+	const out = new Map<string, { line: number; code: string }>();
+	for (let i = 0; i < body.length; i++) {
+		// (a cheap test before tokenizing every line of the body)
+		if (!body[i].includes('RegExp')) continue;
+		const t = tokens(body[i]);
+		for (let k = 0; k + 3 < t.length; k++)
+			if (t[k + 1] === '=' && ((t[k + 2] === 'new' && t[k + 3] === 'RegExp') || (t[k + 2] === 'RegExp' && t[k + 3] === '(')))
+				out.set(t[k], { line: first + i, code: body[i].trim() });
+	}
+	return out;
+}
+/** (a check, whose own ticks are the build's: a `replace` or a `split` with it makes new text, work
+ *  that stays after the fix — its line is not moved) */
+const REGEXP_USE: ReadonlySet<string> = new Set(['test', 'exec']);
+/** the RegExp the same function built that this line checks with: `re.test(s)`, `re.exec(s)` — V8
+ *  often charges a `new RegExp` to its first use, the line below it */
+function used_local_regexp(t: readonly string[], locals: ReadonlyMap<string, { line: number; code: string }>): { line: number; code: string } | undefined {
+	if (!locals.size) return undefined;
+	for (let k = 0; k + 3 < t.length; k++) {
+		const at = locals.get(t[k]);
+		if (at && t[k + 1] === '.' && REGEXP_USE.has(t[k + 2]) && t[k + 3] === '(') return at;
+	}
+	return undefined;
 }
 /** the names in a function body declared as text: `let out = ''`, `` let html = `<ul>` ``, `let s: string` */
 function text_locals(body: readonly string[]): Set<string> {
@@ -1085,7 +1114,9 @@ const RULES: Rule[] = [
 			after:
 				'const re = new RegExp(escape(term), "i"); // once per request\nconst hits = items.filter((p) => re.test(p.name));'
 		},
-		match: (t, c) => c.repeated && !!constructs(t, REGEXP)
+		// (or the line that first runs it, below: the build's time is often charged there — the site
+		// is moved to the build's own line)
+		match: (t, c) => c.repeated && (!!constructs(t, REGEXP) || !!used_local_regexp(t, c.regexp_locals))
 	},
 	{
 		// the time is INSIDE the pattern: V8 runs a compiled regex as its own code (`RegExp: <source>`
@@ -1478,6 +1509,8 @@ export function find_patterns(input: PatternInput): Pattern[] {
 	/** kind → its sites; a library call groups per library function (one renderer called per item
 	 *  is one problem, a timer in another loop is another) */
 	const found = new Map<string, { rule: Rule; sites: PatternSite[] }>();
+	/** sites a RegExp's first use made at its build's line (the build's own line adds to them) */
+	const moved = new Set<PatternSite>();
 	for (const l of input.ledger) {
 		if (!l.code) continue;
 		const f = (l.fn ? fns.get(l.fn) : undefined) ?? starts.get(l.path + '\0' + l.line);
@@ -1533,6 +1566,7 @@ export function find_patterns(input: PatternInput): Pattern[] {
 			alloc_per_render: l.alloc_bytes / Math.max(1, input.renders ?? 1),
 			intl_locals: intl_locals(body),
 			text_locals: text_locals(body),
+			regexp_locals: regexp_locals(body, svelte ? 1 : start),
 			after: input.source?.(l.path, l.line + 1, l.line + 3)?.lines ?? []
 		};
 		const t = tokens(l.code);
@@ -1553,27 +1587,42 @@ export function find_patterns(input: PatternInput): Pattern[] {
 			if (!e) found.set(group, (e = { rule, sites: [] }));
 			// (a line already named from inside another line's loop or callee is not listed twice)
 			matched = true;
-			if (e.sites.some((s) => s.path === l.path && s.line === l.line)) break;
+			// A REGEXP'S FIRST USE (`re.test(s)`) charged with its build: the site is the build's line,
+			// and the two lines' cost one site's
+			const built = rule.kind === 'regexp-per-call' && !constructs(t, REGEXP) ? used_local_regexp(t, ctx.regexp_locals) : undefined;
+			const line = built?.line ?? l.line;
+			const same = e.sites.find((s) => s.path === l.path && s.line === line);
+			if (same) {
+				// (the use's line came first and made the site: the build's own line adds to it too)
+				if (built || moved.has(same)) {
+					same.cpu_ms += l.cpu_ms;
+					same.alloc_bytes += l.alloc_bytes;
+					same.gc_ms += l.gc_ms;
+				}
+				break;
+			}
 			e.sites.push({
 				path: l.path,
 				file: l.file,
-				line: l.line,
-				code: l.code,
+				line,
+				code: built?.code ?? l.code,
 				...(f ? { fn: f.key, fn_name: f.name } : l.fn ? { fn: l.fn } : {}),
 				cpu_ms: l.cpu_ms,
 				alloc_bytes: l.alloc_bytes,
 				gc_ms: l.gc_ms,
 				...(calls ? { calls } : {}),
 				in_loop: loop,
-				...(l.lib_ms
+				// (a RegExp's use: its library time is the pattern RUNNING, which building it once keeps)
+				...(l.lib_ms && !built
 					? {
 							lib_ms: l.lib_ms,
 							libs: (l.libs ?? []).map((x) => (x.pkg ? `${x.name} (${x.pkg})` : x.name))
 						}
 					: {}),
 				...(via.length ? { via } : {}),
-				...ctx_field(input.source, l.path, l.line)
+				...ctx_field(input.source, l.path, line)
 			});
+			if (built) moved.add(e.sites[e.sites.length - 1]);
 			// one line, one pattern: the first rule (most specific) wins
 			matched = true;
 			break;
@@ -2816,6 +2865,7 @@ function look_inside(
 	) => {
 		const locals = intl_locals(lines);
 		const text = text_locals(lines);
+		const rx_locals = regexp_locals(lines, start);
 		for (let i = 0; i < lines.length; i++) {
 			const code = lines[i].trim();
 			if (!code || code.startsWith('//') || code.startsWith('*') || code.startsWith('/*')) continue;
@@ -2835,19 +2885,24 @@ function look_inside(
 				per_call_bytes: undefined,
 				intl_locals: locals,
 				text_locals: text,
+				regexp_locals: rx_locals,
 				after: lines.slice(i + 1, i + 4)
 			};
 			const tl = tokens(lines[i]);
 			for (const rule of RULES) {
 				if (rule.kind === 'library-per-item' || rule.kind === 'sync-io') continue;
-				if (rule.match(tl, c))
+				if (rule.match(tl, c)) {
+					// (a RegExp's first use: the site is the line that built it)
+					const built = rule.kind === 'regexp-per-call' && !constructs(tl, REGEXP) ? used_local_regexp(tl, rx_locals) : undefined;
+					const said = built?.code ?? code;
 					return {
 						rule,
 						path,
-						line: start + i,
-						code: code.length > 140 ? code.slice(0, 139) + '…' : code,
+						line: built?.line ?? start + i,
+						code: said.length > 140 ? said.slice(0, 139) + '…' : said,
 						via
 					};
+				}
 			}
 		}
 		return undefined;

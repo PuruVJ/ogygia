@@ -1497,6 +1497,16 @@ describe('inferno round: context fixes', () => {
 			'\tconst ICONS = Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`i${i}`, `M${i}`]));',
 			'</script>'
 		].join('\n'),
+		'/app/src/lib/search.ts': [
+			'export function matches(p, term) {',
+			"\tconst re = new RegExp(escape(term), 'i');",
+			'\treturn re.test(p.name) || p.tags.some((t) => re.test(t));',
+			'}',
+			'export function clean(s, ch) {',
+			"\tconst strip = new RegExp(ch, 'g');",
+			"\treturn s.replace(strip, '');",
+			'}'
+		].join('\n'),
 		'/app/src/lib/ds.ts': [
 			'function swap(html, from, to) {',
 			'\treturn html.replace(from, to);',
@@ -1576,6 +1586,30 @@ describe('inferno round: context fixes', () => {
 				[f]
 			)
 		).toEqual(['formatter-per-call']);
+	});
+
+	describe('a RegExp built on one line and charged to its first use on the next', () => {
+		const path = '/app/src/lib/search.ts';
+		const lines = files[path].split('\n');
+		const f = fn({ key: 'matches', name: 'matches', path, line: 1, calls: 500 });
+		const g = fn({ key: 'clean', name: 'clean', path, line: 5, calls: 500 });
+		const at = (line: number, cpu_ms: number, key = 'matches') => row({ path, line, code: lines[line - 1].trim(), fn: key, cpu_ms, alloc_bytes: 1e6 });
+		it('the use alone: named, at the build line', () => {
+			const p = find_patterns({ ledger: [at(3, 3)], functions: [f], source }).find((x) => x.kind === 'regexp-per-call');
+			expect(p?.sites.map((s) => [s.line, s.code])).toEqual([[2, "const re = new RegExp(escape(term), 'i');"]]);
+		});
+		it('both lines, either order: one site, both costs', () => {
+			for (const ledger of [[at(3, 0.9), at(2, 0.6)], [at(2, 0.6), at(3, 0.9)]]) {
+				const p = find_patterns({ ledger, functions: [f], source }).find((x) => x.kind === 'regexp-per-call');
+				expect(p?.sites.length).toBe(1);
+				expect(p?.sites[0].line).toBe(2);
+				expect(p?.sites[0].cpu_ms).toBeCloseTo(1.5);
+			}
+		});
+		it('passed to replace: not moved (making the new text is work that stays)', () => {
+			const p = find_patterns({ ledger: [at(7, 3, 'clean')], functions: [g], source }).find((x) => x.kind === 'regexp-per-call');
+			expect(p).toBeUndefined();
+		});
 	});
 
 	it('a callback defined on the costly line is read in the function around it', () => {
