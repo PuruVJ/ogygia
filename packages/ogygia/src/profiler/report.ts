@@ -2578,20 +2578,42 @@ function ogygia_findings(
 	// flashed — the markup changed between the server and the browser
 	const broken = client.filter((c) => c.recovered > 0);
 	if (broken.length) {
-		const total = broken.reduce((s, c) => s + c.recovered, 0);
+		// THE SAME MARKUP CAME BACK (this report's visit compared them, comments aside): the island's
+		// code drew no other tree, so no line of it is the cause — only Svelte's hidden block markers
+		// disagreed (a host of ogygia's in another shape than its render, as kept islands' once was)
+		const fps_of = (entry: string) => new Set(island_rows_of(meta).filter((r) => r.entry === entry).map((r) => r.fp));
+		const same = broken.filter((c) => {
+			const fps = fps_of(c.entry);
+			const seen = (extras.visit?.islands ?? []).filter((i) => i.recovered && (fps.has(i.fp) || i.entry === c.entry));
+			return seen.length > 0 && seen.every((i) => !i.changed && !i.healed && i.ssr_bytes !== undefined);
+		});
+		if (same.length) {
+			const one = same.length === 1;
+			const n = same.reduce((s, c) => s + c.recovered, 0);
+			warn(
+				'hydration-mismatch',
+				`${names(same.map(island_name))} discarded ${one ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${n} time${n === 1 ? '' : 's'} seen) — and drew the same markup ${one ? 'it' : 'they'} threw away: only Svelte's hidden block markers disagreed. ${one ? 'Its' : 'Their'} code drew no other tree: the island's host and its server render disagree on structure (a wrapper of ogygia's), or a block ({#if}, {#each}) took another branch to the same output.`,
+				{
+					fix: "Report it to ogygia with this page and how the island is placed (keep:, inside a snippet, nested in another island): a host that hydrates in another shape than it renders is ogygia's bug. If a block's two branches draw the same thing, give them one branch."
+				}
+			);
+		}
+		const rest = broken.filter((c) => !same.includes(c));
+		const total = rest.reduce((s, c) => s + c.recovered, 0);
 		// (a line of its own that draws differently in the browser: named, the likelier cause)
-		const lines = broken.flatMap((c) => extras.hazards?.[c.entry] ?? []);
-		warn(
-			'hydration-mismatch',
-			`${names(broken.map(island_name))} discarded ${broken.length === 1 ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${total} time${total === 1 ? '' : 's'} seen): the markup the browser found was not what the server sent.` +
-				(lines.length ? ` ${hazard_words(lines)}` : ''),
-			{
-				fix: lines.length
-					? `${hazard_fix(lines)} If none of them is it, something edits the HTML between the render and the wake: a post-SSR pass, a script that runs before the runtime, a comment-stripping proxy.`
-					: 'Something edits the HTML between the render and the wake — a post-SSR pass (a design-system renderer, a DSD injector), a script that runs before the runtime, a comment-stripping proxy. Keep it out of ogygia-region subtrees, or run it before ogygia’s render.',
-				...(lines[0] ? { file: lines[0].file, line: lines[0].line } : {})
-			}
-		);
+		const lines = rest.flatMap((c) => extras.hazards?.[c.entry] ?? []);
+		if (rest.length)
+			warn(
+				'hydration-mismatch',
+				`${names(rest.map(island_name))} discarded ${rest.length === 1 ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${total} time${total === 1 ? '' : 's'} seen): the markup the browser found was not what the server sent.` +
+					(lines.length ? ` ${hazard_words(lines)}` : ''),
+				{
+					fix: lines.length
+						? `${hazard_fix(lines)} If none of them is it, something edits the HTML between the render and the wake: a post-SSR pass, a script that runs before the runtime, a comment-stripping proxy.`
+						: 'Something edits the HTML between the render and the wake — a post-SSR pass (a design-system renderer, a DSD injector), a script that runs before the runtime, a comment-stripping proxy. Keep it out of ogygia-region subtrees, or run it before ogygia’s render.',
+					...(lines[0] ? { file: lines[0].file, line: lines[0].line } : {})
+				}
+			);
 	}
 	if (client.length) {
 		const slow = [...client].sort((x, y) => y.p50_ms - x.p50_ms)[0];

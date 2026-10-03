@@ -1797,6 +1797,33 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
 	});
 
+	it('an island that threw its server DOM away and drew the same markup back: its own finding, no line of it blamed', () => {
+		const client = [
+			{ entry: '/src/lib/SameTree.svelte', hydrations: 1, p50_ms: 5, max_ms: 5, load_p50_ms: 2, recovered: 1 },
+			{ entry: '/src/lib/DiffTree.svelte', hydrations: 1, p50_ms: 5, max_ms: 5, load_p50_ms: 2, recovered: 1 }
+		];
+		const visit = parse_visit('/hell', {
+			at: Date.now(),
+			nav: { req_start: 1, res_start: 10, res_end: 20, dcl: 100, load: 150 },
+			paints: {},
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [
+				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/SameTree.svelte', t0: 100, loaded: 120, done: 130, recovered: true, ssr_bytes: 120 },
+				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/DiffTree.svelte', t0: 100, loaded: 120, done: 130, recovered: true, changed: true, ssr_bytes: 90 }
+			]
+		})!;
+		const hazards = { '/src/lib/SameTree.svelte': [{ file: 'src/lib/SameTree.svelte', line: 4, code: 'const server = typeof window === "undefined";', kind: 'browser' as const, reads: 'typeof window' }], '/src/lib/DiffTree.svelte': [{ file: 'src/lib/DiffTree.svelte', line: 4, code: 'const server = typeof window === "undefined";', kind: 'browser' as const, reads: 'typeof window' }] };
+		const out = derive_findings(analyze(p1), meta as never, { ...extras, client, visit, hazards } as never).filter((f) => f.code === 'hydration-mismatch');
+		expect(out).toHaveLength(2);
+		expect(out[0].message).toContain('SameTree discarded its server-rendered DOM and re-rendered in the browser (1 time seen) — and drew the same markup it threw away');
+		expect(out[0].message).not.toContain('SameTree.svelte:4');
+		expect(out[1].message).toContain('DiffTree discarded its server-rendered DOM');
+		expect(out[1].message).toContain('DiffTree.svelte:4');
+	});
+
 	it("a render reading a prerender function's answer over HTTP: its own call, named, not another visitor", () => {
 		const call = { method: 'GET', path: '/_app/remote/ufd0c8/meta/WyIiXQ', route: '/(docs)', status: 200, ms: 0.75, overlap_ms: 0.75, cpu_max_ms: 0.75, kind: 'self' as const, remote: true as const };
 		const contention = {

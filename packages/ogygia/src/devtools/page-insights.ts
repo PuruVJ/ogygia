@@ -721,12 +721,35 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fps: f.fp ? [f.fp] : []
 		});
 	}
-	const recovered = rows.filter((r) => r.recovered);
+	const all_recovered = rows.filter((r) => r.recovered);
+	// WHO CHANGED IT: a script that edited the island before it woke (the runtime put the server
+	// markup back: `healed`), or a server transform the restorer reported. Neither seen: nothing
+	// touched the markup — the component itself drew another tree in the browser
+	const touched_page = !!page.restore_events?.length;
+	// THE SAME MARKUP CAME BACK: what it drew in the browser, comments aside, is what it threw away
+	// (the beacon compared them) — its code drew no other tree, so no line of it is to blame: only
+	// Svelte's hidden block markers disagreed. A kept island's host once did exactly this
+	const same = touched_page
+		? []
+		: all_recovered.filter((r) => {
+				const i = page.islands.find((x) => x.fp === r.fp);
+				return !r.changed && !i?.healed && i?.ssr_bytes !== undefined;
+			});
+	if (same.length) {
+		const one = same.length === 1;
+		findings.push({
+			code: 'recovered',
+			severity: 'error',
+			message:
+				`${list(same.map((r) => r.name))} threw away the server HTML and rendered again in the browser (a flash and a double render) — and drew the same markup ${one ? 'it' : 'they'} threw away: only Svelte's hidden block markers disagreed. ` +
+				`${one ? 'Its' : 'Their'} code drew no other tree: the island's host and its server render disagree on structure (a wrapper of ogygia's), or a block ({#if}, {#each}) took another branch to the same output.`,
+			fix: "Report it to ogygia with this page and how the island is placed (keep:, inside a snippet, nested in another island): a host that hydrates in another shape than it renders is ogygia's bug. If a block's two branches draw the same thing, give them one branch.",
+			fps: same.map((r) => r.fp)
+		});
+	}
+	const recovered = all_recovered.filter((r) => !same.includes(r));
 	if (recovered.length) {
-		// WHO CHANGED IT: a script that edited the island before it woke (the runtime put the server
-		// markup back: `healed`), or a server transform the restorer reported. Neither seen: nothing
-		// touched the markup — the component itself drew another tree in the browser
-		const touched = recovered.some((r) => page.islands.find((i) => i.fp === r.fp)?.healed) || !!page.restore_events?.length;
+		const touched = recovered.some((r) => page.islands.find((i) => i.fp === r.fp)?.healed) || touched_page;
 		const lines = touched ? [] : hazards_of(page, recovered.map((r) => r.name));
 		findings.push({
 			code: 'recovered',

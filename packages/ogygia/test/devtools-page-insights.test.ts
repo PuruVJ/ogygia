@@ -386,6 +386,34 @@ describe('an island that threw its server HTML away (recovered)', () => {
 		expect(f.message).toContain('Something changed the markup between the server and hydration.');
 		expect(f.fix).toMatch(/^Look for a script that edits the page/);
 	});
+	it('the same markup came back: no line of its blamed, its own finding; one that drew another tree keeps the line', () => {
+		const hazard = (file: string) => [{ file, line: 4, code: "const server = typeof window === 'undefined';", kind: 'browser' as const, reads: 'typeof window' }];
+		const fs = analyze_page(
+			page({
+				islands: [
+					// compared (ssr_bytes) and unchanged: the same tree
+					{ fp: 's', t0: 10, loaded: 20, done: 30, recovered: true, ssr_bytes: 120 },
+					{ fp: 'd', t0: 10, loaded: 20, done: 30, recovered: true, changed: true, ssr_bytes: 90 }
+				],
+				island_code: [
+					{ fp: 's', name: 'SameTree', bytes: 1000, top: [], barrels: [], hazards: hazard('src/lib/SameTree.svelte') },
+					{ fp: 'd', name: 'DiffTree', bytes: 1000, top: [], barrels: [], hazards: hazard('src/lib/DiffTree.svelte') }
+				]
+			}),
+			[region('s', 'SameTree'), region('d', 'DiffTree')],
+			[],
+			500
+		).findings.filter((x) => x.code === 'recovered');
+		expect(fs).toHaveLength(2);
+		const same = fs.find((f) => f.fps?.[0] === 's')!;
+		expect(same.message).toContain('SameTree threw away the server HTML and rendered again in the browser (a flash and a double render) — and drew the same markup it threw away');
+		expect(same.message).not.toContain('SameTree.svelte:4');
+		expect(same.fix).toMatch(/^Report it to ogygia/);
+		const diff = fs.find((f) => f.fps?.[0] === 'd')!;
+		expect(diff.message).toContain('DiffTree.svelte:4');
+		// never compared (no server copy): not called the same
+		expect(at().message).not.toContain('the same markup');
+	});
 });
 
 describe('a page of many elements', () => {
