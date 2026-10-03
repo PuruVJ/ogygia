@@ -18,6 +18,8 @@ export interface SlimIsland {
 	culprit: string | null;
 	client_p50_ms: number | null;
 	recovered: number;
+	/** its first line that draws differently in the browser (the profiler's reading of its sources) */
+	hazard?: { file: string; line: number; kind: 'await' | 'browser'; reads?: string; guard?: true };
 }
 
 export interface SlimProfile {
@@ -90,6 +92,12 @@ export async function run_profile(path: string, runs = 3, base = '/__profiler'):
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const arr = (v: unknown): Record<string, any>[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
+/** an island row's first hazard line — a value it renders before a guard around browser-only work */
+function slim_hazard(v: unknown): { hazard?: NonNullable<SlimIsland['hazard']> } {
+	const list = arr(v).filter((h) => typeof h.file === 'string' && typeof h.line === 'number' && (h.kind === 'await' || h.kind === 'browser'));
+	const h = list.find((x) => !x.guard) ?? list[0];
+	return h ? { hazard: { file: h.file, line: h.line, kind: h.kind, ...(typeof h.reads === 'string' ? { reads: h.reads } : {}), ...(h.guard === true ? { guard: true as const } : {}) } } : {};
+}
 
 function median(xs: number[]): number {
 	if (!xs.length) return 0;
@@ -180,7 +188,8 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 			seed_refs: num(i.seed_refs) ?? 0,
 			culprit: str(i.devalue_culprit),
 			client_p50_ms: num(i.client?.p50_ms),
-			recovered: num(i.client?.recovered) ?? 0
+			recovered: num(i.client?.recovered) ?? 0,
+			...slim_hazard(i.hazards)
 		})),
 		components: arr(r?.components)
 			.slice(0, 12)

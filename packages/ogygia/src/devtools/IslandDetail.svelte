@@ -203,6 +203,10 @@
 			{#if s.props_bytes !== null}<div class="row"><span class="rk">props</span><span class="v">{kb(s.props_bytes)}{#if s.culprit}<span class="muted"> · not plain JSON: {s.culprit}</span>{/if}</span></div>{/if}
 			{#if s.seed_refs}<div class="row"><span class="rk">seed references</span><span class="v">{s.seed_refs}</span></div>{/if}
 			{#if s.client_p50_ms !== null}<div class="row"><span class="rk">hydrate (beacon)</span><span class="v">{s.client_p50_ms} ms{#if s.recovered}<span class="muted"> · recovered {s.recovered}×</span>{/if}</span></div>{/if}
+			{#if s.hazard && !model.t?.hazards?.length}
+				<!-- a build has no dev-server walk: the profiler's reading of its sources says it -->
+				<div class="row" data-og-detail-hazard><span class="rk">browser-only</span><span class="v">{s.hazard.file.split('/').pop()}:{s.hazard.line} <span class="muted">· {s.hazard.kind === 'await' ? 'awaits at the top of its script' : `reads ${s.hazard.reads ?? 'a browser-only value'} ${s.hazard.guard ? 'in a guard' : 'while rendering'}`}</span></span></div>
+			{/if}
 		</div>
 	{/if}
 

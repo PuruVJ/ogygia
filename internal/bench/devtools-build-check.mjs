@@ -314,6 +314,28 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	const quiet = await read('/dt-lab', 'uncompressed');
 	check('a page whose files are all compressed: no uncompressed', quiet.length === 0, JSON.stringify(quiet).slice(0, 200));
 }
+// AN ISLAND'S BROWSER-ONLY LINE, in a build: no dev-server walk reads its sources here — the last
+// profile does (the build scanned them), and the island's card shows it from there
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	const p = await c.newPage();
+	await p.setExtraHTTPHeaders({ 'x-profiler-key': 'hell' });
+	await p.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await p.waitForTimeout(1500);
+	await p.click('[data-og-panel-toggle]').catch(() => {});
+	await p.click('[data-og-tab="profiler"]').catch(() => {});
+	await p.locator('[data-og-profiler] input.n').fill('1').catch(() => {});
+	await p.click('[data-og-profile-run]').catch(() => {});
+	await p.locator('[data-og-profile-head]').waitFor({ timeout: 90_000 }).catch(() => {});
+	await p.click('[data-og-tab="page"]').catch(() => {});
+	await p.waitForTimeout(600);
+	await p.locator('[data-og-page-findings] li[data-code="markup-changed"] .chip').first().click().catch(() => {});
+	await p.waitForTimeout(800);
+	const hazard = await p.locator('[data-og-detail-hazard]').innerText().catch(() => '');
+	await c.close();
+	check("an island's browser-only line on its card in a build, from the last profile", hazard.includes('Clock.svelte:3') && hazard.includes('typeof window'), hazard.slice(0, 160) || 'no row');
+}
 // SCROLLING STALLED, in a build: the handler is a minified name in a hashed chunk — named by its island
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });

@@ -3442,6 +3442,8 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						js_only_bytes: js_only?.get(r.entry) ?? null,
 						modules: [r.module_url, ...r.hints].filter(Boolean),
 						interactivity: r.interactivity,
+						// its own lines that draw differently in the browser (the devtools' island card reads them)
+						...(extras.hazards?.[r.entry]?.length ? { hazards: extras.hazards[r.entry].slice(0, 3) } : {}),
 						client: cl
 							? {
 									hydrations: cl.n,

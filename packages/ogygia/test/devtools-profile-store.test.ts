@@ -77,6 +77,22 @@ describe('the slim profile keeps what the browser cannot read', () => {
 		expect(slim_profile({ ...report, target: { ...report.target, cache_control: 'private, no-store' } }).cache_control).toBe('private, no-store');
 		expect(slim_profile(report).cache_control).toBeUndefined();
 	});
+	it("an island's line that draws differently in the browser: a rendered value before a guard", () => {
+		const rows = report.ogygia.island_rows.map((r, i) =>
+			i === 0
+				? {
+						...r,
+						hazards: [
+							{ file: 'src/lib/MegaHeader.svelte', line: 4, code: "if (typeof window !== 'undefined') {", kind: 'browser', reads: 'typeof window', guard: true },
+							{ file: 'src/lib/MegaHeader.svelte', line: 9, code: 'const now = Date.now();', kind: 'browser', reads: 'Date.now(' }
+						]
+					}
+				: r
+		);
+		const p = slim_profile({ ...report, ogygia: { ...report.ogygia, island_rows: rows } });
+		expect(p.islands[0].hazard).toEqual({ file: 'src/lib/MegaHeader.svelte', line: 9, kind: 'browser', reads: 'Date.now(' });
+		expect(p.islands[1].hazard).toBeUndefined();
+	});
 });
 
 describe('run_profile when the profiler refuses', () => {
