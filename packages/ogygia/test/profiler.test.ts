@@ -58,7 +58,7 @@ import { profiler, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
 import { raw_cookie_values } from '../src/profiler/session-cookie.js';
 import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
-import { budget_segments, build_treemap, waiting_rows } from '../src/profiler/ui/report-data.js';
+import { budget_segments, build_treemap, island_rows, waiting_rows } from '../src/profiler/ui/report-data.js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { set_chunk_contents } from './_stubs/virtual-island-deps.js';
 import {
@@ -1742,6 +1742,15 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			const live_meta = { ...meta, requests: meta.requests.map((r) => ((r as { og?: object }).og ? { ...r, og: { ...og, island_rows: live_rows } } : r)) };
 			expect(derive_findings(analyze(p1), live_meta as never, extras).find((x) => x.code === 'wake-inert')).toBeUndefined();
 		}
+	});
+
+	it("the Islands table: an island reading a browser-only value while rendering is told so, by its line", () => {
+		const hazards = { 'src/lib/CountryPanel.svelte': [{ file: 'src/lib/CountryPanel.svelte', line: 4, code: 'const here = navigator.language;', kind: 'browser' as const, reads: 'navigator.language' }] };
+		const row = island_rows(analyze(p1), meta as never, { net: [], mem: [], hazards } as never).find((r) => r.name === 'CountryPanel')!;
+		expect(row.advice).toBe('Its own code reads navigator.language while rendering (CountryPanel.svelte:4): the browser draws it differently, so its markup changes as it wakes. Read it after the wake ($effect, onMount), or pass it in as a prop.');
+		// a guard around browser-only work is no prediction: the island's other advice stands
+		const guarded = { 'src/lib/CountryPanel.svelte': [{ ...hazards['src/lib/CountryPanel.svelte'][0], code: "if (typeof window !== 'undefined') {", reads: 'typeof window', guard: true as const }] };
+		expect(island_rows(analyze(p1), meta as never, { net: [], mem: [], hazards: guarded } as never).find((r) => r.name === 'CountryPanel')!.advice).not.toContain('while rendering');
 	});
 
 	it('never-hydrated: the beacon reported other islands but not this one', () => {

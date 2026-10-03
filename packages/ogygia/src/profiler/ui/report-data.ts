@@ -9,6 +9,7 @@ import type { NetCall, UpstreamTrace } from '../net.js';
 import type { IoOp } from '../async-io.js';
 import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.js';
 import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.js';
+import { hazard_words } from '../hydration-hazards.js';
 import type { HoleStat, IslandStat, SeedKeyStat } from '../../server/request-stats.js';
 import { io_kind } from '../async-io.js';
 import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.js';
@@ -69,13 +70,19 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 		const js_only = only?.get(r.entry) ?? null;
 		const i = r.interactivity;
 		const marks = i ? i.handlers + i.state + i.effects + i.binds + i.actions + (i.remotes ?? 0) + (i.awaits ?? 0) + (i.shared ?? 0) : -1;
+		// its own lines that draw differently in the browser (the build's scan, or the report's reading)
+		const lines = extras.hazards?.[r.entry] ?? [];
+		const render_read = lines.find((h) => h.kind === 'browser' && !h.guard);
 		let advice: string | null = null;
 		if (beacon_seen && !cl && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `Never reported hydrating in your visits while other islands did. A '${r.wake}' island that ${r.wake === 'visible' ? 'never intersects the viewport (can the page scroll? is it hidden?)' : 'throws on wake (the browser console has it)'} never wakes.`;
 		else if (cl && cl.recovered > 0)
 			advice =
-				`${cl.recovered} of ${cl.n} hydrations threw the server DOM away and re-rendered: the markup the browser found was not what the server sent (a post-SSR pass, a script that edits it before the wake). It paid for the render twice and flashed.` +
-				(cl.reason ? ` Why: ${cl.reason}.` : '');
+				`${cl.recovered} of ${cl.n} hydrations threw the server DOM away and re-rendered: the markup the browser found was not what the server sent. It paid for the render twice and flashed.` +
+				(cl.reason ? ` Why: ${cl.reason}.` : '') +
+				(lines.length ? ` ${hazard_words(lines)}` : ' Look for a post-SSR pass, or a script that edits it before the wake.');
+		else if (render_read)
+			advice = `Its own code reads ${render_read.reads ?? 'a browser-only value'} while rendering (${render_read.file.split('/').pop()}:${render_read.line}): the browser draws it differently, so its markup changes as it wakes. Read it after the wake ($effect, onMount), or pass it in as a prop.`;
 		else if (marks === 0 && r.wake !== 'none') advice = "No handlers, state, effects, binds, actions, remote functions, awaits or shared state in its components: ship it as a lake (wake: 'none') and the JS never loads.";
 		else if (r.count >= 10 && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `${r.count} copies each wake on ${r.wake}${(r.variants ?? 1) > 1 ? ` with ${r.variants} different props sidecars` : ''}: one island around the list hydrates once, or wake: 'interaction' pays only when touched.`;
