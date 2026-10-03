@@ -13,6 +13,7 @@ import {
 	find_wait_patterns,
 	fix_impact,
 	heap_growth,
+	is_clear_leak,
 	is_flat,
 	in_loop,
 	same_document_pattern,
@@ -2146,6 +2147,19 @@ describe('heap growth check', () => {
 		// a cache still filling (each reading 200 KB more, over the 256 KB spread): not flat
 		expect(is_flat([100 * M, 100 * M + 20 * K, 100 * M + 220 * K, 100 * M + 420 * K].map((x) => x - 400 * K))).toBe(false);
 		expect(is_flat([100 * M])).toBe(false);
+	});
+
+	it('a leak past doubt after three renders: steady steps of 16 MB or more; a smaller leak or a cache slowing down, never', () => {
+		// /hell: ~71 MB a render, every time
+		expect(is_clear_leak([1586.78, 1657.98, 1729.28, 1800.39].map((x) => x * M))).toBe(true);
+		// the /inferno plant, 1.2 MB a render: the full check (its halfway read tells its lines apart)
+		expect(is_clear_leak([122.8, 124, 125.2, 126.5].map((x) => x * M))).toBe(false);
+		// a cache filling and slowing (40, 30, 10 MB): not past doubt
+		expect(is_clear_leak([100, 140, 170, 180].map((x) => x * M))).toBe(false);
+		// small steady steps (300 KB): under the line, the full check decides
+		expect(is_clear_leak([100, 100.3, 100.6, 100.9].map((x) => x * M))).toBe(false);
+		// too few renders
+		expect(is_clear_leak([100 * M, 110 * M, 120 * M])).toBe(false);
 	});
 
 	it('the memory card says which, and a plateau is neither severe nor counted down', () => {

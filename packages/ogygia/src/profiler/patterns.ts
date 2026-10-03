@@ -2388,6 +2388,24 @@ export function is_flat(series: readonly number[]): boolean {
 	return hi - lo < 256 * 1024;
 }
 
+/** A LEAK PAST DOUBT after three renders: each kept 16 MB or more, the largest step at most half again
+ *  the smallest — steady growth no further render can turn into "it levels off", and each more render
+ *  takes that much of the measured server's heap (/hell: 70 MB a render, six renders, 9 s and 420 MB
+ *  of the instance's memory for a verdict the first three gave). A smaller leak keeps the full check:
+ *  its halfway read is what tells a growing line from a bounded cache still filling. */
+export function is_clear_leak(series: readonly number[]): boolean {
+	const n = series.length - 1;
+	if (n < 3) return false;
+	let lo = Infinity;
+	let hi = -Infinity;
+	for (let i = 1; i <= n; i++) {
+		const step = series[i] - series[i - 1];
+		lo = Math.min(lo, step);
+		hi = Math.max(hi, step);
+	}
+	return lo >= 16 * 1024 * 1024 && hi <= lo * 1.5;
+}
+
 export function heap_growth(series: readonly number[]): HeapGrowth | undefined {
 	const n = series.length - 1;
 	if (n < 2) return undefined;

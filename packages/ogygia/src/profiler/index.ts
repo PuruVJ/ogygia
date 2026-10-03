@@ -153,6 +153,7 @@ import {
 	find_same_answers,
 	find_wait_patterns,
 	heap_growth,
+	is_clear_leak,
 	is_flat,
 	late_island_pattern,
 	render_per_item_pattern,
@@ -3858,6 +3859,12 @@ class Profiler {
 				// settled heaps within 256 KB of each other, more renders cannot make it grow — each one
 				// is a render and a full collection (/inferno: 4 of its 9 s went here, for "it levels off")
 				if (i + 1 === 3 && is_flat(series)) break;
+				// …and A LEAK PAST DOUBT after three: no halfway read then (its comparison needs renders
+				// on both sides of it), the end's sample names the lines
+				if (i + 1 === 3 && is_clear_leak(series)) {
+					half_head = undefined;
+					break;
+				}
 				if (i + 1 === half)
 					half_head = (
 						(await session.post('HeapProfiler.getSamplingProfile')) as {
