@@ -1968,8 +1968,17 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			`The event loop stalled up to ${fmt_ms(meta.loop_delay.p99)} ms (p99) — long synchronous work blocks every other request.`
 		);
 	}
+	// THE PROCESS GREW while it recorded (resident memory, the samples' first to last) — said only when
+	// the render measured to keep memory is not already the finding (it names the lines and the MB a
+	// render; the process's total says the same thing less exactly)
 	const mem_delta = extras.mem.length >= 2 ? extras.mem.at(-1)!.rss - extras.mem[0].rss : 0;
-	if (mem_delta > 50) warn('mem-growth', `Memory grew ${mem_delta} MB during the window.`);
+	const kept_said = !!extras.retained && extras.retained.total_bytes >= 5 * 1048576;
+	if (mem_delta > 50 && !kept_said)
+		warn(
+			'mem-growth',
+			`The server's memory grew ${mem_delta} MB while the recording ran. A first recording grows it as caches and the heap reach their working size; one that grows it again each time is keeping something per render.`,
+			{ fix: 'Record again: if it grows by about as much again, look for what a render adds to a module-level map, array or cache that is never cleared — the memory card lists what one render leaves alive.' }
+		);
 
 	const profiler_ms = a.buckets.find((b) => b.key === 'profiler overhead')?.self_ms ?? 0;
 	if (profiler_ms > a.busy_ms * 0.05 && profiler_ms > 5) {

@@ -1797,6 +1797,15 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
 	});
 
+	it("the process's memory growth: said plainly, and not beside the render measured to keep memory", () => {
+		const mem = [{ t: 0, rss: 400, heap: 200 }, { t: 1000, rss: 494, heap: 290 }];
+		const plain = derive_findings(analyze(p1), meta as never, { ...extras, mem } as never).find((f) => f.code === 'mem-growth')!;
+		expect(plain.message).toBe("The server's memory grew 94 MB while the recording ran. A first recording grows it as caches and the heap reach their working size; one that grows it again each time is keeping something per render.");
+		expect(plain.fix).toMatch(/^Record again/);
+		const retained = { total_bytes: 72 * 1048576, render_ms: 800, sites: [{ name: 'hydrateAppClosure', url: 'file:///w/node_modules/lib/x.js', line: 1, bytes: 54 * 1048576, share: 0.74 }] };
+		expect(derive_findings(analyze(p1), meta as never, { ...extras, mem, retained } as never).some((f) => f.code === 'mem-growth')).toBe(false);
+	});
+
 	it('one module, two copies, both on this page: named with its files and why; a copy the page never loads is no finding', () => {
 		const asset = (url: string) => ({ url, kind: 'script' as const, blocking: false, via: 'html' as const, bytes: 60_000, wire: 20_000 });
 		const assets = {
