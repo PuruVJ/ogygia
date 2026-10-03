@@ -37,10 +37,10 @@
 	let active = $state('');
 
 	// The "top" entry is a real link to the current page (so it's a valid href, not a bare `#`), but
-	// clicking it just scrolls to the top — no navigation. The page's own URL, the same on the server
+	// clicking it just scrolls to the top — no navigation. The page's own path, the same on the server
 	// and in the browser (a `window.location` read here drew `/` on the server: every page's top link
-	// changed as it woke)
-	const top_href = $derived(page.url.pathname + page.url.search);
+	// changed as it woke). The path alone: a prerendered page may not read `url.search`
+	const top_href = $derived(page.url.pathname);
 	function to_top(e: MouseEvent) {
 		e.preventDefault();
 		window.scrollTo({ top: 0, behavior: 'smooth' });
