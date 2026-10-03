@@ -1753,6 +1753,11 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			'CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.'
 		);
 		expect(nh.fix).toMatch(/can scroll/);
+		// a `visible` island below the visit's first screen waited for a scroll that never came: not silent
+		// for a reason (the visit's region: its entry as the page writes it, `./…`)
+		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800], regions: [{ fp: 'cccccccccccccc00', entry: './_app/immutable/og-region.4b95bfb97fab.js', wake: 'visible', top: 2400, height: 300 }] };
+		const scrolled = derive_findings(analyze(p1), meta as never, { ...(extras as object), visit } as never).find((x) => x.code === 'never-hydrated')!;
+		expect(scrolled.message).toBe('CountryPanel (wake: visible) never reported hydrating in your visits, while 1 other island did.');
 		// no beacon at all: nothing to say
 		expect(
 			derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights } as never).find(

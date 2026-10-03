@@ -43,6 +43,13 @@ describe('island_subgraph_bytes', () => {
 		expect(out.abc123.top?.[0].file).toBe('src/lib/Busy.svelte');
 	});
 
+	it('a small component composing many children is no barrel: it uses what it imports', () => {
+		const leaves = Array.from({ length: 7 }, (_, i) => mod(`/src/lib/demos/Demo${i}.svelte`, 'p'.repeat(300)));
+		const hero = mod('/src/lib/demos/HeroDemo.svelte', 'h'.repeat(7 * 60), leaves);
+		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [hero]);
+		expect(island_subgraph_bytes([entry]).abc123.barrels).toBeUndefined();
+	});
+
 	it('prunes the framework (svelte / ogygia runtime) — shared once per page, not per island', () => {
 		const svelte = mod('/node_modules/svelte/src/internal.js', 'z'.repeat(9999));
 		const runtime = mod('/@fs/repo/packages/ogygia/dist/runtime/core.js', 'r'.repeat(9999));

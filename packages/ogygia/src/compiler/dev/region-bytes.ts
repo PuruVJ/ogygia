@@ -99,7 +99,8 @@ export function island_subgraph_bytes(
 				each.push({ file, bytes: code.length });
 				// a BARREL the island still imports whole: little code of its own, many app modules
 				// behind it (a pure re-export index). Every module behind it rides into the island.
-				if (fanout >= BARREL_FANOUT && code.length <= fanout * BARREL_BYTES_PER_EXPORT) barrels.push({ file, fanout });
+				// (a component uses what it imports: only a script module can be a re-export index)
+				if (fanout >= BARREL_FANOUT && code.length <= fanout * BARREL_BYTES_PER_EXPORT && !file.endsWith('.svelte')) barrels.push({ file, fanout });
 			}
 		}
 		if (count > 0 && (!out[iid] || out[iid].bytes < bytes)) {

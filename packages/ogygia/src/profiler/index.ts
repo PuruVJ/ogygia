@@ -5516,8 +5516,12 @@ class Profiler {
 			string,
 			{ fp: string; name: string; ms: number[]; load: number[]; recovered: number; reason?: string }
 		>();
+		// (by its entry too: an island whose props change every render — a live object passed in — has
+		// another fingerprint in every page view, never the profiled render's own; its entry is its own)
+		const by_entry = new Map<string, BeaconAgg>();
+		for (const b of this.#beacons.values()) if (b.entry && b.ms.length) by_entry.set(entry_path(b.entry), b);
 		for (const r of island_rows_of(stored.meta)) {
-			const b = this.#beacons.get(r.fp);
+			const b = this.#beacons.get(r.fp) ?? by_entry.get(entry_path(r.entry));
 			if (!b || !b.ms.length) continue;
 			let e = per_entry.get(r.entry);
 			if (!e)
@@ -6388,6 +6392,15 @@ function round2(n: number): number {
  * `import { name } from '$lib/…'` or `'./…'` — or the file itself when it declares it. Undefined for
  * a package import, or a name it cannot place. Plain text, no regex.
  */
+/** An island entry as a path, however it was written (`./_app/x.js`, `/_app/x.js`, an absolute URL). */
+function entry_path(entry: string): string {
+	try {
+		return new URL(entry, 'http://x/').pathname;
+	} catch {
+		return entry;
+	}
+}
+
 function imported_from(src: string, name: string, file: string): string | undefined {
 	const self = file.slice(0, file.lastIndexOf('.'));
 	for (const line of src.split('\n')) {

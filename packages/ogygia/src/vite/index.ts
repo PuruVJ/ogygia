@@ -1511,6 +1511,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						const found: { name: string; fanout: number }[] = [];
 						for (const id of chunk.moduleIds ?? []) {
 							if (id.startsWith('\0')) continue;
+							// (a component uses what it imports — a small one composing seven children is no
+							// re-export index; only a script module can be a barrel)
+							const q = id.indexOf('?');
+							if ((q === -1 ? id : id.slice(0, q)).endsWith('.svelte')) continue;
 							const info = this.getModuleInfo(id);
 							if (!info) continue;
 							const fanout = info.importedIds.filter((d) => !d.startsWith('\0')).length;

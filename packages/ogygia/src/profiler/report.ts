@@ -2402,8 +2402,19 @@ function ogygia_findings(
 		const seen = new Set(client.map((c) => c.entry));
 		// (one the visit saw fail is the browser's hydrate-failed finding, with its error)
 		for (const r of extras.visit?.regions ?? []) if (r.failed !== undefined && r.entry) seen.add(r.entry);
+		// (a `visible` island below the visit's first screen waits for a scroll that never came: it did
+		// what it should — only one on that screen, or a visit without positions, is silent for a reason)
+		const path_of_entry = (e: string) => {
+			try {
+				return new URL(e, 'http://x/').pathname;
+			} catch {
+				return e;
+			}
+		};
+		const vh = extras.visit?.viewport?.[1];
+		const below = new Set((vh ? (extras.visit?.regions ?? []).filter((g) => g.entry && g.top >= vh) : []).map((g) => path_of_entry(g.entry!)));
 		const silent = islands.filter(
-			(r) => (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible') && !seen.has(r.entry)
+			(r) => (r.wake === 'load' || r.wake === 'idle' || (r.wake === 'visible' && !below.has(path_of_entry(r.entry)))) && !seen.has(r.entry)
 		);
 		if (silent.length) {
 			warn(
