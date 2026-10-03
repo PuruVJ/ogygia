@@ -699,6 +699,13 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page({ vitals: { ttfb: 1500 } }), [], [], 9000))).toContain('vital-ttfb');
 	});
 
+	it('a slow first byte on a page the last profile found prerendered: a file being served, not a render to profile', () => {
+		const brief = { ago_min: 2, render_ms: 4, top: null, calls: 0, calls_ms: 0, prerendered: 'file' as const };
+		const f = analyze_page(page({ vitals: { ttfb: 1500 }, server_profiles: { '/docs/x': brief }, server_profile: brief, visit: { ...page().visit!, nav: { res_start: 1500, phases: { wait: 1400 } } as never } }), [], [], 9000).findings.find((x) => x.code === 'slow-ttfb')!;
+		expect(f.message).toContain("found it prerendered: the server answered with the file the build wrote, no render ran — its first byte is a file being served, so a slow one is the host or the network, not a render to profile.");
+		expect(f.fix).toMatch(/^The page is a prerendered file, and still slow to arrive/);
+	});
+
 	it('a first byte beyond the render: on the dev server, the page compiling (a note, reload); elsewhere, before the render', () => {
 		const at = (dev: boolean, wait = 3800, ssr = 210) =>
 			analyze_page({ ...page({ vitals: { ttfb: wait }, visit: { ...page().visit!, nav: { res_start: wait, phases: { wait }, server_timing: [{ name: 'ssr', ms: ssr, desc: 'SvelteKit render' }] } as never } }), ...(dev ? { dev: true } : {}) } as PageInput, [], [], 9000).findings.find((f) => f.code === 'slow-ttfb')!;

@@ -30,6 +30,8 @@ export interface SlimProfile {
 	render_ms: number;
 	/** the Cache-Control the page answered the profiler's renders (what the browser cannot read) */
 	cache_control?: string;
+	/** the page is prerendered: 'file' (served as the build's file), 'route' (its route prerenders) */
+	prerendered?: 'file' | 'route';
 	score: {
 		score: number;
 		grade: string;
@@ -123,6 +125,7 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 		runs,
 		render_ms: Math.round(median(runs) * 10) / 10,
 		...(typeof target.cache_control === 'string' && target.cache_control ? { cache_control: target.cache_control.slice(0, 200) } : {}),
+		...(target.prerendered === 'file' || target.prerendered === 'route' ? { prerendered: target.prerendered } : {}),
 		score:
 			sc && typeof sc.score === 'number'
 				? {

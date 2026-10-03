@@ -3323,6 +3323,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 			run_bytes: meta.run_bytes ?? null,
 			// what the page told the browser to keep (no-store: out of the back/forward cache)
 			cache_control: meta.run_cache_control ?? null,
+			// a prerendered page: 'file' (served as the build's file, no render ran), 'route' (its route
+			// prerenders; this server rendered it anyway), or null
+			prerendered: meta.prerendered ? (meta.run_static ? 'file' : 'route') : null,
 			budget_note: meta.budget_note ?? null,
 			// what the clock said per run, before the profiler's own share was taken out of `runs`
 			runs_measured: meta.runs_measured ?? null,

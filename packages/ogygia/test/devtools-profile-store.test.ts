@@ -77,6 +77,10 @@ describe('the slim profile keeps what the browser cannot read', () => {
 		expect(slim_profile({ ...report, target: { ...report.target, cache_control: 'private, no-store' } }).cache_control).toBe('private, no-store');
 		expect(slim_profile(report).cache_control).toBeUndefined();
 	});
+	it('a prerendered page: the file served, or a route that prerenders', () => {
+		expect(slim_profile({ ...report, target: { ...report.target, prerendered: 'file' } }).prerendered).toBe('file');
+		expect(slim_profile({ ...report, target: { ...report.target, prerendered: null } }).prerendered).toBeUndefined();
+	});
 	it("an island's line that draws differently in the browser: a rendered value before a guard", () => {
 		const rows = report.ogygia.island_rows.map((r, i) =>
 			i === 0

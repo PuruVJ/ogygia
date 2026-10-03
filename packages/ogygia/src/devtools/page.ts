@@ -535,7 +535,8 @@ function server_brief(path: string): ServerProfileBrief | undefined {
 		top: said ? trim(said) : comp ? `${comp.name} (${Math.round(comp.self_ms)} ms of its own)` : null,
 		calls: p.network?.count ?? 0,
 		calls_ms: p.network?.total_ms ?? 0,
-		...(no_store ? { no_store } : {})
+		...(no_store ? { no_store } : {}),
+		...(p.prerendered ? { prerendered: p.prerendered } : {})
 	};
 }
 

@@ -113,6 +113,8 @@ export interface ServerProfileBrief {
 	/** the Cache-Control it saw the page answer, when that keeps the page out of the back/forward
 	 *  cache (no-store): the server's own answer, which the browser cannot read */
 	no_store?: string;
+	/** the page is prerendered: 'file' (the build's file answered, no render), 'route' (its route prerenders) */
+	prerendered?: 'file' | 'route';
 }
 
 export interface PageInput {
@@ -2174,6 +2176,9 @@ function explain_fcp(page: PageInput): { message: string; fix: string; fps: stri
 function server_says(brief: ServerProfileBrief | undefined): string {
 	if (!brief) return ' Profile this page (the Profiler tab) to see where the server’s time went.';
 	const ago = brief.ago_min < 1 ? 'just now' : `${Math.round(brief.ago_min)} min ago`;
+	// (a prerendered page: no render to profile — its first byte is a file being served)
+	if (brief.prerendered)
+		return ` The profiler's last run of this page (${ago}) found it prerendered${brief.prerendered === 'file' ? ': the server answered with the file the build wrote, no render ran' : ' (its route exports prerender)'} — its first byte is a file being served, so a slow one is the host or the network, not a render to profile.`;
 	return ` The profiler's last run of this page (${ago}): the server render took ${Math.round(brief.render_ms)} ms${brief.calls ? `, ${brief.calls} outbound call${brief.calls === 1 ? '' : 's'} (${Math.round(brief.calls_ms)} ms)` : ', no outbound calls'}${brief.top ? `; it says: ${brief.top}` : ''}.`;
 }
 
@@ -2210,7 +2215,9 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
 				? "The service worker's start is the cost: keep it small, or turn on navigation preload so the page's request leaves while it starts."
 				: top.key === 'dns' || top.key === 'connect'
 					? 'Reaching the server is the cost: serve the page from closer to the visitor (a CDN at the edge), and keep the connection modern (HTTP/2 or 3, TLS 1.3).'
-					: "The server's answer is the cost: profile the page (its report names the slow load and the lines in it), cache the HTML where it is the same for everyone, or stream it so the first byte leaves before the slow part.";
+					: page.server_profiles && page.server_profile?.prerendered
+						? 'The page is a prerendered file, and still slow to arrive: serve it from close to the visitor (a CDN keeps the built files at the edge), and check what stands in front of the files — a function or a middleware answering them first, a cold start, a slow origin.'
+						: "The server's answer is the cost: profile the page (its report names the slow load and the lines in it), cache the HTML where it is the same for everyone, or stream it so the first byte leaves before the slow part.";
 	// (devtools: the server's side from the Profiler tab's last run of this page, when the wait is it)
 	const profiled = page.server_profiles && top.key === 'wait' && !compiling ? server_says(page.server_profile) : '';
 	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}${split}${profiled}`, fix, fps: [], ...(compiling ? { note: true } : {}) };
