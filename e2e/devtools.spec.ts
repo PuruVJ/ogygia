@@ -559,6 +559,14 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		await page.waitForTimeout(900);
 		const detail = await page.locator('[data-og-detail-browser]').innerText().catch(() => '');
 		check('island detail: shows what the browser measured', detail.includes('hydrate step'), detail.slice(0, 120));
+		// the island whose markup changed: its card names its own line that draws differently in the
+		// browser (the dev server read its source)
+		await page.locator('[data-og-detail] button.back').click();
+		await page.waitForTimeout(400);
+		await page.locator('[data-og-page-findings] li[data-code="markup-changed"] .chip').first().click();
+		await page.waitForTimeout(900);
+		const hazard = await page.locator('[data-og-detail-hazard]').innerText().catch(() => '');
+		check('island detail: names the line that draws differently in the browser', hazard.includes('Clock.svelte:3') && hazard.includes('typeof window'), hazard.slice(0, 120));
 	});
 
 	test('twin islands (one fingerprint, two elements) and a Kit-hydrated page', async ({ page }) => {

@@ -225,6 +225,12 @@
 			{#if model.t.barrels?.length}
 				<div class="row" data-og-detail-barrel><span class="rk">barrel</span><span class="v">{model.t.barrels[0].file} <span class="muted">· {model.t.barrels[0].fanout} modules ride along</span></span></div>
 			{/if}
+			{#if model.t.hazards?.length}
+				<!-- its lines that draw differently in the browser (the dev server read its sources): a
+				     value only the browser has, read while rendering; an await at the top of its script -->
+				{@const h = model.t.hazards[0]}
+				<div class="row" data-og-detail-hazard><span class="rk">browser-only</span><span class="v">{h.file.split('/').pop()}:{h.line} <span class="muted">· {h.kind === 'await' ? 'awaits at the top of its script' : `reads ${h.reads ?? 'a browser-only value'} while rendering`}{model.t.hazards.length > 1 ? ` · ${model.t.hazards.length - 1} more` : ''}</span></span></div>
+			{/if}
 		{/if}
 		{#if model.chunk?.loaded}
 			<div class="row"><span class="rk">entry chunk</span><span class="v">{kb(model.chunk.wire)}<span class="muted"> wire · {kb(model.chunk.raw)} raw</span></span></div>
