@@ -414,6 +414,18 @@ describe('an island that threw its server HTML away (recovered)', () => {
 		// never compared (no server copy): not called the same
 		expect(at().message).not.toContain('the same markup');
 	});
+	it('the same markup came back, its markers unpaired as it arrived: rewritten on the way, not ogygia', () => {
+		const f = analyze_page(
+			page({ islands: [{ fp: 'b', t0: 10, loaded: 20, done: 30, recovered: true, ssr_bytes: 140, markers: [0, 2] }] }),
+			[region('b', 'Broken')],
+			[],
+			500
+		).findings.filter((x) => x.code === 'recovered');
+		expect(f).toHaveLength(1);
+		expect(f[0].message).toContain("its markup arrived with Svelte's hidden block markers unpaired (0 opening, 2 closing), and a render always pairs them. Something rewrote it between the server and the browser");
+		expect(f[0].fix).toMatch(/^Find the rewrite/);
+		expect(f[0].message).not.toContain("ogygia's");
+	});
 });
 
 describe('a page of many elements', () => {

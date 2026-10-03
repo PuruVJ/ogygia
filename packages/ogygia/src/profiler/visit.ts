@@ -61,6 +61,9 @@ export interface VisitIsland {
 	/** another script edited it before it woke; the runtime put the server markup back */
 	healed?: boolean;
 	ssr_bytes?: number;
+	/** a recovered island whose arrived markup had Svelte's block markers unpaired [openers, closers]:
+	 *  rewritten on the way */
+	markers?: [number, number];
 }
 
 export interface VisitRegion {
@@ -285,6 +288,9 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (i.healed === true) out.healed = true;
 		const sb = num(i.ssr_bytes, 1e8);
 		if (sb !== undefined) out.ssr_bytes = sb;
+		const mk = Array.isArray(i.markers) ? i.markers : null;
+		if (mk && mk.length === 2 && Number.isInteger(mk[0]) && Number.isInteger(mk[1]) && mk[0] >= 0 && mk[1] >= 0 && mk[0] < 1e6 && mk[1] < 1e6 && mk[0] !== mk[1])
+			out.markers = [mk[0], mk[1]];
 		islands.push(out);
 	}
 	const firsts: Visit['firsts'] = [];

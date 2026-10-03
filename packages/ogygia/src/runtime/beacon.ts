@@ -122,6 +122,9 @@ interface VisitIslandRec {
 	/** another script edited it before it woke; the runtime put the server markup back */
 	healed?: boolean;
 	ssr_bytes?: number;
+	/** a recovered island whose markup ARRIVED with Svelte's block markers unpaired (`<!--[` openers
+	 *  against `<!--]` closers): something rewrote them on the way — a render always pairs them */
+	markers?: [number, number];
 }
 interface Shift {
 	t: number;
@@ -1847,6 +1850,14 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 	// block the wake idles first): an island waking after it re-sends the visit (debounced), rather
 	// than leaving the islands to the hide-time message, the one most often lost
 	if (early_visit_done) resend_soon();
+	// (only a recovered island's: its arrived markup's block markers, counted — a pair short is a
+	// rewrite on the way, never the component)
+	let markers: [number, number] | undefined;
+	if (recovered && typeof ssr_html === 'string') {
+		const open = count_of(ssr_html, '<!--[');
+		const close = count_of(ssr_html, '<!--]');
+		if (open !== close) markers = [open, close];
+	}
 	const rec: VisitIslandRec | null = room
 		? {
 				fp,
@@ -1858,7 +1869,8 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 				...(recovered ? { recovered: true } : {}),
 				...(changed ? { changed: true } : {}),
 				...(el.hasAttribute('data-og-healed') ? { healed: true } : {}),
-				...(typeof ssr_html === 'string' ? { ssr_bytes: ssr_html.length } : {})
+				...(typeof ssr_html === 'string' ? { ssr_bytes: ssr_html.length } : {}),
+				...(markers ? { markers } : {})
 			}
 		: null;
 	if (rec) visit_islands.push(rec);
@@ -1881,6 +1893,13 @@ const RUNTIME_MARKS = [' data-nested=""', ' data-hydrated=""', ' data-og-kept=""
 export function without_runtime_marks(html: string): string {
 	for (const m of RUNTIME_MARKS) if (html.includes(m)) html = html.split(m).join('');
 	return html;
+}
+
+/** How many times `needle` occurs in `html` (string search). */
+function count_of(html: string, needle: string): number {
+	let n = 0;
+	for (let at = html.indexOf(needle); at !== -1; at = html.indexOf(needle, at + needle.length)) n++;
+	return n;
 }
 
 /** `html` with every `<!-- … -->` removed (string search, no regex: it runs per hydration). */

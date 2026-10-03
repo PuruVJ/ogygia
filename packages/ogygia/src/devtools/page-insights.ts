@@ -34,6 +34,8 @@ export interface PageIsland {
 	/** another script edited it before it woke; the runtime put the server markup back */
 	healed?: boolean;
 	ssr_bytes?: number;
+	/** its arrived markup's block markers unpaired [openers, closers]: rewritten on the way */
+	markers?: [number, number];
 }
 
 /** when an island's own work ended: its effects, when they ran after `hydrate()` returned */
@@ -735,7 +737,25 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				const i = page.islands.find((x) => x.fp === r.fp);
 				return !r.changed && !i?.healed && i?.ssr_bytes !== undefined;
 			});
-	if (same.length) {
+	// …WITH ITS MARKERS UNPAIRED AS IT ARRIVED: a render always pairs them, so something rewrote them
+	// between the server and the browser (a post-SSR pass, a comment-stripping proxy) — the cause, named
+	const rewired = same.filter((r) => page.islands.find((x) => x.fp === r.fp)?.markers);
+	if (rewired.length) {
+		const one = rewired.length === 1;
+		const m = page.islands.find((x) => x.fp === rewired[0].fp)!.markers!;
+		findings.push({
+			code: 'recovered',
+			severity: 'error',
+			message:
+				`${list(rewired.map((r) => r.name))} threw away the server HTML and rendered again in the browser (a flash and a double render): ${one ? 'its' : 'their'} markup arrived with Svelte's hidden block markers unpaired (${one ? '' : `${rewired[0].name}: `}${m[0]} opening, ${m[1]} closing), and a render always pairs them. ` +
+				`Something rewrote ${one ? 'it' : 'them'} between the server and the browser; the markup the component drew is the same.`,
+			fix: 'Find the rewrite: a transformPageChunk or HTML middleware after the render, an edge rewriter, or a proxy that strips HTML comments. Keep it out of ogygia-region subtrees (or run it before ogygia’s render), and let comments through.',
+			fps: rewired.map((r) => r.fp)
+		});
+	}
+	const host_shape = same.filter((r) => !rewired.includes(r));
+	if (host_shape.length) {
+		const same = host_shape;
 		const one = same.length === 1;
 		findings.push({
 			code: 'recovered',

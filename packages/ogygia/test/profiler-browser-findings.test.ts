@@ -72,6 +72,14 @@ test('an island that drew nothing on the visitor\'s screen: eager-hidden, not "b
 	expect(parse_visit('/lab', { ...raw, regions: [{ ...raw.regions[3], hidden: 'yes' }] })!.regions![0].hidden).toBeUndefined();
 });
 
+test("a recovered island's unpaired markers survive the parse; a paired or malformed count does not", () => {
+	const at = (markers: unknown) => parse_visit('/lab', { ...raw, islands: [{ ...raw.islands[0], recovered: true, ssr_bytes: 100, markers }] })!.islands[0].markers;
+	expect(at([0, 2])).toEqual([0, 2]);
+	expect(at([2, 2])).toBeUndefined();
+	expect(at([1.5, 2])).toBeUndefined();
+	expect(at('0,2')).toBeUndefined();
+});
+
 test('a clean visit has no browser findings; a later record of the visit updates the regions', () => {
 	const clean = parse_visit('/lab', {
 		...raw,

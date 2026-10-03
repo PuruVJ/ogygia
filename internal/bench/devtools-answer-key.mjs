@@ -1673,25 +1673,33 @@ try {
 	// (only Svelte's markers disagreed: no line of its blamed, ogygia's report asked for); DiffTree's
 	// draws other markup (its own `typeof window` line named)
 	{
-		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-		await page.goto(base + '/dt-recover', { waitUntil: 'load' });
-		await page.waitForTimeout(1500);
-		const fs = await page.evaluate(() => {
-			const v = window.__ogygia_page?.();
-			const name = (fp) => v?.report.rows.find((r) => r.fp === fp)?.name;
-			return (v?.report.findings ?? []).filter((x) => x.code === 'recovered').map((x) => ({ m: x.message, fix: x.fix, names: x.fps.map(name) }));
-		});
-		await page.close();
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1500);
+			const fs = await page.evaluate(() => {
+				const v = window.__ogygia_page?.();
+				const name = (fp) => v?.report.rows.find((r) => r.fp === fp)?.name;
+				return (v?.report.findings ?? []).filter((x) => x.code === 'recovered').map((x) => ({ m: x.message, fix: x.fix, names: x.fps.map(name) }));
+			});
+			await page.close();
+			return fs;
+		};
+		const fs = await read('/dt-recover');
+		// (/detector: a transformPageChunk strips the first island's `<!--[-->` openers — the markup the
+		// component draws comes back the same, its markers arrived unpaired: the rewrite is named)
+		const det = await read('/detector');
 		const same = fs.find((f) => f.names.includes('SameTree'));
 		const diff = fs.find((f) => f.names.includes('DiffTree'));
 		const checks = [
 			['SameTree: the same markup came back, no line blamed', !!same && same.names.length === 1 && same.m.includes('drew the same markup it threw away') && !same.m.includes('SameTree.svelte:')],
 			['…and the report goes to ogygia', !!same && same.fix.startsWith('Report it to ogygia')],
-			['DiffTree: its own line named', !!diff && diff.names.length === 1 && diff.m.includes('DiffTree.svelte:') && !diff.m.includes('the same markup')]
+			['DiffTree: its own line named', !!diff && diff.names.length === 1 && diff.m.includes('DiffTree.svelte:') && !diff.m.includes('the same markup')],
+			['markers stripped on the way: the rewrite named, not ogygia', det.length === 1 && det[0].names.join() === 'Broken' && det[0].m.includes('markers unpaired') && det[0].fix.startsWith('Find the rewrite')]
 		];
 		const bad = checks.filter(([, ok]) => !ok);
 		if (bad.length) failed = true;
-		console.log(`${bad.length ? '✗' : '✓'} thrown away, two ways: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify(fs)}` : ''}`);
+		console.log(`${bad.length ? '✗' : '✓'} thrown away, three ways: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ fs, det })}` : ''}`);
 	}
 	// A PAGE OF MANY ELEMENTS (/dt-dom: DenseList, an island of ~3,600 — the plant; /dt-dom-static: the
 	// same list as page markup; /dt-big: ~1,000): the island named on /dt-dom, the static twin's size

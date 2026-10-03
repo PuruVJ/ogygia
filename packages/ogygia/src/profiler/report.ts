@@ -2582,11 +2582,29 @@ function ogygia_findings(
 		// code drew no other tree, so no line of it is the cause — only Svelte's hidden block markers
 		// disagreed (a host of ogygia's in another shape than its render, as kept islands' once was)
 		const fps_of = (entry: string) => new Set(island_rows_of(meta).filter((r) => r.entry === entry).map((r) => r.fp));
-		const same = broken.filter((c) => {
+		const seen_of = (c: (typeof broken)[number]) => {
 			const fps = fps_of(c.entry);
-			const seen = (extras.visit?.islands ?? []).filter((i) => i.recovered && (fps.has(i.fp) || i.entry === c.entry));
+			return (extras.visit?.islands ?? []).filter((i) => i.recovered && (fps.has(i.fp) || i.entry === c.entry));
+		};
+		const all_same = broken.filter((c) => {
+			const seen = seen_of(c);
 			return seen.length > 0 && seen.every((i) => !i.changed && !i.healed && i.ssr_bytes !== undefined);
 		});
+		// …WITH ITS MARKERS UNPAIRED AS IT ARRIVED: rewritten on the way (a render always pairs them)
+		const rewired = all_same.filter((c) => seen_of(c).some((i) => i.markers));
+		if (rewired.length) {
+			const one = rewired.length === 1;
+			const m = seen_of(rewired[0]).find((i) => i.markers)!.markers!;
+			const n = rewired.reduce((s, c) => s + c.recovered, 0);
+			warn(
+				'hydration-mismatch',
+				`${names(rewired.map(island_name))} discarded ${one ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${n} time${n === 1 ? '' : 's'} seen): ${one ? 'its' : 'their'} markup arrived with Svelte's hidden block markers unpaired (${m[0]} opening, ${m[1]} closing), and a render always pairs them. Something rewrote ${one ? 'it' : 'them'} between the server and the browser; the markup the component drew is the same.`,
+				{
+					fix: 'Find the rewrite: a transformPageChunk or HTML middleware after the render, an edge rewriter, or a proxy that strips HTML comments. Keep it out of ogygia-region subtrees (or run it before ogygia’s render), and let comments through.'
+				}
+			);
+		}
+		const same = all_same.filter((c) => !rewired.includes(c));
 		if (same.length) {
 			const one = same.length === 1;
 			const n = same.reduce((s, c) => s + c.recovered, 0);
@@ -2598,7 +2616,7 @@ function ogygia_findings(
 				}
 			);
 		}
-		const rest = broken.filter((c) => !same.includes(c));
+		const rest = broken.filter((c) => !all_same.includes(c));
 		const total = rest.reduce((s, c) => s + c.recovered, 0);
 		// (a line of its own that draws differently in the browser: named, the likelier cause)
 		const lines = rest.flatMap((c) => extras.hazards?.[c.entry] ?? []);
