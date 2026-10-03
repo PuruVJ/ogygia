@@ -1519,7 +1519,9 @@ function visit_regions(): Record<string, unknown>[] {
 				...(el.hasAttribute('data-hydrated') ? { hydrated: true } : {}),
 				...(failed !== undefined ? { failed, ...(failed_spans.has(fp) ? { failed_span: failed_spans.get(fp) } : {}) } : {}),
 				top: Math.round(box.top + sy),
-				height: Math.round(box.height)
+				height: Math.round(box.height),
+				// (no box of its own nor a child's: it draws nothing on this screen)
+				...(!box.height && !box.width ? { hidden: true } : {})
 			});
 		}
 	} catch {

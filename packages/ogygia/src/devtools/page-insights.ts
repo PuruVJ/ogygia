@@ -332,6 +332,10 @@ export interface RegionFact {
 	height?: number;
 	/** the wire bytes only this island loads (a build's island graph × the browser's sizes) */
 	own_bytes?: number;
+	/** it draws nothing on this screen: no box of its own nor a child's (hidden by its CSS, or empty) */
+	hidden?: true;
+	/** the media query under which the page's CSS shows it (read off the sheets), when one does */
+	shows_at?: string;
 }
 
 export interface Failure {
@@ -634,6 +638,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	for (const r of regions) if (r.fp && !by_fp.has(r.fp)) by_fp.set(r.fp, r);
 	const name_of = (fp: string | undefined, entry?: string) => (fp && by_fp.get(fp)?.name) || entry || fp || 'an island';
 	const vh = page.visit?.viewport?.[1] ?? 0;
+	const vw = page.visit?.viewport?.[0] ?? 0;
 
 	// ── vitals ──
 	const vitals: RatedVital[] = [];
@@ -650,8 +655,23 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// one of those landed is the CSS's, not the island's waking — /blocks: the CSS at 42 ms, the shift
 	// at 47 ms, the island done at 64 ms, in and out of the island's window load to load. A build links
 	// its CSS in the head: none of this there)
-	const dev_css = page.dev ? (page.visit?.resources ?? []).filter((r) => r.url.includes('type=style')).map((r) => r.end) : [];
-	const by_dev_css = (t: number) => dev_css.some((e) => e <= t + 5 && t - e <= 250);
+	// A COMPONENT'S OWN SHEET moves only that component and what follows it: one of another island's
+	// that sits below the moved island cannot have pushed it (a phone-only bar's sheet at the page's
+	// foot landing as a banner opened above it excused the banner)
+	const island_tops = new Map<string, number[]>();
+	for (const r of regions)
+		if (r.kind === 'island' && typeof r.top === 'number') (island_tops.get(r.name) ?? island_tops.set(r.name, []).get(r.name)!).push(r.top);
+	const sheet_of = (url: string): string | null => {
+		const q = url.indexOf('.svelte?');
+		return q === -1 ? null : url.slice(url.lastIndexOf('/', q) + 1, q);
+	};
+	const dev_css = page.dev ? (page.visit?.resources ?? []).filter((r) => r.url.includes('type=style')).map((r) => ({ end: r.end, of: sheet_of(r.url) })) : [];
+	const by_dev_css = (t: number, name: string, top: number | undefined) =>
+		dev_css.some((e) => {
+			if (e.end > t + 5 || t - e.end > 250) return false;
+			const tops = e.of && e.of !== name ? island_tops.get(e.of) : undefined;
+			return !(tops && typeof top === 'number' && tops.every((x) => x > top));
+		});
 	const rows: IslandRow[] = [];
 	for (const i of latest.values()) {
 		const fact = by_fp.get(i.fp);
@@ -659,7 +679,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// (the island's own work: its hydrate step and the effects Svelte runs right after it)
 		const end = work_end(i);
 		let shift = 0;
-		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= end + SHIFT_WINDOW_MS && !by_dev_css(s.t)) shift += s.value;
+		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= end + SHIFT_WINDOW_MS && !by_dev_css(s.t, fact?.name ?? '', fact?.top)) shift += s.value;
 		let lt = 0;
 		for (const t of page.longtasks) {
 			const a = Math.max(t.t, lo);
@@ -946,7 +966,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		});
 
 	// ── eager islands below the fold ──
-	const eager_below = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && vh && typeof r.top === 'number' && r.top >= vh);
+	// (one that draws nothing here is nowhere on the page: its own finding below)
+	const eager_below = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && !r.hidden && vh && typeof r.top === 'number' && r.top >= vh);
 	if (eager_below.length) {
 		// (copies of one island are one set of files: its own bytes once)
 		const own = new Map<string, number>();
@@ -968,6 +989,46 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 						: ` ${kb(own_total)} of it ${one ? 'is its own' : 'is theirs alone'} (no other island loads it): that much leaves the first load with a later wake.`),
 			fix: "Use wake='visible': its code loads when it scrolls into view, and the islands on the first screen wake sooner.",
 			fps: eager_below.map((r) => r.fp)
+		});
+	}
+
+	// ── eager islands that draw nothing on this screen ──
+	// (a mobile bar on a wide screen, a desktop sidebar on a phone: its code loads, and it shows nothing)
+	// (not one that failed: it draws nothing because it broke, and its failure says so)
+	const broke = new Set(failures.map((f) => f.fp));
+	const eager_hidden = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && r.hidden && !broke.has(r.fp));
+	if (eager_hidden.length) {
+		const names = [...new Set(eager_hidden.map((r) => r.name))];
+		const one = names.length === 1;
+		// each island by what the sheets say: the query that shows it, or nothing readable
+		const query_of = new Map<string, string>();
+		for (const r of eager_hidden) if (r.shows_at && !query_of.has(r.name)) query_of.set(r.name, r.shows_at);
+		const shown = names.filter((n) => query_of.has(n));
+		const unknown = names.filter((n) => !query_of.has(n));
+		const own = new Map<string, number>();
+		for (const r of eager_hidden) if (r.own_bytes) own.set(r.name, r.own_bytes);
+		const own_total = [...own.values()].reduce((s, n) => s + n, 0);
+		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
+		const shows = shown.length ? [one ? `the page's CSS shows it only at ${query_of.get(shown[0])}` : `the page's CSS shows ${shown.map((n) => `${n} only at ${query_of.get(n)}`).join(', ')}`] : [];
+		const bare = unknown.length ? (one ? 'no box of its own, hidden by its CSS or empty' : `${list(unknown)} ${unknown.length === 1 ? 'has' : 'have'} no box of ${unknown.length === 1 ? 'its' : 'their'} own (hidden by CSS, or empty)`) : '';
+		const first_q = shown.length ? query_of.get(shown[0])! : '';
+		findings.push({
+			code: 'eager-hidden',
+			severity: own_total >= EAGER_BELOW_WARN ? 'warn' : 'info',
+			message:
+				`${list(names)} draw${one ? 's' : ''} nothing on this screen (${vw ? `${vw} px wide` : 'this size'}) but load${one ? 's' : ''} ${one ? 'its' : 'their'} code at page load: ` +
+				`${[...shows, ...(bare ? [bare] : [])].join('; ')}.` +
+				(own_total ? ` ${kb(own_total)} of that code ${one ? 'is its own' : 'is theirs alone'}.` : ''),
+			fix:
+				(shown.length === 1
+					? `Wake ${one ? 'it' : shown[0]} by that media query (\`with { wake: '${first_q}' }\`): the code loads only on the screens that show it, and wakes there as the screen changes.`
+					: shown.length
+						? `Wake each by its media query (${shown.map((n) => `${n}: \`with { wake: '${query_of.get(n)}' }\``).join(', ')}): the code loads only on the screens that show them, and wakes there as the screen changes.`
+						: '') +
+				(unknown.length
+					? `${shown.length ? ` For ${list(unknown)}: if` : 'If'} it shows only on some screens, wake it by a media query (\`with { wake: '(max-width: …)' }\`); if it opens on a click, \`wake: 'interaction'\`.`
+					: ''),
+			fps: eager_hidden.map((r) => r.fp)
 		});
 	}
 

@@ -172,6 +172,26 @@ describe("a shift the dev server's CSS made is not the island's waking", () => {
 		expect(at(true)).toBeUndefined();
 		expect(at(false)?.message).toContain('Hydrating CtaCounter (CLS 0.12) moved the layout');
 	});
+	it("dev: another island's own sheet, landing below the moved island, did not push it", () => {
+		const at = (bar_top: number) =>
+			analyze_page(
+				page({
+					dev: true,
+					visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], resources: [{ url: 'http://x/src/lib/PhoneBar.svelte?svelte&type=style&lang.css', type: 'other', start: 30, end: 42 }] },
+					islands: [{ fp: 'aaaa000011112222', entry: '/src/lib/Grower.svelte', t0: 20, loaded: 40, turn: 45, done: 60 }],
+					shifts: [{ t: 200, value: 0.07, fp: 'aaaa000011112222' }]
+				}),
+				[
+					{ fp: 'aaaa000011112222', name: 'Grower', kind: 'island', wake: 'load', hydrated: true, top: 100 },
+					{ fp: 'bbbb000011112222', name: 'PhoneBar', kind: 'island', wake: 'load', hydrated: true, top: bar_top, hidden: true }
+				],
+				[],
+				3000
+			).findings.find((f) => f.code === 'hydration-shift');
+		expect(at(2400)?.message).toContain('Hydrating Grower (CLS 0.07) moved the layout');
+		// above it, its sheet could have pushed it: left out
+		expect(at(20)).toBeUndefined();
+	});
 });
 
 describe("an island's effects are its own work", () => {
@@ -609,6 +629,41 @@ describe('analyze_page', () => {
 		expect(small?.message).toBe('BelowEager starts below the first screen but loads code at page load. 12.0 KB of it is its own (no other island loads it): that much leaves the first load with a later wake.');
 		expect(at(80_000)?.severity).toBe('warn');
 		expect(at(416)?.message).toContain('Only 416 B of it is its own (the rest other islands load too): a later wake saves its hydration on the first load more than bytes.');
+	});
+
+	it('an eager island that draws nothing on this screen: not "below the first screen", the screens that show it', () => {
+		const r = analyze_page(
+			page(),
+			[
+				region('m', 'ShellBar', 'load', { top: 2000, hidden: true, shows_at: '(max-width: 900px)', own_bytes: 6_144 }),
+				region('v', 'Lazy', 'visible', { top: 2000, hidden: true })
+			],
+			[],
+			500
+		);
+		expect(codes(r)).not.toContain('eager-offscreen');
+		const f = r.findings.find((x) => x.code === 'eager-hidden')!;
+		expect(f.fps).toEqual(['m']);
+		expect(f.message).toContain("ShellBar draws nothing on this screen");
+		expect(f.message).toContain("the page's CSS shows it only at (max-width: 900px). 6.0 KB of that code is its own.");
+		expect(f.fix).toContain("`with { wake: '(max-width: 900px)' }`");
+		// no sheet says where: both ways out
+		const bare = analyze_page(page(), [region('m', 'Palette', 'load', { top: 0, hidden: true })], [], 500).findings.find((x) => x.code === 'eager-hidden')!;
+		expect(bare.message).toContain('hidden by its CSS or empty');
+		expect(bare.fix).toContain("wake: 'interaction'");
+		// two: each by what the sheets say, one unreadable not hiding the other's query
+		const two = analyze_page(
+			page(),
+			[region('m', 'ShellBar', 'load', { top: 2000, hidden: true, shows_at: '(max-width: 900px)' }), region('c', 'CodeChrome', 'load', { top: 300, hidden: true })],
+			[],
+			500
+		).findings.find((x) => x.code === 'eager-hidden')!;
+		expect(two.message).toContain("the page's CSS shows ShellBar only at (max-width: 900px); CodeChrome has no box of its own (hidden by CSS, or empty).");
+		expect(two.fix).toContain("Wake ShellBar by that media query (`with { wake: '(max-width: 900px)' }`)");
+		expect(two.fix).toContain('For CodeChrome: if it shows only on some screens');
+		// one that failed draws nothing because it broke: its failure says so, not this
+		const broke = analyze_page(page(), [region('b', 'Broken', 'load', { top: 0, hidden: true })], [{ fp: 'b', message: 'boom' }], 500);
+		expect(codes(broke)).not.toContain('eager-hidden');
 	});
 
 	it('an island’s code: a barrel imported whole, and one module most of its weight', () => {

@@ -60,6 +60,18 @@ test('each planted problem, on its island, in the report', () => {
 	for (const f of found) expect(f.message.startsWith('In the browser: ')).toBe(true);
 });
 
+test('an island that drew nothing on the visitor\'s screen: eager-hidden, not "below the first screen"', () => {
+	const visit = parse_visit('/lab', { ...raw, regions: raw.regions.map((r) => (r.fp === 'dddddddd44444444' ? { ...r, top: 2400, height: 0, hidden: true } : r)) })!;
+	expect(visit.regions!.find((r) => r.fp === 'dddddddd44444444')?.hidden).toBe(true);
+	const found = browser_findings(browser_page_report(visit, rows));
+	expect(found.some((f) => f.code === 'eager-offscreen')).toBe(false);
+	const f = found.find((x) => x.code === 'eager-hidden')!;
+	expect(f.fps).toEqual(['dddddddd44444444']);
+	expect(f.message).toContain('Below draws nothing on this screen (1200 px wide)');
+	// a non-boolean is no claim
+	expect(parse_visit('/lab', { ...raw, regions: [{ ...raw.regions[3], hidden: 'yes' }] })!.regions![0].hidden).toBeUndefined();
+});
+
 test('a clean visit has no browser findings; a later record of the visit updates the regions', () => {
 	const clean = parse_visit('/lab', {
 		...raw,

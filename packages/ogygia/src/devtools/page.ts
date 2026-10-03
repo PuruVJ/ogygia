@@ -99,6 +99,17 @@ export function region_facts(): RegionFact[] {
 		if (!r.fp) continue;
 		const box = r.el.getBoundingClientRect();
 		const own_bytes = own.size && r.kind === 'island' ? own.get(abs(r.entry)) : undefined;
+		// DRAWS NOTHING ON THIS SCREEN: no box of its own nor a child's (its CSS hides it here, or it is
+		// empty) — then its top is no place on the page, and the screen sizes that show it are the news
+		const hidden = r.kind === 'island' && !box.height && !box.width && !has_child_box(r.el);
+		let shows_at: string | null = null;
+		if (hidden && EAGER_WAKES.has(r.wake)) {
+			// (read once per island while the page's sheets stay the same: the tab asks every tick)
+			const key = `${r.fp}:${document.styleSheets.length}`;
+			const seen = media_seen.get(key);
+			shows_at = seen !== undefined ? seen : shown_under_media(r.el);
+			if (seen === undefined) media_seen.set(key, shows_at);
+		}
 		out.push({
 			fp: r.fp,
 			name: region_name(r.entry),
@@ -108,10 +119,85 @@ export function region_facts(): RegionFact[] {
 			...(own_bytes ? { own_bytes } : {}),
 			// (a zero box is a display:contents host: its first child places it)
 			top: Math.round((box.height || box.width ? box.top : first_child_top(r.el)) + sy),
-			height: Math.round(box.height)
+			height: Math.round(box.height),
+			...(hidden ? { hidden: true as const } : {}),
+			...(shows_at ? { shows_at } : {})
 		});
 	}
 	return out;
+}
+
+const EAGER_WAKES = new Set(['load', 'idle']);
+const media_seen = new Map<string, string | null>();
+
+function has_child_box(el: Element): boolean {
+	for (const c of el.children) {
+		const b = c.getBoundingClientRect();
+		if (b.height || b.width) return true;
+	}
+	return false;
+}
+
+/** The media query under which the page's CSS shows this hidden island (or a child of it): a rule
+ *  inside an `@media` this screen does not match giving it a `display` other than `none` — or, the
+ *  other way round, one inside an `@media` this screen matches hiding it (shown where that query is
+ *  not: `not all and …`). The element read is what is hidden: the island's own child, or the
+ *  nearest hidden wrapper around it (a sidebar island inside an aside a phone hides). Null when no
+ *  readable sheet says (a cross-origin sheet, a hide by script, an empty island). */
+function shown_under_media(el: Element): string | null {
+	const none = (e: Element) => getComputedStyle(e).display === 'none';
+	let hider: Element | null = null;
+	for (const c of el.children)
+		if (none(c)) {
+			hider = c;
+			break;
+		}
+	for (let up: Element | null = el; !hider && up && up !== document.body; up = up.parentElement) if (none(up)) hider = up;
+	if (!hider) return null;
+	const target = hider;
+	const matches = (sel: string) => {
+		try {
+			return target.matches(sel);
+		} catch {
+			return false; // a selector this browser cannot match
+		}
+	};
+	let budget = 20000;
+	let hidden_by = null as string | null;
+	// `off`: inside a query this screen does not match; `on`: one it matches
+	const walk = (rules: CSSRuleList, off: string | null, on: string | null): string | null => {
+		for (const rule of rules) {
+			if (--budget < 0) return null;
+			if (rule instanceof CSSMediaRule) {
+				const q = rule.conditionText || rule.media.mediaText;
+				const now = typeof matchMedia === 'function' && matchMedia(q).matches;
+				const hit = walk(rule.cssRules, now ? off : q, now ? q : on);
+				if (hit) return hit;
+			} else if (rule instanceof CSSStyleRule) {
+				const d = rule.style.display;
+				if (!d || (!off && !on) || !matches(rule.selectorText)) continue;
+				if (off && d !== 'none') return off;
+				if (on && !off && d === 'none' && !hidden_by) hidden_by = on;
+			} else if ('cssRules' in rule && (rule as CSSGroupingRule).cssRules) {
+				// (@layer, @supports, @container: their rules keep the media they sit in)
+				const hit = walk((rule as CSSGroupingRule).cssRules, off, on);
+				if (hit) return hit;
+			}
+		}
+		return null;
+	};
+	for (const sheet of document.styleSheets) {
+		let rules: CSSRuleList;
+		try {
+			rules = sheet.cssRules;
+		} catch {
+			continue; // cross-origin: unreadable
+		}
+		const hit = walk(rules, null, null);
+		if (hit) return hit;
+	}
+	const by = hidden_by as string | null;
+	return by ? (by.startsWith('(') ? `not all and ${by}` : `not ${by}`) : null;
 }
 
 function first_child_top(el: Element): number {

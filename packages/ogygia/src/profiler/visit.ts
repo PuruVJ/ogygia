@@ -78,6 +78,8 @@ export interface VisitRegion {
 	/** document px */
 	top: number;
 	height: number;
+	/** it drew nothing on the visitor's screen: no box of its own nor a child's */
+	hidden?: true;
 }
 
 export interface VisitShift {
@@ -329,6 +331,7 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (wake) out.wake = wake;
 		if (r.defer === true) out.defer = true;
 		if (r.hydrated === true) out.hydrated = true;
+		if (r.hidden === true) out.hidden = true;
 		if (typeof r.failed === 'string') {
 			out.failed = r.failed.slice(0, 300);
 			// (its wake → its failure: it was loading, holding the others' turns, meanwhile)

@@ -33,9 +33,10 @@ const PLANTED = {
 	'hydrate-failed': 'Broken',
 	'early-click': 'LateClick',
 	'eager-offscreen': 'BelowEager',
+	'eager-hidden': 'PhoneBar',
 	'long-tasks': null
 };
-const DECOYS = ['Healthy', 'BelowLazy', 'OnClick'];
+const DECOYS = ['Healthy', 'BelowLazy', 'OnClick', 'PhoneBarLazy'];
 /** findings that name the islands that SUFFERED (a decoy may wait behind a planted island) */
 const VICTIM = new Set(['queued']);
 

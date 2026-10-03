@@ -13,6 +13,10 @@
 	// PLANTED healed: a page script edits the Edited island before it wakes
 	const edit = `<script>document.querySelector('[data-dt="edited"] button').textContent = 'edited by a page script';<\/script>`;
 	import OnClick from '$lib/dtlab/OnClick.svelte' with { wake: 'interaction' };
+	// PLANTED eager-hidden: a phone-only bar woken at load (the key's screen is wide); its DECOY, woken
+	// by the query that shows it
+	import PhoneBar from '$lib/dtlab/PhoneBar.svelte' with { wake: 'load' };
+	import PhoneBarLazy from '$lib/dtlab/PhoneBarLazy.svelte' with { wake: '(max-width: 600px)' };
 
 	// PLANTED long-tasks: a page script (not an island) holds the main thread after load.
 	const busy = `<script>addEventListener('load', () => setTimeout(() => { const u = performance.now() + 220; while (performance.now() < u); }, 400));<\/script>`;
@@ -36,3 +40,5 @@
 <div style="height: 400px" aria-hidden="true"></div>
 <Edited />
 {@html edit}
+<PhoneBar />
+<PhoneBarLazy />
