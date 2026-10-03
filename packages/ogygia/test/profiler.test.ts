@@ -58,6 +58,7 @@ import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/
 import { io_kind } from '../src/profiler/async-io.js';
 import { raw_cookie_values } from '../src/profiler/session-cookie.js';
 import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
+import { parse_visit } from '../src/profiler/visit.js';
 import { budget_segments, build_treemap, island_rows, waiting_rows } from '../src/profiler/ui/report-data.js';
 import type { RequestEvent } from '@sveltejs/kit';
 import { set_chunk_contents } from './_stubs/virtual-island-deps.js';
@@ -1750,6 +1751,50 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const file = derive_findings(analyze(p1), { ...meta, prerendered: true, run_static: true } as never, extras).map((f) => f.code);
 		expect(file).toContain('prerendered-page');
 		expect(file.filter((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence', 'cold-start', 'n-plus-one'].includes(c))).toEqual([]);
+	});
+
+	it('the screen the visit had: named on the findings it decides, and what a phone saw that a wide visit did not', () => {
+		const at = Date.now();
+		const base = {
+			nav: { req_start: 1, res_start: 10, res_end: 20, dcl: 100, load: 150 },
+			paints: { fcp: 50, lcp: 60 },
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [
+				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Sidebar.svelte', t0: 100, loaded: 120, turn: 125, done: 130 },
+				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', t0: 100, loaded: 120, turn: 125, done: 130 }
+			]
+		};
+		const wide = parse_visit('/hell', {
+			...base,
+			at,
+			viewport: [1400, 900],
+			regions: [
+				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Sidebar.svelte', hydrated: true, top: 60, height: 800 },
+				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', hydrated: true, top: 2400, height: 80 }
+			]
+		})!;
+		const phone = parse_visit('/hell', {
+			...base,
+			at: at - 60_000,
+			viewport: [390, 844],
+			regions: [
+				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Sidebar.svelte', hydrated: true, top: 60, height: 0, hidden: true },
+				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', hydrated: true, top: 5200, height: 80 }
+			]
+		})!;
+		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit: wide, other_screen_visit: phone } as never);
+		const below = out.find((f) => f.code === 'eager-offscreen')!;
+		expect(below.message.startsWith('In the browser, on a 1400×900 screen: Footer starts below the first screen')).toBe(true);
+		const other = out.find((f) => f.code === 'other-screen')!;
+		// the phone's own news only: the Footer below its first screen is old news
+		expect(other.message.startsWith('On a 390×844 screen (another visit to this page) the browser saw what this one did not: Sidebar draws nothing on this screen (390 px wide)')).toBe(true);
+		expect(other.message).not.toContain('Footer');
+		expect(other.fps).toEqual(['aaaaaaaa11111111']);
+		// no other screen: no such finding
+		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
 	});
 
 	it("a render reading a prerender function's answer over HTTP: its own call, named, not another visitor", () => {

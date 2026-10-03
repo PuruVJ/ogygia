@@ -509,6 +509,8 @@ const PAGE_WAITS_FOR_BACKGROUND_MS = 8000;
 /** a started window stops itself after this, even with no stop (it holds the recorder) */
 const WINDOW_MAX_MS = 60_000;
 const MAX_VISITS_PER_PAGE = 5;
+/** a screen narrower than this is a phone's (its own first screen, its own hidden islands) */
+const NARROW_SCREEN_PX = 768;
 /** Svelte's client runtime, by the names that show up under a component while it hydrates */
 /** the package in a CDN script's path: `/npm/@scope/name@8/dist/x.js`, `/name@1.2.3/x.js`, `/gh/user/repo@v/` */
 const CDN_PKG_RE = /\/(?:npm\/)?((?:@[\w.-]+\/)?[\w.-]+)@[\w.^~-]+\//;
@@ -5482,8 +5484,16 @@ class Profiler {
 		// visit's (the same interaction start, on the page clock)
 		const icpu = stored.interaction_cpu ?? (stored.meta.page ? this.#interaction_cpus.get(stored.meta.page) : undefined);
 		const interaction_cpu = icpu && visit?.interaction && Math.abs(icpu.t - visit.interaction.t) < 2 ? icpu : undefined;
+		// THE OTHER KIND OF SCREEN: the latest kept visit on a phone when this one was wide (or the other
+		// way): the islands below its first screen, or hidden on it, are another list
+		const narrow = (v: Visit) => (v.viewport?.[0] ?? 0) < NARROW_SCREEN_PX;
+		const other_screen_visit =
+			visit?.viewport && stored.meta.page
+				? (this.#visits.get(stored.meta.page) ?? []).filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit)).at(-1)
+				: undefined;
 		return {
 			...(visit ? { visit } : {}),
+			...(other_screen_visit ? { other_screen_visit } : {}),
 			...(interaction_cpu ? { interaction_cpu } : {}),
 			...(hole_requests.length ? { hole_requests } : {}),
 			...(nav_requests.length ? { nav_requests } : {}),

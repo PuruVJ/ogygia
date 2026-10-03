@@ -521,6 +521,9 @@ export interface ReportExtras {
 	replay?: { path: string; headers: Record<string, string> };
 	/** the browser's picture of a visit to this page (the beacon) — the one-clock timeline joins it */
 	visit?: Visit;
+	/** the latest visit to this page on the other kind of screen (a phone's when `visit` was wide, a
+	 *  wide one's when it was a phone's): what sits below the first screen, or draws nothing, differs */
+	other_screen_visit?: Visit;
 	/** the rendered document as a byte strip */
 	strip?: ByteStrip;
 	/** every file the document loads at start, weighed through the app (page-assets.ts); a dev
@@ -804,6 +807,12 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 		runtime_parts
 	};
 }
+
+/** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
+ *  shows smaller or lower down */
+const SCREEN_CODES: ReadonlySet<string> = new Set(['eager-offscreen', 'eager-hidden', 'images-eager-below', 'image-oversized']);
+const IN_BROWSER = 'In the browser: ';
+const screen_of = (v: Visit | undefined): string | null => (v?.viewport ? `${v.viewport[0]}×${v.viewport[1]}` : null);
 
 /** A remote function's name from its call's address (`/<appDir>/remote/<file hash>/<name>/<argument>`),
  *  or the address when it is not one. */
@@ -1474,7 +1483,31 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const all_rows = island_rows_of(meta);
 		const own = island_js_unique(all_rows, extras.weights);
 		const visit_rows = own ? all_rows.map((r) => (own.get(r.entry) ? { ...r, own_bytes: own.get(r.entry)! } : r)) : all_rows;
-		out.push(...browser_findings(browser_page_report(visit, visit_rows, extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev, held_open)).filter((f) => f.code !== 'render-blocking' || !extras.assets));
+		const in_browser = browser_findings(browser_page_report(visit, visit_rows, extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev, held_open)).filter((f) => f.code !== 'render-blocking' || !extras.assets);
+		// THE SCREEN THE VISIT HAD: what sits below its first screen, what draws nothing on it, which
+		// images it shows smaller, are that screen's — the finding says which
+		const here = screen_of(visit);
+		out.push(...in_browser.map((f) => (here && SCREEN_CODES.has(f.code) && f.message.startsWith(IN_BROWSER) ? { ...f, message: `In the browser, on a ${here} screen: ${f.message.slice(IN_BROWSER.length)}` } : f)));
+		// …AND THE OTHER KIND: a phone's visit beside a wide one's (or the other way) sees other islands
+		// below its first screen, others hidden: what it saw that this visit did not
+		const other = extras.other_screen_visit;
+		const there = other ? screen_of(other) : null;
+		if (other && there) {
+			const ours = new Map(in_browser.filter((f) => SCREEN_CODES.has(f.code)).map((f) => [f.code, new Set(f.fps ?? [])]));
+			const theirs = browser_findings(browser_page_report(other, visit_rows, undefined, third, hole_name, hole_server, undefined, !!meta.dev)).filter((f) => {
+				if (!SCREEN_CODES.has(f.code)) return false;
+				const o = ours.get(f.code);
+				return !o || (f.fps ?? []).some((fp) => !o.has(fp));
+			});
+			if (theirs.length)
+				out.push({
+					severity: 'info',
+					code: 'other-screen',
+					message: `On a ${there} screen (another visit to this page) the browser saw what this one did not: ${theirs.map((f) => f.message.slice(f.message.startsWith(IN_BROWSER) ? IN_BROWSER.length : 0)).join(' ')}`,
+					...(theirs.some((f) => f.fix) ? { fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))].slice(0, 2).join(' ') } : {}),
+					fps: [...new Set(theirs.flatMap((f) => f.fps ?? []))]
+				});
+		}
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
