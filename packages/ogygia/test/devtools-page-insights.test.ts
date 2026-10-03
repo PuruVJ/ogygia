@@ -148,6 +148,29 @@ describe('forced layout', () => {
 	it('under 30 ms for each: quiet', () => {
 		expect(run([{ start: 411, end: 419, ms: 8, url: 'http://x/runtime/schedule.ts', fn: '' }])).toBeUndefined();
 	});
+	it("the CPU trace's place, the island named once when the time is its own code", () => {
+		const cpu = {
+			window_ms: 1000,
+			busy_ms: 330,
+			by_kind: [],
+			fns: [],
+			files: [],
+			islands: { aaaa000011112222: { ms: 320, top: [{ name: 'Thrash', file: 'src/lib/Thrash.svelte', line: 5, kind: 'app', self_ms: 307, total_ms: 316 }] } },
+			outside: { ms: 0, top: [] },
+			interval_ms: 10
+		} as never;
+		const f = analyze_page(
+			page({
+				visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], forced_layout: [{ start: 81, end: 409, ms: 317, url: 'http://x/runtime/schedule.ts', fn: '' }] },
+				islands: [{ fp: 'aaaa000011112222', entry: '/src/lib/Thrash.svelte', t0: 80, loaded: 90, turn: 95, done: 410 }]
+			}),
+			[{ fp: 'aaaa000011112222', name: 'Thrash', kind: 'island' } as RegionFact],
+			[],
+			3000,
+			cpu
+		).findings.find((x) => x.code === 'forced-layout');
+		expect(f?.message.startsWith('Thrash while it hydrated (317 ms; mostly its own code (Thrash.svelte:5)) made')).toBe(true);
+	});
 });
 
 describe('images far below the first screen that loaded at start', () => {

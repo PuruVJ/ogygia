@@ -541,7 +541,10 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	/** " — mostly in `fn (file:line)`" from the CPU trace, for a finding about this island (or '') */
 	const why_cpu = (fp: string | null): string => {
 		const f = fp ? cpu?.islands[fp]?.top[0] : cpu?.outside.top[0];
-		return f && f.self_ms >= 5 ? `; mostly ${fn_label(f)}` : '';
+		if (!f || f.self_ms < 5) return '';
+		// (the island's own component: its name once — "Thrash (… mostly its own code (Thrash.svelte:5))")
+		if (fp && f.name === name_of(fp) && f.file) return `; mostly its own code (${f.file.slice(f.file.lastIndexOf('/') + 1)}${f.line !== null ? `:${f.line}` : ''})`;
+		return `; mostly ${fn_label(f)}`;
 	};
 	/** " — mostly <script>" from the long animation frames, when no CPU trace names it (or '') */
 	const why_script = (): string => {

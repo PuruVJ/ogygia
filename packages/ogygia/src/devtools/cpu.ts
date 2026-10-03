@@ -176,8 +176,12 @@ export function analyze_cpu(trace: SelfProfileTrace, windows: IslandWindow[], lo
 	const fn_of = (fid: number, self: number, total: number): CpuFn => {
 		const f = frames[fid] ?? {};
 		const url = f.resourceId !== undefined ? (resources[f.resourceId] ?? '') : '';
+		// (an unnamed function in a component's file — an `$effect`, an inline handler — is that
+		// component's code, named so, as the profiler's analysis names it)
+		const path = url.split('?')[0];
+		const stem = path.endsWith('.svelte') ? path.slice(path.lastIndexOf('/') + 1, -'.svelte'.length) : '';
 		return {
-			name: f.name || (url ? '(anonymous)' : '(browser)'),
+			name: f.name || stem || (url ? '(anonymous)' : '(browser)'),
 			file: url ? clean_file(url, origin) : '',
 			line: typeof f.line === 'number' ? f.line : null,
 			kind: frame_kind(fid),
