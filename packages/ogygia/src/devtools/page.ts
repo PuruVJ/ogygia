@@ -533,6 +533,12 @@ function island_of_file(url: string): { island?: string } {
 		const src = r.el.getAttribute('src');
 		if (r.entry && ((src && base(src) === file) || base(r.entry) === file)) return { island: region_name(r.entry) };
 	}
+	// (the dev server serves the component's own `.svelte` file, and an island's entry there is a
+	// virtual id: by the component's name, as the island is named)
+	if (file.endsWith('.svelte')) {
+		const stem = file.slice(0, -'.svelte'.length);
+		for (const r of all_regions()) if (r.kind === 'island' && r.entry && region_name(r.entry) === stem) return { island: stem };
+	}
 	return {};
 }
 
@@ -553,8 +559,10 @@ export function read_page(): PageView | null {
 	// the slowest interaction's scripts, named by the island whose file each is (its location, or its
 	// identity) — a built chunk name tells the reader nothing
 	const interaction = base.visit?.interaction ? { ...base.visit.interaction, scripts: base.visit.interaction.scripts?.map((s) => ({ ...s, ...island_of_file(s.url) })) } : undefined;
+	// …and the scripts the page's scroll waited on, the same way (a build's handler is a minified name)
+	const scroll_jank = base.visit?.scroll_jank?.map((j) => ({ ...j, scripts: j.scripts.map((s) => ({ ...s, ...island_of_file(s.url) })) }));
 	const with_visit: PageInput = base.visit
-		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}) } }
+		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}), ...(scroll_jank ? { scroll_jank } : {}) } }
 		: base;
 	const holes = hole_failures();
 	const code = island_code();

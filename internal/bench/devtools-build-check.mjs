@@ -270,6 +270,25 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	const dom = await read('/dt-dom', 'dom-large');
 	check('a page of many elements names its island in a build too', dom.length === 1 && dom[0].includes('of them inside DenseList'), JSON.stringify(dom).slice(0, 200));
 }
+// SCROLLING STALLED, in a build: the handler is a minified name in a hashed chunk — named by its island
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	const p = await c.newPage();
+	await p.goto(base + '/dt-jank', { waitUntil: 'load' });
+	await p.waitForTimeout(1200);
+	await p.mouse.move(700, 450);
+	for (let i = 0; i < 8; i++) {
+		await p.mouse.wheel(0, 300);
+		await p.waitForTimeout(150);
+	}
+	await p.waitForTimeout(800);
+	await p.click('[data-og-panel-toggle]').catch(() => {});
+	await p.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+	const jank = await p.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'scroll-jank').map((x) => x.message));
+	await c.close();
+	check('scrolling that stalled names its island in a build too', jank.length === 1 && jank[0].includes("Janky's code") && !jank[0].includes('og-region'), JSON.stringify(jank).slice(0, 220));
+}
 // PRELOADS NOTHING USES, in a build: only once 3 s have passed since load
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });

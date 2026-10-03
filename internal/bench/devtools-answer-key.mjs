@@ -1511,7 +1511,7 @@ try {
 		const lab = await read('/dt-jank');
 		const calm = await read('/dt-big');
 		const checks = [
-			['the heavy handler named, with what ran it', lab.length === 1 && lab[0].includes('mostly heavy_scroll_work (Janky.svelte), run by')],
+			['the heavy handler named, its island, what ran it', lab.length === 1 && lab[0].includes("mostly heavy_scroll_work (Janky's code), run by")],
 			['the once-per-frame one never', lab.length === 1 && !lab[0].includes('light_scroll_read')],
 			['a page scrolled without heavy handlers quiet', calm.length === 0]
 		];
