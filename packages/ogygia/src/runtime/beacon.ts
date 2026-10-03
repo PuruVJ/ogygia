@@ -139,6 +139,12 @@ let visit_longtasks: { t: number; ms: number }[] = [];
 let visit_scripts = new Map<string, { ms: number; count: number }>();
 /** scripts that forced style and layout (5 ms or more), each with its window on the page's clock */
 let visit_forced: { start: number; end: number; ms: number; url: string; fn: string }[] = [];
+/** long frames (50 ms or more) that began while the page scrolled, with their two biggest scripts */
+let visit_scroll_jank: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number }[] }[] = [];
+/** when the page scrolled lately (at most one stamp per 50 ms, the last 200): the long frames are
+ *  delivered after the fact, so each is matched to the scrolls around its own start */
+let scroll_times: number[] = [];
+const scrolled_near = (t: number) => scroll_times.some((s) => s >= t - 150 && s <= t + 50);
 /** THE SLOWEST INTERACTION (the one INP reports), split the way the browser times it: the wait
  *  before its handlers ran, the handlers, and the paint after. `target`: what was clicked, told
  *  briefly; `fp`: the island it was in */
@@ -575,6 +581,18 @@ function observe_vitals(): void {
 			// the scripts that made the browser lay the page out mid-run (a read after a write), with
 			// when: an island's hydration runs inside the runtime's own task, so the report finds the
 			// island by its hydrate window, not by the script's file
+			// a long frame while the page scrolled: the visitor's scroll waited on it (the scripts in it,
+			// biggest first — a scroll handler's work shows as its invoker)
+			if (e.duration >= 50 && scrolled_near(e.startTime) && make_room(visit_scroll_jank, 20, (j) => j.start))
+				visit_scroll_jank.push({
+					start: r2(e.startTime),
+					ms: r2(e.duration),
+					scripts: (e.scripts ?? [])
+						.slice()
+						.sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0))
+						.slice(0, 2)
+						.map((s) => ({ url: (s.sourceURL ?? '').slice(0, 300), fn: (s.sourceFunctionName ?? '').slice(0, 80), invoker: (s.invoker ?? '').slice(0, 120), ms: r2(s.duration ?? 0) }))
+				});
 			for (const s of e.scripts ?? [])
 				if ((s.forcedStyleAndLayoutDuration ?? 0) >= 5 && make_room(visit_forced, 30, (f) => f.start)) {
 					const start = s.startTime ?? e.startTime;
@@ -620,6 +638,17 @@ function observe_vitals(): void {
 	try {
 		document.addEventListener('pointerdown', first('pointer'), { capture: true, passive: true });
 		document.addEventListener('keydown', first('key'), { capture: true, passive: true });
+		// (scrolls of the page and of any scroller: captured, passive, one stamp per 50 ms)
+		document.addEventListener(
+			'scroll',
+			() => {
+				const t = performance.now();
+				if (scroll_times.length && t - scroll_times[scroll_times.length - 1] < 50) return;
+				scroll_times.push(t);
+				if (scroll_times.length > 200) scroll_times.shift();
+			},
+			{ capture: true, passive: true }
+		);
 	} catch {
 		// no document
 	}
@@ -1166,6 +1195,7 @@ function build_visit(): Record<string, unknown> | null {
 		// guess from the HTML)
 		...(unsized ? { images_unsized: unsized } : {}),
 		...(visit_forced.length ? { forced_layout: visit_forced.slice() } : {}),
+		...(visit_scroll_jank.length ? { scroll_jank: visit_scroll_jank.slice() } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
@@ -1918,6 +1948,8 @@ export function _reset_beacon(): void {
 	visit_longtasks = [];
 	visit_scripts = new Map();
 	visit_forced = [];
+	visit_scroll_jank = [];
+	scroll_times = [];
 	visit_interaction = null;
 	visit_interaction_id = 0;
 	visit_interaction_span = null;

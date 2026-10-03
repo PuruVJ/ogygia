@@ -1490,6 +1490,35 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// SCROLLING STALLED (/dt-jank: Janky's scroll handler works 120 ms per event — the plant; Calm's
+	// reads once per frame — the decoy): scrolled with the wheel, Janky's handler named with its
+	// invoker, never Calm's; /dt-big scrolled the same way quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1200);
+			await page.mouse.move(700, 450);
+			for (let i = 0; i < 8; i++) {
+				await page.mouse.wheel(0, 300);
+				await page.waitForTimeout(150);
+			}
+			await page.waitForTimeout(800);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'scroll-jank').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-jank');
+		const calm = await read('/dt-big');
+		const checks = [
+			['the heavy handler named, with what ran it', lab.length === 1 && lab[0].includes('mostly heavy_scroll_work (Janky.svelte), run by')],
+			['the once-per-frame one never', lab.length === 1 && !lab[0].includes('light_scroll_read')],
+			['a page scrolled without heavy handlers quiet', calm.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} scrolling stalled: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, calm })}` : ''}`);
+	}
 	// IMAGES THE BROWSER COULD HOLD NO ROOM FOR (/dt-cls: its hero has no width and height — the
 	// plant; /dt-img's unsized image sits in a hidden parent — the decoy, which an HTML scan cannot
 	// tell): hero.svg named with the page's move, /dt-img quiet

@@ -160,6 +160,8 @@ export interface PageInput {
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
 		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
 		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+		/** long frames (50 ms or more) that began while the page scrolled, with their two biggest scripts */
+		scroll_jank?: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number }[] }[];
 		/** scripts that forced style and layout (5 ms or more): their window, the forced ms, the
 		 *  script's file and entry function (an island's hydration shows as the runtime's own task) */
 		forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
@@ -959,6 +961,35 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message: `${list(big.length > 3 ? [...named, `${big.length - 3} more`] : named)} ${big.length === 1 ? 'is' : 'are'} sent far bigger than shown: about ${kb(big_waste)} of ${kb(big.reduce((n, i) => n + i.bytes, 0))} is pixels nobody sees.`,
 			fix: 'Serve each image near the size it shows at: a `srcset` with a few widths and a `sizes` that says how wide it shows (the browser picks the smallest that is sharp), or resize the file itself.',
 			fps: [...new Set(big.flatMap((i) => (i.fp ? [i.fp] : [])))]
+		});
+	}
+
+	// ── scrolling stalled: long frames while the page scrolled — the visitor's scroll waited on them ──
+	const jank = page.visit?.scroll_jank ?? [];
+	const jank_ms = jank.reduce((n, j) => n + j.ms, 0);
+	const worst = jank.reduce((m, j) => Math.max(m, j.ms), 0);
+	if (jank.length && (worst >= 100 || jank_ms >= 200)) {
+		const file = (u: string) => {
+			const q = u.indexOf('?');
+			const p = q === -1 ? u : u.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1) || 'an inline script';
+		};
+		// the script that held the frames most, by its file, its function and what ran it
+		const by = new Map<string, { label: string; ms: number }>();
+		for (const j of jank)
+			for (const s of j.scripts) {
+				const label = `${s.fn ? `${s.fn} (${file(s.url)})` : file(s.url)}${s.invoker ? `, run by ${s.invoker}` : ''}`;
+				const e = by.get(label);
+				if (e) e.ms += s.ms;
+				else by.set(label, { label, ms: s.ms });
+			}
+		const top = [...by.values()].sort((a, b) => b.ms - a.ms)[0];
+		findings.push({
+			code: 'scroll-jank',
+			severity: 'warn',
+			message: `Scrolling stalled: ${jank.length} frame${jank.length === 1 ? '' : 's'} took ${jank.length === 1 ? `${Math.round(worst)} ms` : `up to ${Math.round(worst)} ms (${Math.round(jank_ms)} ms in all)`} while the page scrolled${top ? `, mostly ${top.label} (${Math.round(top.ms)} ms)` : ''}: the page could not follow the visitor's scroll.`,
+			fix: 'Do little in a scroll handler: mark it passive, do the work once per frame (requestAnimationFrame), or watch with an IntersectionObserver instead of measuring on every scroll event.',
+			fps: []
 		});
 	}
 

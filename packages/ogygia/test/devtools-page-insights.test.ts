@@ -77,6 +77,20 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('scrolling stalled', () => {
+	const at = (frames: NonNullable<NonNullable<PageInput['visit']>['scroll_jank']>) =>
+		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], scroll_jank: frames } }), [], [], 3000).findings.find((f) => f.code === 'scroll-jank');
+	const heavy = { url: 'http://x/src/lib/Janky.svelte?t=1', fn: 'heavy_scroll_work', invoker: 'DOMWindow.onscroll', ms: 120 };
+	it('names the frames, the worst, and the script that held them most with what ran it', () => {
+		expect(at([{ start: 1200, ms: 128, scripts: [heavy] }, { start: 1400, ms: 124, scripts: [heavy, { url: 'http://x/a.js', fn: '', invoker: 'TimerHandler', ms: 2 }] }])?.message).toBe(
+			"Scrolling stalled: 2 frames took up to 128 ms (252 ms in all) while the page scrolled, mostly heavy_scroll_work (Janky.svelte), run by DOMWindow.onscroll (240 ms): the page could not follow the visitor's scroll."
+		);
+	});
+	it('a frame or two of 60 ms: quiet', () => {
+		expect(at([{ start: 1200, ms: 60, scripts: [heavy] }, { start: 1400, ms: 62, scripts: [] }])).toBeUndefined();
+	});
+});
+
 describe('images the browser could hold no room for', () => {
 	const at = (cls: number | undefined) =>
 		analyze_page(page({ vitals: cls === undefined ? {} : { cls }, visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], images_unsized: ['http://x/dt-lcp/hero.svg?quick'] } }), [], [], 3000).findings.find((f) => f.code === 'img-unsized');
