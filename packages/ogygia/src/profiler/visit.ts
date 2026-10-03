@@ -520,7 +520,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 			for (const s of (Array.isArray(it.scripts) ? it.scripts : []).slice(0, 6) as Record<string, unknown>[]) {
 				const sms = num(s?.ms);
 				if (sms === undefined || typeof s.phase !== 'string' || !phases.has(s.phase)) continue;
-				scripts.push({ url: str(s.url, 300) ?? '', fn: str(s.fn, 80) ?? '', invoker: str(s.invoker, 120) ?? '', ms: sms, phase: s.phase as 'delay' | 'handler' | 'paint' });
+				const forced = num(s.forced);
+				scripts.push({ url: str(s.url, 300) ?? '', fn: str(s.fn, 80) ?? '', invoker: str(s.invoker, 120) ?? '', ms: sms, phase: s.phase as 'delay' | 'handler' | 'paint', ...(forced ? { forced: Math.min(forced, sms) } : {}) });
 			}
 			visit.interaction = {
 				name,

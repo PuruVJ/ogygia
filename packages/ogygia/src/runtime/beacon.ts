@@ -167,7 +167,7 @@ let visit_interaction_span: { start: number; ps: number; pe: number; end: number
 interface Frame {
 	start: number;
 	end: number;
-	scripts: { url: string; fn: string; invoker: string; start: number; ms: number }[];
+	scripts: { url: string; fn: string; invoker: string; start: number; ms: number; forced?: number }[];
 }
 let visit_frames: Frame[] = [];
 const MAX_FRAMES = 40;
@@ -621,7 +621,9 @@ function observe_vitals(): void {
 					fn: (s.sourceFunctionName ?? '').slice(0, 80),
 					invoker: (s.invoker ?? '').slice(0, 120),
 					start: r2(s.startTime ?? e.startTime),
-					ms: r2(s.duration ?? 0)
+					ms: r2(s.duration ?? 0),
+					// (of it, the browser laying the page out because the script read sizes after a change)
+					...((s.forcedStyleAndLayoutDuration ?? 0) >= 1 ? { forced: r2(s.forcedStyleAndLayoutDuration!) } : {})
 				}))
 			});
 			if (visit_frames.length > MAX_FRAMES) visit_frames.shift();
@@ -728,18 +730,18 @@ function nav_phases(n: PerformanceNavigationTiming): { phases?: Record<string, n
 /** The slowest interaction with the scripts of the long frames it overlapped, each put in the phase
  *  it started in: `delay` (the input waited behind it), `handler` (it ran the interaction's
  *  handlers), `paint` (after them, before the next frame). The heaviest few. */
-function interaction_with_scripts(i: Interaction): Interaction & { scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint' }[] } {
+function interaction_with_scripts(i: Interaction): Interaction & { scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; forced?: number }[] } {
 	const end = i.t + i.ms;
 	const handlers_at = i.t + i.delay;
 	const paint_at = handlers_at + i.processing;
-	const out: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint' }[] = [];
+	const out: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; forced?: number }[] = [];
 	for (const f of visit_frames) {
 		if (f.end < i.t || f.start > end) continue;
 		for (const s of f.scripts) {
 			// (a script that ended before the input landed is not in the way; one that runs through it is)
 			if (s.start + s.ms < i.t || s.start > end || !(s.ms > 0)) continue;
 			const phase = s.start < handlers_at ? 'delay' : s.start <= paint_at ? 'handler' : 'paint';
-			out.push({ url: s.url, fn: s.fn, invoker: s.invoker, ms: s.ms, phase });
+			out.push({ url: s.url, fn: s.fn, invoker: s.invoker, ms: s.ms, phase, ...(s.forced ? { forced: s.forced } : {}) });
 		}
 	}
 	out.sort((a, b) => b.ms - a.ms);

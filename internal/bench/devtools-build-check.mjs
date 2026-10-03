@@ -172,6 +172,18 @@ check('Styles: the Page tab shows the sheets and the unscoped line', (await page
 		await p.close();
 		return m;
 	};
+	// (a click whose handler reads sizes between writes: how much of it was forced layout)
+	{
+		const p = await ctx.newPage();
+		await p.goto(base + '/dt-inp-thrash', { waitUntil: 'load' });
+		await p.waitForTimeout(1500);
+		const b = await p.locator('[data-inp="thrash"]').boundingBox();
+		await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+		await p.waitForTimeout(1000);
+		const f = await p.evaluate(() => window.__ogygia_page?.()?.report.findings.find((x) => x.code === 'slow-interaction') ?? null);
+		await p.close();
+		check('INP in a build: a handler that forced layout says how much, with the read-then-write fix', !!f && f.message.includes('in ThrashSort') && f.message.includes('the browser laying the page out again') && f.fix.startsWith('Much of the handler is forced layout'), f ? `${f.message} | ${f.fix}`.slice(0, 300) : 'no finding');
+	}
 	const save = await inp_of('save');
 	check('INP in a build: the slow handler, on SlowSave, its own handler', !!save && save.includes('in SlowSave') && save.includes("SlowSave's own click handler"), save ?? 'no finding');
 	const busy = await inp_of('busy');

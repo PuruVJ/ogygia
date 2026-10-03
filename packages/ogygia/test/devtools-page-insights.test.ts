@@ -838,6 +838,17 @@ describe('analyze_page', () => {
 			expect(codes(r)).not.toContain('vital-inp');
 		});
 
+		it('a handler that forced layout: how much of it, and the read-then-write fix; a little never', () => {
+			const at_forced = (forced: number) =>
+				find(analyze_page(page({ vitals: { inp: 300 }, visit: at({ interaction: it_of({ scripts: [{ url: `${origin}/_app/immutable/chunks/events-B1q.js`, fn: 'handle_event_propagation', invoker: 'DOCUMENT.onclick', ms: 268, phase: 'handler', forced }] }) }) }), [region('s', 'SlowSave')], [], 3000))!;
+			const f = at_forced(190);
+			expect(f.message).toContain("270 ms in its handlers (mostly SlowSave's own click handler; 190 ms of it the browser laying the page out again because the code read sizes after changing it)");
+			expect(f.fix).toMatch(/^Much of the handler is forced layout/);
+			const little = at_forced(12);
+			expect(little.message).not.toContain('laying the page out');
+			expect(little.fix).toMatch(/^The handler itself is the cost/);
+		});
+
 		it('another origin’s listener keeps its own name', () => {
 			const f = find(analyze_page(page({ vitals: { inp: 300 }, visit: at({ interaction: it_of({ scripts: [{ url: 'https://tags.example/t.js', fn: 'track', invoker: 'DOCUMENT.onclick', ms: 250, phase: 'handler' }] }) }) }), [region('s', 'SlowSave')], [], 3000))!;
 			expect(f.message).toContain("(mostly t.js's track (an event handler, 250 ms))");

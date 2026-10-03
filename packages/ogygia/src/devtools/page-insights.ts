@@ -50,7 +50,8 @@ export interface PageInteraction {
 	presentation: number;
 	target: string;
 	fp?: string;
-	scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; island?: string }[];
+	/** (`forced`: of a script's time, the browser laying the page out because it read sizes after a change) */
+	scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; island?: string; forced?: number }[];
 }
 
 /** The slowest interaction, sampled (JS Self-Profiling): the functions that ran while it waited and
@@ -2343,9 +2344,15 @@ function explain_interaction(
 		: wait_fn
 			? `the main thread was running ${fn_label(wait_fn)}, ${Math.round(wait_fn.self_ms)} ms sampled${of_phase('delay')[0] && script_kind(of_phase('delay')[0].invoker) ? `, run by ${script_kind(of_phase('delay')[0].invoker)}` : ''}`
 			: behind;
+	// THE HANDLERS' FORCED LAYOUT: of their time, the browser laying the page out mid-run because the
+	// code read a size after a change (a third of it or more, 16 ms or more: what to say first)
+	const forced_ms = of_phase('handler').reduce((s, x) => s + (x.forced ?? 0), 0);
+	const forced = forced_ms >= 16 && forced_ms >= i.processing * 0.3 ? Math.min(forced_ms, i.processing) : 0;
+	const forced_text = forced ? `; ${ms(forced)} of it the browser laying the page out again because the code read sizes after changing it` : '';
 	const parts = phases.map((p) => {
 		if (p.key === 'delay' && wait_text && p.ms >= 16) return `${p.text} (${wait_text})`;
-		if (p.key === 'handler' && handler_text && p.ms >= 16) return `${p.text} (mostly ${handler_text})`;
+		if (p.key === 'handler' && handler_text && p.ms >= 16) return `${p.text} (mostly ${handler_text}${forced_text})`;
+		if (p.key === 'handler' && forced) return `${p.text} (${forced_text.slice(2)})`;
 		return p.text;
 	});
 	const message = `The slowest was ${what}${on} ${where}: ${parts[0]}, ${parts[1]}, ${parts[2]}.`;
@@ -2355,7 +2362,9 @@ function explain_interaction(
 				? 'The input waited for islands to hydrate: wake the ones not needed at once later (wake="visible" or "idle"), or make their hydration lighter, so a click is never queued behind it.'
 				: 'The input waited for other work on the main thread: split that long task (yield between steps with `await new Promise(r => setTimeout(r))`), or move it off the main thread, or run it when the visitor is not interacting.'
 			: top.key === 'handler'
-				? 'The handler itself is the cost: update the screen first and do the heavy part after the next frame (`requestAnimationFrame` then `setTimeout`), do less per event, or move the work to a worker.'
+				? forced
+					? 'Much of the handler is forced layout: it reads a size or position (offsetHeight, getBoundingClientRect, getComputedStyle) after changing the page, and the browser lays the page out again for each read. Read every size first, then make the changes (or batch them in one requestAnimationFrame); never read between writes in a loop.'
+					: 'The handler itself is the cost: update the screen first and do the heavy part after the next frame (`requestAnimationFrame` then `setTimeout`), do less per event, or move the work to a worker.'
 				: 'Painting the result is the cost: the handler changed a lot of the page. Change less per update (a shorter list, `content-visibility: auto` for off-screen parts), and avoid reading layout right after writing it.';
 	return { message, fix, fps: i.fp ? [i.fp] : [] };
 }
