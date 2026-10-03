@@ -445,6 +445,7 @@ const OGYGIA_WRAPPERS = new Set([
 	'OgygiaBoundary',
 	'NestedProvider',
 	'LiveHost',
+	'KeepHost',
 	'Blocks',
 	'RawHtml',
 	'Provide',

@@ -129,7 +129,8 @@ function runtime_content_hash(): string {
 		fileURLToPath(new URL('../shims/page-store.svelte.js', import.meta.url)),
 		fileURLToPath(new URL('../shims/kit-remote/client-stub.js', import.meta.url)),
 		fileURLToPath(new URL('../NestedProvider.svelte', import.meta.url)),
-		fileURLToPath(new URL('../LiveHost.svelte', import.meta.url))
+		fileURLToPath(new URL('../LiveHost.svelte', import.meta.url)),
+		fileURLToPath(new URL('../KeepHost.svelte', import.meta.url))
 	];
 	// Every runtime module (core + feature impls + slots) — any change must bust the sticky filename.
 	try {

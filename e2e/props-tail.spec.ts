@@ -86,6 +86,11 @@ test.describe('PROPS TAIL: island props ride at the end of the body, keyed by fi
 			(await page.locator('ogygia-region[data-hydrated]').count()) === 4,
 			String(await page.locator('ogygia-region[data-hydrated]').count())
 		);
+		// …each ADOPTING its server DOM: the kept island too (it hydrates through its own host, in a
+		// placed island's SSR shape — through the live host it met a branch marker it did not expect
+		// and threw its server DOM away on every load)
+		const recovered = await page.locator('ogygia-region[data-og-recovered]').evaluateAll((els) => els.map((e) => e.getAttribute('data-ogygia-keep') || e.getAttribute('entry')));
+		check('no island discarded its server DOM (the kept one included)', recovered.length === 0, recovered.join(', '));
 		// NO WATERFALL: at the wake the runtime preloaded each island's whole graph beside its
 		// `import()`, so every chunk an island needs started before its entry finished downloading —
 		// none waited to be discovered by parsing the entry.

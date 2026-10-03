@@ -160,6 +160,8 @@ export type Slots = {
 	interaction: ArmFn | null;
 	morph: MorphFn | null;
 	live: Component<Record<string, unknown>> | null;
+	/** a kept island's host (the live feature fills it beside `live`) */
+	keep: Component<Record<string, unknown>> | null;
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
 	frames: FrameOps | null;
@@ -201,6 +203,7 @@ export const slots: Slots = {
 	interaction: null,
 	morph: null,
 	live: null,
+	keep: null,
 	wire: null,
 	remoteSeeds: null,
 	frames: null,

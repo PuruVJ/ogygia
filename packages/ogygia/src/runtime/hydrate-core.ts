@@ -692,8 +692,9 @@ export function hydrate_island(
 		const wrapped = foreign ? props : prop_guard.wrap(props, entry);
 		// Keep needs SPA navigation — a full-page load throws the DOM away, so there is nothing
 		// to relocate. Warn (dev) when the router is off on this page.
-		const LiveHost = slots.live;
-		const keep = region.hasAttribute('data-ogygia-keep') && !!LiveHost;
+		// (a kept island's own host: the placed island's SSR shape, which LiveHost's render() shape is not)
+		const KeepHost = slots.keep ?? slots.live;
+		const keep = region.hasAttribute('data-ogygia-keep') && !!KeepHost;
 		if (keep && import.meta.env.DEV && !document.querySelector('meta[name="ogygia-router"]')) {
 			console.warn(
 				`[ogygia] island "${entry}" has keep:'${region.getAttribute('data-ogygia-keep')}' but the SPA router is off (ogygia({ router: false })) — keep relies on SPA navigation; a full-page load replaces the DOM, so the attribute is a no-op here.`
@@ -733,10 +734,10 @@ export function hydrate_island(
 				// Undefined when there is no provider above — the common case pays only a short DOM walk.
 				const provided_ctx = capture_region_ids(region, () => slots.context?.(region));
 				const recovery = recover ? {} : { recover: false as const };
-				// A PERSIST island hydrates through LiveHost (same no-DOM render as NestedProvider) so
+				// A PERSIST island hydrates through KeepHost (NestedProvider's shape, with pushable props) so
 				// that when it relocates onto the next page its props can be pushed in reactively.
 				if (keep) {
-					const app = hydrate(LiveHost!, {
+					const app = hydrate(KeepHost!, {
 						target: region,
 						props: { component: Component, initialProps: wrapped },
 						...(provided_ctx ? { context: provided_ctx } : {}),
