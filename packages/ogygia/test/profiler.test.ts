@@ -3368,6 +3368,9 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 			'3 hot functions sit on one path under buildTree: format, walk, sortRows — 70.0 ms together (70.0% of busy).'
 		);
 		expect(f.anchor).toMatch(/^fn:buildTree /);
+		// the same share of a render whose group is only a millisecond: a note, not a warning
+		const tiny = { ...a, busy_ms: 1.4, paths: a.paths.map((x) => ({ ...x, ms: 1 })) };
+		expect(derive_findings(tiny as never, meta as never, { net: [], mem: [] } as never).find((x) => x.code === 'path-group')?.severity).toBe('info');
 		const j = report_json(a, meta as never, '/p', { net: [], mem: [] } as never);
 		expect(j.paths[0]).toMatchObject({
 			owner: { name: 'buildTree', line: 11 },

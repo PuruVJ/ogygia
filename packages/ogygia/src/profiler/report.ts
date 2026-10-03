@@ -849,6 +849,9 @@ export function remote_function_name(path: string): string {
 	return at > 0 && parts[at + 2] ? parts[at + 2] : path;
 }
 
+/** a path group is a warning from this much of one render (and 15% of its busy time): under it, a note */
+const PATH_WARN_MS = 3;
+
 /** findings about a server render — its CPU, components, calls, memory — that mean nothing when the
  *  build's file answered (no render ran: `run_static`) */
 const RENDER_ONLY: ReadonlySet<string> = new Set([
@@ -1581,7 +1584,8 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	accuracy_findings(a, meta, extras, info, warn);
 	// PATHS: several hot functions under one caller — the one place to fix (the graph is below)
 	for (const g of (a.paths ?? []).slice(0, 3)) {
-		const say = g.ms >= a.busy_ms * 0.15 ? warn : info;
+		// (a warning for a share that is also time: 15% of a 7 ms render is a millisecond, a note)
+		const say = g.ms >= a.busy_ms * 0.15 && pr(g.ms) >= PATH_WARN_MS ? warn : info;
 		say(
 			'path-group',
 			`${g.fns.length} hot functions sit on one path under ${g.owner.name}: ${g.fns
