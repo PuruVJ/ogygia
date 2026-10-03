@@ -4,7 +4,7 @@
  * `window.__ogygia_page()` (dev-only, devtools builds) so the planted-problem answer key and e2e
  * read the same report the tab shows without opening the panel.
  */
-import { beacon_page, hole_request_times } from '../runtime/beacon.js';
+import { beacon_page, hole_request_times, is_headless } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { page_ledger } from './ledger-dom.js';
 import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.js';
@@ -102,8 +102,10 @@ export function region_facts(): RegionFact[] {
 		// DRAWS NOTHING ON THIS SCREEN: no box of its own nor a child's (its CSS hides it here, or it is
 		// empty) — then its top is no place on the page, and the screen sizes that show it are the news
 		const hidden = r.kind === 'island' && !box.height && !box.width && !has_child_box(r.el);
+		// (one that never draws — only `hidden` markers — is there for its effects: no screen shows it)
+		const headless = hidden && is_headless(r.el);
 		let shows_at: string | null = null;
-		if (hidden && EAGER_WAKES.has(r.wake)) {
+		if (hidden && !headless && EAGER_WAKES.has(r.wake)) {
 			// (read once per island while the page's sheets stay the same: the tab asks every tick)
 			const key = `${r.fp}:${document.styleSheets.length}`;
 			const seen = media_seen.get(key);
@@ -121,6 +123,7 @@ export function region_facts(): RegionFact[] {
 			top: Math.round((box.height || box.width ? box.top : first_child_top(r.el)) + sy),
 			height: Math.round(box.height),
 			...(hidden ? { hidden: true as const } : {}),
+			...(headless ? { headless: true as const } : {}),
 			...(shows_at ? { shows_at } : {})
 		});
 	}

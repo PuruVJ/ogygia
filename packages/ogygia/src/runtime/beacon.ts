@@ -1523,8 +1523,9 @@ function visit_regions(): Record<string, unknown>[] {
 				...(failed !== undefined ? { failed, ...(failed_spans.has(fp) ? { failed_span: failed_spans.get(fp) } : {}) } : {}),
 				top: Math.round(box.top + sy),
 				height: Math.round(box.height),
-				// (no box of its own nor a child's: it draws nothing on this screen)
-				...(!box.height && !box.width ? { hidden: true } : {})
+				// (no box of its own nor a child's: it draws nothing on this screen — or, headless, it never
+				// draws: only `hidden` markers)
+				...(!box.height && !box.width ? { hidden: true, ...(is_headless(el) ? { headless: true } : {}) } : {})
 			});
 		}
 	} catch {
@@ -1893,6 +1894,17 @@ const RUNTIME_MARKS = [' data-nested=""', ' data-hydrated=""', ' data-og-kept=""
 export function without_runtime_marks(html: string): string {
 	for (const m of RUNTIME_MARKS) if (html.includes(m)) html = html.split(m).join('');
 	return html;
+}
+
+/** A HEADLESS island: it renders nothing meant to be seen — no text of its own, and every element
+ *  child marked `hidden` (a marker its effects hang on) — so it exists for its effects, and the
+ *  screen sizes that would show it are no question. */
+export function is_headless(el: Element): boolean {
+	for (const n of el.childNodes) {
+		if (n.nodeType === 3 && (n.textContent ?? '').trim()) return false;
+		if (n.nodeType === 1 && !(n as Element).hasAttribute('hidden')) return false;
+	}
+	return true;
 }
 
 /** How many times `needle` occurs in `html` (string search). */

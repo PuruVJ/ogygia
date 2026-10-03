@@ -701,6 +701,15 @@ describe('analyze_page', () => {
 		expect(two.message).toContain("the page's CSS shows ShellBar only at (max-width: 900px); CodeChrome has no box of its own (hidden by CSS, or empty).");
 		expect(two.fix).toContain("Wake ShellBar by that media query (`with { wake: '(max-width: 900px)' }`)");
 		expect(two.fix).toContain('For CodeChrome: if it shows only on some screens');
+		// headless (only `hidden` markers): there for its effects — not "draws nothing on this screen";
+		// named for its weight only when that is something
+		const head = (own_bytes?: number) =>
+			analyze_page(page(), [region('h', 'BootEffects', 'load', { top: 0, hidden: true, headless: true, ...(own_bytes ? { own_bytes } : {}) })], [], 500).findings;
+		expect(head().map((f) => f.code)).not.toContain('eager-hidden');
+		expect(head().map((f) => f.code)).not.toContain('headless-island');
+		const heavy = head(9_216).find((f) => f.code === 'headless-island')!;
+		expect(heavy.message).toBe('BootEffects (9.0 KB of its own) renders nothing to see — only hidden markers — and loads its code at page load to run its effects.');
+		expect(heavy.fix).toContain("`wake: 'idle'`");
 		// one that failed draws nothing because it broke: its failure says so, not this
 		const broke = analyze_page(page(), [region('b', 'Broken', 'load', { top: 0, hidden: true })], [{ fp: 'b', message: 'boom' }], 500);
 		expect(codes(broke)).not.toContain('eager-hidden');

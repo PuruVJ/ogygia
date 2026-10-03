@@ -92,7 +92,7 @@ export function browser_page_report(
 		const kind = r.defer ? 'hole' : r.wake === 'none' ? 'lake' : 'island';
 		// (its own bytes by fingerprint, else by entry: another copy's props, the same files)
 		const own = kind === 'island' ? (rows.find((x) => x.fp === r.fp) ?? (r.entry ? rows.find((x) => x.entry === r.entry) : undefined))?.own_bytes : undefined;
-		return { fp: r.fp, name: name_of(r.fp, r.entry), kind, wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'), hydrated: !!r.hydrated, top: r.top, height: r.height, ...(own ? { own_bytes: own } : {}), ...(kind === 'island' && r.hidden ? { hidden: true as const } : {}) };
+		return { fp: r.fp, name: name_of(r.fp, r.entry), kind, wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'), hydrated: !!r.hydrated, top: r.top, height: r.height, ...(own ? { own_bytes: own } : {}), ...(kind === 'island' && r.hidden ? { hidden: true as const, ...(r.headless ? { headless: true as const } : {}) } : {}) };
 	});
 	// an island that woke but is not in the regions list (an older beacon): named all the same
 	const known = new Set(regions.map((r) => r.fp));

@@ -338,6 +338,8 @@ export interface RegionFact {
 	hidden?: true;
 	/** the media query under which the page's CSS shows it (read off the sheets), when one does */
 	shows_at?: string;
+	/** it never draws: no text, only `hidden` marker elements — an island there for its effects */
+	headless?: true;
 }
 
 export interface Failure {
@@ -1039,7 +1041,26 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// (a mobile bar on a wide screen, a desktop sidebar on a phone: its code loads, and it shows nothing)
 	// (not one that failed: it draws nothing because it broke, and its failure says so)
 	const broke = new Set(failures.map((f) => f.fp));
-	const eager_hidden = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && r.hidden && !broke.has(r.fp));
+	// (nor a headless one — only `hidden` markers: it is there for its effects, no screen shows it;
+	// below, its weight when that is the news)
+	const eager_hidden = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && r.hidden && !r.headless && !broke.has(r.fp));
+	// ── a headless island whose own code is no small thing ──
+	const headless = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && r.headless && !broke.has(r.fp) && (r.own_bytes ?? 0) >= EAGER_BELOW_SMALL);
+	if (headless.length) {
+		const own = new Map<string, number>();
+		for (const r of headless) own.set(r.name, r.own_bytes!);
+		const names = [...own.keys()];
+		const one = names.length === 1;
+		const total = [...own.values()].reduce((s, n) => s + n, 0);
+		const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
+		findings.push({
+			code: 'headless-island',
+			severity: total >= EAGER_BELOW_WARN ? 'warn' : 'info',
+			message: `${list(names.map((n) => `${n} (${kb(own.get(n)!)} of its own)`))} render${one ? 's' : ''} nothing to see — only hidden markers — and load${one ? 's' : ''} ${one ? 'its' : 'their'} code at page load to run ${one ? 'its' : 'their'} effects.`,
+			fix: `Worth it if the effects must run at start. Otherwise ${headless.some((r) => r.wake === 'load') ? "run them later (`wake: 'idle'`, after the page settles), or " : ''}move them into an island the visitor touches, where they load with it.`,
+			fps: headless.map((r) => r.fp)
+		});
+	}
 	if (eager_hidden.length) {
 		const names = [...new Set(eager_hidden.map((r) => r.name))];
 		const one = names.length === 1;
