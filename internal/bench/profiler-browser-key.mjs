@@ -41,6 +41,10 @@ const LABS = [
 	// (scrolled with the wheel after load: the beacon sends the jank again, the page never hides)
 	// (a build's handler is a minified name in a hashed chunk: named by the island whose file it is)
 	{ path: '/dt-jank', stay: 3000, scroll: true, named: { 'scroll-jank': "Janky's code, run by" }, never: { 'scroll-jank': 'Calm' } },
+	// (a click whose handler reads sizes between writes: how much of it was forced layout, by its island)
+	{ path: '/dt-inp-thrash', stay: 2000, click: '[data-inp="thrash"]', named: { 'slow-interaction': "ThrashSort's own click handler; " }, fix_says: { 'slow-interaction': 'Much of the handler is forced layout' } },
+	// (a handler that is just busy: its own work, never called forced layout)
+	{ path: '/dt-inp', stay: 2000, click: '[data-inp="save"]', named: { 'slow-interaction': "(mostly SlowSave's own click handler)" }, fix_says: { 'slow-interaction': 'The handler itself is the cost' } },
 	// (the server's own answer: the page's Cache-Control, read off the profiled render)
 	{ path: '/dt-nostore', stay: 1000, named: { 'bfcache-no-store': 'Cache-Control: no-store' } },
 	// (the same page every render: "cache it", but a hook's cookie on the answer must be named first;
@@ -103,6 +107,12 @@ try {
 			if (d.includes('"visit"')) biggest = Math.max(biggest, d.length);
 		});
 		await page.goto(base + lab.path + (lab.query ?? ''), { waitUntil: 'load' });
+		// (a click with the mouse, after the islands woke: the slowest interaction is the visit's)
+		if (lab.click) {
+			await page.waitForTimeout(1500);
+			const b = await page.locator(lab.click).boundingBox();
+			if (b) await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+		}
 		if (lab.scroll) {
 			await page.waitForTimeout(1200);
 			await page.mouse.move(700, 450);
