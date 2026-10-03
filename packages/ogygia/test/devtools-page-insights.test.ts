@@ -1173,6 +1173,16 @@ describe('analyze_page', () => {
 		expect(codes(analyze_page(page({ visit: { ...page().visit!, paints: { fcp: 420 }, resources: slow } }), [], [], 500))).toContain('render-blocking');
 	});
 
+	it("a build's small blocking stylesheets: the inlineStyleThreshold that takes them off the paint", () => {
+		const css = (name: string, kb: number, end = 400) => ({ url: `http://x/_app/immutable/assets/${name}.css`, type: 'css', start: 60, end, size: Math.round(kb * 1024), blocking: true });
+		const resources = [css('big', 17), css('shell', 7), css('chrome', 3), css('header', 2)];
+		const f = analyze_page(page({ visit: { ...page().visit!, paints: { fcp: 420 }, resources } }), [], [], 500).findings.find((x) => x.code === 'render-blocking')!;
+		expect(f.fix).toMatch(/^With `kit: \{ inlineStyleThreshold: 8192 \}` in svelte\.config\.js, 3 of these stylesheets \(12\.0 KB\) arrive inside the HTML: 1 file left to wait on instead of 4\./);
+		// the dev server's files are no build's: the general advice
+		const dev = resources.map((r) => ({ ...r, url: r.url.replace('/_app/immutable/assets/', '/src/lib/') }));
+		expect(analyze_page(page({ visit: { ...page().visit!, paints: { fcp: 420 }, resources: dev } }), [], [], 500).findings.find((x) => x.code === 'render-blocking')!.fix).toMatch(/^Inline small stylesheets/);
+	});
+
 	it('the largest paint in an island that rendered it again on hydration', () => {
 		const with_paints = (lcp_replaced?: true, recovered?: true) =>
 			analyze_page(

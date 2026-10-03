@@ -470,6 +470,29 @@ const LIMITS: Record<RatedVital['key'], [number, number, string]> = {
 	inp: [200, 500, 'INP']
 };
 
+/**
+ * THE INLINE THRESHOLD THAT TAKES THE SMALL SHEETS OFF THE PAINT: Kit inlines its route stylesheets
+ * under `inlineStyleThreshold` (ogygia's island sheets follow the same setting), as `<style>` in the
+ * HTML — no request to wait on. Of the blocking build stylesheets (`/_app/immutable/`), the smallest
+ * first, while each is 8 KB or less and the HTML grows by 24 KB at most: the threshold that inlines
+ * them (just over the largest, in whole KB), how many, how many bytes. Null under two sheets. The
+ * profiler's page weight (`style`) and the Page tab's resources (`css`) both ask it.
+ */
+export function inline_threshold_tune(blocking: readonly { url: string; kind: string; bytes: number }[]): { threshold: number; files: number; bytes: number } | null {
+	const sheets = blocking.filter((x) => (x.kind === 'style' || x.kind === 'css') && x.url.includes('/_app/immutable/') && x.bytes > 0).sort((a, b) => a.bytes - b.bytes);
+	let files = 0;
+	let bytes = 0;
+	let largest = 0;
+	for (const s of sheets) {
+		if (s.bytes > 8 * 1024 || bytes + s.bytes > 24 * 1024) break;
+		files++;
+		bytes += s.bytes;
+		largest = s.bytes;
+	}
+	if (files < 2) return null;
+	return { threshold: (Math.floor(largest / 1024) + 1) * 1024, files, bytes };
+}
+
 /** the named islands' own lines that draw differently in the browser (the dev server's reading) */
 function hazards_of(page: PageInput, names: readonly string[]): IslandHazard[] {
 	const want = new Set(names);
@@ -1231,14 +1254,19 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// (the first paint's own explanation already names that file as what it waited on: one card,
 	// at the louder of the two severities — not the same cause told twice)
 	const fcp_card = held_ms >= 200 ? findings.find((f) => f.code === 'slow-fcp' && f.message.includes('waiting for') && f.message.includes(short(blocking[0].url))) : undefined;
+	// THE ONE NUMBER (a build): the inlineStyleThreshold that takes the small sheets off the paint,
+	// the profiler's own reckoning over the sheets this browser waited on
+	const tune = held_ms >= 200 ? inline_threshold_tune((page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp).map((r) => ({ url: r.url, kind: r.type, bytes: r.size ?? 0 }))) : null;
+	const tune_text = tune ? `With \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these stylesheets (${(tune.bytes / 1024).toFixed(1)} KB) arrive inside the HTML: ${blocking.length - tune.files} file${blocking.length - tune.files === 1 ? '' : 's'} left to wait on instead of ${blocking.length}.` : '';
 	if (fcp_card) {
 		if (held_ms >= 600) fcp_card.severity = 'warn';
+		if (tune_text) fcp_card.fix = `${fcp_card.fix ?? ''} ${tune_text}`.trim();
 	} else if (held_ms >= 200)
 		findings.push({
 			code: 'render-blocking',
 			severity: held_ms >= 600 ? 'warn' : 'info',
 			message: `${blocking.length} file${blocking.length === 1 ? '' : 's'} blocked the first paint for ${Math.round(held_ms)} ms after the HTML arrived; the slowest took ${Math.round(blocking[0].ms)} ms (${short(blocking[0].url)}).`,
-			fix: 'Inline small stylesheets, merge the rest, and load scripts as modules (they do not block).',
+			fix: tune_text ? `${tune_text} Merge or trim the rest, and load scripts as modules (they do not block).` : 'Inline small stylesheets, merge the rest, and load scripts as modules (they do not block).',
 			fps: []
 		});
 	const bytes_by = new Map<string, { type: string; count: number; transfer: number; size: number }>();

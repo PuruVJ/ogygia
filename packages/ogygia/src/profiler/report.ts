@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { DOM_LARGE, explain_held_open, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
+import { DOM_LARGE, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -794,27 +794,8 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 	};
 }
 
-/**
- * THE INLINE THRESHOLD THAT TAKES THE SMALL SHEETS OFF THE PAINT: Kit inlines its route stylesheets
- * under `inlineStyleThreshold` (ogygia's island sheets follow the same setting), as `<style>` in the
- * HTML — no request to wait on. Of the blocking build stylesheets (`/_app/immutable/`), the smallest
- * first, while each is 8 KB or less and the HTML grows by 24 KB at most: the threshold that inlines
- * them (just over the largest, in whole KB), how many, how many bytes. Null under two sheets.
- */
-export function inline_threshold_tune(blocking: readonly { url: string; kind: string; bytes: number }[]): { threshold: number; files: number; bytes: number } | null {
-	const sheets = blocking.filter((x) => x.kind === 'style' && x.url.includes('/_app/immutable/') && x.bytes > 0).sort((a, b) => a.bytes - b.bytes);
-	let files = 0;
-	let bytes = 0;
-	let largest = 0;
-	for (const s of sheets) {
-		if (s.bytes > 8 * 1024 || bytes + s.bytes > 24 * 1024) break;
-		files++;
-		bytes += s.bytes;
-		largest = s.bytes;
-	}
-	if (files < 2) return null;
-	return { threshold: (Math.floor(largest / 1024) + 1) * 1024, files, bytes };
-}
+// (the profiler's page weight and the devtools' Page tab say the same number: page-insights.ts)
+export { inline_threshold_tune };
 
 function page_weight_findings(
 	meta: ReportMeta,
