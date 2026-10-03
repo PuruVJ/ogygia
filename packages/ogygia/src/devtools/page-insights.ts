@@ -165,6 +165,9 @@ export interface PageInput {
 		forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
 		/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
 		images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
+		/** the srcs of shown images the browser could hold no room for (computed aspect-ratio `auto`);
+		 *  empty: it looked and found none */
+		images_unsized?: string[];
 		/** the page's size in elements, when 1,500 or more: the deepest nesting, the element with the
 		 *  most children, the islands holding the most (depth 0: past 60,000, only counted) */
 		dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
@@ -1013,6 +1016,22 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message: `${list(groups.length > 3 ? [...named, `${groups.length - 3} more`] : named)} ${below.length === 1 ? 'loads' : 'load'} at start though far below the first screen: ${kb(below_bytes)} that competed with the first screen's files for the network.`,
 			fix: 'Give images below the first screen `loading="lazy"` (and their width and height, so nothing shifts when they arrive): the browser fetches them as the visitor scrolls near.',
 			fps: [...new Set(below.flatMap((i) => (i.fp ? [i.fp] : [])))]
+		});
+	}
+
+	// ── images the browser could hold no room for: the page below moved when each arrived ──
+	const unsized = page.visit?.images_unsized ?? [];
+	if (unsized.length) {
+		const file = (u: string) => u.slice(u.lastIndexOf('/') + 1).split('?')[0] || u;
+		const names = [...new Set(unsized.map(file))];
+		const cls = page.vitals.cls;
+		const moved = typeof cls === 'number' && cls >= 0.1;
+		findings.push({
+			code: 'img-unsized',
+			severity: moved ? 'warn' : 'info',
+			message: `${names.length === 1 ? `${names[0]} has` : `${list(names.slice(0, 4))}${names.length > 4 ? ` and ${names.length - 4} more` : ''} have`} no size the browser knows before the file comes (no width and height, no CSS aspect-ratio), so what is below moves when it arrives${moved ? ` — and this page moved (CLS ${Math.round(cls * 100) / 100})` : ' (unless CSS sets its height)'}.`,
+			fix: 'Give each `<img>` its width and height attributes (the file’s own; CSS can still scale it), or a CSS aspect-ratio: the browser then holds the room from the first paint.',
+			fps: []
 		});
 	}
 

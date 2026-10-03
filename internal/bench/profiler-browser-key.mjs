@@ -26,7 +26,9 @@ const { chromium } = createRequire(new URL('../../package.json', import.meta.url
  *  that must not appear */
 const LABS = [
 	{ path: '/dt-font', stay: 3500, named: { 'font-invisible': "Text in 'SlowFace'" }, never: { 'font-invisible': 'SwapFace' } },
-	{ path: '/dt-img', stay: 2000, named: { 'image-oversized': 'big.png (2000×1333, shown at 300×200)' }, never: { 'image-oversized': 'flat.png' } },
+	// (its unsized image sits in a hidden parent: the visit's look drops the HTML's guess)
+	{ path: '/dt-img', stay: 2000, named: { 'image-oversized': 'big.png (2000×1333, shown at 300×200)' }, never: { 'image-oversized': 'flat.png' }, absent: ['img-unsized'] },
+	{ path: '/dt-cls', stay: 2500, named: { 'img-unsized': 'hero.svg' } },
 	{ path: '/dt-img-below', stay: 2000, named: { 'images-eager-below': 'right.png ×2 (' }, never: { 'images-eager-below': 'flat.png' } },
 	{ path: '/dt-dom', stay: 2000, named: { 'dom-large': 'of them inside DenseList' } },
 	{ path: '/dt-preload-never', stay: 5000, named: { 'preload-never-used': 'right.png (image,' }, never: { 'preload-never-used': 'flat.png' } },

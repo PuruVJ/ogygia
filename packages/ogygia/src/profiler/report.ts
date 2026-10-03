@@ -1326,7 +1326,8 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	}
 	// IMAGES WITH NO SIZE IN THE HTML: the browser cannot hold their room, so the page below moves as
 	// each arrives — a warning when a visit measured the page moving, else a note (CSS may size them)
-	const unsized = extras.strip?.unsized_images ?? [];
+	// (a visit that looked — its browser knows CSS sizes and hidden parents — says it instead)
+	const unsized = extras.visit?.images_unsized ? [] : (extras.strip?.unsized_images ?? []);
 	if (unsized.length) {
 		const file = (u: string) => {
 			const q = u.indexOf('?');

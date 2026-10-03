@@ -1490,6 +1490,28 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// IMAGES THE BROWSER COULD HOLD NO ROOM FOR (/dt-cls: its hero has no width and height — the
+	// plant; /dt-img's unsized image sits in a hidden parent — the decoy, which an HTML scan cannot
+	// tell): hero.svg named with the page's move, /dt-img quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(1500);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'img-unsized').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-cls');
+		const hidden = await read('/dt-img');
+		const checks = [
+			['hero.svg named', lab.length === 1 && lab[0].startsWith('hero.svg has no size the browser knows')],
+			['an image in a hidden parent never', hidden.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} images with no room held: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, hidden })}` : ''}`);
+	}
 	// LISTENERS THAT HOLD SCROLLING (/dt-scroll: Wheelie's wheel listener on its box with no passive —
 	// the plant; Smooth's passive one and its window one with no option — the decoys): Wheelie named,
 	// never Smooth, never window; the dock open on another page adds none of its own

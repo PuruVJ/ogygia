@@ -77,6 +77,17 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('images the browser could hold no room for', () => {
+	const at = (cls: number | undefined) =>
+		analyze_page(page({ vitals: cls === undefined ? {} : { cls }, visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], images_unsized: ['http://x/dt-lcp/hero.svg?quick'] } }), [], [], 3000).findings.find((f) => f.code === 'img-unsized');
+	it('a note; a warning once the page moved', () => {
+		expect(at(undefined)?.severity).toBe('info');
+		expect(at(undefined)?.message).toBe('hero.svg has no size the browser knows before the file comes (no width and height, no CSS aspect-ratio), so what is below moves when it arrives (unless CSS sets its height).');
+		expect(at(0.13)?.severity).toBe('warn');
+		expect(at(0.13)?.message).toContain('— and this page moved (CLS 0.13)');
+	});
+});
+
 describe('listeners that hold scrolling', () => {
 	it('names each with its owner, event and element; passive: false said', () => {
 		const f = analyze_page(

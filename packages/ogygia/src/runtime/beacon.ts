@@ -912,6 +912,24 @@ function dom_shape(): DomShape | null {
 	return shape;
 }
 
+/** IMAGES THE BROWSER COULD NOT HOLD ROOM FOR: an `<img>` with a box whose computed aspect-ratio is
+ *  `auto` — no width and height attributes (they make it `auto W / H`) and no CSS aspect-ratio —
+ *  so the page below moved when its file arrived. A hidden one (no box, a hidden parent too) is
+ *  left out. Their srcs, the first 8. */
+function images_unsized(): string[] {
+	const out: string[] = [];
+	const imgs = document.images;
+	for (let i = 0; i < imgs.length && i < 300 && out.length < 8; i++) {
+		const img = imgs[i];
+		if (img.hasAttribute('width') && img.hasAttribute('height')) continue;
+		if (!img.getClientRects().length) continue;
+		if (getComputedStyle(img).aspectRatio !== 'auto') continue;
+		const src = img.currentSrc || img.src;
+		if (src && !src.startsWith('data:')) out.push(src.slice(0, 300));
+	}
+	return out;
+}
+
 /** IMAGES FAR BELOW THE FIRST SCREEN THAT LOADED AT START: a raster `<img>` whose top sits more
  *  than a screen and a half down the document, not `loading="lazy"`, its file 20 KB or more, and
  *  fetched before the page's load ended — its bytes competed with the first screen's files. A
@@ -1099,9 +1117,11 @@ function build_visit(): Record<string, unknown> | null {
 	let dom: DomShape | null = null;
 	let wasted: { url: string; as: string; bytes: number }[] | null = null;
 	let below: ReturnType<typeof images_eager_below> = [];
+	let unsized: string[] | null = null;
 	try {
 		oversized = oversized_images();
 		below = images_eager_below(nav.loadEventEnd);
+		unsized = images_unsized();
 		dom = dom_shape();
 		wasted = preloads_never_used(nav.loadEventEnd);
 	} catch {
@@ -1142,6 +1162,9 @@ function build_visit(): Record<string, unknown> | null {
 		...(dom ? { dom } : {}),
 		...(wasted?.length ? { preloads_unused: wasted } : {}),
 		...(below.length ? { images_eager_below: below } : {}),
+		// (sent empty too: "the browser looked and found none" is what lets the profiler drop its
+		// guess from the HTML)
+		...(unsized ? { images_unsized: unsized } : {}),
 		...(visit_forced.length ? { forced_layout: visit_forced.slice() } : {}),
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),

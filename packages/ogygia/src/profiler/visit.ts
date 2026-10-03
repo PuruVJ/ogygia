@@ -133,6 +133,8 @@ export interface Visit {
 	preloads_unused?: { url: string; as: string; bytes: number }[];
 	/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
 	images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
+	/** shown images the browser could hold no room for (computed aspect-ratio `auto`); empty: none */
+	images_unsized?: string[];
 	/** scripts that forced style and layout (5 ms or more): their window, the forced ms, file, function */
 	forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
 	/** the page's size in elements, when 1,500 or more (depth 0: past 60,000, only counted) */
@@ -401,6 +403,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (url && as) preloads_unused.push({ url, as, bytes: num(p.bytes, 1e9) ?? 0 });
 	}
 	if (preloads_unused.length) visit.preloads_unused = preloads_unused;
+	// (kept when empty: the browser looked and found none — the report then drops its guess from the HTML)
+	if (Array.isArray(v.images_unsized)) visit.images_unsized = (v.images_unsized as unknown[]).slice(0, 8).filter((u): u is string => typeof u === 'string' && u.length > 0).map((u) => u.slice(0, 300));
 	const images_eager_below: NonNullable<Visit['images_eager_below']> = [];
 	for (const i of (Array.isArray(v.images_eager_below) ? v.images_eager_below : []).slice(0, 10) as Record<string, unknown>[]) {
 		const url = str(i?.url, 500);
@@ -637,6 +641,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		// (asked once 3 s after load: the record that has it)
 		...(b.preloads_unused ?? a.preloads_unused ? { preloads_unused: b.preloads_unused ?? a.preloads_unused } : {}),
 		...(b.images_eager_below ?? a.images_eager_below ? { images_eager_below: b.images_eager_below ?? a.images_eager_below } : {}),
+		...(b.images_unsized ?? a.images_unsized ? { images_unsized: b.images_unsized ?? a.images_unsized } : {}),
 		// (each record carries the whole list so far: by window, the later one's entries win)
 		...(a.forced_layout || b.forced_layout ? { forced_layout: by(a.forced_layout ?? [], b.forced_layout ?? [], (f) => `${f.start}|${f.url}`) } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
