@@ -851,17 +851,33 @@ function page_weight_findings(
 	const big = pa.assets.filter((x) => x.kind === 'script' && !x.lazy).slice(0, 3);
 	const named = big.map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}${x.contains?.length ? ` (${x.contains.slice(0, 4).join(', ')})` : ''}`);
 	// SCRIPTS LOADED AT RUNTIME: invisible in the HTML, measured by the browser
-	if (t.runtime && t.runtime.bytes >= 10 * 1024)
-		(t.runtime.bytes >= 50 * 1024 ? warn : info)(
+	// (this app's own island entries among them, on a visit whose holes answered: islands that arrived
+	// inside a hole's HTML — no page HTML can name what a hole will hold, and no other script fetched
+	// them: the runtime woke them where the hole put them)
+	const holes_answered = new Set((extras.visit?.holes_answered ?? []).map((h) => h.id)).size;
+	const by_holes = !!t.runtime?.island_entries && holes_answered > 0;
+	if (t.runtime && t.runtime.bytes >= 10 * 1024) {
+		const rt = t.runtime;
+		const own = rt.by.find((b) => b.who === 'this app');
+		const others = rt.by.filter((b) => b.who !== 'this app');
+		(rt.bytes >= 50 * 1024 ? warn : info)(
 			'runtime-scripts',
-			`Your browser also loaded ${fmt_bytes(t.runtime.bytes)} of JS in ${t.runtime.files} file${t.runtime.files === 1 ? '' : 's'} that the page's HTML and its imports never name: other scripts fetched ${t.runtime.files === 1 ? 'it' : 'them'} at runtime — ${t.runtime.by.slice(0, 3).map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`).join(', ')}. They count in the page's JS.`,
-			{ fix: 'A library that loads its own parts (a component CDN, a tag manager) costs more than its first file: load it where it is used, or self-host the parts it needs.' }
+			by_holes && own
+				? `Your browser also loaded ${fmt_bytes(rt.bytes)} of JS in ${rt.files} file${rt.files === 1 ? '' : 's'} that the page's HTML and its imports never name: ${fmt_bytes(own.bytes)} (${own.files}) is this app's, the code of ${rt.island_entries} island${rt.island_entries === 1 ? '' : 's'} that arrived inside the page's holes (${holes_answered} answered) — no HTML can name what a hole will hold${others.length ? `; other scripts fetched the rest at runtime — ${others.slice(0, 3).map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`).join(', ')}` : ''}. They count in the page's JS.`
+				: `Your browser also loaded ${fmt_bytes(rt.bytes)} of JS in ${rt.files} file${rt.files === 1 ? '' : 's'} that the page's HTML and its imports never name: other scripts fetched ${rt.files === 1 ? 'it' : 'them'} at runtime — ${rt.by.slice(0, 3).map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`).join(', ')}. They count in the page's JS.`,
+			{
+				fix:
+					by_holes && own
+						? `The islands a hole holds wake as it lands: fine if they are needed at once. Otherwise give them a later wake inside the hole (\`wake: 'visible'\` or \`'interaction'\`), or make the parts that never change lakes.${others.length ? ' A library that loads its own parts costs more than its first file: load it where it is used, or self-host the parts it needs.' : ''}`
+						: 'A library that loads its own parts (a component CDN, a tag manager) costs more than its first file: load it where it is used, or self-host the parts it needs.'
+			}
 		);
+	}
 	if (t.js >= 150 * 1024) {
 		const say = t.js >= 300 * 1024 ? warn : info;
 		say(
 			'js-at-start',
-			`The browser runs ${fmt_bytes(t.js)} of JS in ${t.js_files} files to start this page (${fmt_bytes(t.js_wire)} on the wire${t.runtime ? `, ${fmt_bytes(t.runtime.bytes)} of it loaded at runtime by other scripts` : ''}${t.woke_early ? `, ${fmt_bytes(t.woke_early.bytes)} of it islands that wake when visible and were on your first screen` : ''}${t.runtime_parts ? `, ${fmt_bytes(t.runtime_parts.bytes)} of it the ogygia runtime's parts it loaded as the islands woke` : ''})${t.lazy_js - (t.woke_early?.bytes ?? 0) - (t.runtime_parts?.bytes ?? 0) > 0 ? `, and ${fmt_bytes(t.lazy_js - (t.woke_early?.bytes ?? 0) - (t.runtime_parts?.bytes ?? 0))} more loads only when an island needs it` : ''}. The biggest: ${named.join('; ')}.`,
+			`The browser runs ${fmt_bytes(t.js)} of JS in ${t.js_files} files to start this page (${fmt_bytes(t.js_wire)} on the wire${t.runtime ? `, ${fmt_bytes(t.runtime.bytes)} of it loaded at runtime${by_holes ? ', mostly islands inside its holes' : ' by other scripts'}` : ''}${t.woke_early ? `, ${fmt_bytes(t.woke_early.bytes)} of it islands that wake when visible and were on your first screen` : ''}${t.runtime_parts ? `, ${fmt_bytes(t.runtime_parts.bytes)} of it the ogygia runtime's parts it loaded as the islands woke` : ''})${t.lazy_js - (t.woke_early?.bytes ?? 0) - (t.runtime_parts?.bytes ?? 0) > 0 ? `, and ${fmt_bytes(t.lazy_js - (t.woke_early?.bytes ?? 0) - (t.runtime_parts?.bytes ?? 0))} more loads only when an island needs it` : ''}. The biggest: ${named.join('; ')}.`,
 			{
 				fix: islands
 					? 'Wake the heaviest islands when visible or on interaction, move heavy imports server-side, or make static subtrees lakes.'
@@ -3336,7 +3352,7 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 					.filter((x) => x.kind === 'script' && !x.lazy)
 					.slice(0, 4)
 					.map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}${x.contains?.length ? ` (${x.contains.slice(0, 3).join(', ')})` : ''}`)
-					.concat(sj!.runtime ? [`loaded at runtime by other scripts ${fmt_bytes(sj!.runtime.bytes)} (${sj!.runtime.by[0].who})`] : [])
+					.concat(sj!.runtime ? [`loaded at runtime ${sj!.runtime.island_entries && extras.visit?.holes_answered?.length ? `(islands inside its holes) ${fmt_bytes(sj!.runtime.bytes)}` : `by other scripts ${fmt_bytes(sj!.runtime.bytes)} (${sj!.runtime.by[0].who})`}`] : [])
 			}
 		: null;
 	// data shipped for hydration: the seeds, the props tail, the inline script text

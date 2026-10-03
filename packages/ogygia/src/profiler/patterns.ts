@@ -415,12 +415,17 @@ export function find_same_answers(input: {
 	if (save < MIN_SAVE_MS) return undefined;
 	const top = sites[0];
 	const personal = sites.filter((s) => s.personal).length;
+	// (a row is a kind of request at a line: one helper line fetching eleven endpoints is eleven rows,
+	// and "12 places" said twelve lines where there were two)
+	const lines = new Set(sites.map((s) => s.path + ':' + s.line)).size;
+	const where = sites.length < 2 ? '' : lines === sites.length ? ` (${lines} places)` : ` (${sites.length} requests from ${lines} line${lines === 1 ? '' : 's'})`;
+	const more = sites.length < 2 ? '' : `; ${sites.length - 1} more ${lines === sites.length ? `place${sites.length === 2 ? '' : 's'}` : `request${sites.length === 2 ? '' : 's'}`} do${sites.length === 2 ? 'es' : ''} the same`;
 	if (input.almost) {
 		const changes =
 			input.almost.get((top.target ?? '').split(' (')[0]) ?? [...input.almost.values()][0];
 		return {
 			kind: 'almost-same-answer',
-			title: `Almost the same answer is fetched on every render${sites.length > 1 ? ` (${sites.length} places)` : ''}`,
+			title: `Almost the same answer is fetched on every render${where}`,
 			fix: `Every render asked for this and got the same answer back but for a small part that changes each time (${changes ? `\`${changes}\`` : 'a timestamp or an id'}): the data itself did not change. Cache the answer across requests like any unchanging one, and fill the changing part in yourself, or ask the API to leave it out (many add a request id or a generation time). If the changing part matters to the page, keep only that part live.`,
 			example: {
 				before: 'const catalog = await (await fetch(API + "/catalog")).json(); // { items, generatedAt }',
@@ -431,13 +436,13 @@ export function find_same_answers(input: {
 			cost_ms: r2(cost),
 			alloc_bytes: 0,
 			save_ms: r2(save),
-			evidence: `${top.target} answered the same in every render but for${changes ? ` \`${changes}\`` : ' a few bytes'}, ${r2(top.wait_ms ?? 0)} ms of waiting each time${sites.length > 1 ? `; ${sites.length - 1} more place${sites.length === 2 ? '' : 's'} do the same` : ''}`,
+			evidence: `${top.target} answered the same in every render but for${changes ? ` \`${changes}\`` : ' a few bytes'}, ${r2(top.wait_ms ?? 0)} ms of waiting each time${more}`,
 			wait: true
 		};
 	}
 	return {
 		kind: 'same-answer',
-		title: `The same answer is fetched on every render${sites.length > 1 ? ` (${sites.length} places)` : ''}`,
+		title: `The same answer is fetched on every render${where}`,
 		fix:
 			'Every render asked for this and got the same bytes back each time: nothing it depends on changed between requests. Cache it across requests (a module-level cache with a time limit, the platform’s data cache, or a CDN in front of the API), refreshed on a schedule or when the data changes. If it must be fresh, ask the API for a cheaper “has it changed” check (ETag, If-None-Match) instead of the whole answer.' +
 			(personal
@@ -453,7 +458,7 @@ export function find_same_answers(input: {
 		cost_ms: r2(cost),
 		alloc_bytes: 0,
 		save_ms: r2(save),
-		evidence: `${top.target} answered the same ${top.answer_bytes !== undefined ? fmt_mb(top.answer_bytes) + ' ' : ''}in every render${top.personal ? ' (as the one user this recording rendered as)' : ''}, ${r2(top.wait_ms ?? 0)} ms of waiting each time${sites.length > 1 ? `; ${sites.length - 1} more place${sites.length === 2 ? '' : 's'} do the same` : ''}`,
+		evidence: `${top.target} answered the same ${top.answer_bytes !== undefined ? fmt_mb(top.answer_bytes) + ' ' : ''}in every render${top.personal ? ' (as the one user this recording rendered as)' : ''}, ${r2(top.wait_ms ?? 0)} ms of waiting each time${more}`,
 		wait: true
 	};
 }

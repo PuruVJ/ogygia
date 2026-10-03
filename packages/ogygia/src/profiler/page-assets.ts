@@ -553,6 +553,9 @@ export interface RuntimeScripts {
 	wire: number;
 	/** by who serves them: `this app`, or a CDN package / host */
 	by: { who: string; files: number; bytes: number }[];
+	/** of this app's, the island entry files (`og-region.<id>.…js`): islands no HTML named — the ones
+	 *  a hole's answer brought */
+	island_entries?: number;
 }
 
 /**
@@ -573,6 +576,7 @@ export function runtime_scripts(
 	let files = 0;
 	let bytes = 0;
 	let wire = 0;
+	let entries = 0;
 	const seen = new Set<string>();
 	for (const r of resources) {
 		if (r.type !== 'script' || r.start > until || named.has(r.url) || seen.has(r.url) || r.url.includes('/__profiler/')) continue;
@@ -586,8 +590,9 @@ export function runtime_scripts(
 		g.files++;
 		g.bytes += size;
 		by.set(who, g);
+		if (who === 'this app' && r.url.slice(r.url.lastIndexOf('/') + 1).startsWith('og-region.')) entries++;
 	}
-	return files ? { files, bytes, wire, by: [...by.values()].sort((a, b) => b.bytes - a.bytes) } : null;
+	return files ? { files, bytes, wire, by: [...by.values()].sort((a, b) => b.bytes - a.bytes), ...(entries ? { island_entries: entries } : {}) } : null;
 }
 
 /** `this app`, a CDN package (`@scope/name` after `/npm/`), or the host. */

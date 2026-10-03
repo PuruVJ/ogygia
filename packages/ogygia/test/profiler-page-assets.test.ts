@@ -1,7 +1,7 @@
 // The page's weight: every file the document loads at start, found in the HTML (string scanning)
 // and weighed through the app, following each module's static imports.
 import { describe, test, expect } from 'vitest';
-import { scan_assets, static_imports, dynamic_imports, tag_attrs, weigh_assets, type Weight } from '../src/profiler/page-assets.js';
+import { scan_assets, static_imports, dynamic_imports, tag_attrs, weigh_assets, runtime_scripts, type Weight } from '../src/profiler/page-assets.js';
 
 const KIT_PAGE = `<!doctype html><html><head>
 <link href="./_app/immutable/assets/0.abc.css" rel="stylesheet">
@@ -151,5 +151,24 @@ describe('weigh_assets', () => {
 		let calls = 0;
 		await weigh_assets({ html: KIT_PAGE, page_url: 'http://x/page', fetch_url: async (u) => (calls++, fetch_url(u)), cache, extra: [] });
 		expect(calls).toBe(0);
+	});
+});
+
+describe('runtime_scripts', () => {
+	test("this app's island entries no HTML named (a hole's islands) are counted apart; a CDN's parts are not", () => {
+		const r = runtime_scripts(
+			[{ url: 'http://x/_app/immutable/og-runtime.A.js' }],
+			[
+				{ url: 'http://x/_app/immutable/og-region.69b7a9b1ab5a.B.js', type: 'script', start: 100, size: 30_000 },
+				{ url: 'http://x/_app/immutable/chunks/C.js', type: 'script', start: 110, size: 20_000 },
+				{ url: 'https://cdn.example/npm/lib@1/dist/part.js', type: 'script', start: 120, size: 9_000 },
+				{ url: 'http://x/_app/immutable/og-runtime.A.js', type: 'script', start: 5, size: 18_000 }
+			],
+			'http://x',
+			10_000
+		)!;
+		expect(r.files).toBe(3);
+		expect(r.island_entries).toBe(1);
+		expect(r.by.map((b) => b.who)).toEqual(['this app', 'cdn.example lib']);
 	});
 });

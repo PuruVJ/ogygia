@@ -686,6 +686,20 @@ describe('cache_rules', () => {
 		})!;
 		expect(p.sites[0].upstream_cache).toEqual({ max_age: 300 });
 	});
+
+	it('one helper line fetching several endpoints: requests from lines, not places', () => {
+		const helper = { path: '/app/src/routes/+page.server.ts', line: 17 };
+		const other = { path: '/app/src/routes/+page.server.ts', line: 22 };
+		const call = (name: string, at: typeof helper, start: number) => ({ start, ms: 30, target: `GET api/${name}`, at, scope: '/p', exact: `GET https://x/api/${name}` });
+		const calls = [call('catalog', helper, 0), call('reviews', helper, 40), call('stock', helper, 80), call('product', other, 120)];
+		const p = find_same_answers({ calls, stable: new Set(calls.map((c) => c.exact)) })!;
+		expect(p.title).toBe('The same answer is fetched on every render (4 requests from 2 lines)');
+		expect(p.evidence).toContain('; 3 more requests do the same');
+		// each at its own line: places
+		const two = find_same_answers({ calls: [call('a', helper, 0), call('b', other, 40)], stable: new Set(['GET https://x/api/a', 'GET https://x/api/b']) })!;
+		expect(two.title).toBe('The same answer is fetched on every render (2 places)');
+		expect(two.evidence).toContain('; 1 more place does the same');
+	});
 });
 
 describe('find_wait_patterns', () => {
