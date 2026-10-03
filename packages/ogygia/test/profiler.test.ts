@@ -609,6 +609,27 @@ describe('I/O wait attribution', () => {
 	});
 });
 
+describe('a merged component without line ticks', () => {
+	it('reads at the line of the frame that held most of its self time (an $effect arrow), not the wrapper', () => {
+		// (a browser trace: no positionTicks) the component wrapper at line 1, its anonymous $effect at 5
+		const url = '/app/src/lib/Thrash.svelte';
+		const p: CpuProfile = {
+			startTime: 0,
+			endTime: 100_000,
+			nodes: [
+				{ id: 1, callFrame: frame('(root)'), children: [2] },
+				{ id: 2, callFrame: frame('Thrash', url, 0), children: [3] },
+				{ id: 3, callFrame: frame('', url, 4) }
+			],
+			samples: [2, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+			timeDeltas: Array(10).fill(10_000)
+		};
+		const c = analyze(p).functions.find((f) => f.name === 'Thrash');
+		expect(c?.category).toBe('component');
+		expect(c?.line).toBe(5);
+	});
+});
+
 describe('categorize', () => {
 	it('classifies by url and falls back to Svelte naming for bundles', () => {
 		expect(categorize(frame('x', 'node:fs')).category).toBe('node');

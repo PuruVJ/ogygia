@@ -976,7 +976,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			findings.push({
 				code: 'forced-layout',
 				severity: 'warn',
-				message: `${list(top.slice(0, 3).map((g) => `${g.label} (${Math.round(g.ms)} ms)`))} made the browser recalculate style and layout in the middle of running: the code read sizes or positions (offsetWidth, getBoundingClientRect, getComputedStyle) after changing the page, so each read laid the page out again.`,
+				// (an island's: where in it the CPU trace saw the time, when one was taken)
+				message: `${list(top.slice(0, 3).map((g) => `${g.label} (${Math.round(g.ms)} ms${g.fp ? why_cpu(g.fp) : ''})`))} made the browser recalculate style and layout in the middle of running: the code read sizes or positions (offsetWidth, getBoundingClientRect, getComputedStyle) after changing the page, so each read laid the page out again.`,
 				fix: 'Read every size first, then make every change (or put the changes in one requestAnimationFrame); never read layout between DOM writes in a loop. Sizes CSS can handle (width from the content, a fixed aspect ratio) need no read at all.',
 				fps: top.flatMap((g) => (g.fp ? [g.fp] : []))
 			});

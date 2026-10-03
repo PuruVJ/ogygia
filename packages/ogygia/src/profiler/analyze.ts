@@ -1340,6 +1340,8 @@ export function analyze(
 	const resolved = new Map<number, Resolved>();
 	/** per function key: source line → µs (the hot lines), filled from every node's positionTicks */
 	const line_us = new Map<string, Map<number, number>>();
+	/** per merged component key: the start line of each frame it merged → its self µs */
+	const comp_line_self = new Map<string, Map<number, number>>();
 	/** a node's line ticks, mapped to source lines when the frame was */
 	const line_ticks_of = new Map<number, { line: number; us: number }[]>();
 	for (const n of profile.nodes) {
@@ -1660,6 +1662,13 @@ export function analyze(
 			stat.line = r.line;
 			stat.col = r.col;
 		}
+		// (a merged component's self time by the start line of each frame it merged — its wrapper, each
+		// inline arrow: where in the component the time went when the profile has no line ticks)
+		if (is_comp && s > 0 && r.url.endsWith('.svelte')) {
+			let m = comp_line_self.get(r.key);
+			if (!m) comp_line_self.set(r.key, (m = new Map()));
+			m.set(r.line, (m.get(r.line) ?? 0) + s);
+		}
 		if (s > 0) {
 			stat.self_ms += s / 1000;
 			for (const [k, count] of path) {
@@ -1961,6 +1970,22 @@ export function analyze(
 				f.category !== 'profiler'
 		)
 		.sort((a, b) => b.self_ms - a.self_ms);
+	// A MERGED COMPONENT WITH NO LINE TICKS (a browser trace has none): its line is where most of its
+	// self time ran — an inline arrow's start (an `$effect`'s), not the wrapper's line 1 — when one
+	// frame holds most of it
+	for (const [key, m] of comp_line_self) {
+		if (line_us.has(key)) continue;
+		const stat = agg.get(key);
+		if (!stat) continue;
+		let sum = 0;
+		let best = -1;
+		let best_us = 0;
+		for (const [line, us] of m) {
+			sum += us;
+			if (us > best_us) (best_us = us), (best = line);
+		}
+		if (best > 0 && best_us >= sum / 2) stat.line = best;
+	}
 	const LINES_PER_FN = 8;
 	const lines_of = (key: string): { line: number; ms: number }[] | undefined => {
 		const m = line_us.get(key);
