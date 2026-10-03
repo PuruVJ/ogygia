@@ -185,6 +185,15 @@ describe('the instance was not alone', () => {
 		expect(out.counts).toMatchObject({ self: 60, self_ms: 600, other: 1, hole: 0 });
 		expect(out.counts!.self_paths).toHaveLength(5);
 	});
+	it("a render reading a prerender function over HTTP: the call, logged at its own address, is the render's own", () => {
+		const out = contention({
+			requests: [req('/_app/remote/ufd0c8/meta/WyIiXQ', 120, 1, 1, { remote: true, route: '/(docs)' })],
+			windows: [{ start: 100, end: 200 }],
+			self_paths: new Set(['/_app/remote/ufd0c8/meta/WyIiXQ'])
+		})!;
+		expect(out.requests[0]).toMatchObject({ kind: 'self', remote: true });
+		expect(out.counts).toMatchObject({ self: 1, self_remote: 1, other: 0 });
+	});
 
 	it('is absent when nothing overlapped', () => {
 		expect(contention({ requests: [req('/b', 400, 50, 10)], windows: [{ start: 100, end: 200 }] })).toBeUndefined();

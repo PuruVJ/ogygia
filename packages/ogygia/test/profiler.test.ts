@@ -52,7 +52,7 @@ import {
 	type SpanRecorder,
 	type SpanAttrs
 } from '../src/profiler/span.js';
-import { span_rows, fair_shares, lake_saving, inline_threshold_tune } from '../src/profiler/report.js';
+import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
@@ -1750,6 +1750,22 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const file = derive_findings(analyze(p1), { ...meta, prerendered: true, run_static: true } as never, extras).map((f) => f.code);
 		expect(file).toContain('prerendered-page');
 		expect(file.filter((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence', 'cold-start', 'n-plus-one'].includes(c))).toEqual([]);
+	});
+
+	it("a render reading a prerender function's answer over HTTP: its own call, named, not another visitor", () => {
+		const call = { method: 'GET', path: '/_app/remote/ufd0c8/meta/WyIiXQ', route: '/(docs)', status: 200, ms: 0.75, overlap_ms: 0.75, cpu_max_ms: 0.75, kind: 'self' as const, remote: true as const };
+		const contention = {
+			requests: [call, { ...call, ms: 0.63, overlap_ms: 0.63, cpu_max_ms: 0.63 }],
+			counts: { self: 2, self_ms: 1.38, self_paths: [call.path], self_remote: 2, other: 0, hole: 0 },
+			overlap_ms: 1.38, cpu_max_ms: 1.38, inflight_at_start: [0, 0], per_window: [], busy_share: 0.11
+		};
+		const out = derive_findings(analyze(p1), { ...meta, trigger: 'page', runs: [6.7, 5.9] } as never, { ...extras, contention } as never);
+		expect(out.some((f) => f.code === 'busy-instance')).toBe(false);
+		const f = out.find((x) => x.code === 'self-fetch')!;
+		expect(f.message).toContain("a `prerender` remote function's answer (meta) over HTTP 1 time");
+		expect(f.fix).toContain('`query`');
+		expect(remote_function_name('/_app/remote/ufd0c8/meta')).toBe('meta');
+		expect(remote_function_name('/api/items')).toBe('/api/items');
 	});
 
 	it("the Islands table: an island reading a browser-only value while rendering is told so, by its line", () => {

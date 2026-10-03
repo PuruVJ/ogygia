@@ -5982,10 +5982,21 @@ class Profiler {
 			);
 		}
 
+		// A REMOTE FUNCTION CALL: Kit's `url` is the page that asked (a header), `/` when none did (a
+		// server render reading a `prerender` function's answer over HTTP): its own address is the request's
+		const remote = (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
+		let remote_url: URL | null = null;
+		if (remote)
+			try {
+				remote_url = new URL(event.request.url);
+			} catch {
+				remote_url = null;
+			}
 		const entry: RequestEntry = {
 			ts: Date.now(),
 			method: event.request.method,
-			path: event.url.pathname,
+			path: remote_url ? remote_url.pathname : event.url.pathname,
+			...(remote ? { remote: true as const } : {}),
 			route: event.route?.id ?? null,
 			status: 0,
 			ms: 0,
@@ -5997,7 +6008,8 @@ class Profiler {
 		};
 		// the query, for a replay — Kit THROWS on `url.search` while prerendering, so read it guarded
 		try {
-			if (event.url.search) entry.search = event.url.search;
+			const search = remote_url ? remote_url.search : event.url.search;
+			if (search) entry.search = search;
 		} catch {
 			/* prerendering: no query to keep */
 		}

@@ -297,6 +297,9 @@ export interface RequestEntry {
 	net_count: number;
 	/** true when the profiler itself made this request (page mode) */
 	internal?: boolean;
+	/** a remote function call (`path` is its own address: Kit's `url` names the page that asked,
+	 *  or `/` when no page did, as for a server render reading a `prerender` function) */
+	remote?: true;
 	/** what ogygia's handle added to this page (server/request-stats.ts); absent off the page path */
 	og?: OgygiaRequestStats;
 	/** `tag()` stamps from the app (tenant, locale, variant…) */
@@ -800,6 +803,14 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 		woke_early,
 		runtime_parts
 	};
+}
+
+/** A remote function's name from its call's address (`/<appDir>/remote/<file hash>/<name>/<argument>`),
+ *  or the address when it is not one. */
+export function remote_function_name(path: string): string {
+	const parts = path.split('/');
+	const at = parts.lastIndexOf('remote', parts.length - 3);
+	return at > 0 && parts[at + 2] ? parts[at + 2] : path;
 }
 
 /** findings about a server render — its CPU, components, calls, memory — that mean nothing when the
@@ -1723,13 +1734,28 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			const paths = ct.counts?.self_paths ?? [...new Set(selfs.map((r) => r.path))];
 			const per = Math.round(self_n / win);
 			const self_ms = (ct.counts?.self_ms ?? selfs.reduce((s, r) => s + r.ms, 0)) / win;
-			info(
-				'self-fetch',
-				`The render called its own server ${per} time${per === 1 ? '' : 's'} (${paths.slice(0, 3).join(', ')}${paths.length > 3 ? ', …' : ''}), ${fmt_ms(self_ms)} ms of requests answered by the same event loop that was rendering: the page waited on itself, and every one of those calls paid a full HTTP round trip to reach code in the same process.`,
-				{
-					fix: 'Call the function behind the endpoint directly from the load (import it), or use a remote function; keep fetch for servers that are not this one.'
-				}
-			);
+			// A PRERENDER FUNCTION READ OVER HTTP: Kit answers a `prerender` remote function in a server
+			// render by fetching its prerendered answer from the site's own address, every render (no other
+			// remote call runs over HTTP there) — the page cannot call it any other way, so "import it" is
+			// not the advice
+			const remote_n = ct.counts?.self_remote ?? selfs.filter((r) => r.remote).length;
+			if (remote_n && remote_n === self_n) {
+				const names = [...new Set(paths.map(remote_function_name))];
+				info(
+					'self-fetch',
+					`The render read ${names.length === 1 ? `a \`prerender\` remote function's answer (${names[0]})` : `\`prerender\` remote functions' answers (${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''})`} over HTTP ${per} time${per === 1 ? '' : 's'}: Kit fetches it from the site's own public address on every server render — here this same instance answered, ${fmt_ms(self_ms)} ms of requests while it was rendering. Where the host serves the prerendered answer as a file it is still a trip out and back per render; where it does not (an argument the build did not prerender), the function runs anyway, in a request of its own.`,
+					{
+						fix: 'For data a render needs, use a `query` (it runs in the render\'s own process, no request) or read it in the load; keep `prerender` for answers the browser fetches.'
+					}
+				);
+			} else
+				info(
+					'self-fetch',
+					`The render called its own server ${per} time${per === 1 ? '' : 's'} (${paths.slice(0, 3).join(', ')}${paths.length > 3 ? ', …' : ''}), ${fmt_ms(self_ms)} ms of requests answered by the same event loop that was rendering: the page waited on itself, and every one of those calls paid a full HTTP round trip to reach code in the same process.`,
+					{
+						fix: 'Call the function behind the endpoint directly from the load (import it), or use a remote function; keep fetch for servers that are not this one.'
+					}
+				);
 		}
 		if (holes && !others_n && !self_n) {
 			info(
