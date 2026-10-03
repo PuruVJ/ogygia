@@ -724,8 +724,21 @@ describe('analyze_page', () => {
 		expect(load.message).toBe('LCP is 3000 ms (needs work; good is ≤ 2500 ms). The largest paint was the img (hero.png) in Hero: 120 ms until the HTML\'s first byte, 40 ms before the browser began fetching it, 2790 ms downloading it, 50 ms more before it painted.');
 		expect(load.fix).toMatch(/^The file itself is slow to download/);
 		expect(load.fps).toEqual(['h']);
-		// found late
-		expect(run(at({ lcp: 3000, lcp_url: hero, lcp_tag: 'img' }, [{ url: hero, type: 'img', start: 2600, end: 2900 }]))!.fix).toMatch(/^The browser found it late/);
+		// found late, and why: an <img> at an image's low priority
+		const late = (paints: object, islands: PageInput['islands'] = []) => run({ ...at({ lcp: 3000, lcp_url: hero, ...paints }, [{ url: hero, type: 'img', start: 2600, end: 2900 }]), islands })!.fix;
+		expect(late({ lcp_tag: 'img' })).toMatch(/^It is an `<img>` the browser could find in the HTML, but an image starts at low priority/);
+		// …already high: something before it held the browser back
+		expect(late({ lcp_tag: 'img', lcp_priority: 'high' })).toMatch(/^It already asks for high priority/);
+		// a CSS background
+		expect(late({ lcp_tag: 'div' })).toMatch(/^It is a CSS background image \(on the div\)/);
+		// its island's code added it: the request began after the island hydrated
+		expect(late({ lcp_tag: 'img', lcp_fp: 'h' }, [{ fp: 'h', t0: 100, loaded: 2000, done: 2550 }])).toBe(
+			"Its request began at 2600 ms, after Hero woke (hydrated at 2550 ms): the server HTML did not carry it, the island's code added it. Render the `<img>` (the same src) in the island's server markup, so the browser finds it in the HTML."
+		);
+		// lazy: its own late start, whatever woke
+		expect(late({ lcp_tag: 'img', lcp_fp: 'h', lcp_lazy: true }, [{ fp: 'h', t0: 100, loaded: 2000, done: 2550 }])).toMatch(/^It carries `loading="lazy"`/);
+		// nothing known of the element: the general advice
+		expect(late({})).toMatch(/^The browser found it late/);
 		// ready but not painted
 		expect(run(at({ lcp: 3000, lcp_url: hero, lcp_tag: 'img' }, [{ url: hero, type: 'img', start: 150, end: 400 }]))!.fix).toMatch(/^It was ready but did not paint/);
 		// text: first byte, then render; the first byte the cost

@@ -434,8 +434,8 @@ async function lcp_run(browser) {
 	const on_hero = (f) => !!f && f.message.includes('The largest paint was the img (hero.svg') && f.message.includes(') in Hero:');
 	const checks = [
 		['in the HTML: named on Hero, the download the cost', on_hero(plain.tab) && plain.tab.fix.startsWith('The file itself is slow to download') && plain.tab.fps.length === 1],
-		['added late: named on Hero, the late find the cost', on_hero(late.tab) && late.tab.message.includes('ms before the browser began fetching it') && late.tab.fix.startsWith('The browser found it late')],
-		['the profiler report: the same two', (!plain.report_id || (on_hero(plain.report) && plain.report.fix.startsWith('The file itself'))) && (!late.report_id || (on_hero(late.report) && late.report.fix.startsWith('The browser found it late')))],
+		['added late: named on Hero, the late find the cost', on_hero(late.tab) && late.tab.message.includes('ms before the browser began fetching it') && late.tab.fix.includes('after Hero woke') && late.tab.fix.includes("the island's code added it")],
+		['the profiler report: the same two', (!plain.report_id || (on_hero(plain.report) && plain.report.fix.startsWith('The file itself'))) && (!late.report_id || (on_hero(late.report) && late.report.fix.includes("the island's code added it")))],
 		// (the slow hero, then its quick twin: LCP fell, and the part that fell is the download)
 		['since your last profile: LCP fell, its download the part', !plain.report_id || (!!since && since.some((v) => v.key === 'lcp' && v.b < v.a && v.part?.label === 'its download' && v.part.b < v.part.a))],
 		['since your last load (the Page tab): LCP fell, mostly its download', !!reload && reload.some((m) => m.what === 'LCP' && m.better && m.part?.label === 'its download' && m.part.b < m.part.a)]

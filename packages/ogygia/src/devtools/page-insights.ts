@@ -150,7 +150,8 @@ export interface PageInput {
 		scripts?: { url: string; ms: number; count: number }[];
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 		warnings?: { code: string; message: string; file?: string; fp?: string; t?: number }[];
-		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true };
+		/** (`lcp_priority`: the largest paint's own fetchpriority, when it sets one) */
+		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low' };
 		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean }[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
@@ -1782,6 +1783,37 @@ export function lcp_rivals(visit: PageInput['visit'] | null | undefined): { byte
 	return bytes ? { bytes, files } : null;
 }
 
+/** elements whose largest paint is their own file; any other with a URL painted a CSS background */
+const LCP_OWN_FILE: ReadonlySet<string> = new Set(['img', 'image', 'video', 'svg', 'input']);
+
+/**
+ * WHY THE BROWSER FOUND THE LARGEST PAINT'S FILE LATE, from what the visit saw: a CSS background
+ * (found only once its stylesheet is in and the element laid out), an image its island's code added
+ * as it woke (the request began after it hydrated: the server HTML had none), or an `<img>` in the
+ * HTML at the low priority an image starts at. The generic advice when none of them is it.
+ */
+export function late_found(
+	p: NonNullable<NonNullable<PageInput['visit']>['paints']> | undefined,
+	res: { start: number; req_start?: number } | undefined,
+	islands: readonly PageIsland[],
+	name_of: (fp: string | undefined) => string
+): string {
+	const tag = p?.lcp_tag ?? '';
+	// (lazy: the browser held it until layout — a late start of its own making, whatever woke when)
+	if (p?.lcp_lazy) return 'It carries `loading="lazy"`: the browser held its fetch until layout said it was on screen. Drop it from the first screen\'s images, and give this one `fetchpriority="high"`.';
+	if (p?.lcp_url && tag && !LCP_OWN_FILE.has(tag))
+		return `It is a CSS background image (on the ${tag}): the browser finds it only once the stylesheet has arrived and the element is laid out. Put it in the server HTML as an \`<img>\` with \`fetchpriority="high"\`, or preload it (\`<link rel="preload" as="image" fetchpriority="high">\`).`;
+	const asked = res ? (res.req_start ?? res.start) : undefined;
+	const island = p?.lcp_fp ? islands.find((i) => i.fp === p.lcp_fp) : undefined;
+	if (island && asked !== undefined && asked >= island.done - 1)
+		return `Its request began at ${Math.round(asked)} ms, after ${name_of(p?.lcp_fp)} woke (hydrated at ${Math.round(island.done)} ms): the server HTML did not carry it, the island's code added it. Render the \`<img>\` (the same src) in the island's server markup, so the browser finds it in the HTML.`;
+	if (tag === 'img' && p?.lcp_priority !== 'high')
+		return 'It is an `<img>` the browser could find in the HTML, but an image starts at low priority, behind the page\'s scripts and stylesheets: give it `fetchpriority="high"` (and never `loading="lazy"` on the first screen).';
+	if (tag === 'img')
+		return 'It already asks for high priority: something before it held the browser back (a blocking script in the `<head>`, a long chain of stylesheets). Preload it in the `<head>` (`<link rel="preload" as="image" fetchpriority="high">`), ahead of the rest.';
+	return 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.';
+}
+
 function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
 	const p = page.visit?.paints;
 	const lcp = p?.lcp ?? page.vitals.lcp;
@@ -1825,7 +1857,7 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 			: top.key === 'font'
 				? "The text was there, hidden by its font: give the @font-face `font-display: swap` (or `optional`) and preload the font file, so the text paints at once."
 				: top.key === 'delay'
-					? 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.'
+					? late_found(p, res, page.islands, name_of)
 					: top.key === 'load'
 						? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
 						: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';

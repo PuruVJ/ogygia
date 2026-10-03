@@ -396,7 +396,7 @@ export function beacon_hole_answered(el: Element, start: number, batch?: { left:
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
-let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true } = {};
+let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low' } = {};
 /** the largest paint's element: still in the document when the visit is read, or replaced (an
  *  island that rendered it again put a new one in its place — the hero painted twice). Only while
  *  its island is still there: an in-app navigation away takes both, and replaces nothing */
@@ -506,6 +506,9 @@ function observe_vitals(): void {
 		visit_paints.lcp_tag = last.element?.tagName?.toLowerCase();
 		// (the largest paint marked loading="lazy": the browser held its fetch until layout)
 		visit_paints.lcp_lazy = last.element?.getAttribute?.('loading') === 'lazy' ? true : undefined;
+		// (its fetchpriority, when it says one: an image starts low unless told high)
+		const pri = last.element?.getAttribute?.('fetchpriority');
+		visit_paints.lcp_priority = pri === 'high' || pri === 'low' ? pri : undefined;
 		lcp_el = last.element ?? null;
 		lcp_region = lcp_el?.closest('ogygia-region') ?? null;
 		// (a later, larger paint after the early visit — a slow hero image: sent again)

@@ -278,6 +278,19 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	// (an eager island below the fold: its own bytes, from the build's island graph and the browser's sizes)
 	const eager = await read('/dt-lab', 'eager-offscreen');
 	check('an eager island below the fold names its own bytes', eager.length === 1 && eager[0].startsWith('BelowEager starts') && eager[0].includes(' of it is its own'), JSON.stringify(eager).slice(0, 240));
+	// (the largest paint a CSS background its slow stylesheet names: the slow LCP's fix says why it was found late)
+	{
+		const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+		await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+		const p = await c.newPage();
+		await p.goto(base + '/dt-lcp-bg', { waitUntil: 'load' });
+		await p.waitForTimeout(1500);
+		await p.click('[data-og-panel-toggle]').catch(() => {});
+		await p.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+		const fix = await p.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((x) => x.code === 'slow-lcp')?.fix ?? null);
+		await c.close();
+		check('a background-image hero found late: named as a CSS background', !!fix && fix.startsWith('It is a CSS background image (on the div)'), String(fix).slice(0, 200));
+	}
 	const quiet = await read('/dt-lab', 'uncompressed');
 	check('a page whose files are all compressed: no uncompressed', quiet.length === 0, JSON.stringify(quiet).slice(0, 200));
 }

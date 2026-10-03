@@ -35,7 +35,9 @@ const LABS = [
 	// (its effects are Thrash's own work: never "outside any island", never "the scheduler held it";
 	// Batched waits behind Thrash when its code came in time to wait at all — a cold load varies)
 	{ path: '/dt-thrash', stay: 2500, named: { 'forced-layout': 'Thrash while it hydrated (', 'long-hydrate': 'Thrash (' }, never: { queued: 'scheduler' }, absent: ['held-idle', 'long-tasks'] },
-	{ path: '/dt-lcp', query: '?below', stay: 5000, named: { 'lcp-gap': 'Beside it, ' } },
+	{ path: '/dt-lcp', query: '?below', stay: 5000, named: { 'lcp-gap': 'Beside it, ' }, fix_never: { 'lcp-gap': 'CSS background' } },
+	// (the largest paint a CSS background its slow stylesheet names: found late, and why — the fix)
+	{ path: '/dt-lcp-bg', stay: 4000, fix_says: { 'lcp-gap': 'It is a CSS background image (on the div)' } },
 	// (scrolled with the wheel after load: the beacon sends the jank again, the page never hides)
 	// (a build's handler is a minified name in a hashed chunk: named by the island whose file it is)
 	{ path: '/dt-jank', stay: 3000, scroll: true, named: { 'scroll-jank': "Janky's code, run by" }, never: { 'scroll-jank': 'Calm' } },
@@ -120,6 +122,9 @@ try {
 		for (const [code, said] of Object.entries(lab.named ?? {})) checks.push([`${code} says "${said}"`, msg(code).includes(said)]);
 		for (const [code, not] of Object.entries(lab.never ?? {})) checks.push([`${code} never "${not}"`, !msg(code).includes(not)]);
 		for (const code of lab.absent ?? []) checks.push([`no ${code}`, !findings.some((f) => f.code === code)]);
+		const fix_of = (code) => findings.filter((f) => f.code === code).map((f) => f.fix ?? '').join(' | ');
+		for (const [code, said] of Object.entries(lab.fix_says ?? {})) checks.push([`${code} fix says "${said}"`, fix_of(code).includes(said)]);
+		for (const [code, not] of Object.entries(lab.fix_never ?? {})) checks.push([`${code} fix never "${not}"`, !fix_of(code).includes(not)]);
 		const fix = (kind) => (report.patterns ?? []).filter((p) => p.kind === kind).map((p) => p.fix).join(' | ');
 		for (const [kind, said] of Object.entries(lab.fixes ?? {})) checks.push([`${kind} fix says "${said}"`, fix(kind).includes(said)]);
 		for (const [kind, not] of Object.entries(lab.fixes_never ?? {})) checks.push([`${kind} fix never "${not}"`, !!fix(kind) && !fix(kind).includes(not)]);
@@ -128,7 +133,7 @@ try {
 		console.log(`${bad.length ? '✗' : '✓'} ${lab.path}${lab.query ?? ''}: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}`);
 		for (const [n] of bad) {
 			const code = n.split(' ')[0] === 'no' ? n.split(' ')[1] : n.split(' ')[0];
-			console.log(`    ${code}: ${(msg(code) || fix(code)).slice(0, 300) || '(not in the report)'}`);
+			console.log(`    ${code}: ${(msg(code) || fix(code)).slice(0, 300) || '(not in the report)'}${fix_of(code) ? `\n      fix: ${fix_of(code).slice(0, 300)}` : ''}`);
 		}
 	}
 	// (the heaviest page of the playground too: its visit is the biggest one)

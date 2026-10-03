@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { DOM_LARGE, explain_held_open, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
+import { DOM_LARGE, explain_held_open, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -2956,7 +2956,19 @@ function accuracy_findings(
 			const PART_WORDS: Record<string, [string, string]> = {
 				delay: [
 					`most of it (${fmt_ms(part?.ms ?? 0)} ms) before the browser began fetching the largest paint, ${lcp_file}.`,
-					'The browser found the largest paint late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"`, and preload it with `fetchpriority="high"`.'
+					// (why it was found late, as the devtools say it: a CSS background, an island's code
+					// that added it, an image at its low priority)
+					part?.key === 'delay'
+						? late_found(
+								own?.paints,
+								own?.resources.find((r) => r.url === own?.paints?.lcp_url),
+								own?.islands ?? [],
+								(fp) => {
+									const r = fp ? island_rows_of(meta).find((x) => x.fp === fp) : undefined;
+									return r ? island_name(r) : 'its island';
+								}
+							)
+						: ''
 				],
 				load: [
 					`most of it (${fmt_ms(part?.ms ?? 0)} ms) downloading the largest paint, ${lcp_file}.`,
