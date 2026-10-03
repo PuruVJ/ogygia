@@ -4363,6 +4363,7 @@ class Profiler {
 			const run_ms: number[] = [];
 			const run_windows: Array<{ start: number; end: number }> = [];
 			let run_status = warm_status;
+			let run_cache_control: string | undefined;
 			let run_bytes = warm_bytes;
 			let last_body = '';
 			/** the first render's document, set against the last: what changes between renders */
@@ -4472,6 +4473,8 @@ class Profiler {
 						const done = performance.now();
 						run_status = res.status;
 						run_bytes = body.length;
+						// (what the page tells the browser to keep: `no-store` keeps it out of the back/forward cache)
+						run_cache_control = res.headers.get('cache-control') ?? undefined;
 						// each render's document, fingerprinted: the same bytes every time is a page to cache whole
 						body_prints.push(`${fnv1a32(body)}:${body.length}`);
 						if (!first_body) first_body = body;
@@ -4760,6 +4763,7 @@ class Profiler {
 					warmup_ms,
 					run_status,
 					run_bytes,
+					...(run_cache_control ? { run_cache_control } : {}),
 					budget_note,
 					...(heap_skipped.length ? { heap_guard: heap_guard() } : {}),
 					runs: run_ms,

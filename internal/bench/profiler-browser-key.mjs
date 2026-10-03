@@ -39,8 +39,10 @@ const LABS = [
 	// (scrolled with the wheel after load: the beacon sends the jank again, the page never hides)
 	// (a build's handler is a minified name in a hashed chunk: named by the island whose file it is)
 	{ path: '/dt-jank', stay: 3000, scroll: true, named: { 'scroll-jank': "Janky's code, run by" }, never: { 'scroll-jank': 'Calm' } },
+	// (the server's own answer: the page's Cache-Control, read off the profiled render)
+	{ path: '/dt-nostore', stay: 1000, named: { 'bfcache-no-store': 'Cache-Control: no-store' } },
 	// the quiet ones: none of the codes above
-	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout'] },
+	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store'] },
 	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
 ];
 

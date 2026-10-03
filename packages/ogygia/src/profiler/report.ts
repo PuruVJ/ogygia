@@ -389,6 +389,8 @@ export interface ReportMeta {
 	run_status?: number;
 	/** page mode: representative response body size in bytes (a real page is large; a redirect is tiny) */
 	run_bytes?: number;
+	/** page mode: the timed renders' Cache-Control (what the page tells the browser to keep) */
+	run_cache_control?: string;
 	/** page mode: every render returned the same document, byte for byte */
 	same_document?: boolean;
 	/** page mode, when the renders' documents differ: what changes between the first and the last */
@@ -1302,6 +1304,16 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		ogygia_findings(og, meta, extras, info, warn);
 	}
 	page_weight_findings(meta, extras, info, warn);
+	// KEPT OUT OF THE BACK/FORWARD CACHE: a page answered `no-store` is never kept there, so Back and
+	// Forward render it on the server again (the profiler sees the header itself, no visit needed)
+	const cc = (meta.run_cache_control ?? '').toLowerCase();
+	if (meta.trigger === 'page' && cc.split(',').some((d) => d.trim() === 'no-store')) {
+		warn(
+			'bfcache-no-store',
+			`The page answers with Cache-Control: ${meta.run_cache_control}: the browser keeps no page marked no-store in its back/forward cache, so every Back and Forward to it is another full render here (and another wait for the visitor).`,
+			{ fix: 'Drop no-store from pages that hold nothing private, or use `private, no-cache` (the browser keeps the page and checks with the server before reusing it). Keep no-store for pages that must never be shown again after logout.' }
+		);
+	}
 	// A PAGE OF MANY ELEMENTS, from the HTML itself (no visit, or a visit that did not measure it):
 	// the same words the browser's count gets, which leads when a visit has it
 	const els = extras.strip?.elements;

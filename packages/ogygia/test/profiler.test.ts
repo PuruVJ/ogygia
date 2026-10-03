@@ -2852,6 +2852,10 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 			visit: { at: 1, nav: { res_start: 5 }, paints: {}, resources: [], longtasks: [], islands: [], firsts: [], shifts: [], dom: { nodes: 3640, depth: 7, deepest: 'b', widest: { at: 'ul.dense', children: 1200 }, islands: [] } }
 		} as never).filter((f) => f.code === 'dom-large');
 		expect(both.map((f) => f.message.slice(0, 30))).toEqual(['In the browser: The page has 3']);
+		// A PAGE ANSWERED no-store: kept out of the back/forward cache (the header the render answered)
+		const nostore = derive_findings(analyze(p), { ...og_meta, run_cache_control: 'private, no-store' } as never, { net: [], mem: [] } as never).find((f) => f.code === 'bfcache-no-store');
+		expect(nostore?.message).toContain('The page answers with Cache-Control: private, no-store: the browser keeps no page marked no-store in its back/forward cache');
+		expect(derive_findings(analyze(p), { ...og_meta, run_cache_control: 'private, no-cache' } as never, { net: [], mem: [] } as never).some((f) => f.code === 'bfcache-no-store')).toBe(false);
 		// AN IMAGE WITH NO SIZE: a note, and a warning once a visit measured the page moving
 		const unsized = { ...strip, unsized_images: ['/dt-lcp/hero.svg?quick'] };
 		const note = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip: unsized } as never).find((f) => f.code === 'img-unsized');
