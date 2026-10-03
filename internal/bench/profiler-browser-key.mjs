@@ -67,6 +67,9 @@ const stop = serve ? await start_preview() : () => {};
 const browser = await chromium.launch();
 const headers = { 'x-profiler-key': key };
 let failed = 0;
+/** the largest visit body any lab's beacon sent */
+let biggest = 0;
+const VISIT_BUDGET = 30_000;
 try {
 	for (const lab of LABS) {
 		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent(lab.path)}&runs=1`, { redirect: 'manual', headers });
@@ -79,6 +82,12 @@ try {
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 		// (a build measures only a browser that carries the profiler's key: the beacon's tag is added then)
 		await page.setExtraHTTPHeaders(headers);
+		// each visit the beacon sends, by size: the hide-time send rides keepalive (60 KB at most, the
+		// beacon slims past it and the detail is lost) — the visits must stay well under
+		page.on('request', (r) => {
+			const d = r.method() === 'POST' && r.url().includes('/__profiler') ? (r.postData() ?? '') : '';
+			if (d.includes('"visit"')) biggest = Math.max(biggest, d.length);
+		});
 		await page.goto(base + lab.path + (lab.query ?? ''), { waitUntil: 'load' });
 		// (a test browser closes without the page hiding: the beacon's resends must carry it all)
 		await page.waitForTimeout(lab.stay);
@@ -99,6 +108,21 @@ try {
 			console.log(`    ${code}: ${msg(code).slice(0, 300) || '(not in the report)'}`);
 		}
 	}
+	// (the heaviest page of the playground too: its visit is the biggest one)
+	{
+		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		await page.setExtraHTTPHeaders(headers);
+		page.on('request', (r) => {
+			const d = r.method() === 'POST' && r.url().includes('/__profiler') ? (r.postData() ?? '') : '';
+			if (d.includes('"visit"')) biggest = Math.max(biggest, d.length);
+		});
+		await page.goto(base + '/hell', { waitUntil: 'load' });
+		await page.waitForTimeout(4000);
+		await page.close();
+	}
+	const ok = biggest > 0 && biggest <= VISIT_BUDGET;
+	if (!ok) failed++;
+	console.log(`${ok ? '✓' : '✗'} the biggest visit sent: ${(biggest / 1024).toFixed(1)} KB (under ${VISIT_BUDGET / 1000} KB: half of what a hide-time send may carry)`);
 } finally {
 	await browser.close();
 	stop();
