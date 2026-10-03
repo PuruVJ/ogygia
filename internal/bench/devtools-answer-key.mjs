@@ -1490,6 +1490,28 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// KEPT OUT OF THE BACK/FORWARD CACHE (/dt-bfcache: Saver saves on 'unload' — the plant, its call a
+	// bare addEventListener; Tidy on 'pagehide' — the decoy): Saver named, never Tidy; /dt-lab quiet
+	{
+		const read = async (path) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(2000);
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'bfcache-blocked').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-bfcache');
+		const quiet = await read('/dt-lab');
+		const checks = [
+			['Saver named for its unload listener', lab.length === 1 && lab[0].startsWith("Saver adds an 'unload' listener")],
+			['the pagehide one never', lab.length === 1 && !lab[0].includes('Tidy')],
+			['a page without unload quiet', quiet.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} kept out of the back/forward cache: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, quiet })}` : ''}`);
+	}
 	// SCROLLING STALLED (/dt-jank: Janky's scroll handler works 120 ms per event — the plant; Calm's
 	// reads once per frame — the decoy): scrolled with the wheel, Janky's handler named with its
 	// invoker, never Calm's; /dt-big scrolled the same way quiet

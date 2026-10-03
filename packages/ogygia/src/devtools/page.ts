@@ -8,7 +8,7 @@ import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
 import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.js';
 import { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.js';
-import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners } from './leftovers.js';
+import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.js';
 
 const FPS_KEY = 'ogygia:devtools:fps';
 /** props text kept per island (a longer one is compared by its fingerprint alone) */
@@ -521,6 +521,18 @@ function server_brief(path: string): ServerProfileBrief | undefined {
 }
 
 /** The island a script file belongs to, when it is one's own file (by its location or identity). */
+/** When this document came from Back or Forward and was NOT restored from the back/forward cache,
+ *  the browser's reasons (`notRestoredReasons`, where it gives them), the first 6. */
+function not_restored_reasons(): string[] {
+	try {
+		const n = performance.getEntriesByType('navigation')[0] as (PerformanceNavigationTiming & { notRestoredReasons?: { reasons?: { reason?: string }[] | null } | null }) | undefined;
+		if (!n || n.type !== 'back_forward') return [];
+		return (n.notRestoredReasons?.reasons ?? []).map((r) => String(r?.reason ?? '')).filter(Boolean).slice(0, 6);
+	} catch {
+		return [];
+	}
+}
+
 function island_of_file(url: string): { island?: string } {
 	const base = (u: string) => {
 		const q = u.indexOf('?');
@@ -579,6 +591,11 @@ export function read_page(): PageView | null {
 	const leftovers = owned_leftovers(regs, seen, region_name, performance.now()).map(({ entry: _, ...l }) => l);
 	// (the listeners holding scrolling, still attached, by the island that added each)
 	const scroll_blockers = owned_scroll_listeners(scroll_listeners(), seen, region_name);
+	// (what keeps the page out of the back/forward cache: its unload listeners, by owner, and — when
+	// this load came from Back or Forward and was not restored — the browser's own reasons)
+	const unload_owners = [...new Set(owned_scroll_listeners(unload_listeners(), seen, region_name).map((o) => o.owner))];
+	const not_restored = nav ? [] : not_restored_reasons();
+	const bfcache = unload_owners.length || not_restored.length ? { unload: unload_owners, ...(not_restored.length ? { not_restored } : {}) } : null;
 	// the profiler's last runs (the Profiler tab's): of this page, and of each page it navigated to
 	const server_profiles: Record<string, ServerProfileBrief> = {};
 	for (const n of with_visit.visit?.navs ?? []) {
@@ -589,7 +606,7 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

@@ -211,6 +211,9 @@ export interface PageInput {
 	/** wheel / touch listeners still attached that hold scrolling (not passive), by the island (or
 	 *  the file) that added each (devtools/leftovers.ts; devtools only) */
 	scroll_blockers?: { owner: string; type: string; on: string; forced: boolean }[];
+	/** what keeps the page out of the back/forward cache: who added a window `unload` listener, and
+	 *  the browser's own reasons when this load came from Back and was not restored (devtools only) */
+	bfcache?: { unload: string[]; not_restored?: string[] };
 }
 
 /** A restored host that went wrong: upgraded by its component before the restore reached it
@@ -1343,6 +1346,22 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'warn',
 			message: `${l.name} left ${list(what)} after it left the page${ran}. Each visit to its page adds another, and each keeps the island's state in memory.`,
 			fix: 'Take back what the island starts when it goes: return a cleanup from the `$effect` that started it (`clearInterval(id)`, `removeEventListener` with the same function and capture), or pass an AbortSignal and abort it there. The router keeps the document across navigations, so nothing a page left behind is cleared by the next page.',
+			fps: []
+		});
+	}
+
+	// ── kept out of the back/forward cache: Back reloads the page from the server ──
+	const bf = page.bfcache;
+	if (bf && (bf.unload.length || bf.not_restored?.length)) {
+		findings.push({
+			code: 'bfcache-blocked',
+			severity: 'warn',
+			message:
+				(bf.unload.length
+					? `${list(bf.unload)} ${bf.unload.length === 1 ? 'adds' : 'add'} an 'unload' listener: the browser keeps no page with one in its back/forward cache, so Back and Forward load this page from the server again instead of showing it at once.`
+					: 'This load came from Back or Forward, and the browser did not restore the page from its back/forward cache: it loaded from the server again.') +
+				(bf.not_restored?.length ? ` The browser's reasons for this load: ${bf.not_restored.join(', ')}.` : ''),
+			fix: "Listen to 'pagehide' (or 'visibilitychange') instead of 'unload': it runs at the same moment and keeps the cache. A `Cache-Control: no-store` on the page keeps it out too.",
 			fps: []
 		});
 	}

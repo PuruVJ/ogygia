@@ -102,6 +102,19 @@ describe('images the browser could hold no room for', () => {
 	});
 });
 
+describe('kept out of the back/forward cache', () => {
+	const at = (bfcache: PageInput['bfcache']) => analyze_page(page({ ...(bfcache ? { bfcache } : {}) }), [], [], 3000).findings.find((f) => f.code === 'bfcache-blocked');
+	it("names who adds an 'unload' listener, and the browser's reasons when Back did not restore", () => {
+		expect(at({ unload: ['Saver'] })?.message).toBe(
+			"Saver adds an 'unload' listener: the browser keeps no page with one in its back/forward cache, so Back and Forward load this page from the server again instead of showing it at once."
+		);
+		expect(at({ unload: [], not_restored: ['main-resource-has-cache-control-no-store'] })?.message).toBe(
+			"This load came from Back or Forward, and the browser did not restore the page from its back/forward cache: it loaded from the server again. The browser's reasons for this load: main-resource-has-cache-control-no-store."
+		);
+		expect(at(undefined)).toBeUndefined();
+	});
+});
+
 describe('listeners that hold scrolling', () => {
 	it('names each with its owner, event and element; passive: false said', () => {
 		const f = analyze_page(

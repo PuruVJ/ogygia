@@ -151,19 +151,28 @@ export function watch_leftovers(): void {
 	const proto = EventTarget.prototype;
 	const add = proto.addEventListener;
 	const remove = proto.removeEventListener;
-	proto.addEventListener = function (this: EventTarget, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | AddEventListenerOptions) {
-		if ((this === window || this === document) && fn) {
+	// (a bare `addEventListener(…)` — strict code, no receiver — reaches here with no `this`: the
+	// browser runs it on the window, and so is it counted)
+	proto.addEventListener = function (this: EventTarget | undefined, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | AddEventListenerOptions) {
+		const on: EventTarget = this ?? window;
+		if ((on === window || on === document) && fn) {
 			const o = typeof opts === 'object' && opts ? opts : null;
 			// (a `once` listener takes itself back; an aborted signal takes it back)
-			if (!o?.once && !o?.signal?.aborted) note_listener(this, type, fn, o ? !!o.capture : !!opts, o?.signal);
+			if (!o?.once && !o?.signal?.aborted) note_listener(on, type, fn, o ? !!o.capture : !!opts, o?.signal);
 		}
-		if (fn && SCROLL_TYPES.has(type)) note_scroll_listener(this, type, fn, opts);
-		return add.call(this, type, fn, opts);
+		if (fn && SCROLL_TYPES.has(type)) note_scroll_listener(on, type, fn, opts);
+		if (fn && type === 'unload' && on === window) note_unload_listener(fn);
+		return add.call(on, type, fn, opts);
 	};
-	proto.removeEventListener = function (this: EventTarget, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | EventListenerOptions) {
-		if ((this === window || this === document) && fn) forget_listener(this, type, fn, typeof opts === 'object' && opts ? !!opts.capture : !!opts);
-		if (fn && SCROLL_TYPES.has(type)) forget_scroll_listener(this, type, fn);
-		return remove.call(this, type, fn, opts);
+	proto.removeEventListener = function (this: EventTarget | undefined, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | EventListenerOptions) {
+		const on: EventTarget = this ?? window;
+		if ((on === window || on === document) && fn) forget_listener(on, type, fn, typeof opts === 'object' && opts ? !!opts.capture : !!opts);
+		if (fn && SCROLL_TYPES.has(type)) forget_scroll_listener(on, type, fn);
+		if (fn && type === 'unload' && on === window) {
+			const i = unload_regs.findIndex((r) => r.fn === fn);
+			if (i !== -1) unload_regs.splice(i, 1);
+		}
+		return remove.call(on, type, fn, opts);
 	};
 }
 
@@ -209,6 +218,24 @@ function note_scroll_listener(on: EventTarget, type: string, fn: unknown, opts?:
 function forget_scroll_listener(on: EventTarget, type: string, fn: unknown) {
 	const i = scroll_regs.findIndex((r) => r.target === on && r.type === type && r.fn === fn);
 	if (i !== -1) scroll_regs.splice(i, 1);
+}
+
+// ── AN `unload` LISTENER ON THE WINDOW: the browser keeps no page with one in its back/forward
+// cache, so Back reloads it from the server instead of showing it at once (`pagehide` does the
+// same job and keeps the cache) ──
+
+const unload_regs: { fn: unknown; frames: string[] }[] = [];
+
+function note_unload_listener(fn: unknown) {
+	if (unload_regs.length >= 20 || unload_regs.some((r) => r.fn === fn)) return;
+	// (code the browser injected has no file: not the page's to fix)
+	const frames = callers(6);
+	if (frames.length) unload_regs.push({ fn, frames });
+}
+
+/** The window `unload` listeners still attached, as scroll registrations (the same owner rule). */
+export function unload_listeners(): ScrollReg[] {
+	return unload_regs.map((r) => ({ type: 'unload', on: 'window', forced: false, frames: r.frames }));
 }
 
 /** The scroll-holding listeners still attached (an element's, while it is in the page). */
