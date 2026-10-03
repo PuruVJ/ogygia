@@ -76,6 +76,9 @@ function owner(): BeaconApi | null {
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
 }
+// (on the page as it loads, not at its first call: `ogygia/profiler/client` finds the page's copy on
+// the global rather than bundling one of its own into the island that marks)
+if (typeof document !== 'undefined') owner();
 
 export function beacon_mark(name: string, ms: number, attrs?: Record<string, string | number | boolean>, t0?: number): void {
 	const o = owner();

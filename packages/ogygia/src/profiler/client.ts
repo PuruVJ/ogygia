@@ -21,9 +21,40 @@
  * await mark('widget.boot', () => widget.init(), { version: '3' });
  * ```
  */
-import { beacon_mark } from '../runtime/beacon.js';
-
 export type MarkAttrs = Record<string, string | number | boolean>;
+
+// THE PAGE'S BEACON, not a copy of it: importing runtime/beacon here bundled the whole beacon into
+// every island that marks (11.8 KB of its own on top of the runtime's copy, which the island then
+// handed its marks to anyway). The runtime's beacon puts itself on this global as it loads; a mark
+// made before it is there waits for it (a few seconds at most), and a page without one drops it.
+const BEACON_KEY = Symbol.for('ogygia.beacon');
+type MarkArgs = [name: string, ms: number, attrs: MarkAttrs | undefined, t0: number];
+const page_beacon = (): { beacon_mark: (...a: MarkArgs) => void } | undefined =>
+	(globalThis as Record<symbol, { beacon_mark: (...a: MarkArgs) => void } | undefined>)[BEACON_KEY];
+const waiting: MarkArgs[] = [];
+let retrying = false;
+function beacon_mark(...args: MarkArgs): void {
+	if (typeof document === 'undefined') return;
+	const b = page_beacon();
+	if (b) {
+		for (const w of waiting.splice(0)) b.beacon_mark(...w);
+		b.beacon_mark(...args);
+		return;
+	}
+	if (waiting.length < 400) waiting.push(args);
+	if (retrying) return;
+	retrying = true;
+	let tries = 0;
+	const retry = () => {
+		const later = page_beacon();
+		if (later) {
+			retrying = false;
+			for (const w of waiting.splice(0)) later.beacon_mark(...w);
+		} else if (++tries < 40) setTimeout(retry, 250);
+		else (retrying = false), (waiting.length = 0);
+	};
+	setTimeout(retry, 250);
+}
 
 const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 const is_thenable = (v: unknown): v is PromiseLike<unknown> => !!v && typeof (v as { then?: unknown }).then === 'function';

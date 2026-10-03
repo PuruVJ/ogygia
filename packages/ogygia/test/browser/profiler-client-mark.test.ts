@@ -3,7 +3,7 @@
 // without the tag nothing is queued or sent.
 import { expect, test } from 'vitest';
 import { mark } from '../../src/profiler/client.js';
-import { _reset_beacon, _beacon_state } from '../../src/runtime/beacon.js';
+import { _reset_beacon, _beacon_state, beacon_mark } from '../../src/runtime/beacon.js';
 
 function with_tag(): { meta: HTMLMetaElement; sent: string[]; restore: () => void } {
 	_reset_beacon();
@@ -11,6 +11,9 @@ function with_tag(): { meta: HTMLMetaElement; sent: string[]; restore: () => voi
 	meta.name = 'ogygia-profiler-beacon';
 	meta.content = '/__profiler/beacon';
 	document.head.appendChild(meta);
+	// (the page's beacon claims its global as it loads — `mark` finds it there; after a reset, any
+	// call claims it again, once the tag is in: an unnamed mark records nothing)
+	beacon_mark('', 0);
 	const sent: string[] = [];
 	const orig = navigator.sendBeacon;
 	navigator.sendBeacon = ((_url: string, body: string) => {
