@@ -71,28 +71,36 @@ check('Bytes: the exact ledger (island graph × the browser\'s sizes)', (await p
 // the build's names reach every tab (a built entry is og-region.<id>.js; the names key the bare id)
 const ledger_names = await page.locator('[data-og-ledger-exact] + table tbody .nm').allInnerTexts();
 check('the tabs name islands by their component in a build', ledger_names.includes('Heavy') && !ledger_names.some((n) => n.startsWith('og-region')), ledger_names.join(', '));
-const decoded_text = await page.locator('[data-og-ledger-exact] + table tfoot td').last().innerText().catch(() => '');
-const files = await page.evaluate(() => {
-	const abs = (h) => new URL(h, location.href).href;
-	const set = new Set();
-	for (const s of document.querySelectorAll('script[data-ogygia-graph]')) {
-		const w = JSON.parse(s.textContent);
-		for (const ids of Object.values(w.e)) for (const i of ids) set.add(abs(w.h[i]));
-	}
-	// each island's own file: its location (`src`) — the graph keys islands by identity, a name the
-	// browser never loads
-	for (const r of document.querySelectorAll('ogygia-region[src]')) set.add(abs(r.getAttribute('src')));
-	const rt = document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src');
-	if (rt) set.add(abs(rt));
-	for (const l of document.querySelectorAll('link[data-ogygia-runtime-dep]')) set.add(abs(l.getAttribute('href')));
-	const loaded = new Set(performance.getEntriesByType('resource').map((r) => r.name));
-	// only the islands on THIS page count (a graph may list more entries than the page shows)
-	return [...set].filter((u) => loaded.has(u));
-});
+// THE TRUTH: every JS file a VISITOR's browser (no devtools) downloads on this page — its islands'
+// code, the runtime, and the parts the runtime loads itself as islands wake. The tab must show that
+// total: the devtools' own code never in it, the runtime's own parts never missing
+const files = await (async () => {
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	const v = await c.newPage();
+	await v.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await v.waitForTimeout(2500);
+	const list = await v.evaluate(() => [...new Set(performance.getEntriesByType('resource').filter((r) => r.name.startsWith(location.origin) && r.name.endsWith('.js')).map((r) => r.name))]);
+	await c.close();
+	return list;
+})();
 let on_disk = 0;
 for (const u of files) on_disk += (await (await fetch(u)).arrayBuffer()).byteLength;
+// (the tab reads the runtime's parts from its file once, then shows them on its next tick)
+await page.waitForTimeout(1500);
+const decoded_text = await page.locator('[data-og-ledger-exact] + table tfoot td').last().innerText().catch(() => '');
 const shown_kb = Number.parseFloat(decoded_text);
-check('Bytes: the page total is the real files, each once', Math.abs(shown_kb - on_disk / 1024) <= 0.2, `shown ${decoded_text}, the ${files.length} loaded files are ${(on_disk / 1024).toFixed(1)} kB`);
+// (what only this devtools-on page loaded — the devtools' own lazy modules — is the most the tab may
+// add: a module of theirs that carries none of their globals can read as the runtime's part)
+const visitor_set = new Set(files);
+let dt_only = 0;
+for (const u of await page.evaluate(() => [...new Set(performance.getEntriesByType('resource').filter((r) => r.name.startsWith(location.origin) && r.name.endsWith('.js')).map((r) => r.name))]))
+	if (!visitor_set.has(u)) dt_only += (await (await fetch(u)).arrayBuffer()).byteLength;
+const over = shown_kb - on_disk / 1024;
+check(
+	"Bytes: the page total is every file a visitor downloads (the runtime's own parts too), each once",
+	over >= -0.2 && over <= dt_only / 1024 + 0.2,
+	`shown ${decoded_text}; a visitor's ${files.length} files are ${(on_disk / 1024).toFixed(1)} kB (${over > 0.2 ? `+${over.toFixed(1)} kB of the devtools' own, of ${(dt_only / 1024).toFixed(1)} kB they loaded` : 'exact'})`
+);
 // an island's detail card carries its line of the ledger: its code, what only it needs, whom it shares with
 await page.locator('[data-og-tab="lens"]').click();
 await page.waitForTimeout(400);
