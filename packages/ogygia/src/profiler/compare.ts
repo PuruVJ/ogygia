@@ -778,6 +778,10 @@ export interface PathDelta {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** finding codes about the recording's conditions, not the page's code (compare leaves them out) */
 const RUN_STATE_CODES = new Set(['cold-start', 'cold-instance', 'profiler-overhead', 'heap-filled-before', 'heap-near-limit', 'budget', 'dev-mode', 'low-confidence', 'busy-instance', 'runs-set-aside', 'summary', 'phases']);
+/** warnings that fire when one number of the recording passes a cut (report.ts): the number, and the cut */
+const NEAR_CUT: Record<string, { value: (m: ReportMeta) => number | undefined; at: number }> = {
+	'loop-stall': { value: (m) => m.loop_delay?.p99, at: 50 }
+};
 const median = (xs: number[]) =>
 	xs.length ? [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] : 0;
 
@@ -1030,7 +1034,16 @@ export function compare_reports(
 	// what the RECORDING's conditions say, not the code: a cold start (the instance's first render
 	// of the page), the profiler's own cost, a heap earlier requests filled, the dev server, too few
 	// samples — present in one profile and not the next with the same code, so never "new" or "fixed"
-	const of_the_code = (f: string) => !RUN_STATE_CODES.has(code_of(f));
+	// …nor a warning whose number sat by its cut in both profiles: the loop's p99 of 48 and 53 ms is
+	// one stall, not a new one (/inferno-deals: loop-stall in 4 profiles of 5 of the same code)
+	const near_cut = (code: string) => {
+		const cut = NEAR_CUT[code];
+		if (!cut) return false;
+		const x = cut.value(a.meta);
+		const y = cut.value(b.meta);
+		return x !== undefined && y !== undefined && Math.abs(x - cut.at) <= cut.at * 0.3 && Math.abs(y - cut.at) <= cut.at * 0.3;
+	};
+	const of_the_code = (f: string) => !RUN_STATE_CODES.has(code_of(f)) && !near_cut(code_of(f));
 	// paths by owner name
 	const paths = new Map<string, PathDelta>();
 	for (const g of A.paths ?? []) {

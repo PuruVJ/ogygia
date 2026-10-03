@@ -4531,6 +4531,12 @@ describe('compare + history', () => {
 			{ ...one('b'), findings: ['heap-filled-before: This profile started with 600 MB…'] }
 		);
 		expect(cold.findings).toEqual({ added: [], gone: ['n-plus-one: 12 calls…'] });
+		// a warning whose number sat by its cut in both (the loop's p99 48 → 53 ms) is one stall, not a
+		// new one; from 20 to 120 ms it is
+		const at = (id: string, p99: number, findings: string[]) => ({ ...one(id), meta: { ...(one(id).meta as object), loop_delay: { p99 } } as never, findings });
+		const stall = 'loop-stall: The event loop stalled up to 53 ms (p99)';
+		expect(compare_reports(at('a', 48, []), at('b', 53, [stall])).findings.added).toEqual([]);
+		expect(compare_reports(at('a', 20, []), at('b', 120, [stall])).findings.added).toEqual([stall]);
 	});
 
 	it('groups page reports into a per-page history, oldest first, by median', () => {

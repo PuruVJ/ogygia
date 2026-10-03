@@ -3954,9 +3954,13 @@ class Profiler {
 		return {
 			meta: s.meta,
 			analysis: s.analysis,
-			findings: derive_findings(s.analysis, s.meta, this.#report_extras(s)).map(
-				(f) => `${f.code}: ${f.message}`
-			),
+			// the warnings only: an info line describes the page ("Most expensive component: …", a burst
+			// of allocation) at a cut its numbers sit near, and came and went between profiles of the
+			// same code (/mixed: alloc-burst and logic-heavy 3 of 5, /heavy: markup-heavy 2 of 5) — never
+			// a problem "new" or "fixed"
+			findings: derive_findings(s.analysis, s.meta, this.#report_extras(s))
+				.filter((f) => f.severity === 'warn')
+				.map((f) => `${f.code}: ${f.message}`),
 			...(s.gc_attr ? { gc: s.gc_attr } : {}),
 			...(s.patterns ? { patterns: s.patterns } : {}),
 			...(s.ledger ? { ledger: s.ledger } : {}),
