@@ -5,6 +5,7 @@
  * read the same report the tab shows without opening the panel.
  */
 import { beacon_page, hole_request_times, is_headless } from '../runtime/beacon.js';
+import { tool_fetch } from '../tool-fetches.js';
 import { snapshot } from './bus.js';
 import { page_ledger } from './ledger-dom.js';
 import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.js';
@@ -48,7 +49,7 @@ function fp_drift(nav = 0): FpDrift[] {
 	fps_memo = { at, drift };
 	return drift;
 }
-import { analyze_page, defer_keys, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { analyze_page, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
 import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
@@ -201,6 +202,26 @@ function shown_under_media(el: Element): string | null {
 	}
 	const by = hidden_by as string | null;
 	return by ? (by.startsWith('(') ? `not all and ${by}` : `not ${by}`) : null;
+}
+
+/** THE DEV SERVER'S PRE-BUNDLED PACKAGES, read once from its `.vite/deps/_metadata.json` (the folder of
+ *  a pre-bundled script the page loaded — no guess at the app's base): the names its `optimized` keys
+ *  belong to. Null until read; never off the dev server, nor on a page that loaded no pre-bundled file. */
+let prebundled: string[] | null = null;
+let prebundled_asked = false;
+function prebundled_packages(script_urls: readonly string[]): string[] | null {
+	if (!import.meta.env.DEV || prebundled_asked) return prebundled;
+	const one = script_urls.find((u) => u.includes('/node_modules/.vite/deps/'));
+	if (!one) return null;
+	prebundled_asked = true;
+	const dir = one.slice(0, one.indexOf('/node_modules/.vite/deps/') + 25);
+	void tool_fetch(dir + '_metadata.json')
+		.then((r) => (r.ok ? r.json() : null))
+		.then((m: { optimized?: Record<string, unknown> } | null) => {
+			prebundled = prebundled_names(Object.keys(m?.optimized ?? {}));
+		})
+		.catch(() => {});
+	return null;
 }
 
 function first_child_top(el: Element): number {
@@ -715,7 +736,10 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}) };
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}), ...(() => {
+		const pre = import.meta.env.DEV ? prebundled_packages((with_visit.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url)) : null;
+		return pre?.length ? { prebundled: pre } : {};
+	})() };
 	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before

@@ -225,6 +225,9 @@ export interface PageInput {
 	restore_events?: RestoreEvent[];
 	/** islands whose fingerprint moved between two loads of this page (devtools/fp-drift.ts) */
 	fp_drift?: { name: string; fp?: string; path?: string; was?: string; now?: string }[];
+	/** the dev server's pre-bundled packages (its `.vite/deps/_metadata.json`), read when the page
+	 *  loaded one: a package also served raw from its folder runs as two copies */
+	prebundled?: string[];
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
 	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
 	/** wheel / touch listeners still attached that hold scrolling (not passive), by the island (or
@@ -479,6 +482,40 @@ const LIMITS: Record<RatedVital['key'], [number, number, string]> = {
 	cls: [0.1, 0.25, 'CLS'],
 	inp: [200, 500, 'INP']
 };
+
+/** The packages a dev server's `_metadata.json` `optimized` keys name: `svelte/internal/client` →
+ *  `svelte`, `@scope/lib/x` → `@scope/lib`, `ogygia > @neodrag/svelte` (a dependency's dependency) →
+ *  `@neodrag/svelte`, each once. */
+export function prebundled_names(keys: readonly string[]): string[] {
+	const names = new Set<string>();
+	for (const key of keys) {
+		const at = key.lastIndexOf(' > ');
+		const parts = (at === -1 ? key : key.slice(at + 3)).split('/');
+		names.add(parts[0].startsWith('@') ? `${parts[0]}/${parts[1] ?? ''}` : parts[0]);
+	}
+	return [...names];
+}
+
+/**
+ * ONE PACKAGE, TWO COPIES ON THE DEV SERVER: of the scripts the page loaded, the ones served raw from a
+ * package's folder (`/node_modules/<pkg>/…`, not `.vite/`) whose package Vite also pre-bundled — each
+ * package once, with how many raw files and one of them. String search: it runs on the Page tab tick.
+ */
+export function dev_two_copies(urls: readonly string[], prebundled: readonly string[]): { pkg: string; raw: number; example: string }[] {
+	const pre = new Set(prebundled);
+	const by = new Map<string, { pkg: string; raw: number; example: string }>();
+	for (const u of urls) {
+		const nm = u.lastIndexOf('/node_modules/');
+		if (nm === -1 || u.includes('/node_modules/.vite/')) continue;
+		const parts = u.slice(nm + 14).split('?')[0].split('/');
+		const pkg = parts[0].startsWith('@') ? `${parts[0]}/${parts[1] ?? ''}` : parts[0];
+		if (!pre.has(pkg)) continue;
+		const g = by.get(pkg);
+		if (g) g.raw++;
+		else by.set(pkg, { pkg, raw: 1, example: parts.slice(pkg.startsWith('@') ? 2 : 1).join('/') });
+	}
+	return [...by.values()].sort((a, b) => b.raw - a.raw);
+}
 
 /**
  * THE INLINE THRESHOLD THAT TAKES THE SMALL SHEETS OFF THE PAINT: Kit inlines its route stylesheets
@@ -1035,6 +1072,23 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix: "Use wake='visible': its code loads when it scrolls into view, and the islands on the first screen wake sooner.",
 			fps: eager_below.map((r) => r.fp)
 		});
+	}
+
+	// ── one package, two copies on the dev server ──
+	// (pre-bundled into .vite/deps AND served raw from its folder: a module with state — a store, a
+	// registry, a feature slot — has two instances, and what one writes the other never reads)
+	if (page.dev && page.prebundled?.length) {
+		const twice = dev_two_copies((page.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url), page.prebundled);
+		if (twice.length) {
+			const top = twice[0];
+			findings.push({
+				code: 'dev-two-copies',
+				severity: 'warn',
+				message: `${list(twice.map((t) => t.pkg))} load${twice.length === 1 ? 's' : ''} twice on the dev server: pre-bundled by Vite (.vite/deps) and raw from ${twice.length === 1 ? 'its' : 'their'} folder (${top.pkg}: ${top.raw} file${top.raw === 1 ? '' : 's'}, e.g. ${top.example}). A module that keeps state then has two copies: one side writes what the other never reads, and the bug shows only in dev.`,
+				fix: `Give ${twice.length === 1 ? 'it' : 'each'} one copy: add ${twice.map((t) => `'${t.pkg}'`).join(', ')} to \`optimizeDeps.exclude\` so every import is served raw, or to \`optimizeDeps.include\` with every path it is imported by. (ogygia excludes itself; check the app's own \`optimizeDeps.include\` does not list it.)`,
+				fps: []
+			});
+		}
 	}
 
 	// ── eager islands that draw nothing on this screen ──

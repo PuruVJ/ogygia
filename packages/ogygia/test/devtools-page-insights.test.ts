@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_page, boolean_attr_at, encoding_only, first_difference, lcp_font, lcp_rivals, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
+import { analyze_page, boolean_attr_at, dev_two_copies, encoding_only, prebundled_names, first_difference, lcp_font, lcp_rivals, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
 import { without_comments, without_runtime_marks } from '../src/runtime/beacon.js';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({
@@ -425,6 +425,44 @@ describe('an island that threw its server HTML away (recovered)', () => {
 		expect(f[0].message).toContain("its markup arrived with Svelte's hidden block markers unpaired (0 opening, 2 closing), and a render always pairs them. Something rewrote it between the server and the browser");
 		expect(f[0].fix).toMatch(/^Find the rewrite/);
 		expect(f[0].message).not.toContain("ogygia's");
+	});
+});
+
+describe('one package, two copies on the dev server', () => {
+	it('a package pre-bundled and served raw from its folder: named once, with its raw files; the pre-bundle alone is quiet', () => {
+		expect(
+			dev_two_copies(
+				[
+					'http://x/node_modules/.vite/deps/ogygia_runtime.js?v=1',
+					'http://x/node_modules/ogygia/dist/runtime/slots.js',
+					'http://x/@fs/w/node_modules/.pnpm/ogygia@1/node_modules/ogygia/dist/internal.js',
+					'http://x/node_modules/@scope/lib/dist/a.js?v=2',
+					'http://x/node_modules/devalue/index.js',
+					'http://x/src/lib/A.svelte'
+				],
+				['ogygia', '@scope/lib', 'svelte']
+			)
+		).toEqual([
+			{ pkg: 'ogygia', raw: 2, example: 'dist/runtime/slots.js' },
+			{ pkg: '@scope/lib', raw: 1, example: 'dist/a.js' }
+		]);
+		const at = (dev: boolean) =>
+			analyze_page(
+				page({
+					...(dev ? { dev: true } : {}),
+					prebundled: ['ogygia'],
+					visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], resources: [{ url: 'http://x/node_modules/.vite/deps/ogygia_runtime.js', type: 'script', start: 1, end: 2 }, { url: 'http://x/node_modules/ogygia/dist/runtime/slots.js', type: 'script', start: 3, end: 4 }] }
+				}),
+				[],
+				[],
+				500
+			).findings.find((f) => f.code === 'dev-two-copies');
+		expect(at(true)?.message).toContain('ogygia loads twice on the dev server: pre-bundled by Vite (.vite/deps) and raw from its folder (ogygia: 1 file, e.g. dist/runtime/slots.js)');
+		expect(at(true)?.fix).toContain("`optimizeDeps.exclude`");
+		expect(at(false)).toBeUndefined();
+	});
+	it("the pre-bundled packages from the dev server's metadata keys, a dependency's dependency by its own name", () => {
+		expect(prebundled_names(['svelte/internal/client', 'svelte', '@codemirror/state', 'ogygia > @neodrag/svelte', 'svelte > clsx'])).toEqual(['svelte', '@codemirror/state', '@neodrag/svelte', 'clsx']);
 	});
 });
 
