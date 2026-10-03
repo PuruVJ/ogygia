@@ -2852,6 +2852,14 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 			visit: { at: 1, nav: { res_start: 5 }, paints: {}, resources: [], longtasks: [], islands: [], firsts: [], shifts: [], dom: { nodes: 3640, depth: 7, deepest: 'b', widest: { at: 'ul.dense', children: 1200 }, islands: [] } }
 		} as never).filter((f) => f.code === 'dom-large');
 		expect(both.map((f) => f.message.slice(0, 30))).toEqual(['In the browser: The page has 3']);
+		// AN IMAGE WITH NO SIZE: a note, and a warning once a visit measured the page moving
+		const unsized = { ...strip, unsized_images: ['/dt-lcp/hero.svg?quick'] };
+		const note = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip: unsized } as never).find((f) => f.code === 'img-unsized');
+		expect(note?.severity).toBe('info');
+		expect(note?.message).toBe('An image in the HTML (hero.svg) has no width and height: the browser cannot hold their room before the file arrives, so what is below moves when it does (unless CSS gives them a size).');
+		const moved = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip: unsized, vitals: { n: 1, ttfb: 10, fcp: 20, lcp: 30, cls: 0.26, inp: null } } as never).find((f) => f.code === 'img-unsized');
+		expect(moved?.severity).toBe('warn');
+		expect(moved?.message).toContain('the browser measured the page moving (CLS 0.26)');
 		expect(split.fix).toContain('make it smaller');
 		const ttfb = say({ ttfb: 900, fcp: 950, lcp: 1000, cls: 0, inp: null }).find(
 			(f) => f.code === 'ttfb-gap'

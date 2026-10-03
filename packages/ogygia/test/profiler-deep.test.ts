@@ -56,6 +56,15 @@ describe('byte strip', () => {
 		expect(byte_strip('<!-- <div><p> --><DIV class="a"><textarea><b>no</b></textarea><svg><path d="M0"/></svg></DIV>').elements?.total).toBe(4);
 	});
 
+	it('names each <img> with no width or height by its src; sized, hidden, scripted and data-width ones are not', () => {
+		const doc2 =
+			'<body><img src="/a/hero.jpg?w=1" alt="x"><img src=/b/plain.png><img width="10" height="10" src="/c/sized.png">' +
+			'<img hidden src="/d/hidden.png"><img data-width="9" data-height="9" src="/e/data.png"><IMG WIDTH=4 SRC="/f/half.png">' +
+			'<script>const s = "<img src=/g/in-script.png>"</script><template><img src="/h/tpl.png"></template></body>';
+		expect(byte_strip(doc2).unsized_images).toEqual(['/a/hero.jpg?w=1', '/b/plain.png', '/e/data.png', '/f/half.png']);
+		expect(byte_strip('<img width="1" height="1" src="x.png">').unsized_images).toBeUndefined();
+	});
+
 	it('a document without ogygia at all, or a broken one, still strips', () => {
 		const s = byte_strip('<html><body><p>plain</p></body></html>');
 		expect(s.segments.map((x) => x.kind)).toEqual(['markup']);

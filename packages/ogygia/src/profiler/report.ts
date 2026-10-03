@@ -1324,6 +1324,24 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			}
 		);
 	}
+	// IMAGES WITH NO SIZE IN THE HTML: the browser cannot hold their room, so the page below moves as
+	// each arrives — a warning when a visit measured the page moving, else a note (CSS may size them)
+	const unsized = extras.strip?.unsized_images ?? [];
+	if (unsized.length) {
+		const file = (u: string) => {
+			const q = u.indexOf('?');
+			const p = q === -1 ? u : u.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1) || u;
+		};
+		const names = [...new Set(unsized.map(file))];
+		const cls = extras.vitals?.cls ?? null;
+		const moved = cls !== null && cls >= 0.1;
+		(moved ? warn : info)(
+			'img-unsized',
+			`${names.length === 1 ? `An image in the HTML (${names[0]}) has` : `${unsized.length >= 8 ? '8 or more' : unsized.length} images in the HTML (${names.slice(0, 4).join(', ')}${names.length > 4 ? '…' : ''}) have`} no width and height: the browser cannot hold their room before the file arrives, so what is below moves when it does${moved ? ` — and the browser measured the page moving (CLS ${cls})` : ' (unless CSS gives them a size)'}.`,
+			{ fix: 'Give each `<img>` its width and height attributes (the file’s own; CSS can still scale it): the browser then holds the room from the first paint. Or give it a CSS aspect-ratio.' }
+		);
+	}
 	// what held the profiled render's document open: its streamed promises by page.data key
 	const tail = extras.strip?.tail;
 	const held_open: HeldOpen | undefined = tail?.keys.length

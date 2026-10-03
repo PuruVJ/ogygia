@@ -42,6 +42,8 @@ export interface ByteStrip {
 	shadow_count: number;
 	/** the elements the markup makes: the whole document's, and the islands holding the most */
 	elements?: { total: number; islands: { fp: string; n: number }[] };
+	/** the `src` of each `<img>` with no width or height (the first 8): room the browser cannot hold */
+	unsized_images?: string[];
 	/** when each chunk of the document LEFT the server (end offset, ms after the render began) —
 	 *  present when the page streamed in more than one chunk */
 	chunks?: { end: number; t: number }[];
@@ -129,17 +131,17 @@ export function byte_strip(html: string): ByteStrip {
 	const lower = html.toLowerCase();
 	const islands = out.filter((s) => s.kind === 'island' && s.label).map((s) => ({ fp: s.label!, n: count_elements(lower, s.start, s.end) }));
 	islands.sort((a, b) => b.n - a.n);
-	return { total: html.length, segments: out, by_kind, shadow_bytes, shadow_count, elements: { total: count_elements(lower, 0, lower.length), islands: islands.slice(0, 3) } };
+	const unsized = unsized_images(lower, html);
+	return { total: html.length, segments: out, by_kind, shadow_bytes, shadow_count, elements: { total: count_elements(lower, 0, lower.length), islands: islands.slice(0, 3) }, ...(unsized.length ? { unsized_images: unsized } : {}) };
 }
 
 /** Raw-text elements: their contents are text, not elements. A `<template>`'s contents (a
  *  declarative shadow root's too) are not in the document's own elements either. */
 const OPAQUE = ['script', 'style', 'textarea', 'title', 'template', 'noscript'];
 
-/** The elements markup makes from `start` to `end`: each opening tag once, skipping comments and
- *  the contents of raw-text elements and templates. `html` lowercased. No regex. */
-export function count_elements(html: string, start: number, end: number): number {
-	let n = 0;
+/** Every opening tag markup makes from `start` to `end`, once: its name and where its `<` is,
+ *  skipping comments and the contents of raw-text elements and templates. `html` lowercased. No regex. */
+function walk_tags(html: string, start: number, end: number, on_tag: (tag: string, at: number) => void): void {
 	let i = html.indexOf('<', start);
 	while (i !== -1 && i < end) {
 		const c = html.charCodeAt(i + 1);
@@ -149,7 +151,6 @@ export function count_elements(html: string, start: number, end: number): number
 			continue;
 		}
 		if (c >= 97 && c <= 122) {
-			n++;
 			let j = i + 1;
 			while (j < end) {
 				const d = html.charCodeAt(j);
@@ -157,6 +158,7 @@ export function count_elements(html: string, start: number, end: number): number
 				j++;
 			}
 			const tag = html.slice(i + 1, j);
+			on_tag(tag, i);
 			if (OPAQUE.includes(tag)) {
 				const close = html.indexOf('</' + tag, j);
 				i = close === -1 ? -1 : html.indexOf('<', close + 2);
@@ -165,7 +167,49 @@ export function count_elements(html: string, start: number, end: number): number
 		}
 		i = html.indexOf('<', i + 1);
 	}
+}
+
+/** The elements markup makes from `start` to `end`: each opening tag once (`walk_tags`). */
+export function count_elements(html: string, start: number, end: number): number {
+	let n = 0;
+	walk_tags(html, start, end, () => n++);
 	return n;
+}
+
+/** IMAGES THE BROWSER CANNOT HOLD ROOM FOR: each `<img>` with no `width` or no `height` attribute
+ *  (and not `hidden`): until its file arrives the browser does not know its height, so the page
+ *  below it moves when it does — unless CSS sizes it. Their `src`s (the first 8), in the order of the
+ *  page. `lower` is the lowercased document (tags), `raw` the document as sent (to read the `src`). No regex. */
+export function unsized_images(lower: string, raw: string): string[] {
+	const out: string[] = [];
+	walk_tags(lower, 0, lower.length, (tag, at) => {
+		if (tag !== 'img' || out.length >= 8) return;
+		const close = lower.indexOf('>', at);
+		if (close === -1) return;
+		const attrs = lower.slice(at + 4, close);
+		const has = (name: string) => {
+			let k = attrs.indexOf(name);
+			while (k !== -1) {
+				const before = attrs.charCodeAt(k - 1);
+				const after = attrs.charCodeAt(k + name.length);
+				// (a whole attribute name: `data-width=` is not `width=`)
+				if ((k === 0 || before === 32 || before === 9 || before === 10 || before === 13) && (after === 61 || after === 32 || after === 62 || Number.isNaN(after))) return true;
+				k = attrs.indexOf(name, k + 1);
+			}
+			return false;
+		};
+		if ((has('width') && has('height')) || has('hidden')) return;
+		// (the src as written: a quoted value after `src=`)
+		const s = attrs.indexOf('src=');
+		if (s === -1) return;
+		const q = raw.charAt(at + 4 + s + 4);
+		const quoted = q === '"' || q === "'";
+		const from = at + 4 + s + (quoted ? 5 : 4);
+		let to = quoted ? raw.indexOf(q, from) : from;
+		if (!quoted) while (to < close && raw.charCodeAt(to) > 32 && raw.charCodeAt(to) !== 62) to++;
+		out.push(raw.slice(from, to === -1 ? from : to).slice(0, 300));
+	});
+	return out;
 }
 
 /** A segment's arrival at the browser, given the document's download span from navigation timing:
