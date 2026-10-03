@@ -20,6 +20,8 @@ export interface VisitNav {
 	/** the document's bytes on the wire and decoded */
 	transfer?: number;
 	size?: number;
+	/** the document came down as large as it is: sent without gzip or brotli */
+	raw?: true;
 	protocol?: string;
 	/** the steps before the first byte (ms, each only when it took time) */
 	phases?: NavPhases;
@@ -131,6 +133,8 @@ export interface Visit {
 	images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
 	/** preloads (image, font, stylesheet) nothing on the page used 3 s after load */
 	preloads_unused?: { url: string; as: string; bytes: number }[];
+	/** text files of 4 KB or more sent without gzip or brotli, the largest first */
+	uncompressed?: { url: string; type: string; bytes: number }[];
 	/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
 	images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
 	/** shown images the browser could hold no room for (computed aspect-ratio `auto`); empty: none */
@@ -204,6 +208,7 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	}
 	const proto = str(nav_raw.protocol, 16);
 	if (proto) nav.protocol = proto;
+	if (nav_raw.raw === true) nav.raw = true;
 	const ph = nav_raw.phases as Record<string, unknown> | undefined;
 	if (ph && typeof ph === 'object') {
 		const phases: NavPhases = {};
@@ -405,6 +410,14 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		if (url && as) preloads_unused.push({ url, as, bytes: num(p.bytes, 1e9) ?? 0 });
 	}
 	if (preloads_unused.length) visit.preloads_unused = preloads_unused;
+	const uncompressed: NonNullable<Visit['uncompressed']> = [];
+	for (const f of (Array.isArray(v.uncompressed) ? v.uncompressed : []).slice(0, 10) as Record<string, unknown>[]) {
+		const url = str(f?.url, 500);
+		const type = str(f?.type, 20);
+		const bytes = num(f?.bytes, 1e9);
+		if (url && type && bytes) uncompressed.push({ url, type, bytes });
+	}
+	if (uncompressed.length) visit.uncompressed = uncompressed;
 	// (kept when empty: the browser looked and found none — the report then drops its guess from the HTML)
 	if (Array.isArray(v.images_unsized)) visit.images_unsized = (v.images_unsized as unknown[]).slice(0, 8).filter((u): u is string => typeof u === 'string' && u.length > 0).map((u) => u.slice(0, 300));
 	const images_eager_below: NonNullable<Visit['images_eager_below']> = [];
@@ -646,6 +659,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.warnings ?? a.warnings ? { warnings: b.warnings ?? a.warnings } : {}),
 		// (each record carries the whole list so far: the later one has them all)
 		...(b.preload_misses ?? a.preload_misses ? { preload_misses: b.preload_misses ?? a.preload_misses } : {}),
+		...(b.uncompressed ?? a.uncompressed ? { uncompressed: b.uncompressed ?? a.uncompressed } : {}),
 		...(b.font_faces ?? a.font_faces ? { font_faces: b.font_faces ?? a.font_faces } : {}),
 		...(b.images_oversized ?? a.images_oversized ? { images_oversized: b.images_oversized ?? a.images_oversized } : {}),
 		...(b.dom ?? a.dom ? { dom: b.dom ?? a.dom } : {}),

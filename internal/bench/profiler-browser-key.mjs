@@ -45,8 +45,10 @@ const LABS = [
 	// its control, the same page with no cookie, never — the pattern's fix, `fixes`, not a finding)
 	{ path: '/dt-cookie', stay: 500, runs: 3, fixes: { 'same-document': 'sets a cookie (Set-Cookie)' } },
 	{ path: '/dt-cookie-free', stay: 500, runs: 3, fixes: { 'same-document': 'Set Cache-Control with s-maxage' }, fixes_never: { 'same-document': 'Set-Cookie' } },
+	// (a script and a fetch the server answered `Content-Encoding: identity`; the page itself compressed)
+	{ path: '/dt-raw', stay: 2500, named: { uncompressed: 'blob.js (script, ' }, never: { uncompressed: "the page's HTML" } },
 	// the quiet ones: none of the codes above
-	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store'] },
+	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store', 'uncompressed'] },
 	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
 ];
 

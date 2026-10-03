@@ -134,6 +134,8 @@ export interface PageInput {
 			res_end?: number;
 			/** the document's body, decoded (bytes) */
 			size?: number;
+			/** the document came down as large as it is: sent without gzip or brotli */
+			raw?: true;
 			dom_interactive?: number;
 			/** the steps before the first byte, each only when it took time */
 			phases?: NavPhases;
@@ -158,6 +160,9 @@ export interface PageInput {
 		preload_misses?: PreloadMiss[];
 		/** preloads (image, font, stylesheet) nothing on the page used 3 s after load */
 		preloads_unused?: { url: string; as: string; bytes: number }[];
+		/** text files (scripts, stylesheets, JSON…) of 4 KB or more that came down as large as they are
+		 *  decoded: sent without gzip or brotli, the largest first (the document's own: `nav.raw`) */
+		uncompressed?: { url: string; type: string; bytes: number }[];
 		/** the `@font-face` rules behind the fonts it fetched (family, font-display, the fetched files) */
 		font_faces?: { family: string; display: string; urls: string[] }[];
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
@@ -454,6 +459,10 @@ const LIMITS: Record<RatedVital['key'], [number, number, string]> = {
 	inp: [200, 500, 'INP']
 };
 
+/** text sent uncompressed: named past this many bytes in all (the HTML and the files), a warning past
+ *  the second (on a slow connection, ~100 KB uncompressed is most of a second more) */
+const UNCOMPRESSED_FINDING = 20 * 1024;
+const UNCOMPRESSED_WARN = 100 * 1024;
 /** a shift counts against an island when it lands within this long after the island hydrated */
 const SHIFT_WINDOW_MS = 600;
 /** a hydrate step this long is a long task of its own */
@@ -1483,6 +1492,29 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'warn',
 			message: `${list(never.map((p) => `${file(p.url)} (${p.as}${p.bytes ? `, ${kb(p.bytes)}` : ''}: ${WHAT[p.as] ?? 'nothing uses it'})`))} ${never.length === 1 ? 'was' : 'were'} preloaded, but nothing on the page used ${never.length === 1 ? 'it' : 'them'} 3 s after load: the bytes competed with the files the first screen needed.`,
 			fix: 'Remove the preload, or point it at the file the page really uses: the same URL the `<img>` or CSS asks for, the exact file the `@font-face` names.',
+			fps: []
+		});
+	}
+
+	// ── text sent uncompressed: the server (or a proxy before it) sent it without gzip or brotli ──
+	// (the dev server sends everything as it is: only a build's server says something about the app)
+	const raw_files = page.dev ? [] : (page.visit?.uncompressed ?? []);
+	const raw_doc = !page.dev && page.visit?.nav?.raw ? (page.visit.nav.size ?? 0) : 0;
+	const raw_total = raw_files.reduce((s, f) => s + f.bytes, 0) + raw_doc;
+	if (raw_total >= UNCOMPRESSED_FINDING) {
+		const file = (u: string) => {
+			const q = u.indexOf('?');
+			const p = q === -1 ? u : u.slice(0, q);
+			return p.slice(p.lastIndexOf('/') + 1) || u;
+		};
+		const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
+		const names = [...(raw_doc ? [`the page's HTML (${kb(raw_doc)})`] : []), ...raw_files.slice(0, 4).map((f) => `${file(f.url)} (${f.type}, ${kb(f.bytes)})`)];
+		const more = raw_files.length - 4;
+		findings.push({
+			code: 'uncompressed',
+			severity: raw_total >= UNCOMPRESSED_WARN ? 'warn' : 'info',
+			message: `${list(names)}${more > 0 ? ` and ${more} more` : ''} came down uncompressed: ${kb(raw_total)} over the wire where gzip or brotli usually sends a quarter to a third of that. Every visitor on a slow connection waits for the difference.`,
+			fix: 'Turn on compression where the response leaves your server: a compression middleware, the adapter\'s precompress option for built files, or the CDN\'s setting. A `Cache-Control: no-transform` on the response, or a proxy that strips `Accept-Encoding`, also keeps it off.',
 			fps: []
 		});
 	}

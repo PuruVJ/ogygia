@@ -456,6 +456,11 @@ const MAX_SEEN_RESOURCES = 3000;
 const MAX_DETAIL_RESOURCES = 200;
 /** content-named files fetched again, at most (a page's own; the count past it is not worth more) */
 const MAX_REFETCHED = 40;
+/** text files (and the document) 4 KB or more sent without compression; the largest few by name */
+const UNCOMPRESSED_MIN = 4096;
+const MAX_UNCOMPRESSED = 10;
+/** extensions that compress well (text, and wasm), whatever fetched them */
+const TEXT_EXT = new Set(['js', 'mjs', 'css', 'html', 'htm', 'json', 'svg', 'txt', 'xml', 'map', 'wasm']);
 
 function observe_vitals(): void {
 	// (the page this document loaded as: its visit is filed there, whatever the router does later)
@@ -1030,6 +1035,9 @@ function build_visit(): Record<string, unknown> | null {
 	// every file by type (the counts and bytes of ALL of them), next to the first 200 in detail
 	const totals = new Map<string, { type: string; count: number; transfer: number; size: number }>();
 	let all_n = 0;
+	// text the server sent uncompressed, the largest first (the document itself is in `nav.raw`)
+	const uncompressed: { url: string; type: string; bytes: number }[] = [];
+	const raw_seen = new Set<string>();
 	try {
 		// the observer's list (it saw past the browser's buffer), else the buffer
 		const listed = seen_resources.length ? seen_resources : (performance.getEntriesByType('resource') as PerformanceResourceTiming[]);
@@ -1042,7 +1050,21 @@ function build_visit(): Record<string, unknown> | null {
 			t.transfer += r.transferSize || 0;
 			t.size += r.decodedBodySize || 0;
 			totals.set(type, t);
+			// TEXT SENT AS IT IS: a script, a stylesheet, JSON… whose body came down as large as it is
+			// decoded (no gzip, no brotli). A cross-origin file without Timing-Allow-Origin reports
+			// zeros and is never counted; images and fonts are compressed formats already
+			if (
+				r.decodedBodySize >= UNCOMPRESSED_MIN &&
+				r.encodedBodySize >= r.decodedBodySize &&
+				!raw_seen.has(r.name) &&
+				(type === 'script' || type === 'style' || TEXT_EXT.has(ext_of(r.name)) || r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest')
+			) {
+				raw_seen.add(r.name);
+				uncompressed.push({ url: r.name.slice(0, 500), type, bytes: r.decodedBodySize });
+			}
 		}
+		uncompressed.sort((a, b) => b.bytes - a.bytes);
+		uncompressed.length = Math.min(uncompressed.length, MAX_UNCOMPRESSED);
 		// PRELOADED, THEN DOWNLOADED AGAIN: one URL fetched by a preload link and again by something
 		// else, the second time over the network (its body came down, not from the cache). The
 		// browser could not use the preload — its crossorigin or credentials did not match the
@@ -1178,6 +1200,8 @@ function build_visit(): Record<string, unknown> | null {
 			...(nav.loadEventEnd ? { load: r2(nav.loadEventEnd) } : {}),
 			...(nav.transferSize ? { transfer: nav.transferSize } : {}),
 			...(nav.decodedBodySize ? { size: nav.decodedBodySize } : {}),
+			// (the HTML came down as large as it is: sent without gzip or brotli)
+			...(nav.decodedBodySize >= UNCOMPRESSED_MIN && nav.encodedBodySize >= nav.decodedBodySize ? { raw: true } : {}),
 			...(nav.nextHopProtocol ? { protocol: nav.nextHopProtocol } : {}),
 			// THE WAIT FOR THE FIRST BYTE, step by step: redirects, a service worker starting, the DNS
 			// lookup, the connection (and its TLS), then the request until the server's first byte —
@@ -1192,6 +1216,7 @@ function build_visit(): Record<string, unknown> | null {
 		resources,
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),
+		...(uncompressed.length ? { uncompressed } : {}),
 		...(fonts.length ? { font_faces: fonts } : {}),
 		...(oversized.length ? { images_oversized: oversized } : {}),
 		...(dom ? { dom } : {}),

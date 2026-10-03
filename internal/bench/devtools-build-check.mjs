@@ -269,6 +269,11 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	check('an image far bigger than shown is named in a build too', img.length === 1 && img[0].startsWith('big.png (2000×1333, shown at 300×200)') && !img[0].includes('flat.png'), JSON.stringify(img).slice(0, 200));
 	const dom = await read('/dt-dom', 'dom-large');
 	check('a page of many elements names its island in a build too', dom.length === 1 && dom[0].includes('of them inside DenseList'), JSON.stringify(dom).slice(0, 200));
+	// (the dev server sends everything uncompressed: a build's server is the one this is about)
+	const raw = await read('/dt-raw', 'uncompressed');
+	check('text sent uncompressed is named, the script and the fetch', raw.length === 1 && raw[0].includes('blob.js (script, ') && raw[0].includes('table.json') && !raw[0].includes("the page's HTML"), JSON.stringify(raw).slice(0, 240));
+	const quiet = await read('/dt-lab', 'uncompressed');
+	check('a page whose files are all compressed: no uncompressed', quiet.length === 0, JSON.stringify(quiet).slice(0, 200));
 }
 // SCROLLING STALLED, in a build: the handler is a minified name in a hashed chunk — named by its island
 {

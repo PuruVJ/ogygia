@@ -301,6 +301,29 @@ describe('preloaded, never used', () => {
 	});
 });
 
+describe('text sent uncompressed', () => {
+	const at = (visit: Partial<NonNullable<PageInput['visit']>>, dev = false) =>
+		analyze_page(page({ ...(dev ? { dev: true } : {}), visit: { nav: { res_start: 5 }, paints: {}, viewport: [1280, 800], ...visit } }), [], [], 3000).findings.find((f) => f.code === 'uncompressed');
+	const files = [
+		{ url: 'http://x/dt-raw/blob.js', type: 'script', bytes: 120_447 },
+		{ url: 'http://x/dt-raw/table.json?v=1', type: 'fetch', bytes: 35_281 }
+	];
+	it('names each file, its kind and size; a warning past 100 KB', () => {
+		const f = at({ uncompressed: files });
+		expect(f?.severity).toBe('warn');
+		expect(f?.message).toContain('blob.js (script, 117.6 KB) and table.json (fetch, 34.5 KB) came down uncompressed: 152.1 KB');
+	});
+	it("the page's own HTML, first", () => {
+		const f = at({ nav: { res_start: 5, size: 40_000, raw: true } });
+		expect(f?.severity).toBe('info');
+		expect(f?.message).toMatch(/^the page's HTML \(39\.1 KB\) came down uncompressed/);
+	});
+	it('under 20 KB in all, or on the dev server: nothing', () => {
+		expect(at({ uncompressed: [{ url: 'http://x/a.js', type: 'script', bytes: 9000 }] })).toBeUndefined();
+		expect(at({ uncompressed: files }, true)).toBeUndefined();
+	});
+});
+
 describe('a page of many elements', () => {
 	type Dom = NonNullable<NonNullable<PageInput['visit']>['dom']>;
 	const at = (dom: Dom, regions: RegionFact[] = []) =>
