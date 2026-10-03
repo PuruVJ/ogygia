@@ -8,6 +8,7 @@
  */
 import { all_regions, region_name } from './regions.js';
 import type { StylesFinding } from './styles.js';
+import { tool_fetch, tool_made } from '../tool-fetches.js';
 
 export interface CacheProbe {
 	url: string;
@@ -51,13 +52,14 @@ export function content_named_files(doc: Document = document): { url: string; na
 /** Ask the server how it caches each file (HEAD, past the browser's cache), at most `limit` files. */
 export async function probe_cache(doc: Document = document, limit = 40): Promise<CacheProbe[]> {
 	const sizes = new Map<string, number>();
-	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) sizes.set(r.name, r.decodedBodySize || 0);
+	// (the page's loads: an earlier probe's HEAD has no body to size)
+	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) if (!tool_made(r)) sizes.set(r.name, r.decodedBodySize || 0);
 	const files = content_named_files(doc).slice(0, limit);
 	return Promise.all(
 		files.map(async ({ url, name }) => {
 			let cache_control: string | null = null;
 			try {
-				const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+				const res = await tool_fetch(url, { method: 'HEAD', cache: 'no-store' });
 				cache_control = res.headers.get('cache-control');
 			} catch {
 				cache_control = null;

@@ -18,6 +18,7 @@
  * hides.
  */
 import { hole_copy_of } from './hash.js';
+import { tool_made } from '../tool-fetches.js';
 
 interface Sample {
 	fp: string;
@@ -1046,7 +1047,8 @@ function build_visit(): Record<string, unknown> | null {
 	try {
 		// the observer's list (it saw past the browser's buffer), else the buffer
 		const listed = seen_resources.length ? seen_resources : (performance.getEntriesByType('resource') as PerformanceResourceTiming[]);
-		const all = listed.filter((r) => !r.name.includes('/__profiler/'));
+		// (not the profiler's requests, nor the devtools' own reads of the page's files)
+		const all = listed.filter((r) => !r.name.includes('/__profiler/') && !tool_made(r));
 		all_n = all.length;
 		for (const r of all) {
 			const type = type_of(r);

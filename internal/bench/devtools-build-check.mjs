@@ -89,17 +89,14 @@ for (const u of files) on_disk += (await (await fetch(u)).arrayBuffer()).byteLen
 await page.waitForTimeout(1500);
 const decoded_text = await page.locator('[data-og-ledger-exact] + table tfoot td').last().innerText().catch(() => '');
 const shown_kb = Number.parseFloat(decoded_text);
-// (what only this devtools-on page loaded — the devtools' own lazy modules — is the most the tab may
-// add: a module of theirs that carries none of their globals can read as the runtime's part)
-const visitor_set = new Set(files);
-let dt_only = 0;
-for (const u of await page.evaluate(() => [...new Set(performance.getEntriesByType('resource').filter((r) => r.name.startsWith(location.origin) && r.name.endsWith('.js')).map((r) => r.name))]))
-	if (!visitor_set.has(u)) dt_only += (await (await fetch(u)).arrayBuffer()).byteLength;
+// EXACT: neither the devtools' own modules nor their own reads of the page's files (the tab reads
+// the runtime's parts, the Page tab asks how each file is cached: the browser lists those too, and
+// a part the page never loaded once read as loaded)
 const over = shown_kb - on_disk / 1024;
 check(
 	"Bytes: the page total is every file a visitor downloads (the runtime's own parts too), each once",
-	over >= -0.2 && over <= dt_only / 1024 + 0.2,
-	`shown ${decoded_text}; a visitor's ${files.length} files are ${(on_disk / 1024).toFixed(1)} kB (${over > 0.2 ? `+${over.toFixed(1)} kB of the devtools' own, of ${(dt_only / 1024).toFixed(1)} kB they loaded` : 'exact'})`
+	Math.abs(over) <= 0.2,
+	`shown ${decoded_text}; a visitor's ${files.length} files are ${(on_disk / 1024).toFixed(1)} kB (${Math.abs(over) > 0.2 ? `${over > 0 ? '+' : ''}${over.toFixed(1)} kB off` : 'exact'})`
 );
 // an island's detail card carries its line of the ledger: its code, what only it needs, whom it shares with
 await page.locator('[data-og-tab="lens"]').click();

@@ -8,6 +8,7 @@ import { ISLAND_GRAPH_ATTR, decode_island_graph } from '../island-graph.js';
 import { byte_ledger, type Ledger } from './bytes.js';
 import { dynamic_imports, static_imports } from '../profiler/page-assets.js';
 import { all_regions, region_name } from './regions.js';
+import { tool_fetch, tool_made } from '../tool-fetches.js';
 
 const abs = (href: string | null | undefined): string | null => {
 	if (!href) return null;
@@ -52,7 +53,7 @@ async function read_parts(src: string): Promise<RuntimeParts> {
 	const text = (u: string): Promise<string> => {
 		let t = cache.get(u);
 		if (!t) {
-			t = fetch(u, { cache: 'force-cache' })
+			t = tool_fetch(u, { cache: 'force-cache' })
 				.then((r) => (r.ok ? r.text() : ''))
 				.catch(() => '');
 			cache.set(u, t);
@@ -104,6 +105,9 @@ export function page_ledger(): Ledger | null {
 	if (!graph.size) return null;
 	const sizes = new Map<string, { wire: number; raw: number }>();
 	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) {
+		// (not this ledger's own reading of the runtime's parts: a part the page never loaded would
+		// count as loaded)
+		if (tool_made(r)) continue;
 		const wire = r.encodedBodySize || r.transferSize || r.decodedBodySize || 0;
 		sizes.set(r.name, { wire, raw: r.decodedBodySize || wire });
 	}

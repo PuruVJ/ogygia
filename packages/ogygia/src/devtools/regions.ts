@@ -5,6 +5,7 @@
  */
 import { snapshot } from './bus.js';
 import { props_sidecar_of } from '../runtime/sidecar.js';
+import { tool_made } from '../tool-fetches.js';
 import type { DevtoolsEvent } from './schema.js';
 import type { IslandHazard } from '../profiler/hydration-hazards.js';
 
@@ -146,7 +147,8 @@ function timing_index(): Map<string, PerformanceResourceTiming> {
 	const res = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
 	if (res.length !== index_len) {
 		index = new Map();
-		for (const r of res) index.set(basename(r.name), r); // last match wins (a re-fetch)
+		// last match wins (a re-fetch), the devtools' own reads left out (a HEAD's empty body is no size)
+		for (const r of res) if (!tool_made(r)) index.set(basename(r.name), r);
 		index_len = res.length;
 	}
 	return index;

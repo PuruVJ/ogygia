@@ -13,6 +13,7 @@
  * on a hot path.
  */
 import { find_unscoped, unscoped_finding, type UnscopedStyles } from '../unscoped-css.js';
+import { tool_fetch, tool_made } from '../tool-fetches.js';
 
 export interface SheetRow {
 	/** the file name, or `inline <style>` */
@@ -162,7 +163,7 @@ function each_style_rule(list: CSSRuleList, fn: Walk) {
 /** Read the page's stylesheets. `match: true` also tries every selector against the document. */
 export function read_styles(doc: Document = document, opts: { match?: boolean } = {}): StylesReport {
 	const res = new Map<string, PerformanceResourceTiming>();
-	for (const e of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) res.set(e.name, e);
+	for (const e of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) if (!tool_made(e)) res.set(e.name, e);
 	const sheets: SheetRow[] = [];
 	const examples: { sel: string; len: number }[] = [];
 	let unreadable = 0;
@@ -256,7 +257,7 @@ export async function scan_unscoped(doc: Document = document): Promise<(Unscoped
 		const href = sheet.href;
 		if (new URL(href, location.href).origin !== location.origin) continue;
 		jobs.push(
-			fetch(href, { cache: 'force-cache' })
+			tool_fetch(href, { cache: 'force-cache' })
 				.then((r) => (r.ok ? r.text() : ''))
 				.then((css) => add(css, file_of(href)))
 				.catch(() => {})

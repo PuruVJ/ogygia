@@ -7,6 +7,7 @@
  * read (the next look has it), `null` when it cannot say (no inline map: a build's chunk, a file the
  * dev server did not transform). No regex: the map's marker is found by search, the VLQ by table.
  */
+import { tool_fetch } from '../tool-fetches.js';
 
 const MARK = '//# sourceMappingURL=data:application/json;base64,';
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -86,7 +87,7 @@ export function source_line(file: string, line: number | null): number | null | 
 	if (hit) return hit[line] || null;
 	if (!pending.has(file) && typeof fetch === 'function') {
 		pending.add(file);
-		fetch('/' + file)
+		tool_fetch('/' + file)
 			.then((r) => (r.ok ? r.text() : ''))
 			.then((t) => ready.set(file, t ? parse(t, file) : null))
 			.catch(() => ready.set(file, null))
