@@ -6,6 +6,7 @@
 import { snapshot } from './bus.js';
 import { props_sidecar_of } from '../runtime/sidecar.js';
 import type { DevtoolsEvent } from './schema.js';
+import type { IslandHazard } from '../profiler/hydration-hazards.js';
 
 // ── regexes
 const JS_EXT_RE = /\.js$/;
@@ -109,7 +110,7 @@ export function region_name(entry: string | null | undefined): string {
  */
 export function region_transitive(
 	entry: string | null | undefined
-): { bytes: number; modules: number; top?: { file: string; bytes: number }[]; barrels?: { file: string; fanout: number }[] } | null {
+): { bytes: number; modules: number; top?: { file: string; bytes: number }[]; barrels?: { file: string; fanout: number }[]; hazards?: IslandHazard[] } | null {
 	const id = island_id(entry);
 	const map = (typeof window !== 'undefined' && window.__ogygia_region_bytes) || null;
 	return (id && map && map[id]) || null;

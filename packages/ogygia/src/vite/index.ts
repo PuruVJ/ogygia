@@ -994,7 +994,19 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						}
 					).environments;
 					const client_modules = envs?.client?.moduleGraph?.idToModuleMap?.values();
-					const bytes = client_modules ? island_subgraph_bytes(client_modules as never) : {};
+					// (each app component's source, read once a request: its lines that draw differently in the browser)
+					const sources = new Map<string, string | undefined>();
+					const read = (file: string) => {
+						if (!sources.has(file)) {
+							try {
+								sources.set(file, fs.readFileSync(file, 'utf8'));
+							} catch {
+								sources.set(file, undefined);
+							}
+						}
+						return sources.get(file);
+					};
+					const bytes = client_modules ? island_subgraph_bytes(client_modules as never, read) : {};
 					res.setHeader('content-type', 'application/json');
 					res.end(JSON.stringify({ names: compiler.region_names(), bytes }));
 				});

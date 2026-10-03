@@ -164,8 +164,8 @@ function island_code(): IslandCode[] {
 		if (r.kind !== 'island' || !r.entry || seen.has(r.entry)) continue;
 		seen.add(r.entry);
 		const t = region_transitive(r.entry);
-		if (!t?.top?.length && !t?.barrels?.length) continue;
-		out.push({ fp: r.fp ?? undefined, name: region_name(r.entry), bytes: t.bytes, top: t.top ?? [], barrels: t.barrels ?? [] });
+		if (!t?.top?.length && !t?.barrels?.length && !t?.hazards?.length) continue;
+		out.push({ fp: r.fp ?? undefined, name: region_name(r.entry), bytes: t.bytes, top: t.top ?? [], barrels: t.barrels ?? [], ...(t.hazards?.length ? { hazards: t.hazards } : {}) });
 	}
 	return out;
 }

@@ -23,7 +23,30 @@ export interface Hazard {
 	reads?: string;
 }
 
-const BROWSER_READS = ['typeof window', 'window.', 'document.', 'navigator.', 'localStorage', 'sessionStorage', 'Date.now(', 'new Date()', 'Math.random(', 'matchMedia('];
+/** a hazard with the file it is in (the profiler's island chunks, the dev server's module graph) */
+export type IslandHazard = Hazard & { file: string };
+
+/** "In its own code, the likeliest: X.svelte:4 (`…`) awaits …; Y.svelte:8 reads Date.now( while rendering …" —
+ *  said the same by the profiler's report and the devtools' Page tab */
+export function hazard_words(lines: readonly IslandHazard[]): string {
+	const one = (h: IslandHazard) => {
+		const code = h.code.length > 70 ? h.code.slice(0, 69) + '…' : h.code;
+		const where = `${h.file.split('/').pop()}:${h.line} (\`${code}\`)`;
+		return h.kind === 'await' ? `${where} awaits at the top of its script: the browser runs it again, and another answer draws another tree` : `${where} reads ${h.reads ?? 'a browser-only value'} while rendering, a value the server does not have`;
+	};
+	return `In its own code, the likeliest: ${lines.slice(0, 2).map(one).join('; ')}.`;
+}
+
+/** The fix for those lines: what to do with each kind. */
+export function hazard_fix(lines: readonly IslandHazard[]): string {
+	const kinds = new Set(lines.map((h) => h.kind));
+	return [
+		...(kinds.has('await') ? ['Give both sides the same answer: pass the data in from the server (a load, a prop) rather than awaiting it again in the browser.'] : []),
+		...(kinds.has('browser') ? ["Read the browser-only value after the wake (in `$effect` or `onMount`), or take it from what both sides have (the page's URL from `$app/state`, a time passed in as a prop)."] : [])
+	].join(' ');
+}
+
+const BROWSER_READS =['typeof window', 'window.', 'document.', 'navigator.', 'localStorage', 'sessionStorage', 'Date.now(', 'new Date()', 'Math.random(', 'matchMedia('];
 
 const is_ident = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
 

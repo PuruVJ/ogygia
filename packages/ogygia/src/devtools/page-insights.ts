@@ -10,6 +10,7 @@
  * none (the lab page's decoys hold that line).
  */
 import { without_comments as strip_comments, without_runtime_marks } from '../runtime/beacon.js';
+import { hazard_fix, hazard_words, type IslandHazard } from '../profiler/hydration-hazards.js';
 
 /** markup as a visitor's eyes compare it: no comments (Svelte's re-anchored block markers), no
  *  marks the runtime itself set on the regions inside */
@@ -304,6 +305,8 @@ export interface IslandCode {
 	top: { file: string; bytes: number }[];
 	/** re-export barrels still imported whole, with the app modules each drags in */
 	barrels: { file: string; fanout: number }[];
+	/** its components' lines that draw differently in the browser (the dev server read their sources) */
+	hazards?: IslandHazard[];
 }
 
 export interface HoleFailure {
@@ -466,6 +469,12 @@ const LIMITS: Record<RatedVital['key'], [number, number, string]> = {
 	cls: [0.1, 0.25, 'CLS'],
 	inp: [200, 500, 'INP']
 };
+
+/** the named islands' own lines that draw differently in the browser (the dev server's reading) */
+function hazards_of(page: PageInput, names: readonly string[]): IslandHazard[] {
+	const want = new Set(names);
+	return (page.island_code ?? []).filter((c) => want.has(c.name)).flatMap((c) => c.hazards ?? []);
+}
 
 /** text sent uncompressed: named past this many bytes in all (the HTML and the files), a warning past
  *  the second (on a slow connection, ~100 KB uncompressed is most of a second more) */
@@ -673,6 +682,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// markup back: `healed`), or a server transform the restorer reported. Neither seen: nothing
 		// touched the markup — the component itself drew another tree in the browser
 		const touched = recovered.some((r) => page.islands.find((i) => i.fp === r.fp)?.healed) || !!page.restore_events?.length;
+		const lines = touched ? [] : hazards_of(page, recovered.map((r) => r.name));
 		findings.push({
 			code: 'recovered',
 			severity: 'error',
@@ -680,10 +690,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				`${list(recovered.map((r) => r.name))} threw away the server HTML and rendered again in the browser (a flash and a double render). ` +
 				(touched
 					? 'Something changed the markup between the server and hydration.'
-					: 'No script in the browser edited ' + (recovered.length === 1 ? 'it' : 'them') + ' before waking: either its HTML was rewritten on the way from the server, or the component itself drew a different tree in the browser.'),
+					: 'No script in the browser edited ' + (recovered.length === 1 ? 'it' : 'them') + ' before waking: either its HTML was rewritten on the way from the server, or the component itself drew a different tree in the browser.' + (lines.length ? ` ${hazard_words(lines)}` : '')),
 			fix: touched
 				? 'Look for a script that edits the page before islands wake (an A/B tool, a DOM injector), or markup the browser rewrites (invalid nesting like a <div> in a <p>).'
-				: 'Look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter), then in its components for what the browser sees differently: a block ({#if}, {#each}, {#await}) whose condition reads `window`, `Date`, `Math.random()` or storage; a context set only on the server (a csr=false layout\'s setContext); an `await` at the top of its script; or markup the browser rewrites (a <div> in a <p>).',
+				: lines.length
+					? `${hazard_fix(lines)} If it is none of them, look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter).`
+					: 'Look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter), then in its components for what the browser sees differently: a block ({#if}, {#each}, {#await}) whose condition reads `window`, `Date`, `Math.random()` or storage; a context set only on the server (a csr=false layout\'s setContext); an `await` at the top of its script; or markup the browser rewrites (a <div> in a <p>).',
 			fps: recovered.map((r) => r.fp)
 		});
 	}
@@ -714,15 +726,20 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const d = snap ? first_difference(snap.ssr, snap.hydrated) : null;
 		// a harmless-looking cause: a bare attribute on a custom element (`<my-card data-x>`, Svelte 5)
 		const bool = d && snap ? boolean_attr_at(without_comments(snap.ssr), without_comments(snap.hydrated), d.at) : null;
+		// (the lines of its own that draw differently in the browser: the dev server read them)
+		const changed_lines = hazards_of(page, changed.map((r) => r.name));
 		findings.push({
 			code: 'markup-changed',
 			severity: 'warn',
 			message:
 				`${list(changed.map((r) => r.name))} rendered different markup in the browser than on the server, so the page changes as it wakes.` +
-				(d ? ` First difference in ${changed[0].name}: server "${clip(d.server)}", browser "${clip(d.now)}".` : ''),
+				(d ? ` First difference in ${changed[0].name}: server "${clip(d.server)}", browser "${clip(d.now)}".` : '') +
+				(changed_lines.length && !bool ? ` ${hazard_words(changed_lines)}` : ''),
 			fix: bool
 				? `\`${bool.name}\` on <${bool.tag}> is written bare: the server writes ${bool.name}="" and Svelte's hydrate sets it to "${bool.now}" — Svelte hands a custom element its attributes as values, and a bare attribute's value is \`true\`. So the island's markup changes as it wakes, and CSS or the component reading the value sees two. Give it a value, the same on both sides: \`${bool.name}=""\` (or \`${bool.name}="true"\` when the component reads it as a flag).`
-				: 'Render the same thing on both sides: move time, random values, and browser-only reads (window, localStorage) into an effect or an event, or pass them in as props.',
+				: changed_lines.length
+					? hazard_fix(changed_lines)
+					: 'Render the same thing on both sides: move time, random values, and browser-only reads (window, localStorage) into an effect or an event, or pass them in as props.',
 			fps: changed.map((r) => r.fp)
 		});
 	}

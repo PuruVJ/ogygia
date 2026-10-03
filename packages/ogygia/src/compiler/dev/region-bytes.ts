@@ -14,6 +14,7 @@
  * component was never loaded) has no subgraph in the graph yet — it simply doesn't appear here until
  * it wakes. Pure over the nodes it's handed; reads, never mutates.
  */
+import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.js';
 
 /** Structural shape of a Vite dev module-graph node (the fields the byte walk reads). */
 export type ByteGraphModule = {
@@ -61,7 +62,9 @@ function is_glue(mod: ByteGraphModule): boolean {
  * When two graph nodes resolve to the same island id (e.g. `?v=` query variants), the larger wins.
  */
 export function island_subgraph_bytes(
-	modules: Iterable<ByteGraphModule>
+	modules: Iterable<ByteGraphModule>,
+	/** an app `.svelte` file's source, by its path on disk: what draws differently in the browser */
+	read?: (file: string) => string | undefined
 ): Record<string, IslandBytes> {
 	const out: Record<string, IslandBytes> = {};
 	for (const mod of modules) {
@@ -76,6 +79,7 @@ export function island_subgraph_bytes(
 		let steps = 0;
 		const each: { file: string; bytes: number }[] = [];
 		const barrels: { file: string; fanout: number }[] = [];
+		const hazards: IslandHazard[] = [];
 		while (stack.length && steps++ < 20000) {
 			const n = stack.pop()!;
 			if (seen.has(n)) continue;
@@ -101,11 +105,16 @@ export function island_subgraph_bytes(
 				// behind it (a pure re-export index). Every module behind it rides into the island.
 				// (a component uses what it imports: only a script module can be a re-export index)
 				if (fanout >= BARREL_FANOUT && code.length <= fanout * BARREL_BYTES_PER_EXPORT && !file.endsWith('.svelte')) barrels.push({ file, fanout });
+				// its lines that draw differently in the browser (its source on disk, not the served code)
+				if (read && n.file && file.endsWith('.svelte') && hazards.length < 5) {
+					const src = read(n.file);
+					if (src) for (const h of hydration_hazards(src).slice(0, 3)) if (hazards.length < 5) hazards.push({ file, ...h });
+				}
 			}
 		}
 		if (count > 0 && (!out[iid] || out[iid].bytes < bytes)) {
 			each.sort((a, b) => b.bytes - a.bytes);
-			out[iid] = { bytes, modules: count, top: each.slice(0, 5), ...(barrels.length ? { barrels: barrels.sort((a, b) => b.fanout - a.fanout).slice(0, 3) } : {}) };
+			out[iid] = { bytes, modules: count, top: each.slice(0, 5), ...(barrels.length ? { barrels: barrels.sort((a, b) => b.fanout - a.fanout).slice(0, 3) } : {}), ...(hazards.length ? { hazards } : {}) };
 		}
 	}
 	return out;
@@ -119,6 +128,8 @@ export interface IslandBytes {
 	top?: { file: string; bytes: number }[];
 	/** re-export barrels still in the island's graph, with how many app modules each drags in */
 	barrels?: { file: string; fanout: number }[];
+	/** its components' lines that draw differently in the browser (a top-level await, a browser-only value) */
+	hazards?: IslandHazard[];
 }
 
 /** a barrel re-exports at least this many app modules… */

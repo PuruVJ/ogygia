@@ -1174,7 +1174,8 @@ async function csr_true_run(browser) {
 	return bad.length ? 0 : 1;
 }
 
-function grade(view) {
+/** (`report`: the profiler report's findings — the profiler reads island sources only in a build) */
+function grade(view, report = false) {
 	const name_of = new Map(view.regions.map((r) => [r.fp, r.name]));
 	const found = {};
 	const decoy_hits = [];
@@ -1184,7 +1185,9 @@ function grade(view) {
 		if (!VICTIM.has(f.code)) for (const n of names) if (DECOYS.includes(n)) decoy_hits.push(`${f.code} names decoy ${n}`);
 		if (f.code in PLANTED) {
 			const want = PLANTED[f.code];
-			if (want === null || names.includes(want)) found[f.code] = true;
+			// (on the dev server, which reads the island's sources: Clock's markup change by its line)
+			const by_line = f.code !== 'markup-changed' || serve || report || (f.message ?? '').includes('Clock.svelte:3');
+			if ((want === null || names.includes(want)) && by_line) found[f.code] = true;
 		}
 		for (const n of names) {
 			const planted_for = Object.entries(PLANTED).filter(([, v]) => v === n).map(([k]) => k);
@@ -1238,7 +1241,7 @@ try {
 		} else console.log(`  ✓ hydration tab: Broken failed · Clock changed · Edited ${view.hydration.Edited} · Healthy clean`);
 		// THE PROFILER REPORT of the same visit: the same planted problems, on the same islands
 		if (view.report) {
-			const r = grade({ ...view, findings: view.report.browser_findings });
+			const r = grade({ ...view, findings: view.report.browser_findings }, true);
 			for (const k of Object.keys(r.found)) tally_report[k] = (tally_report[k] ?? 0) + 1;
 			report_runs++;
 			const missed = Object.keys(PLANTED).filter((k) => !r.found[k]);

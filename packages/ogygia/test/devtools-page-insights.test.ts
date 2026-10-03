@@ -348,6 +348,19 @@ describe('an island that threw its server HTML away (recovered)', () => {
 		expect(f.fix).toContain('transformPageChunk');
 		expect(f.fix).toContain('an `await` at the top of its script');
 	});
+	it('with the dev server reading its sources: the likeliest line, and the fix for it', () => {
+		const f = analyze_page(
+			page({
+				islands: [{ fp: 's', t0: 10, loaded: 20, done: 30, recovered: true }],
+				island_code: [{ fp: 's', name: 'Sidebar', bytes: 1000, top: [], barrels: [], hazards: [{ file: 'src/lib/Sidebar.svelte', line: 39, code: 'const fetched = await site.nav();', kind: 'await' }] }]
+			}),
+			[region('s', 'Sidebar')],
+			[],
+			500
+		).findings.find((x) => x.code === 'recovered')!;
+		expect(f.message).toContain('In its own code, the likeliest: Sidebar.svelte:39 (`const fetched = await site.nav();`) awaits at the top of its script');
+		expect(f.fix).toMatch(/^Give both sides the same answer/);
+	});
 	it('a script edited it first (the runtime healed it): the edit is the cause', () => {
 		const f = at(true);
 		expect(f.message).toContain('Something changed the markup between the server and hydration.');
