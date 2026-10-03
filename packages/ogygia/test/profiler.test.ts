@@ -52,7 +52,7 @@ import {
 	type SpanRecorder,
 	type SpanAttrs
 } from '../src/profiler/span.js';
-import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name } from '../src/profiler/report.js';
+import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name, browser_of } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
@@ -1795,6 +1795,32 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(other.fps).toEqual(['aaaaaaaa11111111']);
 		// no other screen: no such finding
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
+	});
+
+	it('the browser a visit came from: named from its user agent, and on its findings when it is not a Chromium one', () => {
+		expect(browser_of('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15')).toBe('Safari 18');
+		expect(browser_of('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')).toBe('Chrome 141');
+		expect(browser_of('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0')).toBe('Edge 141');
+		expect(browser_of('Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0')).toBe('Firefox 133');
+		expect(browser_of('curl/8')).toBeNull();
+		const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15';
+		const visit = parse_visit('/hell', {
+			at: Date.now(),
+			ua: safari,
+			unsupported: ['layout-shift', 'longtask'],
+			viewport: [1280, 800],
+			nav: { req_start: 1, res_start: 10, res_end: 20, dcl: 100, load: 150 },
+			paints: {},
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', t0: 100, loaded: 120, turn: 125, done: 130 }],
+			regions: [{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', hydrated: true, top: 2400, height: 80 }]
+		})!;
+		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit } as never);
+		expect(out.find((f) => f.code === 'browser-limits')!.message.startsWith('Safari 18, the browser that visited, does not report layout shifts')).toBe(true);
+		expect(out.find((f) => f.code === 'eager-offscreen')!.message.startsWith('In the browser (Safari 18), on a 1280×800 screen: Footer starts below')).toBe(true);
 	});
 
 	it("the process's memory growth: said plainly, and not beside the render measured to keep memory", () => {

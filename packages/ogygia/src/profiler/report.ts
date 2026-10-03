@@ -835,6 +835,31 @@ export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 
 		.sort((a, b) => b.extra - a.extra);
 }
 
+/** The browser a visit came from, by name and major version (`Safari 18`, `Chrome 141`, `Firefox 133`,
+ *  `Edge 141`), from its user-agent string by plain search; null when it says nothing known. Some
+ *  findings are one engine's (Safari reports no layout shifts; a preload one engine reuses another
+ *  fetches again): the report names which. */
+export function browser_of(ua: string | undefined): string | null {
+	if (!ua) return null;
+	const major = (token: string): string => {
+		const at = ua.indexOf(token);
+		if (at === -1) return '';
+		let v = '';
+		for (let i = at + token.length; i < ua.length; i++) {
+			const c = ua.charCodeAt(i);
+			if (c < 48 || c > 57) break;
+			v += ua[i];
+		}
+		return v ? ' ' + v : '';
+	};
+	if (ua.includes('Edg/')) return 'Edge' + major('Edg/');
+	if (ua.includes('OPR/')) return 'Opera' + major('OPR/');
+	if (ua.includes('Firefox/')) return 'Firefox' + major('Firefox/');
+	if (ua.includes('Chrome/')) return 'Chrome' + major('Chrome/');
+	if (ua.includes('Safari/') && ua.includes('Version/')) return 'Safari' + major('Version/');
+	return null;
+}
+
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
  *  shows smaller or lower down */
 const SCREEN_CODES: ReadonlySet<string> = new Set(['eager-offscreen', 'eager-hidden', 'images-eager-below', 'image-oversized']);
@@ -1550,7 +1575,18 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// THE SCREEN THE VISIT HAD: what sits below its first screen, what draws nothing on it, which
 		// images it shows smaller, are that screen's — the finding says which
 		const here = screen_of(visit);
-		out.push(...in_browser.map((f) => (here && SCREEN_CODES.has(f.code) && f.message.startsWith(IN_BROWSER) ? { ...f, message: `In the browser, on a ${here} screen: ${f.message.slice(IN_BROWSER.length)}` } : f)));
+		// …AND THE BROWSER, when it is not a Chromium one (the reference every finding is tuned on):
+		// Safari reports no layout shifts and refetches a preload Chromium reuses — the finding says whose
+		const engine = browser_of(visit?.ua);
+		const who = engine && !engine.startsWith('Chrome') && !engine.startsWith('Edge') && !engine.startsWith('Opera') ? ` (${engine})` : '';
+		out.push(
+			...in_browser.map((f) => {
+				if (!f.message.startsWith(IN_BROWSER)) return f;
+				const rest = f.message.slice(IN_BROWSER.length);
+				if (here && SCREEN_CODES.has(f.code)) return { ...f, message: `In the browser${who}, on a ${here} screen: ${rest}` };
+				return who ? { ...f, message: `In the browser${who}: ${rest}` } : f;
+			})
+		);
 		// …AND THE OTHER KIND: a phone's visit beside a wide one's (or the other way) sees other islands
 		// below its first screen, others hidden: what it saw that this visit did not
 		const other = extras.other_screen_visit;
@@ -1577,7 +1613,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		if (blind.length)
 			info(
 				'browser-limits',
-				`The browser that visited does not report ${blind.join(', ')}: findings and score parts that need them are missing from this report, not clean. Visit the page from a Chromium browser to measure them.`
+				`${browser_of(extras.visit.ua) ? `${browser_of(extras.visit.ua)}, the browser that visited,` : 'The browser that visited'} does not report ${blind.join(', ')}: findings and score parts that need them are missing from this report, not clean. Visit the page from a Chromium browser to measure them.`
 			);
 	}
 	kit_findings(a, meta, info, warn);
