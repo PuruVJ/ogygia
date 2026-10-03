@@ -323,6 +323,8 @@ export interface RegionFact {
 	hydrated: boolean;
 	top?: number;
 	height?: number;
+	/** the wire bytes only this island loads (a build's island graph × the browser's sizes) */
+	own_bytes?: number;
 }
 
 export interface Failure {
@@ -467,6 +469,10 @@ const LIMITS: Record<RatedVital['key'], [number, number, string]> = {
  *  the second (on a slow connection, ~100 KB uncompressed is most of a second more) */
 const UNCOMPRESSED_FINDING = 20 * 1024;
 const UNCOMPRESSED_WARN = 100 * 1024;
+/** eager islands below the first screen whose own code is this many wire bytes: a warning */
+const EAGER_BELOW_WARN = 50 * 1024;
+/** …and under this, its bytes are not the point: its hydration is */
+const EAGER_BELOW_SMALL = 4 * 1024;
 /** a shift counts against an island when it lands within this long after the island hydrated */
 const SHIFT_WINDOW_MS = 600;
 /** a hydrate step this long is a long task of its own */
@@ -886,14 +892,29 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 
 	// ── eager islands below the fold ──
 	const eager_below = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && vh && typeof r.top === 'number' && r.top >= vh);
-	if (eager_below.length)
+	if (eager_below.length) {
+		// (copies of one island are one set of files: its own bytes once)
+		const own = new Map<string, number>();
+		for (const r of eager_below) if (r.own_bytes) own.set(r.name, r.own_bytes);
+		const own_total = [...own.values()].reduce((s, n) => s + n, 0);
+		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
+		// (by island, not copy: two copies of one island read as one name)
+		const one = new Set(eager_below.map((r) => r.name)).size === 1;
 		findings.push({
 			code: 'eager-offscreen',
-			severity: 'info',
-			message: `${list(eager_below.map((r) => r.name))} start${eager_below.length === 1 ? 's' : ''} below the first screen but load${eager_below.length === 1 ? 's' : ''} code at page load.`,
+			// (its own code a big share of the first load: a warning past 50 KB moved off it)
+			severity: own_total >= EAGER_BELOW_WARN ? 'warn' : 'info',
+			message:
+				`${list(eager_below.map((r) => r.name))} start${one ? 's' : ''} below the first screen but load${one ? 's' : ''} code at page load.` +
+				(!own_total
+					? ''
+					: own_total < EAGER_BELOW_SMALL
+						? ` Only ${kb(own_total)} of it is ${one ? 'its own' : 'theirs alone'} (the rest other islands load too): a later wake saves ${one ? 'its' : 'their'} hydration on the first load more than bytes.`
+						: ` ${kb(own_total)} of it ${one ? 'is its own' : 'is theirs alone'} (no other island loads it): that much leaves the first load with a later wake.`),
 			fix: "Use wake='visible': its code loads when it scrolls into view, and the islands on the first screen wake sooner.",
 			fps: eager_below.map((r) => r.fp)
 		});
+	}
 
 	// ── looked ready long before it worked ──
 	const lcp = page.visit?.paints?.lcp ?? page.vitals.lcp;

@@ -6,6 +6,7 @@
  */
 import { beacon_page, hole_request_times } from '../runtime/beacon.js';
 import { snapshot } from './bus.js';
+import { page_ledger } from './ledger-dom.js';
 import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.js';
 import { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.js';
 import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.js';
@@ -84,15 +85,27 @@ export interface PageView {
 export function region_facts(): RegionFact[] {
 	const sy = typeof scrollY === 'number' ? scrollY : 0;
 	const out: RegionFact[] = [];
+	// each island's own bytes (a build's graph × the browser's sizes: what only it loads)
+	const own = new Map<string, number>();
+	for (const row of page_ledger()?.rows ?? []) if (row.unique > 0) own.set(row.entry, row.unique);
+	const abs = (e: string | null | undefined) => {
+		try {
+			return e ? new URL(e, location.href).href : '';
+		} catch {
+			return '';
+		}
+	};
 	for (const r of all_regions()) {
 		if (!r.fp) continue;
 		const box = r.el.getBoundingClientRect();
+		const own_bytes = own.size && r.kind === 'island' ? own.get(abs(r.entry)) : undefined;
 		out.push({
 			fp: r.fp,
 			name: region_name(r.entry),
 			kind: r.kind,
 			wake: r.wake,
 			hydrated: r.hydrated,
+			...(own_bytes ? { own_bytes } : {}),
 			// (a zero box is a display:contents host: its first child places it)
 			top: Math.round((box.height || box.width ? box.top : first_child_top(r.el)) + sy),
 			height: Math.round(box.height)

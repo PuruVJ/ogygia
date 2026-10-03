@@ -275,6 +275,9 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	// (a nested island the runtime marks `data-nested` as it connects: the runtime's mark, not the app's markup)
 	const nested = await read('/nested-hole', 'markup-changed');
 	check("a nested island: the runtime's own marks are no markup change", nested.length === 0, JSON.stringify(nested).slice(0, 240));
+	// (an eager island below the fold: its own bytes, from the build's island graph and the browser's sizes)
+	const eager = await read('/dt-lab', 'eager-offscreen');
+	check('an eager island below the fold names its own bytes', eager.length === 1 && eager[0].startsWith('BelowEager starts') && eager[0].includes(' of it is its own'), JSON.stringify(eager).slice(0, 240));
 	const quiet = await read('/dt-lab', 'uncompressed');
 	check('a page whose files are all compressed: no uncompressed', quiet.length === 0, JSON.stringify(quiet).slice(0, 200));
 }

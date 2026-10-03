@@ -569,6 +569,17 @@ describe('analyze_page', () => {
 		const r = analyze_page(page(), [region('e', 'BelowEager', 'load', { top: 2000 }), region('l', 'BelowLazy', 'visible', { top: 2000 })], [], 500);
 		const f = r.findings.find((x) => x.code === 'eager-offscreen');
 		expect(f?.fps).toEqual(['e']);
+		expect(f?.message).not.toContain('KB');
+	});
+
+	it('eager islands below the fold: their own bytes (each island once), a warning past 50 KB', () => {
+		const at = (own: number) =>
+			analyze_page(page(), [region('e', 'BelowEager', 'load', { top: 2000, own_bytes: own }), region('e2', 'BelowEager', 'load', { top: 2600, own_bytes: own })], [], 500).findings.find((x) => x.code === 'eager-offscreen');
+		const small = at(12_288);
+		expect(small?.severity).toBe('info');
+		expect(small?.message).toBe('BelowEager starts below the first screen but loads code at page load. 12.0 KB of it is its own (no other island loads it): that much leaves the first load with a later wake.');
+		expect(at(80_000)?.severity).toBe('warn');
+		expect(at(416)?.message).toContain('Only 416 B of it is its own (the rest other islands load too): a later wake saves its hydration on the first load more than bytes.');
 	});
 
 	it('an island’s code: a barrel imported whole, and one module most of its weight', () => {
