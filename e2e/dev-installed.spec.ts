@@ -152,4 +152,35 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		check('no page reload after the dock was opened', navs === loaded, `${navs - loaded} reload(s)`);
 		check('no dependency found late (each one re-optimizes and reloads the page)', late.length === 0, late.slice(0, 3).join(' | '));
 	});
+
+	test("the devtools name it when it happens anyway: an app pre-bundling ogygia's boot runs two copies", async ({ page }) => {
+		test.setTimeout(180_000);
+		const read = () =>
+			page.evaluate(() => {
+				const v = (window as unknown as { __ogygia_page?: () => { report: { findings: { code: string; message: string }[] } } }).__ogygia_page?.();
+				return (v?.report.findings ?? []).filter((f) => f.code === 'dev-two-copies').map((f) => f.message);
+			});
+		// one copy (the fix): quiet
+		await page.goto(`${base}/`, { waitUntil: 'load' });
+		await page.waitForTimeout(2000);
+		await read();
+		await page.waitForTimeout(800);
+		check('one copy: the devtools say nothing of two', (await read()).length === 0);
+		// THE FIELD BUG, planted: the app's own config pre-bundles ogygia's dev boot while the compiler's
+		// imports load ogygia by path — the server restarts on the config change
+		fs.writeFileSync(
+			path.join(app, 'vite.config.js'),
+			"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()], optimizeDeps: { include: ['ogygia/runtime'] } };\n"
+		);
+		await page.waitForTimeout(6000);
+		let said: string[] = [];
+		for (let i = 0; i < 6 && !said.length; i++) {
+			await page.goto(`${base}/`, { waitUntil: 'load' }).catch(() => {});
+			await page.waitForTimeout(2500);
+			await read();
+			await page.waitForTimeout(1000);
+			said = await read();
+		}
+		check('two copies: the devtools name ogygia, pre-bundled and raw', said.some((m) => m.startsWith('ogygia loads twice on the dev server')), said.join(' | ') || 'no finding');
+	});
 });
