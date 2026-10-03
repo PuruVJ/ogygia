@@ -135,6 +135,8 @@ export interface Visit {
 	images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
 	/** shown images the browser could hold no room for (computed aspect-ratio `auto`); empty: none */
 	images_unsized?: string[];
+	/** long frames (50 ms or more) that began while the page scrolled, with their two biggest scripts */
+	scroll_jank?: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number }[] }[];
 	/** scripts that forced style and layout (5 ms or more): their window, the forced ms, file, function */
 	forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
 	/** the page's size in elements, when 1,500 or more (depth 0: past 60,000, only counted) */
@@ -424,6 +426,15 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		forced_layout.push({ start, end, ms, url: str(f.url, 300) ?? '', fn: str(f.fn, 80) ?? '' });
 	}
 	if (forced_layout.length) visit.forced_layout = forced_layout;
+	const scroll_jank: NonNullable<Visit['scroll_jank']> = [];
+	for (const j of (Array.isArray(v.scroll_jank) ? v.scroll_jank : []).slice(0, 20) as Record<string, unknown>[]) {
+		const start = num(j?.start);
+		const ms = num(j?.ms);
+		if (start === undefined || !ms) continue;
+		const scripts = (Array.isArray(j.scripts) ? j.scripts : []).slice(0, 2).map((s: Record<string, unknown>) => ({ url: str(s?.url, 300) ?? '', fn: str(s?.fn, 80) ?? '', invoker: str(s?.invoker, 120) ?? '', ms: num(s?.ms) ?? 0 }));
+		scroll_jank.push({ start, ms, scripts });
+	}
+	if (scroll_jank.length) visit.scroll_jank = scroll_jank;
 	const d = v.dom as Record<string, unknown> | undefined;
 	const nodes = num(d?.nodes, 1e7);
 	if (d && nodes) {
@@ -644,6 +655,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(b.images_unsized ?? a.images_unsized ? { images_unsized: b.images_unsized ?? a.images_unsized } : {}),
 		// (each record carries the whole list so far: by window, the later one's entries win)
 		...(a.forced_layout || b.forced_layout ? { forced_layout: by(a.forced_layout ?? [], b.forced_layout ?? [], (f) => `${f.start}|${f.url}`) } : {}),
+		...(a.scroll_jank || b.scroll_jank ? { scroll_jank: by(a.scroll_jank ?? [], b.scroll_jank ?? [], (j) => `${j.start}`) } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)

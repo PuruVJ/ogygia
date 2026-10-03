@@ -583,7 +583,9 @@ function observe_vitals(): void {
 			// island by its hydrate window, not by the script's file
 			// a long frame while the page scrolled: the visitor's scroll waited on it (the scripts in it,
 			// biggest first — a scroll handler's work shows as its invoker)
-			if (e.duration >= 50 && scrolled_near(e.startTime) && make_room(visit_scroll_jank, 20, (j) => j.start))
+			if (e.duration >= 50 && scrolled_near(e.startTime) && make_room(visit_scroll_jank, 20, (j) => j.start)) {
+				// (it happens after the load's sends: the visit goes again, not only when the page hides)
+				if (early_visit_done) resend_soon();
 				visit_scroll_jank.push({
 					start: r2(e.startTime),
 					ms: r2(e.duration),
@@ -593,6 +595,7 @@ function observe_vitals(): void {
 						.slice(0, 2)
 						.map((s) => ({ url: (s.sourceURL ?? '').slice(0, 300), fn: (s.sourceFunctionName ?? '').slice(0, 80), invoker: (s.invoker ?? '').slice(0, 120), ms: r2(s.duration ?? 0) }))
 				});
+			}
 			for (const s of e.scripts ?? [])
 				if ((s.forcedStyleAndLayoutDuration ?? 0) >= 5 && make_room(visit_forced, 30, (f) => f.start)) {
 					const start = s.startTime ?? e.startTime;

@@ -72,7 +72,7 @@ export function browser_page_report(
 	held_open?: HeldOpen
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.hole_batches?.length && !visit.restores?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp && !visit.dom && !visit.images_oversized?.length && !visit.font_faces?.length && !visit.preloads_unused?.length && !visit.images_eager_below?.length && !visit.forced_layout?.length && !visit.images_unsized?.length) return null;
+	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.hole_batches?.length && !visit.restores?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp && !visit.dom && !visit.images_oversized?.length && !visit.font_faces?.length && !visit.preloads_unused?.length && !visit.images_eager_below?.length && !visit.forced_layout?.length && !visit.images_unsized?.length && !visit.scroll_jank?.length) return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to
@@ -121,6 +121,19 @@ export function browser_page_report(
 			...(visit.images_eager_below ? { images_eager_below: visit.images_eager_below } : {}),
 			...(visit.images_unsized ? { images_unsized: visit.images_unsized } : {}),
 			...(visit.forced_layout ? { forced_layout: visit.forced_layout } : {}),
+			// (each script named by the island whose file it is, as the slowest interaction's: a build's
+			// handler is a minified `e` in a hashed chunk)
+			...(visit.scroll_jank
+				? {
+						scroll_jank: visit.scroll_jank.map((j) => ({
+							...j,
+							scripts: j.scripts.map((s) => {
+								const own = by_file.get(identity_file(file_of(s.url)));
+								return own ? { ...s, island: own } : s;
+							})
+						}))
+					}
+				: {}),
 			...(visit.navs ? { navs: visit.navs } : {}),
 			// (named from the report's island rows, by the identity each one carries)
 			...(visit.entry_fallbacks

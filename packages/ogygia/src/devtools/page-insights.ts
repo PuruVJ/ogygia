@@ -161,7 +161,8 @@ export interface PageInput {
 		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
 		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
 		/** long frames (50 ms or more) that began while the page scrolled, with their two biggest scripts */
-		scroll_jank?: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number }[] }[];
+		/** (`island`: the island whose file the script is, when the profiler named it from the build's chunks) */
+		scroll_jank?: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number; island?: string }[] }[];
 		/** scripts that forced style and layout (5 ms or more): their window, the forced ms, the
 		 *  script's file and entry function (an island's hydration shows as the runtime's own task) */
 		forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
@@ -978,7 +979,10 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const by = new Map<string, { label: string; ms: number }>();
 		for (const j of jank)
 			for (const s of j.scripts) {
-				const label = `${s.fn ? `${s.fn} (${file(s.url)})` : file(s.url)}${s.invoker ? `, run by ${s.invoker}` : ''}`;
+				// (a minified one- or two-letter name says nothing: the island, or the file, instead)
+				const fn = s.fn.length > 2 ? s.fn : '';
+				const where = s.island ? `${s.island}'s code` : file(s.url);
+				const label = `${fn ? `${fn} (${where})` : where}${s.invoker ? `, run by ${s.invoker}` : ''}`;
 				const e = by.get(label);
 				if (e) e.ms += s.ms;
 				else by.set(label, { label, ms: s.ms });

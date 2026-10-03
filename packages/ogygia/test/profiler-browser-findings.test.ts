@@ -342,6 +342,25 @@ test('images below the first screen that loaded at start reach the report', () =
 	expect(f?.message).toContain('In the browser: right.png ×2 (704 KB, 3420px down) load at start though far below the first screen');
 });
 
+test('scrolling that stalled reaches the report, on a visit with nothing else to say', () => {
+	const heavy = { url: 'https://a.test/src/lib/Janky.svelte', fn: 'heavy_scroll_work', invoker: 'DOMWindow.onscroll', ms: 120 };
+	const v = parse_visit('/dt-jank', {
+		at: 1,
+		nav: { req_start: 1, res_start: 100, res_end: 120 },
+		paints: {},
+		resources: [],
+		longtasks: [],
+		islands: [],
+		firsts: [],
+		shifts: [],
+		scroll_jank: [{ start: 1200, ms: 128, scripts: [heavy] }, { start: 'x', ms: 1 }]
+	})!;
+	expect(v.scroll_jank).toHaveLength(1);
+	expect(merge_visits(v, { ...v, scroll_jank: [{ start: 1400, ms: 124, scripts: [heavy] }] }).scroll_jank).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'scroll-jank');
+	expect(f?.message).toContain('In the browser: Scrolling stalled: 1 frame took 128 ms while the page scrolled, mostly heavy_scroll_work (Janky.svelte), run by DOMWindow.onscroll');
+});
+
 test('a hole answered late: waited from the first paint, split by its server time', () => {
 	const v = parse_visit('/lab', {
 		...raw,

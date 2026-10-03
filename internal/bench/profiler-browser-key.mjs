@@ -36,6 +36,9 @@ const LABS = [
 	// Batched waits behind Thrash when its code came in time to wait at all — a cold load varies)
 	{ path: '/dt-thrash', stay: 2500, named: { 'forced-layout': 'Thrash while it hydrated (', 'long-hydrate': 'Thrash (' }, never: { queued: 'scheduler' }, absent: ['held-idle', 'long-tasks'] },
 	{ path: '/dt-lcp', query: '?below', stay: 5000, named: { 'lcp-gap': 'Beside it, ' } },
+	// (scrolled with the wheel after load: the beacon sends the jank again, the page never hides)
+	// (a build's handler is a minified name in a hashed chunk: named by the island whose file it is)
+	{ path: '/dt-jank', stay: 3000, scroll: true, named: { 'scroll-jank': "Janky's code, run by" }, never: { 'scroll-jank': 'Calm' } },
 	// the quiet ones: none of the codes above
 	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout'] },
 	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
@@ -89,6 +92,14 @@ try {
 			if (d.includes('"visit"')) biggest = Math.max(biggest, d.length);
 		});
 		await page.goto(base + lab.path + (lab.query ?? ''), { waitUntil: 'load' });
+		if (lab.scroll) {
+			await page.waitForTimeout(1200);
+			await page.mouse.move(700, 450);
+			for (let i = 0; i < 8; i++) {
+				await page.mouse.wheel(0, 300);
+				await page.waitForTimeout(150);
+			}
+		}
 		// (a test browser closes without the page hiding: the beacon's resends must carry it all)
 		await page.waitForTimeout(lab.stay);
 		await page.close();
