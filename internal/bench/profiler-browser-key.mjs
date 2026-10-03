@@ -58,7 +58,11 @@ const LABS = [
 	// (its one eager island below the fold: named with its own bytes, from the build's weights)
 	// (and Clock's markup change, by the line of its own that draws differently in the browser)
 	{ path: '/dt-lab', stay: 2500, named: { 'eager-offscreen': 'BelowEager starts below the first screen but loads code at page load. Only ', 'markup-changed': 'Clock.svelte:3 (`const where = typeof window' }, fix_says: { 'markup-changed': 'Read the browser-only value after the wake' }, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store', 'uncompressed'] },
-	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
+	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] },
+	// one module by two paths (a package's src and its dist), both copies on the page; the decoy
+	// loads one copy (the workspace's own ogygia src/dist pair may still be named there — never dup-pkg)
+	{ path: '/dt-dupe', stay: 1500, named: { 'duplicate-module': 'from dup-pkg/dist' }, fix_says: { 'duplicate-module': 'import the package by its public entry everywhere' } },
+	{ path: '/dt-dupe-one', stay: 1500, never: { 'duplicate-module': 'dup-pkg' } }
 ];
 
 async function start_preview() {

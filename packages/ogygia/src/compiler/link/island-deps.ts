@@ -408,11 +408,14 @@ export function module_origin(id: string): string | undefined {
 	}
 	const key = module_key(id);
 	if (!key) return undefined;
-	for (const top of ['/src/', '/dist/', '/esm/', '/build/']) {
-		const at = p.lastIndexOf(top);
-		if (at !== -1) return `${p.slice(p.lastIndexOf('/', at - 1) + 1, at)}${top.slice(0, -1)}`;
+	// (the deepest such folder: a package inside an app's own src/ is the package's dist/, not the app's src)
+	let at = -1;
+	let top = '';
+	for (const t of ['/src/', '/dist/', '/esm/', '/build/']) {
+		const i = p.lastIndexOf(t);
+		if (i > at) (at = i), (top = t);
 	}
-	return undefined;
+	return at === -1 ? undefined : `${p.slice(p.lastIndexOf('/', at - 1) + 1, at)}${top.slice(0, -1)}`;
 }
 
 /** A module id as the file of its package, the build-or-source folder and the extension left out:

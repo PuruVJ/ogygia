@@ -22,6 +22,9 @@ describe('one module, two copies', () => {
 		expect(module_key('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')).toBe('@scope/lib/a');
 		expect(module_key('\0vite/preload-helper')).toBeNull();
 		expect(module_origin('/w/packages/ogygia/dist/runtime/beacon.js')).toBe('ogygia/dist');
+		// a package kept inside an app's own src: its dist, not the app's src
+		expect(module_origin('/w/apps/x/src/lib/dup-pkg/dist/catalog.js')).toBe('dup-pkg/dist');
+		expect(module_key('/w/apps/x/src/lib/dup-pkg/dist/catalog.js')).toBe(module_key('/w/apps/x/src/lib/dup-pkg/src/catalog.ts'));
 		expect(module_origin('/w/node_modules/.pnpm/svelte@5.56.8_acorn@8/node_modules/svelte/src/a.js')).toBe('svelte@5.56.8');
 		expect(module_origin('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')).toBe('@scope/lib@1.0.0');
 	});
