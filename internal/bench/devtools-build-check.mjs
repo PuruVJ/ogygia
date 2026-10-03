@@ -342,6 +342,34 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	check("an island's browser-only line on its card in a build, from the last profile", hazard.includes('Clock.svelte:3') && hazard.includes('typeof window'), hazard.slice(0, 160) || 'no row');
 	check('Bytes: the modules loaded twice, from the last profile, each copy with where it came from', !!twice_note && twice_rows.length > 0 && twice_rows.every((r) => r.includes('(ogygia/src)') || r.includes('(ogygia/dist)') || r.includes('@')), `${twice_note.slice(0, 120)} · ${twice_rows.slice(0, 2).join(' | ')}`);
 }
+// ONE MODULE TWICE, on the island's card: /dt-dupe's DupSearch imports the catalog by its src path, DupPick
+// by its dist path — after a profile, each card names the module and which copy is its
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	const p = await c.newPage();
+	await p.setExtraHTTPHeaders({ 'x-profiler-key': 'hell' });
+	await p.goto(base + '/dt-dupe', { waitUntil: 'load' });
+	await p.waitForTimeout(1500);
+	await p.click('[data-og-panel-toggle]').catch(() => {});
+	await p.click('[data-og-tab="profiler"]').catch(() => {});
+	await p.locator('[data-og-profiler] input.n').fill('1').catch(() => {});
+	await p.click('[data-og-profile-run]').catch(() => {});
+	await p.locator('[data-og-profile-head]').waitFor({ timeout: 90_000 }).catch(() => {});
+	const card = async (name) => {
+		await p.click('[data-og-tab="lens"]').catch(() => {});
+		await p.waitForTimeout(400);
+		await p.locator('[data-og-win] tbody tr', { hasText: name }).first().click().catch(() => {});
+		await p.waitForTimeout(600);
+		const t = await p.locator('[data-og-detail-twice]').innerText().catch(() => '');
+		await p.locator('[data-og-detail] button.back').click().catch(() => {});
+		return t;
+	};
+	const search = await card('DupSearch');
+	const pick = await card('DupPick');
+	await c.close();
+	check("an island's card names a module the page loads twice, and which copy is its", search.includes('dup-pkg/catalog') && search.includes('its copy from dup-pkg/src') && pick.includes('its copy from dup-pkg/dist'), `${search.slice(0, 120)} | ${pick.slice(0, 120)}`);
+}
 // SCROLLING STALLED, in a build: the handler is a minified name in a hashed chunk — named by its island
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });

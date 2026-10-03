@@ -47,6 +47,8 @@ export interface LedgerRow {
 	shared: number;
 	/** files not loaded yet (it is asleep): no size known */
 	cold: number;
+	/** the files themselves (their URLs): an island's card matches them against the modules loaded twice */
+	urls?: string[];
 }
 
 export interface Ledger {
@@ -94,7 +96,7 @@ export function byte_ledger(
 			if ((users.get(u)?.size ?? 0) > 1) shared += s.wire;
 			else unique += s.wire;
 		}
-		rows.push({ entry: i.entry, name: i.name, kind: i.kind, wake: i.wake, count: i.count, files: list.length, wire, unique, shared, cold });
+		rows.push({ entry: i.entry, name: i.name, kind: i.kind, wake: i.wake, count: i.count, files: list.length, wire, unique, shared, cold, urls: list });
 	}
 	rows.sort((a, b) => b.unique - a.unique || b.wire - a.wire);
 

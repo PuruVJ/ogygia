@@ -57,6 +57,27 @@
 	];
 
 	// its line of the exact byte ledger (a build: the page's island graph × the browser's sizes)
+	// the modules in this island's files that the page also loads in another file (the last profile's
+	// list, matched to its files by path): which copy is its, and what the second costs
+	const twice_here = $derived.by(() => {
+		profiles_version();
+		const urls = ledger?.row.urls ?? [];
+		const list = profile_for(location.pathname)?.assets?.twice ?? [];
+		if (!urls.length || !list.length) return [];
+		const paths = urls.map((u) => {
+			try {
+				return new URL(u).pathname;
+			} catch {
+				return u;
+			}
+		});
+		const out = [];
+		for (const d of list) {
+			const mine = d.copies.find((c) => paths.some((p) => p.endsWith(c.file)));
+			if (mine) out.push({ name: d.name, extra: d.extra, mine });
+		}
+		return out;
+	});
 	const ledger = $derived.by(() => {
 		tick;
 		return island_ledger(el?.getAttribute('entry'));
@@ -218,6 +239,10 @@
 			<div class="row"><span class="rk">only it</span><span class="v">{kb(ledger.row.unique)}<span class="muted"> · what removing it would save</span></span></div>
 			{#if ledger.row.shared}
 				<div class="row"><span class="rk">shared</span><span class="v">{kb(ledger.row.shared)}{#if ledger.shares_with.length}<span class="muted"> · with {ledger.shares_with.slice(0, 4).join(', ')}{ledger.shares_with.length > 4 ? ` and ${ledger.shares_with.length - 4} more` : ''}</span>{/if}</span></div>
+			{/if}
+			{#if twice_here.length}
+				<!-- a module in its files that the page loads a second copy of, elsewhere (the last profile) -->
+				<div class="row" data-og-detail-twice><span class="rk">loaded twice</span><span class="v">{#each twice_here.slice(0, 3) as d, i (d.name)}{i ? ' · ' : ''}{d.name} <span class="muted">{kb(d.extra)}{d.mine.from ? `, its copy from ${d.mine.from}` : ''}</span>{/each}{#if twice_here.length > 3}<span class="muted"> and {twice_here.length - 3} more</span>{/if}</span></div>
 			{/if}
 		{/if}
 		{#if model.t}
