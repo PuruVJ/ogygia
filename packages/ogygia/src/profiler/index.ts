@@ -3122,14 +3122,31 @@ class Profiler {
 				else if (!mentioned) g.library = true;
 			}
 		}
+		// A PRERENDERED PAGE (`export const prerender = true` on its route, the nearest file deciding):
+		// production serves its built HTML, rendering nothing per request — the "cache it" advice is
+		// moot, and the report says what its numbers are
+		if (s.meta.trigger === 'page' && s.meta.prerendered === undefined) {
+			const read = await this.#source_reader();
+			// the route's folder: Kit's route id of the profiled render (a build without source maps
+			// names no file), else the page's own file the timeline or the lineage saw
+			// (the timed renders are the profiler's own, internal requests: by the page's path)
+			const reqs = s.meta.requests ?? [];
+			const route = s.meta.run_route ?? (reqs.find((r) => r.route && r.path.split('?')[0] === s.meta.page?.split('?')[0]) ?? reqs.find((r) => r.route))?.route;
+			const leaf =
+				[...new Set((s.analysis.timeline?.lanes ?? []).map((l) => l.file))].find((f) => f.includes('+page')) ??
+				(s.lineage?.components ?? []).find((c) => c.file.endsWith('+page.svelte'))?.file;
+			const dir = route ? `routes${route === '/' ? '' : route}` : leaf ? leaf.slice(0, leaf.lastIndexOf('/')) : '';
+			if (s.meta.run_static || (dir && route_prerendered(read, dir))) s.meta.prerendered = true;
+		}
 		const near =
 			s.meta.doc_diff &&
 			s.meta.doc_diff.differing <= s.meta.doc_diff.tokens * 0.05 &&
 			s.meta.doc_diff.groups.length <= 6
 				? s.meta.doc_diff
 				: undefined;
-		// (an error page repeated is not a page to cache)
+		// (an error page repeated is not a page to cache; a prerendered one is a file already)
 		if (
+			!s.meta.prerendered &&
 			(s.meta.same_document || near) &&
 			s.meta.runs?.length &&
 			Math.min(...s.meta.runs) >= 5 &&
@@ -4802,6 +4819,18 @@ class Profiler {
 					run_bytes,
 					...(run_cache_control ? { run_cache_control } : {}),
 					...(run_sets_cookie ? { run_sets_cookie: true as const } : {}),
+					// Kit's route id of the timed renders (the request log has them, by path): what the route's
+					// own files say — a prerendered route — without a source map
+					// — and none at all (a 200 the app's handle never saw): the page was served as the file the
+					// build wrote, before the app (a prerendered page in a server that serves its files first)
+					...((() => {
+						const path = target.split('?')[0];
+						for (let k = this.#ring.length - 1; k >= 0; k--) {
+							const e = this.#ring[k];
+							if (e.path === path) return e.route ? { run_route: e.route } : {};
+						}
+						return run_status === 200 && !this.dev ? { run_static: true as const } : {};
+					})()),
 					budget_note,
 					...(heap_skipped.length ? { heap_guard: heap_guard() } : {}),
 					runs: run_ms,
@@ -6422,6 +6451,33 @@ function round2(n: number): number {
  * `import { name } from '$lib/…'` or `'./…'` — or the file itself when it declares it. Undefined for
  * a package import, or a name it cannot place. Plain text, no regex.
  */
+/**
+ * Is the route in `dir` prerendered? Kit takes the NEAREST `export const prerender`: the page's own
+ * files first (`+page.server`, `+page`), then each layout up the tree. `true` and `'auto'` prerender;
+ * `false` (or none found) does not. String search over the files (no regex, no parse).
+ */
+export function route_prerendered(read: (file: string) => string | undefined, dir: string): boolean {
+	let at = dir;
+	let first = true;
+	while (at) {
+		const names = [...(first ? ['+page.server.ts', '+page.server.js', '+page.ts', '+page.js'] : []), '+layout.server.ts', '+layout.server.js', '+layout.ts', '+layout.js'];
+		for (const n of names) {
+			const src = read(`${at}/${n}`);
+			if (!src) continue;
+			const k = src.indexOf('export const prerender');
+			if (k === -1) continue;
+			const eq = src.indexOf('=', k);
+			const v = eq === -1 ? '' : src.slice(eq + 1, eq + 12).trim();
+			return v.startsWith('true') || v.startsWith("'auto'") || v.startsWith('"auto"');
+		}
+		first = false;
+		const up = at.lastIndexOf('/');
+		if (up === -1) break;
+		at = at.slice(0, up);
+	}
+	return false;
+}
+
 /** An island entry as a path, however it was written (`./_app/x.js`, `/_app/x.js`, an absolute URL). */
 function entry_path(entry: string): string {
 	try {

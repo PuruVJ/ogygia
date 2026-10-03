@@ -54,7 +54,7 @@ import {
 } from '../src/profiler/span.js';
 import { span_rows, fair_shares, lake_saving, inline_threshold_tune } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
-import { profiler, self_profile_to_cpuprofile } from '../src/profiler/index.js';
+import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
 import { raw_cookie_values } from '../src/profiler/session-cookie.js';
 import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
@@ -5649,6 +5649,23 @@ describe('paths: the owner is a named place', () => {
 		const card = a.paths.find((p) => p.owner.name === 'Card' || p.owner.name === 'priceTable');
 		expect(card).toBeDefined();
 		expect(card!.fns.map((f) => f.name).sort()).toEqual(['fmt', 'sym']);
+	});
+});
+
+describe('route_prerendered: the nearest `export const prerender` decides', () => {
+	const files: Record<string, string> = {
+		'routes/+layout.ts': 'export const prerender = false;',
+		'routes/docs/[...slug]/+page.server.ts': "import x from 'y';\nexport const prerender = true;\nexport const load = x;",
+		'routes/blog/+layout.ts': "export const prerender = 'auto';",
+		'routes/blog/[slug]/+page.ts': 'export const load = () => ({});',
+		'routes/app/+page.server.ts': 'export const load = () => ({});'
+	};
+	const read = (f: string) => files[f];
+	it('the page file, a layout above it, or nothing (the root layout says no)', () => {
+		expect(route_prerendered(read, 'routes/docs/[...slug]')).toBe(true);
+		expect(route_prerendered(read, 'routes/blog/[slug]')).toBe(true);
+		expect(route_prerendered(read, 'routes/app')).toBe(false);
+		expect(route_prerendered(() => undefined, 'routes/x')).toBe(false);
 	});
 });
 

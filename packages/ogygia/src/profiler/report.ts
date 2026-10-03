@@ -395,6 +395,14 @@ export interface ReportMeta {
 	run_sets_cookie?: true;
 	/** page mode: every render returned the same document, byte for byte */
 	same_document?: boolean;
+	/** page mode: its route says `export const prerender = true` (the nearest file deciding) —
+	 *  production serves its built HTML file */
+	prerendered?: boolean;
+	/** page mode: Kit's route id of the timed renders (`/(docs)/docs/[...slug]`) */
+	run_route?: string;
+	/** page mode: the timed renders answered 200 without the app's handle seeing them: a file the
+	 *  build wrote, served before the app (a prerendered page) */
+	run_static?: true;
 	/** page mode, when the renders' documents differ: what changes between the first and the last */
 	doc_diff?: import('./doc-diff.js').DocDiff;
 	/** page mode: a plain note when the run plan was trimmed to fit the serverless budget */
@@ -1340,6 +1348,17 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			{ fix: 'Drop no-store from pages that hold nothing private, or use `private, no-cache` (the browser keeps the page and checks with the server before reusing it). Keep no-store for pages that must never be shown again after logout.' }
 		);
 	}
+	// A PRERENDERED PAGE: production serves the HTML the build wrote; nothing renders per request.
+	// The render times here are what the build spends on it, once — and a visit cannot be measured
+	// on the built file (static HTML carries no profiler tag)
+	if (meta.trigger === 'page' && meta.prerendered)
+		info(
+			'prerendered-page',
+			meta.run_static
+				? 'This page is a file the build wrote (prerendered): the server answered with it before the app saw the request, so no render ran — the times above are the file being served, nothing to make faster on the server. A visit to it cannot be measured either: static HTML carries no profiler tag.'
+				: `This page is prerendered (its route exports \`prerender = true\`): production serves the HTML the build wrote, so its server render costs nothing per request — the times above are what the build spends on it, once. A visit to the built file cannot be measured either: static HTML carries no profiler tag.`,
+			{ fix: 'Look at what the browser does with it instead: the page weight, the islands it wakes, its JS — and the devtools Page tab on a visit, which measures any page.' }
+		);
 	// A PAGE OF MANY ELEMENTS, from the HTML itself (no visit, or a visit that did not measure it):
 	// the same words the browser's count gets, which leads when a visit has it
 	const els = extras.strip?.elements;
