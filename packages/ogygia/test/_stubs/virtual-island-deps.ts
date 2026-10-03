@@ -78,3 +78,10 @@ export const chunkBarrels = (href: string): { name: string; fanout: number }[] |
 export function set_chunk_barrels(map: typeof chunk_barrels) {
 	chunk_barrels = map;
 }
+// `islandHazards(entry)` — an island's lines that draw differently in the browser; null when unknown.
+type StubHazard = { file: string; line: number; code: string; kind: 'await' | 'browser'; reads?: string };
+let island_hazards: Record<string, StubHazard[]> = {};
+export const islandHazards = (entry: string): StubHazard[] | null => island_hazards[entry] ?? null;
+export function set_island_hazards(map: typeof island_hazards) {
+	island_hazards = map;
+}

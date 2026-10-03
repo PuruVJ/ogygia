@@ -1511,6 +1511,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!profiler_config) {
 					map.contents = {};
 					map.heavy = {};
+					map.hazards = {};
 				}
 				// BARRELS a chunk still holds (the profiler's island-barrel note): a module with little
 				// code of its own and many modules behind it — a re-export index the barrel pass left

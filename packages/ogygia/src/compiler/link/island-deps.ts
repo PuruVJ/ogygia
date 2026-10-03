@@ -6,6 +6,7 @@
  */
 import { path } from '../host.js';
 import { merge_page_keys, type PageKeys } from './page-keys.js';
+import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.js';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;
@@ -120,6 +121,9 @@ export function collectIslandDepModulepreloads(
 	page_keys: Record<string, string[] | null>;
 	remotes: Record<string, string[]>;
 	interactivity: Record<string, IslandInteractivityFacts>;
+	/** each island's components' lines that draw differently in the browser (hydration-hazards.ts),
+	 *  by entry — the app's own and the site kit's (ogygia's content components); not other packages */
+	hazards: Record<string, IslandHazard[]>;
 	/** what is inside each chunk an island pulls: a readable source list per public href */
 	contents: Record<string, string[]>;
 	/** each chunk's heaviest named modules with their rendered bytes (a package sums its modules):
@@ -133,6 +137,23 @@ export function collectIslandDepModulepreloads(
 	const page_keys: Record<string, string[] | null> = {};
 	const remotes: Record<string, string[]> = {};
 	const interactivity: Record<string, IslandInteractivityFacts> = {};
+	const hazards: Record<string, IslandHazard[]> = {};
+	// (per file, once: the lines, with a label a reader knows — from `src/`, or the site kit's)
+	const hazards_cache = new Map<string, IslandHazard[]>();
+	const hazards_of = (id: string): IslandHazard[] => {
+		if (!read_source) return [];
+		const clean = norm(id.split('?')[0]);
+		if (!clean.endsWith('.svelte') || (OWN_OR_DEP_RE.test(clean) && !SITE_KIT_RE.test(clean))) return [];
+		const hit = hazards_cache.get(clean);
+		if (hit) return hit;
+		const src = read_source(clean);
+		const at_src = clean.lastIndexOf('/src/');
+		const kit = SITE_KIT_RE.test(clean);
+		const file = kit ? `ogygia/${clean.slice(clean.lastIndexOf('/content/') + 1)}` : at_src !== -1 ? clean.slice(at_src + 1) : clean.split('/').slice(-2).join('/');
+		const out = src === null ? [] : hydration_hazards(src).slice(0, 3).map((h) => ({ file, ...h }));
+		hazards_cache.set(clean, out);
+		return out;
+	};
 	// WAKE ADVISOR FACTS: what the island's own `.svelte` sources do — handlers, `$state`,
 	// `$effect`, `bind:`, `use:` — counted once per file, unioned over the closure. A regex count
 	// on purpose: it needs no parse, it survives every syntax the transform accepts, and an island
@@ -291,6 +312,7 @@ export function collectIslandDepModulepreloads(
 		if (read_source) {
 			let acc: IslandInteractivityFacts | undefined;
 			const seen_files = new Set<string>();
+			const lines: IslandHazard[] = [];
 			for (const s of full) {
 				for (const id of bundle[s]?.moduleIds ?? []) {
 					const clean = norm(id.split('?')[0]);
@@ -298,8 +320,10 @@ export function collectIslandDepModulepreloads(
 					seen_files.add(clean);
 					const f = facts_of(id);
 					if (f) acc = merge_facts(acc, f);
+					if (lines.length < 5) for (const h of hazards_of(id)) if (lines.length < 5) lines.push(h);
 				}
 			}
+			if (lines.length) hazards[entryUrl] = lines;
 			// (a remote function it calls — a streaming query, a form, a command — changes it after it
 			// wakes with no handler of its own: a live clock, a remote form spread onto <form>)
 			if (acc) interactivity[entryUrl] = { ...acc, remotes: remotes[entryUrl].length };
@@ -346,7 +370,7 @@ export function collectIslandDepModulepreloads(
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type === 'chunk') summarize(chunk.fileName || key);
 	}
-	return { js, css, page, page_keys, remotes, interactivity, contents, heavy };
+	return { js, css, page, page_keys, remotes, interactivity, hazards, contents, heavy };
 }
 
 /** A chunk's rendered size and its heaviest named modules. */
@@ -440,6 +464,8 @@ export interface IslandInteractivityFacts {
 }
 
 const OWN_OR_DEP_RE = /\/node_modules\/|\/ogygia\/(?:src|dist)\//;
+/** the site kit's components (ogygia's content/site): an app's own islands in all but location */
+const SITE_KIT_RE = /\/ogygia\/(?:src|dist)\/content\//;
 const HANDLER_RE = /\son[a-z]+\s*=\s*\{|\son:[a-z]+/g;
 const STATE_RE = /\$state(?:\.raw)?\s*\(/g;
 const EFFECT_RE = /\$effect(?:\.pre)?\s*\(/g;
@@ -543,7 +569,7 @@ export function island_deps_module(
 	out_dir_rel = '.svelte-kit'
 ): string {
 	if (!ssr)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function islandHazards(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -553,7 +579,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function islandHazards(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
 	return (
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
@@ -688,6 +714,14 @@ export function island_deps_module(
 		`  return v && typeof v === 'object' && Array.isArray(v.top) ? v : null;\n` +
 		`}\n` +
 		// …and the re-export barrels it still holds (the report's island-barrel note)
+		// each island's lines that draw differently in the browser (the profiler's mismatch findings)
+		`export function islandHazards(entry) {\n` +
+		`  const all = load();\n` +
+		`  const map = all && typeof all.hazards === 'object' && all.hazards ? all.hazards : null;\n` +
+		`  if (!map || !entry) return null;\n` +
+		`  const v = map[entry];\n` +
+		`  return Array.isArray(v) ? v : null;\n` +
+		`}\n` +
 		`export function chunkBarrels(href) {\n` +
 		`  const all = load();\n` +
 		`  const map = all && typeof all.barrels === 'object' && all.barrels ? all.barrels : null;\n` +

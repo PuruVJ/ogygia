@@ -62,6 +62,8 @@ declare module 'virtual:ogygia/island-deps' {
 	export function chunkHeavy(href: string): { total: number; top: { name: string; bytes: number }[] } | null;
 	/** the re-export barrels a chunk still holds, with how many modules each brings (profiler builds only) */
 	export function chunkBarrels(href: string): { name: string; fanout: number }[] | null;
+	/** an island entry's components' lines that draw differently in the browser (the build's scan) */
+	export function islandHazards(entry: string): { file: string; line: number; code: string; kind: 'await' | 'browser'; reads?: string }[] | null;
 	/** Public URLs of the CSS assets an island entry (+ its dep chunks) owns — carried with a
 	 *  region response so a server-picked component styles a page that never imported it. */
 	export function islandCss(entry: string): string[];

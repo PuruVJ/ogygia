@@ -122,7 +122,7 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
 			}
 		};
-		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, contents: {}, heavy: {} };
+		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, hazards: {}, contents: {}, heavy: {} };
 		// not told which chunk is the runtime → nothing is (no guessing from the name)
 		expect(collectIslandDepModulepreloads(bundle)).toEqual({ js: {}, ...empty });
 		// told → recorded, and a leading slash on the name is fine
@@ -171,6 +171,27 @@ describe('collectIslandDepModulepreloads', () => {
 			});
 			const { interactivity } = collectIslandDepModulepreloads(bundle, undefined, undefined, undefined, read);
 			expect(interactivity[FACADE]).toEqual({ handlers: 2, state: 1, effects: 1, binds: 1, actions: 1, awaits: 0, shared: 0, remotes: 0, files: 2 });
+		});
+
+		test("the lines that draw differently in the browser: the app's and the site kit's, never another package's", () => {
+			const src: Record<string, string> = {
+				'/app/src/lib/Clock.svelte': "<script>\n\tconst where = typeof window === 'undefined' ? 'server' : 'browser';\n</script>\n<p>{where}</p>",
+				'/app/node_modules/ogygia/dist/content/site/components/Sidebar.svelte': '<script>\n\tlet { site } = $props();\n\tconst tree = await site.nav();\n</script>',
+				'/app/node_modules/lib/Widget.svelte': '<p>{Date.now()}</p>'
+			};
+			const b = {
+				[FACADE.slice(1)]: {
+					type: 'chunk',
+					fileName: FACADE.slice(1),
+					imports: [],
+					moduleIds: ['/app/src/lib/Clock.svelte', '/app/node_modules/ogygia/dist/content/site/components/Sidebar.svelte', '/app/node_modules/lib/Widget.svelte']
+				}
+			};
+			const { hazards } = collectIslandDepModulepreloads(b, undefined, undefined, undefined, (id: string) => src[id] ?? null);
+			expect(hazards[FACADE]).toEqual([
+				{ file: 'src/lib/Clock.svelte', line: 2, code: "const where = typeof window === 'undefined' ? 'server' : 'browser';", kind: 'browser', reads: 'typeof window' },
+				{ file: 'ogygia/content/site/components/Sidebar.svelte', line: 3, code: 'const tree = await site.nav();', kind: 'await' }
+			]);
 		});
 
 		test('an await in the markup is a value that lands after the wake (a live query, a promise)', () => {

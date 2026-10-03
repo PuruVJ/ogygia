@@ -216,7 +216,7 @@ import {
 	set_request_stats_detail,
 	type BatchHoleStats
 } from '../server/request-stats.js';
-import { chunkBarrels, chunkContents, chunkHeavy, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
+import { chunkBarrels, chunkContents, chunkHeavy, islandHazards, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
 import { register_profiler_file } from './frames.js';
 
@@ -2204,9 +2204,14 @@ class Profiler {
 				const b = chunkBarrels(u);
 				if (b?.length) (barrels ??= {})[u] = b;
 			}
-			// WHAT DRAWS DIFFERENTLY IN THE BROWSER: each island's own components (the app's `.svelte`
-			// files in its chunks), read and scanned once — the lines a mismatch on wake most often
-			// comes from (a top-level await, a browser-only value read while rendering)
+			// WHAT DRAWS DIFFERENTLY IN THE BROWSER: each island's own components — the lines a mismatch
+			// on wake most often comes from (a top-level await, a browser-only value read while
+			// rendering). The build scanned them (the site kit's too); an older build's handoff has
+			// none, and the app's `.svelte` files in its chunks are read and scanned here instead
+			for (const r of island_rows_of(meta)) {
+				const built = islandHazards(r.entry);
+				if (built?.length) (hazards ??= {})[r.entry] = built;
+			}
 			if (contents) {
 				const read = await this.#source_reader();
 				for (const r of island_rows_of(meta)) {
