@@ -511,12 +511,16 @@ function server_brief(path: string): ServerProfileBrief | undefined {
 		return s.endsWith('.') ? s.slice(0, -1) : s;
 	};
 	const comp = [...p.components].sort((a, b) => b.self_ms - a.self_ms)[0];
+	// (the page's own Cache-Control, which only the server side sees: no-store keeps it out of the
+	// back/forward cache)
+	const no_store = p.cache_control && p.cache_control.toLowerCase().split(',').some((d) => d.trim() === 'no-store') ? p.cache_control : undefined;
 	return {
 		ago_min: Math.max(0, (Date.now() - p.at) / 60_000),
 		render_ms: p.render_ms,
 		top: said ? trim(said) : comp ? `${comp.name} (${Math.round(comp.self_ms)} ms of its own)` : null,
 		calls: p.network?.count ?? 0,
-		calls_ms: p.network?.total_ms ?? 0
+		calls_ms: p.network?.total_ms ?? 0,
+		...(no_store ? { no_store } : {})
 	};
 }
 

@@ -113,6 +113,13 @@ describe('kept out of the back/forward cache', () => {
 		);
 		expect(at(undefined)).toBeUndefined();
 	});
+	it("the profiler's run saw the page answer no-store: said, with or without an unload listener", () => {
+		const brief = { ago_min: 1, render_ms: 4, top: null, calls: 0, calls_ms: 0, no_store: 'no-store' };
+		const only = analyze_page(page({ server_profile: brief }), [], [], 3000).findings.find((f) => f.code === 'bfcache-blocked');
+		expect(only?.message.startsWith("The page answers with Cache-Control: no-store (the profiler's last run of it saw so)")).toBe(true);
+		const both = analyze_page(page({ server_profile: brief, bfcache: { unload: ['Saver'] } }), [], [], 3000).findings.find((f) => f.code === 'bfcache-blocked');
+		expect(both?.message).toContain('It also answers with Cache-Control: no-store, which keeps it out too.');
+	});
 });
 
 describe('listeners that hold scrolling', () => {

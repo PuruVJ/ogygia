@@ -104,6 +104,9 @@ export interface ServerProfileBrief {
 	top: string | null;
 	calls: number;
 	calls_ms: number;
+	/** the Cache-Control it saw the page answer, when that keeps the page out of the back/forward
+	 *  cache (no-store): the server's own answer, which the browser cannot read */
+	no_store?: string;
 }
 
 export interface PageInput {
@@ -1352,15 +1355,21 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 
 	// ── kept out of the back/forward cache: Back reloads the page from the server ──
 	const bf = page.bfcache;
-	if (bf && (bf.unload.length || bf.not_restored?.length)) {
+	// (the server's own answer, which the browser cannot read: the profiler's last run of this page saw it)
+	const ns = page.server_profile?.no_store;
+	if ((bf && (bf.unload.length || bf.not_restored?.length)) || ns) {
+		const unload = bf?.unload ?? [];
 		findings.push({
 			code: 'bfcache-blocked',
 			severity: 'warn',
 			message:
-				(bf.unload.length
-					? `${list(bf.unload)} ${bf.unload.length === 1 ? 'adds' : 'add'} an 'unload' listener: the browser keeps no page with one in its back/forward cache, so Back and Forward load this page from the server again instead of showing it at once.`
-					: 'This load came from Back or Forward, and the browser did not restore the page from its back/forward cache: it loaded from the server again.') +
-				(bf.not_restored?.length ? ` The browser's reasons for this load: ${bf.not_restored.join(', ')}.` : ''),
+				(unload.length
+					? `${list(unload)} ${unload.length === 1 ? 'adds' : 'add'} an 'unload' listener: the browser keeps no page with one in its back/forward cache, so Back and Forward load this page from the server again instead of showing it at once.`
+					: ns
+						? `The page answers with Cache-Control: ${ns} (the profiler's last run of it saw so): the browser keeps no page marked no-store in its back/forward cache, so Back and Forward load it from the server again instead of showing it at once.`
+						: 'This load came from Back or Forward, and the browser did not restore the page from its back/forward cache: it loaded from the server again.') +
+				(unload.length && ns ? ` It also answers with Cache-Control: ${ns}, which keeps it out too.` : '') +
+				(bf?.not_restored?.length ? ` The browser's reasons for this load: ${bf.not_restored.join(', ')}.` : ''),
 			fix: "Listen to 'pagehide' (or 'visibilitychange') instead of 'unload': it runs at the same moment and keeps the cache. A `Cache-Control: no-store` on the page keeps it out too.",
 			fps: []
 		});

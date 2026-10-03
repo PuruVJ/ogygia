@@ -26,6 +26,8 @@ export interface SlimProfile {
 	at: number;
 	runs: number[];
 	render_ms: number;
+	/** the Cache-Control the page answered the profiler's renders (what the browser cannot read) */
+	cache_control?: string;
 	score: {
 		score: number;
 		grade: string;
@@ -112,6 +114,7 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 		at: num(r?.created) ?? Date.now(),
 		runs,
 		render_ms: Math.round(median(runs) * 10) / 10,
+		...(typeof target.cache_control === 'string' && target.cache_control ? { cache_control: target.cache_control.slice(0, 200) } : {}),
 		score:
 			sc && typeof sc.score === 'number'
 				? {

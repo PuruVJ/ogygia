@@ -72,6 +72,13 @@ describe('island_row', () => {
 	});
 });
 
+describe('the slim profile keeps what the browser cannot read', () => {
+	it("the page's Cache-Control, when the report has it", () => {
+		expect(slim_profile({ ...report, target: { ...report.target, cache_control: 'private, no-store' } }).cache_control).toBe('private, no-store');
+		expect(slim_profile(report).cache_control).toBeUndefined();
+	});
+});
+
 describe('run_profile when the profiler refuses', () => {
 	it("a heap too full to profile: the profiler's sentence, not its JSON", async () => {
 		const said = "The server's heap is 77% full (1232 of 1596 MB): profiling now could run it out of memory and end the process. Restart the server, then profile once.";
