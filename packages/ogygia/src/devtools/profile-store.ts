@@ -65,7 +65,19 @@ export async function run_profile(path: string, runs = 3, base = '/__profiler'):
 			await new Promise((ok) => setTimeout(ok, 2000));
 			continue;
 		}
-		if (!r.ok) throw new Error(`the profiler answered ${r.status}: ${(await r.text()).slice(0, 200)}`);
+		if (!r.ok) {
+			// (its words, not its JSON: the profiler answers `{ "error": "…" }` — a heap too full to
+			// profile says what to do, and the sentence is the point)
+			const text = await r.text();
+			let said = text;
+			try {
+				const j = JSON.parse(text) as { error?: unknown; message?: unknown };
+				said = typeof j.error === 'string' ? j.error : typeof j.message === 'string' ? j.message : text;
+			} catch {
+				// not JSON: the text itself
+			}
+			throw new Error(r.status === 503 ? said.slice(0, 600) : `the profiler answered ${r.status}: ${said.slice(0, 300)}`);
+		}
 		const p = slim_profile(await r.json());
 		set_profile(p);
 		return p;

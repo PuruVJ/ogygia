@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { slim_profile, island_row } from '../src/devtools/profile-store.js';
+import { slim_profile, island_row, run_profile } from '../src/devtools/profile-store.js';
 
 const report = {
 	id: 'abc123',
@@ -69,5 +69,27 @@ describe('island_row', () => {
 		expect(island_row(p, 'ffff', './@id/virtual:ogygia/island/71c18fcca62d.js')?.name).toBe('MegaHeader');
 		expect(island_row(p, 'ffff', null)).toBeNull();
 		expect(island_row(null, 'x', 'y')).toBeNull();
+	});
+});
+
+describe('run_profile when the profiler refuses', () => {
+	it("a heap too full to profile: the profiler's sentence, not its JSON", async () => {
+		const said = "The server's heap is 77% full (1232 of 1596 MB): profiling now could run it out of memory and end the process. Restart the server, then profile once.";
+		const real = globalThis.fetch;
+		globalThis.fetch = (async () => new Response(JSON.stringify({ error: said }), { status: 503 })) as typeof fetch;
+		try {
+			await expect(run_profile('/hell')).rejects.toThrow(said);
+		} finally {
+			globalThis.fetch = real;
+		}
+	});
+	it('another failure: its status and its words', async () => {
+		const real = globalThis.fetch;
+		globalThis.fetch = (async () => new Response('Give a path on this site, like /docs/overview.', { status: 400 })) as typeof fetch;
+		try {
+			await expect(run_profile('x')).rejects.toThrow('the profiler answered 400: Give a path on this site, like /docs/overview.');
+		} finally {
+			globalThis.fetch = real;
+		}
 	});
 });
