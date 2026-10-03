@@ -49,6 +49,11 @@ test('each planted problem, on its island, in the report', () => {
 	expect(by['long-hydrate'].message).toContain('Menu');
 	expect(by['hydration-shift'].fps).toEqual(['bbbbbbbb22222222']);
 	expect(by['eager-offscreen'].message).toContain('Below');
+	expect(by['eager-offscreen'].message).not.toContain('of it is');
+	// with the build's weights: its own bytes, as the devtools say them
+	const weighed = browser_findings(browser_page_report(visit, rows.map((r) => (r.name === 'Below' ? { ...r, own_bytes: 61_440 } : r)))).find((f) => f.code === 'eager-offscreen');
+	expect(weighed?.message).toContain('60.0 KB of it is its own (no other island loads it)');
+	expect(weighed?.severity).toBe('warn');
 	// the report makes these its own way (render-blocking too, when it weighed the page: report.ts
 	// drops the browser's then — on a dev server the browser's timing is all there is)
 	for (const code of ['recovered', 'never-woke', 'vital-cls']) expect(by[code]).toBeUndefined();

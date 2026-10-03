@@ -57,7 +57,8 @@ function cpu_summary(w: ClientWindows): CpuSummary {
  *  `windows`: the browser's CPU cut by island (the findings then name the function behind a cost). */
 export function browser_page_report(
 	visit: Visit,
-	rows: readonly { fp: string; entry: string; name: string }[],
+	/** (`own_bytes`: what only that island loads, from the build's weights) */
+	rows: readonly { fp: string; entry: string; name: string; own_bytes?: number }[],
 	windows?: ClientWindows,
 	third?: { origin: string; named?: string[]; by_host: Map<string, number> | null },
 	/** a hole's name from its island id (the report's hole rows); with `p`, that copy's (its props) */
@@ -89,7 +90,9 @@ export function browser_page_report(
 	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? named(entry) : fp.slice(0, 8));
 	const regions: RegionFact[] = (visit.regions ?? []).map((r) => {
 		const kind = r.defer ? 'hole' : r.wake === 'none' ? 'lake' : 'island';
-		return { fp: r.fp, name: name_of(r.fp, r.entry), kind, wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'), hydrated: !!r.hydrated, top: r.top, height: r.height };
+		// (its own bytes by fingerprint, else by entry: another copy's props, the same files)
+		const own = kind === 'island' ? (rows.find((x) => x.fp === r.fp) ?? (r.entry ? rows.find((x) => x.entry === r.entry) : undefined))?.own_bytes : undefined;
+		return { fp: r.fp, name: name_of(r.fp, r.entry), kind, wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'), hydrated: !!r.hydrated, top: r.top, height: r.height, ...(own ? { own_bytes: own } : {}) };
 	});
 	// an island that woke but is not in the regions list (an older beacon): named all the same
 	const known = new Set(regions.map((r) => r.fp));

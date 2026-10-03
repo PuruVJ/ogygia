@@ -48,7 +48,8 @@ const LABS = [
 	// (a script and a fetch the server answered `Content-Encoding: identity`; the page itself compressed)
 	{ path: '/dt-raw', stay: 2500, named: { uncompressed: 'blob.js (script, ' }, never: { uncompressed: "the page's HTML" } },
 	// the quiet ones: none of the codes above
-	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store', 'uncompressed'] },
+	// (its one eager island below the fold: named with its own bytes, from the build's weights)
+	{ path: '/dt-lab', stay: 2500, named: { 'eager-offscreen': 'BelowEager starts below the first screen but loads code at page load. Only ' }, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store', 'uncompressed'] },
 	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
 ];
 
