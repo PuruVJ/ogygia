@@ -272,6 +272,9 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	// (the dev server sends everything uncompressed: a build's server is the one this is about)
 	const raw = await read('/dt-raw', 'uncompressed');
 	check('text sent uncompressed is named, the script and the fetch', raw.length === 1 && raw[0].includes('blob.js (script, ') && raw[0].includes('table.json') && !raw[0].includes("the page's HTML"), JSON.stringify(raw).slice(0, 240));
+	// (a nested island the runtime marks `data-nested` as it connects: the runtime's mark, not the app's markup)
+	const nested = await read('/nested-hole', 'markup-changed');
+	check("a nested island: the runtime's own marks are no markup change", nested.length === 0, JSON.stringify(nested).slice(0, 240));
 	const quiet = await read('/dt-lab', 'uncompressed');
 	check('a page whose files are all compressed: no uncompressed', quiet.length === 0, JSON.stringify(quiet).slice(0, 200));
 }

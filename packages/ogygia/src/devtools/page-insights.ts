@@ -9,7 +9,11 @@
  * Thresholds are the public web-vitals ones; the island ones are chosen so a healthy page shows
  * none (the lab page's decoys hold that line).
  */
-import { without_comments } from '../runtime/beacon.js';
+import { without_comments as strip_comments, without_runtime_marks } from '../runtime/beacon.js';
+
+/** markup as a visitor's eyes compare it: no comments (Svelte's re-anchored block markers), no
+ *  marks the runtime itself set on the regions inside */
+const without_comments = (html: string): string => without_runtime_marks(strip_comments(html));
 import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.js';
 import { fn_label, fn_label as label_of, type CpuFn, type CpuSummary } from './cpu.js';
 import { third_party, third_party_findings, type ThirdParty } from './third-party.js';

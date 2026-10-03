@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { analyze_page, boolean_attr_at, encoding_only, first_difference, lcp_font, lcp_rivals, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.js';
-import { without_comments } from '../src/runtime/beacon.js';
+import { without_comments, without_runtime_marks } from '../src/runtime/beacon.js';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({
 	fp,
@@ -39,6 +39,21 @@ describe('first_difference', () => {
 		const d = first_difference('<p>rendered on the server</p>', '<p>rendered on the browser</p>');
 		expect(d?.server).toContain('server');
 		expect(d?.now).toContain('browser');
+	});
+	it("ignores the runtime's own marks on a nested island, and finds the real change past them", () => {
+		const ssr = '<ogygia-region entry="/a.js"><button>bump</button></ogygia-region>';
+		expect(first_difference(ssr, '<ogygia-region entry="/a.js" data-nested="" data-hydrated=""><button>bump</button></ogygia-region>')).toBeNull();
+		const d = first_difference(ssr, '<ogygia-region entry="/a.js" data-nested=""><button>bumped</button></ogygia-region>');
+		expect(d?.now).toContain('bumped');
+		expect(d?.now).not.toContain('data-nested');
+	});
+});
+
+describe('without_runtime_marks', () => {
+	it('drops only the empty marks the runtime sets', () => {
+		expect(without_runtime_marks('<x data-nested="" data-hydrated="" data-og-kept="" data-revalidated="">')).toBe('<x>');
+		// (an app's own attribute that looks alike keeps its value)
+		expect(without_runtime_marks('<x data-nested="yes" data-hydrated-at="">')).toBe('<x data-nested="yes" data-hydrated-at="">');
 	});
 });
 

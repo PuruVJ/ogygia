@@ -1282,8 +1282,8 @@ function flush_visit(final: boolean): void {
 		for (const s of snapshots) {
 			const el = document.querySelector(`ogygia-region[data-og-fp="${s.fp}"]`);
 			if (el) {
-				// (a windowed snapshot: the same window of the markup without comments)
-				const html = s.from === undefined ? el.innerHTML : without_comments(el.innerHTML).slice(s.from, s.from + SNAPSHOT_CAP);
+				// (a windowed snapshot: the same window of the markup without comments or runtime marks)
+				const html = s.from === undefined ? el.innerHTML : without_runtime_marks(without_comments(el.innerHTML)).slice(s.from, s.from + SNAPSHOT_CAP);
 				if (html !== s.hydrated) s.final = html.slice(0, SNAPSHOT_CAP);
 			}
 		}
@@ -1825,9 +1825,11 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 		const now = el.innerHTML;
 		// compared without comments: hydration re-anchors Svelte's block markers (`<!--[-->`), which
 		// nobody sees — only a change a visitor could see counts
+		// (nor the runtime's own marks: a nested island it marks `data-nested` as it connects, one that
+		// woke `data-hydrated` — the app's markup did not change)
 		if (now !== ssr_html) {
-			const a = without_comments(ssr_html);
-			const b = without_comments(now);
+			const a = without_runtime_marks(without_comments(ssr_html));
+			const b = without_runtime_marks(without_comments(now));
 			changed = a !== b;
 			if (changed && snapshot_room()) snapshots.push(snapshot_of(fp, ssr_html, now, a, b));
 		} else changed = false;
@@ -1862,6 +1864,14 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 			if (sent) sent.ms = Math.max(0, r2(fx - t0));
 		});
 	schedule();
+}
+
+/** the attributes the runtime itself sets, empty, on the regions inside an island's markup */
+const RUNTIME_MARKS = [' data-nested=""', ' data-hydrated=""', ' data-og-kept=""', ' data-revalidated=""'];
+/** `html` without the runtime's own marks (string search, no regex: it runs per changed hydration) */
+export function without_runtime_marks(html: string): string {
+	for (const m of RUNTIME_MARKS) if (html.includes(m)) html = html.split(m).join('');
+	return html;
 }
 
 /** `html` with every `<!-- … -->` removed (string search, no regex: it runs per hydration). */
