@@ -52,7 +52,7 @@ import {
 	type SpanRecorder,
 	type SpanAttrs
 } from '../src/profiler/span.js';
-import { span_rows, fair_shares, lake_saving } from '../src/profiler/report.js';
+import { span_rows, fair_shares, lake_saving, inline_threshold_tune } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
@@ -5649,6 +5649,18 @@ describe('paths: the owner is a named place', () => {
 		const card = a.paths.find((p) => p.owner.name === 'Card' || p.owner.name === 'priceTable');
 		expect(card).toBeDefined();
 		expect(card!.fns.map((f) => f.name).sort()).toEqual(['fmt', 'sym']);
+	});
+});
+
+describe('inline_threshold_tune: the inlineStyleThreshold that takes the small sheets off the paint', () => {
+	const sheet = (name: string, kb: number) => ({ url: `http://x/_app/immutable/assets/${name}.css`, kind: 'style', bytes: Math.round(kb * 1024) });
+	it('the smallest build sheets first, each 8 KB or less, 24 KB in all; just over the largest, in whole KB', () => {
+		const blocking = [sheet('big', 17), sheet('route', 9), sheet('shell', 7), sheet('demo', 3), sheet('chrome', 2.5), sheet('header', 2), { url: 'https://cdn.example/x.css', kind: 'style', bytes: 1000 }, { url: 'http://x/legacy.js', kind: 'script', bytes: 900 }];
+		expect(inline_threshold_tune(blocking)).toEqual({ threshold: 8192, files: 4, bytes: Math.round(7 * 1024) + Math.round(3 * 1024) + Math.round(2.5 * 1024) + 2048 });
+	});
+	it('one small sheet, or none: nothing to tune', () => {
+		expect(inline_threshold_tune([sheet('big', 17), sheet('one', 2)])).toBeNull();
+		expect(inline_threshold_tune([])).toBeNull();
 	});
 });
 

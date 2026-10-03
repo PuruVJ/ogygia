@@ -794,6 +794,28 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 	};
 }
 
+/**
+ * THE INLINE THRESHOLD THAT TAKES THE SMALL SHEETS OFF THE PAINT: Kit inlines its route stylesheets
+ * under `inlineStyleThreshold` (ogygia's island sheets follow the same setting), as `<style>` in the
+ * HTML — no request to wait on. Of the blocking build stylesheets (`/_app/immutable/`), the smallest
+ * first, while each is 8 KB or less and the HTML grows by 24 KB at most: the threshold that inlines
+ * them (just over the largest, in whole KB), how many, how many bytes. Null under two sheets.
+ */
+export function inline_threshold_tune(blocking: readonly { url: string; kind: string; bytes: number }[]): { threshold: number; files: number; bytes: number } | null {
+	const sheets = blocking.filter((x) => x.kind === 'style' && x.url.includes('/_app/immutable/') && x.bytes > 0).sort((a, b) => a.bytes - b.bytes);
+	let files = 0;
+	let bytes = 0;
+	let largest = 0;
+	for (const s of sheets) {
+		if (s.bytes > 8 * 1024 || bytes + s.bytes > 24 * 1024) break;
+		files++;
+		bytes += s.bytes;
+		largest = s.bytes;
+	}
+	if (files < 2) return null;
+	return { threshold: (Math.floor(largest / 1024) + 1) * 1024, files, bytes };
+}
+
 function page_weight_findings(
 	meta: ReportMeta,
 	extras: ReportExtras,
@@ -831,8 +853,11 @@ function page_weight_findings(
 		info('js-lazy', `${fmt_bytes(t.lazy_js)} of island JS waits until it is needed: the page starts with ${fmt_bytes(t.js)}.`);
 	if (t.blocking_count >= 3 || t.blocking >= 100 * 1024) {
 		const files = pa.assets.filter((x) => x.blocking).slice(0, 4).map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}`);
+		const tune = inline_threshold_tune(pa.assets.filter((x) => x.blocking));
 		warn('render-blocking', `${t.blocking_count} files (${fmt_bytes(t.blocking)}) must arrive before anything paints: ${files.join(', ')}.`, {
-			fix: 'Inline the small stylesheets, merge the rest, load scripts as modules or with defer.'
+			fix: tune
+				? `Inline the small stylesheets: with \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these sheets (${fmt_bytes(tune.bytes)}) arrive inside the HTML, and the first paint waits on ${t.blocking_count - tune.files} file${t.blocking_count - tune.files === 1 ? '' : 's'} instead of ${t.blocking_count}. Merge or trim the rest; load scripts as modules or with defer.`
+				: 'Inline the small stylesheets, merge the rest, load scripts as modules or with defer.'
 		});
 	}
 	// a component's styles shipped without their scope (the build's fallback marker in the CSS)
