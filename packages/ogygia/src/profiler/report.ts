@@ -521,6 +521,8 @@ export interface ReportExtras {
 	replay?: { path: string; headers: Record<string, string> };
 	/** the browser's picture of a visit to this page (the beacon) — the one-clock timeline joins it */
 	visit?: Visit;
+	/** the modules the build shipped as two copies, each copy's chunk (the build's handoff) */
+	dupes?: { name: string; copies: { file: string; bytes: number; from?: string }[] }[];
 	/** the latest visit to this page on the other kind of screen (a phone's when `visit` was wide, a
 	 *  wide one's when it was a phone's): what sits below the first screen, or draws nothing, differs */
 	other_screen_visit?: Visit;
@@ -872,6 +874,41 @@ function page_weight_findings(
 						: 'A library that loads its own parts (a component CDN, a tag manager) costs more than its first file: load it where it is used, or self-host the parts it needs.'
 			}
 		);
+	}
+	// ONE MODULE, TWICE ON THIS PAGE: a package file the build shipped as two copies (reached by two
+	// paths: its source and its build, or two versions), both in files this page loads — downloaded,
+	// parsed and run twice
+	if (extras.dupes?.length) {
+		const path_of = (u: string) => {
+			try {
+				return new URL(u).pathname;
+			} catch {
+				return u;
+			}
+		};
+		const loaded = new Set<string>();
+		for (const a of pa.assets) loaded.add(path_of(a.url));
+		for (const r of extras.visit?.resources ?? []) if (r.type === 'script') loaded.add(path_of(r.url));
+		const here = (file: string) => {
+			for (const p of loaded) if (p.endsWith(file)) return true;
+			return false;
+		};
+		const twice = extras.dupes
+			.map((d) => ({ name: d.name, copies: d.copies.filter((c) => here(c.file)) }))
+			.filter((d) => d.copies.length >= 2)
+			.map((d) => ({ ...d, extra: d.copies.reduce((s, c) => s + c.bytes, 0) - Math.max(...d.copies.map((c) => c.bytes)) }))
+			.sort((a, b) => b.extra - a.extra);
+		const extra = twice.reduce((s, d) => s + d.extra, 0);
+		if (twice.length && extra >= 2 * 1024) {
+			const top = twice[0];
+			(extra >= 10 * 1024 ? warn : info)(
+				'duplicate-module',
+				`${twice.length === 1 ? `Two copies of ${top.name} ship` : `${twice.length} modules ship twice`} on this page${twice.length === 1 ? '' : ` (the heaviest, ${top.name})`}: in ${top.copies.map((c) => `${asset_name(c.file)} (${fmt_bytes(c.bytes)}${c.from ? `, from ${c.from}` : ''})`).join(' and ')}${twice.length > 1 ? `, ${fmt_bytes(extra)} loaded twice in all` : ''}. One module reached by two paths — a package's source and its build, or two of its versions — so the browser downloads, parses and runs it twice.`,
+				{
+					fix: 'Make every import reach one copy: import the package by its public entry everywhere (not a path into its src or dist), and keep one version installed (`pnpm dedupe`, or `resolve.dedupe` in the Vite config).'
+				}
+			);
+		}
 	}
 	if (t.js >= 150 * 1024) {
 		const say = t.js >= 300 * 1024 ? warn : info;

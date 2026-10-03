@@ -216,7 +216,7 @@ import {
 	set_request_stats_detail,
 	type BatchHoleStats
 } from '../server/request-stats.js';
-import { chunkBarrels, chunkContents, chunkHeavy, islandHazards, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
+import { chunkBarrels, chunkContents, chunkDuplicates, chunkHeavy, islandHazards, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
 import { register_profiler_file } from './frames.js';
 
@@ -5491,9 +5491,12 @@ class Profiler {
 			visit?.viewport && stored.meta.page
 				? (this.#visits.get(stored.meta.page) ?? []).filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit)).at(-1)
 				: undefined;
+		// (the modules the build shipped twice: the report names the ones this page loads both copies of)
+		const dupes = chunkDuplicates();
 		return {
 			...(visit ? { visit } : {}),
 			...(other_screen_visit ? { other_screen_visit } : {}),
+			...(dupes ? { dupes } : {}),
 			...(interaction_cpu ? { interaction_cpu } : {}),
 			...(hole_requests.length ? { hole_requests } : {}),
 			...(nav_requests.length ? { nav_requests } : {}),

@@ -8,8 +8,44 @@ import {
 	islandDepsHandoffPath,
 	island_deps_module,
 	kit_remote_hash,
-	remote_hash_of
+	remote_hash_of,
+	module_key,
+	module_origin,
+	duplicate_modules
 } from '../dist/compiler/link/island-deps.js';
+
+describe('one module, two copies', () => {
+	test("a package file by its source and its build, or two installed versions, is one key; the copies say where they came from", () => {
+		expect(module_key('/w/packages/ogygia/src/runtime/beacon.ts')).toBe('ogygia/runtime/beacon');
+		expect(module_key('/w/packages/ogygia/dist/runtime/beacon.js')).toBe('ogygia/runtime/beacon');
+		expect(module_key('/w/node_modules/.pnpm/svelte@5.56.8/node_modules/svelte/src/internal/client/index.js')).toBe('svelte/internal/client/index');
+		expect(module_key('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')).toBe('@scope/lib/a');
+		expect(module_key('\0vite/preload-helper')).toBeNull();
+		expect(module_origin('/w/packages/ogygia/dist/runtime/beacon.js')).toBe('ogygia/dist');
+		expect(module_origin('/w/node_modules/.pnpm/svelte@5.56.8_acorn@8/node_modules/svelte/src/a.js')).toBe('svelte@5.56.8');
+		expect(module_origin('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')).toBe('@scope/lib@1.0.0');
+	});
+	test('only a key with two ids is a duplicate; small copies are left out; the heaviest first', () => {
+		const size: Record<string, number> = {
+			'/w/packages/ogygia/dist/runtime/beacon.js': 50_000,
+			'/w/packages/ogygia/src/runtime/beacon.ts': 50_000,
+			'/w/packages/ogygia/dist/ref.js': 4_900,
+			'/w/packages/ogygia/src/ref.ts': 1_400,
+			'/w/apps/x/src/lib/A.svelte': 9_000,
+			'/w/packages/ogygia/dist/tiny.js': 100,
+			'/w/packages/ogygia/src/tiny.ts': 100
+		};
+		const d = duplicate_modules([
+			{ file: '_app/immutable/og-runtime.js', ids: ['/w/packages/ogygia/dist/runtime/beacon.js', '/w/packages/ogygia/dist/ref.js', '/w/packages/ogygia/dist/tiny.js'], size_of: (id) => size[id] },
+			{ file: '_app/immutable/chunks/I.js', ids: ['/w/packages/ogygia/src/runtime/beacon.ts', '/w/packages/ogygia/src/ref.ts', '/w/apps/x/src/lib/A.svelte', '/w/packages/ogygia/src/tiny.ts'], size_of: (id) => size[id] }
+		]);
+		expect(d.map((x) => x.name)).toEqual(['ogygia/runtime/beacon', 'ogygia/ref']);
+		expect(d[0].copies).toEqual([
+			{ file: '/_app/immutable/og-runtime.js', bytes: 50_000, from: 'ogygia/dist' },
+			{ file: '/_app/immutable/chunks/I.js', bytes: 50_000, from: 'ogygia/src' }
+		]);
+	});
+});
 
 const FACADE = '/_app/immutable/og-region.aaaaaaaaaaaa.js';
 const ISLAND_REMOTES_FN_RE = /export function islandRemotes\(_?entry\)\s*\{([^}]*)\}/;
@@ -122,7 +158,7 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
 			}
 		};
-		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, hazards: {}, contents: {}, heavy: {} };
+		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, hazards: {}, contents: {}, heavy: {}, dupes: [] };
 		// not told which chunk is the runtime → nothing is (no guessing from the name)
 		expect(collectIslandDepModulepreloads(bundle)).toEqual({ js: {}, ...empty });
 		// told → recorded, and a leading slash on the name is fine

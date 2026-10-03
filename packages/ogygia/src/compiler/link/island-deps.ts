@@ -130,6 +130,8 @@ export function collectIslandDepModulepreloads(
 	 *  what the report names as most of an island's code. Apart from `contents`, which stays names
 	 *  only (a chunk's identity across builds) */
 	heavy: Record<string, ChunkHeavy>;
+	/** modules the build shipped as two copies (one package file by two paths), each copy's chunk */
+	dupes: DuplicateModule[];
 } {
 	const js: Record<string, string[]> = {};
 	const css: Record<string, string[]> = {};
@@ -370,7 +372,99 @@ export function collectIslandDepModulepreloads(
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type === 'chunk') summarize(chunk.fileName || key);
 	}
-	return { js, css, page, page_keys, remotes, interactivity, hazards, contents, heavy };
+	// ONE MODULE, TWO COPIES: a package file reached by two paths (its source and its build, two
+	// versions) lands in two chunks — a page loading both downloads it twice (the profiler says so)
+	const dupes = duplicate_modules(
+		Object.entries(bundle)
+			.filter(([, c]) => c.type === 'chunk')
+			.map(([key, c]) => {
+				const mods = (c as { modules?: Record<string, { renderedLength?: number }> }).modules;
+				return { file: c.fileName || key, ids: c.moduleIds ?? [], ...(mods ? { size_of: (id: string) => mods[id]?.renderedLength ?? 0 } : {}) };
+			})
+	);
+	return { js, css, page, page_keys, remotes, interactivity, hazards, contents, heavy, dupes };
+}
+
+/** One module the build shipped as two (or more) copies: the same file of a package reached by two
+ *  paths (its source and its build, two versions in node_modules), each copy in its chunk. */
+export interface DuplicateModule {
+	/** the module, package-relative (`ogygia/runtime/beacon`, `svelte/internal/client/index`) */
+	name: string;
+	/** `from`: where the copy came from — the package's folder (`ogygia/src`, `ogygia/dist`) or its
+	 *  installed version (`svelte@5.56.8`) — the two paths, told apart */
+	copies: { file: string; bytes: number; from?: string }[];
+}
+
+/** Where a module id's copy came from: an installed package's version (`name@1.2.3`, from a pnpm
+ *  store path), else the package's top folder (`name/src`, `name/dist`). */
+export function module_origin(id: string): string | undefined {
+	const p = id.split('\\').join('/');
+	const store = p.lastIndexOf('/.pnpm/');
+	if (store !== -1) {
+		const seg = p.slice(store + 7, p.indexOf('/', store + 7));
+		// `svelte@5.56.8_…peer suffix` or `@scope+name@1.0.0`: the name and version, peers left out
+		const cut = seg.indexOf('_');
+		return (cut === -1 ? seg : seg.slice(0, cut)).split('+').join('/');
+	}
+	const key = module_key(id);
+	if (!key) return undefined;
+	for (const top of ['/src/', '/dist/', '/esm/', '/build/']) {
+		const at = p.lastIndexOf(top);
+		if (at !== -1) return `${p.slice(p.lastIndexOf('/', at - 1) + 1, at)}${top.slice(0, -1)}`;
+	}
+	return undefined;
+}
+
+/** A module id as the file of its package, the build-or-source folder and the extension left out:
+ *  two ids with one key are one module twice. Null for ids that are no file (virtual, `\0`). */
+export function module_key(id: string): string | null {
+	if (!id || id.startsWith('\0') || id.startsWith('virtual:')) return null;
+	let p = id.split('\\').join('/');
+	const q = p.indexOf('?');
+	if (q !== -1) p = p.slice(0, q);
+	let pkg: string;
+	let rest: string;
+	const nm = p.lastIndexOf('/node_modules/');
+	if (nm !== -1) {
+		const after = p.slice(nm + 14).split('/');
+		const n = after[0].startsWith('@') ? 2 : 1;
+		pkg = after.slice(0, n).join('/');
+		rest = after.slice(n).join('/');
+	} else {
+		// a workspace package (linked, no node_modules in its path): the folder above its src/dist
+		const at = Math.max(p.lastIndexOf('/src/'), p.lastIndexOf('/dist/'));
+		if (at === -1) return null;
+		pkg = p.slice(p.lastIndexOf('/', at - 1) + 1, at);
+		rest = p.slice(at + 1);
+	}
+	for (const top of ['src/', 'dist/', 'esm/', 'build/']) if (rest.startsWith(top)) rest = rest.slice(top.length);
+	for (const ext of ['.mjs', '.cjs', '.mts', '.ts', '.js']) if (rest.endsWith(ext)) rest = rest.slice(0, -ext.length);
+	return pkg && rest ? `${pkg}/${rest}` : null;
+}
+
+/** Every module the build shipped more than once: one key, two or more ids (a single id is in one
+ *  chunk only). The heaviest first, copies of 512 bytes or more, at most 50.
+ *  @internal exported for the tests */
+export function duplicate_modules(chunks: readonly { file: string; ids: readonly string[]; size_of?: (id: string) => number }[]): DuplicateModule[] {
+	const by = new Map<string, Map<string, { file: string; bytes: number }>>();
+	for (const c of chunks)
+		for (const id of c.ids) {
+			const key = module_key(id);
+			if (!key) continue;
+			const ids = by.get(key) ?? by.set(key, new Map()).get(key)!;
+			if (!ids.has(id)) {
+				const from = module_origin(id);
+				ids.set(id, { file: c.file.startsWith('/') ? c.file : '/' + c.file, bytes: c.size_of?.(id) ?? 0, ...(from ? { from } : {}) });
+			}
+		}
+	const out: DuplicateModule[] = [];
+	for (const [name, ids] of by) {
+		if (ids.size < 2) continue;
+		const copies = [...ids.values()].filter((c) => c.bytes >= 512);
+		if (copies.length >= 2) out.push({ name, copies });
+	}
+	const weight = (d: DuplicateModule) => d.copies.reduce((s, c) => s + c.bytes, 0);
+	return out.sort((a, b) => weight(b) - weight(a)).slice(0, 50);
 }
 
 /** A chunk's rendered size and its heaviest named modules. */
@@ -569,7 +663,7 @@ export function island_deps_module(
 	out_dir_rel = '.svelte-kit'
 ): string {
 	if (!ssr)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function islandHazards(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(_entry) { return []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return false; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function islandHazards(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function chunkDuplicates() { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
 	// DEV: there is no built CSS asset to link (Vite serves component CSS only as importable
 	// modules). The `entry` a region carries IS its dev module URL (moduleUrl / dev island_url),
 	// so returning it lets the client `import()` it for its CSS side-effect — the same region-css
@@ -579,7 +673,7 @@ export function island_deps_module(
 	// DEV always seeds the page (no chunk closure to consult) — the conservative side. Same for the
 	// remotes: `null` = "may call anything" (fail-open).
 	if (is_dev)
-		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function islandHazards(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
+		return `export function islandDeps(_entry) { return []; }\nexport function islandCss(entry) { return entry ? [entry] : []; }\nexport function islandCssInline(_href) { return null; }\nexport function contentCss(_id) { return []; }\nexport function islandReadsPage(_entry) { return true; }\nexport function islandPageKeys(_entry) { return null; }\nexport function islandPageWhy(_entry) { return null; }\nexport function islandRemotes(_entry) { return null; }\nexport function islandInteractivity(_entry) { return null; }\nexport function islandHazards(_entry) { return null; }\nexport function chunkContents(_href) { return null; }\nexport function chunkHeavy(_href) { return null; }\nexport function chunkBarrels(_href) { return null; }\nexport function chunkDuplicates() { return null; }\nexport function fnManifest() { return null; }\nexport function entryLocation(_identity) { return null; }`;
 	return (
 		`import fs from 'node:fs';\n` +
 		`import path from 'node:path';\n` +
@@ -712,6 +806,12 @@ export function island_deps_module(
 		`  const key = href.startsWith('/') ? href : '/' + href.replace(/^\\.\\//, '');\n` +
 		`  const v = map[key] ?? map[href];\n` +
 		`  return v && typeof v === 'object' && Array.isArray(v.top) ? v : null;\n` +
+		`}\n` +
+		// the modules the build shipped twice, each copy's chunk (the report's duplicate-module finding)
+		`export function chunkDuplicates() {\n` +
+		`  const all = load();\n` +
+		`  const v = all && Array.isArray(all.dupes) ? all.dupes : null;\n` +
+		`  return v && v.length ? v : null;\n` +
 		`}\n` +
 		// …and the re-export barrels it still holds (the report's island-barrel note)
 		// each island's lines that draw differently in the browser (the profiler's mismatch findings)

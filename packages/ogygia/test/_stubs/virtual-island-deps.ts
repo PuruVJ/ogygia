@@ -78,6 +78,12 @@ export const chunkBarrels = (href: string): { name: string; fanout: number }[] |
 export function set_chunk_barrels(map: typeof chunk_barrels) {
 	chunk_barrels = map;
 }
+// `chunkDuplicates()` — the modules the build shipped twice; null when none.
+let chunk_dupes: { name: string; copies: { file: string; bytes: number; from?: string }[] }[] | null = null;
+export const chunkDuplicates = () => chunk_dupes;
+export function set_chunk_dupes(v: typeof chunk_dupes) {
+	chunk_dupes = v;
+}
 // `islandHazards(entry)` — an island's lines that draw differently in the browser; null when unknown.
 type StubHazard = { file: string; line: number; code: string; kind: 'await' | 'browser'; reads?: string };
 let island_hazards: Record<string, StubHazard[]> = {};

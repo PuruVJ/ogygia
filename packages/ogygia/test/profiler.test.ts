@@ -1797,6 +1797,27 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
 	});
 
+	it('one module, two copies, both on this page: named with its files and why; a copy the page never loads is no finding', () => {
+		const asset = (url: string) => ({ url, kind: 'script' as const, blocking: false, via: 'html' as const, bytes: 60_000, wire: 20_000 });
+		const assets = {
+			assets: [asset('http://x/_app/immutable/og-runtime.A.js'), asset('http://x/_app/immutable/chunks/I.js')],
+			missed: [],
+			html: { bytes: 1, wire: 1 },
+			inline: { script: 0, style: 0 },
+			totals: { js: 120_000, js_wire: 40_000, css: 0, css_wire: 0, font: 0, image: 0, wire: 40_000, lazy_js: 0, blocking: 0, blocking_count: 0, js_files: 2 }
+		};
+		const dupes = [
+			{ name: 'ogygia/runtime/beacon', copies: [{ file: '/_app/immutable/og-runtime.A.js', bytes: 50_461, from: 'ogygia/dist' }, { file: '/_app/immutable/chunks/I.js', bytes: 50_468, from: 'ogygia/src' }] },
+			{ name: 'ogygia/ref', copies: [{ file: '/_app/immutable/og-runtime.A.js', bytes: 4_900 }, { file: '/_app/immutable/chunks/Elsewhere.js', bytes: 1_400 }] }
+		];
+		const f = derive_findings(analyze(p1), meta as never, { ...extras, assets, dupes } as never).find((x) => x.code === 'duplicate-module')!;
+		expect(f.severity).toBe('warn');
+		expect(f.message).toContain('Two copies of ogygia/runtime/beacon ship on this page: in og-runtime.A.js (49 KB, from ogygia/dist) and I.js (49 KB, from ogygia/src)');
+		expect(f.message).not.toContain('ogygia/ref');
+		expect(f.fix).toContain('`resolve.dedupe`');
+		expect(derive_findings(analyze(p1), meta as never, { ...extras, assets, dupes: [dupes[1]] } as never).some((x) => x.code === 'duplicate-module')).toBe(false);
+	});
+
 	it("promises by the tens of thousands: Svelte's async renderer is named with what it renders most; an app's own is the loop", () => {
 		const a = analyze(p1);
 		const renders = { ...meta, trigger: 'page', runs: [10, 10] } as never;

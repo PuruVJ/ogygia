@@ -60,6 +60,9 @@ declare module 'virtual:ogygia/island-deps' {
 	export function chunkContents(href: string): string[] | null;
 	/** a chunk's heaviest named modules with their rendered bytes (profiler builds only) */
 	export function chunkHeavy(href: string): { total: number; top: { name: string; bytes: number }[] } | null;
+	/** the modules the build shipped as two copies (one package file by two paths), each copy's chunk
+	 *  and its bytes (profiler builds only; null when none) */
+	export function chunkDuplicates(): { name: string; copies: { file: string; bytes: number; from?: string }[] }[] | null;
 	/** the re-export barrels a chunk still holds, with how many modules each brings (profiler builds only) */
 	export function chunkBarrels(href: string): { name: string; fanout: number }[] | null;
 	/** an island entry's components' lines that draw differently in the browser (the build's scan) */
