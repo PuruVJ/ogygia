@@ -1468,6 +1468,11 @@ describe('audit false positives (normal pages)', () => {
 			}).map((x) => x.kind)
 		).toEqual(['date-parse']);
 	});
+
+	it('a Date parsed from text and formatted on one line: the formatting is the time, not the parse', () => {
+		for (const code of ['return p.reviews.map((r) => shortDate.format(new Date(r.at)));', "const s = new Date(r.at).toLocaleDateString('en-GB');"])
+			expect(find_patterns({ ledger: [at(15, code, 5, 0)], functions: [comp] }).map((x) => x.kind)).not.toContain('date-parse');
+	});
 });
 
 describe('inferno round: context fixes', () => {

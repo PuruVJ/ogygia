@@ -25,7 +25,7 @@ const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (name) => flags.find((f) => f.startsWith(`--${name}=`))?.slice(name.length + 3);
 const serve = flags.includes('--serve');
-const pages = (flag('page') ?? (serve ? '/inferno,/hell,/latecomer,/purgatory' : '/inferno')).split(',');
+const pages = (flag('page') ?? (serve ? '/inferno,/hell,/latecomer,/purgatory,/limbo' : '/inferno')).split(',');
 const repeat = Math.max(1, Number(flag('repeat') ?? (serve ? 3 : 1)));
 const key = args[1] ?? 'hell';
 const PORT = 4187;

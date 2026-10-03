@@ -1054,6 +1054,14 @@ function locale_call_with_args(t: readonly string[]): boolean {
 	return false;
 }
 
+const DATE_FORMAT_CALLS: ReadonlySet<string> = new Set(['format', 'formatToParts', 'formatRange', 'toLocaleDateString', 'toLocaleString', 'toLocaleTimeString']);
+/** the line formats a value for display: `fmt.format(d)`, `d.toLocaleDateString(…)` */
+function formats_date(t: readonly string[]): boolean {
+	for (let k = 0; k + 2 < t.length; k++)
+		if ((t[k] === '.' || t[k] === '?.') && DATE_FORMAT_CALLS.has(t[k + 1]) && t[k + 2] === '(') return true;
+	return false;
+}
+
 /** the line calls a method of a formatter the same function built: `rules.select(n)` */
 function uses_local_intl(t: readonly string[], locals: ReadonlySet<string>): boolean {
 	if (!locals.size) return false;
@@ -1294,6 +1302,9 @@ const RULES: Rule[] = [
 		fix: 'Parsing a date string is slow. Parse once when the data arrives and keep the timestamp as a number.',
 		match: (t, c) => {
 			if (!c.repeated || c.cpu_ms < 0.5) return false;
+			// a date parsed and FORMATTED on one line: the formatting is the time (an ISO parse is a
+			// tenth of a format), and parsing once would keep almost all of it
+			if (formats_date(t)) return false;
 			if (has_member(t, 'Date', 'parse')) return true;
 			if (constructs(t, DATE) !== 'Date') return false;
 			// `new Date(x)` parses only when x is text: a number or arithmetic (`t0 + i * DAY`) is not
