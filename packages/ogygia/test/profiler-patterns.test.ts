@@ -15,6 +15,7 @@ import {
 	heap_growth,
 	is_flat,
 	in_loop,
+	same_document_pattern,
 	seed_whole_pattern,
 	stable_answers,
 	tokens,
@@ -2391,5 +2392,25 @@ describe('sync I/O too quick to sample, from V8 call counts', () => {
 	it('no *Sync call counted in Node, or none in the route files: nothing', () => {
 		expect(counted_sync_io({ 'readManifest\0file:///x': 1 }, files)).toBeUndefined();
 		expect(counted_sync_io(counts, [{ ...files[0], text: 'export const load = () => ({});' }])).toBeUndefined();
+	});
+});
+
+describe('same_document_pattern: what keeps a shared cache out is named first', () => {
+	const base = { file: 'routes/shop/+page.server.ts', render_ms: 40, bytes: 20_000 };
+	it('a cookie on the answer', () => {
+		const p = same_document_pattern({ ...base, blocked: { cookie: true } });
+		expect(p.fix).toContain('First, the response sets a cookie (Set-Cookie)');
+		expect(p.fix).toContain('then set Cache-Control with s-maxage');
+		expect(p.evidence).toContain('once the response no longer sets a cookie');
+	});
+	it('private / no-store, and both', () => {
+		const p = same_document_pattern({ ...base, blocked: { cookie: true, cache_control: 'private, max-age=0' } });
+		expect(p.fix).toContain('sets a cookie (Set-Cookie) and answers Cache-Control: private, max-age=0');
+		expect(p.fix).toContain('drop private / no-store');
+	});
+	it('nothing in the way: the plain advice', () => {
+		const p = same_document_pattern(base);
+		expect(p.fix).toContain('rendering it. Set Cache-Control with s-maxage');
+		expect(p.fix).not.toContain('First,');
 	});
 });

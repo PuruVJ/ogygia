@@ -391,6 +391,8 @@ export interface ReportMeta {
 	run_bytes?: number;
 	/** page mode: the timed renders' Cache-Control (what the page tells the browser to keep) */
 	run_cache_control?: string;
+	/** page mode: a timed render's response set a cookie (no shared cache keeps such a page) */
+	run_sets_cookie?: true;
 	/** page mode: every render returned the same document, byte for byte */
 	same_document?: boolean;
 	/** page mode, when the renders' documents differ: what changes between the first and the last */

@@ -93,7 +93,17 @@ const gap_inside: Handle = async ({ event, resolve }) => {
 // The SSR profiler is NOT wired here — it's configured entirely in vite.config.ts (`profiler: true`)
 // and ogygia.handle() dynamically imports + mounts it internally. UI at /__profiler (dev = open;
 // prod needs ?key=<OGYGIA_PROFILER_SECRET>).
+// THE STAMPED-COOKIE fixture (/dt-cookie): a hook that sets a visitor-id cookie on every answer of
+// the path, the way a tracking or a session-touch hook does. The page itself is the same for every
+// visitor, but no shared cache keeps an answer that sets a cookie: the profiler's same-document
+// advice must say so before it says "cache it".
+const stamp_cookie: Handle = async ({ event, resolve }) => {
+	if (event.url.pathname === '/dt-cookie') event.cookies.set('og-visitor', crypto.randomUUID(), { path: '/' });
+	return resolve(event);
+};
+
 export const handle = sequence(
+	stamp_cookie,
 	// the hell page's design-system SSR pass (a Stencil renderer over the finished document): first
 	// in the sequence so its page transform runs LAST, on ogygia's output (Kit applies them in reverse)
 	ds_ssr,

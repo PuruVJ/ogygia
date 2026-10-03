@@ -41,6 +41,10 @@ const LABS = [
 	{ path: '/dt-jank', stay: 3000, scroll: true, named: { 'scroll-jank': "Janky's code, run by" }, never: { 'scroll-jank': 'Calm' } },
 	// (the server's own answer: the page's Cache-Control, read off the profiled render)
 	{ path: '/dt-nostore', stay: 1000, named: { 'bfcache-no-store': 'Cache-Control: no-store' } },
+	// (the same page every render: "cache it", but a hook's cookie on the answer must be named first;
+	// its control, the same page with no cookie, never — the pattern's fix, `fixes`, not a finding)
+	{ path: '/dt-cookie', stay: 500, runs: 3, fixes: { 'same-document': 'sets a cookie (Set-Cookie)' } },
+	{ path: '/dt-cookie-free', stay: 500, runs: 3, fixes: { 'same-document': 'Set Cache-Control with s-maxage' }, fixes_never: { 'same-document': 'Set-Cookie' } },
 	// the quiet ones: none of the codes above
 	{ path: '/dt-lab', stay: 2500, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store'] },
 	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
@@ -77,7 +81,7 @@ let biggest = 0;
 const VISIT_BUDGET = 30_000;
 try {
 	for (const lab of LABS) {
-		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent(lab.path)}&runs=1`, { redirect: 'manual', headers });
+		const rec = await fetch(`${base}/__profiler/page?p=${encodeURIComponent(lab.path)}&runs=${lab.runs ?? 1}`, { redirect: 'manual', headers });
 		const id = rec.headers.get('location')?.split('/').pop();
 		if (!id) {
 			console.log(`✗ ${lab.path}: the profiler did not record (${rec.status})`);
@@ -113,12 +117,15 @@ try {
 		for (const [code, said] of Object.entries(lab.named ?? {})) checks.push([`${code} says "${said}"`, msg(code).includes(said)]);
 		for (const [code, not] of Object.entries(lab.never ?? {})) checks.push([`${code} never "${not}"`, !msg(code).includes(not)]);
 		for (const code of lab.absent ?? []) checks.push([`no ${code}`, !findings.some((f) => f.code === code)]);
+		const fix = (kind) => (report.patterns ?? []).filter((p) => p.kind === kind).map((p) => p.fix).join(' | ');
+		for (const [kind, said] of Object.entries(lab.fixes ?? {})) checks.push([`${kind} fix says "${said}"`, fix(kind).includes(said)]);
+		for (const [kind, not] of Object.entries(lab.fixes_never ?? {})) checks.push([`${kind} fix never "${not}"`, !!fix(kind) && !fix(kind).includes(not)]);
 		const bad = checks.filter(([, ok]) => !ok);
 		if (bad.length) failed++;
 		console.log(`${bad.length ? '✗' : '✓'} ${lab.path}${lab.query ?? ''}: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}`);
 		for (const [n] of bad) {
 			const code = n.split(' ')[0] === 'no' ? n.split(' ')[1] : n.split(' ')[0];
-			console.log(`    ${code}: ${msg(code).slice(0, 300) || '(not in the report)'}`);
+			console.log(`    ${code}: ${(msg(code) || fix(code)).slice(0, 300) || '(not in the report)'}`);
 		}
 	}
 	// (the heaviest page of the playground too: its visit is the biggest one)

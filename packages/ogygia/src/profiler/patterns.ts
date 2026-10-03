@@ -2541,11 +2541,20 @@ export function same_document_pattern(input: {
 	render_ms: number;
 	bytes: number;
 	code?: string;
+	/** what the response says that no shared cache accepts: a Set-Cookie, Cache-Control private / no-store */
+	blocked?: { cookie?: boolean; cache_control?: string };
 }): Pattern {
+	const blocks = [
+		...(input.blocked?.cookie ? ['sets a cookie (Set-Cookie)'] : []),
+		...(input.blocked?.cache_control ? [`answers Cache-Control: ${input.blocked.cache_control}`] : [])
+	];
+	const first = blocks.length
+		? ` First, the response ${blocks.join(' and ')}: no shared cache (a CDN, a proxy) keeps such a page, so the header below does nothing until that goes. ${input.blocked?.cookie ? 'Set the cookie where it is needed (an endpoint the page calls, a hook that skips this path) rather than on every page; ' : ''}${input.blocked?.cache_control ? 'drop private / no-store from a page that holds nothing per visitor; ' : ''}then`
+		: '';
 	return {
 		kind: 'same-document',
 		title: 'Every request renders the same page again',
-		fix: 'Every profiled render returned the same document byte for byte, and nothing it reads belongs to the visitor. Let a cache serve it instead of rendering it: set Cache-Control with s-maxage (a CDN keeps it per URL; stale-while-revalidate refreshes it in the background), or freeze the page with ogygia. Only a change in its data needs a new render. (A `handle` hook that reads cookies and changes the page would make it per visitor: the loads cannot show that, so check yours first.)',
+		fix: `Every profiled render returned the same document byte for byte, and nothing it reads belongs to the visitor. Let a cache serve it instead of rendering it.${first} ${first ? 'set' : 'Set'} Cache-Control with s-maxage (a CDN keeps it per URL; stale-while-revalidate refreshes it in the background), or freeze the page with ogygia. Only a change in its data needs a new render. (A \`handle\` hook that reads cookies and changes the page would make it per visitor: the loads cannot show that, so check yours first.)`,
 		example: {
 			before: 'export const load = async ({ fetch }) => { … }',
 			after:
@@ -2567,7 +2576,7 @@ export function same_document_pattern(input: {
 		alloc_bytes: 0,
 		save_ms: r2(input.render_ms),
 		wait: true,
-		evidence: `every render returned the same ${fmt_mb(input.bytes)} document; no load reads cookies, locals or the request, and no call carried a cookie: ~${Math.round(input.render_ms)} ms a request a cache would answer instead`
+		evidence: `every render returned the same ${fmt_mb(input.bytes)} document; no load reads cookies, locals or the request, and no call carried a cookie: ~${Math.round(input.render_ms)} ms a request a cache would answer instead${blocks.length ? `, once the response no longer ${blocks.join(' and ')}` : ''}`
 	};
 }
 

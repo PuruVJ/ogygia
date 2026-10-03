@@ -3151,13 +3151,19 @@ class Profiler {
 					: undefined;
 				const runs = [...s.meta.runs].sort((a, b) => a - b);
 				const render_ms = runs[Math.floor(runs.length / 2)];
+				// (what the response says that keeps every shared cache out: the header advice waits on it)
+				const cc = s.meta.run_cache_control;
+				const shut = cc?.toLowerCase().split(',').some((d) => d.trim() === 'private' || d.trim() === 'no-store');
 				if (s.meta.same_document)
 					patterns.push(
 						same_document_pattern({
 							file: page_file,
 							render_ms,
 							bytes: s.meta.run_bytes ?? 0,
-							...(code ? { code } : {})
+							...(code ? { code } : {}),
+							...(s.meta.run_sets_cookie || shut
+								? { blocked: { ...(s.meta.run_sets_cookie ? { cookie: true } : {}), ...(shut ? { cache_control: cc } : {}) } }
+								: {})
 						})
 					);
 				else if (near)
@@ -4364,6 +4370,7 @@ class Profiler {
 			const run_windows: Array<{ start: number; end: number }> = [];
 			let run_status = warm_status;
 			let run_cache_control: string | undefined;
+			let run_sets_cookie = false;
 			let run_bytes = warm_bytes;
 			let last_body = '';
 			/** the first render's document, set against the last: what changes between renders */
@@ -4475,6 +4482,8 @@ class Profiler {
 						run_bytes = body.length;
 						// (what the page tells the browser to keep: `no-store` keeps it out of the back/forward cache)
 						run_cache_control = res.headers.get('cache-control') ?? undefined;
+						// (a cookie set on the response: no shared cache keeps such a page)
+						if (res.headers.has('set-cookie')) run_sets_cookie = true;
 						// each render's document, fingerprinted: the same bytes every time is a page to cache whole
 						body_prints.push(`${fnv1a32(body)}:${body.length}`);
 						if (!first_body) first_body = body;
@@ -4764,6 +4773,7 @@ class Profiler {
 					run_status,
 					run_bytes,
 					...(run_cache_control ? { run_cache_control } : {}),
+					...(run_sets_cookie ? { run_sets_cookie: true as const } : {}),
 					budget_note,
 					...(heap_skipped.length ? { heap_guard: heap_guard() } : {}),
 					runs: run_ms,
