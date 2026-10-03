@@ -113,6 +113,9 @@ interface VisitIslandRec {
 	 *  `done - turn` is the hydrate step alone, `turn - loaded` the wait for its turn */
 	turn?: number;
 	done: number;
+	/** when its effects had run (Svelte runs them in a microtask after `hydrate()`), when 1 ms or
+	 *  more after `done`: the end of the island's own work */
+	fx?: number;
 	recovered?: boolean;
 	changed?: boolean;
 	/** another script edited it before it woke; the runtime put the server markup back */
@@ -1721,14 +1724,17 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 	// "why". Carried to the profiler so a recovered island shows the specific cause, not just a count.
 	const reason = (el.getAttribute('data-og-recovered') || '').slice(0, 300) || undefined;
 	// (the queue is what goes to the server: only with the tag — devtools alone reads the visit)
-	if (endpoint()) queue.push({
-		fp,
-		entry: el.getAttribute('entry') ?? '',
-		ms: Math.max(0, r2(t_done - t0)),
-		load: Math.max(0, r2(t_loaded - t0)),
-		...(recovered ? { recovered: true } : {}),
-		...(reason ? { reason } : {})
-	});
+	const sent = endpoint()
+		? {
+				fp,
+				entry: el.getAttribute('entry') ?? '',
+				ms: Math.max(0, r2(t_done - t0)),
+				load: Math.max(0, r2(t_loaded - t0)),
+				...(recovered ? { recovered: true } : {}),
+				...(reason ? { reason } : {})
+			}
+		: null;
+	if (sent) queue.push(sent);
 	let changed: boolean | undefined;
 	const room = make_room(visit_islands, 400, (i) => i.t0);
 	if (typeof ssr_html === 'string' && room) {
@@ -1746,20 +1752,31 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 	// block the wake idles first): an island waking after it re-sends the visit (debounced), rather
 	// than leaving the islands to the hide-time message, the one most often lost
 	if (early_visit_done) resend_soon();
-	if (room) {
-		visit_islands.push({
-			fp,
-			...(el.getAttribute('entry') ? { entry: el.getAttribute('entry')! } : {}),
-			t0: r2(t0),
-			loaded: r2(t_loaded),
-			...(t_turn !== undefined && t_turn >= t_loaded ? { turn: r2(t_turn) } : {}),
-			done: r2(t_done),
-			...(recovered ? { recovered: true } : {}),
-			...(changed ? { changed: true } : {}),
-			...(el.hasAttribute('data-og-healed') ? { healed: true } : {}),
-			...(typeof ssr_html === 'string' ? { ssr_bytes: ssr_html.length } : {})
+	const rec: VisitIslandRec | null = room
+		? {
+				fp,
+				...(el.getAttribute('entry') ? { entry: el.getAttribute('entry')! } : {}),
+				t0: r2(t0),
+				loaded: r2(t_loaded),
+				...(t_turn !== undefined && t_turn >= t_loaded ? { turn: r2(t_turn) } : {}),
+				done: r2(t_done),
+				...(recovered ? { recovered: true } : {}),
+				...(changed ? { changed: true } : {}),
+				...(el.hasAttribute('data-og-healed') ? { healed: true } : {}),
+				...(typeof ssr_html === 'string' ? { ssr_bytes: ssr_html.length } : {})
+			}
+		: null;
+	if (rec) visit_islands.push(rec);
+	// ITS EFFECTS: Svelte's `hydrate()` leaves `$effect`s (and onMount) to a microtask it queued
+	// during the call, so they run after `done` — a heavy one (a measure, a subscription) was nobody's
+	// time. A microtask queued now runs after that flush: when the island's own work really ended
+	if (rec || sent)
+		queueMicrotask(() => {
+			const fx = performance.now();
+			if (fx - t_done < 1) return;
+			if (rec) rec.fx = r2(fx);
+			if (sent) sent.ms = Math.max(0, r2(fx - t0));
 		});
-	}
 	schedule();
 }
 

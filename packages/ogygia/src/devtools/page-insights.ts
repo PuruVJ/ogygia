@@ -21,12 +21,18 @@ export interface PageIsland {
 	loaded: number;
 	turn?: number;
 	done: number;
+	/** when its effects had run (a microtask after `hydrate()`), when later than `done`: its own work
+	 *  ended there — `done` is when it could answer a click */
+	fx?: number;
 	recovered?: boolean;
 	changed?: boolean;
 	/** another script edited it before it woke; the runtime put the server markup back */
 	healed?: boolean;
 	ssr_bytes?: number;
 }
+
+/** when an island's own work ended: its effects, when they ran after `hydrate()` returned */
+const work_end = (i: PageIsland) => Math.max(i.done, i.fx ?? 0);
 
 export interface PageInteraction {
 	name: string;
@@ -570,12 +576,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	for (const i of latest.values()) {
 		const fact = by_fp.get(i.fp);
 		const lo = i.turn ?? i.loaded;
+		// (the island's own work: its hydrate step and the effects Svelte runs right after it)
+		const end = work_end(i);
 		let shift = 0;
-		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= i.done + SHIFT_WINDOW_MS) shift += s.value;
+		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= end + SHIFT_WINDOW_MS) shift += s.value;
 		let lt = 0;
 		for (const t of page.longtasks) {
 			const a = Math.max(t.t, lo);
-			const b = Math.min(t.t + t.ms, i.done);
+			const b = Math.min(t.t + t.ms, end);
 			if (b > a) lt += b - a;
 		}
 		const first = page.firsts.find((f) => f.fp === i.fp);
@@ -586,9 +594,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			wake: fact?.wake ?? '',
 			load_ms: round(Math.max(0, i.loaded - i.t0)),
 			queue_ms: i.turn !== undefined ? round(Math.max(0, i.turn - i.loaded)) : null,
-			hydrate_ms: round(Math.max(0, i.done - lo)),
+			hydrate_ms: round(Math.max(0, end - lo)),
 			t0: i.t0,
-			done: i.done,
+			done: end,
 			recovered: !!i.recovered,
 			changed: !!i.changed,
 			shift: round(shift, 4),
@@ -954,7 +962,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			let best_overlap = 0;
 			for (const i of page.islands) {
 				const from = i.turn ?? i.loaded;
-				const overlap = Math.min(i.done, f.end) - Math.max(from, f.start);
+				const overlap = Math.min(work_end(i), f.end) - Math.max(from, f.start);
 				if (overlap > best_overlap) (best_overlap = overlap), (best = i);
 			}
 			const key = best ? best.fp : `${f.url}\0${f.fn}`;
@@ -1407,8 +1415,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const swap_ms = n.swapped - n.styled;
 		// what the new page woke after it showed (its islands, until the next navigation)
 		const woke = page.islands.filter((i) => i.t0 >= n.t && i.t0 < next);
-		const wake_end = woke.length ? Math.max(...woke.map((i) => i.done)) : n.swapped;
-		const heaviest = woke.map((i) => ({ name: name_of(i.fp), ms: i.done - (i.turn ?? i.loaded) })).sort((a, b) => b.ms - a.ms)[0];
+		const wake_end = woke.length ? Math.max(...woke.map(work_end)) : n.swapped;
+		const heaviest = woke.map((i) => ({ name: name_of(i.fp), ms: work_end(i) - (i.turn ?? i.loaded) })).sort((a, b) => b.ms - a.ms)[0];
 		// the fetch, split by the page request's own timing: the server's first byte, the download
 		const kb_of = (b: number) => (b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`);
 		const known = n.server !== undefined && n.download !== undefined;

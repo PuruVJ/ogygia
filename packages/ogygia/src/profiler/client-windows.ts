@@ -91,8 +91,10 @@ export function interaction_windows(
 /** Each island's hydrate window and the long tasks outside them, analyzed. `run` is the report's
  *  own analysis (its resolver, renamer and chunk categories). */
 export function client_windows(profile: CpuProfile, visit: Visit, run: (p: CpuProfile) => Analysis): ClientWindows {
+	// (to the end of the island's effects: Svelte runs them in a microtask right after `hydrate()`)
+	const end = (i: Visit['islands'][number]) => Math.max(i.done, i.fx ?? 0);
 	const windows = visit.islands
-		.map((i) => ({ fp: i.fp, from: i.turn ?? i.loaded, to: i.done }))
+		.map((i) => ({ fp: i.fp, from: i.turn ?? i.loaded, to: end(i) }))
 		.filter((w) => w.to - w.from >= MIN_WINDOW_MS)
 		.sort((x, y) => y.to - y.from - (x.to - x.from))
 		.slice(0, MAX_WINDOWS);
@@ -103,7 +105,7 @@ export function client_windows(profile: CpuProfile, visit: Visit, run: (p: CpuPr
 	}
 	// the long tasks that touched no island's hydration: page scripts
 	const outside = visit.longtasks
-		.filter((t) => !visit.islands.some((i) => t.t < i.done && t.t + t.ms > (i.turn ?? i.loaded)))
+		.filter((t) => !visit.islands.some((i) => t.t < end(i) && t.t + t.ms > (i.turn ?? i.loaded)))
 		.map((t) => [t.t, t.t + t.ms] as const);
 	let out: ClientWindows['outside'] = { ms: 0, top: [] };
 	if (outside.length) {

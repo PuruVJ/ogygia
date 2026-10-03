@@ -2334,7 +2334,8 @@ function ogygia_findings(
 		const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[xs.length >> 1] : 0);
 		const load = mine.length ? med(mine.map((i) => i.loaded - i.t0)) : slow.load_p50_ms;
 		const wait = mine.length ? med(mine.map((i) => (i.turn !== undefined ? i.turn - i.loaded : 0))) : 0;
-		const step = mine.length ? med(mine.map((i) => i.done - (i.turn ?? i.loaded))) : Math.max(0, slow.p50_ms - slow.load_p50_ms);
+		// (the step to the end of its effects: Svelte runs them right after `hydrate()`)
+		const step = mine.length ? med(mine.map((i) => Math.max(i.done, i.fx ?? 0) - (i.turn ?? i.loaded))) : Math.max(0, slow.p50_ms - slow.load_p50_ms);
 		const whole = load + wait + step || slow.p50_ms;
 		const why = load >= whole * 0.6 ? 'load' : wait >= whole * 0.5 ? 'wait' : 'step';
 		// who it waited behind: the islands whose hydrate step ran inside its wait, summed by component

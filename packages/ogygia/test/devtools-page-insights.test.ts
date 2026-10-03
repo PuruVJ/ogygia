@@ -77,6 +77,31 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe("an island's effects are its own work", () => {
+	it('effects run after hydrate() returns: the long task is the island\'s, the next island waited behind it', () => {
+		const r = analyze_page(
+			page({
+				visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900] },
+				islands: [
+					{ fp: 'aaaa000011112222', entry: '/src/lib/Thrash.svelte', t0: 80, loaded: 90, turn: 95, done: 100, fx: 410 },
+					{ fp: 'bbbb000011112222', entry: '/src/lib/Batched.svelte', t0: 80, loaded: 100, turn: 410, done: 420 }
+				],
+				longtasks: [{ t: 95, ms: 315 }]
+			}),
+			[
+				{ fp: 'aaaa000011112222', name: 'Thrash', kind: 'island', wake: 'load' } as RegionFact,
+				{ fp: 'bbbb000011112222', name: 'Batched', kind: 'island', wake: 'load' } as RegionFact
+			],
+			[],
+			3000
+		);
+		const codes = r.findings.map((f) => f.code);
+		expect(codes).not.toContain('long-tasks');
+		expect(codes).not.toContain('held-idle');
+		expect(r.findings.find((f) => f.code === 'queued')?.message).toContain('behind Thrash');
+	});
+});
+
 describe('forced layout', () => {
 	const run = (forced: NonNullable<NonNullable<PageInput['visit']>['forced_layout']>) =>
 		analyze_page(

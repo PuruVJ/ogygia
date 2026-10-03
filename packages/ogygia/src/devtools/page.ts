@@ -299,7 +299,8 @@ export function cpu_of(page: BeaconPage, trace: unknown): CpuSummary | null {
 	const n = `${page.islands.length}|${page.longtasks.length}`;
 	const hit = cpu_memo.get(trace);
 	if (hit && hit.n === n) return hit.out;
-	const windows = page.islands.map((i) => ({ fp: i.fp, from: i.turn ?? i.loaded, to: i.done }));
+	// (to the end of each island's effects: Svelte runs them right after `hydrate()`)
+	const windows = page.islands.map((i) => ({ fp: i.fp, from: i.turn ?? i.loaded, to: Math.max(i.done, i.fx ?? 0) }));
 	const out = analyze_cpu(trace, windows, page.longtasks, location.href);
 	cpu_memo.set(trace, { n, out });
 	return out;
@@ -392,7 +393,7 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 					navs: ((page.visit as PageInput['visit'])?.navs ?? []).filter((n) => n.t >= t - 1).map((n) => ({ ...n, t: n.t - t, fetched: n.fetched - t, styled: n.styled - t, swapped: n.swapped - t }))
 				}
 			: null,
-		islands: page.islands.filter((i) => i.t0 >= t).map((i) => ({ ...i, t0: i.t0 - t, loaded: i.loaded - t, done: i.done - t, ...(i.turn !== undefined ? { turn: i.turn - t } : {}) })),
+		islands: page.islands.filter((i) => i.t0 >= t).map((i) => ({ ...i, t0: i.t0 - t, loaded: i.loaded - t, done: i.done - t, ...(i.turn !== undefined ? { turn: i.turn - t } : {}), ...(i.fx !== undefined ? { fx: i.fx - t } : {}) })),
 		firsts: shift(page.firsts),
 		shifts: shift(page.shifts),
 		longtasks: shift(page.longtasks),

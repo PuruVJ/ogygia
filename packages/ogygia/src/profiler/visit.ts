@@ -51,6 +51,8 @@ export interface VisitIsland {
 	turn?: number;
 	/** `data-hydrated` set */
 	done: number;
+	/** its effects had run (a microtask after `hydrate()`): the end of its own work, when later */
+	fx?: number;
 	recovered?: boolean;
 	/** the island's markup changed between the server and the hydrated DOM */
 	changed?: boolean;
@@ -131,6 +133,8 @@ export interface Visit {
 	preloads_unused?: { url: string; as: string; bytes: number }[];
 	/** images more than a screen and a half down, not lazy, 20 KB or more, fetched before load ended */
 	images_eager_below?: { url: string; top: number; bytes: number; fp?: string }[];
+	/** scripts that forced style and layout (5 ms or more): their window, the forced ms, file, function */
+	forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
 	/** the page's size in elements, when 1,500 or more (depth 0: past 60,000, only counted) */
 	dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
 	/** islands whose own file failed to load and fell back to their stable name */
@@ -260,6 +264,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		const out: VisitIsland = { fp, t0, loaded: Math.min(Math.max(t0, num(i.loaded) ?? t0), Math.max(t0, done)), done: Math.max(t0, done) };
 		const turn = num(i.turn);
 		if (turn !== undefined && turn >= out.loaded && turn <= out.done) out.turn = turn;
+		const fx = num(i.fx);
+		if (fx !== undefined && fx > out.done) out.fx = fx;
 		const entry = str(i.entry, 300);
 		if (entry) out.entry = entry;
 		if (i.recovered === true) out.recovered = true;
@@ -405,6 +411,15 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		images_eager_below.push({ url, top, bytes, ...(fp ? { fp } : {}) });
 	}
 	if (images_eager_below.length) visit.images_eager_below = images_eager_below;
+	const forced_layout: NonNullable<Visit['forced_layout']> = [];
+	for (const f of (Array.isArray(v.forced_layout) ? v.forced_layout : []).slice(0, 30) as Record<string, unknown>[]) {
+		const start = num(f?.start);
+		const end = num(f?.end);
+		const ms = num(f?.ms);
+		if (start === undefined || end === undefined || end < start || !ms) continue;
+		forced_layout.push({ start, end, ms, url: str(f.url, 300) ?? '', fn: str(f.fn, 80) ?? '' });
+	}
+	if (forced_layout.length) visit.forced_layout = forced_layout;
 	const d = v.dom as Record<string, unknown> | undefined;
 	const nodes = num(d?.nodes, 1e7);
 	if (d && nodes) {
@@ -622,6 +637,8 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		// (asked once 3 s after load: the record that has it)
 		...(b.preloads_unused ?? a.preloads_unused ? { preloads_unused: b.preloads_unused ?? a.preloads_unused } : {}),
 		...(b.images_eager_below ?? a.images_eager_below ? { images_eager_below: b.images_eager_below ?? a.images_eager_below } : {}),
+		// (each record carries the whole list so far: by window, the later one's entries win)
+		...(a.forced_layout || b.forced_layout ? { forced_layout: by(a.forced_layout ?? [], b.forced_layout ?? [], (f) => `${f.start}|${f.url}`) } : {}),
 		...(b.refetched ?? a.refetched ? { refetched: b.refetched ?? a.refetched } : {}),
 		...(a.navs || b.navs ? { navs: by(a.navs ?? [], b.navs ?? [], (n) => `${n.t}|${n.to}`) } : {}),
 		// (the slower interaction of the two records: INP is the worst)
@@ -762,10 +779,12 @@ export function one_clock(
 		for (const i of islands) {
 			const name = names[i.fp] ?? (i.entry?.split('/').pop()?.replace(/\.[^.]+$/, '') || i.fp.slice(0, 8));
 			if (i.loaded > i.t0) bars.push({ id: `island:${i.fp}:load`, lane: 'islands', label: `${name} · loading modules`, t0: i.t0, t1: i.loaded, kind: 'island-load', fp: i.fp });
-			const hyd: ClockBar = { id: `island:${i.fp}`, lane: 'islands', label: `${name} · hydrating`, t0: i.loaded, t1: i.done, kind: 'island-hydrate', fp: i.fp, detail: `${Math.round(i.done - i.t0)} ms from wake, ${Math.round(i.loaded - i.t0)} of it loading${i.recovered ? ' · re-rendered (mismatch)' : ''}${i.changed ? ' · markup changed' : ''}` };
+			// (to the end of its effects: Svelte runs them right after `hydrate()`, and they are its work)
+			const own_end = Math.max(i.done, i.fx ?? 0);
+			const hyd: ClockBar = { id: `island:${i.fp}`, lane: 'islands', label: `${name} · hydrating`, t0: i.loaded, t1: own_end, kind: 'island-hydrate', fp: i.fp, detail: `${Math.round(own_end - i.t0)} ms from wake, ${Math.round(i.loaded - i.t0)} of it loading${i.fx ? `, ${Math.round(i.fx - i.done)} running its effects` : ''}${i.recovered ? ' · re-rendered (mismatch)' : ''}${i.changed ? ' · markup changed' : ''}` };
 			bars.push(hyd);
 			island_bars.set(i.fp, hyd);
-			end = Math.max(end, i.done);
+			end = Math.max(end, own_end);
 		}
 		lanes.push({ name: `islands (${islands.length})`, group: 'islands', bars });
 	}
