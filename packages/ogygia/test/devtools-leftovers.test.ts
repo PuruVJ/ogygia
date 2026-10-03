@@ -1,7 +1,7 @@
 // What an island left running after it left the page (devtools/leftovers.ts): the stack read with no
 // regex, the owner by location or (dev) by name, and left behind only when no copy alive now made it.
 import { describe, expect, it } from 'vitest';
-import { owned_leftovers, stack_files, type LeftoverIsland, type LeftoverReg } from '../src/devtools/leftovers.js';
+import { owned_leftovers, owned_scroll_listeners, stack_files, type LeftoverIsland, type LeftoverReg, type ScrollReg } from '../src/devtools/leftovers.js';
 
 describe('leftovers', () => {
 	it('reads each frame’s file: Chrome, Firefox/Safari, no position, no query', () => {
@@ -38,5 +38,16 @@ describe('leftovers', () => {
 	it('made before any copy started (module code, Svelte’s own delegation), or by no island: quiet', () => {
 		expect(owned_leftovers([interval(5)], [ticker], name_of, 1000)).toEqual([]);
 		expect(owned_leftovers([interval(20, ['http://a.test/src/lib/Unrelated.svelte'])], [ticker], name_of, 1000)).toEqual([]);
+	});
+
+	it('a scroll-holding listener is the nearest island’s among its callers (Svelte’s code above it), else its file’s', () => {
+		const regs: ScrollReg[] = [
+			{ type: 'wheel', on: 'div.wheelie', forced: false, frames: ['http://a.test/node_modules/.vite/deps/svelte.js', 'http://a.test/src/lib/Ticker.svelte'] },
+			{ type: 'touchmove', on: 'window', forced: true, frames: ['http://a.test/assets/widget.js'] }
+		];
+		expect(owned_scroll_listeners(regs, [ticker], name_of)).toEqual([
+			{ owner: 'Ticker', type: 'wheel', on: 'div.wheelie', forced: false },
+			{ owner: 'widget.js', type: 'touchmove', on: 'window', forced: true }
+		]);
 	});
 });

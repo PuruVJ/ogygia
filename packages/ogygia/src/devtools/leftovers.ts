@@ -96,14 +96,14 @@ export function stack_files(stack: string): string[] {
 	return out;
 }
 
-/** The first two files above the watcher (the caller, and its caller). */
-function callers(): string[] {
+/** The first `n` files above the watcher (the caller, and its caller). */
+function callers(n = 2): string[] {
 	const files = stack_files(new Error().stack ?? '');
 	const out: string[] = [];
 	for (const f of files) {
 		if (f === own_file) continue;
 		out.push(f);
-		if (out.length === 2) break;
+		if (out.length === n) break;
 	}
 	return out;
 }
@@ -157,12 +157,89 @@ export function watch_leftovers(): void {
 			// (a `once` listener takes itself back; an aborted signal takes it back)
 			if (!o?.once && !o?.signal?.aborted) note_listener(this, type, fn, o ? !!o.capture : !!opts, o?.signal);
 		}
+		if (fn && SCROLL_TYPES.has(type)) note_scroll_listener(this, type, fn, opts);
 		return add.call(this, type, fn, opts);
 	};
 	proto.removeEventListener = function (this: EventTarget, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | EventListenerOptions) {
 		if ((this === window || this === document) && fn) forget_listener(this, type, fn, typeof opts === 'object' && opts ? !!opts.capture : !!opts);
+		if (fn && SCROLL_TYPES.has(type)) forget_scroll_listener(this, type, fn);
 		return remove.call(this, type, fn, opts);
 	};
+}
+
+// ── LISTENERS THAT HOLD SCROLLING: a `wheel` / `touchstart` / `touchmove` listener the browser must
+// run before it scrolls (it might call preventDefault). On `window`, `document`, `<html>` and
+// `<body>` the browser treats them as passive unless `passive: false` is asked for; anywhere else
+// they block unless `passive: true` is ──
+
+const SCROLL_TYPES: ReadonlySet<string> = new Set(['wheel', 'mousewheel', 'touchstart', 'touchmove']);
+
+export interface ScrollReg {
+	type: string;
+	/** `window`, `document`, or the element briefly (`div.scroller`) */
+	on: string;
+	/** `passive: false` asked for on purpose */
+	forced: boolean;
+	frames: string[];
+}
+const scroll_regs: (ScrollReg & { target: EventTarget; fn: unknown })[] = [];
+
+function note_scroll_listener(on: EventTarget, type: string, fn: unknown, opts?: boolean | AddEventListenerOptions) {
+	const passive = typeof opts === 'object' && opts ? opts.passive : undefined;
+	const root = on === window || on === document || on === document.documentElement || on === document.body;
+	if (passive === true || (root && passive !== false) || scroll_regs.length >= 40) return;
+	if (scroll_regs.some((r) => r.target === on && r.type === type && r.fn === fn)) return;
+	let desc = on === window ? 'window' : on === document ? 'document' : '';
+	if (!desc && on instanceof Element) {
+		let cls = '';
+		for (const c of on.classList)
+			if (!c.startsWith('svelte-')) {
+				cls = c;
+				break;
+			}
+		desc = `${on.tagName.toLowerCase()}${on.id ? `#${on.id}` : cls ? `.${cls}` : ''}`;
+	}
+	// (six files: an `onwheel={…}` attribute is attached by Svelte's code, the island's file deeper;
+	// none at all: code the browser injected — an extension, a test driver — not the page's to fix)
+	const frames = callers(6);
+	if (!frames.length) return;
+	scroll_regs.push({ type, on: desc || 'an element', forced: passive === false, frames, target: on, fn });
+}
+
+function forget_scroll_listener(on: EventTarget, type: string, fn: unknown) {
+	const i = scroll_regs.findIndex((r) => r.target === on && r.type === type && r.fn === fn);
+	if (i !== -1) scroll_regs.splice(i, 1);
+}
+
+/** The scroll-holding listeners still attached (an element's, while it is in the page). */
+export function scroll_listeners(): ScrollReg[] {
+	return scroll_regs.filter((r) => !(r.target instanceof Element) || r.target.isConnected).map(({ target: _t, fn: _f, ...r }) => r);
+}
+
+/** Each one's owner, the island whose file is the nearest of its callers (as owned_leftovers
+ *  decides), else the first caller's file. PURE. */
+export function owned_scroll_listeners(regs: ScrollReg[], isls: LeftoverIsland[], name_of: (entry: string) => string): { owner: string; type: string; on: string; forced: boolean }[] {
+	const stem = (url: string) => {
+		const file = url.slice(url.lastIndexOf('/') + 1);
+		const dot = file.indexOf('.');
+		return dot === -1 ? file : file.slice(0, dot);
+	};
+	const named = isls.map((i) => ({ ...i, name: name_of(i.entry) }));
+	return regs.map((r) => {
+		let owner = '';
+		for (const f of r.frames) {
+			const hit = named.find((i) => i.urls.includes(f)) ?? (f.endsWith('.svelte') ? named.find((i) => i.name === stem(f)) : undefined);
+			if (hit) {
+				owner = hit.name;
+				break;
+			}
+		}
+		if (!owner) {
+			const f = r.frames[0] ?? '';
+			owner = f ? f.slice(f.lastIndexOf('/') + 1) : 'a script';
+		}
+		return { owner, type: r.type, on: r.on, forced: r.forced };
+	});
 }
 
 function note_listener(on: EventTarget, type: string, fn: unknown, capture: boolean, signal?: AbortSignal) {

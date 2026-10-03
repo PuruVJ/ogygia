@@ -202,6 +202,9 @@ export interface PageInput {
 	fp_drift?: { name: string; fp?: string; path?: string; was?: string; now?: string }[];
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
 	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
+	/** wheel / touch listeners still attached that hold scrolling (not passive), by the island (or
+	 *  the file) that added each (devtools/leftovers.ts; devtools only) */
+	scroll_blockers?: { owner: string; type: string; on: string; forced: boolean }[];
 }
 
 /** A restored host that went wrong: upgraded by its component before the restore reached it
@@ -1274,6 +1277,19 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'warn',
 			message: `${l.name} left ${list(what)} after it left the page${ran}. Each visit to its page adds another, and each keeps the island's state in memory.`,
 			fix: 'Take back what the island starts when it goes: return a cleanup from the `$effect` that started it (`clearInterval(id)`, `removeEventListener` with the same function and capture), or pass an AbortSignal and abort it there. The router keeps the document across navigations, so nothing a page left behind is cleared by the next page.',
+			fps: []
+		});
+	}
+
+	// ── listeners that hold scrolling: the browser waits for each before it scrolls ──
+	const blockers = page.scroll_blockers ?? [];
+	if (blockers.length) {
+		const said = [...new Set(blockers.map((b) => `${b.owner}'s '${b.type}' listener on ${b.on}${b.forced ? ' (passive: false)' : ''}`))];
+		findings.push({
+			code: 'scroll-blocking',
+			severity: 'warn',
+			message: `${list(said.slice(0, 3))}${said.length > 3 ? ` and ${said.length - 3} more` : ''} ${said.length === 1 ? 'holds' : 'hold'} scrolling: the browser must run ${said.length === 1 ? 'it' : 'each'} before it moves the page (it might call preventDefault), on every wheel turn or touch move, and a busy main thread then makes scrolling stutter.`,
+			fix: 'Add `{ passive: true }` when the listener never calls preventDefault. To stop scrolling, use CSS instead (`overscroll-behavior`, `touch-action`), so the browser can scroll without asking.',
 			fps: []
 		});
 	}

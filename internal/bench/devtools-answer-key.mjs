@@ -1490,6 +1490,34 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} the largest paint marked lazy: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lazy, plain })}` : ''}`);
 	}
+	// LISTENERS THAT HOLD SCROLLING (/dt-scroll: Wheelie's wheel listener on its box with no passive —
+	// the plant; Smooth's passive one and its window one with no option — the decoys): Wheelie named,
+	// never Smooth, never window; the dock open on another page adds none of its own
+	{
+		const read = async (path, dock) => {
+			const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+			await page.goto(base + path, { waitUntil: 'load' });
+			await page.waitForTimeout(800);
+			if (dock) {
+				await page.click('[data-og-panel-toggle]').catch(() => {});
+				await page.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+				for (const t of await page.$$('[data-og-tab]')) await t.click().catch(() => {});
+			}
+			const f = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'scroll-blocking').map((x) => x.message));
+			await page.close();
+			return f;
+		};
+		const lab = await read('/dt-scroll', false);
+		const docked = await read('/dt-lab', true);
+		const checks = [
+			['Wheelie named on its box', lab.length === 1 && lab[0].startsWith("Wheelie's 'wheel' listener on div.wheelie holds scrolling")],
+			["Smooth's passive ones never", lab.length === 1 && !lab[0].includes('Smooth') && !lab[0].includes('window')],
+			['the open dock and its tabs add none', docked.length === 0]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} listeners that hold scrolling: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ lab, docked })}` : ''}`);
+	}
 	// FORCED LAYOUT (/dt-thrash: Thrash writes a width and reads it back 1,500 times as it wakes — the
 	// plant; Batched does every write before every read — the decoy): Thrash named on its island by
 	// its hydrate window (the browser blames the runtime's task), Batched never; /dt-big quiet

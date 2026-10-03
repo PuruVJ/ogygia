@@ -77,6 +77,24 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('listeners that hold scrolling', () => {
+	it('names each with its owner, event and element; passive: false said', () => {
+		const f = analyze_page(
+			page({
+				scroll_blockers: [
+					{ owner: 'Wheelie', type: 'wheel', on: 'div.wheelie', forced: false },
+					{ owner: 'widget.js', type: 'touchmove', on: 'window', forced: true }
+				]
+			}),
+			[],
+			[],
+			3000
+		).findings.find((x) => x.code === 'scroll-blocking');
+		expect(f?.message.startsWith("Wheelie's 'wheel' listener on div.wheelie and widget.js's 'touchmove' listener on window (passive: false) hold scrolling")).toBe(true);
+		expect(f?.fix).toContain('{ passive: true }');
+	});
+});
+
 describe("an island's effects are its own work", () => {
 	it('effects run after hydrate() returns: the long task is the island\'s, the next island waited behind it', () => {
 		const r = analyze_page(
