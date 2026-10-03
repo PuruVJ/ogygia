@@ -668,14 +668,25 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		});
 	}
 	const recovered = rows.filter((r) => r.recovered);
-	if (recovered.length)
+	if (recovered.length) {
+		// WHO CHANGED IT: a script that edited the island before it woke (the runtime put the server
+		// markup back: `healed`), or a server transform the restorer reported. Neither seen: nothing
+		// touched the markup — the component itself drew another tree in the browser
+		const touched = recovered.some((r) => page.islands.find((i) => i.fp === r.fp)?.healed) || !!page.restore_events?.length;
 		findings.push({
 			code: 'recovered',
 			severity: 'error',
-			message: `${list(recovered.map((r) => r.name))} threw away the server HTML and rendered again in the browser (a flash and a double render). Something changed the markup between the server and hydration.`,
-			fix: 'Look for a script that edits the page before islands wake (an A/B tool, a DOM injector), or markup the browser rewrites (invalid nesting like a <div> in a <p>).',
+			message:
+				`${list(recovered.map((r) => r.name))} threw away the server HTML and rendered again in the browser (a flash and a double render). ` +
+				(touched
+					? 'Something changed the markup between the server and hydration.'
+					: 'No script in the browser edited ' + (recovered.length === 1 ? 'it' : 'them') + ' before waking: either its HTML was rewritten on the way from the server, or the component itself drew a different tree in the browser.'),
+			fix: touched
+				? 'Look for a script that edits the page before islands wake (an A/B tool, a DOM injector), or markup the browser rewrites (invalid nesting like a <div> in a <p>).'
+				: 'Look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter), then in its components for what the browser sees differently: a block ({#if}, {#each}, {#await}) whose condition reads `window`, `Date`, `Math.random()` or storage; a context set only on the server (a csr=false layout\'s setContext); an `await` at the top of its script; or markup the browser rewrites (a <div> in a <p>).',
 			fps: recovered.map((r) => r.fp)
 		});
+	}
 
 	// ── the markup changed on hydration (no recovery: Svelte patched it in place) ──
 	// (an island whose two markups differ only in how a URL is percent-encoded — `a/b` against

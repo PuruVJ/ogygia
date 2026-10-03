@@ -339,6 +339,22 @@ describe('text sent uncompressed', () => {
 	});
 });
 
+describe('an island that threw its server HTML away (recovered)', () => {
+	const at = (healed?: true) =>
+		analyze_page(page({ islands: [{ fp: 's', t0: 10, loaded: 20, done: 30, recovered: true, ...(healed ? { healed } : {}) }] }), [region('s', 'Sidebar')], [], 500).findings.find((f) => f.code === 'recovered')!;
+	it('no browser script edited it before waking: a rewrite on the way or the component itself, and where to look', () => {
+		const f = at();
+		expect(f.message).toContain('No script in the browser edited it before waking: either its HTML was rewritten on the way from the server, or the component itself drew a different tree in the browser.');
+		expect(f.fix).toContain('transformPageChunk');
+		expect(f.fix).toContain('an `await` at the top of its script');
+	});
+	it('a script edited it first (the runtime healed it): the edit is the cause', () => {
+		const f = at(true);
+		expect(f.message).toContain('Something changed the markup between the server and hydration.');
+		expect(f.fix).toMatch(/^Look for a script that edits the page/);
+	});
+});
+
 describe('a page of many elements', () => {
 	type Dom = NonNullable<NonNullable<PageInput['visit']>['dom']>;
 	const at = (dom: Dom, regions: RegionFact[] = []) =>
