@@ -86,7 +86,17 @@ export function island_subgraph_bytes(
 			seen.add(n);
 			// Prune at the framework boundary — don't count Svelte/ogygia runtime/registries, and don't
 			// descend into their large subgraphs (keeps the number app-focused and the walk cheap).
-			if (is_framework(n)) continue;
+			if (is_framework(n)) {
+				// (the site kit's components — ogygia's content/site, an app's own islands in all but
+				// location — are no app bytes, but their lines can draw differently in the browser)
+				const f = (n.file || '').split('\\').join('/');
+				const at = f.indexOf('/content/');
+				if (read && at !== -1 && OGYGIA_PKG_PATH_RE.test(f) && f.endsWith('.svelte') && hazards.length < 5) {
+					const src = read(n.file!);
+					if (src) for (const h of hydration_hazards(src).slice(0, 3)) if (hazards.length < 5) hazards.push({ file: `ogygia/${f.slice(at + 1)}`, ...h });
+				}
+				continue;
+			}
 			// Traverse into everything else (incl. the island's own entry glue) to reach the component...
 			let fanout = 0;
 			for (const dep of n.importedModules ?? []) {
@@ -112,7 +122,8 @@ export function island_subgraph_bytes(
 				}
 			}
 		}
-		if (count > 0 && (!out[iid] || out[iid].bytes < bytes)) {
+		// (a site-kit island has no app bytes of its own, and still its lines)
+		if ((count > 0 || hazards.length) && (!out[iid] || out[iid].bytes < bytes)) {
 			each.sort((a, b) => b.bytes - a.bytes);
 			out[iid] = { bytes, modules: count, top: each.slice(0, 5), ...(barrels.length ? { barrels: barrels.sort((a, b) => b.fanout - a.fanout).slice(0, 3) } : {}), ...(hazards.length ? { hazards } : {}) };
 		}

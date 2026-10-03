@@ -56,6 +56,8 @@ describe('hydration_hazards: the lines that draw differently in the browser', ()
 			'\tconst load = async () => {',
 			'\t\tawait fetch(`/x`);',
 			'\t};',
+			'\tconst reduced = () =>',
+			"\t\ttypeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;",
 			'</script>',
 			'<button onclick={() => window.scrollTo(0, 0)}>top {w}</button>',
 			'<p>{mywindow.size}</p>'

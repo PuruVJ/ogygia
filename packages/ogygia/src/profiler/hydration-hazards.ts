@@ -103,6 +103,7 @@ export function hydration_hazards(source: string): Hazard[] {
 	let depth = 0;
 	// the script's callbacks: `onMount(`, `$effect(`, `function`, arrows — what runs after the wake
 	let deferred_depth = -1;
+	let arrow_body = false;
 	for (let n = 0; n < lines.length; n++) {
 		const raw = lines[n];
 		const line = raw.trim();
@@ -127,7 +128,12 @@ export function hydration_hazards(source: string): Hazard[] {
 		}
 		if (in_script) {
 			// (a module script runs once per server process and once in the browser: not a render)
-			const top = depth === 0 && deferred_depth === -1 && !module_script;
+			// (an arrow whose body is on the next lines, no braces: `const reduced = () =>` ⏎ `matchMedia(…)`
+			// — the body runs when it is called, until the statement ends)
+			const in_arrow_body = arrow_body;
+			if (arrow_body && (line.endsWith(';') || line === '')) arrow_body = false;
+			if (!in_arrow_body && line.endsWith('=>')) arrow_body = true;
+			const top = depth === 0 && deferred_depth === -1 && !module_script && !in_arrow_body;
 			if (top && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*')) {
 				const aw = line.indexOf('await ');
 				if (aw !== -1 && (aw === 0 || !is_ident(line.charCodeAt(aw - 1)))) out.push({ line: n + 1, code: line, kind: 'await' });

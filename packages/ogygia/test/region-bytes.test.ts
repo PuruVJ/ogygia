@@ -54,6 +54,15 @@ describe('island_subgraph_bytes', () => {
 		expect(island_subgraph_bytes([entry]).abc123.hazards).toBeUndefined();
 	});
 
+	it("a site-kit island (ogygia's content components): no app bytes, and still its lines", () => {
+		const sidebar = { ...mod('/@fs/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte', 'compiled'), file: '/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte' };
+		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [sidebar]);
+		const src: Record<string, string> = { '/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte': '<script>\n\tlet { site } = $props();\n\tconst tree = await site.nav();\n</script>' };
+		const out = island_subgraph_bytes([entry], (f) => src[f]).abc123;
+		expect(out.bytes).toBe(0);
+		expect(out.hazards).toEqual([{ file: 'ogygia/content/site/components/Sidebar.svelte', line: 3, code: 'const tree = await site.nav();', kind: 'await' }]);
+	});
+
 	it('a small component composing many children is no barrel: it uses what it imports', () => {
 		const leaves = Array.from({ length: 7 }, (_, i) => mod(`/src/lib/demos/Demo${i}.svelte`, 'p'.repeat(300)));
 		const hero = mod('/src/lib/demos/HeroDemo.svelte', 'h'.repeat(7 * 60), leaves);
