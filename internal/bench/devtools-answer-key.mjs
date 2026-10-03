@@ -1701,6 +1701,45 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} thrown away, three ways: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ fs, det })}` : ''}`);
 	}
+	// THE DOCK IN WEBKIT (Safari's engine: no layout-shift, long-task, interaction timing nor JS
+	// sampler): /dt-lab with the dock open — no error but the planted one, every tab opens, the page
+	// view still names what it can measure, and the Page tab says what this browser cannot see
+	{
+		const { webkit } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
+		const wb = await webkit.launch();
+		try {
+			const ctx = await wb.newContext({ viewport: { width: 1280, height: 800 } });
+			await ctx.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+			const page = await ctx.newPage();
+			const errs = [];
+			page.on('pageerror', (e) => errs.push(e.message));
+			await page.goto(base + '/dt-lab', { waitUntil: 'load' });
+			await page.waitForTimeout(3500);
+			const codes = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((f) => f.code));
+			await page.click('[data-og-panel-toggle]').catch(() => {});
+			await page.waitForTimeout(600);
+			const tabs = await page.locator('[data-og-tab]').all();
+			for (const t of tabs) {
+				await t.click().catch(() => {});
+				await page.waitForTimeout(200);
+			}
+			await page.click('[data-og-tab="page"]').catch(() => {});
+			await page.waitForTimeout(500);
+			const limits = await page.locator('[data-og-page-browser-limits]').innerText().catch(() => '');
+			const checks = [
+				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
+				['every tab opens', tabs.length >= 8],
+				['the page view names what it can measure', codes.includes('markup-changed') && codes.includes('hydrate-failed') && codes.includes('eager-offscreen')],
+				['…and never what it cannot', !codes.includes('hydration-shift') && !codes.includes('long-tasks')],
+				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')]
+			];
+			const bad = checks.filter(([, ok]) => !ok);
+			if (bad.length) failed = true;
+			console.log(`${bad.length ? '✗' : '✓'} the dock in WebKit: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ errs: errs.slice(0, 3), tabs: tabs.length, codes, limits: limits.slice(0, 160) })}` : ''}`);
+		} finally {
+			await wb.close();
+		}
+	}
 	// A PAGE OF MANY ELEMENTS (/dt-dom: DenseList, an island of ~3,600 — the plant; /dt-dom-static: the
 	// same list as page markup; /dt-big: ~1,000): the island named on /dt-dom, the static twin's size
 	// named with no island, /dt-big quiet
