@@ -741,11 +741,20 @@ function cpu_by_host(extras: ReportExtras): Map<string, number> | null {
  * nothing in the HTML names (runtime_scripts — a CDN library fetching its parts, a runtime's
  * on-demand chunk). Without the second half, a page that loads its JS from a script weighed light.
  */
-export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): { js: number; js_wire: number; js_files: number; runtime: RuntimeScripts | null; woke_early: { bytes: number; wire: number; files: number } | null } | null {
+export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
+	js: number;
+	js_wire: number;
+	js_files: number;
+	runtime: RuntimeScripts | null;
+	woke_early: { bytes: number; wire: number; files: number } | null;
+	/** the ogygia runtime's on-demand parts the visit loaded at start (as its islands woke) */
+	runtime_parts: { bytes: number; wire: number; files: number } | null;
+} | null {
 	const pa = extras.assets;
 	if (!pa) return null;
 	let runtime: RuntimeScripts | null = null;
 	let woke_early: { bytes: number; wire: number; files: number } | null = null;
+	let runtime_parts: { bytes: number; wire: number; files: number } | null = null;
 	const v = extras.visit;
 	if (v?.resources.length) {
 		const until = (v.nav.load ?? v.nav.res_end) + 3000;
@@ -758,21 +767,23 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): { js: 
 		const at_start = new Set(v.resources.filter((r) => r.type === 'script' && r.start <= loaded_by).map((r) => r.url));
 		for (const a of pa.assets)
 			if (a.lazy && a.kind === 'script' && at_start.has(a.url)) {
-				woke_early ??= { bytes: 0, wire: 0, files: 0 };
-				woke_early.bytes += a.bytes;
-				woke_early.wire += a.wire;
-				woke_early.files++;
+				// (the runtime's own parts: its, not an island's that woke on the first screen)
+				const b = a.phase ? (runtime_parts ??= { bytes: 0, wire: 0, files: 0 }) : (woke_early ??= { bytes: 0, wire: 0, files: 0 });
+				b.bytes += a.bytes;
+				b.wire += a.wire;
+				b.files++;
 			}
 		// "at start": up to 3 s after the load event (a lazy island a scroll woke later is not)
 		runtime = runtime_scripts(pa.assets, v.resources, page_origin(pa), until);
 	}
 	const t = pa.totals;
 	return {
-		js: t.js + (runtime?.bytes ?? 0) + (woke_early?.bytes ?? 0),
-		js_wire: t.js_wire + (runtime?.wire ?? 0) + (woke_early?.wire ?? 0),
-		js_files: t.js_files + (runtime?.files ?? 0) + (woke_early?.files ?? 0),
+		js: t.js + (runtime?.bytes ?? 0) + (woke_early?.bytes ?? 0) + (runtime_parts?.bytes ?? 0),
+		js_wire: t.js_wire + (runtime?.wire ?? 0) + (woke_early?.wire ?? 0) + (runtime_parts?.wire ?? 0),
+		js_files: t.js_files + (runtime?.files ?? 0) + (woke_early?.files ?? 0) + (runtime_parts?.files ?? 0),
 		runtime,
-		woke_early
+		woke_early,
+		runtime_parts
 	};
 }
 
@@ -802,7 +813,7 @@ function page_weight_findings(
 		const say = t.js >= 300 * 1024 ? warn : info;
 		say(
 			'js-at-start',
-			`The browser runs ${fmt_bytes(t.js)} of JS in ${t.js_files} files to start this page (${fmt_bytes(t.js_wire)} on the wire${t.runtime ? `, ${fmt_bytes(t.runtime.bytes)} of it loaded at runtime by other scripts` : ''}${t.woke_early ? `, ${fmt_bytes(t.woke_early.bytes)} of it islands that wake when visible and were on your first screen` : ''})${t.lazy_js - (t.woke_early?.bytes ?? 0) > 0 ? `, and ${fmt_bytes(t.lazy_js - (t.woke_early?.bytes ?? 0))} more loads only when an island needs it` : ''}. The biggest: ${named.join('; ')}.`,
+			`The browser runs ${fmt_bytes(t.js)} of JS in ${t.js_files} files to start this page (${fmt_bytes(t.js_wire)} on the wire${t.runtime ? `, ${fmt_bytes(t.runtime.bytes)} of it loaded at runtime by other scripts` : ''}${t.woke_early ? `, ${fmt_bytes(t.woke_early.bytes)} of it islands that wake when visible and were on your first screen` : ''}${t.runtime_parts ? `, ${fmt_bytes(t.runtime_parts.bytes)} of it the ogygia runtime's parts it loaded as the islands woke` : ''})${t.lazy_js - (t.woke_early?.bytes ?? 0) - (t.runtime_parts?.bytes ?? 0) > 0 ? `, and ${fmt_bytes(t.lazy_js - (t.woke_early?.bytes ?? 0) - (t.runtime_parts?.bytes ?? 0))} more loads only when an island needs it` : ''}. The biggest: ${named.join('; ')}.`,
 			{
 				fix: islands
 					? 'Wake the heaviest islands when visible or on interaction, move heavy imports server-side, or make static subtrees lakes.'
@@ -1789,6 +1800,15 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			'dev-mode',
 			'Recorded on the dev server — Vite module loading and transforms are included. Build and run production for exact figures.'
 		);
+	}
+	// ONE CAUSE, TOLD ONCE: the browser's slow-lcp splits the largest paint (its element, its island,
+	// each part) with the fix for the costliest; the report's own lcp-gap is the server's side of it.
+	// Beside slow-lcp, lcp-gap keeps that verdict and points at the card, not the same split again
+	const gap = out.find((f) => f.code === 'lcp-gap');
+	if (gap && out.some((f) => f.code === 'slow-lcp')) {
+		const dash = gap.message.indexOf(' — ');
+		if (dash !== -1) gap.message = `${gap.message.slice(0, dash)}: the server is not the bottleneck. Where the browser's wait went is the largest paint's own card (In the browser: LCP …).`;
+		gap.fix = "The wait is the browser's, not the server's: follow the largest paint's own card (In the browser: LCP …), which names the part that cost most and its fix.";
 	}
 	if (extras.patterns?.length) link_patterns(out, extras.patterns, a);
 	return out;
@@ -3083,9 +3103,10 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 				js: sj!.js,
 				js_wire: sj!.js_wire,
 				js_files: sj!.js_files,
-				lazy_js: Math.max(0, pa.totals.lazy_js - (sj!.woke_early?.bytes ?? 0)),
+				lazy_js: Math.max(0, pa.totals.lazy_js - (sj!.woke_early?.bytes ?? 0) - (sj!.runtime_parts?.bytes ?? 0)),
 				css: pa.totals.css,
-				wire: pa.totals.wire + (sj!.runtime?.wire ?? 0),
+				// (the runtime's parts it loaded at start were "other scripts'" before it knew them: still over the wire)
+				wire: pa.totals.wire + (sj!.runtime?.wire ?? 0) + (sj!.runtime_parts?.wire ?? 0),
 				blocking: pa.totals.blocking,
 				blocking_count: pa.totals.blocking_count,
 				top: pa.assets

@@ -35,9 +35,10 @@ const LABS = [
 	// (its effects are Thrash's own work: never "outside any island", never "the scheduler held it";
 	// Batched waits behind Thrash when its code came in time to wait at all — a cold load varies)
 	{ path: '/dt-thrash', stay: 2500, named: { 'forced-layout': 'Thrash while it hydrated (', 'long-hydrate': 'Thrash (' }, never: { queued: 'scheduler' }, absent: ['held-idle', 'long-tasks'] },
-	{ path: '/dt-lcp', query: '?below', stay: 5000, named: { 'lcp-gap': 'Beside it, ' }, fix_never: { 'lcp-gap': 'CSS background' } },
+	// (the browser's slow-lcp carries the split; the report's own lcp-gap, beside it, the server's verdict only)
+	{ path: '/dt-lcp', query: '?below', stay: 5000, named: { 'slow-lcp': 'Beside it, ', 'lcp-gap': 'the server is not the bottleneck' }, never: { 'lcp-gap': 'Beside it' }, fix_never: { 'slow-lcp': 'CSS background' } },
 	// (the largest paint a CSS background its slow stylesheet names: found late, and why — the fix)
-	{ path: '/dt-lcp-bg', stay: 4000, fix_says: { 'lcp-gap': 'It is a CSS background image (on the div)' } },
+	{ path: '/dt-lcp-bg', stay: 4000, fix_says: { 'slow-lcp': 'It is a CSS background image (on the div)' } },
 	// (scrolled with the wheel after load: the beacon sends the jank again, the page never hides)
 	// (a build's handler is a minified name in a hashed chunk: named by the island whose file it is)
 	{ path: '/dt-jank', stay: 3000, scroll: true, named: { 'scroll-jank': "Janky's code, run by" }, never: { 'scroll-jank': 'Calm' } },

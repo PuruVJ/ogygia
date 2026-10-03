@@ -21,9 +21,13 @@ export interface AssetRef {
 	/** the browser must have it before the first paint (a head stylesheet, a classic sync script) */
 	blocking: boolean;
 	/** how the document asks for it (`island`: the runtime loads it to wake an island) */
-	via: 'script' | 'modulepreload' | 'preload' | 'stylesheet' | 'inline-import' | 'img' | 'static-import' | 'island' | 'route-node';
+	via: 'script' | 'modulepreload' | 'preload' | 'stylesheet' | 'inline-import' | 'img' | 'static-import' | 'island' | 'route-node' | 'runtime-phase';
 	/** loads later, on demand (an island that wakes when visible / on interaction), not at start */
 	lazy?: boolean;
+	/** the ogygia runtime's own script (`data-ogygia-runtime`): the parts it loads itself are its own */
+	runtime?: true;
+	/** a part of the ogygia runtime it loads on demand as islands wake (and what that part imports) */
+	phase?: true;
 }
 
 export interface WeighedAsset extends AssetRef {
@@ -254,7 +258,11 @@ export function scan_assets(html: string): { refs: AssetRef[]; inline: { script:
 			const type = (a.get('type') ?? '').toLowerCase();
 			const is_js = type === '' || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
 			if (a.has('src')) {
-				if (is_js) add(a.get('src'), 'script', 'script', type !== 'module' && !a.has('async') && !a.has('defer') && in_head);
+				if (is_js) {
+					const n = refs.length;
+					add(a.get('src'), 'script', 'script', type !== 'module' && !a.has('async') && !a.has('defer') && in_head);
+					if (refs.length > n && a.has('data-ogygia-runtime')) refs[n].runtime = true;
+				}
 			} else if (is_js) {
 				inline.script += body.length;
 				for (const spec of dynamic_imports(body)) add(spec, 'script', 'inline-import', false);
@@ -391,7 +399,11 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 			const contains = r.kind === 'script' || r.kind === 'style' ? opts.contents_of?.(r.url) : null;
 			assets.push({ ...r, bytes: w.bytes, wire: w.wire, ...(contains?.length ? { contains } : {}) });
 			// a module's imports load with it: lazy with a lazy parent
-			if (r.kind === 'script' && w.imports) for (const spec of w.imports) push({ url: spec, kind: 'script', blocking: false, via: 'static-import', ...(r.lazy ? { lazy: true } : {}) });
+			if (r.kind === 'script' && w.imports) for (const spec of w.imports) push({ url: spec, kind: 'script', blocking: false, via: 'static-import', ...(r.lazy ? { lazy: true } : {}), ...(r.phase ? { phase: true } : {}) });
+			// the ogygia runtime's on-demand parts (hydration and the rest, loaded as islands wake): its
+			// own, on demand — the visit tells which loaded at start, and they read as the runtime's,
+			// never as code "other scripts fetched"
+			if (r.runtime && w.dynamic) for (const spec of w.dynamic) push({ url: spec, kind: 'script', blocking: false, via: 'runtime-phase', lazy: true, phase: true });
 			// the route nodes this page starts with (and only those: app.js imports every route's)
 			if (node_marks.length && w.dynamic)
 				for (const spec of w.dynamic) if (node_marks.some((m) => spec.includes(m))) push({ url: spec, kind: 'script', blocking: false, via: 'route-node' });

@@ -84,6 +84,30 @@ describe('Kit route nodes', () => {
 		expect(paths).not.toContain('/_app/immutable/nodes/50.N50.js'); // `/nodes/5.` must not match 50
 		expect(r.totals.js).toBeGreaterThan(50_000);
 	});
+
+	test("the ogygia runtime's on-demand parts are its own, loaded later (with what they import)", async () => {
+		const html = '<html><head><script type="module" data-ogygia-runtime src="/_app/immutable/og-runtime.R.js"></script></head><body></body></html>';
+		const files: Record<string, string> = {
+			'/_app/immutable/og-runtime.R.js': 'const h=()=>import(`./chunks/hydrate.H.js`);export{h};',
+			'/_app/immutable/chunks/hydrate.H.js': 'import{a}from"./svelte.S.js";' + 'x'.repeat(2000),
+			'/_app/immutable/chunks/svelte.S.js': 'y'.repeat(3000)
+		};
+		const r = await weigh_assets({
+			html,
+			page_url: 'http://x/page',
+			cache: new Map(),
+			fetch_url: async (u) => {
+				const body = files[new URL(u, 'http://x/page').pathname];
+				return body === undefined ? new Response('', { status: 404 }) : new Response(body);
+			}
+		});
+		const by = Object.fromEntries(r.assets.map((a) => [new URL(a.url).pathname, a]));
+		expect(by['/_app/immutable/og-runtime.R.js'].runtime).toBe(true);
+		expect(by['/_app/immutable/chunks/hydrate.H.js']).toMatchObject({ via: 'runtime-phase', lazy: true, phase: true });
+		expect(by['/_app/immutable/chunks/svelte.S.js']).toMatchObject({ via: 'static-import', lazy: true, phase: true });
+		// on demand, not at start: the visit says whether they loaded
+		expect(r.totals.lazy_js).toBe(files['/_app/immutable/chunks/hydrate.H.js'].length + 3000);
+	});
 });
 
 describe('weigh_assets', () => {

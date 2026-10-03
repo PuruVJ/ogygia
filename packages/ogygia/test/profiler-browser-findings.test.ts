@@ -112,6 +112,15 @@ test("a lazy island's code counts at start only when it loaded before the load e
 	expect(start_js({ assets, visit: visit_with(300) })!.js).toBe(200_000);
 	// scrolled to right after load: still lazy
 	expect(start_js({ assets, visit: visit_with(900) })!.js).toBe(100_000);
+	// the ogygia runtime's own part, loaded as the island woke: counted, as the runtime's — never as
+	// an island that woke early, never as code "other scripts fetched"
+	const with_phase = { ...assets, assets: [...assets.assets, { ...asset('https://a.test/hydrate.js', true), via: 'runtime-phase' as const, phase: true as const }] };
+	const v = parse_visit('/p', { ...raw, nav: { req_start: 0, res_start: 10, res_end: 20, dcl: 200, load: 400 }, resources: [{ url: 'https://a.test/entry.js', type: 'script', start: 50, end: 90 }, { url: 'https://a.test/hydrate.js', type: 'script', start: 120, end: 150 }] })!;
+	const sj = start_js({ assets: with_phase, visit: v })!;
+	expect(sj.runtime_parts).toEqual({ bytes: 100_000, wire: 30_000, files: 1 });
+	expect(sj.woke_early).toBeNull();
+	expect(sj.runtime).toBeNull();
+	expect(sj.js).toBe(200_000);
 });
 
 /** The code inside the inline tag `script()` made — what the browser runs. */
