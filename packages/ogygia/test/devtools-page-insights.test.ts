@@ -645,6 +645,10 @@ describe('analyze_page', () => {
 		const css = run({ visit: { ...page().visit!, nav: { res_start: 100, res_end: 150 }, paints: { fcp: 2400 }, resources: [{ url: 'https://a.test/slow.css?v=1', type: 'css', start: 160, end: 2360, blocking: true }, { url: 'https://a.test/quick.css', type: 'css', start: 160, end: 300, blocking: true }] } })!;
 		expect(css.message).toBe('FCP is 2400 ms (needs work; good is ≤ 1800 ms). The first paint came after 100 ms until the HTML\'s first byte, 50 ms downloading the HTML, 2210 ms waiting for 2 files that block the paint (the slowest slow.css, 2200 ms), 40 ms more before it painted.');
 		expect(css.fix).toMatch(/^The paint waits for slow.css/);
+		// …and render-blocking, the same file told again, is folded into it at its louder severity
+		const both = analyze_page(page({ vitals: { fcp: 2400 }, visit: { ...page().visit!, nav: { res_start: 100, res_end: 150 }, paints: { fcp: 2400 }, resources: [{ url: 'https://a.test/slow.css?v=1', type: 'css', start: 160, end: 2360, blocking: true }] } } as never), [], [], 9000).findings;
+		expect(both.map((f) => f.code)).not.toContain('render-blocking');
+		expect(both.find((f) => f.code === 'slow-fcp')?.severity).toBe('warn');
 		// the main thread busy after everything arrived
 		const busy = run({ visit: { ...page().visit!, nav: { res_start: 100, res_end: 150 }, paints: { fcp: 2400 }, resources: [] }, longtasks: [{ t: 300, ms: 1900 }] })!;
 		expect(busy.message).toContain('2250 ms more before it painted (1900 ms of it long tasks)');

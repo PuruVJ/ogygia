@@ -1200,7 +1200,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	let blocked_until = 0;
 	for (const r of page.visit?.resources ?? []) if (r.blocking && r.start < fcp) blocked_until = Math.max(blocked_until, r.end);
 	const held_ms = blocking.length ? Math.max(0, blocked_until - html_at) : 0;
-	if (held_ms >= 200)
+	// (the first paint's own explanation already names that file as what it waited on: one card,
+	// at the louder of the two severities — not the same cause told twice)
+	const fcp_card = held_ms >= 200 ? findings.find((f) => f.code === 'slow-fcp' && f.message.includes('waiting for') && f.message.includes(short(blocking[0].url))) : undefined;
+	if (fcp_card) {
+		if (held_ms >= 600) fcp_card.severity = 'warn';
+	} else if (held_ms >= 200)
 		findings.push({
 			code: 'render-blocking',
 			severity: held_ms >= 600 ? 'warn' : 'info',
