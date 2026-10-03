@@ -664,7 +664,8 @@ function snapshot_of(v: PageView): LoadSnapshot {
 	return {
 		path: location.pathname,
 		at: Date.now(),
-		findings: v.report.findings.map((f) => ({ code: f.code, names: f.fps.map((fp) => name.get(fp) ?? fp) })),
+		// (`dev`: the dev server's own doing — never "new" or "fixed" on the next load)
+		findings: v.report.findings.map((f) => ({ code: f.code, names: f.fps.map((fp) => name.get(fp) ?? fp), ...(f.dev_compile ? { dev: true as const } : {}) })),
 		islands: v.report.rows.map((r) => {
 			// (on the dev server, the part of its load that was the server compiling its files)
 			const compile_ms = Math.round(dev_compile_ms({ dev: import.meta.env.DEV ? true : undefined, visit: v.page.visit as PageInput['visit'] }, r));
@@ -672,6 +673,8 @@ function snapshot_of(v: PageView): LoadSnapshot {
 		}),
 		vitals: v.report.vitals.map((x) => ({ key: x.key, value: x.value })),
 		...(v.parts ? { parts: v.parts } : {}),
-		...(v.report.findings.some((f) => f.dev_compile) ? { page_compiled: true as const } : {})
+		// (the page compiling on its request: the first byte's own note, not a dev-CSS shift's)
+		...(v.report.findings.some((f) => f.dev_compile && (f.code === 'slow-ttfb' || f.code === 'vital-ttfb')) ? { page_compiled: true as const } : {}),
+		...(v.report.findings.some((f) => f.dev_compile && (f.code === 'shift-cause' || f.code === 'vital-cls')) ? { cls_dev: true as const } : {})
 	};
 }

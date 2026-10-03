@@ -13,7 +13,8 @@ export interface LoadSnapshot {
 	path: string;
 	/** epoch ms the picture was taken */
 	at: number;
-	findings: { code: string; names: string[] }[];
+	/** `dev`: the dev server's own doing (its first compile, the CSS it adds with JavaScript) */
+	findings: { code: string; names: string[]; dev?: true }[];
 	/** `compile_ms`: on the dev server, the part of its load that was the server compiling its files
 	 *  on that first request (page-insights `dev_compile_ms`) — not the code's own cost */
 	islands: { name: string; load_ms: number; hydrate_ms: number; compile_ms?: number }[];
@@ -22,6 +23,8 @@ export interface LoadSnapshot {
 	parts?: Partial<Record<PartedVital, VitalPart[]>>;
 	/** the dev server compiled the page on this load's request (its first byte waited on that) */
 	page_compiled?: true;
+	/** its layout shift came from the CSS the dev server adds with JavaScript */
+	cls_dev?: true;
 }
 
 export interface SinceLoad {
@@ -47,21 +50,34 @@ const label = (f: { code: string; names: string[] }) => (f.names.length ? `${f.c
 export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at = Date.now()): SinceLoad | null {
 	if (prev.path !== now.path) return null;
 	const key = (f: { code: string; names: string[] }) => `${f.code}|${[...new Set(f.names)].sort().join(',')}`;
+	// (the dev server's own doing, on either side, is no change of the code: left out of both)
+	const dev = new Set([...prev.findings, ...now.findings].filter((f) => f.dev).map((f) => f.code));
 	const had = new Set(prev.findings.map(key));
 	const has = new Set(now.findings.map(key));
 	// the last load was the dev server compiling this page's code for the first time: what that alone
 	// raised is not "fixed" now, and the islands' loads are compared without the compile
-	const compiled = !!prev.page_compiled || prev.islands.some((i) => (i.compile_ms ?? 0) >= i.load_ms * 0.5 && i.load_ms >= ISLAND_FLOOR_MS.load);
-	const borne = prev.page_compiled ? PAGE_COMPILE_BORNE : COMPILE_BORNE;
-	const gone = prev.findings.filter((f) => !has.has(key(f)));
+	// (…or it reads like one: most of the islands' modules came at least a third faster all at once,
+	// and nothing in the code can do that across unrelated islands — a dev server serving them warm
+	// after its first compile does, the compile not always seen as such)
+	const sped = now.islands.filter((i) => {
+		const p = prev.islands.find((x) => x.name === i.name);
+		return p && p.load_ms - i.load_ms >= ISLAND_FLOOR_MS.load && i.load_ms <= p.load_ms * 0.67;
+	}).length;
+	const all_warmer = now.islands.length >= 2 && sped >= Math.max(2, now.islands.length * 0.6);
+	const compiled = all_warmer || !!prev.page_compiled || prev.islands.some((i) => (i.compile_ms ?? 0) >= i.load_ms * 0.5 && i.load_ms >= ISLAND_FLOOR_MS.load);
+	// (every module warmer at once is the page's whole first compile: its first byte waited too)
+	const cold_page = !!prev.page_compiled || all_warmer;
+	const borne = cold_page ? PAGE_COMPILE_BORNE : COMPILE_BORNE;
+	const gone = prev.findings.filter((f) => !has.has(key(f)) && !dev.has(f.code));
 	const fixed = gone.filter((f) => !(compiled && borne.has(f.code))).map(label);
 	const set_aside = gone.length - fixed.length;
-	const added = now.findings.filter((f) => !had.has(key(f))).map(label);
+	const added = now.findings.filter((f) => !had.has(key(f)) && !dev.has(f.code)).map(label);
 	const moved: SinceLoad['moved'] = [];
 	const table = (s: LoadSnapshot) => Object.fromEntries(s.vitals.map((v) => [v.key, v.value]));
 	for (const m of vitals_moved(table(prev), table(now), (side, k) => (side === 'a' ? prev : now).parts?.[k] ?? null))
-		// (the page compiling on the last load's request held its first byte, and every paint after it)
-		if (!(prev.page_compiled && (m.key === 'ttfb' || m.key === 'fcp' || m.key === 'lcp')))
+		// (the page compiling on the last load's request held its first byte, and every paint after it;
+		// a shift the dev server's CSS made, on either load, is no shift of the code)
+		if (!(cold_page && (m.key === 'ttfb' || m.key === 'fcp' || m.key === 'lcp')) && !(m.key === 'cls' && (prev.cls_dev || now.cls_dev)))
 			moved.push({ what: m.key.toUpperCase(), a: m.a, b: m.b, unit: m.key === 'cls' ? '' : 'ms', better: m.b < m.a, ...(m.part ? { part: m.part } : {}) });
 	for (const i of now.islands) {
 		const p = prev.islands.find((x) => x.name === i.name);
@@ -69,7 +85,7 @@ export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at = Date.now(
 		// (its hydrate step, and its module load: a change that made the island's file heavier or lighter)
 		// (the page compiled on the last load's request: every module it served was cold — each one
 		// under the per-file line, all of them together a slower load — so loads are not compared)
-		for (const step of prev.page_compiled ? (['hydrate'] as const) : (['hydrate', 'load'] as const)) {
+		for (const step of cold_page ? (['hydrate'] as const) : (['hydrate', 'load'] as const)) {
 			// (a load without the dev server's compile of it: the code's own arrival)
 			const was = step === 'hydrate' ? p.hydrate_ms : Math.max(0, p.load_ms - (p.compile_ms ?? 0));
 			const is = step === 'hydrate' ? i.hydrate_ms : Math.max(0, i.load_ms - (i.compile_ms ?? 0));
@@ -86,7 +102,7 @@ export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at = Date.now(
 		moved: moved.slice(0, 8),
 		...(compiled
 			? {
-					note: `The last load was the dev server compiling this page's code for the first time: ${prev.page_compiled ? "its first byte, its paints and its islands' loads are not compared" : "its islands' loads are compared without that"}${set_aside ? `, and what the compile alone raised (${set_aside === 1 ? 'one finding' : `${set_aside} findings`}) is not counted as fixed` : ''}.`
+					note: `The last load was the dev server compiling this page's code for the first time: ${cold_page ? "its first byte, its paints and its islands' loads are not compared" : "its islands' loads are compared without that"}${set_aside ? `, and what the compile alone raised (${set_aside === 1 ? 'one finding' : `${set_aside} findings`}) is not counted as fixed` : ''}.`
 				}
 			: {})
 	};

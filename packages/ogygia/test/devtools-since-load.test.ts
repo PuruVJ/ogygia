@@ -86,3 +86,25 @@ test('the last load was the dev server’s first compile: nothing "fixed" by the
 	// a load that was not compiling: no note
 	expect(since_load(snap({ islands: [{ name: 'Heavy', load_ms: 33, hydrate_ms: 5 }] }), now)?.note).toBeUndefined();
 });
+
+test("the dev server's own doing is never new or fixed: a dev-CSS shift, and every module warmer at once", () => {
+	// a shift the dev server's CSS made on one load, none on the next: not "fixed", CLS not "moved"
+	const devcss = since_load(
+		snap({ findings: [{ code: 'shift-cause', names: [], dev: true }], vitals: [{ key: 'cls', value: 0.26 }], cls_dev: true }),
+		snap({ vitals: [{ key: 'cls', value: 0 }] })
+	)!;
+	expect(devcss.fixed).toEqual([]);
+	expect(devcss.moved).toEqual([]);
+	// the first load after the dev server started: every island's module a third faster or more at once
+	const isl = (load: number) => ['A', 'B', 'C'].map((name) => ({ name, load_ms: load, hydrate_ms: 4 }));
+	const warm = since_load(
+		snap({ findings: [{ code: 'queued', names: ['C'] }], islands: isl(420), vitals: [{ key: 'ttfb', value: 300 }] }),
+		snap({ islands: isl(60), vitals: [{ key: 'ttfb', value: 20 }] })
+	)!;
+	expect(warm.fixed).toEqual([]);
+	expect(warm.moved).toEqual([]);
+	expect(warm.note).toContain('compiling this page');
+	// one island faster (its own change): a real move
+	const one = since_load(snap({ islands: [...isl(420).slice(0, 2), { name: 'C', load_ms: 420, hydrate_ms: 4 }] }), snap({ islands: [...isl(420).slice(0, 2), { name: 'C', load_ms: 60, hydrate_ms: 4 }] }))!;
+	expect(one.moved.map((m) => m.what)).toEqual(['C load']);
+});

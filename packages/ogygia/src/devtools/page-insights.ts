@@ -415,8 +415,9 @@ export interface PageFinding {
 	fix?: string;
 	/** the islands it is about (to light up on the page) */
 	fps: string[];
-	/** it is the dev server's own first compile of the page (a slow first byte while the page compiled
-	 *  on its first request): a reload reads it warm, and "since your last load" does not call it fixed */
+	/** it is the dev server's own doing: its first compile of the page (a slow first byte while the
+	 *  page compiled on its first request), or the CSS it adds with JavaScript moving the page (a
+	 *  shift). A reload reads it differently: "since your last load" never calls it new or fixed */
 	dev_compile?: true;
 }
 
@@ -1079,7 +1080,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			...(why ? { fix: why.fix } : {}),
 			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? [],
 			// (the page compiling on its first request: the first byte's note only — a dev CSS shift is not a compile)
-			...(v.key === 'ttfb' && why && 'note' in why && why.note ? { dev_compile: true as const } : {})
+			// (the dev server's own doing: its first compile held the first byte, or the CSS it adds with
+			// JavaScript moved the page — a reload reads it differently, never a change of the code)
+			...((v.key === 'ttfb' || v.key === 'cls') && why && 'note' in why && why.note ? { dev_compile: true as const } : {})
 		});
 	}
 
