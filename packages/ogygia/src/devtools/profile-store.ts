@@ -41,7 +41,15 @@ export interface SlimProfile {
 		was?: { score: number; grade: string };
 	} | null;
 	/** what the page loads at start (a build only) */
-	assets: { js: number; lazy_js: number; wire: number; files: { name: string; kind: string; bytes: number; lazy: boolean; contains: string[] }[] } | null;
+	assets: {
+		js: number;
+		lazy_js: number;
+		wire: number;
+		files: { name: string; kind: string; bytes: number; lazy: boolean; contains: string[] }[];
+		/** one module shipped as two copies, both loaded by this page: its files, their bytes, where each
+		 *  came from, and what the second copy costs */
+		twice?: { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[];
+	} | null;
 	forecast: { now_ms: number; after_ms: number; parts: { title: string; kind: string; ms: number; wait: boolean }[] } | null;
 	findings: { severity: string; code: string; message: string; fix?: string; fps?: string[] }[];
 	islands: SlimIsland[];
@@ -156,7 +164,20 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 							bytes: num(f.bytes) ?? 0,
 							lazy: !!f.lazy,
 							contains: Array.isArray(f.contains) ? f.contains.map(String).slice(0, 4) : []
-						}))
+						})),
+					...(() => {
+						const twice = arr(r.assets.twice)
+							.slice(0, 8)
+							.map((d) => ({
+								name: String(d.name ?? ''),
+								copies: arr(d.copies)
+									.slice(0, 3)
+									.map((c) => ({ file: String(c.file ?? ''), bytes: num(c.bytes) ?? 0, ...(typeof c.from === 'string' ? { from: c.from } : {}) })),
+								extra: num(d.extra) ?? 0
+							}))
+							.filter((d) => d.name && d.copies.length >= 2);
+						return twice.length ? { twice } : {};
+					})()
 				}
 			: null,
 		forecast:

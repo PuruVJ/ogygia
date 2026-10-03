@@ -14,6 +14,7 @@
 	} from './regions.js';
 
 	import { page_ledger } from './ledger-dom.js';
+	import { profile_for, profiles_version } from './profile-store.js';
 
 	let { tick = 0 } = $props();
 	const IS_DEV = !!(import.meta.env && import.meta.env.DEV);
@@ -23,6 +24,12 @@
 	const exact = $derived.by(() => {
 		tick;
 		return page_ledger();
+	});
+	// the modules the build shipped twice that this page loads both copies of (the last profile's)
+	const twice = $derived.by(() => {
+		tick;
+		profiles_version();
+		return profile_for(location.pathname)?.assets?.twice ?? [];
 	});
 
 	const model = $derived.by(() => {
@@ -123,6 +130,26 @@
 						<td title={s.url}>{basename(s.url)}</td>
 						<td>{kb(s.wire)}</td>
 						<td class="muted">{s.users.length > 4 ? `${s.users.slice(0, 3).join(', ')} and ${s.users.length - 3} more` : s.users.join(', ')}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	{/if}
+	{#if twice.length}
+		<!-- the last profile of this page: modules the build shipped twice, both copies loaded here -->
+		<h3 class="sub">loaded twice</h3>
+		<div class="note" data-og-ledger-twice>
+			One module reached by two paths (a package's source and its build, or two of its versions) ships as
+			two copies, and this page loads both: {kb(twice.reduce((s, d) => s + d.extra, 0))} of code its browser
+			downloads, parses and runs a second time. From the last profile.
+		</div>
+		<table>
+			<tbody>
+				{#each twice.slice(0, 8) as d (d.name)}
+					<tr>
+						<td>{d.name}</td>
+						<td>{kb(d.extra)}</td>
+						<td class="muted">{d.copies.map((c) => `${basename(c.file)}${c.from ? ` (${c.from})` : ''}`).join(' · ')}</td>
 					</tr>
 				{/each}
 			</tbody>

@@ -330,8 +330,17 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	await p.locator('[data-og-page-findings] li[data-code="markup-changed"] .chip').first().click().catch(() => {});
 	await p.waitForTimeout(800);
 	const hazard = await p.locator('[data-og-detail-hazard]').innerText().catch(() => '');
+	// …and the Bytes tab: the modules this page loads twice, from the same profile — the same list the
+	// report's duplicate-module finding names (the playground's workspace ships ogygia's src beside
+	// the runtime's dist: a few modules twice on every page)
+	await p.locator('[data-og-detail] button.back').click().catch(() => {});
+	await p.click('[data-og-tab="bytes"]').catch(() => {});
+	await p.waitForTimeout(800);
+	const twice_note = await p.locator('[data-og-ledger-twice]').innerText().catch(() => '');
+	const twice_rows = await p.locator('[data-og-ledger-twice] + table tbody tr').allInnerTexts().catch(() => []);
 	await c.close();
 	check("an island's browser-only line on its card in a build, from the last profile", hazard.includes('Clock.svelte:3') && hazard.includes('typeof window'), hazard.slice(0, 160) || 'no row');
+	check('Bytes: the modules loaded twice, from the last profile, each copy with where it came from', !!twice_note && twice_rows.length > 0 && twice_rows.every((r) => r.includes('(ogygia/src)') || r.includes('(ogygia/dist)') || r.includes('@')), `${twice_note.slice(0, 120)} · ${twice_rows.slice(0, 2).join(' | ')}`);
 }
 // SCROLLING STALLED, in a build: the handler is a minified name in a hashed chunk — named by its island
 {

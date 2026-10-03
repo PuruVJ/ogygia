@@ -77,6 +77,14 @@ describe('the slim profile keeps what the browser cannot read', () => {
 		expect(slim_profile({ ...report, target: { ...report.target, cache_control: 'private, no-store' } }).cache_control).toBe('private, no-store');
 		expect(slim_profile(report).cache_control).toBeUndefined();
 	});
+	it('the modules this page loads twice, with where each copy came from', () => {
+		const twice = [{ name: 'ogygia/region-snippet', copies: [{ file: '/_app/immutable/chunks/A.js', bytes: 6671, from: 'ogygia/src' }, { file: '/_app/immutable/chunks/B.js', bytes: 4436, from: 'ogygia/dist' }], extra: 4436 }];
+		const p = slim_profile({ ...report, assets: { totals: { js: 1, lazy_js: 0, wire: 1 }, files: [], twice } });
+		expect(p.assets?.twice).toEqual(twice);
+		expect(slim_profile({ ...report, assets: { totals: { js: 1, lazy_js: 0, wire: 1 }, files: [] } }).assets?.twice).toBeUndefined();
+		// one copy is no pair
+		expect(slim_profile({ ...report, assets: { totals: { js: 1, lazy_js: 0, wire: 1 }, files: [], twice: [{ ...twice[0], copies: twice[0].copies.slice(0, 1) }] } }).assets?.twice).toBeUndefined();
+	});
 	it('a prerendered page: the file served, or a route that prerenders', () => {
 		expect(slim_profile({ ...report, target: { ...report.target, prerendered: 'file' } }).prerendered).toBe('file');
 		expect(slim_profile({ ...report, target: { ...report.target, prerendered: null } }).prerendered).toBeUndefined();

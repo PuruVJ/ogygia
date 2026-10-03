@@ -810,6 +810,31 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 	};
 }
 
+/** The modules the build shipped twice whose copies are both in files this page loads (its weighed
+ *  files and its visit's scripts), each with the bytes the second copy costs; the costliest first. */
+export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 'visit'>): { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[] {
+	if (!extras.dupes?.length || !extras.assets) return [];
+	const path_of = (u: string) => {
+		try {
+			return new URL(u).pathname;
+		} catch {
+			return u;
+		}
+	};
+	const loaded = new Set<string>();
+	for (const a of extras.assets.assets) loaded.add(path_of(a.url));
+	for (const r of extras.visit?.resources ?? []) if (r.type === 'script') loaded.add(path_of(r.url));
+	const here = (file: string) => {
+		for (const p of loaded) if (p.endsWith(file)) return true;
+		return false;
+	};
+	return extras.dupes
+		.map((d) => ({ name: d.name, copies: d.copies.filter((c) => here(c.file)) }))
+		.filter((d) => d.copies.length >= 2)
+		.map((d) => ({ ...d, extra: d.copies.reduce((s, c) => s + c.bytes, 0) - Math.max(...d.copies.map((c) => c.bytes)) }))
+		.sort((a, b) => b.extra - a.extra);
+}
+
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
  *  shows smaller or lower down */
 const SCREEN_CODES: ReadonlySet<string> = new Set(['eager-offscreen', 'eager-hidden', 'images-eager-below', 'image-oversized']);
@@ -878,26 +903,8 @@ function page_weight_findings(
 	// ONE MODULE, TWICE ON THIS PAGE: a package file the build shipped as two copies (reached by two
 	// paths: its source and its build, or two versions), both in files this page loads — downloaded,
 	// parsed and run twice
-	if (extras.dupes?.length) {
-		const path_of = (u: string) => {
-			try {
-				return new URL(u).pathname;
-			} catch {
-				return u;
-			}
-		};
-		const loaded = new Set<string>();
-		for (const a of pa.assets) loaded.add(path_of(a.url));
-		for (const r of extras.visit?.resources ?? []) if (r.type === 'script') loaded.add(path_of(r.url));
-		const here = (file: string) => {
-			for (const p of loaded) if (p.endsWith(file)) return true;
-			return false;
-		};
-		const twice = extras.dupes
-			.map((d) => ({ name: d.name, copies: d.copies.filter((c) => here(c.file)) }))
-			.filter((d) => d.copies.length >= 2)
-			.map((d) => ({ ...d, extra: d.copies.reduce((s, c) => s + c.bytes, 0) - Math.max(...d.copies.map((c) => c.bytes)) }))
-			.sort((a, b) => b.extra - a.extra);
+	{
+		const twice = page_duplicates(extras);
 		const extra = twice.reduce((s, d) => s + d.extra, 0);
 		if (twice.length && extra >= 2 * 1024) {
 			const top = twice[0];
@@ -3934,7 +3941,12 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						...(x.lazy ? { lazy: true } : {}),
 						...(x.contains ? { contains: x.contains } : {})
 					})),
-					...(extras.assets.missed.length ? { missed: extras.assets.missed.slice(0, 20) } : {})
+					...(extras.assets.missed.length ? { missed: extras.assets.missed.slice(0, 20) } : {}),
+					// one module shipped twice, both copies loaded here (the devtools' Bytes tab shows them)
+					...(() => {
+						const twice = page_duplicates(extras).slice(0, 12);
+						return twice.length ? { twice } : {};
+					})()
 				}
 			: extras.assets_missing
 				? { missing: extras.assets_missing }
