@@ -802,6 +802,16 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 	};
 }
 
+/** findings about a server render — its CPU, components, calls, memory — that mean nothing when the
+ *  build's file answered (no render ran: `run_static`) */
+const RENDER_ONLY: ReadonlySet<string> = new Set([
+	'low-confidence', 'phases', 'top-cpu', 'top-component', 'component-heavy', 'component-repeat', 'hot-function',
+	'cold-start', 'cold-instance', 'slower-each-run', 'component-cold-run', 'component-variance', 'sequential-network',
+	'mostly-waiting', 'slow-upstream', 'n-plus-one', 'gc-heavy', 'gc-pause', 'gc-cause', 'alloc-burst', 'path-group',
+	'serialization', 'markup-heavy', 'logic-heavy', 'hot-list', 'retained-per-render', 'mem-growth', 'span-slow',
+	'span-repeat', 'memo-candidate', 'deopt', 'sync-io', 'billed-wait', 'sequential-awaits', 'unseen-wait', 'window-requests'
+]);
+
 // (the profiler's page weight and the devtools' Page tab say the same number: page-insights.ts)
 export { inline_threshold_tune };
 
@@ -1833,6 +1843,11 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			'Recorded on the dev server — Vite module loading and transforms are included. Build and run production for exact figures.'
 		);
 	}
+	// NO RENDER RAN (the build's file answered the timed requests): every finding about a render's
+	// CPU, its components, its calls and its memory describes serving a file — left out. What the
+	// browser does with the page (its weight, what blocks its paint, its elements, its islands) stays
+	if (meta.run_static)
+		for (let k = out.length - 1; k >= 0; k--) if (RENDER_ONLY.has(out[k].code)) out.splice(k, 1);
 	// ONE CAUSE, TOLD ONCE: the browser's slow-lcp splits the largest paint (its element, its island,
 	// each part) with the fix for the costliest; the report's own lcp-gap is the server's side of it.
 	// Beside slow-lcp, lcp-gap keeps that verdict and points at the card, not the same split again

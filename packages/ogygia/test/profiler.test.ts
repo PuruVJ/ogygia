@@ -1744,6 +1744,14 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		}
 	});
 
+	it('a page the build wrote as a file (no render ran): no render findings, the note says why', () => {
+		const rendered = derive_findings(analyze(p1), meta as never, extras).map((f) => f.code);
+		expect(rendered.some((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence'].includes(c))).toBe(true);
+		const file = derive_findings(analyze(p1), { ...meta, prerendered: true, run_static: true } as never, extras).map((f) => f.code);
+		expect(file).toContain('prerendered-page');
+		expect(file.filter((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence', 'cold-start', 'n-plus-one'].includes(c))).toEqual([]);
+	});
+
 	it("the Islands table: an island reading a browser-only value while rendering is told so, by its line", () => {
 		const hazards = { 'src/lib/CountryPanel.svelte': [{ file: 'src/lib/CountryPanel.svelte', line: 4, code: 'const here = navigator.language;', kind: 'browser' as const, reads: 'navigator.language' }] };
 		const row = island_rows(analyze(p1), meta as never, { net: [], mem: [], hazards } as never).find((r) => r.name === 'CountryPanel')!;
