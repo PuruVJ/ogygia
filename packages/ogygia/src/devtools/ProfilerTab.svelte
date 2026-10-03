@@ -203,7 +203,7 @@
 			{#if prof.forecast?.parts.length}
 				<h3>What the fixes save</h3>
 				<ul class="parts">
-					{#each prof.forecast.parts as p (p.kind + p.title)}
+					{#each prof.forecast.parts as p, i (p.kind + p.title + i)}
 						<li><span class="pm">−{ms(p.ms)}</span>{p.title}{#if p.wait}<span class="tag">waiting</span>{/if}</li>
 					{/each}
 				</ul>

@@ -87,9 +87,13 @@ export function page_anchors(p: SlimProfile, doc: Document = document): Anchor[]
 		return hit ? (by_file.get(hit) ?? []) : [];
 	};
 
-	// the heaviest components with a place on the page
+	// the heaviest components with a place on the page — one per file: an island's host row and its
+	// component's own row ("Counter (island host)", "Counter") share the file and its elements (two
+	// with one key broke the dock's list: each_key_duplicate, the run never drew)
+	const seen_files = new Set<string>();
 	for (const c of p.components) {
-		if (!c.file || !c.file.endsWith('.svelte')) continue;
+		if (!c.file || !c.file.endsWith('.svelte') || seen_files.has(c.file)) continue;
+		seen_files.add(c.file);
 		const n = els_of(c.file).length;
 		if (!n) continue;
 		const file = c.file;
@@ -180,5 +184,7 @@ export function page_anchors(p: SlimProfile, doc: Document = document): Anchor[]
 				count: n
 			});
 	}
-	return out;
+	// (each key once: the dock keys its list by it — two spans of one name and tag would collide too)
+	const keys = new Set<string>();
+	return out.filter((a) => !keys.has(a.key) && !!keys.add(a.key));
 }
