@@ -131,6 +131,8 @@ import { app_relative } from './app-path.js';
 import { fnv1a32 } from '../runtime/hash.js';
 import { attr_sites, doc_diff } from './doc-diff.js';
 import { almost_same_document_pattern } from './patterns.js';
+import { hydration_hazards } from './hydration-hazards.js';
+import type { IslandHazard } from './report.js';
 import {
 	constant_work,
 	each_blocks,
@@ -415,6 +417,8 @@ export interface StoredReport {
 	contents?: Record<string, string[]>;
 	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
 	barrels?: Record<string, { name: string; fanout: number }[]>;
+	/** each island entry's lines that draw differently in the browser (its own `.svelte` sources) */
+	hazards?: Record<string, IslandHazard[]>;
 	/** browser hydration timings carried by an uploaded dump (a live report joins the ring instead) */
 	client?: ClientIslandStat[];
 	/** the page's web vitals carried by an uploaded dump */
@@ -2185,6 +2189,7 @@ class Profiler {
 		let contents: Record<string, string[]> | undefined;
 		let heavy: Record<string, { total: number; top: { name: string; bytes: number }[] }> | undefined;
 		let barrels: Record<string, { name: string; fanout: number }[]> | undefined;
+		let hazards: Record<string, IslandHazard[]> | undefined;
 		if (fetch_url && !this.dev) {
 			const urls: string[] = [];
 			for (const r of island_rows_of(meta)) urls.push(r.module_url, ...r.hints);
@@ -2198,6 +2203,23 @@ class Profiler {
 				if (h?.top.length) (heavy ??= {})[u] = h;
 				const b = chunkBarrels(u);
 				if (b?.length) (barrels ??= {})[u] = b;
+			}
+			// WHAT DRAWS DIFFERENTLY IN THE BROWSER: each island's own components (the app's `.svelte`
+			// files in its chunks), read and scanned once — the lines a mismatch on wake most often
+			// comes from (a top-level await, a browser-only value read while rendering)
+			if (contents) {
+				const read = await this.#source_reader();
+				for (const r of island_rows_of(meta)) {
+					if (hazards?.[r.entry]) continue;
+					const files = new Set<string>();
+					for (const u of [r.module_url, ...r.hints]) for (const f of contents[u] ?? []) if (f.endsWith('.svelte') && f.startsWith('src/')) files.add(f);
+					const found: IslandHazard[] = [];
+					for (const f of files) {
+						const src = read(f.slice(4)) ?? read(f);
+						if (src) for (const h of hydration_hazards(src).slice(0, 3)) found.push({ file: f, ...h });
+					}
+					if (found.length) (hazards ??= {})[r.entry] = found.slice(0, 5);
+				}
 			}
 		}
 		// WHEN THE HEAP GREW and what ran then: the fine series joined to the CPU over the capture
@@ -2285,6 +2307,7 @@ class Profiler {
 			...(contents ? { contents } : {}),
 			...(heavy ? { heavy } : {}),
 			...(barrels ? { barrels } : {}),
+			...(hazards ? { hazards } : {}),
 			...(gc_attr ? { gc_attr } : {}),
 			...(alloc ? { alloc } : {}),
 			...(contended ? { contention: contended } : {})
@@ -5250,6 +5273,7 @@ class Profiler {
 			...(e.contents ? { contents: e.contents } : {}),
 			...(e.heavy ? { heavy: e.heavy } : {}),
 			...(e.barrels ? { barrels: e.barrels } : {}),
+			...(e.hazards ? { hazards: e.hazards } : {}),
 			...(e.client ? { client: e.client } : {}),
 			...(e.vitals ? { vitals: e.vitals } : {}),
 			...(e.client_marks ? { client_marks: e.client_marks } : {}),
@@ -5458,6 +5482,7 @@ class Profiler {
 			...(stored.contents ? { contents: stored.contents } : {}),
 			...(stored.heavy ? { heavy: stored.heavy } : {}),
 			...(stored.barrels ? { barrels: stored.barrels } : {}),
+			...(stored.hazards ? { hazards: stored.hazards } : {}),
 			...(client.length ? { client } : {}),
 			...(vitals ? { vitals } : {}),
 			...(client_marks?.length ? { client_marks } : {}),

@@ -455,6 +455,28 @@ export interface GcSummary {
 	max_ms: number;
 }
 
+/** a line of an island's own component that draws differently in the browser, with its file */
+export type IslandHazard = import('./hydration-hazards.js').Hazard & { file: string };
+
+/** "In its own code, X.svelte:4 (`…`) awaits at the top of its script; Y.svelte:8 reads Date.now( while rendering." */
+export function hazard_words(lines: readonly IslandHazard[]): string {
+	const one = (h: IslandHazard) => {
+		const code = h.code.length > 70 ? h.code.slice(0, 69) + '…' : h.code;
+		const where = `${h.file.split('/').pop()}:${h.line} (\`${code}\`)`;
+		return h.kind === 'await' ? `${where} awaits at the top of its script: the browser runs it again, and another answer draws another tree` : `${where} reads ${h.reads ?? 'a browser-only value'} while rendering, a value the server does not have`;
+	};
+	return `In its own code, the likeliest: ${lines.slice(0, 2).map(one).join('; ')}.`;
+}
+
+/** The fix for those lines: what to do with each kind. */
+export function hazard_fix(lines: readonly IslandHazard[]): string {
+	const kinds = new Set(lines.map((h) => h.kind));
+	return [
+		...(kinds.has('await') ? ['Give both sides the same answer: pass the data in from the server (a load, a prop) rather than awaiting it again in the browser.'] : []),
+		...(kinds.has('browser') ? ["Read the browser-only value after the wake (in `$effect` or `onMount`), or take it from what both sides have (the page's URL from `$app/state`, a time passed in as a prop)."] : [])
+	].join(' ');
+}
+
 export interface ReportExtras {
 	net: NetCall[];
 	/** the app's own spans (`span()` from ogygia/profiler) recorded during the window */
@@ -479,6 +501,8 @@ export interface ReportExtras {
 	heavy?: Record<string, { total: number; top: { name: string; bytes: number }[] }>;
 	/** re-export barrels each island file still holds, with how many modules each brings */
 	barrels?: Record<string, { name: string; fanout: number }[]>;
+	/** each island entry's lines that draw differently in the browser (hydration-hazards.ts) */
+	hazards?: Record<string, IslandHazard[]>;
 	/** the visit's own hole requests from the request log (made after the recording): server ms each */
 	/** `name`: the hole's component, from its own request (a hole the profiled render did not have —
 	 *  the visited page's query put it there — is named all the same) */
@@ -1810,6 +1834,22 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		if (dash !== -1) gap.message = `${gap.message.slice(0, dash)}: the server is not the bottleneck. Where the browser's wait went is the largest paint's own card (In the browser: LCP …).`;
 		gap.fix = "The wait is the browser's, not the server's: follow the largest paint's own card (In the browser: LCP …), which names the part that cost most and its fix.";
 	}
+	// THE BROWSER'S MARKUP CHANGE, by line: an island whose markup changed on wake, and a line of its
+	// own that draws differently in the browser (the island rows' entries, by fingerprint)
+	if (extras.hazards) {
+		const mc = out.find((f) => f.code === 'markup-changed');
+		if (mc?.fps?.length) {
+			const rows = island_rows_of(meta);
+			const entries = new Set(mc.fps.flatMap((fp) => rows.filter((r) => r.fp === fp).map((r) => r.entry)));
+			const lines = [...entries].flatMap((e) => extras.hazards?.[e] ?? []);
+			if (lines.length) {
+				mc.message += ` ${hazard_words(lines)}`;
+				mc.fix = `${hazard_fix(lines)} ${mc.fix ?? ''}`.trim();
+				mc.file ??= lines[0].file;
+				mc.line ??= lines[0].line;
+			}
+		}
+	}
 	if (extras.patterns?.length) link_patterns(out, extras.patterns, a);
 	return out;
 }
@@ -2431,11 +2471,17 @@ function ogygia_findings(
 	const broken = client.filter((c) => c.recovered > 0);
 	if (broken.length) {
 		const total = broken.reduce((s, c) => s + c.recovered, 0);
+		// (a line of its own that draws differently in the browser: named, the likelier cause)
+		const lines = broken.flatMap((c) => extras.hazards?.[c.entry] ?? []);
 		warn(
 			'hydration-mismatch',
-			`${names(broken.map(island_name))} discarded ${broken.length === 1 ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${total} time${total === 1 ? '' : 's'} seen): the markup the browser found was not what the server sent.`,
+			`${names(broken.map(island_name))} discarded ${broken.length === 1 ? 'its' : 'their'} server-rendered DOM and re-rendered in the browser (${total} time${total === 1 ? '' : 's'} seen): the markup the browser found was not what the server sent.` +
+				(lines.length ? ` ${hazard_words(lines)}` : ''),
 			{
-				fix: 'Something edits the HTML between the render and the wake — a post-SSR pass (a design-system renderer, a DSD injector), a script that runs before the runtime, a comment-stripping proxy. Keep it out of ogygia-region subtrees, or run it before ogygia’s render.'
+				fix: lines.length
+					? `${hazard_fix(lines)} If none of them is it, something edits the HTML between the render and the wake: a post-SSR pass, a script that runs before the runtime, a comment-stripping proxy.`
+					: 'Something edits the HTML between the render and the wake — a post-SSR pass (a design-system renderer, a DSD injector), a script that runs before the runtime, a comment-stripping proxy. Keep it out of ogygia-region subtrees, or run it before ogygia’s render.',
+				...(lines[0] ? { file: lines[0].file, line: lines[0].line } : {})
 			}
 		);
 	}

@@ -56,7 +56,8 @@ const LABS = [
 	{ path: '/dt-raw', stay: 2500, named: { uncompressed: 'blob.js (script, ' }, never: { uncompressed: "the page's HTML" } },
 	// the quiet ones: none of the codes above
 	// (its one eager island below the fold: named with its own bytes, from the build's weights)
-	{ path: '/dt-lab', stay: 2500, named: { 'eager-offscreen': 'BelowEager starts below the first screen but loads code at page load. Only ' }, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store', 'uncompressed'] },
+	// (and Clock's markup change, by the line of its own that draws differently in the browser)
+	{ path: '/dt-lab', stay: 2500, named: { 'eager-offscreen': 'BelowEager starts below the first screen but loads code at page load. Only ', 'markup-changed': 'Clock.svelte:3 (`const where = typeof window' }, fix_says: { 'markup-changed': 'Read the browser-only value after the wake' }, absent: ['font-invisible', 'image-oversized', 'images-eager-below', 'dom-large', 'preload-never-used', 'forced-layout', 'bfcache-no-store', 'uncompressed'] },
 	{ path: '/dt-big', stay: 2000, absent: ['dom-large', 'image-oversized', 'forced-layout'] }
 ];
 
