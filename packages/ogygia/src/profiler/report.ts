@@ -1817,6 +1817,32 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		if (dash !== -1) gap.message = `${gap.message.slice(0, dash)}: the server is not the bottleneck. Where the browser's wait went is the largest paint's own card (In the browser: LCP …).`;
 		gap.fix = "The wait is the browser's, not the server's: follow the largest paint's own card (In the browser: LCP …), which names the part that cost most and its fix.";
 	}
+	// BEFORE ANY VISIT: an awake island whose own code reads a browser-only value while rendering
+	// draws a different tree in the browser — its markup will change as it wakes. The sources say
+	// so before a browser does (an `await` is left out: in Svelte's async mode the browser can draw
+	// the same answer). Not when a visit already reported that island's change or mismatch
+	if (extras.hazards) {
+		const told = new Set<string>();
+		const rows = island_rows_of(meta);
+		for (const f of out) if (f.code === 'markup-changed' || f.code === 'hydration-mismatch') for (const fp of f.fps ?? []) for (const r of rows) if (r.fp === fp) told.add(r.entry);
+		if (out.some((f) => f.code === 'hydration-mismatch')) for (const c of extras.client ?? []) if (c.recovered > 0) told.add(c.entry);
+		const seen = new Set<string>();
+		const reads: { name: string; line: IslandHazard }[] = [];
+		for (const r of rows) {
+			if (r.wake === 'none' || seen.has(r.entry) || told.has(r.entry)) continue;
+			seen.add(r.entry);
+			// (a value it renders, not a guard around browser-only work: that may draw the same both sides)
+			const line = (extras.hazards[r.entry] ?? []).find((h) => h.kind === 'browser' && !h.guard);
+			if (line) reads.push({ name: island_name(r), line });
+		}
+		const who = reads.map((x) => x.name);
+		if (reads.length)
+			info(
+				'island-browser-read',
+				`${who.length <= 3 ? who.join(', ') : `${who.slice(0, 3).join(', ')} and ${who.length - 3} more`} ${reads.length === 1 ? 'reads' : 'read'} a browser-only value while rendering, so the browser draws ${reads.length === 1 ? 'it' : 'them'} differently and the markup changes as ${reads.length === 1 ? 'it wakes' : 'they wake'}: ${hazard_words(reads.map((x) => x.line)).slice('In its own code, the likeliest: '.length)}`,
+				{ fix: hazard_fix(reads.map((x) => x.line)), file: reads[0].line.file, line: reads[0].line.line }
+			);
+	}
 	// THE BROWSER'S MARKUP CHANGE, by line: an island whose markup changed on wake, and a line of its
 	// own that draws differently in the browser (the island rows' entries, by fingerprint)
 	if (extras.hazards) {

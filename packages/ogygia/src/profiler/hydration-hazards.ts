@@ -21,6 +21,9 @@ export interface Hazard {
 	kind: 'await' | 'browser';
 	/** what it reads (`window.location`, `Date.now()`), for `browser` */
 	reads?: string;
+	/** an `if (…)` at the script's top level: a guard around browser-only work, which may draw the
+	 *  same markup both sides — a lead for a mismatch seen, not a prediction of one */
+	guard?: true;
 }
 
 /** a hazard with the file it is in (the profiler's island chunks, the dev server's module graph) */
@@ -139,7 +142,7 @@ export function hydration_hazards(source: string): Hazard[] {
 				if (aw !== -1 && (aw === 0 || !is_ident(line.charCodeAt(aw - 1)))) out.push({ line: n + 1, code: line, kind: 'await' });
 				else if (!line.startsWith('import ') && !line.startsWith('function ') && !line.startsWith('export function ')) {
 					const reads = browser_read(line);
-					if (reads) out.push({ line: n + 1, code: line, kind: 'browser', reads });
+					if (reads) out.push({ line: n + 1, code: line, kind: 'browser', reads, ...(line.startsWith('if (') || line.startsWith('if(') ? { guard: true as const } : {}) });
 				}
 			}
 			// a callback opening on this line (onMount, $effect, function, an arrow): its body runs later

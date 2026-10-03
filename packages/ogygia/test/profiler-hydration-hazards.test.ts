@@ -36,6 +36,11 @@ describe('hydration_hazards: the lines that draw differently in the browser', ()
 		]);
 	});
 
+	it('a top-level `if (typeof window …)` is a guard: a lead, marked, not a prediction', () => {
+		const src = ['<script>', "\tif (typeof window !== 'undefined') {", '\t\twork();', '\t}', '</script>', '<p>same</p>'].join('\n');
+		expect(hydration_hazards(src)).toEqual([{ line: 2, code: "if (typeof window !== 'undefined') {", kind: 'browser', reads: 'typeof window', guard: true }]);
+	});
+
 	it('what runs after the wake is never one: callbacks, effects, handlers, the module script', () => {
 		const src = [
 			'<script module>',
