@@ -1640,13 +1640,31 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 				.map((t) => `${t.caller} ${Math.round((t.share / rest) * 100)}%`)
 				.join(', ');
 			const left_out = dev_share >= 0.05 ? ` (the dev server's own module loading made about ${Math.round(all - per).toLocaleString()} more, left out)` : '';
-			warn(
-				'promise-storm',
-				`${Math.round(per).toLocaleString()} promises per render${left_out}. Each is an allocation and a microtask; at this volume they are a cost no single function shows.${top ? ` Mostly from: ${top}.` : left_out ? ' Their makers are spread thin: no one origin of the app’s stands out in the sample — profile again warm (the dev server’s loading crowds a first render).' : ''}`,
-				{
-					fix: 'Find the loop that awaits per item (a render per tag, a fetch per row) and do the work in one call, or on a plain array without async at all.'
-				}
-			);
+			// SVELTE'S ASYNC RENDERER made most of them: one promise for each component and block it renders
+			// (an awaited render collects every child's output asynchronously). Not an await of the app's —
+			// the count follows how many pieces the page renders, and the components rendered most set it
+			const renderer = extras.promises.top.filter((t) => t.caller.startsWith('#collect_content_async') && t.caller.endsWith('(svelte)')).reduce((s, t) => s + t.share, 0) / (1 - dev_share || 1);
+			if (renderer >= 0.5) {
+				const many = a.components
+					.filter((c) => (c.calls ?? 0) >= 50)
+					.sort((x, y) => (y.calls ?? 0) - (x.calls ?? 0))
+					.slice(0, 3)
+					.map((c) => `${c.name} ×${(c.calls ?? 0).toLocaleString()}`);
+				warn(
+					'promise-storm',
+					`${Math.round(per).toLocaleString()} promises per render${left_out}, ${Math.round(renderer * 100)}% of them from Svelte's async server renderer (#collect_content_async): it makes one for each component and block it renders, so the count follows how much the page renders, not an await of yours.${many.length ? ` The components rendered most: ${many.join(', ')}.` : ''} Each is an allocation and a microtask, a cost no single function shows.`,
+					{
+						fix: `Render fewer pieces${many.length ? ` — ${many[0].split(' ×')[0]} first` : ''}: inline a small component an \`{#each}\` repeats into the loop's own markup, stop a component that renders itself sooner, or send a page of the list. The renderer goes async for every page when Svelte's \`experimental.async\` is on: an app with no \`await\` in its markup can turn it off and render with none of them.`
+					}
+				);
+			} else
+				warn(
+					'promise-storm',
+					`${Math.round(per).toLocaleString()} promises per render${left_out}. Each is an allocation and a microtask; at this volume they are a cost no single function shows.${top ? ` Mostly from: ${top}.` : left_out ? ' Their makers are spread thin: no one origin of the app’s stands out in the sample — profile again warm (the dev server’s loading crowds a first render).' : ''}`,
+					{
+						fix: 'Find the loop that awaits per item (a render per tag, a fetch per row) and do the work in one call, or on a plain array without async at all.'
+					}
+				);
 		}
 	}
 	// A TIMER EACH RENDER STARTS AND NEVER ENDS: still open after every render, from the same line

@@ -1797,6 +1797,20 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
 	});
 
+	it("promises by the tens of thousands: Svelte's async renderer is named with what it renders most; an app's own is the loop", () => {
+		const a = analyze(p1);
+		const renders = { ...meta, trigger: 'page', runs: [10, 10] } as never;
+		const busy = { ...a, components: [...a.components, { ...a.components[0], name: 'HeavyRow', calls: 800 }, { ...a.components[0], name: 'Fractal', calls: 3280 }] };
+		const svelte = derive_findings(busy as never, renders, { ...extras, promises: { count: 33193, per_render: 16597, top: [{ caller: '#collect_content_async (svelte)', share: 0.99 }, { caller: 'load_page_nodes (@sveltejs/kit)', share: 0.01 }] } } as never).find((f) => f.code === 'promise-storm')!;
+		expect(svelte.message).toContain("16,597 promises per render, 99% of them from Svelte's async server renderer (#collect_content_async): it makes one for each component and block it renders");
+		expect(svelte.message).toContain('The components rendered most: Fractal ×3,280, HeavyRow ×800.');
+		expect(svelte.fix).toMatch(/^Render fewer pieces — Fractal first/);
+		expect(svelte.fix).toContain('experimental.async');
+		const own = derive_findings(a, renders, { ...extras, promises: { count: 40000, per_render: 20000, top: [{ caller: 'fetchRow (src/lib/rows.ts)', share: 0.9 }] } } as never).find((f) => f.code === 'promise-storm')!;
+		expect(own.message).toContain('Mostly from: fetchRow (src/lib/rows.ts) 90%');
+		expect(own.fix).toMatch(/^Find the loop that awaits per item/);
+	});
+
 	it('an island that threw its server DOM away and drew the same markup back: its own finding, no line of it blamed', () => {
 		const client = [
 			{ entry: '/src/lib/SameTree.svelte', hydrations: 1, p50_ms: 5, max_ms: 5, load_p50_ms: 2, recovered: 1 },
