@@ -52,7 +52,7 @@ import {
 	type SpanRecorder,
 	type SpanAttrs
 } from '../src/profiler/span.js';
-import { span_rows, fair_shares } from '../src/profiler/report.js';
+import { span_rows, fair_shares, lake_saving } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
@@ -1694,7 +1694,10 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(by['wake-inert'].message).toContain(
 			'CountryPanel wakes (visible) but the build found no event handlers'
 		);
-		expect(by['wake-inert'].message).toContain('117 KB of JS loads for markup that never changes'); // 20 KB + the shared 100 KB chunk
+		// 20 KB of its own + the 100 KB chunk MegaHeader (awake) loads too: a lake saves the 20 KB
+		// (past 10 KB saved: a warning; a few KB would be a note)
+		expect(by['wake-inert'].severity).toBe('warn');
+		expect(by['wake-inert'].message).toContain('it loads 117 KB of JS for markup that never changes; 20 KB of it is its alone (the rest the page\'s other islands load too), what a lake saves.');
 		expect(by['wake-crowd'].message).toContain(
 			'ProductCard has 48 copies on the page, each waking on visible with its own 80 B of props'
 		);
@@ -5632,5 +5635,17 @@ describe('paths: the owner is a named place', () => {
 		const card = a.paths.find((p) => p.owner.name === 'Card' || p.owner.name === 'priceTable');
 		expect(card).toBeDefined();
 		expect(card!.fns.map((f) => f.name).sort()).toEqual(['fmt', 'sym']);
+	});
+});
+
+describe('lake_saving: what making islands lakes saves', () => {
+	const row = (entry: string, files: string[], wake = 'load') => ({ entry, module_url: files[0], hints: files.slice(1), wake }) as never;
+	const w = { '/a.js': 10, '/b.js': 20, '/rt.js': 100, '/c.js': 5 };
+	it('each chunk once; a chunk an awake island loads stays', () => {
+		// two inert islands share the runtime with each other, and with the awake one
+		expect(lake_saving([row('A', ['/a.js', '/rt.js']), row('B', ['/b.js', '/rt.js'])], [row('A', ['/a.js', '/rt.js']), row('B', ['/b.js', '/rt.js']), row('C', ['/c.js', '/rt.js'])], w)).toEqual({ loads: 130, saves: 30 });
+		// alone on the page (the other one a lake already): the runtime goes too
+		expect(lake_saving([row('A', ['/a.js', '/rt.js'])], [row('A', ['/a.js', '/rt.js']), row('C', ['/c.js', '/rt.js'], 'none')], w)).toEqual({ loads: 110, saves: 110 });
+		expect(lake_saving([row('A', ['/a.js'])], [], undefined)).toBeNull();
 	});
 });

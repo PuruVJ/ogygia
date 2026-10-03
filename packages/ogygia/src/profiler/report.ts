@@ -2036,6 +2036,38 @@ export function island_js_bytes(
 	return any ? total : null;
 }
 
+/** an inert island whose lake saves less than this (bytes) is a note, not a warning */
+const LAKE_WARN_BYTES = 10 * 1024;
+
+/**
+ * WHAT MAKING SOME ISLANDS LAKES SAVES: the bytes of their closures (each chunk once) that no other
+ * waking island on the page loads — a shared chunk (the framework's runtime) another island needs
+ * downloads anyway. `loads`: their closures, each chunk once. Null without the build's weights.
+ */
+export function lake_saving(
+	them: readonly IslandStat[],
+	rows: readonly IslandStat[],
+	weights: Record<string, number> | undefined
+): { loads: number; saves: number } | null {
+	if (!weights) return null;
+	const going = new Set(them.map((r) => r.entry));
+	const kept = new Set<string>();
+	for (const r of rows) if (r.wake !== 'none' && !going.has(r.entry)) for (const u of [r.module_url, ...r.hints]) if (u) kept.add(u);
+	const theirs = new Set<string>();
+	for (const r of them) for (const u of [r.module_url, ...r.hints]) if (u) theirs.add(u);
+	let loads = 0;
+	let saves = 0;
+	let any = false;
+	for (const u of theirs) {
+		const w = weights[u];
+		if (w === undefined) continue;
+		any = true;
+		loads += w;
+		if (!kept.has(u)) saves += w;
+	}
+	return any ? { loads, saves } : null;
+}
+
 /**
  * WHAT ONLY EACH ISLAND NEEDS: of an island's closure (its entry and chunks), the bytes no other
  * waking island on the page uses — what dropping (or deferring) that island would really save.
@@ -2169,11 +2201,20 @@ function ogygia_findings(
 				0
 	);
 	if (inert.length) {
-		const js = inert.reduce((s, r) => s + (island_js_bytes(r, extras.weights) ?? 0), 0);
-		warn(
+		const lake = lake_saving(inert, islands, extras.weights);
+		const they = inert.length === 1 ? 'it loads' : 'they load';
+		// (a lake that saves a few KB saves a hydration, worth a note, not a warning)
+		const say = lake && lake.loads && lake.saves < LAKE_WARN_BYTES ? info : warn;
+		say(
 			'wake-inert',
 			`${names(inert.map(island_name))} wake${inert.length === 1 ? 's' : ''} (${names([...new Set(inert.map((r) => r.wake))])}) but the build found no event handlers, $state, $effect, bind:, use:, remote function, await or shared state in ${inert.length === 1 ? 'its' : 'their'} components` +
-				(js ? ` — ${fmt_kb(js)} of JS loads for markup that never changes.` : '.'),
+				(!lake || !lake.loads
+					? '.'
+					: lake.saves >= lake.loads
+						? ` — ${fmt_kb(lake.saves)} of JS loads for markup that never changes.`
+						: lake.saves > 0
+							? ` — ${they} ${fmt_kb(lake.loads)} of JS for markup that never changes; ${fmt_kb(lake.saves)} of it is ${inert.length === 1 ? 'its' : 'theirs'} alone (the rest the page's other islands load too), what a lake saves.`
+							: ` — ${they} ${fmt_kb(lake.loads)} of JS for markup that never changes, all of it shared with the page's other islands: a lake saves ${inert.length === 1 ? 'its' : 'their'} hydration, not bytes.`),
 			{
 				fix: "Ship them as lakes (wake: 'none'): the server markup stays, the module never downloads."
 			}
