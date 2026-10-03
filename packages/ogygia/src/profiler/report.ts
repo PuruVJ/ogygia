@@ -395,6 +395,9 @@ export interface ReportMeta {
 	doc_diff?: import('./doc-diff.js').DocDiff;
 	/** page mode: a plain note when the run plan was trimmed to fit the serverless budget */
 	budget_note?: string;
+	/** page mode: the server's heap was nearly full, so these renders were not made (one more could
+	 *  have ended the process): its use and limit when the profile finished */
+	heap_guard?: { used_mb: number; limit_mb: number; skipped: string[] };
 	/** recorded on AWS Lambda (Amplify's SSR), where a request is billed for its whole duration */
 	lambda?: boolean;
 	/** on Lambda: the function's memory, MB (it bills memory × wall time) */
@@ -896,6 +899,13 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			}
 		}
 		if (meta.budget_note) info('budget', meta.budget_note);
+		// the heap nearly full: renders left out rather than the server taken down
+		if (meta.heap_guard?.skipped.length)
+			warn(
+				'heap-near-limit',
+				`The server's heap was nearly full (${meta.heap_guard.used_mb} of ${meta.heap_guard.limit_mb} MB), so the profiler left out ${meta.heap_guard.skipped.join(', ')}: one more render of this page could have run it out of memory and ended the process. What it keeps per render is the cause.`,
+				{ fix: 'Fix what a render keeps alive (the Kept per render pattern names the line), and restart the server before profiling again.' }
+			);
 	}
 
 	// THE TIMELINE (one request's critical path): phases, awaits in a row, waits the hooks can't see.

@@ -740,6 +740,13 @@ const RECORDING_HARD_CAP_MS = 30_000;
 // waiting on it and finishes with what it has, rather than pinning the whole recording — and the site —
 // on a page whose own upstream never returns.
 const PER_RENDER_TIMEOUT_MS = 15_000;
+/** the heap's fill (of its limit) past which no timed render is made: one more could end the process */
+const HEAP_STOP = 0.85;
+/** …and past which the extra renders (what a render keeps, the growth check) are skipped */
+const HEAP_EXTRAS = 0.7;
+/** …and past which a profile does not start: the warm-up renders come before any check, and a
+ *  render's own peak (not only what it keeps) needs the room */
+const HEAP_START = 0.75;
 /** the dev server's answer for an island (vite/dev-maps.ts `DevPageKeys`) */
 type DevIslandKeys = {
 	keys: string[] | 'all' | null;
@@ -4238,6 +4245,20 @@ class Profiler {
 			}
 			const runs = clamp(Number(q.get('runs')) || 5, 1, 50);
 			const interval = clamp(Number(q.get('interval')) || 200, 50, 10_000);
+			// THE HEAP ALREADY NEARLY FULL (a page that keeps what it renders, profiled before): the
+			// warm-up alone could end the process. Say so instead of starting
+			// (read inside a try — off Node there is no node:v8 — and refused outside it: `error` throws)
+			let heap_now: { used_heap_size: number; heap_size_limit: number } | null = null;
+			try {
+				heap_now = (await import('node:v8')).getHeapStatistics();
+			} catch {
+				heap_now = null;
+			}
+			if (heap_now && heap_now.heap_size_limit > 0 && heap_now.used_heap_size / heap_now.heap_size_limit >= HEAP_START)
+				return error(
+					503,
+					`The server's heap is ${Math.round((heap_now.used_heap_size / heap_now.heap_size_limit) * 100)}% full (${Math.round(heap_now.used_heap_size / 1048576)} of ${Math.round(heap_now.heap_size_limit / 1048576)} MB): profiling now could run it out of memory and end the process. Something keeps what each render makes (the last profile's Kept per render names the line). Restart the server, then profile once.`
+				);
 			// The whole /page request has to return before the platform's gateway kills it (Amplify 30s,
 			// Netlify 10s, Vercel 300s, …). Start the budget clock now — warm-up, CPU runs, AND the
 			// coverage pass all live inside it. Infinity on a real server.
@@ -4357,6 +4378,26 @@ class Profiler {
 			const gc_attr = q.get('gc') !== '0';
 			// the retention render: its render plus the full collection after it
 			const retention_reserve = () => (gc_attr && this.want_heap ? slowest * 1.5 + 500 : 0);
+			// THE HEAP'S ROOM: a page that keeps what it renders (a leak) fills the heap render by render,
+			// and the profiler renders it many times — past the limit the process dies, the profile with
+			// it (/hell, profiled again and again: out of memory at 3.9 GB in the heap profiler's read).
+			// The timed renders stop at HEAP_STOP of the limit, the extra renders (what a render keeps,
+			// the growth check) are skipped past HEAP_EXTRAS; the report says what was left out
+			let v8_stats: (() => { used_heap_size: number; heap_size_limit: number }) | null = null;
+			try {
+				v8_stats = (await import('node:v8')).getHeapStatistics;
+			} catch {
+				v8_stats = null;
+			}
+			const heap_fill = () => {
+				const s = v8_stats?.();
+				return s && s.heap_size_limit > 0 ? s.used_heap_size / s.heap_size_limit : 0;
+			};
+			const heap_skipped: string[] = [];
+			const heap_guard = () => {
+				const s = v8_stats?.();
+				return s ? { used_mb: Math.round(s.used_heap_size / 1048576), limit_mb: Math.round(s.heap_size_limit / 1048576), skipped: heap_skipped } : undefined;
+			};
 			// the timed renders keep what each GET answered: the keep-the-answers renders are served it
 			this.#kept?.keep(true);
 			mem_mark('before the timed renders');
@@ -4378,6 +4419,14 @@ class Profiler {
 					const want_clean = Math.min(2, runs);
 					for (let i = 0; i < runs * 2; i++) {
 						if (i >= runs && run_windows.filter((w) => !mixed(w)).length >= want_clean) break;
+						// (the heap nearly full: one render more could take the process down)
+						if (i > 0 && heap_fill() >= HEAP_STOP) {
+							if (i < runs) {
+								budget_note = `Ran ${i} of ${runs} renders — stopped: the server's heap was ${Math.round(heap_fill() * 100)}% full, and each render of this page keeps more of it.`;
+								heap_skipped.push(`${runs - i} of the timed renders`);
+							}
+							break;
+						}
 						// Stop early if another CPU run + the reserved coverage pass wouldn't finish in time.
 						// The retention render is kept room for too: on a trimmed run, one CPU render fewer
 						// costs little, and what a render leaves behind is the finding that matters most.
@@ -4603,9 +4652,13 @@ class Profiler {
 			// the real price of each growth-check render (the warm-up time alone was half of it)
 			let retain_ms = 0;
 			// its render plus the full collection after it, and the coverage render still to come
+			// (not past HEAP_EXTRAS of the heap: the heap sampler's read itself needs room)
+			const heap_ok = heap_fill() < HEAP_EXTRAS;
+			if (gc_attr && this.want_heap && !heap_ok) heap_skipped.push('the render that measures what a render keeps');
 			if (
 				gc_attr &&
 				this.want_heap &&
+				heap_ok &&
 				Date.now() + retention_reserve() + coverage_reserve() < deadline
 			) {
 				try {
@@ -4629,7 +4682,11 @@ class Profiler {
 				// not only by count; each render is priced by the retention pass's real wall time
 				const each = Math.max(retain_ms, slowest + 300);
 				const room = deadline - Date.now() - coverage_reserve() - 1500;
-				const n = Math.min(6, Math.floor(room / each));
+				// (and by the heap's room: each render keeps what the retention render measured)
+				const s = v8_stats?.();
+				const heap_n = s ? Math.floor((s.heap_size_limit * HEAP_STOP - s.used_heap_size) / retained.total_bytes) : Infinity;
+				const n = Math.min(6, Math.floor(room / each), heap_n);
+				if (heap_n < 3) heap_skipped.push('the growth check (a few more renders, to tell a leak from a cache filling)');
 				if (n >= 3) {
 					try {
 						growth = await this.#growth_check(
@@ -4645,9 +4702,13 @@ class Profiler {
 				}
 			}
 			mem_mark('after the retention and growth renders');
-			const counted = await this.#count_calls(async () => {
-				await fetch_render(target).then((r) => r.text());
-			}, true);
+			// (the call counts' render: not with the heap nearly full)
+			const counted =
+				heap_fill() < HEAP_STOP
+					? await this.#count_calls(async () => {
+							await fetch_render(target).then((r) => r.text());
+						}, true)
+					: (heap_skipped.push('the call-count render (the ×N counts)'), { counts: {} as Record<string, number> });
 			cap.call_counts = counted.counts;
 			mem_mark('after the coverage render');
 			// the app's own fetch answers a hashed asset on adapter-node (it reads the file); a
@@ -4696,6 +4757,7 @@ class Profiler {
 					run_status,
 					run_bytes,
 					budget_note,
+					...(heap_skipped.length ? { heap_guard: heap_guard() } : {}),
 					runs: run_ms,
 					...(runs_set_aside ? { runs_set_aside } : {}),
 					...(body_prints.length >= 2 && body_prints.every((p) => p === body_prints[0])

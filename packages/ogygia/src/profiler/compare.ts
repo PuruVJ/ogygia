@@ -777,7 +777,7 @@ export interface PathDelta {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** finding codes about the recording's conditions, not the page's code (compare leaves them out) */
-const RUN_STATE_CODES = new Set(['cold-start', 'cold-instance', 'profiler-overhead', 'heap-filled-before', 'dev-mode', 'low-confidence', 'busy-instance', 'runs-set-aside', 'summary', 'phases']);
+const RUN_STATE_CODES = new Set(['cold-start', 'cold-instance', 'profiler-overhead', 'heap-filled-before', 'heap-near-limit', 'budget', 'dev-mode', 'low-confidence', 'busy-instance', 'runs-set-aside', 'summary', 'phases']);
 const median = (xs: number[]) =>
 	xs.length ? [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)] : 0;
 
