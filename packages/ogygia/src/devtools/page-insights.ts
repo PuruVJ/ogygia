@@ -1238,11 +1238,27 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			if (late.some((l) => l.family === face.family)) continue;
 			late.push({ family: face.family, display: face.display, after: Math.round(r.end - fcp_at), file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0] });
 		}
-		if (late.length)
+		// …OR IT HELD THE FIRST PAINT ITSELF: a browser that counts no paint until text shows (Safari)
+		// puts the first paint just after the font lands, so "after the first paint" never holds — the
+		// font arriving within a frame or so before a first paint that came long after the HTML did is
+		// that same hidden text, holding everything
+		const html_end = page.visit?.nav?.res_end;
+		const held: { family: string; display: string; at: number; file: string }[] = [];
+		if (!late.length && typeof html_end === 'number' && fcp_at - html_end >= 300)
+			for (const r of page.visit?.resources ?? []) {
+				if (r.type !== 'font' || r.end > fcp_at || fcp_at - r.end > 60) continue;
+				const face = faces.find((f) => f.urls.includes(r.url));
+				if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
+				if (held.some((l) => l.family === face.family)) continue;
+				held.push({ family: face.family, display: face.display, at: Math.round(r.end), file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0] });
+			}
+		if (late.length || held.length)
 			findings.push({
 				code: 'font-invisible',
 				severity: 'warn',
-				message: `Text in ${list(late.map((l) => `'${l.family}' (${l.file}, ${l.after} ms after the first paint)`))} stayed invisible until its font arrived: font-display is ${late[0].display}, so the browser hides the text, up to 3 s, rather than show a fallback.`,
+				message: late.length
+					? `Text in ${list(late.map((l) => `'${l.family}' (${l.file}, ${l.after} ms after the first paint)`))} stayed invisible until its font arrived: font-display is ${late[0].display}, so the browser hides the text, up to 3 s, rather than show a fallback.`
+					: `Text in ${list(held.map((l) => `'${l.family}' (${l.file}, in at ${l.at} ms)`))} held the first paint: nothing showed until its font arrived (the first paint at ${Math.round(fcp_at)} ms, ${Math.round(fcp_at - html_end!)} ms after the HTML). Font-display is ${held[0].display}, so the browser hides the text, up to 3 s, rather than show a fallback.`,
 				fix: 'Give the @font-face `font-display: swap` (the text shows in a fallback at once, then switches) or `optional` (no switch, no shift), and preload the font file the first screen needs.',
 				fps: []
 			});

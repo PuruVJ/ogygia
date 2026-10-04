@@ -90,6 +90,29 @@ describe('text kept invisible by its font', () => {
 		// arrived before the first paint: nothing was hidden on screen
 		expect(at('auto', 90)).toBeUndefined();
 	});
+	it("Safari's way: no paint counted until the text shows — the font landing just before a late first paint held it", () => {
+		const at = (fcp: number, end: number, display = 'auto') =>
+			analyze_page(
+				page({
+					visit: {
+						nav: { res_start: 5, res_end: 12 },
+						paints: { fcp },
+						viewport: [1280, 800],
+						resources: [{ url: 'http://x/f/slow.woff2', type: 'font', start: 20, end }],
+						font_faces: [{ family: 'SlowFace', display, urls: ['http://x/f/slow.woff2'] }]
+					}
+				}),
+				[],
+				[],
+				3000
+			).findings.find((f) => f.code === 'font-invisible');
+		expect(at(1528, 1519)?.message).toBe("Text in 'SlowFace' (slow.woff2, in at 1519 ms) held the first paint: nothing showed until its font arrived (the first paint at 1528 ms, 1516 ms after the HTML). Font-display is auto, so the browser hides the text, up to 3 s, rather than show a fallback.");
+		expect(at(1528, 1519, 'swap')).toBeUndefined();
+		// a first paint soon after the HTML, the font in just before it: nothing held long
+		expect(at(140, 130)).toBeUndefined();
+		// a font long before a late first paint: not what held it
+		expect(at(1528, 900)).toBeUndefined();
+	});
 });
 
 describe('scrolling stalled', () => {
