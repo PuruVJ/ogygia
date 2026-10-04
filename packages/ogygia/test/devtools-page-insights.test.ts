@@ -1423,4 +1423,16 @@ describe('analyze_page', () => {
 		expect(codes(r)).toContain('long-tasks');
 		expect(r.longtask_ms).toBe(220);
 	});
+
+	it('a browser with no long-task timing: the stalls are frames drawn late, said so', () => {
+		const r = analyze_page(
+			{ ...page({ islands: [{ fp: 'a', t0: 60, loaded: 80, done: 90 }], longtasks: [{ t: 700, ms: 205 }] }), longtasks_from: 'frames' },
+			[region('a', 'A')],
+			[],
+			1500
+		);
+		const f = r.findings.find((x) => x.code === 'long-tasks')!;
+		expect(f.message).toContain('The main thread stalled 205 ms outside any island');
+		expect(f.message).toContain('the frames it drew more than 50 ms late');
+	});
 });

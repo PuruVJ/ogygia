@@ -65,6 +65,8 @@ const LABS = [
 	{ path: '/dt-dupe-one', stay: 1500, never: { 'duplicate-module': 'dup-pkg' } },
 	// (WebKit: every other origin's file 0 bytes and no word of what held the first paint — the report
 	// weighs the files the page names and reads the blocking ones off its HTML, as Chromium tells it)
+	// (WebKit: no long-task timing — the planted stall is found from the frames drawn late, said so)
+	{ path: '/dt-lab', engine: 'webkit', stay: 2500, named: { 'long-tasks': 'the frames it drew more than 50 ms late', 'browser-limits': 'estimated from the frames it drew late' } },
 	{ path: '/dt-third', engine: 'webkit', stay: 3500, named: { 'third-party': 'were weighed from the files themselves', 'third-party-blocking': 'held the first paint', 'third-party-edits': 'ThirdTarget' }, never: { 'third-party': ' 0 KB' } }
 ];
 

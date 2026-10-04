@@ -1821,6 +1821,11 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit } as never);
 		expect(out.find((f) => f.code === 'browser-limits')!.message.startsWith('Safari 18, the browser that visited, does not report layout shifts')).toBe(true);
 		expect(out.find((f) => f.code === 'eager-offscreen')!.message.startsWith('In the browser (Safari 18), on a 1280×800 screen: Footer starts below')).toBe(true);
+		// its beacon estimated the stalls from frames drawn late: kept through the parse, said in the limits
+		const framed = parse_visit('/hell', { ...visit, longtasks: [{ t: 900, ms: 205 }], longtasks_from: 'frames' })!;
+		expect(framed.longtasks_from).toBe('frames');
+		const limits = derive_findings(analyze(p1), meta as never, { ...extras, visit: framed } as never).find((f) => f.code === 'browser-limits')!.message;
+		expect(limits).toContain('long tasks (its stalls are estimated from the frames it drew late)');
 	});
 
 	it('another engine’s visit: what Safari saw that the latest Chrome visit did not, named with the browser', () => {

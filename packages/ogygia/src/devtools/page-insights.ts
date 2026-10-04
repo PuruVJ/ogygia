@@ -213,6 +213,8 @@ export interface PageInput {
 	firsts: { fp: string; t: number; type: string }[];
 	shifts: { t: number; value: number; fp?: string; tag?: string }[];
 	longtasks: { t: number; ms: number }[];
+	/** `frames`: the browser has no long-task timing — these are frames drawn more than 50 ms late */
+	longtasks_from?: 'frames';
 	/** (`from`: a big island's window — where it starts in the markup without comments) */
 	snapshots?: { fp: string; ssr: string; hydrated: string; final?: string; from?: number }[];
 	/** awake islands showing a children slot with nothing in it (read off the DOM; devtools only) */
@@ -1545,10 +1547,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const other = longtask_ms - in_hydration;
 	if (other >= 150) {
 		const biggest = page.longtasks.reduce((m, t) => (t.ms > m.ms ? t : m), page.longtasks[0]);
+		// (a browser with no long-task timing: the stalls are frames drawn late, said so)
+		const frames = page.longtasks_from === 'frames';
 		findings.push({
 			code: 'long-tasks',
 			severity: 'info',
-			message: `${Math.round(other)} ms of long tasks ran outside any island's hydration (the longest ${Math.round(biggest.ms)} ms at ${Math.round(biggest.t)} ms${why_cpu(null) || why_script()}). Page scripts, not islands, held the main thread.`,
+			message: frames
+				? `The main thread stalled ${Math.round(other)} ms outside any island's hydration (the longest ${Math.round(biggest.ms)} ms at ${Math.round(biggest.t)} ms). This browser reports no long tasks: these are the frames it drew more than 50 ms late, so each is the stall a visitor saw, not the script's exact span. Page scripts, not islands, held the main thread.`
+				: `${Math.round(other)} ms of long tasks ran outside any island's hydration (the longest ${Math.round(biggest.ms)} ms at ${Math.round(biggest.t)} ms${why_cpu(null) || why_script()}). Page scripts, not islands, held the main thread.`,
 			fix: 'Record a Performance trace around that time to see the script; third-party tags are the usual cause.',
 			fps: []
 		});

@@ -1748,6 +1748,8 @@ try {
 			await page.goto(base + '/dt-lab', { waitUntil: 'load' });
 			await page.waitForTimeout(3500);
 			const codes = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((f) => f.code));
+			// (WebKit reports no long tasks: the planted stall is found from the frames it drew late)
+			const stall = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'long-tasks')?.message ?? '');
 			await page.click('[data-og-panel-toggle]').catch(() => {});
 			await page.waitForTimeout(600);
 			const tabs = await page.locator('[data-og-tab]').all();
@@ -1787,7 +1789,8 @@ try {
 				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
 				['every tab opens', tabs.length >= 8],
 				['the page view names what it can measure', codes.includes('markup-changed') && codes.includes('hydrate-failed') && codes.includes('eager-offscreen')],
-				['…and never what it cannot', !codes.includes('hydration-shift') && !codes.includes('long-tasks')],
+				['…and never what it cannot', !codes.includes('hydration-shift')],
+				['the planted stall found from frames drawn late, said so', stall.includes('frames it drew more than 50 ms late')],
 				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')],
 				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('fetched the answer again anyway') && !hole_fix.includes('must match exactly')],
 				['the hidden face named in WebKit', font.includes("Text in 'SlowFace'")],

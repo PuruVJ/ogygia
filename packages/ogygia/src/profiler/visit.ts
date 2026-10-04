@@ -115,6 +115,8 @@ export interface Visit {
 	/** how many files the page loaded in all */
 	resources_all?: number;
 	longtasks: { t: number; ms: number }[];
+	/** `frames`: the browser has no long-task timing — the long tasks are frames drawn 50 ms+ late */
+	longtasks_from?: 'frames';
 	islands: VisitIsland[];
 	/** the first interaction inside an island: fingerprint, when, what kind */
 	firsts: { fp: string; t: number; type: string }[];
@@ -322,6 +324,7 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		shifts.push(out);
 	}
 	const visit: Visit = { page, at: num(v.at, 1e14) ?? Date.now(), nav, paints, resources, longtasks, islands, firsts, shifts };
+	if (v.longtasks_from === 'frames') visit.longtasks_from = 'frames';
 	const marks: NonNullable<Visit['marks']> = [];
 	for (const m of (Array.isArray(v.marks) ? v.marks : []).slice(0, MAX_MARKS) as Record<string, unknown>[]) {
 		const name = str(m?.name, 120);
@@ -666,6 +669,7 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 				: {}
 			: { resource_totals: a.resource_totals, resources_all: a.resources_all }),
 		longtasks: by(a.longtasks, b.longtasks, (l) => `${l.t}|${l.ms}`),
+		...(a.longtasks_from || b.longtasks_from ? { longtasks_from: 'frames' as const } : {}),
 		islands: by(a.islands, b.islands, (i) => `${i.fp}|${i.t0}`),
 		firsts: by(a.firsts, b.firsts, (f) => f.fp),
 		shifts: by(a.shifts, b.shifts, (s) => `${s.t}|${s.value}`),
@@ -820,7 +824,7 @@ export function one_clock(
 		lanes.push({
 			name: 'main thread busy',
 			group: 'main',
-			bars: visit.longtasks.map((l, i) => ({ id: `task:${i}`, lane: 'main', label: `long task ${Math.round(l.ms)} ms`, t0: l.t, t1: l.t + l.ms, kind: 'task' }))
+			bars: visit.longtasks.map((l, i) => ({ id: `task:${i}`, lane: 'main', label: `${visit.longtasks_from === 'frames' ? 'frame late' : 'long task'} ${Math.round(l.ms)} ms`, t0: l.t, t1: l.t + l.ms, kind: 'task' }))
 		});
 		for (const l of visit.longtasks) end = Math.max(end, l.t + l.ms);
 	}

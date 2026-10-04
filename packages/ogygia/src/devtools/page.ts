@@ -523,6 +523,7 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 		firsts: shift(page.firsts),
 		shifts: shift(page.shifts),
 		longtasks: shift(page.longtasks),
+		...(page.longtasks_from ? { longtasks_from: page.longtasks_from } : {}),
 		snapshots: page.snapshots
 	};
 }
@@ -573,7 +574,8 @@ export function unmeasured(cpu_off?: string | null): string[] {
 	if (!types.includes('layout-shift')) out.push('layout shifts (CLS, a hydration that moved the layout)');
 	if (!types.includes('largest-contentful-paint')) out.push('the largest paint (LCP)');
 	if (!types.includes('event')) out.push('interaction timing (INP, slow interactions)');
-	if (!types.includes('longtask')) out.push('long tasks');
+	// (the beacon estimates the stalls from frames drawn late instead: said so)
+	if (!types.includes('longtask')) out.push('long tasks (the stalls are estimated from frames drawn late)');
 	if (!types.includes('long-animation-frame')) out.push('which script held a frame');
 	if (cpu_off === 'unsupported') out.push('the main-thread CPU (the JS sampler)');
 	return out;

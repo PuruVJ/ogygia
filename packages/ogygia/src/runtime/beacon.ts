@@ -143,6 +143,8 @@ let visit_islands: VisitIslandRec[] = [];
 let visit_firsts: { fp: string; t: number; type: string }[] = [];
 let visit_shifts: Shift[] = [];
 let visit_longtasks: { t: number; ms: number }[] = [];
+/** the long tasks are frames drawn late (a browser with no long-task timing): see watch_frame_gaps */
+let longtasks_from_frames = false;
 /** main-thread ms per script URL (query off), from long animation frames */
 let visit_scripts = new Map<string, { ms: number; count: number }>();
 /** scripts that forced style and layout (5 ms or more), each with its window on the page's clock */
@@ -589,6 +591,7 @@ function observe_vitals(): void {
 	observe('longtask', (entries) => {
 		for (const e of entries) if (make_room(visit_longtasks, 100, (l) => l.t)) visit_longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
 	});
+	if (!supports('longtask')) watch_frame_gaps();
 	// WHICH SCRIPT held the main thread, from the page's start (buffered): the long animation frames
 	// name each script that ran in them — a third party's cost is measured even before the CPU
 	// sampler starts, and where the sampler cannot see into it
@@ -1245,6 +1248,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(refetched.length ? { refetched } : {}),
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
+		...(longtasks_from_frames ? { longtasks_from: 'frames' } : {}),
 		islands: visit_islands,
 		firsts: visit_firsts,
 		shifts: visit_shifts,
@@ -1492,6 +1496,49 @@ export function beacon_failed(el: Element, message?: string, since?: number): vo
 const failed_spans = new Map<string, [number, number]>();
 
 const MEASURED_TYPES = ['layout-shift', 'longtask', 'event', 'largest-contentful-paint', 'long-animation-frame'];
+/** whether this browser can observe an entry type */
+function supports(type: string): boolean {
+	try {
+		return (PerformanceObserver.supportedEntryTypes ?? []).includes(type);
+	} catch {
+		return false;
+	}
+}
+
+/** a frame's budget at 60 Hz, and how late a frame must be to count: a long task's 50 ms */
+const FRAME_MS = 1000 / 60;
+const STALL_MS = 50;
+/** how long past the load event the frames are watched, and never past this from the start */
+const FRAMES_AFTER_LOAD_MS = 3000;
+const FRAMES_MAX_MS = 20_000;
+
+/**
+ * A browser with no long-task timing (Safari): every long-task finding went silent there. The frames
+ * the page draws stand in — from its first frame (none comes while the paint is blocked, so a slow
+ * stylesheet is never a stall) until a few seconds after the load event, a frame that came more than
+ * 50 ms past its budget means the main thread was held that long. Each is kept as a long task, and
+ * the visit says its long tasks are frame gaps. A hidden page draws no frames: a gap across a hide is
+ * not counted.
+ */
+function watch_frame_gaps(): void {
+	if (longtasks_from_frames || typeof requestAnimationFrame === 'undefined' || typeof document === 'undefined') return;
+	longtasks_from_frames = true;
+	let last = 0;
+	const tick = (now: number) => {
+		if (document.visibilityState !== 'visible') last = 0;
+		else {
+			const late = last ? now - last - FRAME_MS : 0;
+			if (late > STALL_MS && make_room(visit_longtasks, 100, (l) => l.t)) visit_longtasks.push({ t: r2(last + FRAME_MS), ms: r2(late) });
+			last = now;
+		}
+		const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+		const loaded = nav?.loadEventEnd || 0;
+		if (now >= FRAMES_MAX_MS || (loaded && now >= loaded + FRAMES_AFTER_LOAD_MS)) return;
+		requestAnimationFrame(tick);
+	};
+	requestAnimationFrame(tick);
+}
+
 /** `{ unsupported: [...] }` for the entry types this browser cannot observe, or `{}`. */
 function unsupported_types(): { unsupported?: string[] } {
 	let types: readonly string[] = [];
@@ -1982,6 +2029,8 @@ export interface BeaconPage {
 	firsts: { fp: string; t: number; type: string }[];
 	shifts: Shift[];
 	longtasks: { t: number; ms: number }[];
+	/** `frames`: this browser has no long-task timing; they are frames drawn late */
+	longtasks_from?: 'frames';
 	marks: { name: string; ms: number; t0?: number }[];
 	snapshots: Snapshot[];
 	/** the main thread, sampled (JS Self-Profiling): the load trace and recordings, newest first */
@@ -1998,6 +2047,7 @@ export function beacon_page(): BeaconPage | null {
 		firsts: visit_firsts.slice(),
 		shifts: visit_shifts.slice(),
 		longtasks: visit_longtasks.slice(),
+		...(longtasks_from_frames ? { longtasks_from: 'frames' as const } : {}),
 		marks: visit_marks.slice(),
 		snapshots: snapshots.slice(),
 		cpu: { state: cpu ? 'recording' : cpu_kept.length ? 'done' : 'off', off: cpu_off, traces: cpu_kept.slice() }
@@ -2038,6 +2088,7 @@ export function _reset_beacon(): void {
 	visit_firsts = [];
 	visit_shifts = [];
 	visit_longtasks = [];
+	longtasks_from_frames = false;
 	visit_scripts = new Map();
 	visit_forced = [];
 	visit_scroll_jank = [];
@@ -2069,3 +2120,10 @@ export function _beacon_state(): { target: string | null | undefined; queued: nu
 
 /** @internal tests: the size-aware send */
 export const _beacon_send = send;
+
+// THE FRAMES FROM THE PAGE'S START (a browser with no long-task timing): the vitals start with the
+// first thing the beacon hears — in a build, the first island's wake — and a stall a script made at
+// load came before it. The copy that owns the page watches as it loads, when the page is measured
+// (the profiler's tag, or the devtools); the meta tag is read here, not cached, so a page whose tag
+// comes later still finds it. (At the module's end: every binding the watch touches is set.)
+if (typeof document !== 'undefined' && owner() === null && (devtools_measures() || !!document.querySelector('meta[name="ogygia-profiler-beacon"]')) && !supports('longtask')) watch_frame_gaps();
