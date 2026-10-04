@@ -1701,6 +1701,38 @@ try {
 		if (bad.length) failed = true;
 		console.log(`${bad.length ? '✗' : '✓'} thrown away, three ways: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ fs, det })}` : ''}`);
 	}
+	// A LONG SESSION WITH THE DOCK OPEN: in-app navigations round five pages, the Page tab showing —
+	// /props-tail's twin Tally (two copies, one fingerprint) read as the router swapped the page once
+	// keyed the dock's "kept" list twice and threw; the event ring stays capped
+	{
+		const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+		const errs = [];
+		page.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+		await page.goto(base + '/', { waitUntil: 'load' });
+		await page.waitForTimeout(2000);
+		await page.click('[data-og-panel-toggle]').catch(() => {});
+		await page.click('[data-og-tab="page"]').catch(() => {});
+		const pages = ['/dt-lab', '/', '/props-tail', '/hell', '/dt-big'];
+		for (let i = 1; i <= 15; i++) {
+			await page.evaluate((to) => {
+				const a = document.createElement('a');
+				a.href = to;
+				document.body.appendChild(a);
+				a.click();
+				a.remove();
+			}, pages[i % pages.length]);
+			await page.waitForTimeout(800);
+		}
+		const events = await page.evaluate(() => window.__ogygia_devtools?.events?.().length ?? 0);
+		await page.close();
+		const checks = [
+			['no page error across 15 navigations', errs.length === 0],
+			['the event ring stays within its cap', events <= 4096]
+		];
+		const bad = checks.filter(([, ok]) => !ok);
+		if (bad.length) failed = true;
+		console.log(`${bad.length ? '✗' : '✓'} a long session with the dock open: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ errs: [...new Set(errs)].slice(0, 3), events })}` : ''}`);
+	}
 	// THE DOCK IN WEBKIT (Safari's engine: no layout-shift, long-task, interaction timing nor JS
 	// sampler): /dt-lab with the dock open — no error but the planted one, every tab opens, the page
 	// view still names what it can measure, and the Page tab says what this browser cannot see

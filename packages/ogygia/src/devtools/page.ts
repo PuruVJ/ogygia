@@ -748,7 +748,12 @@ export function read_page(): PageView | null {
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
 		const woke = new Set(input.islands.map((i) => i.fp));
-		view.kept = regions.filter((r) => r.kind === 'island' && r.hydrated && !woke.has(r.fp)).map((r) => ({ fp: r.fp, name: r.name }));
+		// (each fingerprint once: two copies of an island with the same props share one — /props-tail's
+		// twin Tally, read as the router swapped the page, keyed the dock's list twice and threw)
+		const seen = new Set<string>();
+		view.kept = regions
+			.filter((r) => r.kind === 'island' && r.hydrated && !woke.has(r.fp) && !seen.has(r.fp) && !!seen.add(r.fp))
+			.map((r) => ({ fp: r.fp, name: r.name }));
 	}
 	// (the first page of this document only: after an in-app navigation the vitals are not this page's)
 	if (!nav) {
