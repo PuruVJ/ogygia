@@ -2010,13 +2010,24 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 
 	it('never-hydrated: the beacon reported other islands but not this one', () => {
 		// client rows for MegaHeader only; ProductCard (48 copies, visible) and PriceTicker stayed silent
+		// no visit to place them: their silence may be a scroll that never came — a note, not a failure
 		const f = derive_findings(analyze(p1), meta as never, extras);
 		const nh = f.find((x) => x.code === 'never-hydrated')!;
-		expect(nh.severity).toBe('warn');
+		expect(nh.severity).toBe('info');
 		expect(nh.message).toBe(
-			'CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.'
+			"CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported waking, while 1 other island did. No visit said where they sit on the page, so whether a visitor ever scrolled them into view is unknown: a visit from a browser carrying the profiler's key tells."
 		);
-		expect(nh.fix).toMatch(/can scroll/);
+		// a visit that placed them on its first screen: silent there is the failure
+		const on_screen = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800], regions: [{ fp: 'bbbbbbbbbbbbbbbb', entry: './_app/immutable/og-region.0123456789ab.js', wake: 'visible', top: 100, height: 300 }] };
+		const warned = derive_findings(analyze(p1), meta as never, { ...(extras as object), visit: on_screen } as never).find((x) => x.code === 'never-hydrated')!;
+		expect(warned.severity).toBe('warn');
+		expect(warned.message).toBe('CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.');
+		expect(warned.fix).toMatch(/can scroll/);
+		// …and below it, known by its fingerprint alone (a build's region names its built file, the row its source)
+		const below_fp = { ...on_screen, regions: [{ ...on_screen.regions[0], top: 2400 }] };
+		expect(derive_findings(analyze(p1), meta as never, { ...(extras as object), visit: below_fp } as never).find((x) => x.code === 'never-hydrated')!.message).toBe(
+			'ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.'
+		);
 		// a `visible` island below the visit's first screen waited for a scroll that never came: not silent
 		// for a reason (the visit's region: its entry as the page writes it, `./…`)
 		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800], regions: [{ fp: 'cccccccccccccc00', entry: './_app/immutable/og-region.4b95bfb97fab.js', wake: 'visible', top: 2400, height: 300 }] };

@@ -2729,10 +2729,28 @@ function ogygia_findings(
 			}
 		};
 		const vh = extras.visit?.viewport?.[1];
-		const below = new Set((vh ? (extras.visit?.regions ?? []).filter((g) => g.entry && g.top >= vh) : []).map((g) => path_of_entry(g.entry!)));
+		const below_regions = vh ? (extras.visit?.regions ?? []).filter((g) => g.top >= vh) : [];
+		// (by its fingerprint too: in a build a region's entry is its built file, never the source
+		// path the island rows carry — a `visible` island below the screen was blamed for not waking)
+		const below_fps = new Set(below_regions.map((g) => g.fp));
+		const below = new Set([
+			...below_regions.filter((g) => g.entry).map((g) => path_of_entry(g.entry!)),
+			...island_rows_of(meta)
+				.filter((r) => below_fps.has(r.fp))
+				.map((r) => path_of_entry(r.entry))
+		]);
+		// (no positions — no visit, or one without a screen — and a `visible` island's silence says
+		// nothing: it may simply never have been scrolled to; named as that, not as a failure)
+		const placed = !!vh && (extras.visit?.regions?.length ?? 0) > 0;
+		const unplaced = placed ? [] : islands.filter((r) => r.wake === 'visible' && !seen.has(r.entry));
 		const silent = islands.filter(
-			(r) => (r.wake === 'load' || r.wake === 'idle' || (r.wake === 'visible' && !below.has(path_of_entry(r.entry)))) && !seen.has(r.entry)
+			(r) => (r.wake === 'load' || r.wake === 'idle' || (r.wake === 'visible' && placed && !below.has(path_of_entry(r.entry)))) && !seen.has(r.entry)
 		);
+		if (unplaced.length)
+			info(
+				'never-hydrated',
+				`${names(unplaced.map((r) => `${island_name(r)} (${r.count > 1 ? `${r.count} copies, ` : ''}wake: visible)`))} never reported waking, while ${client.length} other island${client.length === 1 ? '' : 's'} did. No visit said where ${unplaced.length === 1 ? 'it sits' : 'they sit'} on the page, so whether a visitor ever scrolled ${unplaced.length === 1 ? 'it' : 'them'} into view is unknown: a visit from a browser carrying the profiler's key tells.`
+			);
 		if (silent.length) {
 			warn(
 				'never-hydrated',
