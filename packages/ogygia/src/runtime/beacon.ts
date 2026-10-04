@@ -1262,7 +1262,13 @@ function build_visit(): Record<string, unknown> | null {
 		// hide-time vitals message never left still reports them
 		...(vitals && Object.keys(vitals).length ? { vitals: { ...vitals } } : {}),
 		viewport: [innerWidth, innerHeight],
-		ua: navigator.userAgent.slice(0, 200)
+		ua: navigator.userAgent.slice(0, 200),
+		// (the devtools dock open as the document loaded, from when: its own text can be the first paint
+		// a browser records — the report says so beside the paints)
+		...(() => {
+			const at = (globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.dock-open-at')];
+			return typeof at === 'number' ? { dock_open_at: r2(at) } : {};
+		})()
 	};
 }
 

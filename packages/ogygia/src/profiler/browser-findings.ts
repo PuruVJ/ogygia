@@ -107,6 +107,7 @@ export function browser_page_report(
 	const input: PageInput = {
 		...(dev ? { dev: true } : {}),
 		...(browser ? { browser } : {}),
+		...(visit.dock_open_at !== undefined ? { dock_open_at: visit.dock_open_at } : {}),
 		...(held_open ? { held_open } : {}),
 		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
 		vitals: visit.vitals ?? {},

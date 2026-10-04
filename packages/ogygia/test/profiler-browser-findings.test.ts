@@ -72,6 +72,15 @@ test('an island that drew nothing on the visitor\'s screen: eager-hidden, not "b
 	expect(parse_visit('/lab', { ...raw, regions: [{ ...raw.regions[3], hidden: 'yes' }] })!.regions![0].hidden).toBeUndefined();
 });
 
+test('a visit with the devtools dock open as it loaded: the report says the paints may be the dock’s', () => {
+	const visit = parse_visit('/lab', { ...raw, paints: { fcp: 93, lcp: 93 }, dock_open_at: 89, ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15' })!;
+	expect(visit.dock_open_at).toBe(89);
+	const f = browser_findings(browser_page_report(visit, rows)).find((x) => x.code === 'dock-in-paint')!;
+	expect(f.message).toContain('In the browser: The devtools dock was open as this page loaded (from 89 ms), and the first paint was recorded just after it (93 ms)');
+	expect(f.message).toContain('Safari 26 its largest paint too');
+	expect(browser_findings(browser_page_report(parse_visit('/lab', { ...raw, paints: { fcp: 93, lcp: 93 } })!, rows)).some((x) => x.code === 'dock-in-paint')).toBe(false);
+});
+
 test("a recovered island's unpaired markers survive the parse; a paired or malformed count does not", () => {
 	const at = (markers: unknown) => parse_visit('/lab', { ...raw, islands: [{ ...raw.islands[0], recovered: true, ssr_bytes: 100, markers }] })!.islands[0].markers;
 	expect(at([0, 2])).toEqual([0, 2]);

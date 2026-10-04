@@ -838,6 +838,14 @@ export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 
 // (the browser a visit came from: page-insights.ts, which the devtools' Page tab shares)
 export { browser_of };
 
+/** A visit that loaded with the devtools dock open and recorded its first paint right after the
+ *  dock began to show (the same line as the Page tab's dock-in-paint): its paints may be the dock's. */
+function dock_skewed(v: Visit | undefined): boolean {
+	const fcp = v?.paints?.fcp;
+	const at = v?.dock_open_at;
+	return typeof fcp === 'number' && typeof at === 'number' && fcp >= at && fcp - at <= 250;
+}
+
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
  *  shows smaller or lower down */
 const SCREEN_CODES: ReadonlySet<string> = new Set(['eager-offscreen', 'eager-hidden', 'images-eager-below', 'image-oversized']);
@@ -3366,7 +3374,10 @@ function accuracy_findings(
 		} else {
 			info(
 				'browser-vitals',
-				`The browser measured TTFB ${v.ttfb === null ? '—' : fmt_ms(v.ttfb) + ' ms'}, LCP ${fmt_ms(v.lcp)} ms${v.cls !== null ? `, CLS ${v.cls}` : ''}${v.inp !== null ? `, INP ${fmt_ms(v.inp)} ms` : ''} over ${v.n} visit${v.n === 1 ? '' : 's'}.`
+				`The browser measured TTFB ${v.ttfb === null ? '—' : fmt_ms(v.ttfb) + ' ms'}, LCP ${fmt_ms(v.lcp)} ms${v.cls !== null ? `, CLS ${v.cls}` : ''}${v.inp !== null ? `, INP ${fmt_ms(v.inp)} ms` : ''} over ${v.n} visit${v.n === 1 ? '' : 's'}.` +
+					// (the latest visit loaded with the devtools dock open, its first paint right after the dock's:
+					// the paints may be the dock's own — see dock-in-paint)
+					(dock_skewed(extras.visit) ? ' The latest visit loaded with the devtools dock open, and its paints may be the dock’s: read the paints from a visit with the dock closed.' : '')
 			);
 		}
 	}

@@ -168,6 +168,8 @@ export interface Visit {
 	/** a server transform's restore gone wrong: a host upgraded first (`late`), or not Svelte's (`mismatch`) */
 	restores?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[];
 	viewport?: [number, number];
+	/** the devtools dock was open as the document loaded, from this page-clock time */
+	dock_open_at?: number;
 	ua?: string;
 }
 
@@ -632,6 +634,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	if (vp && vp[0] > 0 && vp[1] > 0) visit.viewport = [vp[0], vp[1]];
 	const ua = str(v.ua, 200);
 	if (ua) visit.ua = ua;
+	const dock = num(v.dock_open_at);
+	if (dock !== undefined) visit.dock_open_at = dock;
 	return visit;
 }
 
@@ -695,7 +699,8 @@ export function merge_visits(a: Visit, b: Visit): Visit {
 		...(a.hole_batches || b.hole_batches ? { hole_batches: (b.hole_batches?.length ?? 0) >= (a.hole_batches?.length ?? 0) ? b.hole_batches : a.hole_batches } : {}),
 		...(a.restores || b.restores ? { restores: (b.restores?.length ?? 0) >= (a.restores?.length ?? 0) ? b.restores : a.restores } : {}),
 		...(b.viewport ?? a.viewport ? { viewport: b.viewport ?? a.viewport } : {}),
-		...(b.ua ?? a.ua ? { ua: b.ua ?? a.ua } : {})
+		...(b.ua ?? a.ua ? { ua: b.ua ?? a.ua } : {}),
+		...(b.dock_open_at ?? a.dock_open_at ? { dock_open_at: b.dock_open_at ?? a.dock_open_at } : {})
 	};
 }
 

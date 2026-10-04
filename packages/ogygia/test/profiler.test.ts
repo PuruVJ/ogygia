@@ -1823,6 +1823,15 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(out.find((f) => f.code === 'eager-offscreen')!.message.startsWith('In the browser (Safari 18), on a 1280×800 screen: Footer starts below')).toBe(true);
 	});
 
+	it("the browser's vitals: a latest visit that loaded with the dock open says its paints may be the dock's", () => {
+		const vitals = { n: 1, ttfb: 2, fcp: 28, lcp: 28, cls: null, inp: null };
+		const base = { at: Date.now(), nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 }, resources: [], longtasks: [], firsts: [], shifts: [], islands: [] };
+		const say = (dock_open_at?: number) =>
+			derive_findings(analyze(p1), meta as never, { ...extras, vitals, visit: parse_visit('/hell', { ...base, paints: { fcp: 28, lcp: 28 }, ...(dock_open_at !== undefined ? { dock_open_at } : {}) })! } as never).find((f) => f.code === 'browser-vitals')?.message ?? '';
+		expect(say(25)).toContain('The latest visit loaded with the devtools dock open, and its paints may be the dock’s');
+		expect(say()).not.toContain('dock');
+	});
+
 	it("the process's memory growth: said plainly, and not beside the render measured to keep memory", () => {
 		const mem = [{ t: 0, rss: 400, heap: 200 }, { t: 1000, rss: 494, heap: 290 }];
 		const plain = derive_findings(analyze(p1), meta as never, { ...extras, mem } as never).find((f) => f.code === 'mem-growth')!;
