@@ -65,6 +65,11 @@ const LABS = [
 	{ path: '/dt-dupe-one', stay: 1500, never: { 'duplicate-module': 'dup-pkg' } },
 	// (WebKit: every other origin's file 0 bytes and no word of what held the first paint — the report
 	// weighs the files the page names and reads the blocking ones off its HTML, as Chromium tells it)
+	// (WebKit: a preloaded font answered Vary: Origin whose @font-face a script adds after the preload
+	// landed — downloaded again, the cause named from the report's own weighing; the decoy, named in the
+	// page's stylesheet, never; Chromium reuses both)
+	{ path: '/dt-font-late', engine: 'webkit', stay: 5000, named: { 'preload-unused': 'late.woff2' }, never: { 'preload-unused': 'early.woff2' }, fix_says: { 'preload-unused': 'Its answer says `Vary: Origin`' } },
+	{ path: '/dt-font-late', stay: 5000, absent: ['preload-unused'] },
 	// (WebKit on a cross-origin-isolated page: the first byte given as 0 — the visit reaches the
 	// report, its first byte said hidden; Chromium's visit, never)
 	{ path: '/dt-coi', engine: 'webkit', stay: 1500, named: { 'first-byte-hidden': 'Safari does that for a cross-origin-isolated page', 'client-hydrate': 'Healthy' } },

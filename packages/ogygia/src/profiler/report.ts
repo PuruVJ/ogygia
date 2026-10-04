@@ -855,7 +855,8 @@ function dock_skewed(v: Visit | undefined): boolean {
  *  files as 0 bytes (Timing-Allow-Origin or not): the report weighed the files the page names and
  *  their imports, and a visit from another engine measured what scripts loaded — a hidden size takes
  *  the weight, marked. And only Chromium says which files held the first paint: for another engine,
- *  the files the HTML makes blocking (a head stylesheet, a classic sync script) are marked so. */
+ *  the files the HTML makes blocking (a head stylesheet, a classic sync script) are marked so. And a
+ *  font downloaded again takes the Vary header the weighing read (the cause, in Safari, with Origin). */
 export function with_hidden_filled(v: Visit, origin: string | undefined, assets: PageAssets | undefined, other: Visit | undefined): Visit {
 	if (!origin) return v;
 	const known = new Map<string, { size: number; transfer: number }>();
@@ -873,7 +874,12 @@ export function with_hidden_filled(v: Visit, origin: string | undefined, assets:
 		if (out !== r) filled = true;
 		return out;
 	});
-	return filled ? { ...v, resources } : v;
+	// …and a font the browser downloaded again: its Vary header as the report's weighing read it (a
+	// font that varies by Origin is one Safari refetches once its @font-face came late)
+	const vary = new Map((assets?.assets ?? []).filter((a) => a.kind === 'font' && a.vary).map((a) => [a.url, a.vary!]));
+	const misses = vary.size ? v.preload_misses?.map((m) => (m.type === 'font' && !m.vary && vary.has(m.url) ? { ...m, vary: vary.get(m.url)! } : m)) : undefined;
+	const misses_filled = !!misses?.some((m, i) => m !== v.preload_misses![i]);
+	return filled || misses_filled ? { ...v, resources, ...(misses_filled ? { preload_misses: misses } : {}) } : v;
 }
 
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it

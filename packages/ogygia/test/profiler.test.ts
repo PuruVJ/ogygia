@@ -1891,6 +1891,15 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		// a Chrome visit's own word stands
 		const head = { ...assets, assets: [...assets.assets, { url: 'https://cdn.lib.test/p-0.js', kind: 'script', via: 'script', blocking: true, bytes: 12_288, wire: 4000 }] };
 		expect(with_hidden_filled(safari, 'http://app.test', head as never, undefined).resources.filter((r) => r.blocking).map((r) => r.url)).toEqual(['https://cdn.lib.test/p-0.js']);
+		// a font Safari downloaded again: the weighing's Vary header rides onto the miss, and the browser
+		// finding names it as the cause
+		const font_url = 'http://app.test/fonts/serif.woff2';
+		const with_font = { ...head, assets: [...head.assets, { url: font_url, kind: 'font', via: 'preload', blocking: false, bytes: 140_000, wire: 140_000, vary: 'Origin' }] };
+		const refetched = { ...safari, preload_misses: [{ url: font_url, type: 'font', bytes: 140_000, as: 'font', crossorigin: 'anonymous' }] };
+		expect(with_hidden_filled(refetched, 'http://app.test', with_font as never, undefined).preload_misses![0].vary).toBe('Origin');
+		const pu = derive_findings(analyze(p1), meta as never, { ...extras, visit: refetched, assets: with_font } as never).find((x) => x.code === 'preload-unused')!;
+		expect(pu.fix).toContain('Its answer says `Vary: Origin`: Safari 26 does not reuse a font preload that varies by Origin');
+		expect(pu.fix).toContain('answer them without `Vary: Origin`');
 		const chrome_ua = { ...safari, ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' };
 		expect(with_hidden_filled(chrome_ua, 'http://app.test', head as never, undefined).resources.some((r) => r.blocking)).toBe(false);
 		const f = derive_findings(analyze(p1), meta as never, { ...extras, visit: safari, assets } as never).find((x) => x.code === 'third-party')!;

@@ -37,6 +37,8 @@ export interface WeighedAsset extends AssetRef {
 	wire: number;
 	/** what the build put in it (its source files and packages, readable), when the build said */
 	contains?: string[];
+	/** a font's `Vary` header, as the server answered it */
+	vary?: string;
 }
 
 export interface PageAssets {
@@ -329,6 +331,9 @@ export interface Weight {
 	dynamic?: string[];
 	/** a stylesheet's unscoped fallbacks (see unscoped-css.ts) */
 	unscoped?: UnscopedStyles[];
+	/** a font's `Vary` header (Safari refetches a font preload that varies by Origin when its
+	 *  @font-face comes late) */
+	vary?: string;
 }
 
 /** Resolve a reference against the page (and a module's import against its module). */
@@ -397,7 +402,7 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 				continue;
 			}
 			const contains = r.kind === 'script' || r.kind === 'style' ? opts.contents_of?.(r.url) : null;
-			assets.push({ ...r, bytes: w.bytes, wire: w.wire, ...(contains?.length ? { contains } : {}) });
+			assets.push({ ...r, bytes: w.bytes, wire: w.wire, ...(contains?.length ? { contains } : {}), ...(w.vary ? { vary: w.vary } : {}) });
 			// a module's imports load with it: lazy with a lazy parent
 			if (r.kind === 'script' && w.imports) for (const spec of w.imports) push({ url: spec, kind: 'script', blocking: false, via: 'static-import', ...(r.lazy ? { lazy: true } : {}), ...(r.phase ? { phase: true } : {}) });
 			// the ogygia runtime's on-demand parts (hydration and the rest, loaded as islands wake): its
@@ -661,6 +666,9 @@ async function weigh_one(r: AssetRef, opts: WeighOptions, deadline: number, orig
 		} else if (r.kind === 'style') {
 			const u = find_unscoped(new TextDecoder().decode(buf));
 			if (u.length) w.unscoped = u;
+		} else if (r.kind === 'font') {
+			const vary = res.headers.get('vary');
+			if (vary) w.vary = vary.slice(0, 120);
 		}
 		return w;
 	} catch {

@@ -141,7 +141,8 @@ export interface Visit {
 	/** holes whose answer never came, by island id (the report's hole rows name them) */
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
 	/** files a preload fetched and something else downloaded again: the preload went unused */
-	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[];
+	/** (`vary`: a font's Vary header, from the report's own weighing — never sent by a beacon) */
+	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null; vary?: string }[];
 	/** the `@font-face` rules behind the fonts it fetched: family, font-display, the fetched files */
 	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** images whose pixels are 4× or more what their box shows (the screen counted), files ≥ 50 KB */
