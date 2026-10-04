@@ -65,6 +65,12 @@ const LABS = [
 	{ path: '/dt-dupe-one', stay: 1500, never: { 'duplicate-module': 'dup-pkg' } },
 	// (WebKit: every other origin's file 0 bytes and no word of what held the first paint — the report
 	// weighs the files the page names and reads the blocking ones off its HTML, as Chromium tells it)
+	// (a redirect that lands with a query: the report is of `/dt-ttfb?fast`, the beacon files under the
+	// path — the visit must still reach it)
+	{ path: '/dt-ttfb-go', stay: 1500, visit: true, named: { redirected: 'followed a redirect from /dt-ttfb-go' } },
+	// (WebKit, a page whose visit passes 60 KB, left by a link: its pagehide reads "visible" — the hide's
+	// visit must leave as a beacon, slimmed to fit, never as a request the navigation cancels)
+	{ path: '/dt-many', engine: 'webkit', stay: 2500, visit: true, big: true },
 	// (WebKit: a preloaded font answered Vary: Origin whose @font-face a script adds after the preload
 	// landed — downloaded again, the cause named from the report's own weighing; the decoy, named in the
 	// page's stylesheet, never; Chromium reuses both)
@@ -124,10 +130,11 @@ try {
 		// (a build measures only a browser that carries the profiler's key: the beacon's tag is added then)
 		await page.setExtraHTTPHeaders(headers);
 		// each visit the beacon sends, by size: the hide-time send rides keepalive (60 KB at most, the
-		// beacon slims past it and the detail is lost) — the visits must stay well under
+		// beacon slims past it and the detail is lost) — the visits must stay well under (a lab built to be
+		// heavy, `big`, is the slimming's own test, not the budget's)
 		page.on('request', (r) => {
 			const d = r.method() === 'POST' && r.url().includes('/__profiler') ? (r.postData() ?? '') : '';
-			if (d.includes('"visit"')) biggest = Math.max(biggest, d.length);
+			if (d.includes('"visit"') && !lab.big) biggest = Math.max(biggest, d.length);
 		});
 		await page.goto(base + lab.path + (lab.query ?? ''), { waitUntil: 'load' });
 		// (a click with the mouse, after the islands woke: the slowest interaction is the visit's)
@@ -152,6 +159,7 @@ try {
 		const findings = report.findings ?? [];
 		const msg = (code) => findings.filter((f) => f.code === code).map((f) => f.message).join(' | ');
 		const checks = [];
+		if (lab.visit) checks.push(['the visit reached the report', !!report.browser?.visit]);
 		for (const [code, said] of Object.entries(lab.named ?? {})) checks.push([`${code} says "${said}"`, msg(code).includes(said)]);
 		for (const [code, not] of Object.entries(lab.never ?? {})) checks.push([`${code} never "${not}"`, !msg(code).includes(not)]);
 		for (const code of lab.absent ?? []) checks.push([`no ${code}`, !findings.some((f) => f.code === code)]);

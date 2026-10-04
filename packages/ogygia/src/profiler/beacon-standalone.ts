@@ -146,7 +146,9 @@ export function standalone_beacon(): void {
 	function send(body: string, slim?: () => string) {
 		const room = 60000 - queued;
 		if (body.length > room) {
-			if (document.visibilityState === 'visible') return post(body, false);
+			// (once the hide ran the page is leaving, whatever its visibility reads: a link or a reload
+			// fires pagehide on a page still "visible", and an ordinary request went with it)
+			if (!sent && document.visibilityState === 'visible') return post(body, false);
 			const smaller = slim?.();
 			if (!smaller || smaller.length > room) return;
 			body = smaller;

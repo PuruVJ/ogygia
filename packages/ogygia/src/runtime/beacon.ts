@@ -692,6 +692,9 @@ const KEEPALIVE_MAX = 60_000;
  *  overflows, and one sent a moment earlier (the early visit) has left by then. */
 let keepalive_queued = 0;
 const BEACON_HOLD_MS = 0;
+/** the hide's own sends: the page is going away whatever its visibility reads (a link or a reload
+ *  fires pagehide on a page still "visible") */
+let leaving = false;
 function hold_keepalive(bytes: number, settled?: Promise<unknown>): void {
 	keepalive_queued += bytes;
 	const release = () => {
@@ -726,7 +729,9 @@ function send(body: string, slim?: () => string): void {
 	const room = keepalive_room();
 	if (body.length > room) {
 		// the page is still here: an ordinary request has no size limit
-		if (typeof document === 'undefined' || document.visibilityState === 'visible') return post(body, false);
+		// (a page leaving by a link or a reload still reads "visible" in its pagehide: the hide says so —
+		// an ordinary request then was cancelled with the page, the visit lost)
+		if (typeof document === 'undefined' || (!leaving && document.visibilityState === 'visible')) return post(body, false);
 		const s = slim?.();
 		if (!s || s.length > room) return;
 		body = s;
@@ -1345,9 +1350,12 @@ function flush_visit(final: boolean): void {
 		}
 	}
 	if (!endpoint()) return; // devtools alone: nothing leaves the page
-	send(JSON.stringify({ page: visit_page(), visit }), () =>
-		JSON.stringify({ page: visit_page(), visit: { ...visit, resources: [], regions: [], islands: [] } })
-	);
+	// (slimmer by steps, to what the hide's room still takes: the file list first — the early visit
+	// and the server's own weighing hold the files — then the regions and islands)
+	send(JSON.stringify({ page: visit_page(), visit }), () => {
+		const no_files = JSON.stringify({ page: visit_page(), visit: { ...visit, resources: [] } });
+		return no_files.length <= keepalive_room() ? no_files : JSON.stringify({ page: visit_page(), visit: { ...visit, resources: [], regions: [], islands: [] } });
+	});
 	void store_visit({ key: `${visit_page()}|${visit.at}`, page: visit_page(), at: visit.at as number, visit, snapshots });
 }
 
@@ -1876,9 +1884,14 @@ function send_after_preload_check(): void {
 function on_hide(): void {
 	// (the small messages first, then the visit: the page's queued keepalive requests share 64 KB,
 	// and the visit has a slim copy to fit what is left)
-	flush();
-	flush_vitals();
-	flush_visit(true);
+	leaving = true;
+	try {
+		flush();
+		flush_vitals();
+		flush_visit(true);
+	} finally {
+		leaving = false;
+	}
 	void flush_cpu(true);
 	void stop_interaction_cpu(true);
 }
@@ -2157,6 +2170,15 @@ export function _beacon_state(): { target: string | null | undefined; queued: nu
 
 /** @internal tests: the size-aware send */
 export const _beacon_send = send;
+/** @internal tests: a send from inside the hide (a page leaving while it still reads "visible") */
+export function _beacon_send_leaving(body: string, slim?: () => string): void {
+	leaving = true;
+	try {
+		send(body, slim);
+	} finally {
+		leaving = false;
+	}
+}
 
 // THE FRAMES FROM THE PAGE'S START (a browser with no long-task timing): the vitals start with the
 // first thing the beacon hears — in a build, the first island's wake — and a stall a script made at

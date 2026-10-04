@@ -98,6 +98,18 @@ test('the 64 KB is shared by everything queued at once: a hide that sends severa
 	}
 });
 
+test('a page leaving by a link still reads "visible": the hide sends the slim copy as a beacon, not an ordinary request the navigation cancels', async () => {
+	const b = await import('../src/runtime/beacon.ts');
+	b._reset_beacon();
+	visibility = 'visible';
+	b._beacon_send_leaving('x'.repeat(62_000), () => 'y'.repeat(9_000));
+	expect(beacons).toEqual([9_000]);
+	expect(fetches).toEqual([]);
+	// outside the hide, the same body while visible is an ordinary request, as before
+	b._beacon_send('x'.repeat(62_000), () => 'y'.repeat(9_000));
+	expect(fetches).toEqual([{ n: 62_000, keepalive: false }]);
+});
+
 test('a refused request never becomes a page error', async () => {
 	const b = await import('../src/runtime/beacon.ts');
 	b._reset_beacon();

@@ -5442,10 +5442,14 @@ class Profiler {
 
 	#report_extras(stored: StoredReport): ReportExtras {
 		const client = stored.client ?? this.#client_for(stored);
-		const vitals = stored.vitals ?? this.#vitals_for(stored.meta.page);
-		const client_marks = stored.client_marks ?? this.#marks_for(stored.meta.page);
+		// THE BROWSER'S PAGE: what the beacon files its messages under — the document's path, no query.
+		// A report of a redirect that lands with a query (`/dt-ttfb-go` → `/dt-ttfb?fast`) is of that
+		// path and query, and read its visits, vitals and traces under it: none, ever
+		const browser_page = stored.meta.page?.split('?')[0];
+		const vitals = stored.vitals ?? this.#vitals_for(browser_page);
+		const client_marks = stored.client_marks ?? this.#marks_for(browser_page);
 		const client_cpu =
-			stored.client_cpu ?? (stored.meta.page ? this.#client_cpus.get(stored.meta.page) : undefined);
+			stored.client_cpu ?? (browser_page ? this.#client_cpus.get(browser_page) : undefined);
 		// THE REPORT'S OWN VISIT: the first page load that started after the report was made (the
 		// profiling visit), not simply the latest — every report of a page read the newest visit, so
 		// an older report showed later loads' browser picture and "since your last profile" compared a
@@ -5454,7 +5458,7 @@ class Profiler {
 		const own_visit = (): Visit | undefined => {
 			const created = stored.meta.created - 1000;
 			if (stored.visit && stored.visit.at >= created) return stored.visit;
-			const list = stored.meta.page ? (this.#visits.get(stored.meta.page) ?? []) : [];
+			const list = browser_page ? (this.#visits.get(browser_page) ?? []) : [];
 			let first: Visit | undefined;
 			for (const v of list) if (v.at >= created && (!first || v.at < first.at)) first = v;
 			return first ?? stored.visit ?? list.at(-1);
@@ -5497,21 +5501,21 @@ class Profiler {
 		}
 		// THE VISIT'S SLOWEST INTERACTION, SAMPLED: the page's latest interaction trace, when it is this
 		// visit's (the same interaction start, on the page clock)
-		const icpu = stored.interaction_cpu ?? (stored.meta.page ? this.#interaction_cpus.get(stored.meta.page) : undefined);
+		const icpu = stored.interaction_cpu ?? (browser_page ? this.#interaction_cpus.get(browser_page) : undefined);
 		const interaction_cpu = icpu && visit?.interaction && Math.abs(icpu.t - visit.interaction.t) < 2 ? icpu : undefined;
 		// THE OTHER KIND OF SCREEN: the latest kept visit on a phone when this one was wide (or the other
 		// way): the islands below its first screen, or hidden on it, are another list
 		const narrow = (v: Visit) => (v.viewport?.[0] ?? 0) < NARROW_SCREEN_PX;
 		const other_screen_visit =
-			visit?.viewport && stored.meta.page
-				? (this.#visits.get(stored.meta.page) ?? []).filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit)).at(-1)
+			visit?.viewport && browser_page
+				? (this.#visits.get(browser_page) ?? []).filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit)).at(-1)
 				: undefined;
 		// THE OTHER ENGINE: the latest kept visit from another browser engine (Safari beside Chrome):
 		// what one engine shows, another may never (a preload refetched, a font holding the first paint)
 		const engine = engine_of(visit?.ua);
 		const other_engine_visit =
-			engine && stored.meta.page
-				? (this.#visits.get(stored.meta.page) ?? []).filter((v) => v !== visit && engine_of(v.ua) && engine_of(v.ua) !== engine).at(-1)
+			engine && browser_page
+				? (this.#visits.get(browser_page) ?? []).filter((v) => v !== visit && engine_of(v.ua) && engine_of(v.ua) !== engine).at(-1)
 				: undefined;
 		// (the modules the build shipped twice: the report names the ones this page loads both copies of)
 		const dupes = chunkDuplicates();
