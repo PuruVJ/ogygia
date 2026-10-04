@@ -1152,6 +1152,14 @@ describe('analyze_page', () => {
 		const script = analyze_page(page({ visit: { preload_misses: [miss('https://a.test/app.js', 'script', null)] } }), [], [], 2000);
 		expect(script.findings.find((x) => x.code === 'preload-unused')!.fix).toContain('modulepreload');
 		expect(codes(analyze_page(page(), [], [], 2000))).not.toContain('preload-unused');
+		// ogygia's own hole preload, refetched by Safari: the two match — the browser's choice, not the markup
+		const hole = (browser?: string) =>
+			analyze_page(page({ ...(browser ? { browser } : {}), visit: { preload_misses: [miss('https://a.test/__ogygia__?id=97f7&props=W3&sig=9d', 'fetch', 'anonymous', 574)] } }), [], [], 2000).findings.find((x) => x.code === 'preload-unused')!;
+		const s = hole('Safari 26');
+		expect(s.fix).toContain("Ogygia's own hole preload and its runtime's fetch match (crossorigin=\"anonymous\", credentials same-origin); Safari 26 fetched the answer again anyway");
+		expect(s.fix).toContain("Nothing in the page's markup to change");
+		expect(s.fix).not.toContain('must match exactly');
+		expect(hole().fix).not.toContain('Safari');
 	});
 
 	it('a server transform’s restore gone wrong: a host upgraded first, and a mismatch, each named with its island', () => {

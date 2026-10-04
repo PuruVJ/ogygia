@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { DOM_LARGE, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
+import { DOM_LARGE, browser_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -835,30 +835,8 @@ export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 
 		.sort((a, b) => b.extra - a.extra);
 }
 
-/** The browser a visit came from, by name and major version (`Safari 18`, `Chrome 141`, `Firefox 133`,
- *  `Edge 141`), from its user-agent string by plain search; null when it says nothing known. Some
- *  findings are one engine's (Safari reports no layout shifts; a preload one engine reuses another
- *  fetches again): the report names which. */
-export function browser_of(ua: string | undefined): string | null {
-	if (!ua) return null;
-	const major = (token: string): string => {
-		const at = ua.indexOf(token);
-		if (at === -1) return '';
-		let v = '';
-		for (let i = at + token.length; i < ua.length; i++) {
-			const c = ua.charCodeAt(i);
-			if (c < 48 || c > 57) break;
-			v += ua[i];
-		}
-		return v ? ' ' + v : '';
-	};
-	if (ua.includes('Edg/')) return 'Edge' + major('Edg/');
-	if (ua.includes('OPR/')) return 'Opera' + major('OPR/');
-	if (ua.includes('Firefox/')) return 'Firefox' + major('Firefox/');
-	if (ua.includes('Chrome/')) return 'Chrome' + major('Chrome/');
-	if (ua.includes('Safari/') && ua.includes('Version/')) return 'Safari' + major('Version/');
-	return null;
-}
+// (the browser a visit came from: page-insights.ts, which the devtools' Page tab shares)
+export { browser_of };
 
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
  *  shows smaller or lower down */

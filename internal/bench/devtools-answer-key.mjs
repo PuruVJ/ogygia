@@ -1726,16 +1726,22 @@ try {
 			await page.click('[data-og-tab="page"]').catch(() => {});
 			await page.waitForTimeout(500);
 			const limits = await page.locator('[data-og-page-browser-limits]').innerText().catch(() => '');
+			// /hell's defer:'load' holes: WebKit fetches the answers its preloads already hold — ogygia's
+			// own preload, matching the runtime's fetch, named as the browser's choice, not the markup's
+			await page.goto(base + '/hell', { waitUntil: 'load' });
+			await page.waitForTimeout(3500);
+			const hole_fix = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'preload-unused')?.fix ?? '');
 			const checks = [
 				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
 				['every tab opens', tabs.length >= 8],
 				['the page view names what it can measure', codes.includes('markup-changed') && codes.includes('hydrate-failed') && codes.includes('eager-offscreen')],
 				['…and never what it cannot', !codes.includes('hydration-shift') && !codes.includes('long-tasks')],
-				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')]
+				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')],
+				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('fetched the answer again anyway') && !hole_fix.includes('must match exactly')]
 			];
 			const bad = checks.filter(([, ok]) => !ok);
 			if (bad.length) failed = true;
-			console.log(`${bad.length ? '✗' : '✓'} the dock in WebKit: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ errs: errs.slice(0, 3), tabs: tabs.length, codes, limits: limits.slice(0, 160) })}` : ''}`);
+			console.log(`${bad.length ? '✗' : '✓'} the dock in WebKit: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ errs: errs.slice(0, 3), tabs: tabs.length, codes, limits: limits.slice(0, 160), hole_fix: hole_fix.slice(0, 160) })}` : ''}`);
 		} finally {
 			await wb.close();
 		}

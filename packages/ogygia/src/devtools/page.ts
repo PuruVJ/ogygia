@@ -49,7 +49,7 @@ function fp_drift(nav = 0): FpDrift[] {
 	fps_memo = { at, drift };
 	return drift;
 }
-import { analyze_page, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
+import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
 import { profile_for } from './profile-store.js';
 import type { BeaconPage } from '../runtime/beacon.js';
 import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
@@ -736,7 +736,7 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}), ...(() => {
+	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}), ...(typeof navigator !== 'undefined' && browser_of(navigator.userAgent) ? { browser: browser_of(navigator.userAgent)! } : {}), ...(() => {
 		const pre = import.meta.env.DEV ? prebundled_packages((with_visit.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url)) : null;
 		return pre?.length ? { prebundled: pre } : {};
 	})() };

@@ -9,7 +9,7 @@
  * Findings the report already makes its own way are left to it: a recovery (hydration-mismatch),
  * an island that never woke (never-hydrated), the vitals, the render-blocking files.
  */
-import { analyze_page, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.js';
+import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.js';
 import type { CodeKind, CpuFn, CpuSummary } from '../devtools/cpu.js';
 import type { FrameCategory } from './analyze.js';
 import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.js';
@@ -103,8 +103,10 @@ export function browser_page_report(
 		}
 	const failures = (visit.regions ?? []).filter((r) => r.failed !== undefined).map((r) => ({ fp: r.fp, message: r.failed || 'it threw', ...(r.failed_span ? { span: r.failed_span } : {}) }));
 	const span = (s: InteractionCpu['wait']) => (s ? { ms: s.ms, top: s.top.map(as_fn) } : null);
+	const browser = browser_of(visit.ua);
 	const input: PageInput = {
 		...(dev ? { dev: true } : {}),
+		...(browser ? { browser } : {}),
 		...(held_open ? { held_open } : {}),
 		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
 		vitals: visit.vitals ?? {},

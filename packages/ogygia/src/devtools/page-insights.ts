@@ -228,6 +228,8 @@ export interface PageInput {
 	/** the dev server's pre-bundled packages (its `.vite/deps/_metadata.json`), read when the page
 	 *  loaded one: a package also served raw from its folder runs as two copies */
 	prebundled?: string[];
+	/** the browser the page ran in (`browser_of` its user agent: `Safari 26`, `Chrome 141`) */
+	browser?: string;
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
 	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
 	/** wheel / touch listeners still attached that hold scrolling (not passive), by the island (or
@@ -482,6 +484,31 @@ const LIMITS: Record<RatedVital['key'], [number, number, string]> = {
 	cls: [0.1, 0.25, 'CLS'],
 	inp: [200, 500, 'INP']
 };
+
+/** The browser a page ran in, by name and major version (`Safari 18`, `Chrome 141`, `Firefox 133`,
+ *  `Edge 141`), from its user-agent string by plain search; null when it says nothing known. Some
+ *  findings are one engine's (Safari reports no layout shifts; a preload one engine reuses another
+ *  fetches again): the profiler's report and the Page tab name which. */
+export function browser_of(ua: string | undefined): string | null {
+	if (!ua) return null;
+	const major = (token: string): string => {
+		const at = ua.indexOf(token);
+		if (at === -1) return '';
+		let v = '';
+		for (let i = at + token.length; i < ua.length; i++) {
+			const c = ua.charCodeAt(i);
+			if (c < 48 || c > 57) break;
+			v += ua[i];
+		}
+		return v ? ' ' + v : '';
+	};
+	if (ua.includes('Edg/')) return 'Edge' + major('Edg/');
+	if (ua.includes('OPR/')) return 'Opera' + major('OPR/');
+	if (ua.includes('Firefox/')) return 'Firefox' + major('Firefox/');
+	if (ua.includes('Chrome/')) return 'Chrome' + major('Chrome/');
+	if (ua.includes('Safari/') && ua.includes('Version/')) return 'Safari' + major('Version/');
+	return null;
+}
 
 /** The packages a dev server's `_metadata.json` `optimized` keys name: `svelte/internal/client` →
  *  `svelte`, `@scope/lib/x` → `@scope/lib`, `ogygia > @neodrag/svelte` (a dependency's dependency) →
@@ -1726,8 +1753,15 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			return p.slice(p.lastIndexOf('/') + 1) || u;
 		};
 		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
+		// OGYGIA'S OWN HOLE PRELOAD (`crossorigin="anonymous"`, answered by the runtime's same-origin
+		// fetch with no headers): the two match by construction, so a second download is the browser's
+		// choice, not the page's markup — Safari does not reuse it where Chromium does
+		const safari = !!page.browser?.startsWith('Safari');
+		const ours = (m: PreloadMiss) => m.type === 'fetch' && m.crossorigin === 'anonymous' && m.url.includes('/__ogygia__');
 		const why = (m: PreloadMiss) =>
-			m.type === 'font' && m.crossorigin === null
+			ours(m)
+				? `ogygia's own hole preload and its runtime's fetch match (crossorigin="anonymous", credentials same-origin)${safari ? `; ${page.browser} fetched the answer again anyway — it does not reuse this preload, which Chromium does` : ''}`
+				: m.type === 'font' && m.crossorigin === null
 				? 'a font always loads in CORS mode: its preload needs `crossorigin`'
 				: m.type === 'fetch' && m.crossorigin === null
 					? 'a fetch preload needs `crossorigin` (`anonymous` for a same-origin `fetch()`, `use-credentials` for `credentials: "include"`)'
@@ -1741,7 +1775,11 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			code: 'preload-unused',
 			severity: 'warn',
 			message: `${list(misses.map((m) => `${file(m.url)} (${kb(m.bytes)})`))} ${misses.length === 1 ? 'was' : 'were'} preloaded, then downloaded again: the browser could not use the preload${misses.length === 1 ? '' : 's'}, and the page paid ${kb(wasted)} twice.`,
-			fix: `${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}. The preload and the request must match exactly, or the browser fetches the file again.`,
+			fix:
+				`${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}.` +
+				(misses.every(ours)
+					? " Nothing in the page's markup to change: it is the hole preload ogygia writes, in a browser that does not use it — report it to ogygia with the browser's name."
+					: ' The preload and the request must match exactly, or the browser fetches the file again.'),
 			fps: []
 		});
 	}
