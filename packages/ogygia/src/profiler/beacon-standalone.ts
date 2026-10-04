@@ -123,24 +123,36 @@ export function standalone_beacon(): void {
 		profiler = null;
 	}
 
+	/** keepalive bytes still queued: the 64 KB cap is shared by every beacon and keepalive fetch the
+	 *  page has queued at once (a hide sends several), not each's — held until a fetch settles, a
+	 *  beacon (which says nothing back) for the task that sent it: the hide's burst is what overflows */
+	let queued = 0;
+	function hold(bytes: number, settled?: Promise<unknown>) {
+		queued += bytes;
+		const release = () => (queued = Math.max(0, queued - bytes));
+		if (settled) settled.finally(release);
+		else setTimeout(release, 0);
+	}
 	function post(body: string, keepalive: boolean) {
 		try {
-			fetch(url!, { method: 'POST', body, keepalive, credentials: 'same-origin', headers: { 'content-type': 'text/plain' } }).catch(() => {});
+			const settled = fetch(url!, { method: 'POST', body, keepalive, credentials: 'same-origin', headers: { 'content-type': 'text/plain' } }).catch(() => {});
+			if (keepalive) hold(body.length, settled);
 		} catch {
 			/* no fetch */
 		}
 	}
-	/** a beacon when it fits (64 KB, keepalive's cap); a big body as a plain POST while the page lives,
-	 *  else its slim form (`slim`), else nothing */
+	/** a beacon when it fits (what is left of the 64 KB the queued requests share); a big body as a
+	 *  plain POST while the page lives, else its slim form (`slim`), else nothing */
 	function send(body: string, slim?: () => string) {
-		if (body.length > 60000) {
+		const room = 60000 - queued;
+		if (body.length > room) {
 			if (document.visibilityState === 'visible') return post(body, false);
 			const smaller = slim?.();
-			if (!smaller || smaller.length > 60000) return;
+			if (!smaller || smaller.length > room) return;
 			body = smaller;
 		}
 		try {
-			if (navigator.sendBeacon?.(url!, body)) return;
+			if (navigator.sendBeacon?.(url!, body)) return hold(body.length);
 		} catch {
 			/* no beacon */
 		}
@@ -280,14 +292,14 @@ export function standalone_beacon(): void {
 
 	/** the load's CPU trace: once, after 8 s, or as the page hides (only when it fits a beacon) */
 	function cpu(hiding: boolean) {
-		if (!profiler) return;
+		if (runtime_claimed() || !profiler) return;
 		const p = profiler;
 		profiler = null;
 		p.stop().then(
 			(trace) => {
 				if (off || !trace) return;
 				const body = JSON.stringify({ page: location.pathname, cpu: trace });
-				if (hiding && body.length > 60000) return;
+				if (hiding && body.length > 60000 - queued) return;
 				post(body, hiding);
 			},
 			() => {}
@@ -296,8 +308,10 @@ export function standalone_beacon(): void {
 
 	/** the page is going away: the vitals (final only now), the visit, the CPU trace */
 	function hide() {
-		if (off || sent) return;
+		if (runtime_claimed() || sent) return;
 		sent = true;
+		// (the small vitals first, then the visit: the queued requests share 64 KB, and the visit has a
+		// slim copy to fit what is left)
 		if (Object.keys(vitals).length) send(JSON.stringify({ page: location.pathname, at: Math.round(performance.timeOrigin), vitals }));
 		const v = visit();
 		if (v) send(JSON.stringify({ page: location.pathname, visit: v }), () => JSON.stringify({ page: location.pathname, visit: { ...v, resources: [] } }));
@@ -309,35 +323,47 @@ export function standalone_beacon(): void {
 		clearTimeout(resend);
 		resend = setTimeout(early, 1500);
 	}
+	/** the runtime's beacon claimed the page after all — it came without the runtime's script tag (the
+	 *  devtools carry it onto a Kit page): it reports, this one hands back its observers and sampler.
+	 *  Both sent the same visit, and their two bodies together passed the 64 KB a page's queued
+	 *  keepalive requests share — Safari refused the second */
+	function runtime_claimed(): boolean {
+		if (off) return true;
+		if (!(w as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.beacon')]) return false;
+		stand_down();
+		return true;
+	}
 	/** the visit while the page lives: the early one, and each re-send */
 	function early() {
-		if (off || early_sends >= 8) return;
+		if (runtime_claimed() || early_sends >= 8) return;
 		early_sends++;
 		const v = visit();
 		if (v) send(JSON.stringify({ page: location.pathname, visit: v }));
 	}
 
-	document.addEventListener('DOMContentLoaded', () => {
-		// the runtime's script came after this one: it reports — hand back the observers and the sampler
-		if (document.querySelector('script[data-ogygia-runtime]')) {
-			off = true;
-			for (const o of observers) {
-				try {
-					o.disconnect();
-				} catch {
-					/* gone */
-				}
+	/** hand back the observers and the sampler: another beacon reports */
+	function stand_down() {
+		off = true;
+		for (const o of observers) {
+			try {
+				o.disconnect();
+			} catch {
+				/* gone */
 			}
-			if (profiler) {
-				try {
-					void profiler.stop();
-				} catch {
-					/* gone */
-				}
-				profiler = null;
-			}
-			return;
 		}
+		if (profiler) {
+			try {
+				void profiler.stop();
+			} catch {
+				/* gone */
+			}
+			profiler = null;
+		}
+	}
+
+	document.addEventListener('DOMContentLoaded', () => {
+		// the runtime's script came after this one: it reports
+		if (document.querySelector('script[data-ogygia-runtime]')) return stand_down();
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'hidden') hide();
 		});

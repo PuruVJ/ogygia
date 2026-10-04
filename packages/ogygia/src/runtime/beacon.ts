@@ -684,6 +684,27 @@ function observe_vitals(): void {
 /** sendBeacon and a keepalive fetch both refuse a body over 64 KB (UTF-16 length, with room) */
 const KEEPALIVE_MAX = 60_000;
 
+/** KEEPALIVE BYTES STILL QUEUED. The 64 KB cap is on everything a page has queued at once — every
+ *  beacon and keepalive fetch not yet sent — not on each: a hide sends the islands, the vitals, the
+ *  visit and the trace together, and Safari refused the rest once they passed it ("reached maximum
+ *  amount of queued data"), the visit among them. A keepalive fetch is held until it settles; a
+ *  beacon, which says nothing back, for the task that sent it — the burst a hide makes is what
+ *  overflows, and one sent a moment earlier (the early visit) has left by then. */
+let keepalive_queued = 0;
+const BEACON_HOLD_MS = 0;
+function hold_keepalive(bytes: number, settled?: Promise<unknown>): void {
+	keepalive_queued += bytes;
+	const release = () => {
+		keepalive_queued = Math.max(0, keepalive_queued - bytes);
+	};
+	if (settled) void settled.finally(release);
+	else setTimeout(release, BEACON_HOLD_MS);
+}
+/** what a keepalive request may still carry */
+function keepalive_room(): number {
+	return KEEPALIVE_MAX - keepalive_queued;
+}
+
 /** `slim`: the same message without what earlier messages already delivered, for a page going
  *  away with a body too big to leave (the server keeps the longest file list and merges regions).
  *  A page with ~300 islands sent 100 KB: refused by both, and the fetch's rejection went unhandled,
@@ -693,22 +714,28 @@ function send(body: string, slim?: () => string): void {
 	if (!url) return;
 	const post = (b: string, keepalive: boolean) => {
 		try {
-			fetch(url, { method: 'POST', body: b, keepalive, credentials: 'same-origin', headers: { 'content-type': 'text/plain' } }).catch(() => {
+			const settled = fetch(url, { method: 'POST', body: b, keepalive, credentials: 'same-origin', headers: { 'content-type': 'text/plain' } }).catch(() => {
 				// best-effort: a dropped beacon is a missing measurement, never a page error
 			});
+			if (keepalive) hold_keepalive(b.length, settled);
 		} catch {
 			// no fetch
 		}
 	};
-	if (body.length > KEEPALIVE_MAX) {
+	// (what is left of the 64 KB the page's queued keepalive requests share)
+	const room = keepalive_room();
+	if (body.length > room) {
 		// the page is still here: an ordinary request has no size limit
 		if (typeof document === 'undefined' || document.visibilityState === 'visible') return post(body, false);
 		const s = slim?.();
-		if (!s || s.length > KEEPALIVE_MAX) return;
+		if (!s || s.length > room) return;
 		body = s;
 	}
 	try {
-		if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(url, body)) return;
+		if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(url, body)) {
+			hold_keepalive(body.length);
+			return;
+		}
 	} catch {
 		// fall through to fetch
 	}
@@ -1645,13 +1672,15 @@ async function flush_cpu(hiding: boolean): Promise<void> {
 	if (!url || !trace) return;
 	const body = JSON.stringify({ page: visit_page(), cpu: trace });
 	// keepalive bodies are capped at 64 KB; a trace is bigger — a plain fetch while the page lives,
-	// keepalive when it is going away and it fits (one that cannot fit would only fail)
-	const keepalive = hiding && body.length <= KEEPALIVE_MAX;
+	// keepalive when it is going away and it fits what the page's queued requests left (one that
+	// cannot fit would only fail)
+	const keepalive = hiding && body.length <= keepalive_room();
 	if (hiding && !keepalive) return;
 	try {
-		fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
+		const settled = fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
 			// best effort
 		});
+		if (keepalive) hold_keepalive(body.length, settled);
 	} catch {
 		// no fetch
 	}
@@ -1714,12 +1743,13 @@ async function stop_interaction_cpu(hiding: boolean): Promise<void> {
 	const url = endpoint();
 	if (!url) return;
 	const body = JSON.stringify({ page: visit_page(), cpu: trace, interaction: caught });
-	const keepalive = hiding && body.length <= KEEPALIVE_MAX;
+	const keepalive = hiding && body.length <= keepalive_room();
 	if (hiding && !keepalive) return;
 	try {
-		fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
+		const settled = fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
 			// best effort
 		});
+		if (keepalive) hold_keepalive(body.length, settled);
 	} catch {
 		// no fetch
 	}
@@ -1844,6 +1874,8 @@ function send_after_preload_check(): void {
 
 /** the page is going away: the islands still queued, then the vitals (final only now), the visit */
 function on_hide(): void {
+	// (the small messages first, then the visit: the page's queued keepalive requests share 64 KB,
+	// and the visit has a slim copy to fit what is left)
 	flush();
 	flush_vitals();
 	flush_visit(true);
@@ -2093,6 +2125,7 @@ export function _reset_beacon(): void {
 	visit_shifts = [];
 	visit_longtasks = [];
 	longtasks_from_frames = false;
+	keepalive_queued = 0;
 	visit_scripts = new Map();
 	visit_forced = [];
 	visit_scroll_jank = [];

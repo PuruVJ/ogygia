@@ -36,5 +36,8 @@ it('DEV: a live region snippet’s portable form threads its entry region-css li
 	const emitted = head.join('');
 	expect(emitted).toContain('data-ogygia-region-css');
 	expect(emitted).toContain(url);
-	expect(emitted).toContain('rel="stylesheet"');
+	// (a modulepreload, as region_css_tag writes a dev module href: as a stylesheet the browser fetched
+	// the module again as CSS — Safari logged a MIME error per page; the boot rescue reads either rel)
+	expect(emitted).toContain('rel="modulepreload"');
+	expect(emitted).not.toContain('rel="stylesheet"');
 });

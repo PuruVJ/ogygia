@@ -114,8 +114,10 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 		// is the entry's module url; emit its region-css link so the runtime imports it on boot (executing
 		// it injects the scoped `<style>`), the same channel islands use. In prod `desc.e` is a built JS
 		// asset, so this DEV branch DCEs out and the entry CSS ships through the build handoff.
+		// (a modulepreload, as region_css_tag writes a dev module href: as a stylesheet link the browser
+		// fetched the module a second time as CSS — Safari logged "non CSS MIME types are not allowed")
 		const dev_css_link = DEV
-			? `<link rel="stylesheet" href="${desc.e}" data-ogygia-region-css>`
+			? `<link rel="modulepreload" href="${desc.e}" data-ogygia-region-css>`
 			: '';
 		const server_snip = ((renderer: ServerRenderer, ...args: unknown[]) => {
 			// Server snippet args arrive as raw values; forward call-time params as `__ogArgs`.

@@ -70,6 +70,34 @@ test('a big body as the page goes away sends the slim copy; nothing that cannot 
 	expect(fetches).toEqual([]);
 });
 
+test('the 64 KB is shared by everything queued at once: a hide that sends several fits them or slims them', async () => {
+	const b = await import('../src/runtime/beacon.ts');
+	b._reset_beacon();
+	visibility = 'hidden';
+	// the visit (40 KB) takes most of the room; a 30 KB message after it does not fit what is left —
+	// its slim copy does; one with no slim copy is not tried (Safari refuses it: "maximum amount of
+	// queued data")
+	b._beacon_send('v'.repeat(40_000));
+	b._beacon_send('i'.repeat(30_000), () => 'j'.repeat(8_000));
+	b._beacon_send('c'.repeat(30_000));
+	expect(beacons).toEqual([40_000, 8_000]);
+	expect(fetches).toEqual([]);
+	// a beacon says nothing back: its bytes count for the task that sent it (the hide's burst), then
+	// the room is there again — the early visit, sent a moment before the hide, never crowds it
+	vi.useFakeTimers();
+	try {
+		b._reset_beacon();
+		b._beacon_send('v'.repeat(50_000));
+		b._beacon_send('w'.repeat(20_000));
+		expect(beacons.slice(2)).toEqual([50_000]);
+		vi.advanceTimersByTime(1);
+		b._beacon_send('w'.repeat(20_000));
+		expect(beacons.slice(2)).toEqual([50_000, 20_000]);
+	} finally {
+		vi.useRealTimers();
+	}
+});
+
 test('a refused request never becomes a page error', async () => {
 	const b = await import('../src/runtime/beacon.ts');
 	b._reset_beacon();
