@@ -40,6 +40,9 @@ export interface VisitResource {
 	transfer?: number;
 	size?: number;
 	blocking?: boolean;
+	/** the size is not the browser's: it hid another origin's, and the report weighed the file (never
+	 *  sent by a beacon — the report sets it) */
+	weighed?: true;
 }
 
 export interface VisitIsland {

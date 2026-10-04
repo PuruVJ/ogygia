@@ -52,7 +52,7 @@ import {
 	type SpanRecorder,
 	type SpanAttrs
 } from '../src/profiler/span.js';
-import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name, browser_of } from '../src/profiler/report.js';
+import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name, browser_of, with_hidden_filled } from '../src/profiler/report.js';
 import { build_standalone } from '../src/profiler/standalone.js';
 import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.js';
 import { io_kind } from '../src/profiler/async-io.js';
@@ -1838,6 +1838,42 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(f.message).toContain('__ogygia__ (574 B) was preloaded, then downloaded again');
 		expect(f.fix).toContain('Safari 26 fetched the answer again anyway');
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome } as never).some((x) => x.code === 'other-browser')).toBe(false);
+	});
+
+	it('a Safari visit’s hidden other-origin sizes take the report’s own weights, said whose they are', () => {
+		const lib = Array.from({ length: 6 }, (_, i) => ({ url: `https://cdn.lib.test/p-${i}.js`, type: 'script', start: 10 + i, end: 20 + i, transfer: 0, size: 0 }));
+		const safari = parse_visit('/hell', {
+			at: Date.now(),
+			origin: 'http://app.test',
+			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
+			nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 },
+			paints: { fcp: 30, lcp: 30 },
+			resources: [...lib, { url: 'http://app.test/_app/a.js', type: 'script', start: 5, end: 9, transfer: 0, size: 0 }],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: []
+		})!;
+		// the report weighed each library file (12 KB) — and the page's own file, never borrowed
+		const weighed = lib.map((r) => ({ url: r.url, kind: 'script', via: 'static-import', blocking: false, bytes: 12_288, wire: 4000 }));
+		const assets = { assets: [...weighed, { url: 'http://app.test/_app/a.js', kind: 'script', via: 'script', blocking: false, bytes: 999, wire: 500 }], missed: [], html: { bytes: 1, wire: 1 }, inline: { script: 0, style: 0 }, totals: { js: 74_727, js_wire: 24_500, css: 0, css_wire: 0, font: 0, image: 0, wire: 24_501, lazy_js: 0, blocking: 0, blocking_count: 0, js_files: 7 } };
+		const sized = with_hidden_filled(safari, 'http://app.test', assets as never, undefined);
+		expect(sized.resources.filter((r) => r.weighed).length).toBe(6);
+		expect(sized.resources.find((r) => r.url.endsWith('/_app/a.js'))!.size).toBe(0);
+		// Safari says nothing of what held the first paint: the file the HTML makes blocking is marked;
+		// a Chrome visit's own word stands
+		const head = { ...assets, assets: [...assets.assets, { url: 'https://cdn.lib.test/p-0.js', kind: 'script', via: 'script', blocking: true, bytes: 12_288, wire: 4000 }] };
+		expect(with_hidden_filled(safari, 'http://app.test', head as never, undefined).resources.filter((r) => r.blocking).map((r) => r.url)).toEqual(['https://cdn.lib.test/p-0.js']);
+		const chrome_ua = { ...safari, ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' };
+		expect(with_hidden_filled(chrome_ua, 'http://app.test', head as never, undefined).resources.some((r) => r.blocking)).toBe(false);
+		const f = derive_findings(analyze(p1), meta as never, { ...extras, visit: safari, assets } as never).find((x) => x.code === 'third-party')!;
+		expect(f.message).toContain('served 72 KB of JS (this browser hid the size of each; weighed from the files themselves)');
+		// nothing weighed: counted, as the devtools say it
+		const bare = derive_findings(analyze(p1), meta as never, { ...extras, visit: safari, assets: undefined } as never).find((x) => x.code === 'third-party')!;
+		expect(bare.message).toContain('6 scripts, sizes hidden');
+		// a Chrome visit to the same page measured them: its sizes serve
+		const chrome = { ...safari, resources: lib.map((r) => ({ ...r, size: 2048 })) };
+		expect(with_hidden_filled(safari, 'http://app.test', undefined, chrome).resources.filter((r) => r.weighed && r.size === 2048).length).toBe(6);
 	});
 
 	it("the browser's vitals: a latest visit that loaded with the dock open says its paints may be the dock's", () => {

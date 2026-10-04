@@ -10,7 +10,7 @@ import { another_routes_file } from './route-files.js';
 import { sequential_ms, type NetCall } from './net.js';
 import type { Visit } from './visit.js';
 import { browser_findings, browser_page_report } from './browser-findings.js';
-import { DOM_LARGE, browser_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
+import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
 import { compare as fp_compare } from '../devtools/fp-drift.js';
 import type { ClientWindows, InteractionCpu } from './client-windows.js';
 import type { ByteStrip } from './byte-strip.js';
@@ -849,6 +849,31 @@ function dock_skewed(v: Visit | undefined): boolean {
 	return typeof fcp === 'number' && typeof at === 'number' && fcp >= at && fcp - at <= 250;
 }
 
+/** What a browser hid, from what the report knows itself. Safari reports each of another origin's
+ *  files as 0 bytes (Timing-Allow-Origin or not): the report weighed the files the page names and
+ *  their imports, and a visit from another engine measured what scripts loaded — a hidden size takes
+ *  the weight, marked. And only Chromium says which files held the first paint: for another engine,
+ *  the files the HTML makes blocking (a head stylesheet, a classic sync script) are marked so. */
+export function with_hidden_filled(v: Visit, origin: string | undefined, assets: PageAssets | undefined, other: Visit | undefined): Visit {
+	if (!origin) return v;
+	const known = new Map<string, { size: number; transfer: number }>();
+	for (const r of other?.resources ?? []) if (r.size) known.set(r.url, { size: r.size, transfer: r.transfer ?? 0 });
+	for (const a of assets?.assets ?? []) if (a.bytes) known.set(a.url, { size: a.bytes, transfer: a.wire });
+	const engine = engine_of(v.ua);
+	const blocking = engine && engine !== 'chromium' ? new Set((assets?.assets ?? []).filter((a) => a.blocking).map((a) => a.url)) : null;
+	if (!known.size && !blocking?.size) return v;
+	let filled = false;
+	const resources = v.resources.map((r) => {
+		let out = r;
+		if (blocking?.has(r.url) && !r.blocking) out = { ...out, blocking: true };
+		const w = r.size || r.url.startsWith(origin + '/') ? undefined : known.get(r.url);
+		if (w) out = { ...out, size: w.size, transfer: r.transfer || w.transfer, weighed: true as const };
+		if (out !== r) filled = true;
+		return out;
+	});
+	return filled ? { ...v, resources } : v;
+}
+
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
  *  shows smaller or lower down */
 const SCREEN_CODES: ReadonlySet<string> = new Set(['eager-offscreen', 'eager-hidden', 'images-eager-below', 'image-oversized']);
@@ -1553,7 +1578,10 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		};
 		// (each in-app navigation with its page request's server side, from the request log)
 		const nav_req = new Map((extras.nav_requests ?? []).map((r) => [r.t, r]));
-		const visit = nav_req.size && extras.visit.navs ? { ...extras.visit, navs: extras.visit.navs.map((n) => (nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n)) } : extras.visit;
+		// (another origin's sizes this browser hid: the report's own weights, else the other engine's
+		// visit; and, beyond Chromium, the files the HTML makes blocking)
+		const sized = with_hidden_filled(extras.visit, origin, extras.assets, extras.other_engine_visit);
+		const visit = nav_req.size && sized.navs ? { ...sized, navs: sized.navs.map((n) => (nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n)) } : sized;
 		// (the blocking files: the report's own finding when it weighed the page; else the browser's timing)
 		// (each island's own bytes, from the build's weights: what an eager island below the fold
 		// moves off the first load, as the devtools say it from the browser's ledger)

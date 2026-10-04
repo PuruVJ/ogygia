@@ -158,7 +158,7 @@ export interface PageInput {
 		warnings?: { code: string; message: string; file?: string; fp?: string; t?: number }[];
 		/** (`lcp_priority`: the largest paint's own fetchpriority, when it sets one) */
 		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low' };
-		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean }[];
+		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean; weighed?: true }[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
 		viewport?: [number, number];

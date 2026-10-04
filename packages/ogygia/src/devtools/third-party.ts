@@ -84,6 +84,8 @@ export interface ThirdParty {
 	origins: ThirdPartyOrigin[];
 	script_bytes: number;
 	unsized: number;
+	/** scripts whose size the browser hid and that were weighed apart from the visit */
+	weighed: number;
 	wire: number;
 	blocking: number;
 	cpu_ms: number | null;
@@ -100,6 +102,8 @@ interface Res {
 	transfer?: number;
 	size?: number;
 	blocking?: boolean;
+	/** a size the browser hid, weighed apart from the visit */
+	weighed?: true;
 }
 
 function host_of(url: string): string {
@@ -121,6 +125,7 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 	const by = new Map<string, ThirdPartyOrigin>();
 	let first_third_script_end = Infinity;
 	let runtime_loaded = 0;
+	let weighed = 0;
 	const sorted = [...resources].sort((a, b) => a.start - b.start);
 	for (const r of sorted) {
 		const host = host_of(r.url);
@@ -133,6 +138,7 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 			o.scripts++;
 			o.script_bytes += r.size ?? 0;
 			if (!r.size) o.unsized++;
+			else if (r.weighed) weighed++;
 			if (r.start >= first_third_script_end && (named ? !named.has(r.url) : (in_page !== undefined && !in_page.has(r.url)) || (parsed !== undefined && r.start > parsed))) runtime_loaded++;
 			first_third_script_end = Math.min(first_third_script_end, r.end);
 		}
@@ -145,6 +151,7 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 		origins,
 		script_bytes: sum('script_bytes'),
 		unsized: sum('unsized'),
+		weighed,
 		wire: sum('wire'),
 		blocking: sum('blocking'),
 		cpu_ms: cpu_by_host ? origins.reduce((s, o) => s + (o.cpu_ms ?? 0), 0) : null,
@@ -173,7 +180,7 @@ export interface ThirdPartyFinding {
 	fix?: string;
 }
 
-const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);
+const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : n > 0 && n < 1024 ? `${n} B` : `${Math.round(n / 1024)} KB`);
 
 /** `edited`: islands that did not wake from the server's markup on this visit (changed, recovered,
  *  healed, failed), with when they woke (ms; Infinity when unknown or never). */
@@ -188,11 +195,13 @@ export function third_party_findings(tp: ThirdParty | null, edited: readonly { n
 		!unsized ? kb(bytes) : unsized === scripts ? `${scripts} script${scripts === 1 ? '' : 's'}, sizes hidden` : `at least ${kb(bytes)}`;
 	const label = (o: ThirdPartyOrigin) => `${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''} ${size(o.script_bytes, o.scripts, o.unsized)}${o.cpu_ms ? `, ${Math.round(o.cpu_ms)} ms CPU` : ''}${o.blocking ? `, ${o.blocking} blocking` : ''}`;
 	const scripts = tp.origins.reduce((s, o) => s + o.scripts, 0);
+	// (sizes the browser hid that were weighed apart from the visit: real bytes, said whose they are)
+	const weighed = tp.weighed ? ` (this browser hid the size of ${tp.weighed === scripts ? (scripts === 1 ? 'it' : 'each') : `${tp.weighed} of them`}; weighed from the files themselves)` : '';
 	const served = !tp.unsized
-		? `${kb(tp.script_bytes)} of JS`
+		? `${kb(tp.script_bytes)} of JS${weighed}`
 		: tp.unsized === scripts
 			? `${scripts} script${scripts === 1 ? '' : 's'} (this browser hides other origins' file sizes; a Chromium visit shows them)`
-			: `at least ${kb(tp.script_bytes)} of JS (${tp.unsized} of the ${scripts} scripts had their size hidden by this browser)`;
+			: `at least ${kb(tp.script_bytes)} of JS (${tp.unsized} of the ${scripts} scripts had their size hidden by this browser${tp.weighed ? `; ${tp.weighed} more it hid were weighed from the files themselves` : ''})`;
 	const worth = tp.script_bytes >= 30 * 1024 || tp.unsized >= MANY || (tp.cpu_ms ?? 0) >= 50 || tp.blocking > 0;
 	if (worth)
 		out.push({

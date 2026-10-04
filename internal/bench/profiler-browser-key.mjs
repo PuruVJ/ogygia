@@ -19,7 +19,7 @@ const base = args[0] ?? `http://127.0.0.1:${PORT}`;
 const key = args[1] ?? 'hell';
 const serve = !args[0];
 const app = fileURLToPath(new URL('../../apps/playground', import.meta.url));
-const { chromium } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
+const { chromium, webkit } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
 
 /** each lab: the page to visit (its path as recorded: the bare path, a query only on the visit),
  *  how long to stay, the codes that must be named (with what each message must say), and the codes
@@ -62,7 +62,10 @@ const LABS = [
 	// one module by two paths (a package's src and its dist), both copies on the page; the decoy
 	// loads one copy (the workspace's own ogygia src/dist pair may still be named there — never dup-pkg)
 	{ path: '/dt-dupe', stay: 1500, named: { 'duplicate-module': 'from dup-pkg/dist' }, fix_says: { 'duplicate-module': 'import the package by its public entry everywhere' } },
-	{ path: '/dt-dupe-one', stay: 1500, never: { 'duplicate-module': 'dup-pkg' } }
+	{ path: '/dt-dupe-one', stay: 1500, never: { 'duplicate-module': 'dup-pkg' } },
+	// (WebKit: every other origin's file 0 bytes and no word of what held the first paint — the report
+	// weighs the files the page names and reads the blocking ones off its HTML, as Chromium tells it)
+	{ path: '/dt-third', engine: 'webkit', stay: 3500, named: { 'third-party': 'were weighed from the files themselves', 'third-party-blocking': 'held the first paint', 'third-party-edits': 'ThirdTarget' }, never: { 'third-party': ' 0 KB' } }
 ];
 
 async function start_preview() {
@@ -89,6 +92,9 @@ if (flags.includes('--build')) {
 }
 const stop = serve ? await start_preview() : () => {};
 const browser = await chromium.launch();
+/** another engine, launched for the first lab that asks for it */
+const engines = { chromium: browser };
+const engine_of = async (name = 'chromium') => (engines[name] ??= await { webkit }[name].launch());
 const headers = { 'x-profiler-key': key };
 let failed = 0;
 /** the largest visit body any lab's beacon sent */
@@ -103,7 +109,7 @@ try {
 			failed++;
 			continue;
 		}
-		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+		const page = await (await engine_of(lab.engine)).newPage({ viewport: { width: 1400, height: 900 } });
 		// (a build measures only a browser that carries the profiler's key: the beacon's tag is added then)
 		await page.setExtraHTTPHeaders(headers);
 		// each visit the beacon sends, by size: the hide-time send rides keepalive (60 KB at most, the
@@ -146,7 +152,7 @@ try {
 		for (const [kind, not] of Object.entries(lab.fixes_never ?? {})) checks.push([`${kind} fix never "${not}"`, !!fix(kind) && !fix(kind).includes(not)]);
 		const bad = checks.filter(([, ok]) => !ok);
 		if (bad.length) failed++;
-		console.log(`${bad.length ? '✗' : '✓'} ${lab.path}${lab.query ?? ''}: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}`);
+		console.log(`${bad.length ? '✗' : '✓'} ${lab.path}${lab.query ?? ''}${lab.engine ? ` (${lab.engine})` : ''}: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}`);
 		for (const [n] of bad) {
 			const code = n.split(' ')[0] === 'no' ? n.split(' ')[1] : n.split(' ')[0];
 			console.log(`    ${code}: ${(msg(code) || fix(code)).slice(0, 300) || '(not in the report)'}${fix_of(code) ? `\n      fix: ${fix_of(code).slice(0, 300)}` : ''}`);
@@ -168,7 +174,7 @@ try {
 	if (!ok) failed++;
 	console.log(`${ok ? '✓' : '✗'} the biggest visit sent: ${(biggest / 1024).toFixed(1)} KB (under ${VISIT_BUDGET / 1000} KB: half of what a hide-time send may carry)`);
 } finally {
-	await browser.close();
+	for (const b of Object.values(engines)) await b.close();
 	stop();
 }
 console.log(failed ? `\n${failed} lab(s) failed` : '\nevery browser plant reached the report, the quiet pages quiet');
