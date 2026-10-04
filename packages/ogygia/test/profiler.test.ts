@@ -1828,6 +1828,28 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(limits).toContain('long tasks (its stalls are estimated from the frames it drew late)');
 	});
 
+	it('a cross-origin-isolated page in Safari: the first byte hidden, the visit kept, never a 0 ms first byte', () => {
+		const hidden = parse_visit('/', {
+			at: Date.now(),
+			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
+			nav: { start_hidden: true, res_end: 2.2, dom_interactive: 15, dcl: 53, load: 54 },
+			paints: { fcp: 48, lcp: 100 },
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', t0: 20, loaded: 30, turn: 31, done: 40 }]
+		})!;
+		expect(hidden).not.toBeNull();
+		expect(hidden.nav).toMatchObject({ start_hidden: true, res_start: 2.2, res_end: 2.2 });
+		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit: hidden } as never);
+		expect(out.find((f) => f.code === 'first-byte-hidden')!.message).toContain("In the browser (Safari 26): The browser gave no time for this page's request and first byte (Safari does that for a cross-origin-isolated page");
+		// no first-byte number from it, anywhere
+		expect(JSON.stringify(report_json(analyze(p1), { ...meta, trigger: 'page' } as never, '/__profiler', { ...extras, visit: hidden } as never))).not.toContain('"ttfb":2.2');
+		// a visit with no document timing at all is still not one
+		expect(parse_visit('/', { at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [] })).toBeNull();
+	});
+
 	it('another engine’s visit: what Safari saw that the latest Chrome visit did not, named with the browser', () => {
 		const base = { nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 }, paints: { fcp: 30, lcp: 30 }, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800] };
 		const chrome = parse_visit('/hell', { ...base, at: Date.now(), ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' })!;

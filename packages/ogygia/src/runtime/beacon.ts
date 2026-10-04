@@ -1022,7 +1022,11 @@ function build_visit(): Record<string, unknown> | null {
 	} catch {
 		nav = undefined;
 	}
-	if (!nav || !(nav.responseStart > 0)) return null;
+	if (!nav || !(nav.responseEnd > 0)) return null;
+	// Safari, on a cross-origin-isolated page (COOP and COEP), gives the request and the first byte as
+	// 0 — the rest of the document's timing stands. The visit is kept (it was dropped whole: no
+	// browser finding for the page at all), its start said hidden, never a 0 ms first byte
+	const start_hidden = !(nav.responseStart > 0);
 	// no regex here: the extension by string search, once per resource
 	const ext_of = (name: string): string => {
 		const q = name.indexOf('?');
@@ -1210,8 +1214,7 @@ function build_visit(): Record<string, unknown> | null {
 		// those as unknown, never as a clean zero
 		...unsupported_types(),
 		nav: {
-			req_start: r2(nav.requestStart),
-			res_start: r2(nav.responseStart),
+			...(start_hidden ? { start_hidden: true } : { req_start: r2(nav.requestStart), res_start: r2(nav.responseStart) }),
 			res_end: r2(nav.responseEnd),
 			...(nav.domInteractive ? { dom_interactive: r2(nav.domInteractive) } : {}),
 			...(nav.domContentLoadedEventEnd ? { dcl: r2(nav.domContentLoadedEventEnd) } : {}),

@@ -112,7 +112,9 @@ export function browser_page_report(
 		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
 		vitals: visit.vitals ?? {},
 		visit: {
-			nav: visit.nav,
+			// (a start the browser hid: no request or first byte for the analysis to read — the
+			// devtools get the beacon's nav the same way, without them)
+			nav: visit.nav.start_hidden ? (({ req_start: _q, res_start: _s, ...rest }) => rest)(visit.nav) : visit.nav,
 			paints: visit.paints,
 			resources: visit.resources,
 			resource_totals: visit.resource_totals,

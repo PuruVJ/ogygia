@@ -140,6 +140,9 @@ export interface PageInput {
 			dcl?: number;
 			load?: number;
 			res_start?: number;
+			/** the browser gave the request and the first byte as 0 (Safari, a cross-origin-isolated
+			 *  page): no `res_start` — what needs the first byte is missing, not zero */
+			start_hidden?: true;
 			/** the document's last byte */
 			res_end?: number;
 			/** the document's body, decoded (bytes) */
@@ -1498,6 +1501,17 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		});
 	}
 
+	// ── a first byte the browser hid (Safari zeroes the request and the first byte of a
+	// cross-origin-isolated page): what needs it is missing, said so, not a clean 0 ms ──
+	if (page.visit?.nav?.start_hidden)
+		findings.push({
+			code: 'first-byte-hidden',
+			severity: 'info',
+			message: `The browser gave no time for this page's request and first byte (${page.browser?.startsWith('Safari') ? 'Safari does' : 'it does'} that for a cross-origin-isolated page, one sent with Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy): the time to first byte and its parts are missing here, not zero. The rest of the visit stands.`,
+			fix: 'Read the first byte from a Chromium visit, or from the server side (the profiler times the render itself).',
+			fps: []
+		});
+
 	// ── resources: what blocked the first paint, and the bytes by type ──
 	const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp ?? Infinity;
 	const blocking = (page.visit?.resources ?? [])
@@ -1506,7 +1520,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		.sort((a, b) => b.ms - a.ms);
 	// what they cost: how long after the HTML arrived the last blocking file was in (the paint could
 	// not come sooner) — many small files that land at once cost nothing worth a finding
-	const html_at = page.visit?.nav?.res_start ?? 0;
+	// (a first byte the browser hid: the HTML's end, the latest it can have begun — never 0)
+	const html_at = page.visit?.nav?.res_start ?? page.visit?.nav?.res_end ?? 0;
 	let blocked_until = 0;
 	for (const r of page.visit?.resources ?? []) if (r.blocking && r.start < fcp) blocked_until = Math.max(blocked_until, r.end);
 	const held_ms = blocking.length ? Math.max(0, blocked_until - html_at) : 0;
@@ -2108,7 +2123,7 @@ export function lcp_rivals(visit: PageInput['visit'] | null | undefined): { byte
 	if (!visit || !below?.length || typeof p?.lcp !== 'number') return null;
 	const resources = visit.resources ?? [];
 	const res = p.lcp_url ? resources.find((r) => r.url === p.lcp_url) : undefined;
-	const from = res ? (res.req_start ?? res.start) : (visit.nav?.res_start ?? 0);
+	const from = res ? (res.req_start ?? res.start) : (visit.nav?.res_start ?? visit.nav?.res_end ?? 0);
 	const to = res ? res.end : p.lcp;
 	let bytes = 0;
 	const files: string[] = [];

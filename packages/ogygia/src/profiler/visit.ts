@@ -14,6 +14,9 @@ export interface VisitNav {
 	req_start: number;
 	res_start: number;
 	res_end: number;
+	/** the browser gave the request and the first byte as 0 (Safari, a cross-origin-isolated page):
+	 *  `req_start` and `res_start` are then the HTML's end, standing in — no first byte to read */
+	start_hidden?: true;
 	dom_interactive?: number;
 	dcl?: number;
 	load?: number;
@@ -205,13 +208,16 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	if (!v || typeof v !== 'object') return null;
 	const nav_raw = v.nav as Record<string, unknown> | undefined;
 	if (!nav_raw || typeof nav_raw !== 'object') return null;
-	const res_start = num(nav_raw.res_start);
+	// (a start the browser hid: the HTML's end stands in for it, marked — never a 0 ms first byte)
+	const start_hidden = nav_raw.start_hidden === true;
+	const res_start = num(nav_raw.res_start) ?? (start_hidden ? num(nav_raw.res_end) : undefined);
 	if (res_start === undefined) return null;
 	const nav: VisitNav = {
-		req_start: num(nav_raw.req_start) ?? 0,
+		req_start: start_hidden ? res_start : (num(nav_raw.req_start) ?? 0),
 		res_start,
 		res_end: Math.max(res_start, num(nav_raw.res_end) ?? res_start)
 	};
+	if (start_hidden) nav.start_hidden = true;
 	for (const k of ['dom_interactive', 'dcl', 'load'] as const) {
 		const n = num(nav_raw[k]);
 		if (n !== undefined) nav[k] = n;
@@ -767,7 +773,9 @@ export function one_clock(
 	// SERVER: the profiled render, aligned so it ENDS at the first byte — a different request than
 	// the visit, so its length is the profile's, its place is the visit's
 	let server_at: OneClock['server_at'] = null;
-	if (server && server.window_ms > 0) {
+	// (a first byte the browser hid: nowhere to end the server's bar, nor a wait for it to draw)
+	if (nav.start_hidden) notes.push("The browser gave no time for the request and the first byte (Safari on a cross-origin-isolated page): the lanes start at the HTML's end, and the server's render is not placed.");
+	if (server && server.window_ms > 0 && !nav.start_hidden) {
 		const t1 = nav.res_start;
 		let t0 = t1 - server.window_ms;
 		let clipped = false;
@@ -792,10 +800,12 @@ export function one_clock(
 	lanes.push({
 		name: 'document',
 		group: 'document',
-		bars: [
-			{ id: 'doc:ttfb', lane: 'document', label: 'waiting for the first byte', t0: nav.req_start, t1: nav.res_start, kind: 'ttfb', detail: `${Math.round(nav.res_start - nav.req_start)} ms from request to first byte` },
-			{ id: 'doc:download', lane: 'document', label: 'HTML arriving', t0: nav.res_start, t1: nav.res_end, kind: 'download', detail: `${nav.size ? Math.round(nav.size / 1024) + ' KB' : 'the document'} over ${Math.round(nav.res_end - nav.res_start)} ms${nav.protocol ? ' · ' + nav.protocol : ''}` }
-		]
+		bars: nav.start_hidden
+			? []
+			: [
+					{ id: 'doc:ttfb', lane: 'document', label: 'waiting for the first byte', t0: nav.req_start, t1: nav.res_start, kind: 'ttfb', detail: `${Math.round(nav.res_start - nav.req_start)} ms from request to first byte` },
+					{ id: 'doc:download', lane: 'document', label: 'HTML arriving', t0: nav.res_start, t1: nav.res_end, kind: 'download', detail: `${nav.size ? Math.round(nav.size / 1024) + ' KB' : 'the document'} over ${Math.round(nav.res_end - nav.res_start)} ms${nav.protocol ? ' · ' + nav.protocol : ''}` }
+				]
 	});
 	// NETWORK: one lane per type, sorted by start
 	const by_type = new Map<string, VisitResource[]>();

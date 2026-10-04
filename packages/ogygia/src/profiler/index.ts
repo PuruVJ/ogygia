@@ -228,6 +228,7 @@ import { app_asset_rel, client_dir_candidates, client_file_finder } from './clie
 import { is_http_error, is_redirect } from '../router/respond.js';
 import { build_profiler_router } from './profiler-router.js';
 import { detect_dev } from './env.js';
+import { refresh_target } from './refresh-stub.js';
 
 export interface ProfilerOptions {
 	/**
@@ -1856,6 +1857,7 @@ class Profiler {
 			| 'runs_set_aside'
 			| 'request'
 			| 'redirected_from'
+			| 'redirect_stub'
 			| 'warmup_ms'
 			| 'run_status'
 			| 'run_bytes'
@@ -4363,6 +4365,8 @@ class Profiler {
 			// FINAL url. The warm-up's own wall time is reported so a caching app is obvious.
 			let target = path;
 			let redirected_from: string | undefined;
+			/** a hop was a prerendered redirect's stub (a meta refresh answered 200) */
+			let redirect_stub = false;
 			let warmup_ms: number | undefined;
 			let warm_status = 0;
 			let warm_bytes = 0;
@@ -4405,6 +4409,8 @@ class Profiler {
 				warm_status = res.status;
 				warm_bytes = body.length;
 				// fetch may follow same-origin redirects itself (res.redirected) or hand back the 3xx
+				// (…or a prerendered redirect: a 200 stub with a meta refresh, the build's stand-in for one)
+				const stub = res.ok && !res.redirected ? refresh_target(body, event.url.origin) : null;
 				const next = res.redirected
 					? new URL(res.url).pathname + new URL(res.url).search
 					: res.status >= 300 && res.status < 400
@@ -4414,9 +4420,10 @@ class Profiler {
 								const u = new URL(loc, event.url.origin);
 								return u.pathname + u.search;
 							})()
-						: null;
+						: stub;
 				if (!next || next === target) break;
 				redirected_from ??= path;
+				if (stub && next === stub) redirect_stub = true;
 				target = next;
 			}
 
@@ -4800,6 +4807,7 @@ class Profiler {
 					trigger: 'page',
 					page: target,
 					redirected_from,
+					...(redirect_stub ? { redirect_stub: true as const } : {}),
 					// plain AWS Lambda (Amplify); Vercel and Netlify run on it too but bill differently
 					...(process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.VERCEL && !process.env.NETLIFY
 						? {

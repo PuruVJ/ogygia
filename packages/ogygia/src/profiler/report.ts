@@ -386,6 +386,8 @@ export interface ReportMeta {
 	page?: string;
 	/** page mode: the originally-requested path, when it redirected to `page` (trailing slash, i18n, …) */
 	redirected_from?: string;
+	/** page mode: the redirect was a prerendered page's stub (a meta refresh answered 200) */
+	redirect_stub?: true;
 	/** page mode: wall ms of the one un-profiled warm-up render (cold module load / cache fill) */
 	warmup_ms?: number;
 	/** page mode: the HTTP status the profiled renders returned (200 = a real render; 3xx/4xx = not) */
@@ -1024,7 +1026,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		if (meta.redirected_from && meta.page) {
 			info(
 				'redirected',
-				`Profiled ${meta.page} — followed a redirect from ${meta.redirected_from}.`
+				meta.redirect_stub
+					? `Profiled ${meta.page}: ${meta.redirected_from} is a redirect the build wrote as a page (a meta refresh, answered 200, since a prerendered route has no server to send a 3xx), and its visitors land on ${meta.page}.`
+					: `Profiled ${meta.page} — followed a redirect from ${meta.redirected_from}.`
 			);
 		}
 		const status = meta.run_status ?? 200;
@@ -3541,7 +3545,7 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 				? {
 						lcp: visit.paints?.lcp ?? null,
 						fcp: visit.paints?.fcp ?? null,
-						ttfb: visit.nav?.res_start ?? null,
+						ttfb: visit.nav?.start_hidden ? null : (visit.nav?.res_start ?? null),
 						cls: no_shifts ? null : visit.shifts?.length ? Math.round(visit.shifts.reduce((s, x) => s + x.value, 0) * 1000) / 1000 : 0,
 						inp: null
 					}
@@ -3599,6 +3603,7 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		target: {
 			page: meta.page ?? null,
 			redirected_from: meta.redirected_from ?? null,
+			...(meta.redirect_stub ? { redirect_stub: true } : {}),
 			runs: meta.runs ?? null,
 			warmup_ms: meta.warmup_ms ?? null,
 			run_status: meta.run_status ?? null,
