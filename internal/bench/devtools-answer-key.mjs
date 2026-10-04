@@ -1785,6 +1785,14 @@ try {
 			await page.goto(base + '/dt-fcp', { waitUntil: 'load' });
 			await page.waitForTimeout(1500);
 			const fcp = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'slow-fcp')?.message ?? '');
+			// /dt-coi: a cross-origin-isolated page — WebKit gives its request, first byte (and on a dev
+			// server its HTML's end) as 0: the visit stands, its first byte said hidden
+			await page.goto(base + '/dt-coi', { waitUntil: 'load' });
+			await page.waitForTimeout(3500);
+			const coi = await page.evaluate(() => {
+				const v = window.__ogygia_page?.();
+				return { hidden: (v?.report.findings ?? []).some((f) => f.code === 'first-byte-hidden'), islands: v?.report.rows?.length ?? 0 };
+			});
 			const checks = [
 				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
 				['every tab opens', tabs.length >= 8],
@@ -1792,11 +1800,12 @@ try {
 				['…and never what it cannot', !codes.includes('hydration-shift')],
 				['the planted stall found from frames drawn late, said so', stall.includes('frames it drew more than 50 ms late')],
 				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')],
-				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('fetched the answer again anyway') && !hole_fix.includes('must match exactly')],
+				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('never hands a fetch preload to a later fetch()') && !hole_fix.includes('must match exactly')],
 				['the hidden face named in WebKit', font.includes("Text in 'SlowFace'")],
 				["the dock open as it loaded: the paints may be the dock's", dock_note.includes('The devtools dock was open as this page loaded')],
 				['third-party scripts whose sizes WebKit hides: counted, not 0 KB', third.includes('sizes hidden') && !third.includes('0 KB') && third.includes('3 of their scripts')],
 				["another origin's file in the head held the paint, named in WebKit too", third_held],
+				["a cross-origin-isolated page: its visit kept, the first byte said hidden", coi.hidden && coi.islands > 0],
 				['the slow head stylesheet named as what the first paint waited on', fcp.includes('waiting for a file that blocks the paint (the slowest slow.css')]
 			];
 			const bad = checks.filter(([, ok]) => !ok);

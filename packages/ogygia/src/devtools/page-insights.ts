@@ -1828,9 +1828,15 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// choice, not the page's markup — Safari does not reuse it where Chromium does
 		const safari = !!page.browser?.startsWith('Safari');
 		const ours = (m: PreloadMiss) => m.type === 'fetch' && m.crossorigin === 'anonymous' && m.url.includes('/__ogygia__');
+		// SAFARI NEVER HANDS A FETCH PRELOAD TO A LATER fetch(): every crossorigin and credentials
+		// pairing, every Cache-Control (no-store to public max-age), Vary or not, isolated or not — two
+		// requests each time, where Chromium makes one (fonts it does reuse). So no attribute fixes it
+		const safari_fetch = (m: PreloadMiss) => safari && m.type === 'fetch' && m.crossorigin !== null;
 		const why = (m: PreloadMiss) =>
 			ours(m)
-				? `ogygia's own hole preload and its runtime's fetch match (crossorigin="anonymous", credentials same-origin)${safari ? `; ${page.browser} fetched the answer again anyway — it does not reuse this preload, which Chromium does` : ''}`
+				? `ogygia's own hole preload and its runtime's fetch match (crossorigin="anonymous", credentials same-origin)${safari ? `; ${page.browser} never hands a fetch preload to a later fetch() — whatever its crossorigin or Cache-Control — so it fetched the answer again` : ''}`
+				: safari_fetch(m)
+				? `${page.browser} never hands a fetch preload to a later fetch(), whatever its crossorigin, credentials or Cache-Control: in Safari it is always a second download (Chromium uses it)`
 				: m.type === 'font' && m.crossorigin === null
 				? 'a font always loads in CORS mode: its preload needs `crossorigin`'
 				: m.type === 'fetch' && m.crossorigin === null
@@ -1848,8 +1854,10 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix:
 				`${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}.` +
 				(misses.every(ours)
-					? " Nothing in the page's markup to change: it is the hole preload ogygia writes, in a browser that does not use it — report it to ogygia with the browser's name."
-					: ' The preload and the request must match exactly, or the browser fetches the file again.'),
+					? " Nothing in the page's markup to change: it is the hole preload ogygia writes, in a browser that never uses one."
+					: misses.every((m) => ours(m) || safari_fetch(m))
+						? ' No attribute changes it: to start the request early in Safari too, begin it in an inline script and hand its promise to the code that reads it — or drop the preload where Safari is most of the traffic.'
+						: ' The preload and the request must match exactly, or the browser fetches the file again.'),
 			fps: []
 		});
 	}

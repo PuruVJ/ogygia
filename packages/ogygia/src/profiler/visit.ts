@@ -210,7 +210,8 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	if (!nav_raw || typeof nav_raw !== 'object') return null;
 	// (a start the browser hid: the HTML's end stands in for it, marked — never a 0 ms first byte)
 	const start_hidden = nav_raw.start_hidden === true;
-	const res_start = num(nav_raw.res_start) ?? (start_hidden ? num(nav_raw.res_end) : undefined);
+	// (…or, its end hidden too — a dev server — the navigation's start: every reader skips it)
+	const res_start = num(nav_raw.res_start) ?? (start_hidden ? (num(nav_raw.res_end) ?? 0) : undefined);
 	if (res_start === undefined) return null;
 	const nav: VisitNav = {
 		req_start: start_hidden ? res_start : (num(nav_raw.req_start) ?? 0),

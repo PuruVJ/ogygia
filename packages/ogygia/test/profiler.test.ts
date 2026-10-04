@@ -1863,7 +1863,7 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		const f = out.find((x) => x.code === 'other-browser')!;
 		expect(f.message.startsWith('In Safari 26 (another visit to this page) the browser saw what this one did not:')).toBe(true);
 		expect(f.message).toContain('__ogygia__ (574 B) was preloaded, then downloaded again');
-		expect(f.fix).toContain('Safari 26 fetched the answer again anyway');
+		expect(f.fix).toContain('Safari 26 never hands a fetch preload to a later fetch()');
 		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome } as never).some((x) => x.code === 'other-browser')).toBe(false);
 	});
 

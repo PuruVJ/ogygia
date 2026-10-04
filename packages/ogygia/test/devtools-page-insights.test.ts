@@ -1203,10 +1203,18 @@ describe('analyze_page', () => {
 		const hole = (browser?: string) =>
 			analyze_page(page({ ...(browser ? { browser } : {}), visit: { preload_misses: [miss('https://a.test/__ogygia__?id=97f7&props=W3&sig=9d', 'fetch', 'anonymous', 574)] } }), [], [], 2000).findings.find((x) => x.code === 'preload-unused')!;
 		const s = hole('Safari 26');
-		expect(s.fix).toContain("Ogygia's own hole preload and its runtime's fetch match (crossorigin=\"anonymous\", credentials same-origin); Safari 26 fetched the answer again anyway");
+		expect(s.fix).toContain("Ogygia's own hole preload and its runtime's fetch match (crossorigin=\"anonymous\", credentials same-origin); Safari 26 never hands a fetch preload to a later fetch()");
 		expect(s.fix).toContain("Nothing in the page's markup to change");
 		expect(s.fix).not.toContain('must match exactly');
 		expect(hole().fix).not.toContain('Safari');
+		// the app's own fetch preload in Safari: never reused whatever its attributes — no crossorigin
+		// advice (which cannot help), the inline-script way instead; in Chromium the attribute advice stands
+		const app = (browser?: string) =>
+			analyze_page(page({ ...(browser ? { browser } : {}), visit: { preload_misses: [miss('https://a.test/api/data', 'fetch', 'use-credentials', 900)] } }), [], [], 2000).findings.find((x) => x.code === 'preload-unused')!;
+		expect(app('Safari 26').fix).toContain('Safari 26 never hands a fetch preload to a later fetch(), whatever its crossorigin, credentials or Cache-Control');
+		expect(app('Safari 26').fix).toContain('begin it in an inline script');
+		expect(app('Safari 26').fix).not.toContain('does not match');
+		expect(app().fix).toContain('Its `crossorigin="use-credentials"` does not match');
 	});
 
 	it('a server transform’s restore gone wrong: a host upgraded first, and a mismatch, each named with its island', () => {

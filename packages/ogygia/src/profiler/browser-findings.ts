@@ -114,7 +114,8 @@ export function browser_page_report(
 		visit: {
 			// (a start the browser hid: no request or first byte for the analysis to read — the
 			// devtools get the beacon's nav the same way, without them)
-			nav: visit.nav.start_hidden ? (({ req_start: _q, res_start: _s, ...rest }) => rest)(visit.nav) : visit.nav,
+			// (its end hidden too, a dev server: the stand-in is 0 — not an end either)
+			nav: visit.nav.start_hidden ? (({ req_start: _q, res_start: _s, res_end, ...rest }) => (res_end > 0 ? { ...rest, res_end } : rest))(visit.nav) : visit.nav,
 			paints: visit.paints,
 			resources: visit.resources,
 			resource_totals: visit.resource_totals,
