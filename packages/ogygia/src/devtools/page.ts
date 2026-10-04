@@ -224,6 +224,18 @@ function prebundled_packages(script_urls: readonly string[]): string[] | null {
 	return null;
 }
 
+/** A FILE THE BROWSER DOWNLOADED AGAIN: its answer's `Vary` header, asked once per URL with a HEAD
+ *  (a tool's request, out of every measurement). Null until it is in, or when the answer has none. */
+const varies = new Map<string, string | null>();
+function vary_of(url: string): string | null {
+	if (varies.has(url)) return varies.get(url) ?? null;
+	varies.set(url, null);
+	void tool_fetch(url, { method: 'HEAD', cache: 'no-store' })
+		.then((r) => varies.set(url, r.headers.get('vary')))
+		.catch(() => {});
+	return null;
+}
+
 function first_child_top(el: Element): number {
 	for (const c of el.children) {
 		const b = c.getBoundingClientRect();
@@ -710,6 +722,12 @@ export function read_page(): PageView | null {
 	// live page already holds the script elements other scripts added — so parse time decides for a
 	// script an element names, and a script no element names came by an import or a fetch)
 	const in_page = other_origin_refs();
+	// (a font the browser downloaded again: its answer's Vary header, read once — Safari refetches a
+	// preloaded font that varies by Origin when its @font-face came late)
+	const preload_misses = base.visit?.preload_misses?.map((m) => {
+		const vary = m.type === 'font' ? vary_of(m.url) : null;
+		return vary ? { ...m, vary } : m;
+	});
 	// (an island whose own file was gone, named as every tab names it)
 	const fallbacks = base.visit?.entry_fallbacks?.map((f) => ({ ...f, name: region_name(f.entry) }));
 	const refetched = base.visit?.refetched?.map((f) => (f.entry ? { ...f, name: region_name(f.entry) } : f));
@@ -719,7 +737,7 @@ export function read_page(): PageView | null {
 	// …and the scripts the page's scroll waited on, the same way (a build's handler is a minified name)
 	const scroll_jank = base.visit?.scroll_jank?.map((j) => ({ ...j, scripts: j.scripts.map((s) => ({ ...s, ...island_of_file(s.url) })) }));
 	const with_visit: PageInput = base.visit
-		? { ...base, visit: { ...base.visit, origin: location.origin, in_page, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}), ...(scroll_jank ? { scroll_jank } : {}) } }
+		? { ...base, visit: { ...base.visit, origin: location.origin, in_page, ...(preload_misses ? { preload_misses } : {}), ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}), ...(scroll_jank ? { scroll_jank } : {}) } }
 		: base;
 	const holes = hole_failures();
 	const code = island_code();

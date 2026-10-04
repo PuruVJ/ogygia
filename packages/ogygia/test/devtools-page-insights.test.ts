@@ -1215,6 +1215,23 @@ describe('analyze_page', () => {
 		expect(app('Safari 26').fix).toContain('begin it in an inline script');
 		expect(app('Safari 26').fix).not.toContain('does not match');
 		expect(app().fix).toContain('Its `crossorigin="use-credentials"` does not match');
+		// a font Safari downloaded again whose answer varies by Origin: the @font-face that came late is
+		// the cause — no crossorigin advice; a dev server's pair of habits said as that
+		const font = (browser: string | undefined, vary: string | undefined, dev = false) =>
+			analyze_page(
+				page({ ...(browser ? { browser } : {}), ...(dev ? { dev: true } : {}), visit: { preload_misses: [{ ...miss('https://a.test/f/serif.woff2', 'font', 'anonymous', 140_000), ...(vary ? { vary } : {}) }] } }),
+				[],
+				[],
+				2000
+			).findings.find((x) => x.code === 'preload-unused')!.fix!;
+		expect(font('Safari 26', 'Origin')).toContain('Its answer says `Vary: Origin`: Safari 26 does not reuse a font preload that varies by Origin once the @font-face asking for it comes from a stylesheet added after the page parsed');
+		expect(font('Safari 26', 'Origin')).toContain('For the fonts: answer them without `Vary: Origin`');
+		expect(font('Safari 26', 'Accept-Encoding, Origin', true)).toContain('on a dev server both are common');
+		expect(font('Safari 26', 'Accept-Encoding, Origin', true)).toContain("a build drops the dev server's habits");
+		expect(font('Safari 26', 'Origin')).not.toContain('must match exactly');
+		// no Vary: Origin, or not Safari: the attribute advice
+		expect(font('Safari 26', 'Accept-Encoding')).toContain('must match exactly');
+		expect(font(undefined, 'Origin')).not.toContain('Vary');
 	});
 
 	it('a server transform’s restore gone wrong: a host upgraded first, and a mismatch, each named with its island', () => {

@@ -1793,8 +1793,18 @@ try {
 				const v = window.__ogygia_page?.();
 				return { hidden: (v?.report.findings ?? []).some((f) => f.code === 'first-byte-hidden'), islands: v?.report.rows?.length ?? 0 };
 			});
+			// /dt-font-late: a preloaded font whose @font-face comes in a stylesheet added after parsing,
+			// answered with Vary: Origin — WebKit fetches it again (the decoy, named in the HTML's own
+			// stylesheet, it reuses); the Vary header is read after the first look, so look twice
+			await page.goto(base + '/dt-font-late', { waitUntil: 'load' });
+			await page.waitForTimeout(4000);
+			const late_of = () => page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'preload-unused') ?? null);
+			await late_of();
+			await page.waitForTimeout(2500);
+			const late = (await late_of()) ?? { message: '', fix: '' };
 			const checks = [
 				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
+				['a late @font-face Safari refetches: named with its Vary: Origin, never the decoy', late.message.includes('late.woff2') && !late.message.includes('early.woff2') && (late.fix ?? '').includes('Vary: Origin')],
 				['every tab opens', tabs.length >= 8],
 				['the page view names what it can measure', codes.includes('markup-changed') && codes.includes('hydrate-failed') && codes.includes('eager-offscreen')],
 				['…and never what it cannot', !codes.includes('hydration-shift')],

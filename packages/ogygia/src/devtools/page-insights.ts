@@ -275,6 +275,8 @@ export interface PreloadMiss {
 	/** the preload link's `as` and `crossorigin` (null: none) */
 	as: string;
 	crossorigin: string | null;
+	/** the answer's `Vary` header, when the devtools read it (a font downloaded again) */
+	vary?: string;
 }
 
 export interface HoleWait {
@@ -1832,8 +1834,16 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// pairing, every Cache-Control (no-store to public max-age), Vary or not, isolated or not — two
 		// requests each time, where Chromium makes one (fonts it does reuse). So no attribute fixes it
 		const safari_fetch = (m: PreloadMiss) => safari && m.type === 'fetch' && m.crossorigin !== null;
+		// SAFARI AND A FONT THAT VARIES BY ORIGIN: its preload is reused while the @font-face is in the
+		// HTML's own stylesheet, and downloaded again once the rule comes from a stylesheet added after
+		// the page parsed (a dev server's CSS, an island's) — any Cache-Control, isolated or not.
+		// Without `Vary: Origin` it is reused either way; Chromium reuses it always
+		const varies = (m: PreloadMiss) => !!m.vary && m.vary.toLowerCase().split(',').some((v) => v.trim() === 'origin' || v.trim() === '*');
+		const safari_font = (m: PreloadMiss) => safari && m.type === 'font' && m.crossorigin !== null && varies(m);
 		const why = (m: PreloadMiss) =>
-			ours(m)
+			safari_font(m)
+				? `its answer says \`Vary: ${m.vary}\`: ${page.browser} does not reuse a font preload that varies by Origin once the @font-face asking for it comes from a stylesheet added after the page parsed${page.dev ? " (on a dev server both are common: it answers every file with Vary: Origin and adds the page's CSS by script)" : ''}`
+				: ours(m)
 				? `ogygia's own hole preload and its runtime's fetch match (crossorigin="anonymous", credentials same-origin)${safari ? `; ${page.browser} never hands a fetch preload to a later fetch() — whatever its crossorigin or Cache-Control — so it fetched the answer again` : ''}`
 				: safari_fetch(m)
 				? `${page.browser} never hands a fetch preload to a later fetch(), whatever its crossorigin, credentials or Cache-Control: in Safari it is always a second download (Chromium uses it)`
@@ -1842,7 +1852,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				: m.type === 'fetch' && m.crossorigin === null
 					? 'a fetch preload needs `crossorigin` (`anonymous` for a same-origin `fetch()`, `use-credentials` for `credentials: "include"`)'
 					: m.type === 'fetch' || m.type === 'font'
-						? `its \`crossorigin="${m.crossorigin}"\` does not match the request's credentials`
+						? `its \`crossorigin="${m.crossorigin}"\`${m.crossorigin ? '' : ' (anonymous)'} does not match the request's credentials`
 						: m.type === 'script'
 							? 'a module script is preloaded with `<link rel="modulepreload">`, not `rel="preload" as="script"`'
 							: 'its `as` or `crossorigin` does not match how the page requests the file';
@@ -1853,11 +1863,18 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message: `${list(misses.map((m) => `${file(m.url)} (${kb(m.bytes)})`))} ${misses.length === 1 ? 'was' : 'were'} preloaded, then downloaded again: the browser could not use the preload${misses.length === 1 ? '' : 's'}, and the page paid ${kb(wasted)} twice.`,
 			fix:
 				`${[...new Set(misses.map(why))].map((w) => w[0].toUpperCase() + w.slice(1)).join('. ')}.` +
+				// (what to do, once per cause present: ogygia's own preload alone needs nothing)
 				(misses.every(ours)
 					? " Nothing in the page's markup to change: it is the hole preload ogygia writes, in a browser that never uses one."
-					: misses.every((m) => ours(m) || safari_fetch(m))
-						? ' No attribute changes it: to start the request early in Safari too, begin it in an inline script and hand its promise to the code that reads it — or drop the preload where Safari is most of the traffic.'
-						: ' The preload and the request must match exactly, or the browser fetches the file again.'),
+					: [
+							misses.some((m) => !ours(m) && safari_fetch(m)) ? ' No attribute changes a fetch preload in Safari: to start the request early there too, begin it in an inline script and hand its promise to the code that reads it — or drop the preload where Safari is most of the traffic.' : '',
+							misses.some(safari_font)
+								? page.dev
+									? " For the fonts: a build drops the dev server's habits (its CSS linked, its files answered by the host), so check whether the host also answers fonts with Vary: Origin and whether a stylesheet naming them is added by script."
+									: ' For the fonts: answer them without `Vary: Origin` (a font is the same whoever asks; a CORS header alone does not need it), or name them in a stylesheet the HTML links.'
+								: '',
+							misses.some((m) => !ours(m) && !safari_fetch(m) && !safari_font(m)) ? ' The preload and the request must match exactly, or the browser fetches the file again.' : ''
+						].join('')),
 			fps: []
 		});
 	}
