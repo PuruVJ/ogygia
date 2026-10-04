@@ -30,6 +30,17 @@ export interface SpawnedServer {
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export async function spawn_server(opts: SpawnServerOptions): Promise<SpawnedServer> {
+	// the port free first: a server still shutting down there (the last spec's, or the instance a
+	// spec just killed) would answer the readiness poll, and the spec would talk to it — then to
+	// nothing once it exits (and a strict-port child that could not bind is not yet seen as exited)
+	for (let i = 0; i < 50; i++) {
+		const busy = await fetch(opts.url, { redirect: 'manual' }).then(
+			() => true,
+			() => false
+		);
+		if (!busy) break;
+		await sleep(200);
+	}
 	const logs: string[] = [];
 	const child = spawn(opts.cmd, opts.args, {
 		cwd: opts.cwd,

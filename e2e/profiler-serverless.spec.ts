@@ -21,7 +21,7 @@ let server: SpawnedServer | undefined;
 /** a new instance: the same build, a database no report was ever written to */
 async function fresh_instance(env: Record<string, string> = {}) {
 	server?.kill();
-	await new Promise((r) => setTimeout(r, 400));
+	// (spawn_server waits for the port to be free: the killed instance is gone first)
 	server = await spawn_server({
 		cmd: 'node',
 		args: ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'],
@@ -55,7 +55,9 @@ test.describe('profiler on a serverless host', () => {
 		await fresh_instance();
 		expect((await page.request.get(`${ORIGIN}/__profiler/report/${id}.json`)).status()).toBe(404);
 		await page.goto(report);
-		await expect(page.getByRole('heading', { name: /Slow patterns/ }).first()).toBeVisible({ timeout: 15_000 });
+		// (the report's own title, rendered from this browser's copy: "Slow patterns" shows only when the
+		// recording found one, and two runs of /inferno on a busy machine may not)
+		await expect(page.getByRole('heading', { level: 1, name: /^SSR profile\b/ })).toBeVisible({ timeout: 15_000 });
 
 		const html = await Promise.all([page.waitForEvent('download'), page.locator('a.btn', { hasText: 'Download' }).click()]).then(([d]) => d.path());
 		expect(readFileSync(html!, 'utf8')).toContain('ogygia-standalone');
@@ -81,6 +83,9 @@ test.describe('profiler on a serverless host', () => {
 		await fresh_instance();
 		await record(page, 'p=/inferno&runs=2');
 		const box = page.locator('details.whatif-box');
+		// (the checklist is an island — an early tick is recounted once it wakes, but a wake that never
+		// comes should fail as that, not as a number that did not move)
+		await expect(box.locator('ogygia-region[data-hydrated] .whatif'), 'the checklist island woke').toBeAttached({ timeout: 30_000 });
 		await box.locator('summary').click();
 		const sum = box.locator('.sum');
 		const ms = async () => Number((await sum.innerText()).match(/about ([\d,.]+) ms/)![1].replace(/,/g, ''));
@@ -92,7 +97,7 @@ test.describe('profiler on a serverless host', () => {
 		// the biggest fix left out: the render after the rest is higher (waits for the island to wake)
 		await expect(async () => {
 			await box.locator('input[type=checkbox]').first().uncheck();
-			expect(await ms()).toBeGreaterThan(all);
+			expect(await ms(), await sum.innerText()).toBeGreaterThan(all);
 		}).toPass({ timeout: 15_000 });
 		// none: the render as it is
 		await box.getByRole('button', { name: 'Clear' }).click();
