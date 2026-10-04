@@ -1777,6 +1777,12 @@ try {
 			await page.goto(base + '/dt-third', { waitUntil: 'load' });
 			await page.waitForTimeout(3500);
 			const third = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'third-party')?.message ?? '');
+			const third_held = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).some((f) => f.code === 'third-party-blocking'));
+			// /dt-fcp: WebKit says nothing of which files held the paint — the head's own blocking files
+			// (its slow stylesheet) stand in, and the first paint names it as Chromium's word does
+			await page.goto(base + '/dt-fcp', { waitUntil: 'load' });
+			await page.waitForTimeout(1500);
+			const fcp = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'slow-fcp')?.message ?? '');
 			const checks = [
 				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
 				['every tab opens', tabs.length >= 8],
@@ -1786,7 +1792,9 @@ try {
 				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('fetched the answer again anyway') && !hole_fix.includes('must match exactly')],
 				['the hidden face named in WebKit', font.includes("Text in 'SlowFace'")],
 				["the dock open as it loaded: the paints may be the dock's", dock_note.includes('The devtools dock was open as this page loaded')],
-				['third-party scripts whose sizes WebKit hides: counted, not 0 KB', third.includes('sizes hidden') && !third.includes('0 KB') && third.includes('3 of their scripts')]
+				['third-party scripts whose sizes WebKit hides: counted, not 0 KB', third.includes('sizes hidden') && !third.includes('0 KB') && third.includes('3 of their scripts')],
+				["another origin's file in the head held the paint, named in WebKit too", third_held],
+				['the slow head stylesheet named as what the first paint waited on', fcp.includes('waiting for a file that blocks the paint (the slowest slow.css')]
 			];
 			const bad = checks.filter(([, ok]) => !ok);
 			if (bad.length) failed = true;

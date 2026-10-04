@@ -19,6 +19,7 @@
  */
 import { hole_copy_of } from './hash.js';
 import { tool_made } from '../tool-fetches.js';
+import { paint_blocker } from './render-blocking.js';
 
 interface Sample {
 	fp: string;
@@ -1143,7 +1144,8 @@ function build_visit(): Record<string, unknown> | null {
 			});
 		}
 		// the detail: every render-blocking file (they explain the first paint), then the earliest
-		const blocking = (r: PerformanceResourceTiming) => (r as { renderBlockingStatus?: string }).renderBlockingStatus === 'blocking';
+		// (Chromium's word per file; elsewhere the files the head makes blocking)
+		const blocking = paint_blocker();
 		const keep = all.filter(blocking).slice(0, MAX_DETAIL_RESOURCES);
 		// …and the largest paint's own file, always (its timing splits the LCP: a late one — an image a
 		// script added after a dev server's 250 modules — fell past the cut)
@@ -1171,7 +1173,7 @@ function build_visit(): Record<string, unknown> | null {
 				...(r.responseStart ? { res_start: r2(r.responseStart) } : {}),
 				...(r.transferSize ? { transfer: r.transferSize } : {}),
 				...(r.decodedBodySize ? { size: r.decodedBodySize } : {}),
-				...((r as { renderBlockingStatus?: string }).renderBlockingStatus === 'blocking' ? { blocking: true } : {})
+				...(blocking(r) ? { blocking: true } : {})
 			}));
 	} catch {
 		resources = [];

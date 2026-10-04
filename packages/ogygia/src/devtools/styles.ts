@@ -14,6 +14,7 @@
  */
 import { find_unscoped, unscoped_finding, type UnscopedStyles } from '../unscoped-css.js';
 import { tool_fetch, tool_made } from '../tool-fetches.js';
+import { paint_blocker } from '../runtime/render-blocking.js';
 
 export interface SheetRow {
 	/** the file name, or `inline <style>` */
@@ -167,6 +168,7 @@ export function read_styles(doc: Document = document, opts: { match?: boolean } 
 	const sheets: SheetRow[] = [];
 	const examples: { sel: string; len: number }[] = [];
 	let unreadable = 0;
+	const blocks = paint_blocker();
 	const panel = doc.querySelector('[data-ogygia-devtools-host]')?.shadowRoot;
 	for (const sheet of Array.from(doc.styleSheets)) {
 		const node = sheet.ownerNode as Element | null;
@@ -187,7 +189,7 @@ export function read_styles(doc: Document = document, opts: { match?: boolean } 
 			href,
 			rules: 0,
 			bytes: href ? (r?.decodedBodySize ?? 0) : (node?.textContent?.length ?? 0),
-			blocking: (r as (PerformanceResourceTiming & { renderBlockingStatus?: string }) | undefined)?.renderBlockingStatus === 'blocking',
+			blocking: !!r && blocks(r),
 			unmatched: opts.match ? 0 : null,
 			unmatched_bytes: opts.match ? 0 : null,
 			ogygia: !!node && (node.hasAttribute('data-ogygia-region-css') || node.hasAttribute('data-ogygia-rcss') || (href ?? '').includes('og-rcss'))
