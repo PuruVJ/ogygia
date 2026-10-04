@@ -737,6 +737,10 @@ export function read_page(): PageView | null {
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
 	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}), ...(typeof navigator !== 'undefined' && browser_of(navigator.userAgent) ? { browser: browser_of(navigator.userAgent)! } : {}), ...(() => {
+		// (the dock open as the document loaded: only the document's own paints, never after a navigation)
+		const at = (globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.dock-open-at')];
+		return typeof at === 'number' && !last_nav() ? { dock_open_at: at } : {};
+	})(), ...(() => {
 		const pre = import.meta.env.DEV ? prebundled_packages((with_visit.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url)) : null;
 		return pre?.length ? { prebundled: pre } : {};
 	})() };

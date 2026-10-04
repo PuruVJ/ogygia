@@ -230,6 +230,9 @@ export interface PageInput {
 	prebundled?: string[];
 	/** the browser the page ran in (`browser_of` its user agent: `Safari 26`, `Chrome 141`) */
 	browser?: string;
+	/** when the devtools' own dock began to show as the page loaded (open, remembered from the last
+	 *  page), page clock; absent when it was opened later or not at all */
+	dock_open_at?: number;
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
 	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
 	/** wheel / touch listeners still attached that hold scrolling (not passive), by the island (or
@@ -1264,6 +1267,22 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			});
 	}
 
+	// ── the dock in its own measurement: open as the page loaded, it painted text of its own, and the
+	// page's first paint was recorded just after — a browser counts any text, the dock's too (Safari:
+	// /dt-font's first and largest paint 1528 ms with the dock closed, 91 ms with it open) ──
+	{
+		const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp;
+		const at = page.dock_open_at;
+		if (typeof at === 'number' && typeof fcp === 'number' && fcp >= at && fcp - at <= 250)
+			findings.push({
+				code: 'dock-in-paint',
+				severity: 'info',
+				message: `The devtools dock was open as this page loaded (from ${Math.round(at)} ms), and the first paint was recorded just after it (${Math.round(fcp)} ms): the browser may have counted the dock's own text as the page's first paint${page.browser?.startsWith('Safari') ? ` — ${page.browser} its largest paint too` : ''}, so the paint numbers here can read early.`,
+				fix: "Close the dock and reload: the page's own paints are measured without it. (Open it again after the load; it reads the same visit.)",
+				fps: []
+			});
+	}
+
 	// ── images sent far bigger than shown: the bytes past what the box shows are bytes nobody sees ──
 	const big = (page.visit?.images_oversized ?? [])
 		.map((i) => ({ ...i, waste: Math.round(i.bytes * (1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1]))) }))
@@ -2047,7 +2066,10 @@ export function lcp_font(visit: PageInput['visit'] | null | undefined): { family
 	for (const r of visit.resources ?? []) {
 		// (the file's end is the network's clock, the paint the main thread's: a paint may read up to
 		// 100 ms before the file it waited for)
-		if (r.type !== 'font' || r.end <= p.fcp || r.end - p.lcp > 100 || p.lcp - r.end > 200) continue;
+		// (in at the first paint itself, when that paint came long after the HTML: a browser that counts
+		// no paint until the text shows — Safari — puts its first paint just after the font it waited for)
+		const held_first = typeof visit.nav?.res_end === 'number' && p.fcp - visit.nav.res_end >= 300 && r.end <= p.fcp && p.fcp - r.end <= 60;
+		if (r.type !== 'font' || (r.end <= p.fcp && !held_first) || r.end - p.lcp > 100 || p.lcp - r.end > 200) continue;
 		const face = faces.find((f) => f.urls.includes(r.url));
 		if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
 		// (no later than the paint: the parts never run backwards)

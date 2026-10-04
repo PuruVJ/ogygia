@@ -115,6 +115,18 @@ describe('text kept invisible by its font', () => {
 	});
 });
 
+describe('the dock in its own measurement', () => {
+	it('open as the page loaded, the first paint just after it: said, the browser named; a paint long after, or no dock, quiet', () => {
+		const at = (dock_open_at: number | undefined, fcp: number) =>
+			analyze_page(page({ browser: 'Safari 26', ...(dock_open_at !== undefined ? { dock_open_at } : {}), visit: { nav: { res_start: 5 }, paints: { fcp }, viewport: [1280, 800] } }), [], [], 3000).findings.find((f) => f.code === 'dock-in-paint');
+		expect(at(89, 93)?.message).toBe("The devtools dock was open as this page loaded (from 89 ms), and the first paint was recorded just after it (93 ms): the browser may have counted the dock's own text as the page's first paint — Safari 26 its largest paint too, so the paint numbers here can read early.");
+		expect(at(89, 93)?.fix).toMatch(/^Close the dock and reload/);
+		expect(at(89, 1500)).toBeUndefined();
+		expect(at(300, 40)).toBeUndefined();
+		expect(at(undefined, 93)).toBeUndefined();
+	});
+});
+
 describe('scrolling stalled', () => {
 	const at = (frames: NonNullable<NonNullable<PageInput['visit']>['scroll_jank']>) =>
 		analyze_page(page({ visit: { nav: { res_start: 5 }, paints: {}, viewport: [1400, 900], scroll_jank: frames } }), [], [], 3000).findings.find((f) => f.code === 'scroll-jank');
@@ -541,6 +553,18 @@ describe('the font the largest paint waited for', () => {
 		// the paint read a little before the file's end (two clocks): still the font's, capped at the paint
 		expect(lcp_font(visit('auto', 2850))?.end).toBe(2850);
 		expect(lcp_font(visit('auto', 2700))).toBeNull();
+	});
+	it("Safari's way: the first paint is the largest, just after the font landed, long after the HTML — the font's", () => {
+		const safari = (fcp: number, end: number): PageInput['visit'] => ({
+			nav: { res_start: 5, res_end: 12 },
+			paints: { fcp, lcp: fcp },
+			viewport: [1280, 800],
+			resources: [{ url: 'http://x/f/slow.woff2', type: 'font', start: 20, end }],
+			font_faces: [{ family: 'SlowFace', display: 'auto', urls: ['http://x/f/slow.woff2'] }]
+		});
+		expect(lcp_font(safari(1527, 1521))).toEqual({ family: 'SlowFace', file: 'slow.woff2', end: 1521 });
+		// a first paint soon after the HTML: not held by a font
+		expect(lcp_font(safari(140, 130))).toBeNull();
 	});
 	it("the LCP's split and parts carry the font wait", () => {
 		const p = page({ visit: visit('auto', 2950), vitals: { lcp: 2950 } });
