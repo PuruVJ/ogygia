@@ -67,6 +67,9 @@ export interface ThirdPartyOrigin {
 	scripts: number;
 	/** decoded bytes of its scripts */
 	script_bytes: number;
+	/** its scripts the browser gave no size for (some engines hide every other origin's sizes,
+	 *  even with Timing-Allow-Origin): `script_bytes` leaves them out */
+	unsized: number;
 	/** every byte on the wire */
 	wire: number;
 	/** files that held the first paint */
@@ -80,6 +83,7 @@ export interface ThirdPartyOrigin {
 export interface ThirdParty {
 	origins: ThirdPartyOrigin[];
 	script_bytes: number;
+	unsized: number;
 	wire: number;
 	blocking: number;
 	cpu_ms: number | null;
@@ -109,8 +113,10 @@ function host_of(url: string): string {
 /** `named`: URLs the server's HTML references (its scripts, preloads, their imports) — another
  *  origin's script not among them came at runtime. Without it (the live page already holds the
  *  injected script elements), `parsed`: when the HTML was parsed (domInteractive) — a script that
- *  starts after that and after another origin's script ran was loaded by a script. */
-export function third_party(resources: readonly Res[], page_origin: string, cpu_by_host: ReadonlyMap<string, number> | null, named?: ReadonlySet<string>, parsed?: number): ThirdParty | null {
+ *  starts after that and after another origin's script ran was loaded by a script. `in_page`: the
+ *  URLs the live document holds — a script no element names came by an import or a fetch (a
+ *  self-loading library's parts), whenever it started. */
+export function third_party(resources: readonly Res[], page_origin: string, cpu_by_host: ReadonlyMap<string, number> | null, named?: ReadonlySet<string>, parsed?: number, in_page?: ReadonlySet<string>): ThirdParty | null {
 	const page_host = host_of(page_origin);
 	const by = new Map<string, ThirdPartyOrigin>();
 	let first_third_script_end = Infinity;
@@ -119,24 +125,26 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 	for (const r of sorted) {
 		const host = host_of(r.url);
 		if (!host || host === page_host) continue;
-		const o = by.get(host) ?? { host, kind: kind_of_host(host), files: 0, scripts: 0, script_bytes: 0, wire: 0, blocking: 0, first: r.start, cpu_ms: cpu_by_host ? (cpu_by_host.get(host) ?? 0) : null };
+		const o = by.get(host) ?? { host, kind: kind_of_host(host), files: 0, scripts: 0, script_bytes: 0, unsized: 0, wire: 0, blocking: 0, first: r.start, cpu_ms: cpu_by_host ? (cpu_by_host.get(host) ?? 0) : null };
 		o.files++;
 		o.wire += r.transfer ?? 0;
 		if (r.blocking) o.blocking++;
 		if (r.type === 'script') {
 			o.scripts++;
 			o.script_bytes += r.size ?? 0;
-			if (r.start >= first_third_script_end && (named ? !named.has(r.url) : parsed !== undefined && r.start > parsed)) runtime_loaded++;
+			if (!r.size) o.unsized++;
+			if (r.start >= first_third_script_end && (named ? !named.has(r.url) : (in_page !== undefined && !in_page.has(r.url)) || (parsed !== undefined && r.start > parsed))) runtime_loaded++;
 			first_third_script_end = Math.min(first_third_script_end, r.end);
 		}
 		by.set(host, o);
 	}
 	if (!by.size) return null;
 	const origins = [...by.values()].sort((a, b) => (b.cpu_ms ?? 0) - (a.cpu_ms ?? 0) || b.script_bytes - a.script_bytes || b.wire - a.wire);
-	const sum = (k: 'script_bytes' | 'wire' | 'blocking') => origins.reduce((s, o) => s + o[k], 0);
+	const sum = (k: 'script_bytes' | 'unsized' | 'wire' | 'blocking') => origins.reduce((s, o) => s + o[k], 0);
 	return {
 		origins,
 		script_bytes: sum('script_bytes'),
+		unsized: sum('unsized'),
 		wire: sum('wire'),
 		blocking: sum('blocking'),
 		cpu_ms: cpu_by_host ? origins.reduce((s, o) => s + (o.cpu_ms ?? 0), 0) : null,
@@ -172,15 +180,26 @@ const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` :
 export function third_party_findings(tp: ThirdParty | null, edited: readonly { name: string; done: number }[] = []): ThirdPartyFinding[] {
 	if (!tp) return [];
 	const out: ThirdPartyFinding[] = [];
-	const heavy = tp.origins.filter((o) => (o.cpu_ms ?? 0) >= 50 || o.script_bytes >= 50 * 1024 || o.blocking);
-	const label = (o: ThirdPartyOrigin) => `${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''} ${kb(o.script_bytes)}${o.cpu_ms ? `, ${Math.round(o.cpu_ms)} ms CPU` : ''}${o.blocking ? `, ${o.blocking} blocking` : ''}`;
-	const worth = tp.script_bytes >= 30 * 1024 || (tp.cpu_ms ?? 0) >= 50 || tp.blocking > 0;
+	// a browser that hides other origins' sizes reports 0 for each of their files: count those scripts
+	// instead of calling them 0 KB, and let a library that loads many parts be worth naming on count
+	const MANY = 5;
+	const heavy = tp.origins.filter((o) => (o.cpu_ms ?? 0) >= 50 || o.script_bytes >= 50 * 1024 || o.unsized >= MANY || o.blocking);
+	const size = (bytes: number, scripts: number, unsized: number) =>
+		!unsized ? kb(bytes) : unsized === scripts ? `${scripts} script${scripts === 1 ? '' : 's'}, sizes hidden` : `at least ${kb(bytes)}`;
+	const label = (o: ThirdPartyOrigin) => `${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''} ${size(o.script_bytes, o.scripts, o.unsized)}${o.cpu_ms ? `, ${Math.round(o.cpu_ms)} ms CPU` : ''}${o.blocking ? `, ${o.blocking} blocking` : ''}`;
+	const scripts = tp.origins.reduce((s, o) => s + o.scripts, 0);
+	const served = !tp.unsized
+		? `${kb(tp.script_bytes)} of JS`
+		: tp.unsized === scripts
+			? `${scripts} script${scripts === 1 ? '' : 's'} (this browser hides other origins' file sizes; a Chromium visit shows them)`
+			: `at least ${kb(tp.script_bytes)} of JS (${tp.unsized} of the ${scripts} scripts had their size hidden by this browser)`;
+	const worth = tp.script_bytes >= 30 * 1024 || tp.unsized >= MANY || (tp.cpu_ms ?? 0) >= 50 || tp.blocking > 0;
 	if (worth)
 		out.push({
 			code: 'third-party',
 			severity: (tp.cpu_ms ?? 0) >= 200 || tp.blocking > 0 || tp.script_bytes >= 200 * 1024 ? 'warn' : 'info',
 			message:
-				`${tp.origins.length} other origin${tp.origins.length === 1 ? '' : 's'} served ${kb(tp.script_bytes)} of JS${tp.cpu_ms !== null ? ` and ran ${Math.round(tp.cpu_ms)} ms on the main thread` : ''}` +
+				`${tp.origins.length} other origin${tp.origins.length === 1 ? '' : 's'} served ${served}${tp.cpu_ms !== null ? ` and ran ${Math.round(tp.cpu_ms)} ms on the main thread` : ''}` +
 				`${tp.runtime_loaded ? `; ${tp.runtime_loaded} of their scripts the page never names, loaded by other scripts (how a tag manager or a self-loading library adds code)` : ''}. ` +
 				`The heaviest: ${(heavy.length ? heavy : tp.origins).slice(0, 3).map(label).join('; ')}.`,
 			fix: [...new Set((heavy.length ? heavy : tp.origins).slice(0, 3).map((o) => `${o.kind === 'other' ? o.host : o.kind}: ${ADVICE[o.kind]}`))].join(' · ')

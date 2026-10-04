@@ -546,6 +546,17 @@ function empty_slots(): string[] {
 	return out;
 }
 
+/** Other origins' URLs an element of the live document names (script src, link href, in the head
+ *  and body alike): the third-party scripts no element names came by an import or a fetch. */
+function other_origin_refs(): string[] {
+	const out = new Set<string>();
+	for (const el of document.querySelectorAll('script[src],link[href]')) {
+		const url = (el as HTMLScriptElement).src || (el as HTMLLinkElement).href;
+		if (url && !url.startsWith(location.origin + '/')) out.add(url);
+	}
+	return [...out];
+}
+
 /**
  * What THIS browser cannot measure (Safari has no layout-shift, long-task or interaction timing;
  * only Chromium has the JS sampler and long animation frames). A finding that needs one of them
@@ -694,7 +705,9 @@ export function read_page(): PageView | null {
 	const cpu = load && !nav ? summary_lines(cpu_of(page, load.trace)) : null;
 	const base = nav ? since_nav(page, nav.t) : (page as unknown as PageInput);
 	// third parties: every origin but this one (what the server's HTML named is not known here — the
-	// live page already holds the script elements other scripts added — so parse time decides)
+	// live page already holds the script elements other scripts added — so parse time decides for a
+	// script an element names, and a script no element names came by an import or a fetch)
+	const in_page = other_origin_refs();
 	// (an island whose own file was gone, named as every tab names it)
 	const fallbacks = base.visit?.entry_fallbacks?.map((f) => ({ ...f, name: region_name(f.entry) }));
 	const refetched = base.visit?.refetched?.map((f) => (f.entry ? { ...f, name: region_name(f.entry) } : f));
@@ -704,7 +717,7 @@ export function read_page(): PageView | null {
 	// …and the scripts the page's scroll waited on, the same way (a build's handler is a minified name)
 	const scroll_jank = base.visit?.scroll_jank?.map((j) => ({ ...j, scripts: j.scripts.map((s) => ({ ...s, ...island_of_file(s.url) })) }));
 	const with_visit: PageInput = base.visit
-		? { ...base, visit: { ...base.visit, origin: location.origin, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}), ...(scroll_jank ? { scroll_jank } : {}) } }
+		? { ...base, visit: { ...base.visit, origin: location.origin, in_page, ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}), ...(scroll_jank ? { scroll_jank } : {}) } }
 		: base;
 	const holes = hole_failures();
 	const code = island_code();

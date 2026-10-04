@@ -167,6 +167,10 @@ export interface PageInput {
 		/** URLs the document itself names (its scripts, preloads, their imports): a script not among
 		 *  them was loaded at runtime by another script */
 		named?: string[];
+		/** without `named` (the live page): other origins' URLs the document holds now (script src,
+		 *  link href). A script of theirs not among them came by an import or a fetch from another
+		 *  script; one among them that started after parsing was added by a script */
+		in_page?: string[];
 		/** files a preload fetched and something else downloaded again (the preload went unused) */
 		preload_misses?: PreloadMiss[];
 		/** preloads (image, font, stylesheet) nothing on the page used 3 s after load */
@@ -2034,7 +2038,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		host_ms.set(host, Math.max(host_ms.get(host) ?? 0, 0) + (cpu?.by_host?.[host] ? 0 : s.ms));
 	}
 	const tp = origin
-		? third_party(page.visit?.resources ?? [], origin, cpu?.by_host || page.visit?.scripts ? host_ms : null, page.visit?.named ? new Set(page.visit.named) : undefined, page.visit?.nav?.dom_interactive)
+		? third_party(page.visit?.resources ?? [], origin, cpu?.by_host || page.visit?.scripts ? host_ms : null, page.visit?.named ? new Set(page.visit.named) : undefined, page.visit?.nav?.dom_interactive, page.visit?.in_page ? new Set(page.visit.in_page) : undefined)
 		: null;
 	const edited = [
 		...page.islands.filter((i) => i.changed || i.recovered || i.healed).map((i) => ({ name: name_of(i.fp, i.entry), done: i.done })),

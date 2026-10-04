@@ -1772,6 +1772,11 @@ try {
 			// says the paints may be the dock's)
 			const font = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'font-invisible')?.message ?? '');
 			const dock_note = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'dock-in-paint')?.message ?? '');
+			// /dt-third: WebKit reports every other origin's file as 0 bytes, Timing-Allow-Origin or not —
+			// the scripts are counted (never "0 KB", never silent), and the ones scripts loaded match Chromium
+			await page.goto(base + '/dt-third', { waitUntil: 'load' });
+			await page.waitForTimeout(3500);
+			const third = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'third-party')?.message ?? '');
 			const checks = [
 				['no page error (the planted Broken logs, never throws past the runtime)', errs.length === 0],
 				['every tab opens', tabs.length >= 8],
@@ -1780,11 +1785,12 @@ try {
 				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')],
 				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('fetched the answer again anyway') && !hole_fix.includes('must match exactly')],
 				['the hidden face named in WebKit', font.includes("Text in 'SlowFace'")],
-				["the dock open as it loaded: the paints may be the dock's", dock_note.includes('The devtools dock was open as this page loaded')]
+				["the dock open as it loaded: the paints may be the dock's", dock_note.includes('The devtools dock was open as this page loaded')],
+				['third-party scripts whose sizes WebKit hides: counted, not 0 KB', third.includes('sizes hidden') && !third.includes('0 KB') && third.includes('3 of their scripts')]
 			];
 			const bad = checks.filter(([, ok]) => !ok);
 			if (bad.length) failed = true;
-			console.log(`${bad.length ? '✗' : '✓'} the dock in WebKit: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ errs: errs.slice(0, 3), tabs: tabs.length, codes, limits: limits.slice(0, 160), hole_fix: hole_fix.slice(0, 160) })}` : ''}`);
+			console.log(`${bad.length ? '✗' : '✓'} the dock in WebKit: ${checks.map(([n, ok]) => `${ok ? '✓' : '✗'} ${n}`).join(' · ')}${bad.length ? ` — ${JSON.stringify({ errs: errs.slice(0, 3), tabs: tabs.length, codes, limits: limits.slice(0, 160), hole_fix: hole_fix.slice(0, 160), third: third.slice(0, 200) })}` : ''}`);
 		} finally {
 			await wb.close();
 		}
