@@ -1823,6 +1823,23 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(out.find((f) => f.code === 'eager-offscreen')!.message.startsWith('In the browser (Safari 18), on a 1280×800 screen: Footer starts below')).toBe(true);
 	});
 
+	it('another engine’s visit: what Safari saw that the latest Chrome visit did not, named with the browser', () => {
+		const base = { nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 }, paints: { fcp: 30, lcp: 30 }, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800] };
+		const chrome = parse_visit('/hell', { ...base, at: Date.now(), ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' })!;
+		const safari = parse_visit('/hell', {
+			...base,
+			at: Date.now() - 60_000,
+			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
+			preload_misses: [{ url: 'http://x/__ogygia__?id=97f7&sig=9d', type: 'fetch', bytes: 574, as: 'fetch', crossorigin: 'anonymous' }]
+		})!;
+		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome, other_engine_visit: safari } as never);
+		const f = out.find((x) => x.code === 'other-browser')!;
+		expect(f.message.startsWith('In Safari 26 (another visit to this page) the browser saw what this one did not:')).toBe(true);
+		expect(f.message).toContain('__ogygia__ (574 B) was preloaded, then downloaded again');
+		expect(f.fix).toContain('Safari 26 fetched the answer again anyway');
+		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome } as never).some((x) => x.code === 'other-browser')).toBe(false);
+	});
+
 	it("the browser's vitals: a latest visit that loaded with the dock open says its paints may be the dock's", () => {
 		const vitals = { n: 1, ttfb: 2, fcp: 28, lcp: 28, cls: null, inp: null };
 		const base = { at: Date.now(), nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 }, resources: [], longtasks: [], firsts: [], shifts: [], islands: [] };

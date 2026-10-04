@@ -206,7 +206,7 @@ async function read_timed(
 	return { text, chunks };
 }
 import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.js';
-import { vital_parts, type PageInput } from '../devtools/page-insights.js';
+import { engine_of, vital_parts, type PageInput } from '../devtools/page-insights.js';
 import { label_call, phase_of_frame } from './timeline.js';
 import { gzip_large } from './compress.js';
 import { io_kind, mark_left_each_run } from './async-io.js';
@@ -5498,11 +5498,19 @@ class Profiler {
 			visit?.viewport && stored.meta.page
 				? (this.#visits.get(stored.meta.page) ?? []).filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit)).at(-1)
 				: undefined;
+		// THE OTHER ENGINE: the latest kept visit from another browser engine (Safari beside Chrome):
+		// what one engine shows, another may never (a preload refetched, a font holding the first paint)
+		const engine = engine_of(visit?.ua);
+		const other_engine_visit =
+			engine && stored.meta.page
+				? (this.#visits.get(stored.meta.page) ?? []).filter((v) => v !== visit && engine_of(v.ua) && engine_of(v.ua) !== engine).at(-1)
+				: undefined;
 		// (the modules the build shipped twice: the report names the ones this page loads both copies of)
 		const dupes = chunkDuplicates();
 		return {
 			...(visit ? { visit } : {}),
 			...(other_screen_visit ? { other_screen_visit } : {}),
+			...(other_engine_visit ? { other_engine_visit } : {}),
 			...(dupes ? { dupes } : {}),
 			...(interaction_cpu ? { interaction_cpu } : {}),
 			...(hole_requests.length ? { hole_requests } : {}),

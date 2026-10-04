@@ -526,6 +526,9 @@ export interface ReportExtras {
 	/** the latest visit to this page on the other kind of screen (a phone's when `visit` was wide, a
 	 *  wide one's when it was a phone's): what sits below the first screen, or draws nothing, differs */
 	other_screen_visit?: Visit;
+	/** the latest visit to this page from another browser engine (Safari beside Chrome): findings one
+	 *  engine makes that another never does */
+	other_engine_visit?: Visit;
 	/** the rendered document as a byte strip */
 	strip?: ByteStrip;
 	/** every file the document loads at start, weighed through the app (page-assets.ts); a dev
@@ -1589,6 +1592,26 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					severity: 'info',
 					code: 'other-screen',
 					message: `On a ${there} screen (another visit to this page) the browser saw what this one did not: ${theirs.map((f) => f.message.slice(f.message.startsWith(IN_BROWSER) ? IN_BROWSER.length : 0)).join(' ')}`,
+					...(theirs.some((f) => f.fix) ? { fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))].slice(0, 2).join(' ') } : {}),
+					fps: [...new Set(theirs.flatMap((f) => f.fps ?? []))]
+				});
+		}
+		// …AND THE OTHER ENGINE: a Safari visit beside a Chrome one (or the other way) sees what the other
+		// never does — a hole preload fetched again, a font holding the whole first paint. Its findings
+		// this visit lacks, by code (the screen's own ones are the other-screen note's; the dock's is
+		// that visit's alone)
+		const eng = extras.other_engine_visit;
+		const eng_name = eng ? browser_of(eng.ua) : null;
+		if (eng && eng_name) {
+			const have = new Set(in_browser.map((f) => f.code));
+			const theirs = browser_findings(browser_page_report(eng, visit_rows, undefined, third, hole_name, hole_server, undefined, !!meta.dev)).filter(
+				(f) => !have.has(f.code) && !SCREEN_CODES.has(f.code) && f.code !== 'dock-in-paint'
+			);
+			if (theirs.length)
+				out.push({
+					severity: 'info',
+					code: 'other-browser',
+					message: `In ${eng_name} (another visit to this page) the browser saw what this one did not: ${theirs.map((f) => f.message.slice(f.message.startsWith(IN_BROWSER) ? IN_BROWSER.length : 0)).join(' ')}`,
 					...(theirs.some((f) => f.fix) ? { fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))].slice(0, 2).join(' ') } : {}),
 					fps: [...new Set(theirs.flatMap((f) => f.fps ?? []))]
 				});

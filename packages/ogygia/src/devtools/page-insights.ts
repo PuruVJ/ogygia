@@ -513,6 +513,16 @@ export function browser_of(ua: string | undefined): string | null {
 	return null;
 }
 
+/** The engine family a user agent runs on: what makes two browsers measure a page differently (Edge
+ *  and Chrome are one; Safari reports no layout shifts and refetches a preload Chromium reuses). */
+export function engine_of(ua: string | undefined): 'chromium' | 'webkit' | 'gecko' | null {
+	const b = browser_of(ua);
+	if (!b) return null;
+	if (b.startsWith('Safari')) return 'webkit';
+	if (b.startsWith('Firefox')) return 'gecko';
+	return 'chromium';
+}
+
 /** The packages a dev server's `_metadata.json` `optimized` keys name: `svelte/internal/client` →
  *  `svelte`, `@scope/lib/x` → `@scope/lib`, `ogygia > @neodrag/svelte` (a dependency's dependency) →
  *  `@neodrag/svelte`, each once. */
