@@ -25,6 +25,12 @@ export function normalize_prefix(prefix: string): string {
 	return p;
 }
 
+/** The key prefix a normalized prefix's SUBTREE shares: `/fr/fr` → `/fr/fr/` (never `/fr/fright`),
+ *  and the root `/` → `/` itself (every key; `'/' + '/'` would match nothing). */
+export function subtree_prefix(normalized: string): string {
+	return normalized.endsWith('/') ? normalized : normalized + '/';
+}
+
 /** The depth-capped prefix list for a pathname — the edge tag vocabulary for this response. */
 export function prefix_tags(pathname: string): string[] {
 	const segs = pathname.split('/').filter(Boolean);

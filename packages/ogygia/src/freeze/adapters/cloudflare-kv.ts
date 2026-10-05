@@ -12,7 +12,7 @@
  *   freeze.configure({ store: cloudflareKv(platform.env.FREEZE) });
  */
 import type { FreezeStore } from '../types.js';
-import { normalize_prefix } from '../key.js';
+import { normalize_prefix, subtree_prefix } from '../key.js';
 
 const KEY_NS = 'og:a:';
 const TAG_NS = 'og:t:';
@@ -64,7 +64,7 @@ export function cloudflareKv(kv: KvNamespaceLike): FreezeStore {
 		},
 		async evictWhere({ prefix }) {
 			const p = normalize_prefix(prefix);
-			for (const name of await list_prefix(KEY_NS + p + '/')) await kv.delete(name);
+			for (const name of await list_prefix(KEY_NS + subtree_prefix(p))) await kv.delete(name);
 			await kv.delete(KEY_NS + p);
 		},
 		async evictByTag(tag) {

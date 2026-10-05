@@ -3,11 +3,12 @@
  * minimal shape below — ogygia takes no redis dependency). Keys are `og:a:<pathname>`, value =
  * JSON entry, EX = the TTL backstop. Prefix eviction is a native cursor SCAN over
  * `og:a:<prefix>*` — the key IS the URL, so no index exists to drift. The og.source reverse
- * index is a per-tag SET (`og:t:<tag>` of plain pathnames, EX-refreshed on every put; members
- * of expired entries are harmless — deleting a gone key is a no-op).
+ * index is a per-tag SET (`og:t:<tag>` of plain pathnames; each put only EXTENDS its expiry, to
+ * the longest lifetime among its members; members of expired entries are harmless — deleting a
+ * gone key is a no-op).
  */
 import type { FreezeStore } from '../types.js';
-import { normalize_prefix } from '../key.js';
+import { normalize_prefix, subtree_prefix } from '../key.js';
 
 // ── regexes
 const GLOB_ACTIVE_G = /[*?[\]\\]/g;
@@ -29,6 +30,8 @@ export interface ValkeyLike {
 	smembers?(key: string): Promise<string[]>;
 	sMembers?(key: string): Promise<string[]>;
 	expire?(key: string, seconds: number): Promise<unknown>;
+	ttl?(key: string): Promise<number>;
+	TTL?(key: string): Promise<number>;
 }
 
 /** Both client families' scan shapes → one { cursor, keys }. */
@@ -66,6 +69,13 @@ export function valkey(client: ValkeyLike): FreezeStore {
 		throw new Error('[ogygia] valkey client has no smembers/sMembers — og.source tags need it');
 	};
 
+	/** Seconds left on a key (-1 = no expiry), or null when the client has no TTL command. */
+	const read_ttl = async (key: string): Promise<number | null> => {
+		if (client.ttl) return Number(await client.ttl(key));
+		if (client.TTL) return Number(await client.TTL(key));
+		return null;
+	};
+
 	const scan_prefix = async (prefix: string, on_keys: (keys: string[]) => Promise<void>) => {
 		const pattern = glob_escape(KEY_NS + prefix) + '*';
 		let cursor = '0';
@@ -91,7 +101,11 @@ export function valkey(client: ValkeyLike): FreezeStore {
 			await set_with_ttl(KEY_NS + key, JSON.stringify(entry), ttl);
 			for (const tag of tags ?? []) {
 				await sadd(TAG_NS + tag, key);
-				await client.expire?.(TAG_NS + tag, ttl);
+				// A tag set is shared by entries of different lifetimes: only ever EXTEND its expiry,
+				// or a short-lived entry would expire the index of a long-lived page sharing the tag.
+				// (TTL then EXPIRE, not `EXPIRE … GT`: GT treats a fresh set as never-expiring.)
+				const left = await read_ttl(TAG_NS + tag);
+				if (left === null || left < ttl) await client.expire?.(TAG_NS + tag, ttl);
 			}
 		},
 		async evict(key) {
@@ -100,7 +114,7 @@ export function valkey(client: ValkeyLike): FreezeStore {
 		async evictWhere({ prefix }) {
 			const p = normalize_prefix(prefix);
 			// `/fr/fr` must match itself + its subtree, never `/fr/fright`: two exact patterns.
-			await scan_prefix(p + '/', async (keys) => void (await client.del(...keys)));
+			await scan_prefix(subtree_prefix(p), async (keys) => void (await client.del(...keys)));
 			await client.del(KEY_NS + p);
 		},
 		async evictByTag(tag) {

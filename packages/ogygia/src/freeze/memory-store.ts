@@ -5,7 +5,7 @@
  * upstash) — a per-instance LRU there means per-instance misses AND invalidation blind spots.
  */
 import type { FreezeEntry, FreezePutOptions, FreezeStore } from './types.js';
-import { normalize_prefix } from './key.js';
+import { normalize_prefix, subtree_prefix } from './key.js';
 import { SizedLru } from '../server/sized-lru.js';
 
 /** Resident budget for frozen pages (a stored page can be multi-MB; a count alone bounds nothing). */
@@ -44,8 +44,9 @@ export function memory_store(
 			// Keys ARE pathnames — a subtree eviction is a startsWith scan. `/fr/fr` matches
 			// `/fr/fr` itself and everything under `/fr/fr/`, never `/fr/fright`.
 			const p = normalize_prefix(prefix);
+			const subtree = subtree_prefix(p);
 			for (const key of [...entries.keys()]) {
-				if (key === p || key.startsWith(p.endsWith('/') ? p : p + '/')) entries.delete(key);
+				if (key === p || key.startsWith(subtree)) entries.delete(key);
 			}
 		},
 		async evictByTag(tag) {

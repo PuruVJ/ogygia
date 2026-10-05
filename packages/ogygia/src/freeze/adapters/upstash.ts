@@ -7,7 +7,7 @@
  *                                          token: env.UPSTASH_REDIS_REST_TOKEN }) });
  */
 import type { FreezeStore } from '../types.js';
-import { normalize_prefix } from '../key.js';
+import { normalize_prefix, subtree_prefix } from '../key.js';
 
 // ── regexes
 const GLOB_ACTIVE_G = /[*?[\]\\]/g;
@@ -63,7 +63,11 @@ export function upstash(config: UpstashConfig): FreezeStore {
 			await command(['SET', KEY_NS + key, JSON.stringify(entry), 'EX', ttl]);
 			for (const tag of tags ?? []) {
 				await command(['SADD', TAG_NS + tag, key]);
-				await command(['EXPIRE', TAG_NS + tag, ttl]);
+				// A tag set is shared by entries of different lifetimes: only ever EXTEND its expiry,
+				// or a short-lived entry would expire the index of a long-lived page sharing the tag.
+				// (TTL then EXPIRE, not `EXPIRE … GT`: GT treats a fresh set as never-expiring.)
+				const left = await command<number>(['TTL', TAG_NS + tag]);
+				if (left < ttl) await command(['EXPIRE', TAG_NS + tag, ttl]);
 			}
 		},
 		async evict(key) {
@@ -71,7 +75,7 @@ export function upstash(config: UpstashConfig): FreezeStore {
 		},
 		async evictWhere({ prefix }) {
 			const p = normalize_prefix(prefix);
-			const pattern = glob_escape(KEY_NS + p + '/') + '*';
+			const pattern = glob_escape(KEY_NS + subtree_prefix(p)) + '*';
 			let cursor = '0';
 			do {
 				const reply = await command<[string, string[]]>([

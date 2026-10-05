@@ -174,6 +174,7 @@ describe('upstash store (REST command shapes)', () => {
 	beforeEach(() => {
 		calls.length = 0;
 		const results = new Map<string, string>();
+		const ttls = new Map<string, number>();
 		vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
 			const parts = JSON.parse(String(init?.body)) as string[];
 			calls.push(parts);
@@ -182,6 +183,8 @@ describe('upstash store (REST command shapes)', () => {
 			if (parts[0] === 'SET') results.set(parts[1], parts[2]);
 			if (parts[0] === 'SMEMBERS') result = ['/fr/fr/a'];
 			if (parts[0] === 'SCAN') result = ['0', []];
+			if (parts[0] === 'TTL') result = ttls.get(parts[1]) ?? -1;
+			if (parts[0] === 'EXPIRE') ttls.set(parts[1], Number(parts[2]));
 			return new Response(JSON.stringify({ result }), { status: 200 });
 		});
 	});
@@ -197,6 +200,21 @@ describe('upstash store (REST command shapes)', () => {
 		expect(keys).toEqual(['/fr/fr/a']);
 		expect(calls).toContainEqual(['DEL', 'og:a:/fr/fr/a']);
 		expect((await store.get('/fr/fr/a'))?.kind).toBe('page');
+	});
+
+	it('only ever extends a tag set’s expiry', async () => {
+		const store = upstash({ url: 'https://x.upstash.io', token: 't' });
+		await store.put('/page', page_entry(), { ttl: 86_400, tags: ['t'] });
+		calls.length = 0;
+		await store.put('/short', page_entry(), { ttl: 600, tags: ['t'] });
+		expect(calls).toContainEqual(['TTL', 'og:t:t']);
+		expect(calls.some((c) => c[0] === 'EXPIRE')).toBe(false);
+	});
+
+	it('a root prefix scans every key', async () => {
+		const store = upstash({ url: 'https://x.upstash.io', token: 't' });
+		await store.evictWhere({ prefix: '/' });
+		expect(calls).toContainEqual(['SCAN', '0', 'MATCH', 'og:a:/*', 'COUNT', '250']);
 	});
 });
 
@@ -271,5 +289,8 @@ describe('cloudflare KV store', () => {
 		await store.evictWhere({ prefix: '/fr/fr' });
 		expect(await store.get('/fr/fr/b')).toBeNull();
 		expect(await store.get('/fright')).not.toBeNull();
+
+		await store.evictWhere({ prefix: '/' });
+		expect(await store.get('/fright')).toBeNull();
 	});
 });

@@ -105,6 +105,16 @@ function store_contract(name: string, make: () => Promise<FreezeStore> | FreezeS
 			expect(await store.get('/fr/fr/solar/')).toBeNull();
 			expect(await store.get('/fr/fright/')).not.toBeNull();
 		});
+
+		it('evictWhere at the root clears every key (the deploy thaw)', async () => {
+			await store.put('/', page_entry(), { ttl: 60 });
+			await store.put('/a/', page_entry(), { ttl: 60 });
+			await store.put('/fr/fr/solar/', page_entry(), { ttl: 60 });
+			await store.evictWhere({ prefix: '/' });
+			expect(await store.get('/')).toBeNull();
+			expect(await store.get('/a/')).toBeNull();
+			expect(await store.get('/fr/fr/solar/')).toBeNull();
+		});
 	});
 }
 
@@ -112,8 +122,9 @@ store_contract('memory (tier 1)', () => memory_store());
 
 // A faithful little Valkey fake (get/set EX/del/scan MATCH+COUNT with cursor) so the adapter's
 // command usage is exercised on every PR; the REAL server runs the same contract below.
-function fake_valkey(): ValkeyLike & { data: Map<string, string> } {
+function fake_valkey(): ValkeyLike & { data: Map<string, string>; expiry: Map<string, number> } {
 	const data = new Map<string, string>();
+	const sets = new Map<string, Set<string>>();
 	const expiry = new Map<string, number>();
 	const alive = (key: string) => {
 		const at = expiry.get(key);
@@ -123,8 +134,17 @@ function fake_valkey(): ValkeyLike & { data: Map<string, string> } {
 		}
 		return data.has(key);
 	};
+	const alive_set = (key: string) => {
+		const at = expiry.get(key);
+		if (at !== undefined && Date.now() >= at) {
+			sets.delete(key);
+			expiry.delete(key);
+		}
+		return sets.has(key);
+	};
 	return {
 		data,
+		expiry,
 		async get(key) {
 			return alive(key) ? (data.get(key) ?? null) : null;
 		},
@@ -138,7 +158,27 @@ function fake_valkey(): ValkeyLike & { data: Map<string, string> } {
 			else expiry.delete(key);
 		},
 		async del(...keys) {
-			for (const k of keys) data.delete(k);
+			for (const k of keys) {
+				data.delete(k);
+				sets.delete(k);
+				expiry.delete(k);
+			}
+		},
+		async sadd(key, ...members) {
+			let set = sets.get(key);
+			if (!set) sets.set(key, (set = new Set()));
+			for (const m of members) set.add(m);
+		},
+		async smembers(key) {
+			return alive_set(key) ? [...sets.get(key)!] : [];
+		},
+		async expire(key, seconds) {
+			expiry.set(key, Date.now() + seconds * 1000);
+		},
+		async ttl(key) {
+			if (!alive_set(key) && !alive(key)) return -2;
+			const at = expiry.get(key);
+			return at === undefined ? -1 : Math.ceil((at - Date.now()) / 1000);
 		},
 		async scan(cursor, ...args) {
 			// single-page cursor; honor MATCH with the same glob subset the adapter emits
@@ -157,6 +197,28 @@ function fake_valkey(): ValkeyLike & { data: Map<string, string> } {
 }
 
 store_contract('valkey (fake client)', () => valkey(fake_valkey()));
+
+describe('valkey tag index lifetime', () => {
+	it('a short-lived entry never shortens the tag set of a long-lived one', async () => {
+		const client = fake_valkey();
+		const store = valkey(client);
+		await store.put('/page/', page_entry(), { ttl: 86_400, tags: ['s:cms#nav:x'] });
+		await store.put('/short/', page_entry(), { ttl: 600, tags: ['s:cms#nav:x'] });
+		const left = (client.expiry.get('og:t:s:cms#nav:x')! - Date.now()) / 1000;
+		expect(left).toBeGreaterThan(86_000);
+		expect((await store.evictByTag!('s:cms#nav:x')).sort()).toEqual(['/page/', '/short/']);
+		expect(await store.get('/page/')).toBeNull();
+	});
+
+	it('a longer-lived entry extends the tag set', async () => {
+		const client = fake_valkey();
+		const store = valkey(client);
+		await store.put('/short/', page_entry(), { ttl: 600, tags: ['t'] });
+		await store.put('/page/', page_entry(), { ttl: 86_400, tags: ['t'] });
+		const left = (client.expiry.get('og:t:t')! - Date.now()) / 1000;
+		expect(left).toBeGreaterThan(86_000);
+	});
+});
 
 const REDIS_URL = process.env.REDIS_URL;
 describe.skipIf(!REDIS_URL)('store contract: valkey (REAL server via REDIS_URL)', () => {
