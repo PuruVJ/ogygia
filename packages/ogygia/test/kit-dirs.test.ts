@@ -45,6 +45,19 @@ describe('kit.files.routes / kit.outDir', () => {
 		expect(islandDepsHandoffPath(d.out_dir)).toBe(join(root, '.svelte-kit-v2/og-region-deps.json'));
 	});
 
+	it("off Kit's own plugin: Kit 3's options at the top (vite.config only), Kit 2's under `kit`", async () => {
+		const root = app({});
+		const setup = (options: object) => ({ name: 'vite-plugin-sveltekit-setup', api: { options } });
+		// Kit 3: `sveltekit({ … })` is a promise of plugins, its options flat
+		const kit3 = [{ name: 'ogygia' }, Promise.resolve([{ name: 'vite-plugin-svelte:config' }, setup({ files: { routes: 'src/r3' }, outDir: '.out3', inlineStyleThreshold: 2048 })])];
+		expect(await load_kit_dirs(root, kit3)).toEqual({ routes_dir: join(root, 'src/r3'), out_dir: join(root, '.out3') });
+		// Kit 2: the svelte config, Kit's options under `kit` — preferred over the file it was read from
+		const kit2_root = app({ 'svelte.config.js': "export default { kit: { files: { routes: 'src/from-file' } } };" });
+		expect(await load_kit_dirs(kit2_root, [[setup({ kit: { files: { routes: 'src/r2' }, outDir: '.out2' } })]])).toEqual({ routes_dir: join(kit2_root, 'src/r2'), out_dir: join(kit2_root, '.out2') });
+		// no Kit plugin in the list: the file
+		expect((await load_kit_dirs(kit2_root, [{ name: 'other' }, null, false])).routes_dir).toBe(join(kit2_root, 'src/from-file'));
+	});
+
 	it('defaults to src/routes + .svelte-kit without a config, or with a config that sets neither', async () => {
 		const bare = app({});
 		expect(await load_kit_dirs(bare)).toEqual({ routes_dir: join(bare, 'src/routes'), out_dir: join(bare, '.svelte-kit') });

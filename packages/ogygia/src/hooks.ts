@@ -73,7 +73,8 @@ import type { FreezeEntry } from './freeze/types.js';
 import { building, dev } from '$app/environment';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
-import { asset } from '$app/paths';
+// Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike
+import { kit_asset as asset } from './kit-paths.js';
 import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
 import { sign, verify, region_mac_message } from './server/hmac.js';
 import { note_cache_control, renewable_expiry } from './server/shared-cache.js';

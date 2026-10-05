@@ -6,6 +6,8 @@ import { secret, secretStable } from 'virtual:ogygia/secret';
 import { sessionCookie } from 'virtual:ogygia/session-cookie';
 import { regionTtl } from 'virtual:ogygia/region-ttl';
 import { sign, region_mac_message } from 'virtual:ogygia/sign';
+// (`resolve('/__ogygia__')` reads the same on Kit 2, which wants the leading slash, and Kit 3, which
+// takes it as a route ID with no params — the same pathname)
 import { resolve } from '$app/paths';
 import { building } from '$app/environment';
 import { getRequestEvent } from 'virtual:ogygia/request-event';

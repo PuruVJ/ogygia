@@ -210,7 +210,7 @@
 	"peerDependencies": {
 		"@neodrag/svelte": "3.0.0-next.12",
 		"@orama/orama": "^3.0.0",
-		"@sveltejs/kit": ">=2.70.2 <3",
+		"@sveltejs/kit": ">=2.70.2 <4",
 		"bits-ui": "^2.0.0",
 		"estree-walker": "^3.0.3",
 		"magic-string": "^1.1.0",

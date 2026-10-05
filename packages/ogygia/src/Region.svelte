@@ -27,7 +27,8 @@
 	import { runtime_bootstrap } from './server/entry-location.js';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
-	import { asset } from '$app/paths';
+	// Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike (kit-paths.ts)
+	import { kit_asset as asset } from './kit-paths.js';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';

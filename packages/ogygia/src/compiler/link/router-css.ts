@@ -158,12 +158,14 @@ export function router_css_module(
 	}
 
 	// PROD: hrefs resolve lazily from the island-deps handoff (written by the client leg, read at
-	// render — Kit is SSR-first, so resolution must not happen at module init). `$app/paths` base is
-	// applied HERE, in generated code: the handoff stores base-less hrefs and this virtual only ever
-	// runs under the app's bundle where `$app/paths` resolves. The raw handoff href is the claim key,
-	// so a held region linking the same sheet dedupes against us.
+	// render — Kit is SSR-first, so resolution must not happen at module init). Kit's base is applied
+	// HERE, in generated code: the handoff stores base-less hrefs. It is the configured base itself,
+	// root-absolute — Kit's build define (`$app/paths` no longer exports `base` on Kit 3, and its
+	// `base` was page-relative during SSR on Kit 2: a router navigation carries these links into a
+	// page at another depth). The raw handoff href is the claim key, so a held region linking the
+	// same sheet dedupes against us.
 	lines.push(`import { islandCss } from 'virtual:ogygia/island-deps';`);
-	lines.push(`import { base } from '$app/paths';`);
+	lines.push(`const base = typeof __SVELTEKIT_PATHS_BASE__ !== 'undefined' ? __SVELTEKIT_PATHS_BASE__ : '';`);
 	for (let i = 0; i < roots.length; i++) {
 		const abs = roots[i];
 		const key = router_css_key(opts.root, abs);

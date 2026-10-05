@@ -34,6 +34,12 @@ export function invalidateAll() {
 	return Promise.resolve();
 }
 export function set_nearest_error_page() {}
+/** Kit 3: a remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
+ *  are no client hooks to consult (the island world has no Kit client). */
+export async function handle_error(error: unknown): Promise<{ status?: number; message: string }> {
+	const body = (error as { body?: { message?: string } } | null)?.body;
+	return body && typeof body.message === 'string' ? (body as { message: string }) : { status: 500, message: 'Internal Error' };
+}
 
 /**
  * Seed `query_responses` from the `<script type="application/ogygia-remote">` the server emits on

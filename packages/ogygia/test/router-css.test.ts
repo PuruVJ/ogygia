@@ -84,7 +84,7 @@ describe('router_css_module — the generated virtual', () => {
 		).toBe('export {};\n');
 	});
 
-	it('prod: registers each root with a handoff thunk (islandCss key + $app/paths base)', () => {
+	it("prod: registers each root with a handoff thunk (islandCss key + Kit's configured base)", () => {
 		const src = router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
 			lib_dir: LIB,
@@ -94,7 +94,10 @@ describe('router_css_module — the generated virtual', () => {
 		expect(src).toContain(`import __OgRcss0 from "/app/src/lib/Shell.svelte";`);
 		expect(src).toContain(`islandCss("rcss:src/lib/Shell.svelte")`);
 		expect(src).toContain(`from 'virtual:ogygia/island-deps'`);
-		expect(src).toContain(`from '$app/paths'`);
+		// (Kit's build define, root-absolute: `$app/paths` has no `base` on Kit 3, and Kit 2's was
+		// page-relative during SSR — a router navigation carries these links to another depth)
+		expect(src).not.toContain(`'$app/paths'`);
+		expect(src).toContain(`__SVELTEKIT_PATHS_BASE__`);
 		expect(src).toContain(`register_router_css(__OgRcss0`);
 	});
 

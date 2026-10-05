@@ -331,6 +331,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let resolve_alias: { find: string | RegExp; replacement: string }[] = [];
 	let is_build = false;
 	let is_ssr = false;
+	/** The leg a build hook runs in: the hook's ENVIRONMENT — Vite's environment API builds `ssr` and
+	 *  `client` in one app build (Kit 3), where `config.build.ssr` is false for both, so the client's
+	 *  work (the runtime chunk, the islands, their names) ran in the server leg too and landed in the
+	 *  server output — every island 404'd. Else the build's own flag (one build per leg). The last
+	 *  environment `buildStart` saw stands in for a hook the bundler calls without one. */
+	let last_leg_server: boolean | null = null;
+	const server_leg_of = (ctx: unknown): boolean => {
+		const env = (ctx as { environment?: { name?: string; config?: { consumer?: string } } } | null)?.environment;
+		if (env) return env.name === 'ssr' || env.config?.consumer === 'server';
+		return last_leg_server ?? is_ssr;
+	};
 	let content_scanned = false;
 	let sourcemap = false;
 	/** the server build's output, waiting for closeBundle to fill the profiler's maps module */
@@ -464,10 +475,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			config: {
 				order: 'pre',
 				async handler(userConfig, env) {
-					// Kit's `files.routes` / `outDir` from the app's svelte.config.js — resolved BEFORE
-					// anything below walks the routes tree or picks an output path (compiler/kit.ts
-					// `kit_dirs`). An app building a second route tree from one source configures both.
-					await load_kit_dirs(path.resolve(userConfig.root ?? '.'));
+					// Kit's `files.routes` / `outDir` from the app's Kit config — resolved BEFORE anything
+					// below walks the routes tree or picks an output path (compiler/kit.ts `kit_dirs`). An
+					// app building a second route tree from one source configures both. Read off Kit's own
+					// plugin (Kit 3 takes its config in vite.config only), else the svelte.config.js file.
+					await load_kit_dirs(path.resolve(userConfig.root ?? '.'), userConfig.plugins);
 
 					// DEVTOOLS IN A BUILD: the app decides (`devtools: mode !== 'production'`). A build then
 					// carries only a small launcher; the dock's code loads when someone opens it. Said once,
@@ -771,14 +783,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// SERVER leg of a build: a stale handoff from an earlier build must never gate THIS
 				// build's client leg — remove it here, where the leg is certain (the environment), not in
 				// configResolved, which the client environment runs again AFTER the server leg wrote it.
-				{
-					const env = (
-						this as unknown as { environment?: { name?: string; config?: { consumer?: string } } }
-					).environment;
-					const server_leg = env ? env.name === 'ssr' || env.config?.consumer === 'server' : is_ssr;
-					if (is_build && server_leg)
-						fs.rmSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), { force: true });
-				}
+				const server_leg = server_leg_of(this);
+				last_leg_server = server_leg;
+				if (is_build && server_leg) fs.rmSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), { force: true });
 				// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
 				// then the client, so the server can't learn a hash the LATER client build produces — a
 				// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
@@ -806,7 +813,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					await islandBridge.scan?.({ root, readFile });
 				}
 
-				if (is_build && !is_ssr) {
+				if (is_build && !server_leg) {
 					// Pure csr=true app (no csr=false route anywhere) → Kit hydrates everything itself, ogygia
 					// ships nothing. Skip the runtime chunk entirely; every host's islands were stripped to
 					// plain by the csrTrue transform branch, so nothing references it anyway.
@@ -1043,10 +1050,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// SERVER leg of a build: hand the real module graph to the client leg (emit gate). The
 				// leg is read off the ENVIRONMENT (Vite's environment API builds `ssr` then `client` in one
 				// app build; `config.build.ssr` is false for both there).
-				const env = (
-					this as unknown as { environment?: { name?: string; config?: { consumer?: string } } }
-				).environment;
-				const server_leg = env ? env.name === 'ssr' || env.config?.consumer === 'server' : is_ssr;
+				const server_leg = server_leg_of(this);
 				if (is_build && server_leg && !standalone) {
 					try {
 						const handoff = ssr_hosts_handoff_path(kit_dirs(root).out_dir);
@@ -1172,7 +1176,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!ssr && source === '__sveltekit/remote') {
 					if (!kit_remote_index) {
 						throw new Error(
-							"[ogygia] could not locate Kit's client remote-functions (src). Pin @sveltejs/kit with its `src/` published (2.70.x)."
+							"[ogygia] could not locate Kit's client remote-functions (src). Use an @sveltejs/kit that publishes its `src/` (2.70.2 or later, or 3.x)."
 						);
 					}
 					return kit_remote_index;
@@ -1183,6 +1187,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (!ssr && importer && importer.includes('/remote-functions/')) {
 					if (KIT_REMOTE_CLIENT.test(source)) return STUB_CLIENT;
 					if (KIT_REMOTE_STATE.test(source)) return STUB_STATE;
+					// (Kit 3 imports its paths and page state through its package imports)
+					if (source === '#app/paths') return STUB_PATHS;
+					if (source === '#app/state/client') return STUB_STATE;
 				}
 				if (!ssr && source === '$app/paths/internal/client') return STUB_PATHS;
 
@@ -1329,7 +1336,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			// an island entry or the runtime, the app's own naming for every other chunk. (The bundler
 			// files an emitted chunk under the chunk pattern, which carries no name.)
 			outputOptions(output) {
-				if (!is_build || is_ssr) return null;
+				if (!is_build || server_leg_of(this)) return null;
 				type Info = { name?: string };
 				type Names = string | ((info: Info) => string) | undefined;
 				const ours = (fallback: Names, dflt: string) => (info: Info) =>
@@ -1342,7 +1349,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			generateBundle() {
-				if (!is_build || is_ssr) return;
+				if (!is_build || server_leg_of(this)) return;
 				for (const shim of compiler.entry_shims((ref) => this.getFileName(ref)))
 					this.emitFile({ type: 'asset', fileName: shim.fileName, source: shim.source });
 			},
@@ -1365,11 +1372,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			async writeBundle(_options, bundle) {
+				const server_leg = server_leg_of(this);
 				// THE MODULE MAP (server build, profiler on): which source module sits at which lines of
 				// each server chunk. A build without sourcemaps — the normal one — leaves the profiler only
 				// chunk names (`chunks/frames.js`): with this it still tells its own code, ogygia's and a
 				// bundled package's from the app's. Written beside the chunks, so it travels with them.
-				if (is_build && is_ssr && profiler_config && _options.dir) {
+				if (is_build && server_leg && profiler_config && _options.dir) {
 					try {
 						write_module_map(_options.dir, bundle as Record<string, unknown>, root);
 					} catch {
@@ -1387,7 +1395,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// `writeBundle` (not `generateBundle`): rolldown merges/eliminates shared chunks AFTER
 				// `generateBundle`, so a chunk's `imports` there can name a phantom that's gone by write.
 				// By `writeBundle` the bundle reflects the files actually on disk.
-				if (!is_build || is_ssr) return;
+				if (!is_build || server_leg) return;
 
 				warn_content_leaks(bundle as Record<string, unknown>, root, is_island_path);
 
