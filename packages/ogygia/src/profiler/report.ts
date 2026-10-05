@@ -1437,10 +1437,10 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			'kit-etag',
 			`Kit hashed the whole HTML for its ETag: ${fmt_ms(pr(etag.self_ms))} ms per render` +
 				(bytes ? ` over ${fmt_kb(bytes)}` : '') +
-				'.',
+				'. The `hash` function is Kit’s (`render_response` calls it on a page that does not stream), not your code, wherever the build put it.',
 			{
 				anchor: `fn:${etag.key}`,
-				fix: 'Only a smaller document helps (fewer bytes in the seed and props, less markup) — the hash itself is Kit’s, not yours.'
+				fix: 'Kit skips the ETag on a streamed page: return a promise from a server load that the page awaits (it streams, and Kit sends no ETag). Otherwise only a smaller document helps — fewer bytes in the seed and props, less markup.'
 			}
 		);
 	}

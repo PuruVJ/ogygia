@@ -1463,6 +1463,18 @@ export function analyze(
 	for (const n of profile.nodes) for (const c of n.children ?? []) parent_of.set(c, n.id);
 	const roots = profile.nodes.filter((n) => !parent_of.has(n.id));
 
+	// KIT'S OWN `hash`, BUNDLED: Kit's `render_response` hashes the whole HTML for the page's ETag (a
+	// response that does not stream). A build bundles Kit's `hash` into a shared chunk
+	// (`chunks/exports-….js`) with no package in its path, so without a map it read as the app's
+	// code — a 148 ms "app" function on a large page. Called straight from `render_response`, it is
+	// Kit's, whatever file it sits in.
+	for (const n of profile.nodes) {
+		const r = resolved.get(n.id);
+		if (!r || r.name !== 'hash' || r.category !== 'app') continue;
+		const up = parent_of.get(n.id);
+		if (up !== undefined && resolved.get(up)?.name === 'render_response') resolved.set(n.id, { ...r, category: 'dependency', pkg: '@sveltejs/kit' });
+	}
+
 	// NODE WORK THE PROFILER ASKED FOR IS THE PROFILER'S: Node's own frames (`dispatch` under
 	// `inspector.post`, `performance.now` under the async tracker) carry no profiler file of their
 	// own, so they read as Node's cost. A node / v8 frame whose nearest ancestor that is NOT node or
