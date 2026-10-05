@@ -1656,7 +1656,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		}
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		// (long tasks the beacon estimated from frames drawn late: said so, not counted as blind)
-		const WHAT: Record<string, string> = { 'layout-shift': 'layout shifts', longtask: extras.visit.longtasks_from === 'frames' ? 'long tasks (its stalls are estimated from the frames it drew late)' : 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
+		const WHAT: Record<string, string> = { 'layout-shift': extras.visit.shifts_from === 'boxes' ? "layout shifts (a wake that moved the layout is estimated from the island's box)" : 'layout shifts', longtask: extras.visit.longtasks_from === 'frames' ? 'long tasks (its stalls are estimated from the frames it drew late)' : 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
 		if (blind.length)
 			info(

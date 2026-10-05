@@ -1449,6 +1449,14 @@ describe('analyze_page', () => {
 		expect(r.longtask_ms).toBe(220);
 	});
 
+	it("a browser with no layout-shift timing: a wake's shift is estimated from the island's box, said so", () => {
+		const input = page({ islands: [{ fp: 'a', t0: 60, loaded: 80, done: 90 }], shifts: [{ t: 120, value: 0.06, fp: 'a' }] });
+		const said = (from?: 'boxes') => analyze_page({ ...input, ...(from ? { shifts_from: from } : {}) }, [region('a', 'Grower')], [], 1500).findings.find((x) => x.code === 'hydration-shift')!.message;
+		expect(said('boxes')).toContain('Hydrating Grower (CLS 0.06) moved the layout');
+		expect(said('boxes')).toContain("Estimated: this browser reports no layout shifts, so each is the island's box before and after it woke");
+		expect(said()).not.toContain('Estimated');
+	});
+
 	it('a browser with no long-task timing: the stalls are frames drawn late, said so', () => {
 		const r = analyze_page(
 			{ ...page({ islands: [{ fp: 'a', t0: 60, loaded: 80, done: 90 }], longtasks: [{ t: 700, ms: 205 }] }), longtasks_from: 'frames' },

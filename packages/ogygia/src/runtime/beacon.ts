@@ -1285,6 +1285,7 @@ function build_visit(): Record<string, unknown> | null {
 		...(visit_navs.length ? { navs: visit_navs.slice() } : {}),
 		longtasks: visit_longtasks,
 		...(longtasks_from_frames ? { longtasks_from: 'frames' } : {}),
+		...(island_boxes ? { shifts_from: 'boxes' } : {}),
 		islands: visit_islands,
 		firsts: visit_firsts,
 		shifts: visit_shifts,
@@ -1542,6 +1543,91 @@ function supports(type: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * WHAT A WAKE MOVED, where the browser reports no layout shifts (Safari): each island's box as the
+ * server drew it, noted at boot before any island wakes, and again once it woke. An island whose
+ * height changed while its bottom sat on the screen moved its content by that much: a shift, scored
+ * the way a layout shift traced to it is (its box's share of the screen × how far, against the
+ * screen's larger side), on the island's fingerprint. An estimate — content moving inside a box of
+ * the same height is not seen — and the visit says its shifts are these (`shifts_from: 'boxes'`).
+ */
+let island_boxes: WeakMap<Element, { top: number; height: number }> | null = null;
+/** an element's box: its own, or — a region draws no box of its own — its children's together */
+function box_of(el: Element): { top: number; bottom: number; left: number; width: number } | null {
+	const r = el.getBoundingClientRect();
+	if (r.width || r.height) return { top: r.top, bottom: r.bottom, left: r.left, width: r.width };
+	let top = Infinity;
+	let bottom = -Infinity;
+	let left = Infinity;
+	let right = -Infinity;
+	for (const c of el.children) {
+		const b = c.getBoundingClientRect();
+		if (!b.width && !b.height) continue;
+		top = Math.min(top, b.top);
+		bottom = Math.max(bottom, b.bottom);
+		left = Math.min(left, b.left);
+		right = Math.max(right, b.right);
+	}
+	return top === Infinity ? null : { top, bottom, left, width: right - left };
+}
+function note_island_boxes(): void {
+	if (island_boxes || typeof innerHeight === 'undefined') return;
+	island_boxes = new WeakMap();
+	for (const el of document.querySelectorAll('ogygia-region[data-og-fp]:not([data-hydrated])')) {
+		const b = box_of(el);
+		if (b) island_boxes.set(el, { top: b.top + scrollY, height: b.bottom - b.top });
+	}
+}
+/** when a woken island's box is looked at again: two frames on (what its mount drew a frame later —
+ *  a banner opened in a requestAnimationFrame), and half a second on (inside the 600 ms a wake's
+ *  shifts are counted against it) */
+const BOX_LOOK_AGAIN_MS = 500;
+function estimate_wake_shift(el: Element, fp: string, t: number): void {
+	const before = island_boxes?.get(el);
+	if (!before) return;
+	island_boxes!.delete(el);
+	let last = before;
+	const look = (at: number) => {
+		const moved = box_shift(el, fp, last, at);
+		if (moved) last = moved;
+	};
+	look(t);
+	if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => requestAnimationFrame(() => look(performance.now())));
+	setTimeout(() => look(performance.now()), BOX_LOOK_AGAIN_MS);
+}
+/** the island's box against `before`: a shift when its height changed with its bottom on the screen;
+ *  the box it has now (the next look's `before`), or null when nothing moved */
+function box_shift(el: Element, fp: string, before: { top: number; height: number }, t: number): { top: number; height: number } | null {
+	const after = box_of(el);
+	if (!after) return null;
+	const dh = after.bottom - after.top - before.height;
+	if (Math.abs(dh) < 1) return null;
+	const now = { top: after.top + scrollY, height: after.bottom - after.top };
+	const vw = innerWidth;
+	const vh = innerHeight;
+	// (its old bottom on the screen as it is now: below the screen, nothing a visitor sees moved)
+	const bottom = before.top - scrollY + before.height;
+	if (bottom >= vh) return now;
+	// (the island's own share, as a layout shift traced to it counts its own moved nodes: the part
+	// of its box on the screen × how far its content moved — what lies below it is another's shift)
+	const moved = Math.min(Math.abs(dh), vh);
+	const seen = Math.max(0, Math.min(vh, after.bottom) - Math.max(0, after.top));
+	const value = Math.round(((seen * Math.min(after.width, vw)) / (vh * vw)) * (moved / Math.max(vw, vh)) * 10000) / 10000;
+	if (value < 0.0001 || !make_room(visit_shifts, 60, (s) => s.t)) return now;
+	const tag = describe_target(el);
+	visit_shifts.push({
+		t: r2(t),
+		value,
+		fp,
+		...(tag ? { tag } : {}),
+		from: [Math.round(after.left), Math.round(before.top - scrollY), Math.round(after.width), Math.round(before.height)],
+		to: [Math.round(after.left), Math.round(after.top), Math.round(after.width), Math.round(after.bottom - after.top)]
+	});
+	// (a shift after the early visit: sent again, as a layout shift's is)
+	if (early_visit_done) resend_soon();
+	return now;
 }
 
 /** a frame's budget at 60 Hz, and how late a frame must be to count: a long task's 50 ms */
@@ -1954,6 +2040,8 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 			if (changed && snapshot_room()) snapshots.push(snapshot_of(fp, ssr_html, now, a, b));
 		} else changed = false;
 	}
+	// a browser with no layout-shift timing: what this island's wake moved, from its size before it
+	if (island_boxes) estimate_wake_shift(el, fp, t_done);
 	// the early visit can leave before any island wakes (the boot schedules it; a page whose scripts
 	// block the wake idles first): an island waking after it re-sends the visit (debounced), rather
 	// than leaving the islands to the hide-time message, the one most often lost
@@ -2043,6 +2131,8 @@ export function beacon_watch(): void {
 	const o = owner();
 	if (o) return o.beacon_watch();
 	if (!collecting() || typeof document === 'undefined') return;
+	// (before any island wakes: their server-drawn boxes, where layout shifts are not reported)
+	if (!supports('layout-shift')) note_island_boxes();
 	// the observers, the CPU sampler and the hide listeners from boot — so a page whose islands
 	// never wake (or that has none) still reports its visit
 	schedule();
@@ -2080,6 +2170,8 @@ export interface BeaconPage {
 	longtasks: { t: number; ms: number }[];
 	/** `frames`: this browser has no long-task timing; they are frames drawn late */
 	longtasks_from?: 'frames';
+	/** `boxes`: this browser has no layout-shift timing; the shifts are islands' boxes changing as they woke */
+	shifts_from?: 'boxes';
 	marks: { name: string; ms: number; t0?: number }[];
 	snapshots: Snapshot[];
 	/** the main thread, sampled (JS Self-Profiling): the load trace and recordings, newest first */
@@ -2097,6 +2189,7 @@ export function beacon_page(): BeaconPage | null {
 		shifts: visit_shifts.slice(),
 		longtasks: visit_longtasks.slice(),
 		...(longtasks_from_frames ? { longtasks_from: 'frames' as const } : {}),
+		...(island_boxes ? { shifts_from: 'boxes' as const } : {}),
 		marks: visit_marks.slice(),
 		snapshots: snapshots.slice(),
 		cpu: { state: cpu ? 'recording' : cpu_kept.length ? 'done' : 'off', off: cpu_off, traces: cpu_kept.slice() }
@@ -2138,6 +2231,7 @@ export function _reset_beacon(): void {
 	visit_shifts = [];
 	visit_longtasks = [];
 	longtasks_from_frames = false;
+	island_boxes = null;
 	keepalive_queued = 0;
 	visit_scripts = new Map();
 	visit_forced = [];

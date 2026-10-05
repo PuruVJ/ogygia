@@ -1750,6 +1750,8 @@ try {
 			const codes = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).map((f) => f.code));
 			// (WebKit reports no long tasks: the planted stall is found from the frames it drew late)
 			const stall = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'long-tasks')?.message ?? '');
+			// (WebKit reports no layout shifts: Grower's wake is found from its box before and after, said so)
+			const grew = await page.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).find((f) => f.code === 'hydration-shift')?.message ?? '');
 			await page.click('[data-og-panel-toggle]').catch(() => {});
 			await page.waitForTimeout(600);
 			const tabs = await page.locator('[data-og-tab]').all();
@@ -1807,7 +1809,7 @@ try {
 				['a late @font-face Safari refetches: named with its Vary: Origin, never the decoy', late.message.includes('late.woff2') && !late.message.includes('early.woff2') && (late.fix ?? '').includes('Vary: Origin')],
 				['every tab opens', tabs.length >= 8],
 				['the page view names what it can measure', codes.includes('markup-changed') && codes.includes('hydrate-failed') && codes.includes('eager-offscreen')],
-				['…and never what it cannot', !codes.includes('hydration-shift')],
+				["the planted wake shift found from Grower's box, said to be an estimate", grew.includes('Hydrating Grower') && grew.includes('Estimated: this browser reports no layout shifts')],
 				['the planted stall found from frames drawn late, said so', stall.includes('frames it drew more than 50 ms late')],
 				['the Page tab says this browser does not report layout shifts and long tasks', limits.includes('layout shifts') && limits.includes('long tasks')],
 				["ogygia's hole preload Safari refetches: the browser's choice, not a crossorigin to fix", hole_fix.includes('never hands a fetch preload to a later fetch()') && !hole_fix.includes('must match exactly')],

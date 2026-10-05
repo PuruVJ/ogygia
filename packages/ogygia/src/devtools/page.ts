@@ -536,6 +536,7 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 		shifts: shift(page.shifts),
 		longtasks: shift(page.longtasks),
 		...(page.longtasks_from ? { longtasks_from: page.longtasks_from } : {}),
+		...(page.shifts_from ? { shifts_from: page.shifts_from } : {}),
 		snapshots: page.snapshots
 	};
 }
@@ -583,7 +584,8 @@ export function unmeasured(cpu_off?: string | null): string[] {
 		types = [];
 	}
 	const out: string[] = [];
-	if (!types.includes('layout-shift')) out.push('layout shifts (CLS, a hydration that moved the layout)');
+	// (a wake that moved the layout is estimated instead, from each island's box before and after)
+	if (!types.includes('layout-shift')) out.push("layout shifts (CLS; a hydration that moved the layout is estimated from the island's box)");
 	if (!types.includes('largest-contentful-paint')) out.push('the largest paint (LCP)');
 	if (!types.includes('event')) out.push('interaction timing (INP, slow interactions)');
 	// (the beacon estimates the stalls from frames drawn late instead: said so)

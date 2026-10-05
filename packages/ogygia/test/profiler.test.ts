@@ -1826,6 +1826,10 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(framed.longtasks_from).toBe('frames');
 		const limits = derive_findings(analyze(p1), meta as never, { ...extras, visit: framed } as never).find((f) => f.code === 'browser-limits')!.message;
 		expect(limits).toContain('long tasks (its stalls are estimated from the frames it drew late)');
+		// …and the wakes' shifts from the islands' boxes: kept, merged, said in the limits
+		const boxed = parse_visit('/hell', { ...visit, shifts: [{ t: 500, value: 0.06, fp: 'bbbbbbbb22222222' }], shifts_from: 'boxes' })!;
+		expect(boxed.shifts_from).toBe('boxes');
+		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: boxed } as never).find((f) => f.code === 'browser-limits')!.message).toContain("layout shifts (a wake that moved the layout is estimated from the island's box)");
 	});
 
 	it('a cross-origin-isolated page in Safari: the first byte hidden, the visit kept, never a 0 ms first byte', () => {

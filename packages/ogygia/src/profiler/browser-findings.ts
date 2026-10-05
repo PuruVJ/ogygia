@@ -180,6 +180,7 @@ export function browser_page_report(
 		shifts: visit.shifts,
 		longtasks: visit.longtasks,
 		...(visit.longtasks_from ? { longtasks_from: visit.longtasks_from } : {}),
+		...(visit.shifts_from ? { shifts_from: visit.shifts_from } : {}),
 		// holes that kept their fallback: the same finding the devtools raise from their bus
 		...(visit.holes_failed?.length
 			? {

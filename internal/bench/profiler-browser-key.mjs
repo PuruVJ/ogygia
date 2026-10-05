@@ -81,7 +81,8 @@ const LABS = [
 	{ path: '/dt-coi', engine: 'webkit', stay: 1500, named: { 'first-byte-hidden': 'Safari does that for a cross-origin-isolated page', 'client-hydrate': 'Healthy' } },
 	{ path: '/dt-coi', stay: 1500, absent: ['first-byte-hidden'] },
 	// (WebKit: no long-task timing — the planted stall is found from the frames drawn late, said so)
-	{ path: '/dt-lab', engine: 'webkit', stay: 2500, named: { 'long-tasks': 'the frames it drew more than 50 ms late', 'browser-limits': 'estimated from the frames it drew late' } },
+	// (…and no layout-shift timing: Grower's wake is found from its box before and after, said so)
+	{ path: '/dt-lab', engine: 'webkit', stay: 2500, named: { 'long-tasks': 'the frames it drew more than 50 ms late', 'browser-limits': 'estimated from the frames it drew late', 'hydration-shift': 'Hydrating Grower' } },
 	{ path: '/dt-third', engine: 'webkit', stay: 3500, named: { 'third-party': 'were weighed from the files themselves', 'third-party-blocking': 'held the first paint', 'third-party-edits': 'ThirdTarget' }, never: { 'third-party': ' 0 KB' } }
 ];
 

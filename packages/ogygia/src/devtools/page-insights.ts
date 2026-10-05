@@ -218,6 +218,9 @@ export interface PageInput {
 	longtasks: { t: number; ms: number }[];
 	/** `frames`: the browser has no long-task timing — these are frames drawn more than 50 ms late */
 	longtasks_from?: 'frames';
+	/** `boxes`: the browser has no layout-shift timing — the shifts are islands whose box changed as
+	 *  they woke, scored the way a layout shift is (an estimate) */
+	shifts_from?: 'boxes';
 	/** (`from`: a big island's window — where it starts in the markup without comments) */
 	snapshots?: { fp: string; ssr: string; hydrated: string; final?: string; from?: number }[];
 	/** awake islands showing a children slot with nothing in it (read off the DOM; devtools only) */
@@ -944,7 +947,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		findings.push({
 			code: 'hydration-shift',
 			severity: shifted.some((r) => r.shift >= 0.1) ? 'warn' : 'info',
-			message: `Hydrating ${list(shifted.map((r) => `${r.name} (CLS ${r.shift})`))} moved the layout: the island's size changed when it woke.`,
+			message:
+				`Hydrating ${list(shifted.map((r) => `${r.name} (CLS ${r.shift})`))} moved the layout: the island's size changed when it woke.` +
+				(page.shifts_from === 'boxes' ? " (Estimated: this browser reports no layout shifts, so each is the island's box before and after it woke, scored the way a layout shift is.)" : ''),
 			fix: 'Render the island at its final size on the server (the same content, or a placeholder with a fixed height), so waking it changes nothing on screen.',
 			fps: shifted.map((r) => r.fp)
 		});
