@@ -293,7 +293,7 @@ function reconcile_children(
 				cursor = cursor.nextSibling;
 				parent.removeChild(gone);
 			}
-		}
+		} else drop_stale_regions(parent, cursor, null);
 		return;
 	}
 	// Old ran out first: everything left is a pure append.
@@ -425,6 +425,26 @@ function reconcile_children(
 			for (const node of old_keys.values()) {
 				if (node.parentNode === parent) parent.removeChild(node);
 			}
+		}
+	} else drop_stale_regions(parent, cursor, old_keys);
+}
+
+/**
+ * A self-owned parent keeps the children it gave itself — but an `<ogygia-region>` among them is never
+ * its own doing: it is the old page's server content, always. One the new page did not claim (its
+ * key changed: a hole's endpoint written at another depth, its `exp` rolled into the next window) is
+ * removed, or the swap left the old region beside the new one — a site's navigation drawn twice in a
+ * custom element. Only regions: the element's own children stay.
+ */
+function drop_stale_regions(parent: Element, cursor: ChildNode | null, old_keys: Map<string, ChildNode> | null): void {
+	while (cursor) {
+		const here = cursor;
+		cursor = cursor.nextSibling;
+		if (here.nodeType === ELEMENT && (here as Element).localName === 'ogygia-region') parent.removeChild(here);
+	}
+	if (old_keys) {
+		for (const node of old_keys.values()) {
+			if (node.parentNode === parent && node.nodeType === ELEMENT && (node as Element).localName === 'ogygia-region') parent.removeChild(node);
 		}
 	}
 }

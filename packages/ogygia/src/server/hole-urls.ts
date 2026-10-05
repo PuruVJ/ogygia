@@ -13,7 +13,7 @@
  */
 import { escape_amp } from '../escape.js';
 
-// The three attribute sites ogygia writes URLs into hole HTML: an `<ogygia-region>`'s `entry` /
+// The attribute sites ogygia writes URLs into hole HTML: an `<ogygia-region>`'s `entry` / `src` /
 // `endpoint`, a region-css `<link>`'s `href`, an inlined region sheet's `data-ogygia-region-css`
 // identity. Values are attribute-escaped (`&` → `&amp;`), so the resolver un-escapes, resolves, and
 // re-escapes. ONE forward walk over the tags (indexOf; it used to be three whole-body regex passes
@@ -58,7 +58,7 @@ function opens(html: string, lt: number, name: string): boolean {
 	return html.startsWith(name, lt + 1) && !is_word(html.charCodeAt(lt + 1 + name.length));
 }
 
-/** Rewrite the relative `entry` / `endpoint` / region-css `href` values in `html` to root-absolute
+/** Rewrite the relative `entry` / `src` / `endpoint` / region-css `href` values in `html` to root-absolute
  *  paths resolved against `base` (the endpoint request URL). */
 export function absolutize_hole_html(html: string, base: URL): string {
 	if (!html.includes('<ogygia-region') && !html.includes(REGION_CSS_ATTR)) return html;
@@ -73,7 +73,9 @@ export function absolutize_hole_html(html: string, base: URL): string {
 		if (gt === -1) break;
 		const tag = html.slice(lt, gt + 1);
 		let next = tag;
-		if (region) next = rewrite_attr(rewrite_attr(tag, 'entry', base, true), 'endpoint', base, true);
+		// (`src` too: an island's location, written beside its identity since locations — left relative,
+		// an island inside a hole imported `/<page>/_app/…` and woke on a redirect to an HTML page)
+		if (region) next = rewrite_attr(rewrite_attr(rewrite_attr(tag, 'entry', base, true), 'src', base, true), 'endpoint', base, true);
 		else if (tag.indexOf(REGION_CSS_ATTR) !== -1) next = link ? rewrite_attr(tag, 'href', base, false) : tag.indexOf(REGION_CSS_ATTR + '="') !== -1 ? rewrite_attr(tag, REGION_CSS_ATTR, base, false) : tag;
 		if (next !== tag) {
 			out += html.slice(pos, lt) + next;

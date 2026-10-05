@@ -53,6 +53,34 @@ export function entry_location(entry: string, base?: string): string | undefined
 	return locations.size ? locations.get(absolute(entry, base)) : undefined;
 }
 
+/** The region attributes that hold a URL: its identity, its location, its hole's endpoint. */
+const REGION_URL_ATTRS = ['entry', 'src', 'endpoint'] as const;
+
+/**
+ * PIN A REGION'S URLS TO THE PAGE THAT WROTE THEM. With Kit's default `paths.relative`, the server
+ * writes `entry` / `src` / `endpoint` relative to the page it rendered (`../../_app/immutable/…`,
+ * `../../__ogygia__?…`), and every reader resolves them against `location.href`. A region that stays
+ * on the page through a client navigation (Kit's, or the router's) then resolved them against the
+ * NEW address: its island imported `/a/b/_app/…` (a redirect to an HTML page), and a hole's key
+ * changed with the depth of the page, so a swap kept the old region beside the new one. Resolved
+ * once, where the address is still the right one — the element's connect, and a fetched document
+ * against its own URL — they read the same on every page. Same origin only (a federated entry stays
+ * as written); an absolute or root-absolute value is already pinned.
+ */
+export function pin_region_urls(el: Element, base?: string): void {
+	for (const name of REGION_URL_ATTRS) {
+		const value = el.getAttribute(name);
+		if (!value || !(value.startsWith('./') || value.startsWith('../'))) continue;
+		let url: URL;
+		try {
+			url = new URL(absolute(value, base));
+		} catch {
+			continue;
+		}
+		if (url.origin === location.origin) el.setAttribute(name, url.pathname + url.search + url.hash);
+	}
+}
+
 /** An island element's identity, its location noted on the way (the one read every loader uses). */
 export function island_entry_of(el: Element): string | null {
 	const entry = el.getAttribute('entry');

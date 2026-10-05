@@ -64,6 +64,12 @@ export const OGYGIA_HOOKS_MODULE = (
 )
 	.split(path.sep)
 	.join('/');
+/** ogygia's `Region.svelte` — either copy, as the POSIX id Vite hands the transform hook (a workspace
+ *  can load the src one and the dist one both): its LateIsland import is the awaiting one where the
+ *  app runs Svelte's async mode (late-island.ts). */
+export const OGYGIA_REGION_MODULES: ReadonlySet<string> = new Set(
+	['src/Region.svelte', 'dist/Region.svelte'].map((f) => path.join(PKG_ROOT, f).split(path.sep).join('/'))
+);
 export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 	? {
 			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),

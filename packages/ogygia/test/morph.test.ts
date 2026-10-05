@@ -605,6 +605,25 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		expect(host.getAttribute('class')).toBe('rt-scope-a1 hydrated'); // scope class + hydrated flag intact
 	});
 
+	test('an upgraded element keeps its own children, but never an old region the new page did not claim', () => {
+		// a site nav (an upgraded custom element) holds a hole; the next page writes the same hole with
+		// another key (its endpoint written at another depth, or its exp rolled over). The self-owned
+		// parent keeps its own children — the old region beside the new one drew the nav twice.
+		const parent = el('<div><x-nav><span data-own="1">its own</span><ogygia-region data-key="a" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav></div>');
+		const nav = upgraded(parent);
+		morph_children(parent, frag('<x-nav><span data-own="1">its own</span><ogygia-region data-key="b" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav>'));
+		expect(parent.firstChild).toBe(nav);
+		const regions = nav.children.filter((c) => (c as DomElement).localName === 'ogygia-region') as DomElement[];
+		expect(regions.length).toBe(1);
+		expect(regions[0].getAttribute('data-key')).toBe('b');
+		expect(nav.innerHTML.split('mega-menu-l1-0').length - 1).toBe(1);
+		// …and an element it gave itself after the render's children stays
+		const kept = el('<div><x-nav><ogygia-region data-key="a"></ogygia-region><i data-own="2"></i></x-nav></div>');
+		const nav2 = upgraded(kept);
+		morph_children(kept, frag('<x-nav><ogygia-region data-key="a"></ogygia-region></x-nav>'));
+		expect(nav2.innerHTML).toContain('data-own="2"');
+	});
+
 	test('a custom element that is NOT upgraded (no shadow root, no definition) still matches exactly', () => {
 		const parent = el('<div><x-plain popover="manual" class="hydrated"></x-plain></div>');
 		const x = parent.firstChild as DomElement;

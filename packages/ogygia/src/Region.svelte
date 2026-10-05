@@ -38,6 +38,8 @@
 	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
+	// (LateIslandAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
+	import LateIsland from './LateIsland.svelte';
 	import { register_late_region } from './late-region-registry.js';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
@@ -89,7 +91,7 @@
 		__component,
 		__css,
 		// The client wrapper's on-demand component fetch (its lazy module answered `undefined`: a
-		// Kit document that did not render this island). See `late_component`.
+		// Kit document that did not render this island). See `late_load`.
 		__load,
 		__props,
 		// server
@@ -255,17 +257,10 @@
 	const island_entry = $derived(as_dual ? as_dual.module : __mode === 'island' ? __entry : '');
 	const island_component = $derived(as_dual ? as_dual.component : __component);
 	// An inline island whose wrapper Kit CREATED on the client (a client-side navigation mounted it:
-	// no SSR, so no rendered stamp, so its lazy module answered `undefined`) has no component yet.
-	// Fetch it through `__load` and render when it lands — a client render, nothing to mismatch.
-	// Never on the server (the SSR wrapper imports the entry) and never at hydration (a stamped
-	// island arrives with its component in hand).
-	/** @type {import('svelte').Component | undefined} */
-	let late_component = $state(undefined);
-	// svelte-ignore state_referenced_locally
-	if (typeof window !== 'undefined' && island_inline && !__component && __load)
-		__load().then((c) => {
-			late_component = c;
-		});
+	// no SSR, so no rendered stamp, so its lazy module answered `undefined`) has no component yet:
+	// LateIsland loads it through `__load`. Never on the server (the SSR wrapper imports the entry)
+	// and never at hydration (a stamped island arrives with its component in hand).
+	const late_load = $derived(typeof window !== 'undefined' && island_inline && !__component ? __load : undefined);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
 
@@ -867,8 +862,8 @@
      want, so each block tells Svelte (svelte-ignore) instead of it warning on every such page. -->
 <svelte:head><!-- svelte-ignore hydration_html_changed -->{@html head_html}</svelte:head>
 {#if is_island}
-	{@const Component = island_component ?? late_component}
-	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else if island_skip}<ogygia-region
+	{@const Component = island_component}
+	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{:else if late_load}<LateIsland load={late_load} props={island_props_ready} children={island_children} />{/if}{:else if island_skip}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}

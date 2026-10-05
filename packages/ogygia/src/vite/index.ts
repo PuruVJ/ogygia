@@ -102,6 +102,7 @@ import { Program, strip_id } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
 import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
 import { discover_package_files } from './package-files.js';
+import { late_island_redirect, svelte_async_enabled } from './late-island.js';
 import { flags_manifest } from '../compiler/flags.js';
 import {
 	V_KIT_WIRE,
@@ -143,6 +144,7 @@ import {
 	PROFILER_UI_DIR,
 	PROFILER_ROUTER_MODULE,
 	OGYGIA_HOOKS_MODULE,
+	OGYGIA_REGION_MODULES,
 	OGYGIA_INJECTED_IMPORTS,
 	OGYGIA_INJECTED_FILES,
 	APP_SHIMS,
@@ -322,6 +324,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let app_dir = '_app';
 	let libDir: string;
 	let is_dev = false;
+	/** the app compiles with Svelte's async mode (vite-plugin-svelte's resolved options): Region
+	 *  imports the awaiting LateIsland (late-island.ts) */
+	let svelte_async = false;
 	/** Resolved `resolve.alias` entries — passed to bake()'s rolldown eval so `$lib` etc. resolve. */
 	let resolve_alias: { find: string | RegExp; replacement: string }[] = [];
 	let is_build = false;
@@ -601,6 +606,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			configResolved(config) {
 				root = config.root;
 				base = config.base || '';
+				svelte_async = svelte_async_enabled(config.plugins);
 				// ogygia keeps itself out of the dep optimizer (one copy in the dev browser, see the
 				// `config` hook); an app that lists part of it in its own `include` brings the second
 				// copy back — say so, once, instead of a hydration error far from the cause
@@ -1149,6 +1155,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// Deterministic, can't throw, can't be left unresolved, works from any sub-package with no
 				// ogygia dependency of its own.
 				if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
+
+				// An island a client navigation created, whole in one swap: Region's LateIsland import is
+				// the awaiting one where the app runs Svelte's async mode (late-island.ts)
+				if (svelte_async) {
+					const awaiting = late_island_redirect(source, importer, OGYGIA_REGION_MODULES);
+					if (awaiting) return awaiting;
+				}
 
 				const ssr = options?.ssr === true;
 

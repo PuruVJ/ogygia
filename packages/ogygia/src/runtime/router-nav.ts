@@ -28,6 +28,7 @@ import {
 } from './seeds.js';
 import type { SpaRouter } from './router.js';
 import { spa_html_cacheable } from './spa-cacheable.js';
+import { pin_region_urls } from './entry-locations.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 
 // What this lazy chunk uses from the boot and from the router, handed over through the registry — it
@@ -637,11 +638,15 @@ export async function navigate(
 		typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 	const use_vt = marker.getAttribute('content') !== 'plain' && !prefer_reduced_motion;
 
+	// The fetched page's relative region URLs belong to ITS address: pin them before anything reads
+	// them — the batch's endpoints, the preflight, the reconcile keys (entry-locations.ts)
+	for (const el of doc.querySelectorAll('ogygia-region')) pin_region_urls(el, dest.href);
+
 	// SINGLE-FLIGHT NAV: prescan the incoming page for its load-timed deferred region calls and stream
 	// them ALL in one batch request, kicked off now (before the swap). Each region binder joins the
 	// batch via the store when it connects — no per-region fetch waterfall on navigation. Fired
 	// synchronously so every reservation is in place before the body swap connects any binder.
-	batch_regions(doc);
+	batch_regions(doc, dest.href);
 	preflight(doc, dest);
 
 	// Cold-cache FOUC guard: get the destination's stylesheets loaded and applied BEFORE the body
@@ -1012,7 +1017,8 @@ function preload_stylesheets(new_head: HTMLHeadElement): Promise<unknown> {
  * irrelevant. Only `when="load"` (or unset) is batched: a region scheduled `visible`/`idle`/media
  * stays lazy and fetches on its own trigger, so dynamic schedules are preserved, not eagerly pulled.
  */
-function batch_regions(doc: Document) {
+/** `base`: the fetched page's own URL (its relative hrefs resolve against it). */
+function batch_regions(doc: Document, base: string) {
 	const endpoints: string[] = [];
 	const batched = new Set<string>();
 	for (const el of Array.from(doc.querySelectorAll('ogygia-region[render="defer"][endpoint]'))) {
@@ -1028,8 +1034,19 @@ function batch_regions(doc: Document) {
 	// Drop the per-region `<link rel="preload" as="fetch">` hints for these calls before the head is
 	// merged: on initial load they front-run the fetch, but on a single-flight navigation the batch serves
 	// them — left in, the browser would fire the very GET waterfall the single-flight batch exists to remove.
+	// (by the URL each names: the endpoints are pinned to the page's address, its preload hints are
+	// still written relative to it)
+	const same_url = (href: string): string => {
+		try {
+			const u = new URL(href, base);
+			return u.pathname + u.search;
+		} catch {
+			return href;
+		}
+	};
+	const batched_urls = new Set(Array.from(batched, same_url));
 	for (const link of Array.from(doc.querySelectorAll('link[rel="preload"][as="fetch"]'))) {
-		if (batched.has(link.getAttribute('href') || '')) link.remove();
+		if (batched_urls.has(same_url(link.getAttribute('href') || ''))) link.remove();
 	}
 	if (DEVTOOLS) dt_emit({ domain: 'nav', name: 'nav.batch', count: endpoints.length });
 	// Through the seam, never a static `frame-nav` import: an app with `router` but no

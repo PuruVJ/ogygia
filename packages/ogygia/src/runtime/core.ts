@@ -14,7 +14,7 @@ import {
 	island_module_url,
 	RegionAnswerRefused
 } from './region-endpoint-url.js';
-import { island_entry_of, import_entry, on_entry_fallback } from './entry-locations.js';
+import { island_entry_of, import_entry, on_entry_fallback, pin_region_urls } from './entry-locations.js';
 import {
 	is_awake,
 	is_deferred,
@@ -461,6 +461,9 @@ class OgygiaRegion extends HTMLElement {
 
 	connectedCallback() {
 		connected_regions.add(this); // the navigation's shadow-root check counts these (connected.ts)
+		// its relative URLs, against the address it entered at — they are read again after any
+		// navigation, when `location` is another page (entry-locations.ts)
+		pin_region_urls(this);
 		// Live region: a `<Region of={liveQuery.current}>` whose ticket carries server-rendered
 		// HTML. Region.svelte drives it through `applyLive` (swap → morph / keep-alive); the element
 		// does nothing automatic here — no fetch, no self-hydrate.
@@ -480,8 +483,10 @@ class OgygiaRegion extends HTMLElement {
 				const identity = this.getAttribute('data-og-hole');
 				const facts = identity ? hole_facts_of(this.ownerDocument, identity) : null;
 				if (facts) {
-					this.#minted_endpoint = facts.endpoint;
 					this.setAttribute('endpoint', facts.endpoint);
+					// (written by the server relative to this page, as the SSR element's was: pinned the same)
+					pin_region_urls(this);
+					this.#minted_endpoint = this.getAttribute('endpoint');
 					if (facts.sidecar)
 						restore_props_sidecar(this, facts.sidecar.cloneNode(true) as HTMLScriptElement);
 				} else if (import.meta.env.DEV && identity) {
