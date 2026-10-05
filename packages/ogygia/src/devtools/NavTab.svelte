@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Nav tab (nav lab, internal/notes/devtools.md, Rung 5 · 4): makes an SPA navigation

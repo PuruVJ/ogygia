@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The boundary-lens OVERLAY: draws a labelled box over every `<ogygia-region>` on the page — tinted

@@ -20,18 +20,43 @@ export function mount_app(root: ShadowRoot, opts: { csr_true: boolean; start_ope
 	// (and its event bus) never ran — the dock renders a notice instead of empty instruments.
 	mount(Devtools, { target: root, props: { csrTrue: opts.csr_true, startOpen: opts.start_open } });
 
-	// The components' scoped `<style>`s land in `document.head` — via Svelte's `append_styles` in a
-	// production build, or Vite's dev CSS injection in dev — where the shadow boundary blocks them.
-	// Relocate ONLY the ones whose scope hash is actually used inside our shadow tree (matched by CSS
-	// text, so it works in both dev and prod), never a page or island stylesheet. Keep adopting as tabs
-	// and detail views mount their styles later.
+	// The components inject their CSS (`<svelte:options css="injected">`): Svelte puts each `<style>`
+	// in this shadow root. On the dev server Vite's own CSS injection still lands them in
+	// `document.head`, where the shadow boundary blocks them: relocate ONLY the ones whose scope hash
+	// is used inside our shadow tree (matched by CSS text), never a page or island stylesheet. And a
+	// page whose CSP refuses inline styles gets them re-made as adopted sheets. Keep going as tabs and
+	// detail views mount their styles later.
 	adopt_scoped_styles(root);
 	const mo = new MutationObserver(() => adopt_scoped_styles(root));
 	mo.observe(document.head, { childList: true });
 	mo.observe(root, { childList: true, subtree: true });
 }
 
+/** the dock's `<style>`s a page's Content-Security-Policy refused, already re-made as sheets */
+const remade = new WeakSet<HTMLStyleElement>();
+
+/** A page whose Content-Security-Policy has no `'unsafe-inline'` for styles refuses every `<style>`
+ *  element — the dock's own among them (the element stays, with its text, but no sheet). A sheet made
+ *  through the CSSOM is not an inline style: the same text, adopted into the shadow root, applies. */
+function remake_refused_styles(root: ShadowRoot): void {
+	if (typeof CSSStyleSheet === 'undefined' || !('adoptedStyleSheets' in root)) return;
+	const add: CSSStyleSheet[] = [];
+	for (const style of root.querySelectorAll('style')) {
+		if (style.sheet || remade.has(style) || !style.textContent) continue;
+		remade.add(style);
+		try {
+			const sheet = new CSSStyleSheet();
+			sheet.replaceSync(style.textContent);
+			add.push(sheet);
+		} catch {
+			// a browser that cannot construct sheets: nothing more to try
+		}
+	}
+	if (add.length) root.adoptedStyleSheets = [...root.adoptedStyleSheets, ...add];
+}
+
 function adopt_scoped_styles(root: ShadowRoot): void {
+	remake_refused_styles(root);
 	// Every `svelte-xxxxxx` scope class present in our shadow tree.
 	const hashes = new Set<string>();
 	for (const el of root.querySelectorAll('[class*="svelte-"]')) {

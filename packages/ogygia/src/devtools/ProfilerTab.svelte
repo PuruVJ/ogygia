@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Profiler tab — the SSR profiler, native in the dock (no iframe). "Profile this page" asks the

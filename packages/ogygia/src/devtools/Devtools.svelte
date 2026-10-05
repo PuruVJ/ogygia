@@ -1,3 +1,9 @@
+<!-- Every devtools component injects its own CSS: the dock lives in a shadow root, and Svelte puts an
+injected component's <style> in the shadow root it mounts into. An app's build extracts component CSS
+to a file by default (Kit's `css: 'external'`), which the page links into its own <head>, where the
+shadow boundary keeps it from the dock — a built dock opened unstyled. -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The devtools ROOT app — one component we `mount()` once (from ui.ts, behind the gate). It owns the

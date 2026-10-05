@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Hydration tab: did every island wake from its server markup, and if not, what differed.

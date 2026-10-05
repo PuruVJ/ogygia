@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Page tab: what the BROWSER saw of this visit — the profiler beacon's data, read live (no tag,

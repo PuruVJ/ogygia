@@ -42,6 +42,17 @@ await page.locator('[data-og-panel-toggle]').click();
 await page.waitForTimeout(1500);
 check('opening loads the dock\'s code then', loaded.length >= 1, `${loaded.length} file(s)`);
 check('the dock opens with its tabs', (await page.locator('[data-og-tab]').count()) >= 7);
+// THE DOCK IS STYLED. Its components inject their CSS into its shadow root: an app's build extracts
+// component CSS to a file the page links into its own <head>, where the shadow boundary kept it from
+// the dock — a built dock opened as bare browser buttons, and no check here looked at more than text
+const dock_style = () =>
+	page.evaluate(() => {
+		const tab = document.querySelector('[data-ogygia-devtools-host]')?.shadowRoot?.querySelector('[data-og-tab]');
+		const cs = tab ? getComputedStyle(tab) : null;
+		return cs ? { font: cs.fontFamily, display: cs.display } : null;
+	});
+const styled = await dock_style();
+check('the dock is styled (its CSS reached its shadow root)', !!styled && styled.font.includes('monospace') && styled.display !== 'inline-block', JSON.stringify(styled));
 check('the cookie remembers it', (await ctx.cookies()).some((c) => c.name === 'og_devtools' && c.value === '1'));
 await page.locator('[data-og-tab="page"]').click();
 await page.waitForTimeout(400);
@@ -401,6 +412,29 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	const pre = await p.evaluate(() => (window.__ogygia_page?.()?.report.findings ?? []).filter((x) => x.code === 'preload-never-used').map((x) => x.message));
 	await c.close();
 	check('a preload nothing uses is named in a build too', pre.length === 1 && pre[0].startsWith('right.png (image,') && pre[0].includes('orphan.woff2') && !pre[0].includes('flat.png'), JSON.stringify(pre).slice(0, 200));
+}
+// …and on a page whose Content-Security-Policy refuses inline styles (no 'unsafe-inline'): the dock's
+// own <style>s are refused too, and it re-makes them as adopted sheets — still styled
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	const p = await c.newPage();
+	await p.route('**/*', async (route) => {
+		if (route.request().resourceType() !== 'document') return route.continue();
+		const res = await route.fetch();
+		await route.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'self'" } });
+	});
+	await p.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await p.waitForSelector('[data-og-panel-toggle]', { timeout: 10_000 }).catch(() => {});
+	await p.click('[data-og-panel-toggle]').catch(() => {});
+	await p.waitForSelector('[data-og-tab]', { timeout: 5000 }).catch(() => {});
+	await p.waitForTimeout(500);
+	const csp = await p.evaluate(() => {
+		const tab = document.querySelector('[data-ogygia-devtools-host]')?.shadowRoot?.querySelector('[data-og-tab]');
+		const cs = tab ? getComputedStyle(tab) : null;
+		return cs ? { font: cs.fontFamily, display: cs.display } : null;
+	});
+	await c.close();
+	check("the dock is styled under a CSP that refuses inline styles", !!csp && csp.font.includes('monospace') && csp.display !== 'inline-block', JSON.stringify(csp));
 }
 await browser.close();
 

@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Timeline tab: CLIENT-realm events on a time axis, one lane per region (+ a page/nav lane), a

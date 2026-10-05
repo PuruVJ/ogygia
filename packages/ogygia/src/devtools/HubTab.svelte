@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Hub tab (hub inspector, internal/notes/devtools.md, Rung 5 · 6): ogygia's identity spine made

@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Bytes tab (byte ledger): real over-the-wire JS per island entry chunk + the shared runtime

@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script module>
 	/** the last session's data + report, kept across tab switches (not across reloads) */
 	let last = $state(/** @type {{ data: import('./session.js').SessionData; report: import('./session-insights.js').SessionReport } | null} */ (null));

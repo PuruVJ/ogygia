@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Lens tab: toggles the page-tinting {@link ./BoundaryOverlay.svelte overlay} and lists every

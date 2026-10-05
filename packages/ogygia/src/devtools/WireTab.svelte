@@ -1,3 +1,6 @@
+<!-- (its CSS injected into the dock's shadow root: see Devtools.svelte) -->
+<svelte:options css="injected" />
+
 <script>
 	/**
 	 * The Wire tab (wire inspector, internal/notes/devtools.md, Rung 5 · 2): everything the SERVER
