@@ -24,6 +24,7 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import { blank_styles } from './blank-styles.js';
+import { strip_bom } from './bom.js';
 // the runtime's reader and this writer share the constants
 import { HTML_PARENT_ATTR, OPAQUE_ATTR } from '../runtime/ownership.js';
 
@@ -119,7 +120,9 @@ const CHILD_KEYS = [
  * does not parse — the real compile reports that). Outermost wins: nothing is stamped inside a stamped
  * element (the repair never enters it anyway).
  */
-export function stamp_opaque(source: string, filename: string): string | null {
+export function stamp_opaque(raw: string, filename: string): string | null {
+	// Svelte's parser drops a leading byte-order mark: edit the text it actually measured (./bom.ts)
+	const source = strip_bom(raw);
 	if (!MAY_STAMP_RE.test(source)) return null;
 	let ast: Node;
 	try {

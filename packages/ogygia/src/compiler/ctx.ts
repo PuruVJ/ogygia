@@ -7,6 +7,7 @@
  * a `CompileCtx` + source and gets the same lowering, no Vite in sight).
  */
 import { fs } from './host.js';
+import { strip_bom } from './bom.js';
 import { islandVirtualId } from './ids.js';
 import {
 	islandChunkFileName,
@@ -254,7 +255,8 @@ export class CompileCtx {
 	/** Read a file as UTF-8, or `null` if it can't be read (the transform tolerates missing deps). */
 	read_file(abs: string): string | null {
 		try {
-			return fs.readFileSync(abs, 'utf-8');
+			// (a byte-order mark would shift every parser offset against the raw text: ./bom.ts)
+			return strip_bom(fs.readFileSync(abs, 'utf-8'));
 		} catch {
 			return null;
 		}

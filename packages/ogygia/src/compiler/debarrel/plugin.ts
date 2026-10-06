@@ -26,6 +26,7 @@ import { matches_any, normalize_options, type DebarrelOptions } from './options.
 import { rewrite_module, type RewritePolicy } from './rewrite.js';
 import { rewrite_svelte } from './svelte.js';
 import { is_script_request } from '../script-request.js';
+import { strip_bom } from '../bom.js';
 
 const IMPORTER_RE = /\.(?:[cm]?[jt]sx?|svelte|svelte\.[jt]s)$/;
 
@@ -97,7 +98,7 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 				const prev = mtimes.get(id);
 				if (prev !== undefined && prev !== st.mtimeMs) index.invalidate(id);
 				mtimes.set(id, st.mtimeMs);
-				return readFileSync(id, 'utf8');
+				return strip_bom(readFileSync(id, 'utf8'));
 			} catch {
 				return null;
 			}
@@ -154,8 +155,10 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 		buildStart() {
 			resolver = this as unknown as Resolver;
 		},
-		async transform(code, id) {
+		async transform(raw, id) {
 			if (!is_importer(id)) return null;
+			// edits land by parser offsets: no byte-order mark in front of them (../bom.ts)
+			const code = strip_bom(raw);
 			resolver = this as unknown as Resolver;
 			const t0 = performance.now();
 			if (report.files === 0) report.first_ms = t0;

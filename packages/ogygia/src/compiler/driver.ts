@@ -131,6 +131,7 @@ import {
 } from './link/registry-stub.js';
 import { island_host_loaded } from './link/emit-gate.js';
 import { stamp_opaque } from './ownership-stamps.js';
+import { strip_bom } from './bom.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program, RegisterResult } from './program.js';
 import type { CompileCtx } from './ctx.js';
@@ -1687,6 +1688,10 @@ export class Compiler {
 		const program = this.program;
 		const { registry, island_graph, emitted_island_chunks } = program;
 		const root = ctx.root;
+		// Every pass below edits by its parser's offsets, and Svelte's parser drops a leading byte-order
+		// mark: take it off here so the offsets and the text agree (./bom.ts). A file no pass touches
+		// returns `null` and keeps its bytes.
+		code = strip_bom(code);
 
 		// Discover islands before any module is transformed so island_graph is populated
 		// even when an island entry component is processed before its host page.
