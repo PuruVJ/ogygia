@@ -16,6 +16,7 @@ import { runtime_session } from './session.js';
 import { regions_in_shadow } from './connected.js';
 import { yield_task } from './schedule.js';
 import { beacon_nav } from './beacon.js';
+import { is_self_owned, walk_enters } from './ownership.js';
 
 // (the profiler's browser half ships only where something reads it: see `__OGYGIA_BEACON__`; a
 // plain import of dist/ without the define keeps it)
@@ -36,6 +37,8 @@ export function link_boot(): void {
 		runtime_session,
 		regions_in_shadow,
 		yield_task,
-		beacon_nav: BEACON ? beacon_nav : no_beacon_nav
+		beacon_nav: BEACON ? beacon_nav : no_beacon_nav,
+		walk_enters,
+		is_self_owned
 	};
 }

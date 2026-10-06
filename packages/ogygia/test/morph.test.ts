@@ -553,12 +553,24 @@ describe('swap_body (outerSync fallback)', () => {
 		expect(next.firstChild).toBeNull();
 	});
 
-	test('removes a body attribute the incoming page dropped', () => {
-		const live = el('<body class="x" data-stale="1"></body>');
-		const next = el('<body class="y"></body>');
-		swap_body(live as unknown as HTMLElement, next as unknown as HTMLElement);
-		expect(live.getAttribute('class')).toBe('y');
+	test('removes a body attribute the previous page’s server sent and the incoming page dropped', () => {
+		const live = el('<body class="x"></body>');
+		// page A's server sends data-stale…
+		swap_body(live as unknown as HTMLElement, el('<body class="y" data-stale="1"></body>') as unknown as HTMLElement);
+		expect(live.getAttribute('data-stale')).toBe('1');
+		// …page B's doesn't: it goes
+		swap_body(live as unknown as HTMLElement, el('<body class="z"></body>') as unknown as HTMLElement);
+		expect(live.getAttribute('class')).toBe('z');
 		expect(live.hasAttribute('data-stale')).toBe(false);
+	});
+
+	test('keeps a body attribute a script on the page set (the server never sent it)', () => {
+		const live = el('<body class="x"></body>');
+		swap_body(live as unknown as HTMLElement, el('<body class="y"></body>') as unknown as HTMLElement);
+		live.setAttribute('data-scroll-lock', ''); // a modal library, between navigations
+		swap_body(live as unknown as HTMLElement, el('<body class="z"></body>') as unknown as HTMLElement);
+		expect(live.hasAttribute('data-scroll-lock')).toBe(true);
+		expect(live.getAttribute('class')).toBe('z');
 	});
 });
 

@@ -58,11 +58,12 @@ export type FormOps = {
 /** Wake a cold island when interaction lands inside it; returns a disarm fn. */
 export type ArmFn = (el: HTMLElement, fire: () => void) => void | (() => void);
 
-/** `preserve_self_owned: false` = hydration repair (exact server sequence); default = live morph. */
+/** `target: 'walk'` = the hydration repair (the server sequence Svelte's walk binds); default = a live
+ *  morph toward a new answer. Same ownership rules either way (runtime/ownership.ts). */
 export type MorphFn = (
 	parent: Element,
 	nodes: ArrayLike<Node>,
-	options?: { preserve_self_owned?: boolean }
+	options?: { target?: 'live' | 'walk' }
 ) => void;
 
 export type WireOps = {
@@ -143,6 +144,9 @@ export type BootLink = {
 	yield_task: typeof import('./schedule.js').yield_task;
 	/** the router's navigation, timed for the profiler's beacon (a no-op without it) */
 	beacon_nav: typeof import('./beacon.js').beacon_nav;
+	/** DOM ownership (./ownership.ts): which children Svelte's walk enters, and self-owned elements */
+	walk_enters: typeof import('./ownership.js').walk_enters;
+	is_self_owned: typeof import('./ownership.js').is_self_owned;
 };
 export type RouterLink = {
 	document_key: typeof import('./router.js').document_key;

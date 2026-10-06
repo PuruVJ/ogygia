@@ -36,12 +36,15 @@ install_hydrate_features();
 const kit_hydrates_page = () => boot_link().kit_hydrates_page();
 const props_sidecar_of = (region: Element) => boot_link().props_sidecar_of(region);
 const parse_region_html = (html: string) => boot_link().parse_region_html(html);
+// DOM ownership (./ownership.ts), through the registry like every boot helper
+const walk_enters = (el: Element) => boot_link().walk_enters(el);
+const is_self_owned = (el: Element) => boot_link().is_self_owned(el);
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
-/** The morph contract for hydration repair: the exact server sequence — see `repair_markup`. */
-const REPAIR_MORPH = { preserve_self_owned: false } as const;
+/** The morph target for hydration repair: the server sequence Svelte's walk binds — see `repair_markup`. */
+const REPAIR_MORPH = { target: 'walk' } as const;
 
 /** A hydrated island as the element holds it: how to tear it down, and (keep / live hosts) how to
  *  push the next page's props into it. */
@@ -200,7 +203,9 @@ export function sequence_differs(live: Node, want: Node): boolean {
 		if (x.nodeType !== y.nodeType) return true;
 		if (x.nodeType === 1) {
 			if ((x as Element).tagName !== (y as Element).tagName) return true;
-			if (sequence_differs(x, y)) return true;
+			// Svelte's walk counts an element it does not enter as ONE sibling (ownership.ts): an
+			// `{@html}` / static / kept / slot subtree, or a hydrated region, may hold anything.
+			if (walk_enters(x as Element) && sequence_differs(x, y)) return true;
 		} else if (x.nodeValue !== y.nodeValue) return true;
 	}
 	return false;
@@ -276,6 +281,7 @@ function describe_divergence(live: Node, want: Node, where = 'the island'): stri
 		if (x.nodeType !== y.nodeType || (x.nodeType === 1 && (x as Element).tagName !== (y as Element).tagName))
 			return `${where}: the server sent ${node_label(y)} but the browser had ${node_label(x)}${culprit_hint(x)}`;
 		if (x.nodeType === 1) {
+			if (!walk_enters(x as Element)) continue; // never entered: see sequence_differs
 			const deeper = describe_divergence(x, y, node_label(x));
 			if (deeper) return deeper;
 		} else if (x.nodeValue !== y.nodeValue) {
@@ -283,6 +289,15 @@ function describe_divergence(live: Node, want: Node, where = 'the island'): stri
 		}
 	}
 	return null;
+}
+
+/** The first ownership conflict the current repair met (DEV / devtools read it), or `null`. */
+let conflict: string | null = null;
+function note_conflict(el: Element): void {
+	conflict ??=
+		`${node_label(el)} is a web component that changed its own children in a position Svelte's hydration reads, ` +
+		`so the repair had to remove the nodes it added. Render that subtree with {@html} or as static markup ` +
+		`(Svelte never reads inside it), put it in a lake (wake: 'none'), or mark the element data-ogygia-keep.`;
 }
 
 /** Put the island's light DOM back to the server's node sequence when it drifted while the island
@@ -295,7 +310,7 @@ function describe_divergence(live: Node, want: Node, where = 'the island'): stri
 export function repair_if_drifted(
 	region: HTMLElement,
 	ssr_html: string
-): { repaired: boolean; reason: string | null } {
+): { repaired: boolean; reason: string | null; conflict: string | null } {
 	// Parse through the ONE DSD-aware parser (parse-html.ts): the content stays inert (a template's
 	// content never upgrades — attaching a declarative shadow root is a parse step, not an upgrade), but
 	// a `<template shadowrootmode>` in the copy is consumed into a shadow root instead of lingering as an
@@ -310,12 +325,15 @@ export function repair_if_drifted(
 	const want = content.ownerDocument.createElement('ogygia-region');
 	want.appendChild(content);
 	slots.lakes.lift(want);
-	if (!sequence_differs(region, want)) return { repaired: false, reason: null };
+	if (!sequence_differs(region, want)) return { repaired: false, reason: null, conflict: null };
 	// Name the drift BEFORE repairing (repair rewrites the live sequence). The string is read only by
 	// the DEV console + devtools, so a prod-without-devtools build skips building it (the walk DCEs).
 	const reason = import.meta.env.DEV || DEVTOOLS ? describe_divergence(region, want) : null;
+	conflict = null;
 	repair_markup(region, want);
-	return { repaired: true, reason };
+	const met = conflict;
+	conflict = null;
+	return { repaired: true, reason, conflict: met };
 }
 
 /** Make `live`'s child sequence the server's (`want`), keeping `live`'s elements. `false` when the
@@ -328,12 +346,20 @@ function align_to(live: Element, want: Element | DocumentFragment): boolean {
 		if (live_elements[i].tagName !== want_elements[i].tagName) return false;
 	}
 	// Children first: a subtree the server sent differently in its elements is the morph's, and the
-	// morph must see that subtree untouched by this level's rebuild.
+	// morph must see that subtree untouched by this level's rebuild. A child Svelte's walk never
+	// enters (ownership.ts — `{@html}`, static, kept, a slot, a hydrated region) is left exactly as it
+	// is: nothing reads its inside, and it may be a widget's own light DOM.
 	for (let i = 0; i < live_elements.length; i++) {
-		if (!align_to(live_elements[i], want_elements[i])) {
+		const child = live_elements[i];
+		if (!walk_enters(child)) continue;
+		if (!align_to(child, want_elements[i])) {
+			// A self-owned element (an upgraded web component) whose children no longer match what the
+			// server sent, in a position Svelte's walk reads: its own nodes have to go, or the walk lands
+			// on them. That is a real conflict between two owners — name it, don't hide it.
+			if (is_self_owned(child)) note_conflict(child);
 			const morph = slots.morph;
-			if (morph) morph(live_elements[i], Array.from(want_elements[i].childNodes), REPAIR_MORPH);
-			else live_elements[i].innerHTML = (want_elements[i] as Element).innerHTML;
+			if (morph) morph(child, Array.from(want_elements[i].childNodes), REPAIR_MORPH);
+			else child.innerHTML = (want_elements[i] as Element).innerHTML;
 		}
 	}
 	// This level: drop every live text / comment node, then put the server's back around the
@@ -669,7 +695,7 @@ export function hydrate_island(
 	const drift =
 		ssr_html !== null && touched && region.isConnected
 			? repair_if_drifted(region, ssr_html)
-			: { repaired: false, reason: null };
+			: { repaired: false, reason: null, conflict: null };
 	const repaired = drift.repaired;
 	try {
 		if (!region.isConnected) return null;
@@ -793,6 +819,19 @@ export function hydrate_island(
 				});
 			if (import.meta.env.DEV)
 				console.warn(HEALED_WARNING + (drift.reason ? `\nWhat drifted: ${drift.reason}` : ''), entry);
+		}
+		if (drift.conflict) {
+			// Two owners wanted the same nodes (runtime/ownership.ts): the repair kept Svelte's walk
+			// working and removed what a web component added. Said out loud, with the way out.
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.hydrate.conflict',
+					entry,
+					fp: region.getAttribute('data-og-fp') || undefined,
+					reason: drift.conflict
+				});
+			if (import.meta.env.DEV) console.warn(`[ogygia] ${drift.conflict}`, entry);
 		}
 
 		// Restore each frozen region's SSR DOM AFTER hydrate. An inner waking region whose

@@ -60,6 +60,13 @@
  * as well as `tagName`, so an HTML `<a>` is never morphed into an SVG `<a>`.
  */
 import { slots } from './slots.js';
+import {
+	is_declared_foreign,
+	is_region_owned,
+	is_self_owned,
+	is_upgraded_ce,
+	owner_of
+} from './ownership.js';
 
 // DOM spec constants by VALUE (they are frozen: 1/3/8 forever) — referencing the `Node` global
 // at module scope made every importer of this file require a DOM at IMPORT time, which broke
@@ -98,26 +105,39 @@ export function morph_children(
 	new_nodes: ArrayLike<Node>,
 	options?: MorphOptions
 ): void {
-	const preserve = options?.preserve_self_owned !== false;
-	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes), false, preserve);
+	const walk = options?.target === 'walk';
+	// The ROOT is vetted like every descendant (runtime/ownership.ts): a caller handing the morph a
+	// subtree it may not enter — a declared-foreign element, or (toward Svelte's walk) one the walk never
+	// reads — gets a no-op, whatever path it came by. (Before this, every ownership check ran on
+	// descendants only, so a repair that recursed down to a kept widget and morphed IT stripped the
+	// widget's own nodes.)
+	if (is_declared_foreign(parent)) return;
+	if (walk) {
+		// (a region root is the island being repaired itself — a kept island is still Svelte's to walk)
+		const owner = owner_of(parent);
+		if (owner !== 'walk' && owner !== 'region') return;
+	}
+	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes), false, walk);
 	clear_aria_hidden_over_focus(parent);
 }
 
 /**
- * Two callers, two contracts.
+ * One ownership rule (runtime/ownership.ts), two TARGETS.
  *
- * - **Live morph** (a hole re-answer, a router body swap, a live region tick) — `preserve_self_owned`
- *   on (the default): a self-owned element ({@link is_self_owned}) keeps the children it gave itself.
- *   The DOM stays live afterwards and a web component must not lose its own upgrade work.
- * - **Hydration repair** (an island restoring the server's node sequence before Svelte's walk) —
- *   `preserve_self_owned: false`: the target IS the server sequence, exactly. A child a runtime added
- *   inside a self-owned element is precisely the node Svelte's cursor trips on (`getAttribute is not
- *   a function` on a nested web component's own residue), so repair must be allowed to remove it.
- *   Self-owned ATTRIBUTES are still kept — the walk never reads them, and a `popover` the element gave
- *   itself is not what breaks hydration.
+ * - **`live`** (default: a hole re-answer, a router body swap, a live region tick) — the target is the
+ *   new answer, and the DOM stays live afterwards: a child an upgraded element gave itself is foreign
+ *   content, kept (a web component must not lose its own upgrade work).
+ * - **`walk`** (the pre-hydration repair) — the target is the server sequence Svelte's walk binds by
+ *   position, exactly. The same foreign child sitting in a position the walk reads is the node
+ *   Svelte's cursor trips on (`getAttribute is not a function` on a nested web component's own
+ *   residue), so here it is removed; and a subtree the walk never enters (`data-og-opaque`, a slot) is
+ *   left alone — nothing reads it.
+ *
+ * In both targets a declared-foreign element and a hydrated region are matched, never entered, and an
+ * upgraded element's host ATTRIBUTES stay its runtime's.
  */
 export interface MorphOptions {
-	preserve_self_owned?: boolean;
+	target?: 'live' | 'walk';
 }
 
 /**
@@ -243,15 +263,16 @@ function reserved_for_later(
  * rewrites its light DOM on upgrade). ADD + UPDATE what the render brings, but NEVER REMOVE a child the
  * element gave itself. Re-inserting/re-upgrading a live custom element is what makes an upgraded trigger
  * flicker when a hole morphs its byte-identical chrome; keeping its nodes leaves the upgrade untouched.
- * @param preserve the {@link MorphOptions.preserve_self_owned} contract, threaded unchanged down the
- * recursion — it decides whether a self-owned DESCENDANT gets `keep_children` at all.
+ * @param walk the {@link MorphOptions.target} is Svelte's walk (the repair), threaded unchanged down
+ * the recursion — a self-owned descendant then gets no `keep_children`, and a subtree the walk never
+ * enters is skipped.
  */
 function reconcile_children(
 	parent: Element,
 	new_nodes: ArrayLike<Node>,
 	sets: IdSets,
 	keep_children = false,
-	preserve = true
+	walk = false
 ): void {
 	const count = new_nodes.length;
 	let cursor: ChildNode | null = parent.firstChild;
@@ -274,12 +295,12 @@ function reconcile_children(
 			if (sets !== null && !id_sets_agree(sets, cursor, next)) break;
 			const here = cursor;
 			cursor = cursor.nextSibling;
-			morph_same(here, next, sets, preserve);
+			morph_same(here, next, sets, walk);
 		} else {
 			// Same non-null key: morph regardless of tag (morph_node replaces on a tag mismatch).
 			const here = cursor;
 			cursor = cursor.nextSibling;
-			morph_node(here, next, sets, preserve);
+			morph_node(here, next, sets, walk);
 		}
 		idx++;
 	}
@@ -341,7 +362,7 @@ function reconcile_children(
 			if (cursor && key_of(next) === null && same_node(cursor, next)) {
 				const here = cursor;
 				cursor = cursor.nextSibling;
-				morph_same(here, next, sets, preserve);
+				morph_same(here, next, sets, walk);
 			} else {
 				parent.insertBefore(clone(next), cursor);
 			}
@@ -361,7 +382,7 @@ function reconcile_children(
 					} else {
 						parent.insertBefore(matched, cursor); // moves `matched` (already lives in `parent`)
 					}
-					morph_node(matched, next, sets, preserve);
+					morph_node(matched, next, sets, walk);
 					continue;
 				}
 			} else if (old_inner !== null && next.nodeType === ELEMENT) {
@@ -376,7 +397,7 @@ function reconcile_children(
 					} else {
 						parent.insertBefore(holder, cursor);
 					}
-					morph_same(holder, next, sets, preserve);
+					morph_same(holder, next, sets, walk);
 					continue;
 				}
 			}
@@ -402,7 +423,7 @@ function reconcile_children(
 				const here = cursor;
 				cursor = cursor.nextSibling;
 				if (old_inner !== null) release_holder(old_inner, sets!, here as Element);
-				morph_same(here, next, sets, preserve);
+				morph_same(here, next, sets, walk);
 				continue;
 			}
 
@@ -475,56 +496,21 @@ function same_node(a: Node, b: Node): boolean {
 	return true; // text / comment reconcile positionally
 }
 
-/** A subtree that must be kept intact: user-marked persist, or a hydrated (Svelte-owned) island root. */
-function is_preserved(el: Element): boolean {
-	// `data-persist` and `data-ogygia-keep` are general user markers (any tag) — always probed; a
-	// matched keep-node is kept intact across a nav reconcile (this is what makes the morph path
-	// subsume persist's relocate). `data-hydrated` is only ever set on hyphenated custom-element
-	// roots (`<ogygia-region>` / `<ogygia-island>`), so its probe is gated behind a cheap `localName`
-	// hyphen test — an ordinary `<td>` never pays for it.
-	return (
-		el.hasAttribute('data-persist') ||
-		el.hasAttribute('data-ogygia-keep') ||
-		(el.localName.includes('-') && el.hasAttribute('data-hydrated'))
-	);
-}
-
 /**
- * An UPGRADED CUSTOM ELEMENT: a live web component whose own runtime owns its host. On upgrade a
- * component framework writes framework-internal attributes onto its own host element — a scope class,
- * hydration ids, `popover` / `role` / `aria-*`, a `hydrated` flag — none of which came from the
- * server render and none of which are the render's to assert. This is generic: any web-component
- * framework (or a hand-written element) that adopts declarative shadow DOM or upgrades in place does
- * it. Detected STRUCTURALLY — a hyphenated name with a shadow root or a registered definition — never
- * by a library-specific attribute or class name.
+ * May the morph ENTER `el`? (runtime/ownership.ts.) Never a declared-foreign subtree (the app's
+ * `data-ogygia-keep` / `data-persist`) nor a hydrated / kept region (Svelte's reactivity owns it); and
+ * toward Svelte's walk, never a subtree the walk does not read (`data-og-opaque`, a slot). Such an
+ * element is matched — kept in place, identity intact — but neither synced nor recursed into.
  *
- * Two consequences for a morph toward a fresh server render (which carries the PRE-upgrade markup):
- *  - the host's CHILDREN are partly its own (slotted / rewritten light DOM) → add + update, never
- *    remove ({@link is_self_owned} → keep_children);
- *  - the host's own ATTRIBUTES are the runtime's → do not sync them at all. Re-asserting a fresh
- *    render's stale markers over a live host makes it lose its hydrated shadow and re-render — a live
- *    host duplicated its content when a hole answer's per-render id / scope class overwrote the ones
- *    its runtime had written. So {@link morph_node} / {@link morph_same} SKIP {@link sync_attributes}
- *    for an upgraded custom element (its children still reconcile).
+ * Upgraded custom elements (ownership.ts `is_upgraded_ce`) are entered, but their host ATTRIBUTES are
+ * their runtime's: re-asserting a fresh render's stale markers (a per-render id, a scope class) over a
+ * live host made it lose its hydrated shadow and duplicate its content. A self-owned element's extra
+ * children are its own: kept toward a live answer (an upgraded trigger re-inserted flickers), removed
+ * toward Svelte's walk where the walk reads that position.
  */
-function is_upgraded_ce(el: Element): boolean {
-	const name = el.localName;
-	if (!name.includes('-')) return false;
-	if (el.shadowRoot) return true;
-	return typeof customElements !== 'undefined' && customElements.get(name) !== undefined;
-}
-
-/**
- * An element whose CHILDREN are partly its own doing, not the render's: an upgraded custom element
- * (slots / rewrites its light DOM — {@link is_upgraded_ce}), or a `<dialog>` / `<details>` whose
- * `open` the browser flips. A morph toward server HTML must never REMOVE such children (keep_children)
- * — re-inserting a live web component's chrome is what made an upgraded trigger flicker.
- * Unlike an upgraded custom element, a dialog/details carries NO runtime-written markers, so its
- * attributes still sync normally (add + update, `open` kept by keep_extra).
- */
-function is_self_owned(el: Element): boolean {
-	const name = el.localName;
-	return name === 'dialog' || name === 'details' || is_upgraded_ce(el);
+function off_limits(el: Element, walk: boolean): boolean {
+	if (is_declared_foreign(el) || is_region_owned(el)) return true;
+	return walk && owner_of(el) !== 'walk';
 }
 
 /**
@@ -533,7 +519,7 @@ function is_self_owned(el: Element): boolean {
  * replace check lives here). Positional/lockstep callers have already proven compatibility via
  * {@link same_node} and go through {@link morph_same}, skipping that recheck.
  */
-function morph_node(from: Node, to: Node, sets: IdSets, preserve: boolean): void {
+function morph_node(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	const kind = from.nodeType;
 	// Text / comment: cheapest possible update.
 	if (kind === TEXT || kind === COMMENT) {
@@ -545,23 +531,25 @@ function morph_node(from: Node, to: Node, sets: IdSets, preserve: boolean): void
 	const ef = from as Element;
 	const et = to as Element;
 
+	// Not ours to touch (ownership.ts): matched by its key, kept as it is. Checked BEFORE the replace
+	// below, or a keyed match whose tag changed would hand a kept widget / a hydrated island over to a
+	// fresh copy anyway.
+	if (off_limits(ef, walk)) return;
 	// Can't turn one element into a different element — hand the whole node over.
 	if (ef.tagName !== et.tagName || ef.namespaceURI !== et.namespaceURI) {
 		ef.parentNode?.replaceChild(clone(to), ef);
 		return;
 	}
-	// Hydrated island / persisted node: Svelte owns it. Match it, but never touch it.
-	if (is_preserved(ef)) return;
 	// Form props BEFORE attributes: the rule compares the previous render's attribute to the incoming
 	// one, so it must read `ef`'s attributes while they are still the previous render's.
 	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et);
 	// An upgraded custom element's host attributes are the runtime's, not the render's — skip them
-	// entirely (see is_upgraded_ce). Everything else (incl. a self-owned dialog/details) syncs.
+	// entirely (see off_limits). Everything else (incl. a self-owned dialog/details) syncs.
 	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned);
 	// `et` is never mutated by the recursion (misses clone, keyed moves come from the OLD tree), so
 	// its live `childNodes` is handed straight down — no per-level snapshot array.
-	reconcile_children(ef, et.childNodes, sets, preserve && self_owned, preserve);
+	reconcile_children(ef, et.childNodes, sets, !walk && self_owned, walk);
 }
 
 /**
@@ -569,7 +557,7 @@ function morph_node(from: Node, to: Node, sets: IdSets, preserve: boolean): void
  * positional/lockstep path. Skips the morph-vs-replace decision {@link morph_node} makes; the element
  * body is inlined (not shared via a helper) to keep this leaf call one frame deep on the hot path.
  */
-function morph_same(from: Node, to: Node, sets: IdSets, preserve: boolean): void {
+function morph_same(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	const kind = from.nodeType;
 	if (kind === TEXT || kind === COMMENT) {
 		if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue;
@@ -577,12 +565,12 @@ function morph_same(from: Node, to: Node, sets: IdSets, preserve: boolean): void
 	}
 	if (kind !== ELEMENT) return;
 	const ef = from as Element;
-	if (is_preserved(ef)) return;
+	if (off_limits(ef, walk)) return;
 	const et = to as Element;
 	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et); // before attributes — see morph_node
 	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned); // upgraded host attrs are the runtime's — skip
-	reconcile_children(ef, et.childNodes, sets, preserve && self_owned, preserve);
+	reconcile_children(ef, et.childNodes, sets, !walk && self_owned, walk);
 }
 
 /** Add + update + remove attributes so `from` matches `to` exactly. Boolean attrs are attr presence.

@@ -130,6 +130,7 @@ import {
 	static_script_specs
 } from './link/registry-stub.js';
 import { island_host_loaded } from './link/emit-gate.js';
+import { stamp_opaque } from './ownership-stamps.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { Program, RegisterResult } from './program.js';
 import type { CompileCtx } from './ctx.js';
@@ -1933,6 +1934,25 @@ export class Compiler {
 			if (rewritten !== out) {
 				out = rewritten;
 				map = null; // import path rewrite invalidates a prior sourcemap
+				touched = true;
+			}
+		}
+
+		// SERVER: stamp the elements Svelte's hydration never walks into (compiler/ownership-stamps.ts),
+		// so the runtime's repair, drift watch and morph leave a web component's own light DOM there
+		// alone. App components, plus those of packages that declared their compile surface; never the
+		// generated glue, and never a `?svelte&type=…` sub-request (not markup).
+		if (
+			ssr &&
+			!id.includes('?') &&
+			id_n.endsWith('.svelte') &&
+			!is_island_path(bare_v) &&
+			(!in_node_modules || ctx.in_declared_pkg(id_n))
+		) {
+			const stamped = stamp_opaque(out, id_n);
+			if (stamped !== null) {
+				out = stamped;
+				map = null;
 				touched = true;
 			}
 		}

@@ -13,6 +13,8 @@
  * as before.
  */
 
+import { walk_enters } from './ownership.js';
+
 const REGION = 'ogygia-region';
 const changed = new WeakSet<Element>();
 let observer: MutationObserver | null = null;
@@ -21,9 +23,17 @@ const supported = typeof MutationObserver !== 'undefined';
 
 function mark(records: MutationRecord[]): void {
 	for (const r of records) {
-		// every region the change sits in (a change deep in a nested island changes its host's sequence too)
+		// Every region the change sits in (a change deep in a nested island changes its host's sequence
+		// too) — unless, between the change and that region, an element sits whose inside Svelte's walk
+		// never reads (runtime/ownership.ts: `{@html}` / static / kept / a slot / a hydrated region). A
+		// web component reworking its own light DOM there is not the island drifting, and arming the
+		// repair for it would only cost a comparison that finds nothing to do.
+		let hidden = false;
 		for (let n: Node | null = r.target; n; n = n.parentNode) {
-			if (n.nodeType === 1 && (n as Element).localName === REGION) changed.add(n as Element);
+			if (n.nodeType !== 1) continue;
+			const el = n as Element;
+			if (el.localName === REGION && !hidden) changed.add(el);
+			if (!hidden && !walk_enters(el)) hidden = true;
 		}
 	}
 }

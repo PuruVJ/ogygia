@@ -247,6 +247,17 @@ export type RuntimeEventInput =
 	  }
 	| {
 			domain: 'runtime';
+			/** Two owners wanted the same nodes (runtime/ownership.ts): a web component changed its own
+			 *  children in a position Svelte's hydration reads, and the repair removed what it added so
+			 *  the island could hydrate. `reason` names the element and the way out ({@html} / static
+			 *  markup / a lake / data-ogygia-keep). */
+			name: 'region.hydrate.conflict';
+			entry?: string;
+			fp?: string;
+			reason?: string;
+	  }
+	| {
+			domain: 'runtime';
 			/** Svelte's own dev warning that the server and the browser disagreed while hydrating
 			 *  (`hydration_html_changed`, `hydration_attribute_changed`, `hydration_mismatch`…) */
 			name: 'svelte.hydration.warning';

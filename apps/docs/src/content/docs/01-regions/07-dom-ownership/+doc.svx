@@ -1,0 +1,58 @@
+---
+title: Who owns the DOM
+summary: Every node inside a region has one owner. ogygia repairs, morphs and watches only what Svelte's hydration reads, and leaves a web component's own nodes alone. How to place a third-party widget so nothing fights over it.
+related:
+  - regions/client-islands
+  - regions/lakes
+  - app/server-transforms
+---
+
+An island's DOM is not only ogygia's. Svelte binds parts of it when the island wakes. A web component rewrites its own light DOM when it upgrades. A design-system script may strip whitespace while the island sleeps. ogygia gives **every node one owner**, and everything ogygia does to the DOM asks the same question first: who owns this node?
+
+::: tip When to use
+Read this page when you put a third-party widget (a web component, a vendor embed) inside an island, or when the devtools Hydration tab reports a **conflict**.
+:::
+
+## The owners
+
+| Owner | What it is | What ogygia does with it |
+|---|---|---|
+| **Svelte's walk** | the parts of the island's markup Svelte's hydration binds by position | before the wake, puts it back to the server's shape if another script changed it |
+| **Static** | markup Svelte never reads again: `{@html}` content, `bind:innerHTML`, a custom element whose children are static | leaves it alone before the wake; a hole answer or a live tick still updates it |
+| **The page (yours)** | an element you marked `data-ogygia-keep` | never touches it: not before the wake, not on a hole answer, not on a navigation |
+| **A web component** | children and attributes a custom element added itself | kept on a hole answer, a live tick and a navigation |
+| **Lake** | `wake: 'none'` content | the server's HTML, lifted out of the way while the island hydrates |
+| **Slot** | host-page content an island adopts | never repaired: Svelte adopts it whole |
+
+You do not mark static markup yourself. The compiler finds `{@html}`, `bind:innerHTML` and custom elements with static children, and stamps them in the server HTML (`data-og-opaque`).
+
+## Placing a third-party widget
+
+A widget that rewrites its own light DOM must sit where Svelte never reads. Any one of these works:
+
+```svelte
+<script>
+  // 1. inside {@html}: Svelte takes the content whole and never walks into it
+  const markup = `<vendor-search id="s"><form action="/search">…</form></vendor-search>`;
+</script>
+
+<div class="search">{@html markup}</div>
+
+<!-- 2. a custom element whose children are static: Svelte never descends -->
+<vendor-search><form action="/search"><input name="q" /></form></vendor-search>
+
+<!-- 3. marked as yours: ogygia never touches it, anywhere -->
+<vendor-search data-ogygia-keep="search">…</vendor-search>
+```
+
+Put the widget **inside** the `{@html}` content, not as the element that holds it: Svelte keeps its own markers as the direct children of that element. The `{@html}` may sit beside other content (`<div><h3>{title}</h3>{@html markup}</div>`); then the elements in that `<div>` are compared by position only, never entered. An `{@html}` at the very top of a component has no element around it to mark: wrap it in one.
+
+## Conflicts
+
+If a web component changes its children in a place Svelte's hydration **does** read (a custom element whose children use `{expressions}` or blocks), both cannot win. Svelte binds nodes by position, so ogygia removes the nodes the component added and the island hydrates. It reports the conflict instead of hiding it: a console warning in development, and a **conflict** finding in devtools naming the element and the fix — one of the three placements above.
+
+## What `data-ogygia-keep` means
+
+On a plain element, `data-ogygia-keep` means **the live DOM owns this subtree**. Before the wake, on a hole answer, on a live tick, on a navigation: ogygia matches the element and keeps it exactly as it is.
+
+On an island, the `keep` import attribute means something related: the island survives a navigation. Svelte still owns that island, so it is repaired and hydrated like any other.

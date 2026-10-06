@@ -376,6 +376,8 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 			findings.push({ code: 'hydrate-recovered', severity: 'error', message: `${name_of(e.fp ?? null)} threw away its server HTML and rendered again${e.reason ? `: ${e.reason}` : ''}.`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
 		else if (e.name === 'region.hydrate.healed')
 			findings.push({ code: 'hydrate-healed', severity: 'warn', message: `${name_of(e.fp ?? null)}'s markup was changed by another script before it woke; the runtime put the server markup back${e.reason ? ` (${e.reason})` : ''}.`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
+		else if (e.name === 'region.hydrate.conflict')
+			findings.push({ code: 'hydrate-conflict', severity: 'warn', message: `${name_of(e.fp ?? null)}: ${e.reason ?? 'a web component and Svelte wanted the same nodes'}`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
 	}
 
 	// ── errors ── (ogygia's own log of a failed island is the hydrate-failed finding above, with its
