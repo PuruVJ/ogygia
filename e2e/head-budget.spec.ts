@@ -18,16 +18,40 @@ import { KIT_MARKER_RE } from './fixtures/re.ts';
 
 const STYLESHEET_LINK_G = /<link\b[^>]*rel="stylesheet"[^>]*>/g;
 const MODULEPRELOAD_LINK_G = /<link\b[^>]*rel="modulepreload"[^>]*>/g;
-const INLINE_REGION_STYLE_G = /<style data-ogygia-region-css="[^"]*">([^<]*)<\/style>/g;
+// Every inline sheet: the region-css channel's `<style data-ogygia-region-css>` AND Kit's own inlined
+// node stylesheets (`kit.inlineStyleThreshold`), which is where a plain block's small sheet lands.
+const INLINE_STYLE_G = /<style\b[^>]*>([^<]*)<\/style>/g;
 const HREF_RE = /href="([^"]+)"/;
 const RENDERED = ['hbtoken-a', 'hbtoken-direct'];
 const UNRENDERED = ['hbtoken-b', 'hbtoken-c', 'hbtoken-d', 'hbtoken-e', 'hbtoken-f', 'hbtoken-unused'];
-// The budget. Stylesheets: the app's own sheet(s) + one per rendered island (two). Preloads: the
-// `load` island's entry + its chunk closure (measured 14: one `og-region.*.js` + 13 shared chunks).
-// Generous enough for chunking drift, tight enough that six leaked registry sheets trip it — and
-// the token greps below catch a single leaked sheet regardless of the count.
-const MAX_STYLESHEETS = 5;
+// PLAIN registry imports (no `with`) — a direct import, a plain barrel's name, a re-export the page
+// uses. Their CSS reaches a csr=false page only through the page node's client graph, so it must be
+// there. (The graph decides for plain imports: a plain import the registry USES is linked whether it
+// renders or not; a re-export nobody uses is tree-shaken, CSS and all, exactly as without ogygia.)
+const PLAIN = ['hbtoken-plain', 'hbtoken-plain-barrel', 'hbtoken-plain-reexport'];
+// Behind the helper the page uses only the registry's `blocks` map: the re-export is unused there.
+const PLAIN_VIA_FACTORY = ['hbtoken-plain', 'hbtoken-plain-barrel'];
+// The budget. Stylesheets: the app's own sheet(s) + one per rendered island (two) + the node's own
+// sheet carrying the plain blocks. Preloads: the `load` island's entry + its chunk closure (measured
+// 14: one `og-region.*.js` + 13 shared chunks). Generous enough for chunking drift, tight enough that
+// six leaked registry sheets trip it — and the token greps below catch a single leaked sheet
+// regardless of the count.
+const MAX_STYLESHEETS = 6;
 const MAX_MODULEPRELOADS = 24;
+
+/** Every CSS byte a document carries: its linked sheets (fetched, resolved against the PAGE url —
+ *  Kit's hrefs are relative to it) + its inline `<style>` blocks. */
+async function page_css(page_url: string, html: string, sheets: string[]): Promise<string> {
+	let css = '';
+	for (const href of sheets) {
+		const r = await fetch(new URL(href, page_url).href);
+		css += (await r.text()) + '\n';
+	}
+	for (const m of html.matchAll(INLINE_STYLE_G)) css += m[1] + '\n';
+	return css;
+}
+/** Whole-token match: `hbtoken-d` must not match inside `hbtoken-direct`. */
+const has_token = (css: string, tok: string) => new RegExp(`${tok}(?![a-z-])`).test(css);
 
 test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => {
 	test('SSR: linked stylesheets carry the rendered islands only, within budget', async ({
@@ -49,23 +73,41 @@ test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => 
 			preloads.length <= MAX_MODULEPRELOADS,
 			preloads.join('\n')
 		);
-		// Fetch every linked sheet and grep the tokens.
-		let css = '';
-		for (const href of sheets) {
-			const r = await fetch(new URL(href, baseURL).href);
-			css += (await r.text()) + '\n';
-		}
-		// The region-css channel's other shape: a rendered island's sheet under the playground's
-		// `kit.inlineStyleThreshold` is a `<style data-ogygia-region-css>` in the head, not a link.
-		for (const m of html.matchAll(INLINE_REGION_STYLE_G)) css += m[1] + '\n';
-		// Whole-token match: `hbtoken-d` must not match inside `hbtoken-direct`.
-		const has = (tok: string) => new RegExp(`${tok}(?![a-z])`).test(css);
+		// Fetch every linked sheet, add every inline sheet, and grep the tokens.
+		const css = await page_css(baseURL + '/head-budget', html, sheets);
+		const has = (tok: string) => has_token(css, tok);
 		for (const tok of RENDERED)
 			check(`rendered island CSS is linked (${tok})`, has(tok), `sheets: ${sheets.join(', ')}`);
 		for (const tok of UNRENDERED)
 			check(`unrendered mark CSS is NOT linked (${tok})`, !has(tok), `sheets: ${sheets.join(', ')}`);
+		for (const tok of PLAIN)
+			check(`plain registry import CSS reaches the page (${tok})`, has(tok), `sheets: ${sheets.join(', ')}`);
 		// No duplicate hrefs either (a sheet linked by Kit AND by the region channel).
 		check('no stylesheet href linked twice', new Set(sheets).size === sheets.length, sheets.join('\n'));
+	});
+
+	test('SSR: a registry behind a plain helper module gets the same treatment', async ({ baseURL }) => {
+		const res = await fetch(baseURL + '/head-budget/via-factory');
+		const html = await res.text();
+		check('/head-budget/via-factory returns 200', res.status === 200);
+		const sheets = (html.match(STYLESHEET_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
+		const css = await page_css(baseURL + '/head-budget/via-factory', html, sheets);
+		check('rendered registry block CSS is linked (hbtoken-a)', has_token(css, 'hbtoken-a'));
+		for (const tok of ['hbtoken-b', 'hbtoken-c', 'hbtoken-d', 'hbtoken-e', 'hbtoken-f'])
+			check(`unrendered mark CSS is NOT linked behind the helper (${tok})`, !has_token(css, tok));
+		for (const tok of PLAIN_VIA_FACTORY)
+			check(`plain registry import CSS reaches the page behind the helper (${tok})`, has_token(css, tok));
+	});
+
+	test('browser: plain registry blocks are styled from first paint', async ({ page }) => {
+		await page.goto('/head-budget', { waitUntil: 'domcontentloaded' });
+		for (const name of ['plain', 'plain-barrel', 'plain-reexport']) {
+			const size = await page
+				.locator(`[data-hb-plain="${name}"]`)
+				.evaluate((el) => getComputedStyle(el).fontSize)
+				.catch(() => '');
+			check(`plain block "${name}" styled (40px heading)`, size === '40px', `got ${size}`);
+		}
 	});
 
 	test('browser: the rendered islands are styled and wake', async ({ page }) => {

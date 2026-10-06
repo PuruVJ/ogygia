@@ -121,11 +121,13 @@ import { strip_id, host_key } from './program.js';
 import { mentions_page_store, page_data_keys_answer } from './link/page-keys.js';
 import {
 	export_names,
-	imported_names,
 	is_registry_stub_id,
-	registry_stub_id,
+	registry_client_id,
+	registry_client_path,
+	registry_client_source,
 	registry_stub_names,
-	registry_stub_source
+	registry_stub_source,
+	static_script_specs
 } from './link/registry-stub.js';
 import { island_host_loaded } from './link/emit-gate.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
@@ -166,6 +168,14 @@ const COMPONENT_EXT_RE = /\.(svelte|js|ts)$/;
 const ROUTE_HOST_FILE_RE = /^\+(page|layout)\.(svelte|ts|js|mjs)$/;
 /** A `.ts`/`.js` module that can be a region registry (a minted `.ts` region host). */
 const TS_REGISTRY_EXT_RE = /\.(ts|js|mjs)$/;
+/** A Svelte rune module (`.svelte.ts` / `.svelte.js`). */
+const SVELTE_RUNE_MODULE_RE = /\.svelte\.(ts|js)$/;
+/** The plugin-context resolver the client-leg registry decision walks import edges with. */
+type RegistryResolve = (
+	source: string,
+	importer: string,
+	opts: { skipSelf: boolean }
+) => Promise<{ id: string } | null>;
 /** A script module the seed-shaping analysis parses with oxc (`.svelte.ts` included). */
 const SCRIPT_MODULE_RE = /\.(?:[cm]?[jt]sx?)$/;
 const SOURCE_EXT_RE = /\.(svelte|ts|js|mjs|cjs)$/;
@@ -1034,6 +1044,8 @@ export class Compiler {
 		// A csr=false route host's registry import on the client leg (link/registry-stub.ts): the
 		// registry's export names as `undefined`, so the host links and ships none of the registry.
 		if (is_registry_stub_id(id)) return registry_stub_source(registry_stub_names(id));
+		const registry_client = registry_client_path(id);
+		if (registry_client) return this.#registry_client_emit(registry_client);
 
 		if (id === RESOLVED(V_RUNTIME_URL)) {
 			// The runtime's IDENTITY — dev: the vite dev URL; build: its stable URL. The server bundle
@@ -1368,10 +1380,11 @@ export class Compiler {
 		if (is_registry_stub_id(source)) return RESOLVED(source);
 
 		// csr=false CLIENT leg of a BUILD: a route host's import of a `.ts`/`.js` REGION REGISTRY
-		// resolves to a names-only stub (link/registry-stub.ts). The registry's marked wrappers would
-		// otherwise drag every component + its CSS into the page node's client graph, and Kit links
-		// `node.stylesheets` for all of it, rendered or not — the render pass already links what
-		// renders. The registry module itself stays real for csr=true hosts and the island world.
+		// resolves to the registry with its MARKS blanked (link/registry-stub.ts). The marked wrappers
+		// would otherwise drag every component + its CSS into the page node's client graph, and Kit
+		// links `node.stylesheets` for all of it, rendered or not — the render pass already links what
+		// renders. Its PLAIN imports keep their edges: nothing else links their CSS. The registry
+		// module itself stays real for csr=true hosts and the island world.
 		const registry_stub = await this.#registry_stub_for(source, importer, { ssr, resolve });
 		if (registry_stub) return registry_stub;
 
@@ -1444,11 +1457,16 @@ export class Compiler {
 	}
 
 	/**
-	 * The registry-stub decision for one import edge (see link/registry-stub.ts). Fires only on the
-	 * client leg of a build, only for an importer that is a csr=false ROUTE host (`+page`/`+layout`
-	 * `.svelte`/`.ts`/`.js` — the page node's own files, whose client JS never runs), and only when
-	 * the resolved target is a `.ts`/`.js` module the prescan registered as a region host. Returns the
-	 * resolved stub id, or `null` to let resolution continue.
+	 * The client-leg registry decision for one import edge (see link/registry-stub.ts). Fires only on
+	 * the client leg of a build, for an importer that is either a csr=false ROUTE host (`+page`/
+	 * `+layout` `.svelte`/`.ts`/`.js` — the page node's own files, whose client JS never runs) or a
+	 * module already in that variant world (its id carries the variant query), and only when the
+	 * resolved target is a local `.ts`/`.js` module that IS a region registry or REACHES one through
+	 * static script imports. The variant world is contagious along script edges only: a registry
+	 * behind a plain helper (`+page.svelte` → `$lib/factory.ts` → `registry.ts`) gets the same
+	 * treatment as a direct import, while modules that reach no registry stay shared (no copies).
+	 * `.svelte` edges never fork (forking a component's id breaks its scoped CSS). Returns the
+	 * variant id, or `null` to let resolution continue.
 	 */
 	async #registry_stub_for(
 		source: string,
@@ -1458,26 +1476,41 @@ export class Compiler {
 			resolve
 		}: {
 			ssr: boolean;
-			resolve: (
-				source: string,
-				importer: string,
-				opts: { skipSelf: boolean }
-			) => Promise<{ id: string } | null>;
+			resolve: RegistryResolve;
 		}
 	): Promise<string | null> {
 		const ctx = this.#ctx!;
 		if (ssr || ctx.is_dev || !ctx.is_build || !importer) return null;
 		if (source.startsWith('\0') || source.startsWith('virtual:') || source.startsWith('$app/'))
 			return null;
+		if (registry_client_path(importer) == null && !this.#is_csr_false_route_host(importer))
+			return null;
+		const target = await this.#resolve_local_script(source, importer, resolve);
+		if (!target) return null;
+		this.prescan();
+		if (!(await this.#reaches_registry(target, resolve, new Set()))) return null;
+		return registry_client_id(target);
+	}
+
+	/** True for a csr=false route host file (`+page`/`+layout` `.svelte`/`.ts`/`.js`). A `+page.ts`
+	 *  shares its route's world with the sibling `.svelte` host. */
+	#is_csr_false_route_host(importer: string): boolean {
 		const importer_abs = strip_id(importer);
-		const routes_dir = kit_dirs(ctx.root).routes_dir;
-		if (!importer_abs.startsWith(routes_dir + path.sep)) return null;
-		const base = path.basename(importer_abs);
-		const m = ROUTE_HOST_FILE_RE.exec(base);
-		if (!m) return null;
-		// A `+page.ts` / `+layout.ts` shares its route's world with the sibling `.svelte` host.
-		const svelte_host = path.join(importer_abs, '..', `+${m[1]}.svelte`);
-		if (!routeCsrIsFalse(svelte_host, routes_dir)) return null;
+		const routes_dir = kit_dirs(this.#ctx!.root).routes_dir;
+		if (!importer_abs.startsWith(routes_dir + path.sep)) return false;
+		const m = ROUTE_HOST_FILE_RE.exec(path.basename(importer_abs));
+		if (!m) return false;
+		return routeCsrIsFalse(path.join(importer_abs, '..', `+${m[1]}.svelte`), routes_dir);
+	}
+
+	/** `source` resolved from `importer` to a local `.ts`/`.js` file on disk, or `null` (virtuals,
+	 *  components, assets, unresolvable). Package files count only when the prescan registered them
+	 *  as region hosts (an `ogygia.files` package registry) — package internals are never walked. */
+	async #resolve_local_script(
+		source: string,
+		importer: string,
+		resolve: RegistryResolve
+	): Promise<string | null> {
 		let resolved: { id: string } | null = null;
 		try {
 			resolved = await resolve(source, importer, { skipSelf: true });
@@ -1486,16 +1519,62 @@ export class Compiler {
 		}
 		if (!resolved?.id || resolved.id.startsWith('\0')) return null;
 		const target = strip_id(resolved.id);
-		if (!TS_REGISTRY_EXT_RE.test(target)) return null;
-		this.prescan();
-		if (!this.program.host_index.has(host_key(target))) return null;
-		const registry_src = ctx.read_file(target);
-		const importer_src = ctx.read_file(importer_abs);
-		if (registry_src == null || importer_src == null) return null;
-		const names = export_names(registry_src);
-		for (const n of imported_names(importer_src, source)) names.add(n);
-		const rel = path.relative(ctx.root, target).split(path.sep).join('/');
-		return RESOLVED(registry_stub_id(rel, names));
+		if (!TS_REGISTRY_EXT_RE.test(target) || this.#ctx!.read_file(target) == null) return null;
+		// Kit owns these on the client: a `.remote.ts` becomes Kit's fetch stub there (its imports
+		// never reach the client graph, and Kit keys its metadata on the exact file id), and a
+		// server-only module is refused outright. Neither may fork, and neither leads anywhere.
+		// A `.svelte.ts` rune module is compiled by vite-plugin-svelte, keyed on its file name: it
+		// never forks either (a registry behind one stays real — a head cost, never a missing style).
+		const posix = target.split(path.sep).join('/');
+		if (SERVER_MODULE_EXT_RE.test(posix) || SERVER_DIR_RE.test(posix)) return null;
+		if (SVELTE_RUNE_MODULE_RE.test(posix)) return null;
+		return target;
+	}
+
+	/** Whether `file` is a region registry or reaches one through static script imports (memoized
+	 *  per build; `.svelte` and package-internal edges are not walked). A result computed while a
+	 *  cycle was open is memoized only when positive (a negative one may still depend on the cycle). */
+	#reach_memo = new Map<string, boolean>();
+	async #reaches_registry(
+		file: string,
+		resolve: RegistryResolve,
+		visiting: Set<string>
+	): Promise<boolean> {
+		const key = host_key(file);
+		const memo = this.#reach_memo.get(key);
+		if (memo !== undefined) return memo;
+		if (this.program.host_index.has(key)) {
+			this.#reach_memo.set(key, true);
+			return true;
+		}
+		if (visiting.has(key) || file.includes('/node_modules/')) return false;
+		visiting.add(key);
+		const src = this.#ctx!.read_file(file);
+		const specs = src == null ? [] : (static_script_specs(src, file) ?? []);
+		let reaches = false;
+		for (const spec of specs) {
+			const target = await this.#resolve_local_script(spec, file, resolve);
+			if (target && (await this.#reaches_registry(target, resolve, visiting))) {
+				reaches = true;
+				break;
+			}
+		}
+		visiting.delete(key);
+		if (reaches || visiting.size === 0) this.#reach_memo.set(key, reaches);
+		return reaches;
+	}
+
+	/** The client-leg registry source (link/registry-stub.ts): marks blanked, plain imports kept. A
+	 *  registry that does not parse falls back to the names-only stub. */
+	#registry_client_emit(file: string): string | null {
+		const ctx = this.#ctx!;
+		const src = ctx.read_file(file);
+		if (src == null) return null;
+		const keys = ctx.import_keys;
+		const region_keys = new Set([keys.wake, keys.render, keys.preset, keys.region]);
+		return (
+			registry_client_source(src, file, region_keys) ?? registry_stub_source([...export_names(src)])
+		);
 	}
 
 	/**
@@ -1550,6 +1629,12 @@ export class Compiler {
 		// Discover islands before any module is transformed so island_graph is populated
 		// even when an island entry component is processed before its host page.
 		this.prescan();
+
+		// A csr=false client-leg registry variant (link/registry-stub.ts) exists only for its import
+		// EDGES (Kit links its plain imports' CSS); its JS never runs. Its id strips to the real
+		// registry's path, so the region pipeline below would re-register that host from the
+		// blanked source — leave it exactly as emitted.
+		if (registry_client_path(id) != null) return null;
 
 		const id_n = strip_id(id);
 		// server leg of a build: this module is in the server bundle's real graph (see

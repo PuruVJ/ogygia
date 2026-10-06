@@ -16,8 +16,158 @@
  * nothing else. The registry module itself is untouched — a csr=true page (Kit hydrates it, so it
  * needs the real wrappers) and the island world keep importing the real thing. Dev keeps the graph
  * (Vite serves CSS as modules there; a stub would unstyle the page).
+ *
+ * PLAIN IMPORTS STAY. A registry also holds PLAIN imports (a heading, a banner wrapper: no `with`).
+ * Those render on the server and never pass through Region, so the page node's client graph is the
+ * only thing that links their CSS — a names-only stub left them unstyled on every deploy (dev keeps
+ * the graph, so it never showed there). The client-leg registry is therefore the registry ITSELF
+ * with only its marks blanked ({@link registry_client_source}): every plain import, re-export,
+ * barrel and style import keeps its edge, resolved from the registry's own directory (the module id
+ * is the real path plus {@link REGISTRY_CLIENT_QUERY}), so Kit links their CSS exactly as before the
+ * stub. Their CSS is linked whether they render or not — the price of the graph deciding; marked
+ * imports stay out, which is the leak this module exists for.
  */
+import { walk } from 'estree-walker';
+import { parse_module } from '../parse/oxc.js';
+
 export const REGISTRY_STUB_PREFIX = 'virtual:ogygia/registry-stub/';
+
+/** The query that names a registry's client-leg variant (its marks blanked, everything else kept). */
+export const REGISTRY_CLIENT_QUERY = '?og-registry-client';
+
+/** The client-leg variant id of a registry: its real absolute path (relative imports resolve from
+ *  the registry's own directory) plus {@link REGISTRY_CLIENT_QUERY}. */
+export function registry_client_id(abs_path: string): string {
+	return abs_path + REGISTRY_CLIENT_QUERY;
+}
+
+/** The registry path a client-leg variant id names, or `null` for any other id. */
+export function registry_client_path(id: string): string | null {
+	return id.endsWith(REGISTRY_CLIENT_QUERY) ? id.slice(0, -REGISTRY_CLIENT_QUERY.length) : null;
+}
+
+type EsNode = {
+	type: string;
+	start: number;
+	end: number;
+	[key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+};
+
+/** True when `node` is `import.meta.og.<prop>`. */
+function is_og_macro(node: EsNode | undefined, prop: string): boolean {
+	return (
+		node?.type === 'MemberExpression' &&
+		node.property?.name === prop &&
+		node.object?.type === 'MemberExpression' &&
+		node.object.property?.name === 'og' &&
+		node.object.object?.type === 'MetaProperty' &&
+		node.object.object.meta?.name === 'import' &&
+		node.object.object.property?.name === 'meta'
+	);
+}
+
+/**
+ * The static VALUE import specifiers of a script module — `import … from`, side-effect `import '…'`,
+ * `export … from`, `export * from` (type-only forms skipped; dynamic `import()` skipped: Kit links
+ * no CSS for a node's dynamic chunks). `null` when the module does not parse.
+ */
+export function static_script_specs(source: string, file: string): string[] | null {
+	const parsed = parse_module(source, file);
+	if (!parsed.ok || !parsed.program) return null;
+	const specs: string[] = [];
+	for (const node of (parsed.program as EsNode).body as EsNode[]) {
+		const is_from =
+			node.type === 'ImportDeclaration' ||
+			node.type === 'ExportAllDeclaration' ||
+			(node.type === 'ExportNamedDeclaration' && node.source);
+		if (!is_from || node.importKind === 'type' || node.exportKind === 'type') continue;
+		const value = node.source?.value;
+		if (typeof value === 'string') specs.push(value);
+	}
+	return specs;
+}
+
+/** `const a = undefined, b = undefined;` for the given locals (empty string for none). */
+function undefined_consts(locals: readonly string[]): string {
+	return locals.length ? `const ${locals.map((l) => `${l} = undefined`).join(', ')};` : '';
+}
+
+/**
+ * The registry's source with its MARKS blanked and everything else kept, or `null` when it does not
+ * parse (the caller falls back to the names-only stub). A mark is an import whose `with { … }`
+ * carries a region key (`region_keys`: the app's wake / render / region / preset names), or a
+ * component handed to `import.meta.og.asRegion(…)`. Each blanked binding becomes
+ * `const X = undefined` so the module still links; the client leg never runs it anyway.
+ */
+export function registry_client_source(
+	source: string,
+	file: string,
+	region_keys: ReadonlySet<string>
+): string | null {
+	const parsed = parse_module(source, file);
+	if (!parsed.ok || !parsed.program) return null;
+	const body = (parsed.program as EsNode).body as EsNode[];
+	const edits: { start: number; end: number; text: string }[] = [];
+
+	// `import.meta.og.asRegion(Comp, …)` → `undefined`; its component import is a mark too.
+	// `import.meta.og.regions(glob)` (a held-region registry the compiler expands into marked
+	// imports) → `{}`: every entry it would mint is a mark.
+	const as_region_args = new Set<string>();
+	walk(parsed.program as never, {
+		enter(n) {
+			const node = n as unknown as EsNode;
+			if (node.type !== 'CallExpression') return;
+			if (is_og_macro(node.callee, 'regions')) {
+				edits.push({ start: node.start, end: node.end, text: '({})' });
+				this.skip();
+				return;
+			}
+			if (!is_og_macro(node.callee, 'asRegion')) return;
+			const arg = node.arguments?.[0];
+			if (arg?.type === 'Identifier') as_region_args.add(arg.name);
+			edits.push({ start: node.start, end: node.end, text: 'undefined' });
+			this.skip();
+		}
+	});
+
+	for (const node of body) {
+		if (node.type !== 'ImportDeclaration' || node.importKind === 'type') continue;
+		const specifiers = (node.specifiers ?? []) as EsNode[];
+		const marked = ((node.attributes ?? []) as EsNode[]).some((a) =>
+			region_keys.has(a.key?.name ?? a.key?.value)
+		);
+		const dropped = specifiers.filter(
+			(s) => marked || (s.importKind !== 'type' && as_region_args.has(s.local.name))
+		);
+		if (!dropped.length) continue;
+		const kept = specifiers.filter((s) => !dropped.includes(s));
+		const consts = undefined_consts(dropped.map((s) => s.local.name));
+		if (!kept.length) {
+			edits.push({ start: node.start, end: node.end, text: consts });
+			continue;
+		}
+		// Some specifiers stay (a barrel import handing one name to asRegion, others plain).
+		const head = kept
+			.filter((s) => s.type !== 'ImportSpecifier')
+			.map((s) => source.slice(s.start, s.end));
+		const named = kept
+			.filter((s) => s.type === 'ImportSpecifier')
+			.map((s) => source.slice(s.start, s.end));
+		if (named.length) head.push(`{ ${named.join(', ')} }`);
+		const spec = source.slice(node.source.start, node.source.end);
+		edits.push({
+			start: node.start,
+			end: node.end,
+			text: `import ${head.join(', ')} from ${spec}; ${consts}`
+		});
+	}
+
+	if (!edits.length) return source;
+	edits.sort((a, b) => b.start - a.start);
+	let out = source;
+	for (const e of edits) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+	return out;
+}
 
 const NAMES_PARAM = '?names=';
 const EXPORT_DECL_G =
