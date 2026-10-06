@@ -1488,7 +1488,7 @@ export class Compiler {
 		const target = await this.#resolve_local_script(source, importer, resolve);
 		if (!target) return null;
 		this.prescan();
-		if (!(await this.#reaches_registry(target, resolve, new Set()))) return null;
+		if (!(await this.#reaches_registry(target, resolve))) return null;
 		return registry_client_id(target);
 	}
 
@@ -1511,6 +1511,21 @@ export class Compiler {
 		importer: string,
 		resolve: RegistryResolve
 	): Promise<string | null> {
+		// One resolution per (importer, specifier) per build: resolution is deterministic within a
+		// build, and every csr=false host and every walked module asks again otherwise.
+		const memo_key = strip_id(importer) + '\n' + source;
+		const memo = this.#resolve_memo.get(memo_key);
+		if (memo !== undefined) return memo;
+		const target = await this.#resolve_local_script_uncached(source, importer, resolve);
+		this.#resolve_memo.set(memo_key, target);
+		return target;
+	}
+	#resolve_memo = new Map<string, string | null>();
+	async #resolve_local_script_uncached(
+		source: string,
+		importer: string,
+		resolve: RegistryResolve
+	): Promise<string | null> {
 		let resolved: { id: string } | null = null;
 		try {
 			resolved = await resolve(source, importer, { skipSelf: true });
@@ -1519,7 +1534,7 @@ export class Compiler {
 		}
 		if (!resolved?.id || resolved.id.startsWith('\0')) return null;
 		const target = strip_id(resolved.id);
-		if (!TS_REGISTRY_EXT_RE.test(target) || this.#ctx!.read_file(target) == null) return null;
+		if (!TS_REGISTRY_EXT_RE.test(target) || !fs.existsSync(target)) return null;
 		// Kit owns these on the client: a `.remote.ts` becomes Kit's fetch stub there (its imports
 		// never reach the client graph, and Kit keys its metadata on the exact file id), and a
 		// server-only module is refused outright. Neither may fork, and neither leads anywhere.
@@ -1531,37 +1546,83 @@ export class Compiler {
 		return target;
 	}
 
-	/** Whether `file` is a region registry or reaches one through static script imports (memoized
-	 *  per build; `.svelte` and package-internal edges are not walked). A result computed while a
-	 *  cycle was open is memoized only when positive (a negative one may still depend on the cycle). */
+	/**
+	 * Whether `file` is a region registry or reaches one through static script imports (`.svelte`
+	 * and package-internal edges are not walked). Every module is read, parsed and walked AT MOST
+	 * ONCE per build: a shared helper reached from thousands of import edges answers from the memo.
+	 *
+	 * Cycles are why that needs care. A NEGATIVE computed while the walk was inside a cycle may
+	 * depend on a file still open above it (that file can still turn out to reach a registry), so it
+	 * is not final yet. Tarjan's strongly-connected-components bookkeeping decides exactly when it
+	 * is: each open file gets its depth on the walk, every step reports the shallowest open file its
+	 * subtree looped back to (`low`), and when a file finishes with `low >= depth` nothing below it
+	 * depends on anything above it — the file and every file still parked on the component stack
+	 * above it form one finished component, all with the same answer. A positive is always final.
+	 * (Keeping only top-level negatives instead, as this did first, re-walked every shared module
+	 * once per path to it — a large app's build never finished.)
+	 */
+	async #reaches_registry(file: string, resolve: RegistryResolve): Promise<boolean> {
+		return (await this.#reach(file, resolve, new Map(), [])).reaches;
+	}
 	#reach_memo = new Map<string, boolean>();
-	async #reaches_registry(
+	#specs_memo = new Map<string, readonly string[]>();
+	async #reach(
 		file: string,
 		resolve: RegistryResolve,
-		visiting: Set<string>
-	): Promise<boolean> {
+		open: Map<string, number>,
+		component: string[]
+	): Promise<{ reaches: boolean; low: number }> {
 		const key = host_key(file);
 		const memo = this.#reach_memo.get(key);
-		if (memo !== undefined) return memo;
+		if (memo !== undefined) return { reaches: memo, low: Infinity };
 		if (this.program.host_index.has(key)) {
 			this.#reach_memo.set(key, true);
-			return true;
+			return { reaches: true, low: Infinity };
 		}
-		if (visiting.has(key) || file.includes('/node_modules/')) return false;
-		visiting.add(key);
-		const src = this.#ctx!.read_file(file);
-		const specs = src == null ? [] : (static_script_specs(src, file) ?? []);
+		const open_depth = open.get(key);
+		if (open_depth !== undefined) return { reaches: false, low: open_depth };
+		if (file.includes('/node_modules/')) return { reaches: false, low: Infinity };
+		const depth = open.size;
+		open.set(key, depth);
+		const parked = component.length;
+		component.push(key);
 		let reaches = false;
-		for (const spec of specs) {
+		let low = Infinity;
+		for (const spec of this.#script_specs(key, file)) {
 			const target = await this.#resolve_local_script(spec, file, resolve);
-			if (target && (await this.#reaches_registry(target, resolve, visiting))) {
+			if (!target) continue;
+			const step = await this.#reach(target, resolve, open, component);
+			if (step.low < low) low = step.low;
+			if (step.reaches) {
 				reaches = true;
 				break;
 			}
 		}
-		visiting.delete(key);
-		if (reaches || visiting.size === 0) this.#reach_memo.set(key, reaches);
-		return reaches;
+		open.delete(key);
+		if (reaches) {
+			this.#reach_memo.set(key, true);
+			component.length = parked + 1;
+			component.pop();
+			return { reaches: true, low: Infinity };
+		}
+		if (low >= depth) {
+			// A finished component rooted here: every file parked above it shares this negative.
+			for (let i = parked; i < component.length; i++) this.#reach_memo.set(component[i], false);
+			component.length = parked;
+			return { reaches: false, low: Infinity };
+		}
+		// Still depends on a file open above: stay parked until that root finishes.
+		return { reaches: false, low };
+	}
+	/** A module's static script specifiers, read and parsed once per build. */
+	#script_specs(key: string, file: string): readonly string[] {
+		let specs = this.#specs_memo.get(key);
+		if (specs === undefined) {
+			const src = this.#ctx!.read_file(file);
+			specs = src == null ? [] : (static_script_specs(src, file) ?? []);
+			this.#specs_memo.set(key, specs);
+		}
+		return specs;
 	}
 
 	/** The client-leg registry source (link/registry-stub.ts): marks blanked, plain imports kept. A
