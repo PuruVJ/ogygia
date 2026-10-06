@@ -8,7 +8,7 @@
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import { islandCss } from 'virtual:ogygia/island-deps';
-import { region_css_links } from './html-scan.js';
+import { region_css_tags } from './html-scan.js';
 
 const REGION_CSS_ATTR = 'data-ogygia-region-css';
 
@@ -16,5 +16,5 @@ export function render_region_html(component: Component<Record<string, unknown>>
 	const r = render(component, { props });
 	let own = '';
 	for (const href of islandCss(module_url)) own += '<link rel="stylesheet" href="' + href + '" ' + REGION_CSS_ATTR + '>';
-	return own + region_css_links(r.head) + r.body;
+	return own + region_css_tags(r.head) + r.body;
 }

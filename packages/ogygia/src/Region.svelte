@@ -739,9 +739,13 @@
 	const island_css_html = $derived.by(() => {
 		// A csr=true document's inline island links its CSS here as well: the client wrapper imports
 		// the component lazily there, so Kit's route stylesheets no longer carry it (that static
-		// reach is what linked every registry block's sheet on every page). Nested stays out — its
-		// CSS rides the parent island's closure.
-		if (nested || __mode !== 'island' || !island_entry) return '';
+		// reach is what linked every registry block's sheet on every page). A NESTED island links
+		// its own too: it loads its component through the same lazy wrapper, and an island's CSS
+		// list is its chunk closure over STATIC edges — so the parent's list never carries the inner
+		// island's sheet (and a CMS container that finds its blocks in a registry at render time
+		// never imports them at all). Claims are per request, so a sheet the parent already linked
+		// is not linked twice.
+		if (__mode !== 'island' || !island_entry) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(island_entry)))
 			html += region_css_tag(href, asset(href));

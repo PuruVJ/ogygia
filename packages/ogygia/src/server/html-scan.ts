@@ -19,6 +19,38 @@ export function is_space(c: number): boolean {
 	);
 }
 
+const REGION_CSS_ATTR = 'data-ogygia-region-css';
+
+/**
+ * Every region-CSS tag in `head`, in order, joined: the `<link … data-ogygia-region-css>` form AND the
+ * inline `<style data-ogygia-region-css="href">…</style>` form a sheet under Kit's
+ * `inlineStyleThreshold` takes. What an isolated render (a held region's body) must carry forward
+ * from its head: keeping links only silently unstyled every small sheet.
+ */
+export function region_css_tags(head: string): string {
+	let out = '';
+	for (
+		let attr = head.indexOf(REGION_CSS_ATTR);
+		attr !== -1;
+		attr = head.indexOf(REGION_CSS_ATTR, attr + 1)
+	) {
+		const open = head.lastIndexOf('<', attr);
+		if (open === -1) continue;
+		if (head.startsWith('<link', open) && !is_word(head.charCodeAt(open + 5))) {
+			const end = head.indexOf('>', attr);
+			if (end === -1) break;
+			out += head.slice(open, end + 1);
+			attr = end;
+		} else if (head.startsWith('<style', open) && !is_word(head.charCodeAt(open + 6))) {
+			const close = head.indexOf('</style>', attr);
+			if (close === -1) break;
+			out += head.slice(open, close + 8);
+			attr = close + 7;
+		}
+	}
+	return out;
+}
+
 /** Every `<link …data-ogygia-region-css…>` tag in `head`, in order, joined — what
  *  `head.match(/<link\b[^>]*data-ogygia-region-css[^>]*>/g).join('')` returned. */
 export function region_css_links(head: string): string {
