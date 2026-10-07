@@ -52,6 +52,29 @@ test('priorities and the viewport class', () => {
 	expect(viewport_class(off)).toBe('ahead');
 });
 
+test('a region with no box of its own is classed by what it renders', () => {
+	// REGRESSION (field report on 0069b94b): a region wrapping a `position: fixed` button measured
+	// 0×0, was classed `ahead` and waited for the critical gate though its button was on screen
+	const fixed = document.createElement('div');
+	fixed.innerHTML = '<button style="position:fixed;top:64px;left:8px">open</button>';
+	const contents = document.createElement('div');
+	contents.style.display = 'contents';
+	contents.innerHTML = '<p style="margin:0">hello</p>';
+	// below the fold, each with nothing on screen
+	const far = `position:absolute;top:${innerHeight + 500}px;width:100px`;
+	const fixed_off = document.createElement('div');
+	fixed_off.style.cssText = far;
+	fixed_off.innerHTML = `<button style="position:fixed;top:${innerHeight + 200}px">far</button>`;
+	const empty = document.createElement('div');
+	empty.style.cssText = far;
+	document.body.append(fixed, contents, fixed_off, empty);
+	expect(fixed.getBoundingClientRect().height).toBe(0);
+	expect(viewport_class(fixed)).toBe('visible');
+	expect(viewport_class(contents)).toBe('visible');
+	expect(viewport_class(fixed_off)).toBe('ahead');
+	expect(viewport_class(empty)).toBe('ahead');
+});
+
 test('island code waits for the critical image; a gesture and visible content do not', async () => {
 	const hero = pending_hero();
 	const started: string[] = [];

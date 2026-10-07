@@ -50,17 +50,28 @@ export function fetch_priority_of(cls: LoadClass): 'high' | 'auto' | 'low' {
 	return cls === 'user' ? 'high' : cls === 'visible' ? 'auto' : 'low';
 }
 
-/** `visible` when `el` intersects the viewport now, else `ahead`. */
+/**
+ * `visible` when `el` — or, for a region with no area of its own, what it renders — intersects the
+ * viewport now, else `ahead`. A region whose content is out of flow (a `position: fixed` button) or
+ * that is `display: contents` has no area, and where such a box sits says nothing (`display:
+ * contents` reports 0,0), so its descendants' boxes decide first (bounded: the first few levels).
+ */
 export function viewport_class(el: Element): 'visible' | 'ahead' {
 	if (typeof innerHeight === 'undefined' || !el.isConnected) return 'ahead';
+	return on_screen(el, 3) ? 'visible' : 'ahead';
+}
+
+function on_screen(el: Element, depth: number): boolean {
 	const r = el.getBoundingClientRect();
-	const visible =
-		r.bottom > 0 &&
-		r.right > 0 &&
-		r.top < innerHeight &&
-		r.left < innerWidth &&
-		(r.width > 0 || r.height > 0);
-	return visible ? 'visible' : 'ahead';
+	const crosses = r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+	if (r.width > 0 && r.height > 0) return crosses;
+	if (depth > 0) {
+		let seen = 0;
+		for (let c = el.firstElementChild; c && seen < 16; c = c.nextElementSibling, seen++)
+			if (on_screen(c, depth - 1)) return true;
+	}
+	// nothing it renders is on screen: a line of its own still counts (an empty hole at the fold)
+	return crosses && (r.width > 0 || r.height > 0);
 }
 
 // ── the critical-resources gate ─────────────────────────────────────────────────────────────────

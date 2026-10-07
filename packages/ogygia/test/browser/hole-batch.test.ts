@@ -58,6 +58,27 @@ describe('join_batch', () => {
 		expect(posts).toEqual([]); // one left: it goes alone
 	});
 
+	it('a preload whose href is relative still matches the pinned root-absolute endpoint', async () => {
+		// REGRESSION (field report on 0069b94b): the page pins a region's endpoint root-absolute while
+		// the link kept its relative text, the strings never matched, and the hole went in the batch
+		// beside its own preload: its HTML downloaded twice
+		const { posts } = stub_batch(() => done_parcel());
+		const pinned = new URL(ep('r1'), location.href);
+		const dir = location.pathname.slice(0, location.pathname.lastIndexOf('/') + 1);
+		let rel = '';
+		for (let i = 1; i < dir.split('/').length - 1; i++) rel += '../';
+		const link = document.createElement('link');
+		link.rel = 'preload';
+		link.as = 'fetch';
+		link.setAttribute('href', (rel || './') + pinned.pathname.slice(1) + pinned.search);
+		link.setAttribute('data-test-hint', '');
+		document.head.append(link);
+		expect(link.getAttribute('href')).not.toBe(ep('r1'));
+		expect(link.href).toBe(pinned.href);
+		await Promise.all([join_batch(ep('r1')), join_batch(ep('r2'))]);
+		expect(posts).toEqual([]);
+	});
+
 	it('a frame the batch did not carry: the joined fetch rejects as a batch miss', async () => {
 		stub_batch(() => done_parcel());
 		await Promise.all([join_batch(ep('m1')), join_batch(ep('m2'))]);

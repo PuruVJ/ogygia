@@ -52,6 +52,18 @@ caller.
   session findings `loads-held` (info) and `critical-cap` (warn); the profiler beacon records
   `paints.held`, and the LCP explanation names a hero that outran the cap.
 
+## Field fixes
+
+- 0069b94b: per-breakpoint `fetchpriority=high` preloads whose `media` does not match never fetch;
+  the wait skips them (it ran every such page into the cap). `imagesrcset` preloads count as
+  arrived when any candidate has a resource-timing entry.
+- `viewport_class`: a region with no area (a `position: fixed` child, `display: contents`) is
+  classed by its children's boxes (3 levels, 16 children each), then by its own line as before. A
+  fixed header button's region was `ahead` and waited 2.6 s.
+- `join_batch` compares preload hrefs as resolved URLs: endpoints are pinned root-absolute, the
+  link keeps its relative text, so a `load` hole went in the batch beside its own preload and its
+  HTML downloaded twice (once at high priority during the hero).
+
 ## Not done (deliberately)
 
 - Server-side hole fetch preloads (`<link rel=preload as=fetch>` for `when: load` holes) keep the
