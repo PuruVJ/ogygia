@@ -435,6 +435,8 @@ class OgygiaRegion extends HTMLElement {
 	#fetch_abort: AbortController | null = null;
 	/** Cancel idle schedule when disconnected. */
 	#idle_handle: number | null = null;
+	/** Disconnected, teardown waiting a microtask: a reconnect before it is a move. */
+	#leaving = false;
 	/** Live region (`<ogygia-region live>`): driven imperatively by Region.svelte's applyLive. */
 	#live_ready = false;
 	#live_app: IslandHandle | null = null;
@@ -464,6 +466,8 @@ class OgygiaRegion extends HTMLElement {
 
 	connectedCallback() {
 		connected_regions.add(this); // the navigation's shadow-root check counts these (connected.ts)
+		// back in the same task it left: a move, and nothing was torn down (disconnectedCallback)
+		if (this.#leaving) return;
 		// its relative URLs, against the address it entered at — they are read again after any
 		// navigation, when `location` is another page (entry-locations.ts)
 		pin_region_urls(this);
@@ -1319,15 +1323,29 @@ class OgygiaRegion extends HTMLElement {
 		this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
 	}
 
+	/**
+	 * A MOVE IS NOT A REMOVAL. Another script relocating the element (a custom element that, at its
+	 * upgrade, moves its server-placed children out of its markup and back into its own light DOM)
+	 * disconnects and reconnects it in one task. Tearing down there aborted a hole's in-flight
+	 * fetch, re-armed its wake and fetched it again; disposed a woken island and woke it again. The
+	 * teardown waits a microtask and runs only if the element is still out of the document.
+	 */
 	disconnectedCallback() {
+		if (this.#leaving) return;
+		this.#leaving = true;
+		queueMicrotask(() => {
+			this.#leaving = false;
+			if (!this.isConnected) this.#teardown();
+		});
+	}
+
+	#teardown() {
 		connected_regions.delete(this);
 		unregister_region(this);
 		// out of the document nothing watches it: a copy it keeps is compared if it wakes again
 		if (this.#watching) mark_region_changed(this);
 		this.#unwatch();
-		// A disconnect now always means the island is gone: the reconcile nav MOVES kept nodes with
-		// insertBefore (no detach, no disconnect), and the fallback is a full swap where old islands
-		// genuinely leave.
+		// Out past the task it left in: the island is gone (a move came back before the microtask).
 		if (DEVTOOLS && (this.#live_app || this.#app)) dt_island_gone(this, this.getAttribute('entry') ?? '');
 		if (this.#live_app) {
 			this.#live_app.dispose();
