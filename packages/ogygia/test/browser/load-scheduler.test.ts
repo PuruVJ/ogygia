@@ -13,6 +13,7 @@ import {
 	critical_settled,
 	fetch_priority_of,
 	load_slot,
+	preload_urls,
 	reset_load_scheduler,
 	viewport_class
 } from '../../src/runtime/load-scheduler.js';
@@ -81,6 +82,29 @@ test('the visitor’s first input releases the wait (the browser stops measuring
 	await tick();
 	expect(started).toBe(true);
 	expect(critical_outcome()?.outcome).toBe('input');
+});
+
+test('a per-breakpoint preload whose media does not match is never waited for', async () => {
+	// the browser fetches only the matching one; the others never settle (every page hit the cap)
+	const off = document.createElement('link');
+	off.rel = 'preload';
+	off.setAttribute('as', 'image');
+	off.setAttribute('fetchpriority', 'high');
+	off.media = '(max-width: 1px)';
+	off.href = '/never-fetched.jpg';
+	document.head.appendChild(off);
+	await critical_settled();
+	expect(critical_outcome()?.outcome).toBe('none');
+	off.remove();
+});
+
+test('an imagesrcset preload (no href) is matched by any of its candidates', () => {
+	const link = document.createElement('link');
+	link.setAttribute('imagesrcset', ' /hero-560.jpg 560w,\n\t/hero-1200.jpg\t1200w, ');
+	expect(preload_urls(link)).toEqual([new URL('/hero-560.jpg', document.baseURI).href, new URL('/hero-1200.jpg', document.baseURI).href]);
+	link.href = '/one.jpg';
+	expect(preload_urls(link)).toEqual([new URL('/one.jpg', document.baseURI).href]);
+	expect(preload_urls(document.createElement('link'))).toEqual([]);
 });
 
 test('no marked resource: code starts right after the paint', async () => {

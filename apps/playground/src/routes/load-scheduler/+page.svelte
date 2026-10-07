@@ -8,6 +8,12 @@
 	import InteractionCounter from '$lib/InteractionCounter.svelte' with { wake: 'interaction' };
 </script>
 
+<svelte:head>
+	<!-- a hero preload per breakpoint, none matching: the browser fetches none, nothing may wait on them -->
+	<link rel="preload" as="image" fetchpriority="high" media="(max-width: 1px)" href="/load-scheduler-hero-tiny.png" />
+	<link rel="preload" as="image" fetchpriority="high" media="(min-width: 99999px)" href="/load-scheduler-hero-huge.png" />
+</svelte:head>
+
 <h1>Load scheduler</h1>
 
 <img data-hero src="/load-scheduler-hero.png" fetchpriority="high" width="320" height="120" alt="" />

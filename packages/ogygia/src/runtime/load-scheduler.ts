@@ -100,10 +100,36 @@ function pending_critical(): Element[] {
 	for (const link of document.querySelectorAll<HTMLLinkElement>(
 		'link[rel~="preload"][fetchpriority="high" i]'
 	)) {
-		if (!link.href) continue;
-		// a resource-timing entry exists once the response is complete
-		if (performance.getEntriesByName?.(link.href).length) continue;
+		// one preload per breakpoint: the browser fetches only the one whose `media` matches, and the
+		// others never fire `load` or `error` — waiting on them ran every such page into the cap
+		if (link.media && !matchMedia(link.media).matches) continue;
+		const urls = preload_urls(link);
+		if (!urls.length) continue;
+		// a resource-timing entry exists once the response is complete (an `imagesrcset` preload
+		// fetches one of its candidates: any of them having arrived means it did)
+		if (urls.some((u) => performance.getEntriesByName?.(u).length)) continue;
 		out.push(link);
+	}
+	return out;
+}
+
+/** The URLs a preload link may fetch: its `href`, else each `imagesrcset` candidate's. */
+export function preload_urls(link: HTMLLinkElement): string[] {
+	if (link.href) return [link.href];
+	const set = link.getAttribute('imagesrcset');
+	if (!set) return [];
+	const out: string[] = [];
+	for (const part of set.split(',')) {
+		const candidate = part.trim();
+		let end = 0;
+		while (end < candidate.length && candidate.charCodeAt(end) > 32) end++; // up to the descriptor
+		const url = candidate.slice(0, end);
+		if (!url) continue;
+		try {
+			out.push(new URL(url, document.baseURI).href);
+		} catch {
+			/* not a URL: skip the candidate */
+		}
 	}
 	return out;
 }

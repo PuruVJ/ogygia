@@ -73,10 +73,18 @@ test.describe('load scheduler: island code waits for the page’s critical resou
 		);
 
 		release();
+		const released_at = Date.now();
 		for (const wake of ['load', 'visible', 'idle'])
 			await page.waitForSelector(`ogygia-region[wake="${wake}"][data-hydrated]`, {
 				timeout: 10_000
 			});
+		// the page's per-breakpoint preloads whose media does not match are never fetched: nothing
+		// waits on them (they used to run every such page into the cap)
+		check(
+			'released: the islands woke right after the hero, not at the cap',
+			Date.now() - released_at < 1500,
+			String(Date.now() - released_at)
+		);
 		const after = await island_requests(page);
 		const woke = after.islands.filter((i) => i.wake !== 'interaction');
 		check('released: the hero arrived', after.hero_end !== null);
