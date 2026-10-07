@@ -47,7 +47,7 @@ export function install() {
 	slots.interaction = (el, fire) => {
 		const warm = () => {
 			const entry = island_entry_of(el);
-			if (entry) warm_island_module(entry);
+			if (entry) warm_island_module(entry, undefined, 'user'); // a hover: the visitor is reaching for it
 		};
 		return arm_interaction(el, warm, () => Promise.resolve(fire()));
 	};

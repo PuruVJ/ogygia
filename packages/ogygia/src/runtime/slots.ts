@@ -144,6 +144,8 @@ export type BootLink = {
 	yield_task: typeof import('./schedule.js').yield_task;
 	/** the router's navigation, timed for the profiler's beacon (a no-op without it) */
 	beacon_nav: typeof import('./beacon.js').beacon_nav;
+	/** the load scheduler's queue (./load-scheduler.ts) */
+	load_slot: typeof import('./load-scheduler.js').load_slot;
 	/** DOM ownership (./ownership.ts): which children Svelte's walk enters, and self-owned elements */
 	walk_enters: typeof import('./ownership.js').walk_enters;
 	is_self_owned: typeof import('./ownership.js').is_self_owned;

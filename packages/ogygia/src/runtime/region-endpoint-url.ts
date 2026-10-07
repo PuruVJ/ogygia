@@ -1,4 +1,5 @@
 import { preload_island_graph } from './island-graph-preload.js';
+import { fetch_priority_of, load_slot, type LoadClass } from './load-scheduler.js';
 import { entry_location } from './entry-locations.js';
 
 /** Hoisted (hot paths — connectedCallback/hydrate run per region); shared with core's
@@ -142,15 +143,21 @@ function warm_key(url: string): string {
 }
 
 /** Fire-and-forget `import()` of an island's module, deduped by resolved URL. */
-export function warm_island_module(entry: string, base?: string): void {
+export function warm_island_module(entry: string, base?: string, cls: LoadClass = 'speculative'): void {
 	const url = island_module_url(entry, base);
 	if (!url) return;
 	const key = warm_key(url);
 	if (warmed_modules.has(key)) return;
 	warmed_modules.add(key);
-	preload_island_graph(entry, base); // the whole graph with the entry, not one import at a time
-	import(/* @vite-ignore */ url).catch(() => {
-		warmed_modules.delete(key);
+	// a warm is the load scheduler's to time (load-scheduler.ts): a hover is the visitor's, a page
+	// prefetch's warm is speculative
+	void load_slot({ kind: 'code', cls, label: entry }).ready.then((release) => {
+		preload_island_graph(entry, base, fetch_priority_of(cls)); // the whole graph with the entry
+		import(/* @vite-ignore */ url)
+			.catch(() => {
+				warmed_modules.delete(key);
+			})
+			.finally(release);
 	});
 }
 

@@ -378,6 +378,14 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 			findings.push({ code: 'hydrate-healed', severity: 'warn', message: `${name_of(e.fp ?? null)}'s markup was changed by another script before it woke; the runtime put the server markup back${e.reason ? ` (${e.reason})` : ''}.`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
 		else if (e.name === 'region.hydrate.conflict')
 			findings.push({ code: 'hydrate-conflict', severity: 'warn', message: `${name_of(e.fp ?? null)}: ${e.reason ?? 'a web component and Svelte wanted the same nodes'}`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
+		else if (e.name === 'load.critical' && e.outcome === 'cap')
+			findings.push({ code: 'critical-cap', severity: 'warn', message: `The page's critical resource${e.resources === 1 ? '' : 's'} (marked fetchpriority="high") took longer than ${e.waited_ms} ms; ogygia stopped holding its downloads back and let them start.`, refs: [] });
+	}
+	// What the load scheduler held back for the page's critical resources (runtime/load-scheduler.ts).
+	const held = s.events.filter((e) => e.name === 'load.started' && e.class !== 'user' && e.waited_ms > 0);
+	if (held.length) {
+		const most = Math.max(...held.map((e) => (e.name === 'load.started' ? e.waited_ms : 0)));
+		findings.push({ code: 'loads-held', severity: 'info', message: `ogygia held ${held.length} download${held.length === 1 ? '' : 's'} back (up to ${most} ms) so the page's critical resources and the visible islands went first.`, refs: [] });
 	}
 
 	// ── errors ── (ogygia's own log of a failed island is the hydrate-failed finding above, with its

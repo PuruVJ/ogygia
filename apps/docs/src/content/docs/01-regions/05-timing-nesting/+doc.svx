@@ -91,7 +91,15 @@ ogygia({ regions: { visible: { margin: '0px' } } });
 
 The wake decides when an island's code *downloads* as well as when it runs. Nothing to configure:
 
-- **No island code moves before the page has painted.** Every wake except `interaction` starts no earlier than a SvelteKit page would start hydrating: after `DOMContentLoaded` and one painted frame. The page's CSS and hero image have the line to themselves.
+- **No island code moves before your hero has arrived.** Every wake except `interaction` waits until the page has painted *and* every image or preload you marked `fetchpriority="high"` has loaded (that is your LCP resource: ogygia does not guess it). The visitor's first click or key ends the wait at once (the browser stops measuring LCP there), and so does a 2.5 s cap. A page with no marked image waits only for the paint. Mark your hero:
+
+  ```html
+  <img src="/hero.jpg" fetchpriority="high" alt="…" />
+  <!-- or, for a CSS background or <picture> hero -->
+  <link rel="preload" as="image" href="/hero.jpg" fetchpriority="high" />
+  ```
+
+- **Downloads are queued by who is waiting for them.** An island or hole on screen downloads at normal priority. One that is not on screen yet (an `idle` island, one screen ahead of a `visible` one, a hole's `prefetch`) and the router's page prefetch download at low priority, a few at a time, so they never crowd out what the visitor sees. Something that scrolls into view moves up the queue. A click never waits. A hole's HTML on screen never waits either: it is the content itself.
 - **When an island wakes, its whole graph downloads at once.** The page carries each island's chunk list as data (one small JSON script, every chunk named once). At the wake the runtime adds a `<link rel="modulepreload">` for each chunk the island needs, beside the island's own `import()`. The browser fetches them in parallel, instead of finding each import only after the last file parsed.
 - **An island that never wakes downloads nothing.** A `visible` island fetches when it intersects (`regions.visible.margin` is the lead time), an `idle` one in idle time, a media-query one when the query matches, an `interaction` one on the first pointer-over, focus or touch inside it (the hover warm-up, with the waking click replayed). The router's hover prefetch warms the next page's islands the same way.
 

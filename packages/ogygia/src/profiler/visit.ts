@@ -111,7 +111,7 @@ export interface Visit {
 	at: number;
 	nav: VisitNav;
 	/** (`lcp_replaced`: its element was taken out while its island stayed — rendered again) */
-	paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low' };
+	paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low'; held?: { outcome: 'arrived' | 'input' | 'cap' | 'none'; resources: number; waited_ms: number } };
 	resources: VisitResource[];
 	/** every file by type, when `resources` lists only some (the first 200, the blocking ones first) */
 	resource_totals?: { type: string; count: number; transfer: number; size: number }[];
@@ -265,6 +265,12 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	if (paints_raw.lcp_replaced === true) paints.lcp_replaced = true;
 	if (paints_raw.lcp_lazy === true) paints.lcp_lazy = true;
 	if (paints_raw.lcp_priority === 'high' || paints_raw.lcp_priority === 'low') paints.lcp_priority = paints_raw.lcp_priority;
+	const held = paints_raw.held as Record<string, unknown> | undefined;
+	if (held && (held.outcome === 'arrived' || held.outcome === 'input' || held.outcome === 'cap' || held.outcome === 'none')) {
+		const resources = num(held.resources);
+		const waited_ms = num(held.waited_ms);
+		if (resources !== undefined && waited_ms !== undefined) paints.held = { outcome: held.outcome, resources, waited_ms };
+	}
 	const resources: VisitResource[] = [];
 	for (const r of (Array.isArray(v.resources) ? v.resources : []).slice(0, MAX_RESOURCES) as Record<string, unknown>[]) {
 		const url = str(r?.url, 500);

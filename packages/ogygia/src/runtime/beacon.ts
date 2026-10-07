@@ -20,6 +20,7 @@
 import { hole_copy_of } from './hash.js';
 import { tool_made } from '../tool-fetches.js';
 import { paint_blocker } from './render-blocking.js';
+import { critical_outcome, type CriticalOutcome } from './load-scheduler.js';
 
 interface Sample {
 	fp: string;
@@ -406,7 +407,7 @@ export function beacon_hole_answered(el: Element, start: number, batch?: { left:
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
-let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low' } = {};
+let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low'; held?: { outcome: CriticalOutcome; resources: number; waited_ms: number } } = {};
 /** the largest paint's element: still in the document when the visit is read, or replaced (an
  *  island that rendered it again put a new one in its place — the hero painted twice). Only while
  *  its island is still there: an in-app navigation away takes both, and replaces nothing */
@@ -1266,7 +1267,12 @@ function build_visit(): Record<string, unknown> | null {
 				? { server_timing: nav.serverTiming.slice(0, 8).map((s) => ({ name: s.name.slice(0, 40), ms: r2(s.duration), ...(s.description ? { desc: s.description.slice(0, 80) } : {}) })) }
 				: {})
 		},
-		paints: lcp_el && !lcp_el.isConnected && lcp_region?.isConnected ? { ...visit_paints, lcp_replaced: true } : visit_paints,
+		// (how long the load scheduler held ogygia's downloads for the page's critical resources)
+		paints: {
+			...visit_paints,
+			...(lcp_el && !lcp_el.isConnected && lcp_region?.isConnected ? { lcp_replaced: true as const } : {}),
+			...(critical_outcome() ? { held: critical_outcome()! } : {})
+		},
 		resources,
 		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
 		...(preload_misses.length ? { preload_misses } : {}),

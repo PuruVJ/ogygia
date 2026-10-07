@@ -76,7 +76,11 @@ function linked_set(): Set<string> {
  * Call it in the same task as the entry's `import()`. An entry the page has no graph for (dev, an
  * island inside a fetched hole answer) preloads nothing — its `import()` still finds its chunks.
  */
-export function preload_island_graph(entry: string, base: string = location.href): void {
+export function preload_island_graph(
+	entry: string,
+	base: string = location.href,
+	priority: 'high' | 'auto' | 'low' = 'auto'
+): void {
 	if (typeof document === 'undefined') return;
 	const key = absolute(entry, base);
 	if (!key) return;
@@ -89,6 +93,8 @@ export function preload_island_graph(entry: string, base: string = location.href
 		seen.add(href);
 		const link = document.createElement('link');
 		link.rel = 'modulepreload';
+		// the load class's priority (load-scheduler.ts); the island's `import()` reuses this in-flight fetch
+		if (priority !== 'auto') link.setAttribute('fetchpriority', priority);
 		link.href = href;
 		link.setAttribute(GRAPH_PRELOAD_ATTR, '');
 		runtime_session.claim_page_head(link); // the page's (session.ts); a navigation may drop it

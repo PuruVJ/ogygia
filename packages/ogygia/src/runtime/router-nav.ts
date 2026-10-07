@@ -334,6 +334,8 @@ const page_cache = new PageCache({
 	maxBytes: PAGE_CACHE_MAX_BYTES
 });
 const inflight = new Map<string, Promise<string | null>>();
+/** Prefetches still waiting in the load scheduler's queue, by href (a click promotes its one). */
+const queued_prefetch = new Map<string, { promote(cls: 'user'): void }>();
 /** requested href → the FINAL href a fetch landed on after following server redirects, when it
  *  differs. One-shot: `navigate()` reads it to correct the address bar (a redirect is invisible to
  *  `fetch` beyond `response.url`), then deletes it. See {@link fetch_page}. */
@@ -405,16 +407,35 @@ export function fetch_page(href: string, signal?: AbortSignal, purpose: NavPurpo
 	const cached = page_cache.get(href);
 	if (cached != null) return Promise.resolve(cached);
 	const pending = inflight.get(href);
-	if (pending) return pending;
+	if (pending) {
+		// a click joining a prefetch the load scheduler still holds: it is the visitor's now
+		if (purpose === 'nav') queued_prefetch.get(href)?.promote('user');
+		return pending;
+	}
 
 	// A fresh fetch is about to define this href's redirect fate — drop any stale mapping from an
 	// earlier (now cache-expired) prefetch so a non-redirecting response isn't shadowed by it.
 	final_url.delete(href);
 
-	const settled = fetch(href, {
-		signal,
-		headers: nav_headers(purpose)
-	})
+	const go = () =>
+		fetch(href, {
+			signal,
+			headers: nav_headers(purpose),
+			...(purpose === 'prefetch' ? { priority: 'low' } : {})
+		} as RequestInit);
+	// A prefetch is a guess: it waits for the page's critical resources and shares the background
+	// window (load-scheduler.ts). A navigation never waits.
+	let fetched: Promise<Response>;
+	if (purpose === 'prefetch') {
+		const slot = boot_link().load_slot({ kind: 'content', cls: 'speculative', label: href });
+		queued_prefetch.set(href, slot.ticket);
+		fetched = slot.ready.then((release) => {
+			queued_prefetch.delete(href);
+			return go().finally(release);
+		});
+	} else fetched = go();
+
+	const settled = fetched
 		.then(async (res) => {
 			const ct = res.headers.get('content-type') || '';
 			if (!ct.includes('text/html')) return { html: null as string | null, cacheable: false };

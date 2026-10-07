@@ -29,7 +29,6 @@ import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.js';
 import { NAV_HANDLE_KEY, mpa_nav, publish_nav } from './nav-handle.js';
 import { link_boot } from './boot-link.js';
 import {
-	after_document_painted,
 	background_start,
 	hydrate_settled,
 	hydrate_started,
@@ -39,6 +38,7 @@ import {
 } from './schedule.js';
 import { once_visible } from './observe.js';
 import { preload_island_graph } from './island-graph-preload.js';
+import { fetch_priority_of, load_slot, viewport_class, type LoadClass } from './load-scheduler.js';
 import { connected_regions } from './connected.js';
 import { restore_props_sidecar } from './sidecar.js';
 import { hole_facts_of } from './hole-facts.js';
@@ -194,9 +194,10 @@ function arm_on_demand(region: Element, fire: () => void): void {
 }
 
 /** Load a hydrate island module from `<ogygia-region entry>` (dev + prod), its whole chunk graph
- *  preloaded in the same task so nothing waits on a discovery waterfall (island-graph-preload.ts). */
-const load_island = (entry: string) => {
-	preload_island_graph(entry);
+ *  preloaded in the same task so nothing waits on a discovery waterfall (island-graph-preload.ts), at
+ *  the priority its load class downloads at (load-scheduler.ts). */
+const load_island = (entry: string, cls: LoadClass = 'visible') => {
+	preload_island_graph(entry, undefined, fetch_priority_of(cls));
 	// (its location, and the fresh identity if that fails: entry-locations.ts)
 	return import_entry<IslandModule>(entry, island_module_url(entry));
 };
@@ -419,6 +420,8 @@ class OgygiaRegion extends HTMLElement {
 	/** Set while an SWR revalidate is in flight, so the next apply marks `data-revalidated`. */
 	#revalidating = false;
 	#hydrating = false;
+	/** A visitor's gesture woke this region (`interaction`): its downloads are the `user` class. */
+	#user_woken = false;
 	/** The hydrated island (hydrate core handle): dispose, and for a kept island, props push. */
 	#app: IslandHandle | null = null;
 	/** Stops the shared `visible` observation (set while armed, cold). */
@@ -580,8 +583,8 @@ class OgygiaRegion extends HTMLElement {
 		// here broke that for every visible island on the page (a customer home page downloaded 1.1 MB
 		// of below-the-fold island code one second after load, for islands the visitor might never
 		// scroll to). At the wake its whole graph downloads at once (island-graph-preload.ts).
-		if (deferred) this.#arm(when, this.#fire_server, false);
-		else this.#arm(when, this.#fire_hydrate, true);
+		if (deferred) this.#arm(when, this.#fire_server);
+		else this.#arm(when, this.#fire_hydrate);
 		// `prefetch="<schedule>"`: a deferred hole warms its HTML on a second, EARLIER schedule
 		// (load / idle / visible / media) while `when` still decides the swap — an on-demand menu
 		// whose bytes sit in the frame store before the first hover, so the gesture joins the warm
@@ -591,7 +594,7 @@ class OgygiaRegion extends HTMLElement {
 		// attribute harmless.
 		const prefetch = deferred ? this.getAttribute('prefetch') : null;
 		if (prefetch && prefetch !== when && prefetch !== 'interaction') {
-			this.#arm(prefetch, this.#fire_prefetch, false, this.getAttribute('margin') || undefined);
+			this.#arm(prefetch, this.#fire_prefetch, this.getAttribute('margin') || undefined);
 		}
 	}
 
@@ -608,7 +611,8 @@ class OgygiaRegion extends HTMLElement {
 		if (!endpoint || !is_allowed_region_endpoint(endpoint)) return;
 		const address = frameAddress(endpoint);
 		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.prefetch', ...dt_ids(this) });
-		void slots.frames?.ensure(address, this.#frame_fetcher(endpoint, false))?.catch(() => {});
+		// a warm ahead of the hole's own schedule: background work (load-scheduler.ts)
+		void slots.frames?.ensure(address, this.#frame_fetcher(endpoint, false, 'ahead'))?.catch(() => {});
 	}
 
 	/**
@@ -617,15 +621,30 @@ class OgygiaRegion extends HTMLElement {
 	 * marker on a 204 (`keepFallback()` on the server). A revalidate bypasses the browser cache
 	 * (the endpoint may answer `private, max-age`, and stale is the whole point of revalidating).
 	 */
-	#frame_fetcher(endpoint: string, revalidate: boolean) {
-		return (signal: AbortSignal) =>
-			runtime_session.server_gate.run(async () => {
+	#frame_fetcher(endpoint: string, revalidate: boolean, cls: LoadClass | (() => LoadClass)) {
+		const class_now = typeof cls === 'function' ? cls : () => cls;
+		return async (signal: AbortSignal) => {
+			// HTML is content: on screen it never waits for the page's critical resources; off screen it
+			// is background work (load-scheduler.ts). The server gate still caps what one page asks of
+			// the origin at once.
+			const release = await load_slot({ kind: 'content', cls, label: endpoint }).ready;
+			try {
+				return await this.#fetch_region(endpoint, revalidate, fetch_priority_of(class_now()), signal);
+			} finally {
+				release();
+			}
+		};
+	}
+
+	#fetch_region(endpoint: string, revalidate: boolean, priority: 'high' | 'auto' | 'low', signal: AbortSignal) {
+		return runtime_session.server_gate.run(async () => {
 				if (BEACON) beacon_hole_fetched(endpoint);
 				let res = await fetch(endpoint, {
 					credentials: 'same-origin',
 					cache: revalidate ? 'no-store' : 'default',
+					priority,
 					signal
-				});
+				} as RequestInit);
 				// An EXPIRED capability (its document outlived it in a cache): renew once. The handle
 				// re-signs an anonymous hole it minted itself and answers with the hole AND the fresh
 				// capability, which this element adopts for its later fetches (#adopt_renewed).
@@ -667,7 +686,7 @@ class OgygiaRegion extends HTMLElement {
 	}
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
-	#arm(when: string, fire: () => unknown, loads_code: boolean, visible_margin?: string) {
+	#arm(when: string, fire: () => unknown, visible_margin?: string) {
 		if (DEVTOOLS) {
 			// Wrap so the schedule FIRING is observable (interaction/visible/idle "when did it actually
 			// wake, and why" is the story a timeline instrument tells). Off → `fire` is used directly.
@@ -680,30 +699,26 @@ class OgygiaRegion extends HTMLElement {
 		// NON-user-initiated wakes start at BACKGROUND priority: `load` fires at boot, and a `visible`/`media`
 		// island above the fold (or a media query that matches at load) fires right then too.
 		// `background_start` lets a pending render or input task run first — main-thread order only; it
-		// does not hold back the network (the gate below does that).
+		// does not hold back the network (the load scheduler does that, below).
 		// `idle` is skipped — it already waits for requestIdleCallback, so wrapping it would double-defer.
 		// `interaction` is skipped — the user clicked and is waiting for THIS island to wake and replay the
 		// click, so it must hydrate immediately (and it ships no JS until the click, so it never competes).
 		//
-		// And a wake that LOADS CODE (`loads_code`: an island's hydrate, a deferred island's phase 2)
-		// starts no earlier than Kit would start hydrating: after DOMContentLoaded and one painted frame
-		// (schedule.ts `after_document_painted`) — every schedule but `interaction`. The runtime boots
-		// before DOMContentLoaded, and background priority does not hold back the network, so without
-		// this a `load`,  `idle`, media or above-the-fold `visible` island's code downloads beside the
-		// page's own first paint. A hole's HTML is not gated (it is page content, not code); neither is
-		// a Kit document, where Kit's own start already sets the pace.
-		const gated = loads_code && !kit_hydrates_page();
-		const start = gated
-			? () => void after_document_painted().then(() => background_start(fire))
-			: () => background_start(fire);
-		if (when === 'idle') {
-			if (gated) void after_document_painted().then(() => this.isConnected && this.#on_idle(fire));
-			else this.#on_idle(fire);
-		} else if (when === 'visible') this.#on_visible(start, visible_margin);
+		// WHEN the downloads a wake starts may go out is the load scheduler's (load-scheduler.ts): island
+		// code waits for the painted document and the page's critical resources, background classes
+		// share a small window, a gesture never waits. Each download asks for its own slot.
+		const start = () => background_start(fire);
+		if (when === 'idle') this.#on_idle(fire);
+		else if (when === 'visible') this.#on_visible(start, visible_margin);
 		else if (when === 'load') start();
 		else if (when === 'interaction') {
-			if (is_deferred(this)) arm_on_demand(this, fire);
-			else this.#on_interaction(fire);
+			// a visitor's gesture: this region's downloads are the `user` class from here on
+			const by_user = () => {
+				this.#user_woken = true;
+				return fire();
+			};
+			if (is_deferred(this)) arm_on_demand(this, by_user);
+			else this.#on_interaction(by_user);
 		} else this.#on_media(when, start); // a media query string
 	}
 
@@ -792,7 +807,7 @@ class OgygiaRegion extends HTMLElement {
 				? this.getAttribute('hydrate-margin') || this.getAttribute('margin') || undefined
 				: undefined;
 		register_region(this);
-		this.#arm(phase2, this.#fire_hydrate, true, margin);
+		this.#arm(phase2, this.#fire_hydrate, margin);
 	}
 
 	/**
@@ -947,7 +962,11 @@ class OgygiaRegion extends HTMLElement {
 			if (!opts.revalidate && frames?.join && !endpoint.includes('&ttl=') && !capability_expired(endpoint))
 				await frames.join(endpoint);
 			const run = () =>
-				frames?.ensure(address, this.#frame_fetcher(endpoint, !!opts.revalidate), { force: opts.revalidate });
+				frames?.ensure(
+					address,
+					this.#frame_fetcher(endpoint, !!opts.revalidate, () => (this.#user_woken ? 'user' : viewport_class(this))),
+					{ force: opts.revalidate }
+				);
 			let html: string | undefined;
 			try {
 				html = await run();
@@ -1100,10 +1119,20 @@ class OgygiaRegion extends HTMLElement {
 			if (!this.isConnected) return;
 			const entry = island_entry_of(this);
 			if (!entry) return;
-			hydrate_started(this); // a viewport island in flight holds ready islands below the fold
-			// (with the module: the transportable classes its props and context carry — runtime/wire-classes.ts)
-			// The island's module first: its graph links go in before the lazy runtime chunks' own preloads.
-			const [mod, core] = await Promise.all([load_island(entry), hydrate_core(), wire_classes_for(this)]);
+			// Its downloads wait for their slot (load-scheduler.ts): a gesture's never wait; otherwise
+			// the class follows the viewport, re-read while queued (an island scrolled into view moves up).
+			const cls = () => (this.#user_woken ? 'user' : viewport_class(this));
+			const release = await load_slot({ kind: 'code', cls, label: entry }).ready;
+			let mod: IslandModule, core: HydrateCore;
+			try {
+				if (!this.isConnected) return;
+				hydrate_started(this); // a viewport island in flight holds ready islands below the fold
+				// (with the module: the transportable classes its props and context carry — runtime/wire-classes.ts)
+				// The island's module first: its graph links go in before the lazy runtime chunks' own preloads.
+				[mod, core] = await Promise.all([load_island(entry, cls()), hydrate_core(), wire_classes_for(this)]);
+			} finally {
+				release();
+			}
 			t_loaded = now_ms();
 			if (!this.isConnected) return;
 			// An island of OURS on a Kit-hydrated document reads Kit's page through the bridge Kit's
@@ -1264,13 +1293,21 @@ class OgygiaRegion extends HTMLElement {
 
 	/** Hydrate a live region's swapped-in HTML through the hydrate core's LiveHost path. */
 	async #live_hydrate(props: Record<string, unknown>) {
-		// A pushed tick is no user gesture either: its island code waits for the painted document like
-		// any scheduled wake (#arm) — on a Kit document, only for the parse.
-		await (kit_hydrates_page() ? dom_ready() : after_document_painted());
+		// A pushed tick is no user gesture either: its island code asks for a slot like any scheduled
+		// wake (load-scheduler.ts).
+		await dom_ready();
 		if (!this.isConnected) return;
 		const entry = island_entry_of(this);
 		if (!entry) return;
-		const [mod, core] = await Promise.all([load_island(entry), hydrate_core()]);
+		const cls = () => viewport_class(this);
+		const release = await load_slot({ kind: 'code', cls, label: entry }).ready;
+		let mod: IslandModule, core: HydrateCore;
+		try {
+			if (!this.isConnected) return;
+			[mod, core] = await Promise.all([load_island(entry, cls()), hydrate_core()]);
+		} finally {
+			release();
+		}
 		if (!this.isConnected) return;
 		await this.#kit_page_ready(core);
 		if (!this.isConnected) return;

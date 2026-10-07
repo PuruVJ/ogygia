@@ -160,7 +160,7 @@ export interface PageInput {
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 		warnings?: { code: string; message: string; file?: string; fp?: string; t?: number }[];
 		/** (`lcp_priority`: the largest paint's own fetchpriority, when it sets one) */
-		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low' };
+		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low'; held?: { outcome: 'arrived' | 'input' | 'cap' | 'none'; resources: number; waited_ms: number } };
 		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean; weighed?: true }[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
@@ -2193,6 +2193,9 @@ export function late_found(
 		return `Its request began at ${Math.round(asked)} ms, after ${name_of(p?.lcp_fp)} woke (hydrated at ${Math.round(island.done)} ms): the server HTML did not carry it, the island's code added it. Render the \`<img>\` (the same src) in the island's server markup, so the browser finds it in the HTML.`;
 	if (tag === 'img' && p?.lcp_priority !== 'high')
 		return 'It is an `<img>` the browser could find in the HTML, but an image starts at low priority, behind the page\'s scripts and stylesheets: give it `fetchpriority="high"` (and never `loading="lazy"` on the first screen).';
+	// (ogygia's load scheduler held its own downloads for it the whole cap: the image itself is slow)
+	if (tag === 'img' && p?.held?.outcome === 'cap')
+		return `It asks for high priority, and ogygia held its own downloads back for it — but it had not arrived after ${p.held.waited_ms} ms, so they started anyway. The file itself is slow to arrive: serve it smaller (a resized, modern-format image) or from a faster origin.`;
 	if (tag === 'img')
 		return 'It already asks for high priority: something before it held the browser back (a blocking script in the `<head>`, a long chain of stylesheets). Preload it in the `<head>` (`<link rel="preload" as="image" fetchpriority="high">`), ahead of the rest.';
 	return 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.';

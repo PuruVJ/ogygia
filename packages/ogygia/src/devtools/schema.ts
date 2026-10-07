@@ -247,6 +247,27 @@ export type RuntimeEventInput =
 	  }
 	| {
 			domain: 'runtime';
+			/** A download ogygia started on its own left the load scheduler's queue
+			 *  (runtime/load-scheduler.ts): its class, what it fetches, and how long it waited for its
+			 *  slot (the page's critical resources, the background window). */
+			name: 'load.started';
+			class: 'user' | 'visible' | 'ahead' | 'speculative';
+			kind: 'code' | 'content';
+			label?: string;
+			waited_ms: number;
+	  }
+	| {
+			domain: 'runtime';
+			/** The load scheduler stopped waiting for the page's critical resources (the images and
+			 *  preloads marked `fetchpriority="high"`): they `arrived`, the visitor's first `input`, the
+			 *  `cap` ran out, or `none` were pending. */
+			name: 'load.critical';
+			outcome: 'arrived' | 'input' | 'cap' | 'none';
+			resources: number;
+			waited_ms: number;
+	  }
+	| {
+			domain: 'runtime';
 			/** Two owners wanted the same nodes (runtime/ownership.ts): a web component changed its own
 			 *  children in a position Svelte's hydration reads, and the repair removed what it added so
 			 *  the island could hydrate. `reason` names the element and the way out ({@html} / static
