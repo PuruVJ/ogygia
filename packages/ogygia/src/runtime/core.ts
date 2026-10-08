@@ -466,8 +466,6 @@ class OgygiaRegion extends HTMLElement {
 
 	connectedCallback() {
 		connected_regions.add(this); // the navigation's shadow-root check counts these (connected.ts)
-		// back in the same task it left: a move, and nothing was torn down (disconnectedCallback)
-		if (this.#leaving) return;
 		// its relative URLs, against the address it entered at — they are read again after any
 		// navigation, when `location` is another page (entry-locations.ts)
 		pin_region_urls(this);
@@ -1328,7 +1326,10 @@ class OgygiaRegion extends HTMLElement {
 	 * upgrade, moves its server-placed children out of its markup and back into its own light DOM)
 	 * disconnects and reconnects it in one task. Tearing down there aborted a hole's in-flight
 	 * fetch, re-armed its wake and fetched it again; disposed a woken island and woke it again. The
-	 * teardown waits a microtask and runs only if the element is still out of the document.
+	 * teardown waits a microtask and runs only if the element is still out of the document. The
+	 * reconnect itself runs as any connect: a region already scheduled stops at `#scheduled`, and one
+	 * that was not (a nested island a lake lifted out and put back, now under a frozen boundary)
+	 * decides afresh where it stands.
 	 */
 	disconnectedCallback() {
 		if (this.#leaving) return;
