@@ -84,3 +84,36 @@ test('a hole’s answer arrives restored, and its island hydrates after', async 
 	});
 	expect(hole).toEqual({ shadow: true, sheets: 1, healed: 0, head_sheets: 1 });
 });
+
+test('a router navigation away and back: every restored host has its sheet, and nothing throws', async ({ page }) => {
+	// REGRESSION (field report on 4e800c75): after a router navigation every restored host lost its
+	// sheet — the restorer's adopt step threw on a root left in the incoming page's parsed document
+	// ("Sharing constructed stylesheets in multiple documents") and stopped before the roots that went in
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(e.message));
+	await page.goto('/restore-lab');
+	await expect(page.locator('[data-hole-count]')).toBeVisible();
+	await page.evaluate(() => {
+		const a = document.createElement('a');
+		a.href = '/plain';
+		a.setAttribute('data-lab-away', '');
+		a.textContent = 'away';
+		document.body.append(a);
+	});
+	const documents: string[] = [];
+	page.on('request', (r) => r.resourceType() === 'document' && documents.push(r.url()));
+	await page.locator('[data-lab-away]').click();
+	await expect(page).toHaveURL(/\/plain$/);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/restore-lab$/);
+	await expect(page.locator('[data-hole-count]')).toBeVisible();
+	const hosts = await page.evaluate(() =>
+		[...document.querySelectorAll('demo-card, demo-link')]
+			.filter((h) => h.shadowRoot)
+			.map((h) => ({ host: h.localName, sheets: h.shadowRoot!.adoptedStyleSheets.length }))
+	);
+	expect(documents, 'both ways were router navigations').toEqual([]);
+	expect(hosts.length).toBeGreaterThanOrEqual(3);
+	expect(hosts.filter((h) => h.sheets !== 1)).toEqual([]);
+	expect(errors).toEqual([]);
+});

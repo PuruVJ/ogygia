@@ -375,24 +375,44 @@ export function restore(root: Document | DocumentFragment | Element): number {
 }
 
 /** Adopt the sheets of roots restored outside the page, now that their hosts are in it (after a hole
- *  answer's insertion or a router swap, in the same task: no paint in between). A host the insertion
- *  discarded (a morph kept the live one) is dropped. */
+ *  answer's insertion or a router swap, in the same task: no paint in between). Each root is one of
+ *  three: IN THE PAGE (adopted now); in a fragment not inserted yet (another hole's answer still
+ *  waiting for its stylesheet: kept for the call after its insertion); or in ANOTHER DOCUMENT — the
+ *  incoming page's parsed copy, where the swap left what it did not take (a morph kept the live
+ *  host): dropped. That last one counts as connected (its document is its root), and adopting a page
+ *  sheet into it throws — which stopped every root after it from getting its sheets. A fragment root
+ *  still out after 30 s never goes in (a morph took a copy of it, the hole left): dropped. */
 export function restore_adopt(): void {
 	const W = window as unknown as { __og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[]; __og_init?: ShadowRoot[] };
+	const now = performance.now();
+	const waiting = (root: ShadowRoot & { __og_out?: number }) => now - (root.__og_out ??= now) < 30_000;
+	const where = (root: ShadowRoot): 'page' | 'later' | 'gone' =>
+		root.host.isConnected ? (root.host.ownerDocument === document ? 'page' : 'gone') : waiting(root) ? 'later' : 'gone';
 	// first: roots attached outside the page get the page's registry, so what is inside them upgrades
 	// (a browser without scoped registries never nulls it, and has no `initialize`)
 	const bare = W.__og_init;
 	if (bare?.length) {
-		W.__og_init = [];
+		const left: ShadowRoot[] = [];
 		const ce = customElements as CustomElementRegistry & { initialize?: (root: Node) => void };
-		for (const root of bare)
-			if (root.host.isConnected && (root as ShadowRoot & { customElementRegistry?: unknown }).customElementRegistry === null) ce.initialize?.(root);
+		for (const root of bare) {
+			const at = where(root);
+			if (at === 'later') left.push(root);
+			else if (at === 'page' && (root as ShadowRoot & { customElementRegistry?: unknown }).customElementRegistry === null) ce.initialize?.(root);
+		}
+		W.__og_init = left;
 	}
 	const list = W.__og_adopt;
 	if (!list?.length) return;
-	W.__og_adopt = [];
-	for (const { shadow, sheets } of list) {
-		if (!shadow.host.isConnected) continue;
-		shadow.adoptedStyleSheets = [...shadow.adoptedStyleSheets, ...sheets];
+	const left: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[] = [];
+	for (const item of list) {
+		const at = where(item.shadow);
+		if (at === 'later') left.push(item);
+		else if (at === 'page')
+			try {
+				item.shadow.adoptedStyleSheets = [...item.shadow.adoptedStyleSheets, ...item.sheets];
+			} catch {
+				// a sheet this page cannot adopt: the other roots still get theirs
+			}
 	}
+	W.__og_adopt = left;
 }

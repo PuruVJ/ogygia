@@ -82,6 +82,43 @@ test('an answer’s fragment: restored before insertion, its sheets adopted once
 	expect(document.querySelector('demo-card')!.shadowRoot!.adoptedStyleSheets.length).toBe(1);
 });
 
+test('a router swap: a root the swap left in the parsed page is skipped, and every root in this one gets its sheets', async () => {
+	// REGRESSION (field report on 4e800c75): after a router navigation every restored header host
+	// lost its sheets — the incoming page's parsed document holds roots the swap did not take (a morph
+	// kept the live host), they count as connected (their document is their root), adopting a page
+	// sheet into one threw "Sharing constructed stylesheets in multiple documents", and the throw
+	// stopped the loop before the roots that did go in
+	const s = await transformMarkup(doc(island('<demo-card> left </demo-card><demo-card> taken </demo-card>')), fake_scoped, { kind: 'document' });
+	document.head.insertAdjacentHTML('beforeend', SHEET);
+	const incoming = new DOMParser().parseFromString(s.html, 'text/html');
+	restore(incoming);
+	const [left, taken] = Array.from(incoming.querySelectorAll('demo-card'));
+	expect(left.isConnected).toBe(true); // (connected to the parsed page, not to this one)
+	document.body.appendChild(taken);
+	expect(() => restore_adopt()).not.toThrow();
+	expect(taken.shadowRoot!.adoptedStyleSheets.length).toBe(1);
+	expect(left.shadowRoot!.adoptedStyleSheets.length).toBe(0);
+	expect((window as { __og_adopt?: unknown[] }).__og_adopt).toEqual([]); // the leftover is dropped
+});
+
+test('an answer still waiting for its stylesheet keeps its roots while another answer goes in', async () => {
+	const answer = async (text: string) => {
+		const s = await transformMarkup(`<demo-card> ${text} </demo-card>`, (h) => SHEET + fake_scoped(h), { kind: 'region' });
+		const tpl = document.createElement('template');
+		tpl.innerHTML = s.html;
+		restore(tpl.content);
+		return tpl.content;
+	};
+	const waiting = await answer('waiting');
+	const first = await answer('first');
+	document.body.appendChild(first);
+	restore_adopt();
+	document.body.appendChild(waiting);
+	restore_adopt();
+	const hosts = Array.from(document.querySelectorAll('demo-card'));
+	expect(hosts.map((h) => h.shadowRoot!.adoptedStyleSheets.length)).toEqual([1, 1]);
+});
+
 test('a host upgraded before the restore reached it is left as served, and says so', async () => {
 	await served('<demo-card class="own"> late </demo-card>');
 	const host = document.querySelector('demo-card')!;
