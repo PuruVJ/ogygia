@@ -69,8 +69,12 @@ test('record(): a session of clicks, with the server split of the request one ma
 		async () => {
 			await page.locator('[data-ds="decoy"]').click();
 			await page.locator('[data-ds="slow"]').click();
+			// the session must span the request the click makes: wait for its answer, not a fixed time
+			// (on a slow CI runner 800 ms ended the window before the request did — an empty server split)
+			const answered = page.waitForResponse((r) => r.url().includes('/dt-session/api'));
 			await page.locator('[data-ds="server"]').click();
-			await page.waitForTimeout(800);
+			await answered;
+			await page.waitForTimeout(300);
 		},
 		{ server: true }
 	);
