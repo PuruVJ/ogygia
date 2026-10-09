@@ -4,6 +4,7 @@
 import { describe, test, expect, beforeEach } from 'vitest';
 import { document, el, frag, DomElement, NS_SVG } from './_stubs/dom.js';
 import { morph_children, install } from '../src/runtime/morph.js';
+import { swap_body } from '../src/runtime/reconcile.js';
 import { slots } from '../src/runtime/slots.js';
 
 beforeEach(() => {
@@ -156,9 +157,7 @@ describe('keyed children (id / data-key)', () => {
 	});
 
 	test('reorder preserves per-node DOM state (typed-in input value)', () => {
-		const parent = el(
-			'<ul><li id="a"><input name="x"></li><li id="b"><input name="y"></li></ul>'
-		);
+		const parent = el('<ul><li id="a"><input name="x"></li><li id="b"><input name="y"></li></ul>');
 		const inputA = parent.children[0].firstElementChild as DomElement;
 		inputA.value = 'typed';
 		morph_children(
@@ -268,6 +267,36 @@ describe('form DOM properties', () => {
 		expect(document.activeElement).toBe(input); // focus preserved (node identity kept)
 	});
 
+	test('does NOT clobber a dirty UNFOCUSED input when the server re-sends the same default', () => {
+		// The htmx-4 rule: an unfocused control only follows the server when the server *changed* its
+		// default. Type in a field, move focus elsewhere, a live tick re-renders the SAME default —
+		// the typed value must survive (the old rule wiped it because the incoming node had a `value`).
+		const parent = el('<form><input name="a" value="default"><input name="b" value=""></form>');
+		const a = parent.children[0] as DomElement;
+		const b = parent.children[1] as DomElement;
+		a.value = 'typed by user';
+		b.focus(); // focus moved OFF a and onto b — a is now unfocused but dirty
+		morph_children(parent, frag('<input name="a" value="default"><input name="b" value="">'));
+		expect(parent.children[0]).toBe(a); // same node
+		expect(a.value).toBe('typed by user'); // unchanged default → typed text kept
+	});
+
+	test('a changed default DOES move an unfocused dirty value (server changed its mind)', () => {
+		const parent = el('<form><input name="a" value="v1"></form>');
+		const a = parent.firstElementChild as DomElement;
+		a.value = 'typed';
+		morph_children(parent, frag('<input name="a" value="v2">')); // default v1 → v2
+		expect(a.value).toBe('v2'); // server changed the default → property follows
+	});
+
+	test('does NOT clobber an unfocused dirty checkbox when the server re-sends the same state', () => {
+		const parent = el('<form><input type="checkbox"></form>');
+		const box = parent.firstElementChild as DomElement;
+		box.checked = true; // user toggled on; default stays unchecked
+		morph_children(parent, frag('<input type="checkbox">')); // same default (no `checked`)
+		expect(box.checked).toBe(true); // user toggle survives an unchanged default
+	});
+
 	test('syncs checked property from the incoming attribute', () => {
 		const parent = el('<form><input type="checkbox"></form>');
 		const box = parent.firstElementChild as DomElement;
@@ -298,6 +327,131 @@ describe('form DOM properties', () => {
 			frag('<select><option value="a">A</option><option value="b" selected>B</option></select>')
 		);
 		expect(optB.selected).toBe(true);
+	});
+});
+
+describe('aria-hidden is never stamped onto a focused subtree (WAI-ARIA / dropdown open)', () => {
+	test('BUG REPRO: the incoming closed-state aria-hidden="true" is skipped when the subtree holds focus', () => {
+		// An on-demand dropdown: the user clicked (focusing the button), then the wake morphs in the
+		// region's fetched CLOSED render, which carries aria-hidden="true" on the container. Applying it
+		// would hide the focused button (browser blocks it, panel never opens).
+		const parent = el('<div><div class="x-panel"><button class="x-btn">Menu</button></div></div>');
+		const container = parent.firstElementChild as DomElement;
+		const button = container.firstElementChild as DomElement;
+		button.focus();
+		expect(document.activeElement).toBe(button);
+
+		morph_children(
+			parent,
+			frag('<div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div>')
+		);
+
+		expect(container.hasAttribute('aria-hidden')).toBe(false); // NOT hidden — the panel can open
+		expect(document.activeElement).toBe(button); // focus kept (node identity preserved)
+	});
+
+	test('aria-hidden="true" IS applied when the subtree does NOT hold focus', () => {
+		const parent = el('<div><div class="x-panel"><button class="x-btn">Menu</button></div></div>');
+		const container = parent.firstElementChild as DomElement;
+		// nothing focused
+		morph_children(
+			parent,
+			frag('<div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div>')
+		);
+		expect(container.getAttribute('aria-hidden')).toBe('true'); // normal case unaffected
+	});
+
+	test('aria-hidden="false" is applied even under focus (only "true" hides)', () => {
+		const parent = el('<div><div class="x-panel"><button class="x-btn">Menu</button></div></div>');
+		const container = parent.firstElementChild as DomElement;
+		(container.firstElementChild as DomElement).focus();
+		morph_children(
+			parent,
+			frag('<div class="x-panel" aria-hidden="false"><button class="x-btn">Menu</button></div>')
+		);
+		expect(container.getAttribute('aria-hidden')).toBe('false');
+	});
+
+	test('SWEEP: a retained aria-hidden="true" over the focused element is stripped after the morph', () => {
+		// The real failure: aria-hidden reaches the focused container via a cloned/inserted subtree
+		// (importNode copies attributes wholesale), which sync_attributes never sees. Simulate the
+		// residue: the live container already carries aria-hidden="true" AND the incoming node carries it
+		// too, so sync_attributes leaves it untouched (values equal). The post-morph sweep must remove it,
+		// because the focused button is inside — otherwise the browser blocks the open.
+		const parent = el(
+			'<div><div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div></div>'
+		);
+		const container = parent.firstElementChild as DomElement;
+		const button = container.firstElementChild as DomElement;
+		button.focus();
+		morph_children(
+			parent,
+			frag('<div class="x-panel" aria-hidden="true"><button class="x-btn">Menu</button></div>')
+		);
+		expect(container.hasAttribute('aria-hidden')).toBe(false); // swept off the focused ancestor
+		expect(document.activeElement).toBe(button);
+	});
+
+	test('SWEEP: aria-hidden="true" on a NON-focused sibling subtree is left alone', () => {
+		const parent = el(
+			'<div><div class="a" aria-hidden="true"><span>x</span></div><button id="b">Y</button></div>'
+		);
+		const button = parent.children[1] as DomElement;
+		button.focus();
+		morph_children(
+			parent,
+			frag('<div class="a" aria-hidden="true"><span>x</span></div><button id="b">Y</button>')
+		);
+		// focus is in the button, NOT in .a — .a keeps its aria-hidden
+		expect((parent.children[0] as DomElement).getAttribute('aria-hidden')).toBe('true');
+	});
+});
+
+describe('id-set wrapper matching', () => {
+	test('a banner inserted above a key-less wrapper keeps the keyed node inside it', () => {
+		// The nav bug: an unkeyed layout wrapper holds a keyed region (an island). A new page inserts
+		// a sibling ABOVE the wrapper. Positional matching morphs the wrapper toward the banner and
+		// destroys the island; id-set matching moves the wrapper (island intact) and inserts the banner.
+		const parent = el(
+			'<main><div class="content"><section data-key="r1">island</section></div></main>'
+		);
+		const content = parent.firstElementChild as DomElement;
+		const island = content.firstElementChild as DomElement;
+		morph_children(
+			parent,
+			frag(
+				'<div class="banner">New</div><div class="content"><section data-key="r1">island</section></div>'
+			)
+		);
+		expect(parent.children.length).toBe(2);
+		expect(parent.children[0].getAttribute('class')).toBe('banner'); // banner inserted
+		expect(parent.children[1]).toBe(content); // SAME wrapper node, moved down
+		expect(parent.children[1].firstElementChild).toBe(island); // island identity preserved
+	});
+
+	test('a wrapper is not consumed by an earlier sibling that a later one needs', () => {
+		// Two key-less wrappers, each holding a distinct keyed node, reordered. Neither may be eaten
+		// positionally by the wrong new sibling.
+		const parent = el(
+			'<main><div><i data-key="a">A</i></div><div><i data-key="b">B</i></div></main>'
+		);
+		const wrapA = parent.children[0] as DomElement;
+		const wrapB = parent.children[1] as DomElement;
+		morph_children(
+			parent,
+			frag('<div><i data-key="b">B</i></div><div><i data-key="a">A</i></div>')
+		);
+		expect(parent.children[0]).toBe(wrapB); // b-wrapper first now
+		expect(parent.children[1]).toBe(wrapA); // a-wrapper second — both reused, none destroyed
+	});
+
+	test('key-less wrappers with no keyed descendants stay positional (no id-set overhead)', () => {
+		const parent = el('<ul><li>one</li><li>two</li></ul>');
+		const first = parent.children[0] as DomElement;
+		morph_children(parent, frag('<li>one</li><li>two</li><li>three</li>'));
+		expect(parent.children.length).toBe(3);
+		expect(parent.children[0]).toBe(first); // positional reuse unchanged
+		expect(parent.children[2].textContent).toBe('three');
 	});
 });
 
@@ -378,5 +532,173 @@ describe('preserved / hydrated island subtrees', () => {
 		);
 		expect(parent.children[0]).toBe(island); // moved to front, same node
 		expect(island.firstChild).toBe(inner); // still intact
+	});
+});
+
+describe('swap_body (outerSync fallback)', () => {
+	test('keeps the live body node, syncs its attributes, replaces its children', () => {
+		const live = el('<body class="old" data-theme="light"><p>gone</p></body>');
+		const old_child = live.firstElementChild;
+		const next = el('<body class="new" data-theme="dark"><span>fresh</span></body>');
+		swap_body(live as unknown as HTMLElement, next as unknown as HTMLElement);
+		// attributes synced onto the SAME live body node
+		expect(live.getAttribute('class')).toBe('new');
+		expect(live.getAttribute('data-theme')).toBe('dark');
+		// children replaced: old <p> dropped, incoming <span> adopted in order
+		expect(live.children.length).toBe(1);
+		expect((live.firstElementChild as DomElement).tagName).toBe('SPAN');
+		expect(live.firstElementChild).not.toBe(old_child);
+		expect(live.textContent).toBe('fresh');
+		// the incoming body was emptied (its children were MOVED, not cloned)
+		expect(next.firstChild).toBeNull();
+	});
+
+	test('removes a body attribute the previous page’s server sent and the incoming page dropped', () => {
+		const live = el('<body class="x"></body>');
+		// page A's server sends data-stale…
+		swap_body(live as unknown as HTMLElement, el('<body class="y" data-stale="1"></body>') as unknown as HTMLElement);
+		expect(live.getAttribute('data-stale')).toBe('1');
+		// …page B's doesn't: it goes
+		swap_body(live as unknown as HTMLElement, el('<body class="z"></body>') as unknown as HTMLElement);
+		expect(live.getAttribute('class')).toBe('z');
+		expect(live.hasAttribute('data-stale')).toBe(false);
+	});
+
+	test('keeps a body attribute a script on the page set (the server never sent it)', () => {
+		const live = el('<body class="x"></body>');
+		swap_body(live as unknown as HTMLElement, el('<body class="y"></body>') as unknown as HTMLElement);
+		live.setAttribute('data-scroll-lock', ''); // a modal library, between navigations
+		swap_body(live as unknown as HTMLElement, el('<body class="z"></body>') as unknown as HTMLElement);
+		expect(live.hasAttribute('data-scroll-lock')).toBe(true);
+		expect(live.getAttribute('class')).toBe('z');
+	});
+});
+
+// SELF-OWNED ELEMENTS.
+// An UPGRADED custom element's HOST attributes are the runtime's — a component framework writes its
+// own scope class, hydration ids, `popover` etc. onto the host at upgrade. A morph toward a fresh
+// server render (which carries the PRE-upgrade markup) must NOT touch them: re-asserting stale
+// framework markers over a live host makes it lose its hydrated shadow and re-render (a live host
+// rendered its content twice). Its light CHILDREN still reconcile (add / update / keep its own). A <dialog>/
+// <details> has no such markers — the browser only flips `open` — so its attributes DO sync (add +
+// update, `open` kept). A plain element matches the incoming HTML exactly (the tests above).
+describe('self-owned attributes (upgraded custom elements, dialog/details)', () => {
+	const upgraded = (parent: DomElement) => {
+		const x = parent.firstChild as DomElement & { shadowRoot?: object };
+		x.shadowRoot = {}; // what an upgraded web component has
+		return x;
+	};
+
+	test('an upgraded custom element is left untouched: its host attributes are the runtime’s, not the render’s', () => {
+		const parent = el('<div><x-pop id="p" popover="manual" class="hydrated"></x-pop></div>');
+		const x = upgraded(parent);
+		morph_children(parent, frag('<x-pop id="p" class="a" data-x="1"><span>content</span></x-pop>'));
+		expect(parent.firstChild).toBe(x); // morphed in place
+		expect(x.getAttribute('popover')).toBe('manual'); // its own — kept
+		expect(x.getAttribute('class')).toBe('hydrated'); // NOT overwritten — the render's scope class would corrupt a live framework host
+		expect(x.hasAttribute('data-x')).toBe(false); // the render adds no host attribute to an upgraded element
+		expect(x.innerHTML).toContain('content'); // …but its light children still reconcile in
+	});
+
+	test('a fresh render’s runtime markers never overwrite the live upgraded host', () => {
+		// A web component hydrated from declarative shadow DOM carries the runtime's own markers — a
+		// per-render id and a generated scope class. A later hole answer is a FRESH server render with
+		// DIFFERENT marker values. Writing them over the live host made its runtime lose its hydrated
+		// shadow and render its content twice. The morph must leave every host attribute as the runtime
+		// left it (its children still reconcile).
+		const parent = el(
+			'<div><x-widget id="c" data-rt-id="5860" class="rt-scope-a1 hydrated" aria-label="Region"></x-widget></div>'
+		);
+		const host = parent.firstChild as DomElement & { shadowRoot?: object };
+		host.shadowRoot = {}; // upgraded (DSD-hydrated)
+		morph_children(parent, frag('<x-widget id="c" data-rt-id="5938" class="rt-scope-a1" aria-label="Region"></x-widget>'));
+		expect(parent.firstChild).toBe(host); // same live host
+		expect(host.getAttribute('data-rt-id')).toBe('5860'); // the runtime's id — NOT overwritten by the render's 5938
+		expect(host.getAttribute('class')).toBe('rt-scope-a1 hydrated'); // scope class + hydrated flag intact
+	});
+
+	test('an upgraded element keeps its own children, but never an old region the new page did not claim', () => {
+		// a site nav (an upgraded custom element) holds a hole; the next page writes the same hole with
+		// another key (its endpoint written at another depth, or its exp rolled over). The self-owned
+		// parent keeps its own children — the old region beside the new one drew the nav twice.
+		const parent = el('<div><x-nav><span data-own="1">its own</span><ogygia-region data-key="a" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav></div>');
+		const nav = upgraded(parent);
+		morph_children(parent, frag('<x-nav><span data-own="1">its own</span><ogygia-region data-key="b" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav>'));
+		expect(parent.firstChild).toBe(nav);
+		const regions = nav.children.filter((c) => (c as DomElement).localName === 'ogygia-region') as DomElement[];
+		expect(regions.length).toBe(1);
+		expect(regions[0].getAttribute('data-key')).toBe('b');
+		expect(nav.innerHTML.split('mega-menu-l1-0').length - 1).toBe(1);
+		// …and an element it gave itself after the render's children stays
+		const kept = el('<div><x-nav><ogygia-region data-key="a"></ogygia-region><i data-own="2"></i></x-nav></div>');
+		const nav2 = upgraded(kept);
+		morph_children(kept, frag('<x-nav><ogygia-region data-key="a"></ogygia-region></x-nav>'));
+		expect(nav2.innerHTML).toContain('data-own="2"');
+	});
+
+	test('a custom element that is NOT upgraded (no shadow root, no definition) still matches exactly', () => {
+		const parent = el('<div><x-plain popover="manual" class="hydrated"></x-plain></div>');
+		const x = parent.firstChild as DomElement;
+		morph_children(parent, frag('<x-plain class="a"></x-plain>'));
+		expect(x.hasAttribute('popover')).toBe(false);
+		expect(x.getAttribute('class')).toBe('a');
+	});
+
+	test('<dialog open> stays open through a morph whose HTML has it closed', () => {
+		const parent = el('<div><dialog id="d" open class="m-0"><p>old</p></dialog></div>');
+		const d = parent.firstChild as DomElement;
+		morph_children(parent, frag('<dialog id="d" class="m-0 z-10"><p>new</p></dialog>'));
+		expect(parent.firstChild).toBe(d);
+		expect(d.hasAttribute('open')).toBe(true);
+		expect(d.getAttribute('class')).toBe('m-0 z-10');
+		expect(d.innerHTML).toContain('new');
+	});
+
+	test('<details open> likewise; a plain sibling still loses its stale attribute', () => {
+		const parent = el('<div><details open><summary>s</summary></details><a data-stale="1">x</a></div>');
+		const details = parent.firstChild as DomElement;
+		morph_children(parent, frag('<details><summary>s</summary></details><a>x</a>'));
+		expect(details.hasAttribute('open')).toBe(true);
+		expect((parent.lastChild as DomElement).hasAttribute('data-stale')).toBe(false);
+	});
+
+	// The morph leaves an upgraded element's ATTRIBUTES alone (above). Its CHILDREN are its own doing
+	// too: a web component slots and rewrites its own light DOM on upgrade. A hole morph toward pristine
+	// fetched content (which carries none of that) must ADD what the render brings but never REMOVE the
+	// children the element gave itself — re-inserting/re-upgrading a live element is what makes an
+	// upgraded trigger flicker and vanish on ~half of reloads.
+	test('an upgraded custom element KEEPS the light children it gave itself when the new HTML has none', () => {
+		// The `<i>` is the element's own light child, added on upgrade (the shim has no innerHTML setter,
+		// so it is built via markup, then the element is marked upgraded).
+		const parent = el('<div><x-btn id="b"><i data-icon>person</i></x-btn></div>');
+		const btn = parent.firstChild as DomElement & { shadowRoot?: object };
+		btn.shadowRoot = {}; // upgraded
+		const icon = btn.firstChild;
+
+		morph_children(parent, frag('<x-btn id="b"></x-btn>')); // fetched: pristine, no children
+
+		expect(parent.firstChild).toBe(btn); // same node, never re-inserted
+		expect(btn.firstChild).toBe(icon); // the element's own child kept — never re-upgraded
+	});
+
+	test('an upgraded custom element still ADDS the children the new HTML brings, keeping its own', () => {
+		const parent = el('<div><x-dropdown id="d"><span data-slot>internal</span></x-dropdown></div>');
+		const dd = parent.firstChild as DomElement & { shadowRoot?: object };
+		dd.shadowRoot = {};
+		const slot = dd.firstChild;
+
+		// The woken hole brings the expensive panel INTO the dropdown.
+		morph_children(parent, frag('<x-dropdown id="d"><section data-panel>Content</section></x-dropdown>'));
+
+		expect(parent.firstChild).toBe(dd);
+		expect(dd.contains(slot)).toBe(true); // the element's own child kept
+		expect(dd.innerHTML).toContain('data-panel'); // the hole panel morphed in
+	});
+
+	test('a NON-upgraded (plain) custom element still reconciles children exactly (removes extras)', () => {
+		const parent = el('<div><x-plain><i data-old>x</i></x-plain></div>');
+		// no shadowRoot, not defined → not self-owned
+		morph_children(parent, frag('<x-plain></x-plain>'));
+		expect((parent.firstChild as DomElement).firstChild).toBeNull(); // extra child removed, as before
 	});
 });

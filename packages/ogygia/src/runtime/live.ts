@@ -1,11 +1,16 @@
 /**
  * Live-region feature: the props-pushable host a live `<Region>` hydrates through, so later
  * `query.live` ticks push new props into the mounted island (keep-alive) instead of re-hydrating.
+ *
+ * A HYDRATE-phase feature (link/runtime-entry.ts): installed by the hydrate core, never the boot.
  */
 import { slots } from './slots.js';
 import LiveHost from '../LiveHost.svelte';
+import KeepHost from '../KeepHost.svelte';
 
-/** Feature entry: fill the `live` slot with {@link LiveHost}. */
+/** Feature entry: fill the `live` slot with {@link LiveHost}, and `keep` with {@link KeepHost} (a
+ *  kept island's host: the same pushable props, in a placed island's SSR shape). */
 export function install() {
-	slots.live = LiveHost;
+	slots.live = LiveHost as unknown as NonNullable<typeof slots.live>;
+	slots.keep = KeepHost as unknown as NonNullable<typeof slots.keep>;
 }

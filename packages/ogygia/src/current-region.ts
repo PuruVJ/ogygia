@@ -17,3 +17,30 @@ export function set_current_region(el: Element | null) {
 export function current_region(): Element | null {
 	return (g[CURRENT_REGION] as Element | null) ?? null;
 }
+
+/**
+ * Fragment federation: the FOREIGN island (another build's entry, delegated to its own
+ * `__og_hydrate`) the runtime is hydrating right now — or null. The `$app/state` / `$app/stores`
+ * shims read this (dev) to warn on a page read: inside a mounted MFE island the page store is the
+ * SHELL's document singleton, never the MFE's (its own seed stops at the fragment boundary), so
+ * `page.data` there is a repaint mismatch waiting to happen. Same slot discipline as the cursor
+ * above — the shell runtime SETS it, the foreign build's shim READS it, one `Symbol.for` slot.
+ */
+const FOREIGN_HYDRATE = Symbol.for('ogygia.context.foreign-hydrate');
+
+export interface ForeignHydrate {
+	/** The MFE origin the island's entry was loaded from. */
+	origin: string;
+	/** The absolute entry URL — the island's identity for once-per-island warnings. */
+	entry: string;
+}
+
+/** Runtime marks the foreign island it is about to delegate-hydrate (null when done). */
+export function set_foreign_hydrate(info: ForeignHydrate | null) {
+	g[FOREIGN_HYDRATE] = info;
+}
+
+/** The foreign island currently hydrating (or null) — read by the page shims' dev warning. */
+export function foreign_hydrate(): ForeignHydrate | null {
+	return (g[FOREIGN_HYDRATE] as ForeignHydrate | null) ?? null;
+}

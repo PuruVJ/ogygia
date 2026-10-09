@@ -132,7 +132,9 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 				}) as unknown as ListRemote<Out>;
 			},
 
-			get<Out = { id: string; data: T } | null>(options: LiveGetOptions<T, Out> = {}): GetRemote<Out> {
+			get<Out = { id: string; data: T } | null>(
+				options: LiveGetOptions<T, Out> = {}
+			): GetRemote<Out> {
 				const filter = c.compose(options.filter);
 				const notFound = ('notFound' in options ? options.notFound : null) as Out;
 				const map = options.map ?? ((e: ContentRef<T>) => ({ id: e.id, data: e.data }) as Out);
@@ -142,10 +144,10 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 					return map(await c.withGraph(e));
 				};
 
-				return query.live(string_arg, async function* (id: string) {
+				return query.live(string_arg, async function* (id: unknown) {
 					await c.ready();
-					yield await project(id);
-					for await (const _ of c.watchChanges()) yield await project(id);
+					yield await project(id as string);
+					for await (const _ of c.watchChanges()) yield await project(id as string);
 				}) as unknown as GetRemote<Out>;
 			}
 		}

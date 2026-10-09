@@ -76,6 +76,46 @@ export class PageState {
 	}
 }
 
+// KIT-WORLD PAGE THREAD (read side). On a Kit-booted (csr=true) document the ogygia runtime never
+// runs, so nothing ever seeds `page_state` — a module SHARED between an island and a Kit page then
+// read `data: {}` through the shims, and a real app's `page.data._locale.toLowerCase()` in onMount
+// threw inside Kit's synchronous hydrate flush, killing every mount after it (the bcms all-products
+// outage). The fix is a thread between the two worlds: two lines appended to Kit's generated client
+// app entry (see KIT_PAGE_THREAD in vite/index.ts) publish Kit's REAL reactive `page` on this
+// well-known symbol, and the shims prefer it whenever it exists. Kit's entry evaluates exactly when
+// Kit boots and never ships to csr=false pages — so on csr=false documents the symbol is never set
+// and the seeded shim path is untouched.
+/** Kit's real `$app/navigation`, as published by the thread — the `$app/navigation` shim (and
+ *  `ogygia/app`) delegate every call here on a Kit-booted document. Typed loosely on purpose: the
+ *  shim forwards arguments as given; Kit's own types apply at the call site. */
+export interface KitNavigation {
+	goto(url: string | URL, opts?: unknown): Promise<void>;
+	invalidate(resource?: unknown): Promise<void>;
+	invalidateAll(): Promise<void>;
+	preloadData(url: string | URL): Promise<unknown>;
+	preloadCode(url?: string): Promise<void>;
+	pushState(url: string | URL, state: unknown): void;
+	replaceState(url: string | URL, state: unknown): void;
+	disableScrollHandling(): void;
+	beforeNavigate(callback: (navigation: unknown) => void): void;
+	afterNavigate(callback: (navigation: unknown) => void): void;
+	onNavigate(callback: (navigation: unknown) => unknown): void;
+}
+
+export interface KitPageBridge {
+	page: PageSnapshot;
+	navigating: { current: unknown };
+	/** Kit's real `$page` store — `$app/stores` shim subscribers delegate here so they stay
+	 *  LIVE through Kit navigations (the state getters above are already live by delegation). */
+	page_store?: { subscribe(run: (value: PageSnapshot) => void): () => void };
+	/** Kit's real navigation module (see {@link KitNavigation}). Absent on an older thread. */
+	navigation?: KitNavigation;
+}
+const KIT_PAGE_KEY = Symbol.for('ogygia.kit-page');
+export function kit_bridge(): KitPageBridge | null {
+	return (globalThis as unknown as Record<symbol, KitPageBridge | undefined>)[KIT_PAGE_KEY] ?? null;
+}
+
 // One instance across EVERY bundle. In production the runtime and island entries share a single
 // `page-store` chunk, so a module-local `new PageState()` was already a singleton — but `vite dev`
 // serves this module as two instances (the runtime imports it relatively; islands reach it through
@@ -83,6 +123,8 @@ export class PageState {
 // updated one instance while an island read the other → stale `page.url`/`params` after SPA nav
 // (e.g. a sidebar's active link stuck on the old page in dev). A `globalThis` + `Symbol.for` handle
 // is one instance regardless of how many times the module is evaluated. PAGE-STATE-SINGLETON.
+import { foreign_hydrate } from '../current-region.js';
+
 const PAGE_STATE_KEY = Symbol.for('ogygia.page-state');
 const global_scope = globalThis as unknown as Record<symbol, PageState | undefined>;
 export const page_state: PageState = (global_scope[PAGE_STATE_KEY] ??= new PageState());
@@ -99,4 +141,31 @@ export function reset_page(): void {
 
 export function subscribe_page(fn: () => void): () => void {
 	return page_state.subscribe(fn);
+}
+
+// FOREIGN PAGE READ (dev warning, fragment federation). Inside a mounted MFE island this store is
+// the SHELL's: one singleton per document, seeded from the shell's page script — the MFE's own seed
+// sits in its `<head>`, which the fragment boundary drops. So a read of page.data / params / route
+// / form / error during that island's hydrate sees the shell's values, while the island's SSR HTML
+// was rendered with the MFE's own load: it will repaint with different values (often `undefined`).
+// The shell runtime marks the foreign hydrate (`set_foreign_hydrate`); this warns once per island
+// entry. `page.url` / `status` / `state` stay silent — the URL is the same on both sides.
+// The once-set lives on `globalThis` for the same reason `page_state` does (PAGE-STATE-SINGLETON):
+// `vite dev` evaluates this module more than once per document, and a module-local set printed
+// the same island twice.
+const WARNED_FOREIGN_KEY = Symbol.for('ogygia.foreign-page-warned');
+const warned_foreign_entries: Set<string> = ((
+	globalThis as unknown as Record<symbol, Set<string> | undefined>
+)[WARNED_FOREIGN_KEY] ??= new Set<string>());
+export function warn_foreign_page_read(expr: string): void {
+	if (!import.meta.env.DEV) return;
+	const f = foreign_hydrate();
+	if (!f || warned_foreign_entries.has(f.entry)) return;
+	warned_foreign_entries.add(f.entry);
+	console.warn(
+		`[ogygia] ${expr} was read inside a mounted MFE island (${f.entry}, from ${f.origin}).\n` +
+			`In the browser this is the SHELL's page, not the MFE's. The HTML you see was rendered with ` +
+			`the MFE's own load data, so this island will repaint with different values after hydrate.\n` +
+			`Pass the value as a prop, or read it with a remote function.`
+	);
 }

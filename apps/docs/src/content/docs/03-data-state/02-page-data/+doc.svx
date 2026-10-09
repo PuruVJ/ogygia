@@ -1,0 +1,80 @@
+---
+title: Page data
+summary: $page.data (your load data, plus url / params / route / status / form / error) reads inside islands. A load that returns a promise streams into the island live.
+related:
+  - data-state/remote-functions
+  - data-state/state-context
+  - regions/client-islands
+---
+
+An island reads `$page.data`, and the rest of the page object of Kit, exactly as a normal Kit component does. Your `load` runs on the server as always. Its data reaches each island on the page.
+
+```svelte title=Greeting.svelte
+<script>
+  import { page } from '$app/state';
+</script>
+
+<p>Bonjour, {page.data.user.name} — you are on {page.url.pathname}</p>
+```
+
+All of the page object crosses the boundary: `data`, `params`, `url`, `route`, `status`, `form`, and `error`. It is the same data that your `load` returns, treated as client-visible: the same contract as a `csr = true` Kit page.
+
+::: tip When to use
+Use this when an island needs the own data of the page (the current user, the route params, a `form` action result), without a prop threaded down. For data that an island fetches *itself* (on demand, on a click), use a [remote function](/docs/data-state/remote-functions).
+:::
+
+## Streaming promises
+
+Kit lets `load` return a **promise** at any level of `data`: you send the page now, and the value follows when it resolves. On a normal Kit page, the browser streams it in. A `csr = false` page has no page-level hydration. Thus the own stream of Kit is inert there. But an **island has a client**. Thus ogygia streams the promise into the island.
+
+```ts title=+page.server.ts
+export const load = () => ({
+  country: 'FR',                                   // sent immediately
+  slow: fetch('/api/recommendations').then((r) => r.json())  // a promise — streamed
+});
+```
+
+```svelte title=Recs.svelte
+<script>
+  import { page } from '$app/state';
+</script>
+
+{#await page.data.slow}
+  <p>Loading recommendations…</p>
+{:then recs}
+  <ul>{#each recs as r}<li>{r.title}</li>{/each}</ul>
+{/await}
+```
+
+The page shell, and the `Loading…` branch of the island, **paint immediately**. The first paint is never blocked on the slowest promise. Each promise resolves on its own as it settles (fast ones first). The `{#await}` of the island flips to its result live, with no extra request.
+
+A promise that **rejects** streams as an error, and shows the `{:catch}` branch. A promise that resolves to a value that holds **more promises** streams those too, recursively: the same as Kit.
+
+## Custom types
+
+Types that you teach Kit through the [`transport`](https://svelte.dev/docs/kit/hooks#Universal-hooks-transport) hook round-trip into islands as real instances, both in plain data and inside a streamed promise. This is not limited to built-in types like `Date` and `Map`.
+
+```ts title=src/hooks.ts
+import * as ogygia from 'ogygia';
+
+export class Money {
+  constructor(public cents: number) {}
+  get pretty() { return `$${(this.cents / 100).toFixed(2)}`; }
+}
+
+export const transport = {
+  ...ogygia.transport,
+  Money: { encode: (v) => v instanceof Money && [v.cents], decode: ([c]) => new Money(c) }
+};
+```
+
+`page.data.price.pretty` then operates inside the island. The getter runs, because `decode` rebuilt the class, not a plain copy.
+
+## Notes
+
+- **A component shared with a `csr = true` page** reads the correct page object in both worlds. On an island page, the seed feeds it. On a Kit-hydrated page, ogygia threads the own live `page` of Kit through to it. To read `page.data` in a shared header/footer is safe in all locations. No guards are needed.
+- **A `form` action result** (`page.form`) and `page.error` reach islands the same way. Thus an island can render the outcome of a `<form method="POST">` without a prop.
+- **Client navigation** (the [SPA router](/docs/app/spa-router)) cannot run streamed scripts in the middle of a swap. Thus, on those loads, a promise is awaited on the server, and handed to the island already settled. `page.data.x` is still a promise that you `{#await}`. Thus your island code is identical in both cases.
+- **Treat load data as client-visible**, exactly as on a `csr = true` page: it is serialized into the HTML. Do not put secrets in `load` data that you would not ship to the browser.
+- A **server island** (`render: 'deferred'`) renders in isolation on its own endpoint, and does not receive the page seed. Give it what it needs through its props, or a remote function.
+- **The seed is shaped to what is read.** The build reads every module that imports `$app/state` or `$app/stores` and records the top-level `page.data` keys it reaches — `page.data.x`, `$page?.data?.x`, `page.data['x']`, `const { x } = page.data`, through aliases like `const v = get(page)` or `derived(page, ($p) => …)`. A page then ships only the keys its islands read (plus any node an island's props point into). A read the build cannot pin to a literal key — `page.data` handed to a function, aliased whole, spread, indexed with a variable, `page.subscribe(…)`, the whole `page` passed on — ships everything, as before. So on a page whose load returns a large tree for the server render, read literal keys in islands and the seed stays small; the build names the file and line whenever a read forces the whole tree to ship.

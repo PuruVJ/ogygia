@@ -3,15 +3,40 @@ import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-	// PROFILER_SOURCEMAPS=1 emits server .map files so ogygia/profiler maps bundled frames back
-	// to source and recovers anonymous names,. Off by default.
-	build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined,
+	// (the profiler's server build writes hidden maps by itself; PROFILER_NO_SOURCEMAPS=1 builds without
+	// any, the way an app that turned them off does — what the answer key's `--no-maps` measures)
+	build: {
+		...(process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : {}),
+		...(process.env.PROFILER_NO_SOURCEMAPS ? { sourcemap: false } : {})
+	},
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
 		ogygia({
+			// The debarrel pass, ON for the whole playground: every e2e run builds and serves the app the
+			// way a customer with `barrels: true` does. REGRESSION (customer build, 2026-09-15): the pass
+			// rewrote `import { Ticker } from '$lib/barrel'` fed to `asRegion(Ticker)` into a leaf import,
+			// the transform minted a different island id from the one the prescan derived from the raw
+			// file, and the server manifest imported a virtual entry nobody registered ("Rolldown failed
+			// to resolve import virtual:ogygia/island/<id>.js from virtual:ogygia/server-manifest"). The
+			// /as-region and /ts-registry fixtures are that shape; with this on, the build is the test.
+			barrels: true,
+			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
+			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
+			// (+ the background recorders, exercised by the hell page: a trap for any request over 400 ms,
+			// and a 1 s coarse sample every 20 s folded into the dashboard's always-on table)
+			// serverTiming on in the built preview too: the hell page's own API routes then answer the
+			// profiler's nested-trace ask, so the waterfall shows "inside the upstream"
+			profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true },
 			// Markdown content pipeline (stock defaults) so the `.svx` fixture behind e2e/content-css
 			// compiles — that check guards content-body scoped CSS shipping to a csr=false page.
 			content: { markdown: {} },
+			// DEVTOOLS event layer — OFF by default (so the suite + bundle-size snapshot stay honest and
+			// e2e/devtools.ts proves tree-shaking); flip on with OGYGIA_DEVTOOLS=1 to run the event-driven
+			// proof-of-value build. Env-gated, not always-on, precisely so the default build ships nothing.
+			devtools: !!process.env.OGYGIA_DEVTOOLS,
+			// Opt IN to server-delta nav (off by default) so e2e/server-delta.ts exercises the protocol:
+			// an SPA nav sends `x-ogygia-known`, the server skips re-rendering the island the client keeps.
+			router: { serverDelta: true },
 			regions: {
 				// global default rootMargin for every `wake: 'visible'` island (per-import wins)
 				visible: { margin: '0px' },
@@ -24,7 +49,10 @@ export default defineConfig({
 					frozenSwr: { render: 'live', wake: 'load' },
 					// a deferred hole that opts INTO a browser cache (default is no-store): 1h max-age,
 					// signed into the endpoint. Exercised by verify/server-islands.ts.
-					cachedGreeting: { render: 'deferred', maxAge: '1h' }
+					cachedGreeting: { render: 'deferred', maxAge: '1h' },
+					// the hell page's second recommendations hole: a render cache the profiler's hole
+					// economics can watch (hits vs misses)
+					cachedRecs: { render: 'deferred', maxAge: '5m' }
 				}
 			}
 		}),

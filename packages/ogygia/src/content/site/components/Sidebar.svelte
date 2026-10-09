@@ -12,6 +12,9 @@
 	import type { Site } from '../site.js';
 	import type { NavLeaf, NavTree } from '../types.js';
 
+	// ── regexes
+	const NON_IDENT_CHARS_G = /[^a-zA-Z0-9_-]+/g;
+
 	let {
 		site,
 		base,
@@ -36,7 +39,7 @@
 	const fetched: NavTree = nav ? [] : the_site ? await the_site.nav({ base: the_base }) : [];
 	// The tree is REACTIVE to the `nav` prop: this island is commonly KEPT (`keep: 'og-sidebar'`), and
 	// on every SPA navigation the router pushes the incoming page's props into the persisted app
-	// (`absorbPersistProps` → LiveHost.setProps). A version/locale switch therefore swaps the tree IN
+	// (`absorbKeptProps` → LiveHost.setProps). A version/locale switch therefore swaps the tree IN
 	// PLACE — new links, new base prefixes — without a re-mount, so the active chip still glides.
 	const tree: NavTree = $derived(nav ?? fetched);
 
@@ -54,7 +57,7 @@
 	 * key (href/label) is, so we sanitise it to a valid custom-ident and prefix by row kind.
 	 */
 	function vt_name(prefix: string, key: string): string {
-		return `${prefix}-${key.replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
+		return `${prefix}-${key.replace(NON_IDENT_CHARS_G, '-')}`;
 	}
 
 	/**

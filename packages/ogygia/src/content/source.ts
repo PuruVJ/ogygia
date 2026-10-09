@@ -114,7 +114,8 @@ function defaultGlobIds(keys: string[]): Map<string, string> {
 	const norm = keys.map((k) => k.replace(BACKSLASH, '/').split('?')[0]);
 	let prefix = norm[0] ? norm[0].slice(0, norm[0].lastIndexOf('/') + 1) : '';
 	for (const p of norm.slice(1)) {
-		while (prefix && !p.startsWith(prefix)) prefix = prefix.slice(0, prefix.slice(0, -1).lastIndexOf('/') + 1);
+		while (prefix && !p.startsWith(prefix))
+			prefix = prefix.slice(0, prefix.slice(0, -1).lastIndexOf('/') + 1);
 	}
 	const out = new Map<string, string>();
 	keys.forEach((key, i) => {

@@ -15,8 +15,20 @@ const NS_HTML = 'http://www.w3.org/1999/xhtml';
 const NS_SVG = 'http://www.w3.org/2000/svg';
 
 const VOID = new Set([
-	'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-	'link', 'meta', 'param', 'source', 'track', 'wbr'
+	'area',
+	'base',
+	'br',
+	'col',
+	'embed',
+	'hr',
+	'img',
+	'input',
+	'link',
+	'meta',
+	'param',
+	'source',
+	'track',
+	'wbr'
 ]);
 const FORMISH = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'OPTION']);
 
@@ -47,11 +59,31 @@ class DomNode {
 		this.ownerDocument = doc as DomDocument;
 	}
 
-	get parentNode(): DomNode | null { return this._parent; }
-	get firstChild(): DomNode | null { return this._first; }
-	get lastChild(): DomNode | null { return this._last; }
-	get nextSibling(): DomNode | null { return this._next; }
-	get previousSibling(): DomNode | null { return this._prev; }
+	get parentNode(): DomNode | null {
+		return this._parent;
+	}
+	/** The parent when it is an element (not the document / a fragment), else null — DOM `parentElement`. */
+	get parentElement(): DomNode | null {
+		const p = this._parent;
+		return p && p.nodeType === 1 ? p : null;
+	}
+	/** DOM `contains`: self-inclusive ancestor test (walks the `_parent` chain). */
+	contains(other: DomNode | null): boolean {
+		for (let n: DomNode | null = other; n; n = n._parent) if (n === this) return true;
+		return false;
+	}
+	get firstChild(): DomNode | null {
+		return this._first;
+	}
+	get lastChild(): DomNode | null {
+		return this._last;
+	}
+	get nextSibling(): DomNode | null {
+		return this._next;
+	}
+	get previousSibling(): DomNode | null {
+		return this._prev;
+	}
 
 	get childNodes(): DomNode[] {
 		const out: DomNode[] = [];
@@ -62,8 +94,10 @@ class DomNode {
 	_detach(node: DomNode): void {
 		const prev = node._prev;
 		const next = node._next;
-		if (prev) prev._next = next; else this._first = next;
-		if (next) next._prev = prev; else this._last = prev;
+		if (prev) prev._next = next;
+		else this._first = next;
+		if (next) next._prev = prev;
+		else this._last = prev;
 		node._parent = node._prev = node._next = null;
 	}
 
@@ -73,13 +107,24 @@ class DomNode {
 		node._parent = this;
 		node._prev = prev;
 		node._next = ref;
-		if (prev) prev._next = node; else this._first = node;
-		if (ref) ref._prev = node; else this._last = node;
+		if (prev) prev._next = node;
+		else this._first = node;
+		if (ref) ref._prev = node;
+		else this._last = node;
 		return node;
 	}
 
-	appendChild(node: DomNode): DomNode { return this.insertBefore(node, null); }
-	removeChild(node: DomNode): DomNode { this._detach(node); return node; }
+	appendChild(node: DomNode): DomNode {
+		return this.insertBefore(node, null);
+	}
+	replaceChildren(...nodes: DomNode[]): void {
+		while (this._first) this._detach(this._first);
+		for (const n of nodes) this.appendChild(n);
+	}
+	removeChild(node: DomNode): DomNode {
+		this._detach(node);
+		return node;
+	}
 
 	replaceChild(next: DomNode, old: DomNode): DomNode {
 		this.insertBefore(next, old);
@@ -102,7 +147,9 @@ class DomNode {
 		if (v !== '') this.appendChild(this.ownerDocument.createTextNode(v));
 	}
 
-	cloneNode(_deep?: boolean): DomNode { throw new Error('abstract'); }
+	cloneNode(_deep?: boolean): DomNode {
+		throw new Error('abstract');
+	}
 }
 
 class DomText extends DomNode {
@@ -135,7 +182,9 @@ class DomElement extends DomNode {
 		this.tagName = tagName;
 	}
 
-	get attributes(): Attr[] { return this._attrs; }
+	get attributes(): Attr[] {
+		return this._attrs;
+	}
 
 	getAttribute(name: string): string | null {
 		const a = this._attrs.find((x) => x.name === name);
@@ -154,7 +203,9 @@ class DomElement extends DomNode {
 		if (i >= 0) this._attrs.splice(i, 1);
 	}
 
-	get id(): string { return this.getAttribute('id') ?? ''; }
+	get id(): string {
+		return this.getAttribute('id') ?? '';
+	}
 
 	get children(): DomElement[] {
 		const out: DomElement[] = [];
@@ -177,19 +228,48 @@ class DomElement extends DomNode {
 		}
 		return this.getAttribute('value') ?? '';
 	}
-	set value(v: string) { this._value = String(v); }
+	set value(v: string) {
+		this._value = String(v);
+	}
 
 	get checked(): boolean {
 		if (this._checked !== null) return this._checked;
 		return this.hasAttribute('checked');
 	}
-	set checked(v: boolean) { this._checked = !!v; }
+	set checked(v: boolean) {
+		this._checked = !!v;
+	}
 
 	get selected(): boolean {
 		if (this._selected !== null) return this._selected;
 		return this.hasAttribute('selected');
 	}
-	set selected(v: boolean) { this._selected = !!v; }
+	set selected(v: boolean) {
+		this._selected = !!v;
+	}
+
+	/** Minimal selectors — a comma list of `tag`, `[attr]`, `tag[attr]` — what `morph.ts` needs. */
+	querySelectorAll(selector: string): DomElement[] {
+		const tests = selector.split(',').map((part) => {
+			const m = part.trim().match(/^([a-zA-Z][\w-]*)?(?:\[([\w-]+)\])?$/);
+			if (!m || (!m[1] && !m[2])) throw new Error('dom shim: unsupported selector ' + part);
+			const tag = m[1] ? m[1].toUpperCase() : null;
+			const attr = m[2] ?? null;
+			return (e: DomElement) =>
+				(tag === null || e.tagName === tag) && (attr === null || e.hasAttribute(attr));
+		});
+		const out: DomElement[] = [];
+		const walk = (n: DomNode): void => {
+			for (let c = n._first; c; c = c._next) {
+				if (c.nodeType !== 1) continue;
+				const e = c as DomElement;
+				if (tests.some((t) => t(e))) out.push(e);
+				walk(c);
+			}
+		};
+		walk(this);
+		return out;
+	}
 
 	private querySelectorOptions(): DomElement[] {
 		const out: DomElement[] = [];
@@ -203,11 +283,20 @@ class DomElement extends DomNode {
 		return out;
 	}
 
-	focus(): void { this.ownerDocument._active = this; }
-	blur(): void { if (this.ownerDocument._active === this) this.ownerDocument._active = null; }
+	focus(): void {
+		this.ownerDocument._active = this;
+	}
+	blur(): void {
+		if (this.ownerDocument._active === this) this.ownerDocument._active = null;
+	}
 
 	cloneNode(deep?: boolean): DomNode {
-		const copy = new DomElement(this.ownerDocument, this.namespaceURI, this.localName, this.tagName);
+		const copy = new DomElement(
+			this.ownerDocument,
+			this.namespaceURI,
+			this.localName,
+			this.tagName
+		);
 		copy._attrs = this._attrs.map((a) => ({ name: a.name, value: a.value }));
 		// A clone reflects attributes, not dirty property state (matches the browser).
 		if (deep) for (let n = this._first; n; n = n._next) copy.appendChild(n.cloneNode(true));
@@ -239,7 +328,9 @@ class DomDocument extends DomNode {
 		this.ownerDocument = this;
 	}
 
-	get activeElement(): DomElement | null { return this._active; }
+	get activeElement(): DomElement | null {
+		return this._active;
+	}
 
 	createElement(tag: string): DomElement {
 		const l = tag.toLowerCase();
@@ -250,15 +341,21 @@ class DomDocument extends DomNode {
 		// SVG (and other) namespaces preserve source case for both localName and tagName.
 		return new DomElement(this, ns, name, name);
 	}
-	createTextNode(data: string): DomText { return new DomText(this, data, 3); }
-	createComment(data: string): DomText { return new DomText(this, data, 8); }
+	createTextNode(data: string): DomText {
+		return new DomText(this, data, 3);
+	}
+	createComment(data: string): DomText {
+		return new DomText(this, data, 8);
+	}
 	createDocumentFragment(): DomNode {
 		const f = new DomNode(this);
 		f.nodeType = 11;
 		return f;
 	}
 
-	importNode(node: DomNode, deep?: boolean): DomNode { return node.cloneNode(deep); }
+	importNode(node: DomNode, deep?: boolean): DomNode {
+		return node.cloneNode(deep);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +399,10 @@ function parse(doc: DomDocument, html: string): DomNode[] {
 			const end = html.indexOf('>', i);
 			let content = html.slice(i + 1, end);
 			let self_close = false;
-			if (content.endsWith('/')) { self_close = true; content = content.slice(0, -1); }
+			if (content.endsWith('/')) {
+				self_close = true;
+				content = content.slice(0, -1);
+			}
 			const { name, attrs } = parse_tag(content);
 			const parent = top();
 			const lname = parent.ns === NS_SVG ? name : name.toLowerCase();

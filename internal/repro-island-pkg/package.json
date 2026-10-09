@@ -1,0 +1,20 @@
+{
+	"name": "repro-island-pkg",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"ogygia": {
+		"files": ["./src/widgets", "./src/pages/**/*.svelte", "./src/routes.ts"]
+	},
+	"exports": {
+		"./routes": "./src/routes.ts",
+		"./Panel.svelte": {
+			"types": "./src/widgets/Panel.svelte.d.ts",
+			"svelte": "./src/widgets/Panel.svelte",
+			"default": "./src/widgets/Panel.svelte"
+		}
+	},
+	"dependencies": {
+		"ogygia": "workspace:*"
+	}
+}

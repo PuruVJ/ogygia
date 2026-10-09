@@ -12,13 +12,20 @@
  * @internal
  */
 export { default as Region } from './Region.svelte';
-export { isNested, setNested } from './context.js';
+// The foreign-hydrate contract (fragment federation) hydrates through the PRODUCER'S
+// NestedProvider — the native runtime's exact call shape, compiled by the producer's build.
+export { default as NestedProvider } from './NestedProvider.svelte';
+export { og_entry_hydrate, og_entry_unmount } from './entry-hydrate.js';
+export { isNested, setNested, documentIsCsrTrue } from './context.js';
 
 // Transportable-class registration. Generated code appended to app modules imports
 // `__register_transportable` from here (a re-export barrel — tree-shaking drops the
 // component exports above, so tagging a plain `.svelte.ts` state file never pulls island
 // component code into its chunk).
 export { __register_transportable } from './live-transport.js';
+export { __og_$, __register_fn } from './fn-transport.js';
+export { __og_store, __register_store_factory, mark_store } from './store-transport.js';
+export { __og_boundary, configure_boundary } from './boundary.js';
 export { __tag_context } from './context-bridge.js';
 
 // Compiler-emitted currency — never hand-authored, so they live on the INTERNAL barrel (the public

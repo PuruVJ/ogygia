@@ -19,22 +19,36 @@
 	 * into the browser. The runtime custom element (`core.ts`) is unchanged; only the `.svelte` wrappers
 	 * collapsed into this file.
 	 */
-	import { untrack } from 'svelte';
+	import { untrack, getContext, setContext, createRawSnippet } from 'svelte';
+	import { KIT_REQUEST_CONTEXT, kit_page_version, kit_request_event } from './server/kit-context.js';
 	import { stringify } from 'devalue';
-	import runtimeUrl from 'virtual:ogygia/runtime-url';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
-	import { islandDeps, islandCss, contentCss } from 'virtual:ogygia/island-deps';
-	import { makeRegionEndpoint, mintServerIsland } from 'virtual:ogygia/region-endpoint';
-	import { asset } from '$app/paths';
+	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
+	import { runtime_bootstrap } from './server/entry-location.js';
+	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
+	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
+	// Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike (kit-paths.ts)
+	import { kit_asset as asset } from './kit-paths.js';
 	import { building } from '$app/environment';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
-	import { isNested, setNested, isCsrTrue, claimRuntimeEmit, claim_region_css } from './context.js';
-	import { TRANSPORT_WIRE_KEY, reduce_transportable } from './live-transport.js';
-	import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
+	import { document_tail, island_graph_script, modulepreload_tag } from './server/document-tail.js';
+	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
+	import { region_css_tag } from './server/region-css.js';
+	import { escape_amp, escape_amp_quot, escape_attr } from './escape.js';
+	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
+	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
+	// (LateIslandAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
+	import LateIsland from './LateIsland.svelte';
+	// (PromiseRegionAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
+	import PromiseRegion from './PromiseRegion.svelte';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
+	import { record_server_event } from './devtools/server-registry.js';
+
+	// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
+	const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
 	/**
 	 * Every prop is optional: a HELD usage passes only `of`, a PLACEMENT usage (the transform's
@@ -44,11 +58,12 @@
 	 *   of?: import('./region.js').RegionValue | Promise<import('./region.js').RegionValue>;
 	 *   placeholder?: import('svelte').Snippet;
 	 *   children?: import('svelte').Snippet;
-	 *   __mode?: 'island' | 'server' | 'lake';
+	 *   __mode?: 'island' | 'server' | 'lake'; __baked?: boolean;
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
-	 *   __keep?: string; __entry?: string; __component?: import('svelte').Component; __css?: unknown;
+	 *   __keep?: string; __entry?: string; __src?: string; __component?: import('svelte').Component; __css?: unknown;
+	 *   __load?: () => Promise<import('svelte').Component>;
 	 *   __props?: Record<string, unknown>; __defer?: string; __margin?: string; __hydrate?: string;
-	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number;
+	 *   __hydrateMargin?: string; __module?: string; __cacheTtl?: number; __stitch?: string; __prefetch?: string;
 	 *   ogygiaFallback?: import('svelte').Snippet;
 	 *   __remount?: string; __when?: string; __maxAge?: number; __onExpire?: 'empty' | 'fetch';
 	 * }}
@@ -61,6 +76,9 @@
 		// styled HTML is still arriving. Distinct from `children` (the rendered component's slot).
 		placeholder,
 		children,
+		// A wire value whose first HTML is already in the page (PromiseRegionAwait: awaited in the server
+		// render, hydrated against the same value) — rendered once, every later value morphs in.
+		__baked = false,
 		// Placement API (the transform's wrappers): `__mode` selects island / server / lake.
 		__mode,
 		// island
@@ -70,10 +88,16 @@
 		load,
 		interaction,
 		__keep,
-		// island + server shared
+		// island + server shared. `__entry` is the island's IDENTITY (its stable URL); `__src` its
+		// LOCATION — the content-hashed file to load — which only the client build knows (its wrapper
+		// passes the bundler's own name for it). The server finds the location in the build handoff.
 		__entry = '',
+		__src = '',
 		__component,
 		__css,
+		// The client wrapper's on-demand component fetch (its lazy module answered `undefined`: a
+		// Kit document that did not render this island). See `late_load`.
+		__load,
 		__props,
 		// server
 		__defer = 'load',
@@ -83,6 +107,13 @@
 		__module = '',
 		// Response cache max-age in seconds for this deferred hole (absent/0 → no-store). Signed at mint.
 		__cacheTtl,
+		// Stitching mark: `'serve'` (the freeze serve path fills the hole at origin, per visitor,
+		// fail-open) or `'edge'` (the freeze capture rewrites it into an ESI include the CDN
+		// fills — the shell stays edge-cached). Emitted as the hole's `stitch` attribute.
+		__stitch = '',
+		// Warm schedule for a deferred hole (`prefetch` attribute): the runtime fills the frame store
+		// on it, ahead of `__defer` (the swap). Absent → the hole fetches on `__defer` only.
+		__prefetch = '',
 		ogygiaFallback,
 		// lake
 		__remount = 'cache',
@@ -97,6 +128,8 @@
 
 	const LT = String.fromCharCode(60); // <
 	const GT = String.fromCharCode(62); // >
+	/** Context mark: "this subtree renders inside Kit's own page pass" (see `kit_page_pass`). */
+	const KIT_PAGE_PASS = Symbol.for('ogygia.kit-page-pass');
 
 	// ─────────────────────────────────────────────── held: resolve (Promise `of`) ──
 	// `of` may be a Promise<RegionValue> (a remote call). Note an awaitable dual IS thenable too —
@@ -113,24 +146,16 @@
 				'promise resolves and its stylesheet loads. Add {#snippet placeholder()}…{/snippet} for the wait.'
 		);
 	}
-	/** @type {import('./region.js').RegionValue | undefined} */
-	let awaited = $state(undefined);
-	// What every held branch below renders. A plain value resolves synchronously (SSR renders it in
-	// this same pass — blocks/SDUI never see a placeholder). A promise resolves client-side only.
-	const resolved = $derived(of_is_promise ? awaited : /** @type {import('./region.js').RegionValue | undefined} */ (of));
-	$effect(() => {
-		if (!of_is_promise) return;
-		const p = /** @type {Promise<import('./region.js').RegionValue>} */ (of);
-		let live = true;
-		// LAG, don't clear: on a re-search `of` is a NEW promise — keep showing the previous value
-		// until the new one lands, so the old content morphs instead of flashing through empty.
-		Promise.resolve(p).then((r) => {
-			if (live) awaited = r;
-		});
-		return () => {
-			live = false;
-		};
-	});
+	// A promise is PromiseRegion's (the template hands it over): how it waits — in the render where the
+	// app runs async mode, a late slot on a streamed document, after hydration otherwise — is decided
+	// there, and what it resolves to comes back here as a value. Region renders values.
+	// What every held branch below renders: a value resolves synchronously (SSR renders it in this
+	// same pass — blocks/SDUI never see a placeholder).
+	const resolved = $derived(of_is_promise ? undefined : /** @type {import('./region.js').RegionValue | undefined} */ (of));
+	// A LIVE region (a wire value with HTML, a deferred hole) is the runtime's to paint, on a Kit-hydrated
+	// page too; so is the one a promise will resolve to.
+	// svelte-ignore state_referenced_locally
+	const holds_live = of_is_promise || /** @type {{ kind?: string } | undefined} */ (of)?.kind === 'deferred';
 
 	// A held interactive dual renders exactly like a placed island — same SSR-inline + self-hydrate —
 	// so both feed the island branch. A held static dual (no schedule) renders bare, like inline.
@@ -147,61 +172,74 @@
 	// svelte-ignore state_referenced_locally
 	const is_lake = __mode === 'lake';
 
-	// Capture the page snapshot for the island seed. On SSR this reads Kit's REAL `$app/state` page —
-	// the only place the resolved load `data` is reachable (Kit merges it locally in render.js, never
-	// on RequestState, and reading page in a hook throws). The handle records it into the
-	// `application/ogygia-page` seed, so a hydrated island's `$page.data` / `.form` / `.error` /
-	// `.status` are populated (boundary law: page.data crosses). No-op on the client (recorder unset;
-	// the client `page` is already the shim seed), and a harmless no-op in an isolated server-island
-	// endpoint render (no recorder installed there either). `untrack` — one snapshot read, no dep.
-	if (typeof window === 'undefined') {
-		untrack(() => {
-			try {
-				record_page({ data: page.data, form: page.form, error: page.error, status: page.status });
-			} catch {
-				/* isolated render without a live page — the recorder is unset there anyway */
-			}
-		});
-	}
-
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
 	const nested = isNested();
+
+	// `requestEvent()` inside a region rendered by Kit's OWN page pass: Kit's `__request__` context
+	// carries `{ page }` only (ogygia's render roots add `event` themselves). Re-set the same key
+	// for this region's subtree with the live event, so a component inside any island / lake /
+	// server island reads the request the same way wherever it renders. Server only, once per
+	// region, and only when no ancestor already did.
+	//
+	// The same fact — `{ page }` with no `event` — is what tells a KIT PAGE PASS apart from every
+	// other render root (a hole endpoint, a baked held region, a router document, a late region):
+	// only in Kit's own pass does the whole document flow through the handle's `transformPageChunk`,
+	// so only there can an island's props sidecar be deferred to the end of the body. The outermost
+	// region stamps the fact into context for its subtree (its own re-set of the request context
+	// hides the bare `{ page }` from nested regions).
+	let kit_page_pass = false;
+	// …and the positive twin: a render root OGYGIA started (`kit_render_context` hands every one the live
+	// event beside the page) — never Kit's own pass, whose `{ page }` carries none.
+	let ogygia_root = false;
+	if (typeof window === 'undefined') {
+		const req = /** @type {{ page?: unknown; event?: unknown } | undefined} */ (getContext(KIT_REQUEST_CONTEXT));
+		kit_page_pass = getContext(KIT_PAGE_PASS) === true || !!(req && req.event == null);
+		ogygia_root = !kit_page_pass && !!(req && req.event != null);
+		if (kit_page_pass && getContext(KIT_PAGE_PASS) !== true) setContext(KIT_PAGE_PASS, true);
+		if (req && req.event == null) {
+			const event = kit_request_event();
+			if (event) setContext(KIT_REQUEST_CONTEXT, { ...req, event });
+		}
+	}
+	// THE DOCUMENT TAIL (server/document-tail.ts) for this render — non-null only inside Kit's page
+	// pass with a request tail installed. What the hints, the props sidecar and the seed-relative
+	// props codec all key on (see each site below).
+	const tail = typeof window === 'undefined' && kit_page_pass ? document_tail() : null;
 	// csr=true rule (ISLANDS only): on a Kit-hydrated page an interactive region should render its
 	// component INLINE in the Kit tree — no `<ogygia-region>`, no runtime — because Kit already
 	// hydrates it. Same degradation as `nested`, gated by the csr context the transform injects into
 	// csr=true route hosts. Server/deferred + lake regions are SERVER-DRIVEN UI, orthogonal to a
 	// page's csr, so they are deliberately NOT degraded here (they keep their endpoint + runtime).
-	const is_csr = isCsrTrue();
+	// Does Kit hydrate this WHOLE document? (the leaf page's effective csr — the one fact that decides
+	// it.) If so, every island degrades to a plain inline component on both legs: no `<ogygia-region>`,
+	// no runtime claim, no FOUC. Server reads the build-time csr=true route map; client reads Kit's
+	// bootstrap. Identical both legs, so the inline/island choice can never desync at hydrate.
+	// INSIDE A LAKE the answer is always false: under Kit hydration a lake is adopted as opaque DOM
+	// (the lake branch below), so Kit never reaches the regions authored inside it — they stay real
+	// `<ogygia-region>`s on every page and the runtime wakes them. Server-side in practice (a lake's
+	// inside is never rendered on the client); the runtime mirrors it with `inside_frozen`.
+	// AN ERROR RENDER (`page.error` set — Kit sets it only when rendering `+error.svelte`; a form
+	// action's `fail(400)` renders the page itself, status ≥ 400 and error null) is Kit's LAYOUT-branch
+	// decision: the page node — and its `csr = false` — is dropped, so a 404 under a client-off page is
+	// hydrated whenever the layouts say so. The server map has a twin for exactly that.
+	function page_error_render() {
+		try {
+			return page.error != null;
+		} catch {
+			return false; // isolated render without a live page (a hole endpoint, a remote's region)
+		}
+	}
+	// ONLY KIT'S OWN PASS IS KIT'S TO HYDRATE: a render root ogygia starts (a held region baked by a
+	// remote or awaited in the render, a hole, a snippet body) becomes opaque HTML Kit never walks — its
+	// islands must be real `<ogygia-region>`s the runtime wakes, whatever the document's csr.
+	const is_csr = documentIsCsrTrue(page_error_render()) && !isInLake() && !ogygia_root;
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
-	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
-		const entry = untrack(() => (is_server ? __entry : island_entry));
-		console.warn(
-			is_server
-				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
-				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
-		);
-	}
-
-	/** @param {unknown} value @param {string} entry */
-	function stringify_props(value, entry) {
-		try {
-			return stringify(value, {
-				[TRANSPORT_WIRE_KEY]: reduce_transportable,
-				[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-			});
-		} catch (e) {
-			const detail = e instanceof Error ? e.message : String(e);
-			throw new Error(
-				`[ogygia] island "${entry}": a captured prop is not serializable — ${detail}. ` +
-					`Captured host values cross the boundary via devalue; functions/Promises cannot, and a ` +
-					`class instance only can when the class declares a static [ogygia.wire] codec. ` +
-					`Pass a serializable value, add a codec, or move that logic inside the island component.`
-			);
-		}
-	}
+	// A server island nested in an island renders its component INLINE (deferred ignored): mark the
+	// subtree so a `keepFallback()` inside it fails with the reason instead of Kit's 500 page.
+	if (is_server && nested) setHoleInline();
 
 	// ─────────────────────────────────────────────────────────── island branch ──
 	// Normalized island inputs, from placement props OR a held dual. `as_dual` is the type-narrowed
@@ -213,8 +251,88 @@
 	);
 	const island_entry = $derived(as_dual ? as_dual.module : __mode === 'island' ? __entry : '');
 	const island_component = $derived(as_dual ? as_dual.component : __component);
+	// An inline island whose wrapper Kit CREATED on the client (a client-side navigation mounted it:
+	// no SSR, so no rendered stamp, so its lazy module answered `undefined`) has no component yet:
+	// LateIsland loads it through `__load`. Never on the server (the SSR wrapper imports the entry)
+	// and never at hydration (a stamped island arrives with its component in hand).
+	const late_load = $derived(typeof window !== 'undefined' && island_inline && !__component ? __load : undefined);
 	const island_props = $derived(as_dual ? as_dual.props : __props);
 	const island_children = $derived(children);
+
+	// Capture the page snapshot for the island seed. On SSR this reads Kit's REAL `$app/state` page —
+	// the only place the resolved load `data` is reachable (Kit merges it locally in render.js, never
+	// on RequestState, and reading page in a hook throws). The handle records it into the
+	// `application/ogygia-page` seed, so a hydrated island's `$page.data` / `.form` / `.error` /
+	// `.status` are populated (boundary law: page.data crosses). No-op on the client (recorder unset;
+	// the client `page` is already the shim seed), and a harmless no-op in an isolated server-island
+	// endpoint render (no recorder installed there either). `untrack` — one snapshot read, no dep.
+	//
+	// THE SEED SHIPS ONLY FOR A REGION WHOSE CLIENT CODE READS IT: `islandReadsPage(entry)` is the
+	// build's answer (the `$app/state` / `$app/stores` shim in the entry's chunk closure; fail-open for
+	// an entry the handoff does not know, and in dev). The snapshot is recorded either way — the
+	// handle also reads it for the freeze verdict and for server-side page reads — with `seed:false`
+	// when this region has no reader. A page whose islands take everything as props asks for no
+	// seed, and the handle then ships none: the whole `page.data` (hundreds of KB on a CMS page)
+	// neither serialized nor downloaded twice. A nested region hydrates with its parent, whose
+	// closure already includes it; a promise `of` resolves later with a module SSR cannot see, so it
+	// asks (fail-open).
+	//
+	// THE REMOTE SEED SHIPS ONLY FOR REMOTES SOME REGION'S CLIENT CAN CALL: `islandRemotes(entry)` is
+	// the build's list for this entry (the remote modules in its chunk closure). A region with no
+	// client entry (a lake, a static hole, an inline held value) records `[]`; the fail-open cases
+	// above record `null` ("may call anything"). The handle unions the records and seeds an
+	// SSR-resolved remote only when it is in that union — a lake or a page script awaiting a query
+	// no island imports (a whole CMS footer entry, measured 12.5 KB) no longer ships it as seed.
+	if (typeof window === 'undefined') {
+		untrack(() => {
+			const entry = nested
+				? ''
+				: is_island
+					? island_entry
+					: is_server
+						? __hydrate
+							? __module
+							: ''
+						: of_is_promise
+							? '?'
+							: of_init && of_init.kind === 'deferred'
+								? of_init.module
+								: '';
+			// SEED SHAPING: not a flag but an ask — which `page.data` keys this region's client reads
+			// (`islandPageKeys`, the build's AST answer over the chunk closure), `'all'` when the build
+			// could not pin them or does not know the entry, `false` when nothing in it reads the page.
+			const seed = !entry
+				? false
+				: entry === '?' || !islandReadsPage(entry)
+					? entry === '?'
+						? 'all'
+						: false
+					: (islandPageKeys(entry) ?? 'all');
+			const remotes = !entry ? [] : entry === '?' ? null : islandRemotes(entry);
+			try {
+				record_page(
+					{ data: page.data, form: page.form, error: page.error, status: page.status },
+					seed,
+					remotes,
+					entry === '?' ? '' : entry
+				);
+			} catch {
+				/* isolated render without a live page — the recorder is unset there anyway */
+			}
+		});
+	}
+
+	// DEV diagnostic (declared HERE, after `island_entry`, so it never reads it in its temporal dead
+	// zone): a nested island can't wake independently — warn that its strategy is ignored. Dead-code
+	// eliminated in builds via the `import.meta.env.DEV` guard.
+	if (nested && (is_island || is_server) && import.meta.env && import.meta.env.DEV) {
+		const entry = untrack(() => (is_server ? __entry : island_entry));
+		console.warn(
+			is_server
+				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
+		);
+	}
 	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
 	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
 	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
@@ -224,7 +342,8 @@
 	// ── slot crossing: an island's children render IN-PLACE, the client ADOPTS them ──
 	// The marker id fencing THIS island's children to its payload pointer. Server-assigned; the client
 	// reads it back from the serialized descriptor, never regenerates it.
-	const slot_id = next_slot_id();
+	// (counted per island entry: another island's async timing never shifts this one's id)
+	const slot_id = next_slot_id(untrack(() => island_entry) ?? '');
 	const has_slot_children = $derived(!nested && island_children != null);
 	// The BODY-side children: a server-convention snippet (`(renderer) => …`) that emits EXACTLY ONE
 	// element — `<ogygia-slot>` wrapping the natural children — with no extra snippet-layer anchors.
@@ -233,6 +352,10 @@
 	// resets the nested context so an island INSIDE the children renders as a full region (own
 	// `<ogygia-region>` + payload) and wakes independently after adoption. Server-only by construction:
 	// on a csr=false page the client never renders Region, it revives the payload's slot pointer.
+	// The SAME reset wraps a server island's `ogygiaFallback` (markup below): the fallback is the
+	// PAGE's markup rendered inside the hole's shell, not the island's tree — an island in it (a login
+	// dropdown inside an actions hole) must be a full region, or a `keepFallback()`-kept fallback
+	// would stand forever with a dead, flattened component inside it (e2e/lake-kit.spec.ts).
 	const slot_children = (renderer) => {
 		renderer.push(slot_marker_open(slot_id));
 		SlotBoundary(renderer, { children: island_children });
@@ -273,41 +396,171 @@
 				: undefined
 	);
 
-	const island_module_url = $derived(
-		nested || !island_entry ? '' : island_entry.startsWith('/@') ? island_entry : asset(island_entry)
+	// `asset()` is the sole base/assets authority — every ogygia URL is baked base-LESS (prod
+	// `/${appDir}/immutable/…`, dev `/@id/…`) and resolved here once. (Kit dev serves `/@id/…` under
+	// base, and `asset()` supplies that prefix — so we never special-case dev URLs.)
+	const island_module_url = $derived(nested || !island_entry ? '' : asset(island_entry));
+	// IDENTITY vs LOCATION (server/entry-location.ts): `island_module_url` is the island's identity
+	// (the `entry` attribute, the graph key, the fingerprint input); the file the runtime loads is its
+	// location — content-hashed, so an `immutable` cache never serves a stale one. The client build's
+	// wrapper passes it (`__src`); the server reads the build handoff. None → the identity is loaded.
+	const location_of = (/** @type {string} */ identity) => {
+		const found = identity ? entryLocation(identity) : null;
+		return found ? asset(found) : '';
+	};
+	const island_src = $derived(nested || !island_entry ? '' : __src || location_of(island_entry));
+	// (written LAST on the element: every attribute before it keeps the order it had before
+	// locations, so HTML rewriters and scans keyed on `entry="…" wake="…"` still match)
+
+	// THE WIRE PLAN (server/props-wire.ts): one walk of this island's props picks its lane (plain
+	// JSON, or devalue for anything devalue exists for) and yields the CANONICAL, seed-independent
+	// text the fingerprint hashes. The sidecar's final text is produced later, when the document
+	// tail renders — by then the request knows whether the page seed ships, and a props subtree
+	// that is a seed node crosses as a reference (seed-refs.ts), whichever island rendered first.
+	const island_wire = $derived(
+		nested || !is_island || island_inline ? null : plan_props_wire(island_props_wire, island_entry)
+	);
+	// THE ISLAND'S FINGERPRINT (server/fingerprint.ts, through the client-stubbed virtual): its
+	// module URL + canonical props text, a native digest. Emitted as data-og-fp; the client only ever
+	// READS it (the reconciler's key, the sidecar id, the `x-ogygia-known` set it sends back on nav
+	// so the server can skip re-rendering an unchanged island). A function of the props alone: the
+	// same props give the same fingerprint with or without the seed.
+	const island_fp = $derived(island_wire ? islandFingerprint(island_module_url, island_wire.canonical) : '');
+	// SERVER-DELTA (D3): SKIP rendering a NON-cached island the client already has live (its fp is
+	// in the SPA nav's x-ogygia-known set). Emit the region's identifying attrs + props script but NO
+	// component content — the reconciler keeps the live node (same data-key). Safe: known_region_fps()
+	// is empty on a full load / non-SPA request, so this never fires except on an SPA nav.
+	const island_skip = $derived(
+		is_island && !island_inline && !has_slot_children && (__cacheTtl ?? 0) <= 0 && !!island_fp
+			&& known_region_fps().has(island_fp)
+	);
+	// THE DOCUMENT TAIL (server/document-tail.ts): in Kit's page pass this region's module-preload
+	// hints and its props sidecar go to the end of the body — the handle emits the tail once, after
+	// the content, before the seeds — so the CSS and the hero are requested before a single island
+	// byte moves (480 KB of props and 1.7 MB of hinted chunks sat above the LCP image on one measured
+	// page). Any other render root has no tail (`document_tail()` → null): a hole response, a baked
+	// ticket, a router document keep their hints in the head and their sidecar adjacent, so the HTML
+	// stays self-contained wherever it is spliced. Decided once at init — the SSR pass renders each
+	// region exactly once.
+	const island_props_tail =
+		!!tail &&
+		untrack(() => {
+			const wire = island_wire;
+			const fp = island_fp;
+			if (!wire || !fp) return false;
+			// The sidecar is KEYED by the fingerprint (`data-ogygia-props` + `id`), so the runtime
+			// finds it wherever it sits — adjacent, or at the end of the body (runtime/sidecar.ts).
+			// The meta rides along for the profiler's Islands table (entry, wake, what the build saw).
+			tail.props(fp, wire, {
+				entry: island_entry,
+				// Svelte names the SSR function after the file (ProductCard.svelte → ProductCard) and
+				// the name survives a production bundle — the same name the profiler's CPU samples carry
+				name: island_component?.name ?? '',
+				// the module as SERVED (its location): what the profiler weighs
+				module_url: island_src || island_module_url,
+				wake: hydrate_attr,
+				interactivity: islandInteractivity(island_entry)
+			});
+			return true;
+		});
+	// Adjacent sidecar (no tail: a hole response, a baked ticket, a router document, a test render):
+	// self-contained, never seed-relative.
+	const island_props_inline = $derived(
+		island_props_tail || !island_wire ? '' : props_sidecar(island_fp, island_wire.wire(null), 'adjacent', island_wire.wire_modules)
 	);
 
-	const island_payload = $derived(
-		nested ? '' : stringify_props(island_props_wire, island_entry).split(LT).join('\\u003C')
-	);
-	const island_props_script = $derived(
-		LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + island_payload + LT + '/script' + GT
-	);
-
-	// `wake: 'load'` — modulepreload facade + dep chunks in <head> so discovery is early.
-	const island_preload = $derived.by(() => {
-		if (island_inline || !is_island || hydrate_attr !== 'load' || !island_module_url) return '';
-		const hrefs = [island_module_url];
-		const add_with_deps = (entry, url) => {
-			if (url && !hrefs.includes(url)) hrefs.push(url);
-			for (const dep of islandDeps(entry)) {
-				const href = dep.startsWith('/@') ? dep : asset(dep);
-				if (href && !hrefs.includes(href)) hrefs.push(href);
+	// THE ISLAND GRAPH (island-graph.ts): the chunks this island's code needs, as DATA. The runtime
+	// turns the list into modulepreload links when the island WAKES — after the wake gate, for exactly
+	// this island, beside its `import()` — so its whole graph downloads in parallel the moment it may
+	// start, nothing lands in the paint window, and an island that never wakes downloads nothing. A
+	// hint in the HTML could promise none of that: it fetches when the parser meets it. Every wake
+	// gets its graph (the runtime knows at wake time what the server could only guess: a media query,
+	// a scroll). Only SSR knows the closure: the client knows just the entry URL.
+	/**
+	 * An island entry's graph: its chunks, as public URLs. Portable region-snippets riding the island's
+	 * props come alive via `import(desc.e)` at hydrate — their entries (+ deps) join the graph.
+	 * RENDER-GATED by construction: listed iff the island that carries the snippet rendered. The wire
+	 * plan found each descriptor's public entry URL in the payload (props-wire.ts).
+	 * @param {string} entry
+	 * @param {string} self_url
+	 * @param {readonly string[] | null | undefined} live_entries
+	 * @returns {string[]}
+	 */
+	function graph_hrefs(entry, self_url, live_entries) {
+		const deps = islandDeps(entry);
+		if (!live_entries?.length) return deps.map((dep) => asset(dep));
+		const seen = new Set([self_url]);
+		/** @type {string[]} */
+		const hrefs = [];
+		/** @param {string} href */
+		const add = (href) => {
+			if (href && !seen.has(href)) {
+				seen.add(href);
+				hrefs.push(href);
 			}
 		};
-		add_with_deps(island_entry, '');
-		// Portable region-snippets riding THIS island's props come alive via `import(desc.e)` at
-		// hydrate — preload their entries (+ deps) in the same breath. RENDER-GATED by construction:
-		// the link exists iff the island that carries the snippet actually rendered (the compiler's
-		// old static-scan emission preloaded every portable candidate in the host, rendered or not).
-		// The payload embeds each descriptor's public entry URL; prod-shaped (dev has no preloads).
-		for (const m of island_payload.match(/\/_app\/immutable\/og-region\.[0-9a-f]+\.js/g) ?? []) {
-			add_with_deps(m, m);
+		for (const dep of deps) add(asset(dep));
+		for (const m of live_entries) {
+			// (the file the snippet's import fetches: its location, when the build named one)
+			add(location_of(m) || asset(m));
+			for (const dep of islandDeps(m)) add(asset(dep));
 		}
-		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;
-		return html;
+		return hrefs;
+	}
+	// The live entries' LOCATIONS, keyed by the identity the snippet imports by (`desc.e`, as baked):
+	// no element carries them, so the island graph does (its `s` map, island-graph.ts).
+	const island_live_locations = $derived.by(() => {
+		const live = nested || !is_island ? null : island_wire?.live_entries;
+		if (!live?.length) return null;
+		/** @type {Map<string, string>} */
+		const out = new Map();
+		for (const m of live) {
+			const loc = location_of(m);
+			if (loc) out.set(m, loc);
+		}
+		return out.size ? out : null;
 	});
+	// Per render it is ONE pass over the build's list: that list is already unique and never holds the
+	// entry itself (island-deps.ts), so only portable snippets (which may share chunks) need a dedupe,
+	// and that one is a Set. A big app's island lists a few hundred chunks; a quadratic dedupe here
+	// was the hottest ogygia frame in a 21-island page's server profile.
+	const island_graph_hrefs = $derived.by(() =>
+		nested || !is_island || !island_module_url
+			? []
+			: graph_hrefs(island_entry, island_module_url, island_wire?.live_entries)
+	);
+	// A csr=true document's island is woken by KIT, not the runtime: its client wrapper imports the
+	// entry lazily (Kit's static graph no longer reaches it), so there the HTML hint stays — a `load`
+	// island only, at `fetchpriority="low"` (document-tail.ts `modulepreload_tag`): nothing it
+	// downloads is needed for first paint, so it must never outrank the CSS and the LCP image.
+	const island_kit_hint_hrefs = $derived(
+		// (the entry's LOCATION: the file its import fetches, not the stable name)
+		is_csr && hydrate_attr === 'load' && island_module_url ? [island_src || island_module_url, ...island_graph_hrefs] : []
+	);
+	// Both ride the document tail on a Kit page (see `tail` above); the head everywhere else, so a
+	// self-contained render root carries its own.
+	const island_graph_tail =
+		!!tail &&
+		untrack(() => {
+			if (island_live_locations) for (const [m, loc] of island_live_locations) tail.locate(m, loc);
+			if (island_kit_hint_hrefs.length) tail.hints(island_kit_hint_hrefs, island_fp);
+			else if (!is_csr && island_module_url) {
+				// The page lists an entry once: a second instance of the same island reuses the list the
+				// first one recorded instead of building it again.
+				const hrefs = tail.graph_of(island_module_url) ?? island_graph_hrefs;
+				if (hrefs.length) tail.graph(island_module_url, hrefs, island_fp, island_src);
+			}
+			return true;
+		});
+	const island_preload_head = $derived(
+		island_graph_tail
+			? ''
+			: island_kit_hint_hrefs.length
+				? island_kit_hint_hrefs.map(modulepreload_tag).join('')
+				: !is_csr && (island_graph_hrefs.length || island_live_locations)
+					? island_graph_script(new Map([[island_module_url, island_graph_hrefs]]), island_live_locations)
+					: ''
+	);
 
 	// ─────────────────────────────────────────────────────────── server branch ──
 	const server_endpoint = $derived.by(() => {
@@ -316,7 +569,8 @@
 		// (throws), and signs on the server. Same URL/MAC/TTL as every other mint path. `__cacheTtl`
 		// (seconds, from the preset's `maxAge`) is signed in so the handle sets Cache-Control; absent
 		// → 0 → the hole is served `no-store` (dynamic by default).
-		return mintServerIsland(__entry, __props || {}, __cacheTtl || 0);
+		// (+ the page facts it renders from, for a hole whose tree reads page.data: server/render-page.ts)
+		return mintServerIsland(__entry, __props || {}, __cacheTtl || 0) + kit_page_version(__entry);
 	});
 
 	// DOM `entry`: the importable module URL a deferred island wakes with AFTER its HTML swaps in.
@@ -324,40 +578,63 @@
 	// so there is nothing to import. Must not fall back to the region id: the router's next-page warm
 	// scans `entry="…"` and `import()`s each as a module, so a bare id there fetches `/<id>` → 404 on
 	// nav. The endpoint (which fetches the hole's HTML) is minted from `__entry` above, independently.
-	const server_region_entry = $derived(
-		!nested && __module ? (__module.startsWith('/@') ? __module : asset(__module)) : ''
-	);
+	const server_region_entry = $derived(!nested && __module ? asset(__module) : '');
+	// …and its location, the file that import fetches (as for an island)
+	const server_region_src = $derived(!nested && __module ? __src || location_of(__module) : '');
 
-	const server_payload = $derived(
-		nested || !__hydrate ? '' : stringify_props(__props, __entry).split(LT).join('\\u003C')
+	// A hydrating hole's props: ADJACENT and self-contained (the hole's HTML is spliced by the
+	// runtime), unkeyed, in whichever lane the props qualify for (props-wire.ts).
+	const server_wire = $derived(nested || !__hydrate ? null : plan_props_wire(__props, __entry));
+	const server_props_script = $derived(server_wire ? props_sidecar('', server_wire.wire(null), 'adjacent', server_wire.wire_modules) : '');
+	// The hole's IDENTITY — the fingerprint of its region id + canonical props, the same function on
+	// both legs (runtime/hash.ts), so the client leg computes the SAME value the server emitted. The
+	// runtime keys the server-minted facts (endpoint, props sidecar) on it: when Kit gives up
+	// hydrating a client-on document and mounts it fresh, the client leg renders this hole again
+	// with NO address (it cannot mint), and the runtime hands the SSR facts back by identity — never
+	// by position. Emitted on every top-level hole; costs one walk of the hole's (small) props.
+	const server_identity = $derived(
+		nested || !is_server ? '' : fingerprint_of(__entry, '', (server_wire ?? plan_props_wire(__props || {}, __entry)).canonical)
 	);
-	const server_props_script = $derived(
-		server_payload
-			? LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + server_payload + LT + '/script' + GT
-			: ''
-	);
+	// On a KIT-HYDRATED document the facts ride the document tail too (server/document-tail.ts
+	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. A csr=false
+	// document has no Kit client to rebuild it, so nothing is recorded there. Decided once at init —
+	// the SSR pass renders each region exactly once.
+	if (tail && is_csr && is_server && !nested) {
+		untrack(() => {
+			const endpoint = server_endpoint;
+			if (endpoint) tail.hole(server_identity, endpoint, server_props_script);
+		});
+	}
+	// Every document: note the hole's schedule + cache policy for the profiler's hole economics.
+	if (tail && is_server && !nested)
+		untrack(() => tail.note_hole(__entry, __defer, __hydrate || null, __cacheTtl || 0, island_component?.name ?? '', __props, server_endpoint ? hole_copy_of(server_endpoint) : ''));
 
-	const server_wants_modulepreload = $derived(
-		!!__module && !!__hydrate && (__hydrate === 'load' || __hydrate === __defer)
+	// A hydrating hole's island graph — the same data as `island_graph_hrefs`: the runtime preloads it
+	// when the hole's island wakes (phase 2, after its HTML landed). Every document: the runtime, not
+	// Kit, wakes a hole's island even on a csr=true page.
+	const server_graph_hrefs = $derived.by(() =>
+		nested || !__module || !__hydrate || !server_region_entry ? [] : graph_hrefs(__module, server_region_entry, null)
 	);
-	const server_modulepreload = $derived.by(() => {
-		if (nested || !server_wants_modulepreload || !server_region_entry) return '';
-		const hrefs = [server_region_entry];
-		for (const dep of islandDeps(__module)) {
-			const href = dep.startsWith('/@') ? dep : asset(dep);
-			if (href && !hrefs.includes(href)) hrefs.push(href);
-		}
-		let html = '';
-		for (const href of hrefs) html += LT + 'link rel="modulepreload" href="' + href + '"' + GT;
-		return html;
-	});
 	const server_fetch_preload = $derived.by(() => {
 		// Only `defer: 'load'`: start the endpoint fetch during HTML parse (warms the per-hole load).
 		if (nested || building || __defer !== 'load' || !server_endpoint) return '';
-		const href_attr = server_endpoint.split('&').join('&amp;');
+		const href_attr = escape_amp(server_endpoint);
 		return LT + 'link rel="preload" as="fetch" crossorigin="anonymous" href="' + href_attr + '"' + GT;
 	});
-	const server_preload = $derived(server_fetch_preload + server_modulepreload);
+	// The fetch preload STAYS in the head: it starts the hole's content request during the HTML parse
+	// (content, not island code). The island graph rides the tail.
+	const server_graph_tail =
+		!!tail &&
+		untrack(() => {
+			if (server_graph_hrefs.length) tail.graph(server_region_entry, server_graph_hrefs);
+			return true;
+		});
+	const server_preload = $derived(
+		server_fetch_preload +
+			(server_graph_tail || !server_graph_hrefs.length
+				? ''
+				: island_graph_script(new Map([[server_region_entry, server_graph_hrefs]])))
+	);
 
 	// ───────────────────────────────────────────────────────────── lake branch ──
 	// Lakes matter only inside an island (freeze + lift/restore). In the shell they render bare.
@@ -366,22 +643,64 @@
 	const lake_endpoint = $derived(
 		lake_inside && lake_swr ? makeRegionEndpoint(__entry || '', __props || {}) : ''
 	);
+	// A lake on a KIT-HYDRATED document (a csr=true page). Kit's client hydrates this wrapper too,
+	// but the lake's component is the render-nothing placeholder on the client (its JS ships to no
+	// browser), so a normal template here would MISMATCH — Svelte then discards the SSR DOM and
+	// re-renders, and the lake vanishes (found on a site header under a csr=true page). Instead the
+	// lake renders through ONE snippet whose SERVER form emits exactly one element (the frozen region
+	// with the lake's HTML inside) and whose CLIENT form is a raw snippet: hydration ADOPTS the
+	// element at the render position verbatim — no diff, no mismatch, the server HTML stays. (The same
+	// adoption an island's slot children get.) It is a real frozen region: LakeBoundary resets
+	// `nested` and marks the lake's inside, so the islands and holes authored in there emit their
+	// real regions and wake on the runtime, which Kit never touches.
+	const lake_attrs = $derived.by(() => {
+		/** @param {unknown} v */
+		const esc = (v) => escape_attr(String(v));
+		let s = ' entry="' + esc(__entry || '') + '" wake="none" remount="' + esc(__remount) + '"';
+		if (lake_swr) s += ' when="' + esc(__when) + '"';
+		if (__maxAge != null) s += ' max-age="' + esc(String(__maxAge)) + '"';
+		if (__onExpire) s += ' on-expire="' + esc(__onExpire) + '"';
+		if (lake_swr && __margin) s += ' margin="' + esc(__margin) + '"';
+		if (lake_endpoint) s += ' endpoint="' + esc(lake_endpoint) + '"';
+		return s;
+	});
+	const lake_adopt =
+		typeof window === 'undefined'
+			? // SERVER: a server-convention snippet (`(renderer) => …`) — one element, the lake inside.
+				/** @param {{ push(html: string): void }} renderer */
+				(renderer) => {
+					renderer.push(LT + 'ogygia-region' + lake_attrs + GT);
+					LakeBoundary(/** @type {never} */ (renderer), /** @type {never} */ ({ children }));
+					renderer.push(LT + '/ogygia-region' + GT);
+				}
+			: createRawSnippet(() => ({
+					render: () => LT + 'ogygia-region' + lake_attrs + GT + LT + '/ogygia-region' + GT,
+					/** @param {Element} el */
+					setup: (el) => {
+						// Created fresh on the client (a Kit client-side navigation mounted this lake, or Kit
+						// gave up hydrating the document and mounted fresh), so there was no SSR element to
+						// adopt: a lake is server HTML, and there is none here. The runtime repaints it from
+						// the copy it took of the SSR children when the lake first connected (lakes.ts), if
+						// this document had them; a route Kit client-renders from scratch has nothing.
+						if (!el.firstChild && import.meta.env && import.meta.env.DEV)
+							console.warn(
+								`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation, or a hydration failure — look for an error above). The runtime restores it from its server HTML when this document rendered it; otherwise it stays empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
+							);
+					}
+				}));
 
 	// ─────────────────────────────────────────────── head (runtime + preload) ──
-	// The runtime bootstrap for this page. Claim once, only for a top-level island/server placement
-	// (lakes render inside an island; held regions rely on an existing runtime). With the router on,
+	// The runtime bootstrap for this page. Claim once, for a top-level island/server placement, and for
+	// a held region the runtime paints (a live wire value, a deferred hole, a promise) — on a Kit-hydrated
+	// page too, where nothing else may have shipped it (lakes render inside an island). With the router on,
 	// the handle injects the same script on island-less pages — this is the with-islands path, and it
 	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
+	// The runtime's own static imports (the chunks it shares with the rest of the app) ride along as
+	// modulepreload hints, so they download with it rather than after it. Its location, not its
+	// stable name: the one bootstrap every document path shares (server/entry-location.ts).
 	const runtime_script =
-		!nested && ((is_island && !is_csr) || is_server) && claimRuntimeEmit()
-			? LT +
-				'script type="module" data-ogygia-runtime src="' +
-				asset(runtimeUrl) +
-				'"' +
-				GT +
-				LT +
-				'/script' +
-				GT +
+		!nested && ((is_island && !is_csr) || is_server || holds_live) && claimRuntimeEmit()
+			? runtime_bootstrap(asset) +
 				(hmrUrl
 					? LT +
 						'script type="module" data-ogygia-dev-hmr src="' +
@@ -402,7 +721,7 @@
 		if (!resolved || resolved.kind !== 'dual' || !resolved.module) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(resolved.module)))
-			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+			html += region_css_tag(href, asset(href));
 		return html;
 	});
 	// A PLACED client island's CSS is ASSUMED to already sit in the page's own stylesheet (Kit links
@@ -414,11 +733,28 @@
 	// `island_preload`'s `islandDeps` — not the asset URL. Server-only; dev routes through the same
 	// module-import hoist (`islandCss` returns the dev module URL there).
 	const island_css_html = $derived.by(() => {
-		if (island_inline || __mode !== 'island' || !island_entry) return '';
+		// A csr=true document's inline island links its CSS here as well: the client wrapper imports
+		// the component lazily there, so Kit's route stylesheets no longer carry it (that static
+		// reach is what linked every registry block's sheet on every page). A NESTED island links
+		// its own too: it loads its component through the same lazy wrapper, and an island's CSS
+		// list is its chunk closure over STATIC edges — so the parent's list never carries the inner
+		// island's sheet (and a CMS container that finds its blocks in a registry at render time
+		// never imports them at all). Claims are per request, so a sheet the parent already linked
+		// is not linked twice.
+		if (__mode !== 'island' || !island_entry) return '';
 		let html = '';
 		for (const href of claim_region_css(islandCss(island_entry)))
-			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+			html += region_css_tag(href, asset(href));
 		return html;
+	});
+	// The RENDERED stamp for an inline island (a csr=true document, or nested in a woken island):
+	// `<meta name="ogygia-kit-island" content="<entry>">`, once per entry per request. The client
+	// wrapper's lazy component module (emit.ts `lazy_entry_source`) reads it before Kit hydrates and
+	// imports the entry only for stamped islands — an unrendered registry block ships nothing.
+	const kit_island_meta = $derived.by(() => {
+		if (!is_island || !island_inline || !island_entry || !claim_kit_island(island_entry)) return '';
+		const content = escape_amp_quot(String(island_entry));
+		return LT + 'meta name="ogygia-kit-island" content="' + content + '"' + GT;
 	});
 
 	// A content BODY (an inline region from a `.svx`/`.md`) carries its own scoped `<style>`, but the
@@ -430,22 +766,27 @@
 		if (resolved?.kind !== 'inline' || !resolved.content_id) return '';
 		let html = '';
 		for (const href of claim_region_css(contentCss(resolved.content_id)))
-			html += LT + 'link rel="stylesheet" href="' + href + '" data-ogygia-region-css' + GT;
+			html += region_css_tag(href, asset(href));
 		return html;
 	});
 
 	const head_html = $derived(
 		(is_island
-			? runtime_script + island_preload + island_css_html
+			? runtime_script + island_preload_head + island_css_html + kit_island_meta
 			: is_server
 				? runtime_script + server_preload
-				: '') +
+				: runtime_script) +
 			region_css_html +
 			content_css_html
 	);
 
 	// ────────────────────────────────────────────────────── held: live / deferred ──
 	const stringify_devalue = stringify;
+	// A baked live region's FIRST HTML, read once: the markup the page was served with and hydrates
+	// against. Later values never re-render it (a re-render would recreate every node and remount the
+	// islands inside); the runtime morphs them in.
+	// svelte-ignore state_referenced_locally
+	const baked_html = __baked ? (/** @type {{ html?: string } | undefined} */ (resolved)?.html ?? '') : '';
 	/** @param {Element & { applyLive?: (v: unknown) => void }} node */
 	function apply_live(node) {
 		// Reads `resolved`, so the attachment re-runs when a Promise `of` re-resolves — the mounted
@@ -472,36 +813,95 @@
 	}
 	const held_props_script = $derived.by(() => {
 		if (!resolved || resolved.kind !== 'deferred' || !resolved.hydrate || !resolved.url) return '';
-		const payload = stringify_devalue(resolved.props).split(LT).join('\\u003C');
-		return (
-			LT + 'script type="application/ogygia-props" data-ogygia-props' + GT + payload + LT + '/script' + GT
-		);
+		// devalue output is `<`-safe by itself; adjacent and unkeyed, like a hole's.
+		return props_sidecar('', { text: stringify_devalue(resolved.props), json: false });
 	});
+	// DEVTOOLS (server realm): emit ONE `server.region.rendered` per real <ogygia-region> this SSR pass
+	// produces (inline/nested components ship no region, so they are skipped). Reads the already-computed
+	// deriveds via untrack (no reactive dep); the whole block DCEs when devtools is off. Rides the page
+	// side-channel the handle injects — so a region's server render lands in the same client-side stream
+	// as its wake, keyed by the SAME data-og-fp.
+	if (DEVTOOLS && typeof window === 'undefined') {
+		untrack(() => {
+			try {
+				if (is_island && !island_inline) {
+					record_server_event({
+						domain: 'server',
+						name: 'server.region.rendered',
+						fp: island_fp || '',
+						mode: 'island',
+						entry: island_module_url || undefined,
+						propsBytes: island_wire?.canonical.length ?? 0
+					});
+					if (island_skip)
+						record_server_event({ domain: 'server', name: 'server.delta.skip', fp: island_fp || '' });
+				} else if (is_server && !nested) {
+					record_server_event({
+						domain: 'server',
+						name: 'server.region.rendered',
+						fp: '',
+						mode: 'server',
+						entry: server_region_entry || undefined,
+						propsBytes: server_wire?.canonical.length ?? 0
+					});
+				} else if (is_lake && lake_inside) {
+					record_server_event({
+						domain: 'server',
+						name: 'server.region.rendered',
+						fp: '',
+						mode: 'lake',
+						entry: __entry || undefined
+					});
+				}
+			} catch {
+				/* devtools emit must never break a render */
+			}
+		});
+	}
 </script>
 
 <!-- svelte:head must be top-level (not inside {#if}); non-island/server modes leave it empty. -->
-<svelte:head>{@html head_html}</svelte:head>
+<!-- SERVER-AUTHORED HTML: every {@html} below carries a string only the server can make — head
+     links claimed once per request, a props sidecar the document tail may have taken instead.
+     When a region renders in the browser (nested in an island a snippet brought), the browser's
+     value differs by design, and hydration keeps the server's nodes: that is the behavior we
+     want, so each block tells Svelte (svelte-ignore) instead of it warning on every such page. -->
+<svelte:head><!-- svelte-ignore hydration_html_changed -->{@html head_html}</svelte:head>
 {#if is_island}
 	{@const Component = island_component}
-	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{/if}{:else}<ogygia-region
+	{#if island_inline}{#if Component}<Component {...island_props_ready}>{@render island_children?.()}</Component>{:else if late_load}<LateIsland load={late_load} props={island_props_ready} children={island_children} />{/if}{:else if island_skip}<ogygia-region
 			entry={island_module_url}
 			wake={hydrate_attr}
 			margin={root_margin || undefined}
 			data-ogygia-keep={__keep || undefined}
-		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region>{@html island_props_script}{/if}
+			data-og-fp={island_fp || undefined}
+			data-og-skipped
+			src={island_src || undefined}
+		></ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{:else}<ogygia-region
+			entry={island_module_url}
+			wake={hydrate_attr}
+			margin={root_margin || undefined}
+			data-ogygia-keep={__keep || undefined}
+			data-og-fp={island_fp || undefined}
+			src={island_src || undefined}
+		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
 	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
 			entry={server_region_entry}
 			render="defer"
+			stitch={__stitch || undefined}
+			prefetch={__prefetch || undefined}
 			when={__defer}
 			wake={__hydrate || undefined}
 			margin={__margin || undefined}
 			hydrate-margin={__hydrateMargin || undefined}
 			endpoint={server_endpoint}
-		>{#if ogygiaFallback}{@render ogygiaFallback()}{/if}</ogygia-region>{@html server_props_script}{/if}
+			data-og-hole={server_identity || undefined}
+			src={server_region_src || undefined}
+		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{/if}
 {:else if is_lake}
-	{#if lake_inside}
+	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
 		<ogygia-region
 			entry={__entry}
 			wake="none"
@@ -524,14 +924,17 @@
 	{@const Component = resolved.component}
 	<Component {...resolved.props}>{#if children}{@render children()}{/if}</Component>
 {:else if resolved?.html != null}
-	<!-- placeholder (or legacy children) shows until the styled HTML paints (replaceChildren). -->
-	<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>
+	<!-- Baked (awaited in the render): the first HTML is in the page, written ONCE — a later value
+	     never re-renders it, the runtime morphs it in (applyLive). Otherwise the placeholder (or legacy
+	     children) shows until the styled HTML paints. -->
+	{#if __baked}<ogygia-region live data-og-baked {@attach apply_live}><!-- svelte-ignore hydration_html_changed -->{@html baked_html}</ogygia-region
+		>{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
-		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{@html held_props_script}
+		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url} src={location_of(d.module || '') || undefined}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html held_props_script}
 	{/key}
-{:else if of}
-	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. -->
-	{@render placeholder?.()}
+{:else if of_is_promise}
+	<!-- A promise `of`: the region owns the whole wait — PromiseRegion decides how it waits. -->
+	<PromiseRegion of={/** @type {Promise<import('./region.js').RegionValue>} */ (of)} {placeholder} {children} />
 {/if}

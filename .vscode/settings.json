@@ -1,3 +1,7 @@
 {
-	"js/ts.experimental.useTsgo": false
+	"js/ts.experimental.useTsgo": false,
+	"editor.defaultFormatter": "oxc.oxc-vscode",
+	"editor.formatOnSave": true,
+	// format the whole file, not only the modified lines
+	"editor.formatOnSaveMode": "file"
 }

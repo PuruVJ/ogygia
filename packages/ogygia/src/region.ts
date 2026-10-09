@@ -13,12 +13,15 @@
  * - **deferred** — what a dual region becomes across the wire: a signed ticket the runtime fetches
  *   and (if interactive) hydrates. No component.
  */
-import type { Component, ComponentProps } from 'svelte';
+import type { Component } from 'svelte';
 import { region_snippet } from './region-snippet.js';
+import { with_portable_forms } from './portable-form.js';
 import RawHtml from './RawHtml.svelte';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
 import { REGION_BRAND } from './region-brand.js';
+import { kit_page_facts_tail, kit_page_ready, kit_render_context } from './server/kit-context.js';
+import { region_css_tags } from './server/html-scan.js';
 export { REGION_BRAND };
 
 /** Schedule options for a held region. `wake` = when its JS runs; `margin` = IntersectionObserver
@@ -116,7 +119,11 @@ export type AwaitableRegion = RegionValue & PromiseLike<RegionValue>;
 
 /** True for any value produced by {@link region} (or decoded from the wire). */
 export function isRegion(value: unknown): value is RegionValue {
-	return typeof value === 'object' && value !== null && (value as Record<symbol, unknown>)[REGION_BRAND] === true;
+	return (
+		typeof value === 'object' &&
+		value !== null &&
+		(value as Record<symbol, unknown>)[REGION_BRAND] === true
+	);
 }
 
 /**
@@ -160,10 +167,10 @@ function isBinding(value: unknown): value is RegionBinding {
  * awaited by the language, so the HTML travels automatically — LiveView over the channel you already
  * have. A held region you *don't* await renders inline where it lands (first paint, same SSR pass).
  */
-export function region<C extends Component<never>>(
-	component: C,
-	props: ComponentProps<C>,
-	opts?: RegionSchedule<ComponentProps<C>>,
+export function region<P extends Record<string, unknown>>(
+	component: Component<P>,
+	props: P,
+	opts?: RegionSchedule<P>,
 	/** Internal: content-body CSS key, set by the markdown source (see {@link InlineRegion.content_id}). */
 	content_id?: string
 ): AwaitableRegion {
@@ -189,7 +196,7 @@ export function region<C extends Component<never>>(
 				return make_inline_awaitable(inlineWrap);
 			}
 			throw new Error(
-				'[ogygia] a `with { region: \'raw\' }` component must be turned into a region on the server ' +
+				"[ogygia] a `with { region: 'raw' }` component must be turned into a region on the server " +
 					'(the signer lives server-side). Call region() in a load / remote / render context, ' +
 					'not in client code.'
 			);
@@ -215,7 +222,7 @@ export function region<C extends Component<never>>(
 	const inline: InlineRegion = {
 		[REGION_BRAND]: true,
 		kind: 'inline',
-		component: component as AnyComponent,
+		component: component as unknown as AnyComponent,
 		props: p,
 		...(content_id ? { content_id } : {})
 	};
@@ -250,12 +257,20 @@ function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
 				// tear down the outer render's context → `push_element` reads null (a systemic 500). The
 				// `typeof document` guard above already keeps this leg server-only.
 				const { render } = await import('svelte/server');
-				const r = await render(inline.component, { props: inline.props });
-				// Keep nested regions' stylesheet links — a body's server-picked blocks emit their
-				// `<link data-ogygia-region-css>` via head, and dropping head would ship them unstyled.
-				const nested = (r.head.match(/<link\b[^>]*data-ogygia-region-css[^>]*>/g) || []).join('');
+				// A fresh root: hand it Kit's `__request__` context — the page of the render
+				// (server/render-page.ts), awaited first: a region a remote call renders reads its page.
+				await kit_page_ready();
+				const r = await render(inline.component, {
+					props: inline.props,
+					context: kit_render_context()
+				});
+				// Keep nested regions' stylesheets — a body's server-picked blocks emit their region CSS
+				// via head (a `<link>`, or an inline `<style>` under Kit's inlineStyleThreshold), and
+				// dropping either form would ship them unstyled.
+				const nested = region_css_tags(r.head);
 				// Spread copies only enumerable own props → drops `then`, so `await` settles here.
-				return { ...inline, html: nested + r.body };
+				// (and the page facts its islands read, when it rendered for a page: server/render-page.ts)
+				return { ...inline, html: nested + r.body + kit_page_facts_tail() };
 			};
 			return run().then(onFulfilled, onRejected);
 		}
@@ -284,7 +299,11 @@ function make_awaitable(dual: DualRegion): AwaitableRegion {
 				// `renderHtml` (generated per binding) already prefixes the component's stylesheet
 				// `<link>`s — the page never imported this server-picked component, so its CSS is on no
 				// page stylesheet; the client hoists those links to <head>.
-				const html = dual.renderHtml ? await dual.renderHtml(dual.props) : undefined;
+				// A branded snippet in the props crosses in its portable form (portable-form.ts) — the
+				// same shape the far side revives from the descriptor the wire carries.
+				const html = dual.renderHtml
+					? await dual.renderHtml(with_portable_forms(dual.props))
+					: undefined;
 				// Spread copies only enumerable own props → drops `then`, so the result is NOT a
 				// thenable and `await` settles here instead of chaining forever.
 				return { ...dual, ...(html != null ? { html } : {}) };
@@ -310,7 +329,7 @@ export function prebaked_region(
 	const inline: InlineRegion = {
 		[REGION_BRAND]: true,
 		kind: 'inline',
-		component: component as AnyComponent,
+		component: component as unknown as AnyComponent,
 		props: {},
 		html,
 		...(content_id ? { content_id } : {})
@@ -332,5 +351,10 @@ export namespace region {
  * its own. Rendered like any region: `<Region of={…} />`.
  */
 export function og_html_region(html: string): InlineRegion {
-	return { [REGION_BRAND]: true, kind: 'inline', component: RawHtml as AnyComponent, props: { html } };
+	return {
+		[REGION_BRAND]: true,
+		kind: 'inline',
+		component: RawHtml as AnyComponent,
+		props: { html }
+	};
 }

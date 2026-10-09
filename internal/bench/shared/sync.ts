@@ -20,7 +20,7 @@ const scripts = {
 	ogygia: "import Counter from '$lib/Counter.svelte' with { wake: 'load' };",
 	sveltekit: "import Counter from '$lib/Counter.svelte';",
 	mochi: "import Counter from '../Counter.svelte';",
-	astro: "import Counter from '../../components/Counter.jsx';"
+	astro: "import Counter from '../../components/Counter.svelte';"
 };
 
 function transformCounters(md) {
@@ -50,7 +50,9 @@ function wrap(md) {
 if (kind === 'astro') {
 	const dest = join(root, 'src', 'components');
 	mkdirSync(dest, { recursive: true });
-	copyFileSync(join(HERE, 'preact', 'Counter.jsx'), join(dest, 'Counter.jsx'));
+	// Astro renders the SAME shared Svelte 5 counter as the other apps (was a bespoke preact widget),
+	// so the island comparison is Svelte-vs-Svelte across ogygia / sveltekit / mochi / astro.
+	copyFileSync(join(HERE, 'svelte', 'Counter.svelte'), join(dest, 'Counter.svelte'));
 } else if (kind === 'mochi') {
 	mkdirSync(join(root, 'src'), { recursive: true });
 	copyFileSync(join(HERE, 'svelte', 'Counter.svelte'), join(root, 'src', 'Counter.svelte'));

@@ -1,0 +1,209 @@
+---
+title: Frozen pages
+summary: A pure page renders one time per content change, is stored whole, and is served as bytes until a publish thaws it. Render-on-write, not render-per-request.
+related:
+  - regions/server-islands
+  - data-state/page-data
+  - app/experiments
+---
+
+Client islands made hydration opt-in per region. Frozen pages are the server mirror: **execution
+becomes opt-in per request**. A page whose render is a pure function of its URL renders one
+time, then freezes. It is stored whole: HTML, headers, permanent redirects. Each later request
+is a byte read. A publish thaws it, and the next request renders it again, one time. Kit, your loads, and Svelte never run on a hit. Cost moves from O(requests) to
+O(publishes). Prerendering is the special case where the only publish is a deploy.
+
+```ts title=vite.config.ts
+ogygia({ freeze: true })
+```
+
+That is the full adoption. The default store is an in-process LRU, with a 24-hour TTL backstop
+(`freeze: { ttl }` to shorten it). Stampedes single-flight: fifty concurrent cold requests
+make exactly one render.
+
+## Whole-app, or opt-in
+
+By default (`freeze: true`) the whole app is on. Each eligible page is stored, and the
+observed-purity check below refuses the rest, so a personalized page opts itself out. A single
+route opts out with `export const freeze = false`.
+
+To flip the whole app to **opt-in**, so that nothing is stored unless a route asks, set the
+default off:
+
+```ts title=vite.config.ts
+ogygia({ freeze: { default: false } })
+```
+
+Then a page or a layout opts in with `export const freeze = true`. It **cascades like `csr`**:
+a layout opts in its whole subtree, and a page below can override in either direction. Deepest
+declaration wins.
+
+```ts title=src/routes/(marketing)/+layout.server.ts
+// this whole marketing subtree is stored
+export const freeze = true;
+```
+
+```ts title=src/routes/(marketing)/preview/+page.server.ts
+// …except this one preview page, which stays per-request
+export const freeze = false;
+```
+
+`export const freeze` is not one of Kit's page options, so ogygia reads it and removes it
+before Kit ever sees the module. There is no error, and nothing to configure. Opting a route in
+only makes it **eligible**. An impure render is still refused by the purity check below.
+
+### Programmatic routes
+
+A table from the [server router](/docs/app/server-router) carries the same flag, in its own
+grammar, and it cascades the same way: the page, then the nearest layout, then the table.
+
+```ts title=src/hooks.server.ts
+const marketing = layout('marketing', Shell, { freeze: true });
+
+export const app = routes(
+  {
+    ...marketing({
+      '/':        page(Home),                          // frozen, from the layout
+      '/preview': page(Preview, { freeze: false })     // per-request again
+    }),
+    '/account': page(Account)                          // follows the config default
+  },
+  { freeze: false }                                    // optional table-wide default
+);
+
+export const handle = sequence(ogygiaHandle(), app.handle);
+```
+
+Keep ogygia's handle **outermost** in the sequence. The router answers inside it, so a frozen
+hit is served before the table ever runs. The router normally stamps its documents
+`cache-control: no-store`. On an eligible request it leaves that to the verdict instead: a frozen
+page gets `public, s-maxage`, a refused one gets `private, no-store`, and a header your page
+sets itself always wins.
+
+## What gets stored: observed purity, not annotations
+
+The handle watches each eligible render. A page **stays per-request** when the render:
+
+- reads a cookie, personal header, or `locals` value that returned a **non-default** value,
+- reads a [feature flag](/docs/app/experiments) (an A/B'd page must never freeze one variant),
+- writes a cookie, sets `set-cookie`, answers non-200, or streams load promises,
+- or was requested with a query string.
+
+Each disqualification is **named in a dev note** (`cookie:session`, `locals.user`,
+`flag:hero`). Thus an almost-pure page tells you exactly which line keeps it hot.
+Default-valued reads still store. The render of an anonymous visitor (`cookies.get('consent')`
+returns `undefined`, an empty `locals.user`) **is** the canonical copy. That is the cookie-less
+CDN cache key, formalized. Once minted, all visitors receive the canonical. Content that must
+truly differ per visitor belongs in a `render: 'deferred'` hole. The shell freezes. The hole
+fetches fresh per visitor. Its signed URL is minted prerender-grade. Thus a warm frozen page never
+carries expired holes (set a stable `OGYGIA_SECRET`).
+
+## Invalidation: three grammars
+
+```ts title=hooks.server.ts (or any server module)
+import { freeze } from 'ogygia/freeze';
+
+await freeze.invalidate('/fr/fr/solar/');             // exact URL — the CMS-webhook case
+await freeze.invalidateWhere({ prefix: '/fr/fr/' });  // subtree — a locale or section nuke
+await freeze.invalidate(loadDoc, ['promo']);          // declared source — see below
+```
+
+A successful form action also evicts its own page automatically. This mirrors the
+actions-invalidate-loads semantics of Kit.
+
+**Declared sources** solve one-document-on-many-pages. Wrap the definition. Loads stay plain:
+
+```ts title=src/lib/server/cms.ts
+export const loadDoc = import.meta.og.source(async (slug: string) => fetchDoc(slug));
+```
+
+Each stored page whose render called `loadDoc('promo')` files a receipt.
+`freeze.invalidate(loadDoc, ['promo'])` evicts exactly those pages, at the origin **and**
+at each edge, however many there are, in whatever locale they live. The macro follows the
+[macro laws](/docs/macros/overview): top-level `export const` only, AST-verified, loud build errors.
+Pass `{ key: (…args) => string }` to canonicalize exotic argument shapes.
+
+## Stores and edges
+
+Live objects cannot ride vite config. They are wired one time, in hooks:
+
+```ts title=src/hooks.server.ts
+import { freeze, valkey, akamai, cloudfront } from 'ogygia/freeze';
+
+freeze.configure({
+	store: valkey(client),                             // or upstash({ url, token }),
+	edge: [akamai(creds), cloudfront(cfg)]             //    cloudflareKv(platform.env.KV)
+});
+```
+
+Stores: `memoryStore` (default) · `valkey(client)` (ioredis or node-redis) ·
+`upstash({ url, token })` (REST, serverless-native) · `cloudflareKv(binding)` (Workers KV).
+Edges: `akamai` (EdgeGrid-signed Fast Purge) · `cloudfront` (SigV4 invalidations) ·
+`cloudflare` (zone purge). Eligible responses are stamped
+`cache-control: public, s-maxage=<ttl>`, plus the tags of each edge. Thus your CDN follows
+proven per-page headers, not a blanket rule. `invalidate()` fans out to the store and each edge
+at the same time. One edge that is down never fails a publish, or a request.
+
+## Serve-time stitching
+
+Sometimes even a one-beat canonical paint is too much: the first response itself must be
+personal. Then mark the hole with `stitch`:
+
+```svelte
+<script>
+  import Header from '$lib/Header.svelte' with { render: 'deferred', stitch: 'serve' };
+</script>
+```
+
+The shell still stores one time, and serves as bytes. But on **each** serve, the server renders
+the hole at that moment, with your cookies in hand, and splices it into the stored HTML before
+it responds. One response, personalized in view-source, no JavaScript required. The trade is
+honest. Stitched pages are per-visitor. Thus they are stamped `private, no-store` (no CDN copy,
+no 304s), and a hit costs one region render, not zero. Failure is open: when the render of the
+hole fails or times out, the fallback ships, and the browser fetches it exactly like a normal
+deferred hole.
+
+### Edge stitching
+
+`stitch: 'serve'` buys a personal first paint at the price of the edge copy. On a CDN that
+speaks **ESI** (edge side includes: Akamai, Fastly, Varnish) you can keep both:
+
+```svelte
+<script>
+  import Header from '$lib/Header.svelte' with { render: 'deferred', stitch: 'edge' };
+</script>
+```
+
+The shell still stores one time, and it stays a normal edge-cached page: `public, s-maxage`,
+validators and all. What changes is the hole. In the stored bytes it becomes an ESI include that
+points at the hole's own signed capability, and the response carries
+`Surrogate-Control: content="ESI/1.0"`. On each request the CDN serves the shell from its cache,
+fetches only the include from your server with the visitor's cookies, and splices it at the edge.
+The first response is personal, the shell never leaves the edge, and your server renders one
+region, not a page. Enable ESI processing on the property for this to happen.
+
+It degrades on its own. Anywhere ESI is not processed, direct to origin, in dev, or on a CDN
+without it, the include is inert and the hole ships its fallback, then the browser fetches it
+exactly like a normal deferred hole. One `stitch: 'serve'` hole on a page makes the whole page
+origin-stitched, `edge` holes on it included.
+
+Rule of thumb: `render: 'live'` when canonical-first is satisfactory. `stitch: 'edge'` when the
+first paint must be personal and your CDN speaks ESI. `stitch: 'serve'` when it must be personal
+and it does not.
+
+## Notes
+
+- **In dev, the store never serves or fills.** Your edits always render again. The verdict
+  still teaches: an eligible page answers `x-ogygia-freeze: would-store` (check the network
+  panel). A refused one prints a single console note that names the disqualifying read.
+- **Revalidations are free.** Stored entries carry an `etag` and `last-modified`. The handle
+  answers `If-None-Match` / `If-Modified-Since` with a bodiless 304. Thus a CDN prefresh, or a
+  browser reload of a stored page, costs zero body bytes.
+- **Refused pages get `private, no-store`** when your app set no cache-control of its own. The
+  headers of the verdict replace blanket CDN rules, in both directions.
+- **csr-agnostic**: a `csr = true` page stores the same way. Kit hydrates the stored copy.
+- **The store holds the render**, not data. A hit skips the data fetch *and* the component
+  execution. Your data caches stay useful underneath, for the misses.
+- Store failures never fail a request. A broken store means renders, not errors.
+- Blind spot, the same contract as prerender: `Date.now()`/randomness inside a load is "true at
+  render time".

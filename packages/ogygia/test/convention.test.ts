@@ -57,7 +57,9 @@ describe('folder() convention', () => {
 			'content/docs/00-start/01-quick/+doc.svx': doc('quick'),
 			'content/docs/01-guides/00-one/+doc.svx': doc('one')
 		});
-		await expect(outline(docs).tree()).rejects.toThrow(/ordering in start: duplicate prefix number 1/);
+		await expect(outline(docs).tree()).rejects.toThrow(
+			/ordering in start: duplicate prefix number 1/
+		);
 	});
 
 	it('a clean corpus builds, ordered by NN-, ids/groups derived', async () => {
@@ -98,7 +100,9 @@ describe('folder() convention', () => {
 		const dotted: Convention = {
 			segment: (raw) => {
 				const m = raw.match(/^(\d+)\.(.*)$/);
-				return m ? { slug: m[2], order: Number(m[1]) } : { slug: raw, order: Number.MAX_SAFE_INTEGER };
+				return m
+					? { slug: m[2], order: Number(m[1]) }
+					: { slug: raw, order: Number.MAX_SAFE_INTEGER };
 			},
 			label: (slug) => slug.toUpperCase(),
 			verify: () => []
@@ -112,7 +116,9 @@ describe('folder() convention', () => {
 			{ convention: dotted }
 		);
 		const tree = await outline(docs).tree();
-		const group = tree.find((n) => (n as { label?: string }).label?.toLowerCase() === 'guide') as { items: { slug: string }[] };
+		const group = tree.find((n) => (n as { label?: string }).label?.toLowerCase() === 'guide') as {
+			items: { slug: string }[];
+		};
 		expect(group.items.map((i) => i.slug)).toEqual(['guide/a', 'guide/b']); // dot-order applied
 	});
 });

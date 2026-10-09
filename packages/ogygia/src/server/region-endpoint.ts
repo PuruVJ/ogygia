@@ -6,19 +6,39 @@ import { secret, secretStable } from 'virtual:ogygia/secret';
 import { sessionCookie } from 'virtual:ogygia/session-cookie';
 import { regionTtl } from 'virtual:ogygia/region-ttl';
 import { sign, region_mac_message } from 'virtual:ogygia/sign';
+// (`resolve('/__ogygia__')` reads the same on Kit 2, which wants the leading slash, and Kit 3, which
+// takes it as a route ID with no params — the same pathname)
 import { resolve } from '$app/paths';
 import { building } from '$app/environment';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
 import {
 	DEFAULT_ISLANDS_ENDPOINT,
 	MAX_REGION_PROPS_LEN,
-	PRERENDER_REGION_TTL_SEC
+	capability_expiry
 } from './endpoint.js';
+import { freeze_capture_active } from '../freeze/capture.js';
+import { document_shared_lifetime, mint_ttl_sec } from './shared-cache.js';
 import { encode_region_props } from './region-props.js';
 import { stringify } from 'devalue';
+import { record_server_event } from '../devtools/server-registry.js';
+
+// DEVTOOLS gate — server realm; off → folds out.
+const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 import { B64Url } from './payload.js';
-import { TRANSPORT_WIRE_KEY, reduce_transportable } from '../live-transport.js';
-import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet } from '../region-snippet.js';
+import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
+import { ensure_prop_kinds } from './region-props.js';
+
+/** Same families as encode_region_props — one seam law for island props. */
+const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
+
+/** The request being rendered (null off-request: prerender, a test). */
+function current_request(): Request | null {
+	try {
+		return getRequestEvent().request;
+	} catch {
+		return null;
+	}
+}
 
 /** Session sealed into the MAC when `ogygia({ sessionCookie })` is set; empty at prerender. */
 function region_session(): string {
@@ -28,6 +48,36 @@ function region_session(): string {
 	} catch {
 		return '';
 	}
+}
+
+/**
+ * SERVER-DELTA NAV (D3) — the set of region fingerprints the CLIENT already has live, sent on an
+ * SPA nav via `x-ogygia-known`. Region.svelte consults this to SKIP re-rendering an island the
+ * client is keeping. Honored ONLY on an SPA nav (`x-ogygia-spa`); a full page load has no header →
+ * empty set → everything renders. Memoized per request-event (parsed once). Client-stubbed to empty.
+ * A missing/oversized header is always the SAFE full render — this is a pure optimization signal.
+ */
+const KNOWN_FPS = new WeakMap<object, Set<string>>();
+const EMPTY_FPS: ReadonlySet<string> = new Set();
+export function known_region_fps(): ReadonlySet<string> {
+	let event;
+	try {
+		event = getRequestEvent();
+	} catch {
+		return EMPTY_FPS; // no request scope (prerender / off-request) → render all
+	}
+	const cached = KNOWN_FPS.get(event);
+	if (cached !== undefined) return cached;
+	let set: Set<string>;
+	try {
+		const spa = event.request.headers.get('x-ogygia-spa');
+		const known = spa ? event.request.headers.get('x-ogygia-known') : null;
+		set = known ? new Set(known.split(',')) : new Set();
+	} catch {
+		set = new Set();
+	}
+	KNOWN_FPS.set(event, set);
+	return set;
 }
 
 /**
@@ -62,15 +112,30 @@ function warn_unstable_secret(): void {
 export function mint_region_capability(entry: string, payload: string, ttl = 0): string {
 	const session = region_session();
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
-	// effectively-forever (props are public in the HTML; session sealed empty). Dynamic pages keep
-	// the short `regionTtl` window so harvested URLs age out.
-	const exp = Math.floor(Date.now() / 1000) + (building ? PRERENDER_REGION_TTL_SEC : regionTtl);
+	// effectively-forever (props are public in the HTML; session sealed empty). A FREEZE-eligible
+	// render is the prerender case at request time — the stored HTML outlives `regions.ttl`, so its
+	// holes mint prerender-grade too (a warm freeze must never carry expired hole URLs). An anonymous
+	// hole on a document the app marked shared-cacheable (a load's `cache-control`) outlives that
+	// cache life (server/shared-cache.ts). Everything else keeps the short `regions.ttl` window so
+	// harvested URLs age out.
+	const stored = building || freeze_capture_active();
+	const exp = capability_expiry(
+		Math.floor(Date.now() / 1000),
+		mint_ttl_sec({
+			stored,
+			session,
+			shared: stored || session !== '' ? 0 : document_shared_lifetime(current_request()),
+			region_ttl: regionTtl
+		})
+	);
 	warn_unstable_secret();
 	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts
 	// into a `private, max-age=ttl` browser cache. Empty string when 0 keeps the MAC field stable.
 	const ttl_field = ttl > 0 ? String(Math.floor(ttl)) : '';
 	const sig = sign(secret, region_mac_message(entry, exp, payload, session, ttl_field));
 	const ttl_param = ttl_field ? `&ttl=${ttl_field}` : '';
+	if (DEVTOOLS)
+		record_server_event({ domain: 'server', name: 'server.capability.minted', id: entry, ttl });
 	return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}`;
 }
 
@@ -82,12 +147,8 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
  * mint on the client — the runtime fetches the endpoint). Mirrors the old `ServerIsland.svelte`.
  */
 export function mintServerIsland(entry: string, props: Record<string, unknown>, ttl = 0): string {
-	const payload = B64Url.encode(
-		stringify(props, {
-			[TRANSPORT_WIRE_KEY]: reduce_transportable,
-			[REGION_SNIPPET_WIRE_KEY]: reduce_region_snippet
-		})
-	);
+	ensure_prop_kinds();
+	const payload = B64Url.encode(stringify(props, { [REF_WIRE_KEY]: ref_reducer(PROP_FAMILIES) }));
 	if (payload.length > MAX_REGION_PROPS_LEN) {
 		throw new Error(
 			`[ogygia] server island "${entry}": props payload is ${payload.length} b64 chars (max ${MAX_REGION_PROPS_LEN}). ` +
@@ -112,3 +173,6 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 }
 
 export { encode_region_props } from './region-props.js';
+/** The island `data-og-fp` (server/fingerprint.ts) — Region.svelte reaches it through this
+ *  client-stubbed virtual, so the native digest never enters the client graph. */
+export { island_fingerprint as islandFingerprint } from './fingerprint.js';

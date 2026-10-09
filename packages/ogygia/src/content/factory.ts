@@ -21,10 +21,17 @@
  */
 import type { ContentRef, ContentRelations, Entry, SchemaLike } from './index.js';
 import type { GroupMeta, Source } from './source.js';
-import { Collection, COLLECTION, type CollectionBaseOptions, type ReadContext } from './collection-base.js';
+import {
+	Collection,
+	COLLECTION,
+	type CollectionBaseOptions,
+	type ReadContext
+} from './collection-base.js';
 
 /** Extract a Standard Schema's output type (valibot / zod / arktype). Falls back to a loose record. */
-type SchemaData<S> = S extends { readonly ['~standard']: { readonly types?: { readonly output: infer O } } }
+type SchemaData<S> = S extends {
+	readonly ['~standard']: { readonly types?: { readonly output: infer O } };
+}
 	? O extends Record<string, unknown>
 		? O
 		: Record<string, unknown>
@@ -37,7 +44,11 @@ export type SchemaInput = SchemaLike | SchemaLike[];
 type LayeredData<S> = S extends readonly unknown[]
 	? UnionToIntersection<{ [K in keyof S]: SchemaData<S[K]> }[number]>
 	: SchemaData<S>;
-type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
+	k: infer I
+) => void
+	? I
+	: never;
 
 /** Options for a content collection (kept for reference; `content()` infers these in place). */
 export type ContentOptions<

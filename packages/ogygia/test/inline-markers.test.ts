@@ -44,7 +44,9 @@ describe('inline_markers', () => {
 
 	it('custom classes replace the defaults (the svelte.dev skin)', async () => {
 		const html = await highlight('let +++x+++;', 'js', {
-			transformers: [inline_markers({ classes: { add: 'highlight add', remove: 'highlight remove' } })]
+			transformers: [
+				inline_markers({ classes: { add: 'highlight add', remove: 'highlight remove' } })
+			]
 		});
 		expect(html).toContain('class="highlight add"');
 		expect(html).not.toContain('og-mark');

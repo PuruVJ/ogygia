@@ -54,7 +54,8 @@ function preference_switch(): string {
 	return script(() => {
 		document.addEventListener('click', function (e) {
 			var t = e.target;
-			var btn = t && (t as Element).closest ? (t as Element).closest('[data-pref][data-pref-set]') : null;
+			var btn =
+				t && (t as Element).closest ? (t as Element).closest('[data-pref][data-pref-set]') : null;
 			if (!btn) return;
 			var name = btn.getAttribute('data-pref');
 			var val = btn.getAttribute('data-pref-set');
@@ -72,7 +73,9 @@ function preference_switch(): string {
 /** Declare a site-wide client preference. Throws at creation if `default` isn't one of `values`. */
 function preference_impl(spec: PreferenceSpec): Preference {
 	if (!spec.values.includes(spec.default)) {
-		throw new Error(`[ogygia] preference('${spec.name}'): default '${spec.default}' is not one of values [${spec.values.join(', ')}]`);
+		throw new Error(
+			`[ogygia] preference('${spec.name}'): default '${spec.default}' is not one of values [${spec.values.join(', ')}]`
+		);
 	}
 	const name = spec.name;
 	const values = spec.values;

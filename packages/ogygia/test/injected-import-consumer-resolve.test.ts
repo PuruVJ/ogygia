@@ -38,14 +38,17 @@ function make_plugin(configure = true): Plugin {
 	// `configure = false` simulates a throwaway plugin instance whose `configResolved` never ran, so
 	// `root` is undefined — a condition the resolution must not depend on.
 	if (configure) {
-		handler(plugin.configResolved!).call(null as never, {
-			root: '/nonexistent-ogygia-consumer-app',
-			base: '/',
-			command: 'serve',
-			mode: 'development',
-			envDir: false,
-			build: {}
-		} as never);
+		handler(plugin.configResolved!).call(
+			null as never,
+			{
+				root: '/nonexistent-ogygia-consumer-app',
+				base: '/',
+				command: 'serve',
+				mode: 'development',
+				envDir: false,
+				build: {}
+			} as never
+		);
 	}
 	return plugin;
 }

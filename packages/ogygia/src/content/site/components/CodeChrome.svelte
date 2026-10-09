@@ -10,6 +10,9 @@
 	 * `installation-code-2`), and the link button copies the full `#`-anchored URL and jumps to it — the
 	 * same "grab a link to exactly this" affordance the heading anchors give.
 	 */
+	// ── regexes
+	const WS_G = /\s+/g;
+
 	let { selector = '.og-body pre' }: { selector?: string } = $props();
 
 	const COPY =
@@ -62,7 +65,7 @@
 		function assign_id(pre: Element): string {
 			if (pre.id) return pre.id;
 			const sec = section_id(pre);
-			const text = ((pre.querySelector('code') || pre).textContent ?? '').replace(/\s+/g, ' ').trim();
+			const text = ((pre.querySelector('code') || pre).textContent ?? '').replace(WS_G, ' ').trim();
 			const h = hash_code(text);
 			const base = sec ? `${sec}-code-${h}` : `code-${h}`;
 			let id = base;

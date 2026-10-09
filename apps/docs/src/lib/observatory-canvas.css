@@ -1,0 +1,252 @@
+/* Gentle, EASILY-OVERRIDABLE native-element defaults for the Observatory preview canvas — used by both
+ * the in-page live/x-ray preview (.preview.og-canvas) and the islands iframe (#obs-app.og-canvas). Every
+ * rule is wrapped in :where(), so it has ZERO specificity: any style a previewed component sets wins. The
+ * colours come from --obs-* tokens (defined in both contexts, theme-aware). Enough that a bare component
+ * looks intentional; never enough to fight the demo. */
+
+/* The canvas uses a plain SYSTEM font (headings + body) — a bare component reads as an app, not as the
+   docs' display serif. `.og-canvas` (0,1,0) beats a bare `h1`/`p`, so it wins in the in-page preview too. */
+.og-canvas {
+	font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+.og-canvas :where(h1, h2, h3, h4, h5, h6) {
+	font-family: inherit;
+	font-weight: 600;
+}
+.og-canvas :where(h1) {
+	font-size: 20px;
+	line-height: 1.25;
+	margin: 0 0 10px;
+}
+.og-canvas :where(h2) {
+	font-size: 17px;
+	margin: 14px 0 8px;
+}
+.og-canvas :where(h3) {
+	font-size: 15px;
+	margin: 12px 0 6px;
+}
+.og-canvas :where(p) {
+	color: var(--obs-muted);
+	margin: 0 0 10px;
+}
+.og-canvas :where(a) {
+	color: var(--obs-accent);
+	text-decoration: none;
+	font-weight: 600;
+}
+.og-canvas :where(a):hover {
+	text-decoration: underline;
+}
+.og-canvas :where(button) {
+	padding: 6px 12px;
+	border: 1px solid var(--obs-border);
+	border-radius: 7px;
+	background: var(--obs-panel);
+	color: var(--obs-text);
+	font: inherit;
+	cursor: pointer;
+	transition:
+		border-color 0.15s,
+		background 0.15s;
+}
+.og-canvas :where(button):hover {
+	border-color: var(--obs-accent);
+	background: color-mix(in oklab, var(--obs-accent) 8%, var(--obs-panel));
+}
+.og-canvas :where(button):disabled {
+	opacity: 0.55;
+	cursor: default;
+}
+.og-canvas :where(input, textarea, select) {
+	padding: 5px 9px;
+	border: 1px solid var(--obs-border);
+	border-radius: 6px;
+	background: var(--obs-bg);
+	color: var(--obs-text);
+	font: inherit;
+}
+.og-canvas :where(input, textarea, select):focus-visible {
+	outline: 2px solid color-mix(in oklab, var(--obs-accent) 45%, transparent);
+	outline-offset: 1px;
+	border-color: var(--obs-accent);
+}
+.og-canvas :where(ul, ol) {
+	margin: 0 0 10px;
+	padding-left: 20px;
+}
+.og-canvas :where(li) {
+	margin: 2px 0;
+}
+.og-canvas :where(code, kbd) {
+	font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	background: var(--obs-panel);
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-size: 0.9em;
+}
+.og-canvas :where(label) {
+	font-size: 13px;
+	color: var(--obs-muted);
+}
+.og-canvas :where(hr) {
+	border: 0;
+	border-top: 1px solid var(--obs-border);
+	margin: 12px 0;
+}
+.og-canvas :where(nav) {
+	border-bottom-color: var(--obs-border);
+}
+
+/* Diff-marked fences (the `+++`/`--- ` line dialect + `+++x+++`/`---x---` inline dialect, enabled in the
+   REPL's content pipeline). Mirrors ogygia/content theme.css so a `.md` fence shows real diff colours in
+   the preview — NOT :where()'d: the marks must paint (they're the feature), still only inside .og-canvas. */
+.og-canvas pre.og-has-diff .og-diff {
+	display: inline-block;
+	width: calc(100% + 2rem);
+	margin-inline: -1rem;
+	padding-inline: 0.25rem;
+}
+.og-canvas pre.og-has-diff .og-diff::before {
+	display: inline-block;
+	width: 0.75em;
+	opacity: 0.75;
+	user-select: none;
+}
+.og-canvas .og-diff-add {
+	background: light-dark(rgb(16 185 129 / 0.12), rgb(16 185 129 / 0.16));
+}
+.og-canvas .og-diff-add::before {
+	content: '+';
+	color: light-dark(rgb(4 120 87), rgb(52 211 153));
+}
+.og-canvas .og-diff-remove {
+	background: light-dark(rgb(239 68 68 / 0.1), rgb(239 68 68 / 0.14));
+}
+.og-canvas .og-diff-remove::before {
+	content: '-';
+	color: light-dark(rgb(185 28 28), rgb(248 113 113));
+}
+.og-canvas .og-mark {
+	border-radius: 0.25em;
+	padding: 0.08em 0.25em;
+	margin: -0.08em -0.05em;
+}
+.og-canvas .og-mark-add {
+	background: light-dark(rgb(16 185 129 / 0.16), rgb(16 185 129 / 0.22));
+}
+.og-canvas .og-mark-remove {
+	background: light-dark(rgb(239 68 68 / 0.13), rgb(239 68 68 / 0.2));
+	text-decoration: line-through;
+	text-decoration-thickness: 0.08em;
+	text-decoration-color: light-dark(rgb(185 28 28 / 0.6), rgb(248 113 113 / 0.6));
+}
+
+/* Admonitions (`::: tip` etc. → .og-admonition), ported from ogygia/content theme.css so content
+   previews show real coloured callouts. Each variant sets one hue token; border/tint/title derive. */
+.og-canvas .og-admonition {
+	--og-adm-c: var(--obs-accent, #14b8a6);
+	margin: 0 0 1.2rem;
+	padding: 0.8rem 1rem;
+	border: 1px solid color-mix(in srgb, var(--og-adm-c) 30%, var(--obs-border, #d4d4d8));
+	border-left: 3px solid var(--og-adm-c);
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--og-adm-c) 8%, transparent);
+}
+.og-canvas .og-admonition-title {
+	margin: 0 0 0.35rem;
+	font-weight: 700;
+	font-size: 0.82em;
+	letter-spacing: 0.02em;
+	color: var(--og-adm-c);
+}
+.og-canvas .og-admonition > :last-child {
+	margin-bottom: 0;
+}
+.og-canvas .og-admonition-tip {
+	--og-adm-c: #10b981;
+}
+.og-canvas .og-admonition-info {
+	--og-adm-c: #3b82f6;
+}
+.og-canvas .og-admonition-important {
+	--og-adm-c: #8b5cf6;
+}
+.og-canvas .og-admonition-warning {
+	--og-adm-c: #f59e0b;
+}
+.og-canvas .og-admonition-danger {
+	--og-adm-c: #ef4444;
+}
+.og-canvas .og-admonition-details {
+	--og-adm-c: #94a3b8;
+}
+.og-canvas summary.og-admonition-title {
+	cursor: pointer;
+	user-select: none;
+}
+.og-canvas summary.og-admonition-title::-webkit-details-marker {
+	display: none;
+}
+.og-canvas summary.og-admonition-title::before {
+	content: '▸ ';
+	opacity: 0.6;
+}
+
+/* Code fences (Shiki `pre.shiki`) — the shiki inline style sets only the token/background colours, so
+   frame them: padding, radius, and a scroll container so long lines don't spill out of the preview. The
+   1rem inline padding lines up with the diff stripe's -1rem bleed above. */
+.og-canvas pre.shiki {
+	margin: 0 0 1.3rem;
+	padding: 0.9rem 1rem;
+	border-radius: 8px;
+	overflow-x: auto;
+	font-size: 0.85em;
+	line-height: 1.55;
+	border: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 55%, transparent);
+}
+/* A `title="app.js"` / `[label]` fence meta → `data-file`; show it as a header bar (absolute so it
+   doesn't scroll with the code). */
+.og-canvas pre.shiki[data-file] {
+	position: relative;
+	padding-top: 2.5em;
+}
+.og-canvas pre.shiki[data-file]::before {
+	content: attr(data-file);
+	position: absolute;
+	inset: 0 0 auto 0;
+	padding: 0.5em 1rem;
+	border-radius: 8px 8px 0 0;
+	border-bottom: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 45%, transparent);
+	background: color-mix(in srgb, currentColor 5%, transparent);
+	font: 500 0.72rem/1 ui-monospace, 'SF Mono', Menlo, monospace;
+	opacity: 0.72;
+}
+
+/* Prose block elements a markdown page relies on — bare browser defaults read as broken. :where() keeps
+   them zero-specificity so a component's own styles still win. */
+.og-canvas :where(blockquote) {
+	margin: 0 0 1.2rem;
+	padding: 0.2rem 0 0.2rem 1rem;
+	border-left: 3px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 85%, transparent);
+	color: var(--obs-muted, #71717a);
+}
+.og-canvas :where(table) {
+	border-collapse: collapse;
+	margin: 0 0 1.2rem;
+	font-size: 0.92em;
+}
+.og-canvas :where(th, td) {
+	border: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 70%, transparent);
+	padding: 0.4rem 0.7rem;
+	text-align: left;
+}
+.og-canvas :where(th) {
+	font-weight: 600;
+	background: color-mix(in srgb, currentColor 4%, transparent);
+}
+.og-canvas :where(hr) {
+	border: 0;
+	border-top: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 70%, transparent);
+	margin: 1.6rem 0;
+}

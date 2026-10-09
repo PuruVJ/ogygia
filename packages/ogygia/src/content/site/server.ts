@@ -98,14 +98,22 @@ export function remotes(
 	const meta_fn = (slug?: string) => site.meta(slug ? { base, slug } : { base });
 	return {
 		nav: (mode.nav === 'query'
-			? query(optional_string_arg, nav_fn)
-			: prerender(optional_string_arg, nav_fn, { dynamic: true })) as unknown as (slug?: string) => Promise<NavTree>,
+			? query(optional_string_arg, nav_fn as (arg: unknown) => Promise<NavTree>)
+			: prerender(optional_string_arg, nav_fn as (arg: unknown) => Promise<NavTree>, {
+					dynamic: true
+				})) as unknown as (slug?: string) => Promise<NavTree>,
 		meta: (mode.nav === 'query'
-			? query(optional_string_arg, meta_fn)
-			: prerender(optional_string_arg, meta_fn, { dynamic: true })) as unknown as (slug?: string) => Promise<SiteMeta>,
-		search: query(string_arg, (q: string) => site.search(q, { base })) as unknown as (q: string) => Promise<SearchHit[]>,
+			? query(optional_string_arg, meta_fn as (arg: unknown) => Promise<SiteMeta>)
+			: prerender(optional_string_arg, meta_fn as (arg: unknown) => Promise<SiteMeta>, {
+					dynamic: true
+				})) as unknown as (slug?: string) => Promise<SiteMeta>,
+		search: query(string_arg, ((q: string) => site.search(q, { base })) as (
+			arg: unknown
+		) => Promise<SearchHit[]>) as unknown as (q: string) => Promise<SearchHit[]>,
 		page: (mode.page === 'query'
-			? query(string_arg, doc_fn)
-			: prerender(string_arg, doc_fn, { dynamic: true })) as unknown as (slug: string) => Promise<PageView | null>
+			? query(string_arg, doc_fn as (arg: unknown) => Promise<PageView | null>)
+			: prerender(string_arg, doc_fn as (arg: unknown) => Promise<PageView | null>, {
+					dynamic: true
+				})) as unknown as (slug: string) => Promise<PageView | null>
 	};
 }

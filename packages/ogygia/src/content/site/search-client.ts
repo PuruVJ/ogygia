@@ -9,6 +9,9 @@
  */
 import type { SearchHit } from './search.js';
 
+// ── regexes
+const TRAILING_SLASHES_RE = /\/+$/;
+
 export type SearchClient = {
 	/** Ranked hits for a query (empty string → []). */
 	query(q: string): Promise<SearchHit[]>;
@@ -34,7 +37,7 @@ export type SearchClientOptions = {
  * `<Shell>` it needs no arguments at all.)
  */
 export function search(opts: SearchClientOptions = {}): SearchClient {
-	const base = (opts.base ?? '').replace(/\/+$/, '');
+	const base = (opts.base ?? '').replace(TRAILING_SLASHES_RE, '');
 	const url = opts.endpoint ?? `${base}/search.json`;
 	const worker = new Worker(new URL('./search-worker.js', import.meta.url), { type: 'module' });
 	let seq = 0;
@@ -51,7 +54,8 @@ export function search(opts: SearchClientOptions = {}): SearchClient {
 		const m = e.data as { type: string; id?: number; hits?: SearchHit[]; message?: string };
 		if (m.type === 'result' && m.id !== undefined) pending.get(m.id)?.(m.hits ?? []);
 		else if (m.type === 'ready') ready_resolve();
-		else if (m.type === 'error') ready_reject(new Error(m.message ?? 'search index failed to load'));
+		else if (m.type === 'error')
+			ready_reject(new Error(m.message ?? 'search index failed to load'));
 	};
 	// A worker-level crash (module failed to load/parse) never sends a message — surface it so the
 	// palette shows *why* instead of hanging on "loading" forever.

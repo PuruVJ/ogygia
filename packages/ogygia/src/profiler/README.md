@@ -6,26 +6,29 @@ network calls, and allocations, with zero per-component instrumentation.
 
 It watches the whole Node process during a render, so it sees everything:
 component SSR, `load` functions, markdown/serialization, utilities, garbage
-collection, and time spent *waiting* on the network. Svelte compiles every
+collection, and time spent _waiting_ on the network. Svelte compiles every
 component to a function named after its file, so the profile attributes render
 time to your components by itself.
 
 ## Install
 
-One line in `src/hooks.server.ts`:
+Turn it on in `vite.config.ts` — nowhere else:
 
 ```ts
-import { sequence } from '@sveltejs/kit/hooks';
-import { profiler } from 'ogygia/profiler';
+import { ogygia } from 'ogygia/vite';
 
-export const handle = sequence(profiler(), /* ...your other handles */);
+export default defineConfig({
+	plugins: [ogygia({ profiler: true }), sveltekit()]
+});
 ```
 
-Put it **first** in the sequence so it times the whole chain below it. In
-production, set a secret so the UI is reachable:
+`ogygia.handle()` mounts it for you, so `src/hooks.server.ts` stays a plain
+`sequence(...)`. Pass options instead of `true` to tune it —
+`ogygia({ profiler: { secret, path, sampleInterval } })`. In production, set a
+secret so the UI is reachable:
 
 ```bash
-PROFILER_SECRET=some-long-random-string
+OGYGIA_PROFILER_SECRET=some-long-random-string
 ```
 
 Then open **`/__profiler`** (add `?key=<secret>` in production).
@@ -48,8 +51,8 @@ Then open **`/__profiler`** (add `?key=<secret>` in production).
   segment is "idle / waiting", the server was blocked on I/O, not computing.
 - **CPU by self time** — an interactive treemap; the biggest box is the
   bottleneck. Click a box to zoom in.
-- **Components** — sortable by self or total. *self* = the component's own code;
-  *total* = self plus everything it calls. Sort by self to find the real CPU
+- **Components** — sortable by self or total. _self_ = the component's own code;
+  _total_ = self plus everything it calls. Sort by self to find the real CPU
   burners (ancestors like `_layout`/`Root` sink to the bottom).
 - **Network** — every outbound `fetch`/`http` call, tied to the route that made
   it, with a waterfall. Flags calls that ran back-to-back (sequential `await`s).
@@ -97,14 +100,14 @@ the always-on request log still works; CPU/heap recording does not.
 
 ```ts
 profiler({
-  secret: process.env.PROFILER_SECRET, // default: PROFILER_SECRET env
-  path: '/__profiler',                 // UI base path
-  sampleInterval: 500,                 // µs between CPU samples
-  maxReports: 6,                       // profiles kept in memory (gzipped)
-  network: true,                       // patch fetch/http for attribution
-  serverTiming: undefined,             // default: on in dev, off in prod
-  heap: true,                          // sample heap allocations while recording
-  enabled: true,                       // master switch
+	secret: process.env.OGYGIA_PROFILER_SECRET, // default: OGYGIA_PROFILER_SECRET env
+	path: '/__profiler', // UI base path
+	sampleInterval: 500, // µs between CPU samples
+	maxReports: 6, // profiles kept in memory (gzipped)
+	network: true, // patch fetch/http for attribution
+	serverTiming: undefined, // default: on in dev, off in prod
+	heap: true, // sample heap allocations while recording
+	enabled: true // master switch
 });
 ```
 
@@ -116,8 +119,8 @@ anonymous functions recover their names:
 ```ts
 // vite.config.ts
 export default defineConfig({
-  build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined,
-  // ...
+	build: process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : undefined
+	// ...
 });
 ```
 

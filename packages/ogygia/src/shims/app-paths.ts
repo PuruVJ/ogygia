@@ -19,7 +19,7 @@ export function resolve(id: string, params: Record<string, string> = {}) {
 	return base + substitute(id, params);
 }
 
-/** Resolve an asset URL in the static dir. */
+/** Resolve an asset URL in the static dir — `'x'` (Kit 3's form) or `'/x'` (Kit 2's). */
 export function asset(file: string) {
-	return (assets || base) + file;
+	return (assets || base) + (file.startsWith('/') ? file : '/' + file);
 }

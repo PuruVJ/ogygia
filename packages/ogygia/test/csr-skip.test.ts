@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/vite/standalone.js';
+import { clientBuildWillSkip, read_csr, KEEP_CLIENT_DIR } from '../src/compiler/kit.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The Kit client-build skip predicate — the issue #4/#1 regression suite.
@@ -113,6 +113,42 @@ describe('clientBuildWillSkip — chain-resolved csr (Kit parity)', () => {
 	});
 });
 
+describe('clientBuildWillSkip — symlinked route files and dirs (Kit follows links)', () => {
+	// Kit discovers routes by name + statSync, so a linked `+layout.ts` / a linked route dir is a
+	// real node to it. ogygia's walkers used dirent types (false for links): a linked root
+	// `+layout.ts` with csr=false was invisible → "build stays" predicted while Kit skipped → 404s.
+	// Regression: an app sharing route files between two trees (src/routes ↔ src/routes-v2).
+	it('a linked root +layout.ts (csr=false) + option-less pages → skip', () => {
+		const dir = routes({
+			'shared/+layout.ts': 'export const csr = false;',
+			'tree/+page.svelte': '<h1>home</h1>',
+			'tree/about/+page.svelte': '<h1>about</h1>'
+		});
+		symlinkSync(join(dir, 'shared/+layout.ts'), join(dir, 'tree/+layout.ts'));
+		expect(clientBuildWillSkip(join(dir, 'tree'))).toBe(true);
+	});
+
+	it('a linked route DIRECTORY holding a csr=true page keeps the build alive', () => {
+		const dir = routes({
+			'shared/kit/+page.svelte': '<h1>kit</h1>',
+			'shared/kit/+page.ts': 'export const csr = true;',
+			'tree/+layout.ts': 'export const csr = false;',
+			'tree/+page.svelte': '<h1>home</h1>'
+		});
+		symlinkSync(join(dir, 'shared/kit'), join(dir, 'tree/kit'));
+		expect(clientBuildWillSkip(join(dir, 'tree'))).toBe(false);
+	});
+
+	it('a dangling link is ignored, as Kit ignores it', () => {
+		const dir = routes({
+			'tree/+layout.ts': 'export const csr = false;',
+			'tree/+page.svelte': '<h1>home</h1>'
+		});
+		symlinkSync(join(dir, 'nowhere'), join(dir, 'tree/gone'));
+		expect(clientBuildWillSkip(join(dir, 'tree'))).toBe(true);
+	});
+});
+
 describe('read_csr — export shapes', () => {
 	it('reads the TS-annotated form `export const csr: boolean = false`', () => {
 		const dir = routes({ '+layout.ts': 'export const csr: boolean = false;\n' });
@@ -126,10 +162,14 @@ describe('read_csr — export shapes', () => {
 		const dir = routes({ '+layout.ts': '// export const csr = true\nexport const csr = false;\n' });
 		expect(read_csr(join(dir, '+layout.ts'))).toBe(false);
 		// Block comment.
-		const dir2 = routes({ '+layout.ts': '/* export const csr = true */\nexport const csr = false;\n' });
+		const dir2 = routes({
+			'+layout.ts': '/* export const csr = true */\nexport const csr = false;\n'
+		});
 		expect(read_csr(join(dir2, '+layout.ts'))).toBe(false);
 		// A `://` inside a string on another line must not be mistaken for a comment and eat the export.
-		const dir3 = routes({ '+layout.ts': 'const u = "https://x.test";\nexport const csr = false;\n' });
+		const dir3 = routes({
+			'+layout.ts': 'const u = "https://x.test";\nexport const csr = false;\n'
+		});
 		expect(read_csr(join(dir3, '+layout.ts'))).toBe(false);
 	});
 });

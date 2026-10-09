@@ -75,35 +75,36 @@
       viewport edges, curved, glassy, with the site's panel shadow. Same recipe as the old `.side`. ── */
 .og-cside {
 	position: fixed;
-	z-index: 50;
-	top: var(--side-gap, 0.85rem);
-	bottom: var(--side-gap, 0.85rem);
-	left: var(--side-gap, 0.85rem);
+	z-index: 40;
+	/* ATTACHED column (not floating) — pinned to the left edge, flush under the shared header, a right
+	   divider instead of the old floating glass panel. */
+	top: 3.5rem;
+	bottom: 0;
+	left: 0;
 	width: var(--og-side-w);
 	height: auto;
-	padding: 0.85rem 0.55rem 0.9rem 0.7rem;
-	border: 1px solid color-mix(in srgb, var(--accent-line) 55%, var(--line));
-	border-radius: 14px;
-	background:
-		linear-gradient(
-			165deg,
-			color-mix(in srgb, var(--accent-deep) 28%, transparent) 0%,
-			transparent 42%
-		),
-		color-mix(in srgb, var(--bg-raised) 92%, transparent);
-	box-shadow:
-		var(--shadow-panel),
-		inset 0 1px 0 color-mix(in srgb, var(--accent) 8%, transparent);
-	backdrop-filter: blur(16px) saturate(1.15);
-	-webkit-backdrop-filter: blur(16px) saturate(1.15);
+	padding: 1.2rem 0.8rem 1rem 1.1rem;
+	border-right: 1px solid color-mix(in srgb, var(--accent-line) 45%, var(--line));
+	background: color-mix(in srgb, var(--bg-raised) 45%, var(--bg));
 	overflow-y: auto;
+}
+/* The header is FIXED now (out of flow, so the elastic overscroll can't drag it), so the content frame
+   clears its 3.5rem height here — on every size. */
+.og-cframe {
+	padding-top: 3.5rem;
 }
 /* The frame no longer reserves a grid column for the sidebar — the panel floats over the page,
    so the content clears it with padding instead (the old site-chrome.css approach). */
 @media (min-width: 901px) {
 	.og-cframe {
 		display: block;
-		padding-left: calc(var(--og-side-w) + var(--side-gap, 0.85rem) * 2);
+		/* Attached sidebar: content clears its full width, no floating gap. */
+		padding-left: var(--og-side-w);
+	}
+	/* The shared SiteHeader (3.5rem) now sits above the content, so the main column needs far less top
+	   padding than the old headerless layout reserved (was 2.75rem — doubled the gap under the header). */
+	.og-cmain {
+		padding-top: 1.35rem;
 	}
 }
 /* Old `.side-cat` rhythm: sections separated by a hairline, tight link stacks. The OUTER list
@@ -199,10 +200,19 @@
    the root content fade is no longer drowned. On a shell change the router strips these names first
    (they fold into the page cross-fade), so this only touches the same-shell case. */
 ::view-transition-group(*.phnav),
-::view-transition-image-pair(*.phnav),
-::view-transition-old(*.phnav),
+::view-transition-image-pair(*.phnav) {
+	animation: none !important;
+}
+/* Old + new must not just DROP their animation — with `animation: none` alone both snapshots keep
+   opacity 1 and stack, so an identical row paints its text TWICE (the ghosted / darker sidebar seen
+   mid-nav). Snap instead: hide the old, hold the new — no fade, no double. */
+::view-transition-old(*.phnav) {
+	animation: none !important;
+	opacity: 0 !important;
+}
 ::view-transition-new(*.phnav) {
 	animation: none !important;
+	opacity: 1 !important;
 }
 ::view-transition-group(og-nav-active) {
 	z-index: 0;
@@ -517,9 +527,10 @@
 }
 .og-doc .og-toc {
 	position: fixed;
-	top: 1.5rem;
+	/* Below the shared SiteHeader (3.5rem), like the sidebar. */
+	top: calc(3.5rem + var(--side-gap, 0.85rem));
 	width: 12.5rem;
-	max-height: calc(100vh - 3rem);
+	max-height: calc(100vh - 3.5rem - 2.5rem);
 	overflow-y: auto;
 }
 .og-toc-link {

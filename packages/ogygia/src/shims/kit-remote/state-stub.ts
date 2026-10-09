@@ -6,3 +6,5 @@ export const page = {
 	}
 };
 export const navigating = { current: null };
+/** Kit 3: a remote response's app version, for Kit's update check — no Kit client here to update. */
+export function notify_version(_version: string): void {}

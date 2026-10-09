@@ -4,13 +4,12 @@
  * `core` (and `router`) never statically import a feature impl — that would defeat the per-app
  * tree-shaking the generated runtime entry relies on. Instead each feature's `install()` fills its
  * typed slot here, and core reads the slot. Slots that core calls unconditionally (`lakes`,
- * `persist`, `forms`) carry a no-op default so the feature can be absent; the rest are `null` until
+ * `forms`) carry a no-op default so the feature can be absent; the rest are `null` until
  * a feature provides them and are read with optional chaining.
  *
  * This is the single wiring mechanism — there is no service locator and no per-feature setter.
  */
 import type { Component } from 'svelte';
-import type { PersistPair } from './persist.js';
 import type { Frame } from '../frame.js';
 import { is_frozen } from './region-attrs.js';
 
@@ -48,16 +47,6 @@ export type LakeOps = {
 	): void;
 };
 
-// ── persist ──────────────────────────────────────────────────────────────
-export type PersistOps = {
-	/** Read by core (`disconnectedCallback`): keep a relocating persist island mounted. */
-	is_persist_preserving(el: Element): boolean;
-	/** Read by the router around a body swap. */
-	collect(from: ParentNode, to: ParentNode): PersistPair[];
-	relocate(pairs: PersistPair[]): void;
-	end(pairs: PersistPair[]): void;
-};
-
 // ── forms ────────────────────────────────────────────────────────────────
 export type FormOps = {
 	enabled: boolean;
@@ -69,14 +58,19 @@ export type FormOps = {
 /** Wake a cold island when interaction lands inside it; returns a disarm fn. */
 export type ArmFn = (el: HTMLElement, fire: () => void) => void | (() => void);
 
-export type MorphFn = (parent: Element, nodes: Node[]) => void;
+/** `target: 'walk'` = the hydration repair (the server sequence Svelte's walk binds); default = a live
+ *  morph toward a new answer. Same ownership rules either way (runtime/ownership.ts). */
+export type MorphFn = (
+	parent: Element,
+	nodes: ArrayLike<Node>,
+	options?: { target?: 'live' | 'walk' }
+) => void;
 
 export type WireOps = {
-	TRANSPORT_WIRE_KEY: string;
-	revive_transportable: (payload: never, remember: boolean) => unknown;
-	/** Portable-snippet codec key + decode (rebuilds a live snippet from its descriptor). */
-	REGION_SNIPPET_WIRE_KEY: string;
-	revive_region_snippet: (payload: never) => unknown;
+	/** THE hub key (`OgygiaRef`) — every transportable kind crosses under it. */
+	REF_WIRE_KEY: string;
+	/** Hub resolve: ref → live value (kind-dispatched; browser remembers, server never). */
+	resolve: (ref: never, remember: boolean) => unknown;
 };
 
 export type RemoteSeedOps = {
@@ -105,16 +99,11 @@ export type FrameOps = {
 	 * frames feature ⇒ no `render="defer"` holes to batch ⇒ the call never fires anyway.
 	 */
 	stream(endpoints: string[]): Promise<void>;
-};
-
-/**
- * Per-document lifecycle, filled by {@link ./core.js core} in `boot()` (not by a feature). The
- * router reads it around a body swap so router modules never import core's Svelte component graph.
- */
-export type SpaLifecycle = {
-	prepare(): void;
-	finish(): void;
-	softInvalidate(doc: Document): void;
+	/** Holes that start fetching in the same task go out as one batch (frame-nav.ts `join_batch`);
+	 *  await it, then `ensure` joins the batch's reservation. */
+	join?(endpoint: string): Promise<void>;
+	/** How the batch that carried a hole timed it (frame-nav.ts; the measuring browser only). */
+	batch_times?(endpoint: string): { left: number; at: number; size: number } | undefined;
 };
 
 // ── nav ──────────────────────────────────────────────────────────────────
@@ -128,18 +117,76 @@ export type NavOps = {
 	invalidateAll(): Promise<void>;
 };
 
+/**
+ * BOOT → LAZY LINKS. The runtime's lazy chunks — the hydrate core, the router's navigation,
+ * interaction replay — use a handful of boot helpers and the boot's session state. They reach them
+ * HERE, never by importing a boot module: a module the boot and a lazy chunk both import is shared,
+ * and Kit's client build (`preserveEntrySignatures: 'strict'`) forbids the runtime chunk from
+ * exporting it, so the bundler splits every such module into a file of its own — the runtime's
+ * boot arrived as nine. Each link is filled before its lazy chunk can load: `boot` by core's boot
+ * (./boot-link.ts), `router_link` and `interaction_link` by the very loader that imports their chunk
+ * (the router's `nav()`, interaction's `replay()`), `sync_attributes` by morph's install. Types only
+ * below (erased), so this registry imports none of them.
+ * `test/runtime-boot-svelte-free.test.ts` pins that no lazy chunk imports a boot module.
+ */
+export type BootLink = {
+	kit_hydrates_page: typeof import('./kit-boot.js').kit_hydrates_page;
+	KitBoot: typeof import('./kit-boot.js').KitBoot;
+	ABSOLUTE_URL_SCHEME: RegExp;
+	register_island_graph: typeof import('./island-graph-preload.js').register_island_graph;
+	is_warmed_module: typeof import('./region-endpoint-url.js').is_warmed_module;
+	warm_island_module: typeof import('./region-endpoint-url.js').warm_island_module;
+	note_entry_location: typeof import('./entry-locations.js').note_entry_location;
+	props_sidecar_of: typeof import('./sidecar.js').props_sidecar_of;
+	parse_region_html: typeof import('./parse-html.js').parse_region_html;
+	runtime_session: typeof import('./session.js').runtime_session;
+	regions_in_shadow: typeof import('./connected.js').regions_in_shadow;
+	yield_task: typeof import('./schedule.js').yield_task;
+	/** the router's navigation, timed for the profiler's beacon (a no-op without it) */
+	beacon_nav: typeof import('./beacon.js').beacon_nav;
+	/** the load scheduler's queue (./load-scheduler.ts) */
+	load_slot: typeof import('./load-scheduler.js').load_slot;
+	/** DOM ownership (./ownership.ts): which children Svelte's walk enters, and self-owned elements */
+	walk_enters: typeof import('./ownership.js').walk_enters;
+	is_self_owned: typeof import('./ownership.js').is_self_owned;
+};
+export type RouterLink = {
+	document_key: typeof import('./router.js').document_key;
+	jump_to_hash: typeof import('./router.js').jump_to_hash;
+	push_state: typeof import('./router.js').push_state;
+	replace_state: typeof import('./router.js').replace_state;
+};
+export type InteractionLink = {
+	resolve_address: typeof import('./interaction.js').resolve_address;
+};
+
 export type Slots = {
 	lakes: LakeOps;
-	persist: PersistOps;
 	forms: FormOps;
 	interaction: ArmFn | null;
 	morph: MorphFn | null;
 	live: Component<Record<string, unknown>> | null;
+	/** a kept island's host (the live feature fills it beside `live`) */
+	keep: Component<Record<string, unknown>> | null;
 	wire: WireOps | null;
 	remoteSeeds: RemoteSeedOps | null;
 	frames: FrameOps | null;
-	spaLifecycle: SpaLifecycle | null;
 	nav: NavOps | null;
+	/**
+	 * Cross-island context bridge, filled by the `context` feature. Walks the DOM from an island up
+	 * to seed its `getContext` from a `<Provide>` / drop-in-`setContext` marker above it. Null when the
+	 * build detected no ogygia context provider — a plain app never bundles the ~4.7 kB bridge, and
+	 * core's call optional-chains to `undefined` (exactly "no provider above", the existing empty case).
+	 */
+	context: ((start: Element | null) => Map<string, unknown> | undefined) | null;
+	/** Boot helpers + session for the lazy chunks (see {@link BootLink}). */
+	boot: BootLink | null;
+	/** The router's history/scroll helpers for its navigation chunk (see {@link RouterLink}). */
+	router_link: RouterLink | null;
+	/** Interaction's address resolver for its replay chunk (see {@link InteractionLink}). */
+	interaction_link: InteractionLink | null;
+	/** Morph's attribute sync, for the navigation's body reconcile. */
+	sync_attributes: typeof import('./morph.js').sync_attributes | null;
 };
 
 /** The live registry. A feature's `install()` assigns its slot; core/router read them. */
@@ -154,12 +201,6 @@ export const slots: Slots = {
 		after_html_swap: () => {},
 		after_fetch_exhausted: () => {}
 	},
-	persist: {
-		is_persist_preserving: () => false,
-		collect: () => [],
-		relocate: () => {},
-		end: () => {}
-	},
 	forms: {
 		enabled: false,
 		snapshot: () => {},
@@ -168,9 +209,26 @@ export const slots: Slots = {
 	interaction: null,
 	morph: null,
 	live: null,
+	keep: null,
 	wire: null,
 	remoteSeeds: null,
 	frames: null,
-	spaLifecycle: null,
-	nav: null
+	nav: null,
+	context: null,
+	boot: null,
+	router_link: null,
+	interaction_link: null,
+	sync_attributes: null
 };
+
+/** A link a lazy chunk needs, or a loud error: every link is filled before its chunk can load, so a
+ *  missing one means a chunk ran without the boot that owns it (a test that skipped `link_boot()`). */
+function linked<T>(link: T | null, name: string): T {
+	if (link === null) throw new Error(`[ogygia] runtime chunk used \`slots.${name}\` before the boot linked it`);
+	return link;
+}
+export const boot_link = (): BootLink => linked(slots.boot, 'boot');
+export const router_link = (): RouterLink => linked(slots.router_link, 'router_link');
+export const interaction_link = (): InteractionLink => linked(slots.interaction_link, 'interaction_link');
+export const morph_sync_attributes = (): NonNullable<Slots['sync_attributes']> =>
+	linked(slots.sync_attributes, 'sync_attributes');

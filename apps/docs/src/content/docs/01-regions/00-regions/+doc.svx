@@ -1,6 +1,6 @@
 ---
 title: Regions
-summary: The one primitive everything compiles to. Islands, server islands, lakes, and held regions are four settings of the same envelope.
+summary: The one primitive that all marks compile to. Islands, server islands, lakes, and held regions are four settings of the same envelope.
 related:
   - regions/client-islands
   - regions/server-islands
@@ -8,52 +8,52 @@ related:
   - regions/held-regions
 ---
 
-A **region** is a piece of the page with its own rendering and waking rules. It is ogygia's only primitive. Every marked import compiles to the same `<Region>` envelope: an island, a server island, a lake, a held region. They are not four features. They are four settings of one thing.
+A **region** is a part of the page with its own rules for rendering and for waking. It is the only primitive in ogygia. Each marked import compiles to the same `<Region>` envelope: an island, a server island, a lake, a held region. They are not four features. They are four settings of one thing.
 
 ::: tip Why one primitive
-One envelope means one way to hydrate, one way to sign, one way to pass props, and one mental model. When you understand a region, you understand all of them. The rest of this section is just the settings.
+One envelope means one way to hydrate, one way to sign, one way to pass props, and one mental model. When you understand a region, you understand all of them. The remainder of this section is only the settings.
 :::
 
 ## The two dials
 
-A region is configured by two independent dials, set as import attributes:
+Two independent dials configure a region. You set them as import attributes:
 
 | Dial | Question it answers | Values |
 | --- | --- | --- |
-| `render` | Where does the HTML come from, and when? | inline in the page's SSR pass (default) · `'deferred'`: fetched from a signed endpoint per request |
-| `wake` | Does this ship client JS, and when does it run? | none (default, HTML only) · `'load'` · `'idle'` · `'visible'` · `'interaction'` · a media query · `'none'` (explicitly frozen) |
+| `render` | Where does the HTML come from, and when? | inline in the SSR pass of the page (default) · `'deferred'`: fetched from a signed endpoint on each request |
+| `wake` | Does this ship client JS, and when does it run? | none (default, HTML only) · `'load'` · `'idle'` · `'visible'` · `'interaction'` · a media query · `'none'` (frozen by intent) |
 
-Every combination is legal, and each named kind is just a point in that grid:
+Each combination is legal. Each named kind is one point in that grid:
 
 ## The kinds
 
 | Kind | Mark | What it is |
 | --- | --- | --- |
-| [Client island](/docs/regions/client-islands) | `with { wake: 'visible' }` | SSRs inline, hydrates on a schedule. The interactive one. |
-| [Server island](/docs/regions/server-islands) | `with { render: 'deferred' }` | HTML rendered per fetch from a signed endpoint, fresh on every request. Streams into a static shell. Optionally wakes after arrival. |
-| [Lake](/docs/regions/lakes) | `with { wake: 'none' }` | Frozen server HTML. Ships zero JS, survives SPA swaps untouched. |
-| [Held region](/docs/regions/held-regions) | `region(Comp, props)` | A region as a **value**: minted in a load or remote function, passed over the wire, placed with `<Region of={value} />`. |
+| [Client island](/docs/regions/client-islands) | `with { wake: 'visible' }` | SSRs inline. Hydrates on a schedule. The interactive one. |
+| [Server island](/docs/regions/server-islands) | `with { render: 'deferred' }` | HTML rendered on each fetch from a signed endpoint. Fresh on each request. Streams into a static shell. Can wake after arrival. |
+| [Lake](/docs/regions/lakes) | `with { wake: 'none' }` | Frozen server HTML. Ships zero JS. Continues unchanged through SPA swaps. |
+| [Held region](/docs/regions/held-regions) | `region(Comp, props)` | A region as a **value**: made in a load or a remote function, sent over the wire, placed with `<Region of={value} />`. |
 
-Anything unmarked is not a region at all. It's plain server HTML compiled into the page, the default and the cheapest thing on the site.
+Unmarked markup is not a region. It is plain server HTML compiled into the page. That is the default, and the least costly thing on the site.
 
-## What every region guarantees
+## What each region guarantees
 
-Whatever the dials say, the envelope's contract is the same:
+The settings can differ. The contract of the envelope does not:
 
-- **SSR first.** A region renders real HTML on the server. JS, if any, attaches to that HTML; it never replaces it. Disable JS and the markup is still there.
-- **One hydration.** A region hydrates exactly once, adopting its server DOM in place: no discard-and-recreate, no flash. Nested regions degrade into their parent's single hydration.
-- **Signed capabilities.** Anything a region fetches later (a deferred hole, an SWR remount) goes through an endpoint minted with an HMAC capability at SSR time. The client holds a ticket, not an open door.
-- **Props cross by value.** Captured host values cross the boundary via devalue: plain data, `Map`/`Set`/`Date`, and your registered [transportables](/docs/data-state/state-context). Functions and promises don't; state that must live, lives inside the region.
+- **SSR first.** A region renders real HTML on the server. JS, if there is JS, attaches to that HTML. It never replaces it. Set JS off, and the markup remains.
+- **One hydration.** A region hydrates one time. It adopts its server DOM in place. There is no discard-and-recreate, and no flash. Nested regions become part of the single hydration of their parent.
+- **Signed capabilities.** All later fetches of a region (a deferred hole, an SWR remount) go through an endpoint with an HMAC capability. The capability is made at SSR time. The client holds a ticket, not an open door.
+- **Props cross by value.** Captured host values cross the boundary through devalue: plain data, `Map`/`Set`/`Date`, and your registered [transportables](/docs/data-state/state-context). Functions and promises do not cross. State that must stay live, lives inside the region.
 
 ## Shared mechanics
 
-Two pages in this section apply to every kind rather than any one of them:
+Two pages in this section apply to each kind:
 
-- [Timing & nesting](/docs/regions/timing-nesting): the full `wake` schedule reference, `visible` margins, and what happens when regions contain regions.
-- [Client islands](/docs/regions/client-islands): mark an import with `wake` and it ships JS on a schedule; the marked import is a real component binding you can pass around, render dynamically, or put in an `{#each}`.
+- [Timing & nesting](/docs/regions/timing-nesting): the full `wake` schedule reference, `visible` margins, and regions that contain regions.
+- [Client islands](/docs/regions/client-islands): mark an import with `wake`, and it ships JS on a schedule. The marked import is a real component binding. You can pass it, render it dynamically, or put it in an `{#each}`.
 
-From here, read the kind you need. Or start with [client islands](/docs/regions/client-islands), the one most pages reach for first.
+From here, read the kind you need. Or start with [client islands](/docs/regions/client-islands). Most pages use that kind first.
 
 ---
 
-*Next chapter: on its own, an island can't reach the server. [Remote functions](/docs/data-state/remote-functions) give it a way.*
+*Next chapter: an island alone cannot reach the server. [Remote functions](/docs/data-state/remote-functions) give it a way.*

@@ -1156,7 +1156,7 @@
 		inset: 0;
 		z-index: 100;
 		background: color-mix(in oklab, #000 55%, transparent);
-		
+
 		animation: og-fade var(--og-dur) var(--og-ease);
 	}
 	.og-search-panel {
@@ -1219,7 +1219,16 @@
 	}
 
 	:is(.og-shell, .og-shell, [class*='og-search'], [class*='og-sw-'], .og-sheet)
-		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
+		:is(
+			a,
+			button,
+			[role='menuitem'],
+			[role='menuitemradio'],
+			[role='tab'],
+			[role='option'],
+			input,
+			summary
+		):focus-visible {
 		outline: 2px solid var(--og-accent);
 		outline-offset: 2px;
 		border-radius: var(--og-radius-sm);

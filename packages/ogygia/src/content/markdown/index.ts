@@ -46,6 +46,11 @@ export { inline_markers } from './inline-markers.js';
 export type { InlineMarkerOptions } from './inline-markers.js';
 export type { Fence, MetaParser, VariantGenerator, Variant } from './code.js';
 
+// ── regexes
+const BACKSLASH_G = /\\/g;
+const MODULE_SCRIPT_OPEN_RE = /<script\b[^>]*\b(?:context\s*=\s*(["'])module\1|module)\b[^>]*>/;
+const TAB_IMPORT_RE = /^\s*import\b[^\n]*\bTab(?:Group)?\b[^\n]*\bfrom\b/m;
+
 /**
  * The CODE fence pipeline config — one bag for the whole fence dialect. Core knows CONTRACTS, not
  * features: each slot takes imported adapter VALUES, never feature flags. (Stages `meta` and
@@ -232,7 +237,7 @@ function transform_islands(content: string, filename: string): string | null {
  * `emit.raw`, "copy as markdown", llms-full, …) with no parallel `?raw` glob in app code.
  */
 function source_line(filename: string): string | null {
-	const base = filename.replace(/\\/g, '/').split('/').pop() ?? '';
+	const base = filename.replace(BACKSLASH_G, '/').split('/').pop() ?? '';
 	if (!base) return null;
 	return `export const __ogygia_source = () => import(${JSON.stringify('./' + base + '?raw')}).then((m) => m.default);`;
 }
@@ -243,7 +248,7 @@ function inject_module(code: string, lines: string[]): string {
 	const block = lines.join('\n');
 	// Inject into the existing module script (Svelte 5 `<script module>` or legacy `context="module"`),
 	// else prepend a fresh one. Never two module scripts (illegal).
-	const open = /<script\b[^>]*\b(?:context\s*=\s*(["'])module\1|module)\b[^>]*>/.exec(code);
+	const open = MODULE_SCRIPT_OPEN_RE.exec(code);
 	if (open) {
 		const at = open.index + open[0].length;
 		return code.slice(0, at) + '\n' + block + code.slice(at);
@@ -346,10 +351,17 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	} = options ?? (islandBridge.markdownConfig as MarkdownOptions | null) ?? {};
 
 	// Element overrides: which tags get wrapped in the ogygia slot (values live in `site()`).
-	const override_tags = overrides ? (overrides === true ? [...DEFAULT_OVERRIDE_TAGS] : (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])) : [];
+	const override_tags = overrides
+		? overrides === true
+			? [...DEFAULT_OVERRIDE_TAGS]
+			: (overrides.tags ?? [...DEFAULT_OVERRIDE_TAGS])
+		: [];
 
 	// The fence pipeline's transformers ride the shiki config (applied at codeToHtml).
-	const cfg = configure_shiki({ ...shiki_opts, ...(code?.transformers ? { transformers: code.transformers } : {}) });
+	const cfg = configure_shiki({
+		...shiki_opts,
+		...(code?.transformers ? { transformers: code.transformers } : {})
+	});
 	// meta parsers (default infostring) + variant generators — the meta/variants stages.
 	const pipeline = {
 		meta: code?.meta ?? default_pipeline().meta,
@@ -393,7 +405,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			`r${remark_staged.pre.length}.${remark_staged.post.length}`,
 			// generator-plugin cache identities (a directive expander over a .d.ts set, …) — dynamic, so
 			// an input edit re-keys every doc that could have expanded it (read late, like the variants)
-			[...remark_staged.cache_keys, ...rehype_staged.cache_keys].map((k) => k()).join(","),
+			[...remark_staged.cache_keys, ...rehype_staged.cache_keys].map((k) => k()).join(','),
 			`h${rehype_staged.pre.length}.${rehype_staged.post.length}`,
 			cfg.lightName,
 			cfg.darkName,
@@ -422,7 +434,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			...remark_staged.post
 		] as MdsvexOptions['remarkPlugins'],
 		highlight: {
-			highlighter: create_mdsvex_highlighter(cfg, pipeline, code?.cacheSalt)
+			highlighter: create_mdsvex_highlighter(cfg, pipeline, code?.cacheSalt) as Extract<
+				MdsvexOptions['highlight'],
+				object
+			>['highlighter']
 		},
 		// Use OUR frontmatter parser, not mdsvex's default js-yaml. It's a frontmatter parser first and
 		// a YAML parser second: a brace-wrapped title like `{@const}` / `{#each}` (Svelte docs source)
@@ -433,7 +448,9 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			marker: '-',
 			parse: (fm: string) => {
 				const data = parse_yaml(fm);
-				return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+				return data && typeof data === 'object' && !Array.isArray(data)
+					? (data as Record<string, unknown>)
+					: {};
 			}
 		}
 	};
@@ -458,10 +475,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	// clean svelte mdsvex produces. No-op if `ogygia` isn't installed (plain content app).
 	const group: PreprocessorGroup = {
 		name: 'ogygia-markdown',
-		async markup(input: { content: string; filename: string }) {
+		async markup(input: { content: string; filename?: string }) {
 			// This hook also runs on every `.svelte` (which must be left untouched). Compute the
 			// content-file check up front so the VitePress `:::` container pass only touches `.svx`/`.md`.
-			const path = input.filename.split('?')[0];
+			const path = (input.filename ?? '').split('?')[0];
 			const isContent = exts.some((x) => path.endsWith(x));
 
 			// Doc-level cache: content files only. The variant generators' `cache_key` includes lazily
@@ -470,7 +487,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			let doc_key: string | null = null;
 			if (isContent) {
 				await Promise.all(pipeline.variants.map((g) => g.ready?.()));
-				const base_name = path.replace(/\\/g, '/').split('/').pop() ?? '';
+				const base_name = path.replace(BACKSLASH_G, '/').split('/').pop() ?? '';
 				doc_key = docs_store.key([doc_sig(), base_name, input.content]);
 				const hit = doc_cache.get(doc_key);
 				if (hit) return { code: hit.code, map: undefined, dependencies: hit.deps };
@@ -485,7 +502,7 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 					// Only inject when the author hasn't already imported TabGroup. Match a real import STATEMENT
 					// (line-anchored, `import … TabGroup … from`), so prose like "the ability to import …" pairing
 					// with the injected `<TabGroup>` tag can't be mistaken for an existing import.
-					inject_tabs = t.used && !/^\s*import\b[^\n]*\bTab(?:Group)?\b[^\n]*\bfrom\b/m.test(raw);
+					inject_tabs = t.used && !TAB_IMPORT_RE.test(raw);
 				}
 				if (containers) raw = transform_containers(raw);
 			}
@@ -500,16 +517,18 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			const md = await get_md();
 			const out = await md.markup?.(raw === input.content ? input : { ...input, content: raw });
 			const code = markup_code(out, raw);
-			const islandCode = transform_islands(code, input.filename);
+			const islandCode = transform_islands(code, input.filename ?? '');
 			const base = islandCode ?? code;
 			// Generator-plugin file deps for THIS document (a directive expander's .d.ts set, …) —
 			// returned as preprocessor `dependencies` (vite-plugin-svelte watches them in dev) and
 			// stored beside the cached output so a warm hit still watches.
-			const gen_deps = [...remark_staged.deps, ...rehype_staged.deps].flatMap((fn) => fn(input.filename));
+			const gen_deps = [...remark_staged.deps, ...rehype_staged.deps].flatMap((fn) =>
+				fn(input.filename ?? '')
+			);
 			// Content module: carry its raw source, and (when overrides are on) import the slot the
 			// rehype pass rewrote tags into. Both are module-script lines injected once.
 			const lines: string[] = [];
-			const src = source_line(input.filename);
+			const src = source_line(input.filename ?? '');
 			if (src) lines.push(src);
 			// Bake the CSS key when the module carries its own scoped `<style>`. markdown_format reads
 			// `__ogygia_css` onto the body region so Region.svelte can link the client CSS chunk the
@@ -522,14 +541,23 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 			// `{@html}` reference in the template, body pre-baked. Only when nothing dynamic touched the
 			// file: no island transform, no tab injection, no slot overrides; the emitter itself vetoes
 			// scripts / component tags / svelte expressions and falls back to the component path.
-			if (region_mode && path.endsWith('.md') && islandCode == null && !inject_tabs && !override_tags.length) {
+			if (
+				region_mode &&
+				path.endsWith('.md') &&
+				islandCode == null &&
+				!inject_tabs &&
+				!override_tags.length
+			) {
 				const emitted = try_region_emit(base, lines);
 				if (emitted) {
 					// Store BOTH artifacts: the compiled module (next compile is a read), and the
 					// serialized region itself — the address future layers (incremental builds, edge,
 					// on-demand baking) fetch without ever seeing a module.
 					if (doc_key) {
-						doc_cache.set(doc_key, { code: emitted.code, ...(gen_deps.length ? { deps: gen_deps } : {}) });
+						doc_cache.set(doc_key, {
+							code: emitted.code,
+							...(gen_deps.length ? { deps: gen_deps } : {})
+						});
 						docs_store.set(doc_key, { html: emitted.html });
 					}
 					return { code: emitted.code, map: undefined, dependencies: gen_deps };
@@ -606,11 +634,10 @@ export function ogygiaPresetPreprocess(): PreprocessorGroup {
 
 	return {
 		name: 'ogygia-markdown',
-		async markup(input: { content: string; filename: string }) {
+		async markup(input: { content: string; filename?: string }) {
 			const m = PRESET_MARKER_RE.exec(input.content);
 			if (!m) return default_group.markup?.(input);
 			return group_for(m[1]).markup?.({ ...input, content: input.content.slice(0, m.index) });
 		}
 	};
 }
-

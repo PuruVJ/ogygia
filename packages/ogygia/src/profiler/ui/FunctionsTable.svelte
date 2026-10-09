@@ -1,0 +1,161 @@
+<script lang="ts">
+	/** Hot-functions table — a `wake:'load'` island with reactive column sort, a name/file filter,
+	 *  and an expandable row per function (full location + its heaviest call stacks). */
+	import type { FrameStat } from '../analyze.js';
+	import { fmt_ms, fmt_dur, fmt_bytes, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
+	import { sortable } from './sort.svelte.js';
+	import { pressable } from './press.js';
+	import FrameDetails from './FrameDetails.svelte';
+	import { row_id, follow_hash } from './row-anchor.svelte.js';
+
+	type Row = FrameStat & { per: number; count: number; alloc: number | null };
+	let {
+		rows,
+		hasAlloc,
+		base = '',
+		dev = false
+	}: { rows: Row[]; hasAlloc: boolean; base?: string; dev?: boolean } = $props();
+
+	let query = $state('');
+	const filtered = $derived.by(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return rows;
+		return rows.filter(
+			(r) =>
+				r.name.toLowerCase().includes(q) ||
+				r.url.toLowerCase().includes(q) ||
+				(r.path ?? '').toLowerCase().includes(q) ||
+				(r.pkg ?? '').toLowerCase().includes(q)
+		);
+	});
+	const s = sortable(() => filtered, 'self_ms');
+	const row_key = (f: Row) => f.key ?? f.name + ' ' + f.url;
+	let open = $state<string | null>(null);
+	const cols = $derived(hasAlloc ? 7 : 6);
+	// a finding's `#fn=<key>` link opens + scrolls to its row
+	$effect(() =>
+		follow_hash(
+			'fn',
+			() => rows.map(row_key),
+			(k) => {
+				query = '';
+				open = k;
+			}
+		)
+	);
+</script>
+
+<div class="tools">
+	<input
+		type="search"
+		placeholder="filter by function, file or package…"
+		bind:value={query}
+		aria-label="filter functions"
+	/>
+	<span class="hint">{filtered.length} of {rows.length} · click a row for its location and call stacks</span>
+</div>
+<table>
+	<thead>
+		<tr>
+			<th>function</th>
+			<th>where</th>
+			<th><span class="sr-only">kind of code</span></th>
+			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')} {@attach pressable} aria-sort={s.aria('self_ms')}
+				>self ms<span class="arr">{s.arrow('self_ms')}</span></th
+			>
+			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')} {@attach pressable} aria-sort={s.aria('total_ms')}
+				>total ms<span class="arr">{s.arrow('total_ms')}</span></th
+			>
+			<th
+				class="num sort"
+				class:active={s.key === 'per'}
+				title="one call: its time per render ÷ its calls in one render"
+				onclick={() => s.click('per')} {@attach pressable} aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
+			>
+			{#if hasAlloc}
+				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')} {@attach pressable} aria-sort={s.aria('alloc')}
+					>alloc<span class="arr">{s.arrow('alloc')}</span></th
+				>
+			{/if}
+		</tr>
+	</thead>
+	<tbody>
+		{#each s.sorted as f (row_key(f))}
+			<tr
+				class="row"
+				id={row_id('fn', row_key(f))}
+				class:open={open === row_key(f)}
+				onclick={() => (open = open === row_key(f) ? null : row_key(f))}
+				{@attach pressable}
+			>
+				<td class="fn">
+					<span class="caret">{open === row_key(f) ? '▾' : '▸'}</span>
+					{#if f.label}<b title="an anonymous function: its own first line">fn</b> <code class="fnlabel">{f.label}</code>{:else}<b>{f.name}</b>{/if}
+					{#if f.count > 1}
+						<span class="hint" title="{f.count} calls in one render, {fmt_ms(f.per)} ms each"
+							>×{f.count}</span
+						>
+					{/if}
+				</td>
+				<td class="file" title={f.path || ''}>
+					{#if f.url}{f.url}{#if f.line > 0}:{f.line}{#if f.col > 0}:{f.col}{/if}{/if}{:else}<span
+							class="hint">native</span
+						>{/if}
+				</td>
+				<td
+					><span
+						class="chip"
+						style="background:{CATEGORY_COLOR[f.category]};color:{ink_on(CATEGORY_COLOR[f.category])}"
+						title={f.pkg ? `${CATEGORY_LABEL[f.category]} · ${f.pkg}` : CATEGORY_LABEL[f.category]}
+						>{f.pkg ?? CATEGORY_LABEL[f.category]}</span
+					></td
+				>
+				<td class="num"><b>{fmt_ms(f.self_ms)}</b></td>
+				<td class="num">{fmt_ms(f.total_ms)}</td>
+				<td class="num">{f.count > 0 ? fmt_dur(f.per) : '—'}</td>
+				{#if hasAlloc}<td class="num">{f.alloc ? fmt_bytes(f.alloc) : '—'}</td>{/if}
+			</tr>
+			{#if open === row_key(f)}
+				<FrameDetails {f} colspan={cols} {base} {dev} />
+			{/if}
+		{/each}
+	</tbody>
+</table>
+
+<style>
+	.tools {
+		display: flex;
+		gap: 12px;
+		align-items: center;
+		flex-wrap: wrap;
+		margin: 6px 0 8px;
+	}
+	.tools input {
+		font: inherit;
+		font-size: 13px;
+		background: var(--bg-raised);
+		color: var(--text);
+		border: 1px solid var(--line);
+		border-radius: 6px;
+		padding: 5px 10px;
+		min-width: 280px;
+	}
+	.tools .hint {
+		color: var(--text-faint);
+		font-size: 12px;
+	}
+	tr.row {
+		cursor: pointer;
+	}
+	tr.row:hover td {
+		background: var(--bg-raised);
+	}
+	tr.row.open td {
+		border-bottom-color: transparent;
+	}
+	.caret {
+		color: var(--text-faint);
+		font-size: 10px;
+		margin-right: 4px;
+	}
+</style>

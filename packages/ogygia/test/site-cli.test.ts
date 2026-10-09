@@ -131,7 +131,9 @@ describe('site init — svelte.config project', () => {
 		expect(vc).toMatch(/sveltekit\(\)/);
 
 		// the layout mounts the docs shell at the root base
-		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(/<DocsShell site=\{docs\} base="" title="Docs">/);
+		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(
+			/<DocsShell site=\{docs\} base="" title="Docs">/
+		);
 		// hooks wired
 		expect(read(dir, 'src/hooks.server.ts')).toContain('ogygia.handle()');
 	});
@@ -215,14 +217,26 @@ describe('site init — --layout', () => {
 
 	it('rejects a --layout outside src/routes', () => {
 		const dir = svelteConfigProject();
-		const { status, out } = run(dir, ['init', '--layout', 'src/+layout.svelte', '-y', '--no-install']);
+		const { status, out } = run(dir, [
+			'init',
+			'--layout',
+			'src/+layout.svelte',
+			'-y',
+			'--no-install'
+		]);
 		expect(status).toBe(1);
 		expect(out).toMatch(/must be a \+layout\.svelte under src\/routes/);
 	});
 
 	it('rejects a --layout that is not a +layout.svelte', () => {
 		const dir = svelteConfigProject();
-		const { status } = run(dir, ['init', '--layout', 'src/routes/+page.svelte', '-y', '--no-install']);
+		const { status } = run(dir, [
+			'init',
+			'--layout',
+			'src/routes/+page.svelte',
+			'-y',
+			'--no-install'
+		]);
 		expect(status).toBe(1);
 	});
 });

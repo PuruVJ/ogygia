@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	// Cross-island context provider for PLAIN `getContext(key)` — no `createContext` handle needed, no
 	// change to the consumer islands. Writes `values` into the DOM once (so islands below, which
 	// hydrate as separate roots on a csr=false page, get them seeded into their own context at hydrate)
@@ -7,14 +7,15 @@
 	// data, `[ogygia.wire]` live values, region snippets — never a function or a live store.
 	import { setContext } from 'svelte';
 	import { serialize_context } from './context-bridge.js';
+	import type { Snippet } from 'svelte';
 
-	/**
-	 * @type {{
-	 *   values: Record<string, unknown> | Array<Record<string, unknown> | false | null | undefined>,
-	 *   children?: import('svelte').Snippet
-	 * }}
-	 */
-	let { values, children } = $props();
+	let {
+		values,
+		children
+	}: {
+		values: Record<string, unknown> | Array<Record<string, unknown> | false | null | undefined>;
+		children?: Snippet;
+	} = $props();
 
 	// clsx-like: an object is used as-is; an array is flattened + merged left→right (falsy entries
 	// skipped, later keys win). A typed `createContext('k')('v')` returns `{ k: 'v' }`, so typed and
@@ -22,7 +23,7 @@
 	// A provider's values are fixed for its lifetime — resolved once (server pass).
 	// svelte-ignore state_referenced_locally
 	const resolved = Array.isArray(values)
-		? /** @type {Record<string, unknown>} */ (Object.assign({}, ...values.filter(Boolean)))
+		? (Object.assign({}, ...values.filter(Boolean)) as Record<string, unknown>)
 		: values;
 
 	// svelte-ignore state_referenced_locally

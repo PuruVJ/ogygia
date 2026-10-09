@@ -65,7 +65,7 @@
 		--og-depth: linear-gradient(transparent, transparent);
 		--og-code-bg: #ffffff;
 		--og-code-line: #dde3ea;
-		--og-sheen: rgba(255,255,255,0.7);
+		--og-sheen: rgba(255, 255, 255, 0.7);
 	}
 
 	@media (prefers-color-scheme: dark) {
@@ -98,7 +98,7 @@
 			--og-depth: linear-gradient(transparent, transparent);
 			--og-code-bg: #0a0f13;
 			--og-code-line: #22303b;
-			--og-sheen: rgba(255,255,255,0.04);
+			--og-sheen: rgba(255, 255, 255, 0.04);
 		}
 	}
 	:root[data-theme='light'] {
@@ -133,7 +133,7 @@
 		--og-depth: linear-gradient(transparent, transparent);
 		--og-code-bg: #ffffff;
 		--og-code-line: #dde3ea;
-		--og-sheen: rgba(255,255,255,0.7);
+		--og-sheen: rgba(255, 255, 255, 0.7);
 	}
 	:root[data-theme='dark'] {
 		color-scheme: dark;
@@ -164,7 +164,7 @@
 		--og-depth: linear-gradient(transparent, transparent);
 		--og-code-bg: #0a0f13;
 		--og-code-line: #22303b;
-		--og-sheen: rgba(255,255,255,0.04);
+		--og-sheen: rgba(255, 255, 255, 0.04);
 	}
 
 	/* theme switch: snap the live DOM, let the VT cross-fade carry the motion */
@@ -857,7 +857,13 @@
 		margin: 2.5rem 0;
 		border: 0;
 		height: 1px;
-		background: linear-gradient(90deg, transparent, var(--og-line) 20%, var(--og-line) 80%, transparent);
+		background: linear-gradient(
+			90deg,
+			transparent,
+			var(--og-line) 20%,
+			var(--og-line) 80%,
+			transparent
+		);
 	}
 	.og-body img {
 		max-width: 100%;
@@ -1209,7 +1215,16 @@
 	}
 
 	:is(.og-shell, .og-shell, [class*='og-search'], [class*='og-sw-'], .og-sheet)
-		:is(a, button, [role='menuitem'], [role='menuitemradio'], [role='tab'], [role='option'], input, summary):focus-visible {
+		:is(
+			a,
+			button,
+			[role='menuitem'],
+			[role='menuitemradio'],
+			[role='tab'],
+			[role='option'],
+			input,
+			summary
+		):focus-visible {
 		outline: 2px solid var(--og-accent);
 		outline-offset: 2px;
 		border-radius: var(--og-radius-sm);

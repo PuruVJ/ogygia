@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	/**
 	 * Optional public annotation wrapper around a region usage.
 	 *
@@ -8,11 +8,9 @@
 	 * lake context reset (`LakeBoundary`).
 	 *
 	 * @component
-	 * @typedef {Object} Props
-	 * @property {import('svelte').Snippet} [children] Content to render unchanged.
 	 */
-	/** @type {Props} */
-	let { children } = $props();
+	import type { Snippet } from 'svelte';
+	let { children }: { children?: Snippet } = $props();
 </script>
 
 {@render children?.()}

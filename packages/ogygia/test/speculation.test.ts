@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mpaSpeculationRules } from '../src/vite/index.js';
+import { mpaSpeculationRules } from '../src/compiler/link/speculation.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MPA-mode Speculation Rules (`router: false` → the handle injects these; SPA mode emits none —

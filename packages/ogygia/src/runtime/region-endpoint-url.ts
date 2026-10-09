@@ -1,4 +1,10 @@
-const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+import { preload_island_graph } from './island-graph-preload.js';
+import { fetch_priority_of, load_slot, type LoadClass } from './load-scheduler.js';
+import { entry_location } from './entry-locations.js';
+
+/** Hoisted (hot paths — connectedCallback/hydrate run per region); shared with core's
+ *  foreign-origin checks. */
+export const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /**
  * Defense-in-depth: only fetch region HTML from same-origin capability URLs.
@@ -8,7 +14,10 @@ const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
  */
 
 /** True when `endpoint` resolves to same-origin http(s). */
-export function is_allowed_region_endpoint(endpoint: string, page_origin = location.origin): boolean {
+export function is_allowed_region_endpoint(
+	endpoint: string,
+	page_origin = location.origin
+): boolean {
 	if (typeof endpoint !== 'string' || endpoint.length === 0) return false;
 	try {
 		const url = new URL(endpoint, page_origin);
@@ -18,6 +27,63 @@ export function is_allowed_region_endpoint(endpoint: string, page_origin = locat
 		return true;
 	} catch {
 		return false;
+	}
+}
+
+/** How far this browser's clock may run behind the server's and still see an expiry. */
+const CLOCK_SKEW_SEC = 300;
+
+/**
+ * Has this hole's capability (probably) EXPIRED — worth one retry with `&renew=1` after a 403? Its
+ * document outlived it in a cache (server/shared-cache.ts). Read from the signed `exp` in the URL,
+ * with {@link CLOCK_SKEW_SEC} of slack for a slow clock; a URL that has not expired never renews
+ * (the server refuses it), so a wrong guess costs one refused request.
+ */
+export function capability_expired(endpoint: string, now_ms = Date.now(), page_origin = location.origin): boolean {
+	try {
+		const exp = Number(new URL(endpoint, page_origin).searchParams.get('exp'));
+		return Number.isFinite(exp) && exp > 0 && exp <= now_ms / 1000 + CLOCK_SKEW_SEC;
+	} catch {
+		return false;
+	}
+}
+
+/** The renewal request for an expired capability `endpoint` (the handle re-signs it, anonymous
+ *  holes only, and answers the fresh capability in `x-ogygia-capability`). */
+export function renewal_url(endpoint: string): string {
+	return endpoint + (endpoint.includes('?') ? '&' : '?') + 'renew=1';
+}
+
+/** A whole HTML document starts with a doctype or `<html>`; a region answer never does. */
+const DOCUMENT_START_RE = /^\s*(?:<!doctype\b|<html\b)/i;
+
+/**
+ * Is this hole answer a WHOLE DOCUMENT rather than the region's fragment? ogygia's handle answers a
+ * region request in place — a fragment, a 204, an error status — never with a page. A page here
+ * means a handle in front of `ogygia.handle()` took the request instead (an auth wall, a locale
+ * bounce, a 404 handler) and the browser followed it: a customer's signed-in visitors had every
+ * hole of the header filled with the account area's page — its scripts, its skeletons, a second
+ * header. Refused, the fallback stands; the redirect twin is {@link is_redirected_answer}.
+ */
+export function is_document_answer(text: string): boolean {
+	return DOCUMENT_START_RE.test(text.slice(0, 256));
+}
+
+/** A region request that was redirected (same origin — cross-origin is refused earlier) did not
+ *  reach the endpoint it named: whatever answered is not the region. */
+export function is_redirected_answer(res: Response): boolean {
+	return res.redirected === true;
+}
+
+/** The error a refused answer throws: the fetch loop does not retry it (the answer is
+ *  deterministic — a redirect rule, not a flaky network) and DEV names the culprit. */
+export class RegionAnswerRefused extends Error {
+	override name = 'RegionAnswerRefused';
+	constructor(
+		public readonly reason: 'redirected' | 'document',
+		public readonly final_url: string
+	) {
+		super(`region answer refused: ${reason} (${final_url})`);
 	}
 }
 
@@ -41,10 +107,22 @@ export function is_same_origin_response(res: Response, page_origin = location.or
  */
 export function island_module_url(entry: string, base?: string): string {
 	if (!entry) return entry;
+	// its LOCATION, once the server named one (entry-locations.ts); else the identity as written
+	const located = entry_location(entry, base);
+	if (located) return located;
 	if (entry.startsWith('/') || ABSOLUTE_URL_SCHEME.test(entry)) return entry;
-	const resolved = new URL(entry, base ?? location.href);
-	return resolved.pathname + resolved.search + resolved.hash;
+	const b = base ?? location.href;
+	const key = b + '\n' + entry;
+	const hit = module_urls.get(key);
+	if (hit !== undefined) return hit;
+	const resolved = new URL(entry, b);
+	const out = resolved.pathname + resolved.search + resolved.hash;
+	if (module_urls.size > 4000) module_urls.clear();
+	module_urls.set(key, out);
+	return out;
 }
+/** A relative entry resolved against its document, by base + entry (asked on every wake and warm). */
+const module_urls = new Map<string, string>();
 
 // ── the ONE island-module warmer ─────────────────────────────────────────────
 // Every "get this island's JS into the module cache before it's needed" call site funnels here:
@@ -54,12 +132,38 @@ export function island_module_url(entry: string, base?: string): string {
 // warm un-marks the URL so the real wake — or a later warm — retries; warming is never fatal.
 const warmed_modules = new Set<string>();
 
+/** The warmer's key: the resolved module as an absolute URL (a location arrives absolute, an href
+ *  off a page root-relative — the same file must be one key). */
+function warm_key(url: string): string {
+	try {
+		return new URL(url, location.href).href;
+	} catch {
+		return url;
+	}
+}
+
 /** Fire-and-forget `import()` of an island's module, deduped by resolved URL. */
-export function warm_island_module(entry: string, base?: string): void {
+export function warm_island_module(entry: string, base?: string, cls: LoadClass = 'speculative'): void {
 	const url = island_module_url(entry, base);
-	if (!url || warmed_modules.has(url)) return;
-	warmed_modules.add(url);
-	import(/* @vite-ignore */ url).catch(() => {
-		warmed_modules.delete(url);
+	if (!url) return;
+	const key = warm_key(url);
+	if (warmed_modules.has(key)) return;
+	warmed_modules.add(key);
+	// a warm is the load scheduler's to time (load-scheduler.ts): a hover is the visitor's, a page
+	// prefetch's warm is speculative
+	void load_slot({ kind: 'code', cls, label: entry }).ready.then((release) => {
+		preload_island_graph(entry, base, fetch_priority_of(cls)); // the whole graph with the entry
+		import(/* @vite-ignore */ url)
+			.catch(() => {
+				warmed_modules.delete(key);
+			})
+			.finally(release);
 	});
+}
+
+/** Has this island module already been warmed (or imported through the warmer)? `entry` resolves
+ *  the way `warm_island_module` resolves it; `base` for an href read off a foreign document. */
+export function is_warmed_module(entry: string, base?: string): boolean {
+	const url = island_module_url(entry, base);
+	return !!url && warmed_modules.has(warm_key(url));
 }

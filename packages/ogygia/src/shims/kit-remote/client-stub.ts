@@ -2,20 +2,10 @@
 // Provides exactly what those modules read — WITHOUT pulling Kit's router graph.
 import { parse } from 'devalue';
 import { transport } from 'virtual:ogygia/transport';
-import { slots } from '../../runtime/slots.js';
-import {
-	query_responses,
-	prerender_responses,
-	query_map,
-	live_query_map
-} from './remote-cache.js';
+import type { NavHandle } from '../../runtime/nav-handle.js';
+import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.js';
 
-export {
-	query_responses,
-	prerender_responses,
-	query_map,
-	live_query_map
-};
+export { query_responses, prerender_responses, query_map, live_query_map };
 
 const t = transport || {};
 export const app = {
@@ -23,22 +13,33 @@ export const app = {
 	decoders: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.decode])),
 	encoders: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.encode]))
 };
-// Read the router's nav via the `slots` registry instead of statically importing `router.js` (~10 KB).
-// The router feature fills `slots.nav` when it loads; if no router is present (no `<Router/>`, no SPA
-// nav — like every app that just seeds a remote query), fall back to a full-page navigation. This is
-// what keeps router out of every app that doesn't route.
-export function goto(url) {
-	if (slots.nav) return slots.nav.goto(url);
+// Reach the running runtime's navigation through its handle (runtime/nav-handle.ts) — never by
+// importing a runtime module: this stub is island-side code (Kit's remote-function modules import
+// it), and an import into the runtime would make that module shared between the two graphs and
+// split the runtime's boot. The handle is the SPA router's API, or the MPA one under
+// `router: false`; with no ogygia runtime on the document at all, the browser navigates.
+const nav = () =>
+	(globalThis as unknown as Record<symbol, NavHandle | undefined>)[Symbol.for('ogygia.nav')] ?? null;
+export function goto(url: string | URL) {
+	const n = nav();
+	if (n) return n.goto(url);
 	location.href = String(url);
 	return Promise.resolve();
 }
 export const _goto = goto;
 export function invalidateAll() {
-	if (slots.nav) return slots.nav.invalidateAll();
+	const n = nav();
+	if (n) return n.invalidateAll();
 	location.reload();
 	return Promise.resolve();
 }
 export function set_nearest_error_page() {}
+/** Kit 3: a remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
+ *  are no client hooks to consult (the island world has no Kit client). */
+export async function handle_error(error: unknown): Promise<{ status?: number; message: string }> {
+	const body = (error as { body?: { message?: string } } | null)?.body;
+	return body && typeof body.message === 'string' ? (body as { message: string }) : { status: 500, message: 'Internal Error' };
+}
 
 /**
  * Seed `query_responses` from the `<script type="application/ogygia-remote">` the server emits on
@@ -46,7 +47,7 @@ export function set_nearest_error_page() {}
  * side-channel because Kit only serializes remote data when csr===true. Parsed with the app's
  * transport decoders so custom types round-trip. Called ONCE by the runtime before the first
  * island hydrates, so every reused `Query` constructor finds its SSR value and never re-fetches.
- * @param {string} text devalue-stringified `{ q?, l?, f? }` payload
+ * @param text devalue-stringified `{ q?, l?, f? }` payload
  */
 export function seed_query_responses(text: string): void {
 	let data: {

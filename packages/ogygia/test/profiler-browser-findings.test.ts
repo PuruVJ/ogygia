@@ -1,0 +1,466 @@
+// The report's browser findings are the devtools Page tab's, run on the visit the beacon sent: each
+// planted problem is named on its island (by the render's own name), the report's own codes are
+// left to it, and a clean visit says nothing.
+import { expect, test } from 'vitest';
+import { parse_visit, merge_visits } from '../src/profiler/visit.ts';
+import { browser_findings, browser_page_report } from '../src/profiler/browser-findings.ts';
+
+const rows = [
+	{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Menu.svelte', name: 'Menu' },
+	{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Grower.svelte', name: 'Grower' },
+	{ fp: 'cccccccc33333333', entry: '/src/lib/Broken.svelte', name: 'Broken' },
+	{ fp: 'dddddddd44444444', entry: '/src/lib/Below.svelte', name: 'Below' }
+];
+
+const raw = {
+	at: 1,
+	nav: { req_start: 1, res_start: 100, res_end: 120, dcl: 300, load: 400 },
+	paints: { fcp: 250, lcp: 260 },
+	viewport: [1200, 800],
+	resources: [],
+	longtasks: [{ t: 500, ms: 120 }],
+	islands: [
+		// Menu: clicked at 450, hydrated at 700; one 120 ms hydrate step
+		{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Menu.svelte', t0: 300, loaded: 480, turn: 500, done: 700 },
+		// Grower: moved the layout just after it woke
+		{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Grower.svelte', t0: 300, loaded: 350, turn: 360, done: 380 },
+		{ fp: 'dddddddd44444444', entry: '/src/lib/Below.svelte', t0: 300, loaded: 320, turn: 330, done: 340 }
+	],
+	firsts: [{ fp: 'aaaaaaaa11111111', t: 450, type: 'pointerdown' }],
+	shifts: [{ t: 400, value: 0.2, fp: 'bbbbbbbb22222222' }],
+	regions: [
+		{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Menu.svelte', hydrated: true, top: 0, height: 60 },
+		{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Grower.svelte', hydrated: true, top: 100, height: 200 },
+		{ fp: 'cccccccc33333333', entry: '/src/lib/Broken.svelte', failed: 'boom is not defined', top: 300, height: 50 },
+		{ fp: 'dddddddd44444444', entry: '/src/lib/Below.svelte', wake: 'idle', hydrated: true, top: 2400, height: 50 }
+	],
+	vitals: { lcp: 260, cls: 0.2 }
+};
+
+test('each planted problem, on its island, in the report', () => {
+	const visit = parse_visit('/lab', raw)!;
+	expect(visit.regions).toHaveLength(4);
+	expect(visit.islands[0].turn).toBe(500);
+	const found = browser_findings(browser_page_report(visit, rows));
+	const by = Object.fromEntries(found.map((f) => [f.code, f]));
+	expect(by['hydrate-failed'].message).toContain('Broken failed to hydrate: boom is not defined');
+	expect(by['hydrate-failed'].severity).toBe('warn');
+	expect(by['early-click'].message).toContain('Menu');
+	expect(by['long-hydrate'].message).toContain('Menu');
+	expect(by['hydration-shift'].fps).toEqual(['bbbbbbbb22222222']);
+	expect(by['eager-offscreen'].message).toContain('Below');
+	expect(by['eager-offscreen'].message).not.toContain('of it is');
+	// with the build's weights: its own bytes, as the devtools say them
+	const weighed = browser_findings(browser_page_report(visit, rows.map((r) => (r.name === 'Below' ? { ...r, own_bytes: 61_440 } : r)))).find((f) => f.code === 'eager-offscreen');
+	expect(weighed?.message).toContain('60.0 KB of it is its own (no other island loads it)');
+	expect(weighed?.severity).toBe('warn');
+	// the report makes these its own way (render-blocking too, when it weighed the page: report.ts
+	// drops the browser's then — on a dev server the browser's timing is all there is)
+	for (const code of ['recovered', 'never-woke', 'vital-cls']) expect(by[code]).toBeUndefined();
+	for (const f of found) expect(f.message.startsWith('In the browser: ')).toBe(true);
+});
+
+test('an island that drew nothing on the visitor\'s screen: eager-hidden, not "below the first screen"', () => {
+	const visit = parse_visit('/lab', { ...raw, regions: raw.regions.map((r) => (r.fp === 'dddddddd44444444' ? { ...r, top: 2400, height: 0, hidden: true } : r)) })!;
+	expect(visit.regions!.find((r) => r.fp === 'dddddddd44444444')?.hidden).toBe(true);
+	const found = browser_findings(browser_page_report(visit, rows));
+	expect(found.some((f) => f.code === 'eager-offscreen')).toBe(false);
+	const f = found.find((x) => x.code === 'eager-hidden')!;
+	expect(f.fps).toEqual(['dddddddd44444444']);
+	expect(f.message).toContain('Below draws nothing on this screen (1200 px wide)');
+	// a non-boolean is no claim
+	expect(parse_visit('/lab', { ...raw, regions: [{ ...raw.regions[3], hidden: 'yes' }] })!.regions![0].hidden).toBeUndefined();
+});
+
+test('a visit with the devtools dock open as it loaded: the report says the paints may be the dock’s', () => {
+	const visit = parse_visit('/lab', { ...raw, paints: { fcp: 93, lcp: 93 }, dock_open_at: 89, ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15' })!;
+	expect(visit.dock_open_at).toBe(89);
+	const f = browser_findings(browser_page_report(visit, rows)).find((x) => x.code === 'dock-in-paint')!;
+	expect(f.message).toContain('In the browser: The devtools dock was open as this page loaded (from 89 ms), and the first paint was recorded just after it (93 ms)');
+	expect(f.message).toContain('Safari 26 its largest paint too');
+	expect(browser_findings(browser_page_report(parse_visit('/lab', { ...raw, paints: { fcp: 93, lcp: 93 } })!, rows)).some((x) => x.code === 'dock-in-paint')).toBe(false);
+});
+
+test("a recovered island's unpaired markers survive the parse; a paired or malformed count does not", () => {
+	const at = (markers: unknown) => parse_visit('/lab', { ...raw, islands: [{ ...raw.islands[0], recovered: true, ssr_bytes: 100, markers }] })!.islands[0].markers;
+	expect(at([0, 2])).toEqual([0, 2]);
+	expect(at([2, 2])).toBeUndefined();
+	expect(at([1.5, 2])).toBeUndefined();
+	expect(at('0,2')).toBeUndefined();
+});
+
+test('a clean visit has no browser findings; a later record of the visit updates the regions', () => {
+	const clean = parse_visit('/lab', {
+		...raw,
+		longtasks: [],
+		firsts: [],
+		shifts: [],
+		islands: [raw.islands[1]],
+		regions: [{ ...raw.regions[1] }],
+		vitals: {}
+	})!;
+	expect(browser_findings(browser_page_report(clean, rows))).toEqual([]);
+
+	const early = parse_visit('/lab', { ...raw, regions: [{ ...raw.regions[0], hydrated: false }] })!;
+	const late = parse_visit('/lab', { ...raw, regions: [raw.regions[0]] })!;
+	expect(merge_visits(early, late).regions?.[0].hydrated).toBe(true);
+});
+
+test('a page with more files than the visit lists: counts and bytes cover all of them', () => {
+	const resources = Array.from({ length: 3 }, (_, i) => ({ url: `/a${i}.js`, type: 'script', start: i, end: i + 1, transfer: 100 }));
+	const totals = [
+		{ type: 'script', count: 300, transfer: 30_000, size: 90_000 },
+		{ type: 'img', count: 40, transfer: 400_000, size: 400_000 }
+	];
+	const v = parse_visit('/lab', { ...raw, resources, resource_totals: totals, resources_all: 340 })!;
+	expect(v.resources_all).toBe(340);
+	const report = browser_page_report(v, rows)!;
+	expect(report.bytes.find((b) => b.type === 'script')).toMatchObject({ count: 300, transfer: 30_000 });
+	expect(report.bytes[0].type).toBe('img'); // the heaviest first
+	// totals that claim no more files than listed are dropped (the list is the truth then)
+	expect(parse_visit('/lab', { ...raw, resources, resource_totals: totals, resources_all: 3 })!.resource_totals).toBeUndefined();
+	// the record that saw more files wins a merge
+	const early = parse_visit('/lab', { ...raw, resources, resource_totals: [{ type: 'script', count: 10, transfer: 1, size: 1 }], resources_all: 10 })!;
+	expect(merge_visits(early, v).resources_all).toBe(340);
+	expect(merge_visits(v, early).resources_all).toBe(340);
+});
+
+test("a lazy island's code counts at start only when it loaded before the load event (a scroll right after is not the start)", async () => {
+	const { start_js } = await import('../src/profiler/report.ts');
+	const asset = (url: string, lazy: boolean) => ({ url, kind: 'script' as const, blocking: false, via: 'island' as const, bytes: 100_000, wire: 30_000, ...(lazy ? { lazy: true } : {}) });
+	const assets = {
+		assets: [asset('https://a.test/entry.js', false), asset('https://a.test/editor.js', true)],
+		missed: [],
+		html: { bytes: 1, wire: 1 },
+		inline: { script: 0, style: 0 },
+		totals: { js: 100_000, js_wire: 30_000, css: 0, css_wire: 0, font: 0, image: 0, wire: 30_000, lazy_js: 100_000, blocking: 0, blocking_count: 0, js_files: 1 }
+	};
+	const visit_with = (editor_start: number) =>
+		parse_visit('/p', { ...raw, nav: { req_start: 0, res_start: 10, res_end: 20, dcl: 200, load: 400 }, resources: [{ url: 'https://a.test/entry.js', type: 'script', start: 50, end: 90 }, { url: 'https://a.test/editor.js', type: 'script', start: editor_start, end: editor_start + 40 }] })!;
+	// on the first screen: loaded before load → counted at start
+	expect(start_js({ assets, visit: visit_with(300) })!.js).toBe(200_000);
+	// scrolled to right after load: still lazy
+	expect(start_js({ assets, visit: visit_with(900) })!.js).toBe(100_000);
+	// the ogygia runtime's own part, loaded as the island woke: counted, as the runtime's — never as
+	// an island that woke early, never as code "other scripts fetched"
+	const with_phase = { ...assets, assets: [...assets.assets, { ...asset('https://a.test/hydrate.js', true), via: 'runtime-phase' as const, phase: true as const }] };
+	const v = parse_visit('/p', { ...raw, nav: { req_start: 0, res_start: 10, res_end: 20, dcl: 200, load: 400 }, resources: [{ url: 'https://a.test/entry.js', type: 'script', start: 50, end: 90 }, { url: 'https://a.test/hydrate.js', type: 'script', start: 120, end: 150 }] })!;
+	const sj = start_js({ assets: with_phase, visit: v })!;
+	expect(sj.runtime_parts).toEqual({ bytes: 100_000, wire: 30_000, files: 1 });
+	expect(sj.woke_early).toBeNull();
+	expect(sj.runtime).toBeNull();
+	expect(sj.js).toBe(200_000);
+});
+
+/** The code inside the inline tag `script()` made — what the browser runs. */
+const tag_code = (tag: string) => tag.slice(tag.indexOf('>') + 1, tag.lastIndexOf('</script>'));
+
+test('the inline beacon for pages without the runtime is one valid script tag', async () => {
+	const { BEACON_STANDALONE_TAG } = await import('../src/profiler/beacon-standalone.ts');
+	expect(BEACON_STANDALONE_TAG.startsWith('<script data-ogygia-beacon>')).toBe(true);
+	expect(() => new Function(tag_code(BEACON_STANDALONE_TAG))).not.toThrow();
+});
+
+test('the inline beacon names a preload the browser downloaded again (a Kit page has no runtime beacon)', async () => {
+	const { BEACON_STANDALONE_TAG } = await import('../src/profiler/beacon-standalone.ts');
+	const BEACON_STANDALONE_JS = tag_code(BEACON_STANDALONE_TAG);
+	const font = 'https://a.test/f.woff2';
+	const res = (name: string, initiatorType: string, transferSize: number, encodedBodySize: number) => ({ name, initiatorType, transferSize, encodedBodySize, decodedBodySize: encodedBodySize, startTime: 1, responseEnd: 2, duration: 1 });
+	const entries = [
+		res(font, 'link', 20_300, 20_000),
+		res(font, 'css', 20_300, 20_000),
+		// preloaded and then served from the preload: no body came down the second time
+		res('https://a.test/app.js', 'link', 5_300, 5_000),
+		res('https://a.test/app.js', 'script', 0, 5_000)
+	];
+	const links = [
+		{ href: font, getAttribute: (n: string) => (n === 'as' ? 'font' : null) },
+		{ href: 'https://a.test/app.js', getAttribute: (n: string) => (n === 'as' ? 'script' : n === 'crossorigin' ? '' : null) }
+	];
+	const listeners: Record<string, () => void> = {};
+	const sent: string[] = [];
+	const doc = {
+		visibilityState: 'hidden',
+		querySelector: (s: string) => (s.startsWith('meta') ? { getAttribute: () => '/__profiler/beacon' } : null),
+		querySelectorAll: () => links,
+		addEventListener: (t: string, f: () => void) => (listeners[t] = f)
+	};
+	class PO {
+		observe() {}
+		disconnect() {}
+		static supportedEntryTypes = ['paint'];
+	}
+	const perf = { timeOrigin: 0, getEntriesByType: (t: string) => (t === 'navigation' ? [{ requestStart: 1, responseStart: 5, responseEnd: 9 }] : t === 'resource' ? entries : []), setResourceTimingBufferSize() {} };
+	const run = new Function('window', 'document', 'performance', 'PerformanceObserver', 'navigator', 'location', 'innerWidth', 'innerHeight', 'addEventListener', 'fetch', BEACON_STANDALONE_JS);
+	run({}, doc, perf, PO, { userAgent: 'test', sendBeacon: (_: string, b: string) => (sent.push(b), true) }, { pathname: '/p', origin: 'https://a.test' }, 1, 1, () => {}, () => Promise.resolve());
+	listeners.DOMContentLoaded();
+	listeners.visibilitychange();
+	const visit = sent.map((b) => JSON.parse(b)).find((b) => b.visit)!.visit;
+	expect(visit.preload_misses).toEqual([{ url: font, type: 'font', bytes: 20_300, as: 'font', crossorigin: null }]);
+	expect(parse_visit('/p', visit)!.preload_misses).toHaveLength(1);
+});
+
+test('bad region records are dropped', () => {
+	const v = parse_visit('/lab', { ...raw, regions: [{ fp: 'nope', top: 0, height: 1 }, { fp: 'aaaaaaaa11111111', top: 'x', height: 1 }, { fp: 'aaaaaaaa11111111', top: 5, height: 9, failed: 7 }] })!;
+	expect(v.regions).toEqual([{ fp: 'aaaaaaaa11111111', top: 5, height: 9 }]);
+});
+
+test('a hole that kept its fallback reaches the report, named from the hole rows', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		holes_failed: [
+			{ id: '7c4afc210dc0', reason: 'redirected', final_path: '/account/', attempts: 1, t: 900 },
+			{ id: 'c0d0e795dedc', reason: 'error', message: 'status 500', attempts: 3, t: 1900 },
+			{ id: 'bad', reason: 'nope' }
+		]
+	})!;
+	expect(v.holes_failed?.map((h) => h.id)).toEqual(['7c4afc210dc0', 'c0d0e795dedc']);
+	// the early visit and the hide-time one fold: each hole once
+	expect(merge_visits(v, v).holes_failed).toHaveLength(2);
+	const names: Record<string, string> = { '7c4afc210dc0': 'Greeting', c0d0e795dedc: 'BrokenHole' };
+	const f = browser_findings(browser_page_report(v, rows, undefined, undefined, (id) => names[id])).filter((x) => x.code === 'hole-failed');
+	expect(f.map((x) => x.message.split(' never')[0])).toEqual(['In the browser: Greeting', 'In the browser: BrokenHole']);
+	expect(f[0].message).toContain('redirected to /account/');
+	expect(f[1].message).toContain('failed 3 times (status 500)');
+});
+
+test("an island whose own file was gone reaches the report, named from the island rows", () => {
+	const entry = rows[0]?.entry ?? '/_app/immutable/og-region.0123456789ab.js';
+	const v = parse_visit('/lab', {
+		...raw,
+		entry_fallbacks: [{ entry, src: '/_app/immutable/og-region.0123456789ab.Gone1234.js', recovered: true }, { entry: 7 }]
+	})!;
+	expect(v.entry_fallbacks).toHaveLength(1);
+	expect(merge_visits(v, v).entry_fallbacks).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'island-file-gone');
+	expect(f?.message).toContain('In the browser: An island could not load its own file (og-region.0123456789ab.Gone1234.js)');
+	if (rows[0]) expect(f?.message).toContain(`${rows[0].name} woke on the current build`);
+	// the page wrote its entry relative to itself (a nested route): named all the same, by its file
+	const nested = parse_visit('/lab', { ...raw, entry_fallbacks: [{ entry: '../../src/lib/Menu.svelte', src: '/gone.js', recovered: true }] })!;
+	const g = browser_findings(browser_page_report(nested, rows)).find((x) => x.code === 'island-file-gone');
+	expect(g?.message).toContain('Menu woke on the current build');
+});
+
+test('content-named files fetched again reach the report, named from the island rows, even with no island awake', () => {
+	const entry = rows[0]?.entry ?? '/_app/immutable/og-region.0123456789ab.js';
+	const v = parse_visit('/lab', {
+		...raw,
+		islands: [],
+		refetched: [
+			{ url: 'https://a.test/_app/immutable/og-region.0123456789ab.Hh12Kk34.js', how: 'revalidated', bytes: 0, ms: 20, entry },
+			{ url: 'https://a.test/_app/immutable/og-runtime.Zz99.js', how: 'revalidated', bytes: 0, ms: 35, runtime: true },
+			{ url: 'https://a.test/x.js', how: 'cached', bytes: 1 },
+			{ url: 7 }
+		]
+	})!;
+	expect(v.refetched).toHaveLength(2);
+	expect(merge_visits(v, { ...v, refetched: undefined }).refetched).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'files-fetched-again');
+	expect(f?.message).toContain('In the browser: The browser asked the server again for 2 files it already had');
+	expect(f?.message).toContain(`(the runtime and ${rows[0]?.name ?? 'og-region.0123456789ab.Hh12Kk34.js'})`);
+	// an island a hole's answer carried: the page's render never saw it, so it is named by its hole
+	const in_hole = parse_visit('/lab', {
+		...raw,
+		refetched: [{ url: 'https://a.test/_app/immutable/og-region.fedcba987654.Qq11.js', how: 'revalidated', bytes: 0, ms: 9, entry: './_app/immutable/og-region.fedcba987654.js', hole: '040dd4f0cdb2' }]
+	})!;
+	expect(in_hole.refetched?.[0].hole).toBe('040dd4f0cdb2');
+	const g = browser_findings(browser_page_report(in_hole, rows, undefined, undefined, (id) => (id === '040dd4f0cdb2' ? 'HoleProbe' : `the hole ${id}`))).find((x) => x.code === 'files-fetched-again');
+	expect(g?.message).toContain('(the island in HoleProbe)');
+});
+
+test('the slowest interaction reaches the report: parsed, the slower of two records kept, a built island file named', () => {
+	const row = rows[0];
+	const fp = row?.fp ?? '0123456789abcdef';
+	// a location is its identity plus a content hash: the script's file names the island
+	const loc = (row?.entry ?? '/_app/immutable/og-region.0123456789ab.js').replace(/\.js$/, '.Hh12Kk34.js');
+	const interaction = (ms: number) => ({ name: 'click', t: 900, ms, delay: 3, processing: ms - 20, presentation: 17, target: 'button "Save"', fp, scripts: [{ url: `https://a.test${loc}`, fn: 'Ce', invoker: 'HTMLButtonElement.onclick', ms: ms - 25, phase: 'handler' }, { url: 7, phase: 'handler' }, { url: 'x.js', ms: 5, phase: 'elsewhere' }] });
+	const v = parse_visit('/lab', { ...raw, vitals: { inp: 320 }, interaction: interaction(320) })!;
+	expect(v.interaction?.scripts).toHaveLength(1);
+	expect(v.interaction?.target).toBe('button "Save"');
+	const lighter = parse_visit('/lab', { ...raw, vitals: { inp: 240 }, interaction: interaction(240) })!;
+	expect(merge_visits(v, lighter).interaction?.ms).toBe(320);
+	expect(merge_visits(lighter, v).interaction?.ms).toBe(320);
+	// junk is dropped whole
+	expect(parse_visit('/lab', { ...raw, interaction: { name: 'click' } })!.interaction).toBeUndefined();
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'slow-interaction');
+	expect(f?.message).toContain('In the browser: INP is 320 ms');
+	if (row) {
+		expect(f?.message).toContain(`a click on button "Save" in ${row.name}`);
+		// a same-origin event handler for a click in the island is the island's own
+		expect(f?.message).toContain(`(mostly ${row.name}'s own click handler)`);
+	}
+});
+
+test("a failed island's wake → failure span is kept (what held the islands below the fold); junk is not", () => {
+	const fp = '0123456789abcdef';
+	const v = parse_visit('/lab', { ...raw, regions: [{ fp, failed: 'planted', failed_span: [50, 740], top: 100, height: 20 }, { fp: 'fedcba9876543210', failed: 'x', failed_span: [9, 'a'], top: 0, height: 0 }] })!;
+	expect(v.regions?.[0].failed_span).toEqual([50, 740]);
+	expect(v.regions?.[1].failed_span).toBeUndefined();
+	expect(parse_visit('/lab', { ...raw, regions: [{ fp, failed: 'x', failed_span: [800, 50], top: 0, height: 0 }] })!.regions?.[0].failed_span).toBeUndefined();
+});
+
+test('in-app navigations reach the report: parsed, merged once, out-of-order clocks dropped', () => {
+	const n = { from: '/a', to: '/slow', type: 'link', t: 1000, fetched: 1820, styled: 1830, swapped: 1850 };
+	const v = parse_visit('/lab', { ...raw, navs: [n, { ...n, to: '/bad', fetched: 900 }, { to: 7 }] })!;
+	expect(v.navs).toHaveLength(1);
+	expect(merge_visits(v, v).navs).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, rows)).find((x) => x.code === 'slow-navigation');
+	expect(f?.message).toContain('In the browser: The in-app navigation to /slow took 850 ms before the new page showed: 820 ms fetching the page from the server');
+});
+
+test('a preload downloaded again reaches the report, even on a page with no island', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		islands: [],
+		preload_misses: [{ url: 'https://a.test/dt-preload/data/planted', type: 'fetch', bytes: 28081, as: 'fetch', crossorigin: null }, { url: 7 }]
+	})!;
+	expect(v.preload_misses).toHaveLength(1);
+	expect(merge_visits(v, { ...v, preload_misses: undefined }).preload_misses).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'preload-unused');
+	expect(f?.message).toContain('In the browser: planted (27.4 KB) was preloaded, then downloaded again');
+});
+
+test('text a late font kept invisible reaches the report; a bad face record is dropped', () => {
+	const font = 'https://a.test/dt-font/slow.woff2';
+	const v = parse_visit('/dt-font', {
+		...raw,
+		resources: [{ url: font, type: 'font', start: 200, end: 1800 }],
+		font_faces: [{ family: 'SlowFace', display: 'auto', urls: [font] }, { family: 'Bad', display: 'auto', urls: [7] }]
+	})!;
+	expect(v.font_faces).toEqual([{ family: 'SlowFace', display: 'auto', urls: [font] }]);
+	expect(merge_visits(v, { ...v, font_faces: undefined }).font_faces).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'font-invisible');
+	expect(f?.message).toContain("In the browser: Text in 'SlowFace' (slow.woff2, 1550 ms after the first paint) stayed invisible");
+});
+
+test('an image sent far bigger than shown reaches the report; a record that breaks the rule is dropped', () => {
+	const big = { url: 'https://a.test/dt-img/big.png', natural: [2000, 1333], shown: [300, 200], dpr: 1, bytes: 352_183 };
+	const v = parse_visit('/dt-img', {
+		...raw,
+		images_oversized: [big, { ...big, url: 'https://a.test/fits.png', natural: [300, 200] }, { ...big, natural: [2000] }]
+	})!;
+	expect(v.images_oversized).toEqual([big]);
+	expect(merge_visits(v, { ...v, images_oversized: undefined }).images_oversized).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'image-oversized');
+	expect(f?.message).toBe('In the browser: big.png (2000×1333, shown at 300×200) is sent far bigger than shown: about 336 KB of 344 KB is pixels nobody sees.');
+});
+
+test('a preload nothing used reaches the report, on a visit with nothing else to say', () => {
+	const v = parse_visit('/dt-preload-never', {
+		at: 1,
+		nav: { req_start: 1, res_start: 100, res_end: 120 },
+		paints: {},
+		resources: [],
+		longtasks: [],
+		islands: [],
+		firsts: [],
+		shifts: [],
+		preloads_unused: [{ url: 'https://a.test/dt-img/right.png', as: 'image', bytes: 360_473 }, { url: 'https://a.test/x.js', as: 'script', bytes: 1 }]
+	})!;
+	expect(v.preloads_unused).toEqual([{ url: 'https://a.test/dt-img/right.png', as: 'image', bytes: 360_473 }]);
+	expect(merge_visits({ ...v, preloads_unused: undefined }, v).preloads_unused).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'preload-never-used');
+	expect(f?.message).toContain('In the browser: right.png (image, 352.0 KB: no image on the page shows it) was preloaded, but nothing on the page used it 3 s after load');
+});
+
+test('images below the first screen that loaded at start reach the report', () => {
+	const v = parse_visit('/dt-img-below', {
+		at: 1,
+		nav: { req_start: 1, res_start: 100, res_end: 120 },
+		paints: {},
+		resources: [],
+		longtasks: [],
+		islands: [],
+		firsts: [],
+		shifts: [],
+		images_eager_below: [
+			{ url: 'https://a.test/dt-img/right.png?a', top: 3420, bytes: 360_473 },
+			{ url: 'https://a.test/dt-img/right.png?b', top: 3420, bytes: 360_473 },
+			{ url: 'https://a.test/x.png', top: 'far' }
+		]
+	})!;
+	expect(v.images_eager_below).toHaveLength(2);
+	expect(merge_visits(v, { ...v, images_eager_below: undefined }).images_eager_below).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'images-eager-below');
+	expect(f?.message).toContain('In the browser: right.png ×2 (704 KB, 3420px down) load at start though far below the first screen');
+});
+
+test('scrolling that stalled reaches the report, on a visit with nothing else to say', () => {
+	const heavy = { url: 'https://a.test/src/lib/Janky.svelte', fn: 'heavy_scroll_work', invoker: 'DOMWindow.onscroll', ms: 120 };
+	const v = parse_visit('/dt-jank', {
+		at: 1,
+		nav: { req_start: 1, res_start: 100, res_end: 120 },
+		paints: {},
+		resources: [],
+		longtasks: [],
+		islands: [],
+		firsts: [],
+		shifts: [],
+		scroll_jank: [{ start: 1200, ms: 128, scripts: [heavy] }, { start: 'x', ms: 1 }]
+	})!;
+	expect(v.scroll_jank).toHaveLength(1);
+	expect(merge_visits(v, { ...v, scroll_jank: [{ start: 1400, ms: 124, scripts: [heavy] }] }).scroll_jank).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, [])).find((x) => x.code === 'scroll-jank');
+	expect(f?.message).toContain('In the browser: Scrolling stalled: 1 frame took 128 ms while the page scrolled, mostly heavy_scroll_work (Janky.svelte), run by DOMWindow.onscroll');
+});
+
+test('a hole answered late: waited from the first paint, split by its server time', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		paints: { fcp: 400 },
+		holes_answered: [
+			// fetch started before the paint: the fallback showed from the paint (1900 − 400)
+			{ id: '8f81e0e4514e', start: 300, t: 1900, below_fold: false },
+			{ id: '7c4afc210dc0', start: 300, t: 700, below_fold: false },
+			{ id: 'aaaaaaaaaaaa', start: 3000, t: 6000, below_fold: true },
+			{ id: 'bad', start: 900, t: 100 }
+		]
+	})!;
+	expect(v.holes_answered?.map((h) => h.id)).toEqual(['8f81e0e4514e', '7c4afc210dc0', 'aaaaaaaaaaaa']);
+	expect(merge_visits(v, v).holes_answered).toHaveLength(3);
+	const names: Record<string, string> = { '8f81e0e4514e': 'SlowHole', '7c4afc210dc0': 'Greeting', aaaaaaaaaaaa: 'Footer' };
+	const slow = (server?: number) =>
+		browser_findings(browser_page_report(v, rows, undefined, undefined, (id) => names[id], () => server)).filter((x) => x.code === 'hole-slow');
+	const bound = slow(1400);
+	expect(bound).toHaveLength(1);
+	expect(bound[0].message).toContain('SlowHole (1.5 s: 1.4 s the server render)');
+	expect(bound[0].message).not.toContain('Greeting');
+	expect(bound[0].message).not.toContain('Footer');
+	expect(bound[0].fix).toMatch(/^The server render is the wait/);
+	// the server answered in 90 ms: the wait was before or around the request
+	expect(slow(90)[0].fix).toMatch(/^The server answered quickly/);
+	// unknown server time: the general advice
+	expect(slow(undefined)[0].message).toContain('SlowHole (1.5 s)');
+	expect(slow(undefined)[0].fix).toContain('Holes section');
+});
+
+test('a server transform’s restore gone wrong rides the visit: a late host named in the report', () => {
+	const v = parse_visit('/lab', {
+		...raw,
+		restores: [{ kind: 'late', host: 'demo-card', t: 21 }, { kind: 'odd', host: 'x' }, { kind: 'mismatch', host: 'x-nav', t: 30, diff: 'Svelte has <i>, the restored markup has nothing' }]
+	})!;
+	expect(v.restores).toHaveLength(2);
+	expect(merge_visits(v, { ...v, restores: undefined }).restores).toHaveLength(2);
+	const f = browser_findings(browser_page_report(v, []));
+	expect(f.find((x) => x.code === 'restore-late')?.message).toContain('<demo-card> was upgraded by its component before ogygia restored it');
+	expect(f.find((x) => x.code === 'restore-mismatch')?.message).toContain('Svelte has <i>');
+});
+
+test('holes in one batch request: a batched hole’s wait is the server’s, never the gate’s; a refused batch is named', () => {
+	const part = (id: string, at: number) => ({ id, start: 100, t: at + 5, below_fold: false, left: 110, first: at, end: at, batch: 4 });
+	const v = parse_visit('/lab', {
+		...raw,
+		paints: { fcp: 100 },
+		holes_answered: [part('a1', 150), part('a2', 150), part('a3', 150), part('a4', 1310)],
+		hole_batches: [{ sent: 4, delivered: 0, status: 405, ids: ['a1', 'a2', 'a3', 'a4'] }, { sent: 'x' }, { sent: 2, delivered: 3, status: 200, ids: [] }]
+	})!;
+	expect(v.holes_answered?.[3].batch).toBe(4);
+	expect(v.hole_batches).toHaveLength(1);
+	expect(merge_visits(v, { ...v, hole_batches: undefined }).hole_batches).toHaveLength(1);
+	const f = browser_findings(browser_page_report(v, [], undefined, undefined, () => 'BatchHole'));
+	const slow = f.find((x) => x.code === 'hole-slow')!;
+	expect(slow.message).toContain('BatchHole (1.2 s: 1.2 s waiting on the server, its part of one request for 4 holes)');
+	expect(slow.fix).not.toContain('hole requests at a time');
+	const missed = f.find((x) => x.code === 'hole-batch-missed')!;
+	expect(missed.message).toContain('The one request for 4 holes (BatchHole ×4) was answered 405');
+});

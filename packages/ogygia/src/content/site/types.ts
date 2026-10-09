@@ -50,7 +50,10 @@ export type Crumb = { label: string; href?: string };
  * Everything a single page position needs, as plain data. `entry` carries the inline `body` region;
  * everything else is derived from the outline and the content graph.
  */
-export type PageView<Data extends Record<string, unknown> = Record<string, unknown>, Meta = unknown> = {
+export type PageView<
+	Data extends Record<string, unknown> = Record<string, unknown>,
+	Meta = unknown
+> = {
 	slug: string;
 	href: string;
 	/** The resolved entry (`data`, `body`, `meta`, `rel`, `backlinks`) — render `entry.body`. */

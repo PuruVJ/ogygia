@@ -13,8 +13,21 @@
  * naming functions (`islandPublicUrl`, `wrapperVirtualId`, …); they appear as string literals in
  * generated source and never gate type-checking, so a types-only run can pass placeholders.
  *
+ * The DRIVER SPINE (`Compiler` / `Program` / `CompileCtx`) is the same carve-out one level up: a
+ * long-lived, bundler-agnostic compile session (it imports no Vite) that fuses the file-local
+ * front-end — `transform` (host islands), `ts_regions`, `macros`, and `prescan` (whole-app island
+ * discovery) — over a `Program` (cross-file linker) and a resolved `CompileCtx`. A REPL or any
+ * non-Vite host is just a second adapter: build a `CompileCtx`, `configure()` the `Compiler`, and
+ * feed it source. The Vite plugin (`ogygia/vite`) is the reference adapter that drives it.
+ *
  * Exposed to consumers as `ogygia/internal/compiler` (internal, not a stable public API).
  */
-export * from './transform.js';
+export * from './region/transform.js';
+// The parser DI seam — a browser build (the Observatory) injects rolldown-browser's oxc here.
+export { set_parser, type RawParse } from './parse/oxc.js';
 export * from './fouc-css.js';
 export * from './free-vars.js';
+export { Compiler, type Profiler } from './driver.js';
+export { Program, strip_id, host_key } from './program.js';
+export { CompileCtx, type CompileCtxInit } from './ctx.js';
+export * from './ids.js';

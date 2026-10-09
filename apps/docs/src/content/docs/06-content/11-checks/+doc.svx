@@ -1,0 +1,98 @@
+---
+title: Checks
+summary: Structural verification that fails the build, not the visitor. The link audit resolves each in-prose link against the address space of the site. A broken one is a named error at prerender, and on page open in dev.
+related:
+  - content/site
+  - content/outline
+  - reference/constraints
+---
+
+A broken internal link is a defect that you want to hear about at build time, from you. Not at runtime, from a visitor. Site checks run over the full corpus as **data**. They surface as named findings, and they can fail the build. The link audit ships built in. You can add your own.
+
+::: tip When to use
+Set `links()` on for each site with cross-references, which is each docs site. It is the safety net that lets you rename and reorganize without fear. Move a page, and each stale link to it fails loudly.
+:::
+
+## The link audit
+
+Pass `checks` to `site()`. `links()` resolves each markdown link in each body against the address space of the site:
+
+```ts
+export const docs = site({ outline: docs, checks: [links()] });
+```
+
+A link to a page that does not exist, or an `#anchor` that no heading emits, is a finding. **This site runs it**: the cross-links that you click through this section were verified by exactly this check. When one of these pages linked to a sibling that was not yet written, the build refused until it existed.
+
+Where it fires:
+
+- **At prerender**: a broken link fails the build with the page, the link text, and the target.
+- **In dev**: the same finding surfaces when you open the page. Thus you catch it as you write.
+
+The audit knows the *full* address space, [dimension](/docs/content/dimensions) coordinates and declared redirects included. Thus it can tell a truly dead link from one that resolves through an alias.
+
+## Findings as data
+
+`docs.check()` runs each check over the corpus, and returns the findings as plain data. It never throws. Thus you can assert on them in a test or a CI step, independent of a prerender crawl:
+
+```ts
+// a vitest guard: the docs have no broken links
+import { docs } from '$lib/site.server';
+
+test('no broken links', async () => {
+	const findings = await docs.check({ base: '/docs' });
+	expect(findings).toEqual([]);
+});
+```
+
+This matters for a dynamic site, where the prerender crawler never runs. There, the check is your only structural gate, and it is available as data.
+
+## Custom checks
+
+A check is a named object with a `page` hook, a `site` hook, or both. Each returns findings. `page` runs per slug, in `load`. Thus dev surfaces it on open, and an `error`-severity finding throws. `site` runs one time over the corpus, through `docs.check()`:
+
+```ts title=$lib/checks.ts
+// a house rule: every page fills its summary
+import type { Check, Finding } from 'ogygia/content';
+
+export function requireSummary(): Check {
+	return {
+		name: 'require-summary',
+		async page(slug, { outline, ctx }): Promise<Finding[]> {
+			const resolved = await outline.resolve(slug, ctx);
+			if (!resolved) return [];
+			const entry = await resolved.collection.get(resolved.record.entryId, ctx);
+			if (!entry || typeof entry.data.summary === 'string') return [];
+			return [{
+				check: 'require-summary',
+				severity: 'error',
+				slug,
+				message: `'${slug}' has no summary — the docs index and llms.txt read it.`
+			}];
+		}
+	};
+}
+```
+
+```ts
+import { links } from 'ogygia/content';
+import { requireSummary } from '$lib/checks';
+
+export const docs = site({ outline: docs, checks: [links(), requireSummary()] });
+```
+
+Severity is the dial. `'error'` throws from `load`: it fails the build at prerender, and blocks the page in dev. `'warn'` surfaces in the `docs.check()` findings, and never blocks a render.
+
+::: details Checks vs. structural build errors
+Two different layers, by intent. **Structural invariants** (an orphan entry, a slug collision, an inconsistent `NN-` sequence) are always-on [outline](/docs/content/outline) build errors. They cannot be configured off, because a site with them is not well-formed. **Checks** are *content policy*: pluggable, per-site, severity-dialed. `links()` is policy. A deliberately-dead link during a migration is your call: allow it, tolerate it as `warn`, or forbid it.
+:::
+
+## Do / don't
+
+- **Do** run `links()` from day one. The cost is zero, and it turns each reorganization into a safe operation.
+- **Do** assert `docs.check()` in CI for a dynamic site. It is the structural gate that the prerender crawler would otherwise be.
+- **Don't** treat a finding as noise. A broken link or a missing anchor is a real defect that the reader would hit. Fix the link or the target.
+- **Don't** wait for production to find a dead cross-reference. The full point is that the build, and your dev server, tell you first.
+
+---
+
+*Next chapter: [the router](/docs/app/spa-router) makes navigation feel like an app: one request, no reload, no waterfall.*

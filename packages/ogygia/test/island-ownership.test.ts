@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { ogygiaPreprocess } from '../src/content/markdown/index.js';
 import { islandBridge } from '../src/vite/island-bridge.js';
-import { transformHost } from '../src/compiler/transform.js';
+import { transformHost } from '../src/compiler/region/transform.js';
 import { __set_build_cache_root } from '../src/build-cache.js';
 
 // The markup hook now consults the doc-level markup cache — isolate it, or a previous run's

@@ -1,0 +1,301 @@
+---
+title: Content collections
+summary: One collection API. Define a collection one time, then load markdown, read a CMS, or stream a live feed. Data crosses the wire, and bodies render as components.
+related:
+  - content/blocks
+  - regions/held-regions
+  - reference/api
+---
+
+::: tip See it all live
+**[Playground ↗](/playground)** is a second site, built inside this one, on all the features below: four markdown corpora, an OpenAPI reference rendered from JSON data, a dated blog, a version × locale switcher, and search. Each one is a `content()` collection.
+:::
+
+[Remote functions](/docs/data-state/remote-functions) move data. But for most sites, the largest data is the writing itself. `ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it**: each page that you read is a `.svx` entry rendered through it.
+
+You learn one API and use it in all locations. Define a collection one time with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time. The read surface (`refs`, `get`) never changes.
+
+::: tip When to use
+Use a collection when you have a *set of content* with typed frontmatter (docs, a blog, a changelog, product pages, a CMS feed), and you want a nav or index over the wire *and* full rendered bodies on the page.
+:::
+
+One rule controls the full surface: **the boundary picks the representation.** Stay on the server, and you get the full entry, with its body. Cross the wire, and you get plain data.
+
+| read | returns | where |
+| --- | --- | --- |
+| `get(id)` | `{ id, data, meta, body }`; the body is a held region | server only |
+| `list({ map })` | a mapped data array | over the wire |
+| `live.get` / `live.list` | mapped data, emitted again on each change | over the wire (live) |
+
+For a *page assembled from typed blocks*, not a single markdown body, see [Blocks](/docs/content/blocks). It is a separate, block-level API.
+
+## Define the collection once, in a server module
+
+The `loader` of a collection holds the compiled corpus. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`). Then Kit mechanically makes sure that no client module can import it. Thus the corpus can never reach a browser bundle:
+
+```ts title=src/lib/collections.server.ts
+import { content } from 'ogygia/content';
+import * as v from 'valibot';
+
+export const docs = content({
+  // The loader is a compile macro — it owns the glob, you pass a literal path. Data + Meta are
+  // inferred, no annotations. See the loader macro for markdown/folder/json/git.
+  loader: import.meta.og.loader.markdown('../content/docs'),
+  schema: v.object({ title: v.string(), section: v.string() }),
+  filter: (e) => !e.data.draft   // visibility, declared ONCE
+});
+```
+
+> `import.meta.og.loader.*` is the standard way to point a collection at static files. It owns the `import.meta.glob` plumbing. Thus you write only a literal path. It comes in four types (`markdown`, `folder`, `json`, `git`). See the **[loader macro](/docs/macros/loaders)** for all four and the rules. The runtime builders that it rewrites to (`markdown()`, `folder()`, `json()`) stay exported for the rare hand-built source.
+
+::: warning ogygia warns you
+Define a collection outside a server module, and the build prints a warning that names the file. A client component that imports it would pull the full corpus into its bundle, silently, and frequently megabytes. Keep the definition server-side, and mint the wire crossing in a `.remote.ts`. That split is the full defense.
+:::
+
+The collection *handle* stays browser-safe by **type**: `docs.refs` and `docs.get` have no `$app/server` in their signatures. But the *module that defines it* is server-only, because of the glob. Import the types of the handle anywhere. Import the module only from the server.
+
+The collection obeys `filter` on each read path: `refs`, `get`, `live`, the wire remotes, and prerender inputs. A draft is invisible in all locations, direct URL included. A per-remote filter can only narrow it more, never widen it.
+
+### An entry is `{ id, data, meta, body }`
+
+`get(id)` is server-only and returns the full entry:
+
+- **`data`**: validated frontmatter, typed from your `schema`.
+- **`meta`**: collector output, for example `meta.headings` for a table of contents.
+- **`body`**: a [held region](/docs/regions/held-regions) that you render with `<Region>`.
+
+`get` returns **`null`** when the id is unknown or filtered out. It never throws. The caller decides the 404. Validate the slug in `load`:
+
+```ts title=src/routes/docs/[...slug]/+page.server.ts
+// clean 404 for a missing entry
+import { error } from '@sveltejs/kit';
+import { docs } from '$lib/collections.server';
+
+export const load = async ({ params }) => {
+  if (!(await docs.get(params.slug))) error(404, 'Not found');
+};
+```
+
+The collection is server-only. Thus the page component cannot import it. It gets the entry, with a **baked body** that can legally cross the wire, from a `.remote.ts`:
+
+```ts title=src/lib/docs.remote.ts
+// mint a getter that bakes the body into a region ticket
+import { query } from '$app/server';
+import * as v from 'valibot';
+import { docs } from './collections.server';
+
+export const entry = query(v.string(), async (slug) => {
+  const e = await docs.get(slug);
+  if (!e) return null;
+  return { data: e.data, meta: e.meta, body: e.body ? await e.body : undefined };
+});
+```
+
+```svelte title=src/routes/docs/[...slug]/+page.svelte
+<!-- the body arrives as a ticket, islands inside wake -->
+<script>
+  import { page } from '$app/state';
+  import { Region } from 'ogygia';
+  import { entry } from '$lib/docs.remote';
+
+  const view = (await entry(page.params.slug))!;
+</script>
+
+<h1>{view.data.title}</h1>
+<Region of={view.body} />   <!-- a demo island in the .svx hydrates here -->
+```
+
+An `await` of `e.body` bakes its SSR HTML into the region ticket. That is the one representation of a body that can cross the wire. A raw body is a same-pass live render, and cannot serialize. Prerender each entry from `+page.server.ts`:
+
+```ts title=src/routes/docs/[...slug]/+page.server.ts
+export const prerender = true;
+export const entries = async () => (await docs.refs()).map((e) => ({ slug: e.id }));
+```
+
+### Data for the wire: `list`
+
+`list` and `live.list` mint real Kit remotes. Mint them in a `.remote.ts`. Kit requires each export there to be a remote. The consumer passes the args:
+
+```ts title=src/lib/docs.remote.ts
+import { withRemotes } from 'ogygia/content/server';
+import { docs } from './collections.server';
+
+export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title: e.data.title }) });
+```
+
+```svelte
+<script>
+  import { docNav } from '$lib/docs.remote';
+  const nav = await docNav();
+</script>
+```
+
+### Rendering an entry the client fetched
+
+`get()` is server-only. The body is a live component. Thus it stays in the SSR pass, and renders with `<Region of={entry.body} />` (above). Sometimes the client must render an entry that it fetched **over the wire**: an index, a live feed, a search result. Then map that entry to a held region of one of your own `with { region }` components, and return *that*. `<Region>` fetches and hydrates it: the one renderable that crosses the wire. See [Held regions](/docs/regions/held-regions).
+
+## Load markdown (`.svx` / `.md`)
+
+`markdown()` is the built-in source for a glob of `.svx` / `.md` files. It runs an opinionated pipeline: mdsvex for the body, Shiki for fences, pandoc-style heading ids, and a headings collector that fills the `meta.headings` of each entry.
+
+Set the pipeline on under the one plugin surface. There is no separate preprocessor to register. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` through `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
+
+```ts title=vite.config.ts
+ogygia({
+  content: {
+    markdown: {} // defaults: Shiki themes, heading ids, headings collector
+  }
+});
+```
+
+The full option list (`themes`, `defaultColor`, `wrapperClass`, `headingIds`, `headings`, `langs`, `remarkPlugins`, `rehypePlugins`) lives in the [API reference](/docs/reference/api). Each fenced code block on this site is highlighted by exactly this.
+
+### Headings for free
+
+The preprocessor collects `h2`–`h4` into `meta.headings`. It auto-slugs each heading that has no explicit `{#id}`. `get()` gives that array back on the entry:
+
+```svelte
+<script>
+  import { Region } from 'ogygia';
+  const entry = await docs.get(slug);
+</script>
+
+<Toc headings={entry.meta.headings} />   <!-- [{ depth, id, text }] -->
+<Region of={entry.body} />
+```
+
+The **On this page** rail beside these docs is built from exactly that array. Build your TOC from `entry.meta.headings`. Do not parse the body again.
+
+### Islands inside markdown
+
+The transform of ogygia runs after mdsvex. Thus marked island imports operate inside a `.svx` file, the same as in a `.svelte` page:
+
+```svelte
+<script>
+  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+</script>
+
+<Counter start={3} />
+```
+
+That is how the live demos in these docs run inside the prose.
+
+## Custom sources (API / CMS)
+
+A `loader` is not limited to a glob. Each object with `refs` / `get` is a source. Thus the same collection API covers a REST API or a CMS. All other parts (schema, `filter`, the wire remotes) are identical to a file-backed collection.
+
+| Source | Write |
+| --- | --- |
+| Static files in repo | the [`loader` macro](/docs/macros/loaders): `import.meta.og.loader.markdown` · `.folder` · `.json` · `.git` |
+| Blocks (CMS tree) | [`blocks(source, registry)`](/docs/content/blocks) with a [`regions()`](/docs/macros/regions) registry |
+| A REST API | a `{ refs, get }` source that fetches |
+| Something that **pushes** | add `live()` (a change signal) plus `live.list` / `live.get` |
+
+A source is two async methods. `refs()` lists the corpus as light metadata. `get(id)` fetches one full entry:
+
+```ts
+import { content } from 'ogygia/content';
+
+const press = content({
+  schema,
+  loader: {
+    async refs() {
+      const rows = await fetch('https://cms/posts').then((r) => r.json());
+      return rows.map((r) => ({ id: r.slug, data: r }));
+    },
+    async get(id) {
+      const row = await fetch(`https://cms/posts/${id}`).then((r) => r.json());
+      return row ? { id, data: row } : null;
+    }
+  }
+});
+```
+
+`get(id)` fetches one post on demand, not a full list. Mint the wire remotes in a `.remote.ts`, exactly as for a file-backed collection:
+
+```ts
+import { withRemotes } from 'ogygia/content/server';
+export const list = withRemotes(press).list({ map: (e) => ({ id: e.id, title: e.data.title }) });
+```
+
+A source that fetches defaults to `query` mode: resolved at request time, not at build.
+
+### `.yaml` / raw text (roll your own)
+
+ogygia ships `markdown()`, `json()`, and `blocks()`, but **not** a `.yaml` or raw-text loader. Its built-in YAML is frontmatter-only, nothing more. Both are a few lines over a glob with `defineSource`, exactly how the built-ins are made. Thus bring the parser that you like:
+
+```ts
+import { content, defineSource, toRawSource } from 'ogygia/content';
+import { parse as parseYaml } from 'yaml'; // npm i yaml
+
+// .yaml files → data-only entries
+export const team = content({
+  schema,
+  loader: defineSource(
+    toRawSource(import.meta.glob('./team/*.yaml', { query: '?raw', import: 'default', eager: true })),
+    (raw) => ({ data: parseYaml(raw as string) })
+  )
+});
+
+// raw text files → `{ body }`
+export const snippets = content({
+  loader: defineSource(
+    toRawSource(import.meta.glob('./snippets/*.txt', { query: '?raw', import: 'default', eager: true })),
+    (raw) => ({ data: { body: raw as string } })
+  )
+});
+```
+
+The second arg is a **format**: `(rawValue, id) => { data, meta?, body? }`. That is the full contract that a source builder wraps.
+
+## Live (push / SSE)
+
+Add `live()`, a change **signal**. Yield when your feed changes, and the collection reads again. Pair it with `live.list` / `live.get`. They emit mapped snapshots again on each change:
+
+```ts
+let posts = [];
+
+const press = content({
+  schema,
+  loader: {
+    async refs() { return posts.map((p) => ({ id: p.id, data: p })); },
+    async get(id) { const p = posts.find((p) => p.id === id); return p ? { id: p.id, data: p } : null; },
+    async *live() {
+      for await (const next of subscribeToCms()) { posts = next; yield 1; }
+    }
+  }
+});
+
+export const headlines = withRemotes(press).live.list({ map: (e) => ({ id: e.id, title: e.data.title }) });
+```
+
+Yield anything to read the full source again. Or yield a **`string[]` of changed ids** for an incremental reload (`get(id)` for each). Use that for a large collection, where a full re-list is wasteful.
+
+### Watch it push
+
+Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions) each second. The server renders each tick, and pushes the HTML down the channel. The client **morphs** it in place, with no client data code and no per-tick fetch.
+
+<script>
+  import LivePartialDemo from '$lib/demos/LivePartialDemo.svelte' with { wake: 'load' };
+</script>
+
+<div class="doc-demo">
+  <LivePartialDemo />
+</div>
+
+> Live sources need a long-lived server. On short-lived serverless functions, an in-memory stream is per-isolate. Document it, and degrade gracefully. Do not promise continuity.
+
+## Do / don't
+
+- **Do** define the collection one time in a `.server.ts` module. Then reach it from server code (`get`), and mint the wire (`list` / a body-baking getter) in a `.remote.ts`.
+- **Do** the 404 in `load` with `error()`, not in the top-level `await` of the component.
+- **Do** keep `markdown: {}` at the defaults to start. The built-in Shiki themes and heading collector cover most sites.
+- **Do** build your TOC from `entry.meta.headings`. Do not parse the body again.
+- **Do** map wire entries to a held region of your own `with { region }` component, when the client must render them. `<Region>` is the one renderable that crosses the wire.
+- **Don't** register a separate mdsvex plugin. Configuration lives fully under `ogygia({ content: { markdown } })`.
+- **Don't** expect a compiled body from a CMS row. Those sources deliver **data**. Render it through a held region.
+- **Don't** promise live continuity on serverless. An in-memory stream is per-isolate there.
+
+---
+
+*A collection knows what exists. [`site()`](/docs/content/site) decides how it reads: nav, search, shell, and more.*

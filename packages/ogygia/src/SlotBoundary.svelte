@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	/**
 	 * The nested-context RESET around an island's in-place slot children. Region `setNested()`s for its
 	 * subtree so islands rendered INSIDE an island degrade to plain inline components — but slot children
@@ -7,9 +7,9 @@
 	 * slot DOM. Server-only in practice (the client adopts, never re-renders slot children).
 	 */
 	import { setNested } from './context.js';
+	import type { Snippet } from 'svelte';
 
-	/** @type {{ children?: import('svelte').Snippet }} */
-	let { children } = $props();
+	let { children }: { children?: Snippet } = $props();
 
 	setNested(false);
 </script>

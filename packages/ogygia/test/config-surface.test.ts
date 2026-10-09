@@ -8,7 +8,8 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ogygia } from '../src/vite/index.js';
-import { rewrite_loaders, extract_preset } from '../src/vite/loaders.js';
+import { resolve_options } from '../src/vite/options.js';
+import { rewrite_loaders, extract_preset } from '../src/compiler/content/loaders.js';
 import { islandBridge } from '../src/vite/island-bridge.js';
 
 const saved: Partial<typeof islandBridge> = {};
@@ -28,10 +29,27 @@ describe('legacy option renames — errors with the new spelling, never silent a
 		expect(() => ogygia({ visible: { margin: '200px' } } as never)).toThrow(/regions: \{ visible/);
 	});
 	it('rejects top-level presets', () => {
-		expect(() => ogygia({ presets: { a: { wake: 'load' } } } as never)).toThrow(/regions: \{ presets/);
+		expect(() => ogygia({ presets: { a: { wake: 'load' } } } as never)).toThrow(
+			/regions: \{ presets/
+		);
 	});
 	it('rejects continuity', () => {
-		expect(() => ogygia({ continuity: { forms: false } } as never)).toThrow(/router: \{ forms: false \}/);
+		expect(() => ogygia({ continuity: { forms: false } } as never)).toThrow(
+			/router: \{ forms: false \}/
+		);
+	});
+	it('rejects regionTtl (now regions.ttl)', () => {
+		expect(() => ogygia({ regionTtl: 600 } as never)).toThrow(/regions: \{ ttl/);
+	});
+});
+
+describe('regions.ttl — the capability lifetime', () => {
+	it('is read from regions.ttl and clamped to [60, 86400]', () => {
+		const ttl = (regions?: { ttl?: number }) => resolve_options({ regions }, 3600).region_ttl;
+		expect(ttl()).toBe(3600);
+		expect(ttl({ ttl: 600 })).toBe(600);
+		expect(ttl({ ttl: 5 })).toBe(60);
+		expect(ttl({ ttl: 10 * 86400 })).toBe(86400);
 	});
 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { transformHost, islandId } from '../dist/compiler/transform.js';
+import { transformHost, islandId } from '../dist/compiler/region/transform.js';
 import { rewrite_lake_import_to_placeholder } from '../dist/vite/index.js';
 import { RateLimiter } from '../dist/server/rate-limit.js';
 import { sign, verify, region_mac_message } from '../dist/server/hmac.js';
@@ -15,8 +15,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
 		readFile: () => null,
 		pathModule: path,
 		dev: false,
-		virtualPathFor: (_hostId: string, iid: string) =>
-			`virtual:ogygia/island/${iid}.js`,
+		virtualPathFor: (_hostId: string, iid: string) => `virtual:ogygia/island/${iid}.js`,
 		devUrlFor: (p: string) => '/@id/' + p,
 		visibleMargin: '0px',
 		presets: {},
@@ -48,10 +47,7 @@ describe('audit fixes — transform contract', () => {
 	it('allows a marked import used as a portable/dynamic binding', () => {
 		// Svelte 5 has no <svelte:component>; a dynamic component is `<Comp/>` where Comp is a variable.
 		const r = run(
-			wrap(
-				`import C from './C.svelte' with { wake: 'load' };\n\tlet Comp = C;`,
-				'<Comp />'
-			)
+			wrap(`import C from './C.svelte' with { wake: 'load' };\n\tlet Comp = C;`, '<Comp />')
 		);
 		expect(r).toBeTruthy();
 		expect(r!.islands.length).toBe(1);
@@ -69,7 +65,9 @@ describe('audit fixes — transform contract', () => {
 	});
 
 	it('unused marked import is stripped even when markup text mentions the local name', () => {
-		const r = run(wrap(`import C from './C.svelte' with { wake: 'load' };`, '<p>no usage of C</p>'));
+		const r = run(
+			wrap(`import C from './C.svelte' with { wake: 'load' };`, '<p>no usage of C</p>')
+		);
 		expect(r).toBeTruthy();
 		expect(r!.islands.length).toBe(0);
 		expect(r!.code).not.toMatch(/import C from/);
@@ -77,7 +75,8 @@ describe('audit fixes — transform contract', () => {
 
 	it('errors when marked import is used as dotted Menu.Item', () => {
 		expectThrows(
-			() => run(wrap(`import Menu from './Menu.svelte' with { wake: 'load' };`, '<Menu.Item x={1} />')),
+			() =>
+				run(wrap(`import Menu from './Menu.svelte' with { wake: 'load' };`, '<Menu.Item x={1} />')),
 			/dotted tag/
 		);
 	});
@@ -96,9 +95,7 @@ describe('audit fixes — transform contract', () => {
 	});
 
 	it('lake binding rewrite produces a portable lake wrapper', () => {
-		const r = run(
-			wrap(`import Lake from './Lake.svelte' with { wake: 'none' };`, '<Lake />')
-		);
+		const r = run(wrap(`import Lake from './Lake.svelte' with { wake: 'none' };`, '<Lake />'));
 		expect(r).toBeTruthy();
 		const lake = r!.islands.find((i) => i.kind === 'lake')!;
 		expect(lake.wrapperSource).toMatch(/OgygiaRegion__Wrapper __mode="lake"/);
@@ -115,9 +112,12 @@ describe('audit fixes — transform contract', () => {
 	it('errors on strategy-less preset', () => {
 		expectThrows(
 			() =>
-				run(wrap(`import C from './C.svelte' with { preset: 'marginOnly' };`, '<C />'), makeCtx({
-					presets: { marginOnly: { margin: '10px' } }
-				})),
+				run(
+					wrap(`import C from './C.svelte' with { preset: 'marginOnly' };`, '<C />'),
+					makeCtx({
+						presets: { marginOnly: { margin: '10px' } }
+					})
+				),
 			/must set `render` or `wake`/
 		);
 	});
@@ -227,7 +227,7 @@ describe('audit fixes — concurrency gate', () => {
 
 describe('audit fixes — head_node_key', () => {
 	it('keys link/meta without full outerHTML when possible', async () => {
-		const { head_node_key } = await import('../dist/runtime/router.js');
+		const { head_node_key } = await import('../dist/runtime/router-nav.js');
 		const attr = (map: Record<string, string>) => (n: string) => map[n] ?? null;
 		const link = {
 			tagName: 'LINK',
@@ -246,7 +246,8 @@ describe('audit fixes — head_node_key', () => {
 	});
 
 	it('keys Kit FOUC and Vite HMR styles by role, not content length', async () => {
-		const { head_node_key, keep_head_node_across_spa } = await import('../dist/runtime/router.js');
+		const { head_node_key, keep_head_node_across_spa } =
+			await import('../dist/runtime/router-nav.js');
 		const fouc = {
 			tagName: 'STYLE',
 			getAttribute: (n: string) => (n === 'data-sveltekit' ? '' : null),
@@ -256,6 +257,17 @@ describe('audit fixes — head_node_key', () => {
 		} as unknown as Element;
 		expect(head_node_key(fouc)).toBe('STYLE:data-sveltekit');
 		expect(keep_head_node_across_spa(fouc)).toBe(false);
+
+		// An INLINED region sheet (under Kit's inlineStyleThreshold) is keyed by the href it stands
+		// for — the same sheet on the next document is one node, never stacked by content length.
+		const inlined = {
+			tagName: 'STYLE',
+			getAttribute: (n: string) => (n === 'data-ogygia-region-css' ? '/_app/immutable/assets/Tiny.css' : null),
+			hasAttribute: (n: string) => n === 'data-ogygia-region-css',
+			textContent: '.a{color:red}',
+			outerHTML: '<style data-ogygia-region-css="/_app/immutable/assets/Tiny.css">.a{color:red}</style>'
+		} as unknown as Element;
+		expect(head_node_key(inlined)).toBe('STYLE:og-css:/_app/immutable/assets/Tiny.css');
 
 		const vite = {
 			tagName: 'STYLE',
@@ -271,9 +283,8 @@ describe('audit fixes — head_node_key', () => {
 
 describe('audit fixes — spa cache policy', () => {
 	it('refuses private/no-store/no-cache and Set-Cookie', async () => {
-		const { spa_html_cacheable, bust_page_cache, _page_cache_size } = await import(
-			'../dist/runtime/router.js'
-		);
+		const { spa_html_cacheable } = await import('../dist/runtime/spa-cacheable.js');
+		const { bust_page_cache, _page_cache_size } = await import('../dist/runtime/router.js');
 		expect(spa_html_cacheable('public, max-age=60', false)).toBe(true);
 		expect(spa_html_cacheable('private, max-age=60', false)).toBe(false);
 		expect(spa_html_cacheable('no-store', false)).toBe(false);
@@ -334,13 +345,8 @@ describe('audit fixes — remote clear', () => {
 	});
 
 	it('clear_remote_seeds leaves live/query instance maps intact', async () => {
-		const {
-			query_responses,
-			prerender_responses,
-			clear_remote_seeds,
-			query_map,
-			live_query_map
-		} = await import('../dist/shims/kit-remote/remote-cache.js');
+		const { query_responses, prerender_responses, clear_remote_seeds, query_map, live_query_map } =
+			await import('../dist/shims/kit-remote/remote-cache.js');
 		query_responses['a'] = { v: 1 };
 		prerender_responses['b'] = { v: 2 };
 		query_map.set('q', new Map());
@@ -353,12 +359,8 @@ describe('audit fixes — remote clear', () => {
 	});
 
 	it('clear_remote_instances destroys leftover query/live maps only', async () => {
-		const {
-			query_responses,
-			clear_remote_instances,
-			query_map,
-			live_query_map
-		} = await import('../dist/shims/kit-remote/remote-cache.js');
+		const { query_responses, clear_remote_instances, query_map, live_query_map } =
+			await import('../dist/shims/kit-remote/remote-cache.js');
 		query_responses['keep'] = { v: 1 };
 		const destroyed: string[] = [];
 		live_query_map.set(
@@ -433,21 +435,20 @@ describe('audit fixes — session-bound MAC', () => {
 
 describe('audit fixes — region endpoint allowlist', () => {
 	it('allows same-origin relative and absolute; rejects cross-origin', async () => {
-		const { is_allowed_region_endpoint, is_same_origin_response } = await import(
-			'../dist/runtime/region-endpoint-url.js'
-		);
+		const { is_allowed_region_endpoint, is_same_origin_response } =
+			await import('../dist/runtime/region-endpoint-url.js');
 		const origin = 'https://app.example';
 		expect(is_allowed_region_endpoint('/__ogygia__?id=abc', origin)).toBe(true);
 		expect(is_allowed_region_endpoint('https://app.example/__ogygia__?id=1', origin)).toBe(true);
 		expect(is_allowed_region_endpoint('https://evil.example/x', origin)).toBe(false);
 		expect(is_allowed_region_endpoint('//evil.example/x', origin)).toBe(false);
 		expect(is_allowed_region_endpoint('javascript:alert(1)', origin)).toBe(false);
-		expect(
-			is_same_origin_response({ url: 'https://app.example/ok' } as Response, origin)
-		).toBe(true);
-		expect(
-			is_same_origin_response({ url: 'https://evil.example/ok' } as Response, origin)
-		).toBe(false);
+		expect(is_same_origin_response({ url: 'https://app.example/ok' } as Response, origin)).toBe(
+			true
+		);
+		expect(is_same_origin_response({ url: 'https://evil.example/ok' } as Response, origin)).toBe(
+			false
+		);
 	});
 
 	it('resolves relative island entries against the document (not runtime module)', async () => {

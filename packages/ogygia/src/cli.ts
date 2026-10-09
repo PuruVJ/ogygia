@@ -13,12 +13,26 @@
 // codemods and BUNDLE it into this file at build time — ogygia declares no extra runtime dependency.
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
-import { color, fileExists, loadFile, saveFile, svelteConfig, transforms } from '@sveltejs/sv-utils';
+import {
+	color,
+	fileExists,
+	loadFile,
+	saveFile,
+	svelteConfig,
+	transforms
+} from '@sveltejs/sv-utils';
+
+// ── regexes
+const JSON_INDENT_RE = /\n(\t| +)/;
+const TRAILING_LFS_RE = /\n*$/;
+const BACKSLASH_G = /\\/g;
+const CONTENT_SHELL_IMPORT_RE = /from ['"]ogygia\/content(\/docs-shell)?['"]/;
 
 const require = createRequire(import.meta.url);
 // This CLI ships inside `ogygia`, so our own version IS the version to pin the user's dependency to.
@@ -37,13 +51,33 @@ const argv = process.argv.slice(2);
 const command = argv[0];
 const flags = new Set(argv.slice(1).filter((a) => a.startsWith('-')));
 
-if (command !== 'init' && command !== 'site') {
+if (
+	command !== 'init' &&
+	command !== 'site' &&
+	command !== 'mcp' &&
+	command !== 'ai' &&
+	command !== 'keys' &&
+	command !== 'fragments' &&
+	command !== 'perf' &&
+	command !== 'bisect'
+) {
 	const unknown = command && command !== 'help' && !command.startsWith('-');
 	stdout.write(
 		`${strong('ogygia')} ${dim(`v${version}`)}\n\n` +
 			`Usage:\n` +
 			`  ${accent('npx ogygia init')} ${dim('[--markdown] [--no-install] [-y]')}\n` +
-			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n\n` +
+			`  ${accent('npx ogygia site init')} ${dim('[--layout <path>] [--force] [--no-install] [-y]')}\n` +
+			`  ${accent('npx ogygia keys')} ${dim('[name] (mint an Ed25519 pair for fragment-federation signing)')}\n` +
+			`  ${accent('npx ogygia fragments')} ${dim('<origin> [--out <file>] [--check <file>] (typed widget-catalog stubs + CI drift check)')}\n` +
+			`  ${accent('npx ogygia ai')} ${dim('(install the Claude skill + register the MCP server)')}\n` +
+			`  ${accent('npx ogygia mcp')} ${dim('(stdio MCP server — hand ogygia components to an AI)')}\n` +
+			`  ${accent('npx ogygia perf')} ${dim('--url <origin> --pages /a,/b [--baseline f.json] [--budget b.json] [--out f.json] [--md f.md]')}\n` +
+			`  ${accent('npx ogygia bisect')} ${dim('--good <sha> [--bad HEAD] --page /x --build "<cmd>" --start "<cmd>" --url <origin>')}\n\n` +
+			`${strong('perf')}  — renders pages under the SSR profiler on a running server, writes a snapshot, diffs it\n` +
+			`  against a baseline under a budget, prints the verdict (exit 1 on a failure) and a PR comment (--md).\n` +
+			`  ${dim('--runs 5 --key $OGYGIA_PROFILER_SECRET --label "$SHA" --no-fail --pages-file pages.json')}\n\n` +
+			`${strong('bisect')}  — finds the first commit that made a page slower: builds and profiles commits between\n` +
+			`  --good and --bad in a binary search (each in its own worktree) and names the culprit.\n\n` +
 			`${strong('init')}  — wires ogygia into the SvelteKit app in the current directory.\n` +
 			`  --markdown / --no-markdown   turn markdown content collections on/off (else you are asked)\n` +
 			`  -y, --yes                    accept defaults, no prompts\n` +
@@ -51,7 +85,15 @@ if (command !== 'init' && command !== 'site') {
 			`${strong('site init')}  — scaffolds a docs site (site, content, routes, a Shell layout).\n` +
 			`  --layout <path>              layout route to write (default ${dim('src/routes/+layout.svelte')})\n` +
 			`  --force                      overwrite existing route/site files (the layout always asks)\n` +
-			`  -y, --yes                    accept defaults, no prompts\n`
+			`  -y, --yes                    accept defaults, no prompts\n\n` +
+			`${strong('keys')}  — prints a caller keypair as env lines (${dim('<NAME>_SIGNING_KEY')} stays with the caller,\n` +
+			`  ${dim('<NAME>_PUBLIC_KEY')} goes to the apps it calls). Redirect where you like: ${dim('npx ogygia keys shell >> keys.env')}\n\n` +
+			`${strong('fragments')}  — typed stubs for an MFE's widget catalog (its unsigned ${dim('__catalog')} manifest).\n` +
+			`  ${dim('--out stubs.ts')} writes the stub; ${dim('--check stubs.ts')} exits 1 when the live catalog drifted (CI).\n\n` +
+			`${strong('ai')}  — installs the ogygia Claude skill into ${dim('.claude/skills/ogygia/')} and registers the MCP\n` +
+			`  server in ${dim('.mcp.json')}, so any agent on this repo gets the mental model + live compiler tools.\n\n` +
+			`${strong('mcp')}  — runs a Model Context Protocol server on stdio. Point an MCP client at it to give an\n` +
+			`  AI the real ogygia compiler: compile a component, read its island map, validate it, explain it.\n`
 	);
 	process.exit(unknown ? 1 : 0);
 }
@@ -148,7 +190,7 @@ function preflight(): Preflight {
 function addOgygiaDep(pf: Preflight): void {
 	if (!pf.pkg.dependencies?.['ogygia']) {
 		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}), ogygia: `^${version}` };
-		const indent = /\n(\t| +)/.exec(pf.pkgRaw)?.[1] ?? '\t';
+		const indent = JSON_INDENT_RE.exec(pf.pkgRaw)?.[1] ?? '\t';
 		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
 	}
 }
@@ -197,8 +239,14 @@ function wireSvelteConfig(asyncCompiler: boolean): void {
 		// experimental.async — site-layer components use top-level `await`; the compiler needs this on.
 		if (asyncCompiler) {
 			const co = property('compilerOptions', { fallback: js.object.create({}) });
-			const experimental = js.object.property(co, { name: 'experimental', fallback: js.object.create({}) });
-			js.object.property(experimental, { name: 'async', fallback: js.common.parseExpression('true') });
+			const experimental = js.object.property(co, {
+				name: 'experimental',
+				fallback: js.object.create({})
+			});
+			js.object.property(experimental, {
+				name: 'async',
+				fallback: js.common.parseExpression('true')
+			});
 		}
 	});
 }
@@ -229,7 +277,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	// 2b. svelte config — `.svx` extensions + preprocessor (and the async compiler for the site layer).
 	if (markdown) {
 		wireSvelteConfig(asyncCompiler);
-		stdout.write(`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`);
+		stdout.write(
+			`  ${ok('✓')} svelte config ${dim(asyncCompiler ? '(.svx + async)' : '(.svx)')}\n`
+		);
 	}
 
 	// 3. Universal hooks — the transport codec. Canonical: `export const transport = ogygia.transport`.
@@ -290,15 +340,19 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	//  in case a build is ever hard-killed before cleanup.)
 	editFile('.gitignore', (c) => {
 		if (c.includes('.ogygia-keep-client')) return c;
-		const line = '# ogygia build-time keep-client route (auto-removed; only survives a crashed build)\n**/.ogygia-keep-client/\n';
-		return c.trim() ? c.replace(/\n*$/, '\n\n') + line : line;
+		const line =
+			'# ogygia build-time keep-client route (auto-removed; only survives a crashed build)\n**/.ogygia-keep-client/\n';
+		return c.trim() ? c.replace(TRAILING_LFS_RE, '\n\n') + line : line;
 	});
 
 	// 5. Ambient types — one reference line so `svelte-check` / `tsc` resolve the `virtual:ogygia/*`
 	//    modules the shipped source imports. TS projects only; never clobber an existing file.
 	if (ext === 'ts') {
 		editFile('src/ogygia.d.ts', (c) =>
-			c.includes('ogygia/types') ? c : (c.trim() ? c.replace(/\n*$/, '\n\n') : '') + '/// <reference types="ogygia/types" />\n'
+			c.includes('ogygia/types')
+				? c
+				: (c.trim() ? c.replace(TRAILING_LFS_RE, '\n\n') : '') +
+					'/// <reference types="ogygia/types" />\n'
 		);
 		stdout.write(`  ${ok('✓')} src/ogygia.d.ts ${dim('(types)')}\n`);
 	}
@@ -314,7 +368,11 @@ function installDeps(): void {
 				? 'bun'
 				: 'npm';
 	stdout.write(`\n  Installing with ${accent(pm)}…\n`);
-	const res = spawnSync(pm, ['install'], { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
+	const res = spawnSync(pm, ['install'], {
+		cwd,
+		stdio: 'inherit',
+		shell: process.platform === 'win32'
+	});
 	if (res.status !== 0) {
 		stdout.write(`  ${bad('✗')} install failed — run ${accent(`${pm} install`)} yourself.\n`);
 	}
@@ -324,7 +382,9 @@ function installDeps(): void {
 async function run() {
 	const pf = preflight();
 	// Markdown: flag wins, else prompt (default off), else default off in non-interactive.
-	const markdown = wantMarkdown ?? (yes ? false : await confirm('Add markdown content collections (.md / .svx)?', false));
+	const markdown =
+		wantMarkdown ??
+		(yes ? false : await confirm('Add markdown content collections (.md / .svx)?', false));
 
 	stdout.write(`\n${strong('ogygia')} — wiring your project…\n`);
 	wireOgygia(pf, markdown);
@@ -363,6 +423,48 @@ function place(rel: string, content: string, overwrite: boolean): boolean {
 	return true;
 }
 
+/** `ogygia ai` — install the Claude skill + register the MCP server so agents on this repo get both. */
+async function ai_install(): Promise<void> {
+	stdout.write(`\n${strong('ogygia ai')} ${dim('— Claude skill + MCP server')}\n\n`);
+
+	// 1. the skill (bundled at ai/SKILL.md, a sibling of dist/) → .claude/skills/ogygia/
+	let skill: string;
+	try {
+		skill = readFileSync(new URL('../ai/SKILL.md', import.meta.url), 'utf8');
+	} catch {
+		die('could not read the bundled skill — ai/SKILL.md is missing from the ogygia package.');
+	}
+	place('.claude/skills/ogygia/SKILL.md', skill, true);
+
+	// 2. the MCP server → .mcp.json (MERGE — never clobber other servers the project registered)
+	const rel = '.mcp.json';
+	const abs = path.join(cwd, rel);
+	let cfg: { mcpServers?: Record<string, unknown>; [k: string]: unknown } = {};
+	if (existsSync(abs)) {
+		try {
+			cfg = JSON.parse(readFileSync(abs, 'utf8'));
+		} catch {
+			die(`${rel} exists but is not valid JSON — fix or remove it, then re-run.`);
+		}
+	}
+	cfg.mcpServers = cfg.mcpServers ?? {};
+	const already = 'ogygia' in cfg.mcpServers;
+	cfg.mcpServers.ogygia = { command: 'npx', args: ['ogygia', 'mcp'] };
+	writeFileSync(abs, JSON.stringify(cfg, null, '\t') + '\n');
+	stdout.write(
+		`  ${ok('✓')} ${rel} ${dim(already ? '(ogygia server updated)' : '(ogygia server added)')}\n`
+	);
+
+	// 3. next steps
+	stdout.write(
+		`\n${ok('✓')} done — any agent on this repo now has:\n` +
+			`  • the ${accent('ogygia')} skill — the mental model, read before inventing a workaround.\n` +
+			`  • live tools ${accent('ogygia_check / compile / islands / explain')} via the MCP server.\n\n` +
+			`  In Claude Code the ${accent('.mcp.json')} server loads on next start ${dim('(approve it when prompted)')}.\n` +
+			`  Sanity-check the server: ${accent('npx ogygia mcp')} ${dim('→ should log “ready — 4 tools”, then Ctrl-C.')}\n`
+	);
+}
+
 async function site_init(): Promise<void> {
 	// argv: site init [--layout p] [--force] [-y] [--no-install]
 	if (argv[1] !== 'init') {
@@ -388,7 +490,7 @@ async function site_init(): Promise<void> {
 
 	// The layout — the ONE file you own. Its DIRECTORY is where the docs mount; a nested layout
 	// (e.g. src/routes/docs/+layout.svelte) mounts the site under that URL prefix.
-	const layoutRel = (flagLayout || 'src/routes/+layout.svelte').replace(/\\/g, '/');
+	const layoutRel = (flagLayout || 'src/routes/+layout.svelte').replace(BACKSLASH_G, '/');
 	if (!layoutRel.startsWith('src/routes/') || path.basename(layoutRel) !== '+layout.svelte') {
 		die(`--layout must be a +layout.svelte under src/routes (got ${strong(layoutRel)}).`);
 	}
@@ -558,7 +660,7 @@ export const prerender = true;
 	const layoutExisted = fileExists(cwd, layoutRel);
 	const layoutIsOurs =
 		layoutExisted &&
-		/from ['"]ogygia\/content(\/docs-shell)?['"]/.test(loadFile(cwd, layoutRel)) &&
+		CONTENT_SHELL_IMPORT_RE.test(loadFile(cwd, layoutRel)) &&
 		loadFile(cwd, layoutRel).includes('Shell');
 
 	if (!layoutExisted || force) {
@@ -702,8 +804,126 @@ function globHasSvx(dir: string): boolean {
 	return false;
 }
 
+// ── keys ─────────────────────────────────────────────────────────────────────
+// Mint one Ed25519 caller pair for fragment-federation signing, in EXACTLY the format
+// `sign`/`verify` consume (base64 PKCS8 DER private, base64 SPKI DER public) — the openssl
+// flag maze (`-outform DER | base64`, `-pubout`) is where wrong keys and confusing 401s
+// come from. Env lines go to STDOUT (redirectable, e.g. `>> keys.env`); guidance goes to
+// STDERR so redirection captures ONLY secrets. Never writes a file.
+const ENV_NAME_RE = /[^A-Z0-9]+/g;
+const ENV_TRIM_RE = /^_|_$/g;
+function keys_mint(): void {
+	const raw = argv[1] && !argv[1].startsWith('-') ? argv[1] : 'ogygia';
+	const name = raw.toUpperCase().replace(ENV_NAME_RE, '_').replace(ENV_TRIM_RE, '') || 'OGYGIA';
+	const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+	stdout.write(
+		`export ${name}_SIGNING_KEY=${privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')}\n` +
+			`export ${name}_PUBLIC_KEY=${publicKey.export({ type: 'spki', format: 'der' }).toString('base64')}\n`
+	);
+	process.stderr.write(
+		`\n${ok('✓')} minted an Ed25519 pair for caller ${strong(name)}\n` +
+			`  ${dim('SIGNING (private)')} — stays with this app; pass it as ${accent('federate({ key })')}\n` +
+			`  ${dim('PUBLIC')} — give to every app it talks to; list it as ${accent('federate({ peers: { <name>: { key } } })')}\n` +
+			`  keep the private key in your secret store — never commit it\n`
+	);
+}
+
+// ── fragments ────────────────────────────────────────────────────────────────
+// Typed stubs for an MFE's widget catalog. Fetches the UNSIGNED `__catalog` manifest and emits
+// a stub whose name union pins the consumable widgets; `--check` diffs the LIVE catalog against
+// a committed stub in CI, so a renamed/removed widget fails the build instead of 404ing in prod.
+function fragments_stub_source(
+	origin: string,
+	names: string[],
+	widgets?: Record<string, { props?: string[] }>
+): string {
+	const union = names.length ? names.map((n) => JSON.stringify(n)).join(' | ') : 'never';
+	// per-widget PROP types when the catalog declared them (`{ props: ['org'], make }`) — the
+	// stub then types the whole call: `widget('kpis', { org })`, prop names checked.
+	const props_iface = names
+		.map((n) => {
+			const props = widgets?.[n]?.props ?? [];
+			const shape = props.length
+				? `{ ${props.map((p) => `${JSON.stringify(p)}?: string`).join('; ')} }`
+				: 'Record<string, string>';
+			return `\t${JSON.stringify(n)}: ${shape};`;
+		})
+		.join('\n');
+	return (
+		`// generated by \`npx ogygia fragments ${origin}\` — do not edit\n` +
+		`export type WidgetName = ${union};\n` +
+		`export const WIDGET_NAMES = ${JSON.stringify(names)} as const;\n` +
+		`export interface WidgetProps {\n${props_iface}\n}\n`
+	);
+}
+async function fragments_stub(): Promise<void> {
+	const origin = argv[1];
+	if (!origin || origin.startsWith('-'))
+		die('usage: npx ogygia fragments <origin> [--out <file>] [--check <file>]');
+	const flag_val = (name: string) => {
+		const i = argv.indexOf(name);
+		return i >= 0 ? argv[i + 1] : undefined;
+	};
+	const out = flag_val('--out');
+	const check = flag_val('--check');
+	const u = new URL('/og/fragment/__catalog', origin);
+	let names: string[];
+	let widgets: Record<string, { props?: string[] }> | undefined;
+	try {
+		const res = await fetch(u, { signal: AbortSignal.timeout(10_000) });
+		if (!res.ok) die(`catalog at ${u.href} answered ${res.status}`);
+		const doc = (await res.json()) as { names?: unknown; widgets?: unknown };
+		if (!Array.isArray(doc.names) || !doc.names.every((n) => typeof n === 'string'))
+			die(`catalog at ${u.href} did not answer { names: string[] }`);
+		names = doc.names;
+		widgets = doc.widgets as typeof widgets;
+	} catch (e) {
+		die(e instanceof Error ? e.message : String(e));
+	}
+	const source = fragments_stub_source(origin, names, widgets);
+	if (check) {
+		const existing = existsSync(check) ? readFileSync(check, 'utf8') : null;
+		if (existing === null) die(`--check: ${check} does not exist (generate it with --out first)`);
+		if (existing !== source) {
+			stdout.write(
+				`${bad('✗')} widget catalog DRIFTED from ${check}\n` +
+					`  live:      ${names.join(', ') || '(empty)'}\n` +
+					`  regenerate: ${accent(`npx ogygia fragments ${origin} --out ${check}`)}\n`
+			);
+			process.exit(1);
+		}
+		stdout.write(`${ok('✓')} widget catalog matches ${check} (${names.length} widget(s))\n`);
+		return;
+	}
+	if (out) {
+		writeFileSync(out, source);
+		stdout.write(`${ok('✓')} wrote ${out} (${names.length} widget(s))\n`);
+	} else {
+		stdout.write(source);
+	}
+}
+
 // ── dispatch ─────────────────────────────────────────────────────────────────
-if (command === 'site') {
+if (command === 'fragments') {
+	fragments_stub().catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'perf' || command === 'bisect') {
+	// `./perf/cli.js` is a sibling in dist (library-built), loaded on demand like mcp
+	import(new URL('./perf/cli.js', import.meta.url).href)
+		.then((m) => (m as { runPerf: (a: string[]) => Promise<number>; runBisect: (a: string[]) => Promise<number> })[command === 'perf' ? 'runPerf' : 'runBisect'](argv.slice(1)))
+		.then((code) => process.exit(code))
+		.catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'keys') {
+	keys_mint();
+} else if (command === 'mcp') {
+	// `./mcp.js` is a sibling in dist (its own library-built module, NOT bundled into this CLI — the
+	// computed URL keeps rolldown from inlining the whole compiler here). It imports the compiler at
+	// runtime and runs the stdio server until stdin closes.
+	import(new URL('./mcp.js', import.meta.url).href)
+		.then((m) => (m as { runMcp: () => Promise<void> }).runMcp())
+		.catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'ai') {
+	ai_install().catch((err) => die(err?.message ?? String(err)));
+} else if (command === 'site') {
 	site_init().catch((err) => die(err?.message ?? String(err)));
 } else {
 	run().catch((err) => die(err?.message ?? String(err)));

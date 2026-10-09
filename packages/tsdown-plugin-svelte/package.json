@@ -1,0 +1,59 @@
+{
+	"name": "@ogygia/tsdown-plugin-svelte",
+	"version": "0.1.0",
+	"description": "Ship Svelte components from a tsdown build: preprocessed, TypeScript-free markup, with .svelte.d.ts types",
+	"type": "module",
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"directory": "packages/tsdown-plugin-svelte"
+	},
+	"keywords": ["tsdown", "rolldown", "svelte", "plugin", "library"],
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		}
+	},
+	"files": ["dist", "README.md", "LICENSE"],
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"prepublishOnly": "pnpm run build && vitest run"
+	},
+	"dependencies": {
+		"magic-string": "^1.1.0"
+	},
+	"peerDependencies": {
+		"@sveltejs/vite-plugin-svelte": ">=5.0.0",
+		"svelte": "^5.40.0",
+		"svelte2tsx": ">=0.7.0",
+		"tsdown": ">=0.15.0",
+		"typescript": ">=5.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@sveltejs/vite-plugin-svelte": { "optional": true },
+		"svelte2tsx": { "optional": true },
+		"typescript": { "optional": true }
+	},
+	"devDependencies": {
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@types/node": "^26.1.2",
+		"svelte": "^5.40.0",
+		"svelte2tsx": "^0.7.60",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.mts",
+				"default": "./dist/index.mjs"
+			}
+		}
+	}
+}

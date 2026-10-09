@@ -8,7 +8,7 @@ import { describe, test, expect } from 'vitest';
 import path from 'node:path';
 import { region, isRegion } from '../dist/region.js';
 import { ogygiaTransport } from '../dist/transport.js';
-import { transformHost } from '../dist/compiler/transform.js';
+import { transformHost } from '../dist/compiler/region/transform.js';
 
 /** A fake SSR partial-binding (what `virtual:ogygia/region/<iid>.js` exports on the server leg). */
 function fakeBinding(overrides: Record<string, unknown> = {}) {
@@ -118,11 +118,13 @@ describe('transform — SSR binding renders HTML, client leg stays metadata-only
 		};
 	}
 
-	test('SSR leg imports svelte/server render and exposes __renderHtml', () => {
+	test('SSR leg renders through the one shared helper and exposes __renderHtml', () => {
 		const r = transformHost(src, '/app/src/routes/+page.svelte', ctx());
 		const isl = r!.islands[0] as Record<string, unknown>;
 		const ssr = String(isl.bindingSsrSource);
-		expect(ssr).toContain("from 'svelte/server'");
+		// (ogygia's shared render, never a copy of it inlined per binding)
+		expect(ssr).toContain('render_region_html as __ogRegionHtml');
+		expect(ssr).toContain("from 'ogygia/internal/server'");
 		expect(ssr).toContain('__renderHtml');
 		// The client leg must NOT pull svelte/server or the component render in.
 		expect(String(isl.bindingClientSource)).not.toContain('svelte/server');

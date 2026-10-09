@@ -1,23 +1,23 @@
 ---
 title: Snippets
-summary: Snippets cross an island boundary as regions. Static content freezes to server HTML; a snippet that needs to wake hydrates on the far side. region.snippet() is the manual form.
+summary: Snippets cross an island boundary as regions. Static content freezes to server HTML. A snippet that must wake hydrates on the far side. region.snippet() is the manual form.
 related:
   - regions/client-islands
   - regions/timing-nesting
 ---
 
-A snippet is a function, so it cannot cross an island boundary directly: the props an island ships are serialized, and a function does not serialize. Ogygia handles this for you: **any snippet handed to an island crosses as a region**, the snippet shape of the same primitive behind `<Component/>` regions. You almost never call anything; passing children or a `{#snippet}` into an island just works, including when a plain wrapper forwards them along.
+A snippet is a function. Thus it cannot cross an island boundary directly: the props of an island are serialized, and a function does not serialize. ogygia does this for you: **each snippet given to an island crosses as a region**. That is the snippet shape of the same primitive behind `<Component/>` regions. You almost never call a function for this. Children or a `{#snippet}` passed into an island operate correctly, also when a plain wrapper forwards them.
 
 ::: tip When to use
-You do not reach for this on purpose. It is what makes `<Tabs>{@render children()}</Tabs>`, a forwarded `{#snippet header()}`, or a wrapper component that passes content into an island work at all. Reach for `region.snippet()` only when you are building a snippet by hand from raw HTML.
+You do not select this feature. It is what makes these operate at all: `<Tabs>{@render children()}</Tabs>`, a forwarded `{#snippet header()}`, and a wrapper component that passes content into an island. Use `region.snippet()` only when you make a snippet by hand from raw HTML.
 :::
 
 ## The two shapes of a crossing
 
-A snippet crosses in one of two ways, chosen for you by whether it needs to wake:
+A snippet crosses in one of two ways. ogygia selects the way, based on the need to wake:
 
-- **Static**: plain content (prose, a code block, markup with no interactivity of its own) renders **once on the server** and freezes to HTML. The client adopts that HTML in place; nothing re-runs, nothing ships. This is the common case for children.
-- **Live**: a named `{#snippet}` whose body must *wake* (it renders an island, or is interactive) compiles to its own entry and **wakes on the far side**. It renders inline on the server and hydrates on the client, so it is interactive wherever it lands, even after being forwarded through a boundary. Parameters are supported: the arguments you call the snippet with ride across to each render.
+- **Static**: plain content (prose, a code block, markup with no interactivity) renders **one time on the server** and freezes to HTML. The client adopts that HTML in place. Nothing runs again, and nothing ships. This is the common case for children.
+- **Live**: a named `{#snippet}` whose body must *wake* (it renders an island, or it is interactive) compiles to its own entry. It **wakes on the far side**. It renders inline on the server and hydrates on the client. Thus it is interactive where it lands, also after a boundary forwards it. Parameters are supported: the arguments of each call ride across.
 
 ```svelte
 <script>
@@ -33,11 +33,11 @@ A snippet crosses in one of two ways, chosen for you by whether it needs to wake
 </Tabs>
 ```
 
-Nested islands inside crossed content keep working: they render as full regions and wake on their own, even though the content around them is frozen.
+Nested islands inside crossed content continue to operate. They render as full regions and wake on their own, although the content around them is frozen.
 
 ## Forwarding through a wrapper
 
-The reason this matters is composition. A plain (non-island) component can forward its children straight into an island, and the crossing still happens at the boundary. Wrapping an island is just Svelte, no special API:
+This matters because of composition. A plain (non-island) component can forward its children into an island. The crossing occurs at the boundary. A wrapper around an island is only Svelte. There is no special API:
 
 ```svelte title=CardShell.svelte
 <!-- a plain wrapper -->
@@ -51,9 +51,9 @@ The reason this matters is composition. A plain (non-island) component can forwa
 
 ## Building one by hand: `region.snippet()`
 
-When you need a snippet made from raw HTML (the sibling of `region()` for components), use `region.snippet()`. It mirrors Svelte's `createRawSnippet`, but the result is a *region* snippet: renderable in the same graph with `{@render}`, and able to cross a boundary.
+When you need a snippet made from raw HTML, use `region.snippet()`. It is the sibling of `region()` for components. It mirrors `createRawSnippet` from Svelte. But the result is a *region* snippet: you can render it in the same graph with `{@render}`, and it can cross a boundary.
 
-Lift an existing parameterless snippet to freeze it as static content:
+Lift an applicable snippet without parameters, to freeze it as static content:
 
 ```svelte
 {#snippet badge()}<span class="badge">stable</span>{/snippet}
@@ -64,7 +64,7 @@ Lift an existing parameterless snippet to freeze it as static content:
 </script>
 ```
 
-Or build one from raw HTML with the same `{ render, setup?, captures? }` contract as `createRawSnippet`:
+Or make one from raw HTML, with the same `{ render, setup?, captures? }` contract as `createRawSnippet`:
 
 ```js
 import { region } from 'ogygia';
@@ -78,4 +78,4 @@ const stamp = region.snippet({
 });
 ```
 
-`render` must return a single root element (the `createRawSnippet` rule); `captures` are serializable, just like island props; `setup` runs on the client after mount and is dropped when the snippet crosses a boundary (a frozen snippet has nothing to boot).
+`render` must return one root element. That is the `createRawSnippet` rule. `captures` must be serializable, the same as island props. `setup` runs on the client after mount. When the snippet crosses a boundary, `setup` is dropped. A frozen snippet has nothing to start.

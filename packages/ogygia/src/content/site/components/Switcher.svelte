@@ -12,10 +12,11 @@
 	import { DropdownMenu } from 'bits-ui';
 	import type { Switcher } from '../dimensions.js';
 
-	// Route through the ogygia SPA router, imported lazily on select so the router module never loads
-	// during this island's SSR (and adds no weight to the server bundle).
+	// Navigate through the island-side navigation shim (the running runtime's navigation handle — the
+	// SPA router when on), imported lazily on select so it never loads during this island's SSR. Never
+	// the router module itself: island code importing a runtime module splits the runtime's boot.
 	async function go(href: string) {
-		const { goto } = await import('../../../runtime/router.js');
+		const { goto } = await import('../../../shims/app-navigation.js');
 		goto(href);
 	}
 

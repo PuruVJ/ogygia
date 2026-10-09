@@ -14,6 +14,7 @@
  * lifetimes here anyway.
  */
 import { nearest_app_site, register_profiler_file, type CallerSite } from './net.js';
+import { call_sites, file_of, is_profiler_file } from './frames.js';
 
 // so this module's own frames (the AsyncHook.init callback) are skipped when we
 // blame a caller, regardless of how the bundler renamed this file
@@ -26,10 +27,22 @@ export interface IoOp {
 	caller?: string;
 	/** raw caller location (bundled), resolved to source at report time */
 	caller_site?: CallerSite;
+	/** the caller's source position, for reading the call site's code */
+	caller_at?: { path: string; line: number };
 	/** init → destroy duration in ms — the time the code waited on this resource */
 	ms: number;
+	/** performance.now() at init — lets page mode window ops to a single representative render */
+	start: number;
 	/** still open when the window ended (long-lived socket, watcher) */
 	open?: boolean;
+	/** a timer's period, when it repeats (`setInterval`), else its delay (ms) */
+	repeat?: number;
+	delay?: number;
+	/** an open timer that does not hold the process (`.unref()`; Node's own `AbortSignal.timeout`) */
+	unref?: true;
+	/** page mode: every render left one of these open, from the same line (index.ts reads it
+	 *  across the runs, before the io is scoped to one) — a timer each render starts and never ends */
+	left_each_run?: true;
 }
 
 // I/O primitives worth timing. PROMISE is excluded (far too many, and it is CPU
@@ -37,6 +50,9 @@ export interface IoOp {
 const TRACK = new Set([
 	'Timeout',
 	'Immediate',
+	// not a wait (a tick is CPU scheduling), but a resource PENDING across a gap the timeline
+	// cannot otherwise name — `process.nextTick` chains, a queue drained one tick at a time
+	'TickObject',
 	'FSREQCALLBACK',
 	'FSREQPROMISE',
 	'STATWATCHER',
@@ -56,6 +72,33 @@ const MAX = 20_000;
 
 export interface IoRecorder {
 	stop(): IoOp[];
+	/** promises created while the recorder ran, and who created them (one stack per
+	 *  PROMISE_SAMPLE_EVERY promises — a counter otherwise) */
+	promises(): { count: number; top: { caller: string; share: number; site?: CallerSite }[] };
+}
+
+/** a promise storm is counted, not stacked: one stack capture per this many promises */
+const PROMISE_SAMPLE_EVERY = 256;
+
+/** the nearest frame that belongs to the app OR a dependency (not Node, not the profiler): its
+ *  generated position in full, so the report can map it back to the source (a short `dir/file`
+ *  of a built chunk named `_page.server.ts.js`, which is no line anyone can open) — no regex,
+ *  this runs once per sampled promise */
+function nearest_own_or_dep_site(): CallerSite | undefined {
+	for (const site of call_sites(nearest_own_or_dep_site)) {
+		const file = file_of(site);
+		if (!file || file.startsWith('node:') || file.includes('node:internal') || is_profiler_file(file)) continue;
+		return { fn: site.getFunctionName() || '(anonymous)', file, line: site.getLineNumber() ?? 0, column: site.getColumnNumber() ?? 0 };
+	}
+	return undefined;
+}
+
+/** `fn (dir/file:line)` from a generated position: what a promise origin reads as when no
+ *  sourcemap maps it */
+export function short_site(s: CallerSite): string {
+	const q = s.file.indexOf('?');
+	const clean = q === -1 ? s.file : s.file.slice(0, q);
+	return `${s.fn} (${clean.split('/').slice(-2).join('/')}:${s.line})`;
 }
 
 /** Start timing I/O resources. Call `stop()` at the end of the window. */
@@ -67,26 +110,73 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 		return null; // no async_hooks (edge) — the fetch patch and wall/CPU split still work
 	}
 
-	const open = new Map<number, { t: number; type: string; site?: CallerSite }>();
+	const open = new Map<number, { t: number; type: string; site?: CallerSite; repeat?: number; delay?: number; timer?: { hasRef?: () => boolean } }>();
 	const ops: IoOp[] = [];
 
+	let promise_count = 0;
+	/** generated `fn\0file\0line` → how many sampled promises it made, and the site itself */
+	const promise_sites = new Map<string, { n: number; site: CallerSite | null }>();
 	const hook = async_hooks.createHook({
-		init(asyncId, type) {
+		init(asyncId, type, _trigger, resource) {
+			if (type === 'PROMISE') {
+				// a counter on every promise (cheap), a stack on one in PROMISE_SAMPLE_EVERY — the
+				// nearest frame that is not Node's own or the profiler's: the app's, or the
+				// dependency's (a design system's renderer makes promises of its own, and that is
+				// the answer)
+				if (++promise_count % PROMISE_SAMPLE_EVERY === 0 && promise_sites.size < 200) {
+					const site = nearest_own_or_dep_site() ?? null;
+					const k = site ? site.fn + '\0' + site.file + '\0' + site.line : '';
+					const hit = promise_sites.get(k);
+					if (hit) hit.n++;
+					else promise_sites.set(k, { n: 1, site });
+				}
+				return;
+			}
 			if (open.size >= MAX || !TRACK.has(type)) return;
-			open.set(asyncId, { t: performance.now(), type, site: nearest_app_site() });
+			const s: { t: number; type: string; site?: CallerSite; repeat?: number; delay?: number; timer?: { hasRef?: () => boolean } } = { t: performance.now(), type, site: nearest_app_site() };
+			if (type === 'Timeout') {
+				// (Node's Timeout keeps its period on `_repeat` — null for a one-shot — and its delay on
+				// `_idleTimeout`: long-standing fields, read defensively. The timer itself is held only
+				// while it is open: whether it was unref'd is asked at the window's end)
+				const r = resource as { _repeat?: unknown; _idleTimeout?: unknown; hasRef?: () => boolean };
+				if (typeof r._repeat === 'number' && r._repeat > 0) s.repeat = r._repeat;
+				else if (typeof r._idleTimeout === 'number' && r._idleTimeout >= 0) s.delay = r._idleTimeout;
+				s.timer = r;
+			}
+			open.set(asyncId, s);
 		},
 		destroy(asyncId) {
 			const s = open.get(asyncId);
 			if (!s) return;
 			open.delete(asyncId);
 			if (ops.length < MAX) {
-				ops.push({ type: s.type, caller_site: s.site, ms: round2(performance.now() - s.t) });
+				ops.push({
+					type: s.type,
+					caller_site: s.site,
+					ms: round2(performance.now() - s.t),
+					start: s.t
+				});
 			}
 		}
 	});
 	hook.enable();
 
 	return {
+		promises() {
+			const sampled = [...promise_sites.values()].reduce((a, b) => a + b.n, 0) || 1;
+			return {
+				count: promise_count,
+				top: [...promise_sites.values()]
+					.sort((a, b) => b.n - a.n)
+					.slice(0, 8)
+					.map(({ n, site }) => ({
+						caller: site ? short_site(site) : '(no frame outside node)',
+						share: Math.round((n / sampled) * 100) / 100,
+						// the generated position, mapped to the source when the report is built
+						...(site ? { site } : {})
+					}))
+			};
+		},
 		stop() {
 			hook.disable();
 			// resources still open at window end (a socket kept alive, a watcher) —
@@ -94,7 +184,16 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 			const now = performance.now();
 			for (const s of open.values()) {
 				if (ops.length < MAX) {
-					ops.push({ type: s.type, caller_site: s.site, ms: round2(now - s.t), open: true });
+					ops.push({
+						type: s.type,
+						caller_site: s.site,
+						ms: round2(now - s.t),
+						start: s.t,
+						open: true,
+						...(s.repeat !== undefined ? { repeat: s.repeat } : {}),
+						...(s.delay !== undefined ? { delay: s.delay } : {}),
+						...(s.timer?.hasRef?.() === false ? { unref: true as const } : {})
+					});
 				}
 			}
 			open.clear();
@@ -103,11 +202,38 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 	};
 }
 
+/**
+ * A timer a render starts and never ends: an interval (or a timeout of a second or more) still open
+ * after every render, started from the same line in each of them. One per render is the proof it is
+ * per render (a cache's single refresh timer, started on the first request, is one in all). Marked
+ * on the ops themselves (`left_each_run`), so the run kept for the waterfall carries it.
+ */
+export function mark_left_each_run(ops: IoOp[], windows: Array<{ start: number; end: number }>): void {
+	if (windows.length < 2) return;
+	const by_site = new Map<string, { runs: Set<number>; ops: IoOp[] }>();
+	for (const o of ops) {
+		if (!o.open || o.type !== 'Timeout' || !o.caller_site) continue;
+		// (a one-shot: a second or more, and holding the process — an unref'd one is Node's own
+		// `AbortSignal.timeout` behind a fetch, or a timer the app already let go of)
+		if (o.repeat === undefined && ((o.delay ?? 0) < 1000 || o.unref)) continue;
+		const ri = windows.findIndex((w) => o.start >= w.start && o.start <= w.end);
+		if (ri === -1) continue;
+		const s = o.caller_site;
+		const k = s.file + '\0' + s.line + '\0' + s.column;
+		const g = by_site.get(k) ?? { runs: new Set<number>(), ops: [] };
+		g.runs.add(ri);
+		g.ops.push(o);
+		by_site.set(k, g);
+	}
+	for (const g of by_site.values()) if (g.runs.size === windows.length) for (const o of g.ops) o.left_each_run = true;
+}
+
 /** A friendly bucket for a resource type, for the report. */
 export function io_kind(type: string): 'timer' | 'file' | 'dns' | 'socket' | 'zlib' | 'other' {
 	if (type === 'Timeout' || type === 'Immediate') return 'timer';
 	if (type.startsWith('FS') || type === 'STATWATCHER') return 'file';
-	if (type.startsWith('GETADDR') || type.startsWith('GETNAME') || type === 'QUERYWRAP') return 'dns';
+	if (type.startsWith('GETADDR') || type.startsWith('GETNAME') || type === 'QUERYWRAP')
+		return 'dns';
 	if (type.includes('TCP') || type.includes('PIPE') || type === 'UDPWRAP') return 'socket';
 	if (type === 'ZLIB') return 'zlib';
 	return 'other';

@@ -9,7 +9,14 @@
 import type { Component } from 'svelte';
 import type { Heading, LinkRef } from './index.js';
 import { prebaked_region, region } from '../region.js';
-import { defineSource, toRawSource, type Format, type GlobMap, type RawSource, type Source } from './source.js';
+import {
+	defineSource,
+	toRawSource,
+	type Format,
+	type GlobMap,
+	type RawSource,
+	type Source
+} from './source.js';
 
 type Input<V> = GlobMap | RawSource<V>;
 export type BuilderOpts = { id?: (key: string) => string };
@@ -48,10 +55,16 @@ const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {
 		throw new Error(`[ogygia/content] markdown: ${id}: missing metadata (is markdown configured?)`);
 	}
 	const meta = as_object(mod.metadata ?? {}, `markdown:${id}`);
-	const { headings, links, ...data } = meta as { headings?: Heading[]; links?: LinkRef[] } & Record<string, unknown>;
+	const { headings, links, ...data } = meta as { headings?: Heading[]; links?: LinkRef[] } & Record<
+		string,
+		unknown
+	>;
 	// The preprocessor injects a lazy `__ogygia_source` self-import (`() => import(self + '?raw')`)
 	// when it compiles a `.svx` / `.md`. Surface it as the entry's `source`; absent in plain apps.
-	const source = typeof mod.__ogygia_source === 'function' ? (mod.__ogygia_source as () => Promise<string>) : undefined;
+	const source =
+		typeof mod.__ogygia_source === 'function'
+			? (mod.__ogygia_source as () => Promise<string>)
+			: undefined;
 	// A SERIALIZED-REGION module (the region emitter): the document HTML was baked at compile time and
 	// rides `__ogygia_region`. The body is a pre-baked inline region — renders like any inline region
 	// (the default export is the thin `{@html}` shell), but awaiting it is a no-op: no svelte/server
@@ -72,7 +85,10 @@ const markdown_format: Format<unknown, MarkdownMeta> = (resolved, id) => {
 				}
 			: {}),
 		...(source ? { source } : {}),
-		meta: { headings: Array.isArray(headings) ? headings : [], links: Array.isArray(links) ? links : [] }
+		meta: {
+			headings: Array.isArray(headings) ? headings : [],
+			links: Array.isArray(links) ? links : []
+		}
 	};
 };
 

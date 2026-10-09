@@ -5,7 +5,7 @@
 //   RollupError: Identifier 'handleClickUrl' has already been declared
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { transformHost } from '../src/compiler/transform.js';
+import { transformHost } from '../src/compiler/region/transform.js';
 
 const ctx = {
 	root: '/app',
@@ -45,6 +45,8 @@ describe('portable snippet — captured imports from one statement', () => {
 			.find((s?: string) => !!s && s.includes('./helpers'));
 		expect(synth, 'expected a portable-snippet synth that captures ./helpers').toBeTruthy();
 		const count = (synth!.match(/from '\.\/helpers'/g) || []).length;
-		expect(count, `the ./helpers import must appear once; got ${count}\n---\n${synth}\n---`).toBe(1);
+		expect(count, `the ./helpers import must appear once; got ${count}\n---\n${synth}\n---`).toBe(
+			1
+		);
 	});
 });

@@ -1,5 +1,5 @@
 /**
- * Transportable objects — `static [import.meta.og.wire]` codecs.
+ * Transportable objects — `static [import.meta.og.wire]` codecs, as the hub's WIRE kind.
  *
  * A class instance normally cannot cross an island boundary (devalue rejects it). A class
  * opts in by declaring how it travels:
@@ -21,27 +21,33 @@
  * STRICT: that member shape is the only legal position (build error anywhere else). ONE contract,
  * always explicit — `{ encode, decode }`, plus optional `id`/`merge` for session continuity.
  *
- * Liveness comes from identity, not the codec: every encode of one instance mints ONE id,
- * and the browser memoizes decode by that id. Five islands receiving the same `cart` prop
- * therefore share one live client instance — `$state` fields inside it are reactive across
- * all of them. The server never memoizes (`remember: false`): each request decodes fresh so
- * nothing leaks between users (same guarantee island props already have).
- *
- * All registry state lives on `globalThis` under `Symbol.for` keys — the runtime and each
- * island entry are separate bundles, and per-module state would silently fork (the
- * nested-island context bug taught us this; see context.ts).
+ * IDENTITY IS THE HUB'S (see ref.ts): mint memoizes one id per instance; the browser resolves
+ * by id so five islands share one live object; `codec.id` names the ref into the session Keep
+ * (a navigation reunites with the SAME instance, `codec.merge` reconciling fresh server data);
+ * the server never remembers. This module owns only what is wire-SPECIFIC: the class registry
+ * (build tag → class) and the codec protocol.
  */
 
 import { slots } from './runtime/slots.js';
-import { REGION_SNIPPET_WIRE_KEY, revive_region_snippet } from './region-snippet.js';
+// EXPLICIT kind registration (never bare side-effect imports — the package marks JS
+// side-effect-free, so a bundler tree-shakes those and the kind silently vanishes
+// from client bundles; a CALLED import cannot be dropped).
+import { register_snippet_kind } from './region-snippet.js';
+import { register_store_kind, register_derived_kind } from './store-transport.js';
+import { register_fn_kind } from './fn-transport.js';
+import { register_kind, mint, resolve, REF_WIRE_KEY, type Ref } from './ref.js';
 
-/** Feature entry: fill the `wire` slot so core revives transportables from `data-ogygia-props`. */
+/** Feature entry: register every props-seam kind, then fill the `wire` slot so core resolves
+ *  ANY transportable kind from `data-ogygia-props` through the one hub key. */
 export function install() {
+	register_wire_kind();
+	register_snippet_kind();
+	register_store_kind();
+	register_fn_kind();
+	register_derived_kind();
 	slots.wire = {
-		TRANSPORT_WIRE_KEY,
-		revive_transportable,
-		REGION_SNIPPET_WIRE_KEY,
-		revive_region_snippet
+		REF_WIRE_KEY,
+		resolve: (ref: never, remember: boolean) => resolve(ref, remember)
 	};
 }
 
@@ -79,43 +85,27 @@ interface TransportableClass {
 	name?: string;
 }
 
-interface TransportRegistry {
+interface WireRegistry {
 	/** tag → class, filled by build-generated `__register_transportable` calls. */
 	classes: Map<string, TransportableClass>;
 	/** class → tag (reverse index for encode). */
 	tags: WeakMap<object, string>;
-	/** instance → minted wire id (one id per instance, however many props carry it). */
-	ids: WeakMap<object, string>;
-	/** wire id → live instance. Browser tab only — the server must never remember. */
-	live: Map<string, object>;
-	/**
-	 * THE KEEP — session-lifetime instances by codec `id`. Survives SPA navigations (the runtime
-	 * module is retained across body swaps); dies with the tab. Browser only: the server-side
-	 * revive path (`remember: false`) never reads or writes it, so per-request isolation holds.
-	 */
-	keep: Map<string, object>;
-	/** name → owning class tag, to detect two different classes claiming one continuity `id`. */
-	keepOwner: Map<string, string>;
 }
 
 const REGISTRY_KEY = Symbol.for('ogygia.transportables');
 
-function registry(): TransportRegistry {
+function wire_registry(): WireRegistry {
 	const g = globalThis as Record<symbol, unknown>;
-	return ((g[REGISTRY_KEY] as TransportRegistry | undefined) ??= {
+	return ((g[REGISTRY_KEY] as WireRegistry | undefined) ??= {
 		classes: new Map(),
-		tags: new WeakMap(),
-		ids: new WeakMap(),
-		live: new Map(),
-		keep: new Map(),
-		keepOwner: new Map()
+		tags: new WeakMap()
 	});
 }
 
 /** Devalue custom-type name used for transportable payloads on the wire. */
 export const TRANSPORT_WIRE_KEY = 'OgygiaT';
 
-/** Wire shape: tag identifies the class, id the instance, data the codec's encode output. */
+/** Legacy wire shape (`t` tag, `i` id, `d` data) — a hub Ref minus its kind discriminator. */
 interface TransportPayload {
 	t: string;
 	i: string;
@@ -131,7 +121,7 @@ export function __register_transportable(tag: string, cls: unknown): void {
 	if (typeof cls !== 'function') return;
 	const candidate = cls as unknown as TransportableClass;
 	if (!candidate[wire]) return;
-	const reg = registry();
+	const reg = wire_registry();
 	reg.classes.set(tag, candidate);
 	reg.tags.set(cls as unknown as object, tag);
 }
@@ -141,121 +131,75 @@ function codec_of(cls: TransportableClass): TransportCodec {
 	return typeof raw === 'function' ? raw.call(cls) : raw;
 }
 
-function mint_id(): string {
-	const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-	if (c?.randomUUID) return c.randomUUID();
-	// Ancient-runtime fallback; collision odds are irrelevant at tab scale.
-	return 't' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-}
-
-/**
- * Devalue reducer: encode a transportable instance, or return undefined to fall through to
- * devalue's normal handling. Same instance → same wire id (memoized), which is what lets
- * the client reunite every copy of the prop into one live object.
- */
-export function reduce_transportable(value: unknown): TransportPayload | undefined {
-	if (value === null || typeof value !== 'object') return undefined;
-	const cls = (value as { constructor?: unknown }).constructor;
-	if (typeof cls !== 'function') return undefined;
-	const candidate = cls as unknown as TransportableClass;
-	if (!candidate[wire]) return undefined;
-
-	const reg = registry();
-	const tag = reg.tags.get(cls as unknown as object);
-	if (tag === undefined) {
-		throw new Error(
-			`[ogygia] class "${candidate.name ?? '?'}" has a [import.meta.og.wire] codec but was never ` +
-				`registered. Transportable classes must be declared in a module the ogygia vite plugin ` +
-				`transforms (an \`export class\` in your app source, not node_modules or a dynamic eval).`
-		);
-	}
-
-	let id = reg.ids.get(value as object);
-	if (id === undefined) {
-		id = mint_id();
-		reg.ids.set(value as object, id);
-	}
-	return { t: tag, i: id, d: codec_of(candidate).encode(value) };
-}
-
-/**
- * Devalue reviver: rebuild a live instance from the wire payload.
- *
- * `remember: true` (browser) memoizes by wire id — decoding the same handle twice returns
- * the SAME instance, which is the entire liveness mechanism. `remember: false` (server,
- * defer/streaming renders) always decodes fresh: memoizing across requests would leak one
- * user's state into another's HTML.
- */
-/** Bound on `live` (wire-id → instance): each navigation aliases a fresh id to a kept object, so
- * without a cap the map would creep for the tab's lifetime. Old ids belong to past pages — evicting
- * them can never break the current page's same-instance reunion. */
-const MAX_LIVE = 1024;
-
-function remember_live(reg: TransportRegistry, id: string, instance: object): void {
-	reg.live.set(id, instance);
-	while (reg.live.size > MAX_LIVE) {
-		const oldest = reg.live.keys().next().value as string | undefined;
-		if (oldest === undefined) break;
-		reg.live.delete(oldest);
-	}
-}
-
-export function revive_transportable(payload: TransportPayload, remember: boolean): unknown {
-	const { t, i, d } = payload;
-	const reg = registry();
-	if (remember) {
-		const existing = reg.live.get(i);
-		if (existing !== undefined) return existing;
-	}
-	const cls = reg.classes.get(t);
+function class_for(tag: string | undefined): TransportableClass {
+	const cls = tag === undefined ? undefined : wire_registry().classes.get(tag);
 	if (cls === undefined) {
 		throw new Error(
-			`[ogygia] cannot revive transportable "${t}": its class is not loaded on this side. ` +
+			`[ogygia] cannot revive transportable "${tag}": its class is not loaded on this side. ` +
 				`The island must import the class as a VALUE (not \`import type\`) so its codec travels ` +
 				`with the island's bundle.`
 		);
 	}
-	const codec = codec_of(cls);
+	return cls;
+}
 
-	// CONTINUITY: a named codec on the client is a session singleton in the Keep. If one already
-	// lives there, decode the incoming payload as `fresh`, reconcile it INTO the live instance
-	// (default: nothing — live wins), and hand back the SAME live object so identity is stable
-	// across the navigation. First sighting: decode, and remember it under the name.
-	// `remember: false` is the SERVER — it must never touch the Keep (per-request isolation).
-	if (remember && typeof codec.id === 'string') {
-		const name = codec.id;
-		// Collision guard: two DIFFERENT classes claiming one continuity `id` would share a Keep slot
-		// and silently reuse each other's instance. Warn (dev) — the name should be unique per class.
-		const owner = reg.keepOwner.get(name);
-		if (owner === undefined) reg.keepOwner.set(name, t);
-		else if (owner !== t && typeof console !== 'undefined') {
-			console.error(
-				`[ogygia] two transportable classes both use continuity id "${name}" ("${owner}" and "${t}"). ` +
-					`A continuity id must be unique per class — rename one, or they will clobber each other in the session Keep.`
-			);
-		}
-		const kept = reg.keep.get(name);
-		if (kept !== undefined) {
-			if (typeof codec.merge === 'function') {
-				const fresh = codec.decode(d);
-				codec.merge(kept as never, fresh as never);
+/** The hub kind: `[og.wire]` class instances. Identity/reunify/Keep live in the hub. */
+export function register_wire_kind(): void {
+	register_kind({
+		k: 'wire',
+		match(value) {
+			const cls = (value as { constructor?: unknown }).constructor;
+			return typeof cls === 'function' && !!(cls as unknown as TransportableClass)[wire];
+		},
+		encode(value) {
+			const cls = value.constructor as unknown as TransportableClass;
+			const tag = wire_registry().tags.get(cls as unknown as object);
+			if (tag === undefined) {
+				throw new Error(
+					`[ogygia] class "${cls.name ?? '?'}" has a [import.meta.og.wire] codec but was never ` +
+						`registered. Transportable classes must be declared in a module the ogygia vite plugin ` +
+						`transforms (an \`export class\` in your app source, not node_modules or a dynamic eval).`
+				);
 			}
-			// The Keep is the source of truth for the name; wire ids in this payload alias it too,
-			// so late-hydrating islands on the same page reunite with the same object.
-			remember_live(reg, i, kept);
-			return kept;
+			return { t: tag, d: codec_of(cls).encode(value) };
+		},
+		decode(ref) {
+			return codec_of(class_for(ref.t)).decode(ref.d);
+		},
+		keep_name(ref) {
+			const codec = codec_of(class_for(ref.t));
+			return typeof codec.id === 'string' ? codec.id : undefined;
+		},
+		merge(kept, ref) {
+			const codec = codec_of(class_for(ref.t));
+			if (typeof codec.merge === 'function') {
+				codec.merge(kept as never, codec.decode(ref.d) as never);
+			}
 		}
-		const instance = codec.decode(d);
-		if (instance !== null && typeof instance === 'object') {
-			reg.keep.set(name, instance as object);
-			remember_live(reg, i, instance as object);
-		}
-		return instance;
-	}
+	});
+}
 
-	const instance = codec.decode(d);
-	if (remember && instance !== null && typeof instance === 'object') {
-		remember_live(reg, i, instance as object);
-	}
-	return instance;
+const WIRE_ONLY = new Set(['wire']);
+
+/**
+ * Devalue reducer: encode a transportable instance, or return undefined to fall through to
+ * devalue's normal handling. Same instance → same wire id (hub-memoized), which is what lets
+ * the client reunite every copy of the prop into one live object.
+ */
+export function reduce_transportable(value: unknown): TransportPayload | undefined {
+	register_wire_kind();
+	const ref = mint(value, WIRE_ONLY);
+	if (ref === undefined) return undefined;
+	return { t: ref.t as string, i: ref.i, d: ref.d };
+}
+
+/**
+ * Devalue reviver: rebuild a live instance from the wire payload via the hub.
+ * `remember: true` (browser) memoizes by wire id + honors the session Keep; `remember: false`
+ * (server, defer/streaming renders) always decodes fresh — per-request isolation.
+ */
+export function revive_transportable(payload: TransportPayload, remember: boolean): unknown {
+	register_wire_kind();
+	const ref: Ref = { k: 'wire', i: payload.i, t: payload.t, d: payload.d };
+	return resolve(ref, remember);
 }

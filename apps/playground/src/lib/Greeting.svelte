@@ -2,9 +2,9 @@
 	import type { Snippet } from 'svelte';
 	import { personalGreeting } from '$lib/server-greeting.remote';
 
-	// A server island may be authored with a reserved `ogygiaFallback` snippet (shown while the
-	// endpoint renders). The transform strips it before this component is rendered, but it
-	// must be declared so svelte-check accepts `{#snippet ogygiaFallback()}` at the call site.
+	// A server island DECLARES the reserved `ogygiaFallback` snippet in its props — svelte-check
+	// types the ORIGINAL source (preprocessor-based augmentation is impossible; probe-proven), so
+	// this one line is what lets call sites pass `{#snippet ogygiaFallback()}`.
 	let { salutation = 'Hi' }: { salutation?: string; ogygiaFallback?: Snippet } = $props();
 
 	// await OUTSIDE any pending boundary -> fully resolved during the (deferred) server

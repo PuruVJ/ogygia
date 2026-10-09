@@ -5,7 +5,7 @@
 import { morph_children } from '../../packages/ogygia/dist/runtime/morph.js';
 
 let seed = 0x1234abcd;
-const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 
 function keyedList(n, gen) {
 	let s = '<ul>';
@@ -106,7 +106,7 @@ const SCENARIOS = [
 	{ name: 'table 100×10', build: (g) => table(100, 10, g) },
 	{ name: 'table 500×15 (hi-vol)', build: (g) => table(500, 15, g) },
 	{ name: 'deep tree 40×8', build: (g) => deepTree(40, 8, g) },
-	{ name: 'attr churn ·400', build: (g) => attrChurn(400, g) },
+	{ name: 'attr churn ·400', build: (g) => attrChurn(400, g) }
 ];
 
 /**

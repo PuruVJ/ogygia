@@ -26,9 +26,34 @@ export function is_frozen(el: Element): boolean {
 	return el.getAttribute('wake') === 'none';
 }
 
+/** True if this region sits INSIDE a frozen region (a lake). Its subtree is ogygia's world even on
+ *  a Kit-hydrated document: the lake wrapper adopts its element there as opaque DOM, so Kit never
+ *  hydrates the inside — the runtime must (the server-side twin is `isInLake()` in context.ts). */
+export function inside_frozen(el: Element): boolean {
+	return !!el.parentElement?.closest(FROZEN_SELECTOR);
+}
+
 /** True if this region fetches HTML later (`render="defer"`). */
 export function is_deferred(el: Element): boolean {
 	return el.getAttribute('render') === 'defer';
+}
+
+/** CSS selector for deferred regions (holes). */
+const DEFERRED_SELECTOR = 'ogygia-region[render="defer"]';
+
+/** True if this region sits INSIDE a deferred region (a hole). A region element found inside a
+ *  hole on a Kit-hydrated document can only have come with the hole's FETCHED answer (the page's
+ *  own markup there — the fallback — renders its islands inline, as Kit's), and Kit never sees
+ *  fetched HTML: that island is the runtime's to wake. */
+export function inside_deferred(el: Element): boolean {
+	return !!el.parentElement?.closest(DEFERRED_SELECTOR);
+}
+
+/** Mixed mode (a csr=true document): Kit hydrates the tree, so an island there is Kit's — EXCEPT
+ *  what Kit never sees: a deferred region (its HTML is fetched after load), anything inside a lake
+ *  (adopted as opaque DOM), and anything inside a hole's fetched answer. Those are ours. */
+export function ours_on_kit_document(el: Element): boolean {
+	return is_deferred(el) || inside_frozen(el) || inside_deferred(el);
 }
 
 /** `{#if}` remount policy for `wake="none"` regions. Default `cache`. */
@@ -67,6 +92,13 @@ export function region_is_vacant(el: ParentNode): boolean {
 		if (n.nodeType === 3 && (n.textContent?.trim() ?? '') !== '') return false; // Text
 	}
 	return true;
+}
+
+/** True when this document was SERVED FROM the freeze store (the handle stamps hit/join
+ *  copies with a head meta). A stored copy is a cached render by definition — swr lakes read
+ *  this to revalidate on FIRST mount, not only on remounts. */
+export function document_is_freeze(): boolean {
+	return typeof document !== 'undefined' && !!document.querySelector('meta[name="ogygia-freeze"]');
 }
 
 /**

@@ -2,6 +2,10 @@
 	// The homepage's own chrome: a slim sticky top-nav instead of the docs sidebar, so the landing
 	// page reads as a marketing page with the full viewport to itself. Docs pages keep DocsShell.
 	import Logo from '$lib/Logo.svelte';
+	// The app's OWN theme switcher (the one DocsShell uses everywhere) — reused, not reinvented. It's a
+	// named barrel export, so asRegion turns it into a load island (writes data-theme + the og-theme key).
+	import { ThemeToggle } from 'ogygia/content';
+	const Theme = import.meta.og.asRegion(ThemeToggle, { wake: 'load' });
 	// ⌘K search over the docs index — an island so its keybinding + palette come alive here too.
 	import HomeSearch from '$lib/HomeSearch.svelte' with { wake: 'load' };
 </script>
@@ -15,7 +19,9 @@
 		<div class="mkt-search"><HomeSearch /></div>
 		<nav class="mkt-links" aria-label="Primary">
 			<a href="/docs/start/install">Docs</a>
+			<a href="/observatory">Observatory</a>
 			<a href="/playground/getting-started/installation">Playground</a>
+			<Theme />
 			<a
 				class="mkt-gh"
 				href="https://github.com/PuruVJ/ogygia"

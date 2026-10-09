@@ -1,0 +1,130 @@
+---
+title: Server transforms
+summary: Post-process the HTML ogygia sends, even inside islands. `ogygia.handle({ transform })` runs your transform over every document and every hole answer, and ogygia puts back, before anything hydrates, what it moved in Svelte's markup.
+related:
+  - regions/server-islands
+  - regions/lakes
+  - reference/constraints
+---
+
+Some apps run one more pass over the HTML after the render: a web-component server render, a translation proxy, a tool that edits markup. The catch is islands. An island hydrates against the exact markup Svelte rendered. A pass that moves a node, trims a space, or wraps a child breaks the hydration walk, and the island throws its server DOM away.
+
+`transform` lets that pass run anyway. You hand it to ogygia. ogygia marks the HTML before your transform, reads what it did after, and restores in the browser, before anything hydrates, exactly what hydration needs.
+
+```ts
+// src/hooks.server.ts
+import * as ogygia from 'ogygia/server';
+import { renderComponents } from '$lib/server/components';
+
+export const handle = ogygia.handle({
+  transform: async (html, { kind, csr, event }) => renderComponents(html, { fragment: kind === 'region' })
+});
+```
+
+It runs on:
+
+- **every document**: the chunk that carries `</head>`. A streamed page's tail (the scripts that settle its streamed promises) passes around it untouched, so the page keeps streaming.
+- **every region answer**: a [server island](/docs/regions/server-islands)'s answer, a lake remount. `kind` is `'region'` then.
+
+It may be async. It sits on the response path, so keep it fast.
+
+## What a transform may do
+
+Anything outside the custom elements ogygia marks `og-h` is yours to rewrite freely. ogygia marks `og-h` on each custom element (a tag with a `-` in its name) that it will restore:
+
+- one in Svelte-owned markup (an island, or the whole body of a [Kit-hydrated page](/docs/regions/client-islands));
+- one in server-owned markup with Svelte-owned markup below it (a component around an island in a [lake](/docs/regions/lakes));
+- every one in a region answer, since the page morphs an answer over live elements.
+
+A host without `og-h` is yours alone: render it any way, and let its own runtime adopt it later.
+
+## Rendering an `og-h` host: its plan
+
+To reshape an `og-h` host, render it in "scoped" form with three things added:
+
+```html
+<my-button og-h="7" og-shadow="my-button.shadow" og-keep="icon-name" icon-name="star" class="sc-my-button-h">
+  <span class="btn sc-my-button">
+    <slot class="sc-my-button sc-my-button-s"><!--og-c 7.0-->Sign in</slot>
+  </span>
+</my-button>
+```
+
+- **`<slot>` wrappers.** Where the component would slot the host's children, wrap them in a real `<slot>` element. Outside a shadow root a `<slot>` renders as if it were not there, so the page paints exactly like your scoped render. Give it the classes any other element of the tree would have. Slot fallback content goes inside it, before the children.
+- **`og-shadow="key …"`.** The keyed stylesheets for the host's shadow root (below).
+- **`og-keep="attr …"`** (optional). Attributes you added to the host that must survive the restore, for example an attribute your component reads before the island hydrates. A kept attribute must be true of the live element at any time, never state for one render: a hole answer copies attributes onto live elements.
+
+An `og-h` host without `og-shadow` is left exactly as Svelte wrote it. Use that for components you do not render on the server.
+
+Every other `og-*` mark is ogygia's (`og-c` on each child, `og-t` before text a serializer could trim). Carry it along wherever you move a node. None of it reaches the final DOM.
+
+A mark comment stands right before its node. If your renderer marks each node it moves with a comment of its own (a relocation marker), do not put that marker between ogygia's mark and its node, at least on `og-h` hosts: ogygia would read the node as dropped, and the restore would put it back twice.
+
+### A transform that caches its renders
+
+ogygia numbers hosts across the whole document, so the same block carries other ids on another page, and a render cache keyed on the block's markup never hits. `localizeMarks` renumbers a block's marks from 0 for the cache key, and maps the document's ids back onto the render:
+
+```ts
+import { localizeMarks } from 'ogygia/markup';
+
+const local = localizeMarks(block);
+const rendered = cache.get(local.html) ?? cache.set(local.html, await render(local.html)).get(local.html);
+return local.back(rendered);
+```
+
+## Stylesheets
+
+Tag head assets with `data-og-head="key"`, anywhere in a document or an answer:
+
+- `<style data-og-head="…">` or `<link data-og-head="…">` applies to the page;
+- `<template data-og-head="…">css</template>` is a shadow sheet: built once into a shared `CSSStyleSheet` and adopted by every root that names its key in `og-shadow`.
+
+ogygia moves them into `<head>`, once per key, and keeps every other attribute on them.
+
+## What ogygia restores, and when
+
+For each planned host, innermost first, in one task:
+
+1. an open shadow root, with its keyed sheets;
+2. the rendered tree moved into it, so its `<slot>` wrappers become real slots;
+3. Svelte's children back in the light DOM, in their order, exactly as Svelte rendered them: attributes your render added removed, text it trimmed or dropped put back;
+4. the host's attributes back to Svelte's, except `og-keep`.
+
+It runs before every reader of the markup:
+
+- **the first document**: an inline script at the end of the body, so before any island wakes, before Kit starts, and before a deferred module script upgrades a custom element;
+- **a region answer**: on the answer before it goes into the page (no paint in between, and nothing upgrades in an inert fragment);
+- **a router swap**: on the incoming page before the swap.
+
+The restore always makes the shadow root itself. A host that already has one when the restore reaches it was upgraded first. It is left as served, with an `ogygia:restore-late` event, and never restored into a root the component's own constructor made.
+
+### Tags the HTML parser would restructure
+
+Your tree lives in the light DOM, so the HTML parser applies its rules to it in the page's context: an `<a>` inside the page's `<a>` closes the outer link, a `<div>` inside a `<p>` closes the paragraph. After your transform ogygia finds every start tag the parser would restructure, where your render made the tag or the element it would close, and ships it as a stand-in (`<og-as tag="a">`) with a zero-specificity sheet that keeps its box. The restore turns each back into the real element. The page's own misnesting is left alone.
+
+## The dev check
+
+In dev, ogygia sends each planned host's original children with the page, and the restore compares every host with them after restoring it: node types, tags, text, comments and attributes (`class` as its set of tokens, `style` as its declarations, either one empty as absent: a serializer's rewrite of those paints the same). A difference is an error in the console, naming the first node that differs, and an `ogygia:restore-mismatch` event:
+
+```
+[ogygia] the transform broke hydration markup: <my-button> > [1]: Svelte has <i>, the restored markup has nothing
+```
+
+## Testing a transform
+
+`ogygia/markup` runs the same round trip outside the app, for a test that harvests markup and runs your transform over it:
+
+```ts
+import { transformMarkup, checkScript, restore } from 'ogygia/markup';
+
+const settled = await transformMarkup(islandHtml, renderComponents, { kind: 'region', dev: true });
+const tpl = document.createElement('template');
+// (the dev check's payload in front: restore then compares each host with Svelte's markup)
+tpl.innerHTML = checkScript(settled.check ?? {}) + settled.html;
+restore(tpl.content);
+// tpl.content now holds what hydration will see
+```
+
+`restore` runs in jsdom as it is: without adoptable stylesheets it gives each shadow root a `<style>`.
+
+`ogygia/markup` also has `scanRegions`, `liftRegions` and `restoreRegions`, for a pass that needs to know where regions are. It imports nothing, so it runs anywhere.

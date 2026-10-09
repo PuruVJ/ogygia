@@ -17,6 +17,7 @@ dist/
 *.tmp.mjs
 *.tmp.*
 # ogygiaBench local installs / builds / packed tarballs
+/internal/bench/results/server-cost-prof/
 /internal/bench/frameworks/*/node_modules/
 /internal/bench/frameworks/*/.svelte-kit/
 /internal/bench/frameworks/*/build/
@@ -42,6 +43,24 @@ dist/
 # local experiments — not part of the published library
 /experiment/
 
+# self-building e2e fixtures (their e2e scripts build them every run)
+/internal/repro-deep-csr/build/
+/internal/repro-freeze/build/
+
+# Playwright runner output (traces on failure, html report) + Vitest browser-mode failure screenshots
+test-results/
+.vitest-attachments/
+/playwright-report/
+**/__screenshots__/
+# one-off screenshots taken while checking the devtools / profiler UI
+/anchors.png
+**/hub.png
+
+# examples: generated signing keys + build freeze
+/examples/mfe/keys.env
+/examples/mfe/*/build/
+/examples/mfe/*/.svelte-kit/
+
 # Slidev talk nested installs / builds
 /talks/*/node_modules/
 /talks/*/dist/
@@ -49,3 +68,11 @@ dist/
 
 # Claude Code local (machine-specific) settings
 .claude/settings.local.json
+scratch-*.mjs
+
+# bcms header lab — copied Schneider source + captured feeds; NEVER committed
+internal/repro-bcms-header/
+# PES (product catalog) lab — same rule: copied Schneider source, se.com captures, vendored bundles
+internal/repro-pes/
+# footer lab (the main ogygia PR's footer → remote functions + lake) — same rule, never committed
+internal/repro-ogygia-footer/

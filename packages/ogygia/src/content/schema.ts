@@ -21,5 +21,7 @@ export async function parseSchema(schema: SchemaLike | undefined, data: unknown,
 		}
 	}
 
-	throw new Error(`[ogygia/content] schema for ${label} is not Standard Schema / parse()-compatible`);
+	throw new Error(
+		`[ogygia/content] schema for ${label} is not Standard Schema / parse()-compatible`
+	);
 }

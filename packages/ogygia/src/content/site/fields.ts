@@ -28,7 +28,10 @@ const is_str = (v: unknown): v is string => typeof v === 'string';
 const str_array = (v: unknown): string[] => (Array.isArray(v) ? v.filter(is_str) : []);
 
 /** A tiny Standard Schema from a pure `(data) => value | throw`. Keeps the family dependency-free. */
-function schema<Out>(vendor: string, run: (data: Record<string, unknown>) => Out): SchemaLike & { readonly ['~standard']: { types?: { output: Out } } } {
+function schema<Out>(
+	vendor: string,
+	run: (data: Record<string, unknown>) => Out
+): SchemaLike & { readonly ['~standard']: { types?: { output: Out } } } {
 	return {
 		['~standard']: {
 			version: 1 as const,
@@ -65,7 +68,14 @@ export type PostFields = { date: string; author?: string; tags: string[] };
 
 /** A post as the blog INDEX lists it (`<BlogList posts>`): the display fields + its href. Map a
  *  collection's refs to this over the wire so the corpus stays server-side. */
-export type BlogPostRef = { href: string; title: string; date: string; summary?: string; author?: string; tags?: string[] };
+export type BlogPostRef = {
+	href: string;
+	title: string;
+	date: string;
+	summary?: string;
+	author?: string;
+	tags?: string[];
+};
 const post_only = schema<PostFields>('ogygia-content/post', (d) => {
 	if (!is_str(d.date) || !d.date) throw new Error('a post needs a `date`');
 	const out: PostFields = { date: d.date, tags: str_array(d.tags) };

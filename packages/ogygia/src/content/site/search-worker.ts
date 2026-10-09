@@ -11,13 +11,22 @@ import { orama_engine, type SearchIndex } from './search.js';
 let index_p: Promise<SearchIndex> | null = null;
 
 self.onmessage = async (e: MessageEvent) => {
-	const msg = e.data as { type: string; url?: string; id?: number; q?: string; base?: string; limit?: number };
+	const msg = e.data as {
+		type: string;
+		url?: string;
+		id?: number;
+		q?: string;
+		base?: string;
+		limit?: number;
+	};
 
 	if (msg.type === 'load' && msg.url) {
 		index_p = (async () => {
 			const res = await fetch(msg.url!);
 			if (!res.ok) {
-				throw new Error(`[ogygia/content] could not load the search index at ${msg.url} (HTTP ${res.status}). Did you mount site.emit.search()?`);
+				throw new Error(
+					`[ogygia/content] could not load the search index at ${msg.url} (HTTP ${res.status}). Did you mount site.emit.search()?`
+				);
 			}
 			const docs = await res.json();
 			const engine = orama_engine();
@@ -28,7 +37,10 @@ self.onmessage = async (e: MessageEvent) => {
 			await index_p;
 			(self as unknown as Worker).postMessage({ type: 'ready' });
 		} catch (err) {
-			(self as unknown as Worker).postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+			(self as unknown as Worker).postMessage({
+				type: 'error',
+				message: err instanceof Error ? err.message : String(err)
+			});
 		}
 		return;
 	}
@@ -39,7 +51,10 @@ self.onmessage = async (e: MessageEvent) => {
 			const hits = await index.query(msg.q ?? '', { limit: msg.limit ?? 10, base: msg.base ?? '' });
 			(self as unknown as Worker).postMessage({ type: 'result', id: msg.id, hits });
 		} catch (err) {
-			(self as unknown as Worker).postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+			(self as unknown as Worker).postMessage({
+				type: 'error',
+				message: err instanceof Error ? err.message : String(err)
+			});
 		}
 	}
 };

@@ -4,7 +4,18 @@ packages:
   # Non-library projects (talk deck, benchmark harness, repros) — workspace members so they share
   # the root install instead of each spawning its own node_modules.
   - 'internal/*'
+  # the bcms header lab is NOT a workspace member: gitignored, installs standalone (no lockfile importer)
+  - '!internal/repro-bcms-header'
+  - '!internal/repro-pes'
+  - '!internal/repro-ogygia-footer'
+  # Runnable demos (the MFE federation trio + contracts) — consume the live packages/ogygia.
+  - 'examples/mfe/*'
 allowBuilds:
+  # A transitive dep of sass-embedded (a devDependency, for compiling `<style lang="scss">` in tests).
+  # Its native watcher build is not needed — sass compileString works without it — and CI's
+  # `--frozen-lockfile` errors on an unlisted build script, so deny it explicitly.
+  '@parcel/watcher': false
+  '@swc/core': true
   esbuild: true
 minimumReleaseAgeExclude:
   - '@rolldown/binding-android-arm64@1.2.2'

@@ -11,8 +11,7 @@
  * raw secret so the id-salt domain stays separate.
  */
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
-
-const HEX64 = /^[0-9a-f]{64}$/;
+import { is_lower_hex } from './endpoint.js';
 const MAC_INFO = Buffer.from('ogygia-mac-v1');
 const ID_SALT_INFO = Buffer.from('ogygia-id-salt-v1');
 const utf8 = new TextEncoder();
@@ -20,9 +19,22 @@ const utf8 = new TextEncoder();
 /** Minimum UTF-8 byte length for a user-supplied `OGYGIA_SECRET` in production builds. */
 export const MIN_SECRET_BYTES = 16;
 
+// The secret is a process constant (env / build), so the derived key is too: derived once per
+// distinct secret, not once per sign and once per verify (an HKDF per island mint and per hole
+// request added up on a page of twenty). Bounded: a process sees one secret, tests a handful.
+const mac_keys = new Map<string, Buffer>();
+
 /** HKDF-SHA256 → 32-byte MAC key (hex for stable logging / tests; Buffer used internally). */
 export function derive_mac_key(secret: string): Buffer {
-	return Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), Buffer.alloc(0), MAC_INFO, 32));
+	let key = mac_keys.get(secret);
+	if (key === undefined) {
+		key = Buffer.from(
+			hkdfSync('sha256', Buffer.from(secret, 'utf8'), Buffer.alloc(0), MAC_INFO, 32)
+		);
+		if (mac_keys.size >= 16) mac_keys.clear();
+		mac_keys.set(secret, key);
+	}
+	return key;
 }
 
 /** HKDF-SHA256 → 16-byte id salt (hex). Empty input must not be used — caller gates on env. */
@@ -53,7 +65,7 @@ export class Hmac {
 
 	static verify(secret: string, message: string, sig: string): boolean {
 		// Reject non-hex / wrong length before Buffer work (L-HMAC charset precheck).
-		if (typeof sig !== 'string' || !HEX64.test(sig)) return false;
+		if (typeof sig !== 'string' || !is_lower_hex(sig, 64)) return false;
 		const expected = Hmac.sha256(derive_mac_key(secret), message);
 		try {
 			return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(sig, 'hex'));

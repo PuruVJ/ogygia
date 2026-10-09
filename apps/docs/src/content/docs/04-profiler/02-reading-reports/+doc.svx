@@ -1,0 +1,608 @@
+---
+title: Reading a report
+summary: How to read a profile: start here, the slow patterns named on your lines, the exact lines with every cost joined, memory kept per render with the leak check, the wall-clock budget bar, the CPU treemap, the network waterfall, and comparing two reports line by line.
+related:
+  - profiler/overview
+  - profiler/recording
+  - reference/performance
+---
+
+A report reads top to bottom, from "is this compute or waiting?" down to the exact function. Here is what each part tells you.
+
+The page is in eight parts, actionable first, raw last: **what to fix** (start here, the slow patterns, the exact lines, the findings, the budget bar, the paths), **why it took this long** (the one render explained, sliced, stepped, and the other requests that shared the instance), **memory** (who caused the GC, when the heap grew, what a render keeps), **hidden costs**, **the data** (who reads what, the river, the seed, the document as bytes), **islands and the browser**, **network and waits**, and **the raw numbers** everything above is an aggregate of (the treemap, the tables, the flame graph). Nothing is left out; the order is the reading order.
+
+## Since your last profile
+
+When this server (or the configured report store) holds an earlier profile of the same page, the report opens with what changed: "−68.6 ms since your last profile (163 → 94.4 ms), mostly: the `Promise.all` at `+page.server.ts:24`, −67.1 ms". It is the comparison below, cut to three rows: the render's change and the rows of **where one render went** that really moved. It says **no real change** when the render moved less than its runs' own spread, and warns instead when the run order skews the result (the earlier profile kept 8 MB or more alive on every render, so the later one ran on a fuller heap). When patterns went away, it adds what they promised against what the render moved. When both profiles weighed the page, it adds how the JS at start moved and which files did it ("JS at start 180 KB → 222 KB; new: the editor's chunk 42 KB"): files new, grown, shrunk and gone, and a file that moved between start and later loading (usually an island's `wake` changed). When both had a browser visit, it lists the browser's findings that went away and the new ones, and the vitals that moved past the noise (a fifth of the old value and at least 50 ms for the first byte, 100 ms for the paints, 40 ms for the slowest interaction; CLS 0.05: the same rule as the devtools Page tab's "since your last load"). For the first byte, the first paint, the largest paint and the slowest interaction it names the part that moved most, in the same parts the explanation uses: "LCP 3,000 → 500 ms, mostly its download 2,790 → 290 ms". It also says what the deploy costs a returning visitor: each island's file is named by its content, so an island either kept its file (still cached) or changed it (downloaded again). "Island files: 2 changed, 38 kept — a returning visitor downloads 14.2 KB again for Probe, Twin." When every island changed, it asks whether their code really did: by default SvelteKit bakes the build time into its own client code, so set `kit.version.name` to your commit. The agent JSON and the MCP digest carry the same thing (`since`), first.
+
+## Start here
+
+The first thing on the page: the three biggest fixes, each with the line to open and what it is worth per render ("waits in a row, `+page.server.ts:65`, ~138 ms less waiting"). The line is the one to change: for a thin wrapper, the caller that loops over it; for a wait inside a helper, the line that called the helper. A leak big enough to take the server down (8 MB or more kept per render) comes first, whatever the timings say.
+
+The fixes follow the forecast's order (see "After all of it"), and each says what one render takes once it **and every fix above it** are done: "waits in a row … → ~374 ms", then "work for data nothing reads … → ~319 ms", then "formatter per call … → ~269 ms". Where to stop reads off the list. A fix another one already covers is not listed again; the one that covers it says "also covers". Work for data nothing reads that shows in several rows (the helper's time, the load line it was inlined onto, the garbage it made) is one deletion, pointed at the load line that fills the key. The agent's digest (`ogygia_profile`) gives the same plan with the same running totals.
+
+## The page score
+
+One number from 0 to 100, with a grade (A from 90, B from 75, C from 60, D from 40, else F). It scores what a visitor pays for, whatever built the page. A page with no islands that ships 6 MB of JS scores low, not 100.
+
+| Category | What it measures | Weight |
+| --- | --- | --- |
+| JS at start | Every script the page runs at start: its `<script>`s, each `modulepreload`, what an inline script imports, each module's static imports, a Kit-hydrated page's route code, and the islands that wake at load. Islands that wake later count apart, as "on demand". | 30 |
+| Server render | The median render time. | 15 |
+| Hydration integrity | Islands that threw away their server HTML, never woke, or changed their markup as they woke. Only on a page with islands, once the browser reported. | 15 |
+| Loading | LCP, FCP and TTFB from the visits. | 10 |
+| Data shipped | The page seed, island props, remote seed, and inline script text. | 10 |
+| Page weight | Every byte on the wire at start, the HTML included. | 10 |
+| Responsiveness | INP and total blocking time from the visits. | 10 |
+| Render-blocking | Stylesheets and sync scripts in `<head>`: their bytes, and a round trip for each. | 5 |
+| HTML document | The size of the HTML. | 5 |
+| Visual stability | CLS from the visits. | 5 |
+
+Each category maps its value onto a smooth curve, the log-normal curve Lighthouse uses: one point where it scores 90, one where it scores 50. Thus every byte and millisecond moves the number, and nothing falls off a cliff. Each bar shows the points it cost, and its biggest contributors (for JS, the largest files).
+
+A category with no measurement is left out, never a free 100. The card says which ones and why. Two cases matter:
+
+- **On the dev server**, the page is not weighed: Vite serves modules one by one, so the JS says nothing about a build. Profile a build (preview or deploy) for JS, page weight and render-blocking.
+- **With no browser visit yet**, loading, stability and responsiveness are left out. Open the page with the profiler on, and the visit fills them in. This works on every page, islands or not: on a page that never boots the ogygia runtime (a Kit-hydrated `csr = true` page, a page with no island), the profiler adds a small standalone beacon for its own user.
+
+JS at start carries the most weight either way. A visit is your own machine, where parsing and running the JS costs a fraction of what a visitor's phone pays. Thus a clean visit on a fast laptop does not wash out a heavy bundle.
+
+Each large file names what the build put in it (the app's files, the packages), in the score's detail, the "What the page loads" panel, and a `js-at-start` finding.
+
+With a browser visit, JS at start also counts what the HTML never names but the browser ran before the load event:
+
+- **Scripts loaded by other scripts.** A tag manager adding its tags, a library from a CDN fetching its own parts. The visit lists every script the browser fetched; the ones the page does not name are counted, and the finding says how much of the JS they are.
+- **Islands that wake when visible and were on your first screen.** They wake at load on that screen, so they count at start. An island you scrolled to later does not.
+
+::: tip Checked against a twin
+The playground's `/score-lab` and `/score-lab-kit` carry the same article and the same code editor. One ships the editor as a lazy island, the other the usual fully hydrated way. `internal/bench/profiler-score-key.mjs` checks that the second one's editor code is counted, and that it scores well below the first, with and without a browser visit.
+:::
+
+The agent JSON carries the score and the weighed files (`assets`: totals, the 40 largest files, what could not be weighed).
+
+While it weighs the stylesheets, the profiler also reads the mark ogygia's build leaves on CSS it could not scope. When it cannot compile a lake's, hole's or router page's component styles, the build ships the raw style body, and every rule in it applies to the whole page. A `css-unscoped` warning names the component and the reason. The devtools Page tab raises the same finding, on the dev server too.
+
+## Slow patterns
+
+The known slow habits of server code, recognized on the lines that cost the most and backed by what was measured there. Each card says what is happening in plain words, the numbers behind it, every place it happens (with the code around each line, the costly line highlighted), and the fix, with a small before and after. The same habit in several files is one card.
+
+### After all of it: the forecast
+
+Above the cards: what one render would take with every fix done ("about 514 ms → 163 ms"). The fixes are not simply added up, because many of them are the same time seen twice:
+
+- **Fixes on the same line count once.** A formatter built per call is often also "a library per item" on that line. One slow call is often both "waits in a row" and "one slow call holds a batch". Such a group gives back its biggest saving, and the forecast names which fix covers which.
+- **Separate fixes add up.** Two chains of waits one after the other, or a loop in one file and a parse in another.
+- **Fixes inside a call another fix moves count once.** Moving `attachBrands(valid)` out of the request takes the slow search inside it along, so the search's own fix adds nothing more. The call stacks tell which work runs only inside a moved call.
+- **Work for data nothing reads is deleted.** Its time counts, and a slow pattern inside it is left out: deleting the work beats speeding it up. Deleting one call of a chain that "waits in a row" also fixes counts once with that fix: once the calls run together, dropping one of them saves little.
+- **Waiting is capped** at what the render really waited.
+- **Keeping answers is a second figure.** "The same answer on every render" is only a fix where an answer may be a little stale. That is a decision about freshness, so it is shown apart: "keeping the services' answers too: about 51 ms". A cached copy of the whole page is left out for the same reason.
+- **That second figure is measured.** After the timed renders, the profiler renders the page up to three more times with those same answers served from memory. Only its own renders get them. The figure is that render, with the other fixes taken off. It catches what the lines cannot show: each call's request and response handling, and, for a call to your own server, the work of answering it.
+- **Capacity is a third line.** A waiting fix cuts how long a visitor waits. Only a CPU fix lets one core serve more. So the forecast also says what the main thread spends a render, now and after the CPU fixes, and what that means in renders a second per core ("about 4 → 32"). That counts your code, packages, Node and the collector's pauses on the main thread, not the collector's helper threads, which run on other cores. On Lambda, which bills memory times the whole render, waits included, it also says the GB-seconds per million renders, now and after. On the test pages it lands within a third of the fixed copies' own figure; a fix's replacement code costs some CPU of its own, on lines the original never had.
+
+Each resource is capped by what the render used. Every saving on the clock (the wait fixes, and the waits deleted) together takes off at most the render's waiting. Every CPU saving together takes off at most its CPU. If the fixes claim more, they overlap in a way the lines do not show, and the forecast says so.
+
+A build without sourcemaps shows fewer lines, so fewer fixes: the forecast says so, and the real time after the fixes is likely lower.
+
+**Pick the fixes you will make.** Under the forecast, a checklist of its parts. Untick what you will not do, and the render after the rest is counted the same way, right in the page. A fix another one covers comes with it. It answers "is the waiting fix alone enough?" without a second profile.
+
+The forecast is checked against real fixes. Three test pages each have a copy with every counted fix applied by hand: one mostly waiting, one mixed, one mostly CPU. The forecast for the original lands within a few percent of what the fixed copy measures: 33.4 ms forecast against 34.3 measured, 169 against 155, 397 against 384. Both sides are measured on a freshly started server (see "A heap earlier requests filled").
+
+| Pattern | What it means |
+| --- | --- |
+| formatter per call | `new Intl.NumberFormat(…)` (or a locale method given a locale) on every call; building a formatter is slow, using one is fast |
+| waits in a row | calls from one line, each started after the one before it ended (a batch already started together is not part of it); the saving is their sum minus the longest, cut to what really comes off the render when another call ran beside them for as long |
+| same request again | the exact same read (method and URL) made more than once in one render |
+| same answer every render | a GET that ran in every profiled render and got back the same bytes each time (the profiler fingerprints each response): data to cache across requests. One row per kind of request and the line that makes it ("product/:id, 16 URLs"). A request that carried a cookie or an authorization header is marked per user, because the recording rendered as one user: cache that one keyed by the session. The saving counts only what comes off the render: a call that overlapped one left uncached still sets the end |
+| same answer but for a stamp | a GET that ran in every render and never answered the same bytes twice, yet the first and last answers differ in one small stretch: at most 2% of the answer (48 bytes or more is always allowed). Usually that stretch is a generation time or a request id (`"generatedAt":"…"`), and the report quotes it. The data did not change, so it can be cached like an unchanging answer, with the changing part filled in or left out. If that part is the page's data (a live price), keep only it live. Like the same answer, it is a caching lever, shown apart from the code fixes |
+| same work every request | a `const` line in a load whose value reads only the module — its imports, its top-level constants, pure globals, or other such lines — so every request computes the same result again (`const valid = validateAll(PRODUCTS)`). Read from the source, priced by the line's CPU plus the whole time of the functions it runs (a function also called from a per-request line is not counted). Compute it once at module level. A line that awaits, reads the load's arguments, a `let`, a module `new Map()` or the clock is never one |
+| renders per item | a component rendered 20+ times in one render (V8's count), costing 5 ms or more a render, traced to the `{#each}` that renders it (in its parent, or a few levels up past an island's host), the page-data key that loop walks (directly, or through a script local made from it) and the load line that makes the list. Its time is count × cost: send fewer items (a page of them) or make each cheaper. No saving is claimed, since it depends on how many you cut |
+| waits for a late island | a call whose every page-data key the page's markup uses only as props of an island imported to wake late (`visible`, `idle`, `interaction`, not already `render: 'deferred'`): every request waits for it before the first byte, for markup seen later if at all. The saving is the stretch the call held the render alone. Move the call into the island and import it `with { render: 'deferred', wake: … }` |
+| one slow call in a batch | calls started together from one line (a `Promise.all`) where the slowest takes 3× the next slowest and 20 ms more: the batch and everything after it wait for that one. The saving is up to the gap between the two. Start it earlier, hand its promise to what needs it, or give it a timeout with a fallback |
+| same page every request | every profiled render returned the same document byte for byte, no load takes cookies, locals, the raw request or the whole event, and no call carried a cookie or an authorization header: a cache can answer instead of a render (`Cache-Control: s-maxage` at a CDN, or ogygia's frozen pages). The saving is the whole render. A `handle` hook that personalises the page from cookies is invisible to this check |
+| same page but for a few parts | the renders' documents differ in at most 5 % of their pieces and at most 6 groups, and nothing read belongs to the visitor. The first render's document is split at its tags and lined up against the last, and each difference is grouped by what it is: an island's props (its region and props script change together), one attribute stamped per render on whatever tags carry it (`data-track`, a renderer's ids), numbered comment markers, or text inside a tag. Make those stop changing and the page caches whole |
+| library call per item | a library called once per item from a loop, with the library's own time (even the part it runs after an `await`) charged to your line |
+| rescan per item | a big string scanned and rebuilt once per item (`html = html.replace(…)` in a loop) |
+| search per item | `find` / `filter` / `indexOf` over a list, inside a loop over another |
+| walks to find a key | `Object.entries(table)` walked to find one key |
+| rebuilt each call | a fixed table (a literal-sized `Array.from`, a literal `new Map([…])`) built inside a function that runs many times |
+| copy per step | `[...acc, x]` or `{ ...acc, k: v }` in a loop or reduce |
+| deep copy | `JSON.parse(JSON.stringify(x))`, `structuredClone` |
+| slow regex | the time is inside a regular expression itself: V8's own code for the pattern (a `RegExp:` frame), charged to the line that runs it, or a pattern written on a slow line that can backtrack. "Can backtrack" means a repeated group with nothing fixed inside it, like `(\w+\s?)*`: the engine tries every way to split the text before it fails. A cheap pattern run thousands of times stays quiet, because no rewrite of it helps |
+| sort per call, date parsing, regex per call, yields per item, blocking disk, string growth | the rest of the list, each named on its line |
+| cache never hits | a memo (`M.get(k)`, an early return, `M.set(k, …)`) whose miss path ran about as often as the function: a helper only the miss path calls ran once per call. Measured from V8's call counts, which survive inlining; the usual cause is a key that is a fresh object every call |
+| kept after render | memory still alive after a warm render: see below |
+| ships all page data | an island that takes `page.data` whole: see below |
+
+A pattern is only reported where the profile paid for it: the line has its own CPU time or allocations, the code has the shape, and the context agrees (the line sits in a loop, its function ran more than once, or a caller runs it from a loop). One that would save under a millisecond is not reported. Optimized code charges an inlined function's time to the line that calls it, and a loop body's to its header; when such a line has no shape of its own, the recognizer reads one level in, into the called function or the loop's block, and names the line there. A whole function inlined into its caller can land its time on a neighboring line, and V8's profile does not say which. For that, the render that counts calls (it already runs with inlining off) is also sampled. There, every function keeps its own frame. When a line's neighbor calls a function that has no frame in the main profile, the line's time is split by that render: the line keeps its own work, and each neighbor gets its inlined function's share. The line list marks it **time moved from line N**. The un-inlined render only decides the split, never the amount, because without inlining everything runs slower. The limit that remains: only the two lines above and the one below are searched, and a function name defined in more than one file is not moved. The code is read with a small tokenizer, not regular expressions, and only for the lines the report names.
+
+The card's header says what fixing everything is worth against the median render: "about 326 ms off the 741 ms render (44%)". CPU and waiting are both per render (the CPU numbers of a page profile add up every run, so they are divided).
+
+## The exact lines
+
+Your own lines that cost the most, one row each, with the code and every cost joined on the line: CPU (the line's own, plus the time inside the libraries it called), bytes made, the GC they caused, and bytes kept alive, per render. A CPU profile never records where a library was called from; the line is found by reading the calling function's source for the library function's name or its import alias. Memory is measured per function, not per line, so a function's memory is shown on its busiest line and the row says so. A line inside a dependency is not listed: its cost reaches the list through your line that called it.
+
+## Memory kept after every render
+
+After the runs, the recorder renders the page once more under a live-objects sampler and forces a full collection. What survived was made by that render and is still held, after the warm runs filled any cache: growth, with every request. The card names the lines, charges a library's kept memory to your line that calls the library, and counts down: "the heap (4.1 GB, 1.1 GB used) is full after about 43 more requests". When it finds something and there is time, it renders up to six more times with a collection after each: a leak climbs every time ("confirmed … about 71 MB a render, and kept climbing"), a cache with a size limit stops, and the card says which, per line: the same live sampler is read halfway and at the end, and a leaking line doubles between the two while a cache that filled stays put (the sampled objects are the same objects in both reads, so the noise of one sample cancels). A line in between gets no verdict rather than a wrong one, and so does a check of under five renders. Calling a line a leak takes six: on a tight time budget the check can stop at five, and over five renders a cache that keeps four entries holds four renders' worth, the same shape as a leak. A cache that holds more entries than the check had renders still reads as growth.
+
+The sampler records where a kept object was made, not what holds it. So when something keeps a whole render's data alive, a line that just built part of that data (a menu tree, a formatted string) shows as kept too. The card lists only lines that hold at least 2% of the total. The rest are counted in one sentence: fix the big lines and they go with them. ogygia's own code is never listed as your line, even when you run it from a linked workspace checkout.
+
+On AWS Lambda (where Amplify runs SSR), the countdown uses the function's memory size instead of the heap's limit, because the platform kills the instance at that size: "the function's memory (1 GB, 384 MB in use now) runs out after about 10 more requests on one instance". That request fails and the next one pays a cold start. The same report also notes how much of the render was waiting on calls, because Lambda bills the whole duration, so cutting a wait saves as much as cutting CPU.
+
+When most of the kept memory was made inside a library that your line calls, the card title says so ("… inside some-lib"). It names the library's function that made the memory and gives the library fixes instead of the Map-in-your-code ones: make its instance once and reuse it, call its cleanup method, turn off its internal cache, upgrade it, or, as a last resort, run it in a worker you replace now and then.
+
+## An island that ships all the page data
+
+An island that takes `page.data` whole (`Object.keys(page.data)`, a spread, the object handed on) makes every key of the page's data ship to the browser, in every page view. The card points at the line in the island that does it and the bytes the seed ships; reading the keys by name lets seed shaping ship only those.
+
+## Where the time went
+
+One bar for the full window, split by what the CPU did. Read this first.
+
+- When the largest segment is **your code**, it is a compute problem. Go to the treemap and the component table.
+- When the largest segment is **idle / waiting**, the server was blocked on I/O, not on compute. A CPU profiler would have found nothing here. Go to the network section.
+
+This one split, compute against waiting, is the full reason that a plain CPU profiler misses "5 second" pages. Those pages usually wait.
+
+## Where one render went, down to the line
+
+One render's time as a tree that adds up at every level: the part of the request (hooks, load functions, component render, …), then in the load functions each **load file**, then who held the time (your function, a library, a call it waited on), then the line. Small rows fold into **N more**, which opens: nothing is dropped, and a fold never hides more than a tenth of its level.
+
+- **Your function** splits by what its samples ran inside it: its own lines and the lines of the arrows and helpers under it, from the call stacks, not a guess by name.
+- **A library** splits into the lines of yours that call it; called from one line, into the library's own functions ("`@ionic/core` → `getNamedItem` 23 ms, `computeMode` 14 ms"): what kind of work it did for you.
+- **A call you waited on** splits into the line that made it, and, through a helper, the line of yours that called the helper. Waits that overlapped share the stretch evenly.
+- **garbage collection** splits into the lines that made the garbage, by the pauses each caused.
+- **nothing recorded** names what was pending across it, with the line that queued it.
+
+Beside a row:
+
+- **alone**, or **N ms alone**, on a wait: how long nothing else was in flight. That is the least a faster answer saves; **always beside other calls** means it saves nothing unless the others get faster too.
+- **each call: X ms their side (…), Y ms network, Z ms body**: a call's own clock. Their side is the service's own Server-Timing (entries that nest are not counted twice); the rest is the network, TLS, their framework or a queue.
+- **→ keys**: the page-data keys the row's lines feed, read from your load's source (a key's expression, the variables it reads, the lines that set or fill them, helpers in the same file). A key nothing reads is struck through; **nothing reads it** on a row means all of its time bought nothing.
+- **N renders** on a component: how many times it rendered in one render of the page.
+- **a–b ms over renders**: the row's low and high over the profiled renders (for a wait, its calls' own time). A difference smaller than that is noise.
+- **N ms cold**: what the row took in the first, cold render, when that stands out. It is what a fresh serverless instance pays on its first request.
+- **tags**: the slow patterns found on the row's lines.
+
+## Work for data nothing reads
+
+The rows whose every key is unread add up to a number: "newestReview 55 ms (CPU) → freshest, GET api/live 16 ms (waiting) → live_at, 71 ms of one render for nothing". It joins **start here** when it is among the biggest fixes, and a slow pattern inside that work (a date parse in a function that builds only an unread key) is left out there: deleting beats speeding up.
+
+## Why this render took N ms: the critical path
+
+A page or request profile opens with one render walked from its first millisecond to its last. Every stretch of that window is one of three things: the CPU **running** something (coloured by the component or function that owned it), the server **waiting** on outbound calls or I/O primitives (blue for HTTP, amber for timers, files and sockets; several bars at once is a parallel group), or a **gap** nothing recorded (a database driver on its own socket pool, a worker, a promise chain). The numbered steps under the bar are the critical path in order, biggest first is the one to fix.
+
+Two things ride on the same walk:
+
+- **Phases** split the render into where in the request the time sat: hooks, load functions, component render, ogygia's transform, Kit's routing and response. A wait is charged to the phase whose code was running just before it, so "load: 2 ms CPU + 210 ms waiting" says at once that the page is data-bound, not render-bound. A handle you import into `hooks.server.ts` from another file (`sequence(myTransform, …)`) counts as hooks too, including the work it does after `await resolve()`. The profiler reads your hooks file from the sourcemap, so this works on a deployed host too. Library work that carries on by itself after an await, with none of your code under it, is charged to whichever phase last called into that library. That keeps **other** small.
+- **Awaits in a row**: two or more calls that ran one after another with nothing between them are flagged with what starting them together would save (the sum minus the longest). The profiler cannot know they are independent; you can.
+
+## Who waited for whom: the causality graph
+
+Under the timeline, **Awaits** draws the outbound calls and spans of the render as boxes on lanes with an arrow from each call to the one that started right after it ended (within 5 ms, with nothing else in flight). A chain of arrows is a chain of `await`s: the second call could not start before the first answered, either because it needs the answer, or because the code says `await` where it could say `Promise.all`. Each arrow carries the gap between the two and, with source maps on, the `await` site that started the second call. The list under the drawing is the same graph as text, longest chain first. A graph with many arrows and one lane is the picture of a serial page; the same calls on several lanes with no arrows is the picture of a parallel one.
+
+**Gaps named.** A stretch of the timeline that reads "nothing recorded" now says what was pending during it, when anything was: `nothing recorded — pending: GET /api/x (+2)`. The profiler could not see the CPU work of those milliseconds (a driver on its own socket pool, a worker thread, a promise chain), but it can see which calls were still open, and that is usually the answer.
+
+## Slice it: the samples themselves
+
+Every table in a report is an aggregate over the whole render. Under the timeline, **Slice it** is the same data before aggregation: every CPU sample of the one render the report explains, each with its stack, drawn as a density strip (grey for any CPU, green for a component's). Drag a range on the strip and the tables under it answer for that stretch alone: what ran itself (**self**), what was on the stack over it (**owners**), and which components. Hover an instant and the stack at that moment is listed, outermost first. The yellow marks are the collections. The point: a hot function that is 12% of the render may be 90% of the 80 ms stretch you care about, and the stack at that instant says who called it there.
+
+The index is window-scoped and folded (consecutive samples of one leaf become one entry), so it costs a few hundred kilobytes in the JSON, not the megabytes of the raw profile. Past twenty thousand entries it is stride-sampled with the lengths kept, so a range's CPU time still adds up. In the JSON it is `stacks`: a frame table with parent links and three parallel arrays (`t_ms`, `d_ms`, `leaf`).
+
+## Step through it: the render as a sequence
+
+The same render as a list to walk: this component ran for this long, then the server waited for that call, then the next component. Each step carries the time into the render at its end, the CPU so far, the leaf that burned inside it, the calls in flight during a wait, the span it sat in, and the stack at its middle from the index above. A slider and the arrow keys step; the longest steps are jump targets. Consecutive segments of one owner merge; when there are more than eighty steps the smallest fold into a neighbour and say how many they took with them. In the JSON it is `steps`.
+
+## The instance was not alone
+
+One Node process has one event loop, so every other request the server answered while the profiled render ran took turns on the same CPU. Those turns sit inside the render's wall time with no frame of their own: the CPU tables do not carry them, the wall time does. This section names the requests that overlapped the profiled window, how long each was in flight over it, and a bound on the CPU it could have taken. The bound is an upper one on purpose: a request's CPU is a process-wide delta over its lifetime, so two overlapping requests each carry some of the other's; the estimate is capped at the overlap itself. The page's own deferred holes appear too, marked as such: they are the page's work, answered while it rendered. A finding (`busy-instance`) fires when something else was in flight for a tenth of the window or more, and says to read the CPU numbers rather than the wall, or to record on a quiet instance. In the JSON it is `contention`.
+
+The CPU sampler hears the whole process, so another page's work lands in the same profile. A sample whose stack runs under another route's page or layout file (`src/routes/purgatory/+page.server.ts`, or its built chunk) is that other request. It is set aside with everything below it, so the other page's slow lines, islands and seed never read as this page's. It counts as time the page did not run, like idle. Kept as the page's work: its own route's files, the layouts above it, the endpoints it calls on its own server, and shared code sampled with no route file above it. How much was set aside is in the finding and in the JSON (`other_requests_ms`). Other visitors on the same page run the same lines, so no stack tells their samples apart, but the clock does. A render that an outside request for the same path overlapped is left out, and its samples are set aside by time, as long as at least one render ran clean. When fewer than two ran clean, the recording makes a few more renders to find some, up to twice the renders asked for and inside the time budget. The finding `runs-set-aside` says how many. When every render overlapped one, nothing is left out, and the finding says how high the CPU can read ("up to 5× on the lines they share"). On Lambda neither happens: an instance serves one request at a time.
+
+## Name what the profiler cannot see: `span` and `tag`
+
+Two waits never show on their own: a database driver on its own socket pool, and a promise chain (a queue, a cache client, a worker). They are the grey "nothing recorded" on the timeline. Name them in the code:
+
+```ts
+import { span, tag } from 'ogygia/profiler';
+
+export const load = async ({ params, locals }) => {
+	tag('tenant', locals.tenant);
+	const user = await span('db.user', () => db.users.find(params.id));
+	const orders = await span('db.orders', () => db.orders.byUser(user.id), (rows) => ({ rows: rows.length }));
+	return { user, orders };
+};
+```
+
+`span(name, fn, attrs?)` runs `fn` and records it like an outbound call: start and end on the profiler's clock, the request it ran in, the caller's file and line, its parent span. Sync in, sync out; a promise in, a promise out. A throw is recorded and rethrown. `attrs` is a record, or a function of the result for what is only known afterwards. The keys the report reads: `cache` (`'hit'` or `'miss'`), `rows`, `bytes`, `key`. For a stream or an event you cannot wrap, `span.start(name)` returns a handle with `set`, `end` and `fail`.
+
+The Spans table carries the same three numbers the components table does. **total** is the spans' summed duration, **self** is that minus the child spans nested inside them (a `ds.pass` of 249 ms with 178 ms of renders and 69 ms of splicing inside is 2 ms of its own), and **wall** counts overlaps once: forty-eight renders of 127 ms under a `Promise.all` are 6 s of total and 180 ms of wall, and wall is what the render paid. A ∥ marks spans that ran together.
+
+A span that carries an attribute with a few distinct values gets a **by** table in the Spans table: `ds.render` by `tag` says what each element type cost (count, total, p50), `db.query` by `table` which table the time went to. The N+1 finding names the biggest value. And a repeated span that ran *together* (a `Promise.all`) is told apart from one that ran one after another: the first shows its wall time next to the summed work, and the fix is per item, not batching.
+
+Where it lands: on the timeline a gap inside the span reads "in db.user" and a call inside it names the span; the **Spans** table gives count, time per render, p50, max, cache hits and misses, errors, and the caller; the awaits-in-a-row detector sees spans as calls; and four findings read them: a span repeated once per item (the N+1 shape), a span that is a fifth of the render, a cache that misses on every render, a span that failed or never ended.
+
+`tag(key, value)` stamps the request's log entry. The dashboard's slowest-routes table can then be split by any tag ("slow for everyone, or for tenant X"), and the request rows in a report show them.
+
+Both are no-ops on the client, in a universal `load` in the browser, and on a server with no recording running. Nothing is recorded outside a recording, and nothing is sampled: a span records or the profiler is idle.
+
+### Values, not just functions
+
+A span that reports a number (`span('db.query', fn, (rows) => ({ rows: rows.length }))`, `bytes`, `tags`) gets a row under the spans table per attribute: the range across the recording (min, median, max, sum) and how the span's time moved with the value. **ms per unit** is the slope of a straight line through the spans, **fit** how well the line holds (1 means the value alone sets the time). A steep, well-fitting line says the cost is the size of the input, which a function's name can never say: the same `render` is cheap on 3 items and slow on 3000. A finding (`value-driven`) names the first span whose time follows a number that closely. A value that barely moved across the spans (under 5% of its size) gets no fit: three renders of one document are not a slope. In the JSON it is `span_values`.
+
+### A renderer or a client you call from everywhere: `instrument`
+
+A design system's `renderToString`, a database client's `query`, an SDK method: called from many places, impossible to wrap at each one. `instrument` wraps it once, and every call is a span:
+
+```ts
+import { instrument } from 'ogygia/profiler';
+import { renderToString as core } from '@acme/design-system/hydrate';
+
+// an ESM import is read-only, so bind the wrapped function
+const renderToString = instrument(core, 'ds.render', (r, tag) => ({ tag, bytes: r.html.length }));
+
+// a method on an object is patched in place; the return value restores it
+const restore = instrument(db, 'query', 'db.query', (rows, sql) => ({ rows: rows.length, key: sql.slice(0, 40) }));
+```
+
+The `attrs` function gets the result and the call's arguments, so a span can carry the tag it rendered. A page that renders three hundred custom elements through one `renderToString` reads in the Spans table as three hundred `ds.render` spans with the per-tag split, and the N+1 finding says so.
+
+### The browser's side: `mark`
+
+What the server profile cannot see at all is the visitor's browser: a design system's CDN components hydrating, a widget booting, a font arriving. `mark` from `ogygia/profiler/client` is the browser twin of `span`:
+
+```ts
+import { mark } from 'ogygia/profiler/client';
+
+mark.event('ds.hydrate', 'components-ready');   // a web-components runtime's "all hydrated" event
+await mark('widget.boot', () => widget.init(), { version: '3' });
+const h = mark.start('search.first-results'); /* … */ h.end({ hits: 12 });
+```
+
+Two more things the browser's side tells the report, once the beacon has seen a visit: an island that **never reported hydrating** while others did (a `visible` island on a page that cannot scroll, a `load` island that throws on wake), and an island that **discarded its server DOM and re-rendered** (a hydration mismatch: something edited the HTML between the render and the wake, such as a post-SSR pass). Both are findings, and the Islands table marks the rows.
+
+The marks ride the same beacon as the islands' hydration timings, so they cost nothing for a visitor: the profiler puts its beacon tag only in its own logged-in user's documents, and without the tag `mark` runs the work and queues nothing. The report shows them for the page under **Marked in the browser** (p50, max, failures, attribute keys), next to the vitals and the server render, and the slowest one gets a finding.
+
+## Paths to fix: hot functions that share a caller
+
+You remove the one function that took two seconds, and a dozen smaller ones remain. Often several of them sit on **one call path**: `walk`, `format` and `sortRows` all run under `buildTree`, and fixing `buildTree` once (call it less, cache what it computes, move it out of the render) takes all three with it. The report finds those groups: for every hot function it credits its time to each of your callers above it, and a caller that covers two or more hot functions is a path. The deepest caller that covers the time wins, so the group names the most specific place to fix, never the route root.
+
+Each group is drawn as a graph: the caller to fix on the left, the chain of calls through the middle, the hot functions lit at the end. Link width is the time that flowed through it. Click a node to open its row. The finding above the graph says how much of busy time the path holds.
+
+A node named `fn @ file:line` is an anonymous function: an arrow or a callback, which V8 cannot name. When the source is on the machine the label also carries the line itself, `fn @ ds-ssr.ts:42 · tags.map(async (tag) => {`, so the callback reads as what it is.
+
+## Whose wait is it: the upstream's own Server-Timing
+
+When an upstream answers with a `Server-Timing` header, the profiler reads it off the response and draws it inside the wait: "GET api/catalog waited 220 ms; their side says db 180 ms, render 20 ms". The finding then says how much of the wait is theirs and how much is the network and their framework, and who to take it to. Any service can send the header; a SvelteKit upstream with the profiler's `serverTiming` on already does.
+
+The request drawer in the waterfall shows the same split, and the **call path**: not only the function that made the call but the ones that called it (`fetchStock` ← `load`), read off the stack the call already captured.
+
+## Cold start: the first render on its own
+
+A page profile renders the page once un-profiled before the measured runs. That first render is now profiled on its own, as a coarse window, and the report shows what it paid over a warm render **per file**: module load, compile, first-call caches. On a serverless host every cold instance pays exactly this on its first request, so a "few hundred ms slower TTFB on preview deploys" reads as a table of files instead of a guess. Pass `?cold=0` to the `/page` endpoint to skip it.
+
+The `cold-start` warning splits the extra time into CPU and waiting. When that first render made outbound calls, the waiting is their new connections (DNS, TLS, empty pools), and the advice is to reuse one client. When it made none, the waiting is not the network: it is the first loads of the modules and files the render reads, which CPU samples do not show, and the advice is fewer and smaller server modules on the page's path.
+
+On AWS Lambda (where Amplify runs SSR) the report also shows the instance's own cold start. A Lambda instance starts for a request, so the time from its process starting to its first request is what every new instance pays before any render: Node's startup, then loading your server bundle and its imports. The report gives that, Node's share of it, how old the instance was and how many requests it had served before the recording. On a long-running server that time is mostly waiting for traffic, so it is not reported there.
+
+## Per run: a cache, not a slow component
+
+The components table gets a **per run** column in page mode: the component's time in each render, shown as min · median · max. A component that is 90 ms in the first render and 2 ms after is a cold cache or a lazy import, and the row says **cold 1st**; one that jumps in a random run says **varies**. Both get a finding, and neither is "make the component faster".
+
+## A heap earlier requests filled
+
+A page that keeps memory alive every render also slows down every render after it: a bigger heap costs more to collect and to allocate in. Within one profile the renders can look flat, yet the next profile on the same server reads far higher. One test page read 720 ms on a fresh server, then 1 020 ms, then 1 310 ms, with the same code. When a profile starts on a heap holding six or more renders' worth of what the page keeps, the report says so (`heap-filled-before`): how big the heap was, and how many renders' worth. Fix what is kept. Until then, compare numbers from freshly started servers only.
+
+## Slower each run: the instance is aging
+
+When every render takes longer than the one before, the report says so: about how many ms each render adds, and the first and last run. It needs 4 runs (a cold first run is left out), and most pairs of runs have to agree, so one slow run does not trigger it. When the same report caught memory a render leaves alive, the finding names it as the likely cause and links to the **Memory kept after every render** pattern. On a long-lived server that climb keeps going until the instance restarts, so the times in the report are one point along it. Fix what is kept, profile again, and the runs should come out flat.
+
+## The browser against the server
+
+With the beacon on (open the page while logged in), the report also shows what your browser measured for the page: TTFB, first paint, LCP, CLS and INP, next to the server's median render. Two gaps matter, and each gets a finding: TTFB far above the render is what sits in front of the server (a cold instance, a proxy, the network); LCP far above TTFB is what the browser does after the HTML arrives (assets, fonts, hydration). Either way the answer is not the SSR code. The TTFB gap is split for the report's own visit. The browser timed its redirects and connection. The request log says how long the server's handler held that very request. So the gap reads as connecting, before the handler took the request (a proxy, a CDN, a cold start), or inside the handler past the render (a hook that awaits something), with the fix for the biggest.
+
+### What went wrong in the browser
+
+The visit the beacon sends is read with the same analysis as the devtools [Page tab](/docs/devtools/overview#the-page-tab). So the report and the tab name the same problems on the same islands. These findings start with "In the browser:":
+
+- an island that failed to hydrate, with its error
+- markup that changed as an island woke
+- a click that reached an island before it was awake
+- a layout shift from an island just after it woke
+- one long hydrate step, or a wait behind other islands
+- a slow module
+- an eager island below the first screen
+- a first-screen island that woke long after the page looked done, or the largest paint repainting inside one
+- long tasks outside any hydration
+- a slow in-app navigation (the router's page swap): how long the fetch, the stylesheets and the swap took, and the islands the new page woke after
+- the slowest interaction, when it was slow: the island it landed in, and whether the time went to waiting (behind an island hydrating, or a named script), its handlers, or the paint. The report's INP line comes from all visits; this one explains the report's own visit.
+- a file that was preloaded and then downloaded again, because the preload did not match the request
+- an island whose own file was gone, so the page (from a cache that outlived its build) ran it on the current build's code
+- content-named files (under `_app/immutable/`) the browser asked for again though it had them. Either each was revalidated (a round trip, answered 304), or on a reload it came down whole. The host did not let the browser keep them. Islands are named, and an island that came inside a hole's answer is named by its hole. A first visit's downloads never count.
+- a hole whose answer never came, and why (a redirect, a whole page, a failed request)
+- a first-screen hole that showed its fallback for a second or more. The report adds how much of that wait was the hole's server render. It finds the hole's own requests in the server's request log, since the browser makes them after the recording ends. When the render is most of the wait, the fix is on the server. It also splits out time waiting for a render slot (a server process renders 4 holes at a time) and time before the request left. When the server answered quickly, the request started late or was held on its way.
+
+A page with hundreds of islands sends a visit over 64 KB, more than a browser lets a page send as it closes. While the page is open, the beacon sends it as an ordinary request, which has no size limit. As the page closes, it sends a slim copy without the file list and the island rows the earlier messages already delivered.
+
+Each report reads its own visit: the first one your browser sent after the report was made. Profile a page, fix it, profile again, and the second report's browser findings come from the second visit, not a mix of both.
+
+The beacon sends where each island sat on the page, so "below the first screen" is measured on your screen. When the browser's CPU trace came in too, the profiler cuts it to each island's hydrate window and to the long tasks outside them. A slow hydrate then names the function that took the time ("mostly `render_rows` (Heavy.svelte:11)"), with the same source-mapped names as the browser CPU section. The report's JSON lists each window under `browser.cpu.by_island`. In the devtools Profiler tab, hover one of these findings to light its islands up on the page.
+
+Not every browser reports everything. Safari and Firefox have no layout-shift, long-task or long-animation-frame entries, for example. When the visiting browser lacks one, a `browser-limits` note says which: the findings and score parts that need it are missing, not clean. Visit from a Chromium browser to measure them.
+
+### Third parties
+
+Every origin but the page's own is a third party. The visit lists what each one served, and the report groups it by origin, with a kind read off the host (tag manager, analytics, ads, session replay, chat, A/B testing, consent, fonts, library CDN): the JS it served, how many of its scripts the page never names (a tag manager's tags), whether it held the first paint, and, with the browser CPU, how long its code ran on the main thread. Three findings come out of it:
+
+- `third-party`: the other origins' total, the heaviest three, and one fix per kind. A tag manager: audit its tags, fire them after the page is interactive or on consent, or move to server-side tagging. A chat widget: a plain button that loads the widget on its first click. A/B testing: render the variant on the server. Moving a script into a worker (Partytown) is suggested only for pure analytics beacons, the kind that tends to work there.
+- `third-party-blocking`: another origin's stylesheet or sync script held the first paint.
+- `third-party-edits`: an island did not wake from the server's markup, and a third party's script ran before it woke. A script that edits the DOM under an island is the usual cause.
+
+The devtools Page tab shows the same table, from the same code.
+
+### The browser's CPU: which island cost the main thread
+
+When the browser supports JS Self-Profiling (Chromium), the beacon also records the page's first 8 seconds of main-thread CPU and sends it in. The report gets a **browser CPU** section built the same way as the server's: components by self time (an island's component name, from the chunk it hydrated from), hot functions, and a flame graph. It answers the question the server profile cannot: which island's hydration ate the main thread, and whether it was your code or a dependency (the rows are categorised: svelte, dependency, app). The profiler sends the `Document-Policy: js-profiling` header only on responses that carry the beacon, so a visitor without the profiler cookie is never sampled. Off with `clientCpu: false`.
+
+Production client chunks are minified, so a browser frame is `Y` in `chunks/DvQX.js` until a source map says otherwise. Build with source maps on (the same `PROFILER_SOURCEMAPS=1` as for the server) and the profiler finds each chunk's map next to the built client files, recovers the real function name and the source file, and files the frame where it belongs: `create_effect` in Svelte's runtime, `ProductCard` in your own component. When the map carries no name at the function's start, the name is read from the original source line itself. Scripts from another origin (a CDN's web components, a tag manager) have no local map and keep their minified names, filed under the package the CDN path names.
+
+## With the keyboard
+
+Everything on a report that takes a click also takes the keyboard. Tab reaches each table row, sort header, timeline block and seed row, and Enter or Space presses it. A focused timeline block shows the detail a hover would, and a sort header tells a screen reader its order. The CPU treemap and the flame graph are pictures of data the tables also list; the flame graph's search box zooms to the heaviest match on Enter. `internal/bench/profiler-click-check.mjs` fails on any control only a mouse can press.
+
+## Take the report with you: the standalone HTML
+
+**Download .html** on a report writes one file with everything inlined: the styles, the runtime, and every island chunk the page reaches, as an import map of `data:` URLs. It opens from disk or an email attachment with the tables sortable, the flame graph and the timeline live. It needs a built app (`vite build` and `preview`, or the deployed server): on the dev server the page's code is hundreds of unbundled modules, so use the `.ogp` export there instead.
+
+It works on serverless hosts too, where the instance that made the report is usually gone by the time you click. The button sends the report with the request: the page's own compressed, encrypted `.ogp` copy (only this server's key opens it), or this browser's kept copy, gzipped. Whichever instance answers builds the file from that, rendering the report page inside the same request. It never sends the report as raw JSON, which would be several MB and over a host's request size limit. The **JSON** link, **Share link**, **Keep in this browser** and **Export .ogp** work the same way. Export needs the server's key to encrypt, so a report shown from this browser's copy sends that copy and gets the file back. The one exception is the `.cpuprofile` link: the raw V8 profile is not part of the portable report, so only the instance that recorded it can serve it.
+
+## Findings that name the fix
+
+Each finding now says what to do and where. A warning about a repeated component ("`HeavyRow` rendered 800 times") carries the fix (render fewer, or move it into a deferred hole), the file, and a **show the row** link that opens that component's row with its call stacks. The same for a hot function, an N+1 chain (the same endpoint hit once per item, folded to `/products/:id`), a serialization-heavy render, and an oversized page seed.
+
+A report over a window of requests (a test's clicks, rather than one page) opens with `window-requests`: how many requests the window saw and the slowest three, each split into CPU and waiting, and how much of the wait was outbound calls. A slow one says which way to go: computing means profile that page on its own for the lines; waiting means the network table.
+
+## Load functions and the `parent()` chain
+
+Under the timeline bar, a page profile draws one lane per Kit load function that ran: `+layout.server.ts`, `+page.server.ts`, a universal `+page.ts`, each from its first moment on the CPU or waiting to its last, on the same clock as the render. The chip says **server** or **universal**, and **await parent()** when Kit's `parent()` ran under that load.
+
+Kit runs a page's load and its layouts' loads together. When the page lane starts only where the layout lane ends, they ran one after the other, and the report says so with the most that overlapping them would save: the usual cause is `await parent()` before the page's own fetches. Start the fetches first, await `parent()` after, and the two overlap.
+
+A load that calls the site's own API through Kit's `fetch` never reaches the network: Kit answers it in-process. The profiler wraps that `fetch` for the requests it records, so those calls show like any other, with their caller and their Server-Timing. A wait inside a `span()` counts toward the lane too.
+
+A universal load with waits gets a note too: on a page with the client router that code runs again in the browser on every navigation, and its data has to be serializable. If it only needs the server, make it `+page.server.ts`.
+
+Kit's own costs that scale with the document are named as well: the ETag hash of the whole HTML, and `devalue.uneval` of the load data for the client router. The second one is zero on a `csr = false` page, where islands take their data from props and the seed.
+
+## ogygia's own cost
+
+A page profile shows what the handle added: the transform's wall time, the islands and holes it emitted, and the bytes of every side-channel (page seed, island props, remote seed, fn manifest, context bridge). A seed over 100 KB gets a finding: some island reads `$page` whole, so that much of `page.data` ships on every render.
+
+## Islands: the server, the build and the browser on one row
+
+The **Islands** table has one row per island fingerprint (identical copies share a row, with `×N`), and joins three sources:
+
+- The server: **SSR ms** is the component's render time per page render; **props** is what the sidecar ships and which lane it took (json parses on the fast lane; **devalue** names the one leaf that forced it, a `Date` or a `Map`); **seed refs** are props that point into `page.data` instead of shipping twice.
+- The build: **JS** is the unique weight of the island's module and its preloads (a built app); **interactivity** is what the build found in the island's components: event handlers, `$state`, `$effect`, `bind:`, `use:`. An island with none of them reads **inert**: it loads JS for markup that never changes, and the advice is `wake: 'none'`.
+- The browser: **hydrate ms** is what your own browser reported. When you open the page while logged in to the profiler, the runtime posts each island's wake-to-hydrated time (and the module-load part of it) back to the profiler, keyed by fingerprint. No visitor ever pays this; the tag that turns it on rides only your own documents. A `client-hydrate` finding names the slowest component (with its copies) and splits its median wake into loading its modules, waiting its turn (islands hydrate one per task) and the hydrate step. When the wait is most of it, it names the island that hydrated during that wait ("most of it behind Heavy, 140 ms of hydrating"), and the advice fits the cause: a shorter step for the one holding the queue, fewer copies waking at once, or a smaller closure.
+
+A row with advice carries a mark; open it for the modules with their bytes, the seed keys it references, the devalue culprit, and the one line the numbers support. The modules are every JavaScript file the browser downloads before that island can run: its own code (marked **this island**) and the shared files it imports. The bundler names shared files by hash, so under each one the report lists what the build packed into it (`svelte runtime`, `src/lib/hell/data.ts`, `date-fns`), read off the build's own module list, heaviest first by the bundler's rendered size: a big component is named even in a file of many small ones. When one module is 40% or more of an island's own code (20 KB or more), an `island-heavy-module` note names it: "Icons.svelte is 89% of Toolbar's own code (42 KB of 47 KB, before minifying)". Svelte's and ogygia's runtimes, SvelteKit and devalue load once per page and never count as an island's own. The devtools raise the same note on the dev server.
+
+An `island-barrel` warning names a re-export barrel an island still ships whole (read off the build's module info: little code of its own, six or more modules behind it): "Toolbar ships a barrel whole: src/lib/dtcode/index.ts, and the 8 modules behind it". A Svelte component is never side-effect free to the bundler, so everything the barrel re-exports ships. The barrel pass leaves a barrel with a statement of its own; the fix names both ways out. The JSON gives each island's `js_only_bytes` too: the bytes no other island on the page needs, what dropping or deferring that island would really save. The `islands-js-heavy` finding names the island with the most of them; when most of every closure is shared, it says no single island's removal saves much. Findings link here: an inert island that wakes, a component with dozens of copies each waking on its own, a page whose islands load hundreds of KB of JS, the slowest hydration in the browser.
+
+## The seed, explained
+
+Every top-level `page.data` key, sized, with **why it ships**: read by an island's client code (the build's answer, from seed shaping), referenced by an island's props (a seed reference), or **whole** because some island reads `page.data` without naming keys, in which case everything ships and the report names the island. Keys that seed shaping left out show greyed, so the trimming is visible. Click a key for who asks for it. The devalue culprit of the seed itself, when it left the JSON lane, is in the heading.
+
+## Holes
+
+Each deferred hole the page rendered, named by its component and its props the way it is written in the page (`Recommendations {"forProduct":"P1"}`, the manifest id in small print): its fetch schedule, whether it wakes afterwards, its `maxAge`, and, when hole requests landed in the window, what the render cache did: hits, misses, or uncached renders, and the average time. A hole with a `maxAge` whose cache never hits is a finding: its cache key carries the props and the session seal, so per-visitor props make every key unique.
+
+## Compare two reports, line by line
+
+The comparison lists which slow patterns a change fixed or brought in, and the exact lines before and after, per render. Lines are matched by their file and the code on them, not by number: an edit above a line moves its number, not its code, so it keeps its row; a rewritten line reads as the old one fixed and the new one new. Small patterns and cheap lines that come and go between runs of the same code are not called fixed.
+
+Every CPU, memory-cleanup, allocation, component, function and path number in a comparison is per render. So a 3-render report and a 10-render report of the same code read the same, not three times apart.
+
+**Where one render's time moved** lists the rows of the two breakdowns that changed, and only the deepest row of each chain: when a call's line carries most of its phase's change, the line is listed, not the phase above it. A row with its low–high over renders on both sides moved only when the two ranges do not overlap. When the render itself took the same time (within the runs' own spread), a CPU row's move is marked **shifted**: V8 inlines differently from run to run and charges the same time to another function, so `newestReview −55 ms` beside `load:96 +62 ms` is one swap, not two changes. Waits keep their verdict. A row missing on one side next to an **N more** is taken at the fold's size ("≤ 4 ms", "at least −55 ms"), never called fixed.
+
+When both reports ran on one server and the earlier one kept 8 MB or more alive every render, the page warns that the run order changes the result: the later report ran on a fuller heap. Restart between the two.
+
+When patterns went away or shrank, the comparison checks whether the fix paid off. It takes the older report's forecast, counts the parts that got done, and adds them the forecast's way: fixes on the same lines once, each resource capped by what the render used. It sets that against how much faster the median render actually got. For example: "expected to save about 360 ms per render, and the median render got 364 ms faster".
+
+A part counts as done when its fix, or one it covers, went away. One that shrank counts by its share, judged by its own lines: if every line the older report flagged is gone, it is done, even when the newer report flags the same kind of pattern on other lines. Lines are matched by their code, so an edit above them does not confuse it. Deleted work counts when the newer report no longer has it.
+
+When the render gained much less than expected, the time most likely moved somewhere else, so look for a line or wait that got worse. When the run order warning is up (B ran on a heap A filled), the check says so instead: restart and profile B again before trusting it.
+
+## Fix once, faster on every page
+
+A slow line in a shared helper (a price formatter, an i18n lookup) shows in the report of every page that calls it. The dashboard adds them up: from the latest report of each page this server profiled, the lines two or more pages share, what fixing each gives back per render on each page, and in all ("`catalog.ts:34`, a key found by walking every entry: /deals ~49 ms, /search ~18 ms, ~67 ms in all"). A pattern's saving is split over its lines by what each cost, so a line gets its own share, not the whole pattern's. Keeping answers or caching a whole page is a decision per page, so those are left out.
+
+A report's JSON and the agent's digest carry the same list for that page (`shared`: "These fixes make other pages faster too"), so an agent fixing one page knows which fix pays twice.
+
+## Holes on this server
+
+The dashboard lists every hole the server answered since it started: requests, cache hits, failed renders, the mean render, the mean wait for a render slot (the worst in brackets), and each hole's part of the time the slots were held. A server process renders 4 holes at a time. A render holds its slot through its awaits, so a hole waiting on slow data keeps the next hole, any visitor's, in line. When holes waited, a line above the table says how many, how long, and which holes held the slots. That is where to look first.
+
+On a host that runs one request per instance (AWS Lambda), nothing waits for a slot. The table still shows each hole's render and cache.
+
+## Compare two reports, and history
+
+Every page-mode report of the same page joins that page's history: the dashboard draws the medians over time and marks a jump; a report links to **compare with the previous run**. The compare page puts two reports side by side (any two): summary deltas, phases, every component and function by the size of its change, and the findings that appeared or went away. A positive delta reads red: the second report is slower.
+
+The compare page also diffs the **paths to fix**: each path by its owner and file, the time it cost in either report, the functions on it, and whether it is new in the second report or gone from it. A path that appears in the second report with its whole cost is the regression named in one line; one whose cost doubled but whose function list grew by one says which function.
+
+## Replay a caught request
+
+A report from the trap (**caught** on the dashboard) and a report you profiled with the header carry a **replay** button. It renders the same path with the same query and the same request headers again, under the full profiler, and opens the new report. The p99 request the trap caught in production with its coarse sampler becomes a proper profile with stacks, calls and heap, as long as the request is reproducible. The headers that come along are the ones `trap.replay` names (none by default, and never cookies unless named), so a page that keys on a tenant or a language replays with the same inputs once you list those headers.
+
+## CPU by self time
+
+An interactive treemap. Each box is real work, sized by time. The largest box is the bottleneck. Click a box to zoom in. Use the breadcrumb to zoom out.
+
+It is built from **self** time. Thus structural parents like `_layout` and `Root` almost do not show: only code that burns CPU does. Hover a box for its file and cost.
+
+## Components: self vs total
+
+The two numbers confuse people. Thus here they are, plainly:
+
+- **self** is the time in the *own* code of the component: its script, and the build of its own HTML. It does not count nested components.
+- **total** is self plus each component and function that it calls.
+
+The root component of a page always has a large total and a small self, because its total *contains the full page*. That is expected, not a defect.
+
+So:
+
+- **Sort by self** to find the components that burn CPU. This is the default.
+- **Sort by total** to find the most costly subtree. That is applicable when the cost is spread across many small children, for example a large list of rows.
+
+The inline bar on each row shows self (bright) inside total (dim). Thus you see at a glance whether a component is slow itself, or slow because of what it renders.
+
+Two more columns answer the next two questions. **markup / logic** splits the component's own time into Svelte writing its template (escaping, attributes, pushing markup) and its script plus the code it calls; nested components are in neither. A row that is mostly markup has a big template, and the fix is fewer elements per instance, not a faster script. **under** names the component that rendered most of it: the `{#each}` owner of a row. "`ProductCard ×48` under `_page`" says where the list lives, and the finding for a hot list points at the parent.
+
+**Click a row** to open it: the full path with line and column (an **open in editor** link when the path is on your machine, a **copy** button otherwise; on the dev server the source lines themselves, with the hot line marked), and the heaviest **call stacks** that rendered it, nearest caller first, each with the time that flowed through that path. That is the answer to "where is this, and who renders it" without the flame graph. The filter box above the table narrows the rows by name or file.
+
+What counts as a component: the function Svelte compiles a `.svelte` file into, named after the file. A capitalised name alone is not enough. A class in your code (`IntersectionObserver`, an `Error` subclass, a `Store`) wears the same case and used to land here; now a name from a bundled chunk is a component only when its subtree reaches Svelte's server internals, which is what rendering anything does. Everything else is **app code**.
+
+## Renders and per call
+
+The cost of a component is frequently *repetition*, not one heavy render. A **`×N`** tag next to a name means that it ran N times in one page render (the count comes from one extra render that counts calls). `HeavyRow ×800` is eight hundred cheap renders, not one slow component. No tag means that it ran one time.
+
+The **per call** column makes that explicit: its time per page render divided by N, the cost of a single call. The time adds up every profiled render and N is one render's count, so both are brought to one render first. A component can top the table on self and total, and still sit near the bottom on per call. That is the "thousand small rows" shape. The fix is to render fewer, not to make one faster. A component that is high on *per call* is the one that is truly heavy to render one time.
+
+## Hot functions
+
+Each function on the server, sortable by self, total, or **per call**. This is where the CPU went, below the component level: a formatter constructed per row, a regex pass, a serializer. The file, line and column point you directly at it. The same `×N` tag flags a hot loop (`escape_html ×7800`), not one slow call.
+
+A row from a dependency names the package in its chip (`devalue`, `@sveltejs/kit`), so a hot third-party function is placed at a glance. **Click a row** for the full path (openable in your editor when it is a local file) and its **call stacks**: the three paths that account for the most time in it, nearest caller first. `escape_html` is hot in every profile; the stack tells you *which* component's loop calls it. The filter box narrows the table by function, file or package.
+
+Native runtime built-ins (Node and V8 internals like `existsSync` or the UTF-8 codecs) carry no source file. Thus their row is labelled **node core**, with a `native` location. That is the runtime that does low-level work, not your code.
+
+**Hot lines.** Open a row and the profiler shows *where inside the function* the self time landed: V8 records a sample count per line, and the report turns it into "line 41: 38 ms, line 12: 4 ms", mapped through the sourcemap when one resolved. On the dev server the source peek widens to cover those lines and shades each by its heat, so a 40 ms function points at the one loop or regex that costs it.
+
+## Network
+
+Each outbound `fetch` and `http`/`https` call that the render made, tied to the route that made it, with a waterfall on a real timeline. Expand a request to see its **payload**: formatted, syntax-highlighted JSON, rendered lazily and off the main thread. Thus a multi-MB body opens without a freeze. It also shows its wire and decoded sizes, and its encoding. The waterfall shows ONE representative render, not the same few calls repeated across each run.
+
+The classic slow-page shape shows here immediately: several calls stacked **one after the other**, with no overlap. That is sequential `await`s. The report flags it. The usual fix is to run them together:
+
+```ts
+// slow: ~sum of all three
+const a = await getA();
+const b = await getB();
+const c = await getC();
+
+// fast: ~the slowest one
+const [a, b, c] = await Promise.all([getA(), getB(), getC()]);
+```
+
+A call with a large "wait" but a small "body" is a slow upstream service. A large "body" is a slow or oversized response.
+
+## Waiting by function
+
+The waterfall above covers outbound HTTP. But a render also waits on things that HTTP never sees: a file read, a `setTimeout`, a DNS lookup, a raw socket. This table times that non-HTTP I/O with `async_hooks`. It attributes each wait to the nearest frame in *your* code. Thus a slow `readManifest` reads as **which function waited**, not as a featureless slice of "idle".
+
+Each row is a function, its kind of wait (timer, fs, dns, tcp), how many times it waited, and the total. The table is sortable, with bars. When the budget bar is mostly idle, but the network waterfall looks clean, the missing time is usually here.
+
+## Memory
+
+Top allocators (who makes the objects, and thus the garbage), RSS over the window, and precise GC pauses from the runtime. One long GC pause freezes each request at the same time. Thus, when GC is a large slice of busy time, the allocators table tells you who to blame.
+
+The allocators table is by **component** when the profiler can tell: each allocation is charged to the nearest component on its stack (an island, a page, a layout), so `ProductCard: 4.2 MB` is what rendering that component allocated across the window, not the name of an inner helper. A component that allocates far more than it renders is building something it throws away: a big intermediate array, a string it concatenates in a loop, an object per item that a `$derived` recomputes.
+
+## Who caused the GC
+
+A page report joins the GC pauses to the garbage that caused them. The recorder runs V8's sampling allocation profiler across the window with objects already collected kept in the profile, so the one read at the end is the allocation stream by stack, not just what survived. The garbage makers are ranked by the pause time they caused: each allocator's share of everything allocated is its share of the pauses. A builtin like `replace` or `structuredClone` is named by the app line that called it, with the component on the stack, source mapped. The same line reached through different stacks is one row.
+
+Each pause is listed with when it fell, its kind (a minor pause when the young space fills, a major one when the old space grows), how much was allocated since the previous pause at the window's rate, and what the CPU was running at that moment, from the timeline. The timeline gets a red tick per pause. A finding names the top maker when it is worth a fix, and says whether the heap grew over the window (something keeps what it allocates) or not (pure churn).
+
+The profile is read once, at the end, on purpose: every read of the sampling profile during the work set off a major collection of its own, and a dozen reads made the collector being measured three times slower. The profiler's own garbage is taken out of every pause in proportion to its share of the allocations. On the hell page the answer was one line: the design system's per-tag `String.replace` splices over a 3 MB document allocated 1.7 GB in three renders, two thirds of everything, and caused most of the pauses.
+
+## When the heap grew
+
+The makers table says who allocated over the whole window; this says when. The recorder reads V8's used-heap figure every 20 ms while a full window runs (a heap statistic, no syscall, microseconds) and the report draws it over the whole recording with the collections as bars and the one render it explains lit. The stretches where the heap grew fastest are listed with what the CPU was running across them, by share, so a burst reads "+29 MB in 20 ms while `toVM` ran". A timer only fires when the event loop yields, so each interval is "between two awaits": the samples carry their true times and the longest gap between two is reported as the longest synchronous stretch the loop saw. A collection inside an interval shrank the heap, so that interval's growth is a floor and the row says so. A finding (`alloc-burst`) names the one stretch when it is most of the growth. In the JSON it is `alloc`.
+
+## What a render leaves behind
+
+After the runs, the recorder renders the page once more under a live-objects sampler, forces a full collection, and reads what is still alive: every sampled object that survived was made by that render and is held by something. The table names the lines that made them, with the app caller and the component, and the total per render. A page that keeps 30 MB per render grows until the instance restarts; the finding says so and where the kept objects come from. What keeps them is their owner, usually a module-level cache or a registry.
+
+## Deoptimizations
+
+V8 can write into the CPU profile why it threw a function out of optimized code: "wrong map" (objects of different shapes at one site), "not a Smi" (a number that changed kind), a megamorphic call site. When it does, the report lists the functions deoptimized during the window with the reasons and how hot they are; a hot function that deoptimizes every render runs in slow code every render, and the reason names the assumption to fix. V8 reports it only for a function it gave up on inside the window; one that re-optimized shows nothing, and the section stays hidden when there is nothing to show.
+
+## What if
+
+Under the causality graph, **What if…** lets you change a call and see the render under the model: *parallel* starts it together with the call it waited for, *cache* makes it instant, *remove* takes it out. The render's wall time recomputes from the graph, with the longest remaining chain of waits spelled out. The CPU between calls stays as recorded; only the waits move. It is a model, and it says so, but "those eight product calls together: 412 ms becomes 260" is a plan you can test before touching code.
+
+## Hidden costs
+
+Three things no single hot function shows. **Synchronous I/O** inside the render, `readFileSync`, `execSync`, a sync compression, with the app caller: while it runs nothing else on the instance moves. **Promises per render**: the async hook counts every promise (one stack in 256 is captured for attribution); tens of thousands per render is an allocation and a microtask each, a cost spread too thin to show as a function. **Memoization candidates**: app functions called many times per render at a steady cost each, with the allocation per call; if the result depends only on the argument, a cache keyed on it runs the function once per distinct value. The last one is a heuristic from counts and cost, and the report says so.
+
+The byte strip also carries, for a page that streamed, when each chunk of the document left the server: hover a segment for the moment its bytes went out. The profiler asks for the page as a browser does (a page navigation), so a load's streamed promises stream in its render just as they do for a visitor. When the document paused a long time before its last part, the report names what held it open: each streamed promise by its `page.data` key and when it left. Islands wake only once the whole document is in, so a slow streamed promise holds every island on the page, even one that reads nothing late. The finding **the document held open** says so, with the islands that waited when a browser visited.
+
+## What the profiler takes out of every number
+
+Every number in a report is what the app would have paid without the profiler. Its own CPU frames (the I/O tracker, the fetch wrapper, its reads) are measured and kept out of busy time — and so is the Node work they call: a Node or V8 frame (the inspector's `dispatch`, `performance.now`) whose nearest caller that is not Node or V8 is the profiler is the profiler's, while the same Node function under your code stays yours — the timeline's phases, the load lanes and the components. Its share of each GC pause is taken out by its share of the allocations before it. Each render run loses exactly what fell inside it, and nothing more: the profiler's start-up scan of compiled code (hundreds of milliseconds on a big process, before the first render) and its final reads sit outside the runs. The header shows what was taken out, and the JSON carries both the runs as reported and as the clock measured them (`runs`, `runs_measured`, `summary.overhead`). What cannot be seen from inside, the sampler's own thread and the inspector's, is not taken out; it is a few percent.
+
+## A build without sourcemaps
+
+With the profiler on, the server build writes hidden source maps by itself (see "Sharper names with source maps"), so this section is about a build that turned them off (`build.sourcemap: false`), or one made without the profiler. Such a build has no sourcemaps, so a frame names only its bundled chunk (`chunks/frames.js:12`). With the profiler on, the build writes `ogygia-modules.json` beside the server chunks: which source module sits at which lines of each chunk. It travels with the build to whatever host runs it, and the profiler reads it to file each frame by what it is: its own code (taken out, above), ogygia's runtime and bundled packages (libraries), or your app.
+
+A script module's chunk lines are also matched to its source lines by their text. The build carries your `src/` files, and the chunks they sit in, in the same server module as the maps, so this works on a host that ships neither `src/` nor the chunks as built (adapter-node re-bundles them). A line in Kit's runtime, a package or ogygia's own chunk is filed as what it is, so Kit's `fetch` wrapper is never named as your caller. That covers loads, helpers and endpoints, but not components, whose compiled markup is not their source. The match survives what a build does to lines: types stripped, comments dropped, one statement wrapped over several lines, two lines folded into one. A line the build changed past matching is placed by its distance from the nearest line that did match. Components keep the chunk's line numbers (their `{#each}` is still read from the `.svelte` file). Build with sourcemaps (above) for those.
+
+The slow patterns work on a build without sourcemaps too: a server build is not minified, so the chunk's lines read like your code (`for (const r of reviews) best = Math.max(best, new Date(r.at).getTime());`). Each line says which source module it came from: `src/lib/format.ts (built chunks/format.js:131)`. A call made from inside a bundled package or Kit's own runtime is never named as your line. A compiled component's line is known by its `.svelte` module, so a table built on every render is still found; memory a render keeps is charged to the built line that made it. What needs the original source file (a load's line-by-line reading: "the same every request", a late island's data, one slow call in a batch, how many items a list renders) reads it through the text match above, and a list's `{#each}` through the module map's `.svelte` file. On the test pages a build without sourcemaps now finds every planted slow habit a sourcemapped one does, and its forecast lands as close. Only where neither sourcemaps nor the source were there (a build made without the profiler on, whose output carries neither) does the forecast say it is partial: a ceiling, the real time after the fixes lower.
+
+## Flame graph and raw profile
+
+A flame graph of the merged call tree for the full window, and a **download** of the raw `.cpuprofile`. Open that file in Chrome DevTools → Performance, or at speedscope.app, when you want their tools on the same data.
+
+Type in the search box above the graph to find a function or file: matching bars stay lit, everything else dims, and the count and summed time show how much of the graph the match covers. Enter zooms to the heaviest match.
+
+The JSON report (`/report/<id>.json`) carries the same locations and call stacks (`path`, `column`, `stacks` on every hot function and component), so an agent reading it can place a function without the UI.
+
+## One clock: from the click to the largest paint
+
+A page report opens with the whole visit on one time axis. The server's render (its phases: hooks, load, render, ogygia) is placed so it ends at the first byte of the document; then the HTML arriving; then every file the browser fetched, one lane per kind (css, script, font, img, fetch), render-blocking ones dashed; the main thread's long tasks; each island waking, module load in light blue and hydration in green; and the paints, DOM ready and load as dashed lines, the first interaction inside each island as marks. The bars with a white outline are the critical path, listed under the drawing in order with why each is on it: the biggest part of the server render, the wait for the first byte, the last render-blocking stylesheet before first paint, and what the largest paint sat in (an image, or the island whose markup it is).
+
+Each hole gets its own lane: its answer from the moment its request left, cut into the wait for a render slot on the server, the server render, and the network and swap. It is the same cut the devtools Page tab draws, from the same code. Copies of one component are numbered.
+
+The visit comes from your own browser: the beacon records it while you look at the page (any page, while logged in to the profiler) and hands it to the server and to the browser's own store. A report on a long-lived host joins the server's copy; a report on an ephemeral host joins the browser's, in the browser. When the profiled render is longer than the visit's time to first byte (a cache, a faster instance), the server bar is clipped and says so.
+
+## The document, byte by byte
+
+The HTML the server sent, as one strip: every byte coloured by what it is. Head markup, inline styles, stylesheet links, the runtime bootstrap, other scripts, the page seed, the remote seed, the island props tail, the holes record, each island's markup (hover for its name and size), lakes and holes, and plain markup, in the order the server wrote them. Declarative shadow DOM a design system rendered is counted wherever it sits, islands included. The legend gives the bytes and the share per kind; click a kind to light only it. With a visit known, hovering a segment also tells you when it arrived at the browser, assuming a steady download. A seed that is a tenth of the document, sitting in the middle of the body, is a tenth of the download that everything after it waits for.
+
+## Who reads what: data lineage from the code
+
+Every `page.data` key on one row: the load that returns it (from the load's source), the bytes the seed shipped for it, the waiting the load did on upstream calls per render, who reads it, and a verdict. The readers come from the code itself: the route's page and layouts, every component the profile saw with a `.svelte` source on the machine, and the islands' closures from the build. The scan is a character walk over the source with comments and strings blanked, no regex: `data.key`, `data['key']`, `page.data.key`, `$page.data.key`, and the destructurings `const { a, b: c } = data`. A component that hands the object on whole (`fn(data)`, `{ ...data }`, `Object.keys(page.data)`) is marked as reading every key; `<Child {data} />` is not, because the child is scanned on its own.
+
+The verdicts: **read by an island** (must ship), **server only, not shipped** (the good case), **server only, but shipped** (rendered into the HTML, in the seed for no island: the shaping could not see who reads it), **nobody reads it** (fetched for no one: the load's wait behind it is pure waste, and the `key-unread` finding says how much), **unknown** (a reader could not be scanned, or an island takes the page whole). No key is called unread while any reader is unknown. The islands' reads come from the page's own seed explainer (the runtime's answer per key), so the two sections agree. In the JSON it is `lineage`.
+
+## The data river
+
+Where the page's data comes from and where it goes, as a flow in four columns: upstream calls (their waiting time), the load functions that made them, the `page.data` keys those loads return (their bytes in the seed), and the islands that read each key. Band width is the amount, ms on the left, bytes on the right. A key in red is fetched and shipped for no one: no island reads it. A load whose source the profiler could not read shows its keys as unknown; an island that reads `page.data` through a helper the build could not follow takes the whole seed, and the note under the river says how to make the seed shrink.
+
+The keys each load returns are read from its source (`return { products, flags }`); the keys each island reads come from the build; the seed's bytes per key from the rendered document, for a JSON seed and for a devalue one (where a value two keys share counts for both).
+
+## Island cost heatmap
+
+Every island on one grid, one column per cost: server render time, markup bytes, props bytes, unique JS, hydration time in your browser, when it finished waking in the visit, the first interaction inside it, and the layout shift its nodes caused. Each cell is shaded against its column's biggest, and the rows are sorted by how many columns an island leads. An island dark across its row should be static or wake later; one dark only in JS wants a smaller closure; one whose first touch came seconds after it woke could wake on interaction instead. Click a column to sort by it.
+
+## DOM time travel
+
+Each island's markup at three moments: as the server sent it, after it hydrated, and when the page went away, with the diff between them, and the visit's layout shifts drawn on a page-shaped map with the island that moved. An island whose hydrated markup differs from the server's tells you exactly which nodes changed, whether a design system inserted marks, a script rewrote text, or hydration re-rendered. The snapshots are big, so they live only in the browser that made the visit, never on the server: open the page once while logged in, then the report reads them back from this browser.
+
+## Nested traces: inside the upstream
+
+While a recording runs, every outbound call carries a small ask. An upstream that also runs this profiler (with `Server-Timing` exposure on) answers with its own picture of that request in one response header: how long it took on its clock, how much was CPU, how much was waiting on its own calls and how many, the route it ran, its biggest calls. The waterfall's drawer opens the call bar into that picture, so "this call took 300 ms" becomes "40 ms of which was the upstream's CPU, 200 ms its own database, 60 ms network between us". Two services, one report.
+
+## The whole site: the request cloud and the layer cake
+
+`/__profiler/site` draws every request as a dot, time across and duration up on a log scale, coloured by route, with caught requests marked. Drag across a range and the hot functions of the always-on sampler windows inside it appear, so "why are 3 percent of product pages slow" becomes a selection. Under it, the layer cake: per route, the sum of its requests split into CPU, waiting on calls, and the rest, sorted by total, with the count, p50 and p95. On a long-lived host these come from the instance's own memory. On an ephemeral host they come from the sink (see Recording): every instance posts its rows to a URL you own, and the page reads them back from any URL you serve them from, over days.
+
+## What the common slow patterns look like
+
+- **Waiting, not computing**: the budget bar is mostly idle, the CPU is low, the wall time is high. The answer is in the network waterfall, or in the waiting-by-function table for non-HTTP I/O like files and timers. (Or a database/socket driver that the profiler cannot see into. The report says so.)
+- **One heavy component**: a single large box in the treemap. That component tops the table sorted by self.
+- **Death by a thousand cuts**: the treemap is a field of small same-colored boxes. Sort the component table by total to find the parent that renders them all.
+- **Allocation pressure**: GC is a visible slice of busy time. The allocators table names the cause.

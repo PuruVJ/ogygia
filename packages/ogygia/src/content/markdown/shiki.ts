@@ -3,6 +3,9 @@ const ESCAPE_BACKTICK = /`/g;
 const ESCAPE_INTERPOLATION = /\$\{/g;
 const LEADING_LF = /^\n/;
 const TRAILING_LF = /\n$/;
+const CODE_ID_META_RE = /ogygia-code-id=(\S+)/;
+const CODE_ID_META_STRIP_RE = /\s*ogygia-code-id=\S+/;
+const DOUBLE_QUOTE_G = /"/g;
 
 /**
  * Shiki dual-theme highlighter for markdown fences + remotes.
@@ -127,9 +130,13 @@ let highlighter_key = '';
 export function normalize_shiki(options: MarkdownShikiOptions = {}): ResolvedShiki {
 	const themes = options.themes ?? DEFAULT_THEMES;
 	const lightName =
-		typeof themes.light === 'string' ? themes.light : String((themes.light as { name?: string }).name ?? 'light');
+		typeof themes.light === 'string'
+			? themes.light
+			: String((themes.light as { name?: string }).name ?? 'light');
 	const darkName =
-		typeof themes.dark === 'string' ? themes.dark : String((themes.dark as { name?: string }).name ?? 'dark');
+		typeof themes.dark === 'string'
+			? themes.dark
+			: String((themes.dark as { name?: string }).name ?? 'dark');
 
 	return {
 		themes,
@@ -178,7 +185,10 @@ export function wrap_html(html: string, wrapperClass: string | false) {
 
 /** Escape for embedding inside a Svelte `{@html \`…\`}` template (mdsvex highlighter). */
 export function escape_svelte(html: string) {
-	return html.replace(ESCAPE_BACKSLASH, '\\\\').replace(ESCAPE_BACKTICK, '\\`').replace(ESCAPE_INTERPOLATION, '\\${');
+	return html
+		.replace(ESCAPE_BACKSLASH, '\\\\')
+		.replace(ESCAPE_BACKTICK, '\\`')
+		.replace(ESCAPE_INTERPOLATION, '\\${');
 }
 
 /** Wrap plain fence HTML in the svelte-embeddable form the COMPONENT path needs. The region emitter
@@ -210,7 +220,9 @@ export async function highlight(
 	// fence in a large imported corpus would otherwise fail the whole build. Fall back to plain text.
 	const loaded = highlighter.getLoadedLanguages();
 	const safe_lang =
-		lang === 'text' || lang === 'plaintext' || lang === 'txt' || loaded.includes(lang) ? lang : 'text';
+		lang === 'text' || lang === 'plaintext' || lang === 'txt' || loaded.includes(lang)
+			? lang
+			: 'text';
 	return highlighter.codeToHtml(code.replace(LEADING_LF, '').replace(TRAILING_LF, ''), {
 		lang: safe_lang,
 		themes: {
@@ -228,7 +240,7 @@ export async function highlight(
  *  `slug-code-<hash>` permalink id (see `remark-code-ids.ts`). Matches an unquoted, space-free id. */
 function pluck_code_id(meta: string | undefined | null): string | null {
 	if (!meta) return null;
-	const m = /ogygia-code-id=(\S+)/.exec(meta);
+	const m = CODE_ID_META_RE.exec(meta);
 	return m ? m[1]! : null;
 }
 
@@ -241,7 +253,11 @@ function pluck_code_id(meta: string | undefined | null): string | null {
  *  the per-fence (lang, meta, code). Meta parsers are counted (plain functions); variants contribute
  *  their preference name + `cache_key`; transformers their `name`s. A stage whose BEHAVIOR changes
  *  while its name stays put is invisible here — bump `cacheSalt` (or version the name) while iterating. */
-export function fence_config_key(cfg: ResolvedShiki, pipe: CodePipeline, cache_salt = ''): string[] {
+export function fence_config_key(
+	cfg: ResolvedShiki,
+	pipe: CodePipeline,
+	cache_salt = ''
+): string[] {
 	return [
 		cache_salt,
 		theme_key(cfg),
@@ -253,7 +269,11 @@ export function fence_config_key(cfg: ResolvedShiki, pipe: CodePipeline, cache_s
 	];
 }
 
-export function create_mdsvex_highlighter(cfg: ResolvedShiki, pipeline?: CodePipeline, cache_salt = '') {
+export function create_mdsvex_highlighter(
+	cfg: ResolvedShiki,
+	pipeline?: CodePipeline,
+	cache_salt = ''
+) {
 	const pipe = pipeline ?? default_pipeline();
 	const config_key = fence_config_key(cfg, pipe, cache_salt);
 	return async function content_mdsvex_highlighter(
@@ -291,9 +311,20 @@ export async function render_code_region(
 	// Strip our internal `ogygia-code-id=…` token from the meta before handing the REST to Shiki as
 	// `__raw`, so meta transformers (`{1-3,5}` line highlight, word highlight, `// [!code …]`) read
 	// the author's infostring without our bookkeeping leaking in.
-	const shiki_meta = (meta ?? '').replace(/\s*ogygia-code-id=\S+/, '').trim();
+	const shiki_meta = (meta ?? '').replace(CODE_ID_META_STRIP_RE, '').trim();
 	const hl = (source: string, l: string, rm: string) =>
-		highlight(source, l || 'text', { themes: cfg.themes, langs: cfg.langs, wrapperClass: false, defaultColor: cfg.defaultColor, transformers: cfg.transformers }, rm || undefined);
+		highlight(
+			source,
+			l || 'text',
+			{
+				themes: cfg.themes,
+				langs: cfg.langs,
+				wrapperClass: false,
+				defaultColor: cfg.defaultColor,
+				transformers: cfg.transformers
+			},
+			rm || undefined
+		);
 
 	const { html, count, file } = await render_fence(code, lang || 'text', shiki_meta, pipe, hl);
 
@@ -301,7 +332,9 @@ export async function render_code_region(
 	let plain: string;
 	if (count > 1) {
 		// Multi-variant container: stamp the permalink id on the outer `<div class="og-code">`.
-		const tagged = id ? html.replace('<div class="og-code"', `<div id="${id}" class="og-code"`) : html;
+		const tagged = id
+			? html.replace('<div class="og-code"', `<div id="${id}" class="og-code"`)
+			: html;
 		plain = wrap_html(tagged, cfg.wrapperClass);
 	} else {
 		// Single variant: stamp `data-lang` + id + the pipeline's `file` (chrome draws the filename
@@ -309,7 +342,7 @@ export async function render_code_region(
 		let attrs = '';
 		if (lang && lang !== 'text') attrs += `data-lang="${lang}" `;
 		if (id) attrs += `id="${id}" `;
-		if (file) attrs += `data-file="${file.replace(/"/g, '&quot;')}" `;
+		if (file) attrs += `data-file="${file.replace(DOUBLE_QUOTE_G, '&quot;')}" `;
 		const tagged = attrs ? html.replace('<pre ', `<pre ${attrs}`) : html;
 		plain = wrap_html(tagged, cfg.wrapperClass);
 	}

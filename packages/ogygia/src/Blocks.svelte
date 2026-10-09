@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
 	/**
 	 * Render a Builder.io-style page tree — the one block renderer, public and internal both.
 	 *
@@ -18,18 +18,21 @@
 	import Region from './Region.svelte';
 	import Self from './Blocks.svelte';
 	import { resolve_block_tree } from './content/blocks.js';
+	import type { BlockNode, BlockRegistry, BlockSchedule, ResolvedBlockNode } from './content/blocks.js';
 
-	/**
-	 * `tree` + `registry` is the public API. `nodes` is the resolved channel — how a `blocks()` body
-	 * and recursion feed already-resolved regions back in; you rarely pass it yourself.
-	 * @type {{
-	 *   tree?: import('./content/blocks.js').BlockNode | import('./content/blocks.js').BlockNode[] | null,
-	 *   registry?: import('./content/blocks.js').BlockRegistry,
-	 *   schedule?: import('./content/blocks.js').BlockSchedule,
-	 *   nodes?: import('./content/blocks.js').ResolvedBlockNode[]
-	 * }}
-	 */
-	let { tree, registry, schedule, nodes: resolved } = $props();
+	// `tree` + `registry` is the public API. `nodes` is the resolved channel — how a `blocks()` body
+	// and recursion feed already-resolved regions back in; you rarely pass it yourself.
+	let {
+		tree,
+		registry,
+		schedule,
+		nodes: resolved
+	}: {
+		tree?: BlockNode | BlockNode[] | null;
+		registry?: BlockRegistry;
+		schedule?: BlockSchedule;
+		nodes?: ResolvedBlockNode[];
+	} = $props();
 
 	const nodes = $derived(resolved ?? resolve_block_tree(tree, registry ?? {}, schedule));
 </script>

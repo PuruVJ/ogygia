@@ -12,6 +12,7 @@
 	 */
 	import { on } from 'svelte/events';
 	import type { Snippet } from 'svelte';
+	import { page } from '$app/state';
 	import { roving } from './roving.js';
 	import type { Heading } from '../types.js';
 
@@ -36,8 +37,10 @@
 	let active = $state('');
 
 	// The "top" entry is a real link to the current page (so it's a valid href, not a bare `#`), but
-	// clicking it just scrolls to the top — no navigation. Server-safe default for the SSR pass.
-	const top_href = $derived(typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/');
+	// clicking it just scrolls to the top — no navigation. The page's own path, the same on the server
+	// and in the browser (a `window.location` read here drew `/` on the server: every page's top link
+	// changed as it woke). The path alone: a prerendered page may not read `url.search`
+	const top_href = $derived(page.url.pathname);
 	function to_top(e: MouseEvent) {
 		e.preventDefault();
 		window.scrollTo({ top: 0, behavior: 'smooth' });

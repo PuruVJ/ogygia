@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { rewrite_regions, region_key } from '../src/vite/regions.js';
+import { rewrite_regions, region_key } from '../src/compiler/content/regions.js';
 
 let dir: string;
 let registry_id: string;
@@ -31,7 +31,9 @@ describe('rewrite_regions', () => {
 		const out = rewrite_regions(src, registry_id);
 		// one import per match, each a raw region
 		expect((out.match(/with \{ region: 'raw' \}/g) ?? []).length).toBe(4);
-		expect(out).toContain(`import __og_region_0 from "./blocks/Callout.svelte" with { region: 'raw' };`);
+		expect(out).toContain(
+			`import __og_region_0 from "./blocks/Callout.svelte" with { region: 'raw' };`
+		);
 		// object keyed by basename (sorted → Callout, Hero, HeroBanner, Prose)
 		expect(out).toContain(`"Callout": __og_region_0`);
 		expect(out).toContain(`"hero-banner":`);
@@ -62,17 +64,20 @@ describe('rewrite_regions', () => {
 		fs.writeFileSync(path.join(dupdir, 'b', 'Hero.svelte'), 'x');
 		fs.writeFileSync(path.join(dupdir, 'b', 'sub', 'Hero.svelte'), 'x');
 		try {
-			expect(() => rewrite_regions(`export const r = import.meta.og.regions('./b/**/*.svelte');`, path.join(dupdir, 'r.ts'))).toThrow(
-				/two files map to the block key 'Hero'/
-			);
+			expect(() =>
+				rewrite_regions(
+					`export const r = import.meta.og.regions('./b/**/*.svelte');`,
+					path.join(dupdir, 'r.ts')
+				)
+			).toThrow(/two files map to the block key 'Hero'/);
 		} finally {
 			fs.rmSync(dupdir, { recursive: true, force: true });
 		}
 	});
 
 	it('rejects a non-literal glob argument', () => {
-		expect(() => rewrite_regions('const r = import.meta.og.regions(dir + "/*.svelte");', registry_id)).toThrow(
-			/must be a static string literal/
-		);
+		expect(() =>
+			rewrite_regions('const r = import.meta.og.regions(dir + "/*.svelte");', registry_id)
+		).toThrow(/must be a static string literal/);
 	});
 });

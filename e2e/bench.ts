@@ -7,9 +7,18 @@
 // Appends a row to internal/notes/perf-checkpoints.md. Micro-benches isolate the PLUGIN transform cost from
 // rollup/svelte; build timing captures the whole thing.
 // ─────────────────────────────────────────────────────────────────────────────
-import { transformHost } from '../packages/ogygia/dist/compiler/transform.js';
+import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, appendFileSync, rmSync, readdirSync, statSync } from 'node:fs';
+import {
+	readFileSync,
+	writeFileSync,
+	existsSync,
+	appendFileSync,
+	rmSync,
+	readdirSync,
+	statSync
+} from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -20,6 +29,7 @@ const label = process.argv[2] || 'unlabeled';
 const doBuild = process.argv.includes('--build');
 
 const ctx = {
+	...CTX_EXTRA,
 	root: '/app',
 	libDir: '/app/src/lib',
 	readFile: () => null,
@@ -73,7 +83,9 @@ function bench(name: string, src: string, iters: number): number {
 	}
 	samples.sort((a, b) => a - b);
 	const median = samples[Math.floor(samples.length / 2)];
-	console.log(`  ${name.padEnd(22)} ${(median * 1000).toFixed(1).padStart(7)} µs/call   (${Math.round(1 / median)} calls/ms)`);
+	console.log(
+		`  ${name.padEnd(22)} ${(median * 1000).toFixed(1).padStart(7)} µs/call   (${Math.round(1 / median)} calls/ms)`
+	);
 	return median;
 }
 
@@ -100,7 +112,10 @@ if (doBuild) {
 	rmSync(path.join(docs, '.svelte-kit/output'), { recursive: true, force: true });
 	rmSync(path.join(docs, 'node_modules/.vite'), { recursive: true, force: true });
 	const t0 = performance.now();
-	const res = spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], { cwd: docs, encoding: 'utf-8' });
+	const res = spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], {
+		cwd: docs,
+		encoding: 'utf-8'
+	});
 	docsBuildMs = performance.now() - t0;
 	if (res.status !== 0) {
 		process.stderr.write(res.stderr ?? '');

@@ -1,0 +1,112 @@
+---
+title: Testing
+summary: The devtools and the profiler as test primitives. Your Playwright tests measure hydration, interactions, server time and weight, and fail on a budget.
+related:
+  - devtools/overview
+  - profiler/overview
+---
+
+`ogygia/testing` turns the devtools and the profiler into primitives for your own tests. Your tests click through the app as they always do. ogygia measures what happened, and your test asserts on it.
+
+- `page()`: the page load as the browser measured it. Vitals, each island's wake, and the findings of the [Page tab](/docs/devtools/overview#the-page-tab).
+- `hydration()`: each island's hydration status, with the difference for a changed one (the [Hydration tab](/docs/devtools/overview#the-hydration-tab)).
+- `record(actions)`: what your actions did. Slow interactions and the function behind each, dead and repeated clicks, requests with the server's own split, long tasks, shifts, errors (the [Record tab](/docs/devtools/overview#recording-a-session)).
+- `profile(path)`: the [SSR profiler](/docs/profiler/overview)'s report of a path. Score, forecast, findings, and weight.
+
+## With Playwright
+
+ogygia does not import Playwright. You hand it your own `test` and `expect`:
+
+```ts title=tests/fixtures.ts
+import { test as base, expect as baseExpect } from '@playwright/test';
+import { withOgygia } from 'ogygia/testing';
+
+export const { test, expect } = withOgygia(base, baseExpect);
+```
+
+```ts title=tests/checkout.spec.ts
+import { test, expect } from './fixtures';
+
+test('checkout stays fast', async ({ page, ogygia }) => {
+  await page.goto('/cart');
+
+  expect(await ogygia.page()).toMeetBudget({ lcp: 2500, cls: 0.1 });
+  expect(await ogygia.hydration()).toHydrateCleanly();
+
+  const session = await ogygia.record(async () => {
+    await page.getByRole('button', { name: 'Buy' }).click();
+  });
+  expect(session).toHaveNoFindings({ severity: 'warn' });
+  expect(session).toMeetBudget({ maxInteractionMs: 200, errors: 0 });
+
+  expect(await ogygia.profile('/cart')).toMeetBudget({ score: 80, renderMs: 200 });
+});
+```
+
+The server under test needs `ogygia({ devtools: true })`: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#enabling-in-a-build-a-preview-deploy)). The fixture sets the `og_devtools` cookie for your `baseURL`, so each page is measured from its first load. `profile()` needs `ogygia({ profiler: true })`. On a build, give it the profiler's key:
+
+```ts title=playwright.config.ts
+export default defineConfig({
+  use: { baseURL: 'http://127.0.0.1:4173', ogygiaOptions: { profilerKey: process.env.OGYGIA_PROFILER_SECRET } },
+});
+```
+
+A recording can span pages: actions that do a full page load (`page.goto`, a form post, a plain link) keep recording on the next page, and the report covers all of them (`session.counts.pages`).
+
+## The server, over the same actions
+
+`record(actions, { server: true })` also records the server while your actions run: the profiler's CPU across every request they made, their outbound calls, and the requests themselves. It lands on the session as `server`:
+
+```ts
+const session = await ogygia.record(() => page.getByRole('button', { name: 'Buy' }).click(), { server: true });
+
+session.server.window.requests; // [{ method: 'POST', path: '/cart/checkout', ms: 412, status: 200 }, …]
+expect(session.server).toHaveNoFindings({ severity: 'warn' });
+expect(session).toMeetBudget({ serverBusyMs: 300 });
+```
+
+Under the hood this is the profiler's window: `POST /__profiler/window/start`, then `POST /__profiler/window/stop` answers the report. One window runs at a time. It waits a few seconds for a background sample to finish, and stops itself after a minute.
+
+## The matchers
+
+| Matcher | Passes when |
+| --- | --- |
+| `toHaveNoFindings({ severity?, ignore? })` | No finding at or above `severity` (`info`, `warn`, `error`), except the codes in `ignore`. Works on page, session and profile reports. |
+| `toMeetBudget(budget)` | Every line of the budget is met. |
+| `toHydrateCleanly({ allow? })` | No island failed, recovered, or changed its markup (`allow` lets some statuses through). |
+
+A failing matcher says what missed and where: `Clock: changed — −rendered on the server +rendered on the browser`.
+
+Budget lines, by report:
+
+| Report | Lines |
+| --- | --- |
+| `page()` | `lcp`, `fcp`, `cls`, `inp`, `ttfb`, `longTaskMs`, `islandWakeMs` (the slowest island's wake) |
+| `record()` | `maxInteractionMs`, `slowInteractions`, `errors`, `longTaskMs`, `failedRequests`, `serverBusyMs` (with `server: true`) |
+| `profile()` | `score` (at least), `renderMs` (the median render), `jsBytes` (JS at start; a build only) |
+
+`checkBudget(report, budget)` returns the same lines as data, for your own logic.
+
+## Reports in CI
+
+Every report a test takes is attached to its result as `ogygia.json`. Playwright's HTML reporter shows it, and the JSON reporter carries it. Two helpers turn two runs (a base branch and a head branch) into a PR comment:
+
+```ts title=scripts/ogygia-comment.ts
+import { compare, toMarkdown } from 'ogygia/testing';
+
+// each run: the parsed `ogygia.json` attachments ({ test, reports }[])
+const diff = compare(baseRun, headRun);
+console.log(toMarkdown(diff)); // score and server-render moves, new and fixed findings, per test
+```
+
+## Other runners and drivers
+
+`createOgygia(driver)` gives the same four primitives over any driver that can run a function in the page (`evaluate`) and, for `profile()`, make a request (`get`). Puppeteer's `Page` fits. The matchers are plain `expect.extend` matchers:
+
+```ts
+import { expect } from 'vitest';
+import { createOgygia, ogygiaMatchers } from 'ogygia/testing';
+
+expect.extend(ogygiaMatchers);
+const ogygia = createOgygia({ evaluate: (fn, arg) => page.evaluate(fn, arg) });
+```

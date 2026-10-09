@@ -197,7 +197,9 @@
 		width: 100%;
 		background: currentColor;
 		border-radius: 2px;
-		transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 120ms ease;
+		transition:
+			transform 200ms cubic-bezier(0.23, 1, 0.32, 1),
+			opacity 120ms ease;
 	}
 	.og-cbar-bars.og-open span:nth-child(1) {
 		transform: translateY(5px) rotate(45deg);

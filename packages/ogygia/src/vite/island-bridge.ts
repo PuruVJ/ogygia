@@ -22,10 +22,7 @@ type IslandBridge = {
 	 * {@link transform} to register. No-op when unset.
 	 */
 	scan:
-		| ((ctx: {
-				root: string;
-				readFile: (abs: string) => string | null;
-		  }) => void | Promise<void>)
+		| ((ctx: { root: string; readFile: (abs: string) => string | null }) => void | Promise<void>)
 		| null;
 	/**
 	 * Markdown config the user passes to `ogygia({ content: { markdown } })`. The `markdown()`

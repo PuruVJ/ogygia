@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_wire, WIRE_EXPR } from '../src/vite/og-wire.js';
+import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
 import {
 	wire,
 	__register_transportable,
 	reduce_transportable,
 	revive_transportable
 } from '../src/live-transport.js';
-import { moduleHasTransportable } from '../src/vite/transportables.js';
+import {
+	moduleHasTransportable,
+	appendTransportRegistrations
+} from '../src/compiler/content/transportables.js';
 
 const MARKUP = ['.svelte'] as const;
 const CODEC = `{ encode: (c) => c.v, decode: (v) => new C(v) }`;
@@ -72,9 +75,9 @@ describe('rewrite_wire — strictness (build errors, file:line)', () => {
 	});
 
 	it('rejects a call outside a static class member', () => {
-		expect(() => rewrite_wire(`const c = import.meta.og.wire(${CODEC});`, '/app/x.ts', MARKUP)).toThrow(
-			/called outside a static class member/
-		);
+		expect(() =>
+			rewrite_wire(`const c = import.meta.og.wire(${CODEC});`, '/app/x.ts', MARKUP)
+		).toThrow(/called outside a static class member/);
 	});
 
 	it('rejects a wrongly-named static member', () => {
@@ -101,6 +104,43 @@ describe('prescan detection — raw source (pre-rewrite)', () => {
 	it('a REWRITTEN computed member is still detected', () => {
 		const src = `export class C { static [Symbol.for('ogygia.wire')] = ${CODEC}; }`;
 		expect(moduleHasTransportable(src, '/app/c.ts')).toBe(true);
+	});
+});
+
+describe('appendTransportRegistrations — inject ONLY for wire classes', () => {
+	const path = { relative: (_from: string, to: string) => to };
+	const reg = (src: string, id = '/app/x.ts') =>
+		appendTransportRegistrations(src, id, '/app', path);
+
+	it('a PLAIN exported class is NOT registered (no ogygia import dragged in)', () => {
+		// The bug: `BroadcastSessionUpdates` in a package that never touches ogygia was getting an
+		// injected `import … from 'ogygia/internal/register'`, which then failed to resolve.
+		const out = reg(`export class BroadcastSessionUpdates { send() {} }`);
+		expect(out).toBe(null);
+	});
+
+	it('a wire class (rewritten computed-symbol form) IS registered', () => {
+		const out = reg(
+			`export class C { static [Symbol.for('ogygia.wire')] = ${CODEC}; }`,
+			'/app/c.ts'
+		);
+		expect(out).not.toBe(null);
+		expect(out).toContain("from 'ogygia/internal/register'");
+		expect(out).toContain('c.ts#C');
+	});
+
+	it('a wire class (pre-rewrite blessed spelling) IS registered too', () => {
+		const out = reg(`export class C { static wire = import.meta.og.wire(${CODEC}); }`, '/app/c.ts');
+		expect(out).not.toBe(null);
+		expect(out).toContain('c.ts#C');
+	});
+
+	it('mixed module: only the wire class is registered, the plain one is skipped', () => {
+		const src = `export class Plain { x = 1; }\nexport class Cart { static [Symbol.for('ogygia.wire')] = ${CODEC}; }`;
+		const out = reg(src, '/app/m.ts');
+		expect(out).not.toBe(null);
+		expect(out).toContain('m.ts#Cart');
+		expect(out).not.toContain('m.ts#Plain');
 	});
 });
 

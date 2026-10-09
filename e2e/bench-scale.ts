@@ -2,7 +2,7 @@
 // ogygia SCALE bench — stress the two things that actually grow with a big app:
 //   A. TRANSFORM: thousands of hosts × many island imports (varied schedules) → the plugin's
 //      per-host parse + rewrite + island dedup.
-//   B. CONTENT: a collection with MILLIONS of entries → catalog build, get()/ids()/entries().
+//   B. CONTENT: a collection with MILLIONS of entries → catalog build, refs()/get().
 //
 //   node verify/bench-scale.ts                 # default scale (fast, ~seconds)
 //   node verify/bench-scale.ts --huge          # millions of content entries + 5k hosts
@@ -10,21 +10,21 @@
 //
 // Appends a row to internal/notes/perf-checkpoints.md (## scale).
 // ─────────────────────────────────────────────────────────────────────────────
-import { transformHost } from '../packages/ogygia/dist/compiler/transform.js';
+import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
+import { CTX_EXTRA } from './_ctx-extra.ts';
 import { content } from '../packages/ogygia/dist/content/factory.js';
 
-// The lib no longer ships `fromArray` (write a `{ get, list, ids }` directly); local copy for fixtures.
-function fromArray<T extends { id: string }>(entries: T[]) {
+// A minimal in-memory Source (the only shape `content({ loader })` accepts): `refs()` (metadata rows)
+// + `get()` (one full entry). The lib no longer ships a `fromArray`; this local fixture builds one.
+function fromArray<T extends { id: string; data: Record<string, unknown> }>(entries: T[]) {
 	const map = new Map(entries.map((e) => [e.id, e]));
 	return {
+		async refs() {
+			return entries.map((e) => ({ id: e.id, data: e.data }));
+		},
 		async get(id: string) {
-			return map.get(id) ?? null;
-		},
-		async list() {
-			return entries.slice();
-		},
-		async ids() {
-			return entries.map((e) => e.id);
+			const e = map.get(id);
+			return e ? { id: e.id, data: e.data } : null;
 		}
 	};
 }
@@ -39,12 +39,15 @@ const HOSTS = Number(process.env.HOSTS || (huge ? 5000 : 800));
 const ISLANDS = Number(process.env.ISLANDS || 10);
 const DISTINCT = Number(process.env.DISTINCT || 60);
 const ENTRIES = Number(process.env.ENTRIES || (huge ? 2_000_000 : 200_000));
-const label = process.argv.find((a) => !a.startsWith('--') && a !== process.argv[0] && a !== process.argv[1]) || (huge ? 'huge' : 'default');
+const label =
+	process.argv.find((a) => !a.startsWith('--') && a !== process.argv[0] && a !== process.argv[1]) ||
+	(huge ? 'huge' : 'default');
 
 const mb = () => Math.round(process.memoryUsage().heapUsed / 1e6);
 const ms = (t: number) => `${t.toFixed(0)}ms`;
 
 const ctx = {
+	...CTX_EXTRA,
 	root: '/app',
 	libDir: '/app/src/lib',
 	readFile: () => null,
@@ -59,7 +62,7 @@ const ctx = {
 
 // deterministic pseudo-random (no Math.random in some contexts; also reproducible)
 let seed = 123456789;
-const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
 const pick = <T>(arr: T[]) => arr[Math.floor(rnd() * arr.length)];
 
 const SCHEDULES = [
@@ -90,7 +93,9 @@ function makeHost(i: number): string {
 	return `<script>\n${imports.join('\n')}\n</script>\n${usages.join('\n')}`;
 }
 
-console.log(`\n▸ SCALE bench  [${label}]  hosts=${HOSTS} islands/host=${ISLANDS} distinct=${DISTINCT} entries=${ENTRIES.toLocaleString()}`);
+console.log(
+	`\n▸ SCALE bench  [${label}]  hosts=${HOSTS} islands/host=${ISLANDS} distinct=${DISTINCT} entries=${ENTRIES.toLocaleString()}`
+);
 
 // ── A. TRANSFORM at scale ────────────────────────────────────────────────────
 const hosts: string[] = [];
@@ -108,8 +113,12 @@ for (let i = 0; i < HOSTS; i++) {
 }
 const tA = performance.now() - tA0;
 console.log(`\n  A. transform ${HOSTS} hosts`);
-console.log(`     total ${ms(tA)}  ·  ${(HOSTS / (tA / 1000)).toFixed(0)} hosts/s  ·  ${(tA / HOSTS * 1000).toFixed(0)}µs/host`);
-console.log(`     islands emitted ${islandCount.toLocaleString()}  ·  distinct chunks ${idsSeen.size.toLocaleString()}  ·  dedupe ${(1 - idsSeen.size / islandCount).toFixed(2)}x`);
+console.log(
+	`     total ${ms(tA)}  ·  ${(HOSTS / (tA / 1000)).toFixed(0)} hosts/s  ·  ${((tA / HOSTS) * 1000).toFixed(0)}µs/host`
+);
+console.log(
+	`     islands emitted ${islandCount.toLocaleString()}  ·  distinct chunks ${idsSeen.size.toLocaleString()}  ·  dedupe ${(1 - idsSeen.size / islandCount).toFixed(2)}x`
+);
 
 // ── B. CONTENT at scale ──────────────────────────────────────────────────────
 console.log(`\n  B. content collection, ${ENTRIES.toLocaleString()} entries`);
@@ -123,9 +132,11 @@ const memBefore = mb();
 const col = content({ loader: fromArray([...gen()]) });
 
 const tIds0 = performance.now();
-const ids = await col.ids(); // triggers catalog build
+const ids = await col.refs(); // triggers catalog build
 const tIds = performance.now() - tIds0;
-console.log(`     build+ids() ${ms(tIds)}  ·  ${ids.length.toLocaleString()} ids  ·  heap +${mb() - memBefore}MB`);
+console.log(
+	`     build+refs() ${ms(tIds)}  ·  ${ids.length.toLocaleString()} refs  ·  heap +${mb() - memBefore}MB`
+);
 
 // random get() latency
 const tGet0 = performance.now();
@@ -136,12 +147,16 @@ for (let i = 0; i < N_GET; i++) {
 	if (e) hit++;
 }
 const tGet = performance.now() - tGet0;
-console.log(`     ${N_GET.toLocaleString()} random get() ${ms(tGet)}  ·  ${(tGet / N_GET * 1000).toFixed(2)}µs/get  ·  hits ${hit.toLocaleString()}`);
+console.log(
+	`     ${N_GET.toLocaleString()} random get() ${ms(tGet)}  ·  ${((tGet / N_GET) * 1000).toFixed(2)}µs/get  ·  hits ${hit.toLocaleString()}`
+);
 
 const tEnt0 = performance.now();
-const all = await col.entries();
+const all = await col.refs();
 const tEnt = performance.now() - tEnt0;
-console.log(`     entries() (materialize all) ${ms(tEnt)}  ·  ${all.length.toLocaleString()} rows  ·  heap ${mb()}MB`);
+console.log(
+	`     refs() (materialize all) ${ms(tEnt)}  ·  ${all.length.toLocaleString()} rows  ·  heap ${mb()}MB`
+);
 
 // ── C. CONTENT GRAPH at scale (relations + backlink inversion) ────────────────
 const G = Math.min(ENTRIES, huge ? 500_000 : 50_000);
@@ -151,25 +166,31 @@ const authors = content({
 });
 const posts = content({
 	loader: fromArray(
-		Array.from({ length: G }, (_, i) => ({ id: `p${i}`, data: { title: `P${i}`, author: `a${i % G}` } }))
+		Array.from({ length: G }, (_, i) => ({
+			id: `p${i}`,
+			data: { title: `P${i}`, author: `a${i % G}` }
+		}))
 	),
 	relations: () => ({ author: authors })
 });
-await posts.ids();
+await posts.refs();
 const tBl0 = performance.now();
 const N_BL = 50_000;
 for (let i = 0; i < N_BL; i++) await authors.get(`a${Math.floor(rnd() * G)}`);
 const tBl = performance.now() - tBl0;
-console.log(`     ${N_BL.toLocaleString()} get() on backlink target ${ms(tBl)}  ·  ${(tBl / N_BL * 1000).toFixed(2)}µs/get (amortized; index built once/version)`);
+console.log(
+	`     ${N_BL.toLocaleString()} get() on backlink target ${ms(tBl)}  ·  ${((tBl / N_BL) * 1000).toFixed(2)}µs/get (amortized; index built once/version)`
+);
 
 // ── record ───────────────────────────────────────────────────────────────────
 const file = path.join(repo, 'internal/notes/perf-checkpoints.md');
-const header = '\n## scale\n\n| label | hosts | islands | content entries | transform ms | hosts/s | build+ids ms | get µs | backlink µs | entries ms | heap MB |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n';
+const header =
+	'\n## scale\n\n| label | hosts | islands | content entries | transform ms | hosts/s | build+ids ms | get µs | backlink µs | entries ms | heap MB |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n';
 if (!existsSync(file)) writeFileSync(file, '# ogygia perf checkpoints\n');
 const hasScaleSection = existsSync(file) && readFileSync(file, 'utf-8').includes('## scale');
 if (!hasScaleSection) appendFileSync(file, header);
 appendFileSync(
 	file,
-	`| ${label} | ${HOSTS} | ${islandCount} | ${ENTRIES} | ${tA.toFixed(0)} | ${(HOSTS / (tA / 1000)).toFixed(0)} | ${tIds.toFixed(0)} | ${(tGet / N_GET * 1000).toFixed(2)} | ${(tBl / N_BL * 1000).toFixed(2)} | ${tEnt.toFixed(0)} | ${mb()} |\n`
+	`| ${label} | ${HOSTS} | ${islandCount} | ${ENTRIES} | ${tA.toFixed(0)} | ${(HOSTS / (tA / 1000)).toFixed(0)} | ${tIds.toFixed(0)} | ${((tGet / N_GET) * 1000).toFixed(2)} | ${((tBl / N_BL) * 1000).toFixed(2)} | ${tEnt.toFixed(0)} | ${mb()} |\n`
 );
 console.log(`\n✓ scale checkpoint '${label}' appended to internal/notes/perf-checkpoints.md\n`);

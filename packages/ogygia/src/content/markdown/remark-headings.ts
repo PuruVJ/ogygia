@@ -22,6 +22,13 @@ const SLUG_STRIP_NON_ALNUM = /[^\p{L}\p{N} \-_]/gu;
 const SLUG_WS_UNDER = /[\s_]+/g;
 const SLUG_MULTI_DASH = /-+/g;
 const SLUG_EDGE_DASH = /^-|-$/g;
+const ENTITY_HEX_G = /&#x([0-9a-f]+);/gi;
+const ENTITY_DEC_G = /&#(\d+);/g;
+const ENTITY_LT_G = /&lt;/g;
+const ENTITY_GT_G = /&gt;/g;
+const ENTITY_QUOT_G = /&quot;/g;
+const ENTITY_APOS_G = /&#39;|&apos;/g;
+const ENTITY_AMP_G = /&amp;/g;
 
 type MdNode = {
 	type?: string;
@@ -68,13 +75,13 @@ export function remarkHeadings(options: RemarkHeadingsOptions = {}) {
 		// text for the TOC (the id slug strips these anyway; the display text must not show `&#123;`).
 		const decodeEntities = (s: string): string =>
 			s
-				.replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-				.replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
-				.replace(/&lt;/g, '<')
-				.replace(/&gt;/g, '>')
-				.replace(/&quot;/g, '"')
-				.replace(/&#39;|&apos;/g, "'")
-				.replace(/&amp;/g, '&');
+				.replace(ENTITY_HEX_G, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+				.replace(ENTITY_DEC_G, (_, dec) => String.fromCodePoint(Number(dec)))
+				.replace(ENTITY_LT_G, '<')
+				.replace(ENTITY_GT_G, '>')
+				.replace(ENTITY_QUOT_G, '"')
+				.replace(ENTITY_APOS_G, "'")
+				.replace(ENTITY_AMP_G, '&');
 
 		const textOf = (node: MdNode): string => {
 			if (typeof node.value === 'string') return node.value;

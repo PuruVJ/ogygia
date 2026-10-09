@@ -92,7 +92,8 @@ export class Collection<
 	#backlinkKey: string | null = null;
 
 	constructor(opts: CollectionBaseOptions<Data, Meta>) {
-		if (!opts || opts.loader == null) throw new Error('[ogygia/content] content() requires `loader`');
+		if (!opts || opts.loader == null)
+			throw new Error('[ogygia/content] content() requires `loader`');
 		if (typeof opts.loader.refs !== 'function' || typeof opts.loader.get !== 'function') {
 			throw new Error(
 				'[ogygia/content] `loader` must be a source ({ refs, get }) — use markdown()/json()/blocks()/folder()/glob()'
@@ -100,7 +101,8 @@ export class Collection<
 		}
 		this.#opts = opts;
 		this.#source = opts.loader;
-		this.#schema = opts.schema == null ? [] : Array.isArray(opts.schema) ? opts.schema : [opts.schema];
+		this.#schema =
+			opts.schema == null ? [] : Array.isArray(opts.schema) ? opts.schema : [opts.schema];
 		this.#visible = opts.filter ?? (() => true);
 		GRAPH.all.add(this as unknown as Collection<Record<string, unknown>>);
 	}
@@ -348,11 +350,18 @@ export class Collection<
 
 	/** All visible refs (each graphed) — the corpus as metadata, never bodies. */
 	async refs(ctx: ReadContext = {}): Promise<ContentRef<Data, Meta>[]> {
-		return Promise.all((await this.ready()).filter((e) => this.#visible(e, ctx)).map((e) => this.withGraph(e)));
+		return Promise.all(
+			(await this.ready()).filter((e) => this.#visible(e, ctx)).map((e) => this.withGraph(e))
+		);
 	}
 
 	/** Build a full {@link Entry} (ref + body + source + graph) from a source `get`. */
-	async #entryFrom(ref: ContentRef<Data, Meta>, full: SourceEntry<Meta> | null, rel: Record<string, RefEntry | RefEntry[] | null>, backlinks: RefEntry[]): Promise<Entry<Data, Meta>> {
+	async #entryFrom(
+		ref: ContentRef<Data, Meta>,
+		full: SourceEntry<Meta> | null,
+		rel: Record<string, RefEntry | RefEntry[] | null>,
+		backlinks: RefEntry[]
+	): Promise<Entry<Data, Meta>> {
 		return {
 			id: ref.id,
 			data: ref.data,
