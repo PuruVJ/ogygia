@@ -4,12 +4,8 @@
 // On a Kit-booted document the kit-world page thread supplies Kit's REAL page instead (the
 // island store is never seeded there); the snapshot is read fresh per subscription — a static
 // read, the same accepted trade-off as the shim's own url fallback (see e2e/split-brain.ts).
-import {
-	page_state,
-	subscribe_page,
-	kit_bridge,
-	warn_foreign_page_read
-} from './page-store.svelte.js';
+import { page_state, subscribe_page, warn_foreign_page_read } from './page-store.svelte.js';
+import { kit_bridge } from './kit-bridge.js';
 
 function snapshot() {
 	// A `$page` subscription reads every field — inside a mounted MFE island that is the SHELL's

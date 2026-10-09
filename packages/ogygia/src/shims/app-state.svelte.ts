@@ -3,7 +3,8 @@
 // document, where the kit-page bridge hands us Kit's REAL reactive `page` (shared modules on
 // csr=true pages must see Kit's truth; the island store is never seeded there).
 
-import { page_state, kit_bridge, warn_foreign_page_read } from './page-store.svelte.js';
+import { page_state, warn_foreign_page_read } from './page-store.svelte.js';
+import { kit_bridge } from './kit-bridge.js';
 
 export type { PageSnapshot } from './page-store.svelte.js';
 

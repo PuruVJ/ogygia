@@ -25,7 +25,7 @@ const chunk = (type: string, data: Uint8Array) => {
 };
 
 /** an RGB PNG; every `noisy`-th row random, the rest one colour (`noisy` 0: all one colour) */
-function png(w: number, h: number, noisy: number): Uint8Array {
+function png(w: number, h: number, noisy: number): Uint8Array<ArrayBuffer> {
 	const raw = new Uint8Array((w * 3 + 1) * h);
 	for (let y = 0; y < h; y++) {
 		const row = raw.subarray(y * (w * 3 + 1) + 1, (y + 1) * (w * 3 + 1));
@@ -47,7 +47,7 @@ function png(w: number, h: number, noisy: number): Uint8Array {
 	return out;
 }
 
-const made = new Map<string, Uint8Array>();
+const made = new Map<string, Uint8Array<ArrayBuffer>>();
 const SPEC: Record<string, [number, number, number]> = { 'big.png': [2000, 1333, 25], 'flat.png': [2000, 1333, 0], 'right.png': [400, 300, 1] };
 
 export const GET = ({ params }) => {

@@ -12,7 +12,7 @@
 // `Symbol.for('ogygia.nav')` (runtime/nav-handle.ts). Importing the router here once made it — and
 // everything its lazy chunks need — shared between island code and the runtime, which split the
 // runtime's boot into a dozen files. Types only below.
-import { kit_bridge } from './page-store.svelte.js';
+import { kit_bridge } from './kit-bridge.js';
 import { bind_to_component } from '../runtime/nav-hooks.js';
 import type { NavHandle } from '../runtime/nav-handle.js';
 import type { BeforeNavigateCallback, AfterNavigateCallback } from '../runtime/router.js';
