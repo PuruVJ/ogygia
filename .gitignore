@@ -8,6 +8,9 @@ node_modules/
 /apps/playground/build/
 /apps/docs/build/
 dist/
+# (a planted duplicate module: the playground's devtools lab imports one package by its src and its
+# dist path — the dist copy IS the fixture)
+!/apps/playground/src/lib/dup-pkg/dist/
 *.log
 .DS_Store
 .env
