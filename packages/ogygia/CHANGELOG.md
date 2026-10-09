@@ -71,6 +71,7 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - The server request path is one request store, one document pass and one walk, and stops allocating per item.
 - A slow or hung page can no longer wedge the profiler or the site, and recordings coordinate across processes.
 - The Vite plugin is a compiler, and region rendering is region-granular.
+- `rolldown` is no longer a dependency: the compiler parses and bundles through the app's Vite, keeping its 16 MB native binary out of production installs.
 
 ### Fixed
 

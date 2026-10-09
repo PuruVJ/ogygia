@@ -205,22 +205,22 @@
 	},
 	"dependencies": {
 		"devalue": "^5.9.0",
-		"esm-env": "^1.2.2"
+		"esm-env": "^1.2.2",
+		"estree-walker": "^3.0.3",
+		"magic-string": "^1.1.0",
+		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
 		"@neodrag/svelte": "3.0.0-next.12",
 		"@orama/orama": "^3.0.0",
 		"@sveltejs/kit": ">=2.70.2 <4",
 		"bits-ui": "^2.0.0",
-		"estree-walker": "^3.0.3",
-		"magic-string": "^1.1.0",
 		"mdsvex": "^0.12.0",
 		"playwright": "^1.40.0",
 		"@playwright/test": "^1.40.0",
 		"rolldown": ">=1.0.0",
 		"shiki": "^3.0.0 || ^4.0.0",
 		"svelte": "^5.40.0",
-		"tinyglobby": "^0.2.17",
 		"vite": "^7.0.0 || ^8.0.0"
 	},
 	"peerDependenciesMeta": {
@@ -228,12 +228,6 @@
 			"optional": true
 		},
 		"bits-ui": {
-			"optional": true
-		},
-		"estree-walker": {
-			"optional": true
-		},
-		"magic-string": {
 			"optional": true
 		},
 		"mdsvex": {
@@ -250,9 +244,6 @@
 		},
 		"shiki": {
 			"optional": true
-		},
-		"tinyglobby": {
-			"optional": true
 		}
 	},
 	"devDependencies": {
@@ -265,8 +256,6 @@
 		"@vitest/browser": "4.1.10",
 		"@vitest/browser-playwright": "4.1.10",
 		"bits-ui": "^2.18.1",
-		"estree-walker": "^3.0.3",
-		"magic-string": "^1.1.0",
 		"mdsvex": "^0.12.8",
 		"oxlint": "^1.77.0",
 		"rolldown": ">=1.0.0",
@@ -274,7 +263,6 @@
 		"shiki": "^4.4.1",
 		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",
-		"tinyglobby": "^0.2.17",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"valibot": "^1.4.2",
