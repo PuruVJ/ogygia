@@ -28,7 +28,8 @@
  * disconnects, reconnects and hydrates anew (the island-children shape).
  */
 import { parse_wire_text, wire_is_json } from './wire-format.js';
-import { page_state, set_page, reset_page, kit_bridge, type PageSnapshot } from '../shims/page-store.svelte.js';
+import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.js';
+import { kit_bridge } from '../shims/kit-bridge.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
 import { transport_decoders } from './app-transport.js';
 import { boot_link, slots } from './slots.js';

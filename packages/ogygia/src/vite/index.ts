@@ -124,7 +124,7 @@ const KIT_CLIENT_APP_RE = /\/generated\/client(-optimized)?\/app\.js$/;
 const ROUTE_HOST_OR_OPTION_RE = /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)$/;
 // Appended INLINE (no extra module): publishes Kit's REAL reactive `page`/`navigating` (and the
 // real `$page` store, so shim subscribers stay LIVE through Kit navigations) on the well-known
-// slot the island `$app/*` shims read through (`kit_bridge()` in shims/page-store). Importer is
+// slot the island `$app/*` shims read through (`kit_bridge()` in shims/kit-bridge). Importer is
 // Kit's own entry — never island-graph — so `$app/state`/`$app/stores` here are KIT'S REAL
 // modules, already in (or a few bytes atop) Kit's client graph. Runs at module-eval, BEFORE
 // `kit.start()`'s synchronous hydrate flush, so a shared component's first `page.data` read
