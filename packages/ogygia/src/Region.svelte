@@ -20,7 +20,7 @@
 	 * collapsed into this file.
 	 */
 	import { untrack, getContext, setContext, createRawSnippet } from 'svelte';
-	import { KIT_REQUEST_CONTEXT, kit_request_event } from './server/kit-context.js';
+	import { KIT_REQUEST_CONTEXT, kit_page_version, kit_request_event } from './server/kit-context.js';
 	import { stringify } from 'devalue';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
@@ -575,7 +575,8 @@
 		// (throws), and signs on the server. Same URL/MAC/TTL as every other mint path. `__cacheTtl`
 		// (seconds, from the preset's `maxAge`) is signed in so the handle sets Cache-Control; absent
 		// → 0 → the hole is served `no-store` (dynamic by default).
-		return mintServerIsland(__entry, __props || {}, __cacheTtl || 0);
+		// (+ the page facts it renders from, for a hole whose tree reads page.data: server/render-page.ts)
+		return mintServerIsland(__entry, __props || {}, __cacheTtl || 0) + kit_page_version(__entry);
 	});
 
 	// DOM `entry`: the importable module URL a deferred island wakes with AFTER its HTML swaps in.

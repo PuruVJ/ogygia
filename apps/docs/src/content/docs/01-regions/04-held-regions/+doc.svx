@@ -232,6 +232,41 @@ Call `bump(id)` from an island. The on-page region at that address repaints from
   <SingleFlightDemo />
 </div>
 
+## A lake that can refresh
+
+A site header is often a lake: static markup, with islands and holes inside that wake on their own. When something the server renders from changes without a navigation, such as a saved language or a sign-in, render the header as a held region from a `query`, and refresh that query from a `command`:
+
+```ts
+// header-region.remote.ts: its own module (see the caveats)
+import { command, getRequestEvent, query } from '$app/server';
+import { region } from 'ogygia';
+import Header from './Header.svelte'; // a plain import, no wake: HTML only
+
+export const headerRegion = query(async () => region(Header, {}));
+
+export const saveLocale = command(v.string(), async (locale) => {
+  getRequestEvent().cookies.set('locale', locale, { path: '/' });
+  await headerRegion().refresh(); // the refreshed header rides this response
+});
+```
+
+```svelte
+<Region of={headerRegion()} />
+```
+
+What happens on the refresh:
+
+- **The header renders for the page it is mounted on.** In the command's request there is no page render. The region's components still read the calling page's `page.url`, `page.route`, `page.params` and `page.data`. ogygia looks that page up through Kit's own data request, with the visitor's cookies, after the command's change. A hole fetched on its own gets the same.
+- **It morphs in place.** The header element stays, and so does an island inside it, with its state. An island reading `page.data` shows the new values: the answer carries the keys its islands read, and they join the page's data before anything wakes.
+- **A hole refetches only when its answer can change.** A hole's address names its call and the page data its tree reads. When the locale changed, the hole fetches its new answer, and its current one stays on screen until then. When nothing changed, it keeps what it has.
+
+Caveats:
+
+- **Put the region's remote in its own module.** The header's own tree may import remotes, and the remote module imports the header. A component inside the header that needs to trigger the refresh can't import the command: dispatch a DOM event and call the command where the `<Region>` is mounted.
+- **On a Kit-hydrated (`csr = true`) page, Kit owns `page.data`.** Refresh the page's data first (`await invalidateAll()`), then refresh the region, so the islands inside read the same values the header was rendered with. In dev, ogygia warns when they differ.
+- **Only server loads count.** A key a universal load (`+page.ts`, `+layout.ts`) returns exists only inside a full page render. In dev, a region reading such a key names it.
+- **`locals` a load sets are not part of the page.** The command's request never runs the layout's load. Set what the header reads from `locals` in the remote function too.
+
 ## Warm a hole early: preload(region)
 
 `preload(region)` warms the HTML of one hole before its schedule. Thus the hole can paint early, while its own `wake` stays lazy. Import it from `ogygia`. It takes a region value and nothing else.

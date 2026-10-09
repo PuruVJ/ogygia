@@ -103,6 +103,9 @@ export class RuntimeSession {
 	readonly settled_lakes = new WeakSet<Element>();
 	readonly initialized_lakes = new Set<string>();
 	readonly server_gate = new ConcurrencyGate(3);
+	/** The page facts answers rendered with (server/render-page.ts), queued at the answer seam
+	 *  (`region_fragment`) for the next hydrate to merge into the page store (seeds.ts). */
+	readonly page_facts: string[] = [];
 
 	#remote_seeded = false;
 	#page_seeded = false;

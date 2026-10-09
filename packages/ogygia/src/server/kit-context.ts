@@ -35,9 +35,21 @@ export interface KitPage {
 
 type Reader = () => KitPage | null;
 type EventReader = () => unknown | null;
+/** THE PAGE OF A RENDER, as a render root uses it (server/render-page.ts behind it). */
+interface RenderPagePort {
+	/** Before the root renders: its page ready for the reader. `reads_data` — `true`: this render
+	 *  reads `page.data`; `false`: it does not; `null`: unknown here (the request's kind decides). */
+	ready(reads_data: boolean | null): Promise<void> | void;
+	/** After it rendered: what its answer carries of the page it rendered for (`''`: nothing). */
+	tail(): string;
+	/** A hole minted in this render: the address part naming the page facts it renders from
+	 *  (`&pv=…`), `''` for a hole whose tree reads no `page.data`. */
+	version(hole_id: string): string;
+}
 interface Slots {
 	reader: Reader | null;
 	event_reader: EventReader | null;
+	render_page?: RenderPagePort | null;
 }
 
 const SLOT = Symbol.for('ogygia.kit-context');
@@ -55,6 +67,32 @@ export function set_kit_page_reader(fn: Reader | null): void {
  *  hands a server island: `locals`, `cookies`, `url`, `request` of the request rendering it. */
 export function set_kit_event_reader(fn: EventReader | null): void {
 	slots.event_reader = fn;
+}
+
+/** hooks.ts installs the render-page port: in a request rendering for a page it is not (a hole, a
+ *  remote call), that page is looked up once (server/page-facts.ts) so the reader answers from it,
+ *  and an answer carries the facts its islands read. */
+export function set_render_page_port(port: RenderPagePort | null): void {
+	slots.render_page = port;
+}
+
+/**
+ * Await before an async render root starts: the page this render belongs to, ready for the reader.
+ * Inside a page request, on the client, or for a render that reads no `page.data`: nothing to wait for
+ * (`undefined`, no microtask).
+ */
+export function kit_page_ready(reads_data: boolean | null = null): Promise<void> | void {
+	return slots.render_page?.ready(reads_data);
+}
+
+/** Append to a render root's HTML: the page facts its islands read, when it rendered for a page. */
+export function kit_page_facts_tail(): string {
+	return slots.render_page?.tail() ?? '';
+}
+
+/** Append to a minted hole endpoint: its page version (server/render-page.ts), or `''`. */
+export function kit_page_version(hole_id: string): string {
+	return slots.render_page?.version(hole_id) ?? '';
 }
 
 /** The live event the installed reader answers (null off-request / on the client). */

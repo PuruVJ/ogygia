@@ -30,6 +30,9 @@ declare module 'virtual:ogygia/server-manifest' {
 	export const island_url: Record<string, string>;
 	/** Server-island id → its component name (`SlowHole`), where the component file is known. */
 	export const island_name: Record<string, string>;
+	/** Server-island id → its server tree reads `page.data` (the build's answer); `null` in dev:
+	 *  unknown, so every hole looks its page up. */
+	export const island_reads_page_data: Record<string, boolean> | null;
 }
 declare module 'virtual:ogygia/runtime-url' {
 	const url: string;

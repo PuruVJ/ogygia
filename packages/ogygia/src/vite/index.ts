@@ -1325,7 +1325,15 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 			renderChunk(code) {
 				// Patch the fn-manifest placeholder (og.$ factory registrations) once every transform has run.
-				return compiler.patch_fn_manifest(code);
+				const fn = compiler.patch_fn_manifest(code);
+				// ...and the server manifest's per-hole `page.data` answer, from the finished graph.
+				if (!server_leg_of(this)) return fn;
+				const page = compiler.patch_page_data_reads(
+					fn?.code ?? code,
+					(id) => this.getModuleInfo(id),
+					() => this.getModuleIds()
+				);
+				return page ?? fn;
 			},
 
 			// THE STABLE NAMES (client build): each island entry and the runtime are content-hashed; their

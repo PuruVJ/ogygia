@@ -26,6 +26,7 @@ import {
 } from './region-attrs.js';
 import { slots } from './slots.js';
 import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.js';
+import { PAGE_FACTS_SELECTOR } from '../page-facts-script.js';
 import { NAV_HANDLE_KEY, mpa_nav, publish_nav } from './nav-handle.js';
 import { link_boot } from './boot-link.js';
 import {
@@ -155,6 +156,13 @@ function hydrate_core(): Promise<HydrateCore> {
 	return core_promise;
 }
 
+/** An answer just went in carrying the page facts it rendered with (server/render-page.ts): once
+ *  islands are awake (the hydrate core loaded), they join the page store NOW, so a KEPT island reading
+ *  those keys shows the new values; before any island woke, the first hydrate absorbs them. */
+function absorb_page_facts_now(): void {
+	if (runtime_session.page_facts.length) loaded_core?.seed_page_once();
+}
+
 /** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`).
  *  `pointerover` (not `pointerenter`) so it fires on hover AND bubbles through the boxless
  *  `display: contents` wrapper from a descendant the pointer actually moves over. */
@@ -246,6 +254,13 @@ function dom_ready() {
  */
 export function region_fragment(html: string): { frag: DocumentFragment; ready: Promise<void> } {
 	const frag = parse_region_html(html);
+	// THE PAGE AN ANSWER RENDERED FOR (server/render-page.ts): the `page.data` its islands read, as the
+	// server looked it up. Queued for the hydrate of those islands (seeds.ts), never left in the DOM.
+	// (one per render root: a region rendered inside a hole carries its own)
+	for (const facts of frag.querySelectorAll(PAGE_FACTS_SELECTOR)) {
+		facts.remove();
+		runtime_session.page_facts.push(facts.textContent ?? '');
+	}
 	const links = frag.querySelectorAll('link[data-ogygia-region-css]');
 	const pending: Array<Promise<void>> = [];
 	if (links.length && import.meta.env.DEV) {
@@ -860,6 +875,7 @@ class OgygiaRegion extends HTMLElement {
 		else this.replaceChildren(frag);
 		restore_adopt_sheets();
 		init_shadow_registries(this);
+		absorb_page_facts_now();
 		this.#done = true;
 		if (revalidate) this.setAttribute('data-revalidated', '');
 		else if (!is_awake(this)) this.setAttribute('data-hydrated', '');
@@ -908,10 +924,26 @@ class OgygiaRegion extends HTMLElement {
 			const morph = slots.morph;
 			if (morph) morph(this, nodes);
 			else this.replaceChildren(...nodes);
+			// the holes this render re-minted: a new address fetches its new answer (the kept ones keep
+			// theirs: same call, same page facts)
+			for (const el of this.querySelectorAll('ogygia-region')) if (el instanceof OgygiaRegion) el.#renew();
 		}
 		restore_adopt_sheets();
 		init_shadow_registries(this);
+		absorb_page_facts_now();
 		this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
+	}
+
+	/**
+	 * A refreshed region re-minted this hole (server/render-page.ts): at a new address — new props, or
+	 * new page facts (`pv`) — it fetches its new answer, the current one on screen until that lands.
+	 * A hole that never fetched yet fetches the new address on its own schedule.
+	 */
+	#renew(): void {
+		if (!this.#frame_address || !is_deferred(this)) return;
+		const endpoint = this.getAttribute('endpoint');
+		if (!endpoint || frameAddress(endpoint) === this.#frame_address) return;
+		void this.#fetch_html({ revalidate: true });
 	}
 
 	/**
@@ -945,7 +977,13 @@ class OgygiaRegion extends HTMLElement {
 		this.#fetch_abort?.abort();
 		this.#fetch_abort = new AbortController();
 		const outer = this.#fetch_abort.signal;
+		const previous = this.#frame_address;
 		const address = (this.#frame_address = frameAddress(endpoint));
+		// a re-minted hole (a refreshed region: new props, new page facts) answers at its NEW address
+		if (this.#frame_unsub && previous !== address) {
+			this.#frame_unsub();
+			this.#frame_unsub = null;
+		}
 		// Bind if we haven't (SWR/lake remount reaches #fetch_html without going through #server).
 		// Idempotent: #server already subscribed for the normal defer flow.
 		if (!this.#frame_unsub) {

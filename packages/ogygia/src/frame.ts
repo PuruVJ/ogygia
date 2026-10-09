@@ -33,5 +33,7 @@ export function frameAddress(endpoint: string): string {
 	const params = new URLSearchParams(endpoint.slice(q + 1));
 	const id = params.get('id');
 	const props = params.get('props');
-	return id != null ? `${id}|${props ?? ''}` : endpoint.slice(0, q);
+	// the page facts a hole renders from name it too (server/render-page.ts): new facts, new address
+	const pv = params.get('pv');
+	return id != null ? `${id}|${props ?? ''}${pv ? '|' + pv : ''}` : endpoint.slice(0, q);
 }

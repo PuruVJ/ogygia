@@ -514,6 +514,18 @@ function off_limits(el: Element, walk: boolean): boolean {
 }
 
 /**
+ * A kept hole's ADDRESS is the render's that minted it; only its content is its answer's
+ * (ownership.ts). A live answer that re-minted it (new props, new page facts: server/render-page.ts)
+ * hands the kept element its new `endpoint`; the hole fetches there (core.ts `#renew`), its current
+ * answer on screen until the new one lands.
+ */
+function carry_address(from: Element, to: Element, walk: boolean): void {
+	if (walk || from.localName !== 'ogygia-region' || to.localName !== 'ogygia-region') return;
+	const next = to.getAttribute('endpoint');
+	if (next && next !== from.getAttribute('endpoint')) from.setAttribute('endpoint', next);
+}
+
+/**
  * Reconcile a single old node toward a single new node, replacing only when it cannot be morphed.
  * Used by keyed matches, where `from` and `to` may be different tags (the reason the tag/namespace
  * replace check lives here). Positional/lockstep callers have already proven compatibility via
@@ -534,7 +546,7 @@ function morph_node(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	// Not ours to touch (ownership.ts): matched by its key, kept as it is. Checked BEFORE the replace
 	// below, or a keyed match whose tag changed would hand a kept widget / a hydrated island over to a
 	// fresh copy anyway.
-	if (off_limits(ef, walk)) return;
+	if (off_limits(ef, walk)) return carry_address(ef, et, walk);
 	// Can't turn one element into a different element — hand the whole node over.
 	if (ef.tagName !== et.tagName || ef.namespaceURI !== et.namespaceURI) {
 		ef.parentNode?.replaceChild(clone(to), ef);
@@ -565,8 +577,8 @@ function morph_same(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	}
 	if (kind !== ELEMENT) return;
 	const ef = from as Element;
-	if (off_limits(ef, walk)) return;
 	const et = to as Element;
+	if (off_limits(ef, walk)) return carry_address(ef, et, walk);
 	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et); // before attributes — see morph_node
 	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned); // upgraded host attrs are the runtime's — skip

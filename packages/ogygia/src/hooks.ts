@@ -24,7 +24,7 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
-import { islands as island_modules, island_url, island_name } from 'virtual:ogygia/server-manifest';
+import { islands as island_modules, island_url, island_name, island_reads_page_data } from 'virtual:ogygia/server-manifest';
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.js';
@@ -48,8 +48,21 @@ import { router_freeze_verdict } from './freeze/routers.js';
 import {
 	set_kit_page_reader,
 	set_kit_event_reader,
+	set_render_page_port,
+	kit_page_ready,
+	kit_page_facts_tail,
 	kit_render_context
 } from './server/kit-context.js';
+import { PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from './server/page-facts.js';
+import {
+	configure_render_page,
+	note_render_page_ask,
+	page_url_of,
+	prepare_render_page,
+	render_page,
+	render_page_facts_script,
+	render_page_version
+} from './server/render-page.js';
 import { absolutize_hole_html } from './server/hole-urls.js';
 import { KEEP_FALLBACK_HTML, is_keep_fallback } from './keep-fallback.js';
 import { serve_federation, install_federation } from './federation/serve.js';
@@ -262,6 +275,10 @@ set_seed_ask_reader(() => {
 	return d ? { wanted: d.wanted, keys: d.keys } : undefined;
 });
 set_page_recorder((snapshot, seed, remotes, entry) => {
+	// a render FOR a page (a hole, a remote call): its islands' asks are the render-page model's —
+	// the answer carries those keys of the looked-up page (server/render-page.ts)
+	const event = (try_get_request_store() as { event?: RequestEvent } | undefined)?.event;
+	if (event && note_render_page_ask(event, seed)) return;
 	const bag = bag_of();
 	if (!bag) {
 		// a router document's render: only the asks matter (it builds its own seed from its snapshot)
@@ -297,54 +314,38 @@ set_tail_reader(() => bag_of()?.tail ?? null);
 // The request's shared measure memo (seed-refs.ts): a hole endpoint, a remote-function render or a
 // router document has no bag, so each of its roots is measured on its own — as before.
 set_measure_memo_reader(() => bag_of()?.measure_memo ?? null);
-// Kit's `__request__` context for every server render root ogygia starts (document root, inline
-// island, deferred endpoint, snippet body): rebuilt from the recorded page snapshot, with the live
-// event filling url/params/route when the snapshot has none (a Kit page: Kit's own values; a
-// deferred endpoint: the endpoint's request — an island rendering in isolation sees no page).
-/** The islands endpoint path the handle serves (the constructor updates it when configured). */
-let islands_endpoint_path: string = DEFAULT_ISLANDS_ENDPOINT;
-
-/**
- * The PAGE a render belongs to. A hole renders in its own request (`/__ogygia__?…`); a component
- * inside it reading `$page.url` — for the locale, a country name, a cookie prefix — must see the
- * page, not the endpoint. The runtime's same-origin fetch carries the page as `Referer`
- * (`strict-origin-when-cross-origin` sends the full URL same-origin), so the endpoint request
- * answers with it; anything else (no referer, cross-origin, an ESI subrequest) keeps its own URL.
- */
-function page_url_of(event: RequestEvent | undefined): URL | undefined {
-	if (!event) return undefined;
-	if (!event.url.pathname.endsWith(islands_endpoint_path)) return event.url;
-	const referer = event.request.headers.get('referer');
-	if (!referer) return event.url;
-	try {
-		const page = new URL(referer);
-		if (page.origin === event.url.origin) return page;
-	} catch {
-		/* malformed referer — fall through */
-	}
-	return event.url;
-}
+// THE PAGE OF A RENDER (server/render-page.ts): Kit's `__request__` context for every server render
+// root ogygia starts (document root, inline region, hole, snippet body, a remote call's region) is
+// built by ONE model — in the page (the recorded snapshot), for a page (a hole or a remote call: the
+// Referer's page, its facts looked up once), or its own. Here only the request state is handed in.
+configure_render_page({ endpoint_path: DEFAULT_ISLANDS_ENDPOINT, warn: dev ? (m) => console.warn(m) : null });
 
 // The live event for `requestEvent()` (public): what a server island reads its `locals` /
 // `cookies` / `url` from, in the request that renders it — no `$app/server` in the component.
 set_kit_event_reader(
 	() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event ?? null
 );
+/** Does this hole's server tree read `page.data` (the build's answer; unknown in dev → yes). */
+const hole_reads_page_data = (id: string): boolean => island_reads_page_data === null || island_reads_page_data[id] !== false;
+type TransportStore = { event?: RequestEvent; state?: { transport?: Record<string, { decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }> } };
+set_render_page_port({
+	ready(reads_data) {
+		const store = try_get_request_store() as TransportStore | undefined;
+		return prepare_render_page(store?.event, store?.state?.transport, reads_data);
+	},
+	tail() {
+		const store = try_get_request_store() as TransportStore | undefined;
+		return render_page_facts_script(store?.event, store?.state?.transport);
+	},
+	version(hole_id) {
+		if (!hole_reads_page_data(hole_id)) return '';
+		const v = render_page_version((try_get_request_store() as TransportStore | undefined)?.event, bag_of()?.page ?? undefined);
+		return v ? '&pv=' + v : '';
+	}
+});
 set_kit_page_reader(() => {
 	const bag = bag_of();
-	const event = (try_get_request_store() as { event?: RequestEvent } | undefined)?.event;
-	if (!bag && !event) return null;
-	const snap = bag?.page ?? {};
-	return {
-		url: snap.url?.href ? new URL(snap.url.href) : page_url_of(event),
-		params: snap.params ?? event?.params ?? {},
-		route: snap.route ?? { id: event?.route.id ?? null },
-		status: snap.status ?? 200,
-		data: snap.data ?? {},
-		form: snap.form ?? null,
-		error: snap.error ?? null,
-		state: {}
-	};
+	return render_page(bag ? (bag.page ?? {}) : undefined, (try_get_request_store() as { event?: RequestEvent } | undefined)?.event);
 });
 // LATE REGIONS: a promise `of` registers per request; the id keys the region's slot wrapper AND
 // its later template chunk. The taker DRAINS (the router reads once, post-render).
@@ -822,7 +823,7 @@ class OgygiaHandle {
 		// pathname by SUFFIX (see `handle`). The endpoint is a clash-safe path, so a suffix match is
 		// unambiguous regardless of `paths.base`.
 		this.#endpoint = options.endpoint || DEFAULT_ISLANDS_ENDPOINT;
-		islands_endpoint_path = this.#endpoint;
+		configure_render_page({ endpoint_path: this.#endpoint, warn: dev ? (m) => console.warn(m) : null });
 		this.render_rate = new RateLimiter({
 			max: rate_limit_cfg.max,
 			windowMs: rate_limit_cfg.windowMs
@@ -907,6 +908,18 @@ class OgygiaHandle {
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request
 		// arrives at `<base>/__ogygia__`, and the endpoint is a leading-slash, clash-safe path.
 		if (!path.endsWith(this.#endpoint)) {
+			// PAGE FACTS (server/page-facts.ts): a render outside its page looks the page up through
+			// Kit's own data request. Nothing renders here: no bag, no freeze. The answer names the
+			// route and params Kit matched, which the data alone does not carry.
+			if (event.isDataRequest && event.request.headers.has(PAGE_FACTS_HEADER)) {
+				const res = await resolve(event);
+				try {
+					res.headers.set(PAGE_FACTS_ROUTE_HEADER, encodeURIComponent(JSON.stringify({ id: event.route.id, params: event.params })));
+				} catch {
+					/* an immutable response: the render keeps the endpoint's route and params */
+				}
+				return res;
+			}
 			// FREEZE read path (render-on-write): GET, no query string, not prerendering. A hit
 			// serves the stored bytes — Kit, loads, and Svelte never run. A concurrent cold miss
 			// JOINS the in-flight render (the stampede law: N concurrent requests, ONE render).
@@ -1774,7 +1787,10 @@ class OgygiaHandle {
 		/** filled when the render ran: its wait for a slot in the gate, and its time in it */
 		timing?: { queue_ms?: number; render_ms?: number },
 		/** the endpoint request's URL: the answer's island graph is made root-absolute against it */
-		base?: URL
+		base?: URL,
+		/** the hole's server tree reads `page.data`: its page is looked up before it renders (a cache
+		 *  hit never pays it) */
+		reads_page_data = false
 	): Promise<string | null> {
 		// R6/G2: the ONE cache-fronted render seam. `cached_render` serves a memo when the hole opted
 		// into a positive `maxAge` (key carries the session seal — a per-user render never crosses
@@ -1791,7 +1807,9 @@ class OgygiaHandle {
 				// only, and without it a hole's islands loaded their chunks in a waterfall)
 				Promise.resolve(rendered).then((out) => {
 					const body = out.body as string;
-					return !base || body === KEEP_FALLBACK_HTML ? body : hole_graph_script(out.head as string, base) + body;
+					if (body === KEEP_FALLBACK_HTML) return body;
+					// (and the page facts its islands read: they hydrate against what it rendered from)
+					return (base ? hole_graph_script(out.head as string, base) : '') + body + kit_page_facts_tail();
 				}),
 				new Promise<never>((_, rej) =>
 					setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)
@@ -1800,7 +1818,10 @@ class OgygiaHandle {
 		};
 		try {
 			return await cached_render(
-				() => {
+				async () => {
+					// the page first, outside the gate: a render slot is never held while Kit runs the
+					// page's loads (and a cache hit never gets here)
+					await kit_page_ready(reads_page_data);
 					if (!timing) return render_gate.run(render_body);
 					// the wait for a slot, and the time in it. A slot is held for the whole render,
 					// awaits included: a hole waiting on slow data keeps the next one queued
@@ -1828,6 +1849,13 @@ class OgygiaHandle {
 			if (import.meta.env.DEV) console.warn('[ogygia] region render failed:', e);
 			return null;
 		}
+	}
+
+	/** A cached hole's memo key: the call and the visitor's session, and — when its tree reads
+	 *  `page.data` — the page it renders for (one page's facts never answer another page's hole). */
+	#hole_cache_key(id: string, payload: string, event: RequestEvent, reads_page_data: boolean): string {
+		const session = this.#region_session(event);
+		return render_cache_key(id, payload, reads_page_data ? session + '\n' + page_url_of(event).href : session);
 	}
 
 	/** The session cookie value sealed into a region capability (empty when no `sessionCookie` is
@@ -1976,10 +2004,8 @@ class OgygiaHandle {
 		if (!props) return null;
 
 		const ttl = Number(ttl_raw) || 0;
-		const cache =
-			ttl > 0
-				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
-				: undefined;
+		const reads_page_data = hole_reads_page_data(id);
+		const cache = ttl > 0 ? { key: this.#hole_cache_key(id, payload, event, reads_page_data), ttl } : undefined;
 		// (the profiler logs each batched hole as its own hole request — only when one listens)
 		const stats = batch && has_batch_hole_listener();
 		const t0 = stats ? performance.now() : 0;
@@ -1991,7 +2017,8 @@ class OgygiaHandle {
 			cache,
 			stats ? (o) => (outcome = o) : undefined,
 			stats ? timing : undefined,
-			event.url
+			event.url,
+			reads_page_data
 		);
 		if (stats)
 			record_batch_hole_stats(event.request, {
@@ -2134,13 +2161,11 @@ class OgygiaHandle {
 		}
 
 		const ttl = Number(ttl_raw) || 0;
-		const cache =
-			ttl > 0
-				? { key: render_cache_key(id, payload, this.#region_session(event)), ttl }
-				: undefined;
+		const reads_page_data = hole_reads_page_data(id);
+		const cache = ttl > 0 ? { key: this.#hole_cache_key(id, payload, event, reads_page_data), ttl } : undefined;
 		const timing: { queue_ms?: number; render_ms?: number } = {};
 		let outcome: 'hit' | 'miss' | 'none' = 'none';
-		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing, event.url);
+		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing, event.url, reads_page_data);
 		// (the profiler's hole economics, with the wait for a render slot: a hole's time on the
 		// server is its queue AND its render)
 		record_hole_stats(event.request, {

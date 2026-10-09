@@ -20,7 +20,7 @@ import RawHtml from './RawHtml.svelte';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
 import { REGION_BRAND } from './region-brand.js';
-import { kit_render_context } from './server/kit-context.js';
+import { kit_page_facts_tail, kit_page_ready, kit_render_context } from './server/kit-context.js';
 import { region_css_tags } from './server/html-scan.js';
 export { REGION_BRAND };
 
@@ -257,8 +257,9 @@ function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
 				// tear down the outer render's context → `push_element` reads null (a systemic 500). The
 				// `typeof document` guard above already keeps this leg server-only.
 				const { render } = await import('svelte/server');
-				// A fresh root: hand it Kit's `__request__` context (rebuilt per request), or a
-				// component reading `page.data` inside this body crashes during SSR.
+				// A fresh root: hand it Kit's `__request__` context — the page of the render
+				// (server/render-page.ts), awaited first: a region a remote call renders reads its page.
+				await kit_page_ready();
 				const r = await render(inline.component, {
 					props: inline.props,
 					context: kit_render_context()
@@ -268,7 +269,8 @@ function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
 				// dropping either form would ship them unstyled.
 				const nested = region_css_tags(r.head);
 				// Spread copies only enumerable own props → drops `then`, so `await` settles here.
-				return { ...inline, html: nested + r.body };
+				// (and the page facts its islands read, when it rendered for a page: server/render-page.ts)
+				return { ...inline, html: nested + r.body + kit_page_facts_tail() };
 			};
 			return run().then(onFulfilled, onRejected);
 		}

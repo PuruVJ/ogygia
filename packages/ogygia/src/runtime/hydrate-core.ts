@@ -17,6 +17,8 @@ import NestedProvider from '../NestedProvider.svelte';
 import { foreign_region_prop_revivers } from './foreign-props.js';
 import { SEED_REF_KEY, seed_ref_reviver } from '../seed-refs.js';
 import { parse_sidecar_text, seed_data_of, seed_page_once, seed_remote_once } from './seeds.js';
+// (for core.ts: an answer's page facts join the page store at once once islands are awake)
+export { seed_page_once };
 import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './region-attrs.js';
 import { boot_link, slots, type LiftedLake } from './slots.js';
 import { keep_host_classes, note_host_classes } from './host-classes.js';

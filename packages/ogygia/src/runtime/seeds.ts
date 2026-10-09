@@ -28,7 +28,7 @@
  * disconnects, reconnects and hydrates anew (the island-children shape).
  */
 import { parse_wire_text, wire_is_json } from './wire-format.js';
-import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.js';
+import { page_state, set_page, reset_page, kit_bridge, type PageSnapshot } from '../shims/page-store.svelte.js';
 import { install_page_defer, page_defer_revivers } from './page-defer.js';
 import { transport_decoders } from './app-transport.js';
 import { boot_link, slots } from './slots.js';
@@ -138,13 +138,62 @@ export function seed_remote_once(): void {
 	apply_remote_seed_text(el?.textContent);
 }
 
-/** Document-level page seed (one script from ogygiaHandle) — once per document. */
+/** Document-level page seed (one script from ogygiaHandle) — once per document; then any page facts
+ *  an answer brought since. Every hydrate calls it, before the island reads `page`. */
 export function seed_page_once(): void {
-	if (session().page_seeded) return;
-	session().mark_page_seeded();
-	if (typeof document === 'undefined') return;
-	const el = document.querySelector(PAGE_SEED_SELECTOR);
-	if (el) apply_page_seed(parse_page_seed(el));
+	if (!session().page_seeded) {
+		session().mark_page_seeded();
+		if (typeof document === 'undefined') return;
+		const el = document.querySelector(PAGE_SEED_SELECTOR);
+		if (el) apply_page_seed(parse_page_seed(el));
+	}
+	if (session().page_facts.length) absorb_page_facts();
+}
+
+/**
+ * ONE PAGE, NOT TWO (server/render-page.ts): an answer rendered outside its page — a hole, a region a
+ * remote call refreshed — carries the `page.data` keys its islands read, as the server just looked
+ * them up. They join the page store before those islands wake, so the islands hydrate against the
+ * values their HTML was rendered from, and every island reading the same keys sees them too (the
+ * page's data changed: a locale saved, a sign-in). On a Kit-hydrated page Kit owns `page.data`: the
+ * page's data is older than the answer's, and dev says to refresh it (`invalidateAll()`) first.
+ */
+function absorb_page_facts(): void {
+	const queued = session().page_facts.splice(0);
+	let merged: Record<string, unknown> | null = null;
+	for (const text of queued) {
+		let facts: Record<string, unknown>;
+		try {
+			facts = parse_wire_text(text, false, transport_decoders) as Record<string, unknown>;
+		} catch {
+			continue;
+		}
+		if (!facts || typeof facts !== 'object') continue;
+		merged = merged ? Object.assign(merged, facts) : { ...facts };
+	}
+	if (!merged) return;
+	const kit = kit_bridge();
+	if (kit) {
+		if (import.meta.env.DEV) {
+			const data = (kit.page.data ?? {}) as Record<string, unknown>;
+			const older = Object.keys(merged).filter((k) => data[k] !== merged![k] && JSON.stringify(data[k]) !== JSON.stringify(merged![k]));
+			if (older.length)
+				console.warn(
+					`[ogygia] a region came back rendered with newer page.data (${older.join(', ')}) than this Kit page holds. Refresh the page's data (invalidateAll()) before refreshing the region, or the islands inside it hydrate against the older values.`
+				);
+		}
+		return;
+	}
+	set_page({
+		url: page_state.url,
+		params: page_state.params,
+		route: page_state.route,
+		status: page_state.status,
+		data: { ...page_state.data, ...merged },
+		form: page_state.form,
+		error: page_state.error,
+		state: page_state.state
+	});
 }
 
 /**

@@ -23,7 +23,7 @@ export function server_manifest_module(
 	devUrlFor: (virtualPath: string) => string,
 	publicUrlFor: (iid: string) => string
 ): string {
-	if (!ssr) return `export const islands = {};\nexport const island_url = {};\nexport const island_name = {};`;
+	if (!ssr) return `export const islands = {};\nexport const island_url = {};\nexport const island_name = {};\nexport const island_reads_page_data = null;`;
 	const entries: string[] = [];
 	const urls: string[] = [];
 	const names: string[] = [];
@@ -47,6 +47,16 @@ export function server_manifest_module(
 	return (
 		`export const islands = {\n${entries.join(',\n')}\n};\n` +
 		`export const island_url = {\n${urls.join(',\n')}\n};\n` +
-		`export const island_name = {\n${names.join(',\n')}\n};`
+		`export const island_name = {\n${names.join(',\n')}\n};\n` +
+		// id → does the hole's SERVER tree read `page.data` (the page lookup a hole needs: server/
+		// render-page.ts). Known only once every module is transformed: a build patches the
+		// placeholder in renderChunk (driver `patch_page_data_reads`); dev leaves `null` (unknown → look up).
+		`export const island_reads_page_data = ${is_dev ? 'null' : PAGE_DATA_READS_PLACEHOLDER};`
 	);
 }
+
+/** The token the build replaces with its answer (driver `patch_page_data_reads`), inside a string
+ *  literal the bundler cannot fold: a plain `null` placeholder was inlined into every reader as the
+ *  constant it was (every hole then looked its page up). Unpatched it parses to nothing → `null`. */
+export const PAGE_DATA_READS_TOKEN = '__OGYGIA_PAGE_DATA_READS__';
+export const PAGE_DATA_READS_PLACEHOLDER = `(() => { try { return JSON.parse("${PAGE_DATA_READS_TOKEN}"); } catch { return null; } })()`;
