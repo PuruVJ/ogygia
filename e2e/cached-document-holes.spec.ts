@@ -13,8 +13,12 @@ import { AMP_ENTITY_G_RE, ENDPOINT_ATTR_RE } from './fixtures/re.ts';
 import { region_mac_message, sign } from '../packages/ogygia/dist/server/hmac.js';
 
 const ENV_SECRET_RE = /^OGYGIA_SECRET=(.+)$/m;
+// the secret the playground server signs with: the environment's (CI sets it; it also wins over
+// `.env` for the server), else the local `.env` file — which only a developer's checkout has
+const ENV_FILE = new URL('../apps/playground/.env', import.meta.url);
 const SECRET = (
-	fs.readFileSync(new URL('../apps/playground/.env', import.meta.url), 'utf8').match(ENV_SECRET_RE)?.[1] ?? ''
+	process.env.OGYGIA_SECRET ??
+	(fs.existsSync(ENV_FILE) ? (fs.readFileSync(ENV_FILE, 'utf8').match(ENV_SECRET_RE)?.[1] ?? '') : '')
 ).trim();
 const DAY = 24 * 3600;
 const now = () => Math.floor(Date.now() / 1000);
