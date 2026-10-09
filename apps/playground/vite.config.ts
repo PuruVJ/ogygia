@@ -9,6 +9,11 @@ export default defineConfig({
 		...(process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : {}),
 		...(process.env.PROFILER_NO_SOURCEMAPS ? { sourcemap: false } : {})
 	},
+	// The e2e suite builds this app (adapter-vercel writes `.vercel/output`, a copy of the server's whole
+	// dependency tree), then starts dev servers in the same folder. Vite's watcher skips only
+	// `node_modules` / `.git`: on Linux (one inotify watcher per directory) it crawled 126k directories of
+	// that output, grew to 3.4 GB and never became ready on CI. The build output is not source.
+	server: { watch: { ignored: ['**/.vercel/**'] } },
 	// ogygia MUST run before sveltekit() (enforce:'pre' also guarantees ordering)
 	plugins: [
 		ogygia({

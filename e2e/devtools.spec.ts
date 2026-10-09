@@ -160,9 +160,12 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		);
 
 		// ── DEVTOOLS PANEL: one mounted Svelte app — launcher opens a tabbed window (Lens/Bytes/Timeline) ──
-		const launcher = await page.$('[data-og-panel-toggle]');
-		check('panel: single launcher button is present on a devtools build', !!launcher);
-		if (launcher) {
+		// (a locator, not a handle: the launcher is drawn again when the dock's code arrives, and a held
+		// handle to the first one is detached by then — a slow CI runner clicked a removed button)
+		const launcher = page.locator('[data-og-panel-toggle]');
+		const has_launcher = (await launcher.count()) > 0;
+		check('panel: single launcher button is present on a devtools build', has_launcher);
+		if (has_launcher) {
 			await launcher.click(); // open the window (the dock's code may still be loading: it opens when in)
 			const winOpen = await page
 				.locator('[data-og-win]')
