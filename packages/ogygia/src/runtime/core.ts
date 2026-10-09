@@ -907,6 +907,15 @@ class OgygiaRegion extends HTMLElement {
 	 */
 	async #morph_live(html: string) {
 		if (!this.isConnected) return;
+		// BAKED (Region.svelte, PromiseRegionAwait): the first HTML is already here — the page was
+		// served with it and hydrated against it. Nothing to paint; later ticks morph as usual (by
+		// identity: Svelte's `{@html}` anchors stay among the children — ownership.ts `order_owner`).
+		if (!this.#live_ready && this.hasAttribute('data-og-baked')) {
+			this.#live_ready = true;
+			this.setAttribute('data-hydrated', '');
+			this.dispatchEvent(new CustomEvent('ogygia:live', { bubbles: true }));
+			return;
+		}
 		const { frag, ready } = region_fragment(html);
 		// Wait for the component's stylesheet before painting. On first paint the region's placeholder
 		// CHILDREN stay visible meanwhile; on a later morph the OLD content stays — either way no flash

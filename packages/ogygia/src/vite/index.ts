@@ -56,6 +56,7 @@ import {
 	keep_client_dir,
 	inject_keep_client_route,
 	resolve_kit_paths,
+	kit_major,
 	is_route_option_file,
 	strip_freeze_export,
 	kit_dirs,
@@ -102,7 +103,7 @@ import { Program, strip_id } from '../compiler/program.js';
 import { Compiler } from '../compiler/driver.js';
 import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
 import { discover_package_files } from './package-files.js';
-import { late_island_redirect, svelte_async_enabled } from './late-island.js';
+import { async_twin_redirect, svelte_async_enabled } from './late-island.js';
 import { flags_manifest } from '../compiler/flags.js';
 import {
 	V_KIT_WIRE,
@@ -597,7 +598,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							// the profiler's browser half (runtime/beacon.ts) ships only to an app that
 							// can read it: the profiler configured, or devtools. Everywhere else every
 							// `if (BEACON) …` folds out and the module leaves the boot (a quarter of it)
-							__OGYGIA_BEACON__: JSON.stringify(profiler_config !== null || devtools_effective || devtools_lazy)
+							__OGYGIA_BEACON__: JSON.stringify(profiler_config !== null || devtools_effective || devtools_lazy),
+							// the app's Kit major: whether Kit's `asset()` takes a path with its leading
+							// slash (2) or without (3) — kit-paths.ts, where a runtime probe guessed wrong in builds
+							__OGYGIA_KIT_MAJOR__: JSON.stringify(kit_major(path.resolve(userConfig.root ?? '.')))
 						},
 						server: {
 							fs: {
@@ -1160,10 +1164,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// ogygia dependency of its own.
 				if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
 
-				// An island a client navigation created, whole in one swap: Region's LateIsland import is
-				// the awaiting one where the app runs Svelte's async mode (late-island.ts)
+				// Region's twin imports are the awaiting ones where the app runs Svelte's async mode
+				// (late-island.ts): a late island in one swap, a promise `of` awaited in the render
 				if (svelte_async) {
-					const awaiting = late_island_redirect(source, importer, OGYGIA_REGION_MODULES);
+					const awaiting = async_twin_redirect(source, importer, OGYGIA_REGION_MODULES);
 					if (awaiting) return awaiting;
 				}
 

@@ -148,7 +148,7 @@ import { collect_remote_seed } from './server/remote-seed-gate.js';
 import { DocumentTail, set_tail_reader } from './server/document-tail.js';
 import { runtime_bootstrap } from './server/entry-location.js';
 import { region_css_tag } from './server/region-css.js';
-import { set_late_recorder, set_late_taker, type LateRegion } from './late-region-registry.js';
+import { set_late_recorder, set_late_scope_opener, set_late_taker, type LateRegion } from './late-region-registry.js';
 import {
 	record_request_stats,
 	record_hole_stats,
@@ -218,6 +218,9 @@ type RequestBag = {
 	 *  page) — the router drains these into completion-order template chunks. */
 	late: LateRegion[] | null;
 	late_next: number;
+	/** The router's streamed document opened the late scope (`open_late_scope`): only then does a
+	 *  promise `of` register — nothing else would ever fill its slot. */
+	late_open: boolean;
 	/** devalue reducers for streamed resolve scripts (app transport encoders + defer marker). */
 	seed_reducers: Record<string, (v: unknown) => unknown> | null;
 	/** the document carries Kit's client bootstrap (`__sveltekit_*` defined): Kit's streamed resolve
@@ -349,9 +352,13 @@ set_kit_page_reader(() => {
 });
 // LATE REGIONS: a promise `of` registers per request; the id keys the region's slot wrapper AND
 // its later template chunk. The taker DRAINS (the router reads once, post-render).
+set_late_scope_opener(() => {
+	const bag = bag_of();
+	if (bag) bag.late_open = true;
+});
 set_late_recorder((promise) => {
 	const bag = bag_of();
-	if (!bag) return null;
+	if (!bag?.late_open) return null;
 	const id = `r${bag.late_next++}`;
 	(bag.late ??= []).push({ id, promise });
 	return id;
@@ -994,6 +1001,7 @@ class OgygiaHandle {
 				defer_next_id: 0,
 				late: null,
 				late_next: 0,
+				late_open: false,
 				seed_reducers: null,
 				freeze_capture: freeze_settle !== null,
 				freeze_obs,

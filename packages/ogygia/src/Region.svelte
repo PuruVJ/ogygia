@@ -41,7 +41,8 @@
 	import { isRegion } from './region.js';
 	// (LateIslandAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
 	import LateIsland from './LateIsland.svelte';
-	import { register_late_region } from './late-region-registry.js';
+	// (PromiseRegionAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
+	import PromiseRegion from './PromiseRegion.svelte';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
 	import { record_server_event } from './devtools/server-registry.js';
@@ -57,7 +58,7 @@
 	 *   of?: import('./region.js').RegionValue | Promise<import('./region.js').RegionValue>;
 	 *   placeholder?: import('svelte').Snippet;
 	 *   children?: import('svelte').Snippet;
-	 *   __mode?: 'island' | 'server' | 'lake';
+	 *   __mode?: 'island' | 'server' | 'lake'; __baked?: boolean;
 	 *   visible?: string | boolean; idle?: boolean; media?: string; load?: boolean; interaction?: boolean;
 	 *   __keep?: string; __entry?: string; __src?: string; __component?: import('svelte').Component; __css?: unknown;
 	 *   __load?: () => Promise<import('svelte').Component>;
@@ -75,6 +76,9 @@
 		// styled HTML is still arriving. Distinct from `children` (the rendered component's slot).
 		placeholder,
 		children,
+		// A wire value whose first HTML is already in the page (PromiseRegionAwait: awaited in the server
+		// render, hydrated against the same value) — rendered once, every later value morphs in.
+		__baked = false,
 		// Placement API (the transform's wrappers): `__mode` selects island / server / lake.
 		__mode,
 		// island
@@ -142,33 +146,16 @@
 				'promise resolves and its stylesheet loads. Add {#snippet placeholder()}…{/snippet} for the wait.'
 		);
 	}
-	// LATE REGION (streamed documents): with the server recorder armed (the handle's ALS), a
-	// promise `of` registers for completion-order delivery DOWN THIS RESPONSE — the placeholder
-	// wraps in an `og-late-slot` the boot swaps when the promise's baked chunk parses. Unarmed
-	// (client, standalone, non-streaming context) → null → today's placeholder behavior.
+	// A promise is PromiseRegion's (the template hands it over): how it waits — in the render where the
+	// app runs async mode, a late slot on a streamed document, after hydration otherwise — is decided
+	// there, and what it resolves to comes back here as a value. Region renders values.
+	// What every held branch below renders: a value resolves synchronously (SSR renders it in this
+	// same pass — blocks/SDUI never see a placeholder).
+	const resolved = $derived(of_is_promise ? undefined : /** @type {import('./region.js').RegionValue | undefined} */ (of));
+	// A LIVE region (a wire value with HTML, a deferred hole) is the runtime's to paint, on a Kit-hydrated
+	// page too; so is the one a promise will resolve to.
 	// svelte-ignore state_referenced_locally
-	const late_slot =
-		of_is_promise && typeof window === 'undefined'
-			? register_late_region(/** @type {Promise<unknown>} */ (of))
-			: null;
-	/** @type {import('./region.js').RegionValue | undefined} */
-	let awaited = $state(undefined);
-	// What every held branch below renders. A plain value resolves synchronously (SSR renders it in
-	// this same pass — blocks/SDUI never see a placeholder). A promise resolves client-side only.
-	const resolved = $derived(of_is_promise ? awaited : /** @type {import('./region.js').RegionValue | undefined} */ (of));
-	$effect(() => {
-		if (!of_is_promise) return;
-		const p = /** @type {Promise<import('./region.js').RegionValue>} */ (of);
-		let live = true;
-		// LAG, don't clear: on a re-search `of` is a NEW promise — keep showing the previous value
-		// until the new one lands, so the old content morphs instead of flashing through empty.
-		Promise.resolve(p).then((r) => {
-			if (live) awaited = r;
-		});
-		return () => {
-			live = false;
-		};
-	});
+	const holds_live = of_is_promise || /** @type {{ kind?: string } | undefined} */ (of)?.kind === 'deferred';
 
 	// A held interactive dual renders exactly like a placed island — same SSR-inline + self-hydrate —
 	// so both feed the island branch. A held static dual (no schedule) renders bare, like inline.
@@ -202,9 +189,13 @@
 	// region stamps the fact into context for its subtree (its own re-set of the request context
 	// hides the bare `{ page }` from nested regions).
 	let kit_page_pass = false;
+	// …and the positive twin: a render root OGYGIA started (`kit_render_context` hands every one the live
+	// event beside the page) — never Kit's own pass, whose `{ page }` carries none.
+	let ogygia_root = false;
 	if (typeof window === 'undefined') {
 		const req = /** @type {{ page?: unknown; event?: unknown } | undefined} */ (getContext(KIT_REQUEST_CONTEXT));
 		kit_page_pass = getContext(KIT_PAGE_PASS) === true || !!(req && req.event == null);
+		ogygia_root = !kit_page_pass && !!(req && req.event != null);
 		if (kit_page_pass && getContext(KIT_PAGE_PASS) !== true) setContext(KIT_PAGE_PASS, true);
 		if (req && req.event == null) {
 			const event = kit_request_event();
@@ -239,7 +230,10 @@
 			return false; // isolated render without a live page (a hole endpoint, a remote's region)
 		}
 	}
-	const is_csr = documentIsCsrTrue(page_error_render()) && !isInLake();
+	// ONLY KIT'S OWN PASS IS KIT'S TO HYDRATE: a render root ogygia starts (a held region baked by a
+	// remote or awaited in the render, a hole, a snippet body) becomes opaque HTML Kit never walks — its
+	// islands must be real `<ogygia-region>`s the runtime wakes, whatever the document's csr.
+	const is_csr = documentIsCsrTrue(page_error_render()) && !isInLake() && !ogygia_root;
 	// The island branch renders inline when nested OR on a csr=true page.
 	const island_inline = nested || is_csr;
 	if ((is_island || is_server) && !nested) setNested();
@@ -696,15 +690,16 @@
 				}));
 
 	// ─────────────────────────────────────────────── head (runtime + preload) ──
-	// The runtime bootstrap for this page. Claim once, only for a top-level island/server placement
-	// (lakes render inside an island; held regions rely on an existing runtime). With the router on,
+	// The runtime bootstrap for this page. Claim once, for a top-level island/server placement, and for
+	// a held region the runtime paints (a live wire value, a deferred hole, a promise) — on a Kit-hydrated
+	// page too, where nothing else may have shipped it (lakes render inside an island). With the router on,
 	// the handle injects the same script on island-less pages — this is the with-islands path, and it
 	// keeps islands hydrating even when the router is off (`ogygia({ router: false })`).
 	// The runtime's own static imports (the chunks it shares with the rest of the app) ride along as
 	// modulepreload hints, so they download with it rather than after it. Its location, not its
 	// stable name: the one bootstrap every document path shares (server/entry-location.ts).
 	const runtime_script =
-		!nested && ((is_island && !is_csr) || is_server) && claimRuntimeEmit()
+		!nested && ((is_island && !is_csr) || is_server || holds_live) && claimRuntimeEmit()
 			? runtime_bootstrap(asset) +
 				(hmrUrl
 					? LT +
@@ -780,13 +775,18 @@
 			? runtime_script + island_preload_head + island_css_html + kit_island_meta
 			: is_server
 				? runtime_script + server_preload
-				: '') +
+				: runtime_script) +
 			region_css_html +
 			content_css_html
 	);
 
 	// ────────────────────────────────────────────────────── held: live / deferred ──
 	const stringify_devalue = stringify;
+	// A baked live region's FIRST HTML, read once: the markup the page was served with and hydrates
+	// against. Later values never re-render it (a re-render would recreate every node and remount the
+	// islands inside); the runtime morphs them in.
+	// svelte-ignore state_referenced_locally
+	const baked_html = __baked ? (/** @type {{ html?: string } | undefined} */ (resolved)?.html ?? '') : '';
 	/** @param {Element & { applyLive?: (v: unknown) => void }} node */
 	function apply_live(node) {
 		// Reads `resolved`, so the attachment re-runs when a Promise `of` re-resolves — the mounted
@@ -924,17 +924,17 @@
 	{@const Component = resolved.component}
 	<Component {...resolved.props}>{#if children}{@render children()}{/if}</Component>
 {:else if resolved?.html != null}
-	<!-- placeholder (or legacy children) shows until the styled HTML paints (replaceChildren). -->
-	<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>
+	<!-- Baked (awaited in the render): the first HTML is in the page, written ONCE — a later value
+	     never re-renders it, the runtime morphs it in (applyLive). Otherwise the placeholder (or legacy
+	     children) shows until the styled HTML paints. -->
+	{#if __baked}<ogygia-region live data-og-baked {@attach apply_live}><!-- svelte-ignore hydration_html_changed -->{@html baked_html}</ogygia-region
+		>{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
 		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url} src={location_of(d.module || '') || undefined}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html held_props_script}
 	{/key}
-{:else if of}
-	<!-- Promise `of` still in flight (first resolution) — the region owns the whole wait. On a
-	     STREAMED document the slot wrapper makes this hole late-chunk-addressable. -->
-	{#if late_slot}<og-late-slot data-og-slot={late_slot} style="display:contents"
-			>{@render placeholder?.()}</og-late-slot
-		>{:else}{@render placeholder?.()}{/if}
+{:else if of_is_promise}
+	<!-- A promise `of`: the region owns the whole wait — PromiseRegion decides how it waits. -->
+	<PromiseRegion of={/** @type {Promise<import('./region.js').RegionValue>} */ (of)} {placeholder} {children} />
 {/if}

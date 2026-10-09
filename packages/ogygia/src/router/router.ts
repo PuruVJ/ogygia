@@ -45,7 +45,7 @@ import {
 } from './respond.js';
 import { router_css_head } from './css-head.js';
 import { prime_flags } from '../flags.js';
-import { take_late_regions } from '../late-region-registry.js';
+import { open_late_scope, take_late_regions } from '../late-region-registry.js';
 import {
 	is_stream_slot,
 	bake_yield,
@@ -425,6 +425,8 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 					(html_view.css?.join('') ?? '') +
 					(html_view.head ?? '')
 				: '');
+		// this document delivers late chunks (a GET's streamed response): its promise `of`s may register
+		if (m === 'GET') open_late_scope();
 		const res = await document(of, {
 			status,
 			head: css_head,

@@ -121,8 +121,9 @@ export function morph_children(
 		const owner = owner_of(parent);
 		if (owner !== 'walk' && owner !== 'region') return;
 	}
-	// (the root is the region being morphed: its children are the answer's, in the answer's order)
-	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes), walk);
+	// (the root is ordered like any element: a region's children in the answer's order, a baked live
+	// region's by identity — Svelte's anchors sit among them)
+	reconcile(parent, new_nodes, build_id_sets(parent, new_nodes), walk);
 	clear_aria_hidden_over_focus(parent);
 }
 
@@ -512,9 +513,19 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 				}
 				if (match !== null && old_inner !== null) release_holder(old_inner, sets!, match as Element);
 			}
+		} else if (next.nodeType === COMMENT) {
+			// a comment is a MARKER: only the same marker is its counterpart (another owner's anchor —
+			// Svelte's `{@html}` bounds — is never rewritten into the render's)
+			for (let j = 0; j < others.length; j++) {
+				const o = others[j];
+				if (o.nodeType === COMMENT && !claimed.has(o) && (o as Comment).data === (next as Comment).data) {
+					match = o;
+					break;
+				}
+			}
 		} else {
-			// text / comment: the next unclaimed one of its kind, in the element's order
-			while (other_at < others.length && others[other_at].nodeType !== next.nodeType) other_at++;
+			// text: the next unclaimed text, in the element's order
+			while (other_at < others.length && (others[other_at].nodeType !== next.nodeType || claimed.has(others[other_at]))) other_at++;
 			if (other_at < others.length) match = others[other_at++];
 		}
 		if (match !== null && !claimed.has(match)) {

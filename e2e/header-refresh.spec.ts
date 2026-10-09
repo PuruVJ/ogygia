@@ -49,3 +49,39 @@ test('a command refreshes the header region: it morphs in place, the island keep
 	expect(errors).toEqual([]);
 	await context.clearCookies();
 });
+
+// The same header on a KIT-HYDRATED page, the promise passed straight to `of` (PromiseRegion /
+// PromiseRegionAwait). REGRESSION (field report on 5c0e2c45): the header never appeared — a late slot
+// was registered on a Kit page, where nothing fills one; the runtime that paints a live region was
+// never shipped on a csr=true page; and the islands inside rendered inline, for Kit to hydrate, inside
+// HTML Kit never walks.
+test('Kit-hydrated page: the header from a promise `of` is in the served page, wakes, and refreshes in place', async ({ page, context, request }) => {
+	await context.clearCookies();
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(e.message));
+
+	const served = await (await request.get('/header-refresh-kit')).text();
+	expect(served.includes('og-late-slot'), 'no slot nothing fills').toBe(false);
+	expect(served).toContain('data-hl-header');
+	expect(served).toContain('og-runtime');
+
+	await page.goto('/header-refresh-kit');
+	const header = page.locator('[data-hl-header]');
+	await expect(header).toHaveAttribute('data-locale', 'en');
+	expect(await page.locator('[data-hl-placeholder]').count()).toBe(0);
+	const counter = page.locator('[data-hl-counter]');
+	await expect(counter.locator('xpath=ancestor::ogygia-region[1]')).toHaveAttribute('data-hydrated', '', { timeout: 10_000 });
+	await counter.click();
+	await expect(counter).toHaveText('en · 1');
+	await expect(page.locator('[data-hl-account]')).toHaveText('My account', { timeout: 10_000 });
+	await page.evaluate(() => ((window as unknown as { __h: Element | null }).__h = document.querySelector('[data-hl-header]')));
+
+	await page.locator('[data-hl-switch]').click();
+	await expect(header).toHaveAttribute('data-locale', 'fr', { timeout: 10_000 });
+	await expect(page.locator('[data-hl-account]')).toHaveText('Mon compte', { timeout: 10_000 });
+	await expect(counter).toHaveText('fr · 1');
+	expect(await page.evaluate(() => (window as unknown as { __h: Element | null }).__h === document.querySelector('[data-hl-header]'))).toBe(true);
+	expect(await page.locator('[data-og-healed],[data-og-recovered]').count()).toBe(0);
+	expect(errors).toEqual([]);
+	await context.clearCookies();
+});

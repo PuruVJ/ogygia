@@ -209,6 +209,8 @@ declare const __OGYGIA_DEVTOOLS_LAZY__: boolean;
 /** the profiler's browser half ships (the profiler or devtools is configured); otherwise every
  *  `if (BEACON) …` folds out and runtime/beacon.ts leaves the bundle */
 declare const __OGYGIA_BEACON__: boolean;
+/** The app's Kit major version (2, 3), or null when the plugin found none (kit-paths.ts). */
+declare const __OGYGIA_KIT_MAJOR__: number | null;
 
 declare module 'virtual:ogygia/router-css' {
 	// Generated component→CSS registrations for the server router — side-effect only.

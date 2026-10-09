@@ -39,6 +39,27 @@ describe('kit_asset', () => {
 		expect(seen).toEqual(['_app/immutable/x.js', '/_app/immutable/x.js', '/_app/immutable/y.js']);
 	});
 
+	it("Kit 2 in a BUILD (no refusal: it returns the slash-less path page-relative) — still the slash", async () => {
+		// REGRESSION (field report on 5c0e2c45): `asset('_uce_/immutable/x.js')` answered
+		// `_uce_/immutable/x.js` in production, which a page at /account/ resolved to /account/_uce_/…
+		const kit_asset = await with_kit((f) => '' + f);
+		expect(kit_asset('/_uce_/immutable/x.js')).toBe('/_uce_/immutable/x.js');
+		expect(kit_asset('/_uce_/immutable/y.js')).toBe('/_uce_/immutable/y.js');
+	});
+
+	it('the build’s Kit major decides with no probe at all', async () => {
+		vi.stubGlobal('__OGYGIA_KIT_MAJOR__', 2);
+		const seen: string[] = [];
+		const kit2 = await with_kit((f) => (seen.push(f), '' + f));
+		expect(kit2('/_app/immutable/x.js')).toBe('/_app/immutable/x.js');
+		expect(seen).toEqual(['/_app/immutable/x.js']);
+		vi.resetModules();
+		vi.stubGlobal('__OGYGIA_KIT_MAJOR__', 3);
+		const kit3 = await with_kit((f) => './' + f);
+		expect(kit3('/_app/immutable/x.js')).toBe('./_app/immutable/x.js');
+		vi.unstubAllGlobals();
+	});
+
 	it('a value without a leading slash passes through as it is', async () => {
 		const kit_asset = await with_kit((f) => 'kit:' + f);
 		expect(kit_asset('already/relative.js')).toBe('kit:already/relative.js');

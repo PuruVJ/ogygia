@@ -63,6 +63,23 @@ export function resolve_kit_paths(root: string): KitPaths {
 	return { kit_wire_path, kit_remote_index, universal_hooks, client_hooks };
 }
 
+/**
+ * The app's Kit MAJOR version (resolved off the app root, like {@link resolve_kit_paths}), or null when
+ * no Kit resolves. The one fact `kit_asset` needs: Kit 2's `asset()` takes a path with its leading
+ * slash, Kit 3's without — and no runtime probe can tell them apart (Kit 2 refuses a slash-less path
+ * only in dev; in a build it returns it page-relative, and every island entry on a nested page 404'd).
+ */
+export function kit_major(root: string): number | null {
+	try {
+		const require = createRequire(path.join(root, 'noop.js'));
+		const pkg = JSON.parse(fs.readFileSync(require.resolve('@sveltejs/kit/package.json'), 'utf8')) as { version?: string };
+		const major = Number.parseInt(pkg.version ?? '', 10);
+		return Number.isFinite(major) ? major : null;
+	} catch {
+		return null;
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Kit's configurable directories — `kit.files.routes` and `kit.outDir`.
 //

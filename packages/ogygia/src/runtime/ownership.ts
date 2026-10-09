@@ -130,10 +130,16 @@ export const REGION_RENDER_ATTRS: readonly string[] = ['endpoint'];
 /** Who orders an element's children: the render (positions are its sequence), or the element itself
  *  (a self-owned element relocates and wraps its light DOM — positions are not the render's). */
 export function order_owner(el: Element): 'render' | 'element' {
-	// (ogygia's own element never rearranges what it holds: a fallback, an answer — the render's order)
-	if (el.localName === REGION) return 'render';
+	// (ogygia's own element never rearranges what it holds: a fallback, an answer — the render's order;
+	// but a BAKED live region's content is hosted by Svelte's `{@html}`, whose anchor comments sit among
+	// the answer's nodes: its children are partly another owner's, so it matches by identity)
+	if (el.localName === REGION) return el.hasAttribute(BAKED_ATTR) ? 'element' : 'render';
 	return is_self_owned(el) ? 'element' : 'render';
 }
+
+/** A live region whose first HTML was baked into the page by Svelte's `{@html}` (Region.svelte,
+ *  PromiseRegionAwait): kept for the element's life — Svelte's block anchors stay among its children. */
+export const BAKED_ATTR = 'data-og-baked';
 
 /** The nodes ogygia placed under an element-ordered parent (a morph's claim or insertion, the restore
  *  putting Svelte's children back into a planned host). One per document across bundles: the inlined

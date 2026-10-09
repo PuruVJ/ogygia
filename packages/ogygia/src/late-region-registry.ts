@@ -14,6 +14,24 @@
 
 type LateRecorder = (promise: Promise<unknown>) => string | null;
 
+type ScopeOpener = () => void;
+let opener: ScopeOpener | null = null;
+
+/** Server (`hooks.ts`) installs the request-scoped scope opener. */
+export function set_late_scope_opener(fn: ScopeOpener | null): void {
+	opener = fn;
+}
+
+/**
+ * ONLY A RENDERER THAT DELIVERS LATE CHUNKS ARMS THEM. The server router's streamed document opens
+ * this request's late scope before it renders (and drains it after); anywhere else — a Kit page render
+ * — a promise `of` registers nothing, because nothing would ever fill its slot (a Kit page's header
+ * sat in an empty slot forever).
+ */
+export function open_late_scope(): void {
+	opener?.();
+}
+
 let recorder: LateRecorder | null = null;
 
 /** Server (`hooks.ts`) installs the request-scoped recorder. */

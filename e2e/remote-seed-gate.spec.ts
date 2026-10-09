@@ -54,7 +54,9 @@ const rows: Row[] = [
 	{ path: '/remote-seed-gate/hole-fallback', seed: false, has: [], html: ['Lake, resolved on the server:'] },
 	// a promise `of` → fail-open: everything seeds, the lake's call included
 	// a promise `of` at page level: fail-open for BOTH seeds (the page seed ships too — documented)
-	{ path: '/remote-seed-gate/held', seed: true, has: ['/getGreeting/', 'lake'], html: ['Lake, resolved on the server:', 'data-held-placeholder'], own_hydrate_test: true },
+	// (the playground runs Svelte's async mode: the promise is awaited in the render — the result is in
+	// the page, not its placeholder: PromiseRegionAwait.svelte)
+	{ path: '/remote-seed-gate/held', seed: true, has: ['/getGreeting/', 'lake'], html: ['Lake, resolved on the server:', 'Result: gate'], own_hydrate_test: true },
 	// the pending island's own call is pending at SSR (omitted, it fetches) — the lake's still seeds
 	{ path: '/remote-seed-gate/pending', seed: true, has: ['/getGreeting/', 'lake'], lacks: ['pending'], html: ['Lake, resolved on the server:'], fetches: 1 },
 	{ path: '/remote-seed-gate/many', seed: true, has: ['/getGreeting/', 'lake', ...Array.from({ length: 20 }, (_, i) => `r${i}`)], html: ['Hello, r19!'], hydrated: 40 },
@@ -108,10 +110,12 @@ test.describe('REMOTE SEED GATE: the remote seed ships only for remotes an islan
 	});
 
 	test('the held promise row: the page loads clean, the lake is HTML, both seeds are the fail-open ones', async ({ baseURL, page }) => {
-		// A page-level promise `of` registers a LATE slot the streamed-router path drains; on a plain
-		// Kit page it stays a placeholder — the row exists for the seeds' fail-open, asserted above.
+		// A page-level promise `of` on a Kit page is awaited in the render (async mode) — never a LATE
+		// slot, which only the streamed-router path fills — and the row exists for the seeds' fail-open.
 		const html = await (await fetch(baseURL + '/remote-seed-gate/held')).text();
 		check('page seed ships (fail-open: the promise’s module is unknown at SSR)', html.includes('application/ogygia-page'));
+		check('no late slot on a Kit page (nothing would fill it)', !html.includes('og-late-slot'));
+		check('the placeholder is not what was served', !html.includes('data-held-placeholder'));
 		const errors: string[] = [];
 		page.on('pageerror', (e) => errors.push(e.message));
 		await page.goto('/remote-seed-gate/held', { waitUntil: 'networkidle' });

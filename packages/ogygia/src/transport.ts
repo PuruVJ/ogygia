@@ -137,6 +137,19 @@ function decode_region(raw: EncodedRegion) {
 	}
 }
 
+/**
+ * A region value AS THE BROWSER RECEIVES IT: through the crossing (encode, then decode) on the server,
+ * itself in the browser (it already crossed). A promise `of` resolves to a wire value — a remote's
+ * answer — so a server render that awaits one renders this form, the same shape the browser hydrates
+ * against (PromiseRegionAwait.svelte). Not a region: unchanged. A plain inline region nothing awaited
+ * throws, exactly as the crossing would.
+ */
+export function wire_form<T>(value: T): T {
+	if (typeof document !== 'undefined') return value;
+	const encoded = encode_region(value);
+	return encoded === false ? value : (decode_region(encoded) as T);
+}
+
 /** The hub kind: a held/dual/awaited region — the RENDERABLE Ref. `d` is the EncodedRegion.
  *  Decode is deliberately un-memoized at the legacy seam (the wrapper below passes ids through
  *  raw); hub-memoized region identity arrives with the one-key collapse, where it becomes the
