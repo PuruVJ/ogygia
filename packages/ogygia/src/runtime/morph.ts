@@ -61,11 +61,15 @@
  */
 import { slots } from './slots.js';
 import {
+	attributes_writer,
 	is_declared_foreign,
 	is_region_owned,
 	is_self_owned,
-	is_upgraded_ce,
-	owner_of
+	mark_render_made,
+	order_owner,
+	owner_of,
+	render_made,
+	REGION_RENDER_ATTRS
 } from './ownership.js';
 
 // DOM spec constants by VALUE (they are frozen: 1/3/8 forever) — referencing the `Node` global
@@ -117,7 +121,8 @@ export function morph_children(
 		const owner = owner_of(parent);
 		if (owner !== 'walk' && owner !== 'region') return;
 	}
-	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes), false, walk);
+	// (the root is the region being morphed: its children are the answer's, in the answer's order)
+	reconcile_children(parent, new_nodes, build_id_sets(parent, new_nodes), walk);
 	clear_aria_hidden_over_focus(parent);
 }
 
@@ -258,22 +263,23 @@ function reserved_for_later(
 }
 
 /**
- * @param keep_children the parent is a self-owned element (an upgraded custom element / dialog / details,
- * {@link is_self_owned}) — so its children are partly ITS OWN doing (a web component slots and
- * rewrites its light DOM on upgrade). ADD + UPDATE what the render brings, but NEVER REMOVE a child the
- * element gave itself. Re-inserting/re-upgrading a live custom element is what makes an upgraded trigger
- * flicker when a hole morphs its byte-identical chrome; keeping its nodes leaves the upgrade untouched.
- * @param walk the {@link MorphOptions.target} is Svelte's walk (the repair), threaded unchanged down
- * the recursion — a self-owned descendant then gets no `keep_children`, and a subtree the walk never
- * enters is skipped.
+ * Reconcile `parent`'s children toward `new_nodes`, by whoever ORDERS them (ownership.ts
+ * `order_owner`): the render's sequence by position ({@link reconcile_children}), or — under a
+ * self-owned element whose own runtime arranges its light DOM — by identity
+ * ({@link reconcile_by_identity}). Toward Svelte's walk, positions are always the render's (the walk
+ * binds by position).
  */
-function reconcile_children(
-	parent: Element,
-	new_nodes: ArrayLike<Node>,
-	sets: IdSets,
-	keep_children = false,
-	walk = false
-): void {
+function reconcile(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets, walk: boolean): void {
+	if (!walk && order_owner(parent) === 'element') reconcile_by_identity(parent, new_nodes, sets);
+	else reconcile_children(parent, new_nodes, sets, walk);
+}
+
+/**
+ * The render's sequence, by position.
+ * @param walk the {@link MorphOptions.target} is Svelte's walk (the repair), threaded unchanged down
+ * the recursion — a subtree the walk never enters is skipped.
+ */
+function reconcile_children(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets, walk = false): void {
 	const count = new_nodes.length;
 	let cursor: ChildNode | null = parent.firstChild;
 	let idx = 0;
@@ -306,15 +312,12 @@ function reconcile_children(
 	}
 
 	// Aligned all the way: drop any old tail the new shape dropped, and we're done — no map built.
-	// A self-owned parent keeps its own trailing children (they are not the render's to remove).
 	if (idx >= count) {
-		if (!keep_children) {
-			while (cursor) {
-				const gone = cursor;
-				cursor = cursor.nextSibling;
-				parent.removeChild(gone);
-			}
-		} else drop_stale_regions(parent, cursor, null);
+		while (cursor) {
+			const gone = cursor;
+			cursor = cursor.nextSibling;
+			parent.removeChild(gone);
+		}
 		return;
 	}
 	// Old ran out first: everything left is a pure append.
@@ -432,42 +435,128 @@ function reconcile_children(
 		}
 	}
 
-	// Remove everything the new shape did not claim — UNLESS the parent is self-owned, whose extra
-	// children are its own (a foreign custom element's slotted / upgraded light DOM). See keep_children.
-	if (!keep_children) {
-		// Trailing key-less/unmatched nodes from the cursor onward:
-		while (cursor) {
-			const gone = cursor;
-			cursor = cursor.nextSibling;
-			parent.removeChild(gone);
-		}
-		// Keyed nodes whose key vanished but that sit BEFORE the cursor (positionally skipped):
-		if (old_keys) {
-			for (const node of old_keys.values()) {
-				if (node.parentNode === parent) parent.removeChild(node);
-			}
-		}
-	} else drop_stale_regions(parent, cursor, old_keys);
-}
-
-/**
- * A self-owned parent keeps the children it gave itself — but an `<ogygia-region>` among them is never
- * its own doing: it is the old page's server content, always. One the new page did not claim (its
- * key changed: a hole's endpoint written at another depth, its `exp` rolled into the next window) is
- * removed, or the swap left the old region beside the new one — a site's navigation drawn twice in a
- * custom element. Only regions: the element's own children stay.
- */
-function drop_stale_regions(parent: Element, cursor: ChildNode | null, old_keys: Map<string, ChildNode> | null): void {
+	// Remove everything the new shape did not claim: the trailing nodes from the cursor onward, and
+	// keyed nodes whose key vanished but that sit BEFORE the cursor (positionally skipped).
 	while (cursor) {
-		const here = cursor;
+		const gone = cursor;
 		cursor = cursor.nextSibling;
-		if (here.nodeType === ELEMENT && (here as Element).localName === 'ogygia-region') parent.removeChild(here);
+		parent.removeChild(gone);
 	}
 	if (old_keys) {
 		for (const node of old_keys.values()) {
-			if (node.parentNode === parent && node.nodeType === ELEMENT && (node as Element).localName === 'ogygia-region') parent.removeChild(node);
+			if (node.parentNode === parent) parent.removeChild(node);
 		}
 	}
+}
+
+/**
+ * THE ELEMENT ORDERS ITS CHILDREN (ownership.ts §11): a self-owned element's runtime relocates and
+ * wraps its light DOM, so positions are not the render's and never decide a match. Each new node
+ * finds its old counterpart by identity — key, then the id-set holder, then the next render-made
+ * sibling of the same tag — and is morphed IN PLACE (the element's arrangement stands; nothing
+ * re-upgrades: a byte-identical answer moves no node). A new node with no counterpart goes in after the
+ * last placed render node. Then EXISTENCE decides the leftovers: one the render made and no longer
+ * produces is removed (a stale fallback panel beside the answer's, painting over it); one the element
+ * made is never matched and never removed.
+ */
+function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets): void {
+	const count = new_nodes.length;
+	// the tags the render produces here: an unmarked old element of one of them is the render's too
+	const render_tags = new Set<string>();
+	for (let i = 0; i < count; i++) if (new_nodes[i].nodeType === ELEMENT) render_tags.add((new_nodes[i] as Element).localName);
+
+	let by_key: Map<string, ChildNode> | null = null;
+	const by_tag = new Map<string, Element[]>();
+	const others: ChildNode[] = [];
+	let old_inner: Map<string, Element> | null = null;
+	for (let n: ChildNode | null = parent.firstChild; n; n = n.nextSibling) {
+		const k = key_of(n);
+		if (k !== null) {
+			(by_key ??= new Map()).set(k, n);
+		} else if (n.nodeType === ELEMENT) {
+			if (!render_made(n, render_tags)) continue; // the element's own: never a counterpart
+			const el = n as Element;
+			let list = by_tag.get(el.localName);
+			if (!list) by_tag.set(el.localName, (list = []));
+			list.push(el);
+			const held = sets?.get(el);
+			if (held !== undefined) {
+				old_inner ??= new Map();
+				for (const key of held) if (!old_inner.has(key)) old_inner.set(key, el);
+			}
+		} else others.push(n);
+	}
+
+	const claimed = new Set<Node>();
+	let anchor: Node | null = null;
+	let other_at = 0;
+	for (let i = 0; i < count; i++) {
+		const next = new_nodes[i];
+		let match: ChildNode | null = null;
+		if (next.nodeType === ELEMENT) {
+			const k = key_of(next);
+			if (k !== null) {
+				const keyed = by_key?.get(k);
+				if (keyed !== undefined) {
+					by_key!.delete(k);
+					match = keyed;
+				}
+			} else {
+				const wanted = old_inner !== null ? sets!.get(next as Element) : undefined;
+				const holder = wanted === undefined ? null : find_holder(old_inner!, wanted, next);
+				if (holder !== null && !claimed.has(holder)) match = holder;
+				else {
+					const queue = by_tag.get((next as Element).localName);
+					while (queue?.length && claimed.has(queue[0])) queue.shift();
+					match = queue?.shift() ?? null;
+				}
+				if (match !== null && old_inner !== null) release_holder(old_inner, sets!, match as Element);
+			}
+		} else {
+			// text / comment: the next unclaimed one of its kind, in the element's order
+			while (other_at < others.length && others[other_at].nodeType !== next.nodeType) other_at++;
+			if (other_at < others.length) match = others[other_at++];
+		}
+		if (match !== null && !claimed.has(match)) {
+			claimed.add(match);
+			const before = match.previousSibling;
+			morph_node(match, next, sets, false);
+			// (a keyed tag change replaced it: the replacement stands where it was)
+			const placed = match.parentNode === parent ? match : before ? before.nextSibling : parent.firstChild;
+			if (placed) {
+				mark_render_made(placed);
+				anchor = placed;
+			}
+			continue;
+		}
+		const copy = clone(next);
+		parent.insertBefore(copy, anchor ? anchor.nextSibling : parent.firstChild);
+		mark_render_made(copy);
+		anchor = copy;
+	}
+
+	// EXISTENCE: a render-made leftover goes; the element's own stay (text and comments included)
+	for (const list of by_tag.values()) for (const el of list) if (!claimed.has(el) && el.parentNode === parent) parent.removeChild(el);
+	if (by_key) for (const n of by_key.values()) if (n.parentNode === parent && render_made(n, render_tags)) parent.removeChild(n);
+}
+
+/** A kept region root's ADDRESS is the render's that minted it ({@link REGION_RENDER_ATTRS}); the rest
+ *  of its attributes and all its content are the runtime's / its answer's. A re-minted hole gets its
+ *  new `endpoint` and fetches there (core.ts `#renew`), its current answer on screen until then. */
+function sync_render_attributes(from: Element, to: Element, walk: boolean): void {
+	if (walk || from.localName !== to.localName) return;
+	for (const name of REGION_RENDER_ATTRS) {
+		const next = to.getAttribute(name);
+		if (next !== null && next !== from.getAttribute(name)) from.setAttribute(name, next);
+	}
+}
+
+/** The attributes of `from` toward `to`, by who writes them (ownership.ts `attributes_writer`). */
+function sync_by_writer(from: Element, to: Element, walk: boolean): void {
+	const writer = attributes_writer(from);
+	if (writer === 'render') sync_attributes(from, to, is_self_owned(from));
+	else if (writer === 'region') sync_render_attributes(from, to, walk);
+	// 'element': an upgraded custom element's host attributes are its runtime's
 }
 
 /**
@@ -503,26 +592,15 @@ function same_node(a: Node, b: Node): boolean {
  * element is matched — kept in place, identity intact — but neither synced nor recursed into.
  *
  * Upgraded custom elements (ownership.ts `is_upgraded_ce`) are entered, but their host ATTRIBUTES are
- * their runtime's: re-asserting a fresh render's stale markers (a per-render id, a scope class) over a
- * live host made it lose its hydrated shadow and duplicate its content. A self-owned element's extra
- * children are its own: kept toward a live answer (an upgraded trigger re-inserted flickers), removed
- * toward Svelte's walk where the walk reads that position.
+ * their runtime's (`attributes_writer`): re-asserting a fresh render's stale markers (a per-render id,
+ * a scope class) over a live host made it lose its hydrated shadow and duplicate its content. Their
+ * children are reconciled by identity (`order_owner`, {@link reconcile_by_identity}): the children the
+ * element made are kept toward a live answer, removed toward Svelte's walk where the walk reads that
+ * position.
  */
 function off_limits(el: Element, walk: boolean): boolean {
 	if (is_declared_foreign(el) || is_region_owned(el)) return true;
 	return walk && owner_of(el) !== 'walk';
-}
-
-/**
- * A kept hole's ADDRESS is the render's that minted it; only its content is its answer's
- * (ownership.ts). A live answer that re-minted it (new props, new page facts: server/render-page.ts)
- * hands the kept element its new `endpoint`; the hole fetches there (core.ts `#renew`), its current
- * answer on screen until the new one lands.
- */
-function carry_address(from: Element, to: Element, walk: boolean): void {
-	if (walk || from.localName !== 'ogygia-region' || to.localName !== 'ogygia-region') return;
-	const next = to.getAttribute('endpoint');
-	if (next && next !== from.getAttribute('endpoint')) from.setAttribute('endpoint', next);
 }
 
 /**
@@ -543,10 +621,13 @@ function morph_node(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	const ef = from as Element;
 	const et = to as Element;
 
-	// Not ours to touch (ownership.ts): matched by its key, kept as it is. Checked BEFORE the replace
-	// below, or a keyed match whose tag changed would hand a kept widget / a hydrated island over to a
-	// fresh copy anyway.
-	if (off_limits(ef, walk)) return carry_address(ef, et, walk);
+	// Not ours to touch (ownership.ts): matched by its key, kept as it is — but for a region root's
+	// address, which is the render's. Checked BEFORE the replace below, or a keyed match whose tag
+	// changed would hand a kept widget / a hydrated island over to a fresh copy anyway.
+	if (off_limits(ef, walk)) {
+		if (attributes_writer(ef) === 'region') sync_render_attributes(ef, et, walk);
+		return;
+	}
 	// Can't turn one element into a different element — hand the whole node over.
 	if (ef.tagName !== et.tagName || ef.namespaceURI !== et.namespaceURI) {
 		ef.parentNode?.replaceChild(clone(to), ef);
@@ -554,14 +635,11 @@ function morph_node(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	}
 	// Form props BEFORE attributes: the rule compares the previous render's attribute to the incoming
 	// one, so it must read `ef`'s attributes while they are still the previous render's.
-	const self_owned = is_self_owned(ef);
 	sync_form_props(ef, et);
-	// An upgraded custom element's host attributes are the runtime's, not the render's — skip them
-	// entirely (see off_limits). Everything else (incl. a self-owned dialog/details) syncs.
-	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned);
+	sync_by_writer(ef, et, walk);
 	// `et` is never mutated by the recursion (misses clone, keyed moves come from the OLD tree), so
 	// its live `childNodes` is handed straight down — no per-level snapshot array.
-	reconcile_children(ef, et.childNodes, sets, !walk && self_owned, walk);
+	reconcile(ef, et.childNodes, sets, walk);
 }
 
 /**
@@ -578,11 +656,13 @@ function morph_same(from: Node, to: Node, sets: IdSets, walk: boolean): void {
 	if (kind !== ELEMENT) return;
 	const ef = from as Element;
 	const et = to as Element;
-	if (off_limits(ef, walk)) return carry_address(ef, et, walk);
-	const self_owned = is_self_owned(ef);
+	if (off_limits(ef, walk)) {
+		if (attributes_writer(ef) === 'region') sync_render_attributes(ef, et, walk);
+		return;
+	}
 	sync_form_props(ef, et); // before attributes — see morph_node
-	if (!is_upgraded_ce(ef)) sync_attributes(ef, et, self_owned); // upgraded host attrs are the runtime's — skip
-	reconcile_children(ef, et.childNodes, sets, !walk && self_owned, walk);
+	sync_by_writer(ef, et, walk);
+	reconcile(ef, et.childNodes, sets, walk);
 }
 
 /** Add + update + remove attributes so `from` matches `to` exactly. Boolean attrs are attr presence.

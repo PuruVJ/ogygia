@@ -299,3 +299,42 @@ Deliberately left (each reviewed):
   markers as that element's children, so a widget prepending there breaks Svelte itself; the docs say
   to put the widget INSIDE the `{@html}` content.
 - An `{@html}` at a component's root (no parent element in that component): nothing to stamp; wrap it.
+
+## 11. Facets: finishing rule 6 (2026-10-09)
+
+**The field case.** A hole's fallback rendered an empty `<x-panel>` inside an upgraded custom element;
+the answer rendered a full one. The element's runtime, at its upgrade, had re-appended its element
+children (the panel now AFTER its closing block comment). The morph matched by position, met a
+comment where the panel was, inserted the answer's panel, and kept the old one ("never remove a child
+a self-owned element gave itself"): two panels, the stale one painting over the real one.
+
+**The diagnosis.** §3.2 rule 6 said a child of an upgraded element is foreign *only if the server
+never sent it*. What shipped was the shortcut "every child of a self-owned element is kept", and the
+model answered one question per element (who writes inside it) while four writers answered other
+questions privately: `keep_children` and `drop_stale_regions` (who may remove a child), the
+upgraded-host attribute skip and `carry_address` (who writes an attribute), positional matching under a
+self-owned parent (who orders the children).
+
+**The model, widened: one element, four facets.**
+
+| facet | `render` (the answer / server render: the morph speaks for it) | `element` (its own runtime / the browser) | `region` |
+|---|---|---|---|
+| content | walk / static / page | — | a hydrated region root |
+| attributes | default | an upgraded custom element's host | a region root, except its ADDRESS (`endpoint`): the render that minted it |
+| order of its children | default | a self-owned element (it relocates / wraps its light DOM) | — |
+| existence of a child | the render made it (provenance) | the element made it | — |
+
+**Provenance** (`render_made`): a registry ogygia fills wherever it places nodes under an
+element-ordered parent — a morph's claim or insertion, the restore putting Svelte's children back into
+a planned host — plus two structural truths for an unmarked node: an `<ogygia-region>` is always render
+output, and an element whose tag the render produces at that level is render output (a runtime does not
+make the render's elements). Anything else under a self-owned parent is the element's: never matched,
+never removed.
+
+**The morph under element-owned order** matches by identity, not position: key → id-set holder → the
+next render-made sibling of the same tag; each match is morphed IN PLACE (the element's arrangement
+stands, nothing re-upgrades); a new node with no match is inserted after the last placed render node;
+a render-made leftover is removed. Positions are the element's, so they never decide a match.
+
+**Folded in and deleted:** `drop_stale_regions` (a region is render-made), the `keep_children` tail
+rule, `carry_address` (the attribute facet), the upgraded-host attribute skip (the attribute facet).

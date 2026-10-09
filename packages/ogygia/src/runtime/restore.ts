@@ -31,6 +31,7 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		__og_init?: ShadowRoot[];
 		__og_class_watch?: { mo: MutationObserver; hosts: Set<Element> };
 		__og_restore_log?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[];
+		__og_rendered?: WeakSet<Node>;
 	};
 	const sheets = (W.__og_sheets ??= new Map());
 	// (a DOM without `CSS.escape` — jsdom — gets a quote-safe escape for the attribute selectors)
@@ -354,7 +355,13 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		const mine = new Set(children.map((c) => c.node));
 		// everything else directly under the host is the rendered tree
 		for (const n of Array.from(host.childNodes)) if (!mine.has(n)) shadow.appendChild(n);
-		for (const c of children) host.appendChild(c.node);
+		// Svelte's children are the RENDER's (ownership.ts `render_made`): a later morph may remove one
+		// the render stops producing; what the element's runtime adds beside them stays its own
+		const made = (W.__og_rendered ??= new WeakSet());
+		for (const c of children) {
+			host.appendChild(c.node);
+			made.add(c.node);
+		}
 		for (const c of children) {
 			if (c.node.nodeType === 1) {
 				const el = c.node as Element;

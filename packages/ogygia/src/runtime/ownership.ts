@@ -25,6 +25,11 @@
  *
  * `data-ogygia-keep` on an `<ogygia-region>` is NOT `foreign`: there it names an island that survives
  * navigation (KeepHost) — Svelte owns that island, and it is repaired and hydrated like any other.
+ *
+ * FACETS (note §11): `owner_of` answers who writes INSIDE an element; the same module answers who
+ * writes its ATTRIBUTES (`attributes_writer`, `REGION_RENDER_ATTRS`), who ORDERS its children
+ * (`order_owner`), and whether a child EXISTS by the render's doing (`render_made`): one element, four
+ * facets, one place. The morph's matching, attribute sync and removal all read them.
  */
 
 /** The owner of an element, for the writers that consult it. */
@@ -102,4 +107,56 @@ export function is_upgraded_ce(el: Element): boolean {
 export function is_self_owned(el: Element): boolean {
 	const name = el.localName;
 	return name === 'dialog' || name === 'details' || is_upgraded_ce(el);
+}
+
+// ── FACETS (internal/notes/dom-ownership.md §11) ────────────────────────────────────────────────
+// `owner_of` answers who writes INSIDE an element. Three more questions have one answer each, here:
+// who writes its ATTRIBUTES, who ORDERS its children, and whether a child EXISTS by the render's doing
+// (the render may remove it when it stops producing it) or the element's (never removed).
+
+/** Who writes an element's attributes: its own runtime (an upgraded custom element's host), Svelte's
+ *  reactivity (a hydrated region root — but see {@link REGION_RENDER_ATTRS}), or the render. */
+export function attributes_writer(el: Element): 'render' | 'element' | 'region' {
+	// (an `<ogygia-region>` in any state: the runtime writes its state attributes — hydrated, kept,
+	// nested — whether or not it woke yet)
+	if (el.localName === REGION || is_region_owned(el)) return 'region';
+	return is_upgraded_ce(el) ? 'element' : 'render';
+}
+
+/** The attributes of a region root that stay the render's: its ADDRESS, which the render that minted
+ *  it writes (a re-minted hole fetches its new answer there); its content is its answer's. */
+export const REGION_RENDER_ATTRS: readonly string[] = ['endpoint'];
+
+/** Who orders an element's children: the render (positions are its sequence), or the element itself
+ *  (a self-owned element relocates and wraps its light DOM — positions are not the render's). */
+export function order_owner(el: Element): 'render' | 'element' {
+	// (ogygia's own element never rearranges what it holds: a fallback, an answer — the render's order)
+	if (el.localName === REGION) return 'render';
+	return is_self_owned(el) ? 'element' : 'render';
+}
+
+/** The nodes ogygia placed under an element-ordered parent (a morph's claim or insertion, the restore
+ *  putting Svelte's children back into a planned host). One per document across bundles: the inlined
+ *  restorer fills the same set (`window.__og_rendered`). */
+function rendered(): WeakSet<Node> {
+	const w = globalThis as { __og_rendered?: WeakSet<Node> };
+	return (w.__og_rendered ??= new WeakSet());
+}
+
+/** Record that the render placed `node` (it may remove it once the render stops producing it). */
+export function mark_render_made(node: Node): void {
+	rendered().add(node);
+}
+
+/**
+ * Does `node`, a child of an element-ordered parent, EXIST by the render's doing? Marked by ogygia, or
+ * structurally: an `<ogygia-region>` is always render output, and an element whose tag the render
+ * produces at this level (`render_tags`) is render output — a runtime does not make the render's
+ * elements. Anything else is the element's own: never matched, never removed.
+ */
+export function render_made(node: Node, render_tags: ReadonlySet<string>): boolean {
+	if (rendered().has(node)) return true;
+	if (node.nodeType !== 1) return false;
+	const name = (node as Element).localName;
+	return name === REGION || render_tags.has(name);
 }

@@ -58,6 +58,16 @@ test('the document: a shadow root with the tree, Svelte’s children back exactl
 	expect(document.body.innerHTML.includes('og-c')).toBe(false);
 });
 
+test('Svelte’s children put back into a host are known render output (a later morph may remove one)', async () => {
+	await served('<demo-card><i>ok</i> text</demo-card>');
+	restore(document);
+	const host = document.querySelector('demo-card')!;
+	const made = (window as { __og_rendered?: WeakSet<Node> }).__og_rendered;
+	expect(made?.has(host.querySelector('i')!)).toBe(true);
+	// the rendered tree went into the shadow root: not the host's children, not marked
+	expect(made?.has(host.shadowRoot!.querySelector('b')!)).toBe(false);
+});
+
 test('a stand-in keeps the parser from splitting the page’s link, and becomes a real <a> in the tree', async () => {
 	await served('<a href="/card"><demo-link>Go</demo-link></a>');
 	// as parsed: the page's link still holds the host (the tree's link is a stand-in)
