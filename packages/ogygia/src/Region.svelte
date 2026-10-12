@@ -29,7 +29,7 @@
 	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
 	// Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike (kit-paths.ts)
 	import { kit_asset as asset } from './kit-paths.js';
-	import { building } from '$app/environment';
+	import { building } from '$app/env';
 	import { page } from '$app/state';
 	import { record_page } from './page-seed-registry.js';
 	import { document_tail, island_graph_script, modulepreload_tag } from './server/document-tail.js';

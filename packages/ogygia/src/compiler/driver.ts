@@ -198,6 +198,23 @@ const ISLAND_DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js'
 const MODULE_SPEC_RE =
 	/(?:^|[\n;])\s*(?:import|export)\b[^;'"()]*?from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
 const ROUTER_PKG_SPEC = 'ogygia/router';
+/** Where Kit's `$app` alias points (Kit 2 and 3: `resolve.alias` `$app` → `<kit>/src/runtime/app`). */
+const KIT_RUNTIME_APP = '/@sveltejs/kit/src/runtime/app/';
+/**
+ * The island shim for an `$app/*` import, by specifier or by where Kit's alias sent it: Vite's alias
+ * plugin runs before any plugin's resolveId, so an import the transform did not rewrite (a module
+ * that joined the island graph late) arrives as `<kit>/src/runtime/app/state`, `…/state/index.js`.
+ */
+export function app_shim_for(source: string, shims: Record<string, string>): string | null {
+	const direct = shims[source];
+	if (direct) return direct;
+	const at = source.indexOf(KIT_RUNTIME_APP);
+	if (at === -1) return null;
+	let name = source.slice(at + KIT_RUNTIME_APP.length);
+	if (name.endsWith('/index.js')) name = name.slice(0, -'/index.js'.length);
+	else if (name.endsWith('.js')) name = name.slice(0, -'.js'.length);
+	return shims['$app/' + name] ?? null;
+}
 /** flag()/experiment() live on the ROOT export — the flag-site sweep only runs on importers. */
 const OGYGIA_ROOT_SPEC = 'ogygia';
 /** Manifest path for a flag site: package-relative for declared surfaces, root-relative else. */
@@ -1038,7 +1055,10 @@ export class Compiler {
 	 * the adapter owns only the FOUC-css virtuals (they carry a Vite `moduleType`) and the Vite build
 	 * value threaded in here (the `universalHooks` path).
 	 */
-	emit(id: string, { ssr, universalHooks }: { ssr: boolean; universalHooks: string | null }): string | null {
+	emit(
+		id: string,
+		{ ssr, universalHooks, kitCodec = null }: { ssr: boolean; universalHooks: string | null; kitCodec?: string | null }
+	): string | null {
 		const ctx = this.#ctx!;
 		const program = this.program;
 		const is_dev = ctx.is_dev;
@@ -1163,7 +1183,7 @@ export class Compiler {
 			return island_deps_module(ssr, is_dev, path.relative(ctx.root, kit_dirs(ctx.root).out_dir));
 		}
 		if (id === RESOLVED(V_TRANSPORT)) {
-			return transport_module(universalHooks);
+			return transport_module(universalHooks, ssr ? null : kitCodec);
 		}
 		if (id === RESOLVED(V_KIT_TRANSPORT)) {
 			// `ogygia.transport` — the codec cluster only when the app crosses a region/wired value over
@@ -1396,8 +1416,9 @@ export class Compiler {
 		// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
 		const importer_id = importer ? strip_id(importer) : undefined;
 		const from_island = importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
-		if (!ssr && from_island && ctx.app_shims[source]) {
-			return ctx.app_shims[source];
+		if (!ssr && from_island) {
+			const shim = app_shim_for(source, ctx.app_shims);
+			if (shim) return shim;
 		}
 
 		// Portable wrappers import `virtual:ogygia/island/<id>` (and hosts import wrappers).

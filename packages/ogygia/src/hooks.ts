@@ -83,7 +83,7 @@ import { observe_event, type Observation } from './freeze/observe.js';
 import { stitch_html, stitch_modes, esi_rewrite } from './freeze/stitch.js';
 import { set_freeze_capture_reader, set_source_recorder } from './freeze/capture.js';
 import type { FreezeEntry } from './freeze/types.js';
-import { building, dev } from '$app/environment';
+import { building, dev } from '$app/env';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 // Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike

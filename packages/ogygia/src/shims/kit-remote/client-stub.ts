@@ -1,38 +1,17 @@
 // Plan A stub for Kit's client `client.js`, scoped to Kit's remote-functions importers only.
 // Provides exactly what those modules read — WITHOUT pulling Kit's router graph.
 import { parse } from 'devalue';
-import { transport } from 'virtual:ogygia/transport';
-import type { NavHandle } from '../../runtime/nav-handle.js';
+import { transport, encoders, decoders } from 'virtual:ogygia/transport';
 import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.js';
 
 export { query_responses, prerender_responses, query_map, live_query_map };
 
-const t = transport || {};
-export const app = {
-	hooks: { transport: t },
-	decoders: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.decode])),
-	encoders: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, v.encode]))
-};
-// Reach the running runtime's navigation through its handle (runtime/nav-handle.ts) — never by
-// importing a runtime module: this stub is island-side code (Kit's remote-function modules import
-// it), and an import into the runtime would make that module shared between the two graphs and
-// split the runtime's boot. The handle is the SPA router's API, or the MPA one under
-// `router: false`; with no ogygia runtime on the document at all, the browser navigates.
-const nav = () =>
-	(globalThis as unknown as Record<symbol, NavHandle | undefined>)[Symbol.for('ogygia.nav')] ?? null;
-export function goto(url: string | URL) {
-	const n = nav();
-	if (n) return n.goto(url);
-	location.href = String(url);
-	return Promise.resolve();
-}
-export const _goto = goto;
-export function invalidateAll() {
-	const n = nav();
-	if (n) return n.invalidateAll();
-	location.reload();
-	return Promise.resolve();
-}
+export const app = { hooks: { transport }, decoders, encoders };
+// Navigation is the `$app/navigation` shim's: Kit's real router on a Kit-booted document, the
+// ogygia runtime's handle on one ogygia owns, the browser with neither. A remote form's redirect or
+// refresh inside an island on a Kit page then goes through Kit, never a full reload. (`_goto`'s
+// options — Kit 2's `invalidateAll`, Kit 3's `refreshAll` — pass through to Kit's own `goto`.)
+export { goto, goto as _goto, invalidateAll, refreshAll } from '../app-navigation.js';
 export function set_nearest_error_page() {}
 /** Kit 3: a remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
  *  are no client hooks to consult (the island world has no Kit client). */

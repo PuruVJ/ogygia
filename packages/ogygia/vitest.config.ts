@@ -29,7 +29,7 @@ export default defineConfig({
 			// them so barrel-importing suites load without a Kit app or the Vite plugin.
 			'$app/state': fileURLToPath(new URL('./test/_stubs/app-state.ts', import.meta.url)),
 			'$app/paths': fileURLToPath(new URL('./test/_stubs/app-paths.ts', import.meta.url)),
-			'$app/environment': fileURLToPath(new URL('./test/_stubs/app-environment.ts', import.meta.url)),
+			'$app/env': fileURLToPath(new URL('./test/_stubs/app-env.ts', import.meta.url)),
 			'virtual:ogygia/runtime-url': fileURLToPath(new URL('./test/_stubs/virtual-runtime-url.ts', import.meta.url)),
 			'virtual:ogygia/router-config': fileURLToPath(new URL('./test/_stubs/virtual-router-config.ts', import.meta.url)),
 			'virtual:ogygia/profiler-config': fileURLToPath(new URL('./test/_stubs/virtual-profiler-config.ts', import.meta.url)),

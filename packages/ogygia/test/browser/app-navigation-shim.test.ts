@@ -4,6 +4,7 @@
 // called `goto()` and reached the ogygia router, which does not own that document — a full reload.
 import { afterEach, expect, test, vi } from 'vitest';
 import * as shim from '../../src/shims/app-navigation.js';
+import { query_map, live_query_map } from '../../src/shims/kit-remote/remote-cache.js';
 
 const KEY = Symbol.for('ogygia.kit-page');
 const scope = globalThis as unknown as Record<symbol, unknown>;
@@ -90,6 +91,60 @@ test('without the Kit thread, calls go to the runtime’s navigation handle', as
 		expect(handle.bust_page_cache).toHaveBeenCalled();
 	} finally {
 		delete scope[NAV];
+	}
+});
+
+// `refreshAll` (Kit 3's remote `form()` calls it through the client stub after a successful submit):
+// the island's queries live in ogygia's remote cache, not Kit's, so they refresh on every document;
+// the page's data then refreshes through whoever owns the document — never a reload.
+function plant_query() {
+	const refresh = vi.fn(async () => {});
+	const reconnect = vi.fn(async () => {});
+	query_map.set('q', new Map([['', { resource: { refresh } }]]));
+	live_query_map.set('l', new Map([['', { resource: { reconnect } }]]));
+	return { refresh, reconnect };
+}
+
+test('refreshAll on a Kit-booted document: island queries refresh, then Kit’s own refreshAll', async () => {
+	const q = plant_query();
+	const navigation = { refreshAll: vi.fn(async () => {}), invalidateAll: vi.fn(async () => {}) };
+	scope[KEY] = { page: {}, navigating: { current: null }, navigation };
+	try {
+		await shim.refreshAll();
+		expect(q.refresh).toHaveBeenCalledOnce();
+		expect(q.reconnect).toHaveBeenCalledOnce();
+		expect(navigation.refreshAll).toHaveBeenCalledOnce();
+		expect(navigation.invalidateAll).not.toHaveBeenCalled();
+	} finally {
+		query_map.clear();
+		live_query_map.clear();
+	}
+});
+
+test('refreshAll on an ogygia document: island queries refresh, then the runtime’s soft refresh', async () => {
+	const q = plant_query();
+	const handle = { invalidateAll: vi.fn(async () => {}) };
+	scope[NAV] = handle;
+	try {
+		await shim.refreshAll();
+		expect(q.refresh).toHaveBeenCalledOnce();
+		expect(handle.invalidateAll).toHaveBeenCalledOnce();
+	} finally {
+		delete scope[NAV];
+		query_map.clear();
+		live_query_map.clear();
+	}
+});
+
+test('refreshAll with no runtime at all refreshes the queries alone', async () => {
+	delete scope[NAV];
+	const q = plant_query();
+	try {
+		await shim.refreshAll();
+		expect(q.refresh).toHaveBeenCalledOnce();
+	} finally {
+		query_map.clear();
+		live_query_map.clear();
 	}
 });
 

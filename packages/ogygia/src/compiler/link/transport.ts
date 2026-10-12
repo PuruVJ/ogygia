@@ -3,12 +3,21 @@
  * map) for the client remote wire codec. Universal hooks are isomorphic, so this is client-safe.
  * Pure over the resolved absolute path to the app's universal hooks module (or null).
  */
-export function transport_module(universal_hooks: string | null): string {
-	if (universal_hooks) {
-		const spec = JSON.stringify(universal_hooks);
-		return `import * as hooks from ${spec};\nexport const transport = hooks.transport || {};`;
-	}
-	return `export const transport = {};`;
+export function transport_module(universal_hooks: string | null, kit_codec: string | null = null): string {
+	if (!universal_hooks) return `export const transport = {};\nexport const encoders = {};\nexport const decoders = {};`;
+	// THE app codec, built once: every ogygia reader (page seed, remote seed, Kit's remote functions
+	// through the client stub) takes `encoders`/`decoders` from here.
+	const src =
+		`import * as hooks from ${JSON.stringify(universal_hooks)};\n` +
+		`export const transport = hooks.transport || {};\n` +
+		`const codecs = Object.entries(transport);\n` +
+		`export const encoders = Object.fromEntries(codecs.map(([k, v]) => [k, v.encode]));\n` +
+		`export const decoders = Object.fromEntries(codecs.map(([k, v]) => [k, v.decode]));`;
+	// Kit 3 (client leg): Kit's own codec module is a reader too — its remote argument encoding reads
+	// it, and only Kit's client boot fills it otherwise (never on a csr=false page). Kit's boot later
+	// fills it again with the same transport.
+	if (!kit_codec) return src;
+	return `import { init_transport } from ${JSON.stringify(kit_codec)};\n${src}\ninit_transport(transport);`;
 }
 
 /**

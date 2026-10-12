@@ -114,19 +114,20 @@ import {
 	V_SERVER_MANIFEST
 } from '../compiler/ids.js';
 
-// Kit's generated CLIENT app entry — dev serves `generated/client/app.js`, build inputs
-// `generated/client-optimized/app.js` (`kit.outDir` is configurable, so match from `generated/`).
-// The one module that evaluates exactly when Kit's client boots and NEVER on a csr=false page —
-// the append target for the kit-world page thread (see the transform hook).
-const KIT_CLIENT_APP_RE = /\/generated\/client(-optimized)?\/app\.js$/;
+// Kit's generated CLIENT app entry — Kit 2 dev serves `generated/client/app.js` and the build inputs
+// `generated/client-optimized/app.js`; Kit 3 nests both under `generated/dev/` and `generated/build/`
+// (`kit.outDir` is configurable, so match from `generated/`). The one module that evaluates exactly
+// when Kit's client boots and NEVER on a csr=false page — the append target for the kit-world page
+// thread (see the transform hook).
+const KIT_CLIENT_APP_RE = /\/generated\/(?:build\/|dev\/)?client(-optimized)?\/app\.js$/;
 // A route host (`+page`/`+layout.svelte`) or option file (`.js`/`.ts`, `.server` too): a dev change
 // to any of these can shift the csr topology OR the `export const freeze` opt-in set.
 const ROUTE_HOST_OR_OPTION_RE = /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)$/;
-// Appended INLINE (no extra module): publishes Kit's REAL reactive `page`/`navigating` (and the
-// real `$page` store, so shim subscribers stay LIVE through Kit navigations) on the well-known
-// slot the island `$app/*` shims read through (`kit_bridge()` in shims/kit-bridge). Importer is
-// Kit's own entry — never island-graph — so `$app/state`/`$app/stores` here are KIT'S REAL
-// modules, already in (or a few bytes atop) Kit's client graph. Runs at module-eval, BEFORE
+// Appended INLINE (no extra module): publishes Kit's REAL reactive `page`/`navigating` on the
+// well-known slot the island `$app/*` shims read through (`kit_bridge()` in shims/kit-bridge; the
+// `$page` shim builds its live store from this `page`). Importer is Kit's own entry — never
+// island-graph — so `$app/state` here is KIT'S REAL module, already in Kit's client graph. Never
+// `$app/stores`: Kit 3 removed it (subscribing throws). Runs at module-eval, BEFORE
 // `kit.start()`'s synchronous hydrate flush, so a shared component's first `page.data` read
 // already sees Kit's truth (the bcms all-products crash read `{}` from the never-seeded island
 // store there).
@@ -136,10 +137,9 @@ const ROUTE_HOST_OR_OPTION_RE = /[\\/]\+(page|layout)(\.server)?\.(svelte|js|ts)
 // island reloaded the whole account page on every click).
 const KIT_PAGE_THREAD =
 	`\nimport { page as __og_kit_page, navigating as __og_kit_nav } from '$app/state';\n` +
-	`import { page as __og_kit_page_store } from '$app/stores';\n` +
 	`import * as __og_kit_navigation from '$app/navigation';\n` +
 	`globalThis[Symbol.for('ogygia.kit-page')] = ` +
-	`{ page: __og_kit_page, navigating: __og_kit_nav, page_store: __og_kit_page_store, navigation: __og_kit_navigation };\n`;
+	`{ page: __og_kit_page, navigating: __og_kit_nav, navigation: __og_kit_navigation };\n`;
 import {
 	PKG_ROOT,
 	PROFILER_UI_DIR,
@@ -357,6 +357,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	/** absolute path to the app's client hooks (src/hooks.client.*), if present — its `init` runs on
 	 *  boot for csr=false pages (Kit never runs it there). */
 	let client_hooks: string | null = null;
+	/** absolute path to Kit 3's client codec module (`#app/internal/transport`); null on Kit 2 */
+	let kit_transport_init: string | null = null;
 	/** true once the process-exit cleanup for the injected keep-client route is registered */
 	let keep_client_cleanup_armed = false;
 
@@ -558,15 +560,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// static capture — a build drops it, the dev server serves it) and, with devtools on, the
 					// dock's drag and resize. Found late, each one re-optimized and RELOADED the page — a
 					// dock opened in that moment closed again (the devtools suite's cold-start timeouts).
-					// (the dock's are ogygia's own dependencies: named through it, `ogygia > …`, the way Vite
-					// includes a dependency of an excluded package)
+					// (ogygia's own dependencies — devalue, the dock's — are named through it, `ogygia > …`, the
+					// way Vite includes a dependency of an excluded package: under a strict install the app
+					// cannot resolve them by bare name, and Vite skipped devalue with a warning)
 					const dev_island_deps =
 						env.command === 'serve'
 							? [
 									'svelte',
 									'svelte/internal/client',
 									'svelte/server',
-									'devalue',
+									'ogygia > devalue',
 									...(devtools_effective ? ['ogygia > @neodrag/svelte', 'ogygia > @neodrag/svelte/resize'] : [])
 								]
 							: [];
@@ -702,7 +705,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 				// Kit's internal wire-protocol + client remote-functions modules (deep-imported) and the
 				// app's universal hooks — resolved off the app root (see resolve_kit_paths).
-				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks } =
+				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks, kit_transport_init } =
 					resolve_kit_paths(root));
 
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
@@ -1258,8 +1261,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 
 				// Every other ogygia virtual is a pure `id → source` emit the driver owns. The Vite build
-				// value it can't see is threaded in: the app's universal-hooks path (configResolved).
-				return compiler.emit(id, { ssr, universalHooks: universal_hooks });
+				// values it can't see are threaded in: the app's universal-hooks path and Kit 3's client
+				// codec module (configResolved).
+				return compiler.emit(id, { ssr, universalHooks: universal_hooks, kitCodec: kit_transport_init });
 			},
 
 			async transform(code, id, options) {

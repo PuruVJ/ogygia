@@ -8,6 +8,19 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-10-12
+
+### Fixed
+
+- SvelteKit 3 production builds no longer fail with `"refreshAll" is not exported`; a remote `form()` in an island refreshes its queries and the page's data after a successful submit, without a reload.
+- Islands on csr=true pages get Kit's page on SvelteKit 3 (Kit 3 moved its generated client entry).
+- `$page` in an island on a Kit page no longer uses Kit's `$app/stores`, which SvelteKit 3 removed.
+- A remote function argument of a custom transport type now encodes on csr=false pages under SvelteKit 3.
+- A remote form in an island on a csr=true page no longer reloads the page after a submit or a redirect; it goes through Kit's router.
+- The `$app/navigation` shim exports `refreshAll` and `snapshot`, and the `$app/stores` shim exports `getStores`, so islands importing them build.
+- ogygia imports `$app/env` instead of `$app/environment` (deprecated in SvelteKit 3).
+- Dev pre-bundles devalue under strict pnpm installs (no "Failed to resolve dependency" warning).
+
 ## [0.8.0] - 2026-10-09
 
 The **passage** release: the runtime and the compiler rebuilt on one identity primitive, regions that move instead of reset across navigations, a standalone compiler, a production SSR profiler, a devtools dock, a typed router, frozen pages and fragment federation. Underneath, one load scheduler, one DOM ownership model and one page model replace per-path rules.

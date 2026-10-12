@@ -1,7 +1,11 @@
 /** SSR-resolved remote response maps shared by Kit remote-functions + ogygia SPA reset. */
 type RemoteNode = { v?: unknown; e?: [number, unknown] };
 
-type RemoteResource = { destroy?: () => void };
+type RemoteResource = {
+	destroy?: () => void;
+	refresh?: () => Promise<unknown>;
+	reconnect?: () => Promise<unknown>;
+};
 type RemoteEntry = { resource?: RemoteResource };
 
 /**
@@ -34,6 +38,21 @@ export class RemoteCache {
 		destroy_map(this.live_query_map);
 		this.query_map.clear();
 		this.live_query_map.clear();
+	}
+
+	/**
+	 * Re-fetch every live query instance in place (Kit's `refreshAll` does the same to its own maps):
+	 * queries refresh, live queries reconnect. Settles when all of them have.
+	 */
+	refresh_instances(): Promise<void> {
+		const pending: Promise<unknown>[] = [];
+		for (const entries of this.query_map.values()) {
+			for (const { resource } of entries.values()) if (resource?.refresh) pending.push(resource.refresh());
+		}
+		for (const entries of this.live_query_map.values()) {
+			for (const { resource } of entries.values()) if (resource?.reconnect) pending.push(resource.reconnect());
+		}
+		return Promise.allSettled(pending).then(() => {});
 	}
 }
 
@@ -76,4 +95,8 @@ export function clear_remote_seeds(): void {
 
 export function clear_remote_instances(): void {
 	remote_cache.clear_instances();
+}
+
+export function refresh_remote_instances(): Promise<void> {
+	return remote_cache.refresh_instances();
 }

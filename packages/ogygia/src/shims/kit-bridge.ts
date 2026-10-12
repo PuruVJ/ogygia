@@ -21,6 +21,8 @@ export interface KitNavigation {
 	goto(url: string | URL, opts?: unknown): Promise<void>;
 	invalidate(resource?: unknown): Promise<void>;
 	invalidateAll(): Promise<void>;
+	/** Kit 2.7x and Kit 3; absent on older Kit. */
+	refreshAll?(): Promise<void>;
 	preloadData(url: string | URL): Promise<unknown>;
 	preloadCode(url?: string): Promise<void>;
 	pushState(url: string | URL, state: unknown): void;
@@ -34,9 +36,6 @@ export interface KitNavigation {
 export interface KitPageBridge {
 	page: PageSnapshot;
 	navigating: { current: unknown };
-	/** Kit's real `$page` store — `$app/stores` shim subscribers delegate here so they stay LIVE
-	 *  through Kit navigations (the state getters are already live by delegation). */
-	page_store?: { subscribe(run: (value: PageSnapshot) => void): () => void };
 	/** Kit's real navigation module (see {@link KitNavigation}). Absent on an older thread. */
 	navigation?: KitNavigation;
 }

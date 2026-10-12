@@ -4,6 +4,7 @@
 // On a Kit-booted document the kit-world page thread supplies Kit's REAL page instead (the
 // island store is never seeded there); the snapshot is read fresh per subscription — a static
 // read, the same accepted trade-off as the shim's own url fallback (see e2e/split-brain.ts).
+import { toStore } from 'svelte/store';
 import { page_state, subscribe_page, warn_foreign_page_read } from './page-store.svelte.js';
 import { kit_bridge } from './kit-bridge.js';
 
@@ -24,13 +25,27 @@ function snapshot() {
 	};
 }
 
+type Snapshot = ReturnType<typeof snapshot>;
+
+function same(a: Snapshot, b: Snapshot) {
+	for (const k in a) if (a[k as keyof Snapshot] !== b[k as keyof Snapshot]) return false;
+	return true;
+}
+
 export const page = {
-	subscribe(run: (value: ReturnType<typeof snapshot>) => void) {
-		// Kit world: delegate to Kit's REAL `$page` store — identical value shape, and the
-		// subscription stays live through Kit navigations/invalidations (a fallback snapshot
-		// would freeze at subscribe time there).
-		const real = kit_bridge()?.page_store;
-		if (real) return real.subscribe(run);
+	subscribe(run: (value: Snapshot) => void) {
+		// Kit world: a store over Kit's REAL reactive `page`, so the subscription stays live through
+		// Kit navigations/invalidations (a plain snapshot would freeze at subscribe time). Built from
+		// `$app/state`, not Kit's `$app/stores`: Kit 3 removed those (subscribing throws). A fresh
+		// snapshot object is made per read, so an unchanged one is not passed on twice.
+		if (kit_bridge()) {
+			let last: Snapshot | null = null;
+			return toStore(snapshot).subscribe((value) => {
+				if (last && same(last, value)) return;
+				last = value;
+				run(value);
+			});
+		}
 		run(snapshot());
 		return subscribe_page(() => run(snapshot()));
 	}
@@ -38,7 +53,9 @@ export const page = {
 
 export const navigating = {
 	subscribe(run: (value: unknown) => void) {
-		run(kit_bridge()?.navigating.current ?? null);
+		const kit = kit_bridge();
+		if (kit) return toStore(() => kit.navigating.current ?? null).subscribe(run);
+		run(null);
 		return () => {};
 	}
 };
@@ -50,3 +67,6 @@ export const updated = {
 	},
 	check: async () => false
 };
+
+/** Kit's `getStores()` (Kit 3 removed it; an island importing it still builds, and reads these). */
+export const getStores = () => ({ page, navigating, updated });
