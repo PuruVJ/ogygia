@@ -13,6 +13,7 @@
 // everything its lazy chunks need — shared between island code and the runtime, which split the
 // runtime's boot into a dozen files. Types only below.
 import { kit_bridge } from './kit-bridge.js';
+import { refresh_remote_instances } from './kit-remote/remote-cache.js';
 import { bind_to_component } from '../runtime/nav-hooks.js';
 import type { NavHandle } from '../runtime/nav-handle.js';
 import type { BeforeNavigateCallback, AfterNavigateCallback } from '../runtime/router.js';
@@ -59,6 +60,19 @@ export function invalidateAll(): Promise<void> {
 	if (o) return o.invalidateAll();
 	location.reload();
 	return Promise.resolve();
+}
+
+/**
+ * Kit's `refreshAll` (Kit 2.7x, Kit 3), which Kit 3's remote `form()` also calls after a successful
+ * submit (through the remote client stub). Island queries live in ogygia's remote cache, not Kit's,
+ * so they refresh here on every document; the page's data then refreshes through whoever owns the
+ * document. With neither runtime, the queries alone refresh: never a reload.
+ */
+export function refreshAll(): Promise<void> {
+	const queries = refresh_remote_instances();
+	const k = kit();
+	const page = k ? (k.refreshAll ?? k.invalidateAll)() : og()?.invalidateAll();
+	return Promise.all([queries, page]).then(() => {});
 }
 
 export function preloadData(url: string | URL): Promise<unknown> {
@@ -118,6 +132,23 @@ export function onNavigate(fn: (navigation: unknown) => unknown): () => void {
 	const k = kit();
 	if (k) k.onNavigate(fn);
 	return NO_UNSUBSCRIBE;
+}
+
+const VITE_QUERY = /\?[^)\s]*(?=:\d+:\d+\)?$)/;
+type SnapshotOptions ={ id?: string; capture: () => unknown; restore: (value: never) => void; reset?: () => void };
+
+// Kit 3's `snapshot` (capture state before navigating, restore on history traversal): Kit's on a Kit
+// document; accept + no-op on ours (no Kit history to restore from). Kit names an unnamed snapshot
+// after its CALL SITE, and through this shim the call site would be the shim itself (every island's
+// snapshot one id): the caller's own frame names it instead.
+export function snapshot(options: SnapshotOptions): void {
+	const k = kit() as { snapshot?: (o: SnapshotOptions) => void } | null;
+	if (!k?.snapshot) return;
+	if (options.id !== undefined) return k.snapshot(options);
+	// frames: `Error`, this function, its caller — Vite query strings stripped (they change on HMR),
+	// as Kit does for its own call-site ids
+	const frame = new Error().stack?.split('\n')[2]?.replace(VITE_QUERY, '').trim();
+	k.snapshot({ ...options, id: frame || 'island' });
 }
 
 /** `ogygia/app`'s `bust_page_cache`: drop the SPA router's warmed page HTML (after mutations / auth

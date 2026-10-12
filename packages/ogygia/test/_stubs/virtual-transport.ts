@@ -4,3 +4,5 @@ export const transport: Record<
 	string,
 	{ encode: (v: unknown) => unknown; decode: (v: never) => unknown }
 > = {};
+export const encoders: Record<string, (v: unknown) => unknown> = {};
+export const decoders: Record<string, (v: unknown) => unknown> = {};

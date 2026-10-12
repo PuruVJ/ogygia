@@ -11,7 +11,7 @@
  */
 import { buildKey, buildHadSecret } from 'virtual:ogygia/secret';
 import { sign } from 'virtual:ogygia/sign';
-import { building } from '$app/environment';
+import { building } from '$app/env';
 
 export interface SigningKey {
 	secret: string;
