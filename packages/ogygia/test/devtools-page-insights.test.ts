@@ -1370,6 +1370,23 @@ describe('analyze_page', () => {
 		// under the threshold: the snapshot's normal first report
 		const short = analyze_page(page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1030, done: 1031 }] }), [region('v', 'Quick', 'visible')], [], 2000);
 		expect(codes(short)).not.toContain('held-idle');
+		// REGRESSION (CI, the lab page): the page's own script took the thread for the whole wait — a
+		// long task; no turn can be handed out inside it, so the scheduler held nothing
+		const page_task = analyze_page(
+			page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1070, done: 1071 }], longtasks: [{ t: 1002, ms: 66 }] }),
+			[region('v', 'AfterScript', 'visible')],
+			[],
+			2000
+		);
+		expect(codes(page_task)).not.toContain('held-idle');
+		// a failing island's hydrate step held the thread until it threw: busy, as a hydrating island is
+		const failed_step = analyze_page(
+			page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1070, done: 1071 }] }),
+			[region('v', 'AfterBroken', 'visible'), region('x', 'Broken')],
+			[{ fp: 'x', message: 'planted', span: [900, 1068], turn: 1001 }],
+			2000
+		);
+		expect(codes(failed_step)).not.toContain('held-idle');
 	});
 
 	it('a queued island names the islands that ran ahead of it', () => {
