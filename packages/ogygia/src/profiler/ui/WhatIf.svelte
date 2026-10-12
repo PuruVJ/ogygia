@@ -23,7 +23,7 @@
 		{#if result.clamped}<span class="hint">· they claim more than the render used: held at what it used</span>{/if}
 	</p>
 	<ul>
-		{#each parts as p, i (p.title)}
+		{#each parts as p, i}
 			<li>
 				<label>
 					<input type="checkbox" bind:checked={on[i]} />

@@ -13,9 +13,12 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+// (Kit 3 lives in its own workspace importer, internal/kit-sources: its svelte ^5.57 peer would
+// otherwise move the svelte ogygia resolves, and a dev server ran two Svelte runtimes)
+const kit_sources = createRequire(path.join(__dirname, '../../../internal/kit-sources/package.json'));
 const KITS = {
 	'Kit 2': path.dirname(require.resolve('@sveltejs/kit/package.json')),
-	'Kit 3': path.dirname(require.resolve('@sveltejs/kit3/package.json'))
+	'Kit 3': path.dirname(kit_sources.resolve('@sveltejs/kit3/package.json'))
 };
 
 const IMPORT_G = /import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;

@@ -20,6 +20,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `$app/navigation` shim exports `refreshAll` and `snapshot`, and the `$app/stores` shim exports `getStores`, so islands importing them build.
 - ogygia imports `$app/env` instead of `$app/environment` (deprecated in SvelteKit 3).
 - Dev pre-bundles devalue under strict pnpm installs (no "Failed to resolve dependency" warning).
+- Going back while the next page is still loading no longer leaves that page on screen under the old address.
+- Island downloads released together start across tasks, so a page with many islands makes no long task when they wake.
+- The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
 
 ## [0.8.0] - 2026-10-09
 
