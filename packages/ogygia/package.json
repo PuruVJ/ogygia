@@ -250,7 +250,6 @@
 		"@neodrag/svelte": "3.0.0-next.12",
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
 		"@orama/orama": "^3.1.18",
-		"@sveltejs/kit3": "npm:@sveltejs/kit@3.0.1",
 		"@sveltejs/sv-utils": "^0.3.3",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",
