@@ -36,7 +36,8 @@ import {
 	hydrate_started,
 	hydrate_turn,
 	register_region,
-	unregister_region
+	unregister_region,
+	yield_task
 } from './schedule.js';
 import { once_visible } from './observe.js';
 import { preload_island_graph } from './island-graph-preload.js';
@@ -152,7 +153,11 @@ let core_promise: Promise<HydrateCore> | null = null;
 let loaded_core: HydrateCore | null = null;
 function hydrate_core(): Promise<HydrateCore> {
 	if (!core_promise) {
-		core_promise = import('./hydrate-core.js').then((m) => (loaded_core = m));
+		// in a task of its own: the import's synchronous start (the bundler's preload of the chunk's
+		// ~20 dependencies) ran inside the first island's start, one long task with it
+		core_promise = yield_task()
+			.then(() => import('./hydrate-core.js'))
+			.then((m) => (loaded_core = m));
 	}
 	return core_promise;
 }
@@ -1254,6 +1259,11 @@ class OgygiaRegion extends HTMLElement {
 			// client entry publishes; it must not hydrate before Kit applied it (kit-page-thread.svelte.ts).
 			await this.#kit_page_ready(core);
 			if (!this.isConnected) return;
+			// The page's seeds parse now, BEFORE the turn: data arriving is not the hydrate step. The
+			// first island parses the seed once (700 KB on a large CMS page), and inside its turn that
+			// parse plus the hydrate made one long task. (The step calls these again: a no-op by then.)
+			core.seed_remote_once();
+			core.seed_page_once();
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
