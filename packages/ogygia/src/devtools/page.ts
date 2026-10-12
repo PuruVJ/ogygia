@@ -271,7 +271,13 @@ export function failures(since = last_nav()?.t ?? -Infinity): Failure[] {
 					break;
 				}
 			}
-			out.push({ fp: e.fp, message: e.message, ...(start !== undefined ? { span: [start, e.t] as [number, number] } : {}) });
+			const turn = (e as { turn?: unknown }).turn;
+			out.push({
+				fp: e.fp,
+				message: e.message,
+				...(start !== undefined ? { span: [start, e.t] as [number, number] } : {}),
+				...(typeof turn === 'number' ? { turn } : {})
+			});
 		}
 	}
 	return out;

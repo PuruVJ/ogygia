@@ -1225,6 +1225,8 @@ class OgygiaRegion extends HTMLElement {
 		const t0 = now_ms();
 		const dt_t0 = DEVTOOLS ? t0 : 0;
 		let t_loaded = t0;
+		/** when its hydrate step began: a failed step held the thread from here (the reports count it busy) */
+		let t_turn: number | undefined;
 		if (DEVTOOLS) {
 			dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
 			dt_seen(this);
@@ -1267,7 +1269,7 @@ class OgygiaRegion extends HTMLElement {
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
-			const t_turn = now_ms();
+			t_turn = now_ms();
 			const ssr_html = this.#ssr_html;
 			// Was the island touched while it slept (runtime/drift-watch.ts)? Read HERE, before the
 			// hydrate step edits it (lakes lifted): an untouched island skips the parse-and-compare.
@@ -1296,13 +1298,14 @@ class OgygiaRegion extends HTMLElement {
 			if (this.#watching) mark_region_changed(this);
 			this.#unwatch();
 			// the beacon's CPU window stops waiting for this one, and the visit reports it (no-op without it)
-			if (BEACON) beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0);
+			if (BEACON) beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0, t_turn);
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
 					name: 'region.hydrate.failed',
 					...dt_ids(this),
-					message: (err as { message?: string })?.message ?? String(err)
+					message: (err as { message?: string })?.message ?? String(err),
+					...(t_turn !== undefined ? { turn: t_turn } : {})
 				});
 			// Distinguish the ENTRY FETCH failing (the module never loaded) from the hydrate throwing
 			// (the module loaded, its code ran and failed). A `Failed to fetch dynamically imported

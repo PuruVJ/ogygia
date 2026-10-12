@@ -372,6 +372,9 @@ export interface Failure {
 	message: string;
 	/** its wake → the failure (page clock): the island was loading, and held its turn, meanwhile */
 	span?: [number, number];
+	/** when its hydrate step began (page clock): from here to the failure it held the thread, as a
+	 *  hydrating island does */
+	turn?: number;
 }
 
 export type Rating = 'good' | 'fair' | 'poor';
@@ -1064,6 +1067,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 					if (typeof top === 'number' && vh && top >= vh) continue;
 					busy.push([f.span[0], f.span[1]]);
 				}
+			// …and any failed island's hydrate STEP, for every island: the step held the thread until it
+			// threw (a failing first-screen island's step — its retry against the server copy, its dev
+			// error — read as the scheduler idling while the next island waited)
+			for (const f of failures) if (f.span && typeof f.turn === 'number' && f.turn <= f.span[1]) busy.push([f.turn, f.span[1]]);
+			// …and every long task: the thread was taken (the page's own script, a third party), and no
+			// turn can be handed out inside a task — a planted busy loop on the lab page read as ogygia's
+			// scheduler holding the islands after it
+			for (const t of page.longtasks) busy.push([t.t, t.t + t.ms]);
 			busy.sort((x, y) => x[0] - y[0]);
 			let covered = 0;
 			let at = a;
