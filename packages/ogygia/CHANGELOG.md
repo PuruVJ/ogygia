@@ -22,6 +22,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dev pre-bundles devalue under strict pnpm installs (no "Failed to resolve dependency" warning).
 - Going back while the next page is still loading no longer leaves that page on screen under the old address.
 - Island downloads released together start across tasks, so a page with many islands makes no long task when they wake.
+- The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
 - The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
 
 ## [0.8.0] - 2026-10-09
