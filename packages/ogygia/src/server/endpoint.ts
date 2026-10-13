@@ -4,6 +4,32 @@
 // `ogygiaHandle({ endpoint })`.
 export const DEFAULT_ISLANDS_ENDPOINT = '/__ogygia__';
 
+/**
+ * THE ISLANDS ENDPOINT — one path for everything that names it: the handle answers on it, every
+ * capability is minted against it, a render knows it is serving a hole by it, the profiler counts
+ * its requests by it. `handle({ endpoint })` sets it as the app's hooks load, before any render
+ * (Kit loads the server hooks before it renders anything, prerender included). It used to move only
+ * the handler: pages still minted `/__ogygia__?…`, and behind a proxy that forwards only the app's
+ * own prefixes every hole was empty.
+ *
+ * Process-wide on `globalThis`, not module state: this file can load under two module ids in one
+ * server (the plugin points the mint at the package's built file while an app's hooks import it from
+ * a linked package's source), and a module variable set by the handle was then never read by the mint.
+ */
+const ENDPOINT_KEY = Symbol.for('ogygia.islands-endpoint');
+const endpoint_slot = globalThis as unknown as Record<symbol, string | undefined>;
+
+/** The islands endpoint path (without the app's base: matched by suffix, minted through `resolve`). */
+export function islands_endpoint(): string {
+	return endpoint_slot[ENDPOINT_KEY] ?? DEFAULT_ISLANDS_ENDPOINT;
+}
+
+/** Set by the handle (`handle({ endpoint })`); the default when none is given. */
+export function configure_islands_endpoint(path: string | undefined): void {
+	// (the suffix match and the mint both read a leading slash: `api/x` would match `/myapi/x`)
+	endpoint_slot[ENDPOINT_KEY] = !path ? DEFAULT_ISLANDS_ENDPOINT : path.startsWith('/') ? path : '/' + path;
+}
+
 /** Max b64url props blob accepted by the region handle (and refused at mint time). */
 export const MAX_REGION_PROPS_LEN = 8192;
 

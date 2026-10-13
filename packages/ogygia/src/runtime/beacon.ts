@@ -1082,7 +1082,7 @@ function build_visit(): Record<string, unknown> | null {
 	} catch {
 		/* no document */
 	}
-	const preload_misses: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[] = [];
+	const preload_misses: { url: string; type: string; bytes: number; as: string; crossorigin: string | null; hole?: true }[] = [];
 	const type_of = (r: PerformanceResourceTiming): string => resource_type(ext_of(r.name), r.initiatorType, link_as.get(r.name));
 	let resources: Record<string, unknown>[] = [];
 	const refetched: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; hole?: string; runtime?: true }[] = [];
@@ -1138,7 +1138,16 @@ function build_visit(): Record<string, unknown> | null {
 			// used, and the download is the runtime's own second ask — a hole fetched again after
 			// Kit rebuilt the page, a retry)
 			if (downloads.length < (hole_fetches.get(url) ?? 0)) continue;
-			if (pre && again) preload_misses.push({ url: url.slice(0, 500), type: type_of(pre), bytes: again.transferSize, as: link_as.get(url) ?? '', crossorigin: link_co.get(url) ?? null });
+			if (pre && again)
+				preload_misses.push({
+					url: url.slice(0, 500),
+					type: type_of(pre),
+					bytes: again.transferSize,
+					as: link_as.get(url) ?? '',
+					crossorigin: link_co.get(url) ?? null,
+					// a hole the runtime asked for (its preload is ogygia's own): known by the ask, not the path
+					...(hole_fetches.has(url) ? { hole: true as const } : {})
+				});
 		}
 		// CONTENT-NAMED FILES FETCHED AGAIN: a file under `/immutable/` is named by its content, so a
 		// browser that has it should never ask again. Revalidated (a 304: the body came from the cache

@@ -280,6 +280,8 @@ export interface PreloadMiss {
 	crossorigin: string | null;
 	/** the answer's `Vary` header, when the devtools read it (a font downloaded again) */
 	vary?: string;
+	/** a hole the runtime asked for: the preload is ogygia's own (on any endpoint path) */
+	hole?: true;
 }
 
 export interface HoleWait {
@@ -1834,7 +1836,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// fetch with no headers): the two match by construction, so a second download is the browser's
 		// choice, not the page's markup — Safari does not reuse it where Chromium does
 		const safari = !!page.browser?.startsWith('Safari');
-		const ours = (m: PreloadMiss) => m.type === 'fetch' && m.crossorigin === 'anonymous' && m.url.includes('/__ogygia__');
+		const ours = (m: PreloadMiss) => m.type === 'fetch' && m.crossorigin === 'anonymous' && m.hole === true;
 		// SAFARI NEVER HANDS A FETCH PRELOAD TO A LATER fetch(): every crossorigin and credentials
 		// pairing, every Cache-Control (no-store to public max-age), Vary or not, isolated or not — two
 		// requests each time, where Chromium makes one (fonts it does reuse). So no attribute fixes it
