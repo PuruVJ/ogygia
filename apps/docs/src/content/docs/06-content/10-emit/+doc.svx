@@ -19,27 +19,27 @@ Add the emissions that your audience asks for. A public docs site wants `sitemap
 
 ```ts [sitemap.xml]
 // src/routes/sitemap.xml/+server.ts — every leaf of the outline
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server';
 export const prerender = true;
 export const GET = docs.emit.sitemap({ base: '/docs', origin: 'https://example.dev' });
 ```
 
 ```ts [llms.txt]
 // src/routes/llms.txt/+server.ts — the llmstxt.org model-readable map
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server';
 export const prerender = true;
 export const GET = docs.emit.llms({ title: 'Example', description: 'Docs for Example.' });
 ```
 
 ```ts [raw markdown]
 // src/routes/docs/[...slug].md/+server.ts — the pre-compile source, per page
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server';
 export const { GET, entries } = docs.emit.raw();   // strips frontmatter by default
 ```
 
 ```ts [rss.xml]
 // src/routes/blog/rss.xml/+server.ts — the blog genre's feed
-import { docs, blog } from '$lib/site.server';
+import { docs, blog } from '#lib/site.server';
 export const prerender = true;
 export const GET = docs.emit.rss({
 	title: 'Example blog',
@@ -56,7 +56,7 @@ export const GET = docs.emit.rss({
 
 ```ts [search.json]
 // src/routes/docs/search.json/+server.ts — the index the client worker queries
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server';
 export const prerender = true;
 export const GET = docs.emit.search();
 ```

@@ -135,8 +135,8 @@ You can replace the HTML elements Markdown generates with your own components. T
 ```ts
 // markdown.config.ts
 import { markdown } from 'ogygia/markdown';
-import Link from '$lib/playground/md/Link.svelte';
-import Table from '$lib/playground/md/Table.svelte';
+import Link from '#lib/playground/md/Link.svelte';
+import Table from '#lib/playground/md/Table.svelte';
 
 export default markdown({
 	components: {

@@ -1,5 +1,5 @@
 import type { EntryGenerator } from './$types';
-import { builderPages } from '$lib/builder/pages';
+import { builderPages } from '#lib/builder/pages.ts';
 
 // Static HTML with live island holes; csr=false inherited from the root layout. Server-only keeps
 // the collection out of the browser graph.

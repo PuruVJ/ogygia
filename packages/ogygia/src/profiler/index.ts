@@ -27,7 +27,8 @@
  * All state lives in memory; nothing is written to disk.
  */
 
-import type { Handle, RequestEvent } from '@sveltejs/kit';
+import type { RequestEvent } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import {
 	analyze,
 	analyze_heap,
@@ -6124,7 +6125,7 @@ class Profiler {
 		// (one closure per attributed request; nothing on an idle request).
 		if (ctx && this.#wrap_event_fetch && typeof event.fetch === 'function') {
 			try {
-				event.fetch = this.#wrap_event_fetch(event.fetch);
+				(event as { fetch: typeof fetch }).fetch = this.#wrap_event_fetch(event.fetch);
 			} catch {
 				// a frozen event (a test double) — the global patch still covers real HTTP
 			}

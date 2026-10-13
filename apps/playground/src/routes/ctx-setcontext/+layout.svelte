@@ -5,7 +5,7 @@
 	// each island seeds its own getContext() from. Mirrors a real company +layout.svelte.
 	import { setContext } from 'ogygia';
 	import { writable } from 'svelte/store';
-	import { SharedCounter } from '$lib/counter-object.svelte.js';
+	import { SharedCounter } from '#lib/counter-object.svelte.js';
 
 	let { children } = $props();
 

@@ -7,8 +7,8 @@ import { federate } from 'ogygia/federation';
 import { region } from 'ogygia';
 // `region: 'raw'`: the fragment root ships as HTML only, but the mark gives its scoped stylesheet
 // a real client asset the bake links.
-import Kpis from '$lib/Kpis.svelte' with { region: 'raw' };
-import { env } from '$env/dynamic/private';
+import Kpis from '#lib/Kpis.svelte' with { region: 'raw' };
+import * as env from '$app/env/private';
 
 federate({
 	name: 'dash',

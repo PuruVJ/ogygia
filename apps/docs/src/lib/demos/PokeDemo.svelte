@@ -1,7 +1,7 @@
 <script lang="ts">
-	import DemoBlock from '$lib/DemoBlock.svelte';
-	import Counter from '$lib/demos/Counter.svelte';
-	import FrozenCounter from '$lib/demos/FrozenCounter.svelte';
+	import DemoBlock from '#lib/DemoBlock.svelte';
+	import Counter from '#lib/demos/Counter.svelte';
+	import FrozenCounter from '#lib/demos/FrozenCounter.svelte';
 
 	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>

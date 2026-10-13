@@ -1,5 +1,5 @@
 <script lang="ts">
-	import HeaderHost from '$lib/HeaderHost.svelte' with { wake: 'load' };
+	import HeaderHost from '#lib/HeaderHost.svelte' with { wake: 'load' };
 	let { data } = $props();
 </script>
 

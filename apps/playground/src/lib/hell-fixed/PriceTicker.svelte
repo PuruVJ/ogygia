@@ -4,7 +4,7 @@
 	// REMOTE FUNCTION at the top level, so that call runs during the page's SSR (the "remote
 	// functions" phase on the timeline).
 	import { page } from '$app/state';
-	import { stockSummary } from '$lib/hell/hell.remote';
+	import { stockSummary } from '#lib/hell/hell.remote.ts';
 	// PATTERN seed-whole-read
 	const keys = Object.keys(page.data);
 	const n = (page.data.catalog?.products?.length as number | undefined) ?? 0;

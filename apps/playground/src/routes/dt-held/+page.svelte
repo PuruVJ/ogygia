@@ -3,8 +3,8 @@
 	// slow and then throws, and a ready island below the fold that waits for it. The wait is the
 	// scheduler's viewport-first hold, explained by the failing island's load: `held-idle` (ogygia's
 	// own unexplained wait) must stay quiet; `hydrate-failed` names SlowFail.
-	import SlowFail from '$lib/dtheld/SlowFail.svelte' with { wake: 'load' };
-	import BelowReady from '$lib/dtheld/BelowReady.svelte' with { wake: 'load' };
+	import SlowFail from '#lib/dtheld/SlowFail.svelte' with { wake: 'load' };
+	import BelowReady from '#lib/dtheld/BelowReady.svelte' with { wake: 'load' };
 </script>
 
 <h1>held lab</h1>

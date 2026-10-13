@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 
 	let { query = '(max-width: 600px)' }: { query?: string } = $props();
 	let taps = $state(0);

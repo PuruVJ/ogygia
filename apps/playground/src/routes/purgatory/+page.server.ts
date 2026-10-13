@@ -5,8 +5,8 @@
 import {
 	randomUUID
 } from 'node:crypto';
-import { BRANDS, PRODUCTS } from '$lib/inferno/data';
-import { allTags, catalogRows, flatten, initials, isSlug, priceCached, priceOf, sortByName, withDiscount } from '$lib/purgatory/helpers';
+import { BRANDS, PRODUCTS } from '#lib/inferno/data.ts';
+import { allTags, catalogRows, flatten, initials, isSlug, priceCached, priceOf, sortByName, withDiscount } from '#lib/purgatory/helpers.ts';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;
@@ -36,7 +36,7 @@ export const load: PageServerLoad = async ({ url }) => {
 	const cached = sorted.slice(0, 800).map((p) => priceCached(p.price, p.currency));
 	const sale = withDiscount(sorted);
 	const flat = flatten(sorted.map((p) => p.tags));
-	// the brands whose name is already a slug (the check itself: $lib/purgatory/helpers.ts)
+	// the brands whose name is already a slug (the check itself: #lib/purgatory/helpers.ts)
 	const slugged = BRANDS.filter((b) => isSlug(b.name.toLowerCase().replaceAll(' ', ''))).length;
 	const inits = sorted.map((p) => initials(p.name));
 
@@ -52,7 +52,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		slugged,
 		items: catalog.items.length as number,
 		inits: inits.slice(0, 3),
-		// the shelf island's list (it reads page.data through a helper: see $lib/purgatory/shelf.ts)
+		// the shelf island's list (it reads page.data through a helper: see #lib/purgatory/shelf.ts)
 		shelf: sorted.slice(0, 400).map((p) => ({ id: p.id, name: p.name, price: p.price }))
 	};
 };

@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { EntryGenerator } from './$types';
-import { blog } from '$lib/site.server';
+import { blog } from '#lib/site.server.ts';
 
 // Every post slug — the prerender source. The body itself crosses via the `post` remote.
 export const prerender = true;

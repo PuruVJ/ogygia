@@ -3,7 +3,7 @@
 	// PLAIN component. Kit hydrates the tree. Because RegionInside uses <Region> DIRECTLY (not the
 	// `with { wake }` import sugar the csr=true transform strips), it still emits an <ogygia-region>
 	// + runtime script here — and the runtime yields to Kit. See e2e/region-mixed.ts.
-	import RegionInside from '$lib/mixed-region/RegionInside.svelte';
+	import RegionInside from '#lib/mixed-region/RegionInside.svelte';
 </script>
 
 <nav><a href="/">Home</a> <a href="/region-mixed">csr=false version</a></nav>

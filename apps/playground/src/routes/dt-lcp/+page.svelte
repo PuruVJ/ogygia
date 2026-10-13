@@ -4,7 +4,7 @@
 	// the browser begins fetching it late — the delay before the fetch is the plant then. Both must be
 	// named on the hero island, with the part that cost most.
 	import { page } from '$app/state';
-	import Hero from '$lib/dtlcp/Hero.svelte' with { wake: 'load' };
+	import Hero from '#lib/dtlcp/Hero.svelte' with { wake: 'load' };
 	const late = page.url.searchParams.has('late');
 	// `?quick`: the same hero answered in 300 ms — the fast twin "since your last profile" compares
 	const quick = page.url.searchParams.has('quick');

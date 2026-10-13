@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getTemperature } from '$lib/greetings.remote';
+	import { getTemperature } from '#lib/greetings.remote.ts';
 	import { Temperature } from '../hooks';
 </script>
 

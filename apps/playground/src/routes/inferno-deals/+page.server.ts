@@ -2,9 +2,9 @@
 // date formatters, the name sort, the UI-string lookup. Each slow helper line then slows two pages,
 // and the dashboard's "fix once, faster on every page" adds them up. (Not an answer-key page: no
 // PATTERN comments; /inferno's own comments name what the helpers do wrong.)
-import { PRODUCTS } from '$lib/inferno/data';
-import { tr } from '$lib/inferno/catalog';
-import { byName, formatMoney, relTime } from '$lib/inferno/format';
+import { PRODUCTS } from '#lib/inferno/data.ts';
+import { tr } from '#lib/inferno/catalog.ts';
+import { byName, formatMoney, relTime } from '#lib/inferno/format.ts';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;

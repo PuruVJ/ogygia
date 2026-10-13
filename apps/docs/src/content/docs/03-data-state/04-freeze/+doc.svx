@@ -151,7 +151,7 @@ personal. Then mark the hole with `stitch`:
 
 ```svelte
 <script>
-  import Header from '$lib/Header.svelte' with { render: 'deferred', stitch: 'serve' };
+  import Header from '#lib/Header.svelte' with { render: 'deferred', stitch: 'serve' };
 </script>
 ```
 
@@ -170,7 +170,7 @@ speaks **ESI** (edge side includes: Akamai, Fastly, Varnish) you can keep both:
 
 ```svelte
 <script>
-  import Header from '$lib/Header.svelte' with { render: 'deferred', stitch: 'edge' };
+  import Header from '#lib/Header.svelte' with { render: 'deferred', stitch: 'edge' };
 </script>
 ```
 

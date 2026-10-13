@@ -1,7 +1,7 @@
 <script lang="ts">
-	import DemoBlock from '$lib/DemoBlock.svelte';
-	import LoadLive from '$lib/demos/LoadLive.svelte';
-	import LoadFrozen from '$lib/demos/LoadFrozen.svelte';
+	import DemoBlock from '#lib/DemoBlock.svelte';
+	import LoadLive from '#lib/demos/LoadLive.svelte';
+	import LoadFrozen from '#lib/demos/LoadFrozen.svelte';
 
 	let { code }: { code: string } = $props();
 </script>

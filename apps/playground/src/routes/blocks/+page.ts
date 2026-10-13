@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { pages } from '$lib/blocks/pages';
+import { pages } from '#lib/blocks/pages.ts';
 
 export async function load() {
 	const page = await pages.get('landing');

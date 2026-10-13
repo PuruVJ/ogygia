@@ -7,8 +7,8 @@
 	// The holes live in a shared component (RebuildChrome): a route host's own marks are stripped
 	// on a csr=true page, a component's are not — the customer's header shape.
 	// e2e/hole-kit-rebuild.spec.ts.
-	import Boom from '$lib/Boom.svelte';
-	import RebuildChrome from '$lib/RebuildChrome.svelte';
+	import Boom from '#lib/Boom.svelte';
+	import RebuildChrome from '#lib/RebuildChrome.svelte';
 	let n = $state(0);
 </script>
 

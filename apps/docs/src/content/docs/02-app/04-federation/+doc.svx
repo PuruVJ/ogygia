@@ -29,7 +29,7 @@ The **shell** — an app that consumes fragments:
 ```ts title="src/lib/federation.server.ts (the shell)"
 import { federate } from 'ogygia/federation';
 import { env } from '$env/dynamic/private';
-import { session_from } from '$lib/auth';
+import { session_from } from '#lib/auth';
 
 export const { cms, dash } = federate({
   name: 'shell',
@@ -48,8 +48,8 @@ The **cms** — an app that serves fragments (an MFE):
 import { federate } from 'ogygia/federation';
 import { region } from 'ogygia';
 import { env } from '$env/dynamic/private';
-import { cms_router } from '$lib/router';
-import Kpis from '$lib/Kpis.svelte' with { region: 'raw' };
+import { cms_router } from '#lib/router';
+import Kpis from '#lib/Kpis.svelte' with { region: 'raw' };
 
 export const { shell } = federate({
   name: 'cms',
@@ -102,8 +102,8 @@ The peer handles are **server values** (they hold the signing key, so they live 
 
 ```ts title=src/lib/shell-router.ts
 import { routes, page } from 'ogygia/router';
-import { cms, dash } from '$lib/federation.server';
-import Home from '$lib/views/Home.svelte';
+import { cms, dash } from '#lib/federation.server';
+import Home from '#lib/views/Home.svelte';
 
 export const shell_router = routes({
   '/': page(Home, {
@@ -147,7 +147,7 @@ Where a region is a **slot** the shell owns, a mount is a **route** the MFE owns
 
 ```ts
 import { mount } from 'ogygia/router';
-import { cms } from '$lib/federation.server';
+import { cms } from '#lib/federation.server';
 
 // in the route table:
 '/cms/[...rest]': mount(cms),
@@ -178,7 +178,7 @@ The shell does not have to use the ogygia router. From an ordinary Kit catchall 
 
 ```ts title=+page.server.ts
 import { mount } from 'ogygia/router';
-import { cms } from '$lib/federation.server';
+import { cms } from '#lib/federation.server';
 
 const m = mount.kit(cms, { user: (e) => session_from(e.cookies) });
 export const load = m.load;

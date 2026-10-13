@@ -1,5 +1,5 @@
 import type { PageServerLoad } from './$types';
-import { dash } from '$lib/federation.server.js';
+import { dash } from '#lib/federation.server.js';
 
 // A Kit route returning REGION values from its load — proof of the wire law. Kit serializes load
 // data with devalue; `src/hooks.ts` (`...ogygia.transport`) teaches it the region codec, so these

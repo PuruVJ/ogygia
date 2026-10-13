@@ -1,9 +1,9 @@
 <script lang="ts">
-	import ResolvedGreeting from '$lib/ResolvedGreeting.svelte' with { wake: 'load' };
-	import PendingGreeting from '$lib/PendingGreeting.svelte' with { wake: 'load' };
-	import RemoteCounter from '$lib/RemoteCounter.svelte' with { wake: 'load' };
-	import LiveClock from '$lib/LiveClock.svelte' with { wake: 'load' };
-	import TransportProbe from '$lib/TransportProbe.svelte' with { wake: 'load' };
+	import ResolvedGreeting from '#lib/ResolvedGreeting.svelte' with { wake: 'load' };
+	import PendingGreeting from '#lib/PendingGreeting.svelte' with { wake: 'load' };
+	import RemoteCounter from '#lib/RemoteCounter.svelte' with { wake: 'load' };
+	import LiveClock from '#lib/LiveClock.svelte' with { wake: 'load' };
+	import TransportProbe from '#lib/TransportProbe.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-static-shell>Data — remote functions inside islands</h1>

@@ -1,5 +1,5 @@
 <script>
-	import Counter from '$lib/Counter.svelte';
+	import Counter from '#lib/Counter.svelte';
 </script>
 
 # Benchmark post (71,000 words)

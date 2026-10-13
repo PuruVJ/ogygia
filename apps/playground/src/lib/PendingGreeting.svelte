@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getGreeting } from '$lib/greetings.remote';
+	import { getGreeting } from '#lib/greetings.remote.ts';
 	let { name } = $props();
 </script>
 

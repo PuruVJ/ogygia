@@ -197,7 +197,7 @@ Use this rarely. For a hole shared across visitors, a placed [server island](/do
 Sometimes the shape needs interpretation: a tree, a feed, a layout. Then ship a normal marked component. It takes the shape as props and changes it back into markup:
 
 ```ts
-import FeedList from '$lib/FeedList.svelte' with { region: 'raw' };
+import FeedList from '#lib/FeedList.svelte' with { region: 'raw' };
 return await region(FeedList, { items: hits.map((h) => region(cardFor(h), h)) });
 ```
 

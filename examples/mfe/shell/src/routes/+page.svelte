@@ -1,5 +1,5 @@
 <script lang="ts">
-	import ShellNav from '$lib/ShellNav.svelte' with { wake: 'load' };
+	import ShellNav from '#lib/ShellNav.svelte' with { wake: 'load' };
 	import { Region } from 'ogygia';
 	import type { RegionValue } from 'ogygia';
 	// The regions arrived from the SERVER load, across Kit's wire (transport codec in src/hooks.ts).

@@ -124,7 +124,7 @@ Everything on this page is static HTML until an island wakes up.
 ## A live counter
 
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 <Counter />

@@ -20,7 +20,8 @@
  */
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
-import type { Handle, RequestEvent } from '@sveltejs/kit';
+import type { RequestEvent } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
@@ -888,7 +889,7 @@ class OgygiaHandle {
 			// core's own transform: the core's runs first (the document is complete), then the profiler's.
 			return prof({
 				event,
-				resolve: (e, outer) =>
+				resolve: async (e, outer) =>
 					this.#core({
 						event: e,
 						resolve: (ev, inner) => resolve(ev, compose_resolve_opts(inner, outer))
@@ -1026,7 +1027,8 @@ class OgygiaHandle {
 			// each load's event) and finish before the render mints. A header a handle sets on the
 			// Response after `resolve` is invisible here — the runtime's renewal covers that case.
 			const set_headers = event.setHeaders;
-			event.setHeaders = (headers) => {
+			// (Kit 3 types the event's fields readonly; the event itself is a plain object)
+			(event as { setHeaders: typeof set_headers }).setHeaders = (headers) => {
 				set_headers(headers);
 				for (const key in headers)
 					if (key.toLowerCase() === 'cache-control') note_cache_control(event.request, headers[key]);

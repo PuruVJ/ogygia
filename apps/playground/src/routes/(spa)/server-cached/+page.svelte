@@ -3,7 +3,7 @@
 	// see vite.config.ts → { render: 'deferred', maxAge: '1h' }). Its signed endpoint carries a `ttl`
 	// and the handle answers `private, max-age=3600`. Default holes are `no-store`; this proves the
 	// opt-in path end to end. Exercised by verify/server-islands.ts.
-	import CachedGreeting from '$lib/Greeting.svelte' with { preset: 'cachedGreeting' };
+	import CachedGreeting from '#lib/Greeting.svelte' with { preset: 'cachedGreeting' };
 </script>
 
 <h1 data-static-shell>Cached server island</h1>

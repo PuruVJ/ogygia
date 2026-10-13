@@ -6,7 +6,7 @@
 	import { onMount } from 'svelte';
 	import { setContext } from 'ogygia';
 	import { beforeNavigate } from '$app/navigation';
-	import { bootStore } from '$lib/boot-store.svelte.js';
+	import { bootStore } from '#lib/boot-store.svelte.js';
 
 	let { data, children } = $props();
 

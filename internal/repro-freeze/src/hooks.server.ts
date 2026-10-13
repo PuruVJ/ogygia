@@ -1,36 +1,36 @@
 import { sequence } from '@sveltejs/kit/hooks';
 import { handle as ogygiaHandle } from 'ogygia/server';
 import { freeze, akamai, cloudfront } from 'ogygia/freeze';
-import { env } from '$env/dynamic/private';
+import { EDGE_AKAMAI_URL, EDGE_CF_URL, EDGE_SITE_URL } from '$app/env/private';
 import { routes, page, layout } from 'ogygia/router';
-import Shell from '$lib/r/Shell.svelte';
-import Frozen from '$lib/r/Frozen.svelte';
-import Plain from '$lib/r/Plain.svelte';
-import Off from '$lib/r/Off.svelte';
+import Shell from '#lib/r/Shell.svelte';
+import Frozen from '#lib/r/Frozen.svelte';
+import Plain from '#lib/r/Plain.svelte';
+import Off from '#lib/r/Off.svelte';
 
 // Edge adapters point at the harness's EMULATORS when their base URLs are set (e2e/freeze.ts
 // boots them) — the REAL adapters run unchanged, signing included; the emulators verify the
 // signature STRUCTURE and speak each CDN's real purge API. No env → origin store only (lane 1).
 const edge = [];
-if (env.EDGE_AKAMAI_URL) {
+if (EDGE_AKAMAI_URL) {
 	edge.push(
 		akamai({
 			host: 'akab-emulated.purge.akamaiapis.net',
 			clientToken: 'emu-client-token',
 			clientSecret: 'emu-client-secret',
 			accessToken: 'emu-access-token',
-			site: env.EDGE_SITE_URL || 'http://127.0.0.1:3073',
-			baseUrl: env.EDGE_AKAMAI_URL
+			site: EDGE_SITE_URL || 'http://127.0.0.1:3073',
+			baseUrl: EDGE_AKAMAI_URL
 		})
 	);
 }
-if (env.EDGE_CF_URL) {
+if (EDGE_CF_URL) {
 	edge.push(
 		cloudfront({
 			distributionId: 'EMULATED123',
 			accessKeyId: 'AKIAEMULATED',
 			secretAccessKey: 'emulated-secret',
-			baseUrl: env.EDGE_CF_URL
+			baseUrl: EDGE_CF_URL
 		})
 	);
 }

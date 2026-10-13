@@ -1,13 +1,13 @@
 <script lang="ts">
 	// wake:'interaction' — the island sleeps until someone uses it. First click is captured,
 	// the island hydrates, and the click replays so it counts. Typing before hydration survives.
-	import InteractionCounter from '$lib/InteractionCounter.svelte' with { wake: 'interaction' };
+	import InteractionCounter from '#lib/InteractionCounter.svelte' with { wake: 'interaction' };
 	// A load island on the same page proves interaction chunks are NOT what loads at start.
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 	// Interaction × crossed children: the page composes an interaction island from the outside.
 	// The synthesized-children entry rides the interaction schedule; the waking toggle click
 	// replays exactly once against the crossed content.
-	import CardInteraction from '$lib/CardShell.svelte' with { wake: 'interaction' };
+	import CardInteraction from '#lib/CardShell.svelte' with { wake: 'interaction' };
 </script>
 
 <nav><a href="/">Home</a></nav>

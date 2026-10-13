@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Search } from 'ogygia/content';
-	import Sidebar from '$lib/Sidebar.svelte';
-	import { TOPICS, topicFromPath } from '$lib/topics';
+	import Sidebar from '#lib/Sidebar.svelte';
+	import { TOPICS, topicFromPath } from '#lib/topics.ts';
 
 	const path = $derived(page.url.pathname);
 	const on_docs = $derived(path.startsWith('/docs'));

@@ -262,7 +262,7 @@ declare module '$app/server' {
 	};
 }
 
-// Minimal ambient for the one Kit type the library imports (`Handle` in hooks.ts). The lib does
+// Minimal ambient for the Kit types the library imports (`Handle` in hooks.ts). The lib does
 // not depend on @sveltejs/kit; the CONSUMER's real Kit types back the shipped `dist/hooks.d.ts`
 // (`@sveltejs/kit` is externalised by tsdown). Not shipped (types.d.ts is excluded from tsdown).
 declare module '@sveltejs/kit' {
@@ -276,6 +276,9 @@ declare module '@sveltejs/kit' {
 			done: boolean;
 		}) => string | undefined | Promise<string | undefined>;
 	}
+}
+declare module '@sveltejs/kit/hooks' {
+	import type { RequestEvent, ResolveOptions } from '@sveltejs/kit';
 	export type Handle = (input: {
 		event: RequestEvent;
 		resolve: (event: RequestEvent, opts?: ResolveOptions) => Response | Promise<Response>;

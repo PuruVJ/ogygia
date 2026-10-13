@@ -15,8 +15,8 @@
 	// the runtime to the front of `<head>` the foreign tool runs first and strips every island
 	// before the runtime keeps their server markup: the copy would be the edited DOM, and the heal
 	// could never fire. That is exactly what a customer deploy measured.
-	import Counter from '$lib/SpacedCounter.svelte' with { wake: 'interaction' };
-	import VisibleCounter from '$lib/SpacedCounter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/SpacedCounter.svelte' with { wake: 'interaction' };
+	import VisibleCounter from '#lib/SpacedCounter.svelte' with { wake: 'visible' };
 
 	function define_foreign_strip() {
 		class ForeignStrip extends HTMLElement {

@@ -1,4 +1,4 @@
-import { count_render } from '$lib/server/state.js';
+import { count_render } from '#lib/server/state.js';
 
 /** The vary-bucket law page: reads a consent cookie WITH a default. Anonymous (no cookie) →
  *  the read returns undefined = DEFAULT → this page still stores (the canonical render).

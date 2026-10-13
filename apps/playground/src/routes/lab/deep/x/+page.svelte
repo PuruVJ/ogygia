@@ -2,7 +2,7 @@
 	// The island sits in a STRUCTURALLY-STABLE slot (`.shell > .rail > .slot > .deeper`) that Page Y
 	// mirrors exactly. Everything ELSE on the page differs. Same wrapper chain + same island props →
 	// same reconcile key at a matched position → the reconciler keeps the live island across the nav.
-	import DeepCounter from '$lib/lab/DeepCounter.svelte' with { wake: 'load', keep: 'deep' };
+	import DeepCounter from '#lib/lab/DeepCounter.svelte' with { wake: 'load', keep: 'deep' };
 </script>
 
 <h2 data-deep-page>Page X</h2>

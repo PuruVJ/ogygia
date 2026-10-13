@@ -1,6 +1,6 @@
 <script lang="ts">
 	// INFERNO's page: 120 result cards and a site map, over the data the load prepared.
-	import ResultCard from '$lib/inferno/ResultCard.svelte';
+	import ResultCard from '#lib/inferno/ResultCard.svelte';
 
 	let { data } = $props();
 </script>

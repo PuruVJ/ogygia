@@ -4,7 +4,7 @@
 	// the setContext calls (drop-in from ogygia, so a page marker seeds child islands). The ONLY thing
 	// that must run in the browser — the side effects — lives in the headless <BootEffects> island.
 	import { setContext } from 'ogygia';
-	import BootEffects from '$lib/BootEffects.svelte' with { wake: 'load' };
+	import BootEffects from '#lib/BootEffects.svelte' with { wake: 'load' };
 
 	let { data, children } = $props();
 

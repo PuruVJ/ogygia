@@ -1,4 +1,4 @@
-import { docs } from '$lib/playground/docs.server';
+import { docs } from '#lib/playground/docs.server.ts';
 
 // The three-file mount: page options are literal + yours; the functions come off the site mint.
 export const prerender = true;

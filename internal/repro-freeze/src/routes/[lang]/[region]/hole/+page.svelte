@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Hole from '$lib/Hole.svelte' with { render: 'deferred' };
+	import Hole from '#lib/Hole.svelte' with { render: 'deferred' };
 	let { data } = $props();
 </script>
 

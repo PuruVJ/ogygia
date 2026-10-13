@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { pages, page_id } from '$lib/server/db';
+import { pages, page_id } from '#lib/server/db.js';
 
 /** `GET /api/pages` → shallow rows (ids + order). `?full=1` includes bodies (the loader's list()). */
 export const GET = ({ url }) => {

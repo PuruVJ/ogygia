@@ -5,9 +5,9 @@
 	// threshold keeps its `<link>`. LinkedCssIsland is the CONTROL: identical rules, sheet padded
 	// over the threshold, so the same page shows both shapes and e2e/inline-css.spec.ts proves
 	// they style identically.
-	import InlineCssIsland from '$lib/InlineCssIsland.svelte' with { wake: 'load' };
-	import LinkedCssIsland from '$lib/LinkedCssIsland.svelte' with { wake: 'load' };
-	import InlineCssHole from '$lib/InlineCssHole.svelte' with { render: 'deferred' };
+	import InlineCssIsland from '#lib/InlineCssIsland.svelte' with { wake: 'load' };
+	import LinkedCssIsland from '#lib/LinkedCssIsland.svelte' with { wake: 'load' };
+	import InlineCssHole from '#lib/InlineCssHole.svelte' with { render: 'deferred' };
 </script>
 
 <h1 data-page>inline region css</h1>

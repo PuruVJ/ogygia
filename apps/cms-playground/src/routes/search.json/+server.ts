@@ -1,4 +1,4 @@
-import { cms } from '$lib/cms';
+import { cms } from '#lib/cms.js';
 
 // The client search index, served DYNAMICALLY (the corpus is remote — nothing prerenders). Block
 // entries carry no raw source, so they index as display fields (title + summary).

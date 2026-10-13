@@ -4,7 +4,7 @@
 	// mutates server state AND returns the re-rendered region. That command response is decoded into a
 	// frame write at the SAME address (id|props), so the mounted region morphs in place — no extra fetch.
 	import { Region } from 'ogygia';
-	import { getBadge, bumpBadge } from '$lib/single-flight.remote';
+	import { getBadge, bumpBadge } from '#lib/single-flight.remote.ts';
 
 	const badge = getBadge();
 </script>

@@ -2,7 +2,7 @@
 	// OUT-OF-ORDER streaming proof. Three deferred regions with staggered server delays (SECONDS),
 	// declared A(3s) → B(1s) → C(2s). Navigate here (SPA) and watch the batch POST: its <template>
 	// frames arrive in SETTLE order — B, then C, then A — not declaration order.
-	import Slow from '$lib/SlowGreeting.svelte' with { render: 'deferred' };
+	import Slow from '#lib/SlowGreeting.svelte' with { render: 'deferred' };
 </script>
 
 <h1 data-static-shell>Out-of-order streaming</h1>

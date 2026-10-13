@@ -1,6 +1,6 @@
 <script lang="ts">
 	// PURGATORY's page: every key the load returns is shown, so none reads as work for nothing.
-	import ShelfFixed from '$lib/purgatory/ShelfFixed.svelte' with { wake: 'load' };
+	import ShelfFixed from '#lib/purgatory/ShelfFixed.svelte' with { wake: 'load' };
 	let { data } = $props();
 </script>
 

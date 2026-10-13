@@ -2,7 +2,7 @@
 	// One post — data + prebaked body region over the `post` remote (HTML-only ticket, csr=false).
 	import { page } from '$app/state';
 	import { Region } from 'ogygia';
-	import { post } from '$lib/blog.remote';
+	import { post } from '#lib/blog.remote.ts';
 
 	const view = (await post(page.params.slug!))!;
 

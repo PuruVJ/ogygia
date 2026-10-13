@@ -1,4 +1,4 @@
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server.ts';
 
 // The no-JS results page reads `?q=` — a runtime concern; everything else prerenders.
 export const prerender = false;

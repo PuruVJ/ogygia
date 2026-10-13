@@ -98,7 +98,8 @@ export function observe_event(event: RequestEvent): Observation {
 
 	// locals — upstream handles personalize BEFORE this handle runs, so the RENDER's read of
 	// what they wrote is the observable moment. Default-shaped values (empty user object) pass.
-	event.locals = new Proxy(event.locals, {
+	// (Kit 3 types the event's fields readonly; the event itself is a plain object)
+	(event as { locals: App.Locals }).locals = new Proxy(event.locals, {
 		get(target, prop, receiver) {
 			const value = Reflect.get(target, prop, receiver);
 			if (typeof prop === 'string' && !is_default_value(value) && typeof value !== 'function') {

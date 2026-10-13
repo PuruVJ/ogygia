@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Deferred SERVER islands: the component renders on the server on demand and streams in. Its
 	// `ogygiaFallback` snippet shows in the initial HTML; NO component JS ships to the browser.
-	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+	import Greeting from '#lib/Greeting.svelte' with { render: 'deferred' };
 </script>
 
 <h1>Streaming server islands</h1>

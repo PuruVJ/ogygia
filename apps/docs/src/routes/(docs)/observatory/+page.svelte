@@ -3,7 +3,7 @@
 	// svelte compile in a Web Worker, previews in an isolated iframe, and hydrates with the real
 	// runtime. It's a `wake: 'load'` island (this route is csr=false; the machinery is browser-only).
 	import { script } from 'ogygia';
-	import Observatory from '$lib/Observatory.svelte' with { wake: 'load' };
+	import Observatory from '#lib/Observatory.svelte' with { wake: 'load' };
 
 	// This is a bare route (no DocsShell), so its no-flash theme must run here: set data-theme from the
 	// active `og-theme` key before paint (same key the docs ThemeToggle + the preview iframe use).

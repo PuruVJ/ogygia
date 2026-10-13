@@ -8,9 +8,6 @@ packages:
   - '!internal/repro-bcms-header'
   - '!internal/repro-pes'
   - '!internal/repro-ogygia-footer'
-  # the SvelteKit 3 app installs the PACKED ogygia standalone (e2e/kit3.spec.ts): a workspace link
-  # would resolve ogygia's own Kit 2 dev install next to the app's Kit 3
-  - '!internal/repro-kit3'
   # Runnable demos (the MFE federation trio + contracts) — consume the live packages/ogygia.
   - 'examples/mfe/*'
 allowBuilds:

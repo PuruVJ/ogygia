@@ -1,11 +1,11 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 	// `getBadge()` seeds the mounted region; clicking bump runs a COMMAND that mutates server state AND
 	// returns the re-rendered region. That response is decoded into a frame write at the SAME address,
 	// so the region morphs in place — no follow-up region-endpoint fetch.
 	import { onMount } from 'svelte';
 	import { Region } from 'ogygia';
-	import { getBadge, bumpBadge } from '$lib/demos/single-flight.remote';
+	import { getBadge, bumpBadge } from '#lib/demos/single-flight.remote.ts';
 
 	// Prerendered page: create the query in the browser only (a query can't run during prerender SSR).
 	let badge = $state<ReturnType<typeof getBadge> | null>(null);

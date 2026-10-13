@@ -1,5 +1,5 @@
-import { docs, blog } from '$lib/site.server';
-import { post_date } from '$lib/blog';
+import { docs, blog } from '#lib/site.server.ts';
+import { post_date } from '#lib/blog.ts';
 
 // The blog's feed — ogygia's RSS emission, `docs.emit` style. Prerendered.
 export const prerender = true;

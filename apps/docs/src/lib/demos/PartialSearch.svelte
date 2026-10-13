@@ -6,7 +6,7 @@
 	// wait (fetch AND styled paint) and `placeholder` fills it. No `loading` state to reconcile —
 	// there is nothing here that claims to know when the card is ready, so nothing can disagree.
 	import { Region } from 'ogygia';
-	import { search } from '$lib/partials/search.remote';
+	import { search } from '#lib/partials/search.remote.ts';
 
 	let q = $state('svelte');
 	let query = $state<string | null>(null);

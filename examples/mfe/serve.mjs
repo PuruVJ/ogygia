@@ -14,9 +14,13 @@ if (!app || !port) {
 	console.error('usage: node serve.mjs <app> <port>');
 	process.exit(1);
 }
+// adapter-node 6 (Kit 3) reads no runtime ORIGIN: without a protocol header it assumes https.
+// This wrapper serves plain http, so it says so (set before the handler reads its env).
+process.env.PROTOCOL_HEADER ??= 'x-forwarded-proto';
 const { handler } = await import(`./${app}/build/handler.js`);
 
 createServer((req, res) => {
+	req.headers['x-forwarded-proto'] ??= 'http';
 	// the assets other origins import: island/runtime chunks + their CSS under the immutable dir
 	if (req.url?.includes('/_app/immutable/')) {
 		res.setHeader('access-control-allow-origin', '*');

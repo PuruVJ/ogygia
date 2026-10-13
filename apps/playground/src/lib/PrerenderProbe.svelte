@@ -2,7 +2,7 @@
 	// prerender() demo: a remote function whose result can be baked at build time. On this
 	// NON-prerendered page it runs on the server during SSR (the island endpoint / csr=false render)
 	// because it is declared `dynamic: true`. Its text is deterministic, so it survives hydration.
-	import { getManifesto } from '$lib/greetings.remote';
+	import { getManifesto } from '#lib/greetings.remote.ts';
 	const m = await getManifesto();
 </script>
 

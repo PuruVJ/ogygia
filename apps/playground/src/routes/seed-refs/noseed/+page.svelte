@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The twin WITHOUT a `$page` reader: no seed ships, so no props may reference it — every block
 	// carries a full copy, exactly as before.
-	import BlockCard from '$lib/seed-refs/BlockCard.svelte' with { wake: 'load' };
+	import BlockCard from '#lib/seed-refs/BlockCard.svelte' with { wake: 'load' };
 	let { data } = $props();
 </script>
 

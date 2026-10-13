@@ -1,6 +1,6 @@
 <script lang="ts">
 	// No prop — the counter comes from the nearest <Provide> above, across the island boundary.
-	import { roomCtx } from '$lib/room-context.svelte.js';
+	import { roomCtx } from '#lib/room-context.svelte.js';
 
 	const counter = roomCtx.get();
 </script>

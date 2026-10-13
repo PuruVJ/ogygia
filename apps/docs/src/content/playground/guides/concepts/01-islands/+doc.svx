@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 Most of a documentation page is text. Text does not need JavaScript. An **island** is the exception: a small, interactive component that hydrates on its own while everything around it stays as server-rendered HTML. ogygia ships JavaScript for the islands and nothing else.
@@ -30,7 +30,7 @@ You turn an ordinary import into an island by attaching a `wake` hint with an im
 
 ```svelte
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 <Counter />
@@ -55,7 +55,7 @@ The island hydrates as soon as its chunk arrives. It is the most eager strategy 
 
 ```svelte
 <script>
-	import Search from '$lib/playground/demos/Search.svelte' with { wake: 'load' };
+	import Search from '#lib/playground/demos/Search.svelte' with { wake: 'load' };
 </script>
 ```
 
@@ -65,7 +65,7 @@ Hydration waits for the main thread to go quiet. The component still wakes witho
 
 ```svelte
 <script>
-	import Toc from '$lib/playground/demos/Toc.svelte' with { wake: 'idle' };
+	import Toc from '#lib/playground/demos/Toc.svelte' with { wake: 'idle' };
 </script>
 ```
 
@@ -75,7 +75,7 @@ The chunk loads when the island enters the viewport, via an `IntersectionObserve
 
 ```svelte
 <script>
-	import Chart from '$lib/playground/demos/Chart.svelte' with { wake: 'visible' };
+	import Chart from '#lib/playground/demos/Chart.svelte' with { wake: 'visible' };
 </script>
 ```
 
@@ -85,7 +85,7 @@ The laziest strategy. The island renders as static HTML and only pulls its chunk
 
 ```svelte
 <script>
-	import Menu from '$lib/playground/demos/Menu.svelte' with { wake: 'interaction' };
+	import Menu from '#lib/playground/demos/Menu.svelte' with { wake: 'interaction' };
 </script>
 ```
 
