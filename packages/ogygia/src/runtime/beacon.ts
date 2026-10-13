@@ -21,6 +21,7 @@ import { hole_copy_of } from './hash.js';
 import { tool_made } from '../tool-fetches.js';
 import { paint_blocker } from './render-blocking.js';
 import { critical_outcome, type CriticalOutcome } from './load-scheduler.js';
+import { devtools_switched_on } from '../devtools/switch.js';
 
 interface Sample {
 	fp: string;
@@ -1869,21 +1870,14 @@ async function stop_interaction_cpu(hiding: boolean): Promise<void> {
 // then: the server, the browser store and the CPU trace stay behind the tag.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
-// a BUILD with devtools on: measure only for a browser that opened the dock once (its cookie) —
+// a BUILD with devtools on: measure only for a browser that turned devtools on (devtools/switch.ts) —
 // every other visitor of a preview deploy pays nothing
 const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 let opted: boolean | undefined;
 function devtools_measures(): boolean {
 	if (!DEVTOOLS) return false;
 	if (!DEVTOOLS_LAZY) return true;
-	if (opted === undefined) {
-		try {
-			opted = document.cookie.split('; ').some((c) => c === 'og_devtools=1');
-		} catch {
-			opted = false;
-		}
-	}
-	return opted;
+	return (opted ??= devtools_switched_on());
 }
 
 /** when the document's first in-app navigation started (its first page's record ends there) */

@@ -160,6 +160,20 @@ import type { SeedAsk } from './server/seed-shape.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { drop_dead_kit_resolves } from './server/dead-kit-resolves.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.js';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, switch_in_url } from './devtools/switch.js';
+
+/** Is devtools on for this request's browser (a devtools BUILD): the URL's `?og-devtools=on|off`
+ *  wins and is written to the response's cookie, else the cookie (devtools/switch.ts). */
+function devtools_switch(event: RequestEvent): boolean {
+	// (a prerendered page has no visitor, and a prerender may not read the query: off, and the browser
+	// applies the param itself — devtools/ui.ts)
+	if (building) return false;
+	const want = switch_in_url(event.url);
+	if (want === null) return event.cookies.get(DEVTOOLS_COOKIE) === DEVTOOLS_ON;
+	if (want) event.cookies.set(DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS);
+	else event.cookies.delete(DEVTOOLS_COOKIE, { path: '/' });
+	return want;
+}
 
 /** Hard cap on rendered region HTML (bytes). */
 const MAX_REGION_BODY = 2_000_000;
@@ -1012,10 +1026,10 @@ class OgygiaHandle {
 			};
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
-			// (a BUILD with devtools on: only for a browser that opened the dock — its cookie — so
-			// no other visitor's page carries the side-channel)
-			if (DEVTOOLS && (!DEVTOOLS_LAZY || event.cookies.get('og_devtools') === '1'))
-				dt_buffers.set(bag, { events: [], seq: 0 });
+			// (a BUILD with devtools on: only for a browser that turned devtools on — devtools/switch.ts —
+			// so no other visitor's page carries the side-channel. `?og-devtools=on|off` flips it on this
+			// very response, so the page that turned it on is measured from its start)
+			if (DEVTOOLS && (!DEVTOOLS_LAZY || devtools_switch(event))) dt_buffers.set(bag, { events: [], seq: 0 });
 			// Hang the bag off the request for the rest of it — the render's own Kit store and the
 			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
 			// carry this same `Request` and find it.

@@ -8,6 +8,12 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - Unreleased
+
+### Changed
+
+- In a build with devtools, the launcher stays hidden until a browser turns devtools on (`?og-devtools=on`, or `ogygia.devtools.on()` in the console); `?og-devtools=off`, `ogygia.devtools.off()` or **hide** in the dock turn it off. The dev server is unchanged.
+
 ## [0.8.1] - 2026-10-13
 
 ### Fixed

@@ -31,7 +31,8 @@
  * test as `ogygia.json`) and `compare` / `toMarkdown` two runs in a CI script.
  *
  * Needs a server with `ogygia({ devtools: true })` (the dev server, or a preview build: measuring
- * starts for a browser with the `og_devtools=1` cookie, which `withOgygia` sets for `baseURL`).
+ * starts for a browser that turned devtools on — the `og_devtools=on` cookie, which `withOgygia` sets
+ * for `baseURL`).
  * `profile()` needs `ogygia({ profiler: true })` (and its key on a build).
  */
 import type { PageFinding, RatedVital, IslandRow } from '../devtools/page-insights.js';
@@ -39,6 +40,7 @@ import type { SessionReport } from '../devtools/session-insights.js';
 import type { HydrationStatus } from '../devtools/hydration.js';
 import type { HtmlDiff } from '../devtools/html-diff.js';
 import { assets_diff } from '../profiler/page-assets.js';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON } from '../devtools/switch.js';
 import type { TestType, Expect, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 
 // ── the reports (plain JSON, as the page hands them over) ──
@@ -183,7 +185,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 		async page() {
 			await call('settled', 300, 10_000);
 			const r = await call<Omit<OgygiaPageReport, 'kind'> | null>('page');
-			if (!r) throw new Error('the page load was not measured: in a build, the browser needs the `og_devtools=1` cookie before the page loads');
+			if (!r) throw new Error('the page load was not measured: in a build, devtools must be on in the browser (the `og_devtools=on` cookie, or `?og-devtools=on`) before the page loads');
 			return keep({ kind: 'page', ...r });
 		},
 		async hydration() {
@@ -257,7 +259,7 @@ export function withOgygia<TA extends PlaywrightTestArgs & PlaywrightTestOptions
 		ogygiaOptions: [{}, { option: true }],
 		ogygia: async ({ page, baseURL, ogygiaOptions }, use, testInfo) => {
 			// measure from the first load on (a build measures only a browser that opted in)
-			if (baseURL) await page.context().addCookies([{ name: 'og_devtools', value: '1', url: baseURL }]);
+			if (baseURL) await page.context().addCookies([{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON, url: baseURL }]);
 			const o = createOgygia(
 				{
 					// (Playwright's `Unboxed<A>` arg typing is stricter than the driver's plain JSON arg)

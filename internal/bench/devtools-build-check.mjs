@@ -1,6 +1,8 @@
-// DEVTOOLS IN A BUILD (a preview deploy with `devtools: true`): a visitor gets the launcher only (no
-// dock code, no server side-channel, no measuring); opening it loads the dock; from the next load
-// that browser is measured from the start and gets the server's events. Exit 1 on a failure.
+// DEVTOOLS IN A BUILD (a preview deploy with `devtools: true`): a visitor gets NOTHING (no launcher,
+// no dock code, no server side-channel, no measuring) until their browser turns devtools on
+// (`?og-devtools=on`, `ogygia.devtools.on()` — devtools/switch.ts); then the launcher shows, the page
+// is measured from the start and gets the server's events; "hide" / `?og-devtools=off` turn it off.
+// Exit 1 on a failure.
 //
 //   cd apps/playground && OGYGIA_DEVTOOLS=1 pnpm build
 //   node node_modules/vite/bin/vite.js preview --port 4181 --host 127.0.0.1
@@ -28,14 +30,27 @@ let loaded = [];
 page.on('response', (r) => r.url().endsWith('.js') && loaded.push(r.url()));
 
 await page.goto(base + '/dt-lab', { waitUntil: 'load' });
+await page.waitForTimeout(1500);
+check('a visitor sees no launcher', (await page.locator('[data-og-panel-toggle]').count()) === 0);
+check('no dock either', (await page.locator('[data-og-win]').count()) === 0 && (await page.evaluate(() => typeof window.__ogygia_page)) === 'undefined');
+// (the leftovers watch wraps the timers and the global listeners: a visitor keeps the browser's own)
+const natives = () => page.evaluate(() => [window.setInterval, window.clearInterval, EventTarget.prototype.addEventListener, EventTarget.prototype.removeEventListener].every((f) => Function.prototype.toString.call(f).includes('[native code]')));
+check('a visitor keeps the browser\'s own timers and listeners', await natives());
+check('the console switch is there', (await page.evaluate(() => typeof window.ogygia?.devtools?.on)) === 'function');
+
+// THE URL SWITCH: on for this browser, from this very response (the server sets the cookie and writes
+// its side-channel), and the address drops the param
+const switched = await fetch(base + '/dt-lab?og-devtools=on');
+check('?og-devtools=on: the response sets the switch', (switched.headers.get('set-cookie') ?? '').includes('og_devtools=on'));
+check('…and carries the server side-channel', (await switched.text()).includes('application/ogygia-devtools'));
+await page.goto(base + '/dt-lab?og-devtools=on', { waitUntil: 'load' });
 // (the launcher is a lazy chunk: on a server's cold first requests it can take past a fixed wait)
 await page.waitForSelector('[data-og-panel-toggle]', { timeout: 10_000 }).catch(() => {});
 await page.waitForTimeout(500);
 check('the launcher is there', (await page.locator('[data-og-panel-toggle]').count()) === 1);
-check('no dock until opened', (await page.locator('[data-og-win]').count()) === 0 && (await page.evaluate(() => typeof window.__ogygia_page)) === 'undefined');
-// (the leftovers watch wraps the timers and the global listeners: a visitor keeps the browser's own)
-const natives = () => page.evaluate(() => [window.setInterval, window.clearInterval, EventTarget.prototype.addEventListener, EventTarget.prototype.removeEventListener].every((f) => Function.prototype.toString.call(f).includes('[native code]')));
-check('a visitor keeps the browser\'s own timers and listeners', await natives());
+check('the address dropped the param', !page.url().includes('og-devtools'), page.url());
+check('the cookie remembers it', (await ctx.cookies()).some((c) => c.name === 'og_devtools' && c.value === 'on'));
+check('no dock until opened', (await page.locator('[data-og-win]').count()) === 0);
 
 loaded = [];
 await page.locator('[data-og-panel-toggle]').click();
@@ -53,10 +68,6 @@ const dock_style = () =>
 	});
 const styled = await dock_style();
 check('the dock is styled (its CSS reached its shadow root)', !!styled && styled.font.includes('monospace') && styled.display !== 'inline-block', JSON.stringify(styled));
-check('the cookie remembers it', (await ctx.cookies()).some((c) => c.name === 'og_devtools' && c.value === '1'));
-await page.locator('[data-og-tab="page"]').click();
-await page.waitForTimeout(400);
-check('the Page tab asks for a reload on the first open', (await page.locator('[data-og-page-unmeasured]').count()) === 1);
 
 await page.reload({ waitUntil: 'load' });
 await page.waitForTimeout(3500);
@@ -244,7 +255,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	for (let i = 0; i < 6; i++) {
 		for (const mode of i % 2 ? ['on', 'off'] : ['off', 'on']) {
 			const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-			if (mode === 'on') await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+			if (mode === 'on') await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 			const p = await c.newPage();
 			const cdp = await c.newCDPSession(p);
 			await cdp.send('Performance.enable');
@@ -264,7 +275,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // by), so the island is told by its file's location. An opted-in browser, /dt-leak → in-app → next
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 	const p = await c.newPage();
 	await p.goto(base + '/dt-leak', { waitUntil: 'load' });
 	await p.waitForTimeout(2000);
@@ -281,7 +292,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 {
 	const read = async (path, code) => {
 		const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-		await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+		await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 		const p = await c.newPage();
 		await p.goto(base + path, { waitUntil: 'load' });
 		await p.waitForTimeout(1500);
@@ -309,7 +320,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	// (the largest paint a CSS background its slow stylesheet names: the slow LCP's fix says why it was found late)
 	{
 		const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-		await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+		await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 		const p = await c.newPage();
 		await p.goto(base + '/dt-lcp-bg', { waitUntil: 'load' });
 		await p.waitForTimeout(1500);
@@ -326,7 +337,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // profile does (the build scanned them), and the island's card shows it from there
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 	const p = await c.newPage();
 	await p.setExtraHTTPHeaders({ 'x-profiler-key': 'hell' });
 	await p.goto(base + '/dt-lab', { waitUntil: 'load' });
@@ -357,7 +368,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // by its dist path — after a profile, each card names the module and which copy is its
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 	const p = await c.newPage();
 	await p.setExtraHTTPHeaders({ 'x-profiler-key': 'hell' });
 	await p.goto(base + '/dt-dupe', { waitUntil: 'load' });
@@ -384,7 +395,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // SCROLLING STALLED, in a build: the handler is a minified name in a hashed chunk — named by its island
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 	const p = await c.newPage();
 	await p.goto(base + '/dt-jank', { waitUntil: 'load' });
 	await p.waitForTimeout(1200);
@@ -403,7 +414,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 // PRELOADS NOTHING USES, in a build: only once 3 s have passed since load
 {
 	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-	await c.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 	const p = await c.newPage();
 	await p.goto(base + '/dt-preload-never', { waitUntil: 'load' });
 	await p.waitForTimeout(3500);
@@ -423,6 +434,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 		const res = await route.fetch();
 		await route.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'self'" } });
 	});
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 	await p.goto(base + '/dt-lab', { waitUntil: 'load' });
 	await p.waitForSelector('[data-og-panel-toggle]', { timeout: 10_000 }).catch(() => {});
 	await p.click('[data-og-panel-toggle]').catch(() => {});
@@ -436,8 +448,39 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	await c.close();
 	check("the dock is styled under a CSP that refuses inline styles", !!csp && csp.font.includes('monospace') && csp.display !== 'inline-block', JSON.stringify(csp));
 }
+// TURNING IT OFF: the dock's "hide", the console, and the URL — each takes the launcher away now and
+// keeps it away on the next load
+{
+	const c = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+	await c.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
+	const p = await c.newPage();
+	const launcher = () => p.locator('[data-og-panel-toggle]').count();
+	const on = async () => (await c.cookies()).some((x) => x.name === 'og_devtools' && x.value === 'on');
+	await p.goto(base + '/dt-lab', { waitUntil: 'load' });
+	await p.waitForSelector('[data-og-panel-toggle]', { timeout: 10_000 }).catch(() => {});
+	await p.click('[data-og-panel-toggle]');
+	await p.waitForSelector('[data-og-hide]', { timeout: 5000 }).catch(() => {});
+	await p.click('[data-og-hide]');
+	await p.waitForTimeout(300);
+	check('hide: the dock and launcher go at once', (await p.locator('[data-ogygia-devtools-host]').count()) === 0);
+	check('hide: the switch is off', !(await on()));
+	await p.reload({ waitUntil: 'load' });
+	await p.waitForTimeout(1500);
+	check('hide: still gone after a reload', (await launcher()) === 0);
+	await p.evaluate(() => window.ogygia?.devtools?.on());
+	await p.waitForSelector('[data-og-panel-toggle]', { timeout: 5000 }).catch(() => {});
+	check('console on(): the launcher shows at once', (await launcher()) === 1);
+	check('console on(): the switch is on', await on());
+	await p.evaluate(() => window.ogygia?.devtools?.off());
+	check('console off(): the launcher goes', (await launcher()) === 0);
+	await p.goto(base + '/dt-lab?og-devtools=on', { waitUntil: 'load' });
+	await p.goto(base + '/dt-lab?og-devtools=off', { waitUntil: 'load' });
+	await p.waitForTimeout(1500);
+	check('?og-devtools=off: no launcher, switch off', (await launcher()) === 0 && !(await on()));
+	await c.close();
+}
 await browser.close();
 
 const failed = results.filter((r) => !r).length;
-console.log(failed ? `FAILED (${failed})` : 'devtools in a build: launcher only until opened');
+console.log(failed ? `FAILED (${failed})` : 'devtools in a build: nothing until switched on');
 process.exit(failed ? 1 : 0);
