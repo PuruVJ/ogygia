@@ -78,7 +78,8 @@ function sigOf(endpoint: string): string | null {
 
 /**
  * Stream a batch of region calls into the frame store. Endpoints must share an endpoint path (they
- * do — all are minted against the same `/__ogygia__`). Frames apply as they land; the promise resolves when
+ * do — all are minted against the app's one islands endpoint, `handle({ endpoint })`, read here off
+ * the first URL). Frames apply as they land; the promise resolves when
  * the response ends.
  */
 export async function streamFrames(endpoints: string[], kind: 'page' | 'nav' = 'nav'): Promise<void> {

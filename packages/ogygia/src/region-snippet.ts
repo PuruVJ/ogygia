@@ -27,7 +27,7 @@ import { render as ssr_render } from 'svelte/server';
 import { BROWSER, DEV } from 'esm-env';
 import { register_kind, mint } from './ref.js';
 import { kit_render_context, kit_request_event } from './server/kit-context.js';
-import { DEFAULT_ISLANDS_ENDPOINT } from './server/endpoint.js';
+import { islands_endpoint } from './server/endpoint.js';
 import { PORTABLE_FORM, with_portable_forms } from './portable-form.js';
 import { analyze } from './seed-refs.js';
 import { fnv1a, fnv1a32 } from './runtime/hash.js';
@@ -331,7 +331,7 @@ export function next_slot_id(key = ''): string {
 		let seq = slot_seq_by_request.get(event);
 		if (!seq) {
 			const url = event.url;
-			const hole = url?.pathname.endsWith(DEFAULT_ISLANDS_ENDPOINT)
+			const hole = url?.pathname.endsWith(islands_endpoint())
 				? (url.searchParams.get('id') ?? '').slice(0, 6)
 				: '';
 			slot_seq_by_request.set(event, (seq = { prefix: hole ? hole + '-' : '', n: new Map() }));

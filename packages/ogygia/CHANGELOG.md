@@ -8,7 +8,7 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.1] - 2026-10-12
+## [0.8.2] - Unreleased
 
 ### Fixed
 
@@ -25,6 +25,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
 - Devtools and the profiler no longer blame ogygia's scheduler ("held with nothing ahead") for a wait the page's own long task or a failing island caused.
 - The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
+
+## [0.8.1] - 2026-10-13
+
+### Fixed
+
+- `handle({ endpoint })` now moves every hole and live-region URL a page mints, not only the handler; before, every hole asked the old `/__ogygia__` path and stayed empty.
 
 ## [0.8.0] - 2026-10-09
 

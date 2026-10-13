@@ -20,6 +20,7 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import * as devalue from 'devalue';
+import { islands_endpoint } from './endpoint.js';
 import type { KitPage } from './kit-context.js';
 import type { PageSnapshot } from '../page-seed-registry.js';
 import { look_up_page, type PageFacts } from './page-facts.js';
@@ -28,18 +29,16 @@ import { PAGE_FACTS_SCRIPT_TYPE } from '../page-facts-script.js';
 
 type Transport = Record<string, { decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }>;
 
-let endpoint_path = '';
 let warn: ((message: string) => void) | null = null;
 
-/** The handle's settings: the islands endpoint path it serves, and where a dev warning goes. */
-export function configure_render_page(o: { endpoint_path: string; warn: ((message: string) => void) | null }): void {
-	endpoint_path = o.endpoint_path;
+/** Where a dev warning goes (the handle's setting). */
+export function configure_render_page(o: { warn: ((message: string) => void) | null }): void {
 	warn = o.warn;
 }
 
 /** A request rendering on behalf of a page it is not: the islands endpoint or a remote call. */
 export function renders_for_a_page(event: RequestEvent): boolean {
-	return (endpoint_path !== '' && event.url.pathname.endsWith(endpoint_path)) || (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
+	return event.url.pathname.endsWith(islands_endpoint()) || (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
 }
 
 /** The page a request renders for: the same-origin Referer of a request rendering for a page, else

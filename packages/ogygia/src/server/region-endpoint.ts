@@ -11,11 +11,7 @@ import { sign, region_mac_message } from 'virtual:ogygia/sign';
 import { resolve } from '$app/paths';
 import { building } from '$app/env';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
-import {
-	DEFAULT_ISLANDS_ENDPOINT,
-	MAX_REGION_PROPS_LEN,
-	capability_expiry
-} from './endpoint.js';
+import { islands_endpoint, MAX_REGION_PROPS_LEN, capability_expiry } from './endpoint.js';
 import { freeze_capture_active } from '../freeze/capture.js';
 import { document_shared_lifetime, mint_ttl_sec } from './shared-cache.js';
 import { encode_region_props } from './region-props.js';
@@ -136,7 +132,7 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 	const ttl_param = ttl_field ? `&ttl=${ttl_field}` : '';
 	if (DEVTOOLS)
 		record_server_event({ domain: 'server', name: 'server.capability.minted', id: entry, ttl });
-	return `${resolve(DEFAULT_ISLANDS_ENDPOINT)}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}`;
+	return `${resolve(islands_endpoint())}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}`;
 }
 
 /**
@@ -158,7 +154,7 @@ export function mintServerIsland(entry: string, props: Record<string, unknown>, 
 	return mint_region_capability(entry, payload, ttl);
 }
 
-/** HMAC-signed `/__ogygia__?id&props&exp&sig` for re-rendering `entry` with `props`. */
+/** HMAC-signed `<endpoint>?id&props&exp&sig` (`handle({ endpoint })`, default `/__ogygia__`) for re-rendering `entry` with `props`. */
 export function makeRegionEndpoint(entry: string, props: Record<string, unknown> = {}): string {
 	const payload = encode_region_props(props);
 	if (payload == null) {

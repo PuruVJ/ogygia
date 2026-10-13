@@ -10,6 +10,7 @@
  * overlap itself, and labelled so.
  */
 import type { RequestEntry } from './report.js';
+import { islands_endpoint } from '../server/endpoint.js';
 
 export interface ContendingRequest {
 	method: string;
@@ -59,7 +60,6 @@ export interface ContentionInput {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
-const HOLE_PREFIX = '/__ogygia__';
 
 export function contention(input: ContentionInput): Contention | undefined {
 	const windows = input.windows;
@@ -102,7 +102,9 @@ export function contention(input: ContentionInput): Contention | undefined {
 			ms: round2(e.ms),
 			overlap_ms: round2(overlap),
 			cpu_max_ms: round2(cpu_max),
-			kind: e.hole || e.path.startsWith(HOLE_PREFIX) ? 'hole' : input.self_paths?.has(e.path) ? 'self' : 'other',
+			// (a hole the handle answered carries its stats; a refused one only its path — the configured
+			// endpoint, matched by suffix as the handle matches it, under any base)
+			kind: e.hole || e.path.endsWith(islands_endpoint()) ? 'hole' : input.self_paths?.has(e.path) ? 'self' : 'other',
 			...(e.remote ? { remote: true as const } : {})
 		});
 	}

@@ -31,11 +31,8 @@ import { REGION_BRAND } from './region-brand.js';
 import { secret } from 'virtual:ogygia/secret';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
-import {
-	enabled as router_enabled,
-	viewTransitions as router_view_transitions,
-	speculationRules as mpa_speculation_rules
-} from 'virtual:ogygia/router-config';
+import { enabled as router_enabled, viewTransitions as router_view_transitions } from 'virtual:ogygia/router-config';
+import { mpaSpeculationRules } from './compiler/link/speculation.js';
 import { profilerConfig } from 'virtual:ogygia/profiler-config';
 /** DEMAND-ONLY profiler: gate the profiler import behind a request to its path. Both read off the plain
  *  config object — no profiler code loaded to decide. `path` mirrors ProfilerOptions.path (default). */
@@ -102,7 +99,8 @@ import { register_store_kind, register_derived_kind } from './store-transport.js
 import { register_snippet_kind } from './region-snippet.js';
 import { register_fn_kind } from './fn-transport.js';
 import {
-	DEFAULT_ISLANDS_ENDPOINT,
+	configure_islands_endpoint,
+	islands_endpoint,
 	MAX_REGION_PROPS_LEN,
 	is_region_id,
 	is_region_ttl,
@@ -321,7 +319,7 @@ set_measure_memo_reader(() => bag_of()?.measure_memo ?? null);
 // root ogygia starts (document root, inline region, hole, snippet body, a remote call's region) is
 // built by ONE model — in the page (the recorded snapshot), for a page (a hole or a remote call: the
 // Referer's page, its facts looked up once), or its own. Here only the request state is handed in.
-configure_render_page({ endpoint_path: DEFAULT_ISLANDS_ENDPOINT, warn: dev ? (m) => console.warn(m) : null });
+configure_render_page({ warn: dev ? (m) => console.warn(m) : null });
 
 // The live event for `requestEvent()` (public): what a server island reads its `locals` /
 // `cookies` / `url` from, in the request that renders it — no `$app/server` in the component.
@@ -817,6 +815,7 @@ const RESTORER_SCRIPT = `<script data-og-restore>(function(){var r=${restore.toS
 
 class OgygiaHandle {
 	readonly #endpoint: string;
+	readonly #speculation_rules: string;
 	/** The app's server transform (documents and region answers) — see OgygiaHandleOptions. */
 	readonly #transform: OgygiaHandleOptions['transform'];
 	readonly render_rate: RateLimiter;
@@ -829,8 +828,12 @@ class OgygiaHandle {
 		// and `resolve()` is page-relative here — so instead of prefixing the base we match the request
 		// pathname by SUFFIX (see `handle`). The endpoint is a clash-safe path, so a suffix match is
 		// unambiguous regardless of `paths.base`.
-		this.#endpoint = options.endpoint || DEFAULT_ISLANDS_ENDPOINT;
-		configure_render_page({ endpoint_path: this.#endpoint, warn: dev ? (m) => console.warn(m) : null });
+		// ONE path for the handler and every capability minted (server/endpoint.ts): the option moved
+		// only the handler once, and every hole on the page asked the old path
+		configure_islands_endpoint(options.endpoint);
+		this.#endpoint = islands_endpoint();
+		// MPA mode's Speculation Rules leave this endpoint out (one string, built once)
+		this.#speculation_rules = router_enabled ? '' : mpaSpeculationRules(this.#endpoint);
 		this.render_rate = new RateLimiter({
 			max: rate_limit_cfg.max,
 			windowMs: rate_limit_cfg.windowMs
@@ -1310,8 +1313,8 @@ class OgygiaHandle {
 			// handle injects static Speculation Rules instead. Chromium prerenders likely next pages,
 			// Firefox prefetches them, everything else ignores the JSON. Presence-checked so a page
 			// authoring its own rules wins; per-link opt-out via `data-ogygia-speculate="off"`.
-			if (!router_enabled && mpa_speculation_rules && !page_declares_speculation_rules(probe)) {
-				head_inject += `<script type="speculationrules" data-ogygia-speculate>${mpa_speculation_rules}</script>`;
+			if (!router_enabled && !page_declares_speculation_rules(probe)) {
+				head_inject += `<script type="speculationrules" data-ogygia-speculate>${this.#speculation_rules}</script>`;
 			}
 			if (router_enabled && !page_declares_router_meta(probe)) {
 				head_inject += `<meta name="ogygia-router" content="${router_view_transitions ? 'vt' : 'plain'}">`;
@@ -2254,8 +2257,12 @@ class OgygiaHandle {
  */
 export interface OgygiaHandleOptions {
 	/**
-	 * Path (relative to Kit `base`) the handle serves.
-	 * Default is the clash-safe island-emoji route (`/__ogygia__`). Must start with `/`.
+	 * Path (relative to Kit `base`) of the islands endpoint: the handle answers on it, and every hole
+	 * and live region on a page is minted against it. Default `/__ogygia__`. Must start with `/`.
+	 *
+	 * It must be a path your deployment forwards to the app (behind a proxy that forwards only known
+	 * prefixes, pick one under them, e.g. `/_server/api/__ogygia__`). Not under Kit's `appDir`
+	 * (`/_app/…`): Kit answers those itself, before any handle runs.
 	 */
 	endpoint?: string;
 	/**

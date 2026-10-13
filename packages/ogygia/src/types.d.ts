@@ -177,10 +177,6 @@ declare module 'virtual:ogygia/router-config' {
 	export const enabled: boolean;
 	/** Use the View Transitions API on navigation. `ogygia({ router: { viewTransitions } })`. */
 	export const viewTransitions: boolean;
-	/** MPA mode only (`router: false`): the static Speculation Rules JSON the handle injects into
-	 *  every page head (native prerender/prefetch of likely next pages). `''` when the router is on —
-	 *  speculation caches serve real navigations only, which a body-swap router can never read. */
-	export const speculationRules: string;
 }
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regions: { ttl } })` (default 3600). */
