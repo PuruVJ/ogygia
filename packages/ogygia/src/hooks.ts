@@ -120,7 +120,7 @@ import { error_route_is_csr_true, route_is_csr_true } from './context.js';
 import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.js';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
 import { check_script, mark, settle, STAND_IN_CSS, type TransformKind } from './server/reversible.js';
-import { hole_graph_script } from './server/hole-graph.js';
+import { hole_head } from './server/hole-graph.js';
 import { restore, restore_adopt } from './runtime/restore.js';
 import { RateLimiter } from './server/rate-limit.js';
 import { PageSeed } from './server/page-seed.js';
@@ -1828,13 +1828,13 @@ class OgygiaHandle {
 				context: kit_render_context()
 			});
 			return await Promise.race([
-				// (with the island graph its islands wrote into the head: the endpoint ships the body
-				// only, and without it a hole's islands loaded their chunks in a waterfall)
+				// (with what its islands wrote into the head — their graph and their CSS: the endpoint
+				// ships the body only — server/hole-graph.ts)
 				Promise.resolve(rendered).then((out) => {
 					const body = out.body as string;
 					if (body === KEEP_FALLBACK_HTML) return body;
 					// (and the page facts its islands read: they hydrate against what it rendered from)
-					return (base ? hole_graph_script(out.head as string, base) : '') + body + kit_page_facts_tail();
+					return hole_head(out.head as string, base) + body + kit_page_facts_tail();
 				}),
 				new Promise<never>((_, rej) =>
 					setTimeout(() => rej(new Error('region render timeout')), RENDER_TIMEOUT_MS)

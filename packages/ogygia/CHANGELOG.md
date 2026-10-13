@@ -14,6 +14,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - In a build with devtools, the launcher stays hidden until a browser turns devtools on (`?og-devtools=on`, or `ogygia.devtools.on()` in the console); `?og-devtools=off`, `ogygia.devtools.off()` or **hide** in the dock turn it off. The dev server is unchanged.
 
+### Fixed
+
+- A hole's CSS now carries components taken through a package (its `exports`, a TypeScript entry included) or a barrel — only the names imported — and an island inside a hole brings its own CSS, so what it renders after a click is styled.
+
 ## [0.8.1] - 2026-10-13
 
 ### Fixed
