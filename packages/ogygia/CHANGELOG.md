@@ -8,6 +8,13 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- On Windows, ogygia knows its own files again: builds no longer register its devtools and profiler components as app modules or warn that its own marks are ignored.
+- The dev dependency scan no longer fails when the profiler is on, so dependencies pre-bundle again; `devalue` is now named through ogygia, so pnpm apps stop warning that it can't be resolved.
+
 ## [0.8.1] - 2026-10-13
 
 ### Fixed
