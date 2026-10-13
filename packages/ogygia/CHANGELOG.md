@@ -8,6 +8,12 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - Unreleased
+
+### Fixed
+
+- `handle({ endpoint })` now moves every hole and live-region URL a page mints, not only the handler; before, every hole asked the old `/__ogygia__` path and stayed empty.
+
 ## [0.8.0] - 2026-10-09
 
 The **passage** release: the runtime and the compiler rebuilt on one identity primitive, regions that move instead of reset across navigations, a standalone compiler, a production SSR profiler, a devtools dock, a typed router, frozen pages and fragment federation. Underneath, one load scheduler, one DOM ownership model and one page model replace per-path rules.

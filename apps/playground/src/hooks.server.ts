@@ -97,12 +97,23 @@ const gap_inside: Handle = async ({ event, resolve }) => {
 // the path, the way a tracking or a session-touch hook does. The page itself is the same for every
 // visitor, but no shared cache keeps an answer that sets a cookie: the profiler's same-document
 // advice must say so before it says "cache it".
+// A MOVED ISLANDS ENDPOINT (e2e/islands-endpoint.spec.ts): with OGYGIA_ENDPOINT set, the app serves
+// its holes there — and, like a reverse proxy that forwards only the app's own prefixes, nothing
+// answers the default path any more.
+const moved_endpoint = process.env.OGYGIA_ENDPOINT;
+const proxy_front: Handle = async ({ event, resolve }) => {
+	if (moved_endpoint && event.url.pathname.endsWith('/__ogygia__') && !event.url.pathname.endsWith(moved_endpoint))
+		return new Response('not forwarded', { status: 404 });
+	return resolve(event);
+};
+
 const stamp_cookie: Handle = async ({ event, resolve }) => {
 	if (event.url.pathname === '/dt-cookie') event.cookies.set('og-visitor', crypto.randomUUID(), { path: '/' });
 	return resolve(event);
 };
 
 export const handle = sequence(
+	proxy_front,
 	stamp_cookie,
 	// the hell page's design-system SSR pass (a Stencil renderer over the finished document): first
 	// in the sequence so its page transform runs LAST, on ogygia's output (Kit applies them in reverse)
@@ -111,7 +122,10 @@ export const handle = sequence(
 	auth_wall,
 	gap_front,
 	// (the restore lab, e2e/restore.spec.ts: a scoped web-component render as the app's transform)
-	ogygiaHandle(process.env.OGYGIA_RESTORE_LAB ? { transform: (html) => scoped_render(html) } : {}),
+	ogygiaHandle({
+		...(process.env.OGYGIA_RESTORE_LAB ? { transform: (html: string) => scoped_render(html) } : {}),
+		...(moved_endpoint ? { endpoint: moved_endpoint } : {})
+	}),
 	gap_inside,
 	corrupt_detector_region,
 	passthrough

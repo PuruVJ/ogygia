@@ -59,7 +59,9 @@ export default defineConfig({
 
 #### hooks.server.ts
 
-`ogygia.handle()` serves the signed island endpoint. `render: 'deferred'` and `render: 'live'` use this endpoint. If you have other handles, put them together with `sequence()`. To change the path, use `ogygia.handle({ endpoint: '/my-islands' })`. The default is a clash-safe emoji route.
+`ogygia.handle()` serves the signed island endpoint. `render: 'deferred'` and `render: 'live'` use this endpoint. If you have other handles, put them together with `sequence()`. The default path is `/__ogygia__`.
+
+To change the path, use `ogygia.handle({ endpoint: '/my-islands' })`. The handle then answers there, and every hole on your pages asks there. Pick a path your deployment sends to the app: behind a proxy that only forwards some prefixes, put it under one of them (for example `/_server/api/__ogygia__`). Don't put it under Kit's `appDir` (`/_app/…`): Kit answers those paths itself, before any handle runs.
 
 ```ts
 import * as ogygia from 'ogygia/server';

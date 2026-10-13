@@ -144,7 +144,8 @@ export interface Visit {
 	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
 	/** files a preload fetched and something else downloaded again: the preload went unused */
 	/** (`vary`: a font's Vary header, from the report's own weighing — never sent by a beacon) */
-	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null; vary?: string }[];
+	/** `hole`: the URL is a hole the runtime asked for (its preload is ogygia's own) */
+	preload_misses?: { url: string; type: string; bytes: number; as: string; crossorigin: string | null; vary?: string; hole?: true }[];
 	/** the `@font-face` rules behind the fonts it fetched: family, font-display, the fetched files */
 	font_faces?: { family: string; display: string; urls: string[] }[];
 	/** images whose pixels are 4× or more what their box shows (the screen counted), files ≥ 50 KB */
@@ -410,7 +411,7 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 		const type = str(m?.type, 20);
 		const bytes = num(m?.bytes, 1e9);
 		if (!url || !type || bytes === undefined) continue;
-		preload_misses.push({ url, type, bytes, as: str(m.as, 20) ?? '', crossorigin: typeof m.crossorigin === 'string' ? m.crossorigin.slice(0, 20) : null });
+		preload_misses.push({ url, type, bytes, as: str(m.as, 20) ?? '', crossorigin: typeof m.crossorigin === 'string' ? m.crossorigin.slice(0, 20) : null, ...(m.hole === true ? { hole: true as const } : {}) });
 	}
 	if (preload_misses.length) visit.preload_misses = preload_misses;
 	const font_faces: NonNullable<Visit['font_faces']> = [];

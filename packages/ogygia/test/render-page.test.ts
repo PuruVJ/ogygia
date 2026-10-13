@@ -11,6 +11,7 @@ import * as devalue from 'devalue';
 import type { RequestEvent } from '@sveltejs/kit';
 import { data_url_of, look_up_page, PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from '../src/server/page-facts.js';
 import { configure_render_page, page_url_of, prepare_render_page, render_page, renders_for_a_page } from '../src/server/render-page.js';
+import { configure_islands_endpoint } from '../src/server/endpoint.js';
 
 /** Kit's data answer: one `data` line (each node devalue-flattened), then a `chunk` line per promise. */
 function kit_data(nodes: (Record<string, unknown> | null)[], chunks: string[] = []): string {
@@ -37,7 +38,10 @@ function event_of(o: { url: string; referer?: string; remote?: boolean; fetch?: 
 	} as unknown as RequestEvent;
 }
 
-beforeEach(() => configure_render_page({ endpoint_path: '/__ogygia__', warn: null }));
+beforeEach(() => {
+	configure_islands_endpoint(undefined);
+	configure_render_page({ warn: null });
+});
 
 describe('data_url_of: the URL Kit’s client asks for a page’s data', () => {
 	it('suffixes the path, keeps the search, marks a trailing slash', () => {
@@ -144,7 +148,7 @@ describe('render_page: one model, three venues', () => {
 
 	it('dev: a key the server loads did not produce is named once (a universal load’s), never silent', async () => {
 		const said: string[] = [];
-		configure_render_page({ endpoint_path: '/__ogygia__', warn: (m) => said.push(m) });
+		configure_render_page({ warn: (m) => said.push(m) });
 		const event = event_of({
 			url: 'https://a.test/_app/remote/abc/header',
 			referer: 'https://a.test/p',
