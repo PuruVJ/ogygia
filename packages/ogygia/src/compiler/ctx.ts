@@ -48,7 +48,6 @@ export interface CompileCtxInit {
 	 *  `asset()`'s job — `Region.svelte` runs every baked entry / runtime URL through it at SSR — so
 	 *  ogygia never bakes a base into these URLs (doing so double-applies it). */
 	app_dir: string;
-	libDir: string;
 	/** `ogygia({ profiler })` normalized (or `null` when off) — baked into `virtual:ogygia/profiler-config`
 	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
 	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
@@ -110,7 +109,6 @@ export class CompileCtx {
 	readonly root: string;
 	readonly base: string;
 	readonly app_dir: string;
-	readonly libDir: string;
 	readonly pkg_scan: PackageScan[];
 	readonly profiler_config: Record<string, unknown> | null;
 	readonly freeze_config: { ttl: number; default: boolean } | null;
@@ -151,7 +149,6 @@ export class CompileCtx {
 		this.root = init.root;
 		this.base = init.base;
 		this.app_dir = init.app_dir;
-		this.libDir = init.libDir;
 		this.pkg_scan = init.pkg_scan ?? [];
 		this.profiler_config = init.profiler_config;
 		this.freeze_config = init.freeze_config;

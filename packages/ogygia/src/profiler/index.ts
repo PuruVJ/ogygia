@@ -3384,7 +3384,7 @@ class Profiler {
 					const text = read(rel);
 					if (text) files.push({ path: join(process.cwd(), 'src', rel), file: rel, text });
 				}
-				// …and the app modules they import, one step (a `$lib` helper that reads a file per
+				// …and the app modules they import, one step (a `#lib` helper that reads a file per
 				// request is the common case): each found once, at most 30
 				const own = new Set(files.map((f) => f.file));
 				for (const f of files.slice()) {
@@ -6501,7 +6501,7 @@ function round2(n: number): number {
 
 /**
  * The module (src-relative, no extension: `lib/inferno/catalog`) a file imports `name` from — its
- * `import { name } from '$lib/…'` or `'./…'` — or the file itself when it declares it. Undefined for
+ * `import { name } from '#lib/…'` or `'./…'` — or the file itself when it declares it. Undefined for
  * a package import, or a name it cannot place. Plain text, no regex.
  */
 /**
@@ -6570,7 +6570,7 @@ function imported_from(src: string, name: string, file: string): string | undefi
 		const q0 = Math.max(l.lastIndexOf("'", q - 1), l.lastIndexOf('"', q - 1));
 		const spec = q0 !== -1 && q > q0 ? l.slice(q0 + 1, q) : '';
 		const bare = (p: string) => (p.endsWith('.ts') || p.endsWith('.js') ? p.slice(0, -3) : p);
-		if (spec.startsWith('$lib/')) return bare(`lib/${spec.slice(5)}`);
+		if (spec.startsWith('#lib/')) return bare(`lib/${spec.slice(5)}`);
 		if (spec.startsWith('.')) {
 			const parts = file.split('/').slice(0, -1);
 			for (const seg of spec.split('/')) {

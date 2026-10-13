@@ -56,7 +56,6 @@ import {
 	keep_client_dir,
 	inject_keep_client_route,
 	resolve_kit_paths,
-	kit_major,
 	is_route_option_file,
 	strip_freeze_export,
 	kit_dirs,
@@ -148,6 +147,7 @@ import {
 	OGYGIA_REGION_MODULES,
 	OGYGIA_INJECTED_IMPORTS,
 	OGYGIA_INJECTED_FILES,
+	own_source_ts,
 	APP_SHIMS,
 	CLIENT_BINDING_STUB_FILE,
 	STUB_CLIENT,
@@ -258,7 +258,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		});
 	}
 
-	// Publish the markdown config so a value-free `markdown()` in the svelte config reads it — all
+	// Publish the markdown config so a value-free `markdown()` in Kit's config reads it — all
 	// content/markdown config stays here in the one plugin. `standalone` re-invokes this factory for
 	// its throwaway client build; don't let that clobber the real config with `null`.
 	if (!standalone && options.content?.markdown) {
@@ -323,12 +323,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let base = '';
 	/** SvelteKit `config.kit.appDir` (default `_app`) — read from Kit's `__SVELTEKIT_APP_DIR__` define. */
 	let app_dir = '_app';
-	let libDir: string;
 	let is_dev = false;
 	/** the app compiles with Svelte's async mode (vite-plugin-svelte's resolved options): Region
 	 *  imports the awaiting LateIsland (late-island.ts) */
 	let svelte_async = false;
-	/** Resolved `resolve.alias` entries — passed to bake()'s rolldown eval so `$lib` etc. resolve. */
+	/** Resolved `resolve.alias` entries — passed to bake()'s rolldown eval so `#lib` etc. resolve. */
 	let resolve_alias: { find: string | RegExp; replacement: string }[] = [];
 	let is_build = false;
 	let is_ssr = false;
@@ -481,7 +480,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// Kit's `files.routes` / `outDir` from the app's Kit config — resolved BEFORE anything
 					// below walks the routes tree or picks an output path (compiler/kit.ts `kit_dirs`). An
 					// app building a second route tree from one source configures both. Read off Kit's own
-					// plugin (Kit 3 takes its config in vite.config only), else the svelte.config.js file.
+					// plugin (Kit takes its config in the vite config only).
 					await load_kit_dirs(path.resolve(userConfig.root ?? '.'), userConfig.plugins);
 
 					// DEVTOOLS IN A BUILD: the app decides (`devtools: mode !== 'production'`). A build then
@@ -601,10 +600,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							// the profiler's browser half (runtime/beacon.ts) ships only to an app that
 							// can read it: the profiler configured, or devtools. Everywhere else every
 							// `if (BEACON) …` folds out and the module leaves the boot (a quarter of it)
-							__OGYGIA_BEACON__: JSON.stringify(profiler_config !== null || devtools_effective || devtools_lazy),
-							// the app's Kit major: whether Kit's `asset()` takes a path with its leading
-							// slash (2) or without (3) — kit-paths.ts, where a runtime probe guessed wrong in builds
-							__OGYGIA_KIT_MAJOR__: JSON.stringify(kit_major(path.resolve(userConfig.root ?? '.')))
+							__OGYGIA_BEACON__: JSON.stringify(profiler_config !== null || devtools_effective || devtools_lazy)
 						},
 						server: {
 							fs: {
@@ -664,7 +660,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// The shared build cache (fences, git checkouts, shas) persists under THIS app's
 				// node_modules/.ogygia — point it before anything derives.
 				configure_build_cache(root);
-				libDir = path.join(root, 'src', 'lib');
 				// Claim the content-island preprocessor bridge for THIS (configured) instance — root is set.
 				claim_island_bridge();
 				is_dev = config.command === 'serve';
@@ -708,7 +703,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks, kit_transport_init } =
 					resolve_kit_paths(root));
 
-				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
+				// Bind the driver's resolved compile context — now that root/base/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
 				// the snapshot is complete before the driver is first called.
 				compiler.configure(
@@ -716,7 +711,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						root,
 						base,
 						app_dir,
-						libDir,
 						pkg_scan,
 						profiler_config,
 						freeze_config,
@@ -863,7 +857,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					router_css_refs.clear();
 					for (const abs of compiler.router_css_roots()) {
 						const parts: string[] = [];
-						for (const e of collectFoucCssReachable(abs, { root, libDir, readFile })) {
+						for (const e of collectFoucCssReachable(abs, { root, readFile })) {
 							if (e.kind === 'scoped') {
 								const src = readFile(e.abs);
 								if (src == null) continue;
@@ -906,7 +900,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							const parts: string[] = [];
 							for (const e of collectFoucCssReachable(abs, {
 								root,
-								libDir,
 								readFile,
 								alias: resolve_alias
 							})) {
@@ -1167,6 +1160,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// ogygia dependency of its own.
 				if (OGYGIA_INJECTED_IMPORTS.has(source)) return OGYGIA_INJECTED_FILES[source];
 
+				// ogygia's own dynamic `import('./x.js')`, reaching here without its importer (dev runner)
+				const own_ts = own_source_ts(source);
+				if (own_ts) return own_ts;
+
 				// Region's twin imports are the awaiting ones where the app runs Svelte's async mode
 				// (late-island.ts): a late island in one swap, a promise `of` awaited in the render
 				if (svelte_async) {
@@ -1223,7 +1220,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					const abs = path.join(root, rel);
 					const code = buildFoucCssModuleSource(abs, {
 						root,
-						libDir,
 						readFile: (p) => {
 							try {
 								return fs.readFileSync(p, 'utf8');
@@ -1532,7 +1528,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				}
 
 				// INLINE REGION CSS: the text of every region sheet under Kit's `inlineStyleThreshold`
-				// (the app's svelte.config.js, read next to `kit_dirs`), keyed by href — the render emits
+				// (the app's Kit config, read next to `kit_dirs`), keyed by href — the render emits
 				// those as `<style data-ogygia-region-css>` instead of blocking `<link>`s.
 				const css_inline = collect_inline_css(
 					bundle as Record<
@@ -1598,7 +1594,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 }
 
 /**
- * ogygia's svelte preprocessor. Spread into the svelte config's `preprocess`:
+ * ogygia's svelte preprocessor. Spread into Kit's config's `preprocess` (`sveltekit({...})`):
  *
  * ```js
  * extensions: ogygia.extensions(),

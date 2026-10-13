@@ -36,12 +36,8 @@ import {
 	generateRuntimeEntrySource,
 	resolveFeatures
 } from './link/runtime-entry.js';
-import {
-	resolveFoucImportSpec,
-	FOUC_CSS_PREFIX,
-	FOUC_SCOPED_PREFIX,
-	type FoucAlias
-} from './fouc-css.js';
+import { FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
+import { app_file, type AppAlias } from './app-resolve.js';
 import {
 	moduleHasTransportable,
 	svelteModuleHasTransportable,
@@ -189,9 +185,6 @@ const OG_PRESET_QUERY_RE = /[?&]og_preset=([\w-]+)/;
  *  regex — `walk_dep` resets `lastIndex` before each scan). */
 const IMPORT_SPEC_G =
 	/\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
-/** The extensions an extension-less island import may resolve to (bare, then index files). */
-const ISLAND_DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js', '.mjs'];
-
 // Import/export-from specifier extraction for the router-css closure (link/router-css.ts). A cheap
 // regex over raw source — a stray match in a comment/string just fails to resolve later, harmless.
 // Runs once per file in the prescan walk; module-level so it compiles once.
@@ -483,7 +476,6 @@ export class Compiler {
 		const th0 = P ? performance.now() : 0;
 		const result = transformHost(source, id, {
 			root: ctx.root,
-			libDir: ctx.libDir,
 			readFile: (abs: string) => ctx.read_file(abs),
 			pathModule: path,
 			dev: ctx.is_dev,
@@ -521,7 +513,6 @@ export class Compiler {
 		const ctx = this.#ctx!;
 		return transformTsRegions(source, id, {
 			root: ctx.root,
-			libDir: ctx.libDir,
 			pathModule: path,
 			dev: ctx.is_dev,
 			virtualPathFor: (_hostId: string, iid: string) => ctx.island_virtual_id(iid),
@@ -548,7 +539,6 @@ export class Compiler {
 		const program = this.program;
 		const { registry, island_graph, transportable_modules, runtime_marks } = program;
 		const root = ctx.root;
-		const libDir = ctx.libDir;
 
 		const src_dir = path.join(root, 'src');
 		clean_stale_ogygia_dirs(src_dir);
@@ -729,7 +719,7 @@ export class Compiler {
 	 * thread). (The `?og-region` module-id fork was tried and reverted — it broke Svelte's scoped-CSS
 	 * emission; membership rides OUTSIDE the module id here, the walk only READS.)
 	 *
-	 * Follows relative, `$lib` AND the app's aliases (`kit.alias` / `resolve.alias` — a customer's
+	 * Follows relative, `#…` subpath imports (Kit's `#lib`) AND the app's aliases (`alias` / `resolve.alias` — a customer's
 	 * `$lib_x/utils/boot` import was where the walk used to stop, and its `$app/state` went to whichever
 	 * page loaded first). Bare package specifiers stop it; the lazy resolveId marking stays their
 	 * backstop. Called at prescan for every island, and again in dev for an island registered by a
@@ -760,28 +750,10 @@ export class Compiler {
 	mark_island_closure(componentAbs: string): string[] {
 		const ctx = this.#ctx!;
 		const { island_graph } = this.program;
-		const aliases = ctx.resolve_alias as readonly FoucAlias[];
+		const alias = ctx.resolve_alias as readonly AppAlias[];
 		const added: string[] = [];
-		const resolve_dep = (spec: string, importerAbs: string): string | null => {
-			const base = resolveFoucImportSpec(spec, importerAbs, ctx.libDir, aliases);
-			if (!base) return null; // a bare package specifier — the lazy resolveId marking is the backstop
-			for (const ext of ISLAND_DEP_EXTS) {
-				try {
-					if (fs.statSync(base + ext).isFile()) return base + ext;
-				} catch {
-					/* not this ext */
-				}
-			}
-			for (const ext of ISLAND_DEP_EXTS.slice(1)) {
-				const idx = path.join(base, 'index' + ext);
-				try {
-					if (fs.statSync(idx).isFile()) return idx;
-				} catch {
-					/* not an index */
-				}
-			}
-			return null;
-		};
+		// (a bare package specifier resolves to null — the lazy resolveId marking is the backstop)
+		const resolve_dep = (spec: string, importerAbs: string): string | null => app_file(spec, importerAbs, { alias });
 		const walk = (abs: string) => {
 			const norm = strip_id(abs);
 			if (this.#island_closure_seen.has(norm)) return;
@@ -888,7 +860,7 @@ export class Compiler {
 		// by prescanned module_specs, so profiler-router's type-import of `./index.js` dead-ends
 		// instead of dragging the host graph in.
 		const roots = new Set(
-			router_css_roots(this.program.router_modules, this.program.module_specs, ctx.libDir)
+			router_css_roots(this.program.router_modules, this.program.module_specs)
 		);
 		const sorted = [...roots].sort();
 		if (ctx.is_build) this.#router_css_roots_cache = sorted;
@@ -1198,7 +1170,6 @@ export class Compiler {
 			// without a server router — the router's dynamic import then costs nothing.
 			return router_css_module(this.router_css_roots(), {
 				root: ctx.root,
-				lib_dir: ctx.libDir,
 				is_dev,
 				read_file: (p) => ctx.read_file(p)
 			});
@@ -1411,7 +1382,7 @@ export class Compiler {
 		if (registry_stub) return registry_stub;
 
 		// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
-		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
+		// pulls in (e.g. `#lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
 		// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
 		// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
 		const importer_id = importer ? strip_id(importer) : undefined;
@@ -1486,7 +1457,7 @@ export class Compiler {
 	 * module already in that variant world (its id carries the variant query), and only when the
 	 * resolved target is a local `.ts`/`.js` module that IS a region registry or REACHES one through
 	 * static script imports. The variant world is contagious along script edges only: a registry
-	 * behind a plain helper (`+page.svelte` → `$lib/factory.ts` → `registry.ts`) gets the same
+	 * behind a plain helper (`+page.svelte` → `#lib/factory.ts` → `registry.ts`) gets the same
 	 * treatment as a direct import, while modules that reach no registry stay shared (no copies).
 	 * `.svelte` edges never fork (forking a component's id breaks its scoped CSS). Returns the
 	 * variant id, or `null` to let resolution continue.

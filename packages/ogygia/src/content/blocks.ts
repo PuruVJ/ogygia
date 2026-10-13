@@ -4,8 +4,8 @@
  * `<Region of={entry.body} />`, exactly like a markdown body.
  *
  *   import { content, blocks } from 'ogygia/content';
- *   import Hero    from '$lib/blocks/Hero.svelte'    with { region: 'raw' };
- *   import Pricing from '$lib/blocks/Pricing.svelte' with { region: 'raw' };
+ *   import Hero    from '#lib/blocks/Hero.svelte'    with { region: 'raw' };
+ *   import Pricing from '#lib/blocks/Pricing.svelte' with { region: 'raw' };
  *
  *   export const pages = content({ loader: blocks(import.meta.glob('./pages/*.json'), { Hero, Pricing }) });
  *

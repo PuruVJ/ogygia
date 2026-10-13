@@ -13,7 +13,7 @@ describe('handle_parts: the handle functions a hooks file borrows from other mod
 			"import { sequence } from '@sveltejs/kit/hooks';",
 			"import { redirect, type Handle } from '@sveltejs/kit';",
 			"import { handle as ogygiaHandle } from 'ogygia/server';",
-			"import { ds_ssr } from '$lib/hell/ds-ssr';",
+			"import { ds_ssr } from '#lib/hell/ds-ssr';",
 			"import {",
 			'\tguard as authGuard,',
 			'\tother',

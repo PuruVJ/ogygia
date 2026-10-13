@@ -10,7 +10,6 @@ import {
 
 describe('fouc-css collector', () => {
 	const root = '/app';
-	const libDir = '/app/src/lib';
 
 	test('foucCssVirtualId normalizes separators', () => {
 		expect(foucCssVirtualId('src/lib/A.svelte')).toBe(
@@ -29,7 +28,6 @@ describe('fouc-css collector', () => {
 		};
 		const src = buildFoucCssModuleSource('/app/src/lib/Hero.svelte', {
 			root,
-			libDir,
 			readFile: (p) => files[path.normalize(p)] ?? null
 		});
 		expect(src).toContain('import "/app/src/lib/x.css";');
@@ -64,10 +62,10 @@ describe('fouc-css collector', () => {
 
 	test('listStaticImportSpecs reads side-effect css imports', () => {
 		const specs = listStaticImportSpecs(
-			`<script>\nimport '$lib/styles/a.css';\nimport B from './B.svelte';\n</script>\n`,
+			`<script>\nimport '#lib/styles/a.css';\nimport B from './B.svelte';\n</script>\n`,
 			'/app/src/lib/H.svelte'
 		);
-		expect(specs).toContain('$lib/styles/a.css');
+		expect(specs).toContain('#lib/styles/a.css');
 		expect(specs).toContain('./B.svelte');
 	});
 });

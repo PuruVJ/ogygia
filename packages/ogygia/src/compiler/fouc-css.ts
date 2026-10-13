@@ -14,6 +14,7 @@
  */
 
 import { fs, path } from './host.js';
+import { app_spec_path, type AppAlias } from './app-resolve.js';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
 import { unscoped_marker } from '../unscoped-css.js';
@@ -88,42 +89,6 @@ export function foucRelFromId(id: string) {
 }
 
 /**
- * Resolve a static import specifier against an importer file + `$lib`.
- * @param spec
- * @param importerAbs
- * @param libDir
- */
-/** One resolved Vite alias (`resolve.alias`, normalized) — Kit's `kit.alias` entries arrive here. */
-export interface FoucAlias {
-	find: string | RegExp;
-	replacement: string;
-}
-
-export function resolveFoucImportSpec(
-	spec: string,
-	importerAbs: string,
-	libDir: string,
-	alias: readonly FoucAlias[] = []
-) {
-	if (spec === '$lib' || spec.startsWith('$lib/')) {
-		return path.join(libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
-	}
-	if (spec.startsWith('.')) {
-		return path.resolve(path.dirname(importerAbs), spec);
-	}
-	// App aliases (`$lib_x`, `@scope/pkg` → a source dir): the same table Vite resolves with.
-	for (const a of alias) {
-		if (typeof a.find === 'string') {
-			if (spec === a.find) return a.replacement;
-			if (spec.startsWith(a.find + '/')) return a.replacement + spec.slice(a.find.length);
-		} else if (a.find.test(spec)) {
-			return spec.replace(a.find, a.replacement);
-		}
-	}
-	return null;
-}
-
-/**
  * Collect side-effect import specs that pull island CSS into the client graph without JS.
  * @param entryAbs absolute path to the island entry `.svelte`
  * @param opts
@@ -132,7 +97,6 @@ export function buildFoucCssModuleSource(
 	entryAbs: string,
 	opts: {
 		root: string;
-		libDir: string;
 		readFile?: (p: string) => string | null;
 	}
 ) {
@@ -158,10 +122,9 @@ export function collectFoucCssReachable(
 	entryAbs: string,
 	opts: {
 		root: string;
-		libDir: string;
 		readFile?: (p: string) => string | null;
 		/** app aliases to follow (`$lib_x/…`, `@scope/pkg/…` → source dirs) */
-		alias?: readonly FoucAlias[];
+		alias?: readonly AppAlias[];
 	}
 ): Array<{ kind: 'scoped' | 'css'; abs: string }> {
 	const read =
@@ -190,7 +153,7 @@ export function collectFoucCssReachable(
 		}
 
 		for (const spec of listStaticImportSpecs(source, norm)) {
-			const resolved = resolveFoucImportSpec(spec, norm, opts.libDir, opts.alias);
+			const resolved = app_spec_path(spec, norm, opts.alias);
 			if (!resolved) continue;
 			const clean = resolved.split('?')[0];
 			if (STYLE_EXT.test(clean)) {

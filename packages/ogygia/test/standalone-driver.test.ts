@@ -31,7 +31,6 @@ function make_compiler() {
 		new CompileCtx({
 			root: ROOT,
 			base: '/',
-			libDir: `${ROOT}/src/lib`,
 			is_dev: false,
 			id_salt: '',
 			visibleMargin: '0px',

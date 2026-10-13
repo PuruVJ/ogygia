@@ -343,7 +343,7 @@ export function calls_name(line: string, names: readonly string[]): boolean {
 }
 
 /** The functions a hooks file's `handle` is made of, when they live in OTHER app modules:
- *  `export const handle = sequence(ds_ssr, auth)` with `import { ds_ssr } from '$lib/ds-ssr'` →
+ *  `export const handle = sequence(ds_ssr, auth)` with `import { ds_ssr } from '#lib/ds-ssr'` →
  *  ds_ssr → `ds-ssr`. The value is the module's file stem, so a CPU frame counts as that handle
  *  only when it is named so AND sits in that file. A handle written in the hooks file itself is
  *  not listed (its frames are in the hooks file already), and neither is one from a package (a
@@ -428,7 +428,7 @@ function spec_after_from(line: string): string {
 	return end === -1 ? '' : line.slice(i + 1, end);
 }
 
-/** an app module's file stem (`$lib/hell/ds-ssr` → `ds-ssr`, `./auth.js` → `auth`); undefined for
+/** an app module's file stem (`#lib/hell/ds-ssr` → `ds-ssr`, `./auth.js` → `auth`); undefined for
  *  a package (`@sveltejs/kit/hooks`, `ogygia/server`) */
 function app_module_stem(spec: string): string | undefined {
 	const c = spec[0];

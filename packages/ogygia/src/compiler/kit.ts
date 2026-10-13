@@ -14,7 +14,7 @@ export interface KitPaths {
 	 *  client app boots — which a csr=false page never does — so ogygia runs its `init` on boot there
 	 *  (client-side monitoring, third-party bootstraps otherwise silently never load). */
 	client_hooks: string | null;
-	/** Kit 3's client codec module (`#app/internal/transport`), or null on Kit 2. Kit 3's remote
+	/** Kit's client codec module (`#app/internal/transport`), or null when no Kit resolves. Kit's remote
 	 *  argument encoding reads the app's transport from it, and only Kit's client boot fills it — so on
 	 *  a csr=false page a custom-type remote argument failed to encode until ogygia filled it too. */
 	kit_transport_init: string | null;
@@ -70,29 +70,12 @@ export function resolve_kit_paths(root: string): KitPaths {
 	return { kit_wire_path, kit_remote_index, universal_hooks, client_hooks, kit_transport_init };
 }
 
-/**
- * The app's Kit MAJOR version (resolved off the app root, like {@link resolve_kit_paths}), or null when
- * no Kit resolves. The one fact `kit_asset` needs: Kit 2's `asset()` takes a path with its leading
- * slash, Kit 3's without — and no runtime probe can tell them apart (Kit 2 refuses a slash-less path
- * only in dev; in a build it returns it page-relative, and every island entry on a nested page 404'd).
- */
-export function kit_major(root: string): number | null {
-	try {
-		const require = createRequire(path.join(root, 'noop.js'));
-		const pkg = JSON.parse(fs.readFileSync(require.resolve('@sveltejs/kit/package.json'), 'utf8')) as { version?: string };
-		const major = Number.parseInt(pkg.version ?? '', 10);
-		return Number.isFinite(major) ? major : null;
-	} catch {
-		return null;
-	}
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Kit's configurable directories — `kit.files.routes` and `kit.outDir`.
 //
 // Everything below that walks the routes tree, and every handoff written under Kit's output dir,
 // resolves through `kit_dirs(root)`, never through a literal `src/routes` / `.svelte-kit`. The
-// Vite plugin fills the cache from the app's svelte.config.js in its `config` hook (see
+// Vite plugin fills the cache from the app's Kit config in its `config` hook (see
 // vite/kit-dirs.ts — Node-only, hence not here); an unfilled root answers the defaults, so a
 // standalone (no-Kit) compile and the tests keep working.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,7 +107,7 @@ export function kit_dirs(root: string): KitDirs {
 // content body's sheets, linked per rendered region) obeys the same number: the build keeps the
 // text of every region CSS asset under the threshold in the island-deps handoff, and the render
 // emits `<style data-ogygia-region-css="href">` instead of a blocking `<link>`. Read from the
-// app's svelte.config.js by the Vite plugin next to `kit_dirs`; `0` (Kit's default) = never inline.
+// app's Kit config by the Vite plugin next to `kit_dirs`; `0` (Kit's default) = never inline.
 const _kit_inline_style_threshold = new Map<string, number>();
 
 export function set_kit_inline_style_threshold(root: string, bytes: number): void {

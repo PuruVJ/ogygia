@@ -186,10 +186,19 @@ function preflight(): Preflight {
 	return { pkg, pkgRaw, viteConfig, ext };
 }
 
-/** Add `ogygia@^version` to dependencies (idempotent). */
+/** Add `ogygia@^version` to dependencies, and Kit's `#lib` subpath imports the generated files import
+ *  from when the app doesn't declare them yet (idempotent). */
 function addOgygiaDep(pf: Preflight): void {
+	let changed = false;
 	if (!pf.pkg.dependencies?.['ogygia']) {
 		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}), ogygia: `^${version}` };
+		changed = true;
+	}
+	if (!pf.pkg.imports?.['#lib/*']) {
+		pf.pkg.imports = { '#lib': './src/lib', '#lib/*': './src/lib/*', ...(pf.pkg.imports ?? {}) };
+		changed = true;
+	}
+	if (changed) {
 		const indent = JSON_INDENT_RE.exec(pf.pkgRaw)?.[1] ?? '\t';
 		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
 	}
@@ -569,7 +578,7 @@ your prose and it hydrates on its own — no client bundle for the rest of the p
 	// Doc route — the three-file mount + the render page.
 	place(
 		rd('[...slug]/+page.ts'),
-		`import { docs } from '$lib/docs';
+		`import { docs } from '#lib/docs';
 
 // The three-file mount: page options are yours; load + entries come off the site.
 export const prerender = true;
@@ -583,7 +592,7 @@ export const entries = docs.entries;
 		`<script lang="ts">
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
-	import { docs } from '$lib/docs';
+	import { docs } from '#lib/docs';
 
 	// csr=false: the body renders in this route's SSR pass, so islands inside the .svx hydrate.
 	const view = (await docs.page(page.params.slug ?? ''))!;
@@ -608,7 +617,7 @@ export const prerender = true;
 	place(
 		rd('+page.svelte'),
 		`<script lang="ts">
-	import { docs } from '$lib/docs';
+	import { docs } from '#lib/docs';
 
 	// \`docs.nav()\` is plain data — queryable outside the sidebar. Find the first real page to link to.
 	const tree = await docs.nav(${emitArg || ''});
@@ -648,7 +657,7 @@ export const prerender = true;
 	// CSS against the \`.og-*\` hooks.
 	import 'ogygia/content/theme.css';
 	import 'ogygia/content/shell.css';
-	import { docs } from '$lib/docs';
+	import { docs } from '#lib/docs';
 
 	let { children } = $props();
 </script>
@@ -684,7 +693,7 @@ export const prerender = true;
 	// Emit routes — search index, sitemap, llms.txt, raw markdown, and the no-JS /search page.
 	place(
 		rd('search.json/+server.ts'),
-		`import { docs } from '$lib/docs';
+		`import { docs } from '#lib/docs';
 
 export const prerender = true;
 export const GET = docs.emit.search(${emitArg});
@@ -693,7 +702,7 @@ export const GET = docs.emit.search(${emitArg});
 	);
 	place(
 		rd('sitemap.xml/+server.ts'),
-		`import { docs } from '$lib/docs';
+		`import { docs } from '#lib/docs';
 
 export const prerender = true;
 export const GET = docs.emit.sitemap(${emitArg});
@@ -702,7 +711,7 @@ export const GET = docs.emit.sitemap(${emitArg});
 	);
 	place(
 		rd('llms.txt/+server.ts'),
-		`import { docs } from '$lib/docs';
+		`import { docs } from '#lib/docs';
 
 export const prerender = true;
 export const GET = docs.emit.llms(${emitArg});
@@ -711,7 +720,7 @@ export const GET = docs.emit.llms(${emitArg});
 	);
 	place(
 		rd('[...slug].md/+server.ts'),
-		`import { docs } from '$lib/docs';
+		`import { docs } from '#lib/docs';
 
 // Every doc, served as raw markdown at \`<slug>.md\` (great for LLMs and \`view source\`).
 export const prerender = true;
@@ -723,7 +732,7 @@ export const entries = raw.entries;
 	);
 	place(
 		rd('search/+page.server.ts'),
-		`import { docs } from '$lib/docs';
+		`import { docs } from '#lib/docs';
 
 // No-JS search: the /search page renders results server-side. With JS, the ⌘K palette takes over.
 export const prerender = false;

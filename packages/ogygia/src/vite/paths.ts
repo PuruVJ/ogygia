@@ -29,6 +29,26 @@ export const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/inter
  */
 const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
 
+/** ogygia's own `src/` as a module-id prefix (posix, trailing `/`), or null for an install (dist only). */
+const OG_SRC_ID = OG_HAS_SRC ? path.join(PKG_ROOT, 'src').split(path.sep).join('/') + '/' : null;
+
+/**
+ * ogygia's OWN source written as it ships: its `.ts` files import each other as `./x.js` (the dist
+ * name). A static import resolves with its importer in hand, which maps `.js` → `.ts`; a DYNAMIC one
+ * under Kit's dev module runner reaches the resolver as an absolute `/@fs/…/x.js` with no importer to
+ * map from — `import('./profiler/index.js')` failed to load and the profiler went missing. This maps
+ * it back: an id inside ogygia's `src/` naming a `.js` that isn't there → the `.ts` beside it. Null
+ * for anything else (one `endsWith` + one `startsWith` on the hot path; no file is touched unless
+ * both hold). Workspace-only: an install has no `src/`.
+ */
+export function own_source_ts(source: string): string | null {
+	if (OG_SRC_ID === null || !source.endsWith('.js')) return null;
+	const id = source.startsWith('/@fs/') ? source.slice(4) : source;
+	if (!id.startsWith(OG_SRC_ID)) return null;
+	const ts = id.slice(0, -3) + '.ts';
+	return !fs.existsSync(id) && fs.existsSync(ts) ? ts : null;
+}
+
 /**
  * ogygia's own profiler UI components — island `.svelte` files marked INSIDE ogygia's source and
  * rendered only from server code (`document()` pages), so no app file ever marks them and the src

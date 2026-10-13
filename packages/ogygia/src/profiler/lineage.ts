@@ -269,7 +269,7 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>, wh
 		}
 		// everything else is not a read of the data: a pattern member (`let { data } = …`), a
 		// hand-off to a child that is scanned on its own (`<Child {data} />`), an attribute
-		// (`data-x`, `data={…}`), a path (`'$lib/data'`), a word in prose
+		// (`data-x`, `data={…}`), a path (`'#lib/data'`), a word in prose
 	}
 	return whole;
 }

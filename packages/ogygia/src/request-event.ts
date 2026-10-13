@@ -4,7 +4,7 @@
  * A `render: 'deferred'` island renders on the origin, under the app's hooks, in the request that
  * fetches it: the visitor's cookies, `locals`, `url` are all there. Kit's own `getRequestEvent()`
  * (`$app/server`) would hand them over — but a component may not import `$app/server`, or any
- * `$lib/server/*` module: the moment a csr=true page shares the layout, that component is in the
+ * `#lib/server/*` module: the moment a csr=true page shares the layout, that component is in the
  * CLIENT module graph and Kit's guard fails the build. Remote functions were the other channel;
  * an app that has not adopted them has none.
  *
