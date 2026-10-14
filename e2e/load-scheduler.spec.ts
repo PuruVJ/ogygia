@@ -14,7 +14,7 @@
 //   3. a hero that never arrives holds island code no longer than the cap.
 // Usage: pnpm exec playwright test load-scheduler
 import type { Page, Route } from '@playwright/test';
-import { test, check } from './fixtures/index.ts';
+import { test, check, replayed_once } from './fixtures/index.ts';
 
 const HERO = '**/load-scheduler-hero.png';
 // a 1×1 transparent PNG
@@ -108,10 +108,8 @@ test.describe('load scheduler: island code waits for the page’s critical resou
 		await page.waitForSelector('ogygia-region[wake="interaction"][data-hydrated]', {
 			timeout: 10_000
 		});
-		check(
-			'the waking click replayed (count 1)',
-			(await page.locator('[data-i-count]').innerText()) === '1'
-		);
+		// (the runtime replays one frame after hydration, so the island's own wiring has settled)
+		check('the waking click replayed (count 1)', await replayed_once(page));
 		// the first input also ended the critical wait (the browser stopped measuring LCP)
 		await page.waitForSelector('ogygia-region[wake="load"][data-hydrated]', { timeout: 10_000 });
 		check('the hero is still held', (await island_requests(page)).hero_end === null);

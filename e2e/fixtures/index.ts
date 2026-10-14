@@ -17,6 +17,15 @@ export function check(name: string, cond: unknown, extra = ''): void {
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** The interaction lab's counter (`[data-i-count]`) reached 1 — the click that woke its island,
+ *  replayed. The runtime replays a frame AFTER `data-hydrated` (the island's wiring settles first),
+ *  so this waits for it instead of reading the counter the instant the island is marked. */
+export async function replayed_once(page: Page): Promise<boolean> {
+	return page
+		.waitForFunction(() => document.querySelector('[data-i-count]')?.textContent === '1', null, { timeout: 2000 })
+		.then(() => true, () => false);
+}
+
 /** Every island graph script in a page's HTML, merged: entry → the chunks its code needs
  *  (src/island-graph.ts wire shape `{h:[href…], e:{entry:[index…]}}`). */
 export function island_graph(html: string): Map<string, string[]> {
