@@ -797,10 +797,10 @@ const TRAILING_SLASH_RE = /\/$/;
 /** a WebAssembly script "file" as V8 names it: `/wasm/00034eea`, `wasm://wasm/…` */
 const WASM_FRAME_RE = /^(?:wasm:\/\/|\/wasm\/)|[/\\]wasm\/[0-9a-f]+$/;
 /** a resolved caller that lives in node_modules or Kit's runtime source: the framework, not the app */
-// Kit's runtime as its sourcemap spells it (`runtime/server/…`, `runtime/telemetry/record_span.js`
-// in newer Kit, which wraps every load)
+// Kit's runtime as its sourcemap spells it (`runtime/server/…`, `runtime/app/…`, and
+// `exports/internal/server/…` — its request store and `telemetry.js`, which wraps every load)
 const FRAMEWORK_SOURCE_RE =
-	/[/\\]node_modules[/\\]|(?:^|[/\\])runtime[/\\](?:server|app|telemetry)[/\\]/;
+	/[/\\]node_modules[/\\]|(?:^|[/\\])(?:runtime[/\\](?:server|app)|exports[/\\]internal[/\\]server)[/\\]/;
 const NODE_MODULES_RE = /[/\\]node_modules[/\\]/;
 /** a Kit endpoint file in a resolved caller string (`+server.ts`, or its built `_server.ts.js`) */
 const SERVER_ROUTE_FILE_RE = /[/\\](?:\+server\.[jt]s|_server\.[jt]s\.js):\d+/;
@@ -1930,7 +1930,7 @@ class Profiler {
 			// `event.fetch`, a bundled dependency) is not the app's caller either — the next frame
 			// of the call chain is
 			// (the FULL resolved path too: the short one drops `node_modules/` — Kit's
-			// `exports/internal/event.js`, bundled into an adapter's own chunks, maps back there)
+			// `exports/internal/server/event.js`, bundled into an adapter's own chunks, maps back there)
 			// (only `node_modules/` there: an app folder named `runtime/server` is still the app's)
 			if (FRAMEWORK_SOURCE_RE.test(file) || (m && NODE_MODULES_RE.test(m.source)))
 				return undefined;
@@ -6025,7 +6025,7 @@ class Profiler {
 
 		// A REMOTE FUNCTION CALL: Kit's `url` is the page that asked (a header), `/` when none did (a
 		// server render reading a `prerender` function's answer over HTTP): its own address is the request's
-		const remote = (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
+		const remote = event.isRemoteRequest;
 		let remote_url: URL | null = null;
 		if (remote)
 			try {

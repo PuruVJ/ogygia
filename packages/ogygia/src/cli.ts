@@ -214,9 +214,9 @@ const svFileApi = {
 };
 
 /**
- * Wire `.svx` support + (optionally) the async compiler into wherever the svelte/kit config lives —
- * a `svelte.config.{js,ts}` OR the `sveltekit({ … })` call in `vite.config`. `svelteConfig.edit`
- * routes each option to the right place. We MERGE (never clobber) an existing `preprocess`/`extensions`.
+ * Wire `.svx` support + (optionally) the async compiler into Kit's config — the `sveltekit({ … })`
+ * call in `vite.config` (`svelteConfig.edit` finds it). We MERGE (never clobber) an existing
+ * `preprocess`/`extensions`.
  */
 function wireSvelteConfig(asyncCompiler: boolean): void {
 	svelteConfig.edit({ sv: svFileApi, cwd }, ({ ast, js, property, override }) => {
@@ -268,9 +268,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	addOgygiaDep(pf);
 	stdout.write(`  ${ok('✓')} dependency ${dim(`ogygia@^${version}`)}\n`);
 
-	// 2. vite.config — the ogygia() plugin BEFORE sveltekit() (mode: 'prepend'). Compiler/preprocess
-	//    options do NOT go here — passing args to `sveltekit()` silently drops svelte.config settings
-	//    (e.g. experimental.async). Those go through `wireSvelteConfig` below, to the right file.
+	// 2. vite.config — the ogygia() plugin BEFORE sveltekit() (mode: 'prepend'). Kit's own options
+	//    (extensions, preprocess, the async compiler) go into `sveltekit({ … })` through
+	//    `wireSvelteConfig` below.
 	editFile(
 		viteConfig,
 		transforms.script(({ ast, js }) => {

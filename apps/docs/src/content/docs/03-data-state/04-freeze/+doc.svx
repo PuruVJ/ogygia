@@ -85,11 +85,13 @@ sets itself always wins.
 The handle watches each eligible render. A page **stays per-request** when the render:
 
 - reads a cookie, personal header, or `locals` value that returned a **non-default** value,
+- reads the router's `c.visitor` and gets an identity (a signed-in visitor; an anonymous one still freezes),
+- stitches a section from a peer that is down (its "temporarily unavailable" card must not be stored),
 - reads a [feature flag](/docs/app/experiments) (an A/B'd page must never freeze one variant),
 - writes a cookie, sets `set-cookie`, answers non-200, or streams load promises,
 - or was requested with a query string.
 
-Each disqualification is **named in a dev note** (`cookie:session`, `locals.user`,
+Each disqualification is **named in a dev note** (`cookie:session`, `locals.user`, `visitor`,
 `flag:hero`). Thus an almost-pure page tells you exactly which line keeps it hot.
 Default-valued reads still store. The render of an anonymous visitor (`cookies.get('consent')`
 returns `undefined`, an empty `locals.user`) **is** the canonical copy. That is the cookie-less

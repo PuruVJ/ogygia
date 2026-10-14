@@ -30,15 +30,26 @@ function app(files: Record<string, string>): string {
 	return root;
 }
 
-describe('kit.files.routes / kit.outDir', () => {
+describe('files.routes / outDir / files.hooks', () => {
 	const setup = (options: object) => ({ name: 'vite-plugin-sveltekit-setup', api: { options } });
+	const defaults = (root: string) => ({
+		routes_dir: join(root, 'src/routes'),
+		out_dir: join(root, '.svelte-kit'),
+		hooks_universal: join(root, 'src/hooks'),
+		hooks_client: join(root, 'src/hooks.client')
+	});
 
-	it("reads both off Kit's own plugin and resolves them against the root", async () => {
+	it("reads them off Kit's own plugin and resolves them against the root", async () => {
 		const root = app({});
 		// `sveltekit({ … })` is a promise of plugins, nested anywhere in the list
-		const plugins = [{ name: 'ogygia' }, Promise.resolve([{ name: 'vite-plugin-svelte:config' }, setup({ files: { routes: 'src/routes-v2' }, outDir: '.svelte-kit-v2', inlineStyleThreshold: 2048 })])];
+		const plugins = [{ name: 'ogygia' }, Promise.resolve([{ name: 'vite-plugin-svelte:config' }, setup({ files: { routes: 'src/routes-v2', hooks: { universal: 'app/hooks', client: 'app/client-hooks' } }, outDir: '.svelte-kit-v2', inlineStyleThreshold: 2048 })])];
 		const d = await load_kit_dirs(root, plugins);
-		expect(d).toEqual({ routes_dir: join(root, 'src/routes-v2'), out_dir: join(root, '.svelte-kit-v2') });
+		expect(d).toEqual({
+			routes_dir: join(root, 'src/routes-v2'),
+			out_dir: join(root, '.svelte-kit-v2'),
+			hooks_universal: join(root, 'app/hooks'),
+			hooks_client: join(root, 'app/client-hooks')
+		});
 		// cached for the compiler (sync) …
 		expect(kit_dirs(root)).toEqual(d);
 		// … and every path-derived helper follows it
@@ -48,15 +59,15 @@ describe('kit.files.routes / kit.outDir', () => {
 
 	it('defaults to src/routes + .svelte-kit without Kit, or with a Kit config that sets neither', async () => {
 		const bare = app({});
-		expect(await load_kit_dirs(bare)).toEqual({ routes_dir: join(bare, 'src/routes'), out_dir: join(bare, '.svelte-kit') });
-		expect(await load_kit_dirs(bare, [{ name: 'other' }, null, false])).toEqual({ routes_dir: join(bare, 'src/routes'), out_dir: join(bare, '.svelte-kit') });
-		expect(await load_kit_dirs(bare, [setup({})])).toEqual({ routes_dir: join(bare, 'src/routes'), out_dir: join(bare, '.svelte-kit') });
+		expect(await load_kit_dirs(bare)).toEqual(defaults(bare));
+		expect(await load_kit_dirs(bare, [{ name: 'other' }, null, false])).toEqual(defaults(bare));
+		expect(await load_kit_dirs(bare, [setup({})])).toEqual(defaults(bare));
 	});
 
 	it('an unread root answers the defaults (never throws), a set root answers what was set', () => {
 		const root = app({});
-		expect(kit_dirs(root)).toEqual({ routes_dir: join(root, 'src/routes'), out_dir: join(root, '.svelte-kit') });
-		set_kit_dirs(root, { routes_dir: join(root, 'r'), out_dir: join(root, 'o') });
+		expect(kit_dirs(root)).toEqual(defaults(root));
+		set_kit_dirs(root, { ...defaults(root), routes_dir: join(root, 'r'), out_dir: join(root, 'o') });
 		expect(kit_dirs(root).routes_dir).toBe(join(root, 'r'));
 	});
 

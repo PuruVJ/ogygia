@@ -20,10 +20,13 @@ federate({
 	widgets: {
 		kpis: {
 			props: ['org'], // declared → typed in the manifest stub (`npx ogygia fragments`)
-			make: (props, { user }) =>
+			make: (props, { user, request }) =>
 				region(Kpis, {
 					org: String(props.org ?? 'acme'),
-					viewer: (user as { sub?: string; roles?: string[] } | undefined) ?? null
+					viewer: (user as { sub?: string; roles?: string[] } | undefined) ?? null,
+					// the trace this hop belongs to (W3C traceparent `00-<trace-id>-<span>-<flags>`):
+					// the same id the shell's request started, however many hops away
+					trace: request.headers.get('traceparent')?.split('-')[1] ?? null
 				})
 		}
 	}

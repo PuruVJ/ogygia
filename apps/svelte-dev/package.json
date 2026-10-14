@@ -15,7 +15,7 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
-		"@shikijs/twoslash": "3.23.0",
+		"@shikijs/twoslash": "^4.4.1",
 		"@sveltejs/adapter-vercel": "^7.0.0",
 		"@sveltejs/kit": "^3.0.1",
 		"@sveltejs/vite-plugin-svelte": "^7.3.1",
@@ -41,7 +41,7 @@
 		"mdast-util-from-markdown": "^2.0.2",
 		"mdsvex": "^0.12.8",
 		"ogygia": "workspace:*",
-		"shiki": "^3.9.1",
+		"shiki": "^4.4.1",
 		"valibot": "^1.4.2"
 	}
 }

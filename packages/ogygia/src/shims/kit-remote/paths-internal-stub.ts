@@ -1,7 +1,7 @@
-// Stub for `$app/paths/internal/client` — Kit's remote-functions client reads `base` + `app_dir`
-// from here to build the POST URL `${base}/${app_dir}/remote/<id>`. We read SvelteKit's own build
-// defines (the same ones its real module reads) so a custom `paths.base` / `appDir` is honoured —
-// a hardcoded `_app` (or empty base) would send island remote calls to a 404. The `typeof` guards
+// Stub for Kit's `#app/paths` inside its remote-functions client — it reads `base` + `app_dir` from
+// here to build the POST URL `${base}/${app_dir}/remote/<id>`. We read SvelteKit's own build
+// defines (the same ones its real module reads) so a custom base / `appDir` is honoured — a
+// hardcoded `_app` (or empty base) would send island remote calls to a 404. The `typeof` guards
 // keep it working in the standalone island build too, where the defines are absent (defaults apply).
 // `base`/`assets` here are the app-origin paths (remote endpoints are served by the SSR handler),
 // NOT the immutable-asset prefix (which may point at a CDN).

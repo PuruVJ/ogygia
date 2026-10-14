@@ -17,7 +17,7 @@ import {
 	invalidate,
 	invalidateWhere
 } from '../src/freeze/registry.js';
-import { observe_event } from '../src/freeze/observe.js';
+import { observe_event, observe_read } from '../src/freeze/observe.js';
 import { find_stitch_holes, stitch_html } from '../src/freeze/stitch.js';
 import type { FreezeEntry, FreezeStore, EdgeAdapter } from '../src/freeze/types.js';
 
@@ -383,6 +383,29 @@ describe('freeze/observe', () => {
 		const obs = observe_event(event as never);
 		event.locals.user;
 		expect(obs.disqualified_by).toBe('locals.user');
+	});
+
+	it("the router's visitor is an identity: a signed-in one disqualifies, an anonymous one stores", () => {
+		const anon = fake_event();
+		const anon_obs = observe_event(anon as never);
+		observe_read(anon.request, 'visitor', undefined);
+		expect(anon_obs.disqualified_by).toBeNull();
+		const signed = fake_event();
+		const obs = observe_event(signed as never);
+		observe_read(signed.request, 'visitor', { sub: 'ada', roles: ['admin'] });
+		expect(obs.disqualified_by).toBe('visitor');
+		// off a freeze render (nothing observed): a no-op
+		expect(() => observe_read(new Request('http://x/'), 'visitor', { sub: 'ada' })).not.toThrow();
+	});
+
+	it('a router route reading c.visitor is per-request (the router records the read)', async () => {
+		const { routes } = await import('../src/router/index.js');
+		const app = routes({ '/me': { GET: (c) => c.json({ who: c.visitor?.sub ?? null }) } }, { visitor: () => ({ sub: 'ada' }) });
+		const event = { ...fake_event(), request: new Request('http://x/me') };
+		const obs = observe_event(event as never);
+		const res = await app.fetch(event.request, event as never);
+		expect(await res?.json()).toEqual({ who: 'ada' });
+		expect(obs.disqualified_by).toBe('visitor');
 	});
 });
 

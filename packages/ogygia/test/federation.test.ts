@@ -16,8 +16,16 @@ import { set_source_observer } from '../src/freeze/capture.js';
 import { set_thaw_notifier } from '../src/freeze/registry.js';
 import { routes } from '../src/router/index.js';
 import { flag } from '../src/flags.js';
+import { set_kit_event_reader } from '../src/server/kit-context.js';
+import { observe_event } from '../src/freeze/observe.js';
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
+/** The smallest event freeze can observe, around `request`. */
+const fake_event = (request: Request) => ({
+	request,
+	cookies: { get: () => undefined, getAll: () => [], set() {}, delete() {} },
+	locals: {}
+});
 const doc_json = (extra: Record<string, unknown> = {}, status = 200) =>
 	JSON.stringify({ status, title: 't', css: [], body: 'B', ...extra });
 
@@ -117,6 +125,45 @@ describe('peer transport — one per remote app', () => {
 		});
 		const cms = make_peer('cms', { origin: 'http://mfe.test' }, 'shell');
 		await expect(cms.doc('/p', '')).rejects.toMatchObject({ status: 504 });
+	});
+
+	it('a static page() / widget() from a dead peer is an inline card — the consuming page renders, and never freezes', async () => {
+		vi.stubGlobal('fetch', async () => {
+			throw new TypeError('fetch failed');
+		});
+		const dash = make_peer('dash', { origin: 'http://dash.test' }, 'shell');
+		const request = new Request('http://shell.test/');
+		const observed = { ...fake_event(request) };
+		const obs = observe_event(observed as never);
+		set_kit_event_reader(() => observed);
+		try {
+			const w = (await dash.widget('kpis')) as { html?: string };
+			expect(w.html).toContain('temporarily unavailable');
+			const p = (await dash.page('/p')) as { html?: string };
+			expect(p.html).toContain('temporarily unavailable');
+			expect(obs.disqualified_by).toBe('peer:dash:unavailable');
+		} finally {
+			set_kit_event_reader(null);
+		}
+	});
+
+	it("a static hop made while serving a request continues the request's trace", async () => {
+		let sent: string | null = null;
+		vi.stubGlobal('fetch', async (_u: URL, init?: RequestInit) => {
+			sent = new Headers(init?.headers).get('traceparent');
+			return new Response(JSON.stringify({ html: '<div>kpis</div>' }));
+		});
+		const dash = make_peer('dash', { origin: 'http://dash.test' }, 'shell');
+		const trace_id = 'a'.repeat(32);
+		const request = new Request('http://cms.test/', { headers: { traceparent: `00-${trace_id}-${'b'.repeat(16)}-01` } });
+		set_kit_event_reader(() => ({ request }));
+		try {
+			await dash.widget('kpis');
+			expect(sent).toMatch(new RegExp(`^00-${trace_id}-[0-9a-f]{16}-01$`));
+			expect(sent).not.toContain('b'.repeat(16)); // a child span, not the caller's own
+		} finally {
+			set_kit_event_reader(null);
+		}
 	});
 
 	it('failover: an unreachable primary tries the next origin; a 404 does not', async () => {

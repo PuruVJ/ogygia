@@ -29,11 +29,11 @@ async function compiles(md) {
 /** Full REPL bundle of a `.md` entry (workspace + markdown + svelte + cdn). */
 async function bundle(md, extraFiles = {}) {
 	const files = { '/repl/src/routes/+page.md': md, ...extraFiles };
-	// Mirror the worker's resolve_file for the bits the tests exercise: exact key, `$lib/…` → src/lib,
+	// Mirror the worker's resolve_file for the bits the tests exercise: exact key, `#lib/…` → src/lib,
 	// and a bare basename → the matching file.
 	const resolve = (id) => {
 		if (files[id] != null) return id;
-		if (id.startsWith('$lib/')) { const k = '/repl/src/lib/' + id.slice(5); if (files[k] != null) return k; }
+		if (id.startsWith('#lib/')) { const k = '/repl/src/lib/' + id.slice(5); if (files[k] != null) return k; }
 		const base = id.split('/').pop();
 		return Object.keys(files).find((k) => k.split('/').pop() === base) ?? null;
 	};
@@ -130,7 +130,7 @@ async function main() {
 	{
 		const counter = `<script>let { start = 0 } = $props(); let n = $state(start);</script>\n<button onclick={() => n++}>c {n}</button>`;
 		const code = await bundle(
-			`<script>\n  import Counter from '$lib/Counter.svelte' with { wake: 'load' };\n</script>\n\n# With island\n\n<Counter start={2} />\n`,
+			`<script>\n  import Counter from '#lib/Counter.svelte' with { wake: 'load' };\n</script>\n\n# With island\n\n<Counter start={2} />\n`,
 			{ '/repl/src/lib/Counter.svelte': counter }
 		);
 		ok('full bundle: island-in-content links the workspace component', code.length > 0 && /button/.test(code));

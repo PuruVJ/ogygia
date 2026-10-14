@@ -13,7 +13,7 @@ export function transport_module(universal_hooks: string | null, kit_codec: stri
 		`const codecs = Object.entries(transport);\n` +
 		`export const encoders = Object.fromEntries(codecs.map(([k, v]) => [k, v.encode]));\n` +
 		`export const decoders = Object.fromEntries(codecs.map(([k, v]) => [k, v.decode]));`;
-	// Kit 3 (client leg): Kit's own codec module is a reader too — its remote argument encoding reads
+	// Client leg: Kit's own codec module is a reader too — its remote argument encoding reads
 	// it, and only Kit's client boot fills it otherwise (never on a csr=false page). Kit's boot later
 	// fills it again with the same transport.
 	if (!kit_codec) return src;

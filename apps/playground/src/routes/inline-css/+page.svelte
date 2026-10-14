@@ -1,5 +1,5 @@
 <script lang="ts">
-	// INLINE REGION CSS under Kit's `inlineStyleThreshold` (playground svelte.config.js sets a small
+	// INLINE REGION CSS under Kit's `inlineStyleThreshold` (the playground's Kit config sets a small
 	// one): the island's small sheet and the hole answer's small sheet ship as
 	// `<style data-ogygia-region-css="href">` — no render-blocking request — while a sheet over the
 	// threshold keeps its `<link>`. LinkedCssIsland is the CONTROL: identical rules, sheet padded

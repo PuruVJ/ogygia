@@ -90,21 +90,26 @@ The order matters. ogygia needs to see the raw module graph before Kit's own tra
 
 ## Enable Markdown
 
-ogygia reads `.svx` files as Svelte-flavored Markdown. Point the preprocessor at your file extensions in `svelte.config.js` so Kit knows how to compile them.
+ogygia reads `.svx` files as Svelte-flavored Markdown. Point the preprocessor at your file extensions in Kit's config, the argument of `sveltekit()` in `vite.config.ts`, so Kit knows how to compile them.
 
 ```ts
-// svelte.config.js
+// vite.config.ts
+import { sveltekit } from '@sveltejs/kit/vite';
 import adapter from '@sveltejs/adapter-auto';
-import { markdown } from 'ogygia/markdown';
-import { vitePreprocess } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import { ogygia } from 'ogygia/vite';
+import { defineConfig } from 'vite';
 
-export default {
-	extensions: ['.svelte', '.svx'],
-	preprocess: [vitePreprocess(), markdown()],
-	kit: {
-		adapter: adapter()
-	}
-};
+export default defineConfig({
+	plugins: [
+		ogygia({ content: { markdown: {} } }),
+		sveltekit({
+			adapter: adapter(),
+			extensions: ogygia.extensions(),
+			preprocess: [vitePreprocess(), ...ogygia.preprocess()]
+		})
+	]
+});
 ```
 
 With this in place, any `.svx` file becomes a normal Svelte component. Frontmatter is parsed into metadata, headings feed the on-this-page rail, and fenced code blocks are highlighted at build time.

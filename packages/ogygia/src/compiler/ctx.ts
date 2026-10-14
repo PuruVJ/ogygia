@@ -9,6 +9,7 @@
 import { fs } from './host.js';
 import { strip_bom } from './bom.js';
 import { islandVirtualId } from './ids.js';
+import { KIT_PAGE_MODULES } from './link/page-keys.js';
 import {
 	islandChunkFileName,
 	islandPublicUrl,
@@ -40,7 +41,7 @@ const NEVER_MATCH_RE = /$^/;
 export interface CompileCtxInit {
 	root: string;
 	base: string;
-	/** SvelteKit `config.kit.appDir` (default `_app`) — the dir Kit emits AND serves its immutable
+	/** SvelteKit's `appDir` (default `_app`) — the dir Kit emits AND serves its immutable
 	 *  assets under. ogygia's runtime + island chunks MUST land here too: a custom appDir otherwise
 	 *  404s them (Kit's adapter only maps `<appDir>/immutable/*` to the immutable-cache route). Read
 	 *  from Kit's `__SVELTEKIT_APP_DIR__` build define; `_app` when Kit isn't present (standalone).
@@ -96,6 +97,9 @@ export interface CompileCtxInit {
 	client_binding_stub_file: string;
 	/** `$app/*` → on-disk client-shim path map (island modules under csr=false). */
 	app_shims: Record<string, string>;
+	/** The modules Kit's page comes from, for seed shaping (link/page-keys.ts) — `$app/state`, plus
+	 *  `$app/stores` under `legacy.appStores`. Default: `KIT_PAGE_MODULES`. */
+	page_modules?: readonly string[];
 	/** `command === 'build'` — gates the transform-time deterministic island-chunk emit. */
 	is_build: boolean;
 	/** Configured content presets (name → merged config), or `null` when content is off. */
@@ -133,6 +137,7 @@ export class CompileCtx {
 	readonly region_endpoint_module: string;
 	readonly client_binding_stub_file: string;
 	readonly app_shims: Record<string, string>;
+	readonly page_modules: readonly string[];
 	readonly is_build: boolean;
 	readonly content_presets: Record<string, unknown> | null;
 	readonly devtools: boolean;
@@ -173,6 +178,7 @@ export class CompileCtx {
 		this.region_endpoint_module = init.region_endpoint_module;
 		this.client_binding_stub_file = init.client_binding_stub_file;
 		this.app_shims = init.app_shims;
+		this.page_modules = init.page_modules ?? KIT_PAGE_MODULES;
 		this.is_build = init.is_build;
 		this.content_presets = init.content_presets;
 		this.devtools = init.devtools;

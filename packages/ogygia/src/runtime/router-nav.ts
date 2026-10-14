@@ -960,7 +960,7 @@ function merge_head(new_head: HTMLHeadElement) {
 	// where `preload_stylesheets` puts an SPA `<link>`, and for the same reason: an island's
 	// `<svelte:head>` hydration on the new page reclaims a TRAILING head-node range, so a sheet
 	// appended at the end goes with it. Kit inlines a route's small sheets as `<style>` under
-	// `kit.inlineStyleThreshold`, and ogygia inlines small region sheets the same way; one such
+	// Kit's `inlineStyleThreshold`, and ogygia inlines small region sheets the same way; one such
 	// destination page lost its `ogygia-region{display:block}` and the layout collapsed
 	// (e2e/context, "Context after SPA navigation"). `anchor` is the head's first child BEFORE this
 	// merge, so the new sheets land above everything old and keep their own order.

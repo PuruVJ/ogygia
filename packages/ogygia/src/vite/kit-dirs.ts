@@ -1,6 +1,8 @@
 /**
- * Kit's two configurable directories, read from the app's Kit config: `files.routes` (default
- * `src/routes`) and `outDir` (default `.svelte-kit`). ogygia scans the routes tree (csr worlds, the
+ * Kit's configurable locations, read from the app's Kit config: `files.routes` (default
+ * `src/routes`), `outDir` (default `.svelte-kit`) and `files.hooks.{universal,client}` (default
+ * `src/hooks`, `src/hooks.client` — ogygia reads the app's transport and client `init` there).
+ * ogygia scans the routes tree (csr worlds, the
  * client-build keepalive, route options) and writes/reads its island-deps handoff under Kit's output
  * dir — every one of those must follow the app's configuration, not the defaults (an app building
  * two route trees from one source, `PES_MODE=v2 → src/routes-v2` + `.svelte-kit-v2`, had its
@@ -22,7 +24,11 @@ import {
 	DEFAULT_KIT_DIRS
 } from '../compiler/kit.js';
 
-type KitOptions = { files?: { routes?: string }; outDir?: string; inlineStyleThreshold?: number };
+type KitOptions = {
+	files?: { routes?: string; hooks?: { universal?: string | null; client?: string | null } };
+	outDir?: string;
+	inlineStyleThreshold?: number;
+};
 
 /** The plugin list as a Vite config holds it: plugins, arrays of them, promises of either, falsy. */
 type PluginOption = unknown;
@@ -52,7 +58,9 @@ export async function load_kit_dirs(root: string, plugins?: PluginOption): Promi
 	const kit: KitOptions = (await kit_options_from_plugins(plugins)) ?? {};
 	const dirs: KitDirs = {
 		routes_dir: path.resolve(root, kit.files?.routes ?? DEFAULT_KIT_DIRS.routes),
-		out_dir: path.resolve(root, kit.outDir ?? DEFAULT_KIT_DIRS.out)
+		out_dir: path.resolve(root, kit.outDir ?? DEFAULT_KIT_DIRS.out),
+		hooks_universal: path.resolve(root, kit.files?.hooks?.universal ?? DEFAULT_KIT_DIRS.hooks_universal),
+		hooks_client: path.resolve(root, kit.files?.hooks?.client ?? DEFAULT_KIT_DIRS.hooks_client)
 	};
 	set_kit_dirs(root, dirs);
 	// `inlineStyleThreshold` — the same number governs ogygia's region CSS (compiler/kit.ts).

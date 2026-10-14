@@ -7,7 +7,7 @@
 	// route, `/(spa)`, read against the page's URL is the app's root, with its trailing slash.)
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	const base = $derived(new URL(resolve('/(spa)'), page.url).pathname.slice(0, -1));
+	const base = $derived(new URL(resolve('/(spa)'), page.url.href).pathname.slice(0, -1));
 	let { children } = $props();
 </script>
 

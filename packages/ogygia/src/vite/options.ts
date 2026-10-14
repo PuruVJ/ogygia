@@ -249,6 +249,17 @@ export interface OgygiaOptions {
 	barrels?: boolean | DebarrelOptions;
 
 	/**
+	 * Bridges for code written against what Kit no longer has. Each key is opt-in and temporary.
+	 *
+	 * - `appStores: true` — `$app/stores` (removed in Kit 3) keeps working inside islands for an app
+	 *   that shims it: islands get ogygia's `$page` / `$navigating` stores over the island page, the
+	 *   server render roots carry Kit's old `__svelte__` stores context, and seed shaping reads `$page`
+	 *   usage (`$page.data.x`, `get(page)`, `page.subscribe(…)`, `derived(page, …)`) to decide which
+	 *   `page.data` keys an island's seed ships. Off: only `$app/state` is Kit's page, as in Kit 3.
+	 */
+	legacy?: { appStores?: boolean };
+
+	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.
 	 * App authors should not set this.
 	 */

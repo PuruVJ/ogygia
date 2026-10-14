@@ -1,6 +1,6 @@
 <script lang="ts">
-	// A csr=true page whose hydration FAILS on purpose (Boom throws once in the browser): Svelte
-	// logs "Failed to hydrate", Kit mounts the document fresh, and every deferred hole on it is
+	// A csr=true page whose hydration FAILS on purpose (a post-SSR pass corrupts Boom's markup, see
+	// hooks.server.ts): Svelte drops the server DOM, mounts the document fresh, and every deferred hole on it is
 	// rendered again by the client leg — which cannot mint an address. The runtime remembered each
 	// hole's server-minted facts under its identity (`data-og-hole`) at parse time and hands them
 	// back, so the holes still fetch (and a hydrating hole still gets its props).

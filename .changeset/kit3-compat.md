@@ -1,5 +1,5 @@
 ---
-"ogygia": patch
+"ogygia": minor
 ---
 
-SvelteKit 3: production builds no longer fail on `refreshAll`; islands on csr=true pages get Kit's page; `$page` no longer uses the removed `$app/stores`; custom-type remote arguments encode on csr=false pages; a remote form in an island on a csr=true page no longer reloads the page.
+SvelteKit 3 only: ogygia supports what SvelteKit 3 and Svelte 5 support (SvelteKit 2 is dropped). Kit's config is read from `sveltekit({...})`; `#lib` and other package.json `"imports"` entries are followed; `$app/stores` in islands needs `ogygia({ legacy: { appStores: true } })`.

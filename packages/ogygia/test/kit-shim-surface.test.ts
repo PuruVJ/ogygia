@@ -1,11 +1,11 @@
 /**
- * EVERY NAME KIT READS FROM A MODULE OGYGIA STANDS IN FOR, OGYGIA EXPORTS — on every Kit major the
- * package supports. ogygia swaps a few Kit modules for its own in the island client graph: the
- * `$app/*` shims (APP_SHIMS) for island code, and the remote-functions stubs (client.js, its page
- * state, its paths) for Kit's own remote-functions modules. A name the stand-in lacks fails the
- * production build (`MISSING_EXPORT`) — Kit 3's remote `form()` imports `refreshAll`, and every
- * Kit 3 build broke on it. This reads what each Kit actually imports/exports, so a new Kit release
- * that reaches for a new name fails here first.
+ * EVERY NAME KIT READS FROM A MODULE OGYGIA STANDS IN FOR, OGYGIA EXPORTS. ogygia swaps a few Kit
+ * modules for its own in the island client graph: the `$app/*` shims (APP_SHIMS) for island code,
+ * and the remote-functions stubs (`../client.js`, `#app/state/client`, `#app/paths`) for Kit's own
+ * remote-functions modules. A name the stand-in lacks fails the production build (`MISSING_EXPORT`)
+ * — Kit's remote `form()` once reached for `refreshAll`, and every build broke on it. This reads
+ * what the installed Kit actually imports/exports, so a Kit release that reaches for a new name
+ * fails here first.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -13,13 +13,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-// (Kit 3 lives in its own workspace importer, internal/kit-sources: its svelte ^5.57 peer would
-// otherwise move the svelte ogygia resolves, and a dev server ran two Svelte runtimes)
-const kit_sources = createRequire(path.join(__dirname, '../../../internal/kit-sources/package.json'));
-const KITS = {
-	'Kit 2': path.dirname(require.resolve('@sveltejs/kit/package.json')),
-	'Kit 3': path.dirname(kit_sources.resolve('@sveltejs/kit3/package.json'))
-};
+const kit = path.dirname(require.resolve('@sveltejs/kit/package.json'));
 
 const IMPORT_G = /import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
 const EXPORT_LIST_G = /export\s*\{([^}]*)\}/g;
@@ -54,7 +48,7 @@ function remote_imports(kit: string): Map<string, Set<string>> {
 			if (spec.startsWith('#app/')) key = spec;
 			else if (spec.startsWith('.')) {
 				const rel = path.relative(client, path.resolve(path.dirname(file), spec));
-				if (rel === 'client.js' || rel === 'state.svelte.js') key = rel;
+				if (rel === 'client.js') key = rel;
 			}
 			if (!key) continue;
 			const set = out.get(key) ?? new Set();
@@ -77,7 +71,7 @@ function exports_of(file: string): Set<string> {
 	return out;
 }
 
-/** Kit's public `$app/<name>` exports, browser condition (Kit 3 moved them under folders + `#app`). */
+/** Kit's public `$app/<name>` exports, browser condition (a folder entry re-exporting `#app/<name>`). */
 function kit_app_exports(kit: string, name: string): Set<string> {
 	const app = path.join(kit, 'src/runtime/app');
 	const entry = fs.existsSync(path.join(app, `${name}.js`)) ? path.join(app, `${name}.js`) : path.join(app, name, 'index.js');
@@ -94,13 +88,13 @@ function kit_app_exports(kit: string, name: string): Set<string> {
 const SRC = path.join(__dirname, '../src');
 const STUBS: Record<string, string> = {
 	'client.js': 'shims/kit-remote/client-stub.ts',
-	'state.svelte.js': 'shims/kit-remote/state-stub.ts',
 	'#app/state/client': 'shims/kit-remote/state-stub.ts',
 	'#app/paths': 'shims/kit-remote/paths-internal-stub.ts'
 };
 const APP_SHIMS: Record<string, string> = {
 	navigation: 'shims/app-navigation.ts',
 	state: 'shims/app-state.svelte.ts',
+	// (the `legacy.appStores` shim: the names Kit's removed `$app/stores` still declares)
 	stores: 'shims/app-stores.ts'
 };
 
@@ -109,7 +103,7 @@ function stub_exports(rel: string): Set<string> {
 	return exports_of(path.join(SRC, rel));
 }
 
-describe.each(Object.entries(KITS))('%s', (_, kit) => {
+describe('the installed Kit', () => {
 	const imports = remote_imports(kit);
 
 	it('the scan finds the remote-functions client imports (not vacuous)', () => {

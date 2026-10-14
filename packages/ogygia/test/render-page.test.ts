@@ -137,8 +137,8 @@ describe('render_page: one model, three venues', () => {
 		});
 		// a bag-like snapshot in this request changes nothing: the venue is the request's kind
 		expect(render_page({}, event)!.url?.href).toBe('https://a.test/p/alpha');
-		await prepare_render_page(event, undefined, null);
-		await prepare_render_page(event, undefined, null);
+		await prepare_render_page(event, null);
+		await prepare_render_page(event, null);
 		expect(calls).toBe(1);
 		const page = render_page({}, event)!;
 		expect(page.data).toEqual({ signedIn: true });
@@ -155,7 +155,7 @@ describe('render_page: one model, three venues', () => {
 			remote: true,
 			fetch: (async () => answer(kit_data([{ signedIn: true }]))) as RequestEvent['fetch']
 		});
-		await prepare_render_page(event, undefined, null);
+		await prepare_render_page(event, null);
 		const data = render_page(undefined, event)!.data as Record<string, unknown>;
 		expect(data.signedIn).toBe(true);
 		expect(data.headerLocale).toBeUndefined();
@@ -173,13 +173,13 @@ describe('render_page: one model, three venues', () => {
 			return answer(kit_data([{ x: 1 }]));
 		}) as RequestEvent['fetch'];
 		const hole = event_of({ url: 'https://a.test/__ogygia__?id=1', referer: 'https://a.test/p', fetch });
-		await prepare_render_page(hole, undefined, false);
-		await prepare_render_page(hole, undefined, null);
+		await prepare_render_page(hole, false);
+		await prepare_render_page(hole, null);
 		expect(calls).toBe(0);
-		await prepare_render_page(hole, undefined, true);
+		await prepare_render_page(hole, true);
 		expect(calls).toBe(1);
 		const foreign = event_of({ url: 'https://a.test/__ogygia__?id=1', referer: 'https://evil.test/p', fetch });
-		await prepare_render_page(foreign, undefined, true);
+		await prepare_render_page(foreign, true);
 		expect(calls).toBe(1);
 		expect(render_page(undefined, foreign)!.url?.href).toBe('https://a.test/__ogygia__?id=1');
 	});

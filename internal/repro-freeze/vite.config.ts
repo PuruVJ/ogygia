@@ -16,7 +16,10 @@ export default defineConfig({
 			compilerOptions: {
 				experimental: { async: true }
 			},
-			experimental: { remoteFunctions: true }
+			experimental: { remoteFunctions: true },
+			// adapter-node reads the origin at BUILD time (no runtime ORIGIN): the spec serves over
+			// plain http, so the build is told — or its form POSTs fail Kit's same-origin check
+			...(process.env.ORIGIN ? { paths: { origin: process.env.ORIGIN } } : {})
 		})
 	]
 });

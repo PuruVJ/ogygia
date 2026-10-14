@@ -175,7 +175,11 @@ function guard(t: ShikiTransformer): ShikiTransformer {
 	const inner = t.preprocess;
 	return {
 		...t,
-		preprocess(this: unknown, code: string, options: Parameters<NonNullable<ShikiTransformer['preprocess']>>[1]) {
+		preprocess(
+			this: ThisParameterType<NonNullable<ShikiTransformer['preprocess']>>,
+			code: string,
+			options: Parameters<NonNullable<ShikiTransformer['preprocess']>>[1]
+		) {
 			if (is_reentrant()) return undefined;
 			return inner?.call(this, code, options);
 		}

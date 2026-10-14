@@ -63,7 +63,7 @@ export function invalidateAll(): Promise<void> {
 }
 
 /**
- * Kit's `refreshAll` (Kit 2.7x, Kit 3), which Kit 3's remote `form()` also calls after a successful
+ * Kit's `refreshAll`, which Kit's remote `form()` also calls after a successful
  * submit (through the remote client stub). Island queries live in ogygia's remote cache, not Kit's,
  * so they refresh here on every document; the page's data then refreshes through whoever owns the
  * document. With neither runtime, the queries alone refresh: never a reload.
@@ -71,7 +71,7 @@ export function invalidateAll(): Promise<void> {
 export function refreshAll(): Promise<void> {
 	const queries = refresh_remote_instances();
 	const k = kit();
-	const page = k ? (k.refreshAll ?? k.invalidateAll)() : og()?.invalidateAll();
+	const page = k ? k.refreshAll() : og()?.invalidateAll();
 	return Promise.all([queries, page]).then(() => {});
 }
 
@@ -137,13 +137,13 @@ export function onNavigate(fn: (navigation: unknown) => unknown): () => void {
 const VITE_QUERY = /\?[^)\s]*(?=:\d+:\d+\)?$)/;
 type SnapshotOptions ={ id?: string; capture: () => unknown; restore: (value: never) => void; reset?: () => void };
 
-// Kit 3's `snapshot` (capture state before navigating, restore on history traversal): Kit's on a Kit
+// Kit's `snapshot` (capture state before navigating, restore on history traversal): Kit's on a Kit
 // document; accept + no-op on ours (no Kit history to restore from). Kit names an unnamed snapshot
 // after its CALL SITE, and through this shim the call site would be the shim itself (every island's
 // snapshot one id): the caller's own frame names it instead.
 export function snapshot(options: SnapshotOptions): void {
-	const k = kit() as { snapshot?: (o: SnapshotOptions) => void } | null;
-	if (!k?.snapshot) return;
+	const k = kit();
+	if (!k) return;
 	if (options.id !== undefined) return k.snapshot(options);
 	// frames: `Error`, this function, its caller — Vite query strings stripped (they change on HMR),
 	// as Kit does for its own call-site ids

@@ -5,9 +5,10 @@
 	import AddToCart from './AddToCart.svelte' with { wake: 'load' };
 	import Ticker from './Ticker.svelte' with { wake: 'visible' };
 
-	let { org, viewer = null }: {
+	let { org, viewer = null, trace = null }: {
 		org: string;
 		viewer?: { sub?: string; roles?: string[] } | null;
+		trace?: string | null;
 	} = $props();
 	// the visitor's claims arrived signature-bound through the fragment hop (on-behalf-of)
 	const is_admin = $derived(viewer?.roles?.includes('admin') ?? false);
@@ -19,7 +20,7 @@
 	];
 </script>
 
-<section class="kpis" data-testid="dash-fragment">
+<section class="kpis" data-testid="dash-fragment" data-dash-trace={trace}>
 	<h2>Dashboard · {org}</h2>
 	<div class="grid">
 		{#if is_admin}

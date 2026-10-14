@@ -27,7 +27,7 @@ test('on a Kit-booted document, goto / invalidate / preload / the hooks go to Ki
 		afterNavigate: vi.fn(),
 		onNavigate: vi.fn()
 	};
-	scope[KEY] = { page: {}, navigating: { current: null }, navigation };
+	scope[KEY] = { page: {}, navigating: { to: null }, navigation };
 
 	await shim.goto('/somewhere', { replaceState: true });
 	expect(navigation.goto).toHaveBeenCalledWith('/somewhere', { replaceState: true });
@@ -108,7 +108,7 @@ function plant_query() {
 test('refreshAll on a Kit-booted document: island queries refresh, then Kit’s own refreshAll', async () => {
 	const q = plant_query();
 	const navigation = { refreshAll: vi.fn(async () => {}), invalidateAll: vi.fn(async () => {}) };
-	scope[KEY] = { page: {}, navigating: { current: null }, navigation };
+	scope[KEY] = { page: {}, navigating: { to: null }, navigation };
 	try {
 		await shim.refreshAll();
 		expect(q.refresh).toHaveBeenCalledOnce();

@@ -47,7 +47,7 @@ import {
 import { rewrite_loaders } from './content/loaders.js';
 import { rewrite_regions } from './content/regions.js';
 import { materialize } from './content/git.js';
-import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT, FOREIGN_HYDRATE_MARK } from './region/emit.js';
+import { rewrite_lake_import_to_placeholder, shim_app_imports, FOREIGN_HYDRATE_MARK } from './region/emit.js';
 
 /** the import that makes an app a federation participant (its island entries keep the foreign-hydrate exports) */
 const FEDERATION_SPEC = 'ogygia/federation';
@@ -191,7 +191,7 @@ const IMPORT_SPEC_G =
 const MODULE_SPEC_RE =
 	/(?:^|[\n;])\s*(?:import|export)\b[^;'"()]*?from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
 const ROUTER_PKG_SPEC = 'ogygia/router';
-/** Where Kit's `$app` alias points (Kit 2 and 3: `resolve.alias` `$app` → `<kit>/src/runtime/app`). */
+/** Where Kit's `$app` alias points (`resolve.alias` `$app` → `<kit>/src/runtime/app`). */
 const KIT_RUNTIME_APP = '/@sveltejs/kit/src/runtime/app/';
 /**
  * The island shim for an `$app/*` import, by specifier or by where Kit's alias sent it: Vite's alias
@@ -1291,9 +1291,7 @@ export class Compiler {
 			// shim paths (defense in depth alongside resolveId island-graph shimming).
 			// SSR keeps the real Kit modules (correct server-rendered page.data).
 			if (!ssr) {
-				src = src.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
-					JSON.stringify(ctx.app_shims['$app/' + name])
-				);
+				src = shim_app_imports(src, ctx.app_shims);
 				// LAKES: swap each lake import for the render-nothing placeholder so the lake
 				// component's JS is excluded from this island's client chunk. Handles default
 				// (`import Lake from '…'`) and named (`import { Lake } from '…'`) forms.
@@ -1704,7 +1702,7 @@ export class Compiler {
 		// parsers, for the top-level `page.data` keys it can reach (link/page-keys.ts). Recorded by
 		// the query-less id so the client `writeBundle` can find it from a chunk's `moduleIds`; the
 		// source form is what this pre-transform sees, before the `$app/*` shim rewrite below.
-		if (ctx.is_build && mentions_page_store(code)) {
+		if (ctx.is_build && mentions_page_store(code, ctx.page_modules)) {
 			const clean = id.split('?')[0].split('\\').join('/');
 			const kind = clean.endsWith('.svelte')
 				? 'svelte'
@@ -1712,7 +1710,7 @@ export class Compiler {
 					? 'script'
 					: null;
 			if (kind) {
-				const { keys, reason, pending } = page_data_keys_answer(code, clean, kind);
+				const { keys, reason, pending } = page_data_keys_answer(code, clean, kind, ctx.page_modules);
 				if (keys !== null) program.page_keys.set(clean, keys);
 				if (reason) program.page_key_reasons.set(clean, reason);
 				if (pending.length) program.page_pending.set(clean, pending);
@@ -1925,9 +1923,7 @@ export class Compiler {
 			island_graph.has(id_n) &&
 			(id_n.endsWith('.svelte') || SCRIPT_MODULE_RE.test(id_n))
 		) {
-			const rewritten = out.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
-				JSON.stringify(ctx.app_shims['$app/' + name])
-			);
+			const rewritten = shim_app_imports(out, ctx.app_shims);
 			if (rewritten !== out) {
 				out = rewritten;
 				map = null; // import path rewrite invalidates a prior sourcemap

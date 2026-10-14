@@ -47,6 +47,21 @@ const corrupt_detector_region: Handle = async ({ event, resolve }) => {
 	});
 };
 
+// KIT-REBUILD fixture (e2e/hole-kit-rebuild.spec.ts): on /hole-kit-rebuild only, a foreign post-SSR
+// pass strips the hydration marker of Boom's `{#if}` from Kit's document — so Kit's hydration hits a
+// mismatch Svelte cannot repair in place, and the document is mounted fresh in the browser.
+const corrupt_kit_rebuild: Handle = async ({ event, resolve }) => {
+	if (!event.url.pathname.startsWith('/hole-kit-rebuild')) return resolve(event);
+	return resolve(event, {
+		transformPageChunk: ({ html, done }) => {
+			if (!done) return html;
+			const boom = html.indexOf('data-boom');
+			const marker = boom === -1 ? -1 : html.indexOf('<!--[-->', boom);
+			return marker === -1 ? html : html.slice(0, marker) + html.slice(marker + '<!--[-->'.length);
+		}
+	});
+};
+
 // AUTH-WALL fixture (e2e/hole-wall.spec.ts): an app handle IN FRONT of ogygia.handle() that takes
 // a region request away from it — the way a customer's sign-in redirect bounced every locale-less
 // URL of a signed-in visitor (the islands endpoint included) to the account area, and the browser
@@ -129,5 +144,6 @@ export const handle = sequence(
 	}),
 	gap_inside,
 	corrupt_detector_region,
+	corrupt_kit_rebuild,
 	passthrough
 );

@@ -38,7 +38,12 @@ const UNRENDERED = ['hbtoken-b', 'hbtoken-c', 'hbtoken-d', 'hbtoken-e', 'hbtoken
 // Kit's node preloads plus that block's entry and closure. Five leaked registry sheets trip the
 // count; the token greps catch one.
 const MAX_STYLESHEETS = 5;
-const MAX_MODULEPRELOADS = 40;
+// The preload budget rides on KIT'S OWN: what a csr=true page with no components at all preloads
+// (its start/app entries and their chunks — a number Kit's own chunking sets, and moves between
+// releases), plus room for this page's two components, the rendered block's entry and closure.
+// Five leaked registry blocks (an entry each, at least) overrun it.
+const PLAIN_KIT_PAGE = '/hole-wall/account';
+const MODULEPRELOAD_ROOM = 19;
 
 test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Kit still hydrates it', () => {
 	test('SSR: Kit boots, no runtime, no region tags; stylesheets carry the rendered islands only; one stamp each', async ({
@@ -52,6 +57,8 @@ test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Ki
 		check('csr=true: NO <ogygia-region> in the SSR (islands render inline)', !REGION_TAG_RE.test(html));
 		const sheets = (html.match(STYLESHEET_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
 		const preloads = (html.match(MODULEPRELOAD_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
+		const kit_own = ((await (await fetch(baseURL + PLAIN_KIT_PAGE)).text()).match(MODULEPRELOAD_LINK_G) ?? []).length;
+		const MAX_MODULEPRELOADS = kit_own + MODULEPRELOAD_ROOM;
 		check(
 			`stylesheet links within budget (${sheets.length} ≤ ${MAX_STYLESHEETS})`,
 			sheets.length <= MAX_STYLESHEETS,
