@@ -49,12 +49,12 @@ const wrap = (imports: string, markup: string) => `<script>\n${imports}\n</scrip
 // (A) island-heavy host: 6 imports across strategies + a couple usages each
 const heavy = wrap(
 	[
-		`import A from '$lib/A.svelte' with { wake: 'load' };`,
-		`import B from '$lib/B.svelte' with { wake: 'visible' };`,
-		`import C from '$lib/C.svelte' with { wake: 'idle' };`,
-		`import D from '$lib/D.svelte' with { wake: 'interaction' };`,
-		`import E from '$lib/E.svelte' with { render: 'deferred' };`,
-		`import F from '$lib/F.svelte' with { render: 'deferred', wake: 'visible' };`,
+		`import A from '#lib/A.svelte' with { wake: 'load' };`,
+		`import B from '#lib/B.svelte' with { wake: 'visible' };`,
+		`import C from '#lib/C.svelte' with { wake: 'idle' };`,
+		`import D from '#lib/D.svelte' with { wake: 'interaction' };`,
+		`import E from '#lib/E.svelte' with { render: 'deferred' };`,
+		`import F from '#lib/F.svelte' with { render: 'deferred', wake: 'visible' };`,
 		`const items = [1,2,3];`
 	].join('\n'),
 	`<A n={1}/><A n={2}/><B/><C/><D/>{#each items as i}<E name={i}/>{/each}<F/>`
@@ -62,7 +62,7 @@ const heavy = wrap(
 
 // (B) crossed-children host (the synth path)
 const children = wrap(
-	`import Card from '$lib/Card.svelte' with { wake: 'load' };\nconst who='Ada';`,
+	`import Card from '#lib/Card.svelte' with { wake: 'load' };\nconst who='Ada';`,
 	`<Card title="x">{#snippet header()}<em>{who}</em>{/snippet}<p>hi {who}</p></Card>`
 );
 

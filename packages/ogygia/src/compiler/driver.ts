@@ -1029,8 +1029,19 @@ export class Compiler {
 	 */
 	emit(
 		id: string,
-		{ ssr, universalHooks, kitCodec = null }: { ssr: boolean; universalHooks: string | null; kitCodec?: string | null }
-	): string | null {
+		{
+			ssr,
+			universalHooks,
+			kitCodec = null,
+			resolve
+		}: {
+			ssr: boolean;
+			universalHooks: string | null;
+			kitCodec?: string | null;
+			/** the bundler's resolver (the router-CSS tree walk: compiler/fouc-css.ts) */
+			resolve?: (spec: string, importer: string) => Promise<string | null>;
+		}
+	): string | Promise<string> | null {
 		const ctx = this.#ctx!;
 		const program = this.program;
 		const is_dev = ctx.is_dev;
@@ -1171,7 +1182,8 @@ export class Compiler {
 			return router_css_module(this.router_css_roots(), {
 				root: ctx.root,
 				is_dev,
-				read_file: (p) => ctx.read_file(p)
+				read_file: (p) => ctx.read_file(p),
+				resolve
 			});
 		}
 		if (id === RESOLVED(V_SECRET)) {

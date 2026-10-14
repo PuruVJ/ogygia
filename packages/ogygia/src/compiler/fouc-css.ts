@@ -14,11 +14,13 @@
  */
 
 import { fs, path } from './host.js';
-import { app_spec_path, type AppAlias } from './app-resolve.js';
+import { app_spec_path, probe_file, type AppAlias } from './app-resolve.js';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
 import { unscoped_marker } from '../unscoped-css.js';
 import { blank_styles } from './blank-styles.js';
+import { BarrelIndex } from './debarrel/barrel.js';
+import { analyze_exports, analyze_imports } from './debarrel/parse.js';
 
 export const FOUC_CSS_PREFIX = 'virtual:ogygia/fouc-css/';
 export const FOUC_SCOPED_PREFIX = 'virtual:ogygia/fouc-scoped/';
@@ -93,18 +95,19 @@ export function foucRelFromId(id: string) {
  * @param entryAbs absolute path to the island entry `.svelte`
  * @param opts
  */
-export function buildFoucCssModuleSource(
-	entryAbs: string,
-	opts: {
-		root: string;
-		readFile?: (p: string) => string | null;
-	}
-) {
-	const entries = collectFoucCssReachable(entryAbs, opts);
+export async function buildFoucCssModuleSource(entryAbs: string, opts: CssReachOptions) {
+	const entries = await collectFoucCssReachable(entryAbs, opts);
 	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
-	const imports = entries.map((e) =>
-		e.kind === 'scoped' ? foucScopedVirtualId(posix_rel(e.abs)) : e.abs
-	);
+	const imports: string[] = [];
+	for (const e of entries) {
+		if (e.kind !== 'scoped') imports.push(e.abs);
+		else {
+			// (a scoped sheet is addressed by its root-relative path — the dev `load` refuses `..` — so
+			// a component outside the app's root cannot ride this module)
+			const rel = posix_rel(e.abs);
+			if (!rel.startsWith('../') && !path.isAbsolute(rel)) imports.push(foucScopedVirtualId(rel));
+		}
+	}
 	if (imports.length === 0) {
 		return 'export {}';
 	}
@@ -118,15 +121,48 @@ export function buildFoucCssModuleSource(
  * (`kind: 'scoped'`) and every plain style-file import (`kind: 'css'`) reachable through the
  * component tree. Abs paths. Same resolution rules as the aggregator, so both stay in lockstep.
  */
-export function collectFoucCssReachable(
+export interface CssReachOptions {
+	root: string;
+	readFile?: (p: string) => string | null;
+	/** app aliases to follow (`$lib_x/…`, `@scope/pkg/…` → source dirs) — the fallback resolver's */
+	alias?: readonly AppAlias[];
+	/**
+	 * The bundler's own resolver (Vite's `this.resolve`): a package specifier through its `exports`
+	 * (a TypeScript entry included), a workspace link, an alias — whatever the build resolves. Without
+	 * it (a unit test, a host with no bundler) the compiler's app resolver: relative paths, `#…`
+	 * subpath imports and `alias`.
+	 */
+	resolve?: (spec: string, importer: string) => Promise<string | null>;
+}
+
+const SCRIPT_MODULE_EXT = /\.(?:[cm]?[jt]sx?|svelte\.[jt]s)$/;
+const NODE_MODULES_RE = /[\\/]node_modules[\\/]/;
+/** every name a module exports — a namespace import, or a module reached for its own code */
+const ALL = '*';
+/** the barrel index of each bundler resolver (one per build's legs: see `collectFoucCssReachable`) */
+const barrel_indexes = new WeakMap<object, BarrelIndex>();
+
+/**
+ * THE CSS A COMPONENT TREE REACHES — every `.svelte` with a `<style>` block (`kind: 'scoped'`) and
+ * every plain style-file import (`kind: 'css'`), in DISCOVERY ORDER (the cascade order the aggregator
+ * has always imported in). Abs paths.
+ *
+ * A subtree no client chunk carries (a server-only hole, a router page, a lake) gets its CSS from
+ * here, so this walk must reach what the bundler reaches — a component imported through a workspace
+ * package's TypeScript barrel came back unstyled: its specifier was not resolved, and a `.ts` module
+ * was a dead end. So:
+ * - specifiers resolve through the bundler's resolver (`opts.resolve`) when the build has one;
+ * - a `.svelte` file is a component: all of it renders, so every import of it is followed;
+ * - a script module is followed by the NAMES taken from it: through a barrel (the debarrel index —
+ *   nested barrels, `export *`), each name to its leaf, so a barrel of twenty components brings the
+ *   CSS of the two imported; a module with code of its own, every import it makes (its code may
+ *   render them). A dependency's own JavaScript (`node_modules`, not a barrel) is not walked: a
+ *   package ships compiled code, its components as `.svelte` files a barrel names.
+ */
+export async function collectFoucCssReachable(
 	entryAbs: string,
-	opts: {
-		root: string;
-		readFile?: (p: string) => string | null;
-		/** app aliases to follow (`$lib_x/…`, `@scope/pkg/…` → source dirs) */
-		alias?: readonly AppAlias[];
-	}
-): Array<{ kind: 'scoped' | 'css'; abs: string }> {
+	opts: CssReachOptions
+): Promise<Array<{ kind: 'scoped' | 'css'; abs: string }>> {
 	const read =
 		opts.readFile ||
 		((p: string) => {
@@ -136,38 +172,119 @@ export function collectFoucCssReachable(
 				return null;
 			}
 		});
+	const resolve = async (spec: string, importer: string): Promise<string | null> => {
+		if (opts.resolve) {
+			const id = await opts.resolve(spec, importer);
+			return id ? path.normalize(id.split('?')[0]) : null;
+		}
+		const base = app_spec_path(spec, importer, opts.alias);
+		if (!base) return null;
+		const clean = base.split('?')[0];
+		if (STYLE_EXT.test(clean) || SVELTE_EXT.test(clean)) return path.normalize(clean);
+		return probe_file(clean, { is_file: (p) => read(p) != null });
+	};
+	// ONE barrel index per resolver: a build's walks (every hole, every router root) share its parsed
+	// barrels instead of each re-reading them
+	let barrels = opts.resolve ? barrel_indexes.get(opts.resolve) : undefined;
+	if (!barrels) {
+		barrels = new BarrelIndex({
+			read: (id) => read(id),
+			resolve: (spec, importer) => resolve(spec, importer),
+			candidate: () => true,
+			forced: () => false,
+			kept: () => false,
+			follow_packages: true
+		});
+		if (opts.resolve) barrel_indexes.set(opts.resolve, barrels);
+	}
 
 	const entries: Array<{ kind: 'scoped' | 'css'; abs: string }> = [];
 	const seen_css = new Set<string>();
 	const seen_svelte = new Set<string>();
+	/** script module → the names already followed (`*`: all of them) */
+	const seen_names = new Map<string, Set<string>>();
 
-	const visit_svelte = (abs: string) => {
-		const norm = path.normalize(abs);
-		if (seen_svelte.has(norm)) return;
-		seen_svelte.add(norm);
-		const source = read(norm);
-		if (source == null) return;
-
-		if (svelteHasStyle(source)) {
-			entries.push({ kind: 'scoped', abs: norm });
-		}
-
-		for (const spec of listStaticImportSpecs(source, norm)) {
-			const resolved = app_spec_path(spec, norm, opts.alias);
-			if (!resolved) continue;
-			const clean = resolved.split('?')[0];
-			if (STYLE_EXT.test(clean)) {
-				if (!seen_css.has(clean)) {
-					seen_css.add(clean);
-					entries.push({ kind: 'css', abs: clean });
-				}
-			} else if (SVELTE_EXT.test(clean) || clean.endsWith('.svelte')) {
-				visit_svelte(clean);
+	const visit = async (abs: string, names: ReadonlySet<string>, spec: string): Promise<void> => {
+		if (STYLE_EXT.test(abs)) {
+			if (!seen_css.has(abs)) {
+				seen_css.add(abs);
+				entries.push({ kind: 'css', abs });
 			}
+		} else if (SVELTE_EXT.test(abs)) {
+			await visit_svelte(abs);
+		} else if (SCRIPT_MODULE_EXT.test(abs)) {
+			await visit_script(abs, names, spec);
 		}
 	};
 
-	visit_svelte(entryAbs);
+	const follow = async (decls: ReadonlyArray<{ source: string; names: Set<string> }>, importer: string) => {
+		for (const d of decls) {
+			const resolved = await resolve(d.source, importer);
+			if (resolved) await visit(resolved, d.names, d.source);
+		}
+	};
+
+	const visit_svelte = async (abs: string) => {
+		if (seen_svelte.has(abs)) return;
+		seen_svelte.add(abs);
+		const source = read(abs);
+		if (source == null) return;
+		if (svelteHasStyle(source)) entries.push({ kind: 'scoped', abs });
+		await follow(listStaticImports(source, abs), abs);
+	};
+
+	const visit_script = async (abs: string, names: ReadonlySet<string>, spec: string) => {
+		let done = seen_names.get(abs);
+		if (!done) seen_names.set(abs, (done = new Set()));
+		if (done.has(ALL)) return;
+		const wanted = names.has(ALL) ? [ALL] : [...names].filter((n) => !done.has(n));
+		if (!wanted.length) return;
+		for (const n of wanted) done.add(n);
+		// a barrel: each name to its leaf (only the names taken)
+		const map = await barrels.map(abs, spec);
+		if (map && !wanted.includes(ALL)) {
+			const own: string[] = [];
+			for (const n of wanted) {
+				const entry = map.entries.get(n);
+				if (entry && typeof entry === 'object')
+					await visit(entry.id, new Set(['namespace' in entry ? ALL : entry.name]), entry.id);
+				else own.push(n); // its own code, ambiguous, or unseen (an opaque star): the module itself
+			}
+			if (!own.length && !map.opaque) return;
+		}
+		// a module with code of its own (or every name of a barrel): every import it makes
+		if (NODE_MODULES_RE.test(abs)) return;
+		const code = read(abs);
+		if (code == null) return;
+		const decls = analyze_imports(code, abs);
+		if (!decls) return;
+		await follow(
+			decls
+				.filter((d) => !d.type_only)
+				.map((d) => ({
+					source: d.source,
+					names: new Set(d.side_effect ? [] : d.specs.filter((s) => !s.type_only).map((s) => (s.kind === 'namespace' ? ALL : s.imported)))
+				})),
+			abs
+		);
+		// (`export … from` in a module with code of its own: what it re-exports may be what renders)
+		const shape = analyze_exports(code, abs);
+		if (shape)
+			await follow(
+				shape.exports.flatMap((e) =>
+					e.kind === 'reexport' && !e.type_only
+						? [{ source: e.source, names: new Set([e.imported]) }]
+						: e.kind === 'star' && !e.type_only
+							? [{ source: e.source, names: new Set([ALL]) }]
+							: e.kind === 'star_ns'
+								? [{ source: e.source, names: new Set([ALL]) }]
+								: []
+				),
+				abs
+			);
+	};
+
+	await visit_svelte(path.normalize(entryAbs));
 	return entries;
 }
 
@@ -262,8 +379,10 @@ function extractRawStyleBodies(source: string) {
  * @param source
  * @param filename
  */
-export function listStaticImportSpecs(source: string, filename: string) {
-	const specs: string[] = [];
+/** A component's static imports: each specifier with the names it takes (`*` for a namespace;
+ *  none for a bare `import 'x'`). Type-only imports are left out: they bring nothing at runtime. */
+export function listStaticImports(source: string, filename: string): Array<{ source: string; names: Set<string> }> {
+	const out: Array<{ source: string; names: Set<string> }> = [];
 	try {
 		// (blanked styles: a raw SCSS `<style>` threw here and dropped to the regex fallback)
 		const ast = parse(blank_styles(source), { filename, modern: true });
@@ -274,15 +393,26 @@ export function listStaticImportSpecs(source: string, filename: string) {
 			walk(content, {
 				enter(node) {
 					if (node.type !== 'ImportDeclaration') return;
-					const src = node.source?.value;
-					if (typeof src === 'string') specs.push(src);
+					const decl = node as {
+						source?: { value?: unknown };
+						importKind?: string;
+						specifiers?: Array<{ type: string; importKind?: string; imported?: { name?: string; value?: string } }>;
+					};
+					const src = decl.source?.value;
+					if (typeof src !== 'string' || decl.importKind === 'type') return;
+					const names = new Set<string>();
+					for (const s of decl.specifiers ?? []) {
+						if (s.importKind === 'type') continue;
+						if (s.type === 'ImportDefaultSpecifier') names.add('default');
+						else if (s.type === 'ImportNamespaceSpecifier') names.add(ALL);
+						else names.add(s.imported?.name ?? s.imported?.value ?? ALL);
+					}
+					out.push({ source: src, names });
 				}
 			});
 		}
 	} catch {
-		for (const m of source.matchAll(IMPORT_SPEC)) {
-			specs.push(m[1]);
-		}
+		for (const m of source.matchAll(IMPORT_SPEC)) out.push({ source: m[1], names: new Set([ALL]) });
 	}
-	return specs;
+	return out;
 }

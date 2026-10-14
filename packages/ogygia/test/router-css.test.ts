@@ -77,14 +77,14 @@ describe('router_css_roots — the component closure of router modules', () => {
 describe('router_css_module — the generated virtual', () => {
 	const read = (files: Record<string, string>) => (p: string) => files[p] ?? null;
 
-	it('emits an inert module for zero roots', () => {
+	it('emits an inert module for zero roots', async () => {
 		expect(
-			router_css_module([], { root: ROOT, is_dev: false, read_file: () => null })
+			await router_css_module([], { root: ROOT, is_dev: false, read_file: () => null })
 		).toBe('export {};\n');
 	});
 
-	it("prod: registers each root with a handoff thunk (islandCss key + Kit's configured base)", () => {
-		const src = router_css_module(['/app/src/lib/Shell.svelte'], {
+	it("prod: registers each root with a handoff thunk (islandCss key + Kit's configured base)", async () => {
+		const src = await router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
 			is_dev: false,
 			read_file: () => null
@@ -99,14 +99,14 @@ describe('router_css_module — the generated virtual', () => {
 		expect(src).toContain(`register_router_css(__OgRcss0`);
 	});
 
-	it('dev: inlines compiled scoped css (transitively, through child components)', () => {
+	it('dev: inlines compiled scoped css (transitively, through child components)', async () => {
 		const files: Record<string, string> = {
 			'/app/src/lib/Shell.svelte':
 				`<script>import Badge from './Badge.svelte';</script>` +
 				`<div class="shell"><Badge/></div><style>.shell { color: red; }</style>`,
 			'/app/src/lib/Badge.svelte': `<b class="badge">!</b><style>.badge { color: blue; }</style>`
 		};
-		const src = router_css_module(['/app/src/lib/Shell.svelte'], {
+		const src = await router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
 			is_dev: true,
 			read_file: read(files)
@@ -126,12 +126,12 @@ describe('router_css_module — the generated virtual', () => {
 		expect(src).toContain('m["/app/src/lib/Shell.svelte"] = m["src/lib/Shell.svelte"]');
 	});
 
-	it('collects a plain .css import (the profiler.css shared-sheet pattern)', () => {
+	it('collects a plain .css import (the profiler.css shared-sheet pattern)', async () => {
 		const files: Record<string, string> = {
 			'/app/src/lib/Shell.svelte': `<script>import './shared.css';</script><div class="shell">x</div>`,
 			'/app/src/lib/shared.css': `body { background: #101318; } .btn { color: red; }`
 		};
-		const src = router_css_module(['/app/src/lib/Shell.svelte'], {
+		const src = await router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
 			is_dev: true,
 			read_file: read(files)
