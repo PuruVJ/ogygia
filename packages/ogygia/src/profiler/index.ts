@@ -4444,9 +4444,11 @@ class Profiler {
 			// consume the whole budget on CPU runs and starve it. One render is priced at the SLOWEST seen so
 			// far (the warm-up, then each run): a page that keeps what it renders gets slower run by run, and
 			// pricing it at the first render overran the budget. Coverage turns V8's inlining off, so that
-			// render runs two to three and a half times a warm one (measured on /hell).
+			// render runs about one and a half to two times a warm one, and turning coverage on walks every
+			// compiled function first — about one more render again: the pass is 3 to 3.5 slowest renders on
+			// a fast machine (measured on /hell), and a slow CI runner overran 3 by two seconds.
 			let slowest = warmup_ms ?? 0;
-			const coverage_reserve = () => Math.max(slowest * 3, 300);
+			const coverage_reserve = () => Math.max(slowest * 4.5, 300);
 			// `?gc=0`: record without the GC attribution (no allocation-stream sampling, no reads) — the
 			// cheaper recording, and the control for what the attribution costs
 			const gc_attr = q.get('gc') !== '0';
