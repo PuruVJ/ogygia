@@ -232,6 +232,9 @@ importers:
       ogygia:
         specifier: workspace:*
         version: link:../../packages/ogygia
+      repro-hole-css-kit:
+        specifier: workspace:*
+        version: link:../../internal/repro-hole-css-kit
       repro-island-pkg:
         specifier: workspace:*
         version: link:../../internal/repro-island-pkg
@@ -552,6 +555,8 @@ importers:
       vite:
         specifier: ^8.2.0
         version: 8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+
+  internal/repro-hole-css-kit: {}
 
   internal/repro-island-pkg:
     dependencies:

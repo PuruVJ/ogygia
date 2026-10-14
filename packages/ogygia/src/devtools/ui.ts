@@ -3,25 +3,27 @@
  * boot on a devtools build (behind the `__OGYGIA_DEVTOOLS__` gate: off, all of it tree-shakes away).
  * It makes the shadow host and, in a build, one small plain-DOM button: the dock itself (ui-app.ts,
  * Svelte, every tab, their CSS) loads when someone opens it — a dynamic import the bundler splits
- * off, so a preview deploy with devtools on costs its visitors a button. On the dev server the dock
- * loads at once.
+ * off. In a build even the button waits for the browser's DEVTOOLS SWITCH (switch.ts: `?og-devtools=on`,
+ * `ogygia.devtools.on()`): a QA or preview deploy's visitors see nothing and pay nothing. On the dev
+ * server the button is always there and the dock loads at once.
  *
  * The panel mounts on the LIVE page (not an iframe), so its host element carries a **shadow root** for
  * total CSS isolation: host-page globals can't reach in (a stray `.spacer { height: 140vh }` once
  * ballooned the header) and the devtools' own styles can't leak out. The host is attached to
  * `<html>` (not `<body>`) so a full-body SPA swap never tears the panel out.
  *
- * Opening it once sets the `og_devtools` cookie: from the next load on, the server writes its event
- * side-channel and the page is measured from the start (runtime/beacon.ts) — for that browser only.
+ * The switch's cookie also starts the rest, for that browser only: the server writes its event
+ * side-channel and the page is measured from the start (runtime/beacon.ts).
  */
+import { devtools_switched_on, switch_in_url, without_switch, write_switch } from './switch.js';
+
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 
-/** Set when the dock is opened: the server's side-channel and the page measuring follow it. */
-export const DEVTOOLS_COOKIE = 'og_devtools';
 const LAYOUT_KEY = 'ogygia:devtools:layout:v4';
 
 let mounted = false;
+let launch_opts: { csr_true?: boolean } | undefined;
 
 export function install_devtools_ui(opts?: { csr_true?: boolean }): void {
 	if (!DEVTOOLS || typeof document === 'undefined' || mounted) return;
@@ -29,12 +31,25 @@ export function install_devtools_ui(opts?: { csr_true?: boolean }): void {
 	// tag themselves with `<meta name="ogygia-devtools" content="off">`; the devtools has no business
 	// x-raying its own tooling (and a launcher inside the iframe is nonsense).
 	if (document.querySelector('meta[name="ogygia-devtools"][content="off"]')) return;
+	launch_opts = opts;
+	install_testing_api();
+	install_console_api();
+	// A BUILD: nothing shows until this browser turns devtools on (switch.ts) — a QA or preview
+	// deploy's visitors never see the launcher. The dev server always has it.
+	if (LAZY) {
+		apply_url_switch();
+		if (!devtools_switched_on()) return;
+	}
+	mount_launcher(opts);
+}
+
+/** The launcher (and, on the dev server or for a dock left open, the dock). */
+function mount_launcher(opts?: { csr_true?: boolean }): void {
 	// ONE dock per document, whichever copy of this module asks: a Kit-hydrated page with holes
 	// boots both the standalone dock and the ogygia runtime, and two copies of this module (two
 	// URLs for one file) each have their own `mounted` — the host element is the shared truth
-	if (document.querySelector('[data-ogygia-devtools-host]')) return;
+	if (mounted || document.querySelector('[data-ogygia-devtools-host]')) return;
 	mounted = true;
-	install_testing_api();
 	// a session the page before was recording (a full page load mid-session) goes on here — the
 	// recorder loads only then (the key: session.ts SAVED_KEY)
 	try {
@@ -67,7 +82,7 @@ export function install_devtools_ui(opts?: { csr_true?: boolean }): void {
 		void import('./ui-app.js').then((m) => {
 			button?.remove();
 			if (on_key) removeEventListener('keydown', on_key);
-			m.mount_app(root, { csr_true, start_open: want_open });
+			m.mount_app(root, { csr_true, start_open: want_open, ...(LAZY ? { hide: devtools_off } : {}) });
 		});
 	};
 	button = document.createElement('button');
@@ -82,7 +97,6 @@ export function install_devtools_ui(opts?: { csr_true?: boolean }): void {
 	b.onmouseenter = () => (b.style.opacity = '1');
 	b.onmouseleave = () => (b.style.opacity = '.55');
 	const open = () => {
-		if (LAZY) set_cookie();
 		want_open = true;
 		b.textContent = 'loading…';
 		load();
@@ -146,20 +160,69 @@ function install_testing_api(): void {
 }
 
 /** Has this browser opened the dock before (from then on the page is measured from the start). */
-export function devtools_opted_in(): boolean {
+/** `?og-devtools=on|off` on this page: flip the switch and drop the param from the address. */
+function apply_url_switch(): void {
 	try {
-		return document.cookie.split('; ').some((c) => c === DEVTOOLS_COOKIE + '=1');
+		const url = new URL(location.href);
+		const want = switch_in_url(url);
+		if (want === null) return;
+		write_switch(want);
+		history.replaceState(history.state, '', without_switch(url).href);
 	} catch {
-		return false;
+		// no URL / history (an embedded frame): the cookie alone
 	}
 }
 
-function set_cookie(): void {
+/** Turn devtools on in this browser, now: the launcher shows (measuring starts with the next load). */
+export function devtools_on(): void {
+	if (!LAZY) return;
+	write_switch(true);
+	mount_launcher(launch_opts);
+}
+
+/** Turn devtools off in this browser, now: the launcher and the dock go, and nothing is measured from
+ *  the next load on. */
+export function devtools_off(): void {
+	if (!LAZY) return;
+	write_switch(false);
 	try {
-		document.cookie = `${DEVTOOLS_COOKIE}=1; path=/; max-age=2592000; samesite=lax`;
+		localStorage.removeItem(LAYOUT_KEY); // (a dock left open must not come back with the switch)
 	} catch {
-		// cookies off: the dock still works, the page just is not measured from the start
+		// no storage
 	}
+	document.querySelector('[data-ogygia-devtools-host]')?.remove();
+	mounted = false;
+}
+
+/**
+ * `ogygia.devtools.on()` / `.off()` in the console (and `.status()`). On the dev server devtools is
+ * always on, and they say so.
+ */
+declare global {
+	interface Window {
+		ogygia?: { devtools?: { on(): string; off(): string; status(): string } };
+	}
+}
+function install_console_api(): void {
+	const say = (on: boolean) =>
+		on ? 'ogygia devtools: on in this browser (stays on; ogygia.devtools.off() to hide it)' : 'ogygia devtools: off in this browser';
+	const g = (window.ogygia ??= {});
+	if (g.devtools) return;
+	g.devtools = {
+		on() {
+			if (!LAZY) return 'ogygia devtools: always on on the dev server';
+			devtools_on();
+			return say(true);
+		},
+		off() {
+			if (!LAZY) return 'ogygia devtools: always on on the dev server';
+			devtools_off();
+			return say(false);
+		},
+		status() {
+			return !LAZY ? 'ogygia devtools: always on on the dev server' : say(devtools_switched_on());
+		}
+	};
 }
 
 function was_open(): boolean {

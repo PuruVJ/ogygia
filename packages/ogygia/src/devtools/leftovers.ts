@@ -16,6 +16,7 @@
  * (its event delegation on `document`, set while a component's module evaluates) sit deeper in the
  * stack, and are Svelte's to keep.
  */
+import { devtools_switched_on } from './switch.js';
 
 export interface LeftoverReg {
 	kind: 'interval' | 'listener';
@@ -108,21 +109,14 @@ function callers(n = 2): string[] {
 	return out;
 }
 
-// a BUILD with devtools on: only a browser that opened the dock once is watched (its cookie, as the
+// a BUILD with devtools on: only a browser that turned devtools on is watched (switch.ts, as the
 // beacon's measuring) — every other visitor of a preview deploy keeps the browser's own functions
 const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
-function opted_in(): boolean {
-	try {
-		return document.cookie.split('; ').some((c) => c === 'og_devtools=1');
-	} catch {
-		return false;
-	}
-}
 
 /** Watch intervals and the global listeners. Once per page; a no-op off the browser. */
 export function watch_leftovers(): void {
 	if (installed || typeof window === 'undefined' || typeof EventTarget === 'undefined') return;
-	if (DEVTOOLS_LAZY && !opted_in()) return;
+	if (DEVTOOLS_LAZY && !devtools_switched_on()) return;
 	installed = true;
 	own_file = stack_files(new Error().stack ?? '')[0] ?? '';
 	// (typed as the browser has them: the Node timer types merge into `window`'s)

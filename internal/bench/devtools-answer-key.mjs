@@ -1741,7 +1741,7 @@ try {
 		const wb = await webkit.launch();
 		try {
 			const ctx = await wb.newContext({ viewport: { width: 1280, height: 800 } });
-			await ctx.addCookies([{ name: 'og_devtools', value: '1', url: base }]);
+			await ctx.addCookies([{ name: 'og_devtools', value: 'on', url: base }]);
 			const page = await ctx.newPage();
 			const errs = [];
 			page.on('pageerror', (e) => errs.push(e.message));

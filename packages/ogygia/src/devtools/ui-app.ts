@@ -10,7 +10,7 @@ import { install_page_hook } from './page.js';
 import { set_highlight_root } from './highlight.js';
 import { names as built_names } from 'virtual:ogygia/devtools-meta';
 
-export function mount_app(root: ShadowRoot, opts: { csr_true: boolean; start_open: boolean }): void {
+export function mount_app(root: ShadowRoot, opts: { csr_true: boolean; start_open: boolean; hide?: () => void }): void {
 	install_page_hook();
 	set_highlight_root(root);
 	// a build knows its islands' component names (the dev server serves them live instead)
@@ -18,7 +18,9 @@ export function mount_app(root: ShadowRoot, opts: { csr_true: boolean; start_ope
 		window.__ogygia_region_names = { ...built_names, ...(window.__ogygia_region_names ?? {}) };
 	// `csr_true` = the standalone boot on a Kit-hydrated (csr=true) page, where the ogygia runtime
 	// (and its event bus) never ran — the dock renders a notice instead of empty instruments.
-	mount(Devtools, { target: root, props: { csrTrue: opts.csr_true, startOpen: opts.start_open } });
+	// `hide` (a build): turns devtools off in this browser — the launcher's, handed in so the dock's
+	// chunk never imports the launcher's module
+	mount(Devtools, { target: root, props: { csrTrue: opts.csr_true, startOpen: opts.start_open, hide: opts.hide } });
 
 	// The components inject their CSS (`<svelte:options css="injected">`): Svelte puts each `<style>`
 	// in this shadow root. On the dev server Vite's own CSS injection still lands them in

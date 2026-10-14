@@ -40,7 +40,10 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	// never ran there, so there's no event bus and no islands to inspect — the window shows a notice
 	// pointing at a csr=false page instead of the (empty) instrument tabs.
 	// `startOpen` = the launcher's click loaded this dock (a build loads it only on open): open at once.
-	let { csrTrue = false, startOpen = false } = $props();
+	// `hide` (a build only): turn devtools off in this browser — the launcher and dock go, nothing is
+	// measured from the next load (devtools/switch.ts); `?og-devtools=on` brings it back.
+	/** @type {{ csrTrue?: boolean, startOpen?: boolean, hide?: () => void }} */
+	let { csrTrue = false, startOpen = false, hide } = $props();
 	const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 
 	const TABS = [
@@ -277,6 +280,9 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 					{:else}
 						<span class="mode">csr=true</span>
 					{/if}
+					{#if hide}
+						<button class="trace hide" data-og-hide {...winCancel} title="turn devtools off in this browser (?og-devtools=on brings it back)" onclick={hide}>hide</button>
+					{/if}
 					<button class="x" {...winCancel} title="close" onclick={() => set_open(false)}>✕</button>
 				</div>
 				{#if !csrTrue}
@@ -462,6 +468,10 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	}
 	.trace:hover {
 		color: #e2e8f0;
+	}
+	/* beside trace (which takes the bar's free space), not a second push to the right */
+	.hide {
+		margin-left: 6px;
 	}
 	.x {
 		color: #94a3b8;
