@@ -15,7 +15,7 @@
 //      graphs (runtime/island-graph-preload.ts), never a sleeping island's own chunks.
 // Usage: pnpm exec playwright test wake-gate
 import type { Page, Route } from '@playwright/test';
-import { test, check } from './fixtures/index.ts';
+import { test, check, replayed_once } from './fixtures/index.ts';
 import { ISLAND_HINT_G_RE } from './fixtures/re.ts';
 
 const SLOW_SCRIPT_NAME = '/wake-gate-slow.js';
@@ -152,7 +152,8 @@ test.describe('wake gate: island wakes start after DOMContentLoaded and a painte
 				() => (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).domContentLoadedEventStart === 0
 			)
 		);
-		check('the waking click replayed (count 1)', (await page.locator('[data-i-count]').innerText()) === '1');
+		// (the runtime replays one frame after hydration, so the island's own wiring has settled)
+		check('the waking click replayed (count 1)', await replayed_once(page));
 		check('no gated island hydrated yet', (await page.locator('ogygia-region[wake="load"][data-hydrated]').count()) === 0);
 		release();
 		await page.waitForSelector('ogygia-region[wake="load"][data-hydrated]', { timeout: 10_000 });
