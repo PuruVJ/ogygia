@@ -75,7 +75,19 @@ export interface OgygiaHydrationReport {
 	engine: OgygiaEngine;
 	/** `key`: the instance — its `islandKey` attribute (the nearest, across shadow roots), else `Name#n`
 	 *  in document order. Absent from an engine before version 2 (`compare` then tallies by name). */
-	islands: { fp: string; key?: string; name: string; wake: string; status: HydrationStatus; reason: string; diff: HtmlDiff | null }[];
+	islands: {
+		fp: string;
+		key?: string;
+		name: string;
+		wake: string;
+		status: HydrationStatus;
+		reason: string;
+		diff: HtmlDiff | null;
+		/** when it began to wake and when it could answer, on the page's clock (ms from the document's
+		 *  start; null if it has not woken) — which of a test's steps woke it. Absent before engine 2 */
+		t0?: number | null;
+		done?: number | null;
+	}[];
 }
 
 export type OgygiaSessionReport = Omit<SessionReport, 'findings' | 'counts'> & {

@@ -176,6 +176,39 @@ test('a reload in a click handler is named by the button that ran it, run after 
 	expect(held).toHaveLength(3);
 });
 
+test('a router navigation handed to the browser and held back leaves page() on the same page', async ({ page, ogygia }) => {
+	test.setTimeout(90_000);
+	await page.goto('/dt-session');
+	await page.waitForTimeout(9000);
+	const before = await ogygia.page();
+	expect(before.islands.length).toBeGreaterThan(0);
+	await ogygia.record(
+		async () => {
+			// a link the router takes (no reload attribute) to a csr=true page: it starts a navigation,
+			// pushes the address, then hands the load to the browser, which the test holds back
+			await page.evaluate(() => {
+				const a = Object.assign(document.createElement('a'), { href: '/head-budget-kit', textContent: 'to a kit page' });
+				a.setAttribute('data-to-kit', '');
+				document.body.append(a);
+			});
+			await page.locator('[data-to-kit]').click();
+			await page.waitForTimeout(1500);
+		},
+		{ blockNavigation: true }
+	);
+	expect(await page.evaluate(() => location.pathname), 'the router took the link (it pushed the address)').toBe('/head-budget-kit');
+	await ogygia.settled({ quiet: 500, timeout: 15_000 });
+	const later = await ogygia.page();
+	const hyd = await ogygia.hydration();
+	// the page never changed: its islands are all still in page(), and hydration() carries their wake times
+	expect(later.islands.length).toBeGreaterThanOrEqual(before.islands.length);
+	const fps = new Set(later.islands.map((i) => i.fp));
+	for (const i of hyd.islands.filter((x) => x.status !== 'asleep')) {
+		expect(fps.has(i.fp), i.name).toBe(true);
+		expect(typeof i.t0, i.name).toBe('number');
+	}
+});
+
 test.describe('a recording whose page leaves for a document with no testing API', () => {
 	test.use({ ogygiaOptions: { timeout: 1500 } });
 	test('says the page left, with the actions’ own error as the cause', async ({ page, ogygia }) => {

@@ -14,7 +14,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with what started it, seen as it began (the link, form or input being handled; `approx` where the browser cannot say).
 - `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, blocked navigations, CLS) and vitals past a noise threshold (`compare(base, head, { noise })`), and take several runs a side (`{ test, runs }`): load signals by median, session signals only when every head run has them and no base run does.
-- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute on it or its nearest ancestor, across shadow roots); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
+- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute on it or its nearest ancestor, across shadow roots) and its wake times (`t0`, `done`); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
 - `ogygia/testing`: `playwrightDriver(page, { onNavigationHeld })` and `turnOnDevtools(page, baseURL)`, the fixture's own pieces, for a test that holds its pages itself.
 - `ogygia/testing`: every report names the page's testing engine (`engine.version`); against a site on an older ogygia, `record()` fills in `navigations` from the loads it held and warns once.
 
@@ -29,6 +29,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `withOgygia` turns devtools on for the first page a test opens when there is no `baseURL`; before, it was silently left off.
 - A page with devtools switched on is sent `private, no-store` with `Vary: Cookie` and is never frozen, so a shared cache cannot hand its events to other visitors; a profiler beacon page too.
 - A hole's `Server-Timing` reaches a browser that switched devtools on (it checked an old cookie value).
+- Devtools' Page and Timeline tabs, and `page()`, stay on the page after a router navigation that never swapped it (handed to the browser and held back, or overtaken); before, they reported no islands.
 
 ## [0.8.2] - 2026-10-14
 

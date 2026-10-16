@@ -60,9 +60,15 @@ export function hydration_rows(): { rows: IslandHydration[]; measured: boolean }
 	return { rows, measured: !!page };
 }
 
-/** The same, as plain data (no elements), with each changed island's diff — for tests. */
-export function hydration_report(): { measured: boolean; islands: { fp: string; name: string; wake: string; status: HydrationStatus; reason: string; diff: HtmlDiff | null; window_from?: number }[] } {
+/** The same, as plain data (no elements), with each changed island's diff — for tests. `t0` / `done`:
+ *  when it began to wake and when it could answer, on the document's clock (ms from its start; null
+ *  for an island that has not woken), so a test can tell which of its steps woke it. */
+export function hydration_report(): {
+	measured: boolean;
+	islands: { fp: string; name: string; wake: string; status: HydrationStatus; reason: string; diff: HtmlDiff | null; t0: number | null; done: number | null; window_from?: number }[];
+} {
 	const { rows, measured } = hydration_rows();
+	const woke = new Map((beacon_page()?.islands ?? []).map((i) => [i.fp, i]));
 	return {
 		measured,
 		islands: rows.map((r) => ({
@@ -72,6 +78,8 @@ export function hydration_report(): { measured: boolean; islands: { fp: string; 
 			status: r.status,
 			reason: r.reason,
 			diff: r.snap && r.status !== 'clean' ? html_diff(r.snap.ssr, r.snap.hydrated) : null,
+			t0: woke.get(r.fp)?.t0 ?? null,
+			done: woke.get(r.fp)?.done ?? null,
 			...(r.snap?.from !== undefined ? { window_from: r.snap.from } : {})
 		}))
 	};
