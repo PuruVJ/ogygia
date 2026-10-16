@@ -110,7 +110,8 @@ export function session_timeline(s: SessionData, names: (fp: string) => string):
 
 export interface SessionReport {
 	duration_ms: number;
-	counts: { interactions: number; slow: number; longtasks: number; longtask_ms: number; requests: number; request_bytes: number; errors: number; shifts: number; mutations: number; pages: number };
+	/** `shifts` and `cls`: the layout moving with no input (the shifts the session's CLS counts) */
+	counts: { interactions: number; slow: number; longtasks: number; longtask_ms: number; requests: number; request_bytes: number; errors: number; shifts: number; cls: number; mutations: number; pages: number };
 	findings: SessionFinding[];
 	/** the slowest interactions, for the timeline */
 	interactions: { i: number; t: number; name: string; duration: number; target: string; fp: string | null }[];
@@ -446,6 +447,7 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 			request_bytes: bytes,
 			errors: s.errors.length,
 			shifts: unexpected.length,
+			cls: Math.round(cls * 1000) / 1000,
 			mutations: s.mutations.reduce((a, m) => a + m.count, 0),
 			pages: Math.max(1, s.pages?.length ?? 1)
 		},
