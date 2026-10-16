@@ -8,6 +8,21 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with the input before it (a `navigation-blocked` finding).
+- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, CLS) and vitals that moved past a noise threshold (`compare(base, head, { noise })`).
+- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute your app renders); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
+
+### Fixed
+
+- `record()` whose page left for another document now says so, with the actions' own error as `cause`, instead of "serve with devtools".
+- `withOgygia` turns devtools on for the first page a test opens when there is no `baseURL`; before, it was silently left off.
+- A page with devtools switched on is sent `private, no-store` with `Vary: Cookie` and is never frozen, so a shared cache cannot hand its events to other visitors; a profiler beacon page too.
+- A hole's `Server-Timing` reaches a browser that switched devtools on (it checked an old cookie value).
+
 ## [0.8.2] - 2026-10-14
 
 ### Changed

@@ -161,6 +161,7 @@ import { set_server_devtools_recorder, record_server_event } from './devtools/se
 import { drop_dead_kit_resolves } from './server/dead-kit-resolves.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.js';
 import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, switch_in_url } from './devtools/switch.js';
+import { mark_personal } from './server/personal-response.js';
 
 /** Is devtools on for this request's browser (a devtools BUILD): the URL's `?og-devtools=on|off`
  *  wins and is written to the response's cookie, else the cookie (devtools/switch.ts). */
@@ -947,10 +948,16 @@ class OgygiaHandle {
 			// FREEZE read path (render-on-write): GET, no query string, not prerendering. A hit
 			// serves the stored bytes — Kit, loads, and Svelte never run. A concurrent cold miss
 			// JOINS the in-flight render (the stampede law: N concurrent requests, ONE render).
+			// DEVTOOLS for this browser (a BUILD: only one that turned it on — devtools/switch.ts). Its
+			// page carries its own events, so it is never frozen and never shared-cached.
+			const devtools_on = DEVTOOLS && (!DEVTOOLS_LAZY || devtools_switch(event));
+			// (a prerender has no visitor, and may not read the query)
+			const devtools_personal = DEVTOOLS_LAZY && !building && (devtools_on || switch_in_url(event.url) !== null);
 			let freeze_settle: ((outcome: FlightOutcome) => void) | null = null;
 			let freeze_obs: Observation | null = null;
 			const freeze_page_request =
 				freezeConfig !== null &&
+				!devtools_personal &&
 				!building &&
 				event.request.method.toUpperCase() === 'GET' &&
 				event.url.search === '' &&
@@ -1029,7 +1036,7 @@ class OgygiaHandle {
 			// (a BUILD with devtools on: only for a browser that turned devtools on — devtools/switch.ts —
 			// so no other visitor's page carries the side-channel. `?og-devtools=on|off` flips it on this
 			// very response, so the page that turned it on is measured from its start)
-			if (DEVTOOLS && (!DEVTOOLS_LAZY || devtools_switch(event))) dt_buffers.set(bag, { events: [], seq: 0 });
+			if (devtools_on) dt_buffers.set(bag, { events: [], seq: 0 });
 			// Hang the bag off the request for the rest of it — the render's own Kit store and the
 			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
 			// carry this same `Request` and find it.
@@ -1054,6 +1061,7 @@ class OgygiaHandle {
 			} finally {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
 			}
+			if (devtools_personal) mark_personal(response);
 			// FREEZE: action self-evict — a successful mutation on a page URL evicts its freeze
 			// (mirrors Kit's actions-invalidate-loads semantics; origin store only, fire-and-forget).
 			if (
@@ -2209,7 +2217,7 @@ class OgygiaHandle {
 		const timed =
 			timing.queue_ms !== undefined &&
 			(import.meta.env.DEV ||
-				(DEVTOOLS && event.cookies.get('og_devtools') === '1') ||
+				(DEVTOOLS && event.cookies.get(DEVTOOLS_COOKIE) === DEVTOOLS_ON) ||
 				event.cookies.get('og_profiler_beacon') === '1');
 		const server_timing: Record<string, string> = timed
 			? { 'server-timing': `og-queue;dur=${timing.queue_ms!.toFixed(1)}, og-render;dur=${(timing.render_ms ?? 0).toFixed(1)}` }

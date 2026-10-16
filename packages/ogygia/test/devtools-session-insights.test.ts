@@ -122,6 +122,8 @@ describe('analyze_session', () => {
 		);
 		const shift = r.findings.find((f) => f.code === 'unexpected-shift')!;
 		expect(shift.message).toContain('CLS 0.05');
+		// the same number as data, for a test to compare without reading the message
+		expect(r.counts).toMatchObject({ shifts: 1, cls: 0.05 });
 		expect(shift.message).toContain('in Churn');
 		expect(r.findings.find((f) => f.code === 'dom-churn')!.message).toContain('Churn changed the DOM 800 times');
 	});
