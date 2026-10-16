@@ -286,8 +286,8 @@ A dependency ships islands, marked components, or whole route tables by declarin
 - `regions: { visible: { margin }, preload: 'load' | 'all' | 'none', presets: { name: { render, wake, margin, maxAge, onExpire, revalidate, keep, prefetch } } }` — `preload` (default `'load'`): which islands get modulepreload hints in the SSR HTML; `'all'` hints every island's closure (non-load at low priority), `'none'` hints nothing
 - `router: false | { viewTransitions?, forms?, serverDelta? }` (defaults true/true/false)
 - `content: { markdown?, presets? }`
-- `profiler: boolean | { secret?, path = '/__profiler', sampleInterval, maxReports, network, heap, … }` — the ONLY profiler wiring (the handle auto-mounts it; nothing in hooks)
-- `devtools: boolean` — dev-server-only (coerced false on build with a warn); use `devtools: command === 'serve'`
+- `profiler: boolean | { secret?, path = '/__profiler', sampleInterval, maxReports, network, heap, … }` — the ONLY profiler wiring (the handle auto-mounts it; nothing in hooks). A `secret` passed here is baked into the server bundle (for hosts with no runtime env, like Amplify); leave it out to read `OGYGIA_PROFILER_SECRET` at runtime instead
+- `devtools: boolean` — on in the dev server; in a build it ships a small launcher (warned once at build) and stays off for every visitor until a browser turns it on (`?og-devtools=on`, or `ogygia.devtools.on()` in the console; the `og_devtools=on` cookie). A switched-on page is sent `private, no-store` and never frozen. Keep it off for production: `devtools: mode !== 'production'`
 - `rateLimit: false | { max = 60, windowMs = 60_000 }` — per-IP budget on the signed island endpoint
 - `sessionCookie: false | '<name>'` — seals capability URLs to a cookie (not compatible with PPR holes)
 - `regions: { ttl: 3600 }` — capability-URL lifetime in seconds (clamped 60–86400); anonymous holes on a page a load marks shared-cacheable (`setHeaders({ 'cache-control': 'public, s-maxage=…' })`) are signed for the page's cache life, and a hole on an older cached copy renews itself (`&renew=1`) when it wakes. (`regionTtl` is gone — errors with the new spelling)

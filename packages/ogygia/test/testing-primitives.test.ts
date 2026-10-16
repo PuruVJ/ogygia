@@ -105,10 +105,98 @@ describe('compare / toMarkdown', () => {
 	});
 });
 
+describe('compare: hydration, session counts, vitals', () => {
+	const hyd = (islands: { key?: string; name: string; status: string }[]) =>
+		({ kind: 'hydration', measured: true, islands: islands.map((i, n) => ({ fp: 'f' + n, wake: 'load', reason: '', diff: null, ...i })) }) as unknown as OgygiaReport;
+	const sess = (counts: Record<string, number>) => ({ kind: 'session', counts, findings: [], navigations: [], interactions: [], requests: [] }) as unknown as OgygiaReport;
+	const pg = (lcp: number, cls: number) => ({ ...(page as object), vitals: [{ key: 'lcp', value: lcp }, { key: 'cls', value: cls }], findings: [] }) as unknown as OgygiaReport;
+
+	it('names the island instance that broke and the one that was fixed', () => {
+		const base = [{ test: 't', reports: [hyd([{ key: 'Carousel#1', name: 'Carousel', status: 'clean' }, { key: 'Carousel#2', name: 'Carousel', status: 'failed' }])] }];
+		const head = [{ test: 't', reports: [hyd([{ key: 'Carousel#1', name: 'Carousel', status: 'failed' }, { key: 'Carousel#2', name: 'Carousel', status: 'clean' }])] }];
+		expect(compare(base, head)[0].hydration).toEqual({ broke: ['Carousel#1: clean → failed'], fixed: ['Carousel#2: failed → clean'] });
+	});
+	it('reports without keys compare as a tally per name and status', () => {
+		const base = [{ test: 't', reports: [hyd([{ name: 'Carousel', status: 'failed' }, { name: 'Carousel', status: 'clean' }])] }];
+		const head = [{ test: 't', reports: [hyd([{ name: 'Carousel', status: 'failed' }, { name: 'Carousel', status: 'failed' }])] }];
+		expect(compare(base, head)[0].hydration).toEqual({ broke: ['Carousel: failed ×1'], fixed: [] });
+	});
+	it('session counts and vitals past the noise, in the markdown', () => {
+		const base = [{ test: 't', reports: [pg(1800, 0.05), sess({ errors: 0, shifts: 1, slow: 0, cls: 0.03 })] }];
+		const head = [{ test: 't', reports: [pg(2400, 0.06), sess({ errors: 2, shifts: 1, slow: 0, cls: 0.2 })] }];
+		const d = compare(base, head);
+		expect(d[0].vitals).toEqual([{ key: 'lcp', base: 1800, head: 2400 }]); // CLS moved 0.01: noise
+		expect(d[1].session).toEqual([
+			{ key: 'errors', base: 0, head: 2 },
+			{ key: 'cls', base: 0.03, head: 0.2 }
+		]);
+		const md = toMarkdown(d);
+		expect(md).toContain('LCP 1800 ms → 2400 ms');
+		expect(md).toContain('errors 0 → 2');
+		expect(md).toContain('session CLS 0.03 → 0.2');
+		expect(compare(base, head, { noise: { lcp: 1000 } })[0].vitals).toBeUndefined();
+	});
+	it('a session meets a CLS budget', () => {
+		expect(checkBudget(sess({ cls: 0.2 }), { cls: 0.1 })).toEqual([{ key: 'cls', measured: 0.2, limit: 0.1, ok: false }]);
+	});
+});
+
 describe('createOgygia', () => {
 	it('drives any page driver, and tells you when the page has no testing API', async () => {
 		const o = createOgygia({ evaluate: async () => false as never }, { timeout: 50 });
 		await expect(o.page()).rejects.toThrow('devtools: true');
+	});
+	/** A page driver over a fake in-page API: `present()` says whether the API is in the page now. */
+	const fake = (api: Record<string, (...a: unknown[]) => unknown>, present: () => boolean = () => true) => ({
+		evaluate: async (fn: unknown, arg: unknown) => {
+			if (arg === null) return (String(fn).includes('location') ? 'http://app.test/elsewhere' : present()) as never;
+			const [n, a] = arg as [string, unknown[]];
+			return api[n](...a) as never;
+		},
+		wait: async () => {}
+	});
+	const session = { duration_ms: 1, counts: {}, findings: [], interactions: [], by_island: {}, requests: [], cpu: null, navigations: [], timeline: [], unmeasured: [] };
+
+	it('record(): a page that left for another document says so, with the actions’ own error as the cause', async () => {
+		let here = true;
+		const o = createOgygia(fake({ settled: () => true, record_start: () => true, record_stop: () => session }, () => here), { timeout: 50 });
+		const boom = new Error('the button was gone');
+		const err = await o
+			.record(async () => {
+				here = false; // the click reloaded the page into one with no testing API
+				throw boom;
+			})
+			.catch((e: Error) => e);
+		expect((err as Error).message).toContain('went to another document');
+		expect((err as Error).message).toContain('http://app.test/elsewhere');
+		expect((err as Error).message).not.toContain('devtools: true');
+		expect((err as Error).cause).toBe(boom);
+	});
+	it('record(): the actions’ error still surfaces when the page stayed', async () => {
+		const o = createOgygia(fake({ settled: () => true, record_start: () => true, record_stop: () => session }));
+		await expect(o.record(async () => Promise.reject(new Error('plain failure')))).rejects.toThrow('plain failure');
+	});
+	it('record({ blockNavigation }): the driver holds the loads back and the page lists them', async () => {
+		let stop_args: unknown[] = [];
+		const held = [{ url: 'http://app.test/', t: 120 }];
+		const o = createOgygia({
+			...fake({
+				settled: () => true,
+				record_start: () => true,
+				record_stop: (...a) => ((stop_args = a), { ...session, navigations: [{ url: 'http://app.test/', t: 120, after: 'button.reload', island: 'Hero' }] })
+			}),
+			blockNavigation: async () => ({ stop: async () => held })
+		});
+		const r = await o.record(async () => {}, { blockNavigation: true });
+		expect(stop_args).toEqual([held]);
+		expect(r.navigations[0]).toMatchObject({ after: 'button.reload', island: 'Hero' });
+		await expect(createOgygia(fake({ settled: () => true })).record(async () => {}, { blockNavigation: true })).rejects.toThrow('blockNavigation()');
+	});
+	it('hydration() asks the page to key islands by the app’s attribute', async () => {
+		let asked: unknown;
+		const o = createOgygia(fake({ settled: () => true, hydration: (k) => ((asked = k), { measured: true, islands: [] }) }), { islandKey: 'data-block-id' });
+		await o.hydration();
+		expect(asked).toBe('data-block-id');
 	});
 	it('profile() keeps its own kind over the profiler JSON', async () => {
 		const o = createOgygia({ evaluate: async () => true as never, get: async () => ({ status: 200, body: JSON.stringify({ kind: 'page', id: 'z', target: { page: '/', runs: [1] } }) }) });

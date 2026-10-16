@@ -136,9 +136,11 @@ function after_load_idle(fn: () => void): void {
 export interface OgygiaTestingApi {
 	version: 1;
 	page(): Promise<unknown>;
-	hydration(): Promise<unknown>;
+	/** `key_attr`: the attribute that names an island instance (see testing-engine.ts) */
+	hydration(key_attr?: string): Promise<unknown>;
 	record_start(): Promise<boolean>;
-	record_stop(): Promise<unknown>;
+	/** `blocked`: the navigations the test's driver held back during the recording */
+	record_stop(blocked?: { url: string; t: number | null }[]): Promise<unknown>;
 	settled(quiet?: number, timeout?: number): Promise<boolean>;
 }
 declare global {
@@ -152,9 +154,9 @@ function install_testing_api(): void {
 	window.__ogygia_testing = {
 		version: 1,
 		page: async () => (await engine()).page_json(),
-		hydration: async () => (await engine()).hydration_json(),
+		hydration: async (key_attr) => (await engine()).hydration_json(key_attr),
 		record_start: async () => (await engine()).record_start(),
-		record_stop: async () => (await engine()).record_stop(),
+		record_stop: async (blocked) => (await engine()).record_stop(blocked),
 		settled: async (quiet, timeout) => (await engine()).settled(quiet, timeout)
 	};
 }

@@ -130,6 +130,7 @@ import {
 import { module_imports, route_imports } from './route-imports.js';
 import { app_relative } from './app-path.js';
 import { fnv1a32 } from '../runtime/hash.js';
+import { mark_personal } from '../server/personal-response.js';
 import { attr_sites, doc_diff } from './doc-diff.js';
 import { almost_same_document_pattern } from './patterns.js';
 import { hydration_hazards } from './hydration-hazards.js';
@@ -6156,6 +6157,8 @@ class Profiler {
 					// immutable headers
 				}
 			}
+			// (the beacon is this user's: no shared cache may keep the page that carries it)
+			if (beacon_tag && !this.dev) mark_personal(res);
 			if (this.want_server_timing) {
 				try {
 					const ms = performance.now() - start;

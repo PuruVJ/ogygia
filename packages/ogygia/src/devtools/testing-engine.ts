@@ -4,9 +4,9 @@
  * on it and attach it to its report.
  */
 import { read_page, unmeasured } from './page.js';
-import { hydration_report } from './hydration.js';
+import { hydration_report, hydration_rows } from './hydration.js';
 import { start_session, recording, set_last_session, session_names } from './session.js';
-import { analyze_session, session_timeline } from './session-insights.js';
+import { analyze_session, session_timeline, type Ref } from './session-insights.js';
 import { region_name_by_fp } from './regions.js';
 import { snapshot } from './bus.js';
 import { ensure_region_names } from './names.js';
@@ -32,9 +32,25 @@ export async function page_json() {
 	};
 }
 
-export async function hydration_json() {
+/** Each island's report, keyed per INSTANCE: the value of `key_attr` on the island or its nearest
+ *  ancestor that has it (an id the app renders, e.g. its CMS block's), else `Name#n`, the n-th island
+ *  of that name in document order — the same across builds while the page keeps its layout. */
+export async function hydration_json(key_attr?: string) {
 	await ensure_region_names();
-	return hydration_report();
+	const report = hydration_report();
+	const els = new Map(hydration_rows().rows.map((r) => [r.fp, r.el]));
+	const in_order = report.islands
+		.map((i) => ({ i, el: els.get(i.fp) }))
+		.sort((a, b) => (a.el && b.el && a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_PRECEDING ? 1 : -1));
+	const keys = new Map<string, string>();
+	const count = new Map<string, number>();
+	for (const { i, el } of in_order) {
+		const n = (count.get(i.name) ?? 0) + 1;
+		count.set(i.name, n);
+		const own = key_attr && el ? el.closest(`[${CSS.escape(key_attr)}]`)?.getAttribute(key_attr) : null;
+		keys.set(i.fp, own || `${i.name}#${n}`);
+	}
+	return { ...report, islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
 }
 
 export function record_start(): boolean {
@@ -43,17 +59,52 @@ export function record_start(): boolean {
 	return true;
 }
 
-export async function record_stop() {
+/** A navigation the test's driver blocked during the recording: where it went, when (page clock). */
+export interface BlockedNavigation {
+	url: string;
+	t: number | null;
+}
+
+export async function record_stop(blocked: BlockedNavigation[] = []) {
 	const rec = recording();
 	if (!rec) return null;
 	const data = await rec.stop();
 	await ensure_region_names();
 	const names = session_names(data, (fp) => region_name_by_fp(fp));
 	const report = analyze_session(data, names, location.href);
+	// each blocked navigation with the input just before it: what made the page try to leave
+	const inputs = [...data.clicks, ...data.interactions].sort((a, b) => a.t - b.t);
+	const navigations = blocked.map((n) => {
+		const before = n.t === null ? undefined : inputs.filter((x) => x.t <= n.t!).at(-1);
+		return { url: n.url, t: n.t, after: before?.target ?? null, island: before?.fp ? names(before.fp) : null };
+	});
+	for (const n of navigations)
+		report.findings.push({
+			code: 'navigation-blocked',
+			severity: 'warn',
+			message: `The page tried to load another document (${n.url})${n.after ? ` after ${n.after}${n.island ? ` in ${n.island}` : ''}` : ''}; it was blocked, so the recording kept going.`,
+			fix: 'If that input should keep the page, find what navigates: a link, a form, or a reload in a handler.',
+			refs: []
+		});
 	set_last_session({ data, report });
 	window.__ogygia_session = report;
+	// each finding with the islands it points at, by name, as page findings carry them
+	const fp_of = (ref: Ref): string | null =>
+		ref.kind === 'island'
+			? ref.fp
+			: ((ref.kind === 'interaction' ? data.interactions : ref.kind === 'click' ? data.clicks : data.shifts)[ref.i]?.fp ?? null);
+	let nav_i = 0;
 	return {
 		...report,
+		findings: report.findings.map((f) => {
+			const named = f.refs.map(fp_of).filter((fp): fp is string => !!fp).map(names);
+			if (f.code === 'navigation-blocked') {
+				const island = navigations[nav_i++]?.island;
+				if (island) named.push(island);
+			}
+			return { ...f, names: [...new Set(named)] };
+		}),
+		navigations,
 		timeline: session_timeline(data, names).map((l) => ({ ...l, items: l.items.map(({ ref: _ref, ...it }) => it) })),
 		unmeasured: unmeasured(data.cpu_off)
 	};

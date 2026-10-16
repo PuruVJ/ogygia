@@ -52,8 +52,10 @@ export function sign_module(ssr: boolean, hmac_module: string): string {
  * `virtual:ogygia/profiler-config` — SERVER only: the profiler options from `ogygia({ profiler })`,
  * or `null` when unset. `ogygia.handle()` reads it and, when non-null, dynamically imports and mounts
  * the profiler — so hooks.server.ts never mentions it and the profiler's weight loads only when
- * enabled. The SECRET is deliberately NOT here: it stays a runtime env var (OGYGIA_PROFILER_SECRET),
- * never baked into a frozen page.
+ * enabled. The SECRET is here only when the author passes `profiler.secret`: then it IS baked into the
+ * server bundle (on purpose — a serverless host such as Amplify has no runtime env to read it from), so
+ * treat that bundle as holding it. Left out, the profiler reads OGYGIA_PROFILER_SECRET at runtime and
+ * nothing is baked. Never in a client bundle or a frozen page.
  */
 export function profiler_config_module(
 	ssr: boolean,

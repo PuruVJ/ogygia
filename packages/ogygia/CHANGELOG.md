@@ -21,6 +21,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `ogygia({ legacy: { appStores: true } })` keeps `$app/stores` working in islands for an app that shims it, and seed shaping reads its `$page` usage to decide which `page.data` keys ship.
+- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with the input before it (a `navigation-blocked` finding).
+- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, CLS) and vitals that moved past a noise threshold (`compare(base, head, { noise })`).
+- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute your app renders); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
 
 ### Fixed
 
@@ -45,6 +48,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
 - Devtools and the profiler no longer blame ogygia's scheduler ("held with nothing ahead") for a wait the page's own long task or a failing island caused.
 - The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
+- `record()` whose page left for another document now says so, with the actions' own error as `cause`, instead of "serve with devtools".
+- `withOgygia` turns devtools on for the first page a test opens when there is no `baseURL`; before, it was silently left off.
+- A page with devtools switched on is sent `private, no-store` with `Vary: Cookie` and is never frozen, so a shared cache cannot hand its events to other visitors; a profiler beacon page too.
+- A hole's `Server-Timing` reaches a browser that switched devtools on (it checked an old cookie value).
 
 ## [0.8.2] - 2026-10-14
 

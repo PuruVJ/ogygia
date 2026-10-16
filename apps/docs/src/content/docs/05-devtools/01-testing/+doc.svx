@@ -43,7 +43,7 @@ test('checkout stays fast', async ({ page, ogygia }) => {
 });
 ```
 
-The server under test needs `ogygia({ devtools: true })`: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#enabling-in-a-build-a-preview-deploy)). The fixture turns devtools on for your `baseURL` (the `og_devtools` cookie), so each page is measured from its first load. `profile()` needs `ogygia({ profiler: true })`. On a build, give it the profiler's key:
+The server under test needs `ogygia({ devtools: true })`: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#enabling-in-a-build-a-preview-deploy)). The fixture turns devtools on for your `baseURL` (the `og_devtools` cookie), or with no `baseURL` for the origin of the first page the test opens, so each page is measured from its first load. `profile()` needs `ogygia({ profiler: true })`. On a build, give it the profiler's key:
 
 ```ts title=playwright.config.ts
 export default defineConfig({
@@ -51,7 +51,16 @@ export default defineConfig({
 });
 ```
 
-A recording can span pages: actions that do a full page load (`page.goto`, a form post, a plain link) keep recording on the next page, and the report covers all of them (`session.counts.pages`).
+A recording can span pages: actions that do a full page load (`page.goto`, a form post, a plain link) keep recording on the next page, and the report covers all of them (`session.counts.pages`). If the actions leave for a document with no testing API (another site, a page without devtools), the recording is lost and `record()` says so, with your actions' own error as its `cause`.
+
+To keep the page instead, record with `blockNavigation`. Every document load the actions cause (a reload in a handler, a stray link) is answered `204`, so the browser stays where it is, and each one is listed with the input just before it. It is also a `navigation-blocked` finding:
+
+```ts
+const session = await ogygia.record(() => page.getByRole('button', { name: 'Filter' }).click(), { blockNavigation: true });
+session.navigations; // [{ url: 'https://…/products', after: 'button.filter', island: 'ProductFilter', t: 4120 }]
+```
+
+Each island in `hydration()` has a `key` for its instance, so a diff can say which carousel broke: `Carousel#2`, the second island of that name in page order. Give the fixture `ogygiaOptions: { islandKey: 'data-block-id' }` to key each island by an attribute your app renders on it or around it (a CMS block's id), wherever it has one. Session findings carry `names`, the islands they point at, like page findings.
 
 ## The server, over the same actions
 
@@ -82,7 +91,7 @@ Budget lines, by report:
 | Report | Lines |
 | --- | --- |
 | `page()` | `lcp`, `fcp`, `cls`, `inp`, `ttfb`, `longTaskMs`, `islandWakeMs` (the slowest island's wake) |
-| `record()` | `maxInteractionMs`, `slowInteractions`, `errors`, `longTaskMs`, `failedRequests`, `serverBusyMs` (with `server: true`) |
+| `record()` | `maxInteractionMs`, `slowInteractions`, `errors`, `cls` (shifts with no input), `longTaskMs`, `failedRequests`, `serverBusyMs` (with `server: true`) |
 | `profile()` | `score` (at least), `renderMs` (the median render), `jsBytes` (JS at start; a build only) |
 
 `checkBudget(report, budget)` returns the same lines as data, for your own logic.
@@ -96,8 +105,16 @@ import { compare, toMarkdown } from 'ogygia/testing';
 
 // each run: the parsed `ogygia.json` attachments ({ test, reports }[])
 const diff = compare(baseRun, headRun);
-console.log(toMarkdown(diff)); // score and server-render moves, new and fixed findings, per test
+console.log(toMarkdown(diff)); // what moved, per test
 ```
+
+Per test, the diff carries:
+
+- **Findings:** new and fixed, by code.
+- **Profiles:** score, server render and JS at start, with the files behind a JS move.
+- **Hydration:** each island instance that stopped or started hydrating cleanly (`Carousel#2: clean → failed`).
+- **Sessions:** the counts that moved (errors, unexpected shifts, slow interactions, the session's CLS).
+- **Vitals:** only those that moved past a run's noise. Defaults: LCP and FCP 150 ms, TTFB 100 ms, INP 50 ms (each also 10 % of the base), CLS 0.02. Set your own with `compare(baseRun, headRun, { noise: { lcp: 300 } })`.
 
 ## Other runners and drivers
 
