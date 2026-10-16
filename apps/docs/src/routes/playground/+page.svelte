@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { meta } from '$lib/playground/docs.remote';
+	import { meta } from '#lib/playground/docs.remote.ts';
 	// Home: prove the nav data is queryable as plain data (over the wire, corpus server-only).
 	const tree = (await meta('')).nav;
 	const first = tree.flatMap((n) => (n.kind === 'group' ? n.items : [])).find((n) => n.kind === 'leaf');

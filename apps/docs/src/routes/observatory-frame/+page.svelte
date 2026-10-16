@@ -2,8 +2,8 @@
 	// The frame's harness is an island (client JS under csr=false): it receives the app from the parent
 	// over postMessage, links + injects it, and this page's runtime hydrates it in FULL isolation.
 	import { script } from 'ogygia';
-	import Harness from '$lib/observatory-frame/Harness.svelte' with { wake: 'load' };
-	import '$lib/observatory-canvas.css'; // gentle, overridable native-element defaults (shared with the in-page preview)
+	import Harness from '#lib/observatory-frame/Harness.svelte' with { wake: 'load' };
+	import '#lib/observatory-canvas.css'; // gentle, overridable native-element defaults (shared with the in-page preview)
 
 	// No-flash theme: read the shared `og-theme` (same key + storage the docs ThemeToggle uses) BEFORE
 	// paint. Same-origin → the iframe shares localStorage with the host, so it tracks the docs theme.
@@ -72,7 +72,7 @@
 		#obs-app {
 			padding: 16px 18px;
 		}
-		/* Native-element defaults live in the shared $lib/observatory-canvas.css (.og-canvas), imported above. */
+		/* Native-element defaults live in the shared #lib/observatory-canvas.css (.og-canvas), imported above. */
 
 		/* ── BOUNDARY LENS (x-ray) — the parent's x-ray mode adds `.lens` to #obs-app. This overlays the
 		   REAL, live islands: they stay interactive and wake on their real schedule; the tint just draws

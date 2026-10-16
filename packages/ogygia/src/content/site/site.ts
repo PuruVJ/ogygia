@@ -457,7 +457,7 @@ function choose_suggested(policy: PrevNext, related: NavRef[], next: NavRef | un
 /**
  * Derive the mount prefix by subtraction: the catch-all's `url.pathname` minus its matched `slug` is
  * the group's base. Call it once in the layout — the one place guaranteed to hold the request. Root
- * mount → `''`; a `(docs)` group at `/docs` → `'/docs'`. Composes with `paths.base` (already in the
+ * mount → `''`; a `(docs)` group at `/docs` → `'/docs'`. Composes with Kit's base (already in the
  * pathname). No global config, no registry.
  */
 export function mountBase(url: URL | string | { pathname: string }, slug: string): string {

@@ -1,17 +1,17 @@
 <script lang="ts">
 	// HELL, FIXED — /hell's page over lib/hell-fixed (the counted fixes applied; see +page.server.ts).
-	import MegaHeader from '$lib/hell-fixed/MegaHeader.svelte' with { wake: 'load' };
-	import CountryPanel from '$lib/hell-fixed/CountryPanel.svelte' with { wake: 'none' };
-	import SiteSearch from '$lib/hell-fixed/SiteSearch.svelte' with { wake: 'interaction' };
-	import PriceTicker from '$lib/hell-fixed/PriceTicker.svelte' with { wake: 'load' };
-	import ProductCard from '$lib/hell-fixed/ProductCard.svelte' with { wake: 'visible' };
-	import Recommendations from '$lib/hell-fixed/Recommendations.svelte' with { render: 'deferred' };
+	import MegaHeader from '#lib/hell-fixed/MegaHeader.svelte' with { wake: 'load' };
+	import CountryPanel from '#lib/hell-fixed/CountryPanel.svelte' with { wake: 'none' };
+	import SiteSearch from '#lib/hell-fixed/SiteSearch.svelte' with { wake: 'interaction' };
+	import PriceTicker from '#lib/hell-fixed/PriceTicker.svelte' with { wake: 'load' };
+	import ProductCard from '#lib/hell-fixed/ProductCard.svelte' with { wake: 'visible' };
+	import Recommendations from '#lib/hell-fixed/Recommendations.svelte' with { render: 'deferred' };
 	// the same hole with a render cache: the profiler's hole economics (hits vs misses)
-	import CachedRecommendations from '$lib/hell-fixed/Recommendations.svelte' with { preset: 'cachedRecs' };
-	import FooterLake from '$lib/hell-fixed/FooterLake.svelte' with { wake: 'none' };
-	import FacetBar from '$lib/hell-fixed/FacetBar.svelte';
-	import { header_config, countries, footer_columns } from '$lib/hell-fixed/data';
-	import { walkTree } from '$lib/hell-fixed/util';
+	import CachedRecommendations from '#lib/hell-fixed/Recommendations.svelte' with { preset: 'cachedRecs' };
+	import FooterLake from '#lib/hell-fixed/FooterLake.svelte' with { wake: 'none' };
+	import FacetBar from '#lib/hell-fixed/FacetBar.svelte';
+	import { header_config, countries, footer_columns } from '#lib/hell-fixed/data.ts';
+	import { walkTree } from '#lib/hell-fixed/util.ts';
 
 	let { data } = $props();
 	const config = header_config();

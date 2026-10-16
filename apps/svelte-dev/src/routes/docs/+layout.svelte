@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Island: `data-ogygia-keep` preserves the sidebar DOM (and its scroll position) across SPA
 	// body-swaps, while `wake: 'load'` re-hydrates it each nav so the active link tracks the page.
-	import Sidebar from '$lib/Sidebar.svelte' with { wake: 'load' };
-	import TwoslashHover from '$lib/TwoslashHover.svelte' with { wake: 'load' };
+	import Sidebar from '#lib/Sidebar.svelte' with { wake: 'load' };
+	import TwoslashHover from '#lib/TwoslashHover.svelte' with { wake: 'load' };
 	let { children } = $props();
 </script>
 

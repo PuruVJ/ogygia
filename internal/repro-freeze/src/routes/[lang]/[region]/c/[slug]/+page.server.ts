@@ -1,5 +1,5 @@
-import { count_render, cms_read } from '$lib/server/state.js';
-import { read_doc } from '$lib/server/sources.js';
+import { count_render, cms_read } from '#lib/server/state.js';
+import { read_doc } from '#lib/server/sources.js';
 
 /** The pure content page (the bcms landing-page shape): CMS body keyed by slug, PLUS a shared
  *  embedded doc ('promo') read through a DECLARED source — the one-doc-on-many-pages case the

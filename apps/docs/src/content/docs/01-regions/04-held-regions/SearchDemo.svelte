@@ -2,7 +2,7 @@
 	// One loading indicator: `of` takes the remote call's promise, the region owns the whole wait
 	// (fetch AND styled paint), `placeholder` fills it. Nothing else claims to know when it's ready.
 	import { Region } from 'ogygia';
-	import { search } from '$lib/partials/search.remote';
+	import { search } from '#lib/partials/search.remote.ts';
 
 	let q = $state('svelte');
 	let query = $state<string | null>(null);

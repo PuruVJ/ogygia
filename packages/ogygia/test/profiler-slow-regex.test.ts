@@ -131,7 +131,7 @@ describe('slow-regex', () => {
 		const page = '/app/src/routes/+page.server.ts';
 		const lib = '/app/src/lib/names.ts';
 		const files: Record<string, string[]> = {
-			[page]: ["import { initials } from '$lib/names';", 'export async function load() {', '\tconst inits = sorted.map((p) => initials(p.name));', '}'],
+			[page]: ["import { initials } from '#lib/names';", 'export async function load() {', '\tconst inits = sorted.map((p) => initials(p.name));', '}'],
 			[lib]: ['export function initials(name: string) {', "\treturn name.replace(/\\b(\\w)\\w*/g, '$1');", '}']
 		};
 		const source = (p: string, a: number, b: number) => (files[p] ? { start: a, lines: files[p].slice(a - 1, b) } : undefined);

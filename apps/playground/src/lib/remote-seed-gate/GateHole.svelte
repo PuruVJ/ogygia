@@ -3,7 +3,7 @@
 	// that). Its `ogygiaFallback` renders in the PAGE pass, where a lake inside it awaits the query
 	// too — a page-pass call, gated like any other.
 	import type { Snippet } from 'svelte';
-	import { getGreeting } from '$lib/greetings.remote';
+	import { getGreeting } from '#lib/greetings.remote.ts';
 	let { ogygiaFallback }: { ogygiaFallback?: Snippet } = $props();
 	// svelte-ignore state_referenced_locally
 	const res = await getGreeting('hole');

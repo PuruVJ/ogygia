@@ -76,11 +76,13 @@ const check = (label, ok, detail = '') => {
 	if (!ok) failures++;
 };
 
-// 1) SSR stitch: dash's widget baked into the shell's first paint (admin KPI = claims arrived)
+// 1) SSR stitch: dash's widget baked into the shell's first paint. The home is a FROZEN page
+// (`freeze: true`), so its static widget is the anonymous one — no visitor claims ride a hop
+// whose answer is stored for everyone (the per-visitor widget is the deferred hole, section 4)
 {
 	const html = await (await fetch(SHELL + '/')).text();
 	check('SSR stitch: dash fragment in shell paint', html.includes('data-testid="dash-fragment"'));
-	check('claims reached dash (admin KPI rendered)', html.includes('data-testid="admin-kpi"'));
+	check('the frozen home stays anonymous (no admin KPI baked in)', !html.includes('data-testid="admin-kpi"'));
 }
 
 // 2) whole-app mount + identity + three-hop trace + per-team Server-Timing
@@ -155,6 +157,7 @@ const check = (label, ok, detail = '') => {
 	if (hole) {
 		const frag = await (await fetch(SHELL + hole)).text();
 		check('deferred: the hole rendered the dash widget', /dash-fragment/.test(frag));
+		check('claims reached dash through the hole (admin KPI rendered)', frag.includes('data-testid="admin-kpi"'));
 	}
 	const forged = await fetch(
 		SHELL + '/og/frag?peer=dash&kind=widget&target=kpis&search=&exp=9999999999999&sig=bad'
@@ -197,13 +200,18 @@ const check = (label, ok, detail = '') => {
 	await b.close();
 }
 
-// 6) failure isolation: dead MFE, shell page unharmed
+// 6) failure isolation: dead MFE, pages unharmed. The frozen home keeps serving its stored copy
+// (a dead team never darkens it); the live cms page — mounted in the shell, stitching dash —
+// renders with dash's section as an inline card.
 {
 	procs.dash.kill();
 	await new Promise((r) => setTimeout(r, 300));
-	const res = await fetch(SHELL + '/');
+	const home = await fetch(SHELL + '/');
+	check('isolation: the frozen home still serves with dash dead', home.status === 200);
+	// (a search the shell's 3 s SWR cache of cms documents has not seen: a fresh hop, not a stale copy)
+	const res = await fetch(SHELL + '/cms/?isolation');
 	const html = await res.text();
-	check('isolation: shell renders 200 with dash dead', res.status === 200);
+	check('isolation: the live cms page renders 200 with dash dead', res.status === 200, 'got ' + res.status);
 	check('isolation: inline card, not a broken page', html.includes('unavailable'));
 }
 

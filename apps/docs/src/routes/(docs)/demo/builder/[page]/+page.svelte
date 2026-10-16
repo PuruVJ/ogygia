@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Region } from 'ogygia';
-	import { builderPages } from '$lib/builder/pages';
+	import { builderPages } from '#lib/builder/pages.ts';
 
 	// Server-only (csr=false): the entry's body is an inline partial rendered in this page's own SSR
 	// pass, so the interactive block inside it self-hydrates. `+page.ts` already 404'd unknown pages.

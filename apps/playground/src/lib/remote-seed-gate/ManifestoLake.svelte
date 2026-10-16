@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A lake awaiting a PRERENDER remote (`p` bucket) — gated exactly like a query.
-	import { getManifesto } from '$lib/greetings.remote';
+	import { getManifesto } from '#lib/greetings.remote.ts';
 	// svelte-ignore state_referenced_locally
 	const m = await getManifesto();
 </script>

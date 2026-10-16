@@ -59,18 +59,18 @@
 	// The all-strategies host — every island kind in one file (imports stub on render, but the transform
 	// shows them all). Kept as a preset.
 	// ogygia is SvelteKit-only, so presets are shaped like real apps: a route `+page.svelte` entry, a
-	// `+layout.ts` that opts the route into server-HTML (csr=false), and components under `$lib`.
+	// `+layout.ts` that opts the route into server-HTML (csr=false), and components under `#lib`.
 	const LAYOUT_CSR = `// ogygia renders pages as server HTML; only marked islands ship JS.\nexport const csr = false;`;
 	const ALL_STRATEGIES = `<scr${''}ipt>
-  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
-  import Menu from '$lib/Menu.svelte' with { wake: 'interaction' };
-  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
-  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
-  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
-  import Row from '$lib/Row.svelte' with { region: 'raw' };
+  import Counter from '#lib/Counter.svelte' with { wake: 'load' };
+  import Menu from '#lib/Menu.svelte' with { wake: 'interaction' };
+  import Chart from '#lib/Chart.svelte' with { wake: 'visible' };
+  import Greeting from '#lib/Greeting.svelte' with { render: 'deferred' };
+  import Prose from '#lib/Prose.svelte' with { wake: 'none' };
+  import Row from '#lib/Row.svelte' with { region: 'raw' };
 
   // unmarked = free server HTML, ships no JS
-  import Header from '$lib/Header.svelte';
+  import Header from '#lib/Header.svelte';
 
   const points = [3, 1, 4, 1, 5];
   const article = '<p>rendered prose</p>';
@@ -188,7 +188,7 @@
 title: Content pages
 ---
 <scr${''}ipt>
-  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </scr${''}ipt>
 
 # Markdown, live
@@ -270,9 +270,9 @@ export default {
 		'demo app': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.svelte': `<scr${''}ipt>
-  import Header from '$lib/Header.svelte';
-  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
-  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+  import Header from '#lib/Header.svelte';
+  import Counter from '#lib/Counter.svelte' with { wake: 'load' };
+  import Prose from '#lib/Prose.svelte' with { wake: 'none' };
 </scr${''}ipt>
 
 <Header title="My ogygia app" />
@@ -286,11 +286,11 @@ export default {
 		'wake demo': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.svelte': `<scr${''}ipt>
-  import Header from '$lib/Header.svelte';
-  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
-  import Menu from '$lib/Menu.svelte' with { wake: 'interaction' };
-  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
-  import Prose from '$lib/Prose.svelte' with { wake: 'none' };
+  import Header from '#lib/Header.svelte';
+  import Counter from '#lib/Counter.svelte' with { wake: 'load' };
+  import Menu from '#lib/Menu.svelte' with { wake: 'interaction' };
+  import Chart from '#lib/Chart.svelte' with { wake: 'visible' };
+  import Prose from '#lib/Prose.svelte' with { wake: 'none' };
 </scr${''}ipt>
 
 <Header title="Wake schedules" />
@@ -308,14 +308,14 @@ export default {
 		'all strategies': { 'src/routes/+layout.ts': LAYOUT_CSR, 'src/routes/+page.svelte': ALL_STRATEGIES },
 		counter: {
 			'src/routes/+layout.ts': LAYOUT_CSR,
-			'src/routes/+page.svelte': `<scr${''}ipt>\n  import Counter from '$lib/Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`,
+			'src/routes/+page.svelte': `<scr${''}ipt>\n  import Counter from '#lib/Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`,
 			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
 		},
 		'server island': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.svelte': `<scr${''}ipt>
-  import Header from '$lib/Header.svelte';
-  import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+  import Header from '#lib/Header.svelte';
+  import Greeting from '#lib/Greeting.svelte' with { render: 'deferred' };
 </scr${''}ipt>
 
 <Header title="Server islands" />
@@ -336,8 +336,8 @@ inlined). In "islands" mode, watch the fallback swap for the real content.</p>
 		'live region': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.svelte': `<scr${''}ipt>
-  import Header from '$lib/Header.svelte';
-  import Ticker from '$lib/Ticker.svelte' with { render: 'live' };
+  import Header from '#lib/Header.svelte';
+  import Ticker from '#lib/Ticker.svelte' with { render: 'live' };
 </scr${''}ipt>
 
 <Header title="Live regions" />
@@ -394,8 +394,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 		'keep · nav': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.svelte': `<scr${''}ipt>
-  import Counter from '$lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
-  import HomeWidget from '$lib/HomeWidget.svelte' with { wake: 'load' };
+  import Counter from '#lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import HomeWidget from '#lib/HomeWidget.svelte' with { wake: 'load' };
 </scr${''}ipt>
 
 <nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
@@ -406,8 +406,8 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 <Counter start={0} />
 <HomeWidget />`,
 			'src/routes/about/+page.svelte': `<scr${''}ipt>
-  import Counter from '$lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
-  import AboutWidget from '$lib/AboutWidget.svelte' with { wake: 'load' };
+  import Counter from '#lib/Counter.svelte' with { wake: 'load', keep: 'counter' };
+  import AboutWidget from '#lib/AboutWidget.svelte' with { wake: 'load' };
 </scr${''}ipt>
 
 <nav style="display:flex; gap:12px; align-items:center; padding-bottom:8px; border-bottom:1px solid #e2e8f0;">
@@ -472,10 +472,10 @@ input — your text and focus SURVIVE each update (that's the morph, not a re-mo
 			'src/routes/+layout.ts': `// ogygia renders pages as server HTML; only islands ship JS.\nexport const csr = false;`,
 			'src/routes/+page.svelte': `<scr${''}ipt>
   import { Region, region } from 'ogygia';
-  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Counter from '#lib/Counter.svelte' with { wake: 'load' };
   // region: 'raw' marks Badge as a HELD region — a component a registry hands to region(). It is
   // NEVER placed as <Badge/>; you render it through <Region of={region(Badge, props)}/>.
-  import Badge from '$lib/Badge.svelte' with { region: 'raw' };
+  import Badge from '#lib/Badge.svelte' with { region: 'raw' };
 </scr${''}ipt>
 
 <h1>Held-raw region</h1>
@@ -553,7 +553,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			'src/routes/+page.svelte': `<scr${''}ipt>
   // drop-in: swap 'svelte' → 'ogygia' and setContext reaches child ISLANDS (not just the tree).
   import { setContext, Provide } from 'ogygia';
-  import Badge from '$lib/Badge.svelte' with { wake: 'load' };
+  import Badge from '#lib/Badge.svelte' with { wake: 'load' };
 
   setContext('theme', 'midnight');
 </scr${''}ipt>
@@ -675,7 +675,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		request_all();
 	}
 
-	// Prettify the active file (the Format button). The formatter is the shared lazy prettier ($lib/prettier).
+	// Prettify the active file (the Format button). The formatter is the shared lazy prettier (#lib/prettier).
 	let formatting = $state(false);
 	const warm_prettier = warmPrettier;
 	async function prettify() {

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Tally from '$lib/props-tail/Tally.svelte' with { wake: 'load' };
-	import Keeper from '$lib/props-tail/Keeper.svelte' with { wake: 'load', keep: 'tally-keeper' };
+	import Tally from '#lib/props-tail/Tally.svelte' with { wake: 'load' };
+	import Keeper from '#lib/props-tail/Keeper.svelte' with { wake: 'load', keep: 'tally-keeper' };
 </script>
 
 <h1 data-static-shell>props tail — page B</h1>

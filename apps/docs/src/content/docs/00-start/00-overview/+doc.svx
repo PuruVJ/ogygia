@@ -27,7 +27,7 @@ Use ogygia on content pages that have small interactive parts: marketing, docs, 
 The island below is real. It lives on this page with the mark `wake: 'load'`. The text around it stays HTML:
 
 <script>
-  import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
+  import Counter from '#lib/demos/Counter.svelte' with { wake: 'load' };
 </script>
 
 <div class="doc-demo">

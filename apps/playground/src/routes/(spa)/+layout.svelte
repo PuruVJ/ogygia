@@ -2,8 +2,12 @@
 	// The SPA router (+ view transitions) is global — enabled by the ogygia() vite plugin, no
 	// component to render. `/plain` opts OUT of view transitions per-page via a meta tag.
 	// `base` prefixes every internal link so the app is correct under a non-root `paths.base`
-	// (and prerenders cleanly there); it is `''` by default, so normal runs are unchanged.
-	import { base } from '$app/paths';
+	// (and prerenders cleanly there); it is `''` by default, so normal runs are unchanged. (Kit 3 has
+	// no `base` export, and its `resolve()` answers RELATIVE to the page while rendering: the root
+	// route, `/(spa)`, read against the page's URL is the app's root, with its trailing slash.)
+	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
+	const base = $derived(new URL(resolve('/(spa)'), page.url.href).pathname.slice(0, -1));
 	let { children } = $props();
 </script>
 

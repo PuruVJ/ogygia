@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SeedShapeReader from '$lib/SeedShapeReader.svelte' with { wake: 'load' };
+	import SeedShapeReader from '#lib/SeedShapeReader.svelte' with { wake: 'load' };
 	import { page } from '$app/state';
 </script>
 

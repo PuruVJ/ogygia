@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+	import Palette from '#lib/playground/demos/Palette.svelte' with { wake: 'visible' };
 </script>
 
 Every color, radius, and surface in the design system comes from a CSS custom property named `--og-*`. Change a token and everything that uses it updates at once. Because they are plain CSS variables, theming works with no JavaScript and adapts to light or dark automatically.
@@ -104,7 +104,7 @@ Here is how it is dropped into the page:
 
 ```svelte
 <script>
-	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+	import Palette from '#lib/playground/demos/Palette.svelte' with { wake: 'visible' };
 </script>
 
 <Palette />

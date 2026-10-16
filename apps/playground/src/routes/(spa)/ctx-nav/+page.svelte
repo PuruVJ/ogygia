@@ -3,10 +3,10 @@
 	// page's provider markup + serialized payload arrive in the swapped body, and the islands
 	// re-hydrate, so get() must resolve exactly as on a fresh load.
 	import { Provide } from 'ogygia';
-	import CtxWriter from '$lib/CtxWriter.svelte' with { wake: 'load' };
-	import CtxReader from '$lib/CtxReader.svelte' with { wake: 'load' };
-	import { SharedCounter } from '$lib/counter-object.svelte.js';
-	import { roomCtx } from '$lib/room-context.svelte.js';
+	import CtxWriter from '#lib/CtxWriter.svelte' with { wake: 'load' };
+	import CtxReader from '#lib/CtxReader.svelte' with { wake: 'load' };
+	import { SharedCounter } from '#lib/counter-object.svelte.js';
+	import { roomCtx } from '#lib/room-context.svelte.js';
 
 	const counter = new SharedCounter('nav', 3);
 </script>

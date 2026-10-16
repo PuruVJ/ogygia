@@ -7,8 +7,8 @@ import { federate } from 'ogygia/federation';
 import { region } from 'ogygia';
 // `region: 'raw'`: the fragment root ships as HTML only, but the mark gives its scoped stylesheet
 // a real client asset the bake links.
-import Kpis from '$lib/Kpis.svelte' with { region: 'raw' };
-import { env } from '$env/dynamic/private';
+import Kpis from '#lib/Kpis.svelte' with { region: 'raw' };
+import * as env from '$app/env/private';
 
 federate({
 	name: 'dash',
@@ -20,10 +20,13 @@ federate({
 	widgets: {
 		kpis: {
 			props: ['org'], // declared → typed in the manifest stub (`npx ogygia fragments`)
-			make: (props, { user }) =>
+			make: (props, { user, request }) =>
 				region(Kpis, {
 					org: String(props.org ?? 'acme'),
-					viewer: (user as { sub?: string; roles?: string[] } | undefined) ?? null
+					viewer: (user as { sub?: string; roles?: string[] } | undefined) ?? null,
+					// the trace this hop belongs to (W3C traceparent `00-<trace-id>-<span>-<flags>`):
+					// the same id the shell's request started, however many hops away
+					trace: request.headers.get('traceparent')?.split('-')[1] ?? null
 				})
 		}
 	}

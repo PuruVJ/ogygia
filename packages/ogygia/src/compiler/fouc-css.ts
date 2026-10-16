@@ -14,6 +14,7 @@
  */
 
 import { fs, path } from './host.js';
+import { app_spec_path, probe_file, type AppAlias } from './app-resolve.js';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
 import { unscoped_marker } from '../unscoped-css.js';
@@ -90,42 +91,6 @@ export function foucRelFromId(id: string) {
 }
 
 /**
- * Resolve a static import specifier against an importer file + `$lib`.
- * @param spec
- * @param importerAbs
- * @param libDir
- */
-/** One resolved Vite alias (`resolve.alias`, normalized) — Kit's `kit.alias` entries arrive here. */
-export interface FoucAlias {
-	find: string | RegExp;
-	replacement: string;
-}
-
-export function resolveFoucImportSpec(
-	spec: string,
-	importerAbs: string,
-	libDir: string,
-	alias: readonly FoucAlias[] = []
-) {
-	if (spec === '$lib' || spec.startsWith('$lib/')) {
-		return path.join(libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
-	}
-	if (spec.startsWith('.')) {
-		return path.resolve(path.dirname(importerAbs), spec);
-	}
-	// App aliases (`$lib_x`, `@scope/pkg` → a source dir): the same table Vite resolves with.
-	for (const a of alias) {
-		if (typeof a.find === 'string') {
-			if (spec === a.find) return a.replacement;
-			if (spec.startsWith(a.find + '/')) return a.replacement + spec.slice(a.find.length);
-		} else if (a.find.test(spec)) {
-			return spec.replace(a.find, a.replacement);
-		}
-	}
-	return null;
-}
-
-/**
  * Collect side-effect import specs that pull island CSS into the client graph without JS.
  * @param entryAbs absolute path to the island entry `.svelte`
  * @param opts
@@ -158,20 +123,19 @@ export async function buildFoucCssModuleSource(entryAbs: string, opts: CssReachO
  */
 export interface CssReachOptions {
 	root: string;
-	libDir: string;
 	readFile?: (p: string) => string | null;
 	/** app aliases to follow (`$lib_x/…`, `@scope/pkg/…` → source dirs) — the fallback resolver's */
-	alias?: readonly FoucAlias[];
+	alias?: readonly AppAlias[];
 	/**
 	 * The bundler's own resolver (Vite's `this.resolve`): a package specifier through its `exports`
 	 * (a TypeScript entry included), a workspace link, an alias — whatever the build resolves. Without
-	 * it (a unit test, a host with no bundler) `$lib`, relative paths and `alias` only.
+	 * it (a unit test, a host with no bundler) the compiler's app resolver: relative paths, `#…`
+	 * subpath imports and `alias`.
 	 */
 	resolve?: (spec: string, importer: string) => Promise<string | null>;
 }
 
 const SCRIPT_MODULE_EXT = /\.(?:[cm]?[jt]sx?|svelte\.[jt]s)$/;
-const RESOLVE_SUFFIXES = ['', '.ts', '.js', '/index.ts', '/index.js'];
 const NODE_MODULES_RE = /[\\/]node_modules[\\/]/;
 /** every name a module exports — a namespace import, or a module reached for its own code */
 const ALL = '*';
@@ -213,15 +177,11 @@ export async function collectFoucCssReachable(
 			const id = await opts.resolve(spec, importer);
 			return id ? path.normalize(id.split('?')[0]) : null;
 		}
-		const base = resolveFoucImportSpec(spec, importer, opts.libDir, opts.alias);
+		const base = app_spec_path(spec, importer, opts.alias);
 		if (!base) return null;
 		const clean = base.split('?')[0];
 		if (STYLE_EXT.test(clean) || SVELTE_EXT.test(clean)) return path.normalize(clean);
-		for (const suffix of RESOLVE_SUFFIXES) {
-			const candidate = path.normalize(clean + suffix);
-			if (read(candidate) != null) return candidate;
-		}
-		return null;
+		return probe_file(clean, { is_file: (p) => read(p) != null });
 	};
 	// ONE barrel index per resolver: a build's walks (every hole, every router root) share its parsed
 	// barrels instead of each re-reading them

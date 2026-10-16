@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { Region, type RegionValue } from 'ogygia';
-	import '$lib/styles/demo-block.css';
-	import '$lib/styles/widget.css';
-	import '$lib/styles/feel.css';
+	import '#lib/styles/demo-block.css';
+	import '#lib/styles/widget.css';
+	import '#lib/styles/feel.css';
 
 	let {
 		title,

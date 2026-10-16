@@ -459,8 +459,18 @@ export function strategy_to_attr(strategy: string, options?: Record<string, unkn
 	return `media=${JSON.stringify(strategy)}`;
 }
 
-/** Rewrite `$app/{state,stores,navigation}` string literals to absolute shim paths. */
-export const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
+/** `$app/{state,stores,navigation}` string literals — the island shims' candidates. */
+const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
+
+/** Rewrite each `$app/*` string literal that has an island shim to the shim's absolute path; one
+ *  without (`$app/stores` when `legacy.appStores` is off) is left as written. */
+export function shim_app_imports(code: string, shims: Record<string, string>): string {
+	if (!code.includes('$app/')) return code;
+	return code.replace(APP_SHIM_IMPORT, (m: string, _q: string, name: string) => {
+		const shim = shims['$app/' + name];
+		return shim ? JSON.stringify(shim) : m;
+	});
+}
 
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const IMPORT_AS_CLAUSE = /^(.+?)(?:\s+as\s+(\w+))?$/;

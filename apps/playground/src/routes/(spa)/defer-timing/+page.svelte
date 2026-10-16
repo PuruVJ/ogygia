@@ -5,14 +5,14 @@
 	//   idle    -> on requestIdleCallback
 	//   visible -> when scrolled into view (IntersectionObserver) — placed far below the fold
 	//   media   -> when the media query matches
-	import GLoad from '$lib/Greeting.svelte' with { render: 'deferred' };
-	import GIdle from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'idle' };
-	import GVisible from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'visible' };
-	import GMedia from '$lib/Greeting.svelte' with { render: 'deferred', wake: '(min-width: 300px)' };
+	import GLoad from '#lib/Greeting.svelte' with { render: 'deferred' };
+	import GIdle from '#lib/Greeting.svelte' with { render: 'deferred', wake: 'idle' };
+	import GVisible from '#lib/Greeting.svelte' with { render: 'deferred', wake: 'visible' };
+	import GMedia from '#lib/Greeting.svelte' with { render: 'deferred', wake: '(min-width: 300px)' };
 	//   prefetch -> an ON-DEMAND hole (swaps on first hover) whose HTML is warmed at idle: the request
 	//               goes out at idle with no intent, the fallback stays, the hover swaps with no
 	//               second request (e2e/defer-timing.spec.ts)
-	import GPrefetch from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'interaction', prefetch: 'idle' };
+	import GPrefetch from '#lib/Greeting.svelte' with { render: 'deferred', wake: 'interaction', prefetch: 'idle' };
 </script>
 
 <h1 data-static-shell>Defer timing variants</h1>

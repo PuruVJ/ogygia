@@ -8,6 +8,9 @@
  */
 import type { RegionValue } from '../region.js';
 import type { Router } from '../router/router.js';
+
+/** What federation serves an exposed table through — any `routes()` router, whatever its table. */
+export type ExposedRouter = Pick<Router, 'fetch'>;
 import type { Claims } from './wire.js';
 
 /** Visitor claims resolver — `federate({ visitor })`. Reads the LIVE event (cookies, locals);
@@ -48,11 +51,12 @@ export interface WidgetInfo {
 	url: URL;
 }
 
-/** A widget: props in, an awaitable `{ html }` out — `region(Comp, props)` IS that shape. */
+/** A widget: props in, an awaitable `{ html }` out — `region(Comp, props)` IS that shape (awaited,
+ *  a region carries its server-rendered `html`; one that never baked answers 500). */
 export type Widget = (
 	props: Record<string, string>,
 	info: WidgetInfo
-) => PromiseLike<{ html: string | null }> | { html: string | null };
+) => PromiseLike<{ html?: string | null }> | { html?: string | null };
 
 export type WidgetDef = Widget | { props: readonly string[]; make: Widget };
 
@@ -67,7 +71,7 @@ export interface FederateConfig<P extends Record<string, PeerConfig> = Record<st
 	/** THE visitor identity for outbound hops (on-behalf-of, signed, never via the browser). */
 	visitor?: VisitorResolver;
 	/** Serve this route table as fragments at `/og/fragment/page` (the MFE side). */
-	expose?: Router;
+	expose?: ExposedRouter;
 	/** The mount base the exposed table renders under (`routes(table, { base })`). */
 	base?: string;
 	/** Named widget catalog served at `/og/fragment/<name>`; `__catalog` = the unsigned manifest. */
@@ -140,7 +144,7 @@ export interface Federation {
 	readonly key: string | undefined;
 	readonly peers: ReadonlyMap<string, Peer & { readonly keys: readonly string[] }>;
 	readonly visitor: VisitorResolver | undefined;
-	readonly expose: Router | undefined;
+	readonly expose: ExposedRouter | undefined;
 	readonly base: string;
 	readonly widgets: ReadonlyMap<string, { make: Widget; props?: readonly string[] }>;
 	readonly audience: string | string[] | undefined;

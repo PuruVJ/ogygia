@@ -4,7 +4,7 @@
 	// loaded as a classic script does — so the host upgrades (and makes its own shadow root) before
 	// ogygia's restorer runs at the end of the body.
 	import { script } from 'ogygia';
-	import LateCard from '$lib/dtrestore/LateCard.svelte' with { wake: 'load' };
+	import LateCard from '#lib/dtrestore/LateCard.svelte' with { wake: 'load' };
 	const early = script(() => {
 		customElements.define(
 			'demo-card',

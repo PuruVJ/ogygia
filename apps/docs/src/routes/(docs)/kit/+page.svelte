@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
-	import PageHead from '$lib/PageHead.svelte';
+	import Counter from '#lib/demos/Counter.svelte' with { wake: 'load' };
+	import PageHead from '#lib/PageHead.svelte';
 </script>
 
 <PageHead

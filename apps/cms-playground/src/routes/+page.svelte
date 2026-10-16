@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { cms } from '$lib/cms';
+	import { cms } from '#lib/cms.js';
 	// Home: the nav as plain data, straight off the CMS-backed weave.
 	const tree = await cms.nav();
 	const first = tree.flatMap((n) => (n.kind === 'group' ? n.items : [])).find((n) => n.kind === 'leaf');

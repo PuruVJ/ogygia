@@ -35,11 +35,16 @@ function real(name: string): string {
 	throw new Error(`no ${name} in the repo`);
 }
 
+/** The app's vite config (Kit 3: Kit's config is passed to `sveltekit()`), with `extra` top-level keys. */
+const vite_config = (extra: string) =>
+	"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\n" +
+	'const og = ogygia({ devtools: true });\n' +
+	`export default { plugins: [og, sveltekit({ extensions: ogygia.extensions(), preprocess: [...ogygia.preprocess()] })]${extra} };\n`;
+
 const FILES: Record<string, string> = {
-	'package.json': '{ "name": "installed-app", "private": true, "type": "module" }\n',
-	'svelte.config.js': "import { ogygia } from 'ogygia/vite';\nexport default { extensions: ogygia.extensions(), preprocess: [...ogygia.preprocess()], kit: {} };\n",
+	'package.json': '{ "name": "installed-app", "private": true, "type": "module", "imports": { "#lib/*": "./src/lib/*" } }\n',
 	// (devtools on, the way an app turns it on in dev: its dock's packages must be found up front)
-	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()] };\n",
+	'vite.config.js': vite_config(''),
 	'src/app.html': '<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',
 	'src/routes/+page.ts': 'export const csr = false;\n',
 	// an island with a snippet prop (its children: they cross as a wired value) …
@@ -58,8 +63,8 @@ const FILES: Record<string, string> = {
 <button data-plain onclick={() => n++}>{label} {n}</button>
 `,
 	'src/routes/+page.svelte': `<script lang="ts">
-	import Card from '$lib/Card.svelte' with { wake: 'load' };
-	import Plain from '$lib/Plain.svelte' with { wake: 'load' };
+	import Card from '#lib/Card.svelte' with { wake: 'load' };
+	import Plain from '#lib/Plain.svelte' with { wake: 'load' };
 </script>
 <Card><p data-kid>a child from the page</p></Card>
 <Plain label="plain" />
@@ -168,10 +173,7 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		check('one copy: the devtools say nothing of two', (await read()).length === 0);
 		// THE FIELD BUG, planted: the app's own config pre-bundles ogygia's dev boot while the compiler's
 		// imports load ogygia by path — the server restarts on the config change
-		fs.writeFileSync(
-			path.join(app, 'vite.config.js'),
-			"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()], optimizeDeps: { include: ['ogygia/runtime'] } };\n"
-		);
+		fs.writeFileSync(path.join(app, 'vite.config.js'), vite_config(", optimizeDeps: { include: ['ogygia/runtime'] }"));
 		await page.waitForTimeout(6000);
 		let said: string[] = [];
 		for (let i = 0; i < 6 && !said.length; i++) {

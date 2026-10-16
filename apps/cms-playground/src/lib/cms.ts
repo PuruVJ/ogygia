@@ -65,7 +65,7 @@ const cms_pages: RawSource<unknown> = {
 	// Section labels straight from the CMS's own category API — no fake meta collection.
 	async groups() {
 		const cats = await categories_once();
-		return new Map(cats.map((c) => [c.id, { label: c.name }]));
+		return new Map(cats.map((c: CmsCategory) => [c.id, { label: c.name }]));
 	}
 };
 
@@ -79,7 +79,7 @@ export const docs = content({
 
 /** Preview context from the URL (`?preview=secret`) — universal-load-safe (no cookies API there).
  *  Exported so the page component derives the SAME context it renders under as the load guard used. */
-export const preview_ctx = (url: URL) => ({ preview: url.searchParams.get('preview') === 'secret' });
+export const preview_ctx = (url: { searchParams: Pick<URLSearchParams, 'get'> }) => ({ preview: url.searchParams.get('preview') === 'secret' });
 
 export const cms = site({
 	outline: docs,

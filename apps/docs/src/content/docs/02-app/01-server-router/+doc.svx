@@ -21,12 +21,12 @@ Use it when your routes are *computed*: a CMS whose paths come from a database, 
 
 ```ts title=src/lib/router.ts
 import { routes, page, layout, load, redirect, error, fail } from 'ogygia/router';
-import AppShell from '$lib/views/AppShell.svelte';
-import Home from '$lib/views/Home.svelte';
-import Doc from '$lib/views/Doc.svelte';
-import Login from '$lib/views/Login.svelte';
-import ErrorPage from '$lib/views/ErrorPage.svelte';
-import { docs, auth } from '$lib/server';
+import AppShell from '#lib/views/AppShell.svelte';
+import Home from '#lib/views/Home.svelte';
+import Doc from '#lib/views/Doc.svelte';
+import Login from '#lib/views/Login.svelte';
+import ErrorPage from '#lib/views/ErrorPage.svelte';
+import { docs, auth } from '#lib/server';
 
 // A layout is a NAMED table→table wrapper: its component, its load, its error boundary.
 const app = layout('app', AppShell, {
@@ -96,7 +96,7 @@ The layout component is a Kit layout: `{ data, children }`, `{@render children()
 
 ```svelte title=AppShell.svelte
 <script lang="ts">
-  import type { App } from '$lib/router';
+  import type { App } from '#lib/router';
   let { data, children }: App['(app)'] = $props();
 </script>
 <nav>signed in as {data.user.name}</nav>
@@ -161,7 +161,7 @@ page(Doc, { load: docLoad }),
 
 ```svelte title=Dashboard.svelte
 <script lang="ts">
-  import type { App } from '$lib/router';
+  import type { App } from '#lib/router';
   let { data }: App['/dashboard'] = $props();
   //   data.user   — from the app layout's load
   //   data.team   — from the dash layout's load
@@ -319,7 +319,7 @@ export type App = typeof router.$infer;
 
 ```svelte
 <script lang="ts">
-  import type { App } from '$lib/router';
+  import type { App } from '#lib/router';
   let { data, form, params }: App['/docs/[slug]'] = $props();
 </script>
 ```
@@ -354,8 +354,8 @@ await svc.post('/posts', { body: { title } });                        // body: s
 A routed page is only a component. Thus its **wake / render** schedule rides as an import attribute on the component that you pass to `page()`: the same dials as a marked island import:
 
 ```ts
-import Chart from '$lib/views/Chart.svelte' with { wake: 'visible' };
-import Greeting from '$lib/views/Greeting.svelte' with { render: 'deferred' };
+import Chart from '#lib/views/Chart.svelte' with { wake: 'visible' };
+import Greeting from '#lib/views/Greeting.svelte' with { render: 'deferred' };
 
 '/dashboard': page(Chart),                              // wakes when scrolled into view
 '/':          page(Greeting, { fallback: Skeleton }),   // deferred page + its loading slot
@@ -414,7 +414,7 @@ Wrap a table entry (a page, an endpoint object, a [`mount()`](/docs/app/federati
 
 ```ts
 import { when } from 'ogygia/router';
-import { checkoutV2, exportsFlag, cmsRollout } from '$lib/flags';
+import { checkoutV2, exportsFlag, cmsRollout } from '#lib/flags';
 
 routes({
   '/checkout-v2': when(checkoutV2, page(NewCheckout, { load })),  // staged rollout of a whole page
@@ -434,7 +434,7 @@ Export the router. Serve it at either seam.
 ```ts title=src/hooks.server.ts
 import { sequence } from '@sveltejs/kit/hooks';
 import { handle as ogygiaHandle } from 'ogygia/server';
-import { router } from '$lib/router';
+import { router } from '#lib/router';
 
 export const handle = sequence(ogygiaHandle(), router.handle);
 ```
@@ -442,7 +442,7 @@ export const handle = sequence(ogygiaHandle(), router.handle);
 `router.handle` dispatches a match, or falls through to the rest of the app (a good citizen for URLs that it does not own). Or own a subtree from a Kit catch-all:
 
 ```ts title="src/routes/[...path]/+server.ts"
-import { router } from '$lib/router';
+import { router } from '#lib/router';
 export const GET = (event) => router.fetch(event.request, event);
 export const entries = router.entries;      // static routes + declared dynamic entries → Kit's crawl
 export const prerender = 'auto';

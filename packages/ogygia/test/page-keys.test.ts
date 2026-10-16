@@ -3,14 +3,15 @@
 // or from the playground fixtures. The contract: literal keys → the set; anything the analysis
 // cannot pin → 'all'; no page import → null.
 import { describe, expect, it } from 'vitest';
-import { page_data_keys, merge_page_keys } from '../src/compiler/link/page-keys.js';
+import { page_data_keys, merge_page_keys, LEGACY_PAGE_MODULES } from '../src/compiler/link/page-keys.js';
 
+// (the `$page` store forms below are an app's that shims `$app/stores` — `legacy.appStores`)
 const ts = (code: string) => {
-	const r = page_data_keys(code, '/app/x.ts', 'script');
+	const r = page_data_keys(code, '/app/x.ts', 'script', LEGACY_PAGE_MODULES);
 	return r === 'all' || r === null ? r : [...r].sort();
 };
 const svelte = (code: string) => {
-	const r = page_data_keys(code, '/app/X.svelte', 'svelte');
+	const r = page_data_keys(code, '/app/X.svelte', 'svelte', LEGACY_PAGE_MODULES);
 	return r === 'all' || r === null ? r : [...r].sort();
 };
 
@@ -18,6 +19,10 @@ describe('page_data_keys — scripts', () => {
 	it('null when the module never imports the page', () => {
 		expect(ts(`const data = { a: 1 }; console.log(data.a);`)).toBeNull();
 		expect(ts(`import { goto } from '$app/navigation'; import { page } from 'svelte'; goto(page.data.x);`)).toBeNull();
+	});
+	it('without `legacy.appStores`, only `$app/state` is the page: a `$app/stores` import reads nothing', () => {
+		expect(page_data_keys(`import { page } from '$app/stores';\nexport const l = get(page).data._locale;`, '/app/x.ts', 'script')).toBeNull();
+		expect([...(page_data_keys(`import { page } from '$app/state';\nexport const l = page.data._locale;`, '/app/x.ts', 'script') as Set<string>)]).toEqual(['_locale']);
 	});
 	it('$app/state: page.data.key, optional chaining, nested paths keep the top-level key', () => {
 		expect(ts(`import { page } from '$app/state';\nexport const l = page.data._locale; const u = page.data?.user?.access_token; const c = page.data?.userCountry?.country;`)).toEqual(['_locale', 'user', 'userCountry']);

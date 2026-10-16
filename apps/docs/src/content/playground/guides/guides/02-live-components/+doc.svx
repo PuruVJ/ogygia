@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 A live component is an island once it has woken. This page goes past *how to declare one* and into *how it actually works*: where the hydration boundary sits, what crosses it, and why the prose around a live component never re-runs.
@@ -32,7 +32,7 @@ Here is exactly how it is placed on the page. The import carries the wake hint; 
 
 ```svelte
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 <Counter />

@@ -27,8 +27,8 @@
  *     a timeout could paper over it). Every field of that page is a `$state.raw`, so the assignment
  *     is a reactive write and an effect reading `status` re-runs on it: the exact moment, no polling.
  *
- * Nothing here touches the `$page` store (removed in Kit 3): the `$app/state` page object is what
- * both Kit 2 and Kit 3 publish. No timeout either: a Kit document whose `start()` never runs has no
+ * Nothing here touches the `$page` store: the `$app/state` page object is what Kit publishes. No
+ * timeout either: a Kit document whose `start()` never runs has no
  * page truth for such an island to hydrate against, and its own Kit components are equally dead —
  * the island stays as its visible server HTML, which is the honest state.
  *

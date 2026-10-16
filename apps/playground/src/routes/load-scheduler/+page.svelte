@@ -2,10 +2,10 @@
 	// THE LOAD SCHEDULER (e2e/load-scheduler.spec.ts): the hero below is the page's critical resource
 	// (`fetchpriority="high"`); the test holds it. Island code must wait for it — or for the visitor's
 	// first input, or the cap — while an `interaction` island still wakes at once.
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
-	import VisibleCounter from '$lib/Counter.svelte' with { wake: 'visible' };
-	import IdleCounter from '$lib/Counter.svelte' with { wake: 'idle' };
-	import InteractionCounter from '$lib/InteractionCounter.svelte' with { wake: 'interaction' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
+	import VisibleCounter from '#lib/Counter.svelte' with { wake: 'visible' };
+	import IdleCounter from '#lib/Counter.svelte' with { wake: 'idle' };
+	import InteractionCounter from '#lib/InteractionCounter.svelte' with { wake: 'interaction' };
 </script>
 
 <svelte:head>

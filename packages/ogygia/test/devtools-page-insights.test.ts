@@ -1370,6 +1370,23 @@ describe('analyze_page', () => {
 		// under the threshold: the snapshot's normal first report
 		const short = analyze_page(page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1030, done: 1031 }] }), [region('v', 'Quick', 'visible')], [], 2000);
 		expect(codes(short)).not.toContain('held-idle');
+		// REGRESSION (CI, the lab page): the page's own script took the thread for the whole wait — a
+		// long task; no turn can be handed out inside it, so the scheduler held nothing
+		const page_task = analyze_page(
+			page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1070, done: 1071 }], longtasks: [{ t: 1002, ms: 66 }] }),
+			[region('v', 'AfterScript', 'visible')],
+			[],
+			2000
+		);
+		expect(codes(page_task)).not.toContain('held-idle');
+		// a failing island's hydrate step held the thread until it threw: busy, as a hydrating island is
+		const failed_step = analyze_page(
+			page({ islands: [{ fp: 'v', t0: 1000, loaded: 1000, turn: 1070, done: 1071 }] }),
+			[region('v', 'AfterBroken', 'visible'), region('x', 'Broken')],
+			[{ fp: 'x', message: 'planted', span: [900, 1068], turn: 1001 }],
+			2000
+		);
+		expect(codes(failed_step)).not.toContain('held-idle');
 	});
 
 	it('a queued island names the islands that ran ahead of it', () => {
@@ -1407,7 +1424,7 @@ describe('analyze_page', () => {
 		const css = (name: string, kb: number, end = 400) => ({ url: `http://x/_app/immutable/assets/${name}.css`, type: 'css', start: 60, end, size: Math.round(kb * 1024), blocking: true });
 		const resources = [css('big', 17), css('shell', 7), css('chrome', 3), css('header', 2)];
 		const f = analyze_page(page({ visit: { ...page().visit!, paints: { fcp: 420 }, resources } }), [], [], 500).findings.find((x) => x.code === 'render-blocking')!;
-		expect(f.fix).toMatch(/^With `kit: \{ inlineStyleThreshold: 8192 \}` in svelte\.config\.js, 3 of these stylesheets \(12\.0 KB\) arrive inside the HTML: 1 file left to wait on instead of 4\./);
+		expect(f.fix).toMatch(/^With `sveltekit\(\{ inlineStyleThreshold: 8192 \}\)` in the vite config, 3 of these stylesheets \(12\.0 KB\) arrive inside the HTML: 1 file left to wait on instead of 4\./);
 		// the dev server's files are no build's: the general advice
 		const dev = resources.map((r) => ({ ...r, url: r.url.replace('/_app/immutable/assets/', '/src/lib/') }));
 		expect(analyze_page(page({ visit: { ...page().visit!, paints: { fcp: 420 }, resources: dev } }), [], [], 500).findings.find((x) => x.code === 'render-blocking')!.fix).toMatch(/^Inline small stylesheets/);

@@ -27,7 +27,7 @@ type IslandBridge = {
 	/**
 	 * Markdown config the user passes to `ogygia({ content: { markdown } })`. The `markdown()`
 	 * preprocessor reads it here when called with no args, so all config lives in the one plugin —
-	 * the svelte config only references a value-free `markdown()`. `null` when not set.
+	 * Kit's config only references a value-free `markdown()`. `null` when not set.
 	 */
 	markdownConfig: Record<string, unknown> | null;
 	/**

@@ -239,7 +239,7 @@ describe('collectIslandDepModulepreloads', () => {
 		});
 
 		test('state another island can change: a context read, a rune module import', () => {
-			expect(interactivity_facts("<script>import { roomCtx } from '$lib/room-context.svelte.js'; const c = roomCtx.get();</script>{c.count}").shared).toBe(1);
+			expect(interactivity_facts("<script>import { roomCtx } from '#lib/room-context.svelte.js'; const c = roomCtx.get();</script>{c.count}").shared).toBe(1);
 			expect(interactivity_facts("<script>import { getContext } from 'svelte'; const n = getContext('room');</script>").shared).toBe(1);
 			expect(interactivity_facts("<script lang=\"ts\">const g = getContext<string>('greeting');</script>").shared).toBe(1);
 			expect(interactivity_facts("<script>import X from './X.svelte';</script><X />").shared).toBe(0);

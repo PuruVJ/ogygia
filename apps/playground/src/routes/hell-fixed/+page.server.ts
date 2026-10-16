@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import type { PageServerLoad } from './$types';
 import { span, tag } from 'ogygia/profiler';
-import { catalog, PRODUCTS } from '$lib/hell-fixed/data';
+import { catalog, PRODUCTS } from '#lib/hell-fixed/data.ts';
 
 async function queryDatabase(ms: number): Promise<{ rows: number }> {
 	await new Promise((r) => setTimeout(r, ms));

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// PURGATORY's page: every key the load returns is shown, so none reads as work for nothing.
-	import Shelf from '$lib/purgatory/Shelf.svelte' with { wake: 'load' };
+	import Shelf from '#lib/purgatory/Shelf.svelte' with { wake: 'load' };
 	let { data } = $props();
 </script>
 

@@ -21,7 +21,6 @@ const base_ctx_init = {
 	root: '/repo',
 	base: '',
 	app_dir: '_app',
-	libDir: '/repo/src/lib',
 	profiler_config: null,
 	is_dev: false,
 	id_salt: '',
@@ -199,7 +198,6 @@ describe('undeclared-marks warning', () => {
 			new CompileCtx({
 				...base_ctx_init,
 				root: '/nowhere-app',
-				libDir: '/nowhere-app/src/lib',
 				import_keys: normalize_import_keys(undefined),
 				pkg_root
 			})

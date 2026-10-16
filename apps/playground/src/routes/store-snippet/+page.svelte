@@ -4,9 +4,9 @@
 	// VALUE at the host and rewrite the crossed body — never emit `$country` verbatim into the
 	// runes-mode synth entry (that used to kill the build inside virtual:ogygia/island/…).
 	// The nested Bumper island proves the crossed copy still comes ALIVE.
-	import PortableBar from '$lib/PortableBar.svelte' with { wake: 'load' };
-	import Bumper from '$lib/Bumper.svelte' with { wake: 'load' };
-	import { country, language } from '$lib/sub-stores';
+	import PortableBar from '#lib/PortableBar.svelte' with { wake: 'load' };
+	import Bumper from '#lib/Bumper.svelte' with { wake: 'load' };
+	import { country, language } from '#lib/sub-stores.ts';
 
 	const label = 'locale';
 </script>

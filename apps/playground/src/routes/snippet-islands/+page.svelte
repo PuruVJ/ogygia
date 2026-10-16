@@ -6,9 +6,9 @@
 	//  2. the live snippet's server leg rendered through the SYNC `ssr_render`, so a top-level
 	//     `await` inside the snippet body threw `await_invalid` (the docs-home 500).
 	// ResolvedGreeting top-level-awaits a remote; Bumper is the interactivity probe.
-	import SnippetCard from '$lib/SnippetCard.svelte';
-	import ResolvedGreeting from '$lib/ResolvedGreeting.svelte' with { wake: 'load' };
-	import Bumper from '$lib/Bumper.svelte' with { wake: 'load' };
+	import SnippetCard from '#lib/SnippetCard.svelte';
+	import ResolvedGreeting from '#lib/ResolvedGreeting.svelte' with { wake: 'load' };
+	import Bumper from '#lib/Bumper.svelte' with { wake: 'load' };
 
 	const label = 'in-snippet';
 </script>

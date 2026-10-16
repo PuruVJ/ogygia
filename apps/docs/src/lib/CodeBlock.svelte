@@ -3,7 +3,7 @@
 	 * Renders Shiki HTML baked at build (`snippets.remote.ts` via Kit `prerender()`, or a `defer`
 	 * server island that calls `highlight.server.ts`). No Shiki in the browser — only finished markup.
 	 */
-	import '$lib/styles/code-block.css';
+	import '#lib/styles/code-block.css';
 
 	let {
 		html,

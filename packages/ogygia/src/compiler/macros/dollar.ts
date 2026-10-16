@@ -302,6 +302,7 @@ export function rewrite_dollar(
 			if (!src_val) continue;
 			const is_server =
 				src_val === '$app/server' ||
+				src_val === '$app/env/private' ||
 				src_val.startsWith('$env/static/private') ||
 				src_val.startsWith('$env/dynamic/private') ||
 				SERVER_MODULE_RE.test(src_val);

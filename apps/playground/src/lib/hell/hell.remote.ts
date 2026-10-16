@@ -5,8 +5,9 @@ import { span } from 'ogygia/profiler';
 // in-process, waits on a "pricing service" round trip, and is on the render's critical path —
 // the profiler's "remote functions" phase. The span names the part the hooks cannot see.
 export const stockSummary = query(async () => {
-	const { url } = getRequestEvent();
-	const res = await fetch(`${url.origin}/hell/api/stock-summary?ms=22`);
+	// (the request's own origin: Kit refuses `event.url` inside a query)
+	const { origin } = new URL(getRequestEvent().request.url);
+	const res = await fetch(`${origin}/hell/api/stock-summary?ms=22`);
 	const j = (await res.json()) as { ms: number };
 	await span('cache.write', () => new Promise((r) => setTimeout(r, 12)));
 	return { low: 7, out: 3, refreshed_ms: j.ms };

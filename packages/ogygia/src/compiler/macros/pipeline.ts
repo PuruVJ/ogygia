@@ -143,7 +143,6 @@ export async function run_module_macros(
 		const { rewrite_bake } = await import('./bake.js'); // lazy — keeps bake's node-only graph out of the worker
 		const rewritten = await rewrite_bake(out, id, {
 			alias: ctx.resolveAlias as AliasEntry[],
-			root: ctx.root,
 			markupExts: CONSTRUCT_MARKUP_EXTS
 		});
 		if (rewritten !== out) {

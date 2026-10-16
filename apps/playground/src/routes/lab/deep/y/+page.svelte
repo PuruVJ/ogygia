@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Same stable slot as Page X, different everything-else. The deep island is kept across X ⇄ Y.
-	import DeepCounter from '$lib/lab/DeepCounter.svelte' with { wake: 'load', keep: 'deep' };
+	import DeepCounter from '#lib/lab/DeepCounter.svelte' with { wake: 'load', keep: 'deep' };
 </script>
 
 <h2 data-deep-page>Page Y</h2>

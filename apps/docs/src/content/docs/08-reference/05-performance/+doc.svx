@@ -8,7 +8,7 @@ related:
 ---
 
 <script>
-	import BenchCharts from '$lib/BenchCharts.svelte';
+	import BenchCharts from '#lib/BenchCharts.svelte';
 </script>
 
 ogygia is an islands library for SvelteKit. Here are the measurements, reproducible in-repo under

@@ -1,33 +1,33 @@
 <script lang="ts">
-	import Contours from '$lib/Contours.svelte';
+	import Contours from '#lib/Contours.svelte';
 	import { Region } from 'ogygia';
 	import {
 		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
 		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
 		contentJsonCode, contentCustomCode, dimensionsCode, composeCode
-	} from '$lib/code/snippets';
+	} from '#lib/code/snippets.ts';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
-	import HeroDemo from '$lib/demos/HeroDemo.svelte' with { wake: 'load' };
-	import PageHead from '$lib/PageHead.svelte';
-	import SiteFooter from '$lib/SiteFooter.svelte';
-	import ShowcaseCard from '$lib/ShowcaseCard.svelte';
+	import HeroDemo from '#lib/demos/HeroDemo.svelte' with { wake: 'load' };
+	import PageHead from '#lib/PageHead.svelte';
+	import SiteFooter from '#lib/SiteFooter.svelte';
+	import ShowcaseCard from '#lib/ShowcaseCard.svelte';
 	// Each showcase demo IS a real island using the strategy it documents.
-	import Counter from '$lib/demos/Counter.svelte' with { wake: 'load' };
-	import IdleClock from '$lib/demos/IdleClock.svelte' with { wake: 'idle' };
-	import VisibleWidget from '$lib/demos/VisibleWidget.svelte' with { wake: 'visible' };
-	import MediaWidget from '$lib/demos/MediaWidget.svelte' with { wake: '(max-width: 600px)' };
-	import InteractionWidget from '$lib/demos/InteractionWidget.svelte' with { wake: 'interaction' };
-	import ServerGreeting from '$lib/demos/ServerGreeting.svelte' with { render: 'deferred' };
-	import FrozenCounter from '$lib/demos/FrozenCounter.svelte';
-	import PartialSearch from '$lib/demos/PartialSearch.svelte' with { wake: 'load' };
-	import LivePartialDemo from '$lib/demos/LivePartialDemo.svelte' with { wake: 'load' };
+	import Counter from '#lib/demos/Counter.svelte' with { wake: 'load' };
+	import IdleClock from '#lib/demos/IdleClock.svelte' with { wake: 'idle' };
+	import VisibleWidget from '#lib/demos/VisibleWidget.svelte' with { wake: 'visible' };
+	import MediaWidget from '#lib/demos/MediaWidget.svelte' with { wake: '(max-width: 600px)' };
+	import InteractionWidget from '#lib/demos/InteractionWidget.svelte' with { wake: 'interaction' };
+	import ServerGreeting from '#lib/demos/ServerGreeting.svelte' with { render: 'deferred' };
+	import FrozenCounter from '#lib/demos/FrozenCounter.svelte';
+	import PartialSearch from '#lib/demos/PartialSearch.svelte' with { wake: 'load' };
+	import LivePartialDemo from '#lib/demos/LivePartialDemo.svelte' with { wake: 'load' };
 	// Two separate island bundles sharing one live object passed as a prop (static [ogygia.wire]).
-	import SharedAdd from '$lib/demos/SharedAdd.svelte' with { wake: 'load' };
-	import SharedCount from '$lib/demos/SharedCount.svelte' with { wake: 'load' };
-	import ContentPeek from '$lib/demos/ContentPeek.svelte' with { wake: 'load' };
-	import { Cart } from '$lib/demos/cart-store.svelte.js';
-	import '$lib/styles/widget.css';
+	import SharedAdd from '#lib/demos/SharedAdd.svelte' with { wake: 'load' };
+	import SharedCount from '#lib/demos/SharedCount.svelte' with { wake: 'load' };
+	import ContentPeek from '#lib/demos/ContentPeek.svelte' with { wake: 'load' };
+	import { Cart } from '#lib/demos/cart-store.svelte.js';
+	import '#lib/styles/widget.css';
 
 
 	// One instance, handed to both islands below.

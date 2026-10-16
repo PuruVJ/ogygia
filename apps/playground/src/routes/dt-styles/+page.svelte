@@ -4,7 +4,7 @@
 	// ogygia writes when it cannot compile a component's scoped CSS), and its `.row` rule restyles
 	// markup it was never meant for. unused.css is 600 rules that match nothing here. The healthy
 	// island's scoped styles are the decoy: devtools and the profiler must name the planted two only.
-	import Healthy from '$lib/dtlab/Healthy.svelte' with { wake: 'load' };
+	import Healthy from '#lib/dtlab/Healthy.svelte' with { wake: 'load' };
 </script>
 
 <svelte:head>

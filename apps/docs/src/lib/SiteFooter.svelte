@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import Logo from '$lib/Logo.svelte';
+	import Logo from '#lib/Logo.svelte';
 
 	let {
 		meta,

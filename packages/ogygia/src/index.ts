@@ -5,9 +5,9 @@
  *
  * ```svelte
  * <script>
- *   import Counter from '$lib/Counter.svelte' with { wake: 'load' };
- *   import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
- *   import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+ *   import Counter from '#lib/Counter.svelte' with { wake: 'load' };
+ *   import Chart from '#lib/Chart.svelte' with { wake: 'visible' };
+ *   import Greeting from '#lib/Greeting.svelte' with { render: 'deferred' };
  * </script>
  * ```
  *

@@ -371,6 +371,9 @@ export interface Failure {
 	message: string;
 	/** its wake → the failure (page clock): the island was loading, and held its turn, meanwhile */
 	span?: [number, number];
+	/** when its hydrate step began (page clock): from here to the failure it held the thread, as a
+	 *  hydrating island does */
+	turn?: number;
 }
 
 export type Rating = 'good' | 'fair' | 'poor';
@@ -1063,6 +1066,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 					if (typeof top === 'number' && vh && top >= vh) continue;
 					busy.push([f.span[0], f.span[1]]);
 				}
+			// …and any failed island's hydrate STEP, for every island: the step held the thread until it
+			// threw (a failing first-screen island's step — its retry against the server copy, its dev
+			// error — read as the scheduler idling while the next island waited)
+			for (const f of failures) if (f.span && typeof f.turn === 'number' && f.turn <= f.span[1]) busy.push([f.turn, f.span[1]]);
+			// …and every long task: the thread was taken (the page's own script, a third party), and no
+			// turn can be handed out inside a task — a planted busy loop on the lab page read as ogygia's
+			// scheduler holding the islands after it
+			for (const t of page.longtasks) busy.push([t.t, t.t + t.ms]);
 			busy.sort((x, y) => x[0] - y[0]);
 			let covered = 0;
 			let at = a;
@@ -1540,7 +1551,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// THE ONE NUMBER (a build): the inlineStyleThreshold that takes the small sheets off the paint,
 	// the profiler's own reckoning over the sheets this browser waited on
 	const tune = held_ms >= 200 ? inline_threshold_tune((page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp).map((r) => ({ url: r.url, kind: r.type, bytes: r.size ?? 0 }))) : null;
-	const tune_text = tune ? `With \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these stylesheets (${(tune.bytes / 1024).toFixed(1)} KB) arrive inside the HTML: ${blocking.length - tune.files} file${blocking.length - tune.files === 1 ? '' : 's'} left to wait on instead of ${blocking.length}.` : '';
+	const tune_text = tune ? `With \`sveltekit({ inlineStyleThreshold: ${tune.threshold} })\` in the vite config, ${tune.files} of these stylesheets (${(tune.bytes / 1024).toFixed(1)} KB) arrive inside the HTML: ${blocking.length - tune.files} file${blocking.length - tune.files === 1 ? '' : 's'} left to wait on instead of ${blocking.length}.` : '';
 	if (fcp_card) {
 		if (held_ms >= 600) fcp_card.severity = 'warn';
 		if (tune_text) fcp_card.fix = `${fcp_card.fix ?? ''} ${tune_text}`.trim();

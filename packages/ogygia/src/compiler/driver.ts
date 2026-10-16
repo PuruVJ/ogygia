@@ -36,12 +36,8 @@ import {
 	generateRuntimeEntrySource,
 	resolveFeatures
 } from './link/runtime-entry.js';
-import {
-	resolveFoucImportSpec,
-	FOUC_CSS_PREFIX,
-	FOUC_SCOPED_PREFIX,
-	type FoucAlias
-} from './fouc-css.js';
+import { FOUC_CSS_PREFIX, FOUC_SCOPED_PREFIX } from './fouc-css.js';
+import { app_file, type AppAlias } from './app-resolve.js';
 import {
 	moduleHasTransportable,
 	svelteModuleHasTransportable,
@@ -51,7 +47,7 @@ import {
 import { rewrite_loaders } from './content/loaders.js';
 import { rewrite_regions } from './content/regions.js';
 import { materialize } from './content/git.js';
-import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT, FOREIGN_HYDRATE_MARK } from './region/emit.js';
+import { rewrite_lake_import_to_placeholder, shim_app_imports, FOREIGN_HYDRATE_MARK } from './region/emit.js';
 
 /** the import that makes an app a federation participant (its island entries keep the foreign-hydrate exports) */
 const FEDERATION_SPEC = 'ogygia/federation';
@@ -189,15 +185,29 @@ const OG_PRESET_QUERY_RE = /[?&]og_preset=([\w-]+)/;
  *  regex — `walk_dep` resets `lastIndex` before each scan). */
 const IMPORT_SPEC_G =
 	/\bfrom\s*['"]([^'"\n]+)['"]|\bimport\s*['"]([^'"\n]+)['"]|\bimport\s*\(\s*['"]([^'"\n]+)['"]/g;
-/** The extensions an extension-less island import may resolve to (bare, then index files). */
-const ISLAND_DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js', '.mjs'];
-
 // Import/export-from specifier extraction for the router-css closure (link/router-css.ts). A cheap
 // regex over raw source — a stray match in a comment/string just fails to resolve later, harmless.
 // Runs once per file in the prescan walk; module-level so it compiles once.
 const MODULE_SPEC_RE =
 	/(?:^|[\n;])\s*(?:import|export)\b[^;'"()]*?from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
 const ROUTER_PKG_SPEC = 'ogygia/router';
+/** Where Kit's `$app` alias points (`resolve.alias` `$app` → `<kit>/src/runtime/app`). */
+const KIT_RUNTIME_APP = '/@sveltejs/kit/src/runtime/app/';
+/**
+ * The island shim for an `$app/*` import, by specifier or by where Kit's alias sent it: Vite's alias
+ * plugin runs before any plugin's resolveId, so an import the transform did not rewrite (a module
+ * that joined the island graph late) arrives as `<kit>/src/runtime/app/state`, `…/state/index.js`.
+ */
+export function app_shim_for(source: string, shims: Record<string, string>): string | null {
+	const direct = shims[source];
+	if (direct) return direct;
+	const at = source.indexOf(KIT_RUNTIME_APP);
+	if (at === -1) return null;
+	let name = source.slice(at + KIT_RUNTIME_APP.length);
+	if (name.endsWith('/index.js')) name = name.slice(0, -'/index.js'.length);
+	else if (name.endsWith('.js')) name = name.slice(0, -'.js'.length);
+	return shims['$app/' + name] ?? null;
+}
 /** flag()/experiment() live on the ROOT export — the flag-site sweep only runs on importers. */
 const OGYGIA_ROOT_SPEC = 'ogygia';
 /** Manifest path for a flag site: package-relative for declared surfaces, root-relative else. */
@@ -466,7 +476,6 @@ export class Compiler {
 		const th0 = P ? performance.now() : 0;
 		const result = transformHost(source, id, {
 			root: ctx.root,
-			libDir: ctx.libDir,
 			readFile: (abs: string) => ctx.read_file(abs),
 			pathModule: path,
 			dev: ctx.is_dev,
@@ -504,7 +513,6 @@ export class Compiler {
 		const ctx = this.#ctx!;
 		return transformTsRegions(source, id, {
 			root: ctx.root,
-			libDir: ctx.libDir,
 			pathModule: path,
 			dev: ctx.is_dev,
 			virtualPathFor: (_hostId: string, iid: string) => ctx.island_virtual_id(iid),
@@ -531,7 +539,6 @@ export class Compiler {
 		const program = this.program;
 		const { registry, island_graph, transportable_modules, runtime_marks } = program;
 		const root = ctx.root;
-		const libDir = ctx.libDir;
 
 		const src_dir = path.join(root, 'src');
 		clean_stale_ogygia_dirs(src_dir);
@@ -712,7 +719,7 @@ export class Compiler {
 	 * thread). (The `?og-region` module-id fork was tried and reverted — it broke Svelte's scoped-CSS
 	 * emission; membership rides OUTSIDE the module id here, the walk only READS.)
 	 *
-	 * Follows relative, `$lib` AND the app's aliases (`kit.alias` / `resolve.alias` — a customer's
+	 * Follows relative, `#…` subpath imports (Kit's `#lib`) AND the app's aliases (`alias` / `resolve.alias` — a customer's
 	 * `$lib_x/utils/boot` import was where the walk used to stop, and its `$app/state` went to whichever
 	 * page loaded first). Bare package specifiers stop it; the lazy resolveId marking stays their
 	 * backstop. Called at prescan for every island, and again in dev for an island registered by a
@@ -743,28 +750,10 @@ export class Compiler {
 	mark_island_closure(componentAbs: string): string[] {
 		const ctx = this.#ctx!;
 		const { island_graph } = this.program;
-		const aliases = ctx.resolve_alias as readonly FoucAlias[];
+		const alias = ctx.resolve_alias as readonly AppAlias[];
 		const added: string[] = [];
-		const resolve_dep = (spec: string, importerAbs: string): string | null => {
-			const base = resolveFoucImportSpec(spec, importerAbs, ctx.libDir, aliases);
-			if (!base) return null; // a bare package specifier — the lazy resolveId marking is the backstop
-			for (const ext of ISLAND_DEP_EXTS) {
-				try {
-					if (fs.statSync(base + ext).isFile()) return base + ext;
-				} catch {
-					/* not this ext */
-				}
-			}
-			for (const ext of ISLAND_DEP_EXTS.slice(1)) {
-				const idx = path.join(base, 'index' + ext);
-				try {
-					if (fs.statSync(idx).isFile()) return idx;
-				} catch {
-					/* not an index */
-				}
-			}
-			return null;
-		};
+		// (a bare package specifier resolves to null — the lazy resolveId marking is the backstop)
+		const resolve_dep = (spec: string, importerAbs: string): string | null => app_file(spec, importerAbs, { alias });
 		const walk = (abs: string) => {
 			const norm = strip_id(abs);
 			if (this.#island_closure_seen.has(norm)) return;
@@ -871,7 +860,7 @@ export class Compiler {
 		// by prescanned module_specs, so profiler-router's type-import of `./index.js` dead-ends
 		// instead of dragging the host graph in.
 		const roots = new Set(
-			router_css_roots(this.program.router_modules, this.program.module_specs, ctx.libDir)
+			router_css_roots(this.program.router_modules, this.program.module_specs)
 		);
 		const sorted = [...roots].sort();
 		if (ctx.is_build) this.#router_css_roots_cache = sorted;
@@ -1043,10 +1032,12 @@ export class Compiler {
 		{
 			ssr,
 			universalHooks,
+			kitCodec = null,
 			resolve
 		}: {
 			ssr: boolean;
 			universalHooks: string | null;
+			kitCodec?: string | null;
 			/** the bundler's resolver (the router-CSS tree walk: compiler/fouc-css.ts) */
 			resolve?: (spec: string, importer: string) => Promise<string | null>;
 		}
@@ -1175,7 +1166,7 @@ export class Compiler {
 			return island_deps_module(ssr, is_dev, path.relative(ctx.root, kit_dirs(ctx.root).out_dir));
 		}
 		if (id === RESOLVED(V_TRANSPORT)) {
-			return transport_module(universalHooks);
+			return transport_module(universalHooks, ssr ? null : kitCodec);
 		}
 		if (id === RESOLVED(V_KIT_TRANSPORT)) {
 			// `ogygia.transport` — the codec cluster only when the app crosses a region/wired value over
@@ -1190,7 +1181,6 @@ export class Compiler {
 			// without a server router — the router's dynamic import then costs nothing.
 			return router_css_module(this.router_css_roots(), {
 				root: ctx.root,
-				lib_dir: ctx.libDir,
 				is_dev,
 				read_file: (p) => ctx.read_file(p),
 				resolve
@@ -1313,9 +1303,7 @@ export class Compiler {
 			// shim paths (defense in depth alongside resolveId island-graph shimming).
 			// SSR keeps the real Kit modules (correct server-rendered page.data).
 			if (!ssr) {
-				src = src.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
-					JSON.stringify(ctx.app_shims['$app/' + name])
-				);
+				src = shim_app_imports(src, ctx.app_shims);
 				// LAKES: swap each lake import for the render-nothing placeholder so the lake
 				// component's JS is excluded from this island's client chunk. Handles default
 				// (`import Lake from '…'`) and named (`import { Lake } from '…'`) forms.
@@ -1404,13 +1392,14 @@ export class Compiler {
 		if (registry_stub) return registry_stub;
 
 		// Island CLIENT graph: shim `$app/*` for the virtual module AND every module it
-		// pulls in (e.g. `$lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
+		// pulls in (e.g. `#lib/PageUrlProbe.svelte` importing `$app/state`). Kit's alias
 		// would otherwise give islands the uninitialized Kit page (`new URL('a:')` → empty
 		// pathname). enforce:'pre' wins over Kit's resolveId. SSR keeps real Kit modules.
 		const importer_id = importer ? strip_id(importer) : undefined;
 		const from_island = importer_id && (registry.has(importer_id) || island_graph.has(importer_id));
-		if (!ssr && from_island && ctx.app_shims[source]) {
-			return ctx.app_shims[source];
+		if (!ssr && from_island) {
+			const shim = app_shim_for(source, ctx.app_shims);
+			if (shim) return shim;
 		}
 
 		// Portable wrappers import `virtual:ogygia/island/<id>` (and hosts import wrappers).
@@ -1478,7 +1467,7 @@ export class Compiler {
 	 * module already in that variant world (its id carries the variant query), and only when the
 	 * resolved target is a local `.ts`/`.js` module that IS a region registry or REACHES one through
 	 * static script imports. The variant world is contagious along script edges only: a registry
-	 * behind a plain helper (`+page.svelte` → `$lib/factory.ts` → `registry.ts`) gets the same
+	 * behind a plain helper (`+page.svelte` → `#lib/factory.ts` → `registry.ts`) gets the same
 	 * treatment as a direct import, while modules that reach no registry stay shared (no copies).
 	 * `.svelte` edges never fork (forking a component's id breaks its scoped CSS). Returns the
 	 * variant id, or `null` to let resolution continue.
@@ -1725,7 +1714,7 @@ export class Compiler {
 		// parsers, for the top-level `page.data` keys it can reach (link/page-keys.ts). Recorded by
 		// the query-less id so the client `writeBundle` can find it from a chunk's `moduleIds`; the
 		// source form is what this pre-transform sees, before the `$app/*` shim rewrite below.
-		if (ctx.is_build && mentions_page_store(code)) {
+		if (ctx.is_build && mentions_page_store(code, ctx.page_modules)) {
 			const clean = id.split('?')[0].split('\\').join('/');
 			const kind = clean.endsWith('.svelte')
 				? 'svelte'
@@ -1733,7 +1722,7 @@ export class Compiler {
 					? 'script'
 					: null;
 			if (kind) {
-				const { keys, reason, pending } = page_data_keys_answer(code, clean, kind);
+				const { keys, reason, pending } = page_data_keys_answer(code, clean, kind, ctx.page_modules);
 				if (keys !== null) program.page_keys.set(clean, keys);
 				if (reason) program.page_key_reasons.set(clean, reason);
 				if (pending.length) program.page_pending.set(clean, pending);
@@ -1946,9 +1935,7 @@ export class Compiler {
 			island_graph.has(id_n) &&
 			(id_n.endsWith('.svelte') || SCRIPT_MODULE_RE.test(id_n))
 		) {
-			const rewritten = out.replace(APP_SHIM_IMPORT, (_m: string, _q: string, name: string) =>
-				JSON.stringify(ctx.app_shims['$app/' + name])
-			);
+			const rewritten = shim_app_imports(out, ctx.app_shims);
 			if (rewritten !== out) {
 				out = rewritten;
 				map = null; // import path rewrite invalidates a prior sourcemap

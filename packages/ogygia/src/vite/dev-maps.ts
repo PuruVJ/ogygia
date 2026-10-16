@@ -39,7 +39,9 @@ type SsrGraph = { getModulesByFile(file: string): Set<SsrNode> | undefined };
 export function install_dev_page_keys(
 	server: ViteDevServer,
 	component_of: (iid: string) => string | null | undefined,
-	root: string
+	root: string,
+	/** the modules Kit's page comes from (page-keys `KIT_PAGE_MODULES` / `LEGACY_PAGE_MODULES`) */
+	page_modules: readonly string[]
 ): void {
 	const ssr = () =>
 		(server as unknown as { environments?: Record<string, { moduleGraph?: SsrGraph }> }).environments
@@ -91,7 +93,7 @@ export function install_dev_page_keys(
 		for (const f of files) {
 			const code = read(f);
 			if (!code) continue;
-			const a = page_data_keys_answer(code, f, kind(f));
+			const a = page_data_keys_answer(code, f, kind(f), page_modules);
 			if (a.keys === 'all' && a.reason) why.push({ file: f, line: a.reason.line, why: a.reason.why });
 			add(a.keys);
 			// `helper(page)`: what the imported helper reads of it (one level, as the build follows)

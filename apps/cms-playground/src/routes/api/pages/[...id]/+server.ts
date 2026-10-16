@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { find_page, page_id } from '$lib/server/db';
+import { find_page, page_id } from '#lib/server/db.js';
 
 /** `GET /api/pages/{category}/{slug}` → one full page (with body), 404 when absent. */
 export const GET = ({ params }) => {

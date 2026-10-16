@@ -8,9 +8,9 @@ related:
 
 <script>
 	import { TabGroup, Tab } from 'ogygia/content';
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
-	import Stopwatch from '$lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
-	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Stopwatch from '#lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
+	import Palette from '#lib/playground/demos/Palette.svelte' with { wake: 'visible' };
 </script>
 
 This page exists to exercise the design system at scale. It uses every heading level, all list types, multiple tables, blockquotes, code in every language the highlighter supports, tabbed panels, and all three live demos. If something looks wrong here, it will look wrong everywhere. Read it top to bottom, or use the on-this-page rail to jump around.
@@ -143,7 +143,7 @@ export async function resolve(slug: string) {
 
 ```svelte
 <script lang="ts">
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 
 	let { title, summary } = $props();
 	let expanded = $state(false);
@@ -283,7 +283,7 @@ A client island holding local state. It rendered on the server showing `0`, then
 
 ```svelte
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 <Counter />
@@ -297,7 +297,7 @@ An island driven by an effect and a timer. Start it, watch it tick, and note tha
 
 ```svelte
 <script>
-	import Stopwatch from '$lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
+	import Stopwatch from '#lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
 </script>
 
 <Stopwatch />
@@ -311,7 +311,7 @@ Drag the slider to rewrite `--og-accent`. The whole page recolors because every 
 
 ```svelte
 <script>
-	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+	import Palette from '#lib/playground/demos/Palette.svelte' with { wake: 'visible' };
 </script>
 
 <Palette />

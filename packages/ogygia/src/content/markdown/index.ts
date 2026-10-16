@@ -1,16 +1,17 @@
 /**
  * Opinionated markdown for Kit content apps: mdsvex + Shiki.
  *
- * Drop into `svelte.config.js` — discovery stays `import.meta.glob` + `format: mdsvex`.
+ * Drop into Kit's config (`sveltekit({...})` in the vite config) — discovery stays
+ * `import.meta.glob` + `format: mdsvex`.
  *
  * ```js
  * import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
  * import { markdown } from 'ogygia/content/markdown';
  *
- * export default {
+ * sveltekit({
  *   extensions: ['.svelte', ...markdown.extensions],
  *   preprocess: [vitePreprocess(), markdown()]
- * };
+ * });
  * ```
  */
 
@@ -321,7 +322,7 @@ function register_island_scanner(
  * composed after it, so islands authored inside `.svx` / `.md` become real islands.
  *
  * Called with **no args** it reads its config from `ogygia({ content: { markdown } })`, so all
- * config lives in the one plugin and the svelte config only needs the value-free call:
+ * config lives in the one plugin and Kit's config only needs the value-free call:
  *
  * ```js
  * extensions: ogygia.extensions(),

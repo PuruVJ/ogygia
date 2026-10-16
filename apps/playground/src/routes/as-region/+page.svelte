@@ -4,9 +4,9 @@
 	//
 	// `{ Ticker, Flag }` are consumed ONLY by asRegion → the transform strips this import from the host
 	// (the island entries import the components themselves, straight from the barrel).
-	import { Ticker, Flag } from '$lib/barrel';
+	import { Ticker, Flag } from '#lib/barrel/index.ts';
 	// `brandConfig` is a NON-component barrel export used normally in the shell → this import stays.
-	import { brandConfig } from '$lib/barrel';
+	import { brandConfig } from '#lib/barrel/index.ts';
 
 	const TickerIsland = import.meta.og.asRegion(Ticker, { wake: 'load' });
 	const FlagIsland = import.meta.og.asRegion(Flag, { wake: 'visible' });

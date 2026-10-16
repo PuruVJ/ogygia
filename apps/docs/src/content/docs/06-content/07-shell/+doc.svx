@@ -20,8 +20,8 @@ Use `DocsShell` when you want a docs layout that operates in one import, and `Bl
 ```svelte
 <script>
 	import { Frame } from 'ogygia/content';
-	import { docs } from '$lib/site.server';   // in a csr=false layout, server-only is fine
-	import MyHeader from '$lib/MyHeader.svelte';
+	import { docs } from '#lib/site.server';   // in a csr=false layout, server-only is fine
+	import MyHeader from '#lib/MyHeader.svelte';
 </script>
 
 <Frame site={docs} header={MyHeader} footer={null}>
@@ -38,7 +38,7 @@ The shells are **compositions of Frame and the public bricks**, not privileged c
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/theme.css';   // the design language (tokens + element styles)
 	import 'ogygia/content/shell.css';   // shell layout (header + sidebar + grid + mobile chrome)
-	import { meta } from '$lib/site.remote';
+	import { meta } from '#lib/site.remote';
 	let { children } = $props();
 
 	const shellMeta = await meta();
@@ -109,7 +109,7 @@ The article layout operates with only a view. No shell is required:
 ```svelte
 <script>
 	import { Doc } from 'ogygia/content';
-	import * as docs from '$lib/site.remote';
+	import * as docs from '#lib/site.remote';
 
 	const view = await docs.page(slug);
 </script>

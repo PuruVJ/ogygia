@@ -8,8 +8,8 @@
 	// ships. (A mark authored ON a csr=true route host is stripped to a plain import — ogygia steps
 	// aside there — so BlockDirect below is Kit's own component: linked, hydrated, no stamp.)
 	import type { Component } from 'svelte';
-	import { block } from '$lib/head-budget/registry';
-	import BlockDirect from '$lib/head-budget/BlockDirect.svelte' with { wake: 'load' };
+	import { block } from '#lib/head-budget/registry.ts';
+	import BlockDirect from '#lib/head-budget/BlockDirect.svelte' with { wake: 'load' };
 
 	const Chosen = block('a') as Component<Record<string, unknown>>;
 </script>

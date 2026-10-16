@@ -1,12 +1,13 @@
 import { sequence } from '@sveltejs/kit/hooks';
-import { redirect, type Handle } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import { handle as ogygiaHandle, document } from 'ogygia/server';
 import { region } from 'ogygia';
 import { setProfilerStore } from 'ogygia/profiler/storage';
 import { sqliteStore } from 'ogygia/profiler/storage/sqlite';
-import DocTest from '$lib/doctest/DocTest.svelte';
-import { ds_ssr } from '$lib/hell/ds-ssr';
-import { scoped_render } from '$lib/restorelab/scoped-render';
+import DocTest from '#lib/doctest/DocTest.svelte';
+import { ds_ssr } from '#lib/hell/ds-ssr.ts';
+import { scoped_render } from '#lib/restorelab/scoped-render.ts';
 
 // DEMO: give the profiler a durable SQLite store so reports survive a restart and the sidebar's
 // shared list fills. Swap for redisStore(...) / postgresStore(process.env.DATABASE_URL) in a real
@@ -42,6 +43,21 @@ const corrupt_detector_region: Handle = async ({ event, resolve }) => {
 			if (start === -1 || end === -1) return html;
 			const block = html.slice(start, end);
 			return html.slice(0, start) + block.replaceAll('<!--[-->', '') + html.slice(end);
+		}
+	});
+};
+
+// KIT-REBUILD fixture (e2e/hole-kit-rebuild.spec.ts): on /hole-kit-rebuild only, a foreign post-SSR
+// pass strips the hydration marker of Boom's `{#if}` from Kit's document — so Kit's hydration hits a
+// mismatch Svelte cannot repair in place, and the document is mounted fresh in the browser.
+const corrupt_kit_rebuild: Handle = async ({ event, resolve }) => {
+	if (!event.url.pathname.startsWith('/hole-kit-rebuild')) return resolve(event);
+	return resolve(event, {
+		transformPageChunk: ({ html, done }) => {
+			if (!done) return html;
+			const boom = html.indexOf('data-boom');
+			const marker = boom === -1 ? -1 : html.indexOf('<!--[-->', boom);
+			return marker === -1 ? html : html.slice(0, marker) + html.slice(marker + '<!--[-->'.length);
 		}
 	});
 };
@@ -128,5 +144,6 @@ export const handle = sequence(
 	}),
 	gap_inside,
 	corrupt_detector_region,
+	corrupt_kit_rebuild,
 	passthrough
 );

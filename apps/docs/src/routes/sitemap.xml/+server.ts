@@ -1,4 +1,4 @@
-import { docs } from '$lib/docs.server';
+import { docs } from '#lib/docs.server.ts';
 
 // A sitemap over every doc page — off the outline's leaves. Prerendered; canonical origin.
 export const prerender = true;

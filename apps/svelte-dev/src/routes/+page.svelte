@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Hero from './_home/Hero.svelte';
-	import { TOPICS } from '$lib/topics';
+	import { TOPICS } from '#lib/topics.ts';
 </script>
 
 <svelte:head>

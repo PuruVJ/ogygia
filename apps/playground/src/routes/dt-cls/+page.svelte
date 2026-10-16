@@ -3,7 +3,7 @@
 	// text and pushes it down. `?hole`: a hole whose answer is far taller than its fallback swaps in
 	// above the same text. Each must be named as the cause of the worst burst of shifts.
 	import { page } from '$app/state';
-	import TallHole from '$lib/dtcls/TallHole.svelte' with { render: 'deferred' };
+	import TallHole from '#lib/dtcls/TallHole.svelte' with { render: 'deferred' };
 	const hole = page.url.searchParams.has('hole');
 </script>
 

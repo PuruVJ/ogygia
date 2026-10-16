@@ -5,7 +5,7 @@
  * derived server-side at deferred-hole time (never via the browser).
  */
 import { federate } from 'ogygia/federation';
-import { env } from '$env/dynamic/private';
+import * as env from '$app/env/private';
 
 /** The shell's session (pretend): a real app reads cookies / its auth layer here. */
 export const session = () => ({ sub: 'puru', roles: ['admin'], locale: 'fr' });

@@ -16,6 +16,7 @@
  * violations surface as build-voice errors naming the file and line. Node-only.
  */
 import { fs, path } from '../host.js';
+import { app_spec_path, probe_file } from '../app-resolve.js';
 import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
 import { og_member } from './wire.js';
@@ -25,7 +26,6 @@ import { BuildCache } from '../../build-cache.js';
 
 // ── regexes
 const REGEX_SPECIAL_G = /[.*+?^${}()|[\]\\]/g;
-const LEADING_SLASH_RE = /^\//;
 
 /** bake's corner of the shared build cache — the transient eval bundles live here (never committed;
  *  written and deleted per bake). All writes go through the cache interface, like the git checkouts. */
@@ -164,90 +164,25 @@ function dead_imports(src: string, imports: ImportDecl[], calls: BakeCall[]): Im
 	);
 }
 
-const RESOLVE_EXTS = ['', '.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.jsx', '.json'];
-const INDEX_EXTS = [
-	'/index.ts',
-	'/index.mts',
-	'/index.js',
-	'/index.mjs',
-	'/index.jsx',
-	'/index.tsx'
-];
-
-/** Resolve a relative specifier against `dir` to an existing absolute FILE path (extension/`index`
- *  probing), or null. */
-function resolve_relative(dir: string, source: string): string | null {
-	return resolve_file(path.resolve(dir, source));
-}
-
 /**
  * The rolldown plugin that serves the virtual eval entry and roots resolution at the REAL module's
- * directory. It resolves — WITH extension probing, so an extensionless TS import lands on `x.ts` —
- * the entry's relative imports (`./data`) against `module_dir`, its `$lib/…` against `<root>/src/lib`
- * (the SvelteKit convention, robust even if the config alias isn't populated yet), and any configured
- * alias. Anything a resolved module then pulls in has a real path and resolves normally.
+ * directory: every app import (relative, alias, `#…` subpath) resolves through the compiler's one
+ * app resolver — the entry standing in for a file in the real module's directory — with extension
+ * probing, so an extensionless TS import lands on `x.ts`. Packages resolve via rolldown.
  */
-function bake_plugin(
-	entry_id: string,
-	entry_code: string,
-	module_dir: string,
-	root: string,
-	aliases: AliasEntry[]
-) {
+function bake_plugin(entry_id: string, entry_code: string, module_dir: string, aliases: AliasEntry[]) {
+	const entry_file = path.join(module_dir, '__ogygia_bake__.js');
 	return {
 		name: 'ogygia-bake-entry',
 		resolveId(source: string, importer: string | undefined) {
 			if (source === entry_id) return entry_id;
-			const from_entry = importer === entry_id || importer === undefined;
-			// Configured aliases (probe the extension on the result so `$lib/x` → `x.ts`).
-			for (const { find, replacement } of aliases) {
-				let mapped: string | null = null;
-				if (typeof find === 'string') {
-					if (source === find) mapped = replacement;
-					else if (source.startsWith(find + '/'))
-						mapped = path.join(replacement, source.slice(find.length + 1));
-				} else if (find.test(source)) {
-					mapped = source.replace(find, replacement);
-				}
-				if (mapped) return resolve_file(mapped) ?? mapped;
-			}
-			// SvelteKit conventions, as a fallback (config aliases may be unset this early).
-			if (source === '$lib' || source.startsWith('$lib/')) {
-				return resolve_file(
-					path.join(root, 'src', 'lib', source.slice('$lib'.length).replace(LEADING_SLASH_RE, ''))
-				);
-			}
-			// The entry's relative imports resolve against the real module's directory.
-			if (from_entry && (source.startsWith('./') || source.startsWith('../'))) {
-				return resolve_relative(module_dir, source);
-			}
-			return null; // node_modules + nested relatives resolve via rolldown (real paths / cwd)
+			const base = app_spec_path(source, importer === entry_id || importer === undefined ? entry_file : importer, aliases);
+			return base === null ? null : (probe_file(base) ?? base);
 		},
 		load(id: string) {
 			return id === entry_id ? entry_code : null;
 		}
 	};
-}
-
-/** Probe an absolute path base to an existing file (extension / `index`), or null. */
-function resolve_file(base: string): string | null {
-	for (const e of RESOLVE_EXTS) {
-		const f = base + e;
-		try {
-			if (fs.statSync(f).isFile()) return f;
-		} catch {
-			/* not this ext */
-		}
-	}
-	for (const e of INDEX_EXTS) {
-		const f = base + e;
-		try {
-			if (fs.statSync(f).isFile()) return f;
-		} catch {
-			/* not this index */
-		}
-	}
-	return null;
 }
 
 /**
@@ -270,7 +205,7 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 		configFile: false,
 		logLevel: 'silent',
 		root: module_dir,
-		// Probe TS/JS extensions so an alias/tsconfig-path (`$lib/x`) or bare relative resolves to
+		// Probe TS/JS extensions so an alias/tsconfig-path (`#lib/x`) or bare relative resolves to
 		// `x.ts` etc. — the app corpus is TypeScript with extensionless imports.
 		resolve: { extensions: ['.ts', '.tsx', '.mts', '.js', '.mjs', '.jsx', '.json', '.node'] },
 		// Everything (app TS, npm deps) is bundled in so the emitted file is self-contained and its
@@ -284,7 +219,7 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 			rollupOptions: {
 				input: ENTRY,
 				external: (source: string) => source.startsWith('node:'),
-				plugins: [bake_plugin(ENTRY, entry_code, module_dir, opts.root, opts.alias)],
+				plugins: [bake_plugin(ENTRY, entry_code, module_dir, opts.alias)],
 				output: { format: 'esm', exports: 'named' }
 			}
 		}
@@ -324,10 +259,8 @@ async function evaluate(entry_code: string, id: string, opts: BakeOptions): Prom
 export type BakeOptions = {
 	/** Content hash of the eval entry — names/isolates the bundle in the cache. */
 	hash: string;
-	/** `resolve.alias` entries so a baked `fn` can import `$lib/…`. */
+	/** `resolve.alias` entries so a baked `fn` can import an app alias. */
 	alias: AliasEntry[];
-	/** Project root — anchors the `$lib` convention fallback. */
-	root: string;
 };
 
 /**

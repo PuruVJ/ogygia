@@ -27,7 +27,8 @@
  * All state lives in memory; nothing is written to disk.
  */
 
-import type { Handle, RequestEvent } from '@sveltejs/kit';
+import type { RequestEvent } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import {
 	analyze,
 	analyze_heap,
@@ -797,10 +798,10 @@ const TRAILING_SLASH_RE = /\/$/;
 /** a WebAssembly script "file" as V8 names it: `/wasm/00034eea`, `wasm://wasm/…` */
 const WASM_FRAME_RE = /^(?:wasm:\/\/|\/wasm\/)|[/\\]wasm\/[0-9a-f]+$/;
 /** a resolved caller that lives in node_modules or Kit's runtime source: the framework, not the app */
-// Kit's runtime as its sourcemap spells it (`runtime/server/…`, `runtime/telemetry/record_span.js`
-// in newer Kit, which wraps every load)
+// Kit's runtime as its sourcemap spells it (`runtime/server/…`, `runtime/app/…`, and
+// `exports/internal/server/…` — its request store and `telemetry.js`, which wraps every load)
 const FRAMEWORK_SOURCE_RE =
-	/[/\\]node_modules[/\\]|(?:^|[/\\])runtime[/\\](?:server|app|telemetry)[/\\]/;
+	/[/\\]node_modules[/\\]|(?:^|[/\\])(?:runtime[/\\](?:server|app)|exports[/\\]internal[/\\]server)[/\\]/;
 const NODE_MODULES_RE = /[/\\]node_modules[/\\]/;
 /** a Kit endpoint file in a resolved caller string (`+server.ts`, or its built `_server.ts.js`) */
 const SERVER_ROUTE_FILE_RE = /[/\\](?:\+server\.[jt]s|_server\.[jt]s\.js):\d+/;
@@ -1930,7 +1931,7 @@ class Profiler {
 			// `event.fetch`, a bundled dependency) is not the app's caller either — the next frame
 			// of the call chain is
 			// (the FULL resolved path too: the short one drops `node_modules/` — Kit's
-			// `exports/internal/event.js`, bundled into an adapter's own chunks, maps back there)
+			// `exports/internal/server/event.js`, bundled into an adapter's own chunks, maps back there)
 			// (only `node_modules/` there: an app folder named `runtime/server` is still the app's)
 			if (FRAMEWORK_SOURCE_RE.test(file) || (m && NODE_MODULES_RE.test(m.source)))
 				return undefined;
@@ -3384,7 +3385,7 @@ class Profiler {
 					const text = read(rel);
 					if (text) files.push({ path: join(process.cwd(), 'src', rel), file: rel, text });
 				}
-				// …and the app modules they import, one step (a `$lib` helper that reads a file per
+				// …and the app modules they import, one step (a `#lib` helper that reads a file per
 				// request is the common case): each found once, at most 30
 				const own = new Set(files.map((f) => f.file));
 				for (const f of files.slice()) {
@@ -6027,7 +6028,7 @@ class Profiler {
 
 		// A REMOTE FUNCTION CALL: Kit's `url` is the page that asked (a header), `/` when none did (a
 		// server render reading a `prerender` function's answer over HTTP): its own address is the request's
-		const remote = (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
+		const remote = event.isRemoteRequest;
 		let remote_url: URL | null = null;
 		if (remote)
 			try {
@@ -6127,7 +6128,7 @@ class Profiler {
 		// (one closure per attributed request; nothing on an idle request).
 		if (ctx && this.#wrap_event_fetch && typeof event.fetch === 'function') {
 			try {
-				event.fetch = this.#wrap_event_fetch(event.fetch);
+				(event as { fetch: typeof fetch }).fetch = this.#wrap_event_fetch(event.fetch);
 			} catch {
 				// a frozen event (a test double) — the global patch still covers real HTTP
 			}
@@ -6505,7 +6506,7 @@ function round2(n: number): number {
 
 /**
  * The module (src-relative, no extension: `lib/inferno/catalog`) a file imports `name` from — its
- * `import { name } from '$lib/…'` or `'./…'` — or the file itself when it declares it. Undefined for
+ * `import { name } from '#lib/…'` or `'./…'` — or the file itself when it declares it. Undefined for
  * a package import, or a name it cannot place. Plain text, no regex.
  */
 /**
@@ -6574,7 +6575,7 @@ function imported_from(src: string, name: string, file: string): string | undefi
 		const q0 = Math.max(l.lastIndexOf("'", q - 1), l.lastIndexOf('"', q - 1));
 		const spec = q0 !== -1 && q > q0 ? l.slice(q0 + 1, q) : '';
 		const bare = (p: string) => (p.endsWith('.ts') || p.endsWith('.js') ? p.slice(0, -3) : p);
-		if (spec.startsWith('$lib/')) return bare(`lib/${spec.slice(5)}`);
+		if (spec.startsWith('#lib/')) return bare(`lib/${spec.slice(5)}`);
 		if (spec.startsWith('.')) {
 			const parts = file.split('/').slice(0, -1);
 			for (const seg of spec.split('/')) {

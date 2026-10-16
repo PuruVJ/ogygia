@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Tick from '$lib/Tick.svelte' with { wake: 'load' };
+	import Tick from '#lib/Tick.svelte' with { wake: 'load' };
 	let { data } = $props();
 </script>
 

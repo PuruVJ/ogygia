@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 
 	let time = $state(new Date().toLocaleTimeString());
 	let ticks = $state(0);

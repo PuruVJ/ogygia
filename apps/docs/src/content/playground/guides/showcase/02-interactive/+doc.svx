@@ -7,9 +7,9 @@ related:
 ---
 
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
-	import Stopwatch from '$lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
-	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Stopwatch from '#lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
+	import Palette from '#lib/playground/demos/Palette.svelte' with { wake: 'visible' };
 </script>
 
 This page is a showcase. Three live islands sit inside ordinary prose, each one hydrating on its own when it scrolls into view. Between them, everything you read is static server-rendered HTML that never re-runs. That contrast — live spots in a calm document — is the whole idea, and here it is in action.
@@ -34,7 +34,7 @@ It is placed with a single import and a single tag:
 
 ```svelte
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 <Counter />
@@ -62,7 +62,7 @@ Same placement pattern, same wake hint:
 
 ```svelte
 <script>
-	import Stopwatch from '$lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
+	import Stopwatch from '#lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
 </script>
 
 <Stopwatch />
@@ -95,7 +95,7 @@ Placed the same way as the others:
 
 ```svelte
 <script>
-	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
+	import Palette from '#lib/playground/demos/Palette.svelte' with { wake: 'visible' };
 </script>
 
 <Palette />

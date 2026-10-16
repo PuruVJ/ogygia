@@ -1539,17 +1539,20 @@ export function beacon_nav(n: NavRec): void {
 	resend_soon();
 }
 
-export function beacon_failed(el: Element, message?: string, since?: number): void {
+export function beacon_failed(el: Element, message?: string, since?: number, turn?: number): void {
 	const o = owner();
-	if (o) return o.beacon_failed(el, message, since);
+	if (o) return o.beacon_failed(el, message, since, turn);
 	if (!collecting()) return;
 	const fp = el.getAttribute('data-og-fp');
 	if (!fp) return;
 	failed_fps.set(fp, (message ?? '').slice(0, 300));
 	// its wake → now: it was loading (and held the turns of islands below the fold) meanwhile
 	if (typeof since === 'number') failed_spans.set(fp, [r2(since), r2(performance.now())]);
+	// its hydrate step → now: it held the thread, as a hydrating island does
+	if (typeof turn === 'number') failed_turns.set(fp, r2(turn));
 }
 const failed_spans = new Map<string, [number, number]>();
+const failed_turns = new Map<string, number>();
 
 const MEASURED_TYPES = ['layout-shift', 'longtask', 'event', 'largest-contentful-paint', 'long-animation-frame'];
 /** whether this browser can observe an entry type */
@@ -1719,7 +1722,13 @@ function visit_regions(): Record<string, unknown>[] {
 				...(el.getAttribute('wake') ? { wake: el.getAttribute('wake')! } : {}),
 				...(el.getAttribute('render') === 'defer' ? { defer: true } : {}),
 				...(el.hasAttribute('data-hydrated') ? { hydrated: true } : {}),
-				...(failed !== undefined ? { failed, ...(failed_spans.has(fp) ? { failed_span: failed_spans.get(fp) } : {}) } : {}),
+				...(failed !== undefined
+					? {
+							failed,
+							...(failed_spans.has(fp) ? { failed_span: failed_spans.get(fp) } : {}),
+							...(failed_turns.has(fp) ? { failed_turn: failed_turns.get(fp) } : {})
+						}
+					: {}),
 				top: Math.round(box.top + sy),
 				height: Math.round(box.height),
 				// (no box of its own nor a child's: it draws nothing on this screen — or, headless, it never
@@ -2227,6 +2236,7 @@ export function _reset_beacon(): void {
 	opted = undefined;
 	failed_fps.clear();
 	failed_spans.clear();
+	failed_turns.clear();
 	visit_navs = [];
 	first_nav_t = undefined;
 	snapshot_firsts = 0;

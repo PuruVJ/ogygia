@@ -3,7 +3,7 @@
 	// mutates it. Proves the drop-in setContext bridged a LIVE instance, not a snapshot: bumping here
 	// repaints every reader that shares it.
 	import { getContext } from 'svelte';
-	import type { SharedCounter } from '$lib/counter-object.svelte.js';
+	import type { SharedCounter } from '#lib/counter-object.svelte.js';
 
 	const room = getContext<SharedCounter | undefined>('room');
 </script>
