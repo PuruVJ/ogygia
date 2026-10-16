@@ -16,6 +16,7 @@
  * side-channel and the page is measured from the start (runtime/beacon.ts).
  */
 import { devtools_switched_on, switch_in_url, without_switch, write_switch } from './switch.js';
+import { TESTING_ENGINE_VERSION } from './testing-version.js';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
@@ -134,7 +135,8 @@ function after_load_idle(fn: () => void): void {
  * mismatch.
  */
 export interface OgygiaTestingApi {
-	version: 1;
+	/** the report shape (testing-version.ts) */
+	version: number;
 	page(): Promise<unknown>;
 	/** `key_attr`: the attribute that names an island instance (see testing-engine.ts) */
 	hydration(key_attr?: string): Promise<unknown>;
@@ -152,7 +154,7 @@ function install_testing_api(): void {
 	if (window.__ogygia_testing) return;
 	const engine = () => import('./testing-engine.js');
 	window.__ogygia_testing = {
-		version: 1,
+		version: TESTING_ENGINE_VERSION,
 		page: async () => (await engine()).page_json(),
 		hydration: async (key_attr) => (await engine()).hydration_json(key_attr),
 		record_start: async () => (await engine()).record_start(),

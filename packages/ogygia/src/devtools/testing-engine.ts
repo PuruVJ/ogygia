@@ -10,6 +10,8 @@ import { analyze_session, session_timeline, type Ref } from './session-insights.
 import { region_name_by_fp } from './regions.js';
 import { snapshot } from './bus.js';
 import { ensure_region_names } from './names.js';
+import { TESTING_ENGINE_VERSION } from './testing-version.js';
+import { nearest_attr } from './nearest-attr.js';
 
 export async function page_json() {
 	await ensure_region_names();
@@ -28,13 +30,15 @@ export async function page_json() {
 		cpu_state: v.page.cpu.state,
 		cpu_off: v.page.cpu.off ?? null,
 		// what this browser cannot measure: a test's "no findings" means less there
-		unmeasured: v.unmeasured
+		unmeasured: v.unmeasured,
+		engine: { version: TESTING_ENGINE_VERSION }
 	};
 }
 
-/** Each island's report, keyed per INSTANCE: the value of `key_attr` on the island or its nearest
- *  ancestor that has it (an id the app renders, e.g. its CMS block's), else `Name#n`, the n-th island
- *  of that name in document order — the same across builds while the page keeps its layout. */
+/** Each island's report, keyed per INSTANCE: the value of `key_attr` on the island or its NEAREST
+ *  ancestor that has it, across shadow roots (an id the app renders, e.g. its CMS block's), else
+ *  `Name#n`, the n-th island of that name in document order. Two islands under the same keyed
+ *  element are told apart as `key`, `key#2`, … in document order. */
 export async function hydration_json(key_attr?: string) {
 	await ensure_region_names();
 	const report = hydration_report();
@@ -44,13 +48,18 @@ export async function hydration_json(key_attr?: string) {
 		.sort((a, b) => (a.el && b.el && a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_PRECEDING ? 1 : -1));
 	const keys = new Map<string, string>();
 	const count = new Map<string, number>();
+	const used = new Map<string, number>();
 	for (const { i, el } of in_order) {
 		const n = (count.get(i.name) ?? 0) + 1;
 		count.set(i.name, n);
-		const own = key_attr && el ? el.closest(`[${CSS.escape(key_attr)}]`)?.getAttribute(key_attr) : null;
-		keys.set(i.fp, own || `${i.name}#${n}`);
+		const own = key_attr && el ? nearest_attr(el, key_attr) : null;
+		if (own) {
+			const k = (used.get(own) ?? 0) + 1;
+			used.set(own, k);
+			keys.set(i.fp, k === 1 ? own : `${own}#${k}`);
+		} else keys.set(i.fp, `${i.name}#${n}`);
 	}
-	return { ...report, islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
+	return { ...report, engine: { version: TESTING_ENGINE_VERSION }, islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
 }
 
 export function record_start(): boolean {
@@ -72,11 +81,23 @@ export async function record_stop(blocked: BlockedNavigation[] = []) {
 	await ensure_region_names();
 	const names = session_names(data, (fp) => region_name_by_fp(fp));
 	const report = analyze_session(data, names, location.href);
-	// each blocked navigation with the input just before it: what made the page try to leave
+	// each blocked navigation with what started it: the navigation the page saw start for that URL
+	// (its link or form, or the input being handled then — exact), else, where the browser has no
+	// Navigation API, the last input before it (`approx`)
 	const inputs = [...data.clicks, ...data.interactions].sort((a, b) => a.t - b.t);
+	const seen = [...(data.navs ?? [])];
 	const navigations = blocked.map((n) => {
+		let best = -1;
+		for (let k = 0; k < seen.length; k++) {
+			if (seen[k].url !== n.url) continue;
+			if (best === -1 || (n.t !== null && Math.abs(seen[k].t - n.t) < Math.abs(seen[best].t - n.t))) best = k;
+		}
+		if (best !== -1) {
+			const [nav] = seen.splice(best, 1);
+			return { url: n.url, t: nav.t, after: nav.source, island: nav.fp ? names(nav.fp) : null, approx: false };
+		}
 		const before = n.t === null ? undefined : inputs.filter((x) => x.t <= n.t!).at(-1);
-		return { url: n.url, t: n.t, after: before?.target ?? null, island: before?.fp ? names(before.fp) : null };
+		return { url: n.url, t: n.t, after: before?.target ?? null, island: before?.fp ? names(before.fp) : null, approx: true };
 	});
 	for (const n of navigations)
 		report.findings.push({
@@ -105,6 +126,7 @@ export async function record_stop(blocked: BlockedNavigation[] = []) {
 			return { ...f, names: [...new Set(named)] };
 		}),
 		navigations,
+		engine: { version: TESTING_ENGINE_VERSION },
 		timeline: session_timeline(data, names).map((l) => ({ ...l, items: l.items.map(({ ref: _ref, ...it }) => it) })),
 		unmeasured: unmeasured(data.cpu_off)
 	};

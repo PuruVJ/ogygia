@@ -7,7 +7,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test as base, expect as baseExpect } from '@playwright/test';
-import { withOgygia, compare, toMarkdown, checkBudget } from '../packages/ogygia/dist/testing/index.js';
+import { withOgygia, compare, toMarkdown, checkBudget, createOgygia, playwrightDriver, turnOnDevtools } from '../packages/ogygia/dist/testing/index.js';
 import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const { test, expect } = withOgygia(base, baseExpect);
@@ -133,10 +133,47 @@ test('record({ blockNavigation }): a click that would load another document is h
 		{ blockNavigation: true }
 	);
 	expect(await page.evaluate(() => performance.timeOrigin), 'the page stayed').toBe(origin);
+	expect(session.engine.version).toBe(2);
 	expect(session.navigations).toHaveLength(1);
 	expect(session.navigations[0].url).toContain('/dt-lab');
+	expect(session.navigations[0]).toMatchObject({ approx: false });
 	expect(session.navigations[0].after).toContain('leave');
 	expect(session.findings.find((f) => f.code === 'navigation-blocked')?.message).toContain('/dt-lab');
+});
+
+test('a reload in a click handler is named by the button that ran it, run after run (the exported driver)', async ({ page, baseURL }) => {
+	test.setTimeout(120_000);
+	// (a caller holding its own pages: the driver withOgygia builds, with a hook on each held load)
+	const held: string[] = [];
+	await turnOnDevtools(page, baseURL);
+	const og = createOgygia(playwrightDriver(page, { baseURL, onNavigationHeld: (n) => held.push(n.url) }));
+	await page.goto('/dt-session');
+	await page.waitForTimeout(9000);
+	await page.evaluate(() => {
+		const b = Object.assign(document.createElement('button'), { textContent: 'Login/Register' });
+		b.setAttribute('data-login', '');
+		b.onclick = () => location.reload();
+		document.body.append(b);
+		// an empty button beside it, clicked first: the input the old guess could pick
+		const e = document.createElement('button');
+		e.setAttribute('data-empty', '');
+		document.body.append(e);
+	});
+	for (let run = 0; run < 3; run++) {
+		const session = await og.record(
+			async () => {
+				await page.locator('[data-empty]').click();
+				await page.locator('[data-login]').click();
+				await page.locator('[data-empty]').click();
+				await page.waitForTimeout(300);
+			},
+			{ blockNavigation: true }
+		);
+		expect(session.navigations, `run ${run}`).toHaveLength(1);
+		expect(session.navigations[0], `run ${run}`).toMatchObject({ approx: false });
+		expect(session.navigations[0].after, `run ${run}`).toContain('Login/Register');
+	}
+	expect(held).toHaveLength(3);
 });
 
 test.describe('a recording whose page leaves for a document with no testing API', () => {

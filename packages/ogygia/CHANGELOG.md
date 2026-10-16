@@ -12,9 +12,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with the input before it (a `navigation-blocked` finding).
-- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, CLS) and vitals that moved past a noise threshold (`compare(base, head, { noise })`).
-- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute your app renders); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
+- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with what started it, seen as it began (the link, form or input being handled; `approx` where the browser cannot say).
+- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, blocked navigations, CLS) and vitals past a noise threshold (`compare(base, head, { noise })`), and take several runs a side (`{ test, runs }`): load signals by median, session signals only when every head run has them and no base run does.
+- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute on it or its nearest ancestor, across shadow roots); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
+- `ogygia/testing`: `playwrightDriver(page, { onNavigationHeld })` and `turnOnDevtools(page, baseURL)`, the fixture's own pieces, for a test that holds its pages itself.
+- `ogygia/testing`: every report names the page's testing engine (`engine.version`); against a site on an older ogygia, `record()` fills in `navigations` from the loads it held and warns once.
+
+### Changed
+
+- `OgygiaDriver.evaluate` is loosely typed, so a driver's `page.evaluate` fits without a cast.
+- A pkg.pr.new preview is versioned `<next patch>-next.<commit>`, never the release it was built after.
 
 ### Fixed
 
