@@ -64,9 +64,38 @@ session.navigations; // [{ url: 'https://…/products', after: 'button.filter "F
 
 Each island in `hydration()` has a `key` for its instance, so a diff can say which carousel broke: `Carousel#2`, the second island of that name in page order. That number moves when an island is added earlier on the page. For a key that survives that, give the fixture `ogygiaOptions: { islandKey: 'data-block-id' }`: each island is keyed by that attribute on itself or its nearest ancestor that has it, across shadow roots (an island inside a web component finds the block around the component). Two islands under the same keyed element are `id` and `id#2`. Each island also carries `t0` and `done`, when it began to wake and when it could answer, in ms on the page's clock, so one report tells which step of a session woke it. Session findings carry `names`, the islands they point at, like page findings.
 
+### Changed, but how?
+
+A `changed` island says what kind of change it was. `attributesOnly: true` means the same elements and text, with only attributes different, listed in `attributes` as `{ tag, name, from, to }`. That is often not the app rendering differently: a web component setting its own `tabindex` or `aria-*` as it upgrades, or an inline style set and cleared. `inputDuringHydration: true` means a pointer, a key press or focus landed on the island while it hydrated, so its DOM may have answered that input. Let either through in a matcher, or leave chosen attribute changes out of the report altogether:
+
+```ts
+expect(await ogygia.hydration()).toHydrateCleanly({ allowAttributeChanges: true, allowInput: true });
+
+// playwright.config.ts: these read `clean`, with what was left out in `ignored`
+use: { ogygiaOptions: { ignoreAttributes: [{ tag: /^qds-/, name: /^(tabindex|aria-)/ }, { name: 'style', value: '' }] } }
+```
+
+A rule matches the element's tag, the attribute's name and its new value (its old one when it was removed). A string matches exactly, and a RegExp by test.
+
+### What measuring costs, and lean testing
+
+Measuring isn't free. Devtools checks each island's markup as it hydrates, builds its report, and loads the testing engine. A visitor with devtools off pays none of that. `page().self` says what it cost: `script_ms` is the main-thread time of ogygia's own measuring so far (by `phases`), and `bytes` is the decoded size of the testing engine's files. Subtract both from a CPU or JS-weight measurement.
+
+Lean testing goes further. With `ogygiaOptions: { lean: true }` (the `og_testing=lean` cookie beside `og_devtools=on`, or `?og-testing=lean`), the page runs the testing API and nothing else of devtools: no launcher, no dock, no watcher of its timers, no event side-channel in its HTML. It loads what it loads with devtools off, plus the testing engine when a test first asks. Findings that need the server's events are not there in that mode. Every report says which mode ran (`engine.lean`), and an engine before version 3 ignores the cookie and runs full devtools.
+
 ### When the site runs an older ogygia
 
-The reports are built by the page's testing engine, which ships with the site's build, not with your test's `ogygia` package. A check that measures an older deploy (a baseline) next to a new preview gets older reports from it. Every report says which engine answered (`report.engine.version`; 2 is current), and the first older one logs a warning. What the test side knows is filled in: `navigations` from the loads it held back (with `approx: true`), `names: []` on findings. Instance keys and `counts.cls` are absent there, and `compare` then tallies hydration by name and skips the session's CLS rather than report a false move.
+The reports are built by the page's testing engine, which ships with the site's build, not with your test's `ogygia` package. A check that measures an older deploy (a baseline) next to a new preview gets older reports from it. Every report says which engine answered (`report.engine.version`; 3 is current), and the first older one logs one warning per site for the whole run. What the test side knows is filled in: `navigations` from the loads it held back (with `approx: true`), `names: []` on findings. Instance keys and `counts.cls` are absent there, and `compare` then tallies hydration by name and skips the session's CLS rather than report a false move.
+
+What each engine version detects:
+
+| Version | Added | Detection |
+| --- | --- | --- |
+| 1 (0.8.2) | | |
+| 2 | instance `key`, `t0` / `done`, `navigations`, finding `names`, `counts.cls` | A router navigation that never swapped the page no longer starts a new page for `page()`. Hydration status as in 1. |
+| 3 | `attributesOnly`, `attributes`, `inputDuringHydration`, `ignoreAttributes`, `self`, lean testing | Hydration status as in 1 and 2. The new fields only say what kind of change it was. |
+
+So an island that reads `clean` on one engine and `changed` on another differed in that run. Input landing while it hydrated is the usual cause, and version 3 flags it.
 
 ## The server, over the same actions
 

@@ -12,10 +12,33 @@ import { snapshot } from './bus.js';
 import { ensure_region_names } from './names.js';
 import { TESTING_ENGINE_VERSION } from './testing-version.js';
 import { nearest_attr } from './nearest-attr.js';
+import { charge, own_cost } from '../runtime/own-cost.js';
+import { apply_attr_rules, type AttrRule } from './attr-rules.js';
+import { testing_lean } from './switch.js';
+
+/** Which engine answered, and whether in lean testing (switch.ts): on every report. */
+const engine = () => ({ version: TESTING_ENGINE_VERSION, lean: testing_lean() });
+
+/** The decoded size of the engine's own files: what the page fetched while its import ran (ui.ts). */
+let engine_bytes = 0;
+export function note_engine_files(from: number, to: number): void {
+	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+		if (r.startTime >= from && r.startTime <= to && (r.initiatorType === 'script' || r.initiatorType === 'link' || r.initiatorType === 'other')) engine_bytes += r.decodedBodySize || 0;
+}
+
+/** What ogygia's measuring cost this page, for a test to subtract: the main-thread time of its own work
+ *  (checking islands as they hydrate, building the visit, the testing reports — runtime/own-cost.ts)
+ *  and the decoded bytes of the testing engine's files. No visitor with devtools off pays either. */
+function self_cost(): { script_ms: number; bytes: number; phases: Record<string, number> } {
+	const c = own_cost();
+	return { script_ms: c.ms, bytes: engine_bytes, phases: c.phases };
+}
 
 export async function page_json() {
 	await ensure_region_names();
+	const c0 = performance.now();
 	const v = read_page();
+	charge('report', c0);
 	if (!v) return null;
 	return {
 		url: location.pathname,
@@ -31,7 +54,8 @@ export async function page_json() {
 		cpu_off: v.page.cpu.off ?? null,
 		// what this browser cannot measure: a test's "no findings" means less there
 		unmeasured: v.unmeasured,
-		engine: { version: TESTING_ENGINE_VERSION }
+		self: self_cost(),
+		engine: engine()
 	};
 }
 
@@ -39,9 +63,19 @@ export async function page_json() {
  *  ancestor that has it, across shadow roots (an id the app renders, e.g. its CMS block's), else
  *  `Name#n`, the n-th island of that name in document order. Two islands under the same keyed
  *  element are told apart as `key`, `key#2`, … in document order. */
-export async function hydration_json(key_attr?: string) {
+export async function hydration_json(key_attr?: string, ignore: AttrRule[] = []) {
 	await ensure_region_names();
-	const report = hydration_report();
+	const base = hydration_report();
+	// attribute changes a test ignores: an island whose every difference is one reads `clean`
+	const report = {
+		...base,
+		islands: base.islands.map((i) => {
+			if (!i.attributesOnly || !ignore.length || !i.attributes) return i;
+			const { left, ignored } = apply_attr_rules(i.attributes, ignore);
+			if (!ignored.length) return i;
+			return left.length ? { ...i, attributes: left, ignored } : { ...i, status: 'clean' as const, attributesOnly: false, attributes: null, diff: null, ignored };
+		})
+	};
 	const els = new Map(hydration_rows().rows.map((r) => [r.fp, r.el]));
 	const in_order = report.islands
 		.map((i) => ({ i, el: els.get(i.fp) }))
@@ -59,7 +93,7 @@ export async function hydration_json(key_attr?: string) {
 			keys.set(i.fp, k === 1 ? own : `${own}#${k}`);
 		} else keys.set(i.fp, `${i.name}#${n}`);
 	}
-	return { ...report, engine: { version: TESTING_ENGINE_VERSION }, islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
+	return { ...report, engine: engine(), islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
 }
 
 export function record_start(): boolean {
@@ -126,7 +160,7 @@ export async function record_stop(blocked: BlockedNavigation[] = []) {
 			return { ...f, names: [...new Set(named)] };
 		}),
 		navigations,
-		engine: { version: TESTING_ENGINE_VERSION },
+		engine: engine(),
 		timeline: session_timeline(data, names).map((l) => ({ ...l, items: l.items.map(({ ref: _ref, ...it }) => it) })),
 		unmeasured: unmeasured(data.cpu_off)
 	};

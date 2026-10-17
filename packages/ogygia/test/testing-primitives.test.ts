@@ -62,6 +62,14 @@ describe('matchers', () => {
 		expect(r.message()).toContain('Clock: changed — −server +browser');
 		expect(ogygiaMatchers.toHydrateCleanly(hyd, { allow: ['changed'] }).pass).toBe(true);
 	});
+	it('toHydrateCleanly can let attribute-only changes, or changes under input, through', () => {
+		const hyd = (attributesOnly: boolean, inputDuringHydration: boolean) =>
+			({ kind: 'hydration', measured: true, islands: [{ fp: 'a', name: 'SearchBar', wake: 'idle', status: 'changed', reason: '', diff: null, attributesOnly, inputDuringHydration }] }) as unknown as OgygiaReport;
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(true, false)).pass).toBe(false);
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(true, false), { allowAttributeChanges: true }).pass).toBe(true);
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(false, false), { allowAttributeChanges: true }).pass).toBe(false);
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(false, true), { allowInput: true }).pass).toBe(true);
+	});
 });
 
 describe('compare / toMarkdown', () => {
@@ -185,7 +193,7 @@ describe('createOgygia', () => {
 		await expect(o.page()).rejects.toThrow('devtools: true');
 	});
 	/** A page driver over a fake in-page API: `present()` says whether the API is in the page now. */
-	const fake = (api: Record<string, (...a: unknown[]) => unknown>, present: () => boolean = () => true, version = 2) => ({
+	const fake = (api: Record<string, (...a: unknown[]) => unknown>, present: () => boolean = () => true, version = 3) => ({
 		evaluate: async (fn: unknown, arg: unknown) => {
 			if (arg === null) return (String(fn).includes('location') ? 'http://app.test/elsewhere' : present()) as never;
 			const [n, a] = arg as [string, unknown[]];
@@ -253,6 +261,28 @@ describe('createOgygia', () => {
 		} finally {
 			console.warn = warn;
 		}
+	});
+	it('the older-engine warning is said once per site for the whole process, not per page', async () => {
+		const warn = console.warn;
+		const warnings: string[] = [];
+		console.warn = (m: string) => warnings.push(m);
+		try {
+			for (let n = 0; n < 3; n++) await createOgygia(fake({ settled: () => true }, () => true, 2)).settled();
+			expect(warnings.filter((w) => w.includes('(version 2'))).toHaveLength(1);
+		} finally {
+			console.warn = warn;
+		}
+	});
+	it('ignoreAttributes crosses into the page as plain data (a RegExp as its source)', async () => {
+		let asked: unknown[] = [];
+		const o = createOgygia(fake({ settled: () => true, hydration: (...a) => ((asked = a), { measured: true, islands: [] }) }), {
+			ignoreAttributes: [{ tag: /^qds-/i, name: /^(tabindex|aria-)/ }, { name: 'style', value: '' }]
+		});
+		await o.hydration();
+		expect(asked[1]).toEqual([
+			{ tag: { re: '^qds-', flags: 'i' }, name: { re: '^(tabindex|aria-)', flags: '' }, value: undefined },
+			{ tag: undefined, name: 'style', value: '' }
+		]);
 	});
 	it('hydration() asks the page to key islands by the app’s attribute', async () => {
 		let asked: unknown;

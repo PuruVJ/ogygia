@@ -40,7 +40,7 @@ import type { SessionReport } from '../devtools/session-insights.js';
 import type { HydrationStatus } from '../devtools/hydration.js';
 import type { HtmlDiff } from '../devtools/html-diff.js';
 import { assets_diff } from '../profiler/page-assets.js';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON } from '../devtools/switch.js';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN } from '../devtools/switch.js';
 import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.js';
 import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 
@@ -49,6 +49,10 @@ import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestO
 export interface OgygiaPageReport {
 	kind: 'page';
 	engine: OgygiaEngine;
+	/** what MEASURING cost this page, which no visitor with devtools off pays — subtract it: `script_ms`,
+	 *  the main-thread time of ogygia's own measuring so far (by `phases`); `bytes`, the decoded size of
+	 *  the testing engine's files. Engine 3 */
+	self?: { script_ms: number; bytes: number; phases: Record<string, number> };
 	url: string;
 	nav: { to: string; t: number } | null;
 	vitals: RatedVital[];
@@ -67,6 +71,9 @@ export interface OgygiaPageReport {
  *  package (`version` 1: 0.8.2, before keys, navigations, finding names and `counts.cls`). */
 export interface OgygiaEngine {
 	version: number;
+	/** the page ran lean testing (`og_testing=lean`): the testing API and nothing else of devtools.
+	 *  Absent from an engine before version 3 (it ran full devtools whatever the cookie said) */
+	lean?: boolean;
 }
 
 export interface OgygiaHydrationReport {
@@ -87,6 +94,16 @@ export interface OgygiaHydrationReport {
 		 *  start; null if it has not woken) — which of a test's steps woke it. Absent before engine 2 */
 		t0?: number | null;
 		done?: number | null;
+		/** a `changed` island whose only differences are attributes (the same elements and text: often a
+		 *  custom element setting its own as it upgrades); false when text or elements differ. Engine 3 */
+		attributesOnly?: boolean;
+		/** with `attributesOnly`, each attribute that differs (`from` / `to` null: absent) */
+		attributes?: { tag: string; name: string; from: string | null; to: string | null }[] | null;
+		/** input landed on it while it hydrated (a pointer over it, a press, a key, focus): its DOM may
+		 *  have answered that input, so a change is not only the render. Engine 3 */
+		inputDuringHydration?: boolean;
+		/** attribute changes `ignoreAttributes` left out: the island reads `clean` because of them */
+		ignored?: { tag: string; name: string; from: string | null; to: string | null }[];
 	}[];
 }
 
@@ -165,7 +182,19 @@ export interface OgygiaOptions {
 	/** the attribute that names an island INSTANCE in `hydration()` (on the island or an ancestor: an id
 	 *  your app renders, e.g. a CMS block's). Without it, or where it is missing: `Name#n` */
 	islandKey?: string;
+	/** attribute changes `hydration()` leaves out: an island whose every difference matches reads
+	 *  `clean` (with what it ignored in `ignored`). Each rule: the element's tag, the attribute's name,
+	 *  its new value (or old, when removed) — a string matches exactly, a RegExp by test. E.g. web
+	 *  components setting their own as they upgrade:
+	 *  `[{ tag: /^qds-/, name: /^(tabindex|aria-)/ }, { name: 'style', value: '' }]` */
+	ignoreAttributes?: { tag?: string | RegExp; name: string | RegExp; value?: string | RegExp }[];
 }
+
+/** A pattern as it crosses into the page: a RegExp as its source and flags. */
+const wire_pat = (p: string | RegExp | undefined) => (p instanceof RegExp ? { re: p.source, flags: p.flags } : p);
+
+/** "Older engine" said once per site and version for the whole process (a CI run opens hundreds of pages). */
+const warned_engines = new Set<string>();
 
 export interface Ogygia {
 	page(): Promise<OgygiaPageReport>;
@@ -192,7 +221,6 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 	const keep = <T extends OgygiaReport>(r: T): T => (reports.push(r), r);
 	// the page's engine version, from the last call (an older site's engine answers less)
 	let engine: OgygiaEngine = { version: TESTING_ENGINE_VERSION };
-	const warned = new Set<number>();
 	const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
 		const until = Date.now() + (options.timeout ?? 15_000);
 		while (!(await driver.evaluate(() => !!(window as { __ogygia_testing?: unknown }).__ogygia_testing, null))) {
@@ -206,10 +234,14 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			},
 			[name, args] as const
 		)) as { v: number; r: T };
-		engine = { version: out.v };
-		if (out.v < TESTING_ENGINE_VERSION && !warned.has(out.v)) {
-			warned.add(out.v);
+		// (an engine from 3 on names itself, lean or not, in its reports)
+		const own = out.r && typeof out.r === 'object' ? (out.r as { engine?: OgygiaEngine }).engine : undefined;
+		engine = own ?? { version: out.v };
+		if (out.v < TESTING_ENGINE_VERSION) {
 			const at = await driver.evaluate(() => location.origin, null).catch(() => '');
+			const key = `${at}|${out.v}`;
+			if (warned_engines.has(key)) return out.r;
+			warned_engines.add(key);
 			console.warn(
 				`[ogygia/testing] the page${at ? ` at ${at}` : ''} runs an older testing engine (version ${out.v}, this package expects ${TESTING_ENGINE_VERSION}): ` +
 					'its reports lack instance keys, finding names, counts.cls and what started each navigation. Filled in where the test side knows (navigations).'
@@ -247,7 +279,8 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 		},
 		async hydration() {
 			await call('settled', 300, 10_000);
-			const r = await call<Omit<OgygiaHydrationReport, 'kind' | 'engine'>>('hydration', options.islandKey);
+			const ignore = (options.ignoreAttributes ?? []).map((r) => ({ tag: wire_pat(r.tag), name: wire_pat(r.name), value: wire_pat(r.value) }));
+			const r = await call<Omit<OgygiaHydrationReport, 'kind' | 'engine'>>('hydration', options.islandKey, ignore);
 			return keep({ kind: 'hydration', ...r, engine });
 		},
 		async record(actions, ropts) {
@@ -337,6 +370,10 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 export type OgygiaTestOptions = OgygiaOptions & {
 	/** attach every report to the test result as `ogygia.json` (default true) */
 	attach?: boolean;
+	/** lean testing (`og_testing=lean`): the page runs the testing API and nothing else of devtools —
+	 *  no launcher, no dock, no event side-channel in its HTML — so what it loads is what a visitor's
+	 *  loads, plus the testing engine. An older site's engine ignores it (`engine.lean` says which ran) */
+	lean?: boolean;
 };
 
 /** A document load ogygia held back (`record(…, { blockNavigation: true })`), `t` on the page's clock. */
@@ -393,17 +430,19 @@ export function playwrightDriver(page: Page, opts: { baseURL?: string; onNavigat
  * `og_devtools=on` cookie): for `baseURL`, or with none for the origin of the first page it opens, on
  * that very request (Playwright's route handlers run newest first, so the test's own still run after).
  */
-export async function turnOnDevtools(page: Page, baseURL?: string): Promise<void> {
-	const cookie = `${DEVTOOLS_COOKIE}=${DEVTOOLS_ON}`;
+export async function turnOnDevtools(page: Page, baseURL?: string, opts: { lean?: boolean } = {}): Promise<void> {
+	// `lean`: lean testing too (devtools/switch.ts) — the testing API and nothing else of devtools
+	const pairs = [{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON }, ...(opts.lean ? [{ name: TESTING_COOKIE, value: TESTING_LEAN }] : [])];
+	const cookie = pairs.map((p) => `${p.name}=${p.value}`).join('; ');
 	if (baseURL) {
-		await page.context().addCookies([{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON, url: baseURL }]);
+		await page.context().addCookies(pairs.map((p) => ({ ...p, url: baseURL })));
 		return;
 	}
 	const first = async (route: Route) => {
 		const req = route.request();
 		if (!req.isNavigationRequest() || req.frame() !== page.mainFrame() || !(req.url().startsWith('http:') || req.url().startsWith('https:'))) return route.fallback();
 		await page.unroute('**/*', first);
-		await page.context().addCookies([{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON, url: new URL(req.url()).origin }]);
+		await page.context().addCookies(pairs.map((p) => ({ ...p, url: new URL(req.url()).origin })));
 		const headers = await req.allHeaders();
 		await route.fallback({ headers: { ...headers, cookie: headers.cookie ? `${headers.cookie}; ${cookie}` : cookie } });
 	};
@@ -423,7 +462,7 @@ export function withOgygia<TA extends PlaywrightTestArgs & PlaywrightTestOptions
 	const extended = base.extend<{ ogygia: Ogygia; ogygiaOptions: OgygiaTestOptions }>({
 		ogygiaOptions: [{}, { option: true }],
 		ogygia: async ({ page, baseURL, ogygiaOptions }, use, testInfo) => {
-			await turnOnDevtools(page, baseURL);
+			await turnOnDevtools(page, baseURL, { lean: ogygiaOptions.lean });
 			const o = createOgygia(playwrightDriver(page, { baseURL }), ogygiaOptions);
 			await use(o);
 			if (ogygiaOptions.attach !== false && o.reports.length)
@@ -552,11 +591,17 @@ export const ogygiaMatchers = {
 					: 'expected the ogygia budget to be missed, it was met'
 		};
 	},
-	/** No island failed, recovered, or changed its markup on hydration (`allow` some statuses). */
-	toHydrateCleanly(received: OgygiaReport, opts: { allow?: HydrationStatus[] } = {}) {
+	/** No island failed, recovered, or changed its markup on hydration (`allow` some statuses;
+	 *  `allowAttributeChanges`: a change only in attributes passes; `allowInput`: a change in an island
+	 *  that input landed on while it hydrated passes). */
+	toHydrateCleanly(received: OgygiaReport, opts: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean } = {}) {
 		if (received.kind !== 'hydration') return { pass: false, name: 'toHydrateCleanly', message: () => 'toHydrateCleanly takes the report of ogygia.hydration()' };
 		const allow = new Set<HydrationStatus>(['clean', 'asleep', ...(opts.allow ?? [])]);
-		const bad = received.islands.filter((i) => !allow.has(i.status));
+		const bad = received.islands.filter(
+			(i) =>
+				!allow.has(i.status) &&
+				!(i.status === 'changed' && ((opts.allowAttributeChanges && i.attributesOnly) || (opts.allowInput && i.inputDuringHydration)))
+		);
 		return {
 			pass: bad.length === 0,
 			name: 'toHydrateCleanly',
@@ -584,7 +629,7 @@ declare global {
 		interface Matchers<R> {
 			toHaveNoFindings(opts?: { severity?: Severity; ignore?: string[] }): R;
 			toMeetBudget(budget: Budget): R;
-			toHydrateCleanly(opts?: { allow?: HydrationStatus[] }): R;
+			toHydrateCleanly(opts?: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean }): R;
 		}
 	}
 }

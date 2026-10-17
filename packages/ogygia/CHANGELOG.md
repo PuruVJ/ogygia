@@ -16,7 +16,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, blocked navigations, CLS) and vitals past a noise threshold (`compare(base, head, { noise })`), and take several runs a side (`{ test, runs }`): load signals by median, session signals only when every head run has them and no base run does.
 - `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute on it or its nearest ancestor, across shadow roots) and its wake times (`t0`, `done`); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
 - `ogygia/testing`: `playwrightDriver(page, { onNavigationHeld })` and `turnOnDevtools(page, baseURL)`, the fixture's own pieces, for a test that holds its pages itself.
-- `ogygia/testing`: every report names the page's testing engine (`engine.version`); against a site on an older ogygia, `record()` fills in `navigations` from the loads it held and warns once.
+- `ogygia/testing`: every report names the page's testing engine (`engine.version`, `engine.lean`); against a site on an older ogygia, `record()` fills in `navigations` from the loads it held, and one warning per site is logged for the whole run.
+- `ogygia/testing`: a `changed` island says whether only attributes differ (`attributesOnly`, with each in `attributes`) and whether input landed on it while it hydrated (`inputDuringHydration`); `ignoreAttributes` leaves chosen attribute changes out, and `toHydrateCleanly({ allowAttributeChanges, allowInput })` lets them through.
+- `ogygia/testing`: `page().self` says what measuring cost the page (`script_ms`, the testing engine's `bytes`), and lean testing (`lean: true`, the `og_testing=lean` cookie) runs the testing API and nothing else of devtools, so the page loads what a visitor's does.
 
 ### Changed
 

@@ -15,7 +15,7 @@
  * The switch's cookie also starts the rest, for that browser only: the server writes its event
  * side-channel and the page is measured from the start (runtime/beacon.ts).
  */
-import { devtools_switched_on, switch_in_url, without_switch, write_switch } from './switch.js';
+import { devtools_switched_on, switch_in_url, testing_lean, without_switch, write_switch } from './switch.js';
 import { TESTING_ENGINE_VERSION } from './testing-version.js';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -41,6 +41,8 @@ export function install_devtools_ui(opts?: { csr_true?: boolean }): void {
 		apply_url_switch();
 		if (!devtools_switched_on()) return;
 	}
+	// LEAN TESTING (switch.ts): the testing API above, and nothing to see or load
+	if (testing_lean()) return;
 	mount_launcher(opts);
 }
 
@@ -138,8 +140,9 @@ export interface OgygiaTestingApi {
 	/** the report shape (testing-version.ts) */
 	version: number;
 	page(): Promise<unknown>;
-	/** `key_attr`: the attribute that names an island instance (see testing-engine.ts) */
-	hydration(key_attr?: string): Promise<unknown>;
+	/** `key_attr`: the attribute that names an island instance; `ignore`: attribute changes to leave out
+	 *  (see testing-engine.ts) */
+	hydration(key_attr?: string, ignore?: unknown[]): Promise<unknown>;
 	record_start(): Promise<boolean>;
 	/** `blocked`: the navigations the test's driver held back during the recording */
 	record_stop(blocked?: { url: string; t: number | null }[]): Promise<unknown>;
@@ -152,11 +155,19 @@ declare global {
 }
 function install_testing_api(): void {
 	if (window.__ogygia_testing) return;
-	const engine = () => import('./testing-engine.js');
+	// the engine's own files, as they load (`page().self.bytes`): the resources fetched while its import ran
+	let loading: Promise<typeof import('./testing-engine.js')> | null = null;
+	const engine = () =>
+		(loading ??= (async () => {
+			const from = performance.now();
+			const m = await import('./testing-engine.js');
+			m.note_engine_files(from, performance.now());
+			return m;
+		})());
 	window.__ogygia_testing = {
 		version: TESTING_ENGINE_VERSION,
 		page: async () => (await engine()).page_json(),
-		hydration: async (key_attr) => (await engine()).hydration_json(key_attr),
+		hydration: async (key_attr, ignore) => (await engine()).hydration_json(key_attr, ignore as never),
 		record_start: async () => (await engine()).record_start(),
 		record_stop: async (blocked) => (await engine()).record_stop(blocked),
 		settled: async (quiet, timeout) => (await engine()).settled(quiet, timeout)

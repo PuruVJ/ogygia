@@ -22,6 +22,7 @@ import { tool_made } from '../tool-fetches.js';
 import { paint_blocker } from './render-blocking.js';
 import { critical_outcome, type CriticalOutcome } from './load-scheduler.js';
 import { devtools_switched_on } from '../devtools/switch.js';
+import { charge, metered } from './own-cost.js';
 
 interface Sample {
 	fp: string;
@@ -125,6 +126,13 @@ interface VisitIslandRec {
 	fx?: number;
 	recovered?: boolean;
 	changed?: boolean;
+	/** a change only in attributes (same elements, same text): each one, as `attr_changes` tells them —
+	 *  often a custom element setting its own (`tabindex`, `aria-*`) as it upgrades, not the app
+	 *  rendering differently. Absent when text or elements differ too. */
+	attrs?: AttrChange[];
+	/** input landed on it between its wake and its hydrate (a pointer over it, a key, focus): its DOM
+	 *  may have answered that input, so a change is not only the render */
+	input?: string;
 	/** another script edited it before it woke; the runtime put the server markup back */
 	healed?: boolean;
 	ssr_bytes?: number;
@@ -143,6 +151,85 @@ interface Shift {
 }
 let visit_islands: VisitIslandRec[] = [];
 let visit_firsts: { fp: string; t: number; type: string }[] = [];
+/** the last inputs, any target (a ring): which island something touched while it hydrated */
+const recent_inputs: { t: number; el: WeakRef<Element>; type: string }[] = [];
+
+/** One attribute that differs between the server's markup and the island's after hydrate. */
+export interface AttrChange {
+	tag: string;
+	name: string;
+	from: string | null;
+	to: string | null;
+}
+
+/** `name="value"` pairs of one start tag (`<a href="x" hidden>`), as the browser serializes them. */
+function tag_attrs(tag: string): Map<string, string> {
+	const out = new Map<string, string>();
+	let i = 1;
+	while (i < tag.length && tag[i] !== ' ' && tag[i] !== '>' && tag[i] !== '/') i++;
+	while (i < tag.length) {
+		while (i < tag.length && (tag[i] === ' ' || tag[i] === '\n' || tag[i] === '\t' || tag[i] === '/')) i++;
+		if (i >= tag.length || tag[i] === '>') break;
+		const start = i;
+		while (i < tag.length && tag[i] !== '=' && tag[i] !== ' ' && tag[i] !== '>') i++;
+		const name = tag.slice(start, i);
+		let value = '';
+		if (tag[i] === '=') {
+			i++;
+			const q = tag[i];
+			if (q === '"' || q === "'") {
+				const end = tag.indexOf(q, i + 1);
+				value = tag.slice(i + 1, end === -1 ? tag.length : end);
+				i = end === -1 ? tag.length : end + 1;
+			} else {
+				const s = i;
+				while (i < tag.length && tag[i] !== ' ' && tag[i] !== '>') i++;
+				value = tag.slice(s, i);
+			}
+		}
+		if (name) out.set(name, value);
+	}
+	return out;
+}
+
+/** The tag's name, lowercase (`<qds-button …>` → `qds-button`). */
+function tag_name(tag: string): string {
+	let i = 1;
+	while (i < tag.length && tag[i] !== ' ' && tag[i] !== '>' && tag[i] !== '/' && tag[i] !== '\n') i++;
+	return tag.slice(1, i).toLowerCase();
+}
+
+/**
+ * When two markups (comments out) differ ONLY in attributes — the same elements in the same order, the
+ * same text — each attribute that differs (at most 20); `null` when text or elements differ. A walk of
+ * both strings tag by tag, no regex: it runs once per changed island.
+ */
+export function attr_changes(a: string, b: string): AttrChange[] | null {
+	const out: AttrChange[] = [];
+	let i = 0;
+	let j = 0;
+	while (i < a.length || j < b.length) {
+		const ti = a.indexOf('<', i);
+		const tj = b.indexOf('<', j);
+		// the text before the next tag must match
+		if (a.slice(i, ti === -1 ? a.length : ti) !== b.slice(j, tj === -1 ? b.length : tj)) return null;
+		if (ti === -1 || tj === -1) return ti === tj ? out : null;
+		const ei = a.indexOf('>', ti);
+		const ej = b.indexOf('>', tj);
+		const x = a.slice(ti, ei === -1 ? a.length : ei + 1);
+		const y = b.slice(tj, ej === -1 ? b.length : ej + 1);
+		i = ti + x.length;
+		j = tj + y.length;
+		if (x === y) continue;
+		const tag = tag_name(x);
+		if (tag !== tag_name(y) || x[1] === '/' || y[1] === '/') return null;
+		const xa = tag_attrs(x);
+		const ya = tag_attrs(y);
+		for (const [name, v] of xa) if (ya.get(name) !== v && out.length < 20) out.push({ tag, name, from: v, to: ya.has(name) ? ya.get(name)! : null });
+		for (const [name, v] of ya) if (!xa.has(name) && out.length < 20) out.push({ tag, name, from: null, to: v });
+	}
+	return out;
+}
 let visit_shifts: Shift[] = [];
 let visit_longtasks: { t: number; ms: number }[] = [];
 /** the long tasks are frames drawn late (a browser with no long-task timing): see watch_frame_gaps */
@@ -653,6 +740,18 @@ function observe_vitals(): void {
 			}
 		}
 	});
+	// recent input anywhere (a pointer entering, a press, a key, focus): an island hydrating under it
+	// is flagged (beacon_hydrated)
+	const note_input = (type: string) => (ev: Event) => {
+		if (!(ev.target instanceof Element)) return;
+		recent_inputs.push({ t: performance.now(), el: new WeakRef(ev.target), type });
+		if (recent_inputs.length > 64) recent_inputs.shift();
+	};
+	try {
+		for (const type of ['pointerover', 'pointerdown', 'keydown', 'focusin'] as const) document.addEventListener(type, note_input(type), { capture: true, passive: true });
+	} catch {
+		// no document
+	}
 	// the first interaction inside each island: capture phase, one entry per fingerprint
 	const seen = new Set<string>();
 	const first = (type: string) => (ev: Event) => {
@@ -1050,6 +1149,9 @@ function images_eager_below(load_end: number): { url: string; top: number; bytes
 /** the visit as one object: the server's copy has no snapshots (they are big and the browser
  *  store keeps them) */
 function build_visit(): Record<string, unknown> | null {
+	return metered('visit', build_visit_now);
+}
+function build_visit_now(): Record<string, unknown> | null {
 	let nav: PerformanceNavigationTiming | undefined;
 	try {
 		nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
@@ -1941,6 +2043,9 @@ function resend_soon(): void {
 }
 
 function flush(): void {
+	metered('send', flush_now);
+}
+function flush_now(): void {
 	scheduled = false;
 	if (queue.length || marks.length) {
 		// (sendBeacon sends `text/plain` without a preflight; the profiler parses the body as JSON)
@@ -2016,6 +2121,11 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 	const o = owner();
 	if (o) return o.beacon_hydrated(el, t0, t_loaded, t_done, ssr_html, t_turn);
 	if (!collecting()) return;
+	const c0 = performance.now();
+	island_record(el, t0, t_loaded, t_done, ssr_html, t_turn);
+	charge('islands', c0);
+}
+function island_record(el: Element, t0: number, t_loaded: number, t_done: number, ssr_html?: string | null, t_turn?: number): void {
 	const fp = el.getAttribute('data-og-fp');
 	if (!fp) return;
 	const recovered = el.hasAttribute('data-og-recovered');
@@ -2035,6 +2145,7 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 		: null;
 	if (sent) queue.push(sent);
 	let changed: boolean | undefined;
+	let attrs: AttrChange[] | null = null;
 	const room = make_room(visit_islands, 400, (i) => i.t0);
 	if (typeof ssr_html === 'string' && room) {
 		const now = el.innerHTML;
@@ -2046,8 +2157,22 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 			const a = without_runtime_marks(without_comments(ssr_html));
 			const b = without_runtime_marks(without_comments(now));
 			changed = a !== b;
-			if (changed && snapshot_room()) snapshots.push(snapshot_of(fp, ssr_html, now, a, b));
+			if (changed) {
+				attrs = attr_changes(a, b);
+				if (snapshot_room()) snapshots.push(snapshot_of(fp, ssr_html, now, a, b));
+			}
 		} else changed = false;
+	}
+	// input on it while it hydrated (between its wake and done)
+	let input: string | undefined;
+	for (let k = recent_inputs.length - 1; k >= 0; k--) {
+		const x = recent_inputs[k];
+		if (x.t < t0) break;
+		const target = x.el.deref();
+		if (x.t <= t_done && target && el.contains(target)) {
+			input = x.type;
+			break;
+		}
 	}
 	// a browser with no layout-shift timing: what this island's wake moved, from its size before it
 	if (island_boxes) estimate_wake_shift(el, fp, t_done);
@@ -2073,6 +2198,9 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 				done: r2(t_done),
 				...(recovered ? { recovered: true } : {}),
 				...(changed ? { changed: true } : {}),
+				// (an empty list: the same attributes in another order or quoting)
+				...(attrs ? { attrs } : {}),
+				...(input ? { input } : {}),
 				...(el.hasAttribute('data-og-healed') ? { healed: true } : {}),
 				...(typeof ssr_html === 'string' ? { ssr_bytes: ssr_html.length } : {}),
 				...(markers ? { markers } : {})
