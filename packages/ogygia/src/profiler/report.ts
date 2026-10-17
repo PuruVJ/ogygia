@@ -45,6 +45,7 @@ import type {
 	OgygiaRequestStats
 } from '../server/request-stats.js';
 import type { SpanRecord } from './span.js';
+import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.js';
 
 export type { OgygiaRequestStats, SpanRecord, HoleRequestStats, IslandStat };
 
@@ -994,7 +995,16 @@ function page_weight_findings(
 		const f = unscoped_finding(pa.unscoped);
 		warn(f.code, f.message, { fix: f.fix });
 	}
-	if (pa.missed.length) info('assets-missed', `${pa.missed.length} file(s) the page loads could not be weighed (a 404, a timeout, or the time budget): ${pa.missed.slice(0, 3).map(asset_name).join(', ')}.`);
+	if (pa.missed.length) {
+		// by reason: a budget or timeout miss makes the totals vary run to run; an error status does not
+		const why = new Map<string, number>();
+		for (const m of pa.missed_why ?? []) {
+			const k = m.why.startsWith('status ') || m.why.startsWith('error') ? m.why.split(':')[0] : m.why;
+			why.set(k, (why.get(k) ?? 0) + 1);
+		}
+		const reasons = [...why].map(([k, n]) => `${n} ${k}`).join(', ');
+		info('assets-missed', `${pa.missed.length} file(s) the page loads could not be weighed${reasons ? ` (${reasons})` : ' (a 404, a timeout, or the time budget)'}: ${pa.missed.slice(0, 3).map(asset_name).join(', ')}.${why.has('budget') || why.has('timeout') ? ' Profile with `weigh=full` for totals that hold run to run.' : ''}`);
+	}
 }
 
 export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExtras): Finding[] {
@@ -3616,6 +3626,8 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 	return {
 		schema: 'ogygia-profiler-report',
 		version: 1,
+		// the ogygia that produced it, as its page reports name it: findings come and go with it
+		engine: { version: TESTING_ENGINE_VERSION },
 		units: { time: 'ms', size: 'bytes', memory_suffix_mb: true },
 		id: meta.id,
 		created: meta.created,
@@ -4061,6 +4073,8 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						...(x.contains ? { contains: x.contains } : {})
 					})),
 					...(extras.assets.missed.length ? { missed: extras.assets.missed.slice(0, 20) } : {}),
+					// every miss with its reason (`budget`, `timeout`, `status 404`, `file cap`, `error: …`)
+					...(extras.assets.missed_why?.length ? { missed_why: extras.assets.missed_why } : {}),
 					// one module shipped twice, both copies loaded here (the devtools' Bytes tab shows them)
 					...(() => {
 						const twice = page_duplicates(extras).slice(0, 12);

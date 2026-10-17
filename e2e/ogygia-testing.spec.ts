@@ -7,7 +7,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test as base, expect as baseExpect } from '@playwright/test';
-import { withOgygia, compare, toMarkdown, checkBudget } from '../packages/ogygia/dist/testing/index.js';
+import { withOgygia, compare, toMarkdown, checkBudget, createOgygia, playwrightDriver, turnOnDevtools } from '../packages/ogygia/dist/testing/index.js';
 import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const { test, expect } = withOgygia(base, baseExpect);
@@ -48,6 +48,13 @@ test('page() and hydration(): the planted problems, as a test sees them', async 
 	expect(hyd.islands.find((i) => i.name === 'Clock')!.diff!.added).toBeGreaterThan(0);
 	// each instance keyed by its place among islands of its name (no `islandKey` attribute given)
 	expect(hyd.islands.find((i) => i.name === 'Broken')!.key).toBe('Broken#1');
+	// the clock renders other text in the browser: a markup change, not attributes; nothing touched it
+	expect(hyd.islands.find((i) => i.name === 'Clock')).toMatchObject({ attributesOnly: false, inputDuringHydration: false });
+	// what measuring cost the page, for a test to subtract
+	expect(load.self!.script_ms).toBeGreaterThan(0);
+	expect(load.self!.phases.islands).toBeGreaterThan(0);
+	expect(load.self!.bytes).toBeGreaterThan(0);
+	expect(load.engine).toMatchObject({ version: 3, lean: false });
 	expect(new Set(hyd.islands.map((i) => i.key)).size).toBe(hyd.islands.length);
 
 	// the matchers, and their messages when a test fails
@@ -133,10 +140,95 @@ test('record({ blockNavigation }): a click that would load another document is h
 		{ blockNavigation: true }
 	);
 	expect(await page.evaluate(() => performance.timeOrigin), 'the page stayed').toBe(origin);
+	expect(session.engine.version).toBe(3);
 	expect(session.navigations).toHaveLength(1);
 	expect(session.navigations[0].url).toContain('/dt-lab');
+	expect(session.navigations[0]).toMatchObject({ approx: false });
 	expect(session.navigations[0].after).toContain('leave');
 	expect(session.findings.find((f) => f.code === 'navigation-blocked')?.message).toContain('/dt-lab');
+});
+
+test('a reload in a click handler is named by the button that ran it, run after run (the exported driver)', async ({ page, baseURL }) => {
+	test.setTimeout(120_000);
+	// (a caller holding its own pages: the driver withOgygia builds, with a hook on each held load)
+	const held: string[] = [];
+	await turnOnDevtools(page, baseURL);
+	const og = createOgygia(playwrightDriver(page, { baseURL, onNavigationHeld: (n) => held.push(n.url) }));
+	await page.goto('/dt-session');
+	await page.waitForTimeout(9000);
+	await page.evaluate(() => {
+		const b = Object.assign(document.createElement('button'), { textContent: 'Login/Register' });
+		b.setAttribute('data-login', '');
+		b.onclick = () => location.reload();
+		document.body.append(b);
+		// an empty button beside it, clicked first: the input the old guess could pick
+		const e = document.createElement('button');
+		e.setAttribute('data-empty', '');
+		document.body.append(e);
+	});
+	for (let run = 0; run < 3; run++) {
+		const session = await og.record(
+			async () => {
+				await page.locator('[data-empty]').click();
+				await page.locator('[data-login]').click();
+				await page.locator('[data-empty]').click();
+				await page.waitForTimeout(300);
+			},
+			{ blockNavigation: true }
+		);
+		expect(session.navigations, `run ${run}`).toHaveLength(1);
+		expect(session.navigations[0], `run ${run}`).toMatchObject({ approx: false });
+		expect(session.navigations[0].after, `run ${run}`).toContain('Login/Register');
+	}
+	expect(held).toHaveLength(3);
+});
+
+test('a router navigation handed to the browser and held back leaves page() on the same page', async ({ page, ogygia }) => {
+	test.setTimeout(90_000);
+	await page.goto('/dt-session');
+	await page.waitForTimeout(9000);
+	const before = await ogygia.page();
+	expect(before.islands.length).toBeGreaterThan(0);
+	await ogygia.record(
+		async () => {
+			// a link the router takes (no reload attribute) to a csr=true page: it starts a navigation,
+			// pushes the address, then hands the load to the browser, which the test holds back
+			await page.evaluate(() => {
+				const a = Object.assign(document.createElement('a'), { href: '/head-budget-kit', textContent: 'to a kit page' });
+				a.setAttribute('data-to-kit', '');
+				document.body.append(a);
+			});
+			await page.locator('[data-to-kit]').click();
+			await page.waitForTimeout(1500);
+		},
+		{ blockNavigation: true }
+	);
+	expect(await page.evaluate(() => location.pathname), 'the router took the link (it pushed the address)').toBe('/head-budget-kit');
+	await ogygia.settled({ quiet: 500, timeout: 15_000 });
+	const later = await ogygia.page();
+	const hyd = await ogygia.hydration();
+	// the page never changed: its islands are all still in page(), and hydration() carries their wake times
+	expect(later.islands.length).toBeGreaterThanOrEqual(before.islands.length);
+	const fps = new Set(later.islands.map((i) => i.fp));
+	for (const i of hyd.islands.filter((x) => x.status !== 'asleep')) {
+		expect(fps.has(i.fp), i.name).toBe(true);
+		expect(typeof i.t0, i.name).toBe('number');
+	}
+});
+
+test.describe('lean testing', () => {
+	test.use({ ogygiaOptions: { lean: true } });
+	test('the testing API in full, and nothing else of devtools: no launcher, no event side-channel', async ({ page, ogygia }) => {
+		test.setTimeout(60_000);
+		const html = page.waitForResponse((r) => r.url().endsWith('/dt-lab')).then((r) => r.text());
+		await page.goto('/dt-lab');
+		const load = await ogygia.page();
+		const hyd = await ogygia.hydration();
+		expect(load.engine).toMatchObject({ version: 3, lean: true });
+		expect(hyd.islands.find((i) => i.name === 'Broken')?.status).toBe('failed');
+		expect(await page.locator('[data-ogygia-devtools-host]').count(), 'no launcher').toBe(0);
+		expect(await html, 'no server event side-channel in the HTML').not.toContain('application/ogygia-devtools');
+	});
 });
 
 test.describe('a recording whose page leaves for a document with no testing API', () => {

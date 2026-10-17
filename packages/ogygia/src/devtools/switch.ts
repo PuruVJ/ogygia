@@ -46,6 +46,33 @@ export function switch_on_in(cookies: string): boolean {
 	return false;
 }
 
+/**
+ * LEAN TESTING: `og_testing=lean` (or `?og-testing=lean`) beside the devtools switch — the testing API
+ * (`window.__ogygia_testing`) works in full, and nothing else of devtools runs: no launcher, no dock, no
+ * watcher of the page's timers, no server event side-channel in the HTML. The page loads what it loads
+ * with devtools off, plus the testing engine when a test first asks. An engine that does not know the
+ * cookie ignores it.
+ */
+export const TESTING_COOKIE = 'og_testing';
+export const TESTING_LEAN = 'lean';
+export const TESTING_PARAM = 'og-testing';
+
+/** Is lean testing asked for in a `Cookie` header / `document.cookie` string. */
+export function lean_in(cookies: string): boolean {
+	const want = TESTING_COOKIE + '=' + TESTING_LEAN;
+	for (const c of cookies.split(';')) if (c.trim() === want) return true;
+	return false;
+}
+
+/** Lean testing in this browser: the cookie, or the URL param (false off the browser). */
+export function testing_lean(): boolean {
+	try {
+		return lean_in(document.cookie) || new URL(location.href).searchParams.get(TESTING_PARAM) === TESTING_LEAN;
+	} catch {
+		return false;
+	}
+}
+
 /** The `Set-Cookie`-shaped attributes the switch is written with (browser and server alike). */
 export const SWITCH_COOKIE_OPTIONS = { path: '/', maxAge: MAX_AGE, sameSite: 'lax' as const, httpOnly: false };
 

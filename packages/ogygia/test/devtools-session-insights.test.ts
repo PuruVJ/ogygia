@@ -128,6 +128,37 @@ describe('analyze_session', () => {
 		expect(r.findings.find((f) => f.code === 'dom-churn')!.message).toContain('Churn changed the DOM 800 times');
 	});
 
+	it('every failed request, and the slowest interaction on each element however quick', () => {
+		const r = analyze_session(
+			base({
+				requests: [
+					{ url: 'http://x/api/a', type: 'fetch', t: 10, ms: 50, bytes: 10, status: 200 },
+					{ url: 'http://x/api/b', type: 'fetch', t: 20, ms: 5, bytes: 0, status: 500 },
+					{ url: 'http://x/img.png', type: 'img', t: 30, ms: 5, bytes: 0, status: 404 }
+				],
+				interactions: [
+					{ t: 100, name: 'click', duration: 40, input_delay: 1, processing: 30, presentation: 9, id: 1, target: 'button#buy', fp: 'a', el: null },
+					{ t: 200, name: 'click', duration: 90, input_delay: 1, processing: 80, presentation: 9, id: 2, target: 'button#buy', fp: 'a', el: null }
+				],
+				clicks: [
+					{ t: 100, target: 'button#buy', fp: 'a', el: null },
+					{ t: 300, target: 'a.quick', fp: null, el: null }
+				]
+			}),
+			names,
+			'http://x/p'
+		);
+		expect(r.failed).toEqual([
+			{ url: 'http://x/api/b', status: 500, type: 'fetch', t: 20 },
+			{ url: 'http://x/img.png', status: 404, type: 'img', t: 30 }
+		]);
+		expect(r.by_element).toEqual([
+			{ target: 'button#buy', duration: 90, processing: 80, t: 200, fp: 'a' },
+			// a click the browser did not time: touched, at 0
+			{ target: 'a.quick', duration: 0, processing: 0, t: 300, fp: null }
+		]);
+	});
+
 	it("a request's own server split (Server-Timing): the upstream it waited on", () => {
 		const r = analyze_session(
 			base({

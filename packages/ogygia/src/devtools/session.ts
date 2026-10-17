@@ -70,6 +70,16 @@ export interface SessionFrame {
 	blocking: number;
 	scripts: { source: string; fn: string; invoker: string; ms: number }[];
 }
+/** A navigation as it started: where to, when, and the element that started it (the link or form, or
+ *  the input being handled then) with its island. */
+export interface SessionNav {
+	url: string;
+	t: number;
+	type: string;
+	source: string | null;
+	fp: string | null;
+}
+
 export interface SessionData {
 	from: number;
 	to: number;
@@ -84,6 +94,8 @@ export interface SessionData {
 	/** every click, fast ones too */
 	clicks: SessionClick[];
 	errors: { t: number; message: string }[];
+	/** navigations as they started, with what started them (absent in a part saved before this field) */
+	navs?: SessionNav[];
 	heap: { from: number; to: number } | null;
 	events: DevtoolsEvent[];
 	cpu: unknown | null;
@@ -122,6 +134,7 @@ function shift_part(s: SessionData, d: number): SessionData {
 		mut_log: t(s.mut_log),
 		clicks: t(s.clicks),
 		errors: t(s.errors),
+		navs: t(s.navs ?? []),
 		events: s.events.map((e) => ({ ...e, t: e.t + d })),
 		pages: t(s.pages)
 	};
@@ -149,6 +162,7 @@ function merge_parts(parts: SavedPart[], current: SessionData): SessionData {
 		mut_log: cat('mut_log'),
 		clicks: cat('clicks'),
 		errors: cat('errors'),
+		navs: all.flatMap((p) => p.navs ?? []),
 		events: cat('events'),
 		pages: cat('pages'),
 		mutations: [...muts.values()].sort((a, b) => b.count - a.count),
@@ -335,6 +349,34 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		clicks.push({ t: r1(e.timeStamp), target: describe_el(el), fp: island_of(el)?.getAttribute('data-og-fp') ?? null, el: el ? new WeakRef(el) : null, ...(el && looks_clickable(el) ? { clickable: true as const } : {}) });
 	};
 	addEventListener('click', on_click, { capture: true, passive: true });
+	// EVERY NAVIGATION as it starts, with what started it: the link or form the browser names, else the
+	// input being handled at that moment (a reload in a click handler) — read when it fires, not
+	// guessed later from the last input (Chromium's Navigation API; elsewhere none are noted)
+	const navs: SessionNav[] = [];
+	let handling: { target: string; fp: string | null; until: number } | null = null;
+	const on_input = (e: Event) => {
+		const el = e.target instanceof Element ? e.target : null;
+		if (!el || el.closest('[data-ogygia-devtools-host]')) return;
+		handling = { target: describe_el(el), fp: island_of(el)?.getAttribute('data-og-fp') ?? null, until: performance.now() + 50 };
+	};
+	const INPUTS = ['click', 'submit', 'keydown', 'change'] as const;
+	for (const type of INPUTS) addEventListener(type, on_input, { capture: true, passive: true });
+	const navigation = (globalThis as { navigation?: EventTarget }).navigation;
+	const on_navigate = (e: Event) => {
+		const n = e as Event & { destination?: { url: string }; sourceElement?: Element | null; navigationType?: string };
+		if (!n.destination || navs.length >= 200) return;
+		const now = performance.now();
+		const by = n.sourceElement ?? null;
+		const input = handling && now <= handling.until ? handling : null;
+		navs.push({
+			url: n.destination.url,
+			t: r1(now),
+			type: n.navigationType ?? '',
+			source: by ? describe_el(by) : (input?.target ?? null),
+			fp: by ? (island_of(by)?.getAttribute('data-og-fp') ?? null) : (input?.fp ?? null)
+		});
+	};
+	navigation?.addEventListener('navigate', on_navigate);
 	// every request (a PerformanceObserver: the resource buffer holds only 250, a dev page fills it)
 	const requests: SessionRequest[] = [];
 	watch('resource', (es) => {
@@ -395,6 +437,8 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		removeEventListener('error', on_error);
 		removeEventListener('unhandledrejection', on_rej);
 		removeEventListener('click', on_click, { capture: true });
+		for (const type of INPUTS) removeEventListener(type, on_input, { capture: true });
+		navigation?.removeEventListener('navigate', on_navigate);
 		removeEventListener('pagehide', on_hide);
 		console.error = console_error;
 	};
@@ -413,6 +457,7 @@ export function start_session(prior?: SavedPart[]): Recorder {
 			mut_log,
 			clicks,
 			errors,
+			navs,
 			heap: heap0 !== null && heap1 !== null ? { from: heap0, to: heap1 } : null,
 			events: snapshot().filter((e) => e.seq > seq0 && e.realm === 'client'),
 			cpu,
