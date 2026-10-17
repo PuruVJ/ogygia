@@ -284,6 +284,31 @@ describe('createOgygia', () => {
 			{ tag: undefined, name: 'style', value: '' }
 		]);
 	});
+	it('record({ server }): a window that fails leaves the session whole, with server.error', async () => {
+		const o = createOgygia({
+			...fake({ settled: () => true, record_start: () => true, record_stop: () => session }),
+			post: async (url: string) => (url.endsWith('/start') ? { status: 200, body: '{"ok":true,"id":"n.s","header":"x-og-window"}' } : { status: 400, body: '{"error":"No window is recording"}' })
+		});
+		const r = await o.record(async () => {}, { server: true });
+		expect(r.kind).toBe('session');
+		expect(r.server).toEqual({ error: expect.stringContaining('(400)') });
+	});
+	it('record({ server }): the window id rides every request the session makes, and its stop', async () => {
+		const tagged: string[] = [];
+		let stop_headers: Record<string, string> = {};
+		const o = createOgygia({
+			...fake({ settled: () => true, record_start: () => true, record_stop: () => session }),
+			post: async (url: string, headers: Record<string, string>) => {
+				if (url.endsWith('/start')) return { status: 200, body: '{"ok":true,"id":"n.s","header":"x-og-window"}' };
+				stop_headers = headers;
+				return { status: 200, body: '{"kind":"window","window":{"ms":1,"requests":[]}}' };
+			},
+			tagRequests: async (h: string, v: string) => (tagged.push(`${h}=${v}`), async () => void tagged.push('untagged'))
+		});
+		await o.record(async () => {}, { server: true });
+		expect(tagged).toEqual(['x-og-window=n.s', 'untagged']);
+		expect(stop_headers['x-og-window']).toBe('n.s');
+	});
 	it('hydration() asks the page to key islands by the app’s attribute', async () => {
 		let asked: unknown;
 		const o = createOgygia(fake({ settled: () => true, hydration: (k) => ((asked = k), { measured: true, islands: [] }) }), { islandKey: 'data-block-id' });

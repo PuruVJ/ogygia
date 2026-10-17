@@ -139,7 +139,8 @@ function after_load_idle(fn: () => void): void {
 export interface OgygiaTestingApi {
 	/** the report shape (testing-version.ts) */
 	version: number;
-	page(): Promise<unknown>;
+	/** `cpu_fns`: how many of the page load's hottest functions (default 15) */
+	page(cpu_fns?: number): Promise<unknown>;
 	/** `key_attr`: the attribute that names an island instance; `ignore`: attribute changes to leave out
 	 *  (see testing-engine.ts) */
 	hydration(key_attr?: string, ignore?: unknown[]): Promise<unknown>;
@@ -166,7 +167,7 @@ function install_testing_api(): void {
 		})());
 	window.__ogygia_testing = {
 		version: TESTING_ENGINE_VERSION,
-		page: async () => (await engine()).page_json(),
+		page: async (cpu_fns) => (await engine()).page_json(cpu_fns),
 		hydration: async (key_attr, ignore) => (await engine()).hydration_json(key_attr, ignore as never),
 		record_start: async () => (await engine()).record_start(),
 		record_stop: async (blocked) => (await engine()).record_stop(blocked),

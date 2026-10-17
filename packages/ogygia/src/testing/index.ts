@@ -54,6 +54,9 @@ export interface OgygiaPageReport {
 	 *  the testing engine's files. Engine 3 */
 	self?: { script_ms: number; bytes: number; phases: Record<string, number> };
 	url: string;
+	/** the SvelteKit route id the server rendered (`/[lang]/about-us`), from a build with devtools on;
+	 *  null on the dev server or an engine before 3 */
+	route?: string | null;
 	nav: { to: string; t: number } | null;
 	vitals: RatedVital[];
 	islands: IslandRow[];
@@ -124,13 +127,27 @@ export type OgygiaSessionReport = Omit<SessionReport, 'findings' | 'counts'> & {
 	/** what the test's browser cannot measure (see OgygiaPageReport) */
 	unmeasured: string[];
 	/** with `record(actions, { server: true })`: the server over the same stretch — its CPU across
-	 *  every request the actions made, their outbound calls, the requests (the profiler's window) */
-	server?: OgygiaProfileReport & { window: { ms: number; requests: { method: string; path: string; route: string | null; ms: number; status: number | null }[] } };
+	 *  every request the actions made, their outbound calls, the requests (the profiler's window). On a
+	 *  serverless deployment with a profiler store, `requests` come from every instance (`instances`),
+	 *  each with its own `cpu_ms`; the CPU profile is the starting instance's. `{ error }` when the window
+	 *  could not run: the session report is still whole */
+	server?:
+		| (OgygiaProfileReport & {
+				window: {
+					ms: number;
+					requests: { method: string; path: string; route: string | null; ms: number; status: number | null; cpu_ms?: number; net_ms?: number | null; instance?: string }[];
+					instances?: number;
+				};
+		  })
+		| { error: string };
 };
 
 /** The profiler's JSON answer (`/__profiler/page?format=json`), the fields a test reads first typed. */
 export interface OgygiaProfileReport {
 	kind: 'profile';
+	/** the ogygia that produced it (the page reports' `engine.version`): a profiler from before 3 sends
+	 *  none — its findings are 0.8.2's, so compare profiles only across one version */
+	engine?: { version: number };
 	id: string;
 	target: { page: string; runs: number[] };
 	score: { score: number; grade: string; categories: { key: string; label: string; score: number; value: string; lost?: number }[]; missing: { key: string; label: string; why: string }[] } | null;
@@ -170,6 +187,10 @@ export interface OgygiaDriver {
 	/** start holding back the page's document loads (answer them 204, so the page stays) for
 	 *  `record(…, { blockNavigation: true })`; `stop()` ends it and lists them, `t` on the page's clock */
 	blockNavigation?(): Promise<{ stop(): Promise<{ url: string; t: number | null }[]> }>;
+	/** add `header: value` to every request the page makes to its own origin until the returned
+	 *  function is called — the server window's id, so each instance of a serverless deployment
+	 *  attributes the session's requests (`record(…, { server: true })`) */
+	tagRequests?(header: string, value: string): Promise<() => Promise<void>>;
 }
 
 export interface OgygiaOptions {
@@ -188,6 +209,8 @@ export interface OgygiaOptions {
 	 *  components setting their own as they upgrade:
 	 *  `[{ tag: /^qds-/, name: /^(tabindex|aria-)/ }, { name: 'style', value: '' }]` */
 	ignoreAttributes?: { tag?: string | RegExp; name: string | RegExp; value?: string | RegExp }[];
+	/** how many of the page load's hottest functions `page().cpu.fns` keeps (default 15, up to 500) */
+	cpuFunctions?: number;
 }
 
 /** A pattern as it crosses into the page: a RegExp as its source and flags. */
@@ -203,7 +226,10 @@ export interface Ogygia {
 	 *  `blockNavigation: true` holds back any document load the actions cause (a reload, a link), so the
 	 *  page and the recording stay, and lists each in `navigations` (needs a driver that can: Playwright's) */
 	record(actions: () => Promise<unknown>, opts?: { server?: boolean; blockNavigation?: boolean }): Promise<OgygiaSessionReport>;
-	profile(path: string, opts?: { runs?: number }): Promise<OgygiaProfileReport>;
+	/** `fields`: only these top-level sections of the report (with what names it — schema, engine, id,
+	 *  target, links), e.g. `['requests', 'network', 'findings', 'assets', 'summary']`: a full report is
+	 *  hundreds of KB, mostly `stacks`, `hot_functions` and `drill` */
+	profile(path: string, opts?: { runs?: number; fields?: string[] }): Promise<OgygiaProfileReport>;
 	/** wait until no island is waking or hydrating */
 	settled(opts?: { quiet?: number; timeout?: number }): Promise<boolean>;
 	/** every report taken so far, in order */
@@ -273,7 +299,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 		reports,
 		async page() {
 			await call('settled', 300, 10_000);
-			const r = await call<Omit<OgygiaPageReport, 'kind'> | null>('page');
+			const r = await call<Omit<OgygiaPageReport, 'kind'> | null>('page', options.cpuFunctions);
 			if (!r) throw new Error('the page load was not measured: in a build, devtools must be on in the browser (the `og_devtools=on` cookie, or `?og-devtools=on`) before the page loads');
 			return keep({ kind: 'page', ...r, engine });
 		},
@@ -287,14 +313,28 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			await call('settled', 300, 10_000);
 			const b = options.profilerBase ?? '/__profiler';
 			const headers = { accept: 'application/json', ...(options.profilerKey ? { 'x-profiler-key': options.profilerKey } : {}) };
+			// the server window first (a 409: another recording holds the recorder — wait for it). A window
+			// that cannot start leaves the session whole, with `server: { error }`
+			let window_id: { header: string; id: string } | null = null;
+			let untag: (() => Promise<void>) | null = null;
+			let server_error: string | null = null;
 			if (ropts?.server) {
-				// the server window first (a 409: another recording holds the recorder — wait for it)
 				for (let tries = 0; ; tries++) {
 					const s = await post(`${b}/window/start`, headers);
-					if (s.status === 200) break;
-					if (s.status !== 409 || tries >= 30) throw new Error(`the profiler could not start a window (${s.status}): ${s.body.slice(0, 200)}`);
+					if (s.status === 200) {
+						const j = JSON.parse(s.body) as { id?: string; header?: string };
+						if (j.id && j.header) window_id = { header: j.header, id: j.id };
+						break;
+					}
+					if (s.status !== 409 || tries >= 30) {
+						server_error = `the profiler could not start a window (${s.status}): ${s.body.slice(0, 200)}`;
+						break;
+					}
 					await wait(2000);
 				}
+				// each request of the session carries the window's id, so every instance of a serverless
+				// deployment attributes it (the profiler gathers them from its store at stop)
+				if (window_id && driver.tagRequests) untag = await driver.tagRequests(window_id.header, window_id.id);
 			}
 			if (ropts?.blockNavigation && !driver.blockNavigation)
 				throw new Error('record(…, { blockNavigation: true }) needs a driver with `blockNavigation()` (withOgygia’s Playwright driver has one)');
@@ -321,14 +361,15 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 				stop_error = e;
 			}
 			let server: OgygiaSessionReport['server'];
-			if (ropts?.server) {
-				const s = await post(`${b}/window/stop`, headers);
-				if (s.status !== 200 && !failed && r) throw new Error(`the profiler's window failed (${s.status}): ${s.body.slice(0, 200)}`);
+			if (untag) await untag().catch(() => {});
+			if (ropts?.server && !server_error) {
+				const s = await post(`${b}/window/stop`, { ...headers, ...(window_id ? { [window_id.header]: window_id.id } : {}) });
 				if (s.status === 200) {
 					const json = JSON.parse(s.body) as Record<string, unknown>;
 					server = { ...json, mode: json.kind, kind: 'profile' } as unknown as OgygiaSessionReport['server'];
-				}
+				} else server_error = `the profiler's window failed (${s.status}): ${s.body.slice(0, 200)}`;
 			}
+			if (server_error) server = { error: server_error } as unknown as OgygiaSessionReport['server'];
 			if (!r) {
 				const now = await driver.evaluate(() => location.href, null).catch(() => null);
 				throw new Error(
@@ -352,7 +393,8 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 		},
 		async profile(path, opts) {
 			const b = options.profilerBase ?? '/__profiler';
-			const res = await get(`${b}/page?p=${encodeURIComponent(path)}&runs=${opts?.runs ?? 3}&format=json`, {
+			const fields = opts?.fields?.length ? `&fields=${encodeURIComponent(opts.fields.join(','))}` : '';
+			const res = await get(`${b}/page?p=${encodeURIComponent(path)}&runs=${opts?.runs ?? 3}&format=json${fields}`, {
 				accept: 'application/json',
 				...(options.profilerKey ? { 'x-profiler-key': options.profilerKey } : {})
 			});
@@ -410,6 +452,19 @@ export function playwrightDriver(page: Page, opts: { baseURL?: string; onNavigat
 					await page.unroute('**/*', hold);
 					return held;
 				}
+			};
+		},
+		async tagRequests(header, value) {
+			const origin = opts.baseURL ? new URL(opts.baseURL).origin : new URL(page.url()).origin;
+			// (the page's own origin only: a header on another site's request would make it preflight)
+			const tag = async (route: Route) => {
+				const req = route.request();
+				if (!req.url().startsWith(origin + '/')) return route.fallback();
+				await route.fallback({ headers: { ...(await req.allHeaders()), [header]: value } });
+			};
+			await page.route('**/*', tag);
+			return async () => {
+				await page.unroute('**/*', tag);
 			};
 		},
 		async get(url, headers) {
@@ -490,7 +545,7 @@ export function forAttachment(r: OgygiaReport): unknown {
 		hot_functions: ((p as { hot_functions?: unknown[] }).hot_functions ?? []).slice(0, 10)
 	});
 	if (r.kind === 'profile') return slim_profile(r);
-	if (r.kind === 'session' && r.server) return { ...r, server: slim_profile(r.server) };
+	if (r.kind === 'session' && r.server) return { ...r, server: 'error' in r.server ? r.server : slim_profile(r.server) };
 	return r;
 }
 

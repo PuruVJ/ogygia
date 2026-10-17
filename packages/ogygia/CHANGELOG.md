@@ -19,6 +19,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ogygia/testing`: every report names the page's testing engine (`engine.version`, `engine.lean`); against a site on an older ogygia, `record()` fills in `navigations` from the loads it held, and one warning per site is logged for the whole run.
 - `ogygia/testing`: a `changed` island says whether only attributes differ (`attributesOnly`, with each in `attributes`) and whether input landed on it while it hydrated (`inputDuringHydration`); `ignoreAttributes` leaves chosen attribute changes out, and `toHydrateCleanly({ allowAttributeChanges, allowInput })` lets them through.
 - `ogygia/testing`: `page().self` says what measuring cost the page (`script_ms`, the testing engine's `bytes`), and lean testing (`lean: true`, the `og_testing=lean` cookie) runs the testing API and nothing else of devtools, so the page loads what a visitor's does.
+- `ogygia/testing`: `page().route` (the SvelteKit route id), `cpuFunctions` for more than 15 of `page().cpu.fns`, and a session's `failed` requests and slowest interaction per element (`by_element`).
+- Profiler: `record(…, { server: true })` works across the instances of a serverless deployment: the window's signed id rides each of the session's requests, every instance writes them to the profiler store, and stop on any instance gathers them (`window.instances`); a window that fails leaves the session whole with `server: { error }`.
+- Profiler: the JSON report names its `engine.version`; `?fields=` (`profile(path, { fields })`) answers only the sections asked for; `?weigh=full` weighs every file with no time budget, and each file it could not weigh says why (`assets.missed_why`).
+- A page with devtools switched on is sent `Document-Policy: js-profiling`, so the browser's CPU sampler can run on it.
 
 ### Changed
 
@@ -31,6 +35,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `withOgygia` turns devtools on for the first page a test opens when there is no `baseURL`; before, it was silently left off.
 - A page with devtools switched on is sent `private, no-store` with `Vary: Cookie` and is never frozen, so a shared cache cannot hand its events to other visitors; a profiler beacon page too.
 - A hole's `Server-Timing` reaches a browser that switched devtools on (it checked an old cookie value).
+- A profiler window whose stop never came frees its instance at its 60 s cap; before, that instance refused every later window.
+- A file the profiler failed to weigh by a timeout is weighed again on the next profile; before, it stayed a miss for the life of the instance.
 - Devtools' Page and Timeline tabs, and `page()`, stay on the page after a router navigation that never swapped it (handed to the browser and held back, or overtaken); before, they reported no islands.
 
 ## [0.8.2] - 2026-10-14

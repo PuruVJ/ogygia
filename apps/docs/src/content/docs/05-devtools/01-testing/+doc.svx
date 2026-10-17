@@ -111,6 +111,25 @@ expect(session).toMeetBudget({ serverBusyMs: 300 });
 
 Under the hood this is the profiler's window: `POST /__profiler/window/start`, then `POST /__profiler/window/stop` answers the report. One window runs at a time. It waits a few seconds for a background sample to finish, and stops itself after a minute.
 
+On a serverless deployment, start, the session's requests and stop can each land on another instance. Give the profiler a store (redis, postgres or SQLite, see the profiler's storage docs) and it works anyway:
+
+- Start answers a signed window id, and the driver adds it to each of the session's requests to the site (`x-og-window`).
+- Every instance writes such a request, with its own `cpu_ms`, to the store before it answers.
+- Stop, on any instance, gathers them. `window.instances` says how many served the session.
+- The CPU profile is the starting instance's, since sampling is per process. A stop that lands elsewhere returns the requests without it.
+
+A window that cannot run never costs you the session: `session.server` is then `{ error }`.
+
+## Profiles for a CI check
+
+- **`engine.version`:** a profile names the ogygia that produced it, the same number as the page reports. Its detectors come and go with it, so compare profiles only across one version. One from 0.8.2 has no `engine`.
+- **`profile(path, { fields: ['requests', 'network', 'findings', 'assets', 'summary'] })`:** returns only those sections. A full report is hundreds of KB, mostly `stacks`, `hot_functions` and `drill`.
+- **`?weigh=full`:** weighs every file the page loads with no time budget (on a serverless host, what the request has left), so `assets.totals` holds run to run. Each file it could not weigh says why in `assets.missed_why`: `budget`, `timeout`, `status 404`, `file cap` or `error`.
+- **`Document-Policy: js-profiling`:** a page with devtools switched on is sent it, so the browser's CPU sampler runs without the app sending it.
+- **`page().route`:** the SvelteKit route id the server rendered, on a build with devtools on.
+- **More CPU functions:** `ogygiaOptions: { cpuFunctions: 50 }` keeps more than 15 of `page().cpu.fns`.
+- **Session lists:** `session.failed` lists every request that answered an error status. `session.by_element` gives the slowest interaction on each element the session touched, at 0 for a click too quick for the browser to time.
+
 ## The matchers
 
 | Matcher | Passes when |

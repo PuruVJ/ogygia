@@ -1064,6 +1064,18 @@ class OgygiaHandle {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
 			}
 			if (devtools_personal) mark_personal(response);
+			// a browser that turned devtools on may sample its main thread (the JS Self-Profiling API needs
+			// the document to allow it): the CPU of a page load and of a recorded session. Its own pages only
+			if (devtools_on && DEVTOOLS_LAZY && (response.headers.get('content-type') ?? '').includes('text/html')) {
+				try {
+					if (!response.headers.has('document-policy')) response.headers.set('document-policy', 'js-profiling');
+					// the route this page rendered (Kit's id), for `page().route` — a header, so even lean
+					// testing's HTML stays a visitor's
+					if (event.route?.id) response.headers.append('server-timing', `og-route;desc=${JSON.stringify(event.route.id)}`);
+				} catch {
+					// immutable headers
+				}
+			}
 			// FREEZE: action self-evict — a successful mutation on a page URL evicts its freeze
 			// (mirrors Kit's actions-invalidate-loads semantics; origin store only, fire-and-forget).
 			if (

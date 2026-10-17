@@ -34,14 +34,23 @@ function self_cost(): { script_ms: number; bytes: number; phases: Record<string,
 	return { script_ms: c.ms, bytes: engine_bytes, phases: c.phases };
 }
 
-export async function page_json() {
+export async function page_json(cpu_fns = 15) {
 	await ensure_region_names();
 	const c0 = performance.now();
 	const v = read_page();
 	charge('report', c0);
 	if (!v) return null;
+	// the route the server rendered (its `og-route` Server-Timing on this document), else null
+	let route: string | null = null;
+	try {
+		const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+		route = nav?.serverTiming?.find((s) => s.name === 'og-route')?.description || null;
+	} catch {
+		route = null;
+	}
 	return {
 		url: location.pathname,
+		route,
 		nav: v.nav,
 		vitals: v.report.vitals,
 		islands: v.report.rows,
@@ -49,7 +58,7 @@ export async function page_json() {
 		blocking: v.report.blocking,
 		bytes: v.report.bytes,
 		longtask_ms: v.report.longtask_ms,
-		cpu: v.cpu ? { busy_ms: v.cpu.busy_ms, by_kind: v.cpu.by_kind, fns: v.cpu.fns.slice(0, 15) } : null,
+		cpu: v.cpu ? { busy_ms: v.cpu.busy_ms, by_kind: v.cpu.by_kind, fns: v.cpu.fns.slice(0, Math.max(1, Math.min(500, cpu_fns))) } : null,
 		cpu_state: v.page.cpu.state,
 		cpu_off: v.page.cpu.off ?? null,
 		// what this browser cannot measure: a test's "no findings" means less there
