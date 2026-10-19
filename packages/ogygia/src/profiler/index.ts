@@ -512,6 +512,10 @@ const GC_SAMPLING_FLAGS = {
 const PAGE_WAITS_FOR_BACKGROUND_MS = 8000;
 /** a started window stops itself after this, even with no stop (it holds the recorder) */
 const WINDOW_MAX_MS = 60_000;
+/** the header a test's driver sends with each request of a window (its signed id) */
+const WINDOW_HEADER = 'x-og-window';
+/** a window's requests sit in the store's visit rows under this page key (never a real path) */
+const WINDOW_PAGE_PREFIX = '\0window:';
 const MAX_VISITS_PER_PAGE = 5;
 /** a screen narrower than this is a phone's (its own first screen, its own hidden islands) */
 const NARROW_SCREEN_PX = 768;
@@ -4173,7 +4177,55 @@ class Profiler {
 	// A WINDOW YOU START AND STOP — the server side of a test's (or the devtools Record tab's) actions:
 	// the CPU sampled across every request those actions made, their outbound calls, the requests
 	// themselves. One at a time (it holds the recorder); capped so a forgotten stop cannot hold it.
-	#window: { stop: () => void; done: Promise<WindowCapture>; timer: ReturnType<typeof setTimeout> } | null = null;
+	#window: { id: string; stop: () => void; done: Promise<WindowCapture>; timer: ReturnType<typeof setTimeout> } | null = null;
+
+	// A WINDOW ACROSS INSTANCES (a serverless deployment: start, the session's requests and stop can
+	// each land on another instance). Start answers an id, signed with the profiler's secret so any
+	// instance can check it; the test's driver sends it on each of the session's requests (`x-og-window`);
+	// every instance writes such a request to the shared store (its visit rows, under the window's own
+	// key) BEFORE it answers — a frozen instance never finishes a write after; and stop, on whichever
+	// instance, gathers them. The CPU profile stays the starting instance's: sampling is per process.
+	async #window_sign(nonce: string): Promise<string> {
+		const { createHmac } = await import('node:crypto');
+		return createHmac('sha256', this.secret || 'ogygia-dev-window').update('window:' + nonce).digest('hex').slice(0, 20);
+	}
+
+	/** A window id from a request, when its signature holds; else null. */
+	async #window_id_of(request: Request): Promise<string | null> {
+		const raw = request.headers.get(WINDOW_HEADER);
+		if (!raw || raw.length > 80) return null;
+		const dot = raw.indexOf('.');
+		if (dot <= 0) return null;
+		const nonce = raw.slice(0, dot);
+		return (await this.#window_sign(nonce)) === raw.slice(dot + 1) ? raw : null;
+	}
+
+	/** A request in a window: written to the store, awaited (see above). */
+	async #window_note(entry: RequestEntry, request: Request): Promise<void> {
+		if (!this.#store?.putVisit || entry.internal) return;
+		const id = await this.#window_id_of(request);
+		if (!id) return;
+		const rec = { method: entry.method, path: entry.path, route: entry.route ?? null, ms: entry.ms, status: entry.status ?? null, cpu_ms: entry.cpu_ms, net_ms: entry.net_ms ?? null, net_count: entry.net_count ?? 0, at: Date.now(), instance: this.#instance_id };
+		try {
+			await this.#store.putVisit({ key: `${WINDOW_PAGE_PREFIX}${id}\0${rec.at}\0${Math.random().toString(36).slice(2, 8)}`, page: WINDOW_PAGE_PREFIX + id, at: rec.at, visit: JSON.stringify(rec) });
+		} catch {
+			// the store is down: this request is missing from the window, nothing else breaks
+		}
+	}
+
+	/** The requests every instance wrote for a window. */
+	async #window_requests(id: string): Promise<{ method: string; path: string; route: string | null; ms: number; status: number | null; cpu_ms: number; net_ms: number | null; net_count: number; at: number; instance: string }[]> {
+		if (!this.#store?.listVisits) return [];
+		try {
+			const rows = await this.#store.listVisits(WINDOW_PAGE_PREFIX + id, 2000);
+			return rows.map((r) => JSON.parse(r.visit)).sort((a, b) => a.at - b.at);
+		} catch {
+			return [];
+		}
+	}
+
+	/** This instance, told apart from the others in a window's requests. */
+	readonly #instance_id = Math.random().toString(36).slice(2, 10);
 
 	async #window_start(ctx: RouteCtx): Promise<Response> {
 		const busy = (message: string) =>
@@ -4196,13 +4248,23 @@ class Profiler {
 		this.#ensure_net?.();
 		let stop!: () => void;
 		const stopped = new Promise<void>((r) => (stop = r));
-		const timer = setTimeout(stop, WINDOW_MAX_MS);
+		const nonce = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+		const id = `${nonce}.${await this.#window_sign(nonce)}`;
+		// the cap: a stop that never comes here (a forgotten one, or one another instance answered)
+		// ends the window and frees the recorder — it held this instance's profiling until then
+		const timer = setTimeout(() => {
+			stop();
+			void done.finally(() => {
+				if (this.#window?.id === id) this.#window_release();
+			});
+		}, WINDOW_MAX_MS);
 		timer.unref?.();
 		const done = this.#capture_window(Math.min(this.sample_interval, 1000), () => stopped, { light: true });
 		// a capture that fails to start frees the recorder at once
 		done.catch(() => this.#window_release());
-		this.#window = { stop, done, timer };
-		return ctx.json({ ok: true, max_ms: WINDOW_MAX_MS });
+		this.#window = { id, stop, done, timer };
+		// `shared`: the requests of other instances reach this window (a store with visit rows)
+		return ctx.json({ ok: true, id, header: WINDOW_HEADER, shared: !!(this.#store?.putVisit && this.#store.listVisits), max_ms: WINDOW_MAX_MS });
 	}
 
 	#window_release(): void {
@@ -4215,8 +4277,30 @@ class Profiler {
 	}
 
 	async #window_stop(ctx: RouteCtx): Promise<Response> {
-		const w = this.#window;
-		if (!w) return ctx.json({ error: 'No window is recording (start one with POST /window/start).' }, { status: 400 });
+		const asked = ctx.event ? await this.#window_id_of(ctx.event.request) : null;
+		const w = this.#window && (!asked || this.#window.id === asked) ? this.#window : null;
+		if (!w) {
+			// another instance started it: its requests from the store (every instance wrote them), and no
+			// CPU profile — sampling ran in the starting instance
+			if (asked && this.#store?.listVisits) {
+				const reqs = await this.#window_requests(asked);
+				const busy = round2(reqs.reduce((a, r) => a + (r.cpu_ms || 0), 0));
+				return ctx.json({
+					kind: 'window',
+					id: null,
+					target: { page: '', runs: [] },
+					score: null,
+					forecast: null,
+					findings: [],
+					assets: null,
+					links: { html: '', json: '' },
+					summary: { busy_ms: busy },
+					cpu: 'the instance that started the window sampled it; this one only gathered the requests',
+					window: { ms: reqs.length ? reqs[reqs.length - 1].at - reqs[0].at : 0, requests: reqs, instances: new Set(reqs.map((r) => r.instance)).size }
+				});
+			}
+			return ctx.json({ error: 'No window is recording (start one with POST /window/start).' }, { status: 400 });
+		}
 		w.stop();
 		let cap: WindowCapture;
 		try {
@@ -4227,16 +4311,23 @@ class Profiler {
 		}
 		// the requests the window saw (not the profiler's own)
 		const own = `${this.base}/`;
-		const requests = this.#ring
-			.filter((e) => !e.internal && e.ts >= cap.t0 && e.ts <= cap.t1 && !e.path.startsWith(own) && e.path !== this.base)
-			.map((e) => ({ method: e.method, path: e.path, route: e.route ?? null, ms: round2(e.ms), status: e.status ?? null }));
+		// this instance's requests over the window (all of them: the server-side calls a tagged request
+		// made carry no tag), and the other instances' tagged ones from the store
+		const shared = await this.#window_requests(w.id);
+		const others = shared.filter((e) => e.instance !== this.#instance_id && !e.path.startsWith(own) && e.path !== this.base);
+		const requests = [
+			...this.#ring
+				.filter((e) => !e.internal && e.ts >= cap.t0 && e.ts <= cap.t1 && !e.path.startsWith(own) && e.path !== this.base)
+				.map((e) => ({ method: e.method, path: e.path, route: e.route ?? null, ms: round2(e.ms), status: e.status ?? null, cpu_ms: e.cpu_ms, instance: this.#instance_id })),
+			...others
+		];
 		try {
 			const id = await this.#finish_report(cap, {
 				trigger: 'window',
 				...(requests[0] ? { request: { method: requests[0].method, path: requests[0].path, route: requests[0].route, ms: requests[0].ms } } : {})
 			});
 			const s = this.#reports.get(id)!;
-			return ctx.json({ ...report_json(s.analysis, s.meta, this.base, this.#report_extras(s)), window: { ms: round2(cap.t1 - cap.t0), requests } });
+			return ctx.json({ ...report_json(s.analysis, s.meta, this.base, this.#report_extras(s)), window: { ms: round2(cap.t1 - cap.t0), requests, ...(shared.length ? { instances: new Set(requests.map((r) => r.instance)).size } : {}) } });
 		} finally {
 			this.#window_release();
 		}
@@ -4915,7 +5006,13 @@ class Profiler {
 							fetch_url: app_fetch,
 							cache: this.#asset_weights,
 							gzip: (b) => gzipSync(b, { level: 6 }).byteLength,
-							budget_ms: Math.max(500, Math.min(6000, request_deadline - Date.now() - 8000)),
+							// `weigh=full`: every file, however long (on a server with no request limit — on a
+							// serverless one, what the request has left), so the totals do not vary run to run
+							budget_ms:
+								q.get('weigh') === 'full'
+									? Math.max(500, Math.min(120_000, request_deadline - Date.now() - 4000))
+									: Math.max(500, Math.min(6000, request_deadline - Date.now() - 8000)),
+							...(q.get('weigh') === 'full' ? { max_files: 2000 } : {}),
 							extra,
 							// the build's readable list of what a hashed chunk holds (keyed by its served path)
 							contents_of: (u) => {
@@ -4984,11 +5081,14 @@ class Profiler {
 				const since = await this.#since_for(s, this.#prev_in_memory(s));
 				// its fixes that make other pages faster too (the lines they share)
 				const shared = this.#shared_of(s.meta);
-				return ctx.json({
+				const full: Record<string, unknown> = {
 					...report_json(s.analysis, s.meta, this.base, this.#report_extras(s)),
 					...(since ? { since } : {}),
 					...(shared.length ? { shared } : {})
-				});
+				};
+				// `fields=a,b`: only those top-level keys (and what names the report) — a CI run reading a few
+				// sections of hundreds of profiles need not carry the stacks
+				return ctx.json(pick_fields(full, q.get('fields')));
 			}
 			// the session cookie is seated by the gate in #ui, not here
 			return ctx.redirect(ctx.href('/report/[id]', { id }));
@@ -6267,6 +6367,8 @@ class Profiler {
 			return await run();
 		} finally {
 			this.#finalize(entry, start, cpu0, ctx, event.request);
+			// a test's window across instances: this request in the store before the answer goes out
+			if (event.request.headers.has(WINDOW_HEADER)) await this.#window_note(entry, event.request);
 		}
 	};
 
@@ -6502,6 +6604,18 @@ function mem_mark(step: string): void {
 
 function round2(n: number): number {
 	return Math.round(n * 100) / 100;
+}
+
+/** What names a report: kept whatever `fields` asks for. */
+const REPORT_IDENTITY = ['schema', 'version', 'engine', 'kind', 'id', 'created', 'target', 'links'];
+
+/** `report` with only the top-level keys in `fields` (comma-separated) and its identity; whole when unset. */
+export function pick_fields(report: Record<string, unknown>, fields: string | null): Record<string, unknown> {
+	if (!fields) return report;
+	const want = new Set([...REPORT_IDENTITY, ...fields.split(',').map((f) => f.trim()).filter(Boolean)]);
+	const out: Record<string, unknown> = {};
+	for (const k in report) if (want.has(k)) out[k] = report[k];
+	return out;
 }
 
 /**

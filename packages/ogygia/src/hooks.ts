@@ -165,7 +165,7 @@ import type { SeedAsk } from './server/seed-shape.js';
 import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
 import { drop_dead_kit_resolves } from './server/dead-kit-resolves.js';
 import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.js';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, switch_in_url } from './devtools/switch.js';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, TESTING_COOKIE, TESTING_LEAN, TESTING_PARAM, switch_in_url } from './devtools/switch.js';
 import { mark_personal } from './server/personal-response.js';
 
 /** Is devtools on for this request's browser (a devtools BUILD): the URL's `?og-devtools=on|off`
@@ -1024,7 +1024,9 @@ class OgygiaHandle {
 			// (a BUILD with devtools on: only for a browser that turned devtools on — devtools/switch.ts —
 			// so no other visitor's page carries the side-channel. `?og-devtools=on|off` flips it on this
 			// very response, so the page that turned it on is measured from its start)
-			if (devtools_on) dt_buffers.set(bag, { events: [], seq: 0 });
+			// (LEAN TESTING — devtools/switch.ts — keeps the HTML what a visitor gets: no event side-channel)
+			const lean = devtools_on && !building && (event.cookies.get(TESTING_COOKIE) === TESTING_LEAN || event.url.searchParams.get(TESTING_PARAM) === TESTING_LEAN);
+			if (devtools_on && !lean) dt_buffers.set(bag, { events: [], seq: 0 });
 			// Hang the bag off the request for the rest of it — the render's own Kit store and the
 			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
 			// carry this same `Request` and find it.
@@ -1051,6 +1053,18 @@ class OgygiaHandle {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
 			}
 			if (devtools_personal) mark_personal(response);
+			// a browser that turned devtools on may sample its main thread (the JS Self-Profiling API needs
+			// the document to allow it): the CPU of a page load and of a recorded session. Its own pages only
+			if (devtools_on && DEVTOOLS_LAZY && (response.headers.get('content-type') ?? '').includes('text/html')) {
+				try {
+					if (!response.headers.has('document-policy')) response.headers.set('document-policy', 'js-profiling');
+					// the route this page rendered (Kit's id), for `page().route` — a header, so even lean
+					// testing's HTML stays a visitor's
+					if (event.route?.id) response.headers.append('server-timing', `og-route;desc=${JSON.stringify(event.route.id)}`);
+				} catch {
+					// immutable headers
+				}
+			}
 			// FREEZE: action self-evict — a successful mutation on a page URL evicts its freeze
 			// (mirrors Kit's actions-invalidate-loads semantics; origin store only, fire-and-forget).
 			if (

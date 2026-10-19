@@ -76,10 +76,6 @@ import {
 	isFoucScopedId
 } from '../compiler/fouc-css.js';
 
-// Glob metacharacters in a file path handed to `optimizeDeps.entries` (Vite globs entries as
-// PATTERNS): a route group `(pes)`, a param dir `[slug]`, `{a,b}`, `*`, `?`, `!`. Escaped, or the
-// scanner would read the directory name as glob syntax and never match the file.
-const GLOB_META_RE = /[()[\]{}*?!]/g;
 import { preprocess_component_for_css } from './style-preprocess.js';
 import {
 	needs_csr_false_full_reload,
@@ -140,6 +136,9 @@ const KIT_PAGE_THREAD =
 	`{ page: __og_kit_page, navigating: __og_kit_nav, navigation: __og_kit_navigation };\n`;
 import {
 	PKG_ROOT,
+	PKG_ROOT_ID,
+	real_posix,
+	scan_entry_pattern,
 	PROFILER_UI_DIR,
 	PROFILER_ROUTER_MODULE,
 	OGYGIA_HOOKS_MODULE,
@@ -170,8 +169,6 @@ import type {
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
-/** Windows separators → posix. */
-const WIN_SEP_RE = /\\/g;
 const CSS_EXT_RE = /\.css$/;
 const STYLE_BEARING_FILE_RE = /\.(svelte|css|scss|sass|less|styl)$/;
 const PROFILER_DYNAMIC_IMPORT_RE = /import\((['"])\.\/profiler\/index\.js\1\)/;
@@ -188,16 +185,6 @@ function bundler_resolve(ctx: {
 			return null; // (Vite throws for a specifier this importer cannot resolve)
 		}
 	};
-}
-
-/** realpath + posix — declared-surface paths must match Vite's symlink-resolved module ids. */
-function real_posix(p: string): string {
-	try {
-		p = fs.realpathSync(p);
-	} catch {
-		/* keep as-given — a missing path simply never matches an id */
-	}
-	return p.replace(WIN_SEP_RE, '/');
 }
 
 /**
@@ -265,7 +252,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	if (profiler_config) {
 		pkg_scan.push({
 			name: 'ogygia',
-			root: real_posix(PKG_ROOT),
+			root: PKG_ROOT_ID.slice(0, -1),
 			dirs: [real_posix(PROFILER_UI_DIR)],
 			files: [real_posix(PROFILER_ROUTER_MODULE)]
 		});
@@ -585,6 +572,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 									'svelte',
 									'svelte/internal/client',
 									'svelte/server',
+									// (ogygia's dependency, not the app's: under pnpm the app root can't resolve it bare)
 									'ogygia > devalue',
 									...(devtools_effective ? ['ogygia > @neodrag/svelte', 'ogygia > @neodrag/svelte/resize'] : [])
 								]
@@ -740,7 +728,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						import_keys,
 						resolve_alias,
 						markdown_config: islandBridge.markdownConfig ?? null,
-						pkg_root: PKG_ROOT,
+						// (the id prefix, not the native path: every consumer `startsWith`s a module id)
+						pkg_root: PKG_ROOT_ID,
 						build_secret,
 						rate_limit,
 						session_cookie,
@@ -791,8 +780,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					opt.entries = entries;
 					const have = new Set(entries);
 					for (const abs of compiler.island_scan_entries()) {
-						const pattern = abs.split(path.sep).join('/').replace(GLOB_META_RE, '\\$&');
-						if (!have.has(pattern)) {
+						const pattern = scan_entry_pattern(abs);
+						if (pattern !== null && !have.has(pattern)) {
 							have.add(pattern);
 							entries.push(pattern);
 						}

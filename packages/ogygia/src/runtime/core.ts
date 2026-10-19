@@ -464,7 +464,10 @@ class OgygiaRegion extends HTMLElement {
 	// The two wake targets, bound once per element (not per connect): `#arm` hands them to a
 	// schedule, and `load` calls them straight — no closure built on the connect path. Each returns
 	// its promise: the interaction feature awaits it to know when the island is live (replay).
-	#fire_hydrate = () => this.#hydrate();
+	// ONE hydration in flight: a click that lands while the island's own schedule is already waking
+	// it waits for THAT run (an early return would replay the click before the island is live)
+	#hydrate_run: Promise<void> | null = null;
+	#fire_hydrate = () => (this.#hydrate_run ??= this.#hydrate().finally(() => (this.#hydrate_run = null)));
 	#fire_server = () => this.#server();
 	#fire_prefetch = () => this.#prefetch_html();
 
@@ -709,6 +712,12 @@ class OgygiaRegion extends HTMLElement {
 
 	/** Arm idle / visible / load / interaction / media for a schedule callback. */
 	#arm(when: string, fire: () => unknown, visible_margin?: string) {
+		// EVERY cold island catches what a visitor does before it is live, not only `interaction` ones:
+		// a `load` / `idle` / `visible` / media island is server markup with no handlers until it wakes,
+		// and a click on it then did nothing (a tab that "needs two clicks" on a slow machine). The same
+		// capture wakes it at once (a gesture: the `user` class) and replays the click when it is live.
+		// `interaction` is the island with no other trigger.
+		if (fire === this.#fire_hydrate && when !== 'interaction') this.#catch_early_input(fire);
 		if (DEVTOOLS) {
 			// Wrap so the schedule FIRING is observable (interaction/visible/idle "when did it actually
 			// wake, and why" is the story a timeline instrument tells). Off → `fire` is used directly.
@@ -764,6 +773,22 @@ class OgygiaRegion extends HTMLElement {
 			return;
 		}
 		const disarm = arm(this, fire);
+		this.#disarm_interaction = typeof disarm === 'function' ? disarm : null;
+	}
+
+	/**
+	 * A scheduled island (`load` / `idle` / `visible` / media) also catches input until it is live — the
+	 * interaction capture, armed beside its schedule: the first press, key or focus on it wakes it now,
+	 * as a gesture, and a click is replayed once it is live. Not on a Kit-hydrated page (Kit owns the
+	 * island there, as for `interaction`), not without the interaction feature, never once awake.
+	 */
+	#catch_early_input(fire: () => unknown) {
+		const arm = slots.interaction;
+		if (!arm || this.#app || (kit_hydrates_page() && !ours_on_kit_document(this))) return;
+		const disarm = arm(this, () => {
+			this.#user_woken = true;
+			return fire();
+		});
 		this.#disarm_interaction = typeof disarm === 'function' ? disarm : null;
 	}
 
@@ -1264,6 +1289,10 @@ class OgygiaRegion extends HTMLElement {
 		} finally {
 			this.#hydrating = false;
 			hydrate_settled(this);
+			// live (or failed, or not ours): its clicks are its own from here — the capture stops eating
+			// them (a click it already queued is still replayed by the wake that queued it)
+			this.#disarm_interaction?.();
+			this.#disarm_interaction = null;
 		}
 	}
 

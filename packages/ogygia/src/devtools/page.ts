@@ -459,20 +459,30 @@ export function held_open(): HeldOpen | null {
 	return keys.length ? { side: 'browser', keys: keys.sort((a, b) => a.at - b.at) } : null;
 }
 
+/** The router's last navigation that SWAPPED the page (its start time, its address). One that started
+ *  and never finished — it fell back to a full load the browser did not make (a test holding document
+ *  loads back), or a later one overtook it — changed nothing: this is still the page it was. */
 export function last_nav(): { to: string; t: number } | null {
 	const ev = snapshot();
 	let own: { to: string; t: number } | null = null;
+	let finished: string | null = null;
 	for (let i = ev.length - 1; i >= 0; i--) {
 		const e = ev[i];
-		if (e.name === 'nav.start' && e.realm === 'client') {
-			own = { to: e.to, t: e.t };
+		if (e.realm !== 'client') continue;
+		if (e.name === 'nav.finish' && finished === null) finished = e.to;
+		else if (e.name === 'nav.start' && finished !== null) {
+			own = { to: finished, t: e.t };
 			break;
 		}
 	}
 	// a page change ogygia's router did not make (SvelteKit's own client router on a Kit-hydrated
-	// document): the URL moved to another page after the router's last navigation, or with none
-	const moved = url_moves.at(-1);
-	if (moved && (!own || (moved.t > own.t && moved.to.split('?')[0] !== own.to.split('?')[0]))) return moved;
+	// document): the URL moved to another page after the router's last navigation, or with none. The
+	// router's own address moves are not one — it pushes the new address before it fetches, so a
+	// navigation it then hands to the browser (held back by a test) leaves a move behind with no swap
+	const path = (to: string) => to.split('?')[0];
+	const starts = ev.filter((e) => e.name === 'nav.start' && e.realm === 'client').map((e) => ({ t: e.t, path: path((e as { to: string }).to) }));
+	const moved = url_moves.filter((m) => !starts.some((s) => s.t <= m.t && s.path === path(m.to))).at(-1);
+	if (moved && (!own || moved.t > own.t)) return moved;
 	return own;
 }
 

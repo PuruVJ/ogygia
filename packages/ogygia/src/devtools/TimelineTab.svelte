@@ -8,6 +8,7 @@
 	 * different origin. The track width follows the window (bind:clientWidth), so it never overflows.
 	 */
 	import { snapshot } from './bus.js';
+	import { last_nav } from './page.js';
 	import { region_name, region_name_by_fp } from './regions.js';
 
 	let { tick = 0 } = $props();
@@ -35,13 +36,10 @@
 		// THIS page: from the last in-app navigation on (the nav itself included). Every earlier page's
 		// islands stayed in the buffer: after a few navigations the axis spanned the whole session, one
 		// lane per island of every page visited, each squeezed to a dot.
+		// (a navigation that never swapped the page — a full load held back, one overtaken — starts nothing)
 		const all = snapshot().filter((e) => e.realm === 'client' && MARK[e.name]);
-		let from = 0;
-		for (let i = all.length - 1; i >= 0; i--)
-			if (all[i].name === 'nav.start') {
-				from = i;
-				break;
-			}
+		const nav = last_nav();
+		const from = nav ? Math.max(0, all.findIndex((e) => e.t >= nav.t)) : 0;
 		const events = all.slice(from);
 		if (events.length === 0) return { events: [], lanes: [], span: 0 };
 

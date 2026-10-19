@@ -56,13 +56,16 @@ Each of the four demos below is a real island with that schedule:
 - **Typed text stays.** Characters land in the field natively, because it is real HTML. After hydration, the typed value, the selection, and the focus are restored, and `bind:` syncs.
 - **Hover warms it.** When the pointer enters the region, the chunk prefetches. Thus, when the press lands, the wake is usually immediate. For an on-demand *hole* (`render: 'deferred', wake: 'interaction'`) the hover fetches and swaps in one go; add `prefetch: 'idle'` to warm its HTML at page idle instead, so the first hover finds it already there (see [`prefetch` in `regions.presets`](/docs/reference/api#ogygiavite-regionspresets)).
 
-One caution: the replayed first event is not a *trusted* browser gesture. Gesture-gated APIs (`window.open`, clipboard, fullscreen) are blocked if called from it. A component can find this condition and adapt:
+The same holds for every other schedule until the island is live. A `load`, `idle`, `visible` or media island is server markup with no handlers until it wakes, so a press on it before then wakes it at once, and the click is replayed when it is live. A Ctrl/Cmd/Shift- or middle-click on a link opens it as the browser would, since a replay could not.
+
+One caution: the replayed first event is not a *trusted* browser gesture. Gesture-gated APIs (`window.open`, clipboard, fullscreen) are blocked if called from it. A component that ignores untrusted clicks (`if (!event.isTrusted) return`, often written to skip its own synthetic clicks) ignores the replay too, so narrow such a guard. A component can find this condition and adapt:
 
 ```svelte
 <script>
   import { hydratedBy } from 'ogygia';
 
-  // 'load' | 'idle' | 'visible' | 'interaction' | a media query — or null during SSR.
+  // 'interaction' when a visitor's input woke it (its first click is a replay), else its schedule:
+  // 'load' | 'idle' | 'visible' | a media query — or null during SSR.
   // Call during setup, like getContext.
   const woke = hydratedBy();
 </script>

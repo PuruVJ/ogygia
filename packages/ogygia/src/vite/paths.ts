@@ -9,8 +9,48 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-/** This package's root (the plugin runs from `dist/vite/`, so `../..` is the package root). */
+/** This package's root (the plugin runs from `dist/vite/`, so `../..` is the package root). A NATIVE
+ *  path (backslashes on Windows): for the file system, never to compare against a module id. */
 export const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
+
+/** Windows separators → posix. */
+const WIN_SEP_RE = /\\/g;
+
+/** A native path as Vite writes module ids: symlinks resolved (pnpm), forward slashes (Windows). */
+export function real_posix(p: string): string {
+	try {
+		p = fs.realpathSync(p);
+	} catch {
+		/* keep as-given — a missing path simply never matches an id */
+	}
+	return p.replace(WIN_SEP_RE, '/');
+}
+
+/** A native directory as the PREFIX of the module ids inside it: `real_posix` + one trailing `/`, so a
+ *  `startsWith` never matches a sibling (`ogygia-x/`) and holds on Windows, where the native path has
+ *  backslashes and Vite's ids do not. */
+export function id_dir(p: string): string {
+	const posix = real_posix(p);
+	return posix.endsWith('/') ? posix : posix + '/';
+}
+
+/** THE own-package test: every module id inside this package starts with this. Every check of "is
+ *  this id ogygia's own file" compares against it, never against PKG_ROOT. */
+export const PKG_ROOT_ID = id_dir(PKG_ROOT);
+
+// Glob metacharacters in a file path handed to `optimizeDeps.entries` (Vite globs entries as
+// PATTERNS): a route group `(pes)`, a param dir `[slug]`, `{a,b}`, `*`, `?`, `!`. Escaped, or the
+// scanner would read the directory name as glob syntax and never match the file.
+const GLOB_META_RE = /[()[\]{}*?!]/g;
+
+/** An island file as an `optimizeDeps.entries` pattern, or null for one of ogygia's OWN islands (the
+ *  profiler UI): ogygia is in `optimizeDeps.exclude`, so the scanner can't resolve inside it, and one
+ *  unresolved import fails the whole scan (nothing pre-bundles). Its client deps are named up front
+ *  instead (the plugin's `dev_island_deps`). */
+export function scan_entry_pattern(file: string, own_root: string = PKG_ROOT_ID): string | null {
+	const posix = real_posix(file);
+	return posix.startsWith(own_root) ? null : posix.replace(GLOB_META_RE, '\\$&');
+}
 
 /** The two ogygia self-imports the transform injects into hosts / generated island modules. */
 export const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/internal/server']);
@@ -79,17 +119,11 @@ export const PROFILER_ROUTER_MODULE = OG_HAS_SRC
  * spot it. Dev severs this module's `import('./profiler/index.js')` edge from import-analysis there
  * (see the transform hook) so Kit's dev css crawl can't descend into the profiler UI's stylesheets.
  */
-export const OGYGIA_HOOKS_MODULE = (
-	OG_HAS_SRC ? path.join(PKG_ROOT, 'src/hooks.ts') : path.join(PKG_ROOT, 'dist/hooks.js')
-)
-	.split(path.sep)
-	.join('/');
+export const OGYGIA_HOOKS_MODULE = PKG_ROOT_ID + (OG_HAS_SRC ? 'src/hooks.ts' : 'dist/hooks.js');
 /** ogygia's `Region.svelte` — either copy, as the POSIX id Vite hands the transform hook (a workspace
  *  can load the src one and the dist one both): its LateIsland import is the awaiting one where the
  *  app runs Svelte's async mode (late-island.ts). */
-export const OGYGIA_REGION_MODULES: ReadonlySet<string> = new Set(
-	['src/Region.svelte', 'dist/Region.svelte'].map((f) => path.join(PKG_ROOT, f).split(path.sep).join('/'))
-);
+export const OGYGIA_REGION_MODULES: ReadonlySet<string> = new Set([PKG_ROOT_ID + 'src/Region.svelte', PKG_ROOT_ID + 'dist/Region.svelte']);
 export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 	? {
 			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),

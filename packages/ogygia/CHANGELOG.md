@@ -21,9 +21,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `ogygia({ legacy: { appStores: true } })` keeps `$app/stores` working in islands for an app that shims it, and seed shaping reads its `$page` usage to decide which `page.data` keys ship.
-- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with the input before it (a `navigation-blocked` finding).
-- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, CLS) and vitals that moved past a noise threshold (`compare(base, head, { noise })`).
-- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute your app renders); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
 
 ### Fixed
 
@@ -48,10 +45,41 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
 - Devtools and the profiler no longer blame ogygia's scheduler ("held with nothing ahead") for a wait the page's own long task or a failing island caused.
 - The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
+
+## [0.8.3] - 2026-10-19
+
+### Added
+
+- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with what started it, seen as it began (the link, form or input being handled; `approx` where the browser cannot say).
+- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, blocked navigations, CLS) and vitals past a noise threshold (`compare(base, head, { noise })`), and take several runs a side (`{ test, runs }`): load signals by median, session signals only when every head run has them and no base run does.
+- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute on it or its nearest ancestor, across shadow roots) and its wake times (`t0`, `done`); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
+- `ogygia/testing`: `playwrightDriver(page, { onNavigationHeld })` and `turnOnDevtools(page, baseURL)`, the fixture's own pieces, for a test that holds its pages itself.
+- `ogygia/testing`: every report names the page's testing engine (`engine.version`, `engine.lean`); against a site on an older ogygia, `record()` fills in `navigations` from the loads it held, and one warning per site is logged for the whole run.
+- `ogygia/testing`: a `changed` island says whether only attributes differ (`attributesOnly`, with each in `attributes`) and whether input landed on it while it hydrated (`inputDuringHydration`); `ignoreAttributes` leaves chosen attribute changes out, and `toHydrateCleanly({ allowAttributeChanges, allowInput })` lets them through.
+- `ogygia/testing`: `page().self` says what measuring cost the page (`script_ms`, the testing engine's `bytes`), and lean testing (`lean: true`, the `og_testing=lean` cookie) runs the testing API and nothing else of devtools, so the page loads what a visitor's does.
+- `ogygia/testing`: `page().route` (the SvelteKit route id), `cpuFunctions` for more than 15 of `page().cpu.fns`, and a session's `failed` requests and slowest interaction per element (`by_element`).
+- Profiler: `record(…, { server: true })` works across the instances of a serverless deployment: the window's signed id rides each of the session's requests, every instance writes them to the profiler store, and stop on any instance gathers them (`window.instances`); a window that fails leaves the session whole with `server: { error }`.
+- Profiler: the JSON report names its `engine.version`; `?fields=` (`profile(path, { fields })`) answers only the sections asked for; `?weigh=full` weighs every file with no time budget, and each file it could not weigh says why (`assets.missed_why`).
+- A page with devtools switched on is sent `Document-Policy: js-profiling`, so the browser's CPU sampler can run on it.
+
+### Changed
+
+- `OgygiaDriver.evaluate` is loosely typed, so a driver's `page.evaluate` fits without a cast.
+- A pkg.pr.new preview is versioned `<next patch>-next.<commit>`, never the release it was built after.
+
+### Fixed
+
 - `record()` whose page left for another document now says so, with the actions' own error as `cause`, instead of "serve with devtools".
 - `withOgygia` turns devtools on for the first page a test opens when there is no `baseURL`; before, it was silently left off.
 - A page with devtools switched on is sent `private, no-store` with `Vary: Cookie` and is never frozen, so a shared cache cannot hand its events to other visitors; a profiler beacon page too.
 - A hole's `Server-Timing` reaches a browser that switched devtools on (it checked an old cookie value).
+- A profiler window whose stop never came frees its instance at its 60 s cap; before, that instance refused every later window.
+- A file the profiler failed to weigh by a timeout is weighed again on the next profile; before, it stayed a miss for the life of the instance.
+- Devtools' Page and Timeline tabs, and `page()`, stay on the page after a router navigation that never swapped it (handed to the browser and held back, or overtaken); before, they reported no islands.
+- On Windows, ogygia knows its own files again: builds no longer register its devtools and profiler components as app modules or warn that its own marks are ignored.
+- The dev dependency scan no longer fails when the profiler is on, so dependencies pre-bundle again; `devalue` is now named through ogygia, so pnpm apps stop warning that it can't be resolved.
+- A click on a `load`, `idle`, `visible` or media island before it is live is no longer lost: the island wakes at once and the click is replayed when it is live, as on an `interaction` island; `hydratedBy()` then says `'interaction'`.
+- A Ctrl/Cmd/Shift- or middle-click on a link in an island that is not live yet opens the link as the browser would; before, it was canceled and replayed, and the replay could not open it.
 
 ## [0.8.2] - 2026-10-14
 
