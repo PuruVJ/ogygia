@@ -119,6 +119,11 @@ export interface SessionReport {
 	by_island: Record<string, IslandSession>;
 	/** the slowest requests, with the server's own split when it sent one */
 	requests: { url: string; ms: number; status: number | null; server_ms: number | null; cpu_ms: number | null; net_ms: number | null; up: string | null }[];
+	/** every request that answered an error status (`type`: the browser's initiator type) */
+	failed: { url: string; status: number; type: string; t: number }[];
+	/** the slowest interaction on each element the session touched, however quick (0: a click the
+	 *  browser did not time, under its 16 ms floor) */
+	by_element: { target: string; duration: number; processing: number; t: number; fp: string | null }[];
 	cpu: CpuSummary | null;
 }
 
@@ -470,6 +475,25 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 				net_ms: st(r, 'net')?.ms ?? null,
 				up: st(r, 'up1') ? `${st(r, 'up1')!.desc} ${ms(st(r, 'up1')!.ms)}` : null
 			})),
+		// EVERY request that failed (an error status), not only the slowest — what a comparison needs to
+		// see a request start failing. (The browser's resource timing gives no method, and no entry for
+		// one the network refused outright: a failed status is what it can tell.)
+		failed: s.requests
+			.filter((r) => r.status !== null && r.status >= 400)
+			.map((r) => ({ url: r.url, status: r.status!, type: r.type, t: r.t })),
+		// the slowest interaction on EACH element, however quick: a comparison can tell "fast" from
+		// "never touched" (the list above keeps only the slowest)
+		by_element: Object.values(
+			s.interactions.reduce<Record<string, { target: string; duration: number; processing: number; t: number; fp: string | null }>>(
+				(acc, x) => {
+					const cur = acc[x.target];
+					if (!cur || x.duration > cur.duration) acc[x.target] = { target: x.target, duration: x.duration, processing: x.processing, t: x.t, fp: x.fp };
+					return acc;
+				},
+				// (a click the browser did not time — under 16 ms, its floor — counts as touched, at 0)
+				Object.fromEntries(s.clicks.map((c) => [c.target, { target: c.target, duration: 0, processing: 0, t: c.t, fp: c.fp }]))
+			)
+		).sort((a, b) => b.duration - a.duration),
 		cpu
 	};
 }
