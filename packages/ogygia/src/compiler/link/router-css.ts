@@ -97,15 +97,17 @@ export function router_css_roots(
  * Emit the `virtual:ogygia/router-css` source. Empty (`export {}`) when the app has no router
  * modules — the router's dynamic import of this virtual then registers nothing, zero cost.
  */
-export function router_css_module(
+export async function router_css_module(
 	roots: readonly string[],
 	opts: {
 		root: string;
 		lib_dir: string;
 		is_dev: boolean;
 		read_file: (p: string) => string | null;
+		/** the bundler's resolver, for the dev tree-CSS walk (compiler/fouc-css.ts) */
+		resolve?: (spec: string, importer: string) => Promise<string | null>;
 	}
-): string {
+): Promise<string> {
 	if (roots.length === 0) return 'export {};\n';
 
 	const lines: string[] = [`import { register_router_css } from 'ogygia/internal/register';`];
@@ -121,7 +123,8 @@ export function router_css_module(
 		const assignments: string[] = [];
 		for (const abs of roots) {
 			const entries: Array<{ key: string; css: string }> = [];
-			for (const e of collectFoucCssReachable(abs, {
+			for (const e of await collectFoucCssReachable(abs, {
+				resolve: opts.resolve,
 				root: opts.root,
 				libDir: opts.lib_dir,
 				readFile: opts.read_file

@@ -11,7 +11,7 @@
 // so Svelte's client runtime (one ~200 KB chunk in a real app) must not be among the boot's scripts:
 // it arrives with the first wake, when `hydrate()` needs it anyway.
 // Usage: pnpm exec playwright test lazy-chunks
-import { test, check } from './fixtures/index.ts';
+import { test, check, replayed_once } from './fixtures/index.ts';
 
 /** A string only the hydrate core carries: the foreign-mutation detector's warning text. (The
  *  `data-og-recovered` MARK it sets is not unique — the boot's hydration beacon reads it.) */
@@ -112,7 +112,7 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 			after_wake.map((b) => b.u).join('\n')
 		);
 		check('wake: still no navigation chunk', carrying(after_wake, ROUTER_NAV_MARKER).length === 0);
-		check('wake: the click replayed (count 1)', (await page.locator('[data-i-count]').innerText()) === '1');
+		check('wake: the click replayed (count 1)', await replayed_once(page));
 
 		// The visible island below the fold wakes on scroll, from the already-loaded core.
 		const before_scroll = scripts.length;

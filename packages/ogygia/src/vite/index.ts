@@ -174,6 +174,20 @@ const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 const CSS_EXT_RE = /\.css$/;
 const STYLE_BEARING_FILE_RE = /\.(svelte|css|scss|sass|less|styl)$/;
 const PROFILER_DYNAMIC_IMPORT_RE = /import\((['"])\.\/profiler\/index\.js\1\)/;
+/** The bundler's resolver as the CSS walk's (compiler/fouc-css.ts `collectFoucCssReachable`): what
+ *  the build resolves, the walk reaches — a package's `exports`, a workspace link, an alias. */
+function bundler_resolve(ctx: {
+	resolve(source: string, importer?: string, o?: { skipSelf?: boolean }): Promise<{ id: string; external?: boolean | string } | null>;
+}): (spec: string, importer: string) => Promise<string | null> {
+	return async (spec, importer) => {
+		try {
+			const r = await ctx.resolve(spec, importer, { skipSelf: true });
+			return r && !r.external ? r.id : null;
+		} catch {
+			return null; // (Vite throws for a specifier this importer cannot resolve)
+		}
+	};
+}
 
 /**
  * Vite plugin: transforms `with { hydrate | defer | preset }` imports into islands,
@@ -848,9 +862,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// shared-chunk CSS hoisting, which breaks any root that shares a child (every profiler
 					// page wraps Shell). Same emit shape as the content-body CSS leg just below.
 					router_css_refs.clear();
+					// (both tree-CSS legs reach what the build resolves: compiler/fouc-css.ts)
+					const walk_resolve = bundler_resolve(this);
 					for (const abs of compiler.router_css_roots()) {
 						const parts: string[] = [];
-						for (const e of collectFoucCssReachable(abs, { root, libDir, readFile })) {
+						for (const e of await collectFoucCssReachable(abs, { root, libDir, readFile, alias: resolve_alias, resolve: walk_resolve })) {
 							if (e.kind === 'scoped') {
 								const src = readFile(e.abs);
 								if (src == null) continue;
@@ -891,11 +907,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						let ref = hole_css_by_abs.get(abs);
 						if (ref === undefined) {
 							const parts: string[] = [];
-							for (const e of collectFoucCssReachable(abs, {
+							for (const e of await collectFoucCssReachable(abs, {
 								root,
 								libDir,
 								readFile,
-								alias: resolve_alias
+								alias: resolve_alias,
+								resolve: walk_resolve
 							})) {
 								if (e.kind === 'scoped') {
 									const src = readFile(e.abs);
@@ -1208,7 +1225,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						return { code: 'export {}', moduleSideEffects: false };
 					}
 					const abs = path.join(root, rel);
-					const code = buildFoucCssModuleSource(abs, {
+					const code = await buildFoucCssModuleSource(abs, {
 						root,
 						libDir,
 						readFile: (p) => {
@@ -1218,6 +1235,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 								return null;
 							}
 						}
+						// (no bundler resolver: this module names each sheet by its root-relative path, so it
+						// carries the app's own files — an island's exact chunk CSS reaches the page through its
+						// region-CSS link: Region.svelte `island_css_html`)
 					});
 					// Must not tree-shake: the only purpose of this module is CSS side effects.
 					return { code, moduleSideEffects: true };
@@ -1249,7 +1269,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 				// Every other ogygia virtual is a pure `id → source` emit the driver owns. The Vite build
 				// value it can't see is threaded in: the app's universal-hooks path (configResolved).
-				return compiler.emit(id, { ssr, universalHooks: universal_hooks });
+				return compiler.emit(id, { ssr, universalHooks: universal_hooks, resolve: bundler_resolve(this) });
 			},
 
 			async transform(code, id, options) {

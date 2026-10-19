@@ -10,10 +10,30 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `ogygia/testing`: `record(actions, { blockNavigation: true })` holds back any document load the actions cause, keeps the page and lists each in `navigations` with the input before it (a `navigation-blocked` finding).
+- `ogygia/testing`: `compare()` and `toMarkdown()` also report hydration per island instance, session counts (errors, shifts, slow interactions, CLS) and vitals that moved past a noise threshold (`compare(base, head, { noise })`).
+- `ogygia/testing`: each `hydration()` island has a `key` per instance (`Name#n` in page order, or the `islandKey` attribute your app renders); session findings carry `names`; a session's `counts.cls` is a number, and `toMeetBudget({ cls })` reads it.
+
 ### Fixed
 
+- `record()` whose page left for another document now says so, with the actions' own error as `cause`, instead of "serve with devtools".
+- `withOgygia` turns devtools on for the first page a test opens when there is no `baseURL`; before, it was silently left off.
+- A page with devtools switched on is sent `private, no-store` with `Vary: Cookie` and is never frozen, so a shared cache cannot hand its events to other visitors; a profiler beacon page too.
+- A hole's `Server-Timing` reaches a browser that switched devtools on (it checked an old cookie value).
 - On Windows, ogygia knows its own files again: builds no longer register its devtools and profiler components as app modules or warn that its own marks are ignored.
 - The dev dependency scan no longer fails when the profiler is on, so dependencies pre-bundle again; `devalue` is now named through ogygia, so pnpm apps stop warning that it can't be resolved.
+
+## [0.8.2] - 2026-10-14
+
+### Changed
+
+- In a build with devtools, the launcher stays hidden until a browser turns devtools on (`?og-devtools=on`, or `ogygia.devtools.on()` in the console); `?og-devtools=off`, `ogygia.devtools.off()` or **hide** in the dock turn it off. The dev server is unchanged.
+
+### Fixed
+
+- A hole's CSS now carries components taken through a package (its `exports`, a TypeScript entry included) or a barrel — only the names imported — and an island inside a hole brings its own CSS, so what it renders after a click is styled.
 
 ## [0.8.1] - 2026-10-13
 

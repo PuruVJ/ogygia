@@ -46,6 +46,9 @@ test('page() and hydration(): the planted problems, as a test sees them', async 
 	expect(status.Clock).toBe('changed');
 	expect(status.Healthy).toBe('clean');
 	expect(hyd.islands.find((i) => i.name === 'Clock')!.diff!.added).toBeGreaterThan(0);
+	// each instance keyed by its place among islands of its name (no `islandKey` attribute given)
+	expect(hyd.islands.find((i) => i.name === 'Broken')!.key).toBe('Broken#1');
+	expect(new Set(hyd.islands.map((i) => i.key)).size).toBe(hyd.islands.length);
 
 	// the matchers, and their messages when a test fails
 	let message = '';
@@ -83,6 +86,7 @@ test('record(): a session of clicks, with the server split of the request one ma
 	expect(session).toMeetBudget({ serverBusyMs: 60_000 });
 	const slow = session.findings.find((f) => f.code === 'slow-interaction');
 	expect(slow?.message).toContain('SessionSlow');
+	expect(slow?.names).toContain('SessionSlow');
 	const server = session.findings.find((f) => f.code === 'server-time');
 	expect(server?.message).toContain('/hell/api/session');
 	expect(session).toMeetBudget({ errors: 0 });
@@ -106,6 +110,52 @@ test('record() across a full page load: one session, both pages', async ({ page,
 	// the first page's slow click keeps its island's name, the second page's broken island is there
 	expect(session.findings.find((f) => f.code === 'slow-interaction')?.message).toContain('SessionSlow');
 	expect(session.findings.find((f) => f.code === 'hydrate-failed')?.message).toContain('Broken');
+});
+
+test('record({ blockNavigation }): a click that would load another document is held back and listed', async ({ page, ogygia }) => {
+	test.setTimeout(90_000);
+	await page.goto('/dt-session');
+	await page.waitForTimeout(9000);
+	const origin = await page.evaluate(() => performance.timeOrigin);
+	const session = await ogygia.record(
+		async () => {
+			await page.locator('[data-ds="slow"]').click();
+			// a plain link out of the router's reach: a full document load
+			await page.evaluate(() => {
+				const a = Object.assign(document.createElement('a'), { href: '/dt-lab', textContent: 'leave' });
+				a.setAttribute('data-sveltekit-reload', '');
+				a.setAttribute('data-leave', '');
+				document.body.append(a);
+			});
+			await page.locator('[data-leave]').click();
+			await page.waitForTimeout(500);
+		},
+		{ blockNavigation: true }
+	);
+	expect(await page.evaluate(() => performance.timeOrigin), 'the page stayed').toBe(origin);
+	expect(session.navigations).toHaveLength(1);
+	expect(session.navigations[0].url).toContain('/dt-lab');
+	expect(session.navigations[0].after).toContain('leave');
+	expect(session.findings.find((f) => f.code === 'navigation-blocked')?.message).toContain('/dt-lab');
+});
+
+test.describe('a recording whose page leaves for a document with no testing API', () => {
+	test.use({ ogygiaOptions: { timeout: 1500 } });
+	test('says the page left, with the actions’ own error as the cause', async ({ page, ogygia }) => {
+		test.setTimeout(60_000);
+		await page.goto('/dt-session');
+		await page.waitForTimeout(2000);
+		const boom = new Error('the button was gone');
+		const err = (await ogygia
+			.record(async () => {
+				await page.goto('about:blank');
+				throw boom;
+			})
+			.catch((e: Error) => e)) as Error;
+		expect(err.message).toContain('went to another document');
+		expect(err.message).not.toContain('devtools: true');
+		expect(err.cause).toBe(boom);
+	});
 });
 
 test('record() across an in-app navigation: the first page keeps its island names', async ({ page, ogygia }) => {

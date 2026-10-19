@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => ({
 }));
 ```
 
-A launcher appears at the bottom of each `csr = false` page.
+On the dev server, a launcher appears at the bottom of each `csr = false` page. In a build it stays hidden until you turn it on in your browser (see below).
 
 ### What measuring costs the page
 
@@ -31,9 +31,16 @@ Devtools measures the page it shows, so it must not change what it measures. Loa
 
 ### In a build (a preview deploy)
 
-With the flag on in a build, a page carries only a small launcher (about 10 KB of JS with the event recorder). The dock itself (its code, every tab, its CSS) loads when someone opens it. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
+With the flag on in a build (a QA, UAT or preview deploy), a page carries only a small switch (about 10 KB of JS with the event recorder). Visitors see nothing: no launcher, no measuring, no server event data. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
 
-Opening the dock once sets an `og_devtools` cookie in that browser. From the next load on, that browser's pages are measured from the start (the Page tab), and the server adds its event data to them (the Wire and Timeline tabs). Every other visitor gets neither. The first time you open it on a page, the Page tab asks you to reload.
+Turn devtools on in your own browser:
+
+- add `?og-devtools=on` to any page's URL (the address drops it once it is applied), or
+- run `ogygia.devtools.on()` in the browser console.
+
+It stays on across navigations and reloads (an `og_devtools` cookie, for 30 days). From then on the launcher shows, your pages are measured from the start (the Page tab), and the server adds its event data to them (the Wire and Timeline tabs). The dock itself (its code, every tab, its CSS) loads when you open it.
+
+Turn it off with `?og-devtools=off`, `ogygia.devtools.off()`, or **hide** in the dock's title bar. `ogygia.devtools.status()` says which it is. Every other visitor never sees any of it.
 
 Two things stay dev-only: the Main thread section's CPU sampling needs a `Document-Policy: js-profiling` response header (the dev server sends it; set it on your preview host to have it there), and a Kit-hydrated (`csr = true`) page gets no dock in a build.
 

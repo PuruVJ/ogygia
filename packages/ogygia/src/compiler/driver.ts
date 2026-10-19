@@ -1038,7 +1038,19 @@ export class Compiler {
 	 * the adapter owns only the FOUC-css virtuals (they carry a Vite `moduleType`) and the Vite build
 	 * value threaded in here (the `universalHooks` path).
 	 */
-	emit(id: string, { ssr, universalHooks }: { ssr: boolean; universalHooks: string | null }): string | null {
+	emit(
+		id: string,
+		{
+			ssr,
+			universalHooks,
+			resolve
+		}: {
+			ssr: boolean;
+			universalHooks: string | null;
+			/** the bundler's resolver (the router-CSS tree walk: compiler/fouc-css.ts) */
+			resolve?: (spec: string, importer: string) => Promise<string | null>;
+		}
+	): string | Promise<string> | null {
 		const ctx = this.#ctx!;
 		const program = this.program;
 		const is_dev = ctx.is_dev;
@@ -1180,7 +1192,8 @@ export class Compiler {
 				root: ctx.root,
 				lib_dir: ctx.libDir,
 				is_dev,
-				read_file: (p) => ctx.read_file(p)
+				read_file: (p) => ctx.read_file(p),
+				resolve
 			});
 		}
 		if (id === RESOLVED(V_SECRET)) {
