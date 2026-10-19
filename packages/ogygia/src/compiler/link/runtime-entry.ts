@@ -67,7 +67,9 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 	interaction: {
 		module: 'interaction.js',
 		deps: [],
-		detect: (m) => (m.hydrate || []).includes('interaction')
+		// every island that hydrates on the client: a scheduled one is armed too until it is live
+		// (a lake — `none` — never hydrates)
+		detect: (m) => (m.hydrate || []).some((w) => w !== 'none')
 	},
 	forms: {
 		module: 'form-continuity.js',
