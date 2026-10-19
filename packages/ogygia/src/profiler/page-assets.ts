@@ -48,6 +48,9 @@ export interface PageAssets {
 	unscoped?: (UnscopedStyles & { in: string })[];
 	/** references that could not be weighed (a 404, a timeout, the budget ran out) */
 	missed: string[];
+	/** each of those, and why: `budget` (time ran out before it), `timeout`, `status 404`, `file cap`,
+	 *  `error: …` — a total with only `status` misses can be trusted; `budget` / `timeout` ones vary */
+	missed_why?: { url: string; why: string }[];
 	/** the HTML itself */
 	html: { bytes: number; wire: number };
 	/** inline `<script>` / `<style>` text in the document, decoded bytes */
@@ -388,17 +391,29 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 	for (const r of extra) if (r.lazy) push(r);
 	const assets: WeighedAsset[] = [];
 	const missed: string[] = [];
+	const missed_why: { url: string; why: string }[] = [];
+	const miss = (url: string, why: string) => {
+		missed.push(url);
+		missed_why.push({ url, why });
+	};
 	let at = 0;
 	const worker = async () => {
 		while (at < queue.length && Date.now() < deadline && assets.length + missed.length < max_files) {
 			const r = queue[at++];
 			let w = opts.cache.get(r.url);
 			if (w === undefined) {
-				w = await weigh_one(r, opts, deadline, origin);
+				const got = await weigh_one(r, opts, deadline, origin);
+				if ('miss' in got) {
+					// (a file that answered an error is that for good; a timeout or the budget is not)
+					if (got.miss.startsWith('status ')) opts.cache.set(r.url, null);
+					miss(r.url, got.miss);
+					continue;
+				}
+				w = got;
 				opts.cache.set(r.url, w);
 			}
 			if (!w) {
-				missed.push(r.url);
+				miss(r.url, 'an error status before (cached)');
 				continue;
 			}
 			const contains = r.kind === 'script' || r.kind === 'style' ? opts.contents_of?.(r.url) : null;
@@ -418,7 +433,7 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 	while (at < queue.length && Date.now() < deadline && assets.length + missed.length < max_files) {
 		await Promise.all(Array.from({ length: Math.min(6, queue.length - at) }, worker));
 	}
-	for (let k = at; k < queue.length; k++) missed.push(queue[k].url);
+	for (let k = at; k < queue.length; k++) miss(queue[k].url, assets.length + missed.length >= max_files ? 'file cap' : 'budget');
 
 	const html_bytes = byte_length(opts.html);
 	const html_wire = opts.gzip ? opts.gzip(new TextEncoder().encode(opts.html)) : html_bytes;
@@ -446,7 +461,7 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 	// the build's unscoped-fallback markers: in the document's inline <style>s, then in each sheet
 	const unscoped: (UnscopedStyles & { in: string })[] = find_unscoped(inline_style_text(opts.html)).map((u) => ({ ...u, in: 'the document' }));
 	for (const a of assets) if (a.kind === 'style') for (const u of opts.cache.get(a.url)?.unscoped ?? []) if (!unscoped.some((x) => x.file === u.file)) unscoped.push({ ...u, in: a.url });
-	return { assets: assets.sort((x, y) => y.bytes - x.bytes), missed, ...(unscoped.length ? { unscoped } : {}), html: { bytes: html_bytes, wire: html_wire }, inline, totals: t };
+	return { assets: assets.sort((x, y) => y.bytes - x.bytes), missed, ...(missed_why.length ? { missed_why } : {}), ...(unscoped.length ? { unscoped } : {}), html: { bytes: html_bytes, wire: html_wire }, inline, totals: t };
 }
 
 /** The text of every inline `<style>` in the document (only there is a marker the build's: a page
@@ -634,15 +649,19 @@ function byte_length(s: string): number {
 	return n;
 }
 
-async function weigh_one(r: AssetRef, opts: WeighOptions, deadline: number, origin: string): Promise<Weight | null> {
+/** Why a file could not be weighed. */
+type Miss = { miss: string };
+
+async function weigh_one(r: AssetRef, opts: WeighOptions, deadline: number, origin: string): Promise<Weight | Miss> {
 	const left = deadline - Date.now();
-	if (left < 100) return null;
+	if (left < 100) return { miss: 'budget' };
 	try {
 		const res = await Promise.race([
 			opts.fetch_url(r.url.startsWith(origin) ? r.url.slice(origin.length) || '/' : r.url),
 			new Promise<null>((ok) => setTimeout(() => ok(null), left))
 		]);
-		if (!res || !res.ok) return null;
+		if (!res) return { miss: 'timeout' };
+		if (!res.ok) return { miss: `status ${res.status}` };
 		const enc = res.headers.get('content-encoding');
 		const len = Number(res.headers.get('content-length'));
 		const buf = new Uint8Array(await res.arrayBuffer());
@@ -671,7 +690,7 @@ async function weigh_one(r: AssetRef, opts: WeighOptions, deadline: number, orig
 			if (vary) w.vary = vary.slice(0, 120);
 		}
 		return w;
-	} catch {
-		return null;
+	} catch (e) {
+		return { miss: 'error: ' + (e instanceof Error ? e.message : String(e)).slice(0, 120) };
 	}
 }

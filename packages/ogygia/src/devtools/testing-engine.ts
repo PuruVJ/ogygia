@@ -10,13 +10,47 @@ import { analyze_session, session_timeline, type Ref } from './session-insights.
 import { region_name_by_fp } from './regions.js';
 import { snapshot } from './bus.js';
 import { ensure_region_names } from './names.js';
+import { TESTING_ENGINE_VERSION } from './testing-version.js';
+import { nearest_attr } from './nearest-attr.js';
+import { charge, own_cost } from '../runtime/own-cost.js';
+import { apply_attr_rules, type AttrRule } from './attr-rules.js';
+import { testing_lean } from './switch.js';
 
-export async function page_json() {
+/** Which engine answered, and whether in lean testing (switch.ts): on every report. */
+const engine = () => ({ version: TESTING_ENGINE_VERSION, lean: testing_lean() });
+
+/** The decoded size of the engine's own files: what the page fetched while its import ran (ui.ts). */
+let engine_bytes = 0;
+export function note_engine_files(from: number, to: number): void {
+	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+		if (r.startTime >= from && r.startTime <= to && (r.initiatorType === 'script' || r.initiatorType === 'link' || r.initiatorType === 'other')) engine_bytes += r.decodedBodySize || 0;
+}
+
+/** What ogygia's measuring cost this page, for a test to subtract: the main-thread time of its own work
+ *  (checking islands as they hydrate, building the visit, the testing reports — runtime/own-cost.ts)
+ *  and the decoded bytes of the testing engine's files. No visitor with devtools off pays either. */
+function self_cost(): { script_ms: number; bytes: number; phases: Record<string, number> } {
+	const c = own_cost();
+	return { script_ms: c.ms, bytes: engine_bytes, phases: c.phases };
+}
+
+export async function page_json(cpu_fns = 15) {
 	await ensure_region_names();
+	const c0 = performance.now();
 	const v = read_page();
+	charge('report', c0);
 	if (!v) return null;
+	// the route the server rendered (its `og-route` Server-Timing on this document), else null
+	let route: string | null = null;
+	try {
+		const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+		route = nav?.serverTiming?.find((s) => s.name === 'og-route')?.description || null;
+	} catch {
+		route = null;
+	}
 	return {
 		url: location.pathname,
+		route,
 		nav: v.nav,
 		vitals: v.report.vitals,
 		islands: v.report.rows,
@@ -24,33 +58,51 @@ export async function page_json() {
 		blocking: v.report.blocking,
 		bytes: v.report.bytes,
 		longtask_ms: v.report.longtask_ms,
-		cpu: v.cpu ? { busy_ms: v.cpu.busy_ms, by_kind: v.cpu.by_kind, fns: v.cpu.fns.slice(0, 15) } : null,
+		cpu: v.cpu ? { busy_ms: v.cpu.busy_ms, by_kind: v.cpu.by_kind, fns: v.cpu.fns.slice(0, Math.max(1, Math.min(500, cpu_fns))) } : null,
 		cpu_state: v.page.cpu.state,
 		cpu_off: v.page.cpu.off ?? null,
 		// what this browser cannot measure: a test's "no findings" means less there
-		unmeasured: v.unmeasured
+		unmeasured: v.unmeasured,
+		self: self_cost(),
+		engine: engine()
 	};
 }
 
-/** Each island's report, keyed per INSTANCE: the value of `key_attr` on the island or its nearest
- *  ancestor that has it (an id the app renders, e.g. its CMS block's), else `Name#n`, the n-th island
- *  of that name in document order — the same across builds while the page keeps its layout. */
-export async function hydration_json(key_attr?: string) {
+/** Each island's report, keyed per INSTANCE: the value of `key_attr` on the island or its NEAREST
+ *  ancestor that has it, across shadow roots (an id the app renders, e.g. its CMS block's), else
+ *  `Name#n`, the n-th island of that name in document order. Two islands under the same keyed
+ *  element are told apart as `key`, `key#2`, … in document order. */
+export async function hydration_json(key_attr?: string, ignore: AttrRule[] = []) {
 	await ensure_region_names();
-	const report = hydration_report();
+	const base = hydration_report();
+	// attribute changes a test ignores: an island whose every difference is one reads `clean`
+	const report = {
+		...base,
+		islands: base.islands.map((i) => {
+			if (!i.attributesOnly || !ignore.length || !i.attributes) return i;
+			const { left, ignored } = apply_attr_rules(i.attributes, ignore);
+			if (!ignored.length) return i;
+			return left.length ? { ...i, attributes: left, ignored } : { ...i, status: 'clean' as const, attributesOnly: false, attributes: null, diff: null, ignored };
+		})
+	};
 	const els = new Map(hydration_rows().rows.map((r) => [r.fp, r.el]));
 	const in_order = report.islands
 		.map((i) => ({ i, el: els.get(i.fp) }))
 		.sort((a, b) => (a.el && b.el && a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_PRECEDING ? 1 : -1));
 	const keys = new Map<string, string>();
 	const count = new Map<string, number>();
+	const used = new Map<string, number>();
 	for (const { i, el } of in_order) {
 		const n = (count.get(i.name) ?? 0) + 1;
 		count.set(i.name, n);
-		const own = key_attr && el ? el.closest(`[${CSS.escape(key_attr)}]`)?.getAttribute(key_attr) : null;
-		keys.set(i.fp, own || `${i.name}#${n}`);
+		const own = key_attr && el ? nearest_attr(el, key_attr) : null;
+		if (own) {
+			const k = (used.get(own) ?? 0) + 1;
+			used.set(own, k);
+			keys.set(i.fp, k === 1 ? own : `${own}#${k}`);
+		} else keys.set(i.fp, `${i.name}#${n}`);
 	}
-	return { ...report, islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
+	return { ...report, engine: engine(), islands: report.islands.map((i) => ({ ...i, key: keys.get(i.fp)! })) };
 }
 
 export function record_start(): boolean {
@@ -72,11 +124,23 @@ export async function record_stop(blocked: BlockedNavigation[] = []) {
 	await ensure_region_names();
 	const names = session_names(data, (fp) => region_name_by_fp(fp));
 	const report = analyze_session(data, names, location.href);
-	// each blocked navigation with the input just before it: what made the page try to leave
+	// each blocked navigation with what started it: the navigation the page saw start for that URL
+	// (its link or form, or the input being handled then — exact), else, where the browser has no
+	// Navigation API, the last input before it (`approx`)
 	const inputs = [...data.clicks, ...data.interactions].sort((a, b) => a.t - b.t);
+	const seen = [...(data.navs ?? [])];
 	const navigations = blocked.map((n) => {
+		let best = -1;
+		for (let k = 0; k < seen.length; k++) {
+			if (seen[k].url !== n.url) continue;
+			if (best === -1 || (n.t !== null && Math.abs(seen[k].t - n.t) < Math.abs(seen[best].t - n.t))) best = k;
+		}
+		if (best !== -1) {
+			const [nav] = seen.splice(best, 1);
+			return { url: n.url, t: nav.t, after: nav.source, island: nav.fp ? names(nav.fp) : null, approx: false };
+		}
 		const before = n.t === null ? undefined : inputs.filter((x) => x.t <= n.t!).at(-1);
-		return { url: n.url, t: n.t, after: before?.target ?? null, island: before?.fp ? names(before.fp) : null };
+		return { url: n.url, t: n.t, after: before?.target ?? null, island: before?.fp ? names(before.fp) : null, approx: true };
 	});
 	for (const n of navigations)
 		report.findings.push({
@@ -105,6 +169,7 @@ export async function record_stop(blocked: BlockedNavigation[] = []) {
 			return { ...f, names: [...new Set(named)] };
 		}),
 		navigations,
+		engine: engine(),
 		timeline: session_timeline(data, names).map((l) => ({ ...l, items: l.items.map(({ ref: _ref, ...it }) => it) })),
 		unmeasured: unmeasured(data.cpu_off)
 	};

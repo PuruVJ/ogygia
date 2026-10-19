@@ -4,7 +4,7 @@
  * the Hydration tab and the testing API (`window.__ogygia_testing.hydration()`).
  */
 import { snapshot } from './bus.js';
-import { beacon_page } from '../runtime/beacon.js';
+import { beacon_page, type AttrChange } from '../runtime/beacon.js';
 import { all_regions, region_name } from './regions.js';
 import { html_diff, type HtmlDiff } from './html-diff.js';
 
@@ -60,9 +60,33 @@ export function hydration_rows(): { rows: IslandHydration[]; measured: boolean }
 	return { rows, measured: !!page };
 }
 
-/** The same, as plain data (no elements), with each changed island's diff — for tests. */
-export function hydration_report(): { measured: boolean; islands: { fp: string; name: string; wake: string; status: HydrationStatus; reason: string; diff: HtmlDiff | null; window_from?: number }[] } {
+/** The same, as plain data (no elements), with each changed island's diff — for tests. `t0` / `done`:
+ *  when it began to wake and when it could answer, on the document's clock (ms from its start; null
+ *  for an island that has not woken), so a test can tell which of its steps woke it. */
+export function hydration_report(): {
+	measured: boolean;
+	islands: {
+		fp: string;
+		name: string;
+		wake: string;
+		status: HydrationStatus;
+		reason: string;
+		diff: HtmlDiff | null;
+		t0: number | null;
+		done: number | null;
+		/** a `changed` island whose only differences are attributes (the same elements and text — often a
+		 *  custom element setting its own as it upgrades); false when text or elements differ */
+		attributesOnly: boolean;
+		/** with `attributesOnly`, each attribute that differs */
+		attributes: AttrChange[] | null;
+		/** input landed on it while it hydrated (a pointer over it, a press, a key, focus): its DOM may
+		 *  have answered that input */
+		inputDuringHydration: boolean;
+		window_from?: number;
+	}[];
+} {
 	const { rows, measured } = hydration_rows();
+	const woke = new Map((beacon_page()?.islands ?? []).map((i) => [i.fp, i]));
 	return {
 		measured,
 		islands: rows.map((r) => ({
@@ -72,6 +96,11 @@ export function hydration_report(): { measured: boolean; islands: { fp: string; 
 			status: r.status,
 			reason: r.reason,
 			diff: r.snap && r.status !== 'clean' ? html_diff(r.snap.ssr, r.snap.hydrated) : null,
+			t0: woke.get(r.fp)?.t0 ?? null,
+			done: woke.get(r.fp)?.done ?? null,
+			attributesOnly: r.status === 'changed' && !!woke.get(r.fp)?.attrs,
+			attributes: r.status === 'changed' ? (woke.get(r.fp)?.attrs ?? null) : null,
+			inputDuringHydration: !!woke.get(r.fp)?.input,
 			...(r.snap?.from !== undefined ? { window_from: r.snap.from } : {})
 		}))
 	};

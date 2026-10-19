@@ -29,6 +29,16 @@ jobs:
       # Build the library to dist (the published preview uses publishConfig.exports → dist).
       - run: pnpm run build:lib
 
+      # A preview names itself: the next patch as a prerelease of this commit (`0.8.3-next.cb18746`),
+      # so a report or a lockfile never mistakes it for the release it was built after. Only the
+      # packed copy changes — nothing is committed.
+      # (a pull_request run checks out GitHub's merge commit: name the branch's own head instead)
+      - env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd packages/ogygia
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));const [a,b,c]=p.version.split('-')[0].split('.').map(Number);p.version=a+'.'+b+'.'+(c+1)+'-next.'+process.env.HEAD_SHA.slice(0,7);fs.writeFileSync('package.json',JSON.stringify(p,null,'\t')+'\n');console.log(p.version)"
+
       # `--pnpm` makes pkg.pr.new pack with `pnpm pack` instead of the default `npm pack`. Only pnpm
       # pack applies `publishConfig` (swapping the dev `exports` that point at `src/` for the `dist/`
       # map). Without it the preview shipped raw source exports pointing at files not in the tarball,

@@ -62,6 +62,14 @@ describe('matchers', () => {
 		expect(r.message()).toContain('Clock: changed — −server +browser');
 		expect(ogygiaMatchers.toHydrateCleanly(hyd, { allow: ['changed'] }).pass).toBe(true);
 	});
+	it('toHydrateCleanly can let attribute-only changes, or changes under input, through', () => {
+		const hyd = (attributesOnly: boolean, inputDuringHydration: boolean) =>
+			({ kind: 'hydration', measured: true, islands: [{ fp: 'a', name: 'SearchBar', wake: 'idle', status: 'changed', reason: '', diff: null, attributesOnly, inputDuringHydration }] }) as unknown as OgygiaReport;
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(true, false)).pass).toBe(false);
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(true, false), { allowAttributeChanges: true }).pass).toBe(true);
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(false, false), { allowAttributeChanges: true }).pass).toBe(false);
+		expect(ogygiaMatchers.toHydrateCleanly(hyd(false, true), { allowInput: true }).pass).toBe(true);
+	});
 });
 
 describe('compare / toMarkdown', () => {
@@ -136,6 +144,44 @@ describe('compare: hydration, session counts, vitals', () => {
 		expect(md).toContain('session CLS 0.03 → 0.2');
 		expect(compare(base, head, { noise: { lcp: 1000 } })[0].vitals).toBeUndefined();
 	});
+	it('several runs a side: load signals by median and majority, session signals only when every head run has them and no base run does', () => {
+		const s = (errors: number, codes: string[], navigations = 0) =>
+			({ kind: 'session', counts: { errors, shifts: 0, slow: 0, cls: 0 }, findings: codes.map((code) => ({ code, severity: 'warn', message: code })), navigations: Array.from({ length: navigations }, () => ({ url: '/' })), interactions: [], requests: [] }) as unknown as OgygiaReport;
+		const p = (lcp: number, codes: string[]) => ({ ...(pg(lcp, 0) as object), findings: codes.map((code) => ({ code, severity: 'warn', message: code })) }) as unknown as OgygiaReport;
+		const base = [{ test: 't', runs: [[p(1800, []), s(0, [])], [p(1900, ['late-image']), s(1, ['errors'])], [p(1850, []), s(0, [])]] }];
+		const head = [
+			{
+				test: 't',
+				runs: [
+					[p(2500, ['long-hydrate']), s(2, ['errors', 'rage-click', 'navigation-blocked'], 1)],
+					[p(2600, ['long-hydrate']), s(3, ['rage-click', 'navigation-blocked'], 1)],
+					[p(1800, []), s(2, ['rage-click', 'navigation-blocked'], 1)]
+				]
+			}
+		];
+		const [load, session] = compare(base, head);
+		// a page finding in most head runs and few base runs; LCP by median (2500 vs 1850)
+		expect(load.findings.added).toEqual(['long-hydrate: long-hydrate']);
+		expect(load.vitals).toEqual([{ key: 'lcp', base: 1850, head: 2500 }]);
+		// `errors` appeared in one base run: not a regression; `rage-click` in every head run and no base one
+		expect(session.findings.added).toEqual(['rage-click: rage-click']);
+		// counts move when every head run is above every base run (errors 2–3 vs 0–1), as medians; the
+		// navigation finding is left to its own count
+		expect(session.session).toEqual([
+			{ key: 'errors', base: 0, head: 2 },
+			{ key: 'navigations', base: 0, head: 1 }
+		]);
+		// overlapping runs are noise
+		const base2 = [{ test: 't', runs: [[s(0, [])], [s(3, [])]] }];
+		const head2 = [{ test: 't', runs: [[s(2, [])], [s(3, [])]] }];
+		expect(compare(base2, head2)[0].session).toBeUndefined();
+	});
+	it('several runs of hydration: each instance by its most common status', () => {
+		const run = (status: string) => [hyd([{ key: 'Carousel#1', name: 'Carousel', status }])];
+		const base = [{ test: 't', runs: [run('clean'), run('clean'), run('failed')] }];
+		const head = [{ test: 't', runs: [run('failed'), run('failed'), run('clean')] }];
+		expect(compare(base, head)[0].hydration).toEqual({ broke: ['Carousel#1: clean → failed'], fixed: [] });
+	});
 	it('a session meets a CLS budget', () => {
 		expect(checkBudget(sess({ cls: 0.2 }), { cls: 0.1 })).toEqual([{ key: 'cls', measured: 0.2, limit: 0.1, ok: false }]);
 	});
@@ -147,11 +193,11 @@ describe('createOgygia', () => {
 		await expect(o.page()).rejects.toThrow('devtools: true');
 	});
 	/** A page driver over a fake in-page API: `present()` says whether the API is in the page now. */
-	const fake = (api: Record<string, (...a: unknown[]) => unknown>, present: () => boolean = () => true) => ({
+	const fake = (api: Record<string, (...a: unknown[]) => unknown>, present: () => boolean = () => true, version = 3) => ({
 		evaluate: async (fn: unknown, arg: unknown) => {
 			if (arg === null) return (String(fn).includes('location') ? 'http://app.test/elsewhere' : present()) as never;
 			const [n, a] = arg as [string, unknown[]];
-			return api[n](...a) as never;
+			return { v: version, r: await api[n](...a) } as never;
 		},
 		wait: async () => {}
 	});
@@ -191,6 +237,77 @@ describe('createOgygia', () => {
 		expect(stop_args).toEqual([held]);
 		expect(r.navigations[0]).toMatchObject({ after: 'button.reload', island: 'Hero' });
 		await expect(createOgygia(fake({ settled: () => true })).record(async () => {}, { blockNavigation: true })).rejects.toThrow('blockNavigation()');
+	});
+	it('an older site’s engine: navigations filled in from what the driver held, finding names empty, warned once', async () => {
+		const warn = console.warn;
+		const warnings: string[] = [];
+		console.warn = (m: string) => warnings.push(m);
+		try {
+			const old_session = { duration_ms: 1, counts: { errors: 0 }, findings: [{ code: 'errors', severity: 'warn', message: 'x', refs: [] }], interactions: [], by_island: {}, requests: [], cpu: null, timeline: [], unmeasured: [] };
+			const o = createOgygia({
+				...fake({ settled: () => true, record_start: () => true, record_stop: () => old_session }, () => true, 1),
+				blockNavigation: async () => ({ stop: async () => [{ url: 'http://app.test/', t: 50 }] })
+			});
+			const r = await o.record(async () => {}, { blockNavigation: true });
+			expect(r.engine).toEqual({ version: 1 });
+			expect(r.navigations).toEqual([{ url: 'http://app.test/', t: 50, after: null, island: null, approx: true }]);
+			expect(r.findings.map((f) => [f.code, f.names])).toEqual([
+				['errors', []],
+				['navigation-blocked', []]
+			]);
+			await o.record(async () => {}, { blockNavigation: true });
+			expect(warnings).toHaveLength(1);
+			expect(warnings[0]).toContain('older testing engine (version 1');
+		} finally {
+			console.warn = warn;
+		}
+	});
+	it('the older-engine warning is said once per site for the whole process, not per page', async () => {
+		const warn = console.warn;
+		const warnings: string[] = [];
+		console.warn = (m: string) => warnings.push(m);
+		try {
+			for (let n = 0; n < 3; n++) await createOgygia(fake({ settled: () => true }, () => true, 2)).settled();
+			expect(warnings.filter((w) => w.includes('(version 2'))).toHaveLength(1);
+		} finally {
+			console.warn = warn;
+		}
+	});
+	it('ignoreAttributes crosses into the page as plain data (a RegExp as its source)', async () => {
+		let asked: unknown[] = [];
+		const o = createOgygia(fake({ settled: () => true, hydration: (...a) => ((asked = a), { measured: true, islands: [] }) }), {
+			ignoreAttributes: [{ tag: /^qds-/i, name: /^(tabindex|aria-)/ }, { name: 'style', value: '' }]
+		});
+		await o.hydration();
+		expect(asked[1]).toEqual([
+			{ tag: { re: '^qds-', flags: 'i' }, name: { re: '^(tabindex|aria-)', flags: '' }, value: undefined },
+			{ tag: undefined, name: 'style', value: '' }
+		]);
+	});
+	it('record({ server }): a window that fails leaves the session whole, with server.error', async () => {
+		const o = createOgygia({
+			...fake({ settled: () => true, record_start: () => true, record_stop: () => session }),
+			post: async (url: string) => (url.endsWith('/start') ? { status: 200, body: '{"ok":true,"id":"n.s","header":"x-og-window"}' } : { status: 400, body: '{"error":"No window is recording"}' })
+		});
+		const r = await o.record(async () => {}, { server: true });
+		expect(r.kind).toBe('session');
+		expect(r.server).toEqual({ error: expect.stringContaining('(400)') });
+	});
+	it('record({ server }): the window id rides every request the session makes, and its stop', async () => {
+		const tagged: string[] = [];
+		let stop_headers: Record<string, string> = {};
+		const o = createOgygia({
+			...fake({ settled: () => true, record_start: () => true, record_stop: () => session }),
+			post: async (url: string, headers: Record<string, string>) => {
+				if (url.endsWith('/start')) return { status: 200, body: '{"ok":true,"id":"n.s","header":"x-og-window"}' };
+				stop_headers = headers;
+				return { status: 200, body: '{"kind":"window","window":{"ms":1,"requests":[]}}' };
+			},
+			tagRequests: async (h: string, v: string) => (tagged.push(`${h}=${v}`), async () => void tagged.push('untagged'))
+		});
+		await o.record(async () => {}, { server: true });
+		expect(tagged).toEqual(['x-og-window=n.s', 'untagged']);
+		expect(stop_headers['x-og-window']).toBe('n.s');
 	});
 	it('hydration() asks the page to key islands by the app’s attribute', async () => {
 		let asked: unknown;
