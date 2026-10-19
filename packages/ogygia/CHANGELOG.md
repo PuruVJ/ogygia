@@ -40,6 +40,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Devtools' Page and Timeline tabs, and `page()`, stay on the page after a router navigation that never swapped it (handed to the browser and held back, or overtaken); before, they reported no islands.
 - On Windows, ogygia knows its own files again: builds no longer register its devtools and profiler components as app modules or warn that its own marks are ignored.
 - The dev dependency scan no longer fails when the profiler is on, so dependencies pre-bundle again; `devalue` is now named through ogygia, so pnpm apps stop warning that it can't be resolved.
+- A click on a `load`, `idle`, `visible` or media island before it is live is no longer lost: the island wakes at once and the click is replayed when it is live, as on an `interaction` island; `hydratedBy()` then says `'interaction'`.
+- A Ctrl/Cmd/Shift- or middle-click on a link in an island that is not live yet opens the link as the browser would; before, it was canceled and replayed, and the replay could not open it.
 
 ## [0.8.2] - 2026-10-14
 
