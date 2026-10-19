@@ -89,7 +89,8 @@ test('record(): a session of clicks, with the server split of the request one ma
 		{ server: true }
 	);
 	// the server over the same stretch: the request the click made, and the upstream it called
-	expect(session.server?.window.requests.map((r) => r.path)).toEqual(expect.arrayContaining(['/dt-session/api', '/hell/api/session']));
+	expect(session.server?.error).toBeUndefined();
+	expect(session.server?.window?.requests.map((r) => r.path)).toEqual(expect.arrayContaining(['/dt-session/api', '/hell/api/session']));
 	expect(session).toMeetBudget({ serverBusyMs: 60_000 });
 	const slow = session.findings.find((f) => f.code === 'slow-interaction');
 	expect(slow?.message).toContain('SessionSlow');

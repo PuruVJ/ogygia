@@ -133,13 +133,14 @@ export type OgygiaSessionReport = Omit<SessionReport, 'findings' | 'counts'> & {
 	 *  could not run: the session report is still whole */
 	server?:
 		| (OgygiaProfileReport & {
+				error?: undefined;
 				window: {
 					ms: number;
 					requests: { method: string; path: string; route: string | null; ms: number; status: number | null; cpu_ms?: number; net_ms?: number | null; instance?: string }[];
 					instances?: number;
 				};
 		  })
-		| { error: string };
+		| { error: string; window?: undefined };
 };
 
 /** The profiler's JSON answer (`/__profiler/page?format=json`), the fields a test reads first typed. */
