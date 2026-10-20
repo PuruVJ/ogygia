@@ -12,11 +12,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- An island or hole inside a live snippet an island renders follows the nested rule: it renders inline and hydrates with that island (such a hole never loaded before).
+- An island inside a live snippet an island renders follows the nested rule: it renders inline and hydrates with that island.
 - An island sets `data-hydrated` and fires `ogygia:hydrated` once the live snippets it renders have hydrated too.
 
 ### Fixed
 
+- A hole inside a live snippet an island renders stays deferred: it ships its fallback, loads on its schedule and is never bundled into the island (it never loaded before).
+- A live snippet that renders a template-root snippet, or reads a `<script module>` import or value, an exported declaration or a `$:` declaration, no longer throws `ReferenceError` at render.
 - A lake inside a live snippet an island renders keeps its frozen region, so the island inside it wakes and the lake's HTML is no longer discarded beside other snippet content.
 - A live snippet an island renders reads the page's contexts on the server and in the browser, as the island does.
 - An island inside a frozen snippet wakes on its own.

@@ -75,8 +75,11 @@ const host_context = (): Map<unknown, unknown> | null => {
 		return null;
 	}
 };
+/** context.ts `isInLiveSnippet` reads it: a hole in the body stays deferred (Region.svelte). */
+const LIVE_SNIPPET_KEY = Symbol.for('ogygia.live-snippet');
 const with_host = (context: Map<unknown, unknown>, host: Map<unknown, unknown> | null) => {
 	if (host) for (const [k, v] of host) context.set(k, v);
+	context.set(LIVE_SNIPPET_KEY, true);
 	return context;
 };
 

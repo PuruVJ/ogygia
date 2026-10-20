@@ -37,7 +37,9 @@ Nested islands inside **static** content continue to operate. They render as ful
 
 A **live** snippet is part of the island that renders it:
 
-- An island or a server island inside it renders inline and hydrates with that island, the same as one placed in the island's own template.
+- An island inside it renders inline and hydrates with that island, the same as one placed in the island's own template.
+- A server island (`render: 'deferred'`) inside it stays deferred. Its fallback ships with the page, and its HTML arrives on its schedule. Its code never ships to the browser.
+- It can render the host's template-root snippets, and read the host's `<script module>` imports and values.
 - A lake (`wake: 'none'`) inside it stays frozen. An island inside the lake wakes on its own schedule.
 - It reads the page's contexts, on the server and in the browser.
 - The island sets `data-hydrated` and fires `ogygia:hydrated` after its live snippets have hydrated too.

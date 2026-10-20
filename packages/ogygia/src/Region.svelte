@@ -36,7 +36,7 @@
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
 	import { escape_amp, escape_amp_quot, escape_attr } from './escape.js';
-	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
+	import { isNested, setNested, isInLake, isInLiveSnippet, setInLiveSnippet, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	// (LateIslandAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
@@ -174,7 +174,12 @@
 
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
-	const nested = isNested();
+	// Except a HOLE in a live snippet's body: it keeps `render: 'deferred'` — a full hole, fetched on its
+	// schedule, never bundled into the island — and the snippet's hydrate adopts its element as it stands.
+	const in_live_snippet = isInLiveSnippet();
+	const nested = isNested() && !(is_server && in_live_snippet);
+	// (an island rendered inline in the snippet: the holes of its own template follow the nested rule)
+	if (is_island && nested && in_live_snippet) setInLiveSnippet(false);
 
 	// `requestEvent()` inside a region rendered by Kit's OWN page pass: Kit's `__request__` context
 	// carries `{ page }` only (ogygia's render roots add `event` themselves). Re-set the same key
@@ -596,6 +601,30 @@
 	const server_identity = $derived(
 		nested || !is_server ? '' : fingerprint_of(__entry, '', (server_wire ?? plan_props_wire(__props || {}, __entry)).canonical)
 	);
+	// A hole in a live snippet's body: the snippet hydrates in the browser, which cannot mint the hole's
+	// address — a template there would blank `endpoint` and the landed HTML. One snippet whose SERVER form
+	// emits exactly the hole's element (with its fallback) and whose CLIENT form is a raw snippet: the
+	// snippet's hydrate ADOPTS the element verbatim, as a lake's (lake_adopt below). A re-created one has
+	// no address; the runtime finds the hole's facts by identity, as for a hole Kit rebuilt.
+	const hole_attrs = () => {
+		/** @param {string} name @param {unknown} v */
+		const a = (name, v) => (v == null || v === '' ? '' : ' ' + name + '="' + escape_attr(String(v)) + '"');
+		return (
+			' entry="' + escape_attr(server_region_entry) + '" render="defer"' +
+			a('stitch', __stitch) + a('prefetch', __prefetch) + a('when', __defer) + a('wake', __hydrate) +
+			a('margin', __margin) + a('hydrate-margin', __hydrateMargin) +
+			' endpoint="' + escape_attr(server_endpoint) + '"' + a('data-og-hole', server_identity) + a('src', server_region_src)
+		);
+	};
+	const hole_adopt =
+		typeof window === 'undefined'
+			? /** @param {{ push(html: string): void }} renderer */
+				(renderer) => {
+					renderer.push(LT + 'ogygia-region' + hole_attrs() + GT);
+					if (ogygiaFallback) SlotBoundary(/** @type {never} */ (renderer), /** @type {never} */ ({ children: ogygiaFallback }));
+					renderer.push(LT + '/ogygia-region' + GT);
+				}
+			: createRawSnippet(() => ({ render: () => LT + 'ogygia-region' + hole_attrs() + GT + LT + '/ogygia-region' + GT }));
 	// On a KIT-HYDRATED document the facts ride the document tail too (server/document-tail.ts
 	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. A csr=false
 	// document has no Kit client to rebuild it, so nothing is recorded there. Decided once at init —
@@ -891,7 +920,7 @@
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
-	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
+	{#if nested}{#if Component}<Component {...__props} />{/if}{:else if in_live_snippet}{@render hole_adopt()}<!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{:else}<ogygia-region
 			entry={server_region_entry}
 			render="defer"
 			stitch={__stitch || undefined}

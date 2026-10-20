@@ -1,8 +1,15 @@
+<script lang="ts" module>
+	// A live snippet's body may read the host's MODULE script too: an import and a value.
+	import MxModuleRead from '$lib/mx/MxCtxRead.svelte';
+	const MODULE_START = 600;
+</script>
+
 <script lang="ts">
 	// Nesting matrix: every kind of container × a lake holding a `visible` island (or the island
 	// alone). Every inner island must wake on its own and every lake must keep its server HTML.
 	// `?only=<case>` renders one case alone. e2e/nest-matrix.spec.ts.
 	import { page } from '$app/state';
+	import MxTwoSlots from '$lib/mx/MxTwoSlots.svelte' with { wake: 'load' };
 	import SnipApp from '$lib/SnipApp.svelte' with { wake: 'load' };
 	import MxChildrenApp from '$lib/mx/MxChildrenApp.svelte' with { wake: 'load' };
 	import MxLakeHost from '$lib/mx/MxLakeHost.svelte' with { wake: 'load' };
@@ -23,7 +30,44 @@
 	const only = page.url.searchParams.get('only');
 	const show = (c: string) => !only || only === c;
 	setContext('mx-design', 'v2');
+	const base_start = 700;
 </script>
+
+<!-- template-root snippets, shared by live snippets below: a parameter, an import, a host value -->
+{#snippet banner(position: 'top' | 'middle')}
+	<p data-banner={position}>banner {position} <Bumper start={base_start + (position === 'top' ? 1 : 2)} /></p>
+{/snippet}
+{#snippet banner_hole(position: 'top' | 'middle')}
+	<MxIslandHole start={base_start + (position === 'top' ? 10 : 20)}>
+		{#snippet ogygiaFallback()}<p data-hole-fallback={position}>loading {position}</p>{/snippet}
+	</MxIslandHole>
+{/snippet}
+
+{#if show('snippet-root-sibling')}
+	<div data-case="snippet-root-sibling">
+		<MxTwoSlots>
+			{#snippet top()}{@render banner('top')}{/snippet}
+			{#snippet middle()}{@render banner('middle')}{/snippet}
+		</MxTwoSlots>
+	</div>
+{/if}
+
+{#if show('snippet-root-hole')}
+	<div data-case="snippet-root-hole">
+		<MxTwoSlots>
+			{#snippet top()}{@render banner_hole('top')}{/snippet}
+			{#snippet middle()}{@render banner_hole('middle')}{/snippet}
+		</MxTwoSlots>
+	</div>
+{/if}
+
+{#if show('snippet-module')}
+	<div data-case="snippet-module">
+		<SnipApp>
+			{#snippet blocks()}<MxModuleRead label="module" /><Bumper start={MODULE_START} />{/snippet}
+		</SnipApp>
+	</div>
+{/if}
 
 {#if show('snippet-timing')}
 	<div data-case="snippet-timing">

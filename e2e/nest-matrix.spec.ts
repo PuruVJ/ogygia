@@ -21,6 +21,9 @@ const CASES = [
 	'snippet-args-lake',
 	'snippet-forwarded-lake',
 	'snippet-in-snippet-lake',
+	'snippet-root-sibling',
+	'snippet-root-hole',
+	'snippet-module',
 	'static-snippet-island',
 	'hole-lake',
 	'hole-wake-lake',
@@ -93,6 +96,27 @@ for (const base of ['/nest-matrix', '/nest-matrix/kit']) {
 			check('browser: every reader sees v2', reads.length === 3 && reads.every((v) => v === 'v2'), reads.join(','));
 			check('no hydration failure or error', problems.length === 0, problems.join(' | '));
 		});
+	});
+}
+
+// A hole in a live snippet keeps `render: 'deferred'`: the server ships its region and fallback (its
+// content is off the HTML's critical path), the runtime fetches it, and the snippet's hydrate adopts it.
+for (const c of ['snippet-hole', 'snippet-root-hole']) {
+	test(`a hole in a live snippet stays deferred (${c})`, async ({ page, baseURL }) => {
+		const raw = await (await fetch(`${baseURL}/nest-matrix?only=${c}`)).text();
+		const snippet_at = raw.indexOf('<ogygia-snippet');
+		const hole_at = raw.indexOf('render="defer"', snippet_at);
+		check('SSR: the hole region sits inside the snippet', snippet_at > 0 && hole_at > snippet_at);
+		check('SSR: it carries a signed address', raw.slice(hole_at, raw.indexOf('>', hole_at)).includes('endpoint="'));
+		check('SSR: its content is not in the page', !raw.includes('data-mx-hole'));
+		const problems = watch(page);
+		await page.goto(`/nest-matrix?only=${c}`, { waitUntil: 'networkidle' });
+		const box = page.locator(`[data-case="${c}"]`);
+		await box.locator('[data-mx-hole]').first().waitFor();
+		check('browser: the hole landed', (await box.locator('[data-mx-hole]').count()) > 0);
+		check('browser: its fallback is gone', (await box.locator('[data-hole-fallback]').count()) === 0);
+		check('browser: its region kept its address', (await box.locator('ogygia-region[render="defer"][endpoint=""]').count()) === 0);
+		check('no hydration failure or error', problems.length === 0, problems.join(' | '));
 	});
 }
 
