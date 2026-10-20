@@ -601,8 +601,10 @@
 	const server_identity = $derived(
 		nested || !is_server ? '' : fingerprint_of(__entry, '', (server_wire ?? plan_props_wire(__props || {}, __entry)).canonical)
 	);
-	// A hole in a live snippet's body: the snippet hydrates in the browser, which cannot mint the hole's
-	// address — a template there would blank `endpoint` and the landed HTML. One snippet whose SERVER form
+	// A hole a client hydrates over — in a live snippet's body, or on a KIT-HYDRATED document — whose
+	// browser leg cannot mint the hole's address: a template there blanked `endpoint` (Svelte sets a
+	// dynamic attribute during hydration) and, when the HTML had already landed, the content with it (a
+	// csr=true page's hole inside an inline island went empty in dev, timing-dependent). One snippet whose SERVER form
 	// emits exactly the hole's element (with its fallback) and whose CLIENT form is a raw snippet: the
 	// snippet's hydrate ADOPTS the element verbatim, as a lake's (lake_adopt below). A re-created one has
 	// no address; the runtime finds the hole's facts by identity, as for a hole Kit rebuilt.
@@ -920,7 +922,7 @@
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
-	{#if nested}{#if Component}<Component {...__props} />{/if}{:else if in_live_snippet}{@render hole_adopt()}<!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{:else}<ogygia-region
+	{#if nested}{#if Component}<Component {...__props} />{/if}{:else if in_live_snippet || is_csr}{@render hole_adopt()}<!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{:else}<ogygia-region
 			entry={server_region_entry}
 			render="defer"
 			stitch={__stitch || undefined}
