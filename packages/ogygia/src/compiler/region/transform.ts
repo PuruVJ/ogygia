@@ -129,11 +129,13 @@ export function is_island_path(id: string): boolean {
  * Override via `ogygia({ importKeys })`.
  * - `render` attribute → the MODE: `static` (inline HTML) | `deferred` (a hole, fetched) | `live`
  *   (a hole that revalidates). Defaults to `static`.
- * - `wake` attribute → when the region comes alive: for `static` that is HYDRATION; for
- *   `deferred`/`live` that is the FETCH schedule.
+ * - `fetch` attribute → a `deferred` hole's TIMING, when its HTML arrives (default `load`):
+ *   `with { render: 'deferred', fetch: 'visible' }`.
+ * - `wake` attribute → when an island's JS runs (`none`: a lake). Never a hole's timing.
  */
 export const DEFAULT_IMPORT_KEYS = {
 	wake: 'wake',
+	fetch: 'fetch',
 	render: 'render',
 	preset: 'preset',
 	region: 'region'
@@ -141,13 +143,16 @@ export const DEFAULT_IMPORT_KEYS = {
 
 /**
  * Import-attribute key names claimed by the transform
- * (`with { wake | render | preset | region }`). Override via `ogygia({ importKeys })` when
+ * (`with { wake | fetch | render | preset | region }`). Override via `ogygia({ importKeys })` when
  * another tool already uses the default names.
  */
 export type ImportKeys = {
-	/** When the region comes alive (default attribute `'wake'`) — hydration for `static`, the fetch
-	 * schedule for `deferred`/`live`. */
+	/** When an island's JS runs (default attribute `'wake'`); `'none'` makes a lake. For `live` it is
+	 * the revalidate schedule. */
 	wake: string;
+	/** A `render: 'deferred'` hole's timing — when its HTML arrives (default attribute `'fetch'`):
+	 * `'load'` | `'idle'` | `'visible'` | `'interaction'` | a media query. */
+	fetch: string;
 	/** The delivery MODE (default attribute `'render'`): `static` | `deferred` | `live`. */
 	render: string;
 	/** Named preset attribute (default `'preset'`). */
@@ -235,11 +240,13 @@ export function normalize_import_keys(overrides?: Partial<ImportKeys> | null): I
 
 function normalize_import_keys_uncached(overrides?: Partial<ImportKeys> | null): ImportKeys {
 	const wake = (overrides?.wake ?? DEFAULT_IMPORT_KEYS.wake).trim();
+	const fetch = (overrides?.fetch ?? DEFAULT_IMPORT_KEYS.fetch).trim();
 	const render = (overrides?.render ?? DEFAULT_IMPORT_KEYS.render).trim();
 	const preset = (overrides?.preset ?? DEFAULT_IMPORT_KEYS.preset).trim();
 	const region = (overrides?.region ?? DEFAULT_IMPORT_KEYS.region).trim();
 	for (const [role, name] of [
 		['wake', wake],
+		['fetch', fetch],
 		['render', render],
 		['preset', preset],
 		['region', region]
@@ -250,12 +257,12 @@ function normalize_import_keys_uncached(overrides?: Partial<ImportKeys> | null):
 			);
 		}
 	}
-	if (new Set([wake, render, preset, region]).size !== 4) {
+	if (new Set([wake, fetch, render, preset, region]).size !== 5) {
 		throw new Error(
-			'[ogygia] importKeys.wake, importKeys.render, importKeys.preset, and importKeys.region must be distinct.'
+			'[ogygia] importKeys.wake, importKeys.fetch, importKeys.render, importKeys.preset, and importKeys.region must be distinct.'
 		);
 	}
-	return { wake, render, preset, region };
+	return { wake, fetch, render, preset, region };
 }
 
 /**
@@ -272,7 +279,7 @@ export function import_keys_hint(import_keys: ImportKeys) {
 	if (re) return re;
 	const esc = (s: string) => s.replace(REGEXP_META, '\\$&');
 	re = new RegExp(
-		`${esc(import_keys.wake)}|${esc(import_keys.render)}|${esc(import_keys.preset)}|${esc(import_keys.region)}`
+		`${esc(import_keys.wake)}|${esc(import_keys.fetch)}|${esc(import_keys.render)}|${esc(import_keys.preset)}|${esc(import_keys.region)}`
 	);
 	HINT_CACHE.set(import_keys, re);
 	return re;
@@ -407,8 +414,9 @@ function parse_ts_as_region_options(
 	fail: (msg: string) => Error,
 	regionKey: string,
 	wakeKey: string,
-	renderKey: string
-): { region?: string; wake?: string; render?: string } {
+	renderKey: string,
+	fetchKey = 'fetch'
+): { region?: string; wake?: string; render?: string; fetch?: string } {
 	if (!arg || arg.type !== 'ObjectExpression')
 		throw fail(
 			`needs an options object — e.g. \`import.meta.og.asRegion(Comp, { wake: 'load' })\`.`
@@ -416,6 +424,7 @@ function parse_ts_as_region_options(
 	let region: string | undefined;
 	let wake: string | undefined;
 	let render: string | undefined;
+	let fetch: string | undefined;
 	for (const p of arg.properties ?? []) {
 		if (p.type !== 'Property' || p.computed)
 			throw fail('options must be a plain object of string-valued keys.');
@@ -425,16 +434,18 @@ function parse_ts_as_region_options(
 		const val = String(p.value.value);
 		if (key === regionKey || key === 'region') region = val;
 		else if (key === wakeKey || key === 'wake') wake = val;
+		else if (key === fetchKey || key === 'fetch') fetch = val;
 		else if (key === renderKey || key === 'render') render = val;
 		else
 			throw fail(
-				`unknown option \`${key}\` — a .ts region takes \`wake: '…'\`, \`region: 'raw'\`, or \`render: 'deferred'\`.`
+				`unknown option \`${key}\` — a .ts region takes \`wake: '…'\`, \`region: 'raw'\`, or \`render: 'deferred'\` (with \`fetch\` as its timing).`
 			);
 	}
-	// `render: 'deferred'` may carry `wake` (its fetch schedule); `region`/`wake` are exclusive.
-	if (render != null) {
+	// `render: 'deferred'` pairs with `fetch` (its timing); the emitter refuses a lone `fetch` and the
+	// retired `render` + `wake` pairing, naming the spelling to write. `region`/`wake` are exclusive.
+	if (render != null || fetch != null) {
 		if (region != null) throw fail('`render` and `region` are different markers — use one.');
-		return { render, wake };
+		return { render, wake, fetch };
 	}
 	if (region != null && wake != null) throw fail('takes exactly one of `wake` or `region`.');
 	if (region != null) return { region };
@@ -492,7 +503,7 @@ function clean_import_text(source: string, node: SvelteNode) {
 function region_keys_on_dynamic_import(node: SvelteNode, import_keys: ImportKeys) {
 	const opts = node.options;
 	if (!opts || opts.type !== 'ObjectExpression') return [];
-	const claimed = new Set([import_keys.wake, import_keys.render, import_keys.preset]);
+	const claimed = new Set([import_keys.wake, import_keys.fetch, import_keys.render, import_keys.preset]);
 	const found: string[] = [];
 	for (const prop of opts.properties) {
 		if (prop.type !== 'Property' || prop.computed) continue;
@@ -900,10 +911,11 @@ function transform_csr_true_host(
 	}
 	const ms = new MagicString(source);
 
-	// Strip `with { wake|render|preset|region }` off host imports → plain imports (Kit compiles them).
+	// Strip `with { wake|fetch|render|preset|region }` off host imports → plain imports (Kit compiles them).
 	if (has_island_hint) {
 		const region_keys = new Set([
 			import_keys.wake,
+			import_keys.fetch,
 			import_keys.render,
 			import_keys.preset,
 			import_keys.region
@@ -1047,6 +1059,7 @@ class FileCompilation {
 		const rel_host = this.#rel_host;
 		const REGION_KEYS = [
 			import_keys.wake,
+			import_keys.fetch,
 			import_keys.render,
 			import_keys.preset,
 			import_keys.region
@@ -1073,8 +1086,9 @@ class FileCompilation {
 			return { strategy: 'held', options: {} };
 		}
 
-		// The block carries a `render` MODE + a `wake` schedule, or a preset. No option keys inline — all
-		// tuning lives in plugin config (presets). Canonical internal slots stay `hydrate`/`defer` (+live).
+		// The block carries a `wake` schedule (an island), a `fetch` schedule (a hole), a `render` MODE, or
+		// a preset. No option keys inline — all tuning lives in plugin config (presets). Canonical internal
+		// slots stay `hydrate`/`defer` (+live).
 		const attrs = new Map<string, string>();
 		let remount_opt:
 			| { policy: string; when?: string; maxAgeMs?: number; onExpire?: string }
@@ -1082,6 +1096,7 @@ class FileCompilation {
 		let from_preset: string | null = null;
 		let render_mode: string | undefined;
 		let wake_val: string | undefined;
+		let fetch_val: string | undefined;
 		const live_opts: { revalidate?: unknown; maxAge?: unknown; onExpire?: unknown } = {};
 		if (inline.has(import_keys.preset)) {
 			if (inline.size > 1) {
@@ -1101,6 +1116,7 @@ class FileCompilation {
 				if (v == null) continue;
 				if (k === import_keys.render) render_mode = String(v);
 				else if (k === import_keys.wake) wake_val = String(v);
+				else if (k === import_keys.fetch) fetch_val = String(v);
 				else if (k === 'maxAge' || k === 'onExpire' || k === 'revalidate') live_opts[k] = v;
 				else if (k === 'margin' || k === 'keep' || k === 'prefetch') attrs.set(k, String(v));
 				else if (k === 'stitch') {
@@ -1112,7 +1128,7 @@ class FileCompilation {
 					attrs.set('stitch', v === 'edge' ? 'edge' : 'serve');
 				} else {
 					throw fail(
-						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`, \`stitch\`, \`prefetch\`.`
+						`unknown key \`${k}\` in preset '${from_preset}'. Use \`${import_keys.wake}\`, \`${import_keys.fetch}\`, \`${import_keys.render}\`, \`margin\`, \`maxAge\`, \`onExpire\`, \`revalidate\`, \`stitch\`, \`prefetch\`.`
 					);
 				}
 			}
@@ -1120,21 +1136,23 @@ class FileCompilation {
 			for (const k of inline.keys()) {
 				if (
 					k !== import_keys.wake &&
+					k !== import_keys.fetch &&
 					k !== import_keys.render &&
 					k !== 'keep' &&
 					k !== 'stitch' &&
 					k !== 'prefetch'
 				) {
 					throw fail(
-						`\`${k}\` is not allowed inline. Use \`${import_keys.render}\`, \`${import_keys.wake}\`, \`keep\`, \`stitch\`, \`prefetch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.wake}\`, \`${import_keys.fetch}\`, \`${import_keys.render}\`, \`keep\`, \`stitch\`, \`prefetch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
 					);
 				}
 			}
 			if (inline.has(import_keys.render)) render_mode = inline.get(import_keys.render);
 			if (inline.has(import_keys.wake)) wake_val = inline.get(import_keys.wake);
+			if (inline.has(import_keys.fetch)) fetch_val = inline.get(import_keys.fetch);
 			if (inline.has('keep')) attrs.set('keep', inline.get('keep')!);
-			// A schedule dial like `wake`, so it may ride inline (`with { render: 'deferred', wake:
-			// 'interaction', prefetch: 'idle' }`) as well as in a preset.
+			// A schedule dial like `fetch`, so it may ride inline (`with { fetch: 'interaction',
+			// prefetch: 'idle' }`) as well as in a preset.
 			if (inline.has('prefetch')) attrs.set('prefetch', inline.get('prefetch')!);
 			if (inline.has('stitch')) {
 				// Import-attribute values are STRINGS by grammar — `stitch: 'serve' | 'edge'` are the
@@ -1154,7 +1172,27 @@ class FileCompilation {
 				`unknown ${import_keys.render} '${render_mode}'. Use 'static' (inline HTML) | 'deferred' (a hole, fetched) | 'live' (a hole that revalidates).`
 			);
 		}
-		if (render_mode === 'live') {
+		// `render: 'deferred'` says it is a hole; `fetch` says WHEN its HTML arrives. `wake` is when an
+		// island's JS runs — a hole ships no JS — so the old `wake` timing fails the build with its
+		// replacement, never a silent change.
+		const said = from_preset ? `preset '${from_preset}'` : 'this import';
+		if (render_mode === 'deferred' && wake_val != null) {
+			throw fail(
+				`${said} times a \`${import_keys.render}: 'deferred'\` hole with \`${import_keys.wake}: '${wake_val}'\` — that spelling is gone. ` +
+					`Write \`${import_keys.render}: 'deferred', ${import_keys.fetch}: '${wake_val}'\` instead: \`${import_keys.fetch}\` says when a hole's HTML arrives. ` +
+					`(\`${import_keys.wake}\` is when an island's JS runs; a hole ships no JS.)`
+			);
+		}
+		if (fetch_val != null && render_mode !== 'deferred') {
+			throw fail(
+				`${said} sets \`${import_keys.fetch}: '${fetch_val}'\` without \`${import_keys.render}: 'deferred'\` — \`${import_keys.fetch}\` is a hole's timing. ` +
+					`Write \`${import_keys.render}: 'deferred', ${import_keys.fetch}: '${fetch_val}'\` for a hole` +
+					(render_mode == null ? `, or \`${import_keys.wake}: '${fetch_val}'\` for an island.` : '.')
+			);
+		}
+		if (render_mode === 'deferred') {
+			attrs.set('defer', fetch_val ?? 'load');
+		} else if (render_mode === 'live') {
 			attrs.set('hydrate', 'none');
 			remount_opt = parse_remount(
 				{
@@ -1165,8 +1203,6 @@ class FileCompilation {
 				err_shim,
 				''
 			);
-		} else if (render_mode === 'deferred') {
-			attrs.set('defer', wake_val ?? 'load');
 		} else if (wake_val != null) {
 			attrs.set('hydrate', wake_val);
 		}
@@ -1177,7 +1213,7 @@ class FileCompilation {
 		}
 		if (attrs.has('prefetch') && !attrs.has('defer')) {
 			throw fail(
-				`\`prefetch\` is only valid with \`${import_keys.render}: 'deferred'\` — it warms a hole's HTML ahead of its \`${import_keys.wake}\` schedule; an island's JS is preloaded by the runtime when it wakes, not by \`prefetch\`.`
+				`\`prefetch\` is only valid with \`${import_keys.render}: 'deferred'\` — it warms a hole's HTML ahead of its \`${import_keys.fetch}\` timing; an island's JS is preloaded by the runtime when it wakes, not by \`prefetch\`.`
 			);
 		}
 		if (from_preset && !attrs.has('hydrate') && !attrs.has('defer')) {
@@ -1199,7 +1235,7 @@ class FileCompilation {
 			throw fail(`\`remount\` is only valid with \`${import_keys.wake}: 'none'\`.`);
 		}
 
-		// `defer` → SERVER island (content-only hole, fetched on the `wake` schedule).
+		// `defer` → SERVER island (content-only hole, fetched on the `fetch` schedule).
 		if (attrs.has('defer')) {
 			const dval = attrs.get('defer')!;
 			let when: string;
@@ -1207,7 +1243,7 @@ class FileCompilation {
 			else if (is_media_query(dval)) when = dval;
 			else
 				throw fail(
-					`\`${import_keys.render}: 'deferred'\` fetches on the \`${import_keys.wake}\` schedule, but '${dval}' is not one. Use \`${import_keys.wake}: 'load' | 'idle' | 'visible' | 'interaction'\` or a media query (not 'none' — a hole must fetch).`
+					`\`${import_keys.render}: 'deferred'\` fetches on its \`${import_keys.fetch}\` timing, but '${dval}' is not one. Use \`${import_keys.fetch}: 'load' | 'idle' | 'visible' | 'interaction'\` or a media query (not 'none' — a hole must fetch).`
 				);
 			const options: {
 				when: string;
@@ -1221,12 +1257,12 @@ class FileCompilation {
 				const p = attrs.get('prefetch')!;
 				if (p === 'interaction' || !(PREFETCH_STRATEGIES.has(p) || is_media_query(p))) {
 					throw fail(
-						`\`prefetch: '${p}'\` — a hole prefetches its HTML on 'load' | 'idle' | 'visible' | a media query. Never 'interaction': that is the SWAP, \`${import_keys.wake}\`'s job; prefetch only warms the bytes ahead of it.`
+						`\`prefetch: '${p}'\` — a hole prefetches its HTML on 'load' | 'idle' | 'visible' | a media query. Never 'interaction': that is the SWAP, \`${import_keys.fetch}\`'s job; prefetch only warms the bytes ahead of it.`
 					);
 				}
 				if (p === when) {
 					throw fail(
-						`\`prefetch: '${p}'\` is this hole's own \`${import_keys.wake}\` schedule — it adds nothing. Prefetch EARLIER than the swap ('load' | 'idle' | 'visible' for an 'interaction' hole), or drop it.`
+						`\`prefetch: '${p}'\` is this hole's own \`${import_keys.fetch}\` schedule — it adds nothing. Prefetch EARLIER than the swap ('load' | 'idle' | 'visible' for an 'interaction' hole), or drop it.`
 					);
 				}
 				options.prefetch = p;
@@ -1524,7 +1560,7 @@ class FileCompilation {
 		// `render` = the delivery mode). These become the internal `hydrate` / `defer` DOM attributes below:
 		//   import Comp from './Comp.svelte' with { wake: 'visible', margin: '200px' };
 		//   import Comp from './Comp.svelte' with { wake: '(min-width: 768px)' };
-		//   import Comp from './Comp.svelte' with { render: 'deferred', wake: 'load' };   // deferred HTML hole
+		//   import Comp from './Comp.svelte' with { render: 'deferred', fetch: 'load' };  // deferred HTML hole
 		// Values MUST be string literals (ES import-attribute spec). See DESIGN.md.
 		/** localName -> { node, cleaned } */
 		const imports = new Map();
@@ -2594,18 +2630,26 @@ class TsRegionCompilation {
 	// default import, the barrel export name for a named one.
 	#emit_ts_region(
 		componentPath: string,
-		marker: { region?: string; wake?: string; render?: string },
+		marker: { region?: string; wake?: string; render?: string; fetch?: string },
 		exportName?: string
 	): { iid: string; record: object; importFrom: string } {
 		const comp_rel = this.#component_identity(componentPath);
 		const id_base = exportName && exportName !== 'default' ? `${comp_rel}#${exportName}` : comp_rel;
-		// `render: 'deferred'` — a SERVER island (a content hole fetched from the endpoint on the `wake`
-		// schedule). Mirrors the `.svelte` deferred path (resolve_region_mark's server block + the inline
-		// server record), so a `.svelte` and a `.ts` deferred import are byte-identical. The rewritten
-		// import points at the WRAPPER (not a held binding): placed as `<C {...}/>` it emits the hole; its
-		// `ogygiaFallback` slot is preserved (the router supplies it). `render: 'live'` stays .svelte-only.
+		// `render: 'deferred'` (+ `fetch`, its timing) — a SERVER island (a content hole fetched from the
+		// endpoint on that timing). Mirrors the `.svelte` deferred path (resolve_region_mark's server
+		// block + the inline server record), so a `.svelte` and a `.ts` deferred import are byte-identical.
+		// The rewritten import points at the WRAPPER (not a held binding): placed as `<C {...}/>` it emits
+		// the hole; its `ogygiaFallback` slot is preserved (the router supplies it). `render: 'live'` stays
+		// .svelte-only.
+		const fetchKey = this.#import_keys.fetch;
+		const renderKey = this.#import_keys.render;
+		if (marker.fetch != null && marker.render == null) {
+			throw new Error(
+				`[ogygia] ${this.#rel_host}: \`${fetchKey}: '${marker.fetch}'\` without \`${renderKey}: 'deferred'\` — \`${fetchKey}\` is a hole's timing. ` +
+					`Write \`${renderKey}: 'deferred', ${fetchKey}: '${marker.fetch}'\` for a hole, or \`${this.#wakeKey}: '${marker.fetch}'\` for an island.`
+			);
+		}
 		if (marker.render != null) {
-			const renderKey = this.#import_keys.render;
 			if (marker.render !== 'deferred') {
 				throw new Error(
 					marker.render === 'live'
@@ -2613,13 +2657,20 @@ class TsRegionCompilation {
 						: `[ogygia] ${this.#rel_host}: unknown \`${renderKey}\` '${marker.render}'. Use 'deferred'.`
 				);
 			}
-			const dval = marker.wake ?? 'load';
+			if (marker.wake != null) {
+				throw new Error(
+					`[ogygia] ${this.#rel_host}: a \`${renderKey}: 'deferred'\` hole timed with \`${this.#wakeKey}: '${marker.wake}'\` — that spelling is gone. ` +
+						`Write \`${renderKey}: 'deferred', ${fetchKey}: '${marker.wake}'\` instead: \`${fetchKey}\` says when a hole's HTML arrives. ` +
+						`(\`${this.#wakeKey}\` is when an island's JS runs; a hole ships no JS.)`
+				);
+			}
+			const dval = marker.fetch ?? 'load';
 			let when: string;
 			if (DEFER_STRATEGIES.has(dval)) when = dval;
 			else if (is_media_query(dval)) when = dval;
 			else
 				throw new Error(
-					`[ogygia] ${this.#rel_host}: \`${renderKey}: 'deferred'\` fetches on the \`${this.#wakeKey}\` schedule, but '${dval}' is not one. Use \`${this.#wakeKey}: 'load' | 'idle' | 'visible' | 'interaction'\` or a media query (a hole must fetch — not 'none').`
+					`[ogygia] ${this.#rel_host}: \`${fetchKey}: '${dval}'\` is not a timing. Use \`${fetchKey}: 'load' | 'idle' | 'visible' | 'interaction'\` or a media query (a hole must fetch — not 'none').`
 				);
 			const options: { when: string; margin?: string } = { when };
 			if (when === 'visible' && this.#ctx.visibleMargin != null)
@@ -2718,11 +2769,15 @@ class TsRegionCompilation {
 		const regionKey = this.#regionKey;
 		const wakeKey = this.#wakeKey;
 		const renderKey = import_keys.render;
-		// cheap bail — a held import (`with { region|wake|render }`) OR the `import.meta.og.asRegion(…)` macro.
+		const fetchKey = import_keys.fetch;
+		// cheap bail — a held import (`with { region|wake|fetch|render }`) OR the `import.meta.og.asRegion(…)` macro.
 		const has_as_region = source.includes('asRegion');
 		if (
 			!has_as_region &&
-			((!source.includes(regionKey) && !source.includes(wakeKey) && !source.includes(renderKey)) ||
+			((!source.includes(regionKey) &&
+				!source.includes(wakeKey) &&
+				!source.includes(fetchKey) &&
+				!source.includes(renderKey)) ||
 				!source.includes('with'))
 		)
 			return null;
@@ -2754,17 +2809,19 @@ class TsRegionCompilation {
 			const has_render = attrs.has(renderKey);
 			const has_region = attrs.has(regionKey);
 			const has_wake = attrs.has(wakeKey);
-			if (!has_render && !has_region && !has_wake) continue;
+			const has_fetch = attrs.has(fetchKey);
+			if (!has_render && !has_region && !has_wake && !has_fetch) continue;
 			if (inside_literal(m.index)) continue;
-			// `region` is exclusive; `render` (deferred) may pair with `wake` (its fetch schedule); a bare
-			// `wake` is exclusive. Anything else is a mismatched marker set.
+			// `region` and a bare `wake` are exclusive; `render: 'deferred'` pairs with `fetch` (its timing).
+			// A lone `fetch` and the retired `render` + `wake` reach #emit_ts_region, which names the
+			// spelling to write; anything else is a mismatched marker set.
 			const bad_combo =
 				(has_region && attrs.size > 1) ||
-				(has_render && [...attrs.keys()].some((k) => k !== renderKey && k !== wakeKey)) ||
+				(has_render && [...attrs.keys()].some((k) => k !== renderKey && k !== wakeKey && k !== fetchKey)) ||
 				(!has_render && has_wake && attrs.size > 1);
 			if (bad_combo) {
 				throw new Error(
-					`[ogygia] ${rel_host}: a held-region import on '${local}' takes ONE marker — \`${regionKey}: 'raw'\`, \`${wakeKey}: '…'\`, or \`${renderKey}: 'deferred'\` (optionally with \`${wakeKey}\` as its fetch schedule).`
+					`[ogygia] ${rel_host}: a held-region import on '${local}' takes ONE marker — \`${regionKey}: 'raw'\`, \`${wakeKey}: '…'\`, or \`${renderKey}: 'deferred'\` (with \`${fetchKey}\` as its timing).`
 				);
 			}
 			const componentPath = this.#resolve_spec(spec);
@@ -2774,10 +2831,12 @@ class TsRegionCompilation {
 				);
 			}
 			const marker = has_render
-				? { render: attrs.get(renderKey), wake: attrs.get(wakeKey) }
+				? { render: attrs.get(renderKey), wake: attrs.get(wakeKey), fetch: attrs.get(fetchKey) }
 				: has_region
 					? { region: attrs.get(regionKey) }
-					: { wake: attrs.get(wakeKey) };
+					: has_fetch
+						? { fetch: attrs.get(fetchKey) }
+						: { wake: attrs.get(wakeKey) };
 			const { iid, record, importFrom } = this.#emit_ts_region(componentPath, marker);
 			if (!islands_by_id.has(iid)) islands_by_id.set(iid, record);
 			s.overwrite(
@@ -2893,7 +2952,8 @@ class TsRegionCompilation {
 						(msg) => this.#as_err(local, msg),
 						regionKey,
 						wakeKey,
-						renderKey
+						renderKey,
+						fetchKey
 					);
 					const { iid, record, importFrom } = this.#emit_ts_region(
 						componentPath,

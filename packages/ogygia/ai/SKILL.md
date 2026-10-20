@@ -16,7 +16,8 @@ Marked on a component import: `import X from './X.svelte' with { … }`.
 | Key | Question | Values |
 | --- | --- | --- |
 | `render` | Where/when does the HTML come from? | `'static'` (default, inline in the page's SSR pass) · `'deferred'` (fetched later from a signed endpoint) · `'live'` (baked, revalidates in background) |
-| `wake` | When does JS run (static) / when does the HTML fetch (deferred, live)? | `'load'` · `'idle'` · `'visible'` · `'interaction'` (island: first pointer/key/focus inside wakes it; deferred: an **on-demand hole** — first hover/focus/touch inside fetches it, morphed in) · `'(media query)'` · `'none'` (frozen — a lake) |
+| `wake` | When does an island's JS run (static) / when does a live region revalidate? | `'load'` · `'idle'` · `'visible'` · `'interaction'` (first pointer/key/focus inside wakes it) · `'(media query)'` · `'none'` (frozen — a lake) |
+| `fetch` | When does a `render: 'deferred'` hole's HTML arrive? Pairs with `render: 'deferred'` only | `'load'` (default) · `'idle'` · `'visible'` · `'interaction'` (an **on-demand hole** — first hover/focus/touch inside fetches it, morphed in) · `'(media query)'`. `render: 'deferred'` + `wake` fails the build — write `fetch` |
 | `region` | Held-across-a-boundary marker (registries the transform can't see into) | `'raw'` (only value) |
 | `keep` | Island keeps its live node + `$state` across SPA navigation | a name (unique per class of thing) |
 | `preset` | Named bundle from `ogygia({ regions: { presets } })` | preset name (literal) |
@@ -89,7 +90,7 @@ over guessing** what the transform (or the running app) does:
 - `ogygia_profile_open({ file })` — open a downloaded `.ogp` profiler report and return the same digest as
   `ogygia_profile` (for reports a user hands you).
 - `ogygia_observatory({ files })` — bundle the user's files into a CLIENT-ONLY Observatory link (gzip-packed into the URL # fragment, which browsers never send to a server) so they can SEE their code compiled + running live in the browser. Great for showing how one of their real pages becomes islands.
-- `ogygia_scan({ dir })` — scan a WHOLE project: every island/lake/server-island by file, plus a lint pass (hard `[ogygia]` errors + soft anti-patterns: island-in-island, wake:none+deferred). Use it to understand or audit a real app, not one snippet.
+- `ogygia_scan({ dir })` — scan a WHOLE project: every island/lake/server-island by file, plus a lint pass (hard `[ogygia]` errors + soft anti-patterns: island-in-island). Use it to understand or audit a real app, not one snippet.
 - `ogygia_flags({ dir })` — inventory every `flag()` call site: reads the build manifest (`node_modules/.ogygia/flags-manifest.json`) when present, else live-scans the source with the real AST collector. Names, file:line, drift vs the last build — use it to audit rollouts and find dead flags.
 - `ogygia_fragment({ origin })` — probe a federated app: fetches its unsigned `__catalog` widget manifest (names + props) and reports whether the fragment endpoint verifies signatures (401 without a signature = signed, 200 = OPEN). Use it when wiring a shell to a peer, before writing `mount(peer)` / `peer.page()` / `peer.widget()` code.
 
@@ -149,7 +150,7 @@ Each island is its own hydration root. Props cross by **value** (devalue), never
 - **An island hydrates against its own server markup.** The element keeps the HTML it connected with; if another script edited the island while it slept (a design-system runtime stripping whitespace, an A/B tool, a translator) and Svelte's walk mismatches on wake, the runtime puts the server markup back and hydrates that (`data-og-healed`, dev warning) instead of re-rendering client-side; only a second failure falls back to Svelte's recovery (`data-og-recovered`). Foreign scripts should still leave `<ogygia-region>` subtrees alone — whatever they added is gone after a heal.
 - **A lake on a csr=true (Kit-hydrated) page is adopted, not hydrated.** Kit's pass keeps the lake's SSR element as opaque DOM (its component ships no client JS — not even in Kit's bundle), and everything authored INSIDE the lake stays in ogygia's world: islands and server islands there emit real regions and wake on the runtime. This is how a site header (static markup + `render: 'deferred'` personal holes + a `wake: 'interaction'` search) stays zero-JS-for-anonymous on csr=true pages too: mark the header import `with { wake: 'none' }` in the layout. Caveat: a lake first mounted during a Kit client-side navigation has no server HTML and renders empty (dev warns) — keep chrome lakes in a layout that persists, or serve the route csr=false. A hole rendered OUTSIDE a lake on a csr=true page is Kit-hydrated around; if Kit gives up hydrating the document (`Failed to hydrate`: a component threw) and mounts it fresh, the hole is rendered again with no address — the runtime restores it from the document's holes record (by identity, `data-og-hole`), so it still fetches; a hole rendered only in the browser has no record and keeps its fallback.
 - Dedupe: same component + same strategy/options = ONE wrapper module and ONE client chunk, however many instances (each instance still gets its own region + props payload).
-- `wake: 'none'` + any `render: 'deferred'` is nonsense (HTML later, no JS) — dev warns, treated as defer-only.
+- A hole's timing is `fetch`, never `wake`: `with { render: 'deferred', fetch: 'visible' }`. Any `wake` on a `render: 'deferred'` import fails the build, naming the `fetch` to write; a `fetch` without `render: 'deferred'` fails too.
 
 ## csr=false lifecycle rules
 
@@ -282,7 +283,7 @@ A dependency ships islands, marked components, or whole route tables by declarin
 
 `ogygia({ … })` keys — legacy top-level keys (`visible`, `presets`, `continuity`) are hard errors, not aliases:
 
-- `regions: { visible: { margin }, preload: 'load' | 'all' | 'none', presets: { name: { render, wake, margin, maxAge, onExpire, revalidate, keep, prefetch } } }` — `preload` (default `'load'`): which islands get modulepreload hints in the SSR HTML; `'all'` hints every island's closure (non-load at low priority), `'none'` hints nothing
+- `regions: { visible: { margin }, preload: 'load' | 'all' | 'none', presets: { name: { render, wake, fetch, margin, maxAge, onExpire, revalidate, keep, prefetch } } }` — `preload` (default `'load'`): which islands get modulepreload hints in the SSR HTML; `'all'` hints every island's closure (non-load at low priority), `'none'` hints nothing
 - `router: false | { viewTransitions?, forms?, serverDelta? }` (defaults true/true/false)
 - `content: { markdown?, presets? }`
 - `profiler: boolean | { secret?, path = '/__profiler', sampleInterval, maxReports, network, heap, … }` — the ONLY profiler wiring (the handle auto-mounts it; nothing in hooks). A `secret` passed here is baked into the server bundle (for hosts with no runtime env, like Amplify); leave it out to read `OGYGIA_PROFILER_SECRET` at runtime instead

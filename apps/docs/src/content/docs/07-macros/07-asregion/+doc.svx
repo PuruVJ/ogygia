@@ -36,7 +36,7 @@ import { Header, Footer } from '@company/ui'; // named — no `with { … }` pos
 
 ```svelte
 const HeaderIsland = import.meta.og.asRegion(Header, { wake: 'load' });                     // placed island
-const ChartHole    = import.meta.og.asRegion(Chart, { render: 'deferred', wake: 'visible' }); // server hole
+const ChartHole    = import.meta.og.asRegion(Chart, { render: 'deferred', fetch: 'visible' }); // server hole
 const BlockRaw     = import.meta.og.asRegion(Block, { region: 'raw' });                       // held → region(BlockRaw, …)
 ```
 

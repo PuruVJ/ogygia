@@ -196,7 +196,7 @@ function resolve_strategy(attrs: Record<string, unknown>) {
 	if (render === 'live')
 		return { kind: 'live', color: '#8b5cf6', detail: 'baked HTML, revalidates in the background' };
 	if (render === 'deferred')
-		return { kind: 'server hole', color: '#8b5cf6', detail: `signed endpoint; HTML fetched on '${wake || 'load'}'` };
+		return { kind: 'server hole', color: '#8b5cf6', detail: `signed endpoint; HTML fetched on '${(attrs.fetch as string | undefined) || 'load'}'` };
 	if (attrs.region === 'raw')
 		return { kind: 'held (raw)', color: '#f59e0b', detail: 'server-picked HTML, zero JS' };
 	if (wake === 'none')
@@ -206,7 +206,7 @@ function resolve_strategy(attrs: Record<string, unknown>) {
 	return { kind: 'island', color: '#14b8a6', detail: `hydrates on '${wake || 'load'}'` };
 }
 
-const MARK_KEYS = new Set(['wake', 'render', 'preset', 'region', 'margin']);
+const MARK_KEYS = new Set(['wake', 'fetch', 'render', 'preset', 'region', 'margin']);
 
 // ── rolldown-browser oxc: load + WARM the WASM once, then parseSync is sync (what the transform needs).
 type OxcMod = {
@@ -384,7 +384,7 @@ function build_island_info(files: Record<string, string>): IslandInfo {
 			const lf = ledger.files.find((x) => x.name === target);
 			info.set(target, {
 				kind: isl.strategy.kind,
-				wake: (isl.attrs.wake as string) || (isl.strategy.kind === 'island' ? 'load' : ''),
+				wake: (isl.attrs.wake as string) || (isl.attrs.fetch as string) || (isl.strategy.kind === 'island' ? 'load' : ''),
 				name: target,
 				bytes: lf?.bytes ?? 0,
 				ships: lf?.ships ?? false,

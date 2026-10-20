@@ -10,6 +10,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** a `render: 'deferred'` hole's timing is the new `fetch` key (`with { render: 'deferred', fetch: 'visible' }`); pairing it with `wake` fails the build with the line to write, and `wake` now only means when an island's JS runs.
+
 ### Fixed
 
 - ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.

@@ -32,7 +32,7 @@ async function hole_status(): Promise<{ page: number; hole: number; endpoint: st
 	const html = await res.text();
 	// The LAST hole in the page is Kept (rendered after Greeting in LakeChrome): LakeChrome is its
 	// ONLY host. Greeting is hosted by many pages and keeps its id when this host is unregistered
-	// (shared ids are refcounted), which would hide the bug. (A deferred `wake: 'load'` hole emits
+	// (shared ids are refcounted), which would hide the bug. (A deferred `fetch: 'load'` hole emits
 	// no `wake` attribute — `when="load"` is the fetch schedule — so the tag can't be told by it.)
 	const all = [...html.matchAll(/<ogygia-region[^>]*render="defer"[^>]*endpoint="([^"]+)"/g)];
 	const endpoint = (all.at(-1)?.[1] ?? '').replace(/&amp;/g, '&');

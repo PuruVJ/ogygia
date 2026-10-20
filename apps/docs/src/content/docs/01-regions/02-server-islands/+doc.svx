@@ -44,17 +44,19 @@ To see the round-trip, click **Fetch again**. The hole goes back to its fallback
 
 <DeferredFrame />
 
-## When it fetches: the `wake` schedule
+## When it fetches: the `fetch` schedule
 
-A deferred region fetches on the `wake` schedule. The timing words are the same as for an island. `render: 'deferred'` alone fetches on load. Add `wake` to make the *fetch itself* later. A hole below the fold does not cost a request until you scroll to it:
+A deferred region fetches on the `fetch` schedule. The timing words are the same as for an island. `render: 'deferred'` alone fetches on load. Add `fetch` to make the *fetch itself* later. A hole below the fold does not cost a request until you scroll to it:
 
 ```svelte
 <script>
-  import Chart from './Chart.svelte' with { render: 'deferred', wake: 'visible' };
+  import Chart from './Chart.svelte' with { render: 'deferred', fetch: 'visible' };
 </script>
 ```
 
-| `wake` | HTML arrives |
+`fetch` decides when the HTML arrives. `wake` decides when an island's JS runs. A hole has no JS, so it takes `fetch`, not `wake`. The old `render: 'deferred'` + `wake` pairing fails the build, with a message that names the `fetch` to write.
+
+| `fetch` | HTML arrives |
 | --- | --- |
 | `load` (default) | immediately |
 | `idle` | when the browser is idle |
@@ -67,7 +69,7 @@ An on-demand hole is for content that is large, server-rendered, and only needed
 ```svelte
 <script>
   import MegaMenu from './MegaMenu.svelte';
-  import MegaMenuFull from './MegaMenuFull.svelte' with { render: 'deferred', wake: 'interaction' };
+  import MegaMenuFull from './MegaMenuFull.svelte' with { render: 'deferred', fetch: 'interaction' };
 </script>
 
 <nav>
@@ -101,7 +103,7 @@ Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTM
 A server island is **fresh on each request**. Its endpoint is served with `Cache-Control: no-store`. A reload renders it again. That is the correct default for a hole (a per-request clock, cookie-personal data). To let a hole stay in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-regionspresets):
 
 ```ts title=vite.config.ts
-ogygia({ regions: { presets: { pricing: { render: 'deferred', wake: 'load', maxAge: '1h' } } } })
+ogygia({ regions: { presets: { pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' } } } })
 ```
 
 ```svelte
@@ -127,7 +129,7 @@ A deferred region is **content only**. It never ships JS. When a part of the fet
 <CartButtons {cart} />   <!-- the interactive part, its own island -->
 ```
 
-That keeps the split clean. `render` decides how the HTML arrives. `wake` decides when JS runs. The two live on different components.
+That keeps the split clean. `render` and `fetch` decide how and when the HTML arrives. `wake` decides when JS runs. The two live on different components.
 
 Server islands need the [server handle](/docs/start/install). They load through the signed island endpoint.
 

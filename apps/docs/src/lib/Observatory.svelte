@@ -794,7 +794,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		else if (kind === 'held (raw)')
 			lines.push(`It's a held region: marked with { region: 'raw' }. The server decides its HTML (a registry the transform can't see into), so zero JS crosses — the component's scoped CSS rides along with the response.`);
 		else if (kind === 'server hole')
-			lines.push(`It's a server island: marked with { render: 'deferred' }. It renders on the server per request, and the client fetches its HTML from a signed endpoint ${hydrate_phrase(wake)}. Request-specific but not interactive.`);
+			lines.push(`It's a server island: marked with { render: 'deferred' }. It renders on the server per request, and the client fetches its HTML from a signed endpoint ${hydrate_phrase(a.fetch as string | undefined)}. Request-specific but not interactive.`);
 		else if (kind === 'live')
 			lines.push(`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`);
 		else if (kind === 'preset')
