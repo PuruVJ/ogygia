@@ -593,15 +593,16 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		const rows = await page.evaluate(() => (window as any).__dt_qa('[data-og-hydration] tr[data-status]').length);
 		expect(errors).toEqual([]);
 		expect(rows).toBeGreaterThan(1);
-		// an island nested in an awake island rides its hydration (no data-hydrated of its own): it is
-		// awake, and the Hydration tab says whose hydration it rode — never "asleep"
+		// an island inside a live snippet an island renders is part of that island (it renders inline,
+		// with no region of its own): the Hydration tab lists no island "asleep" and none left riding
 		await page.goto('/portable-snippet', { waitUntil: 'load' });
 		await page.waitForTimeout(1500);
-		const riding = await page.evaluate(async () => {
+		const statuses = await page.evaluate(async () => {
 			const h = await (window as any).__ogygia_testing.hydration();
-			return h.islands.filter((i: any) => i.reason.startsWith('rides ')).map((i: any) => i.status);
+			return h.islands.map((i: any) => (i.reason.startsWith('rides ') ? 'riding' : i.status));
 		});
-		expect(riding, 'a riding island, awake').toEqual(['clean']);
+		expect(statuses.length, 'the page lists its islands').toBeGreaterThan(0);
+		expect(statuses.filter((s: string) => s !== 'clean'), 'every island awake, none riding').toEqual([]);
 		// a Kit-hydrated page with no island: the dock still mounts (its boot runs before Kit's client
 		// hands the page the dev server's gates) and says why there is nothing to inspect
 		await page.goto('/kit', { waitUntil: 'load' });

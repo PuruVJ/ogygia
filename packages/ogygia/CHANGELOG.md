@@ -10,8 +10,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- An island or hole inside a live snippet an island renders follows the nested rule: it renders inline and hydrates with that island (such a hole never loaded before).
+- An island sets `data-hydrated` and fires `ogygia:hydrated` once the live snippets it renders have hydrated too.
+
 ### Fixed
 
+- A lake inside a live snippet an island renders keeps its frozen region, so the island inside it wakes and the lake's HTML is no longer discarded beside other snippet content.
+- A live snippet an island renders reads the page's contexts on the server and in the browser, as the island does.
+- An island inside a frozen snippet wakes on its own.
+- A snippet passed to an island on a Kit-hydrated page no longer causes a hydration mismatch.
 - ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
 
 ## [0.8.3] - 2026-10-19

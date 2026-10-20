@@ -335,9 +335,10 @@
 	}
 	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
 	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
-	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
-	// crossing, so untouched. CHILDREN are not frozen — they cross via the slot marker below.
-	const island_props_ready = $derived(nested ? island_props : prepare_region_props(island_props));
+	// HTML with no mismatch. A live (branded) snippet passes through; an INLINE island (nested, or on a
+	// csr=true page, where Kit's client renders the snippet as written) has no crossing, so untouched.
+	// CHILDREN are not frozen — they cross via the slot marker below.
+	const island_props_ready = $derived(island_inline ? island_props : prepare_region_props(island_props));
 
 	// ── slot crossing: an island's children render IN-PLACE, the client ADOPTS them ──
 	// The marker id fencing THIS island's children to its payload pointer. Server-assigned; the client
@@ -643,16 +644,18 @@
 	const lake_endpoint = $derived(
 		lake_inside && lake_swr ? makeRegionEndpoint(__entry || '', __props || {}) : ''
 	);
-	// A lake on a KIT-HYDRATED document (a csr=true page). Kit's client hydrates this wrapper too,
-	// but the lake's component is the render-nothing placeholder on the client (its JS ships to no
-	// browser), so a normal template here would MISMATCH — Svelte then discards the SSR DOM and
-	// re-renders, and the lake vanishes (found on a site header under a csr=true page). Instead the
-	// lake renders through ONE snippet whose SERVER form emits exactly one element (the frozen region
-	// with the lake's HTML inside) and whose CLIENT form is a raw snippet: hydration ADOPTS the
-	// element at the render position verbatim — no diff, no mismatch, the server HTML stays. (The same
-	// adoption an island's slot children get.) It is a real frozen region: LakeBoundary resets
-	// `nested` and marks the lake's inside, so the islands and holes authored in there emit their
-	// real regions and wake on the runtime, which Kit never touches.
+	// Every lake a client hydrates over — inside an island, or on a KIT-HYDRATED document (a csr=true
+	// page) — renders through ONE snippet whose SERVER form emits exactly one element (the frozen region
+	// with the lake's HTML inside) and whose CLIENT form is a raw snippet: hydration ADOPTS the element
+	// at the render position verbatim — no diff, no mismatch, the server HTML stays. (The same adoption
+	// an island's slot children get.) The lake's component is the render-nothing placeholder on the
+	// client (its JS ships to no browser), so a normal template MISMATCHED wherever the lake's HTML was
+	// still there when the client hydrated: under Kit (Svelte discarded the SSR DOM and the lake
+	// vanished — a site header under a csr=true page), and inside a live snippet, which hydrates after
+	// its host island restored its lakes. An island's own lakes are lifted out around its hydrate, so
+	// it adopts the empty element and the runtime puts the HTML back (lakes.ts). It is a real frozen
+	// region: LakeBoundary resets `nested` and marks the lake's inside, so the islands and holes
+	// authored in there emit their real regions and wake on the runtime.
 	const lake_attrs = $derived.by(() => {
 		/** @param {unknown} v */
 		const esc = (v) => escape_attr(String(v));
@@ -681,8 +684,9 @@
 						// gave up hydrating the document and mounted fresh), so there was no SSR element to
 						// adopt: a lake is server HTML, and there is none here. The runtime repaints it from
 						// the copy it took of the SSR children when the lake first connected (lakes.ts), if
-						// this document had them; a route Kit client-renders from scratch has nothing.
-						if (!el.firstChild && import.meta.env && import.meta.env.DEV)
+						// this document had them; a route Kit client-renders from scratch has nothing. (Inside an
+						// island an empty element is the lifted lake, which the runtime fills right after.)
+						if (is_csr && !el.firstChild && import.meta.env && import.meta.env.DEV)
 							console.warn(
 								`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation, or a hydration failure — look for an error above). The runtime restores it from its server HTML when this document rendered it; otherwise it stays empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
 							);
@@ -901,20 +905,7 @@
 			src={server_region_src || undefined}
 		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{/if}
 {:else if is_lake}
-	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
-		<ogygia-region
-			entry={__entry}
-			wake="none"
-			remount={__remount}
-			when={lake_swr ? __when : undefined}
-			max-age={__maxAge != null ? String(__maxAge) : undefined}
-			on-expire={__onExpire || undefined}
-			margin={lake_swr && __margin ? __margin : undefined}
-			endpoint={lake_endpoint || undefined}
-		>
-			<LakeBoundary>{@render children?.()}</LakeBoundary>
-		</ogygia-region>
-	{:else}
+	{#if is_csr || lake_inside}{@render lake_adopt()}{:else}
 		{@render children?.()}
 	{/if}
 {:else if resolved?.kind === 'inline'}

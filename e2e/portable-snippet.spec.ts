@@ -28,9 +28,9 @@ test.describe('a snippet forwarded THROUGH a plain shell into an island crosses 
 			OGYGIA_REF_RE.test(raw) && SNIPPET_KIND_RE.test(raw)
 		);
 		// It rendered inside the island's <ogygia-region>, wrapped in the portable container, with the
-		// captured host value (who = Ada) baked in. Unbounded window: the crossed snippet's nested island
-		// is now a REAL `<ogygia-region>` (marks survive into the synth entry) + its props script, so the
-		// bar spans far more than the old 400-char cap.
+		// captured host value (who = Ada) baked in. Unbounded window: the crossed snippet carries its
+		// nested island (inline — the snippet renders inside the island's tree) and more, so the bar
+		// spans far more than the old 400-char cap.
 		const barMatch = raw.match(PORTABLE_BAR_RE);
 		const bar = barMatch ? barMatch[0] : '';
 		check('SSR: crossed snippet rendered inside the island bar', OGYGIA_SNIPPET_RE.test(bar));

@@ -33,7 +33,14 @@ A snippet crosses in one of two ways. ogygia selects the way, based on the need 
 </Tabs>
 ```
 
-Nested islands inside crossed content continue to operate. They render as full regions and wake on their own, although the content around them is frozen.
+Nested islands inside **static** content continue to operate. They render as full regions and wake on their own, although the content around them is frozen.
+
+A **live** snippet is part of the island that renders it:
+
+- An island or a server island inside it renders inline and hydrates with that island, the same as one placed in the island's own template.
+- A lake (`wake: 'none'`) inside it stays frozen. An island inside the lake wakes on its own schedule.
+- It reads the page's contexts, on the server and in the browser.
+- The island sets `data-hydrated` and fires `ogygia:hydrated` after its live snippets have hydrated too.
 
 ## Forwarding through a wrapper
 
