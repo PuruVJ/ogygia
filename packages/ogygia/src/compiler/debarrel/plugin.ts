@@ -1,7 +1,7 @@
 /**
  * The debarrel Vite plugin — barrel imports become leaf imports at transform time.
  *
- *   import { Button, Card } from '$lib/components';        // an index.ts that re-exports 40 files
+ *   import { Button, Card } from '#lib/components';        // an index.ts that re-exports 40 files
  *   → import Button from '/…/components/Button.svelte';
  *     import Card from '/…/components/Card.svelte';
  *

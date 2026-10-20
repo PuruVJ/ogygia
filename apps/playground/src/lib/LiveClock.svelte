@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { clock } from '$lib/greetings.remote';
+	import { clock } from '#lib/greetings.remote.ts';
 	const c = clock();
 </script>
 

@@ -1,4 +1,4 @@
-import { getOrder } from '$lib/server/db.js';
+import { getOrder } from '#lib/server/db.js';
 import { error } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 

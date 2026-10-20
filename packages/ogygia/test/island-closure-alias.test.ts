@@ -13,8 +13,9 @@ import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/co
 let root = '';
 
 const files: Record<string, string> = {
+	'package.json': JSON.stringify({ name: 'app', imports: { '#lib': './src/lib', '#lib/*': './src/lib/*' } }),
 	'src/routes/+layout.ts': 'export const csr = false;\n',
-	'src/routes/+page.svelte': `<script>\n\timport Reader from '$lib/Reader.svelte' with { wake: 'load' };\n</script>\n<Reader />\n`,
+	'src/routes/+page.svelte': `<script>\n\timport Reader from '#lib/Reader.svelte' with { wake: 'load' };\n</script>\n<Reader />\n`,
 	'src/lib/Reader.svelte': `<script>\n\timport { page_name } from '$boot/read-page';\n\timport { relative_helper } from './relative-helper';\n</script>\n<p>{page_name()} {relative_helper()}</p>\n`,
 	'src/lib/relative-helper.ts': `export const relative_helper = () => 'r';\n`,
 	'src/lib/boot/read-page.ts': `import { page } from '$app/state';\nexport const page_name = () => String(page.data.name ?? '');\n`,
@@ -42,7 +43,6 @@ function make_compiler(resolve_alias: { find: string | RegExp; replacement: stri
 		new CompileCtx({
 			root,
 			base: '/',
-			libDir: path.join(root, 'src/lib'),
 			is_dev: false,
 			id_salt: '',
 			visibleMargin: '0px',

@@ -1,10 +1,10 @@
 // LIMBO — an answer-key page for the profiler written the way an app is, not the way the rules were
 // built: each planted pattern in a shape no other answer-key page uses, and beside it a DECOY that
-// does the same job the right way. The comment on each (here and in $lib/limbo) says which slow
+// does the same job the right way. The comment on each (here and in #lib/limbo) says which slow
 // pattern the profiler should name, or why it must stay quiet. Profile it: /__profiler → "Profile one
 // page" → /limbo, or `node internal/bench/profiler-answer-key.mjs --page=/limbo`.
-import { PRODUCTS } from '$lib/inferno/data';
-import { brandOf, brandOfIndexed, onSale, onSaleShallow, reviewDates, reviewDatesShared, specDirect, specOf } from '$lib/limbo/helpers';
+import { PRODUCTS } from '#lib/inferno/data.ts';
+import { brandOf, brandOfIndexed, onSale, onSaleShallow, reviewDates, reviewDatesShared, specDirect, specOf } from '#lib/limbo/helpers.ts';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;

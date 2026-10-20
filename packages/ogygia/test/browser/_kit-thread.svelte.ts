@@ -22,7 +22,7 @@ class KitPage {
 function publish(page: KitPage): void {
 	(globalThis as unknown as Record<symbol, unknown>)[KIT_PAGE_KEY] = {
 		page,
-		navigating: { current: null },
+		navigating: { from: null, to: null, type: null, willUnload: null, delta: null, complete: null },
 		navigation: {}
 	};
 }

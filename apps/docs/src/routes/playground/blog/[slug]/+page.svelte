@@ -3,7 +3,7 @@
 	// <BlogPost>. The +page.server.ts guard already 404'd unknown slugs.
 	import { page } from '$app/state';
 	import { BlogPost } from 'ogygia/content';
-	import { postPage } from '$lib/playground/blog.remote';
+	import { postPage } from '#lib/playground/blog.remote.ts';
 
 	const view = (await postPage(page.params.slug ?? ''))!;
 </script>

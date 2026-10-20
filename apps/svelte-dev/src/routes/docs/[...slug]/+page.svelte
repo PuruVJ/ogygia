@@ -2,8 +2,8 @@
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
 	import type { PageView } from 'ogygia/content';
-	import * as docs from '$lib/docs.remote'; // namespace: `page` would clash with $app/state
-	import { TOPICS, topicFromPath, type DocData } from '$lib/topics';
+	import * as docs from '#lib/docs.remote.ts'; // namespace: `page` would clash with $app/state
+	import { TOPICS, topicFromPath, type DocData } from '#lib/topics.ts';
 
 	const slug = page.params.slug ?? '';
 	// The page over ogygia's `page` remote — the entry's lazy body rides the wire as a region ticket

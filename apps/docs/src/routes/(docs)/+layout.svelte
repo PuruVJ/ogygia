@@ -7,18 +7,18 @@
 	import fontsMonoUrl from '../../fonts-mono.css?url';
 	import '../../fonts.css';
 	import '../../app.css';
-	import '$lib/styles/site-chrome.css';
+	import '#lib/styles/site-chrome.css';
 	// The WHOLE site chrome — homepage and docs alike — DOGFOODS the ogygia `Shell`, in the site's
 	// own skin (never ogygia theme.css). An empty `header` snippet removes the top header, so the
 	// floating sidebar panel is the chrome: brand row (`side` snippet), search, theme toggle, and the
 	// docs nav — exactly the shape the bespoke SideNav had, now rendered by the Shell's built-ins.
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/shell.css'; // layout FORM only (@layer ogygia — the unlayered skin wins)
-	import '$lib/styles/shell-skin.css'; // the site's LOOK on the .ph-* hooks
-	import SiteHeader from '$lib/SiteHeader.svelte';
+	import '#lib/styles/shell-skin.css'; // the site's LOOK on the .ph-* hooks
+	import SiteHeader from '#lib/SiteHeader.svelte';
 	import * as ogygia from 'ogygia';
 	import { page } from '$app/state';
-	import { meta } from '$lib/docs.remote';
+	import { meta } from '#lib/docs.remote.ts';
 
 	let { children } = $props();
 

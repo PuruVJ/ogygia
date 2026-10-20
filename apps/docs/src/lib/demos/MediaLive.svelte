@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/feel.css';
+	import '#lib/styles/feel.css';
 
 	const QUERY = '(max-width: 600px)';
 

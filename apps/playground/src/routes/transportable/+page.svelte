@@ -2,18 +2,18 @@
 	// A live object crossing the boundary: the PAGE (server, csr=false) constructs the
 	// instance and passes it to TWO separate islands as a normal prop. The codec ships it,
 	// the client registry reunites both decodes into ONE live instance.
-	import TransportWriter from '$lib/TransportWriter.svelte' with { wake: 'load' };
-	import TransportReader from '$lib/TransportReader.svelte' with { wake: 'load' };
+	import TransportWriter from '#lib/TransportWriter.svelte' with { wake: 'load' };
+	import TransportReader from '#lib/TransportReader.svelte' with { wake: 'load' };
 	// Transportable prop into a SERVER island (defer only): endpoint payload carries the wire codec.
-	import TransportServer from '$lib/TransportServerReader.svelte' with { render: 'deferred' };
+	import TransportServer from '#lib/TransportServerReader.svelte' with { render: 'deferred' };
 	// Transportable prop into a deferred CLIENT island (defer+hydrate): props-sibling carries it too,
 	// and after hydration it reunites into the one live instance.
-	import TransportDeferHydrate from '$lib/TransportServerReader.svelte' with { wake: 'load' };
-	import WidgetStore from '$lib/WidgetStore.svelte' with { wake: 'load' };
-	import WidgetReader from '$lib/WidgetReader.svelte' with { wake: 'load' };
-	import { SharedCounter } from '$lib/counter-object.svelte.js';
-	import { AliasProbe } from '$lib/alias-probe.svelte.js';
-	import { WidgetStore as WidgetStoreClass } from '$lib/WidgetStore.svelte';
+	import TransportDeferHydrate from '#lib/TransportServerReader.svelte' with { wake: 'load' };
+	import WidgetStore from '#lib/WidgetStore.svelte' with { wake: 'load' };
+	import WidgetReader from '#lib/WidgetReader.svelte' with { wake: 'load' };
+	import { SharedCounter } from '#lib/counter-object.svelte.js';
+	import { AliasProbe } from '#lib/alias-probe.svelte.js';
+	import { WidgetStore as WidgetStoreClass } from '#lib/WidgetStore.svelte';
 
 	const counter = new SharedCounter('demo', 5);
 	const probe = new AliasProbe('alias-ok');

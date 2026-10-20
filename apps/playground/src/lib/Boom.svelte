@@ -1,18 +1,10 @@
-<script lang="ts" module>
-	// Throws ONCE, in the browser, during Kit's hydration of the document — and never again. Svelte
-	// logs "Failed to hydrate", clears the document and mounts it fresh (the customer shape: a
-	// tracking SDK's fetch wrapper threw inside a header's template while Kit was hydrating). The
-	// fresh mount runs this again with the fuse blown, so the page comes back — rebuilt in the
-	// browser, every server-minted fact on it gone. e2e/hole-kit-rebuild.spec.ts.
-	let armed = true;
-</script>
-
 <script lang="ts">
-	import { browser } from '$app/environment';
-	if (browser && armed) {
-		armed = false;
-		throw new Error('hydration boom (on purpose: Boom.svelte)');
-	}
+	// The block a foreign post-SSR pass corrupts (hooks.server.ts, on /hole-kit-rebuild only): it
+	// strips this `{#if}`'s hydration marker from the served HTML — the customer shape, a web-component
+	// renderer or a proxy rewriting markup after the render. Hydrating Kit's document then hits a
+	// mismatch Svelte cannot repair in place: it drops the server DOM and mounts the document fresh,
+	// in the browser, every server-minted fact on it gone. e2e/hole-kit-rebuild.spec.ts.
+	const alive = true;
 </script>
 
-<p data-boom>boom survived</p>
+<p data-boom>{#if alive}boom survived{/if}</p>

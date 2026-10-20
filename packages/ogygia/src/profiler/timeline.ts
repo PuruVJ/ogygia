@@ -133,7 +133,7 @@ export interface Segment {
 	/** the innermost `span()` this segment sits inside, when any */
 	within?: string;
 	/** cpu: the Kit load file on its stack (`routes/+page.server.ts`) — the load a helper in
-	 *  `$lib` ran for */
+	 *  `#lib` ran for */
 	lane?: string;
 	/** gap: the async resources that were pending across it — what the wait most likely was */
 	pending?: string[];

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 	// A frozen lake inside this hydrated island. FrozenCounter ships in NO client chunk — its DOM is
 	// lifted out and restored around this island's hydration. The counter above stays interactive.
 	import FrozenCounter from './FrozenCounter.svelte' with { wake: 'none' };

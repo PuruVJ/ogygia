@@ -343,9 +343,8 @@ const final_url = new Map<string, string>();
 /** Hrefs whose prefetched HTML was already scanned for island entries — parse once. (URL-level
  *  import dedupe lives in the shared `warm_island_module`.) */
 const warmed_pages = new Set<string>();
-/** Hard SPA navigations only — never shared with soft invalidate. */
-let nav_gen = 0;
-let nav_abort: AbortController | null = null;
+/** (Hard SPA navigations cancel through the router's own handle, `r.nav_gen` / `r.nav_abort`, so a
+ *  "same document" decision there can stop one in flight: SpaRouter.supersede.) */
 /** Soft invalidate fetches only — aborting these must not cancel a real click nav. */
 let soft_gen = 0;
 let soft_abort: AbortController | null = null;
@@ -567,10 +566,10 @@ export async function navigate(
 		});
 
 	// Cancel any in-flight navigation; only the latest gen may apply a body swap (P2).
-	nav_abort?.abort();
-	nav_abort = new AbortController();
-	const { signal } = nav_abort;
-	const gen = ++nav_gen;
+	r.nav_abort?.abort();
+	r.nav_abort = new AbortController();
+	const { signal } = r.nav_abort;
+	const gen = ++r.nav_gen;
 	// the address being navigated to, while the fetch + swap are in flight (click listener)
 	r.nav_target = url.href;
 	signal.addEventListener('abort', () => {
@@ -595,11 +594,11 @@ export async function navigate(
 	try {
 		html = await fetch_page(url.href, signal, purpose);
 	} catch (err) {
-		if ((err as { name?: string })?.name === 'AbortError' || gen !== nav_gen) return;
+		if ((err as { name?: string })?.name === 'AbortError' || gen !== r.nav_gen) return;
 		location.href = url.href;
 		return;
 	}
-	if (gen !== nav_gen) return;
+	if (gen !== r.nav_gen) return;
 	if (html == null) {
 		location.href = url.href;
 		return;
@@ -675,12 +674,12 @@ export async function navigate(
 	// snapping to its styled width). Warm caches resolve this instantly. Old body keeps its styles
 	// until the swap, so adding the sheets early is invisible.
 	await preload_stylesheets(doc.head);
-	if (gen !== nav_gen) return;
+	if (gen !== r.nav_gen) return;
 	nav_styled = performance.now();
 	// The transition starts in a task of its own: everything above is a finished task by then, and
 	// the frame it captures is not the one that parsed 2 MB of HTML.
 	await yield_task();
-	if (gen !== nav_gen) return;
+	if (gen !== r.nav_gen) return;
 
 	// Reconcile in place unless a region lives where a body morph cannot reach it (a shadow root —
 	// counted, not walked), or an author opted the page out on either side.
@@ -694,14 +693,14 @@ export async function navigate(
 	// ── TASK TWO: the DOM — head, seeds, body, title ──
 	const swap = () => {
 		// Stale nav: do not mutate the DOM (view-transition can otherwise commit a superseded swap).
-		if (gen !== nav_gen) return;
+		if (gen !== r.nav_gen) return;
 		// Pull the a11y announcer out of the body before the reconcile — it isn't in the incoming
 		// HTML, so a body morph would remove it. Re-attached (with the new title) by `announce`.
 		announcer?.remove();
 		// LIFECYCLE (Astro-parity DOM events): last chance to read the OUTGOING page's DOM.
 		document.dispatchEvent(new Event('og:before-swap'));
 		merge_head(doc.head); // keeps our runtime module script alive across swaps
-		if (gen !== nav_gen) return;
+		if (gen !== r.nav_gen) return;
 		// CONTINUITY: snapshot the LEAVING page's changed island form fields (session-scoped) so
 		// returning to it restores what the visitor was mid-typing. Read the old body now.
 		if (slots.forms.enabled && r.current_url) {
@@ -713,7 +712,7 @@ export async function navigate(
 		// that connects below reads the new page, never a stale script. Seeds first, DOM second.
 		prepare_spa_document();
 		apply_soft_invalidate_doc(doc);
-		if (gen !== nav_gen) return;
+		if (gen !== r.nav_gen) return;
 		if (reconcile) {
 			// THE nav path: diff the live body toward the parsed one IN PLACE. Matched regions
 			// (same fingerprint) keep their live hydrated node and island state; changed regions
@@ -776,7 +775,7 @@ export async function navigate(
 	} else {
 		swap();
 	}
-	if (gen !== nav_gen) return;
+	if (gen !== r.nav_gen) return;
 
 	// From here on, `dest` is the address the swapped content belongs to (== `url` unless a
 	// server redirect moved it).
@@ -826,8 +825,8 @@ export async function navigate(
 	// The navigation is done: nothing is in flight to abort. Drop its controller — its abort listener
 	// closes over this call's scope, and kept the parsed document and its HTML alive until the next
 	// navigation (~1 MB, thousands of nodes) — and the in-flight address with it.
-	if (gen === nav_gen) {
-		nav_abort = null;
+	if (gen === r.nav_gen) {
+		r.nav_abort = null;
 		if (r.nav_target === url.href) r.nav_target = null;
 	}
 	// new <body> -> re-evaluate eager/viewport preload links on the freshly-swapped page
@@ -961,7 +960,7 @@ function merge_head(new_head: HTMLHeadElement) {
 	// where `preload_stylesheets` puts an SPA `<link>`, and for the same reason: an island's
 	// `<svelte:head>` hydration on the new page reclaims a TRAILING head-node range, so a sheet
 	// appended at the end goes with it. Kit inlines a route's small sheets as `<style>` under
-	// `kit.inlineStyleThreshold`, and ogygia inlines small region sheets the same way; one such
+	// Kit's `inlineStyleThreshold`, and ogygia inlines small region sheets the same way; one such
 	// destination page lost its `ogygia-region{display:block}` and the layout collapsed
 	// (e2e/context, "Context after SPA navigation"). `anchor` is the head's first child BEFORE this
 	// merge, so the new sheets land above everything old and keep their own order.

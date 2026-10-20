@@ -2,7 +2,7 @@
 // The comment on each says which slow pattern the profiler should name (or that it must not).
 // PATTERN almost-same-document: the page is the same every render but for the Price island's live value
 import type { PageServerLoad } from './$types';
-import { readFlags } from '$lib/latecomer/flags';
+import { readFlags } from '#lib/latecomer/flags.ts';
 
 export const prerender = false;
 

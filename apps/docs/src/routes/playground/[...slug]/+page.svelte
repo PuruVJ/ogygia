@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
-	import * as docs from '$lib/playground/docs.remote'; // namespace: `page` would clash with $app/state
-	import OperationDoc from '$lib/playground/openapi/OperationDoc.svelte';
-	import type { Operation } from '$lib/playground/openapi';
+	import * as docs from '#lib/playground/docs.remote.ts'; // namespace: `page` would clash with $app/state
+	import OperationDoc from '#lib/playground/openapi/OperationDoc.svelte';
+	import type { Operation } from '#lib/playground/openapi.ts';
 
 	// LEAK-FREE: the entry comes over the wire from the `page` remote (corpus stays server-only). The
 	// `+page.server.ts` guard already 404'd unknown slugs, so the view is guaranteed. A markdown body

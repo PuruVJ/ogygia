@@ -1,5 +1,5 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { addEntry, listEntries } from '$lib/server/guestbook';
+import { addEntry, listEntries } from '#lib/server/guestbook.ts';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ url }) => ({

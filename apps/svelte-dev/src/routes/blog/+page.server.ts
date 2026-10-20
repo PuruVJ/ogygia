@@ -1,5 +1,5 @@
-import { blog } from '$lib/site.server';
-import { post_date } from '$lib/blog';
+import { blog } from '#lib/site.server.ts';
+import { post_date } from '#lib/blog.ts';
 
 // The blog index — refs only (titles, descriptions, dates), newest first. Fully prerendered.
 export const prerender = true;

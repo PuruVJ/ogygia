@@ -2815,7 +2815,7 @@ function normalize(p: string): string {
 }
 
 /** Where `name` is defined for code in `path`: a `function name(` / `const name =` in the file
- *  itself, else through its `import { name } from '…'` (relative or `$lib/`), in that file. */
+ *  itself, else through its `import { name } from '…'` (relative or `#lib/`), in that file. */
 function find_definition(
 	source: SourceReader,
 	path: string,
@@ -2855,7 +2855,7 @@ function find_definition(
 		const spec = q.slice(1, q.indexOf(q[0], 1));
 		let target: string;
 		if (spec.startsWith('.')) target = normalize(path.slice(0, path.lastIndexOf('/') + 1) + spec);
-		else if (spec.startsWith('$lib/')) {
+		else if (spec.startsWith('#lib/')) {
 			const src = path.lastIndexOf('/src/');
 			if (src === -1) return undefined;
 			target = path.slice(0, src + 5) + 'lib/' + spec.slice(5);

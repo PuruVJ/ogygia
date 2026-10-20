@@ -3,8 +3,8 @@
 	//   - even blocks: the seed's own object (identity)
 	//   - odd blocks: a JSON clone (what a CMS SDK hands out — structure only)
 	// plus one `$page` reader, so the seed ships. Every block's props must serialize as a reference.
-	import BlockCard from '$lib/seed-refs/BlockCard.svelte' with { wake: 'load' };
-	import PageGreeting from '$lib/seed-refs/PageGreeting.svelte' with { wake: 'load' };
+	import BlockCard from '#lib/seed-refs/BlockCard.svelte' with { wake: 'load' };
+	import PageGreeting from '#lib/seed-refs/PageGreeting.svelte' with { wake: 'load' };
 	let { data } = $props();
 	const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 </script>

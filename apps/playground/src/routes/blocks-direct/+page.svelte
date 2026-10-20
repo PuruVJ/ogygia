@@ -1,7 +1,7 @@
 <script lang="ts">
 	// No content collection — a tree in hand, rendered through the MyBlocks recipe.
-	import MyBlocks from '$lib/MyBlocks.svelte';
-	import { tree, registry } from '$lib/blocks-direct-registry';
+	import MyBlocks from '#lib/MyBlocks.svelte';
+	import { tree, registry } from '#lib/blocks-direct-registry.ts';
 </script>
 
 <h1 data-static-shell>Direct blocks (recipe, no collection)</h1>

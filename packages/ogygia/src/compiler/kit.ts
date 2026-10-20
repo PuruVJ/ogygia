@@ -4,99 +4,77 @@ import { ISLAND_DIR } from './region/transform.js';
 
 /** The Kit-internal + app paths ogygia deep-imports (resolved off the APP root, not this package). */
 export interface KitPaths {
-	/** Kit's internal wire-protocol module (deep import), or null → built-in devalue codec fallback. */
+	/** Kit's internal wire-protocol module (deep import), or null when no Kit resolves. */
 	kit_wire_path: string | null;
-	/** Kit's client remote-functions entry (Plan A reuse), or null. */
-	kit_remote_index: string | null;
-	/** The app's universal hooks (`src/hooks.{ts,js}`) for `transport`, or null when absent. */
+	/** The app's universal hooks (`files.hooks.universal`) for `transport`, or null when absent. */
 	universal_hooks: string | null;
-	/** The app's CLIENT hooks (`src/hooks.client.{ts,js}`), or null. Kit runs this file only when its
+	/** The app's CLIENT hooks (`files.hooks.client`), or null. Kit runs this file only when its
 	 *  client app boots — which a csr=false page never does — so ogygia runs its `init` on boot there
 	 *  (client-side monitoring, third-party bootstraps otherwise silently never load). */
 	client_hooks: string | null;
+	/** Kit's client codec module (`#app/internal/transport`), or null when no Kit resolves. Kit's remote
+	 *  argument encoding reads the app's transport from it, and only Kit's client boot fills it — so on
+	 *  a csr=false page a custom-type remote argument failed to encode until ogygia filled it too. */
+	kit_transport_init: string | null;
 }
 
 /**
- * Locate Kit's internal wire-protocol + client remote-functions modules by resolving `@sveltejs/kit`'s
- * package.json (that IS exported) and joining the src path — deep-importing the file bypasses the exports
- * map. Also finds the app's universal hooks. Resolved from the APP root (`createRequire` off a root path),
- * so a monorepo sub-package still finds Kit. Never throws (a missing Kit → the devalue-codec fallback).
+ * Locate Kit's internal wire-protocol + client codec modules by resolving `@sveltejs/kit`'s
+ * package.json (that IS exported) and joining the src path — deep-importing the file bypasses the
+ * exports map. Also finds the app's hooks, where Kit's config puts them (`kit_dirs`). Resolved from
+ * the APP root (`createRequire` off a root path), so a monorepo sub-package still finds Kit. Never
+ * throws (no Kit → the Kit paths are null).
  */
 export function resolve_kit_paths(root: string): KitPaths {
 	let kit_wire_path: string | null = null;
-	let kit_remote_index: string | null = null;
-	let universal_hooks: string | null = null;
+	let kit_transport_init: string | null = null;
 	try {
 		const require = createRequire(path.join(root, 'noop.js'));
 		const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
 		const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
 		if (fs.existsSync(candidate)) kit_wire_path = candidate;
-		const remoteIdx = path.join(
-			kitRoot,
-			'src',
-			'runtime',
-			'client',
-			'remote-functions',
-			'index.js'
-		);
-		if (fs.existsSync(remoteIdx)) kit_remote_index = remoteIdx;
+		const codec = path.join(kitRoot, 'src', 'runtime', 'app', 'internal', 'transport.js');
+		if (fs.existsSync(codec)) kit_transport_init = codec;
 	} catch {
-		kit_wire_path = null; // fall back to the built-in devalue codec (no transport)
+		/* no Kit resolves from this root */
 	}
-	// the app's universal hooks (default src/hooks.{ts,js}) for `transport`
-	for (const f of ['hooks.ts', 'hooks.js']) {
-		const abs = path.join(root, 'src', f);
-		if (fs.existsSync(abs)) {
-			universal_hooks = abs;
-			break;
-		}
-	}
-	// the app's CLIENT hooks (src/hooks.client.{ts,js}) — run its `init` on boot for csr=false pages.
-	let client_hooks: string | null = null;
-	for (const f of ['hooks.client.ts', 'hooks.client.js']) {
-		const abs = path.join(root, 'src', f);
-		if (fs.existsSync(abs)) {
-			client_hooks = abs;
-			break;
-		}
-	}
-	return { kit_wire_path, kit_remote_index, universal_hooks, client_hooks };
-}
-
-/**
- * The app's Kit MAJOR version (resolved off the app root, like {@link resolve_kit_paths}), or null when
- * no Kit resolves. The one fact `kit_asset` needs: Kit 2's `asset()` takes a path with its leading
- * slash, Kit 3's without — and no runtime probe can tell them apart (Kit 2 refuses a slash-less path
- * only in dev; in a build it returns it page-relative, and every island entry on a nested page 404'd).
- */
-export function kit_major(root: string): number | null {
-	try {
-		const require = createRequire(path.join(root, 'noop.js'));
-		const pkg = JSON.parse(fs.readFileSync(require.resolve('@sveltejs/kit/package.json'), 'utf8')) as { version?: string };
-		const major = Number.parseInt(pkg.version ?? '', 10);
-		return Number.isFinite(major) ? major : null;
-	} catch {
-		return null;
-	}
+	const dirs = kit_dirs(root);
+	return {
+		kit_wire_path,
+		// the app's universal hooks, for `transport`
+		universal_hooks: hooks_file(dirs.hooks_universal),
+		// the app's CLIENT hooks — its `init` runs on boot for csr=false pages
+		client_hooks: hooks_file(dirs.hooks_client),
+		kit_transport_init
+	};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Kit's configurable directories — `kit.files.routes` and `kit.outDir`.
+// Kit's configurable locations — `files.routes`, `outDir` and `files.hooks.{universal,client}`.
 //
-// Everything below that walks the routes tree, and every handoff written under Kit's output dir,
-// resolves through `kit_dirs(root)`, never through a literal `src/routes` / `.svelte-kit`. The
-// Vite plugin fills the cache from the app's svelte.config.js in its `config` hook (see
-// vite/kit-dirs.ts — Node-only, hence not here); an unfilled root answers the defaults, so a
-// standalone (no-Kit) compile and the tests keep working.
+// Everything below that walks the routes tree, every handoff written under Kit's output dir and
+// every read of the app's hooks resolves through `kit_dirs(root)`, never through a literal
+// `src/routes` / `.svelte-kit` / `src/hooks`. The Vite plugin fills the cache from the app's Kit
+// config in its `config` hook (see vite/kit-dirs.ts — Node-only, hence not here); an unfilled root
+// answers the defaults, so a standalone (no-Kit) compile and the tests keep working.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface KitDirs {
-	/** absolute `kit.files.routes` (default `<root>/src/routes`) */
+	/** absolute `files.routes` (default `<root>/src/routes`) */
 	routes_dir: string;
-	/** absolute `kit.outDir` (default `<root>/.svelte-kit`) */
+	/** absolute `outDir` (default `<root>/.svelte-kit`) */
 	out_dir: string;
+	/** absolute `files.hooks.universal`, extensionless (default `<root>/src/hooks`) */
+	hooks_universal: string;
+	/** absolute `files.hooks.client`, extensionless (default `<root>/src/hooks.client`) */
+	hooks_client: string;
 }
-export const DEFAULT_KIT_DIRS = { routes: 'src/routes', out: '.svelte-kit' } as const;
+export const DEFAULT_KIT_DIRS = {
+	routes: 'src/routes',
+	out: '.svelte-kit',
+	hooks_universal: 'src/hooks',
+	hooks_client: 'src/hooks.client'
+} as const;
 const _kit_dirs = new Map<string, KitDirs>();
 
 export function set_kit_dirs(root: string, dirs: KitDirs): void {
@@ -107,17 +85,27 @@ export function kit_dirs(root: string): KitDirs {
 	return (
 		_kit_dirs.get(root) ?? {
 			routes_dir: path.join(root, DEFAULT_KIT_DIRS.routes),
-			out_dir: path.join(root, DEFAULT_KIT_DIRS.out)
+			out_dir: path.join(root, DEFAULT_KIT_DIRS.out),
+			hooks_universal: path.join(root, DEFAULT_KIT_DIRS.hooks_universal),
+			hooks_client: path.join(root, DEFAULT_KIT_DIRS.hooks_client)
 		}
 	);
 }
 
-// Kit's `kit.inlineStyleThreshold` — the ONE number for inline-vs-link CSS. Kit inlines its own
+/** A Kit hooks entry (extensionless) as a file: `.js` / `.ts` (Kit's module extensions), or an index. */
+function hooks_file(entry: string): string | null {
+	for (const f of [entry + '.ts', entry + '.js', path.join(entry, 'index.ts'), path.join(entry, 'index.js')]) {
+		if (fs.existsSync(f)) return f;
+	}
+	return null;
+}
+
+// Kit's `inlineStyleThreshold` — the ONE number for inline-vs-link CSS. Kit inlines its own
 // route sheets under it as `<style>`; ogygia's region-CSS channel (an island's, a held dual's, a
 // content body's sheets, linked per rendered region) obeys the same number: the build keeps the
 // text of every region CSS asset under the threshold in the island-deps handoff, and the render
 // emits `<style data-ogygia-region-css="href">` instead of a blocking `<link>`. Read from the
-// app's svelte.config.js by the Vite plugin next to `kit_dirs`; `0` (Kit's default) = never inline.
+// app's Kit config by the Vite plugin next to `kit_dirs`; `0` (Kit's default) = never inline.
 const _kit_inline_style_threshold = new Map<string, number>();
 
 export function set_kit_inline_style_threshold(root: string, bytes: number): void {

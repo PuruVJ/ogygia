@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The page script awaits a query AND an island on the page can call that remote → the seed
 	// ships, the page's call included (same module).
-	import { getGreeting } from '$lib/greetings.remote';
-	import ResolvedGreeting from '$lib/ResolvedGreeting.svelte' with { wake: 'load' };
+	import { getGreeting } from '#lib/greetings.remote.ts';
+	import ResolvedGreeting from '#lib/ResolvedGreeting.svelte' with { wake: 'load' };
 	const res = await getGreeting('page');
 </script>
 

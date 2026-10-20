@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Two SEPARATE island bundles that import one plain state module.
 	// Probe: does clicking Add in one island update the badge in the other?
-	import AddCartButton from '$lib/AddCartButton.svelte' with { wake: 'load' };
-	import CartBadge from '$lib/CartBadge.svelte' with { wake: 'load' };
+	import AddCartButton from '#lib/AddCartButton.svelte' with { wake: 'load' };
+	import CartBadge from '#lib/CartBadge.svelte' with { wake: 'load' };
 </script>
 
 <nav><a href="/">Home</a></nav>

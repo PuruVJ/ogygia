@@ -1,4 +1,4 @@
-import { blog } from '$lib/playground/blog.server';
+import { blog } from '#lib/playground/blog.server.ts';
 
 export const prerender = true;
 export const load = blog.load;

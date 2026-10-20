@@ -111,8 +111,8 @@ describe('og.$ server-only capture rejection', () => {
 	});
 
 	it('BUILD ERROR: capturing from a .server module or $app/server', () => {
-		const a = `import { db } from '$lib/db.server.js';\nconst f = import.meta.og.$(() => db);`;
-		expect(() => run(a)).toThrow(/server-only module '\$lib\/db\.server\.js'/);
+		const a = `import { db } from '#lib/db.server.js';\nconst f = import.meta.og.$(() => db);`;
+		expect(() => run(a)).toThrow(/server-only module '#lib\/db\.server\.js'/);
 		const b = `import { read } from '$app/server';\nconst f = import.meta.og.$(() => read);`;
 		expect(() => run(b)).toThrow(/server-only module '\$app\/server'/);
 	});

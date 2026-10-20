@@ -26,15 +26,17 @@ type Node = Record<string, any>;
 
 export type PageKeys = ReadonlySet<string> | 'all';
 
-/** Kit's page-store specifiers as an author writes them; the driver's shim rewrite runs after
- *  this analysis, so the source still names them. */
-const PAGE_SPECIFIER_RE = /^\$app\/(?:state|stores)$/;
+/** The modules Kit's page comes from, as an author writes them (the driver's shim rewrite runs after
+ *  this analysis, so the source still names them): Kit's `$app/state`. An app that still reads the
+ *  `$page` store passes {@link LEGACY_PAGE_MODULES} (`ogygia({ legacy: { appStores: true } })`). */
+export const KIT_PAGE_MODULES: readonly string[] = ['$app/state'];
+/** …and `$app/stores`, which Kit 3 removed — for an app that shims it (the store forms below:
+ *  `$page`, `get(page)`, `page.subscribe(…)`, `derived(page, …)` are read only through it). */
+export const LEGACY_PAGE_MODULES: readonly string[] = ['$app/state', '$app/stores'];
 /** The page fields that are never shaped — reading them commits nothing about `data`. */
 const SAFE_FIELDS = new Set(['url', 'params', 'route', 'status', 'error', 'form', 'state']);
 /** Keys the walker never descends into (positions, back-references). */
 const SKIP_KEYS = new Set(['start', 'end', 'loc', 'range', 'parent', 'metadata', 'leadingComments', 'trailingComments']);
-/** Cheap pre-filter for the transform hot path: no page specifier in the text → nothing to parse. */
-const PAGE_SPECIFIER_HINT_RE = /\$app\/st(?:ate|ores)/;
 
 /** The analysis giving up on a module: WHY, and WHERE (a source offset), so the build can name the
  *  line that makes a page ship all of `page.data`. */
@@ -65,16 +67,21 @@ export type PageKeysAnswer = { keys: PageKeys | null; reason: AllReason | null; 
  * literal key, or `null` when the module never imports the page (nothing to ship for it).
  * `kind` picks the parser: `'svelte'` for a component source, `'script'` for `.ts` / `.js`.
  */
-export function page_data_keys(code: string, id: string, kind: 'svelte' | 'script'): PageKeys | null {
-	return page_data_keys_answer(code, id, kind).keys;
+export function page_data_keys(code: string, id: string, kind: 'svelte' | 'script', modules: readonly string[] = KIT_PAGE_MODULES): PageKeys | null {
+	return page_data_keys_answer(code, id, kind, modules).keys;
 }
 
 /** The same answer with the reason an `'all'` was given (for the build report). */
-export function page_data_keys_answer(code: string, id: string, kind: 'svelte' | 'script'): PageKeysAnswer {
-	if (!PAGE_SPECIFIER_HINT_RE.test(code)) return { keys: null, reason: null, pending: [] };
+export function page_data_keys_answer(
+	code: string,
+	id: string,
+	kind: 'svelte' | 'script',
+	modules: readonly string[] = KIT_PAGE_MODULES
+): PageKeysAnswer {
+	if (!mentions_page_store(code, modules)) return { keys: null, reason: null, pending: [] };
 	const roots = parse_roots(code, id, kind);
 	if (!roots) return { keys: 'all', reason: { why: 'the module did not parse here (the bundler will say why)', line: null }, pending: [] };
-	const scan = new Scan(code);
+	const scan = new Scan(code, modules);
 	try {
 		for (const root of roots) scan.collect_bindings(root);
 		if (!scan.refs.size) return { keys: null, reason: null, pending: [] };
@@ -182,9 +189,10 @@ export function merge_page_keys(a: PageKeys | null, b: PageKeys | null): PageKey
 	return new Set([...a, ...b]);
 }
 
-/** Does this module even mention a page-store specifier? (the transform's pre-filter) */
-export function mentions_page_store(code: string): boolean {
-	return PAGE_SPECIFIER_HINT_RE.test(code);
+/** Does this module even mention a page module? (the transform's pre-filter — no parse) */
+export function mentions_page_store(code: string, modules: readonly string[] = KIT_PAGE_MODULES): boolean {
+	for (const m of modules) if (code.includes(m)) return true;
+	return false;
 }
 
 // ── parsing ────────────────────────────────────────────────────────────────────────────────────
@@ -230,7 +238,11 @@ class Scan {
 	/** Module-level function declarations by name (`function f(p) {}` / `const f = (p) => …`). */
 	readonly #local_fns = new Map<string, Node>();
 
-	constructor(private readonly code: string) {}
+	constructor(
+		private readonly code: string,
+		/** the modules the page comes from (a helper summary seeds its parameter instead) */
+		private readonly modules: readonly string[] = KIT_PAGE_MODULES
+	) {}
 
 	/** For {@link summarize_export}: the helper's own parameter IS the page, inside the helper. */
 	seed_param(name: string, fn: Node): void {
@@ -271,7 +283,7 @@ class Scan {
 				if (s.type === 'ImportSpecifier') this.#imports.set(s.local.name, { specifier, imported: spec_name(s.imported) ?? s.local.name });
 				else if (s.type === 'ImportDefaultSpecifier') this.#imports.set(s.local.name, { specifier, imported: 'default' });
 			}
-			if (!PAGE_SPECIFIER_RE.test(specifier)) return;
+			if (!this.modules.includes(specifier)) return;
 			for (const s of node.specifiers ?? []) {
 				if (s.type === 'ImportNamespaceSpecifier' || s.type === 'ImportDefaultSpecifier')
 					throw new All('the page store is imported as a namespace', s.start ?? null);

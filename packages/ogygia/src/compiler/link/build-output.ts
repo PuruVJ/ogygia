@@ -65,7 +65,7 @@ export function warn_content_leaks(
 
 /**
  * Write the island-deps handoff JSON (the map SSR reads at render): the stable path under Kit's
- * `outDir` (`.svelte-kit` unless the app configured `kit.outDir`), an adapter-friendly copy next
+ * `outDir` (`.svelte-kit` unless the app configured another), an adapter-friendly copy next
  * to the server bundle, AND an in-place inline into every server chunk that carries the token slot
  * — inlining is what makes it survive serverless tracing (@vercel/nft only bundles *imported*
  * files, not runtime fs reads, so the co-located JSON is dropped there; that is why held/dual

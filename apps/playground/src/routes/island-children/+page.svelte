@@ -2,8 +2,8 @@
 	// The full cross-island composition stress case, all authored by the page and crossing into a
 	// hydrate island: a captured host VALUE (who), a named snippet (header), a parameterized snippet
 	// (row), and a NESTED ISLAND (Bumper) inside the children.
-	import CardShell from '$lib/CardShell.svelte' with { wake: 'load' };
-	import Bumper from '$lib/Bumper.svelte' with { wake: 'load' };
+	import CardShell from '#lib/CardShell.svelte' with { wake: 'load' };
+	import Bumper from '#lib/Bumper.svelte' with { wake: 'load' };
 
 	const who = 'Ada';
 </script>

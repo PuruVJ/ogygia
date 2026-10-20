@@ -9,7 +9,6 @@ import { transformHost } from '../src/compiler/region/transform.js';
 
 const ctx = {
 	root: '/app',
-	libDir: '/app/src/lib',
 	readFile: () => null,
 	pathModule: path,
 	dev: false,

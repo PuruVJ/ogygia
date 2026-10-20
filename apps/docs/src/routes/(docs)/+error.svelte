@@ -4,7 +4,7 @@
 	// style block — scoped component styles are always inlined into the SSR head, so the error
 	// page can never render unstyled, whatever else fails to load.
 	import { page } from '$app/state';
-	import '$lib/styles/site-chrome.css';
+	import '#lib/styles/site-chrome.css';
 
 	const status = $derived(page.status);
 	const message = $derived(page.error?.message ?? 'Something went wrong.');

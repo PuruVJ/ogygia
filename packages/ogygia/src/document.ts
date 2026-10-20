@@ -95,7 +95,8 @@ function kit_page_context(options: DocumentOptions): KitPage {
 		data: s?.data ?? {},
 		form: s?.form ?? null,
 		error: s?.error ?? null,
-		state: {}
+		state: {},
+		shallow: null
 	};
 	// The document root has no client code of its own: it can call no remote (`[]`); the regions
 	// inside it record what theirs can.

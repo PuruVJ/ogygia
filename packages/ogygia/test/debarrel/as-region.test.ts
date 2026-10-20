@@ -16,7 +16,6 @@ afterEach(() => f?.dispose());
 
 const ctx = (root: string) => ({
 	root,
-	libDir: root + '/lib',
 	readFile: () => null,
 	pathModule: path,
 	dev: false,
@@ -33,7 +32,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 			'lib/A.svelte': '<h1>A</h1>',
 			'lib/B.svelte': '<p>B</p>',
 			'lib/index.ts': `export { default as A } from './A.svelte';\nexport { default as B } from './B.svelte';`,
-			'src/registry.ts': `import { A, B } from '$lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B];`
+			'src/registry.ts': `import { A, B } from '#lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B];`
 		});
 		const rewritten = (await f.rewrite('src/registry.ts'))!;
 		expect(rewritten).toBe(
@@ -57,7 +56,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		f = fixture({
 			'lib/A.svelte': '<h1>A</h1>',
 			'lib/index.ts': `export { default as A } from './A.svelte';`,
-			'src/registry.ts': `import { A } from '$lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'load' });\nexport const registry = [ARegion];`
+			'src/registry.ts': `import { A } from '#lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'load' });\nexport const registry = [ARegion];`
 		});
 		const r = transformTsRegions(f.read('src/registry.ts'), f.id('src/registry.ts'), ctx(f.root));
 		expect(r!.islands).toHaveLength(1);
@@ -66,7 +65,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 
 	it('INSIDE ogygia the import feeding asRegion is left alone: the prescan keys the island on the raw import, the transform must see the same one', async () => {
 		// REGRESSION (customer build, 2026-09-15): with `barrels: true` the transform saw
-		// `import A from '…/A.svelte'` where the prescan (raw source) saw `import { A } from '$lib'` —
+		// `import A from '…/A.svelte'` where the prescan (raw source) saw `import { A } from '#lib'` —
 		// two island ids, and the server manifest imported a virtual entry nobody registered:
 		// "Rolldown failed to resolve import virtual:ogygia/island/<id>.js from virtual:ogygia/server-manifest".
 		f = fixture({
@@ -74,11 +73,11 @@ describe('debarrel + import.meta.og.asRegion', () => {
 			'lib/B.svelte': '<p>B</p>',
 			'lib/util.ts': 'export const util = 1;',
 			'lib/index.ts': `export { default as A } from './A.svelte';\nexport { default as B } from './B.svelte';\nexport { util } from './util';`,
-			'src/registry.ts': `import { A, B } from '$lib';\nimport { util } from '$lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B, util];`
+			'src/registry.ts': `import { A, B } from '#lib';\nimport { util } from '#lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B, util];`
 		});
 		const skip = (decl: { specs: { local: string }[] }) => decl.specs.some((s) => asRegionLocals(f.read('src/registry.ts')).has(s.local));
 		expect(await f.rewrite('src/registry.ts', undefined, { skip })).toBe(
-			`import { A, B } from '$lib';\nimport { util } from '${f.id('lib/util.ts')}';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B, util];`
+			`import { A, B } from '#lib';\nimport { util } from '${f.id('lib/util.ts')}';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B, util];`
 		);
 		// and the island id is the one the prescan computes from the raw file
 		const raw = transformTsRegions(f.read('src/registry.ts'), f.id('src/registry.ts'), ctx(f.root));
@@ -92,7 +91,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 			'lib/A.svelte': '<h1>A</h1>',
 			'lib/util.ts': 'export const util = 1;',
 			'lib/index.ts': `export { default as A } from './A.svelte';\nexport { util } from './util';`,
-			'src/registry.ts': `import { A } from '$lib';\nimport { util } from '$lib';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`
+			'src/registry.ts': `import { A } from '#lib';\nimport { util } from '#lib';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`
 		});
 		const plugin = ogygia({ barrels: true })[0];
 		const transform = plugin.transform as (this: unknown, code: string, id: string) => Promise<{ code: string } | null>;
@@ -105,14 +104,14 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		};
 		(plugin.configResolved as (c: unknown) => void)({ root: f.root, command: 'build', logger: { info() {} } });
 		const out = await transform.call(ctx_, f.read('src/registry.ts'), f.id('src/registry.ts'));
-		expect(out!.code).toBe(`import { A } from '$lib';\nimport { util } from '${f.id('lib/util.ts')}';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`);
+		expect(out!.code).toBe(`import { A } from '#lib';\nimport { util } from '${f.id('lib/util.ts')}';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`);
 	});
 
 	it('a region-MARKED barrel import is left to the compiler (skip policy), so the mark still errors or works exactly as before', async () => {
 		f = fixture({
 			'lib/A.svelte': '<h1>A</h1>',
 			'lib/index.ts': `export { default as A } from './A.svelte';`,
-			'src/host.ts': `import { A } from '$lib' with { wake: 'visible' };\nexport const x = A;`
+			'src/host.ts': `import { A } from '#lib' with { wake: 'visible' };\nexport const x = A;`
 		});
 		const skip = (decl: { attribute_keys: string[] }) => decl.attribute_keys.includes('wake');
 		expect(await f.rewrite('src/host.ts', undefined, { skip })).toBeNull();

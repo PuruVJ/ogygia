@@ -1,5 +1,5 @@
 // Unit tests for the Observatory's import → workspace-key resolver (src/lib/repl/resolve-file.ts).
-// Covers the Kit alias forms ($lib AND #lib for Kit 3), the exact-path preference, the move-tolerant
+// Covers Kit's `#lib` subpath import, the exact-path preference, the move-tolerant
 // basename fallback, and the duplicate-basename disambiguation (the hazard the resolver must not
 // resolve arbitrarily). Node strips the .ts types natively.
 import { resolve_file } from './resolve-file.ts';
@@ -25,19 +25,15 @@ eq('./ prefix strips to a root key', resolve_file('./+page.svelte', { '+page.sve
 eq('leading / strips', resolve_file('/src/lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
 eq('query string is ignored', resolve_file('src/lib/Counter.svelte?raw', demo), 'src/lib/Counter.svelte');
 
-// ── $lib alias (Kit <=2) ──
-eq('$lib/ maps to src/lib/', resolve_file('$lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
-eq('$lib/ nested', resolve_file('$lib/Header.svelte', demo), 'src/lib/Header.svelte');
-
-// ── #lib alias (Kit 3) ──
-eq('#lib/ maps to src/lib/ (Kit 3)', resolve_file('#lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
-eq('$libfoo is NOT the alias', resolve_file('$libfoo/Counter.svelte', demo), 'src/lib/Counter.svelte'); // still found by basename fallback
+// ── #lib alias ──
+eq('#lib/ maps to src/lib/', resolve_file('#lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
+eq('#lib/ nested', resolve_file('#lib/Header.svelte', demo), 'src/lib/Header.svelte');
+eq('#libfoo is NOT the alias', resolve_file('#libfoo/Counter.svelte', demo), 'src/lib/Counter.svelte'); // still found by basename fallback
 
 // ── move-tolerant basename fallback ──
 {
 	const moved = { 'src/routes/+page.svelte': 'x', 'Counter.svelte': 'x' }; // Counter dragged to root
-	eq('$lib import of a file moved to root still resolves by name', resolve_file('$lib/Counter.svelte', moved), 'Counter.svelte');
-	eq('#lib import of a moved file resolves by name', resolve_file('#lib/Counter.svelte', moved), 'Counter.svelte');
+	eq('#lib import of a file moved to root still resolves by name', resolve_file('#lib/Counter.svelte', moved), 'Counter.svelte');
 	eq('relative import of a moved file resolves by name', resolve_file('../lib/Counter.svelte', moved), 'Counter.svelte');
 }
 
@@ -48,22 +44,22 @@ eq('$libfoo is NOT the alias', resolve_file('$libfoo/Counter.svelte', demo), 'sr
 		'src/lib/ui/Button.svelte': 'LIB',
 		'src/lib/Button.svelte': 'LIBROOT'
 	};
-	eq('$lib/ui/Button → the exact src/lib/ui path (not another Button)', resolve_file('$lib/ui/Button.svelte', dup), 'src/lib/ui/Button.svelte');
+	eq('#lib/ui/Button → the exact src/lib/ui path (not another Button)', resolve_file('#lib/ui/Button.svelte', dup), 'src/lib/ui/Button.svelte');
 	// The exact alias path is GONE here. It must NOT invent src/components/ui/Button just because that
 	// shares the ui/Button tail — that would violate the convention. It degrades to a by-name pick.
 	const noExact = {
 		'src/other/Button.svelte': 'OTHER',
 		'src/components/ui/Button.svelte': 'UI'
 	};
-	eq('missing exact alias path degrades to a deterministic by-name pick (shortest)', resolve_file('$lib/ui/Button.svelte', noExact), 'src/other/Button.svelte');
+	eq('missing exact alias path degrades to a deterministic by-name pick (shortest)', resolve_file('#lib/ui/Button.svelte', noExact), 'src/other/Button.svelte');
 	// pure basename tie → deterministic: shortest path, then lexical (not Object.keys order)
 	const tie = { 'b/X.svelte': 'x', 'a/X.svelte': 'x', 'aa/X.svelte': 'x' };
-	eq('a bare-name tie resolves deterministically (shortest, then lexical)', resolve_file('$lib/X.svelte', tie), 'a/X.svelte');
-	ok('duplicate resolution is stable across calls', resolve_file('$lib/X.svelte', tie) === resolve_file('$lib/X.svelte', tie));
+	eq('a bare-name tie resolves deterministically (shortest, then lexical)', resolve_file('#lib/X.svelte', tie), 'a/X.svelte');
+	ok('duplicate resolution is stable across calls', resolve_file('#lib/X.svelte', tie) === resolve_file('#lib/X.svelte', tie));
 }
 
 // ── misses ──
-eq('unknown specifier → null', resolve_file('$lib/Nope.svelte', demo), null);
+eq('unknown specifier → null', resolve_file('#lib/Nope.svelte', demo), null);
 eq('empty-ish spec → null', resolve_file('', demo), null);
 eq('external package → null (handled elsewhere)', resolve_file('nanoid', demo), null);
 

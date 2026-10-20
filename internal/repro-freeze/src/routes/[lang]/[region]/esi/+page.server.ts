@@ -1,4 +1,4 @@
-import { count_render } from '$lib/server/state.js';
+import { count_render } from '#lib/server/state.js';
 
 /** The EDGE stitching (ESI) demo shell: PURE (stores, stays edge-cacheable). The header inside is a
  *  `stitch: 'edge'` deferred hole — the capture rewrites it into an ESI include the CDN fills per

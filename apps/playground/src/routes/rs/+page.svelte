@@ -1,6 +1,6 @@
 <script>
-	import RSWrapper from '$lib/RSWrapper.svelte';
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import RSWrapper from '#lib/RSWrapper.svelte';
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <h1>region-snippet: forwarded children</h1>

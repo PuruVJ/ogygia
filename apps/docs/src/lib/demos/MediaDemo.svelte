@@ -1,7 +1,7 @@
 <script lang="ts">
-	import DemoBlock from '$lib/DemoBlock.svelte';
-	import MediaLive from '$lib/demos/MediaLive.svelte';
-	import MediaFrozen from '$lib/demos/MediaFrozen.svelte';
+	import DemoBlock from '#lib/DemoBlock.svelte';
+	import MediaLive from '#lib/demos/MediaLive.svelte';
+	import MediaFrozen from '#lib/demos/MediaFrozen.svelte';
 
 	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>

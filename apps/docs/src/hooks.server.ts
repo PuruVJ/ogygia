@@ -1,6 +1,5 @@
-import { sequence } from '@sveltejs/kit/hooks';
+import { sequence, type Handle } from '@sveltejs/kit/hooks';
 import * as ogygia from 'ogygia/server';
-import type { Handle } from '@sveltejs/kit';
 
 // Cross-origin isolation for the Observatory (/observatory + its /observatory-frame iframe). The
 // rolldown-browser WASM uses SharedArrayBuffer, which needs COOP: same-origin + COEP: require-corp on

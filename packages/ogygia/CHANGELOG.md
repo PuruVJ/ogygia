@@ -8,10 +8,43 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] - Unreleased
+
+### Changed
+
+- **Breaking:** ogygia supports what SvelteKit 3 and Svelte 5 support — SvelteKit 3, Svelte 5.57+ and Vite 8; SvelteKit 2 is no longer supported.
+- **Breaking:** Kit's config (routes dir, `outDir`, `inlineStyleThreshold`) is read from `sveltekit({...})` in the vite config; ogygia no longer reads `svelte.config.js`.
+- **Breaking:** islands no longer get a `$app/stores` shim (SvelteKit 3 removed the store) unless `legacy: { appStores: true }` is on.
+- The compiler follows every app import through one resolver — relative paths, the app's Vite aliases and `#lib` or any other package.json `"imports"` entry — in place of its `$lib` special case.
+- Devtools and profiler advice names `sveltekit({ inlineStyleThreshold })`, and `ogygia init` adds Kit's `#lib` imports to an app that lacks them.
+
+### Added
+
+- `ogygia({ legacy: { appStores: true } })` keeps `$app/stores` working in islands for an app that shims it, and seed shaping reads its `$page` usage to decide which `page.data` keys ship.
 
 ### Fixed
 
+- SvelteKit 3 production builds no longer fail with `"refreshAll" is not exported`; a remote `form()` in an island refreshes its queries and the page's data after a successful submit, without a reload.
+- Islands on csr=true pages get Kit's page on SvelteKit 3 (Kit 3 moved its generated client entry).
+- A remote function argument of a custom transport type now encodes on csr=false pages under SvelteKit 3.
+- A remote form in an island on a csr=true page no longer reloads the page after a submit or a redirect; it goes through Kit's router.
+- The `$app/navigation` shim exports `refreshAll` and `snapshot`, and the `$app/stores` shim exports `getStores`, so islands importing them build.
+- ogygia imports `$app/env` instead of `$app/environment` (deprecated in SvelteKit 3).
+- The profiler and ogygia's other lazily loaded server code load in dev under SvelteKit 3's module runner.
+- A region returned by a remote query no longer crashes on SvelteKit 3 (Kit refuses `event.url` there); its asset and hole URLs are root-absolute.
+- A load's custom transport types reach the page seed, the remote seed and a hole's page lookup again under SvelteKit 3.
+- A frozen page no longer freezes a signed-in visitor's render: reading the router's `c.visitor` keeps the page per-request.
+- A static `page()` / `widget()` from a peer that is down renders an inline "unavailable" card instead of breaking the page, and such a page is not frozen.
+- A static peer hop continues the request's trace (one `traceparent` trace-id across shell → cms → dash).
+- Islands on a Kit page see Kit's real `navigating` (`from`, `to`, `type`, …) and `page.shallow`.
+- A federated widget returning `region(Comp, props)` and an `expose`d typed router type-check, as documented.
+- A `page.data` key that cannot be serialized (a region value the page renders on the server) drops only that key from the page seed, not every key beside it.
+- Dev pre-bundles devalue under strict pnpm installs (no "Failed to resolve dependency" warning).
+- Going back while the next page is still loading no longer leaves that page on screen under the old address.
+- Island downloads released together start across tasks, so a page with many islands makes no long task when they wake.
+- The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
+- Devtools and the profiler no longer blame ogygia's scheduler ("held with nothing ahead") for a wait the page's own long task or a failing island caused.
+- The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
 - ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
 
 ## [0.8.3] - 2026-10-19

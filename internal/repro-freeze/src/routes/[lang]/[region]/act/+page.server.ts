@@ -1,4 +1,4 @@
-import { count_render } from '$lib/server/state.js';
+import { count_render } from '#lib/server/state.js';
 
 let tally = 0;
 

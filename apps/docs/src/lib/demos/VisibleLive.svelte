@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/feel.css';
+	import '#lib/styles/feel.css';
 
 	let waves = $state(0);
 	let at = $state('—');

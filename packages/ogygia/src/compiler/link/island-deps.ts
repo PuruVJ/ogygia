@@ -20,7 +20,7 @@ const BACKSLASH_G = /\\/g;
 /**
  * Kit's own `hash()` (`@sveltejs/kit/src/utils/hash.js`: djb2 ×33 xor, unsigned, base36) — the
  * function a remote's id is minted with: `${hash(file)}/${exportName}`, `file` the module's path
- * relative to `process.cwd()`, posix. Mirrored here (Kit does not export it) so the build can
+ * relative to the Vite root, posix. Mirrored here (Kit does not export it) so the build can
  * name a remote by the same id the server sees on `internals.id` at render time. Covered by a
  * vector test against ids observed from a real Kit build.
  */
@@ -33,14 +33,14 @@ export function kit_remote_hash(file: string): string {
 
 /**
  * The Kit remote id-hash of a CLIENT module id, or `null` for a module that is not a remote file.
- * `cwd` is what Kit hashed the file against (`process.cwd()` at build), either separator.
+ * `vite_root` is what Kit hashed the file against (the Vite root), either separator.
  *
  * @internal Exported for the plugin and unit tests.
  */
-export function remote_hash_of(module_id: string, cwd: string): string | null {
+export function remote_hash_of(module_id: string, vite_root: string): string | null {
 	const id = module_id.split('?')[0].replace(BACKSLASH_G, '/');
 	if (!REMOTE_MODULE_RE.test(id)) return null;
-	const root = cwd.replace(BACKSLASH_G, '/').replace(TRAILING_SLASH_RE, '');
+	const root = vite_root.replace(BACKSLASH_G, '/').replace(TRAILING_SLASH_RE, '');
 	const rel = id.startsWith(root + '/') ? id.slice(root.length + 1) : path.posix.relative(root, id);
 	return kit_remote_hash(rel);
 }

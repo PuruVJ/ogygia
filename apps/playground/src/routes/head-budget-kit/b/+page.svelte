@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import { block } from '$lib/head-budget/registry';
+	import { block } from '#lib/head-budget/registry.ts';
 
 	const Chosen = block('b') as Component<Record<string, unknown>>;
 </script>

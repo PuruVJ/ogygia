@@ -21,13 +21,13 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import * as devalue from 'devalue';
 import { islands_endpoint } from './endpoint.js';
-import type { KitPage } from './kit-context.js';
+import { in_remote_query, type KitPage } from './kit-context.js';
 import type { PageSnapshot } from '../page-seed-registry.js';
 import { look_up_page, type PageFacts } from './page-facts.js';
 import { merge_seed_ask, shape_page_data, type SeedAsk, type SeedKeys } from './seed-shape.js';
 import { PAGE_FACTS_SCRIPT_TYPE } from '../page-facts-script.js';
-
-type Transport = Record<string, { decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }>;
+// the app's universal `transport` codecs (the plugin builds them from the app's hooks)
+import { encoders, decoders } from 'virtual:ogygia/transport';
 
 let warn: ((message: string) => void) | null = null;
 
@@ -36,24 +36,35 @@ export function configure_render_page(o: { warn: ((message: string) => void) | n
 	warn = o.warn;
 }
 
+/** The request's own url — `event.url`, or the request's url inside a remote query. */
+function own_url(event: RequestEvent): URL {
+	return in_remote_query() ? new URL(event.request.url) : event.url;
+}
+
 /** A request rendering on behalf of a page it is not: the islands endpoint or a remote call. */
 export function renders_for_a_page(event: RequestEvent): boolean {
-	return event.url.pathname.endsWith(islands_endpoint()) || (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
+	return event.isRemoteRequest || own_url(event).pathname.endsWith(islands_endpoint());
+}
+
+/** The page a request renders FOR (a request rendering for a page it is not): its same-origin
+ *  Referer, or null — no Referer, a foreign one, a malformed one, or a request in its own page. */
+function referer_page(event: RequestEvent, own: URL): URL | null {
+	if (!renders_for_a_page(event)) return null;
+	const referer = event.request.headers.get('referer');
+	if (!referer) return null;
+	try {
+		const page = new URL(referer);
+		return page.origin === own.origin ? page : null;
+	} catch {
+		return null;
+	}
 }
 
 /** The page a request renders for: the same-origin Referer of a request rendering for a page, else
  *  the request's own url. */
 export function page_url_of(event: RequestEvent): URL {
-	if (!renders_for_a_page(event)) return event.url;
-	const referer = event.request.headers.get('referer');
-	if (!referer) return event.url;
-	try {
-		const page = new URL(referer);
-		if (page.origin === event.url.origin) return page;
-	} catch {
-		/* malformed referer: the request's own */
-	}
-	return event.url;
+	const own = own_url(event);
+	return referer_page(event, own) ?? own;
 }
 
 const looked_up = new WeakMap<Request, Promise<void>>();
@@ -65,16 +76,15 @@ const facts_of = new WeakMap<Request, PageFacts>();
  * looks up, a hole relies on its tree's build answer). The venue is the request's kind, as Kit and
  * the islands endpoint name it — never whether some per-request state happens to exist.
  */
-export function prepare_render_page(event: RequestEvent | undefined, transport: Transport | undefined, reads_data: boolean | null): Promise<void> | void {
+export function prepare_render_page(event: RequestEvent | undefined, reads_data: boolean | null): Promise<void> | void {
 	if (!event || !renders_for_a_page(event)) return;
-	if (!(reads_data ?? (event as { isRemoteRequest?: boolean }).isRemoteRequest === true)) return;
+	if (!(reads_data ?? event.isRemoteRequest)) return;
 	const request = event.request;
 	const known = looked_up.get(request);
 	if (known) return known;
-	const page = page_url_of(event);
-	if (page === event.url) return;
-	const decoders: Record<string, (v: unknown) => unknown> = {};
-	for (const name in transport ?? {}) decoders[name] = transport![name].decode;
+	// (no page to look up: the Referer was missing, foreign or malformed)
+	const page = referer_page(event, own_url(event));
+	if (!page) return;
 	const p = look_up_page(page, event.fetch, decoders).then((facts) => {
 		if ('miss' in facts) warn?.(`[ogygia] ${page.pathname}: the page's data for a render outside it is unavailable: ${facts.miss}. The render sees an empty page.data.`);
 		else facts_of.set(request, facts);
@@ -100,20 +110,24 @@ export function render_page(snapshot: PageSnapshot | undefined, event: RequestEv
 			data: facts && warn ? watched_data(facts, warn) : (facts?.data ?? {}),
 			form: null,
 			error: null,
-			state: {}
+			state: {},
+			shallow: null
 		};
 	}
 	// IN THE PAGE (its recorded snapshot, the live event filling the rest) or ITS OWN
 	const snap: PageSnapshot = snapshot ?? {};
+	// (inside a remote query Kit refuses params / route: unknown there, like the page they'd name)
+	const query = in_remote_query();
 	return {
-		url: snap.url?.href ? new URL(snap.url.href) : event?.url,
-		params: snap.params ?? event?.params ?? {},
-		route: snap.route ?? { id: event?.route.id ?? null },
+		url: snap.url?.href ? new URL(snap.url.href) : event && own_url(event),
+		params: snap.params ?? (query ? undefined : event?.params) ?? {},
+		route: snap.route ?? { id: (query ? null : event?.route.id) ?? null },
 		status: snap.status ?? 200,
 		data: snap.data ?? {},
 		form: snap.form ?? null,
 		error: snap.error ?? null,
-		state: {}
+		state: {},
+		shallow: null
 	};
 }
 
@@ -205,13 +219,11 @@ export function note_render_page_ask(event: RequestEvent, seed: SeedAsk): boolea
  * them into the page store: seeds.ts). `''` when no island in it reads the page, the page was not
  * looked up, or a value does not serialize (a still-streaming promise).
  */
-export function render_page_facts_script(event: RequestEvent | undefined, transport: Transport | undefined): string {
+export function render_page_facts_script(event: RequestEvent | undefined): string {
 	if (!event || !renders_for_a_page(event)) return '';
 	const facts = facts_of.get(event.request);
 	const keys = asks_of.get(event.request);
 	if (!facts || !keys) return '';
-	const encoders: Record<string, (v: unknown) => unknown> = {};
-	for (const name in transport ?? {}) encoders[name] = transport![name].encode;
 	try {
 		// (devalue output is `<`-safe by itself: no second pass for the script element)
 		return `<script type="${PAGE_FACTS_SCRIPT_TYPE}">${devalue.stringify(shape_page_data(facts.data, keys), encoders)}</script>`;

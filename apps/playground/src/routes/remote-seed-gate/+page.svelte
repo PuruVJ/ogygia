@@ -3,8 +3,8 @@
 	// island on the page (Counter) imports no remote module. The page must ship NO
 	// `application/ogygia-remote` seed — the lake's result is already HTML, no client can call it.
 	// The `/reader` sibling adds an island that CAN call it, and there the seed ships.
-	import LakeGreeting from '$lib/lakes/LakeGreeting.svelte' with { wake: 'none' };
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import LakeGreeting from '#lib/lakes/LakeGreeting.svelte' with { wake: 'none' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <h1>remote seed gate</h1>

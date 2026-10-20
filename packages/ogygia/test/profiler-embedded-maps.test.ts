@@ -286,7 +286,7 @@ describe('module_imports', () => {
 	it("a server file's $lib and relative script imports, resolved, with the files each may be; packages and components left out", () => {
 		const src = [
 			"import { readFileSync } from 'node:fs';",
-			"import { readFlags } from '$lib/latecomer/flags';",
+			"import { readFlags } from '#lib/latecomer/flags';",
 			'import {',
 			'\ta,',
 			'\tb',
@@ -314,7 +314,7 @@ describe('route_imports', () => {
 	it('an import spread over lines', () => {
 		const files: Record<string, string> = {
 			'routes/a/+page.svelte':
-				"<script>\n\timport Ticker from\n\t\t'$lib/a/Ticker.svelte';\n\timport {\n\t\tx\n\t} from '$lib/b/Other.svelte';\n</script>\n<p>see $lib/c/Ticker.svelte'</p>"
+				"<script>\n\timport Ticker from\n\t\t'#lib/a/Ticker.svelte';\n\timport {\n\t\tx\n\t} from '#lib/b/Other.svelte';\n</script>\n<p>see #lib/c/Ticker.svelte'</p>"
 		};
 		expect([...route_imports(Object.keys(files), (f) => files[f], 'Ticker')]).toEqual([
 			'lib/a/Ticker.svelte'
@@ -327,7 +327,7 @@ describe('route_imports', () => {
 	it('the same-named component the route imports', () => {
 		const files: Record<string, string> = {
 			'routes/hell/+page.svelte':
-				"<script>\n\timport PriceTicker from '$lib/hell/PriceTicker.svelte' with { wake: 'load' };\n\timport Card from './Card.svelte';\n</script>"
+				"<script>\n\timport PriceTicker from '#lib/hell/PriceTicker.svelte' with { wake: 'load' };\n\timport Card from './Card.svelte';\n</script>"
 		};
 		expect([...route_imports(Object.keys(files), (f) => files[f], 'PriceTicker')]).toEqual([
 			'lib/hell/PriceTicker.svelte'

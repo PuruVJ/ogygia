@@ -8,10 +8,10 @@
 // decision), the manifest read, the job queue, the regex per result, the memo that never hits.
 // (No PATTERN comments: this page measures the forecast, it is not an answer key of its own.)
 import { existsSync, readFileSync } from 'node:fs';
-import { PRODUCTS } from '$lib/inferno/data';
-import { attachBrands, forView, indexById, labelFor, matches, toView, totalPrice, validateAll, pages } from '$lib/inferno-fixed/catalog';
-import { byName } from '$lib/inferno-fixed/format';
-import { injectBadges, sitemapHtml } from '$lib/inferno/html';
+import { PRODUCTS } from '#lib/inferno/data.ts';
+import { attachBrands, forView, indexById, labelFor, matches, toView, totalPrice, validateAll, pages } from '#lib/inferno-fixed/catalog.ts';
+import { byName } from '#lib/inferno-fixed/format.ts';
+import { injectBadges, sitemapHtml } from '#lib/inferno/html.ts';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;

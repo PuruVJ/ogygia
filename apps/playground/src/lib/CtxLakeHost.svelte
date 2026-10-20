@@ -2,7 +2,7 @@
 	// Hydrated island that contains a lake in its own tree (host children can't cross the island
 	// boundary, so the lake is imported here, not passed from the page). The lake is frozen; the
 	// context reader authored inside it self-hydrates and reads the page provider.
-	import CtxLake from '$lib/CtxLake.svelte' with { wake: 'none' };
+	import CtxLake from '#lib/CtxLake.svelte' with { wake: 'none' };
 
 	let count = $state(0);
 </script>

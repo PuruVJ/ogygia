@@ -2,7 +2,7 @@
 	// Frame-store dedupe proof: three IDENTICAL server islands. Same component + same props → same
 	// minted endpoint → same frame-store address. The runtime must fetch the endpoint ONCE and fan
 	// the one response out to all three regions, not fetch three times.
-	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+	import Greeting from '#lib/Greeting.svelte' with { render: 'deferred' };
 </script>
 
 <h1 data-static-shell>Defer twins</h1>

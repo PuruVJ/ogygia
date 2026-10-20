@@ -7,8 +7,8 @@
 	// The snippet OPENS with a `{@const}` (a customer's snippet opened with a feature-flag const):
 	// legal under `{#snippet}`, illegal at a template root — where the compiler writes the crossed
 	// copy's body. The synth keeps its snippet around such a body. e2e/portable-snippet.spec.ts.
-	import PortableShell from '$lib/PortableShell.svelte';
-	import Bumper from '$lib/Bumper.svelte' with { wake: 'load' };
+	import PortableShell from '#lib/PortableShell.svelte';
+	import Bumper from '#lib/Bumper.svelte' with { wake: 'load' };
 
 	const who = 'Ada';
 	const flags = { gh: true };

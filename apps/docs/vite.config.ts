@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
+import adapter from '@sveltejs/adapter-vercel';
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
 import { diff_markers, inline_markers } from 'ogygia/content/markdown';
 import { defineConfig, type Plugin } from 'vite';
@@ -46,11 +47,20 @@ const crossOriginIsolation = (): Plugin => {
 	};
 };
 
-// Plugins live here; Kit config (adapter, extensions, preprocess) lives in svelte.config.js — the
-// Kit v2 home that `svelte-check` and the editor's Svelte language server read. The ogygia() plugin
-// registers its markdown config synchronously here (before sveltekit() loads svelte.config.js), so
-// the value-free `ogygia.extensions()` / `ogygia.preprocess()` in svelte.config.js resolve to the
-// full markdown + island pipeline for the build.
+/** SvelteKit's config (Kit 3: passed to `sveltekit()`; a `svelte.config.js` is an error). A function:
+ *  the ogygia() plugin registers its markdown config synchronously when called, so the value-free
+ *  `ogygia.extensions()` / `ogygia.preprocess()` resolve to the full markdown + island pipeline only
+ *  when this runs after it. */
+const kit = () => ({
+	adapter: adapter({ runtime: 'nodejs22.x' }),
+	extensions: ogygia.extensions(),
+	preprocess: [vitePreprocess(), ...ogygia.preprocess()],
+	compilerOptions: {
+		experimental: { async: true }
+	},
+	experimental: { remoteFunctions: true }
+});
+
 export default defineConfig(({ command }) => ({
 	resolve: {
 		// Observatory: browser variant of rolldown's ./utils (WASI worker-threads binding).
@@ -184,6 +194,6 @@ export default defineConfig(({ command }) => ({
 				},
 			},
 		}),
-		sveltekit(),
+		sveltekit(kit()),
 	],
 }));

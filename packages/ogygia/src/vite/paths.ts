@@ -69,6 +69,26 @@ export const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/inter
  */
 const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
 
+/** ogygia's own `src/` as a module-id prefix (posix, trailing `/`), or null for an install (dist only). */
+const OG_SRC_ID = OG_HAS_SRC ? path.join(PKG_ROOT, 'src').split(path.sep).join('/') + '/' : null;
+
+/**
+ * ogygia's OWN source written as it ships: its `.ts` files import each other as `./x.js` (the dist
+ * name). A static import resolves with its importer in hand, which maps `.js` → `.ts`; a DYNAMIC one
+ * under Kit's dev module runner reaches the resolver as an absolute `/@fs/…/x.js` with no importer to
+ * map from — `import('./profiler/index.js')` failed to load and the profiler went missing. This maps
+ * it back: an id inside ogygia's `src/` naming a `.js` that isn't there → the `.ts` beside it. Null
+ * for anything else (one `endsWith` + one `startsWith` on the hot path; no file is touched unless
+ * both hold). Workspace-only: an install has no `src/`.
+ */
+export function own_source_ts(source: string): string | null {
+	if (OG_SRC_ID === null || !source.endsWith('.js')) return null;
+	const id = source.startsWith('/@fs/') ? source.slice(4) : source;
+	if (!id.startsWith(OG_SRC_ID)) return null;
+	const ts = id.slice(0, -3) + '.ts';
+	return !fs.existsSync(id) && fs.existsSync(ts) ? ts : null;
+}
+
 /**
  * ogygia's own profiler UI components — island `.svelte` files marked INSIDE ogygia's source and
  * rendered only from server code (`document()` pages), so no app file ever marks them and the src
@@ -114,12 +134,14 @@ export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 			'ogygia/internal/server': path.join(PKG_ROOT, 'dist/internal-server.js')
 		};
 
-/** Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false). */
-export const APP_SHIMS = {
+/** Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false):
+ *  Kit's page module and `$app/navigation`. */
+export const APP_SHIMS: Record<string, string> = {
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
-	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
 	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
 };
+/** `$app/stores` (removed in Kit 3), shimmed only under `legacy: { appStores: true }`. */
+export const LEGACY_APP_STORES_SHIM = fileURLToPath(new URL('../shims/app-stores.js', import.meta.url));
 
 // A lake's component code must ship in NO client chunk. In the CLIENT build of an island's virtual
 // module we swap every lake import for a render-nothing stub (the runtime lifts/restores the lake's
@@ -131,9 +153,9 @@ export const CLIENT_BINDING_STUB_FILE = fileURLToPath(
 );
 
 // Reuse Kit's OWN client remote primitives (query/command/form/live). We point
-// `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
-// modules those pull in (`client.js`, `state.svelte.js`) to tiny stubs, so the router graph
-// never loads. The old hand-rolled wire client is gone; these stubs are the only glue.
+// `__sveltekit/remote` at Kit's real remote-functions and scope-alias the router-coupled modules
+// those pull in (`../client.js`, `#app/state/client`, `#app/paths`) to tiny stubs, so the router
+// graph never loads. The old hand-rolled wire client is gone; these stubs are the only glue.
 export const STUB_CLIENT = fileURLToPath(
 	new URL('../shims/kit-remote/client-stub.js', import.meta.url)
 );
@@ -143,8 +165,6 @@ export const STUB_STATE = fileURLToPath(
 export const STUB_PATHS = fileURLToPath(
 	new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)
 );
-export const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
-export const KIT_REMOTE_STATE = /state\.svelte\.js$/;
 
 /** Absolute path to real HMAC (SSR-only via `virtual:ogygia/sign`). */
 export const HMAC_MODULE = fileURLToPath(new URL('../server/hmac.js', import.meta.url));

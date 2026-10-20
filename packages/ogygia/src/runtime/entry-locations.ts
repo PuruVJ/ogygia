@@ -57,7 +57,7 @@ export function entry_location(entry: string, base?: string): string | undefined
 const REGION_URL_ATTRS = ['entry', 'src', 'endpoint'] as const;
 
 /**
- * PIN A REGION'S URLS TO THE PAGE THAT WROTE THEM. With Kit's default `paths.relative`, the server
+ * PIN A REGION'S URLS TO THE PAGE THAT WROTE THEM. With Kit's default `relative: true`, the server
  * writes `entry` / `src` / `endpoint` relative to the page it rendered (`../../_app/immutable/…`,
  * `../../__ogygia__?…`), and every reader resolves them against `location.href`. A region that stays
  * on the page through a client navigation (Kit's, or the router's) then resolved them against the

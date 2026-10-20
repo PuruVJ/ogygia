@@ -11,7 +11,6 @@ import {
 
 describe('fouc-css collector', () => {
 	const root = '/app';
-	const libDir = '/app/src/lib';
 
 	test('foucCssVirtualId normalizes separators', () => {
 		expect(foucCssVirtualId('src/lib/A.svelte')).toBe(
@@ -30,7 +29,6 @@ describe('fouc-css collector', () => {
 		};
 		const src = await buildFoucCssModuleSource('/app/src/lib/Hero.svelte', {
 			root,
-			libDir,
 			readFile: (p) => files[path.normalize(p)] ?? null
 		});
 		expect(src).toContain('import "/app/src/lib/x.css";');
@@ -64,7 +62,6 @@ describe('fouc-css collector', () => {
 		};
 		const reached = await collectFoucCssReachable('/app/src/lib/Menu.svelte', {
 			root,
-			libDir,
 			readFile: (p) => files[path.normalize(p)] ?? null,
 			resolve
 		});
@@ -86,7 +83,6 @@ describe('fouc-css collector', () => {
 		};
 		const reached = await collectFoucCssReachable('/app/src/lib/Page.svelte', {
 			root,
-			libDir,
 			readFile: (p) => files[path.normalize(p)] ?? null
 		});
 		expect(reached.map((e) => path.basename(e.abs)).sort()).toEqual(['A.svelte', 'B.svelte']);
@@ -119,11 +115,11 @@ describe('fouc-css collector', () => {
 
 	test('listStaticImports reads side-effect css imports and the names taken', () => {
 		const imports = listStaticImports(
-			`<script lang="ts">\nimport '$lib/styles/a.css';\nimport B from './B.svelte';\nimport { C, type T } from './kit';\nimport type { U } from './types';\n</script>\n`,
+			`<script lang="ts">\nimport '#lib/styles/a.css';\nimport B from './B.svelte';\nimport { C, type T } from './kit';\nimport type { U } from './types';\n</script>\n`,
 			'/app/src/lib/H.svelte'
 		);
 		const by = new Map(imports.map((i) => [i.source, [...i.names]]));
-		expect(by.get('$lib/styles/a.css')).toEqual([]);
+		expect(by.get('#lib/styles/a.css')).toEqual([]);
 		expect(by.get('./B.svelte')).toEqual(['default']);
 		expect(by.get('./kit')).toEqual(['C']);
 		expect(by.has('./types')).toBe(false);

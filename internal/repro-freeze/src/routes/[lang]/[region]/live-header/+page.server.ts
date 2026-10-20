@@ -1,4 +1,4 @@
-import { count_render } from '$lib/server/state.js';
+import { count_render } from '#lib/server/state.js';
 
 /** The live-header demo shell: PURE (stores as an freeze). The header inside is
  *  `render: 'live'` — baked into the stored bytes, self-freshening per visit with cookies. */

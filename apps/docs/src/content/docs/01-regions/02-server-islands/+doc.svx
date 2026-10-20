@@ -29,7 +29,7 @@ The demo below is a real server island on this page. Its timestamp is set when t
 
 <script>
   import ServerGreeting from './ServerGreeting.svelte' with { render: 'deferred' };
-  import DeferredFrame from '$lib/DeferredFrame.svelte' with { wake: 'load' };
+  import DeferredFrame from '#lib/DeferredFrame.svelte' with { wake: 'load' };
 </script>
 
 <div class="doc-demo">
@@ -106,7 +106,7 @@ ogygia({ regions: { presets: { pricing: { render: 'deferred', wake: 'load', maxA
 
 ```svelte
 <script>
-  import Pricing from '$lib/Pricing.svelte' with { preset: 'pricing' };
+  import Pricing from '#lib/Pricing.svelte' with { preset: 'pricing' };
 </script>
 ```
 

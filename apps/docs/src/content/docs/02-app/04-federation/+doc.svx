@@ -29,7 +29,7 @@ The **shell** — an app that consumes fragments:
 ```ts title="src/lib/federation.server.ts (the shell)"
 import { federate } from 'ogygia/federation';
 import { env } from '$env/dynamic/private';
-import { session_from } from '$lib/auth';
+import { session_from } from '#lib/auth';
 
 export const { cms, dash } = federate({
   name: 'shell',
@@ -48,8 +48,8 @@ The **cms** — an app that serves fragments (an MFE):
 import { federate } from 'ogygia/federation';
 import { region } from 'ogygia';
 import { env } from '$env/dynamic/private';
-import { cms_router } from '$lib/router';
-import Kpis from '$lib/Kpis.svelte' with { region: 'raw' };
+import { cms_router } from '#lib/router';
+import Kpis from '#lib/Kpis.svelte' with { region: 'raw' };
 
 export const { shell } = federate({
   name: 'cms',
@@ -102,8 +102,8 @@ The peer handles are **server values** (they hold the signing key, so they live 
 
 ```ts title=src/lib/shell-router.ts
 import { routes, page } from 'ogygia/router';
-import { cms, dash } from '$lib/federation.server';
-import Home from '$lib/views/Home.svelte';
+import { cms, dash } from '#lib/federation.server';
+import Home from '#lib/views/Home.svelte';
 
 export const shell_router = routes({
   '/': page(Home, {
@@ -137,7 +137,7 @@ export const shell_router = routes({
 
 Pass `claims` on the dials to override the visitor identity for that one hop (the default is the federation's `visitor`, plus every experiment bucket the request decided). The fragment's CSS travels with it and is hoisted to `<head>`; the islands inside wake themselves once the HTML lands.
 
-**Static bakes; deferred stays live.** A `static` remote region is one buffered, signed hop folded into the shell's own server render — a bare `await` on the region value, so it is SSR-stitched with no client fetch for the pixels. A `deferred` remote region is a hole below the fold: the browser fetches **the shell**, never an MFE origin, so there is one cookie domain and no exposed internal host. Inside a [streamed page](/docs/app/server-router), a deferred region arrives down the stream as a late region.
+**Static bakes; deferred stays live.** A `static` remote region is one buffered, signed hop folded into the shell's own server render — a bare `await` on the region value, so it is SSR-stitched with no client fetch for the pixels. A `deferred` remote region is a hole below the fold: the browser fetches **the shell**, never an MFE origin, so there is one cookie domain and no exposed internal host. Inside a [streamed page](/docs/app/server-router), a deferred region arrives down the stream as a late region. A static region whose peer is down or failing renders as an inline "temporarily unavailable" card: the consuming page still renders, and it is not [frozen](/docs/data-state/freeze) while the card is in it.
 
 **No allowlist. No open proxy.** A deferred region's hole URL is a **shell-signed capability** minted at render time: it names the peer, the route or widget, and the props, and the browser can choose none of them. There is no endpoint that turns browser input into a signed call, so there is nothing to allowlist. Widgets still authorize what they return against `user` (the signed claims), never against a prop — props are caller-chosen, claims are not.
 
@@ -147,7 +147,7 @@ Where a region is a **slot** the shell owns, a mount is a **route** the MFE owns
 
 ```ts
 import { mount } from 'ogygia/router';
-import { cms } from '$lib/federation.server';
+import { cms } from '#lib/federation.server';
 
 // in the route table:
 '/cms/[...rest]': mount(cms),
@@ -178,7 +178,7 @@ The shell does not have to use the ogygia router. From an ordinary Kit catchall 
 
 ```ts title=+page.server.ts
 import { mount } from 'ogygia/router';
-import { cms } from '$lib/federation.server';
+import { cms } from '#lib/federation.server';
 
 const m = mount.kit(cms, { user: (e) => session_from(e.cookies) });
 export const load = m.load;

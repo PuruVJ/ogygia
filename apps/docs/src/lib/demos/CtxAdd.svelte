@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 	import { cartCtx } from './cart-store.svelte.js';
 
 	const cart = cartCtx.get();

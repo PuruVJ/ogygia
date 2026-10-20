@@ -986,7 +986,7 @@ function page_weight_findings(
 		const tune = inline_threshold_tune(pa.assets.filter((x) => x.blocking));
 		warn('render-blocking', `${t.blocking_count} files (${fmt_bytes(t.blocking)}) must arrive before anything paints: ${files.join(', ')}.`, {
 			fix: tune
-				? `Inline the small stylesheets: with \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these sheets (${fmt_bytes(tune.bytes)}) arrive inside the HTML, and the first paint waits on ${t.blocking_count - tune.files} file${t.blocking_count - tune.files === 1 ? '' : 's'} instead of ${t.blocking_count}. Merge or trim the rest; load scripts as modules or with defer.`
+				? `Inline the small stylesheets: with \`sveltekit({ inlineStyleThreshold: ${tune.threshold} })\` in the vite config, ${tune.files} of these sheets (${fmt_bytes(tune.bytes)}) arrive inside the HTML, and the first paint waits on ${t.blocking_count - tune.files} file${t.blocking_count - tune.files === 1 ? '' : 's'} instead of ${t.blocking_count}. Merge or trim the rest; load scripts as modules or with defer.`
 				: 'Inline the small stylesheets, merge the rest, load scripts as modules or with defer.'
 		});
 	}

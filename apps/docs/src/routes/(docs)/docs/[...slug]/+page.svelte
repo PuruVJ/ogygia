@@ -2,15 +2,15 @@
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
 	import type { PageView } from 'ogygia/content';
-	import type { DocData } from '$lib/collections.server';
-	import * as docs from '$lib/docs.remote';
-	import PageHead from '$lib/PageHead.svelte';
+	import type { DocData } from '#lib/collections.server.ts';
+	import * as docs from '#lib/docs.remote.ts';
+	import PageHead from '#lib/PageHead.svelte';
 	// Island (re-hydrates per SPA nav, like CodeChrome) that localizes the changelog's release dates.
-	import LocaleDates from '$lib/LocaleDates.svelte' with { wake: 'load' };
+	import LocaleDates from '#lib/LocaleDates.svelte' with { wake: 'load' };
 	// The `.og-*` doc body painted in the SITE's look (the customization-ladder skin — no ogygia
 	// theme.css anywhere); code-block.css styles the Shiki fences.
-	import '$lib/styles/doc-skin.css';
-	import '$lib/styles/code-block.css';
+	import '#lib/styles/doc-skin.css';
+	import '#lib/styles/code-block.css';
 
 	// Dogfood the `.server.ts` rule: the component imports the `page` REMOTE, never the collection.
 	// `page` bakes the entry's body into a region ticket (`<Doc>` renders it via `<Region>`); the

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import DynIsland from '$lib/DynIsland.svelte' with { wake: 'load' };
+	import DynIsland from '#lib/DynIsland.svelte' with { wake: 'load' };
 	let { children } = $props();
 	const someHtml = '<span data-html>x</span>';
 </script>

@@ -5,8 +5,8 @@
  *
  * This is the RSC-shaped path: server decides the UI, client just paints it.
  */
-import PackageCard from '$lib/partials/PackageCard.svelte' with { wake: 'load' };
-import EmptyResult from '$lib/partials/EmptyResult.svelte' with { region: 'raw' };
+import PackageCard from '#lib/partials/PackageCard.svelte' with { wake: 'load' };
+import EmptyResult from '#lib/partials/EmptyResult.svelte' with { region: 'raw' };
 import { query } from '$app/server';
 import { region } from 'ogygia';
 import * as v from 'valibot';

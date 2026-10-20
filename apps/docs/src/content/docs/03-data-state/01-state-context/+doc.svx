@@ -50,10 +50,10 @@ They are separate bundles. But they share **one live object**. Click Add, and th
 The two widgets below are two separate islands. They share one `Cart`, passed as a prop:
 
 <script>
-  import SharedCount from '$lib/demos/SharedCount.svelte' with { wake: 'load' };
-  import SharedAdd from '$lib/demos/SharedAdd.svelte' with { wake: 'load' };
-  import ContextDemo from '$lib/demos/ContextDemo.svelte';
-  import { Cart } from '$lib/demos/cart-store.svelte.js';
+  import SharedCount from '#lib/demos/SharedCount.svelte' with { wake: 'load' };
+  import SharedAdd from '#lib/demos/SharedAdd.svelte' with { wake: 'load' };
+  import ContextDemo from '#lib/demos/ContextDemo.svelte';
+  import { Cart } from '#lib/demos/cart-store.svelte.js';
 
   const cart = new Cart();
 </script>
@@ -195,7 +195,7 @@ A context whose value is a named codec is continuous with no extra work. No cont
 An island can keep its **full live self** across navigation, not only an object:
 
 ```svelte
-import Player from '$lib/Player.svelte' with { wake: 'load', keep: 'player' };
+import Player from '#lib/Player.svelte' with { wake: 'load', keep: 'player' };
 ```
 
 The same `keep` name on the next page → the live node and its mounted app **move** onto the new slot. They do not remount. A music player continues to play through navigation, with its scroll position. The props of the new page push into the live component. Thus a `track` that changes per route still updates. Only the app and its `$state` are kept, not the props.

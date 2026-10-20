@@ -1,5 +1,5 @@
 <script lang="ts">
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-lab-page>Page B</h1>

@@ -1,4 +1,4 @@
-import { base } from '$app/paths';
+import { resolve } from '$app/paths';
 import { routes, page, layout } from 'ogygia/router';
 // DISTRIBUTED ROUTES: a table fragment shipped by a dependency (`ogygia.files`-declared) —
 // its pages + the islands inside them compile like app source (e2e/island-pkg.ts).
@@ -6,13 +6,13 @@ import { pkg_table } from 'repro-island-pkg/routes';
 import { region } from 'ogygia';
 // `region: 'raw'` — a plain import in a server-only module has no client leg, so the bake
 // would mint nothing (the round-1 catalog rule); the mark gives the region its identity + CSS.
-import StreamPayload from '$lib/rtr/StreamPayload.svelte' with { region: 'raw' };
-import StreamRegion from '$lib/rtr/StreamRegion.svelte';
-import Shell from '$lib/rtr/Shell.svelte';
-import Inner from '$lib/rtr/Inner.svelte';
-import Home from '$lib/rtr/Home.svelte';
-import Deep from '$lib/rtr/Deep.svelte';
-import Reader from '$lib/rtr/Reader.svelte';
+import StreamPayload from '#lib/rtr/StreamPayload.svelte' with { region: 'raw' };
+import StreamRegion from '#lib/rtr/StreamRegion.svelte';
+import Shell from '#lib/rtr/Shell.svelte';
+import Inner from '#lib/rtr/Inner.svelte';
+import Home from '#lib/rtr/Home.svelte';
+import Deep from '#lib/rtr/Deep.svelte';
+import Reader from '#lib/rtr/Reader.svelte';
 
 // v2: layouts are named table→table wrappers; nesting = spreading a wrapped sub-table. Deep's `data`
 // merges shell.who + inner.nav (Kit's cascade), so it needs no load of its own. Endpoints are the
@@ -49,7 +49,7 @@ const app = routes(
 		'/api/ping': { GET: (c) => c.json({ pong: true }) }
 	}),
 	// Mounted under the Kit route `rtr/[...path]` — derive the mount from Kit's own base.
-	{ base: `${base}/rtr` }
+	{ base: resolve('rtr') }
 );
 
 export const GET = async (event: { request: Request }) =>

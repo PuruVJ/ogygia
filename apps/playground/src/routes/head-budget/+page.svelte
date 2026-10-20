@@ -6,9 +6,9 @@
 	//   - a marked import that is imported but never placed.
 	// Only the two rendered islands may cost a stylesheet + a chunk hint.
 	import type { Component } from 'svelte';
-	import { block, BlockPlainReexport } from '$lib/head-budget/registry';
-	import BlockDirect from '$lib/head-budget/BlockDirect.svelte' with { wake: 'load' };
-	import BlockUnused from '$lib/head-budget/BlockUnused.svelte' with { wake: 'load' };
+	import { block, BlockPlainReexport } from '#lib/head-budget/registry.ts';
+	import BlockDirect from '#lib/head-budget/BlockDirect.svelte' with { wake: 'load' };
+	import BlockUnused from '#lib/head-budget/BlockUnused.svelte' with { wake: 'load' };
 
 	const Chosen = block('a') as Component<Record<string, unknown>>;
 	// two PLAIN registry blocks (no `with`): rendered on the server, styled only through the page

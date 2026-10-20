@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { personalGreeting } from '$lib/server-greeting.remote';
+	import { personalGreeting } from '#lib/server-greeting.remote.ts';
 
 	// A server island DECLARES the reserved `ogygiaFallback` snippet in its props — svelte-check
 	// types the ORIGINAL source (preprocessor-based augmentation is impossible; probe-proven), so

@@ -69,7 +69,7 @@ The collection obeys `filter` on each read path: `refs`, `get`, `live`, the wire
 ```ts title=src/routes/docs/[...slug]/+page.server.ts
 // clean 404 for a missing entry
 import { error } from '@sveltejs/kit';
-import { docs } from '$lib/collections.server';
+import { docs } from '#lib/collections.server.ts';
 
 export const load = async ({ params }) => {
   if (!(await docs.get(params.slug))) error(404, 'Not found');
@@ -96,7 +96,7 @@ export const entry = query(v.string(), async (slug) => {
 <script>
   import { page } from '$app/state';
   import { Region } from 'ogygia';
-  import { entry } from '$lib/docs.remote';
+  import { entry } from '#lib/docs.remote.ts';
 
   const view = (await entry(page.params.slug))!;
 </script>
@@ -125,7 +125,7 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 ```svelte
 <script>
-  import { docNav } from '$lib/docs.remote';
+  import { docNav } from '#lib/docs.remote.ts';
   const nav = await docNav();
 </script>
 ```
@@ -172,7 +172,7 @@ The transform of ogygia runs after mdsvex. Thus marked island imports operate in
 
 ```svelte
 <script>
-  import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+  import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <Counter start={3} />
@@ -276,7 +276,7 @@ Yield anything to read the full source again. Or yield a **`string[]` of changed
 Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions) each second. The server renders each tick, and pushes the HTML down the channel. The client **morphs** it in place, with no client data code and no per-tick fetch.
 
 <script>
-  import LivePartialDemo from '$lib/demos/LivePartialDemo.svelte' with { wake: 'load' };
+  import LivePartialDemo from '#lib/demos/LivePartialDemo.svelte' with { wake: 'load' };
 </script>
 
 <div class="doc-demo">

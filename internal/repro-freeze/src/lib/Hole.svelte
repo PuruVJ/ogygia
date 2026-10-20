@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { next_hole_serial } from '$lib/hole-serial.js';
+	import { next_hole_serial } from '#lib/hole-serial.js';
 
 	// Server island (render: 'deferred') — renders on its own signed endpoint per request.
 	// `ogygiaFallback` is the reserved loading slot (hand-declared — the law).

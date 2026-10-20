@@ -6,7 +6,7 @@
 	//       guarantee turns that into an empty hold rather than a flash — but the gap is real.
 	//   B — THE MODEL: `of={promise}` + `placeholder`. One indicator across fetch AND styled paint.
 	import { Region } from 'ogygia';
-	import { boxSearch } from '$lib/box-search.remote';
+	import { boxSearch } from '#lib/box-search.remote.ts';
 
 	let qa = $state<string | null>(null);
 	let qb = $state<string | null>(null);

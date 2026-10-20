@@ -227,6 +227,10 @@ export class SpaRouter {
 	#after_hooks = new Set<AfterNavigateCallback>();
 	/** href of the navigation in flight (set before the fetch, cleared when applied or aborted) */
 	nav_target: string | null = null;
+	/** The in-flight navigation's cancel handle: router-nav bumps `nav_gen` and sets `nav_abort` for
+	 *  each navigation it starts, and stops at its next step once `nav_gen` moved on. */
+	nav_gen = 0;
+	nav_abort: AbortController | null = null;
 	#viewport_io: IntersectionObserver | null = null;
 	#viewport_seen = new WeakSet<Element>();
 	/** pathname+search of the document currently in the DOM (hash ignored). */
@@ -261,6 +265,21 @@ export class SpaRouter {
 		return () => this.#after_hooks.delete(fn);
 	}
 
+	/**
+	 * Keep the document in the DOM: the navigation in flight (if any) never swaps. The document key
+	 * moves only when a swap commits, so every "same document" decision is about the page still on
+	 * screen — and one made while the next page loads (back to this page, a link to it) must cancel
+	 * that load, or it lands under this page's address (back pressed before `/plain` finished
+	 * swapping left the URL on the old page and `/plain` in the DOM).
+	 */
+	supersede(): void {
+		if (this.nav_target === null && this.nav_abort === null) return;
+		this.nav_gen++;
+		this.nav_abort?.abort();
+		this.nav_abort = null;
+		this.nav_target = null;
+	}
+
 	bust_page_cache() {
 		loaded_nav?.bust_page_cache(); // no navigation loaded yet ⇒ nothing cached
 	}
@@ -290,6 +309,7 @@ export class SpaRouter {
 		// navigate.)
 		if (same_document(url, from) && !replace) {
 			if (!this.run_before(from, url, type)) return;
+			this.supersede();
 			if (push && url.href !== location.href) {
 				push_state({ ...(history.state || {}), ogygia: true }, url.href);
 			} else if (url.href !== location.href) {
@@ -307,6 +327,7 @@ export class SpaRouter {
 		// this one with — a second fetch. router-nav clears the claim when the navigation applies,
 		// is aborted, or is cancelled by a beforeNavigate hook.
 		this.nav_target = url.href;
+		const gen = this.nav_gen;
 		let n: Nav;
 		try {
 			n = await nav();
@@ -317,6 +338,8 @@ export class SpaRouter {
 			location.href = url.href;
 			return;
 		}
+		// superseded while the navigation code loaded
+		if (gen !== this.nav_gen) return;
 		return n.navigate(this, url, from, opts);
 	}
 
@@ -429,6 +452,8 @@ export class SpaRouter {
 			// Hash-only back/forward on the same document — browser already updated the URL;
 			// do not fetch or swap. Scroll to the target if present.
 			if (document_key(url) === this.doc_key) {
+				// (back to the page still on screen while the next one loads: that load must not land)
+				this.supersede();
 				jump_to_hash(url.hash);
 				return;
 			}

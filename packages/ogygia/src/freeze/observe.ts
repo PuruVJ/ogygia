@@ -98,7 +98,8 @@ export function observe_event(event: RequestEvent): Observation {
 
 	// locals — upstream handles personalize BEFORE this handle runs, so the RENDER's read of
 	// what they wrote is the observable moment. Default-shaped values (empty user object) pass.
-	event.locals = new Proxy(event.locals, {
+	// (Kit 3 types the event's fields readonly; the event itself is a plain object)
+	(event as { locals: App.Locals }).locals = new Proxy(event.locals, {
 		get(target, prop, receiver) {
 			const value = Reflect.get(target, prop, receiver);
 			if (typeof prop === 'string' && !is_default_value(value) && typeof value !== 'function') {
@@ -108,5 +109,22 @@ export function observe_event(event: RequestEvent): Observation {
 		}
 	});
 
+	// reads ogygia itself makes on the render's behalf (the router's `c.visitor`): same rule
+	readers.set(event.request, (label, value) => {
+		if (!is_default_value(value)) disqualify(label);
+	});
+
 	return obs;
+}
+
+/** The observed request → its read recorder (per request; the request dies with it). */
+const readers = new WeakMap<Request, (label: string, value: unknown) => void>();
+
+/**
+ * A personalization read the render makes through ogygia rather than the event — the router's
+ * `c.visitor` (an identity derived from the request) — recorded like a cookie read: a non-default
+ * value makes the page per-request, an anonymous one still freezes. A no-op off a freeze render.
+ */
+export function observe_read(request: Request, label: string, value: unknown): void {
+	readers.get(request)?.(label, value);
 }
