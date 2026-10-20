@@ -23,6 +23,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A live snippet an island renders reads the page's contexts on the server and in the browser, as the island does.
 - An island inside a frozen snippet wakes on its own.
 - A snippet passed to an island on a Kit-hydrated page no longer causes a hydration mismatch.
+- A hole on a Kit-hydrated page keeps its address and its landed HTML through Kit's hydration (a hole inside an island could go empty).
 - ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
 
 ## [0.8.3] - 2026-10-19
