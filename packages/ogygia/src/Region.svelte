@@ -25,7 +25,7 @@
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
 	import { runtime_bootstrap } from './server/entry-location.js';
-	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
+	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint, holeCss } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
 	// Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike (kit-paths.ts)
 	import { kit_asset as asset } from './kit-paths.js';
@@ -334,7 +334,7 @@
 		const entry = untrack(() => (is_server ? __entry : island_entry));
 		console.warn(
 			is_server
-				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+				? `[ogygia] nested server island "${entry}" is inside another island; it renders inline as frozen HTML (no JS ships; islands inside it wake on their own) — 'deferred' ignored.`
 				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
 		);
 	}
@@ -627,6 +627,30 @@
 					renderer.push(LT + '/ogygia-region' + GT);
 				}
 			: createRawSnippet(() => ({ render: () => LT + 'ogygia-region' + hole_attrs() + GT + LT + '/ogygia-region' + GT }));
+	// A hole NESTED in an island renders in the page pass (`deferred` ignored, the nested rule) — as a
+	// LAKE: frozen server HTML the island adopts and lifts around its hydrate, never hydrated itself. A
+	// hole ships no JS wherever it sits (the client wrapper has no component — emit.ts), and the
+	// islands authored inside it emit real regions (LakeBoundary) and wake on their own.
+	const hole_frozen_open = LT + 'ogygia-region entry="' + escape_attr(String(__entry || '')) + '" wake="none" remount="cache"' + GT;
+	const hole_frozen =
+		typeof window === 'undefined'
+			? /** @param {{ push(html: string): void }} renderer */
+				(renderer) => {
+					renderer.push(hole_frozen_open);
+					const Component = /** @type {(r: unknown, p: unknown) => void} */ (/** @type {unknown} */ (__component));
+					if (Component)
+						LakeBoundary(/** @type {never} */ (renderer), /** @type {never} */ ({ children: (/** @type {unknown} */ r) => Component(r, __props || {}) }));
+					renderer.push(LT + '/ogygia-region' + GT);
+				}
+			: createRawSnippet(() => ({ render: () => hole_frozen_open + LT + '/ogygia-region' + GT }));
+	// …and its stylesheets: the page never imported its component (the client wrapper has none), so
+	// link them as its endpoint answer would (server-only; the client hoists `data-ogygia-region-css`)
+	const hole_css_html = $derived.by(() => {
+		if (!is_server || !nested) return '';
+		let html = '';
+		for (const href of claim_region_css(holeCss(__entry || ''))) html += region_css_tag(href, asset(href));
+		return html;
+	});
 	// On a KIT-HYDRATED document the facts ride the document tail too (server/document-tail.ts
 	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. A csr=false
 	// document has no Kit client to rebuild it, so nothing is recorded there. Decided once at init —
@@ -809,7 +833,7 @@
 		(is_island
 			? runtime_script + island_preload_head + island_css_html + kit_island_meta
 			: is_server
-				? runtime_script + server_preload
+				? runtime_script + server_preload + hole_css_html
 				: runtime_script) +
 			region_css_html +
 			content_css_html
@@ -922,7 +946,7 @@
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
-	{#if nested}{#if Component}<Component {...__props} />{/if}{:else if in_live_snippet || is_csr}{@render hole_adopt()}<!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{:else}<ogygia-region
+	{#if nested}{@render hole_frozen()}{:else if in_live_snippet || is_csr}{@render hole_adopt()}<!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{:else}<ogygia-region
 			entry={server_region_entry}
 			render="defer"
 			stitch={__stitch || undefined}

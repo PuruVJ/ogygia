@@ -376,8 +376,8 @@ export function server_wrapper_source(
 	exportName: string | undefined,
 	module_url: string,
 	lang: string,
-	// false: the CLIENT leg of a hole placed in a live snippet's synth — it stays deferred there and the
-	// snippet's hydrate adopts its element (Region.svelte), so the browser never needs its component
+	// false: the CLIENT leg. A hole ships no JS — the browser adopts its server HTML wherever it sits
+	// (deferred, or frozen inline in an island: Region.svelte), so it never needs the component
 	component = true
 ): string {
 	const deferred_hydrate = !!options?.hydrate;

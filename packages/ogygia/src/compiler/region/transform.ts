@@ -1887,11 +1887,7 @@ class FileCompilation {
 			const identity = regionIdentity(id_base, mark);
 			const iid = regionId(identity, salt);
 			const entryPath = ctx.virtualPathFor(id, iid);
-			// A hole placed in a live snippet's synth (a generated entry: its origin is another file) has a
-			// client leg of its own (no component — see server_wrapper_source), so its own wrapper module:
-			// the wrapper id is per region id, and the same hole in an island's template keeps its own.
-			const snippet_hole = mark.strategy === 'server' && origin !== id;
-			const wrapPath = wrapperPathFor(id, snippet_hole ? iid + '-snippet' : iid);
+			const wrapPath = wrapperPathFor(id, iid);
 			const bindingPath = link_virtual ? wrapPath : binding_stub;
 
 			if (mark.strategy === 'lake') {
@@ -1993,22 +1989,18 @@ class FileCompilation {
 									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
 									lang
 								),
-								// a hole in a live snippet's synth stays deferred and is adopted in the browser:
-								// no component on the client
-								...(snippet_hole
-									? {
-											wrapperClientSource: server_wrapper_source(
-												iid,
-												componentPath,
-												entryPath,
-												mark.options,
-												exportName,
-												ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
-												lang,
-												false
-											)
-										}
-									: {}),
+								// a hole ships no JS: its client leg adopts server HTML (deferred or frozen)
+								// and never needs the component
+								wrapperClientSource: server_wrapper_source(
+									iid,
+									componentPath,
+									entryPath,
+									mark.options,
+									exportName,
+									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
+									lang,
+									false
+								),
 								source: island_entry_source(componentPath, iid, exportName),
 								hostPath: origin,
 								componentPath,
@@ -2723,6 +2715,17 @@ class TsRegionCompilation {
 						exportName,
 						this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
 						''
+					),
+					// (a hole ships no JS — see the placed-hole record)
+					wrapperClientSource: server_wrapper_source(
+						iid,
+						componentPath,
+						entryPath,
+						options,
+						exportName,
+						this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
+						'',
+						false
 					),
 					source: island_entry_source(componentPath, iid, exportName),
 					hostPath: this.#id,

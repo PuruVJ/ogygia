@@ -14,6 +14,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An island inside a live snippet an island renders follows the nested rule: it renders inline and hydrates with that island.
 - An island sets `data-hydrated` and fires `ogygia:hydrated` once the live snippets it renders have hydrated too.
+- A hole nested in an island renders inline as static HTML, like a lake: its component never ships to the browser, and an island inside it wakes on its own.
 
 ### Fixed
 

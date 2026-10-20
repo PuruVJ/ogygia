@@ -1224,10 +1224,12 @@ export class Compiler {
 					`export function known_region_fps() { return new Set(); }\n` +
 					// An island's `data-og-fp` is minted on the server only (a native digest); the
 					// client reads the attribute and never computes one.
-					`export function islandFingerprint(_entry, _canonical) { return ''; }`
+					`export function islandFingerprint(_entry, _canonical) { return ''; }\n` +
+					// A hole's stylesheets are linked by the server render; the client links none.
+					`export function holeCss(_entry) { return []; }`
 				);
 			}
-			return `export { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from ${JSON.stringify(ctx.region_endpoint_module)};`;
+			return `export { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint, holeCss } from ${JSON.stringify(ctx.region_endpoint_module)};`;
 		}
 		if (id === RESOLVED(V_RATE_LIMIT)) {
 			return rate_limit_module(ssr, ctx.rate_limit);

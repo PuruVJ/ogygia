@@ -23,6 +23,9 @@ declare module 'virtual:ogygia/region-endpoint' {
 	/** The island `data-og-fp` over its module URL + canonical props text (server/fingerprint.ts);
 	 *  `''` on the client, which only ever reads the attribute. */
 	export function islandFingerprint(entry: string, canonical: string): string;
+	/** A hole's own stylesheet hrefs (by region id), for a render that inlines it in the page;
+	 *  `[]` on the client. */
+	export function holeCss(entry: string): string[];
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;
