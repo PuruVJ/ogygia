@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Branch/tag to test (default: passage)'
+        description: 'Branch/tag to test (default: kit3-compat)'
         required: false
-        default: 'passage'
+        default: 'kit3-compat'
 
 permissions:
   contents: read
@@ -24,12 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      # `passage` is the LIVING branch — main is frozen at the 0.7.0 release, and its stale check
-      # chain kept failing this watcher on pre-existing rot (never on upstream). Watch the code
-      # that actually ships next; flip back to 'main' when passage merges.
+      # The latest SvelteKit is 3: watch the branch that supports it — main is SvelteKit 2, so
+      # `--latest` there can only fail (Kit 3 refuses `svelte.config.js`), never on upstream news.
+      # Flip to 'main' when kit3-compat merges. (It watched `passage` long after passage merged.)
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || 'passage' }}
+          ref: ${{ github.event.inputs.ref || 'kit3-compat' }}
 
       - uses: pnpm/action-setup@v4
 

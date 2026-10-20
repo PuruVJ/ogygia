@@ -588,6 +588,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// installed one the same single graph. Its own dependencies (svelte, devalue) are
 					// still pre-bundled, once, shared with the app.
 					return {
+						// ONE KIT: ogygia reads Kit's request store (`@sveltejs/kit/internal/server`) — the
+						// request a render belongs to (its devtools events, the freeze verdict's reads, the
+						// page seed). A second Kit resolved from ogygia's own location has its own, empty store:
+						// a workspace-linked ogygia whose peer resolved another Kit than the app's lost every
+						// one of those, silently. Kit always resolves from the app.
+						resolve: { dedupe: ['@sveltejs/kit'] },
 						ssr: { noExternal: ['esm-env', 'ogygia', ...declared_pkg_names] },
 						optimizeDeps: { exclude: ['ogygia', ...declared_pkg_names], include: dev_island_deps },
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,

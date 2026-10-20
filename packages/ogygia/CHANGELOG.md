@@ -45,6 +45,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
 - Devtools and the profiler no longer blame ogygia's scheduler ("held with nothing ahead") for a wait the page's own long task or a failing island caused.
 - The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
+- ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
 
 ## [0.8.3] - 2026-10-19
 
