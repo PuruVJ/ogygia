@@ -121,11 +121,11 @@ Not each tile earns hydration. A "recent orders" list that no person touches is 
 ```svelte
 <script>
   import RecentOrders from './RecentOrders.svelte' with { render: 'deferred' };
-  import AuditLog from './AuditLog.svelte' with { render: 'deferred', wake: 'visible' };
+  import AuditLog from './AuditLog.svelte' with { render: 'deferred', fetch: 'visible' };
 </script>
 ```
 
-Each `render: 'deferred'` hole fetches its own HTML on load. On a SPA navigation, [single-flight navigation](/docs/app/spa-router#single-flight) pulls all holes down in one batch request, with no waterfall. Tiles below the fold with `render: 'deferred', wake: 'visible'` do not cost the server a render until you scroll to them.
+Each `render: 'deferred'` hole fetches its own HTML on load. On a SPA navigation, [single-flight navigation](/docs/app/spa-router#single-flight) pulls all holes down in one batch request, with no waterfall. Tiles below the fold with `render: 'deferred', fetch: 'visible'` do not cost the server a render until you scroll to them.
 
 Two refinements for the tiles that you *do* hydrate:
 
@@ -170,13 +170,13 @@ The checklist, inverted. If you build one of these by hand, a primitive already 
 | Skeleton or spinner state per tile | `.current` + `.loading` (stale-while-refetch comes free) |
 | WebSocket plumbing plus diff/patch for live tiles | `query.live` that yields held regions (morph / keep-alive) |
 | A client-side widget registry for user layouts | Held regions: the server selects, the client paints |
-| Lazy tile loading | `wake: 'visible'` / `render: 'deferred', wake: 'visible'` |
+| Lazy tile loading | `wake: 'visible'` / `render: 'deferred', fetch: 'visible'` |
 | "Keep the chart alive across pages" hacks | `keep` |
 
 ## Do / don't
 
 - **Do** put each piece of shared UI state (range, segment, selection) on the one wire class. Two sources of truth make tiles drift.
-- **Do** set tiles to `wake: 'visible'`, and below-fold server islands to `render: 'deferred', wake: 'visible'`. The fold hides most of the cost of a dashboard.
+- **Do** set tiles to `wake: 'visible'`, and below-fold server islands to `render: 'deferred', fetch: 'visible'`. The fold hides most of the cost of a dashboard.
 - **Do** dim on `.loading`. Do not unmount to a spinner. The visible last value is what makes filter changes feel immediate.
 - **Don't** make a tile a server island because it "feels server-like". If it must react to filters, it is a client island with a query. The server-island trade is per-request HTML for zero JS.
 - **Don't** use `query.live` for data that changes only when the user acts. A plain query that refetches through `$derived` costs less and is simpler.

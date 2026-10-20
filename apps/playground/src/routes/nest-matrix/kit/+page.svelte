@@ -20,9 +20,9 @@
 	import SnipLake from '$lib/SnipLake.svelte' with { wake: 'none' };
 	import Bumper from '$lib/Bumper.svelte' with { wake: 'visible' };
 	import MxLakeHole from '$lib/mx/MxLakeHole.svelte' with { render: 'deferred' };
-	import MxLakeHoleWake from '$lib/mx/MxLakeHoleWake.svelte' with { render: 'deferred', wake: 'load' };
+	import MxLakeHoleWake from '$lib/mx/MxLakeHoleWake.svelte' with { render: 'deferred', fetch: 'load' };
 	import MxIslandHole from '$lib/mx/MxIslandHole.svelte' with { render: 'deferred' };
-	import MxIslandHoleWake from '$lib/mx/MxIslandHoleWake.svelte' with { render: 'deferred', wake: 'load' };
+	import MxIslandHoleWake from '$lib/mx/MxIslandHoleWake.svelte' with { render: 'deferred', fetch: 'load' };
 	import MxCtxRead from '$lib/mx/MxCtxRead.svelte';
 	import MxMounted from '$lib/mx/MxMounted.svelte';
 	import MxCtxLake from '$lib/mx/MxCtxLake.svelte' with { wake: 'none' };

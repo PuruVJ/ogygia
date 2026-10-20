@@ -169,7 +169,7 @@ function absorb_page_facts_now(): void {
 	if (runtime_session.page_facts.length) loaded_core?.seed_page_once();
 }
 
-/** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `wake: 'interaction'`).
+/** What counts as intent for an ON-DEMAND hole (`render: 'deferred'` + `fetch: 'interaction'`).
  *  `pointerover` (not `pointerenter`) so it fires on hover AND bubbles through the boxless
  *  `display: contents` wrapper from a descendant the pointer actually moves over. */
 const ON_DEMAND_EVENTS = [

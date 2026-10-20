@@ -16,25 +16,32 @@ const IDENT_NAME_RE = /^[\w-]+$/;
  * Named strategy bundle referenced from source via `with { preset: 'name' }`
  * (or the renamed `importKeys.preset` key).
  *
- * A preset speaks the SAME two-dial grammar as an inline import: `render` (the delivery mode) +
- * `wake` (the schedule), plus the tuning options that aren't allowed inline (`margin`, `maxAge`, …).
+ * A preset speaks the SAME grammar as an inline import: a `render` mode with its timing (`fetch` for
+ * a `deferred` hole, `wake` for an island), plus the tuning options that aren't allowed inline
+ * (`margin`, `maxAge`, …).
  */
 export interface OgygiaPreset {
 	/**
 	 * Delivery mode (the `render` import attribute): `'static'` (default — an island that hydrates)
-	 * | `'deferred'` (a hole whose HTML is fetched) | `'live'` (a hole that revalidates).
+	 * | `'deferred'` (a hole whose HTML is fetched, on its `fetch` timing) | `'live'` (a hole that
+	 * revalidates).
 	 */
 	render?: 'static' | 'deferred' | 'live';
 	/**
-	 * Schedule (the `wake` import attribute): hydration when `render` is `'static'`, the FETCH
-	 * schedule when `'deferred'`/`'live'`. `'load'` | `'idle'` | `'visible'` | `'interaction'` |
-	 * a CSS media query | `'none'` (a frozen lake).
+	 * When an island's JS runs (the `wake` import attribute): `'load'` | `'idle'` | `'visible'` |
+	 * `'interaction'` | a CSS media query | `'none'` (a frozen lake). With `render: 'live'`, the
+	 * revalidate schedule. Never a `deferred` hole's timing — that is `fetch`.
 	 */
 	wake?: string;
+	/**
+	 * A `render: 'deferred'` hole's timing — when its HTML arrives (the `fetch` import attribute):
+	 * `'load'` (default) | `'idle'` | `'visible'` | `'interaction'` | a CSS media query.
+	 */
+	fetch?: string;
 	/** `IntersectionObserver` `rootMargin` when the schedule is `'visible'`. */
 	margin?: string;
 	/**
-	 * `render: 'deferred'` — response cache max-age for the hole's HTML: seconds (number) or a
+	 * A hole (`fetch`) — response cache max-age for the hole's HTML: seconds (number) or a
 	 * duration string (`'30s'` | `'5m'` | `'1h'`). Absent or `0` → `no-store`: the hole is dynamic,
 	 * re-rendered on every request. A positive value opts into a `private, max-age` browser cache.
 	 * Signed into the hole's endpoint so a harvested URL can't be re-pointed at a longer cache.
@@ -46,11 +53,11 @@ export interface OgygiaPreset {
 	/** `render: 'live'` — past `maxAge`, whether to clear the hole (`'empty'`) or refetch (`'fetch'`). */
 	onExpire?: 'empty' | 'fetch';
 	/**
-	 * `render: 'deferred'` — warm the hole's HTML into the frame store on this schedule (`'load'` |
-	 * `'idle'` | `'visible'` | a media query) while `wake` still decides when it swaps in. An
-	 * on-demand hole (`wake: 'interaction'`) then has its bytes before the first hover: the gesture
+	 * A hole (`fetch`) — warm the hole's HTML into the frame store on this schedule (`'load'` |
+	 * `'idle'` | `'visible'` | a media query) while `fetch` still decides when it swaps in. An
+	 * on-demand hole (`fetch: 'interaction'`) then has its bytes before the first hover: the gesture
 	 * joins the warm frame instead of paying the origin round trip. Never `'interaction'` — that is
-	 * the swap schedule, `wake`'s job.
+	 * the swap schedule, `fetch`'s job.
 	 */
 	prefetch?: string;
 	/** `render: 'live'` — the revalidate schedule (`false` disables). Defaults to `wake`. */

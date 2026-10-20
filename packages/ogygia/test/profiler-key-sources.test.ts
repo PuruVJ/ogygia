@@ -340,7 +340,7 @@ describe('late_island_keys', () => {
 			'<script lang="ts">',
 			"\timport Reviews from './Reviews.svelte' with { wake: 'visible' };",
 			"\timport Price from './Price.svelte' with { wake: 'load' };",
-			"\timport Chart from './Chart.svelte' with { render: 'deferred', wake: 'visible' };",
+			"\timport Chart from './Chart.svelte' with { render: 'deferred', fetch: 'visible' };",
 			'\tlet { data } = $props();',
 			'\tconst n = data.count + 1;',
 			'</script>',

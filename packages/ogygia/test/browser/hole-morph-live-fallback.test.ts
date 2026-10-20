@@ -1,5 +1,5 @@
 // A DEFERRED hole's answer swaps over a fallback that a foreign runtime has already made interactive.
-// A menu's deeper links are a `render:'deferred' wake:'idle'` hole; its top-level fallback is on screen
+// A menu's deeper links are a `render:'deferred' fetch:'idle'` hole; its top-level fallback is on screen
 // and its `<x-menu-item>` (a web component) upgrades ~1 s after DCL — a visitor can OPEN it (the
 // runtime sets state on the item's shadow root) before the idle answer lands seconds later. #apply
 // used to `replaceChildren` for every non-`interaction` hole, destroying the opened item and

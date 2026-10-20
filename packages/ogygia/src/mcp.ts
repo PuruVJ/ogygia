@@ -48,9 +48,13 @@ const { version } = require('../package.json') as { version: string };
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'ogygia';
-const MARK_KEYS = new Set(['wake', 'render', 'region', 'keep', 'preset', 'margin']);
+const MARK_KEYS = new Set(['wake', 'fetch', 'render', 'region', 'keep', 'preset', 'margin']);
 
 type Attrs = Record<string, unknown>;
+
+/** A `render: 'deferred'` hole's timing (its `fetch`, default load); null for anything else. */
+const hole_fetch = (attrs: Attrs): string | null =>
+	attrs.render === 'deferred' ? String(attrs.fetch ?? 'load') : null;
 type Mark = { local: string; component: string; attrs: Attrs };
 type HostIsland = {
 	id?: string;
@@ -122,12 +126,12 @@ const base = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
 /** A one-line, human/AI-legible label for what a mark's dials make it. */
 function strategy_label(attrs: Attrs): string {
 	if (attrs.region === 'raw') return 'held region (raw — HTML only, ships no JS)';
-	if (attrs.render === 'deferred')
-		return `server island (deferred, fetched on ${attrs.wake ?? 'load'})`;
+	const fetch = hole_fetch(attrs);
+	if (fetch === 'interaction')
+		return 'on-demand server island (HTML fetched on the first hover/focus/touch inside, morphed in; ships no JS)';
+	if (fetch != null) return `server island (deferred, fetched on ${fetch})`;
 	if (attrs.render === 'live') return 'live region (baked, revalidates in background)';
 	if (attrs.wake === 'none') return 'lake (frozen server HTML, ships no JS)';
-	if (attrs.render === 'deferred' && attrs.wake === 'interaction')
-		return 'on-demand server island (HTML fetched on the first hover/focus/touch inside, morphed in; ships no JS)';
 	const wake = (attrs.wake as string) ?? 'load';
 	return `island (interactive, wakes on ${wake})${attrs.keep ? `, kept across nav as "${attrs.keep}"` : ''}`;
 }
@@ -516,8 +520,8 @@ function tool_explain(args: Attrs): ToolResult {
 		const a = i.attrs;
 		if (a.region === 'raw')
 			return `• ${i.component}: a held region marked \`raw\` — server picks it, it renders as HTML and ships no JS.`;
-		if (a.render === 'deferred')
-			return `• ${i.component}: a server island. Its HTML is fetched later from a signed endpoint (on ${a.wake ?? 'load'}); show \`ogygiaFallback\` while it loads. Not interactive unless it nests its own wake island.`;
+		if (hole_fetch(a) != null)
+			return `• ${i.component}: a server island. Its HTML is fetched later from a signed endpoint (on ${hole_fetch(a)}); show \`ogygiaFallback\` while it loads. Not interactive unless it nests its own wake island.`;
 		if (a.render === 'live')
 			return `• ${i.component}: a live region — baked at request, then revalidated in the background and morphed in place.`;
 		if (a.wake === 'none')
@@ -1712,17 +1716,10 @@ function tool_scan(args: Attrs): ToolResult {
 				file: rel(f)
 			});
 			kinds[kind] = (kinds[kind] ?? 0) + 1;
-			// a real interactive island (not a lake/raw) — remember its component basename
-			if (m.attrs.wake !== 'none' && m.attrs.region !== 'raw')
+			// a real interactive island (not a lake/raw/hole) — remember its component basename
+			// (a hole with a `wake` fails the scan's compile above, naming the `fetch` to write)
+			if (m.attrs.wake !== 'none' && m.attrs.region !== 'raw' && hole_fetch(m.attrs) == null)
 				island_components.add(base(m.component));
-
-			// ── soft lints (per mark) ──
-			if (m.attrs.wake === 'none' && m.attrs.render === 'deferred')
-				violations.push({
-					file: rel(f),
-					severity: 'warn',
-					msg: `${m.component}: wake:'none' + render:'deferred' is nonsense (HTML later, no JS) — dev treats it as defer-only. Drop one.`
-				});
 		}
 	}
 

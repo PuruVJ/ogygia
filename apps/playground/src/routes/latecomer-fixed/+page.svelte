@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Reviews from './Reviews.svelte' with { render: 'deferred', wake: 'visible' };
-	import Recs from './Recs.svelte' with { render: 'deferred', wake: 'load' };
+	import Reviews from './Reviews.svelte' with { render: 'deferred', fetch: 'visible' };
+	import Recs from './Recs.svelte' with { render: 'deferred', fetch: 'load' };
 	import Price from '../latecomer/Price.svelte' with { wake: 'load' };
 
 	let { data } = $props();
