@@ -69,7 +69,8 @@ import {
 	order_owner,
 	owner_of,
 	render_made,
-	REGION_RENDER_ATTRS
+	REGION_RENDER_ATTRS,
+	slots_light_dom
 } from './ownership.js';
 
 // DOM spec constants by VALUE (they are frozen: 1/3/8 forever) — referencing the `Node` global
@@ -79,6 +80,7 @@ import {
 const ELEMENT = 1; // Node.ELEMENT_NODE
 const TEXT = 3; // Node.TEXT_NODE
 const COMMENT = 8; // Node.COMMENT_NODE
+const FOLLOWING = 4; // Node.DOCUMENT_POSITION_FOLLOWING
 
 /** Feature entry: fill the `morph` slot (live static-region ticks morph in place). */
 export function install(): void {
@@ -459,9 +461,15 @@ function reconcile_children(parent: Element, new_nodes: ArrayLike<Node>, sets: I
  * last placed render node. Then EXISTENCE decides the leftovers: one the render made and no longer
  * produces is removed (a stale fallback panel beside the answer's, painting over it); one the element
  * made is never matched and never removed.
+ * An element that SLOTS its light DOM (ownership.ts `slots_light_dom`) arranges nothing: the render's
+ * nodes then end in the answer's order — the fewest moves, its own nodes untouched — and the render's
+ * leftover block markers go (a tab the CMS moved kept its old place; one the answer added landed
+ * among the wrong siblings).
  */
 function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets): void {
 	const count = new_nodes.length;
+	const slotted = slots_light_dom(parent);
+	const placed_in_order: ChildNode[] = [];
 	// the tags the render produces here: an unmarked old element of one of them is the render's too
 	const render_tags = new Set<string>();
 	for (let i = 0; i < count; i++) if (new_nodes[i].nodeType === ELEMENT) render_tags.add((new_nodes[i] as Element).localName);
@@ -515,14 +523,20 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 			}
 		} else if (next.nodeType === COMMENT) {
 			// a comment is a MARKER: only the same marker is its counterpart (another owner's anchor —
-			// Svelte's `{@html}` bounds — is never rewritten into the render's)
+			// Svelte's `{@html}` bounds — is never rewritten into the render's). Under a slotting element
+			// the nearest one after the last placed node first: Svelte's markers repeat, and the far one
+			// would cost a move.
+			let first: ChildNode | null = null;
 			for (let j = 0; j < others.length; j++) {
 				const o = others[j];
-				if (o.nodeType === COMMENT && !claimed.has(o) && (o as Comment).data === (next as Comment).data) {
+				if (o.nodeType !== COMMENT || claimed.has(o) || (o as Comment).data !== (next as Comment).data) continue;
+				if (!slotted || anchor === null || anchor.compareDocumentPosition(o) & FOLLOWING) {
 					match = o;
 					break;
 				}
+				first ??= o;
 			}
+			match ??= first;
 		} else {
 			// text: the next unclaimed text, in the element's order
 			while (other_at < others.length && (others[other_at].nodeType !== next.nodeType || claimed.has(others[other_at]))) other_at++;
@@ -537,6 +551,7 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 			if (placed) {
 				mark_render_made(placed);
 				anchor = placed;
+				placed_in_order.push(placed as ChildNode);
 			}
 			continue;
 		}
@@ -544,11 +559,67 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 		parent.insertBefore(copy, anchor ? anchor.nextSibling : parent.firstChild);
 		mark_render_made(copy);
 		anchor = copy;
+		placed_in_order.push(copy as ChildNode);
 	}
 
 	// EXISTENCE: a render-made leftover goes; the element's own stay (text and comments included)
 	for (const list of by_tag.values()) for (const el of list) if (!claimed.has(el) && el.parentNode === parent) parent.removeChild(el);
 	if (by_key) for (const n of by_key.values()) if (n.parentNode === parent && render_made(n, render_tags)) parent.removeChild(n);
+	if (slotted) {
+		// (a block marker is the render's by construction — `<!--[-->`, `<!--[!-->`, `<!--]-->`, `<!---->`)
+		for (const o of others) if (!claimed.has(o) && o.parentNode === parent && is_block_marker(o)) parent.removeChild(o);
+		order_render_nodes(parent, placed_in_order);
+	}
+}
+
+/** Svelte's block markers: `''`, or `[`-opened (`[`, `[!`, `[0`, `[-1`, …), or `]`. */
+function is_block_marker(n: Node): boolean {
+	if (n.nodeType !== COMMENT) return false;
+	const d = (n as Comment).data;
+	return d === '' || d === ']' || d.charCodeAt(0) === 91; // '['
+}
+
+/**
+ * Put the render's placed nodes (`nodes`, in the answer's order) in that order among `parent`'s
+ * children, moving the fewest: the longest run already in order (longest increasing subsequence of
+ * their positions) stays, every other node goes right after its predecessor in the answer. Nodes not
+ * in the list — the element's own — are never moved. An answer already in order moves nothing.
+ */
+function order_render_nodes(parent: Element, nodes: ChildNode[]): void {
+	const count = nodes.length;
+	if (count < 2) return;
+	const at = new Map<Node, number>();
+	let index = 0;
+	for (let n = parent.firstChild; n; n = n.nextSibling) at.set(n, index++);
+	// patience LIS over the positions: tails[l] = index into `nodes` ending a run of length l+1
+	const tails: number[] = [];
+	const prev = new Int32Array(count).fill(-1);
+	for (let k = 0; k < count; k++) {
+		const p = at.get(nodes[k])!;
+		let lo = 0;
+		let hi = tails.length;
+		while (lo < hi) {
+			const mid = (lo + hi) >> 1;
+			if (at.get(nodes[tails[mid]])! < p) lo = mid + 1;
+			else hi = mid;
+		}
+		if (lo > 0) prev[k] = tails[lo - 1];
+		tails[lo] = k;
+	}
+	if (tails.length === count) return;
+	const stay = new Uint8Array(count);
+	for (let k = tails[tails.length - 1]; k >= 0; k = prev[k]) stay[k] = 1;
+	let first_stay: ChildNode | null = null;
+	for (let k = 0; k < count && first_stay === null; k++) if (stay[k]) first_stay = nodes[k];
+	let last: ChildNode | null = null;
+	for (let k = 0; k < count; k++) {
+		const n = nodes[k];
+		if (!stay[k]) {
+			const ref: ChildNode | null = last ? last.nextSibling : first_stay;
+			if (ref !== n) parent.insertBefore(n, ref);
+		}
+		last = n;
+	}
 }
 
 /** A kept region root's ADDRESS is the render's that minted it ({@link REGION_RENDER_ATTRS}); the rest
