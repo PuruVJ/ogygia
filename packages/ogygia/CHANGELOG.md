@@ -8,6 +8,24 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5] - 2026-10-22
+
+### Changed
+
+- An island inside a live snippet an island renders follows the nested rule: it renders inline and hydrates with that island.
+- An island sets `data-hydrated` and fires `ogygia:hydrated` once the live snippets it renders have hydrated too.
+- A hole nested in an island renders inline as static HTML, like a lake: its component never ships to the browser, and an island inside it wakes on its own.
+
+### Fixed
+
+- A hole inside a live snippet an island renders stays deferred: it ships its fallback, loads on its schedule and is never bundled into the island (it never loaded before).
+- A live snippet that renders a template-root snippet, or reads a `<script module>` import or value, an exported declaration or a `$:` declaration, no longer throws `ReferenceError` at render.
+- A lake inside a live snippet an island renders keeps its frozen region, so the island inside it wakes and the lake's HTML is no longer discarded beside other snippet content.
+- A live snippet an island renders reads the page's contexts on the server and in the browser, as the island does.
+- An island inside a frozen snippet wakes on its own.
+- A snippet passed to an island on a Kit-hydrated page no longer causes a hydration mismatch.
+- A hole on a Kit-hydrated page keeps its address and its landed HTML through Kit's hydration (a hole inside an island could go empty).
+
 ## [0.8.4] - 2026-10-22
 
 ### Fixed

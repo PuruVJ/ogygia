@@ -23,6 +23,15 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
 import { B64Url } from './payload.js';
 import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
 import { ensure_prop_kinds } from './region-props.js';
+import { island_url } from 'virtual:ogygia/server-manifest';
+import { islandCss } from 'virtual:ogygia/island-deps';
+
+/** A hole's own stylesheet hrefs, by region id — the list its endpoint answer links (hooks.ts
+ *  `region_css_links`), for a render that inlines the hole in the page instead (Region.svelte). */
+export function holeCss(entry: string): string[] {
+	const url = island_url[entry];
+	return url ? islandCss(url) : [];
+}
 
 /** Same families as encode_region_props — one seam law for island props. */
 const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);

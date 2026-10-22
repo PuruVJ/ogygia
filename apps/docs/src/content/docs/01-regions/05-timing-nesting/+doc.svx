@@ -134,7 +134,8 @@ Walk up the tree. The **closest marked parent decides**.
 | Island inside an island | Shares the JS of its parent: one interactive tree, not two |
 | Lake inside an island | Stays static HTML. The JS of the lake never ships |
 | Island inside a lake | Gets its own JS again |
-| Server island inside an island | Renders inline with the parent (`render: 'deferred'` ignored) |
+| Server island inside an island | Renders inline as static HTML, like a lake (`render: 'deferred'` ignored). Its JS never ships, and an island inside it gets its own JS |
+| Server island inside a live snippet | Stays deferred: its fallback ships, its HTML arrives on its schedule |
 
 ```
 page → island → lake → island → …

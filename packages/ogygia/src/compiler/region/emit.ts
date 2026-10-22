@@ -375,7 +375,10 @@ export function server_wrapper_source(
 	options: Record<string, unknown> | undefined,
 	exportName: string | undefined,
 	module_url: string,
-	lang: string
+	lang: string,
+	// false: the CLIENT leg. A hole ships no JS — the browser adopts its server HTML wherever it sits
+	// (deferred, or frozen inline in an island: Region.svelte), so it never needs the component
+	component = true
 ): string {
 	const deferred_hydrate = !!options?.hydrate;
 	const fetch_when = options?.when || 'load';
@@ -401,12 +404,15 @@ export function server_wrapper_source(
 	return (
 		`<script${lang}>\n` +
 		`\timport { Region as OgygiaRegion__Wrapper } from 'ogygia/internal';\n` +
-		`\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
-		`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n` +
+		(component
+			? `\timport __OgygiaEntry from ${JSON.stringify(entryPath)};\n` +
+				`\t${component_import_line('__OgygiaCss', componentPath, exportName)}\n`
+			: '') +
 		`\tlet { ogygiaFallback, ...__props } = $props();\n` +
 		`</script>\n` +
-		`<OgygiaRegion__Wrapper __mode="server" __entry={${JSON.stringify(iid)}} __component={__OgygiaEntry} ` +
-		`__css={__OgygiaCss} {__props} ${server_attrs} {ogygiaFallback} />\n`
+		`<OgygiaRegion__Wrapper __mode="server" __entry={${JSON.stringify(iid)}} ` +
+		(component ? `__component={__OgygiaEntry} __css={__OgygiaCss} ` : '') +
+		`{__props} ${server_attrs} {ogygiaFallback} />\n`
 	);
 }
 

@@ -54,6 +54,23 @@ export function isInLake(): boolean {
 	return getContext(LAKE_KEY) === true;
 }
 
+// Context key marking "this subtree is a LIVE SNIPPET's body" — set by the snippet's own render root on
+// both legs (region-snippet.ts, which can't import this module: same `Symbol.for` key). A hole authored
+// there keeps `render: 'deferred'` inside the island the snippet crossed into: the server emits its real
+// region and the snippet's hydrate adopts that element as it stands (Region.svelte, server branch). An
+// island rendered inline in the snippet resets it: the holes of ITS template follow the nested rule.
+const LIVE_SNIPPET_KEY = Symbol.for('ogygia.live-snippet');
+
+/** Reset the live-snippet mark for the current subtree (an inline island inside a snippet). */
+export function setInLiveSnippet(value: boolean): void {
+	setContext(LIVE_SNIPPET_KEY, value);
+}
+
+/** True inside a live snippet's body (and not under an island it renders inline). */
+export function isInLiveSnippet(): boolean {
+	return getContext(LIVE_SNIPPET_KEY) === true;
+}
+
 // Context key marking "this server island is rendering INLINE in the page pass" — it sits inside a
 // `wake` island, where `render: 'deferred'` is ignored (the nested rule) and its component renders
 // as a plain child instead of on the endpoint. `keepFallback()` reads it: thrown here its signal

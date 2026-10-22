@@ -30,10 +30,24 @@ export function settle_in(root: ParentNode) {
 	runtime_session.settle_lakes_in(root);
 }
 
+// A lake inside a LIVE snippet belongs to the snippet's own hydrate, which runs after the host's (its
+// entry imports) and adopts the lake element as it stands (Region.svelte `lake_adopt`). The host's
+// hydrate never walks into the snippet (it adopts the snippet element), so lifting the lake there only
+// moved its trailing anchors in front of its content, and the snippet's hydrate then mismatched.
+const in_live_snippet = (lake: Element, parent: Element) => {
+	const snippet = lake.parentElement?.closest('ogygia-snippet');
+	return !!snippet && parent.contains(snippet) && !snippet.hasAttribute('data-og-static');
+};
+
+/** The lakes `parent`'s own hydrate lifts and restores: nearest region is `parent`, outside live snippets. */
+const lifted_lakes_of = (parent: Element) =>
+	[...parent.querySelectorAll(FROZEN_SELECTOR)].filter(
+		(l) => l.parentElement?.closest('ogygia-region') === parent && !in_live_snippet(l, parent)
+	);
+
 export function lift(parent: Element): LiftedLake[] {
 	const lifted: LiftedLake[] = [];
-	for (const lake of parent.querySelectorAll(FROZEN_SELECTOR)) {
-		if (lake.parentElement?.closest('ogygia-region') !== parent) continue;
+	for (const lake of lifted_lakes_of(parent)) {
 		const id = lake.getAttribute('entry') || '';
 		const frag = document.createDocumentFragment();
 		while (lake.firstChild) frag.appendChild(lake.firstChild);
@@ -55,9 +69,21 @@ export function restore(parent: Element, lifted: LiftedLake[]) {
 	// FIRST for both — both frags land in lake #1, leaving lake #2 empty. `lift()` collected `lifted`
 	// in DOM order under this exact direct-child filter, and hydrate-in-place doesn't reorder the frozen
 	// children, so the i-th surviving lake here owns the i-th lifted frag.
-	const lakes = [...parent.querySelectorAll(FROZEN_SELECTOR)].filter(
-		(l) => l.parentElement?.closest('ogygia-region') === parent
-	);
+	const lakes = lifted_lakes_of(parent);
+	// a live snippet's lakes stayed in place: settled and remembered here all the same, as the host is awake
+	for (const lake of parent.querySelectorAll(FROZEN_SELECTOR)) {
+		if (lake.parentElement?.closest('ogygia-region') !== parent || !in_live_snippet(lake, parent)) continue;
+		const id = lake.getAttribute('entry') || '';
+		settle_in(lake);
+		runtime_session.initialized_lakes.add(id);
+		remember(lake, id, {
+			endpoint: lake.getAttribute('endpoint') || '',
+			when: lake.getAttribute('when') || 'load',
+			maxAgeMs: region_max_age_ms(lake)
+		});
+		// not moved, so nothing reconnects: re-enter the regions that waited on this lake
+		for (const r of lake.querySelectorAll('ogygia-region')) (r as HTMLElement & { connectedCallback?(): void }).connectedCallback?.();
+	}
 	for (let i = 0; i < lifted.length && i < lakes.length; i++) {
 		const lake = lakes[i];
 		const { id, frag, endpoint, when, maxAgeMs } = lifted[i];
