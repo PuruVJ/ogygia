@@ -14,6 +14,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
 - A hole's answer morphed into a custom element with a shadow root keeps the answer's order: a reordered or newly shown child no longer stays in or lands at the wrong place.
+- A baked held region on a Kit-hydrated page no longer throws a hydration mismatch that emptied it: the region element is adopted as it stands, like a lake's.
+- Islands inside a baked held region on a Kit-hydrated page wake on the runtime instead of being left to Kit, which never hydrates them.
+- Custom elements inside a baked held region keep what the server's transform wrote (a closed dropdown no longer loses `hidden` and shifts the page).
 
 ## [0.8.3] - 2026-10-19
 
