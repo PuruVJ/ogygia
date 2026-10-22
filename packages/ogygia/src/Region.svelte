@@ -787,6 +787,30 @@
 	// islands inside); the runtime morphs them in.
 	// svelte-ignore state_referenced_locally
 	const baked_html = __baked ? (/** @type {{ html?: string } | undefined} */ (resolved)?.html ?? '') : '';
+	// The baked region is OPAQUE (region-attrs.ts `OPAQUE_SELECTOR`): its HTML is server-only, never a
+	// Svelte tree the client could hydrate — the same as a lake's. So it renders like one: ONE snippet
+	// whose SERVER form emits exactly the region element with the HTML inside, and whose CLIENT form is a
+	// raw snippet — hydration ADOPTS the element verbatim (no walk into it: as an `{@html}`, Svelte walked
+	// its siblings to the first empty comment, and the render's own top-level markers stopped it inside —
+	// `hydration_mismatch`, and Kit remounted the page with the region emptied). Later values morph in.
+	/** @type {Element | null} */
+	let baked_el = $state(null);
+	const baked_adopt =
+		typeof window === 'undefined'
+			? /** @param {{ push(html: string): void }} renderer */
+				(renderer) => renderer.push(LT + 'ogygia-region live data-og-baked' + GT + baked_html + LT + '/ogygia-region' + GT)
+			: createRawSnippet(() => ({
+					render: () => LT + 'ogygia-region live data-og-baked' + GT + LT + '/ogygia-region' + GT,
+					/** @param {Element} el */
+					setup: (el) => {
+						baked_el = el;
+						return () => (baked_el = null);
+					}
+				}));
+	// (reads `resolved` too: a Promise `of` that re-resolves morphs the mounted region in place)
+	$effect(() => {
+		if (baked_el) apply_live(/** @type {Element & { applyLive?: (v: unknown) => void }} */ (baked_el));
+	});
 	/** @param {Element & { applyLive?: (v: unknown) => void }} node */
 	function apply_live(node) {
 		// Reads `resolved`, so the attachment re-runs when a Promise `of` re-resolves — the mounted
@@ -927,8 +951,7 @@
 	<!-- Baked (awaited in the render): the first HTML is in the page, written ONCE — a later value
 	     never re-renders it, the runtime morphs it in (applyLive). Otherwise the placeholder (or legacy
 	     children) shows until the styled HTML paints. -->
-	{#if __baked}<ogygia-region live data-og-baked {@attach apply_live}><!-- svelte-ignore hydration_html_changed -->{@html baked_html}</ogygia-region
-		>{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
+	{#if __baked}{@render baked_adopt()}{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}

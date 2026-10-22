@@ -417,9 +417,14 @@ function is_custom(name: string, foreign: boolean): boolean {
 	return !name.startsWith('ogygia-') && !name.startsWith('og-');
 }
 
+/** Who renders a region's inside, for Svelte ownership: a hole's and a lake's are opaque to any
+ *  hydration — and so is a BAKED live region's (its first HTML is one `{@html}` string to Svelte), the
+ *  same set the client calls opaque (region-attrs.ts `OPAQUE_SELECTOR`). Restoring a host in there to
+ *  Svelte's render undid what the server's transform wrote for no hydration to follow (a closed
+ *  dropdown lost `hidden` and pushed the page down until its own runtime set it again). */
 function region_kind(attrs: Attr[]): 'island' | 'lake' | 'hole' {
 	if (attrs.some((a) => a.name === 'endpoint')) return 'hole';
-	if (attrs.some((a) => a.name === 'wake' && a.value === 'none')) return 'lake';
+	if (attrs.some((a) => (a.name === 'wake' && a.value === 'none') || a.name === 'data-og-baked')) return 'lake';
 	return 'island';
 }
 

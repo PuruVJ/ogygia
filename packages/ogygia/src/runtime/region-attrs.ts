@@ -26,34 +26,33 @@ export function is_frozen(el: Element): boolean {
 	return el.getAttribute('wake') === 'none';
 }
 
-/** True if this region sits INSIDE a frozen region (a lake). Its subtree is ogygia's world even on
- *  a Kit-hydrated document: the lake wrapper adopts its element there as opaque DOM, so Kit never
- *  hydrates the inside — the runtime must (the server-side twin is `isInLake()` in context.ts). */
-export function inside_frozen(el: Element): boolean {
-	return !!el.parentElement?.closest(FROZEN_SELECTOR);
-}
-
 /** True if this region fetches HTML later (`render="defer"`). */
 export function is_deferred(el: Element): boolean {
 	return el.getAttribute('render') === 'defer';
 }
 
-/** CSS selector for deferred regions (holes). */
-const DEFERRED_SELECTOR = 'ogygia-region[render="defer"]';
+/**
+ * The regions whose INSIDE Kit's hydration never walks — OPAQUE to it, adopted as one element: a lake
+ * (frozen server HTML), a hole (a fallback, then an answer fetched after load — a region found inside
+ * one on a Kit-hydrated document came with that answer: the page's own fallback renders its islands
+ * inline, as Kit's), and a BAKED live region (its first HTML is server-only, morphed in after by the
+ * runtime). Their insides are ogygia's on every page: nothing else will wake them. The server twins:
+ * `isInLake()` (context.ts — set by LakeBoundary and on every render root whose HTML lands in one) and
+ * `region_kind` (reversible.ts).
+ */
+export const OPAQUE_SELECTOR = 'ogygia-region[wake="none"],ogygia-region[render="defer"],ogygia-region[data-og-baked]';
 
-/** True if this region sits INSIDE a deferred region (a hole). A region element found inside a
- *  hole on a Kit-hydrated document can only have come with the hole's FETCHED answer (the page's
- *  own markup there — the fallback — renders its islands inline, as Kit's), and Kit never sees
- *  fetched HTML: that island is the runtime's to wake. */
-export function inside_deferred(el: Element): boolean {
-	return !!el.parentElement?.closest(DEFERRED_SELECTOR);
+/** True if this region sits inside an {@link OPAQUE_SELECTOR opaque} region: on a Kit-hydrated
+ *  document nothing but the runtime will ever wake it. */
+export function inside_opaque(el: Element): boolean {
+	return !!el.parentElement?.closest(OPAQUE_SELECTOR);
 }
 
 /** Mixed mode (a csr=true document): Kit hydrates the tree, so an island there is Kit's — EXCEPT
- *  what Kit never sees: a deferred region (its HTML is fetched after load), anything inside a lake
- *  (adopted as opaque DOM), and anything inside a hole's fetched answer. Those are ours. */
+ *  what Kit never sees: a deferred region (its HTML is fetched after load) and anything inside an
+ *  opaque region (a lake, a hole's answer, a baked region's first HTML). Those are ours. */
 export function ours_on_kit_document(el: Element): boolean {
-	return is_deferred(el) || inside_frozen(el) || inside_deferred(el);
+	return is_deferred(el) || inside_opaque(el);
 }
 
 /** `{#if}` remount policy for `wake="none"` regions. Default `cache`. */
