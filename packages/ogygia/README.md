@@ -71,7 +71,7 @@ Dev HMR still works with `csr = false` — soft updates for CSS and shared modul
 <script>
 	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
 	import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
-	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred', wake: 'load' };
+	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred', fetch: 'load' };
 
 	// Counter is a portable island binding — lists / dynamic <Comp /> work too
 	const Dyn = Counter;

@@ -38,11 +38,11 @@ describe('rewrite — output shapes', () => {
 	it('the skip policy leaves an import with a listed attribute key untouched — the ogygia mark stays on the barrel', async () => {
 		f = fixture({
 			...base(),
-			'src/app.ts': `import { Button } from '$lib' with { wake: 'visible' };\nimport { Card } from '$lib';\nimport { a } from '$lib' with { render: 'deferred', wake: 'load' };`
+			'src/app.ts': `import { Button } from '$lib' with { wake: 'visible' };\nimport { Card } from '$lib';\nimport { a } from '$lib' with { render: 'deferred', fetch: 'load' };`
 		});
 		const skip = (decl: { attribute_keys: string[] }) => decl.attribute_keys.some((k) => k === 'wake' || k === 'render');
 		expect(await f.rewrite('src/app.ts', undefined, { skip })).toBe(
-			`import { Button } from '$lib' with { wake: 'visible' };\nimport Card from ${q(f, 'lib/Card.svelte')};\nimport { a } from '$lib' with { render: 'deferred', wake: 'load' };`
+			`import { Button } from '$lib' with { wake: 'visible' };\nimport Card from ${q(f, 'lib/Card.svelte')};\nimport { a } from '$lib' with { render: 'deferred', fetch: 'load' };`
 		);
 	});
 

@@ -6,9 +6,9 @@
 	import ChromeHeader from '../ChromeHeader.svelte' with { wake: 'load' };
 	import Greeting from '../Greeting.svelte' with { render: 'deferred' };
 	// A hole that always keepFallback()s, whose fallback holds an interaction island (lake-kit e2e).
-	// `wake: 'load'` makes the hole an AWAKE ancestor — the case where a flattened fallback island
+	// `fetch: 'load'` makes the hole an AWAKE ancestor — the case where a flattened fallback island
 	// could never wake (a kept hole has no phase-2 hydration of its own).
-	import Kept from '../Kept.svelte' with { render: 'deferred', wake: 'load' };
+	import Kept from '../Kept.svelte' with { render: 'deferred', fetch: 'load' };
 	import KeptFallbackButton from '../KeptFallbackButton.svelte' with { wake: 'interaction' };
 	// An island WITH PROPS inside the lake: its props sidecar rides the document tail, which the
 	// handle must still emit on a csr=true page (it once skipped the whole tail there, and an island

@@ -2757,10 +2757,10 @@ export function late_island_pattern(items: readonly LateIslandWait[]): Pattern |
 	return {
 		kind: 'late-island-wait',
 		title: `The page waits for data only a late island shows${places(costly.length)}`,
-		fix: `The data feeds only an island that wakes later (${top.wake}), yet every request waits for it before sending a byte. Move the call into the island (a remote function it awaits) and import it deferred — \`with { render: 'deferred', wake: '${top.wake}' }\`: the page renders without it, and the island's HTML comes from the server when it wakes.`,
+		fix: `The data feeds only an island that wakes later (${top.wake}), yet every request waits for it before sending a byte. Move the call into the island (a remote function it awaits) and import it deferred — \`with { render: 'deferred', fetch: '${top.wake}' }\`: the page renders without it, and the island's HTML comes from the server when it is due.`,
 		example: {
 			before: `import ${top.island} from './${top.island}.svelte' with { wake: '${top.wake}' };\n<${top.island} ${top.key}={data.${top.key}} />`,
-			after: `import ${top.island} from './${top.island}.svelte' with { render: 'deferred', wake: '${top.wake}' };\n<${top.island} /> <!-- it fetches ${top.key} itself -->`
+			after: `import ${top.island} from './${top.island}.svelte' with { render: 'deferred', fetch: '${top.wake}' };\n<${top.island} /> <!-- it fetches ${top.key} itself -->`
 		},
 		sites: costly.map((i) => ({
 			path: i.at.path,

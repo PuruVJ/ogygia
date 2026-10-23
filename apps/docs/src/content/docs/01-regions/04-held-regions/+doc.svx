@@ -269,7 +269,7 @@ Caveats:
 
 ## Warm a hole early: preload(region)
 
-`preload(region)` warms the HTML of one hole before its schedule. Thus the hole can paint early, while its own `wake` stays lazy. Import it from `ogygia`. It takes a region value and nothing else.
+`preload(region)` warms the HTML of one hole before its schedule. Thus the hole can paint early, while its own schedule stays lazy. Import it from `ogygia`. It takes a region value and nothing else.
 
 ```ts
 import { preload } from 'ogygia';

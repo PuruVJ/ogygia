@@ -18,8 +18,10 @@ single hydration root.
 
 - **`render`** — where/when the HTML comes from: `static` (inline in the SSR pass) · `deferred`
   (fetched later from the signed endpoint) · `live` (baked, revalidates over SSE).
-- **`wake`** — when JS runs (static) / when the HTML fetches (deferred/live): `load` · `idle` ·
+- **`wake`** — when an island's JS runs (static; the revalidate schedule for live): `load` · `idle` ·
   `visible` · `interaction` · `(media query)` · `none` (frozen — a lake).
+- **`fetch`** — when a `render: 'deferred'` hole's HTML arrives: the same words, minus `none`. It
+  only rides with `render: 'deferred'`; the old `render: 'deferred'` + `wake` pairing fails the build.
 - **`region: 'raw'`** — a modifier: HTML only, zero JS.
 
 ## The permutations, as a page-level thing
@@ -38,7 +40,7 @@ single hydration root.
 
 ### `render: deferred` — page body fetched from the signed endpoint after the shell
 
-| `wake` | The page behaves as |
+| `fetch` | The page behaves as |
 |---|---|
 | `load` | static shell instant (CDN-cacheable), per-visitor body fetched + hydrated → **PPR at the page level** |
 | `visible` / `idle` | heavy / below-the-fold body fetched lazily |
@@ -97,7 +99,7 @@ with it.
 
 ```ts
 r.page(Dashboard, { wake: 'load' })                    // whole page hydrates (csr=true)
-r.page(Doc, { render: 'deferred', wake: 'load' })      // PPR: static shell, dynamic body
+r.page(Doc, { render: 'deferred', fetch: 'load' })     // PPR: static shell, dynamic body
 r.page(Feed, { render: 'live', wake: 'load' })         // live page over SSE
 r.page(Marketing, { region: 'raw' })                   // zero JS
 r.page(Settings, { wake: 'interaction' })              // interactive on first touch

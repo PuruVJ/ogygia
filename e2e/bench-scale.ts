@@ -72,7 +72,7 @@ const SCHEDULES = [
 	`wake: 'interaction'`,
 	`wake: 'none'`,
 	`render: 'deferred'`,
-	`render: 'deferred', wake: 'visible'`
+	`render: 'deferred', fetch: 'visible'`
 ];
 
 /** One synthetic host: DISTINCT-pool imports w/ varied schedules + usages (dedup + each-loops). */
