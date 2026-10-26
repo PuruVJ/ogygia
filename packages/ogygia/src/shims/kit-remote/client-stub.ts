@@ -33,6 +33,9 @@ export function invalidateAll() {
 	location.reload();
 	return Promise.resolve();
 }
+// Kit 3 remote `form()` imports this from `client.js` (aliased here). Same implementation as
+// `$app/navigation` — Kit's router on a Kit-booted document, ogygia's soft seed refresh otherwise.
+export { refreshAll } from '../app-navigation.js';
 export function set_nearest_error_page() {}
 /** Kit 3: a remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
  *  are no client hooks to consult (the island world has no Kit client). */

@@ -16,6 +16,7 @@ export {
 	goto,
 	invalidate,
 	invalidateAll,
+	refreshAll,
 	preloadData,
 	preloadCode,
 	disableScrollHandling,

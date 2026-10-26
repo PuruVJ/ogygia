@@ -13,6 +13,7 @@
 // everything its lazy chunks need — shared between island code and the runtime, which split the
 // runtime's boot into a dozen files. Types only below.
 import { kit_bridge } from './kit-bridge.js';
+import { refresh_remote_instances } from './kit-remote/remote-cache.js';
 import { bind_to_component } from '../runtime/nav-hooks.js';
 import type { NavHandle } from '../runtime/nav-handle.js';
 import type { BeforeNavigateCallback, AfterNavigateCallback } from '../runtime/router.js';
@@ -59,6 +60,23 @@ export function invalidateAll(): Promise<void> {
 	if (o) return o.invalidateAll();
 	location.reload();
 	return Promise.resolve();
+}
+
+/**
+ * Kit's `refreshAll`, which Kit's remote `form()` also calls after a successful
+ * submit (through the remote client stub). Island queries live in ogygia's remote cache, not Kit's,
+ * so they refresh here on every document; the page's data then refreshes through whoever owns the
+ * document. With neither runtime, the queries alone refresh: never a reload.
+ */
+export function refreshAll(): Promise<void> {
+	const queries = refresh_remote_instances();
+	const k = kit();
+	const page = k
+		? typeof k.refreshAll === 'function'
+			? k.refreshAll()
+			: k.invalidateAll()
+		: (og()?.invalidateAll() ?? Promise.resolve());
+	return Promise.all([queries, page]).then(() => {});
 }
 
 export function preloadData(url: string | URL): Promise<unknown> {

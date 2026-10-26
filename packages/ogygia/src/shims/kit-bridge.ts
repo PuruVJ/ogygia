@@ -21,6 +21,7 @@ export interface KitNavigation {
 	goto(url: string | URL, opts?: unknown): Promise<void>;
 	invalidate(resource?: unknown): Promise<void>;
 	invalidateAll(): Promise<void>;
+	refreshAll?(): Promise<void>;
 	preloadData(url: string | URL): Promise<unknown>;
 	preloadCode(url?: string): Promise<void>;
 	pushState(url: string | URL, state: unknown): void;

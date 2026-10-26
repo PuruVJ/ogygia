@@ -8,6 +8,12 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Kit 3 builds with `remoteFunctions`: export `refreshAll` from the kit-remote client stub and `$app/navigation` shim (Kit's remote `form()` imports it from `client.js`).
+
 ## [0.8.5] - 2026-10-22
 
 ### Changed
