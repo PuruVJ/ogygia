@@ -8,6 +8,14 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- With an app transform, a router navigation no longer leaves a web component's server tree in the light DOM of a live host its own runtime already unpacked (a site nav collapsed to one unstyled item): a page the router fetches is rendered as an answer, every host restored before the swap.
+- A first-load copy of a transformed page that reaches the router (a frozen page, a prerender, a cache that ignores `Vary`) is loaded instead of swapped in; transformed documents vary on `x-ogygia-spa`.
+- A link inside a web component's shadow tree honors the `data-sveltekit-reload` around the component.
+
 ## [0.8.5] - 2026-10-22
 
 ### Changed

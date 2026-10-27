@@ -625,6 +625,12 @@ function served_html(entry: Extract<FreezeEntry, { kind: 'page' }>, via: string)
 	return at === -1 ? entry.html : entry.html.slice(0, at) + FREEZE_DOC_META + entry.html.slice(at);
 }
 
+/** A document fetched by ogygia's router (runtime/router-nav.ts `nav_headers`: a navigation or a
+ *  prefetch) — morphed into the live page rather than loaded as one. */
+function router_fetched(event: RequestEvent): boolean {
+	return event.request.headers.get('x-ogygia-spa') !== null;
+}
+
 /** The verdict's other word: a REFUSED page gets `private, no-store` when the app set nothing —
  *  per-page proven headers replace blanket CDN rules in both directions. Best-effort (some
  *  platforms hand out immutable headers). */
@@ -962,6 +968,9 @@ class OgygiaHandle {
 				event.request.method.toUpperCase() === 'GET' &&
 				event.url.search === '' &&
 				!path.endsWith('__data.json') &&
+				// (an app transform renders a router-fetched page as an ANSWER — every host planned,
+				// `#transform_document` — a form the store, keyed by path, does not hold)
+				!(this.#transform && router_fetched(event)) &&
 				freeze_route_optin(event.route?.id, path);
 			if (freeze_page_request && !dev) {
 				const hit = await freeze_get(path);
@@ -1064,6 +1073,14 @@ class OgygiaHandle {
 				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
 			}
 			if (devtools_personal) mark_personal(response);
+			// with an app transform a router-fetched page is rendered as an answer (`#transform_document`):
+			// a shared cache must keep the two forms apart
+			if (this.#transform && (response.headers.get('content-type') ?? '').includes('text/html'))
+				try {
+					response.headers.append('vary', 'x-ogygia-spa');
+				} catch {
+					/* immutable headers — the app's platform wins */
+				}
 			// a browser that turned devtools on may sample its main thread (the JS Self-Profiling API needs
 			// the document to allow it): the CPU of a page load and of a recorded session. Its own pages only
 			if (devtools_on && DEVTOOLS_LAZY && (response.headers.get('content-type') ?? '').includes('text/html')) {
@@ -1236,12 +1253,23 @@ class OgygiaHandle {
 		const head_end = html.indexOf('</head>');
 		if (head_end === -1) return html;
 		const csr = csr_page_of(html, html.lastIndexOf('</body>'), event, bag);
-		const marked = mark(html, 'document', csr);
+		// A page the router fetched is morphed into the live one, whose hosts their runtime already
+		// rendered: it is an ANSWER, every host planned (server/reversible.ts `plan_hosts`) — the router
+		// restores it before the swap, so live and incoming hosts meet in one form.
+		const answer = router_fetched(event);
+		const marked = mark(html, 'document', csr, answer);
 		const out = await this.#transform!(marked ? marked.html : html, { kind: 'document', csr, event });
 		const s = marked ? settle(out, marked.record, { dev }) : null;
+		// A page loaded as one keeps hosts in the transform's first-load form: if this copy ever reaches
+		// the router (a store, a prerender, a cache), it loads it instead of swapping it in
+		let first_load = false;
+		if (marked && !answer) for (const h of marked.record.hosts.values()) if (!h.planned) first_load = true;
 		// (its head assets and the restorer ride the seed injection's ONE assembly of the document —
 		// no splice here, which was another full copy the assembly then re-located)
-		bag.transform_head = (s?.head.join('') ?? '') + (s?.stand_ins ? `<style data-og-stand-ins>${STAND_IN_CSS}</style>` : '');
+		bag.transform_head =
+			(s?.head.join('') ?? '') +
+			(s?.stand_ins ? `<style data-og-stand-ins>${STAND_IN_CSS}</style>` : '') +
+			(first_load ? '<meta name="ogygia-first-load">' : '');
 		bag.transform_body = (s?.check ? check_script(s.check) : '') + RESTORER_SCRIPT;
 		return s ? s.html : out;
 	}

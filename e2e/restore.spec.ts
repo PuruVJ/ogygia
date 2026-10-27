@@ -117,3 +117,66 @@ test('a router navigation away and back: every restored host has its sheet, and 
 	expect(hosts.filter((h) => h.sheets !== 1)).toEqual([]);
 	expect(errors).toEqual([]);
 });
+
+test('a router navigation morphs a server-owned host its own runtime unpacked, without the transform’s tree in its light DOM', async ({ page }) => {
+	// REGRESSION (field report on 0.8.4): a site nav (a server-owned custom element the transform renders
+	// in scoped form, unpacked by its own runtime on first load) collapsed to one unstyled item after an
+	// in-place navigation — the incoming page carried the host in the transform's first-load form, and
+	// the morph put that tree into the live host's light DOM. A router-fetched page is an answer now:
+	// every host planned and restored before the swap.
+	const errors: string[] = [];
+	page.on('pageerror', (e) => errors.push(e.message));
+	await page.goto('/restore-lab/nav-a');
+	const nav = page.locator('demo-nav[data-nav]');
+	await expect.poll(() => nav.evaluate((el) => !!el.shadowRoot)).toBe(true);
+	const shape = () =>
+		page.evaluate(() => {
+			const host = document.querySelector('demo-nav[data-nav]')!;
+			return {
+				cids: document.querySelectorAll('[c-id]').length,
+				light: [...host.children].map((c) => c.localName),
+				tabs: host.querySelectorAll(':scope > ul > li').length,
+				shadow_nav: !!host.shadowRoot?.querySelector('nav')
+			};
+		});
+	expect(await shape()).toEqual({ cids: 0, light: ['ul'], tabs: 7, shadow_nav: true });
+	const documents: string[] = [];
+	page.on('request', (r) => r.resourceType() === 'document' && documents.push(r.url()));
+	await page.locator('[data-nav-go]').click();
+	await expect(page.locator('[data-nav-page="b"]')).toBeVisible();
+	expect(documents, 'an in-place navigation').toEqual([]);
+	expect(await shape()).toEqual({ cids: 0, light: ['ul'], tabs: 7, shadow_nav: true });
+	expect(errors).toEqual([]);
+});
+
+test('a first-load copy reaching the router (a store, a prerender, a cache that ignores Vary) is loaded, never swapped in', async ({ page, request }) => {
+	await page.goto('/restore-lab/nav-a');
+	await expect.poll(() => page.locator('demo-nav[data-nav]').evaluate((el) => !!el.shadowRoot)).toBe(true);
+	// the router's fetch gets the copy a full load gets
+	const first_load = await (await request.get('/restore-lab/nav-b')).text();
+	await page.route('**/restore-lab/nav-b', (route) =>
+		route.request().headers()['x-ogygia-spa'] ? route.fulfill({ body: first_load, contentType: 'text/html' }) : route.continue()
+	);
+	const documents: string[] = [];
+	page.on('request', (r) => r.resourceType() === 'document' && documents.push(r.url()));
+	await page.locator('[data-nav-go]').click();
+	await expect(page.locator('[data-nav-page="b"]')).toBeVisible();
+	expect(documents.some((u) => u.endsWith('/restore-lab/nav-b')), 'the router handed it to a full load').toBe(true);
+	await expect.poll(() => page.locator('demo-nav[data-nav]').evaluate((el) => !!el.shadowRoot)).toBe(true);
+	expect(await page.evaluate(() => document.querySelectorAll('[c-id]').length)).toBe(0);
+});
+
+test('a router-fetched page is rendered as an answer: every host planned, and the response varies on it', async ({ request }) => {
+	const load = await request.get('/restore-lab/nav-b');
+	const nav = await request.get('/restore-lab/nav-b', { headers: { 'x-ogygia-spa': '1' } });
+	const load_html = await load.text();
+	const nav_html = await nav.text();
+	// loaded as a document: the server-owned nav is left in the transform's form, marked first-load
+	expect(load_html).toContain('<meta name="ogygia-first-load">');
+	expect(load_html).not.toMatch(/<demo-nav[^>]* og-h=/);
+	// fetched by the router: planned (the restorer puts it back before the swap), no first-load mark
+	expect(nav_html).not.toContain('ogygia-first-load');
+	expect(nav_html).toMatch(/<demo-nav[^>]* og-h=/);
+	expect((load.headers()['vary'] ?? '').toLowerCase()).toContain('x-ogygia-spa');
+	expect((nav.headers()['vary'] ?? '').toLowerCase()).toContain('x-ogygia-spa');
+});

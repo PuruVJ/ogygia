@@ -646,6 +646,11 @@ export async function navigate(
 	// (and stop SPA behaviour from here on).
 	const marker = doc.querySelector('meta[name="ogygia-router"]');
 	if (!marker) return hand_off();
+	// A page whose custom elements are in the app transform's FIRST-LOAD form (served from a store,
+	// a prerender, or a cache that held the full-load copy — the server renders a router fetch as an
+	// answer otherwise): only each component's own first hydrate reads that form, and swapped into
+	// live hosts it would leave the transform's tree in their light DOM. Loaded, it is right.
+	if (doc.querySelector('meta[name="ogygia-first-load"]')) return hand_off();
 	// The app's transform reshaped the incoming page: restore it before anything reads it (the
 	// reconcile, the islands' copies). The restorer is the page's own global, when the app has one.
 	(globalThis as { __og_restore?: (root: ParentNode) => number }).__og_restore?.(doc);
