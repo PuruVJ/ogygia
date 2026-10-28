@@ -10,6 +10,7 @@
 	// `?only=<case>` renders one case alone. e2e/nest-matrix.spec.ts.
 	import { page } from '$app/state';
 	import MxTwoSlots from '$lib/mx/MxTwoSlots.svelte' with { wake: 'load' };
+	import MxToggleApp from '$lib/mx/MxToggleApp.svelte' with { wake: 'load' };
 	import SnipApp from '$lib/SnipApp.svelte' with { wake: 'load' };
 	import MxChildrenApp from '$lib/mx/MxChildrenApp.svelte' with { wake: 'load' };
 	import MxLakeHost from '$lib/mx/MxLakeHost.svelte' with { wake: 'load' };
@@ -120,6 +121,18 @@
 		<SnipApp>
 			{#snippet blocks()}<SnipLake start={145} /><p>direct <Bumper start={146} /></p>{/snippet}
 		</SnipApp>
+	</div>
+{/if}
+
+{#if show('snippet-hole-recreate')}
+	<div data-case="snippet-hole-recreate">
+		<MxToggleApp>
+			{#snippet blocks()}
+				<MxIslandHole start={160}>
+					{#snippet ogygiaFallback()}<p data-hole-fallback>loading</p>{/snippet}
+				</MxIslandHole>
+			{/snippet}
+		</MxToggleApp>
 	</div>
 {/if}
 
