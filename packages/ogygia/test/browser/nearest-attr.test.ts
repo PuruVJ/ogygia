@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nearest_attr } from '../../src/devtools/nearest-attr.js';
+import { nearest_attr } from '../../src/runtime/nearest-attr.js';
 
 describe('nearest_attr (the islandKey lookup)', () => {
 	it('takes the nearest keyed ancestor, across shadow roots', () => {

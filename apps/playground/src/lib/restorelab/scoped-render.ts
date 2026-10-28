@@ -12,7 +12,8 @@
  */
 const SHEETS: Record<string, string> = {
 	'demo-card.shadow': ':host{display:block;border:2px solid #0a7;padding:8px}b.title{display:block;color:rgb(0, 119, 85)}',
-	'demo-link.shadow': ':host{display:inline}a{text-decoration:underline}'
+	'demo-link.shadow': ':host{display:inline}a{text-decoration:underline}',
+	'demo-nav.shadow': ':host{display:block}nav{display:flex;gap:8px}'
 };
 
 export function scoped_render(html: string): string {
@@ -23,6 +24,9 @@ export function scoped_render(html: string): string {
 		return `<div class="card sc-demo-card"><b class="title sc-demo-card">Card title</b><slot class="sc-demo-card sc-demo-card-s">${stamped}</slot></div><!--o.0.1-->`;
 	});
 	out = render(out, 'demo-link', used, (inner) => `<a class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#"><slot class="sc-demo-link sc-demo-link-s">${inner}</slot></a>`);
+	// a nav whose own client hydrate unpacks this tree (restore-lab/nav-a: the shadow tree, then the
+	// original children back in the light DOM — what a scoped component runtime does on first load)
+	out = render(out, 'demo-nav', used, (inner) => `<nav class="web sc-demo-nav" c-id="9.0"><b class="sc-demo-nav" c-id="9.1">menu</b><slot class="sc-demo-nav sc-demo-nav-s">${inner}</slot></nav>`);
 	const sheets = [...used].map((k) => `<template data-og-head="${k}">${SHEETS[k]}</template>`).join('');
 	return sheets + out;
 }

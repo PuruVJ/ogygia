@@ -25,6 +25,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An island inside a frozen snippet wakes on its own.
 - A snippet passed to an island on a Kit-hydrated page no longer causes a hydration mismatch.
 - A hole on a Kit-hydrated page keeps its address and its landed HTML through Kit's hydration (a hole inside an island could go empty).
+- With an app transform, a router navigation no longer leaves a web component's server tree in the light DOM of a live host its own runtime already unpacked (a site nav collapsed to one unstyled item): a page the router fetches is rendered as an answer, every host restored before the swap.
+- A first-load copy of a transformed page that reaches the router (a frozen page, a prerender, a cache that ignores `Vary`) is loaded instead of swapped in; transformed documents vary on `x-ogygia-spa`.
+- A link inside a web component's shadow tree honors the `data-sveltekit-reload` around the component.
 
 ## [0.8.4] - 2026-10-22
 

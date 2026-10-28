@@ -475,12 +475,17 @@ const attr_map = (attrs: Attr[]): Record<string, string> => {
 };
 
 /**
- * Which custom elements (in document order) get a plan: every one in a hole / lake answer; in a
- * document, every one in Svelte-owned markup, and every one with Svelte-owned markup below it (a
- * server-owned host around an island: adopting it would reach into the island). A first pass, so
- * the marking pass knows a host's plan before it reaches the host's children.
+ * Which custom elements (in document order) get a plan: every one in an ANSWER — markup the runtime
+ * morphs into a live page (a hole / lake answer, or a document the router fetched: `answer`) — whose
+ * hosts meet live ones its own runtime already rendered, so they must arrive in the form the restorer
+ * gives (Svelte's children in the light DOM), never in the transform's server form only the
+ * component's first hydrate reads (that form, morphed into a live host, left the transform's tree in
+ * its light DOM: a site nav collapsed to one unstyled item after an in-place navigation). In a
+ * document loaded as one, every one in Svelte-owned markup, and every one with Svelte-owned markup
+ * below it (a server-owned host around an island: adopting it would reach into the island). A first
+ * pass, so the marking pass knows a host's plan before it reaches the host's children.
  */
-function plan_hosts(html: string, kind: TransformKind, csr: boolean): boolean[] {
+function plan_hosts(html: string, kind: TransformKind, csr: boolean, answer: boolean): boolean[] {
 	const planned: boolean[] = [];
 	const stack: Stack<{ name: string; host: number; owned: boolean; foreign: boolean }> = [];
 	let in_body = kind !== 'document';
@@ -498,7 +503,7 @@ function plan_hosts(html: string, kind: TransformKind, csr: boolean): boolean[] 
 			let host = -1;
 			if (in_body && is_custom(name, foreign)) {
 				host = planned.length;
-				planned.push(kind !== 'document' || owned);
+				planned.push(answer || kind !== 'document' || owned);
 			}
 			// Svelte-owned markup starts here: every host above it gets the plan
 			if (owned && !(parent ? parent.owned : false)) for (const f of stack) if (f.host !== -1) planned[f.host] = true;
@@ -526,12 +531,13 @@ function has_custom_element(html: string, document: boolean): boolean {
 
 /**
  * Tag `html` for the transform. `csr`: a Kit-hydrated document (its whole body is Svelte's, except
- * lakes and holes). Returns the tagged HTML, or `null` when there is no custom element to tag (the
- * transform then gets the HTML as is, and settle has nothing to do).
+ * lakes and holes). `answer`: a document the router fetched, morphed into the live page (every host
+ * planned, as in a region answer — see `plan_hosts`). Returns the tagged HTML, or `null` when there is
+ * no custom element to tag (the transform then gets the HTML as is, and settle has nothing to do).
  */
-export function mark(html: string, kind: TransformKind, csr: boolean): { html: string; record: MarkRecord } | null {
+export function mark(html: string, kind: TransformKind, csr: boolean, answer = false): { html: string; record: MarkRecord } | null {
 	if (!has_custom_element(html, kind === 'document')) return null;
-	const planned = plan_hosts(html, kind, csr);
+	const planned = plan_hosts(html, kind, csr, answer);
 	if (!planned.length) return null;
 	const out: string[] = [];
 	let pos = 0;
