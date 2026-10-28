@@ -7,7 +7,7 @@
 // waited on its host's hydration forever; next to an island the lake's HTML was discarded.
 // Usage: pnpm exec playwright test nest-matrix
 import type { Page } from '@playwright/test';
-import { test, check } from './fixtures/index.ts';
+import { test, check, expect } from './fixtures/index.ts';
 
 const CASES = [
 	'shell-lake',
@@ -117,6 +117,32 @@ for (const c of ['snippet-hole', 'snippet-root-hole']) {
 		check('browser: its fallback is gone', (await box.locator('[data-hole-fallback]').count()) === 0);
 		check('browser: its region kept its address', (await box.locator('ogygia-region[render="defer"][endpoint=""]').count()) === 0);
 		check('no hydration failure or error', problems.length === 0, problems.join(' | '));
+	});
+}
+
+// A hole in a live snippet that the island RE-CREATES in the browser (an `{#if}` hiding and showing
+// it): created fresh, it renders its fallback again and fetches by its identity — on a page Kit loads
+// and on one it does not.
+for (const base of ['/nest-matrix', '/nest-matrix/kit']) {
+	test(`a hole in a re-created live snippet shows its fallback and lands again (${base})`, async ({ page }) => {
+		await page.goto(`${base}?only=snippet-hole-recreate`, { waitUntil: 'networkidle' });
+		const box = page.locator('[data-case="snippet-hole-recreate"]');
+		await box.locator('[data-mx-hole]').waitFor();
+		await box.locator('[data-toggle]').click();
+		await expect(box.locator('[data-mx-hole]')).toHaveCount(0);
+		await box.locator('[data-toggle]').click();
+		await expect(box.locator('[data-mx-hole]'), 'the hole lands again').toHaveCount(1, { timeout: 10_000 });
+		check('its fallback is gone', (await box.locator('[data-hole-fallback]').count()) === 0);
+		const bump = box.locator('[data-bumper]');
+		await bump.scrollIntoViewIfNeeded();
+		const before = Number(await bump.locator('[data-bumper-n]').innerText());
+		let after = before;
+		for (let t = 0; t < 20 && after === before; t++) {
+			await bump.click();
+			await page.waitForTimeout(100);
+			after = Number(await bump.locator('[data-bumper-n]').innerText());
+		}
+		check('the island in its answer is live', after === before + 1, `${before} → ${after}`);
 	});
 }
 

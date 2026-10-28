@@ -8,6 +8,13 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- A hole created fresh in the browser (Kit remounting a page whose hydration failed, or an island re-creating a snippet) renders its fallback again, so an on-demand hole whose fallback is its trigger can still be woken (it came back empty in 0.8.5).
+- A hole in a live snippet that an island re-creates fetches again by its identity on any page, not only on a Kit-hydrated one.
+
 ## [0.8.5] - 2026-10-22
 
 ### Changed

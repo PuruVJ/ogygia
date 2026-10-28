@@ -19,7 +19,7 @@
 	 * into the browser. The runtime custom element (`core.ts`) is unchanged; only the `.svelte` wrappers
 	 * collapsed into this file.
 	 */
-	import { untrack, getContext, setContext, createRawSnippet } from 'svelte';
+	import { untrack, getContext, getAllContexts, setContext, createRawSnippet, mount, unmount } from 'svelte';
 	import { KIT_REQUEST_CONTEXT, kit_page_version, kit_request_event } from './server/kit-context.js';
 	import { stringify } from 'devalue';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
@@ -137,8 +137,12 @@
 	 * form is a raw snippet, and hydration ADOPTS the element verbatim at its position — no walk into it,
 	 * no attribute set, nothing to mismatch (the adoption slot children get). As a template the browser
 	 * leg rendered placeholders, `{@html}` walks, or empty `endpoint`s over the server's DOM: Svelte
-	 * discarded it, threw, or blanked an address. Created fresh in the browser (a client navigation, a
-	 * remount) the element comes up empty; `setup` sees it either way.
+	 * discarded it, threw, or blanked an address. CREATED FRESH in the browser instead (Kit remounting
+	 * after a failed hydration, a Kit client navigation, an `{#if}` re-creating it in an island or a
+	 * snippet) the element comes up empty, and each kind refills it from its own source of content: a
+	 * hole renders its fallback (the page's snippet: what the server showed until the answer lands, and
+	 * what an `interaction` hole is woken through), a lake repaints from the runtime's copy (lakes.ts), a
+	 * baked region morphs in its live value. `setup` sees the element either way.
 	 * @param {() => string} attrs the element's attribute text (both legs)
 	 * @param {(renderer: never) => void} [inner] SERVER: renders its inside into the element
 	 * @param {(el: Element) => void | (() => void)} [setup] CLIENT: the adopted (or created) element
@@ -205,6 +209,9 @@
 	const nested = isNested() && !(is_server && in_live_snippet);
 	// (an island rendered inline in the snippet: the holes of its own template follow the nested rule)
 	if (is_island && nested && in_live_snippet) setInLiveSnippet(false);
+	// the contexts a hole created fresh in the browser renders its fallback with (`hole_adopt`): the
+	// page's, as when the fallback rendered in its tree
+	const region_contexts = typeof window !== 'undefined' && is_server ? getAllContexts() : undefined;
 
 	// `requestEvent()` inside a region rendered by Kit's OWN page pass: Kit's `__request__` context
 	// carries `{ page }` only (ogygia's render roots add `event` themselves). Re-set the same key
@@ -641,9 +648,19 @@
 			' endpoint="' + escape_attr(server_endpoint) + '"' + a('data-og-hole', server_identity) + a('src', server_region_src)
 		);
 	};
-	const hole_adopt = adopt_region(hole_attrs, (renderer) => {
-		if (ogygiaFallback) SlotBoundary(renderer, /** @type {never} */ ({ children: ogygiaFallback }));
-	});
+	const hole_adopt = adopt_region(
+		hole_attrs,
+		(renderer) => {
+			if (ogygiaFallback) SlotBoundary(renderer, /** @type {never} */ ({ children: ogygiaFallback }));
+		},
+		(el) => {
+			// created fresh (adopted, it holds the server's): its fallback, rendered here as the server
+			// did — the rebuilt hole's address comes back from the holes record, the fallback is the page's
+			if (el.firstChild || !ogygiaFallback) return;
+			const app = mount(SlotBoundary, { target: el, props: { children: ogygiaFallback }, context: region_contexts });
+			return () => void unmount(app);
+		}
+	);
 	// A hole NESTED in an island renders in the page pass (`deferred` ignored, the nested rule) — as a
 	// LAKE: frozen server HTML the island adopts and lifts around its hydrate, never hydrated itself. A
 	// hole ships no JS wherever it sits (the client wrapper has no component — emit.ts), and the
@@ -664,10 +681,11 @@
 		return html;
 	});
 	// On a KIT-HYDRATED document the facts ride the document tail too (server/document-tail.ts
-	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. A csr=false
-	// document has no Kit client to rebuild it, so nothing is recorded there. Decided once at init —
-	// the SSR pass renders each region exactly once.
-	if (tail && is_csr && is_server && !nested) {
+	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. Decided once
+	// at init — the SSR pass renders each region exactly once.
+	// So do a live snippet's holes, on any document: the island re-creates the snippet in the browser
+	// (an `{#if}` toggling), and the hole created fresh fetches by its identity, as a rebuilt one does.
+	if (tail && (is_csr || in_live_snippet) && is_server && !nested) {
 		untrack(() => {
 			const endpoint = server_endpoint;
 			if (endpoint) tail.hole(server_identity, endpoint, server_props_script);
