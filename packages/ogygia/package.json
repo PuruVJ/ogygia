@@ -204,7 +204,7 @@
 		"verify:package": "node scripts/verify-package.mjs"
 	},
 	"dependencies": {
-		"devalue": "^5.9.0",
+		"devalue": "^5.9.3",
 		"esm-env": "^1.2.2",
 		"estree-walker": "^3.0.3",
 		"magic-string": "^1.1.0",
@@ -267,7 +267,7 @@
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"valibot": "^1.4.2",
-		"vite": "^8.2.0",
+		"vite": "^8.3.5",
 		"vitest": "^4.1.10"
 	},
 	"publishConfig": {
