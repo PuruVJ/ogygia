@@ -13,6 +13,7 @@
  */
 import { wire_loaders, wire_all } from 'virtual:ogygia/transportables';
 import { props_sidecar_of } from './sidecar.js';
+import { yield_task } from './schedule.js';
 
 const loaders = wire_loaders as Record<string, () => Promise<unknown>>;
 const paths = Object.keys(loaders);
@@ -22,8 +23,9 @@ function load(path: string): Promise<unknown> {
 	let p = loading.get(path);
 	if (!p) {
 		const loader = loaders[path];
-		// (a failed load resolves: the decode then says which class is missing, as it always did)
-		p = loader ? loader().catch(() => undefined) : Promise.resolve();
+		// (a failed load resolves: the decode then says which class is missing, as it always did; each
+		// import starts in a task of its own — every class's preload ran inside the first island's start)
+		p = loader ? yield_task().then(loader).catch(() => undefined) : Promise.resolve();
 		loading.set(path, p);
 	}
 	return p;
