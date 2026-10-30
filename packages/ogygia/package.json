@@ -221,7 +221,7 @@
 		"rolldown": ">=1.0.0",
 		"shiki": "^3.0.0 || ^4.0.0",
 		"svelte": "^5.40.0",
-		"vite": "^7.0.0 || ^8.0.0"
+		"vite": "^8.2.4"
 	},
 	"peerDependenciesMeta": {
 		"@orama/orama": {
