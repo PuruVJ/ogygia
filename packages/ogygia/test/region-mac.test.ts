@@ -10,6 +10,20 @@ import { islandId } from '../src/compiler/region/transform.js';
 describe('region_mac_message', () => {
 	const secret = 'test-secret-key-16b';
 
+	it('v1 without a render identity, v2 with one — and neither verifies as the other', () => {
+		const exp = '1700000000';
+		expect(region_mac_message('aaaaaa', exp, 'W3t9XQ')).toBe('v1|6:aaaaaa|10:1700000000|6:W3t9XQ|0:|0:');
+		expect(region_mac_message('aaaaaa', exp, 'W3t9XQ', '', '', 'c0ffee0c0ffe')).toBe(
+			'v2|6:aaaaaa|10:1700000000|6:W3t9XQ|0:|0:|12:c0ffee0c0ffe'
+		);
+		const v2 = sign(secret, region_mac_message('aaaaaa', exp, 'W3t9XQ', '', '', 'c0ffee0c0ffe'));
+		// stripping `r` from the URL (a v1 check) breaks it
+		expect(verify(secret, region_mac_message('aaaaaa', exp, 'W3t9XQ'), v2)).toBe(false);
+		// re-pointing it at another component breaks it
+		expect(verify(secret, region_mac_message('aaaaaa', exp, 'W3t9XQ', '', '', 'badbadbadbad'), v2)).toBe(false);
+		expect(verify(secret, region_mac_message('aaaaaa', exp, 'W3t9XQ', '', '', 'c0ffee0c0ffe'), v2)).toBe(true);
+	});
+
 	it('binds region id into the MAC', () => {
 		const props = 'W3t9XQ';
 		const exp = '1700000000';

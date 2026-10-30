@@ -23,7 +23,7 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
 import { B64Url } from './payload.js';
 import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
 import { ensure_prop_kinds } from './region-props.js';
-import { island_url } from 'virtual:ogygia/server-manifest';
+import { island_url, island_render } from 'virtual:ogygia/server-manifest';
 import { islandCss } from 'virtual:ogygia/island-deps';
 
 /** A hole's own stylesheet hrefs, by region id — the list its endpoint answer links (hooks.ts
@@ -122,12 +122,15 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts
 	// into a `private, max-age=ttl` browser cache. Empty string when 0 keeps the MAC field stable.
 	const ttl_field = ttl > 0 ? String(Math.floor(ttl)) : '';
-	const sig = sign(key.secret, region_mac_message(entry, exp, payload, session, ttl_field));
+	// `r`: what the endpoint renders (the component), signed — a build that no longer has this `id`
+	// (another schedule, preset or salt) still answers it (compiler/region/identity.ts `renderId`)
+	const render = island_render[entry] ?? '';
+	const sig = sign(key.secret, region_mac_message(entry, exp, payload, session, ttl_field, render));
 	const ttl_param = ttl_field ? `&ttl=${ttl_field}` : '';
 	if (DEVTOOLS)
 		record_server_event({ domain: 'server', name: 'server.capability.minted', id: entry, ttl });
 	// `k`: the minter's key fingerprint, outside the MAC (server/signing-key.ts)
-	return `${resolve(islands_endpoint())}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}&k=${key.fp}`;
+	return `${resolve(islands_endpoint())}?id=${encodeURIComponent(entry)}${render ? `&r=${render}` : ''}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}&k=${key.fp}`;
 }
 
 /**

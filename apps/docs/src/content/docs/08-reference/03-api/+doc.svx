@@ -285,7 +285,11 @@ It is not a longer `ttl`. A renewed URL still lives only `regions.ttl`, and a ho
 
 ### `OGYGIA_SECRET`
 
-The HMAC secret that signs `render: 'deferred'` capability URLs. Set it in the environment, for stable signatures across a deployment. Otherwise, a per-build key is generated. Every deployment that serves your pages or your islands endpoint needs the same value at runtime: a hole signed by one key and checked by another is refused (`x-ogygia-deny: foreign-key`). Server islands and `render: 'live'` need the [server handle](/docs/start/install) installed, to serve the endpoint.
+The HMAC secret that signs `render: 'deferred'` capability URLs. Set it in the environment, for stable signatures across a deployment. Otherwise, a per-build key is generated. Every deployment that serves your pages or your islands endpoint needs the same value at runtime: a hole signed by one key and checked by another is refused (`x-ogygia-deny: foreign-key`).
+
+A hole's URL signs the component it renders, so a page cached across a deploy keeps its holes as long as their components still exist: a changed preset, `wake` or build-time `OGYGIA_SECRET` does not matter. A hole whose component was moved, renamed or removed is refused (`x-ogygia-deny: unknown-id`) and keeps its fallback.
+
+Server islands and `render: 'live'` need the [server handle](/docs/start/install) installed, to serve the endpoint.
 
 ## `ogygia/server`
 

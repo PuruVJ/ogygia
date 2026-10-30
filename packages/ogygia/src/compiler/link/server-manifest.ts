@@ -23,13 +23,24 @@ export function server_manifest_module(
 	devUrlFor: (virtualPath: string) => string,
 	publicUrlFor: (iid: string) => string
 ): string {
-	if (!ssr) return `export const islands = {};\nexport const island_url = {};\nexport const island_name = {};\nexport const island_reads_page_data = null;`;
+	if (!ssr)
+		return `export const islands = {};\nexport const island_url = {};\nexport const island_name = {};\nexport const island_render = {};\nexport const render_island = {};\nexport const island_reads_page_data = null;`;
 	const entries: string[] = [];
 	const urls: string[] = [];
 	const names: string[] = [];
+	const renders: string[] = [];
+	/** render id → the server entry that renders it (the smallest id: one answer per build) */
+	const by_render = new Map<string, string>();
 	for (const [iid, virtualPath] of program.by_id) {
 		const reg = program.registry.get(virtualPath);
 		if (!reg?.server) continue;
+		// id → its render identity, signed into every capability minted for it; render identity → an
+		// entry rendering it, for a capability minted by another build (compiler/region/identity.ts)
+		if (reg.renderId) {
+			renders.push(`  ${JSON.stringify(iid)}: ${JSON.stringify(reg.renderId)}`);
+			const seen = by_render.get(reg.renderId);
+			if (seen === undefined || iid < seen) by_render.set(reg.renderId, iid);
+		}
 		// id → its component's name (`SlowHole` from `…/SlowHole.svelte`): the profiler names a hole
 		// request by it (neither URL carries the name: both are keyed by the id)
 		const file = reg.componentPath ?? '';
@@ -48,6 +59,8 @@ export function server_manifest_module(
 		`export const islands = {\n${entries.join(',\n')}\n};\n` +
 		`export const island_url = {\n${urls.join(',\n')}\n};\n` +
 		`export const island_name = {\n${names.join(',\n')}\n};\n` +
+		`export const island_render = {\n${renders.join(',\n')}\n};\n` +
+		`export const render_island = {\n${[...by_render].map(([r, iid]) => `  ${JSON.stringify(r)}: ${JSON.stringify(iid)}`).join(',\n')}\n};\n` +
 		// id → does the hole's SERVER tree read `page.data` (the page lookup a hole needs: server/
 		// render-page.ts). Known only once every module is transformed: a build patches the
 		// placeholder in renderChunk (driver `patch_page_data_reads`); dev leaves `null` (unknown → look up).

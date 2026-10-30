@@ -7,7 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 vi.mock('virtual:ogygia/secret', () => ({ buildKey: 'test-secret', buildHadSecret: false }));
 vi.mock('virtual:ogygia/session-cookie', () => ({ sessionCookie: null }));
 vi.mock('virtual:ogygia/region-ttl', () => ({ regionTtl: 3600, renewWindow: 691200 }));
-vi.mock('virtual:ogygia/server-manifest', () => ({ island_url: {} }));
+vi.mock('virtual:ogygia/server-manifest', () => ({ island_url: {}, island_render: { rnd123: 'c0ffee0c0ffe' } }));
 vi.mock('virtual:ogygia/sign', () => ({
 	sign: (_k: string, m: string) => 'sig' + m.length,
 	region_mac_message: (...parts: unknown[]) => parts.join('|')
@@ -41,6 +41,18 @@ describe('the islands endpoint', () => {
 
 	it('a minted capability names its signing key (`&k=`, outside the MAC)', () => {
 		expect(mintServerIsland('abc123', {})).toMatch(/&sig=[^&]+&k=[^&]+$/);
+	});
+
+	it('a minted capability names what it renders (`&r=`, its render identity, signed)', () => {
+		const url = mintServerIsland('rnd123', {});
+		expect(url).toMatch(/\?id=rnd123&r=c0ffee0c0ffe&props=/);
+		// (the mocked sign hashes the message by length: the render identity is part of it)
+		const sig = new URL(url, 'http://x').searchParams.get('sig');
+		expect(sig).toBe('sig' + ['rnd123', new URL(url, 'http://x').searchParams.get('exp'), 'W3t9XQ', '', '', 'c0ffee0c0ffe'].join('|').length);
+	});
+
+	it('a region with no render identity mints as before (no `r`)', () => {
+		expect(mintServerIsland('def456', {})).not.toContain('&r=');
 	});
 
 	it('a path without its leading slash gets one', () => {
