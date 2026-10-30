@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - main
-      # the next minor, in changesets pre mode (.changeset/pre.json): publishes `x.y.z-next.n` under
-      # the npm `next` tag, so `latest` stays on main's releases
+      # the next minor's line (.changeset/README.md): it releases as usual, under npm's `latest`
       - next
 
 jobs:

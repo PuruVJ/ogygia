@@ -10,9 +10,11 @@ Releases are automated (`.github/workflows/release.yml`, the Changesets GitHub A
 
 ## Two lines: `main` and `next`
 
-- `main` is the current line (0.8.x): its releases go out under npm's `latest` tag.
-- `next` is the next minor, in pre mode (`.changeset/pre.json`, `changeset pre enter next`): the same
-  flow publishes `x.y.z-next.n` under npm's `next` tag (`pnpm add ogygia@next`). A PR for the next
-  line targets `next`; fixes land on `main` first and `main` is merged into `next`.
-- To release the next line for real: on `next`, `pnpm changeset pre exit`, merge the Version packages
-  PR, then merge `next` into `main`.
+The split is for working on GitHub; on npm both are plain releases.
+
+- `next` is the newer line (0.9): a PR for it targets `next`, and its releases go out under npm's
+  `latest` tag as usual.
+- `main` keeps the older line (0.8.x) for patches. Once `next` has released, `main` publishes under the
+  npm tag `0.8`, so a patch never takes `latest` back (`pnpm add ogygia@0.8`).
+- Fixes land on `main` first, and `main` is merged into `next`. When the older line is done, `next` is
+  merged into `main`.
