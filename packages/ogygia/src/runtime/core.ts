@@ -36,7 +36,8 @@ import {
 	hydrate_started,
 	hydrate_turn,
 	register_region,
-	unregister_region
+	unregister_region,
+	yield_task
 } from './schedule.js';
 import { once_visible } from './observe.js';
 import { preload_island_graph } from './island-graph-preload.js';
@@ -152,7 +153,11 @@ let core_promise: Promise<HydrateCore> | null = null;
 let loaded_core: HydrateCore | null = null;
 function hydrate_core(): Promise<HydrateCore> {
 	if (!core_promise) {
-		core_promise = import('./hydrate-core.js').then((m) => (loaded_core = m));
+		// in a task of its own: the import's synchronous start (the bundler's preload of the chunk's
+		// ~20 dependencies) ran inside the first island's start, one long task with it
+		core_promise = yield_task()
+			.then(() => import('./hydrate-core.js'))
+			.then((m) => (loaded_core = m));
 	}
 	return core_promise;
 }
@@ -1220,6 +1225,8 @@ class OgygiaRegion extends HTMLElement {
 		const t0 = now_ms();
 		const dt_t0 = DEVTOOLS ? t0 : 0;
 		let t_loaded = t0;
+		/** when its hydrate step began: a failed step held the thread from here (the reports count it busy) */
+		let t_turn: number | undefined;
 		if (DEVTOOLS) {
 			dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
 			dt_seen(this);
@@ -1254,10 +1261,15 @@ class OgygiaRegion extends HTMLElement {
 			// client entry publishes; it must not hydrate before Kit applied it (kit-page-thread.svelte.ts).
 			await this.#kit_page_ready(core);
 			if (!this.isConnected) return;
+			// The page's seeds parse now, BEFORE the turn: data arriving is not the hydrate step. The
+			// first island parses the seed once (700 KB on a large CMS page), and inside its turn that
+			// parse plus the hydrate made one long task. (The step calls these again: a no-op by then.)
+			core.seed_remote_once();
+			core.seed_page_once();
 			await hydrate_turn(this);
 			if (!this.isConnected || this.#app) return;
 			// ── the turn: everything below is one synchronous step ──
-			const t_turn = now_ms();
+			t_turn = now_ms();
 			const ssr_html = this.#ssr_html;
 			// Was the island touched while it slept (runtime/drift-watch.ts)? Read HERE, before the
 			// hydrate step edits it (lakes lifted): an untouched island skips the parse-and-compare.
@@ -1286,13 +1298,14 @@ class OgygiaRegion extends HTMLElement {
 			if (this.#watching) mark_region_changed(this);
 			this.#unwatch();
 			// the beacon's CPU window stops waiting for this one, and the visit reports it (no-op without it)
-			if (BEACON) beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0);
+			if (BEACON) beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0, t_turn);
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
 					name: 'region.hydrate.failed',
 					...dt_ids(this),
-					message: (err as { message?: string })?.message ?? String(err)
+					message: (err as { message?: string })?.message ?? String(err),
+					...(t_turn !== undefined ? { turn: t_turn } : {})
 				});
 			// Distinguish the ENTRY FETCH failing (the module never loaded) from the hydrate throwing
 			// (the module loaded, its code ran and failed). A `Failed to fetch dynamically imported

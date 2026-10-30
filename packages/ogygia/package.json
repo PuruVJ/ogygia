@@ -204,24 +204,24 @@
 		"verify:package": "node scripts/verify-package.mjs"
 	},
 	"dependencies": {
-		"devalue": "^5.9.0",
+		"devalue": "^5.9.3",
 		"esm-env": "^1.2.2",
 		"estree-walker": "^3.0.3",
-		"magic-string": "^1.1.0",
+		"magic-string": "^1.4.5",
 		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
 		"@neodrag/svelte": "3.0.0-next.12",
 		"@orama/orama": "^3.0.0",
+		"@playwright/test": "^1.62.0",
 		"@sveltejs/kit": ">=2.70.2 <4",
 		"bits-ui": "^2.0.0",
 		"mdsvex": "^0.12.0",
-		"playwright": "^1.40.0",
-		"@playwright/test": "^1.40.0",
+		"playwright": "^1.62.0",
 		"rolldown": ">=1.0.0",
 		"shiki": "^3.0.0 || ^4.0.0",
-		"svelte": "^5.40.0",
-		"vite": "^7.0.0 || ^8.0.0"
+		"svelte": "^5.56.8",
+		"vite": "^8.2.4"
 	},
 	"peerDependenciesMeta": {
 		"@orama/orama": {
@@ -261,12 +261,13 @@
 		"rolldown": ">=1.0.0",
 		"sass-embedded": "^1.104.1",
 		"shiki": "^4.4.1",
+		"svelte": "5.56.8",
 		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"valibot": "^1.4.2",
-		"vite": "^8.2.0",
+		"vite": "^8.3.5",
 		"vitest": "^4.1.10"
 	},
 	"publishConfig": {

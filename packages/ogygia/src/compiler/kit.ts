@@ -14,6 +14,10 @@ export interface KitPaths {
 	 *  client app boots — which a csr=false page never does — so ogygia runs its `init` on boot there
 	 *  (client-side monitoring, third-party bootstraps otherwise silently never load). */
 	client_hooks: string | null;
+	/** Kit 3's client codec module (`#app/internal/transport`), or null on Kit 2. Kit 3's remote
+	 *  argument encoding reads the app's transport from it, and only Kit's client boot fills it — so on
+	 *  a csr=false page a custom-type remote argument failed to encode until ogygia filled it too. */
+	kit_transport_init: string | null;
 }
 
 /**
@@ -26,11 +30,14 @@ export function resolve_kit_paths(root: string): KitPaths {
 	let kit_wire_path: string | null = null;
 	let kit_remote_index: string | null = null;
 	let universal_hooks: string | null = null;
+	let kit_transport_init: string | null = null;
 	try {
 		const require = createRequire(path.join(root, 'noop.js'));
 		const kitRoot = path.dirname(require.resolve('@sveltejs/kit/package.json'));
 		const candidate = path.join(kitRoot, 'src', 'runtime', 'shared.js');
 		if (fs.existsSync(candidate)) kit_wire_path = candidate;
+		const codec = path.join(kitRoot, 'src', 'runtime', 'app', 'internal', 'transport.js');
+		if (fs.existsSync(codec)) kit_transport_init = codec;
 		const remoteIdx = path.join(
 			kitRoot,
 			'src',
@@ -60,7 +67,7 @@ export function resolve_kit_paths(root: string): KitPaths {
 			break;
 		}
 	}
-	return { kit_wire_path, kit_remote_index, universal_hooks, client_hooks };
+	return { kit_wire_path, kit_remote_index, universal_hooks, client_hooks, kit_transport_init };
 }
 
 /**

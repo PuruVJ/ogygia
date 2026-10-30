@@ -9,7 +9,7 @@ import { sign, region_mac_message } from 'virtual:ogygia/sign';
 // (`resolve('/__ogygia__')` reads the same on Kit 2, which wants the leading slash, and Kit 3, which
 // takes it as a route ID with no params — the same pathname)
 import { resolve } from '$app/paths';
-import { building } from '$app/environment';
+import { building } from '$app/env';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
 import { islands_endpoint, MAX_REGION_PROPS_LEN, capability_expiry } from './endpoint.js';
 import { freeze_capture_active } from '../freeze/capture.js';

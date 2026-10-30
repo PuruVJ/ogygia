@@ -234,6 +234,8 @@ declare module 'virtual:ogygia/transport' {
 		string,
 		{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
 	>;
+	export const encoders: Record<string, (v: unknown) => unknown>;
+	export const decoders: Record<string, (v: unknown) => unknown>;
 }
 /** The hydrate-phase features the app's marks selected (compiler/link/runtime-entry.ts). */
 declare module 'virtual:ogygia/hydrate-features' {
@@ -257,10 +259,12 @@ declare module '$app/paths' {
 	export function resolve(id: string, params?: Record<string, string>): string;
 	export function asset(file: string): string;
 }
-declare module '$app/environment' {
+// `$app/env` (Kit ≥ 2.70 and Kit 3; Kit 3 deprecates `$app/environment`)
+declare module '$app/env' {
 	export const building: boolean;
 	export const browser: boolean;
 	export const dev: boolean;
+	export const version: string;
 }
 declare module '$app/server' {
 	export function getRequestEvent(): {
