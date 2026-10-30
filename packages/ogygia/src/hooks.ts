@@ -24,7 +24,7 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
-import { islands as island_modules, island_url, island_name, island_reads_page_data } from 'virtual:ogygia/server-manifest';
+import { islands as island_modules, island_url, island_name, island_reads_page_data, render_island } from 'virtual:ogygia/server-manifest';
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.js';
@@ -513,6 +513,44 @@ function region_denied(why: RegionDeny) {
  *  without `k` (minted before capabilities named their key) is left to the MAC. */
 function foreign_key(k: string | null): boolean {
 	return k !== null && k !== signing_key().fp;
+}
+
+/** A region capability's fields, as its URL carries them (server/region-endpoint.ts mints them). */
+interface Capability {
+	/** the region id: the wrapper that minted it */
+	id: string;
+	/** its render identity (`r`): what the endpoint renders; '' when minted before render ids */
+	render: string;
+	payload: string;
+	exp: string;
+	ttl: string;
+	sig: string;
+	/** the minter's key fingerprint; null when minted before capabilities named their key */
+	k: string | null;
+}
+
+function capability_of(params: URLSearchParams): Capability {
+	return {
+		id: params.get('id') ?? '',
+		render: params.get('r') ?? '',
+		payload: params.get('props') ?? '',
+		exp: params.get('exp') ?? '',
+		ttl: params.get('ttl') ?? '',
+		sig: params.get('sig') ?? '',
+		k: params.get('k')
+	};
+}
+
+/**
+ * The server entry that answers a verified capability: its own id when this build has it, else an
+ * entry of this build rendering the same component (its signed render identity) — the capability
+ * came from another build: an older cached page, another deployment, a changed schedule or salt.
+ * Null when this build renders neither: the component is gone, moved or renamed.
+ */
+function capability_target(cap: Capability): string | null {
+	if (Object.hasOwn(island_modules, cap.id)) return cap.id;
+	if (cap.render !== '' && Object.hasOwn(render_island, cap.render)) return render_island[cap.render];
+	return null;
 }
 
 /**
@@ -2008,23 +2046,22 @@ class OgygiaHandle {
 	 * that has not expired never renews), and the signing key it names. Null when it passes, else why
 	 * it is refused.
 	 */
-	#capability_precheck(
-		id: string,
-		payload: string,
-		ttl_raw: string,
-		exp_raw: string,
-		k: string | null,
-		renewal = false
-	): RegionDeny | null {
-		if (!is_region_id(id) || payload.length > MAX_REGION_PROPS_LEN || !is_region_ttl(ttl_raw)) return 'shape';
+	#capability_precheck(cap: Capability, renewal = false): RegionDeny | null {
+		if (
+			!is_region_id(cap.id) ||
+			(cap.render !== '' && !is_region_id(cap.render)) ||
+			cap.payload.length > MAX_REGION_PROPS_LEN ||
+			!is_region_ttl(cap.ttl)
+		)
+			return 'shape';
 		const now = Math.floor(Date.now() / 1000);
 		if (renewal) {
-			if (!renewable_expiry(exp_raw, now, renewWindow)) return 'renew-window';
+			if (!renewable_expiry(cap.exp, now, renewWindow)) return 'renew-window';
 		} else {
-			const exp = Number(exp_raw);
+			const exp = Number(cap.exp);
 			if (!Number.isFinite(exp) || exp < now) return 'expired';
 		}
-		if (foreign_key(k)) return 'foreign-key';
+		if (foreign_key(cap.k)) return 'foreign-key';
 		return null;
 	}
 
@@ -2036,33 +2073,19 @@ class OgygiaHandle {
 	 * app itself put in public HTML can be. The caller has already gated shape + the renew window
 	 * and charged the probe budget. Returns the fresh `exp` + `sig`.
 	 */
-	#renew_capability(
-		id: string,
-		payload: string,
-		exp_raw: string,
-		ttl_raw: string,
-		sig: string,
-		event: RequestEvent
-	): { exp: string; sig: string } | null {
+	#renew_capability(cap: Capability, event: RequestEvent): Capability | null {
 		if (this.#region_session(event) !== '') return null;
 		const { secret } = signing_key();
-		if (!verify(secret, region_mac_message(id, exp_raw, payload, '', ttl_raw), sig)) return null;
+		if (!verify(secret, region_mac_message(cap.id, cap.exp, cap.payload, '', cap.ttl, cap.render), cap.sig)) return null;
 		const exp = String(capability_expiry(Math.floor(Date.now() / 1000), regionTtl));
-		return { exp, sig: sign(secret, region_mac_message(id, exp, payload, '', ttl_raw)) };
+		return { ...cap, exp, sig: sign(secret, region_mac_message(cap.id, exp, cap.payload, '', cap.ttl, cap.render)), k: signing_key().fp };
 	}
 
-	/** THE auth check: session-bound region MAC verify. */
-	#verify_region_mac(
-		id: string,
-		payload: string,
-		exp_raw: string,
-		ttl_raw: string,
-		sig: string,
-		event: RequestEvent
-	): boolean {
+	/** THE auth check: session-bound region MAC verify (its render identity inside, when it has one). */
+	#verify_region_mac(cap: Capability, event: RequestEvent): boolean {
 		// The capability seals the session cookie (if any) into the signed message.
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
-		return verify(signing_key().secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig);
+		return verify(signing_key().secret, region_mac_message(cap.id, cap.exp, cap.payload, session, cap.ttl, cap.render), cap.sig);
 	}
 
 	/** Eval the island module (registers transportable codecs the reviver needs on a cold-start defer),
@@ -2108,26 +2131,23 @@ class OgygiaHandle {
 	): Promise<{ slot: string; html: string } | null> {
 		const q = endpoint.indexOf('?');
 		if (q === -1) return null;
-		const params = new URLSearchParams(endpoint.slice(q + 1));
-		const id = params.get('id') ?? '';
-		const payload = params.get('props') ?? '';
-		const exp_raw = params.get('exp') ?? '';
-		const ttl_raw = params.get('ttl') ?? '';
-		const sig = params.get('sig') ?? '';
+		const cap = capability_of(new URLSearchParams(endpoint.slice(q + 1)));
+		const { id, payload, sig } = cap;
 
-		if (this.#capability_precheck(id, payload, ttl_raw, exp_raw, params.get('k'))) return null;
-		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) return null;
+		if (this.#capability_precheck(cap)) return null;
+		if (!this.#verify_region_mac(cap, event)) return null;
 
-		if (!Object.hasOwn(island_modules, id)) return null;
-		const load = island_modules[id];
+		const target = capability_target(cap);
+		if (target === null) return null;
+		const load = island_modules[target];
 		if (typeof load !== 'function') return null;
 
 		const props = await this.#decode_region_props(payload, load);
 		if (!props) return null;
 
-		const ttl = Number(ttl_raw) || 0;
-		const reads_page_data = hole_reads_page_data(id);
-		const cache = ttl > 0 ? { key: this.#hole_cache_key(id, payload, event, reads_page_data), ttl } : undefined;
+		const ttl = Number(cap.ttl) || 0;
+		const reads_page_data = hole_reads_page_data(target);
+		const cache = ttl > 0 ? { key: this.#hole_cache_key(target, payload, event, reads_page_data), ttl } : undefined;
 		// (the profiler logs each batched hole as its own hole request — only when one listens)
 		const stats = batch && has_batch_hole_listener();
 		const t0 = stats ? performance.now() : 0;
@@ -2149,7 +2169,7 @@ class OgygiaHandle {
 				cache: outcome,
 				ttl,
 				...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
-				...(island_name?.[id] ? { name: island_name[id] } : {}),
+				...(island_name?.[target] ? { name: island_name[target] } : {}),
 				p: hole_copy_key(payload),
 				ms: performance.now() - t0,
 				status: body === null ? 500 : 200
@@ -2161,7 +2181,7 @@ class OgygiaHandle {
 		// inside the `<template>` box), so a batched server-island still styles a page that never
 		// imported its component. URLs inside are made root-absolute: `asset()` made them relative
 		// to THIS request, and the parcel lands in a page at any depth (server/hole-urls.ts).
-		let html = absolutize_hole_html(region_css_links(id) + body, event.url);
+		let html = absolutize_hole_html(region_css_links(target) + body, event.url);
 		// The app's transform, as on the hole's own answer (render_region): a batched hole is the same
 		// answer, and the runtime restores both the same way.
 		if (batch && this.#transform) html = await this.#transform_region(html, event);
@@ -2198,12 +2218,9 @@ class OgygiaHandle {
 			return region_response('Too Many Requests', { status: 429 });
 		}
 
-		const id = url.searchParams.get('id') ?? '';
-		const payload = url.searchParams.get('props') ?? '';
-		let exp_raw = url.searchParams.get('exp') ?? '';
-		const ttl_raw = url.searchParams.get('ttl') ?? '';
-		let sig = url.searchParams.get('sig') ?? '';
-		const k = url.searchParams.get('k');
+		let cap = capability_of(url.searchParams);
+		const { id, payload } = cap;
+		const ttl_raw = cap.ttl;
 		// RENEWAL: the runtime retries a hole whose capability EXPIRED (its document outlived it in a
 		// cache) once with `&renew=1`. The answer carries the fresh capability in
 		// `x-ogygia-capability`; the runtime adopts it for the hole's later fetches.
@@ -2211,10 +2228,10 @@ class OgygiaHandle {
 		const renewal = url.searchParams.get('renew') === '1';
 
 		// Every check before HMAC (P5-HMAC-CPU) — the batch path runs the same one.
-		const refused = this.#capability_precheck(id, payload, ttl_raw, exp_raw, k, renewal);
+		const refused = this.#capability_precheck(cap, renewal);
 		if (refused) {
 			if (import.meta.env.DEV && refused === 'foreign-key')
-				console.warn(`[ogygia] region endpoint 403: id "${id}" was signed by key ${k}, this server signs with ${signing_key().fp}`);
+				console.warn(`[ogygia] region endpoint 403: id "${id}" was signed by key ${cap.k}, this server signs with ${signing_key().fp}`);
 			return region_denied(refused);
 		}
 
@@ -2224,15 +2241,14 @@ class OgygiaHandle {
 		}
 
 		if (renewal) {
-			const fresh = this.#renew_capability(id, payload, exp_raw, ttl_raw, sig, event);
+			const fresh = this.#renew_capability(cap, event);
 			if (!fresh) return region_denied(this.#region_session(event) !== '' ? 'renew-session' : 'sig');
-			exp_raw = fresh.exp;
-			sig = fresh.sig;
-			renewed = `${url.pathname}?id=${encodeURIComponent(id)}&props=${payload}&exp=${exp_raw}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${sig}&k=${signing_key().fp}`;
+			cap = fresh;
+			renewed = `${url.pathname}?id=${encodeURIComponent(id)}${cap.render ? `&r=${cap.render}` : ''}&props=${payload}&exp=${cap.exp}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${cap.sig}&k=${cap.k}`;
 		} else {
 			// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes
 			// unknown vs known id.
-			if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
+			if (!this.#verify_region_mac(cap, event)) {
 				if (import.meta.env.DEV)
 					console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
 				return region_denied('sig');
@@ -2252,14 +2268,16 @@ class OgygiaHandle {
 			return region_response('Too Many Requests', { status: 429 });
 		}
 
-		if (!Object.hasOwn(island_modules, id)) {
+		// Its own id, or (minted by another build) an entry of this build rendering its component.
+		const target = capability_target(cap);
+		if (target === null) {
 			if (import.meta.env.DEV)
 				console.warn(
-					`[ogygia] region endpoint 403: id "${id}" is not in the server manifest (${Object.keys(island_modules).length} known)`
+					`[ogygia] region endpoint 403: id "${id}"${cap.render ? ` (component ${cap.render})` : ''} is not in the server manifest (${Object.keys(island_modules).length} known)`
 				);
 			return region_denied('unknown-id');
 		}
-		const load = island_modules[id];
+		const load = island_modules[target];
 		if (typeof load !== 'function') return region_denied('unknown-id');
 
 		// Same status as bad MAC on any decode failure (STATUS-ORACLE); the reason is only ever
@@ -2268,8 +2286,8 @@ class OgygiaHandle {
 		if (!props) return region_denied('props');
 
 		const ttl = Number(ttl_raw) || 0;
-		const reads_page_data = hole_reads_page_data(id);
-		const cache = ttl > 0 ? { key: this.#hole_cache_key(id, payload, event, reads_page_data), ttl } : undefined;
+		const reads_page_data = hole_reads_page_data(target);
+		const cache = ttl > 0 ? { key: this.#hole_cache_key(target, payload, event, reads_page_data), ttl } : undefined;
 		const timing: { queue_ms?: number; render_ms?: number } = {};
 		let outcome: 'hit' | 'miss' | 'none' = 'none';
 		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing, event.url, reads_page_data);
@@ -2282,7 +2300,7 @@ class OgygiaHandle {
 			ttl,
 			...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
 			// (a manifest from an older build has no names: the stub's `undefined`)
-			...(island_name?.[id] ? { name: island_name[id] } : {}),
+			...(island_name?.[target] ? { name: island_name[target] } : {}),
 			p: hole_copy_key(payload)
 		});
 		// the same split for the browser (devtools, the profiler's beacon), as Server-Timing. Only for
@@ -2311,7 +2329,7 @@ class OgygiaHandle {
 		// Ship the component's stylesheet links ahead of its HTML (the client hoists them to <head>).
 		// Root-absolute URLs inside: the hole's HTML is spliced into a page at any depth — by the
 		// runtime, or by a CDN (ESI) — where a `./_app/…` entry would 404 (server/hole-urls.ts).
-		let html = absolutize_hole_html(region_css_links(id) + body, event.url);
+		let html = absolutize_hole_html(region_css_links(target) + body, event.url);
 
 		// The app's transform, on the fully assembled answer — marked before it, settled after it, so
 		// the runtime can restore what the transform moved before the answer goes in. Runs on the final

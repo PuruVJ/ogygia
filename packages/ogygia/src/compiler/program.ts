@@ -13,6 +13,7 @@
  * descriptors, never the resolved build context (that is `CompileCtx`'s job).
  */
 import { path } from './host.js';
+import { renderId } from './region/identity.js';
 import type { RuntimeMarks } from './link/runtime-entry.js';
 
 /** Strip a `?query` off a module id (host vs component vs Vite watch paths). */
@@ -34,6 +35,8 @@ export interface RegistryEntry {
 	componentPath?: string | null;
 	role?: 'entry' | 'wrapper' | 'region' | 'lazy';
 	portable?: boolean;
+	/** a server entry's render identity (identity.ts `renderId`): what its endpoint renders */
+	renderId?: string;
 }
 
 /** What a host's last transform indexed: the region ids + virtual paths it minted. */
@@ -69,6 +72,8 @@ export interface IslandDescriptor {
 	componentPath?: string | null;
 	virtualPath?: string;
 	source?: string;
+	/** the region identity (identity.ts `regionIdentity`) the id was hashed from */
+	identity?: string;
 }
 
 /** The relevant shape of a file's transform result the linker registers. */
@@ -322,7 +327,8 @@ export class Program {
 					role: 'entry',
 					// A portable-snippet synth entry is AUTHORED markup (a slice of user source) — the
 					// transform hook re-processes it (nested island marks, nested snippets), unlike glue.
-					portable: isl.portable === true
+					portable: isl.portable === true,
+					...(isl.server && isl.identity ? { renderId: renderId(isl.identity) } : {})
 				});
 				by_id.set(isl.id, isl.virtualPath);
 				idx.vpaths.add(isl.virtualPath);

@@ -75,6 +75,21 @@ export function regionIdentity(
 	return `${String(componentRelPath).split(PATH_SEP).join('/')}\0${strategyKey(mark)}`;
 }
 
+/**
+ * A server-rendered region's RENDER identity: what the islands endpoint renders — the component
+ * alone (posix path, `#export` for a named one). A region id names a WRAPPER (the component ⊕ its
+ * page-side schedule ⊕ the build's salt); the endpoint's render of a component is the same under
+ * every schedule, so a capability that names its render identity is answered by any build that
+ * still serves the component as a region, whatever its schedule, its preset or the build's salt.
+ * Unsalted: it is never a file name (nothing to enumerate) and only rides inside a signed URL.
+ * @param identityOrPath a {@link regionIdentity} (its component half is taken) or a component path
+ */
+export function renderId(identityOrPath: string) {
+	const nul = identityOrPath.indexOf('\0');
+	const component = (nul === -1 ? identityOrPath : identityOrPath.slice(0, nul)).split(PATH_SEP).join('/');
+	return createHash('md5').update(`render\0${component}`).digest('hex').slice(0, 12);
+}
+
 /** Hash an identity string (optional production salt) → 12-char region id. */
 export function regionId(identityKey: string, salt = '') {
 	const msg = salt ? `${salt}\0${identityKey}` : identityKey;

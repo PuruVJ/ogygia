@@ -35,10 +35,11 @@ export function sign_module(ssr: boolean, hmac_module: string): string {
 		return (
 			`export function sign(_secret, _message) { return ''; }\n` +
 			`export function verify(_secret, _message, _sig) { return false; }\n` +
-			`export function region_mac_message(id, exp, props, session = '', ttl = '') {\n` +
+			`export function region_mac_message(id, exp, props, session = '', ttl = '', render = '') {\n` +
 			`  const enc = new TextEncoder();\n` +
 			`  const lp = (s) => enc.encode(String(s)).byteLength + ':' + String(s);\n` +
-			`  return 'v1|' + lp(id) + '|' + lp(exp) + '|' + lp(props) + '|' + lp(session) + '|' + lp(ttl);\n` +
+			`  const v1 = lp(id) + '|' + lp(exp) + '|' + lp(props) + '|' + lp(session) + '|' + lp(ttl);\n` +
+			`  return render === '' ? 'v1|' + v1 : 'v2|' + v1 + '|' + lp(render);\n` +
 			`}\n`
 		);
 	}

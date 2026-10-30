@@ -33,6 +33,11 @@ declare module 'virtual:ogygia/server-manifest' {
 	export const island_url: Record<string, string>;
 	/** Server-island id → its component name (`SlowHole`), where the component file is known. */
 	export const island_name: Record<string, string>;
+	/** Server-island id → its render identity (the component it renders), signed into its capabilities. */
+	export const island_render: Record<string, string>;
+	/** Render identity → a server-island id of this build that renders it: answers a capability
+	 *  minted by another build, whose id this one does not have. */
+	export const render_island: Record<string, string>;
 	/** Server-island id → its server tree reads `page.data` (the build's answer); `null` in dev:
 	 *  unknown, so every hole looks its page up. */
 	export const island_reads_page_data: Record<string, boolean> | null;
@@ -132,7 +137,8 @@ declare module 'virtual:ogygia/sign' {
 		exp: number | string,
 		props: string,
 		session?: string,
-		ttl?: number | string
+		ttl?: number | string,
+		render?: string
 	): string;
 }
 declare module 'virtual:ogygia/request-event' {

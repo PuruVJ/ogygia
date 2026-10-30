@@ -21,7 +21,7 @@ export const REGION_ENDPOINT_G_RE = /<ogygia-region\b[^>]*\bendpoint="([^"]+)"/g
 /** The `endpoint` attribute of one region tag — group 1. */
 export const ENDPOINT_ATTR_RE = /endpoint="([^"]*)"/;
 /** A signed region endpoint URL with its expiry — group 1 is `exp`. */
-export const REGION_ENDPOINT_URL_RE = /__ogygia__\?id=[^"&]+&props=[^"&]+&exp=(\d+)/;
+export const REGION_ENDPOINT_URL_RE = /__ogygia__\?id=[^"&]+(?:&r=[^"&]+)?&props=[^"&]+&exp=(\d+)/;
 /** The signature query parameter on a capability URL. */
 export const SIG_PARAM_RE = /[?&]sig=/;
 /** A hoisted region stylesheet link (`<link data-ogygia-region-css>`). */

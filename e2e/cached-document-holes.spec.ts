@@ -34,7 +34,7 @@ async function hole_endpoint(base: string, path: string): Promise<string> {
 function signed_at(endpoint: string, exp: number): string {
 	const u = new URL(endpoint);
 	const p = u.searchParams;
-	const sig = sign(SECRET, region_mac_message(p.get('id') ?? '', String(exp), p.get('props') ?? '', '', p.get('ttl') ?? ''));
+	const sig = sign(SECRET, region_mac_message(p.get('id') ?? '', String(exp), p.get('props') ?? '', '', p.get('ttl') ?? '', p.get('r') ?? ''));
 	p.set('exp', String(exp));
 	p.set('sig', sig);
 	return u.href;
