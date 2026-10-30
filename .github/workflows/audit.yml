@@ -1,9 +1,11 @@
-name: pnpm audit
+name: Dependency audit
 
-# Checks the lockfile against the npm advisory database: weekly, when the lockfile changes, and on
-# demand. `--prod` audits what runs in production — the published package's dependencies and the
-# apps' runtime ones — not dev and build tooling, which never ships to a user. Fails on high or
-# critical advisories. (`pnpm audit` reads only the lockfile: no install needed.)
+# Checks dependencies against the npm advisory database: weekly, when the lockfile changes, and on
+# demand. The report (.github/scripts/audit-report.mjs) is split by how each advisory reaches ogygia:
+# its dependencies, the peers the app installs, and this repository's dev tooling. It goes to the run's
+# summary, and onto the PR as a comment (a same-repository PR: a fork's token cannot comment). The job
+# fails only when ogygia's own dependency range cannot reach a fixed version of a high or critical
+# advisory.
 
 on:
   schedule:
@@ -16,15 +18,18 @@ on:
   pull_request:
     paths:
       - pnpm-lock.yaml
+      - .github/workflows/audit.yml
+      - .github/scripts/audit-report.mjs
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -34,5 +39,23 @@ jobs:
         with:
           node-version: 22
 
-      - name: Audit production dependencies against npm advisories
-        run: pnpm audit --prod --audit-level=high
+      # the dependency tree the report classifies by (`pnpm list`); no build, no install scripts
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Audit
+        id: audit
+        run: |
+          set +e
+          node .github/scripts/audit-report.mjs > audit-report.md
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat audit-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment on the PR
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment ${{ github.event.pull_request.number }} --body-file audit-report.md --edit-last --create-if-none
+
+      - name: Fail on an advisory a fresh install of ogygia would get
+        if: steps.audit.outputs.code != '0'
+        run: exit 1
