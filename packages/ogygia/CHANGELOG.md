@@ -8,6 +8,20 @@ changeset, written by the release: do not edit by hand.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.9.0
+
+### Minor Changes
+
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - Raised minimums to the versions ogygia is tested on: `svelte` ^5.56.8, `playwright` and `@playwright/test` ^1.62.0 (for `ogygia/testing`), and the `magic-string` dependency ^1.4.5.
+
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - SvelteKit 3 support, alongside SvelteKit 2: builds no longer fail on `refreshAll` ([#37](https://github.com/PuruVJ/ogygia/issues/37)), islands on csr=true pages get Kit's page, the `$page` store no longer uses the removed `$app/stores`, custom-type remote arguments encode on csr=false pages, and a remote form in an island on a csr=true page no longer reloads the page.
+
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - The `vite` peer is `^8.2.4`: Vite 8, from the first version past its published advisories. SvelteKit 2 and SvelteKit 3 both run on it.
+
+### Patch Changes
+
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - `devalue` is required at `^5.9.3`, the first version with the fixes for its published advisories.
+
 ## 0.8.8 - 2026-10-30
 
 ### Fixed
