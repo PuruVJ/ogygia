@@ -104,6 +104,9 @@ test('a router navigation away and back: every restored host has its sheet, and 
 	page.on('request', (r) => r.resourceType() === 'document' && documents.push(r.url()));
 	await page.locator('[data-lab-away]').click();
 	await expect(page).toHaveURL(/\/plain$/);
+	// the address moves before the page arrives: go back only once /plain is on screen (a back while
+	// it loads cancels the trip — router-race.spec — and the way back would restore nothing)
+	await expect(page.locator('h1')).toContainText('Plain page');
 	await page.goBack();
 	await expect(page).toHaveURL(/\/restore-lab$/);
 	await expect(page.locator('[data-hole-count]')).toBeVisible();
