@@ -8,6 +8,12 @@ changeset, written by the release: do not edit by hand.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.8.9
+
+### Patch Changes
+
+- [#54](https://github.com/PuruVJ/ogygia/pull/54) [`7c6fce7`](https://github.com/PuruVJ/ogygia/commit/7c6fce7bc4f31974b162414843cb5e2775518ac7) Thanks [@PuruVJ](https://github.com/PuruVJ)! - Going back while a router navigation is still loading cancels it cleanly, and the profiler's checklist no longer crashes on two fixes with the same title.
+
 ## 0.8.8 - 2026-10-30
 
 ### Fixed
