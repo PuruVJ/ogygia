@@ -28,7 +28,8 @@ jobs:
         uses: changesets/action@v2
         with:
           version-script: pnpm ci:version
-          publish-script: pnpm ci:release
-          commit-message: 'chore: update versions'
-          pr-title: 'chore: update versions'
+          # main is the 0.8.x line: `latest` belongs to `next` (0.9), so main publishes under `0.8`
+          publish-script: pnpm ci:release --tag 0.8
+          commit-message: 'chore: update versions (main)'
+          pr-title: 'chore: update versions (main)'
           create-github-releases: true
