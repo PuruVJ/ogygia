@@ -14,18 +14,15 @@ import {
 } from '../kit.js';
 
 /**
- * `virtual:ogygia/secret` — SERVER only: the signing key. CLIENT build: empty string (never mint in
- * the browser). Runtime prefers `OGYGIA_SECRET` when the host sets it; otherwise the per-build key
- * baked here (same freeze → all instances of this deploy agree). `secretStable` records whether
- * the key survives redeploys (env-provided vs per-build random) — prerender warns when minting
- * ~forever capabilities a redeploy would orphan.
+ * `virtual:ogygia/secret` — SERVER only: the per-build random key material and whether the BUILD
+ * saw an `OGYGIA_SECRET` (its region ids are salted from it). CLIENT build: empty (never mint in the
+ * browser). Which key signs is decided at first use, not here (server/signing-key.ts): the runtime's
+ * `OGYGIA_SECRET` when the host sets it — read then, so an env a host fills after module eval still
+ * counts — else this build's key.
  */
-export function secret_module(ssr: boolean, build_secret: string): string {
-	if (!ssr) return `export const secret = '';\nexport const secretStable = false;`;
-	return (
-		`export const secret = process.env.OGYGIA_SECRET || ${JSON.stringify(build_secret)};\n` +
-		`export const secretStable = !!process.env.OGYGIA_SECRET;`
-	);
+export function secret_module(ssr: boolean, build_secret: string, build_had_secret: boolean): string {
+	if (!ssr) return `export const buildKey = '';\nexport const buildHadSecret = false;`;
+	return `export const buildKey = ${JSON.stringify(build_secret)};\nexport const buildHadSecret = ${build_had_secret};`;
 }
 
 /**

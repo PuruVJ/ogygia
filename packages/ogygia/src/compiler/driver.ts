@@ -1197,7 +1197,8 @@ export class Compiler {
 			});
 		}
 		if (id === RESOLVED(V_SECRET)) {
-			return secret_module(ssr, ctx.build_secret);
+			// (ids are salted only from a build-time OGYGIA_SECRET: a salt means the build had one)
+			return secret_module(ssr, ctx.build_secret, ctx.id_salt !== '');
 		}
 		if (id === RESOLVED(V_SIGN)) {
 			return sign_module(ssr, ctx.hmac_module);

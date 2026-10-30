@@ -18,6 +18,7 @@
  * hides.
  */
 import { hole_copy_of } from './hash.js';
+import type { RegionRefusal } from './region-endpoint-url.js';
 import { tool_made } from '../tool-fetches.js';
 import { paint_blocker } from './render-blocking.js';
 import { critical_outcome, type CriticalOutcome } from './load-scheduler.js';
@@ -285,10 +286,10 @@ export function beacon_warning(w: { code: string; message: string; file?: string
 export interface HoleFailed {
 	/** the hole's island id (its endpoint's `?id=`): the report's hole rows name it */
 	id: string;
-	reason: 'redirected' | 'document' | 'error';
+	reason: RegionRefusal | 'error';
 	/** what answered instead, as a path (a refused answer) */
 	final_path?: string;
-	/** the error's first line (a failed request) */
+	/** the error's first line (a failed request), or the server's reason (a refused capability) */
 	message?: string;
 	attempts: number;
 	t: number;

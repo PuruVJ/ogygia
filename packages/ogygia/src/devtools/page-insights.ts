@@ -10,6 +10,7 @@
  * none (the lab page's decoys hold that line).
  */
 import { without_comments as strip_comments, without_runtime_marks } from '../runtime/beacon.js';
+import type { RegionRefusal } from '../runtime/region-endpoint-url.js';
 import { hazard_fix, hazard_words, type IslandHazard } from '../profiler/hydration-hazards.js';
 
 /** markup as a visitor's eyes compare it: no comments (Svelte's re-anchored block markers), no
@@ -341,7 +342,7 @@ export interface HoleFailure {
 	fp?: string;
 	name: string;
 	endpoint?: string;
-	reason: 'redirected' | 'document' | 'error';
+	reason: RegionRefusal | 'error';
 	final_url?: string;
 	message?: string;
 	attempts: number;
@@ -2062,6 +2063,22 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				return u;
 			}
 		};
+		if (h.reason === 'forbidden') {
+			const why = h.message ?? 'no reason given';
+			const split = why.startsWith('foreign-key');
+			findings.push({
+				code: 'hole-failed',
+				severity: 'error',
+				message: `${h.name} never got its answer: the islands endpoint refused its capability (403: ${why}), and the fallback stands.`,
+				fix: split
+					? 'The page and its islands endpoint came from different deployments, each signing with its own key: route the islands endpoint to the deployment that served the page, and give every deployment the same OGYGIA_SECRET at runtime.'
+					: why === 'unknown-id'
+						? 'The page names a hole the answering deployment does not have: the page came from another build (a cache kept it across a deploy, or another backend served it).'
+						: `Open ${h.endpoint ?? 'the hole’s endpoint'} (signed for this page): its x-ogygia-deny header says why the server refused it.`,
+				fps: h.fp ? [h.fp] : []
+			});
+			continue;
+		}
 		const refused = h.reason !== 'error';
 		findings.push({
 			code: 'hole-failed',

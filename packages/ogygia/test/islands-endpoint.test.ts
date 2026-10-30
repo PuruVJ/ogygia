@@ -4,7 +4,7 @@
 // proxy forwarding only the app's own prefixes, and without one).
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-vi.mock('virtual:ogygia/secret', () => ({ secret: 'test-secret', secretStable: true }));
+vi.mock('virtual:ogygia/secret', () => ({ buildKey: 'test-secret', buildHadSecret: false }));
 vi.mock('virtual:ogygia/session-cookie', () => ({ sessionCookie: null }));
 vi.mock('virtual:ogygia/region-ttl', () => ({ regionTtl: 3600 }));
 vi.mock('virtual:ogygia/server-manifest', () => ({ island_url: {} }));
@@ -37,6 +37,10 @@ describe('the islands endpoint', () => {
 		expect(renders_for_a_page(at('/__ogygia__'))).toBe(false);
 		// (under the app's base: matched by suffix, as the handler matches it)
 		expect(renders_for_a_page(at('/sub/_server/api/__ogygia__'))).toBe(true);
+	});
+
+	it('a minted capability names its signing key (`&k=`, outside the MAC)', () => {
+		expect(mintServerIsland('abc123', {})).toMatch(/&sig=[^&]+&k=[^&]+$/);
 	});
 
 	it('a path without its leading slash gets one', () => {

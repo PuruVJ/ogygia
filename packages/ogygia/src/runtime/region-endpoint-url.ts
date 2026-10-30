@@ -75,16 +75,44 @@ export function is_redirected_answer(res: Response): boolean {
 	return res.redirected === true;
 }
 
+/**
+ * Why a hole's answer was refused:
+ * - `redirected` / `document`: something in front of ogygia's handle answered instead;
+ * - `forbidden`: the handle refused the capability (a 403, `deny` says why — `foreign-key` when the
+ *   page and the islands endpoint came from different deployments).
+ */
+export type RegionRefusal = 'redirected' | 'document' | 'forbidden';
+
 /** The error a refused answer throws: the fetch loop does not retry it (the answer is
- *  deterministic — a redirect rule, not a flaky network) and DEV names the culprit. */
+ *  deterministic — a redirect rule, a refused capability, not a flaky network) and DEV names the
+ *  culprit. */
 export class RegionAnswerRefused extends Error {
 	override name = 'RegionAnswerRefused';
 	constructor(
-		public readonly reason: 'redirected' | 'document',
-		public readonly final_url: string
+		public readonly reason: RegionRefusal,
+		public readonly final_url: string,
+		/** `forbidden`: the server's `x-ogygia-deny`, with its key fingerprint and the capability's */
+		public readonly deny?: string
 	) {
-		super(`region answer refused: ${reason} (${final_url})`);
+		super(`region answer refused: ${reason}${deny ? ` (${deny})` : ''} (${final_url})`);
 	}
+}
+
+/**
+ * A 403 from the islands endpoint, as one line: its `x-ogygia-deny` reason, and for `foreign-key`
+ * the two keys (the capability's `&k=`, the answering server's `x-ogygia-key`). '' when the 403
+ * carries no reason (a server before reasons, or a CDN rule in front).
+ */
+export function deny_of(res: Response, endpoint: string): string {
+	const why = res.headers.get('x-ogygia-deny') ?? '';
+	if (why !== 'foreign-key') return why;
+	let minted = '';
+	try {
+		minted = new URL(endpoint, location.href).searchParams.get('k') ?? '';
+	} catch {
+		/* the endpoint parsed to be fetched */
+	}
+	return `foreign-key: signed by ${minted || '?'}, answered by ${res.headers.get('x-ogygia-key') ?? '?'}`;
 }
 
 /** After fetch: reject opaque redirects that left the page origin. */

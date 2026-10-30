@@ -119,9 +119,10 @@ declare module 'virtual:ogygia/devtools-boot-url' {
 	export default url;
 }
 declare module 'virtual:ogygia/secret' {
-	export const secret: string;
-	/** True when the key is env-provided (OGYGIA_SECRET) and thus survives redeploys. */
-	export const secretStable: boolean;
+	/** This build's random key material (server leg; '' on the client). */
+	export const buildKey: string;
+	/** True when the build saw an `OGYGIA_SECRET` (its region ids are salted from it). */
+	export const buildHadSecret: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;

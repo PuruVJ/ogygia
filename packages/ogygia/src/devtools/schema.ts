@@ -342,11 +342,12 @@ export type RuntimeEventInput =
 			name: 'region.server.failed';
 			entry?: string;
 			endpoint?: string;
-			/** refused: redirected / a whole document answered; error: the request failed */
-			reason: 'redirected' | 'document' | 'error';
+			/** refused: redirected / a whole document answered / the capability refused (403); error:
+			 *  the request failed */
+			reason: 'redirected' | 'document' | 'forbidden' | 'error';
 			/** what answered instead (a refused answer) */
 			final_url?: string;
-			/** the error's first line (a failed request) */
+			/** the error's first line (a failed request), or the server's reason (a refused capability) */
 			message?: string;
 			/** this attempt (1-based) */
 			attempt: number;

@@ -28,7 +28,7 @@ import { islands as island_modules, island_url, island_name, island_reads_page_d
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.js';
-import { secret } from 'virtual:ogygia/secret';
+import { signing_key } from './server/signing-key.js';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import { enabled as router_enabled, viewTransitions as router_view_transitions } from 'virtual:ogygia/router-config';
@@ -480,6 +480,39 @@ function region_response(
 		status: init.status,
 		headers: { ...REGION_FRAME_HEADERS, ...init.headers }
 	});
+}
+
+/** Why a region request was refused. `foreign-key`: the capability names another signing key than
+ *  this deployment's — the page and its islands endpoint came from different deployments. */
+type RegionDeny =
+	| 'cross-site'
+	| 'shape'
+	| 'expired'
+	| 'renew-window'
+	| 'renew-session'
+	| 'foreign-key'
+	| 'sig'
+	| 'unknown-id'
+	| 'props'
+	| 'oversize';
+
+/**
+ * Every refused region request: a 403 that says why (`x-ogygia-deny`) and which key answered
+ * (`x-ogygia-key`, the fingerprint a capability carries as `&k=`). Neither is an oracle: every
+ * reason past `sig` is reached only with a capability this key signed (an unknown id still never
+ * tells from a bad MAC, SEC-01), and the fingerprint is an HMAC of a constant.
+ */
+function region_denied(why: RegionDeny) {
+	return region_response('Forbidden', {
+		status: 403,
+		headers: { 'x-ogygia-deny': why, 'x-ogygia-key': signing_key().fp }
+	});
+}
+
+/** A capability minted under another key than this deployment's (its `&k=` fingerprint). One
+ *  without `k` (minted before capabilities named their key) is left to the MAC. */
+function foreign_key(k: string | null): boolean {
+	return k !== null && k !== signing_key().fp;
 }
 
 /**
@@ -1186,9 +1219,7 @@ class OgygiaHandle {
 	 */
 	async render_batch(event: RequestEvent): Promise<Response> {
 		const MAX_BATCH = 32;
-		if (event.request.headers.get('sec-fetch-site') === 'cross-site') {
-			return region_response('Forbidden', { status: 403 });
-		}
+		if (event.request.headers.get('sec-fetch-site') === 'cross-site') return region_denied('cross-site');
 		const ip = client_ip(event);
 		if (!ip) return region_response('Too Many Requests', { status: 429 });
 		if (this.probe_rate.limited(ip) || this.render_rate.limited(ip)) {
@@ -1999,6 +2030,7 @@ class OgygiaHandle {
 		event: RequestEvent
 	): { exp: string; sig: string } | null {
 		if (this.#region_session(event) !== '') return null;
+		const { secret } = signing_key();
 		if (!verify(secret, region_mac_message(id, exp_raw, payload, '', ttl_raw), sig)) return null;
 		const exp = String(capability_expiry(Math.floor(Date.now() / 1000), regionTtl));
 		return { exp, sig: sign(secret, region_mac_message(id, exp, payload, '', ttl_raw)) };
@@ -2015,7 +2047,7 @@ class OgygiaHandle {
 	): boolean {
 		// The capability seals the session cookie (if any) into the signed message.
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
-		return verify(secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig);
+		return verify(signing_key().secret, region_mac_message(id, exp_raw, payload, session, ttl_raw), sig);
 	}
 
 	/** Eval the island module (registers transportable codecs the reviver needs on a cold-start defer),
@@ -2142,9 +2174,7 @@ class OgygiaHandle {
 		// Harvested capability URLs embedded cross-site (img/script/navigation) — reject when the
 		// browser reports cross-site. Missing Sec-Fetch-Site (old clients) is allowed.
 		const fetch_site = event.request.headers.get('sec-fetch-site');
-		if (fetch_site === 'cross-site') {
-			return region_response('Forbidden', { status: 403 });
-		}
+		if (fetch_site === 'cross-site') return region_denied('cross-site');
 
 		const url = event.url;
 		const ip = client_ip(event);
@@ -2158,6 +2188,7 @@ class OgygiaHandle {
 		let exp_raw = url.searchParams.get('exp') ?? '';
 		const ttl_raw = url.searchParams.get('ttl') ?? '';
 		let sig = url.searchParams.get('sig') ?? '';
+		const k = url.searchParams.get('k');
 		// RENEWAL: the runtime retries a hole whose capability EXPIRED (its document outlived it in a
 		// cache) once with `&renew=1`. The answer carries the fresh capability in
 		// `x-ogygia-capability`; the runtime adopts it for the hole's later fetches.
@@ -2166,26 +2197,28 @@ class OgygiaHandle {
 		if (url.searchParams.get('renew') === '1') {
 			// Shape + the renew window (expired, by at most RENEW_WINDOW_SEC) BEFORE HMAC; a URL that
 			// has not expired never renews (nothing to rescue — and no fresh URL for a live one).
-			if (
-				!this.#capability_shape_ok(id, payload, ttl_raw) ||
-				!renewable_expiry(exp_raw, Math.floor(Date.now() / 1000))
-			) {
-				return region_response('Forbidden', { status: 403 });
-			}
+			if (!this.#capability_shape_ok(id, payload, ttl_raw)) return region_denied('shape');
+			if (!renewable_expiry(exp_raw, Math.floor(Date.now() / 1000))) return region_denied('renew-window');
+			if (foreign_key(k)) return region_denied('foreign-key');
 			if (this.probe_rate.limited(ip)) {
 				return region_response('Too Many Requests', { status: 429 });
 			}
 			const fresh = this.#renew_capability(id, payload, exp_raw, ttl_raw, sig, event);
-			if (!fresh) return region_response('Forbidden', { status: 403 });
+			if (!fresh) return region_denied(this.#region_session(event) !== '' ? 'renew-session' : 'sig');
 			exp_raw = fresh.exp;
 			sig = fresh.sig;
-			renewed = `${url.pathname}?id=${encodeURIComponent(id)}&props=${payload}&exp=${exp_raw}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${sig}`;
+			renewed = `${url.pathname}?id=${encodeURIComponent(id)}&props=${payload}&exp=${exp_raw}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${sig}&k=${signing_key().fp}`;
 		} else {
 			// Length/charset/expiry gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the
 			// transform; `ttl` (cache max-age seconds) is signed, but charset-gate it here so a forged
 			// value can't reach the response header before verify rejects it.
-			if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) {
-				return region_response('Forbidden', { status: 403 });
+			if (!this.#capability_shape_ok(id, payload, ttl_raw)) return region_denied('shape');
+			if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) return region_denied('expired');
+			// Minted by another deployment's key: no MAC to check (a string compare, before the probe).
+			if (foreign_key(k)) {
+				if (import.meta.env.DEV)
+					console.warn(`[ogygia] region endpoint 403: id "${id}" was signed by key ${k}, this server signs with ${signing_key().fp}`);
+				return region_denied('foreign-key');
 			}
 
 			// Pre-HMAC probe — forged floods hit this, not render() (HMAC-CPU-DOS).
@@ -2196,11 +2229,9 @@ class OgygiaHandle {
 			// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes
 			// unknown vs known id.
 			if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
-				// Server-side only (the response stays an opaque 403 — SEC-01): a dev seeing every hole
-				// fail deserves the reason in the terminal.
 				if (import.meta.env.DEV)
 					console.warn(`[ogygia] region endpoint 403: bad signature for id "${id}"`);
-				return region_response('Forbidden', { status: 403 });
+				return region_denied('sig');
 			}
 		}
 
@@ -2222,18 +2253,15 @@ class OgygiaHandle {
 				console.warn(
 					`[ogygia] region endpoint 403: id "${id}" is not in the server manifest (${Object.keys(island_modules).length} known)`
 				);
-			return region_response('Forbidden', { status: 403 });
+			return region_denied('unknown-id');
 		}
 		const load = island_modules[id];
-		if (typeof load !== 'function') {
-			return region_response('Forbidden', { status: 403 });
-		}
+		if (typeof load !== 'function') return region_denied('unknown-id');
 
-		// Same status as bad MAC on any decode failure — no decode oracle (STATUS-ORACLE).
+		// Same status as bad MAC on any decode failure (STATUS-ORACLE); the reason is only ever
+		// reached with a capability this key signed.
 		const props = await this.#decode_region_props(payload, load);
-		if (!props) {
-			return region_response('Forbidden', { status: 403 });
-		}
+		if (!props) return region_denied('props');
 
 		const ttl = Number(ttl_raw) || 0;
 		const reads_page_data = hole_reads_page_data(id);
@@ -2274,9 +2302,7 @@ class OgygiaHandle {
 				headers: renewed ? { 'cache-control': 'no-store', ...renew_headers } : undefined
 			});
 
-		if (body.length > MAX_REGION_BODY) {
-			return region_response('Forbidden', { status: 403 });
-		}
+		if (body.length > MAX_REGION_BODY) return region_denied('oversize');
 
 		// Ship the component's stylesheet links ahead of its HTML (the client hoists them to <head>).
 		// Root-absolute URLs inside: the hole's HTML is spliced into a page at any depth — by the
