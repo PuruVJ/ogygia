@@ -261,6 +261,7 @@
 		"rolldown": ">=1.0.0",
 		"sass-embedded": "^1.104.1",
 		"shiki": "^4.4.1",
+		"svelte": "5.56.8",
 		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",
 		"tsdown": "^0.22.14",
