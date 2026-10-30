@@ -88,7 +88,7 @@ import { kit_asset as asset } from './kit-paths.js';
 import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
 import { sign, verify, region_mac_message } from './server/hmac.js';
 import { note_cache_control, renewable_expiry } from './server/shared-cache.js';
-import { regionTtl } from 'virtual:ogygia/region-ttl';
+import { regionTtl, renewWindow } from 'virtual:ogygia/region-ttl';
 import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
 import { REF_WIRE_KEY, ref_reviver } from './ref.js';
@@ -2019,7 +2019,7 @@ class OgygiaHandle {
 		if (!is_region_id(id) || payload.length > MAX_REGION_PROPS_LEN || !is_region_ttl(ttl_raw)) return 'shape';
 		const now = Math.floor(Date.now() / 1000);
 		if (renewal) {
-			if (!renewable_expiry(exp_raw, now)) return 'renew-window';
+			if (!renewable_expiry(exp_raw, now, renewWindow)) return 'renew-window';
 		} else {
 			const exp = Number(exp_raw);
 			if (!Number.isFinite(exp) || exp < now) return 'expired';

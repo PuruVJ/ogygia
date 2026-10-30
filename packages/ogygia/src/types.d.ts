@@ -185,6 +185,8 @@ declare module 'virtual:ogygia/router-config' {
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regions: { ttl } })` (default 3600). */
 	export const regionTtl: number;
+	/** Seconds after expiry an anonymous capability still renews. From `ogygia({ regions: { maxPageAge } })` (default 8 days). */
+	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/route-csr' {
 	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the

@@ -6,7 +6,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 vi.mock('virtual:ogygia/secret', () => ({ buildKey: 'test-secret', buildHadSecret: false }));
 vi.mock('virtual:ogygia/session-cookie', () => ({ sessionCookie: null }));
-vi.mock('virtual:ogygia/region-ttl', () => ({ regionTtl: 3600 }));
+vi.mock('virtual:ogygia/region-ttl', () => ({ regionTtl: 3600, renewWindow: 691200 }));
 vi.mock('virtual:ogygia/server-manifest', () => ({ island_url: {} }));
 vi.mock('virtual:ogygia/sign', () => ({
 	sign: (_k: string, m: string) => 'sig' + m.length,

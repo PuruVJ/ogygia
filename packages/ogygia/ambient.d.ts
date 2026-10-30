@@ -82,6 +82,7 @@ declare module 'virtual:ogygia/session-cookie' {
 }
 declare module 'virtual:ogygia/region-ttl' {
 	export const regionTtl: number;
+	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<

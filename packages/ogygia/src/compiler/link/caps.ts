@@ -87,10 +87,11 @@ export function session_cookie_module(ssr: boolean, session_cookie: string): str
 	return `export const sessionCookie = ${JSON.stringify(session_cookie)};`;
 }
 
-/** `virtual:ogygia/region-ttl` — SERVER only; the capability expiry window for mint. */
-export function region_ttl_module(ssr: boolean, region_ttl: number): string {
-	if (!ssr) return `export const regionTtl = 3600;`;
-	return `export const regionTtl = ${region_ttl};`;
+/** `virtual:ogygia/region-ttl` — SERVER only; the capability expiry window for mint, and how long
+ *  after expiry an anonymous capability still renews. */
+export function region_ttl_module(ssr: boolean, region_ttl: number, renew_window: number): string {
+	if (!ssr) return `export const regionTtl = 3600;\nexport const renewWindow = 0;`;
+	return `export const regionTtl = ${region_ttl};\nexport const renewWindow = ${renew_window};`;
 }
 
 /** `virtual:ogygia/route-csr` — SERVER only: the csr=true route ids, so a csr=false layout's islands

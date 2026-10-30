@@ -1254,7 +1254,7 @@ export class Compiler {
 			return session_cookie_module(ssr, ctx.session_cookie);
 		}
 		if (id === RESOLVED(V_REGION_TTL)) {
-			return region_ttl_module(ssr, ctx.region_ttl);
+			return region_ttl_module(ssr, ctx.region_ttl, ctx.renew_window);
 		}
 		if (id === RESOLVED(V_ROUTE_CSR)) {
 			return route_csr_module(ssr, kit_dirs(ctx.root).routes_dir);

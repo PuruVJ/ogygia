@@ -10,6 +10,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `regions.maxPageAge` sets the oldest a cached copy of a page can be and still renew its holes (default 8 days, the old fixed window), for a CDN that keeps pages longer without saying so in `cache-control`.
+
 ### Fixed
 
 - A refused hole request says why: its 403 carries `x-ogygia-deny` (`foreign-key`, `sig`, `unknown-id`, …) and `x-ogygia-key`, the answering server's key fingerprint, which every hole URL now also carries as `&k=`.
