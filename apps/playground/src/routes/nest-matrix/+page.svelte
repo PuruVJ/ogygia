@@ -1,6 +1,6 @@
 <script lang="ts" module>
 	// A live snippet's body may read the host's MODULE script too: an import and a value.
-	import MxModuleRead from '$lib/mx/MxCtxRead.svelte';
+	import MxModuleRead from '#lib/mx/MxCtxRead.svelte';
 	const MODULE_START = 600;
 </script>
 
@@ -9,23 +9,23 @@
 	// alone). Every inner island must wake on its own and every lake must keep its server HTML.
 	// `?only=<case>` renders one case alone. e2e/nest-matrix.spec.ts.
 	import { page } from '$app/state';
-	import MxTwoSlots from '$lib/mx/MxTwoSlots.svelte' with { wake: 'load' };
-	import MxToggleApp from '$lib/mx/MxToggleApp.svelte' with { wake: 'load' };
-	import SnipApp from '$lib/SnipApp.svelte' with { wake: 'load' };
-	import MxChildrenApp from '$lib/mx/MxChildrenApp.svelte' with { wake: 'load' };
-	import MxLakeHost from '$lib/mx/MxLakeHost.svelte' with { wake: 'load' };
-	import MxHoleHost from '$lib/mx/MxHoleHost.svelte' with { wake: 'load' };
-	import MxRowsApp from '$lib/mx/MxRowsApp.svelte' with { wake: 'load' };
-	import MxPlainForward from '$lib/mx/MxPlainForward.svelte';
-	import SnipLake from '$lib/SnipLake.svelte' with { wake: 'none' };
-	import Bumper from '$lib/Bumper.svelte' with { wake: 'visible' };
-	import MxLakeHole from '$lib/mx/MxLakeHole.svelte' with { render: 'deferred' };
-	import MxLakeHoleWake from '$lib/mx/MxLakeHoleWake.svelte' with { render: 'deferred', wake: 'load' };
-	import MxIslandHole from '$lib/mx/MxIslandHole.svelte' with { render: 'deferred' };
-	import MxIslandHoleWake from '$lib/mx/MxIslandHoleWake.svelte' with { render: 'deferred', wake: 'load' };
-	import MxCtxRead from '$lib/mx/MxCtxRead.svelte';
-	import MxMounted from '$lib/mx/MxMounted.svelte';
-	import MxCtxLake from '$lib/mx/MxCtxLake.svelte' with { wake: 'none' };
+	import MxTwoSlots from '#lib/mx/MxTwoSlots.svelte' with { wake: 'load' };
+	import MxToggleApp from '#lib/mx/MxToggleApp.svelte' with { wake: 'load' };
+	import SnipApp from '#lib/SnipApp.svelte' with { wake: 'load' };
+	import MxChildrenApp from '#lib/mx/MxChildrenApp.svelte' with { wake: 'load' };
+	import MxLakeHost from '#lib/mx/MxLakeHost.svelte' with { wake: 'load' };
+	import MxHoleHost from '#lib/mx/MxHoleHost.svelte' with { wake: 'load' };
+	import MxRowsApp from '#lib/mx/MxRowsApp.svelte' with { wake: 'load' };
+	import MxPlainForward from '#lib/mx/MxPlainForward.svelte';
+	import SnipLake from '#lib/SnipLake.svelte' with { wake: 'none' };
+	import Bumper from '#lib/Bumper.svelte' with { wake: 'visible' };
+	import MxLakeHole from '#lib/mx/MxLakeHole.svelte' with { render: 'deferred' };
+	import MxLakeHoleWake from '#lib/mx/MxLakeHoleWake.svelte' with { render: 'deferred', wake: 'load' };
+	import MxIslandHole from '#lib/mx/MxIslandHole.svelte' with { render: 'deferred' };
+	import MxIslandHoleWake from '#lib/mx/MxIslandHoleWake.svelte' with { render: 'deferred', wake: 'load' };
+	import MxCtxRead from '#lib/mx/MxCtxRead.svelte';
+	import MxMounted from '#lib/mx/MxMounted.svelte';
+	import MxCtxLake from '#lib/mx/MxCtxLake.svelte' with { wake: 'none' };
 	import { setContext } from 'ogygia';
 
 	const only = page.url.searchParams.get('only');

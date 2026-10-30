@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A per-page island whose PROPS differ from Page B → different fingerprint → the server DOES
 	// re-render it on nav (it shows up in the delta), unlike the kept layout island above.
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-lab-page>Page A</h1>

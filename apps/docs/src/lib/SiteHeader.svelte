@@ -4,7 +4,7 @@
 	// Logo hard-left, then a breadcrumb (`ogygia │ Docs` / `ogygia │ Observatory`; just `ogygia` on
 	// home); actions hard-right. On docs it's passed to DocsShell as the `header` snippet (with
 	// `tools={null}`), so the sidebar carries only the nav.
-	import Logo from '$lib/Logo.svelte';
+	import Logo from '#lib/Logo.svelte';
 	import { Search, ThemeToggle } from 'ogygia/content';
 	// Named barrel imports → asRegion turns each into its own island (Search's ⌘K palette lazy-loads on
 	// first intent; ThemeToggle writes data-theme + the og-theme key).

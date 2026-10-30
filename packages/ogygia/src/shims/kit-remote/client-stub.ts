@@ -1,19 +1,19 @@
 // Plan A stub for Kit's client `client.js`, scoped to Kit's remote-functions importers only.
 // Provides exactly what those modules read — WITHOUT pulling Kit's router graph.
 import { parse } from 'devalue';
-import { transport, encoders, decoders } from 'virtual:ogygia/transport';
+import { encoders, decoders } from 'virtual:ogygia/transport';
 import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.js';
 
 export { query_responses, prerender_responses, query_map, live_query_map };
 
-export const app = { hooks: { transport }, decoders, encoders };
+export const app = { decoders, encoders };
 // Navigation is the `$app/navigation` shim's: Kit's real router on a Kit-booted document, the
 // ogygia runtime's handle on one ogygia owns, the browser with neither. A remote form's redirect or
-// refresh inside an island on a Kit page then goes through Kit, never a full reload. (`_goto`'s
-// options — Kit 2's `invalidateAll`, Kit 3's `refreshAll` — pass through to Kit's own `goto`.)
-export { goto, goto as _goto, invalidateAll, refreshAll } from '../app-navigation.js';
+// refresh inside an island on a Kit page then goes through Kit, never a full reload. (`refreshAll`:
+// a remote `form()` calls it after a successful submit.)
+export { goto as _goto, refreshAll } from '../app-navigation.js';
 export function set_nearest_error_page() {}
-/** Kit 3: a remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
+/** A remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
  *  are no client hooks to consult (the island world has no Kit client). */
 export async function handle_error(error: unknown): Promise<{ status?: number; message: string }> {
 	const body = (error as { body?: { message?: string } } | null)?.body;

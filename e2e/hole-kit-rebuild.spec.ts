@@ -1,7 +1,8 @@
 // A DEFERRED HOLE SURVIVES KIT REBUILDING THE DOCUMENT IN THE BROWSER. On a csr=true page Kit
-// hydrates the whole document; when a component throws while it does (a tracking SDK's fetch
-// wrapper threw inside a customer's header), Svelte logs "Failed to hydrate", clears Kit's root
-// and mounts it fresh. Every hole is then rendered by the client leg, which cannot mint a signed
+// hydrates the whole document; when the served markup does not match what Svelte rendered (a
+// post-SSR pass rewrote it — the fixture's hooks.server.ts strips one hydration marker), Svelte
+// drops Kit's root and mounts it fresh. (A component THROWING while Kit hydrates is Kit's error page
+// now, not a rebuild: the mismatch is the path that still rebuilds.) Every hole is then rendered by the client leg, which cannot mint a signed
 // address: `endpoint=""`, and the fallback stood forever — a site header's account holes went
 // dark for signed-in visitors. Now every top-level hole carries its identity (`data-og-hole`, the
 // fingerprint of region id + props, computed the same way on both legs), the handle records each
@@ -16,7 +17,6 @@ const HOLE_TAG_G = /<ogygia-region[^>]*render="defer"[^>]*>/g;
 const HOLE_WITH_ADDRESS_RE = /endpoint="[^"]+"[^>]*data-og-hole="[0-9a-f]{16}"/;
 const HOLE_IDENTITY_G = /data-og-hole="([0-9a-f]{16})"/g;
 const HOLES_RECORD_RE = /<script type="application\/ogygia-holes" data-ogygia-holes>(\{[\s\S]*?\})<\/script>/;
-const FAILED_TO_HYDRATE_RE = /Failed to hydrate/;
 
 test.describe('deferred holes on a csr=true page Kit rebuilds in the browser', () => {
 	test('SSR: every hole carries its address and identity; the tail records the facts outside Kit’s root', async ({ baseURL }) => {
@@ -41,11 +41,21 @@ test.describe('deferred holes on a csr=true page Kit rebuilds in the browser', (
 			if (m.type() === 'error') errs.push('console: ' + m.text());
 			if (m.type() === 'warning') warns.push(m.text());
 		});
+		// the server-rendered Boom, held from before Kit starts: a rebuild replaces it, a hydration keeps it
+		await page.addInitScript(() =>
+			document.addEventListener('DOMContentLoaded', () => {
+				(window as unknown as { __ssr_boom: Element | null }).__ssr_boom = document.querySelector('[data-boom]');
+			})
+		);
 		await page.goto('/hole-kit-rebuild/', { waitUntil: 'networkidle' });
 		await sleep(500);
 
-		check('Kit DID give up hydrating (the regression needs the rebuild)', warns.some((w) => FAILED_TO_HYDRATE_RE.test(w)), warns.slice(0, 2).join('; '));
-		check('the page was rebuilt (Boom survived its second run)', (await page.locator('[data-boom]').count()) === 1);
+		const ssr_boom_gone = await page.evaluate(() => {
+			const el = (window as unknown as { __ssr_boom: Element | null }).__ssr_boom;
+			return !!el && !el.isConnected;
+		});
+		check('Kit DID give up hydrating: the server DOM was replaced (the regression needs the rebuild)', ssr_boom_gone, warns.slice(0, 2).join('; '));
+		check('the page was rebuilt (Boom renders again)', (await page.locator('[data-boom]').count()) === 1);
 		const kbtn = page.locator('[data-kit-btn]');
 		await kbtn.click();
 		check('Kit’s client is alive after the rebuild', (await kbtn.textContent())!.includes('kit:1'));

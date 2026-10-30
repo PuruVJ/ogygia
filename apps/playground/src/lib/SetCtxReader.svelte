@@ -2,7 +2,7 @@
 	// Ordinary island — raw Svelte getContext, no ogygia import. Reads the plain object, the string,
 	// and the LIVE transportable the layout set via the drop-in setContext, across the island split.
 	import { getContext } from 'svelte';
-	import type { SharedCounter } from '$lib/counter-object.svelte.js';
+	import type { SharedCounter } from '#lib/counter-object.svelte.js';
 
 	let { label = 'load' }: { label?: string } = $props();
 

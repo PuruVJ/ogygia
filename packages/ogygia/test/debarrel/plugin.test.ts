@@ -16,10 +16,10 @@ let f: Fixture;
 afterEach(() => f?.dispose());
 
 const app = () => ({
-	'package.json': JSON.stringify({ name: 'app', type: 'module' }),
+	'package.json': JSON.stringify({ name: 'app', type: 'module', imports: { '#lib': './lib/index.ts', '#lib/*': './lib/*' } }),
 	'index.html': `<script type="module" src="/src/main.ts"></script>`,
-	'src/main.ts': `import { Button, util } from '$lib';\nimport { pkgLeaf } from '@scope/ui';\nimport App from './App.svelte';\nconsole.log(Button, util, pkgLeaf, App);`,
-	'src/App.svelte': `<script lang="ts">\n\timport { Card } from '$lib';\n</script>\n<Card />`,
+	'src/main.ts': `import { Button, util } from '#lib';\nimport { pkgLeaf } from '@scope/ui';\nimport App from './App.svelte';\nconsole.log(Button, util, pkgLeaf, App);`,
+	'src/App.svelte': `<script lang="ts">\n\timport { Card } from '#lib';\n</script>\n<Card />`,
 	'lib/Button.svelte': '<button>b</button>',
 	'lib/Card.svelte': '<div>c</div>',
 	'lib/Unused.svelte': '<div>never imported: must not be in the graph</div>',
@@ -35,7 +35,6 @@ const config = (f: Fixture, extra: Parameters<typeof debarrel>[0] = {}) => ({
 	root: f.root,
 	logLevel: 'silent' as const,
 	configFile: false as const,
-	resolve: { alias: { $lib: f.id('lib') } },
 	optimizeDeps: { noDiscovery: true, include: [] },
 	plugins: [
 		debarrel({ packages: ['@scope/ui'], ...(extra === true ? {} : extra) }),
@@ -69,7 +68,7 @@ describe('which ids are importers', () => {
 		// vite-plugin-svelte serves each component's CSS as `Foo.svelte?svelte&type=style&lang.css`:
 		// counted as a Svelte importer, the parser ran over plain CSS and every component with a
 		// <style> was reported "skipped" (3,233 false warnings in one production build)
-		f = fixture({ ...app(), 'src/App.svelte': `<script lang="ts">\n\timport { Card } from '$lib';\n</script>\n<Card />\n<p class="x">x</p>\n<style>\n\t.x { color: red }\n</style>` });
+		f = fixture({ ...app(), 'src/App.svelte': `<script lang="ts">\n\timport { Card } from '#lib';\n</script>\n<Card />\n<p class="x">x</p>\n<style>\n\t.x { color: red }\n</style>` });
 		const cfg = config(f);
 		cfg.plugins = [cfg.plugins[0], svelte({ configFile: false, emitCss: true })];
 		const warns: string[] = [];
@@ -115,7 +114,7 @@ describe('vite build', () => {
 
 	it('a `keep` matcher leaves that barrel alone even though it is pure', async () => {
 		f = fixture(app());
-		const { ids } = await build_ids(config(f, { keep: ['$lib'] }));
+		const { ids } = await build_ids(config(f, { keep: ['#lib'] }));
 		expect(ids).toContain(f.id('lib/index.ts'));
 		expect(ids, 'the package barrel is still bypassed').not.toContain(f.id('node_modules/@scope/ui/index.js'));
 	});
@@ -154,7 +153,7 @@ describe('vite build', () => {
 		for (let i = 0; i < 12; i++) {
 			files[`lib/b${i}/leaf.ts`] = `export const v${i} = ${i};`;
 			files[`lib/b${i}/index.ts`] = `export { v${i} } from './leaf';`;
-			files['src/main.ts'] += `\nimport { v${i} } from '$lib/b${i}';\nconsole.log(v${i});`;
+			files['src/main.ts'] += `\nimport { v${i} } from '#lib/b${i}';\nconsole.log(v${i});`;
 		}
 		f = fixture(files);
 		const lines: string[] = [];
@@ -225,7 +224,7 @@ describe('ogygia({ barrels }) wiring', () => {
 			'lib/Button.svelte': '<button/>',
 			'lib/util.ts': 'export function util() { return "util-marker"; }',
 			'lib/index.ts': `export { default as Button } from './Button.svelte';\nexport { util } from './util';`,
-			'src/app.ts': `import { Button } from '$lib' with { hydrate: 'visible' };\nimport { util } from '$lib';`
+			'src/app.ts': `import { Button } from '#lib' with { hydrate: 'visible' };\nimport { util } from '#lib';`
 		});
 		const plugin = ogygia({ barrels: true, importKeys: { wake: 'hydrate' } })[0];
 		const transform = plugin.transform as (this: unknown, code: string, id: string) => Promise<{ code: string } | null>;
@@ -238,20 +237,20 @@ describe('ogygia({ barrels }) wiring', () => {
 		};
 		(plugin.configResolved as (c: unknown) => void)({ root: f.root, command: 'serve', logger: { info() {} } });
 		const out = await transform.call(ctx, f.read('src/app.ts'), f.id('src/app.ts'));
-		expect(out!.code).toBe(`import { Button } from '$lib' with { hydrate: 'visible' };\nimport { util } from '${f.id('lib/util.ts')}';`);
+		expect(out!.code).toBe(`import { Button } from '#lib' with { hydrate: 'visible' };\nimport { util } from '${f.id('lib/util.ts')}';`);
 	});
 
 	it('a specifier Vite cannot resolve (it THROWS from `this.resolve`) leaves that import alone and the rest still moves', async () => {
 		f = fixture({
 			'lib/util.ts': 'export const util = 1;',
 			'lib/index.ts': `export { util } from './util';`,
-			'src/app.ts': `import { Action } from 'svelte/action';\nimport { util } from '$lib';\nimport { deep } from '@vendor/pkg/src/types';`
+			'src/app.ts': `import { Action } from 'svelte/action';\nimport { util } from '#lib';\nimport { deep } from '@vendor/pkg/src/types';`
 		});
 		const plugin = debarrel(true);
 		const transform = plugin.transform as (this: unknown, code: string, id: string) => Promise<{ code: string } | null>;
 		const ctx = {
 			resolve: async (spec: string, importer: string) => {
-				if (!spec.startsWith('$lib') && !spec.startsWith('.')) throw new Error(`Errored while resolving "${spec}" in \`this.resolve\`.`);
+				if (!spec.startsWith('#lib') && !spec.startsWith('.')) throw new Error(`Errored while resolving "${spec}" in \`this.resolve\`.`);
 				const id = await f.host().resolve(spec, importer);
 				return id ? { id } : null;
 			},

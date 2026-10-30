@@ -40,7 +40,7 @@ A body is a live [region](/docs/regions/held-regions): a same-pass SSR render. I
 ```svelte
 <script>
 	import { Doc } from 'ogygia/content';
-	import * as docs from '$lib/site.remote';
+	import * as docs from '#lib/site.remote';
 
 	const view = (await docs.page(slug))!;   // view.entry.body is a baked ticket
 </script>
@@ -80,7 +80,7 @@ export const { nav, meta, page, search } = remotes(docs, {
 The route still must know which slugs to bake. `docs.entries()` is each leaf in the outline, declared old addresses included. Thus redirect stubs bake too:
 
 ```ts title=src/routes/docs/[...slug]/+page.server.ts
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server';
 
 export const prerender = true;
 export const entries = docs.entries;

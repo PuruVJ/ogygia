@@ -4,7 +4,7 @@
 	// treatment as a direct import: the unrendered marked blocks' CSS stays out, the plain blocks'
 	// CSS stays in.
 	import type { Component } from 'svelte';
-	import { component_for } from '$lib/head-budget/factory';
+	import { component_for } from '#lib/head-budget/factory.ts';
 
 	const Chosen = component_for('a') as Component<Record<string, unknown>>;
 	const Plain = component_for('plain') as Component<Record<string, unknown>>;

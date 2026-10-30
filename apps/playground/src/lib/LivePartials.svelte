@@ -2,7 +2,7 @@
 	// Island host for live partials. It never imports LiveStat / StatBadge — it renders whatever the
 	// live query streams. `.current` holds the latest tick; `<Region>` swaps/morphs/keep-alives it.
 	import { Region } from 'ogygia';
-	import { liveStat, liveBadge } from '$lib/live-partials.remote';
+	import { liveStat, liveBadge } from '#lib/live-partials.remote.ts';
 
 	const stat = liveStat();
 	const badge = liveBadge();

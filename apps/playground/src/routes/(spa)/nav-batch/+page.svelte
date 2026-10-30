@@ -2,7 +2,7 @@
 	// ROUTE WEAVING target: four DISTINCT deferred regions, each with a staggered server delay. On SPA
 	// navigation they are pulled in ONE batch stream (no per-region GET waterfall) — and because the
 	// delays differ, you can watch them fill out of declaration order as each frame settles.
-	import Slow from '$lib/SlowGreeting.svelte' with { render: 'deferred' };
+	import Slow from '#lib/SlowGreeting.svelte' with { render: 'deferred' };
 </script>
 
 <h1 data-static-shell>Route weaving</h1>

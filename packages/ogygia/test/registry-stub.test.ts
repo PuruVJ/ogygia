@@ -40,18 +40,18 @@ describe('export_names', () => {
 describe('imported_names', () => {
 	const HOST = `
 <script lang="ts">
-	import { blocks, factory as make } from '$lib/registry';
-	import def from '$lib/registry';
-	import * as ns from '$lib/other';
-	import { unrelated } from '$lib/other';
-	import type { T } from '$lib/registry';
+	import { blocks, factory as make } from '#lib/registry';
+	import def from '#lib/registry';
+	import * as ns from '#lib/other';
+	import { unrelated } from '#lib/other';
+	import type { T } from '#lib/registry';
 </script>`;
 	test('named (with alias → exported name) + default, only for the given spec', () => {
-		expect([...imported_names(HOST, '$lib/registry')].sort()).toEqual(
+		expect([...imported_names(HOST, '#lib/registry')].sort()).toEqual(
 			['T', 'blocks', 'default', 'factory'].sort()
 		);
-		expect([...imported_names(HOST, '$lib/other')]).toEqual(['unrelated']);
-		expect(imported_names(HOST, '$lib/none').size).toBe(0);
+		expect([...imported_names(HOST, '#lib/other')]).toEqual(['unrelated']);
+		expect(imported_names(HOST, '#lib/none').size).toBe(0);
 	});
 });
 

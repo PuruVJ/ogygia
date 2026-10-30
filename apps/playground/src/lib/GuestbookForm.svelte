@@ -2,7 +2,7 @@
 	// Remote `form()` INSIDE an island — Kit's own client form runtime (reused via ogygia).
 	// Enhanced submit (no reload), schema field issues, and pending state all work; with no JS
 	// the form posts to the remote endpoint and post-redirect-gets back.
-	import { signGuestbook } from '$lib/guestbook.remote';
+	import { signGuestbook } from '#lib/guestbook.remote.ts';
 </script>
 
 <form {...signGuestbook} data-remote-form>

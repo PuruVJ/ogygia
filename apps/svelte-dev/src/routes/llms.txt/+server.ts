@@ -1,4 +1,4 @@
-import { docs } from '$lib/site.server';
+import { docs } from '#lib/site.server.ts';
 
 // llms.txt index (llmstxt.org) over the whole docs corpus — ogygia emits it from the nav tree.
 export const prerender = true;

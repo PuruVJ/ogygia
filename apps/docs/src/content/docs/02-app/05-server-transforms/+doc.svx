@@ -14,7 +14,7 @@ Some apps run one more pass over the HTML after the render: a web-component serv
 ```ts
 // src/hooks.server.ts
 import * as ogygia from 'ogygia/server';
-import { renderComponents } from '$lib/server/components';
+import { renderComponents } from '#lib/server/components';
 
 export const handle = ogygia.handle({
   transform: async (html, { kind, csr, event }) => renderComponents(html, { fragment: kind === 'region' })

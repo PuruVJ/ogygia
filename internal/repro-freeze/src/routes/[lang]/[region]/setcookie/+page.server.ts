@@ -1,4 +1,4 @@
-import { count_render } from '$lib/server/state.js';
+import { count_render } from '#lib/server/state.js';
 
 /** Never-store guard: the render WRITES a cookie → always per-request. */
 export function load({ url, cookies }) {

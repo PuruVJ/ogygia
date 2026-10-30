@@ -1,5 +1,5 @@
 <script lang="ts">
-	import BigHeader from '$lib/BigHeader.svelte' with { render: 'deferred', stitch: 'edge' };
+	import BigHeader from '#lib/BigHeader.svelte' with { render: 'deferred', stitch: 'edge' };
 	let { data } = $props();
 </script>
 

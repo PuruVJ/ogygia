@@ -3,10 +3,10 @@
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/theme.css';
 	import 'ogygia/content/shell.css';
-	import { cms } from '$lib/cms';
+	import { cms } from '#lib/cms.js';
 	let { children } = $props();
 </script>
 
-<DocsShell {site} base="" title="cms playground">
+<DocsShell site={cms} base="" title="cms playground">
 	{@render children()}
 </DocsShell>

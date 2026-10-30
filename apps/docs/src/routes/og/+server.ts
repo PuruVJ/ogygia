@@ -7,7 +7,7 @@ import { render } from 'svelte/server';
 import satori from 'satori';
 import { html as toSatori } from 'satori-html';
 import { Resvg } from '@resvg/resvg-js';
-import OgCard from '$lib/og/OgCard.svelte';
+import OgCard from '#lib/og/OgCard.svelte';
 
 import NewsreaderNormal from '@fontsource/newsreader/files/newsreader-latin-600-normal.woff';
 import NewsreaderItalic from '@fontsource/newsreader/files/newsreader-latin-600-italic.woff';

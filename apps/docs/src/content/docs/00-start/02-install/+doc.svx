@@ -7,7 +7,7 @@ related:
   - app/spa-router
 ---
 
-ogygia installs into an applicable SvelteKit app. First, add the parts: the package, the Vite plugin, and the server handle. Then adopt it one route at a time. All other routes stay normal Kit pages.
+ogygia installs into an applicable SvelteKit app. It supports what SvelteKit 3 and Svelte 5 support: SvelteKit 3, Svelte 5 and Vite 8. First, add the parts: the package, the Vite plugin, and the server handle. Then adopt it one route at a time. All other routes stay normal Kit pages.
 
 ## Setup
 
@@ -100,8 +100,11 @@ For `.svx` / `.md` [content collections](/docs/content/collections), add the opt
 pnpm add -D mdsvex shiki
 ```
 
+Kit takes its config in `vite.config.ts`, as the argument of `sveltekit()`. Put `extensions` and `preprocess` there. Call `ogygia({ content })` first, because `ogygia.extensions()` and `ogygia.preprocess()` read its markdown config:
+
 ```ts title=vite.config.ts
 import { sveltekit } from '@sveltejs/kit/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
 import { defineConfig } from 'vite';
 
@@ -110,21 +113,12 @@ export default defineConfig({
     ogygia({
       content: { markdown: {} } // {} = defaults: Shiki + heading ids + collected headings
     }),
-    sveltekit()
+    sveltekit({
+      extensions: ogygia.extensions(), // includes .svelte, adds .svx / .md
+      preprocess: [vitePreprocess(), ...ogygia.preprocess()]
+    })
   ]
 });
-```
-
-Put `extensions` and `preprocess` in **`svelte.config.js`**. Do not put them inline on `sveltekit()`. Kit v2, `svelte-check`, and the Svelte language server read `svelte.config.js`. If you pass them inline, Kit ignores `svelte.config.js`, and `svelte-check` does not see them:
-
-```js title=svelte.config.js
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { ogygia } from 'ogygia/vite';
-
-export default {
-  extensions: ogygia.extensions(), // includes .svelte, adds .svx / .md
-  preprocess: [vitePreprocess(), ...ogygia.preprocess()]
-};
 ```
 
 `mdsvex` and `shiki` stay optional peers. `ogygia.preprocess()` is synchronous. When markdown is off, it does not load mdsvex. mdsvex loads at first use. If mdsvex is absent, you get an error with an install hint. `ogygia.extensions()` adds `.svx` / `.md` only when markdown is on. Set themes and headings under `content: { markdown }`. See [content collections](/docs/content/collections).

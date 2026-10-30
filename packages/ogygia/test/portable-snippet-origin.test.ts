@@ -8,11 +8,18 @@
 // (`hostPath`); the transform now resolves a re-minted MARKED import against that same origin
 // (`HostCtx.originOf`), and every record minted during a re-process stamps that origin as its own
 // `hostPath` — so a snippet nested inside a snippet inherits the real file, never the outer virtual.
-// It only ever bit relative specifiers: `$lib/…` and package specifiers are host-independent, which
-// is why every earlier snippet fixture (all `$lib`) sailed through.
-import { describe, it, expect } from 'vitest';
+// It only ever bit relative specifiers: `#lib/…` and package specifiers are host-independent, which
+// is why every earlier snippet fixture (all `#lib`) sailed through.
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import path from 'node:path';
 import { transformHost } from '../src/compiler/region/transform.js';
+import * as host from '../src/compiler/host.js';
+import * as app_resolve from '../src/compiler/app-resolve.js';
+import { with_app_package } from './_helpers/app-package.js';
+
+let restore = () => {};
+beforeAll(() => (restore = with_app_package(host, app_resolve, ['/app', '/ci'])));
+afterAll(() => restore());
 
 // ── regexes
 /** Any `<something>/virtual:ogygia/<Name>.svelte` — the phantom path the bug used to bake. */
@@ -24,7 +31,6 @@ const INNER_G = /Inner/g;
 
 const base_ctx = {
 	root: '/app',
-	libDir: '/app/src/lib',
 	readFile: () => null,
 	pathModule: path,
 	dev: false,
@@ -189,9 +195,9 @@ describe('portable snippet — a relative marked import inside the snippet resol
 });
 
 describe('portable snippet — what already worked keeps working, and identity is stable', () => {
-	it('`$lib/…` and package specifiers inside the snippet are untouched (host-independent)', () => {
+	it('`#lib/…` and package specifiers inside the snippet are untouched (host-independent)', () => {
 		const host = `<script>
-	import Inner from '$lib/Inner.svelte' with { wake: 'load' };
+	import Inner from '#lib/Inner.svelte' with { wake: 'load' };
 	import Pkg from 'some-pkg/Widget.svelte' with { wake: 'idle' };
 	import Shell from './Shell.svelte';
 </script>
@@ -204,7 +210,7 @@ describe('portable snippet — what already worked keeps working, and identity i
 		expect(entry).toBeTruthy();
 		const second = reprocess(entry, origin_map(first?.islands ?? []));
 		const paths = component_paths(second);
-		expect(paths).toContain(REAL_INNER); // $lib → libDir join
+		expect(paths).toContain(REAL_INNER); // #lib → the package.json imports target
 		expect(paths).toContain('some-pkg/Widget.svelte'); // package spec → verbatim
 	});
 
@@ -238,13 +244,11 @@ describe('portable snippet — what already worked keeps working, and identity i
 		const a = transformHost(PLAIN_SITE_PARENT, '/app/src/lib/holes/Hole.svelte', {
 			...base_ctx,
 			root: '/app',
-			libDir: '/app/src/lib',
 			ssr: true
 		}) as Result;
 		const b = transformHost(PLAIN_SITE_PARENT, '/ci/src/lib/holes/Hole.svelte', {
 			...base_ctx,
 			root: '/ci',
-			libDir: '/ci/src/lib',
 			ssr: true
 		}) as Result;
 		expect(portable_entries(a)[0]?.id).toBeTruthy();

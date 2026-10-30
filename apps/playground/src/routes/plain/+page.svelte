@@ -2,7 +2,7 @@
 	// The SPA router is global, so navigation here is still client-side. This page opts OUT of view
 	// transitions with `<meta name="ogygia-router" content="plain">` — the per-page escape hatch. The
 	// handle presence-checks the meta, so this page's tag wins over the global default.
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
 </script>
 
 <svelte:head>

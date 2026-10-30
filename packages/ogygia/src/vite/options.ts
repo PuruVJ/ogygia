@@ -84,7 +84,7 @@ export interface RegionsOptions {
 	};
 	/**
 	 * Named strategy bundles. Reference one from an import:
-	 * `import Chart from '$lib/Chart.svelte' with { preset: 'chart' };`
+	 * `import Chart from '#lib/Chart.svelte' with { preset: 'chart' };`
 	 */
 	presets?: Record<string, OgygiaPreset>;
 	/**
@@ -245,7 +245,7 @@ export interface OgygiaOptions {
 	freeze?: boolean | { ttl?: number; default?: boolean };
 
 	/**
-	 * Barrel imports become leaf imports at transform time — `import { Button } from '$lib'` (an
+	 * Barrel imports become leaf imports at transform time — `import { Button } from '#lib'` (an
 	 * `index.ts` that re-exports forty files) becomes `import Button from '…/Button.svelte'`, so the
 	 * module graph (dev) and the chunk graph (build) hold only the leaves a file uses.
 	 *
@@ -257,6 +257,17 @@ export interface OgygiaOptions {
 	 * The same plugin is `debarrel()` from `'ogygia/vite'` for any Vite app.
 	 */
 	barrels?: boolean | DebarrelOptions;
+
+	/**
+	 * Bridges for code written against what Kit no longer has. Each key is opt-in and temporary.
+	 *
+	 * - `appStores: true` — `$app/stores` (removed in Kit 3) keeps working inside islands for an app
+	 *   that shims it: islands get ogygia's `$page` / `$navigating` stores over the island page, the
+	 *   server render roots carry Kit's old `__svelte__` stores context, and seed shaping reads `$page`
+	 *   usage (`$page.data.x`, `get(page)`, `page.subscribe(…)`, `derived(page, …)`) to decide which
+	 *   `page.data` keys an island's seed ships. Off: only `$app/state` is Kit's page, as in Kit 3.
+	 */
+	legacy?: { appStores?: boolean };
 
 	/**
 	 * @internal Recreate this plugin instance inside the standalone client build.

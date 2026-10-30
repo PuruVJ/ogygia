@@ -13,6 +13,8 @@ export interface PageSnapshot {
 	form: unknown;
 	error: { message: string } | null;
 	state: Record<string, unknown>;
+	/** a shallow navigation's target page — Kit's page only (the island page has no shallow routing) */
+	shallow?: unknown;
 }
 
 const FALLBACK: PageSnapshot = {

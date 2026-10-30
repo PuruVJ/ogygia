@@ -1,7 +1,7 @@
 <script lang="ts">
-	import DemoBlock from '$lib/DemoBlock.svelte';
-	import VisibleLive from '$lib/demos/VisibleLive.svelte';
-	import VisibleFrozen from '$lib/demos/VisibleFrozen.svelte';
+	import DemoBlock from '#lib/DemoBlock.svelte';
+	import VisibleLive from '#lib/demos/VisibleLive.svelte';
+	import VisibleFrozen from '#lib/demos/VisibleFrozen.svelte';
 
 	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>

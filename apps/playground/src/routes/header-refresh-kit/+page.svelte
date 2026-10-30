@@ -3,7 +3,7 @@
 	// query passed STRAIGHT to `of` — a promise — in a csr=true page, refreshed by a command.
 	import { Region } from 'ogygia';
 	import { invalidateAll } from '$app/navigation';
-	import { headerRegion, switchHeaderLocale } from '$lib/headerlab/header.remote';
+	import { headerRegion, switchHeaderLocale } from '#lib/headerlab/header.remote.ts';
 </script>
 
 <Region of={headerRegion()}>

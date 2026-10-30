@@ -91,8 +91,8 @@ describe('key_sources', () => {
 describe('constant_work', () => {
 	it('load lines that read only the module: computed the same on every request', () => {
 		const src = [
-			"import { PRODUCTS } from '$lib/data';",
-			"import { validate, attach, matches, rank } from '$lib/catalog';",
+			"import { PRODUCTS } from '#lib/data';",
+			"import { validate, attach, matches, rank } from '#lib/catalog';",
 			'const cache = new Map();',
 			'const LIMIT = 10;',
 			'export const load = async ({ url }) => {',
@@ -121,7 +121,7 @@ describe('constant_work', () => {
 			"import { randomUUID } from 'node:crypto';",
 			"import { hrtime } from 'process';",
 			"import { getRequestEvent } from '$app/server';",
-			"import { validate, PRODUCTS } from '$lib/data';",
+			"import { validate, PRODUCTS } from '#lib/data';",
 			'export const load = async () => {',
 			'\tconst nonce = randomUUID();',
 			'\tconst t = hrtime();',
@@ -136,7 +136,7 @@ describe('constant_work', () => {
 	it("a helper of the file that reads the disk, a clock or a random, or changes the file's state, answers per call", () => {
 		const src = [
 			"import { readFileSync } from 'node:fs';",
-			"import { PRODUCTS, validate } from '$lib/data';",
+			"import { PRODUCTS, validate } from '#lib/data';",
 			'const seen = new Map();',
 			'let count = 0;',
 			"function readManifest() {\n\treturn readFileSync('m.json', 'utf8').length;\n}",
@@ -164,7 +164,7 @@ describe('constant_work', () => {
 		// the per-call function sits on a continuation line of the import
 		const multi = [
 			"import {\n\trandomUUID\n} from 'node:crypto';",
-			"import { PRODUCTS } from '$lib/data';",
+			"import { PRODUCTS } from '#lib/data';",
 			'function makeId(p) {\n\treturn p.id + randomUUID();\n}',
 			'export const load = async () => {',
 			'\tconst ids = PRODUCTS.map((p) => makeId(p));',
@@ -175,7 +175,7 @@ describe('constant_work', () => {
 		expect(hoist_plan(multi)).toBeNull();
 		// a clock read on the line after the arrow
 		const arrow = [
-			"import { PRODUCTS } from '$lib/data';",
+			"import { PRODUCTS } from '#lib/data';",
 			'const stamp = () =>\n\tDate.now();',
 			'const tag = (p) => ({ ...p, at: stamp() });',
 			'export const load = async () => {',
@@ -198,7 +198,7 @@ describe('constant_work', () => {
 
 	it('a value the load changes afterwards is its own, and so is what it was made from', () => {
 		const src = [
-			"import { DEFAULTS, PRODUCTS, validate, rank } from '$lib/data';",
+			"import { DEFAULTS, PRODUCTS, validate, rank } from '#lib/data';",
 			'export const load = async ({ locals }) => {',
 			'\tconst state = structuredClone(DEFAULTS);',
 			'\tstate.user.name = locals.name;',
@@ -221,7 +221,7 @@ describe('constant_work', () => {
 
 	it('hoist_plan: the costly lines and what they read, placed above the load', () => {
 		const src = [
-			"import { validate, attach, PRODUCTS } from '$lib/data';",
+			"import { validate, attach, PRODUCTS } from '#lib/data';",
 			'const LIMIT = 10;',
 			'export const load = async ({ url }) => {',
 			'\tconst unused = PRODUCTS;',
@@ -246,7 +246,7 @@ describe('constant_work', () => {
 			'\treturn { valid };',
 			'};'
 		];
-		const imp = "import { validate, PRODUCTS } from '$lib/data';";
+		const imp = "import { validate, PRODUCTS } from '#lib/data';";
 		expect(hoist_plan([imp, ...load].join('\n'))).not.toBeNull();
 		// validate() may read RULES: above the load, RULES is not set yet
 		expect(hoist_plan([imp, ...load, 'const RULES = [1];'].join('\n'))).toBeNull();
@@ -258,7 +258,7 @@ describe('constant_work', () => {
 		expect(hoist_plan([imp, 'function valid() {}', ...load].join('\n'))).toBeNull();
 		expect(
 			hoist_plan(
-				["import {\n\tvalidate,\n\tPRODUCTS,\n\tvalid\n} from '$lib/data';", ...load].join('\n')
+				["import {\n\tvalidate,\n\tPRODUCTS,\n\tvalid\n} from '#lib/data';", ...load].join('\n')
 			)
 		).toBeNull();
 		// a `const loading` before the load is not the load
@@ -267,7 +267,7 @@ describe('constant_work', () => {
 
 	it('a statement wrapped over several lines is read whole', () => {
 		const src = [
-			"import { validate, PRODUCTS } from '$lib/data';",
+			"import { validate, PRODUCTS } from '#lib/data';",
 			'export const load = async ({ url }) => {',
 			'\tconst valid = validate(',
 			'\t\tPRODUCTS,',
@@ -294,7 +294,7 @@ describe('constant_work', () => {
 	it('a value written straight into the return counts too; an object key is not a read', () => {
 		const src = [
 			"import { span } from 'ogygia/profiler';",
-			"import { catalog } from '$lib/data';",
+			"import { catalog } from '#lib/data';",
 			'export const load = async ({ url }) => {',
 			'\treturn {',
 			"\t\tcatalog: span('cms.catalog', () => catalog(), (c) => ({ rows: c.products.length })),",

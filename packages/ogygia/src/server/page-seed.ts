@@ -22,6 +22,29 @@ export interface SeedText {
 // island on a real navigation, or awaited + settled for a programmatic fetch. By the time a value
 // reaches PageSeed it is either promise-free or carries DeferRef/SettledRef markers the caller's
 // reducers encode — so this module just serializes, robustly.
+const DROPPED = Symbol('dropped');
+
+/** `value` if it serializes; else, for a plain object when `by_key`, the object of its keys that
+ *  do; else {@link DROPPED}. */
+function serializable_part(value: unknown, stringify_fn: typeof stringify, by_key: boolean): unknown {
+	try {
+		stringify_fn(value);
+		return value;
+	} catch {
+		if (!by_key || !value || typeof value !== 'object' || Array.isArray(value)) return DROPPED;
+		const kept: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(value)) {
+			try {
+				stringify_fn(v);
+				kept[k] = v;
+			} catch {
+				/* drop just this key */
+			}
+		}
+		return kept;
+	}
+}
+
 export class PageSeed {
 	/**
 	 * Public page slice for islands. url/params/route/status are always plain and MUST survive;
@@ -63,15 +86,12 @@ export class PageSeed {
 				raw = stringify_fn(full);
 			} catch {
 				// One non-serializable leaf must not nuke the whole seed: keep base + each of
-				// data/form/error that serializes on its own.
+				// data/form/error that serializes on its own — and of `data`, each top-level key that
+				// does (a load returning a value only the server renders, beside the keys islands read).
 				const safe: Record<string, unknown> = { ...base };
 				for (const key of ['data', 'form', 'error'] as const) {
-					try {
-						stringify_fn(full[key]);
-						safe[key] = full[key];
-					} catch {
-						/* drop just this field */
-					}
+					safe[key] = serializable_part(full[key], stringify_fn, key === 'data');
+					if (safe[key] === DROPPED) delete safe[key];
 				}
 				raw = stringify_fn(safe);
 			}

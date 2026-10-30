@@ -4,10 +4,10 @@
 	// hydrates as its own root, yet the wire-encoded object is revived to the SAME live instance in all
 	// of them — mutate it in the writer and every reader repaints (same heap, not copies).
 	import { Provide } from 'ogygia';
-	import CtxWriter from '$lib/CtxWriter.svelte' with { wake: 'load' };
-	import CtxReader from '$lib/CtxReader.svelte' with { wake: 'load' };
-	import { SharedCounter } from '$lib/counter-object.svelte.js';
-	import { roomCtx } from '$lib/room-context.svelte.js';
+	import CtxWriter from '#lib/CtxWriter.svelte' with { wake: 'load' };
+	import CtxReader from '#lib/CtxReader.svelte' with { wake: 'load' };
+	import { SharedCounter } from '#lib/counter-object.svelte.js';
+	import { roomCtx } from '#lib/room-context.svelte.js';
 
 	const counter = new SharedCounter('lab', 7);
 </script>

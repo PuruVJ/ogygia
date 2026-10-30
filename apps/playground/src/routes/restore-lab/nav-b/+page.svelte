@@ -1,5 +1,5 @@
 <script lang="ts">
-	import NavChrome from '$lib/restorelab/NavChrome.svelte';
+	import NavChrome from '#lib/restorelab/NavChrome.svelte';
 </script>
 
 <NavChrome />

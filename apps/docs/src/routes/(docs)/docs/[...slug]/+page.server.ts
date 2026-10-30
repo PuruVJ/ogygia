@@ -1,5 +1,5 @@
 import type { EntryGenerator } from './$types';
-import { docs } from '$lib/docs.server';
+import { docs } from '#lib/docs.server.ts';
 
 // Each doc page is static HTML with live island holes; csr=false is inherited from the root layout.
 export const prerender = true;

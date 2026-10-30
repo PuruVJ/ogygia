@@ -2,10 +2,10 @@
 	// The section layout: a breadcrumb strip (i18n'd, tracked) around the page, the design
 	// system's CDN runtime (Ionic: Stencil-built web components, the same shape as a corporate
 	// design system) and the island that marks its hydration.
-	import { t } from '$lib/hell/i18n';
-	import { track } from '$lib/hell/track';
-	import Icon from '$lib/hell/ds/Icon.svelte';
-	import DsHydrateMark from '$lib/hell/DsHydrateMark.svelte' with { wake: 'load' };
+	import { t } from '#lib/hell/i18n.ts';
+	import { track } from '#lib/hell/track.ts';
+	import Icon from '#lib/hell/ds/Icon.svelte';
+	import DsHydrateMark from '#lib/hell/DsHydrateMark.svelte' with { wake: 'load' };
 	let { data, children } = $props();
 	track('layout.render', { crumbs: data.crumbs.length, toggles: data.toggles.name });
 </script>

@@ -4,18 +4,18 @@
 	// nested rating island, a spec sheet and a price table), a deferred recommendations hole, a
 	// footer lake — on top of a load that awaits in a row and fetches stock per card. Profile it:
 	// /__profiler → "Profile one page" → /hell.
-	import MegaHeader from '$lib/hell/MegaHeader.svelte' with { wake: 'load' };
-	import CountryPanel from '$lib/hell/CountryPanel.svelte' with { wake: 'none' };
-	import SiteSearch from '$lib/hell/SiteSearch.svelte' with { wake: 'interaction' };
-	import PriceTicker from '$lib/hell/PriceTicker.svelte' with { wake: 'load' };
-	import ProductCard from '$lib/hell/ProductCard.svelte' with { wake: 'visible' };
-	import Recommendations from '$lib/hell/Recommendations.svelte' with { render: 'deferred' };
+	import MegaHeader from '#lib/hell/MegaHeader.svelte' with { wake: 'load' };
+	import CountryPanel from '#lib/hell/CountryPanel.svelte' with { wake: 'none' };
+	import SiteSearch from '#lib/hell/SiteSearch.svelte' with { wake: 'interaction' };
+	import PriceTicker from '#lib/hell/PriceTicker.svelte' with { wake: 'load' };
+	import ProductCard from '#lib/hell/ProductCard.svelte' with { wake: 'visible' };
+	import Recommendations from '#lib/hell/Recommendations.svelte' with { render: 'deferred' };
 	// the same hole with a render cache: the profiler's hole economics (hits vs misses)
-	import CachedRecommendations from '$lib/hell/Recommendations.svelte' with { preset: 'cachedRecs' };
-	import FooterLake from '$lib/hell/FooterLake.svelte' with { wake: 'none' };
-	import FacetBar from '$lib/hell/FacetBar.svelte';
-	import { header_config, countries, footer_columns } from '$lib/hell/data';
-	import { walkTree } from '$lib/hell/util';
+	import CachedRecommendations from '#lib/hell/Recommendations.svelte' with { preset: 'cachedRecs' };
+	import FooterLake from '#lib/hell/FooterLake.svelte' with { wake: 'none' };
+	import FacetBar from '#lib/hell/FacetBar.svelte';
+	import { header_config, countries, footer_columns } from '#lib/hell/data.ts';
+	import { walkTree } from '#lib/hell/util.ts';
 
 	let { data } = $props();
 	const config = header_config();

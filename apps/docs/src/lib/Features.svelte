@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { FEATURES } from '$lib/features';
-	import PermalinkHeading from '$lib/PermalinkHeading.svelte';
+	import { FEATURES } from '#lib/features.ts';
+	import PermalinkHeading from '#lib/PermalinkHeading.svelte';
 </script>
 
 <section class="features" aria-labelledby="features">

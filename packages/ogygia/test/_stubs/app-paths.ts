@@ -1,10 +1,8 @@
-// Test stub for Kit's `$app/paths` — Kit 2's (the repo's own Kit): an asset path or a pathname takes
-// its leading slash, and one without is refused, as Kit 2's `resolve` refuses it.
-const refuse_relative = (p: string) => {
-	if (!p.startsWith('/')) throw new Error(`Cannot use \`resolve(...)\` with a non-absolute pathname or route ID (got "${p}").`);
-	return p;
+// Test stub for Kit's `$app/paths`, for an app at the root: `asset()` takes a path without its leading
+// slash (Kit warns on one with it) and answers it root-absolute; `resolve()` reads a leading slash as a
+// route id and none as a pathname.
+export const asset = (file: string) => {
+	if (file.startsWith('/')) throw new Error(`asset() takes a path without its leading slash (got "${file}").`);
+	return '/' + file;
 };
-export const asset = refuse_relative;
-export const base = '';
-export const assets = '';
-export const resolve = refuse_relative;
+export const resolve = (id: string) => (id.startsWith('/') ? id : '/' + id);

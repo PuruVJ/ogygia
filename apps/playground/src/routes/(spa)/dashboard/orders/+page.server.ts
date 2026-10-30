@@ -1,4 +1,4 @@
-import { listOrders } from '$lib/server/db.js';
+import { listOrders } from '#lib/server/db.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ url }) => {

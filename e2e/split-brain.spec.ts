@@ -1,16 +1,16 @@
-// REGRESSION: the production `$app/stores` split brain, reproduced end to end.
+// REGRESSION: the production `$app/*` split brain, reproduced end to end.
 //
 // The shape (seen live on a deployed ogygia 0.5.1 app): a Header island whose FIRST import is
-// `$app/stores`, siblings importing the same module LATER in the list, and the same file also
-// imported PLAIN by a csr=true page. Under lazy island-graph membership, build order decided
-// which `$app/*` each copy got: the header bundled Kit's REAL client store — whose page store
-// never populates under csr=false — while its siblings got the shim. `$page.url.pathname` threw
+// the page module (`$app/stores` then, `$app/state` now), siblings importing the same module LATER
+// in the list, and the same file also imported PLAIN by a csr=true page. Under lazy island-graph
+// membership, build order decided which `$app/*` each copy got: the header bundled Kit's REAL
+// client page — never populated under csr=false — while its siblings got the shim. `page.url.pathname` threw
 // "Cannot read properties of undefined (reading 'pathname')" during hydrate and the header was
 // torn out of the page. The EAGER transitive island-graph walk makes membership deterministic
 // (the `?og-region` module-id fork was tried and reverted — it broke scoped-CSS emission), so a
 // shared module is shimmed EVERYWHERE, including the csr=true copy.
 //
-// SECOND LEG (the bcms all-products outage): a shared component reading `$page.data.x.method()`
+// SECOND LEG (the bcms all-products outage): a shared component reading `page.data.x.method()`
 // in onMount. The shimmed csr=true copy read `data: {}` (the island seed never runs on a
 // Kit-booted document), threw inside Kit's synchronous hydrate flush, and killed every mount
 // after it. The KIT-WORLD PAGE THREAD fixes this: Kit's generated client entry publishes its
@@ -24,10 +24,12 @@ import { FAVICON_RE } from './fixtures/re.ts';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const CHUNK_IMPORT_RE = /import[^'"]*['"](\.[^'"]+\.js)['"]/g;
+/** Kit's real client page is constructed with `url = new URL('a:')` (runtime/app/state/client) */
+const KIT_CLIENT_PAGE_RE = /URL\(["']a:["']\)/;
 const text = async (page: import('@playwright/test').Page, sel: string) =>
 	((await page.locator(sel).textContent()) ?? '').trim();
 
-test.describe('$app/stores split brain', () => {
+test.describe('$app/* split brain', () => {
 	test('csr=false: the header hydrates with the shim and reads its own page', async ({ page }) => {
 		const errs: string[] = [];
 		page.on('pageerror', (e) => errs.push(e.message));
@@ -45,7 +47,7 @@ test.describe('$app/stores split brain', () => {
 		).toHaveCount(1);
 		expect(
 			await text(page, '[data-split-path]'),
-			"header's own $page.url.pathname via $app/stores (the line that crashed)"
+			"header's own page.url.pathname via $app/state (the line that crashed)"
 		).toBe('/split-brain');
 		expect(
 			await text(page, '[data-split-child-path]'),
@@ -63,11 +65,11 @@ test.describe('$app/stores split brain', () => {
 			await text(page, '[data-shared-url]'),
 			'shared TRANSITIVE dep (also imported by /kit) reads the shim, not the race'
 		).toBe('/split-brain');
-		// PAGE DATA leg (the bcms all-products crash): `$page.data.<field>.method()` in onMount.
+		// PAGE DATA leg (the bcms all-products crash): `page.data.<field>.method()` in onMount.
 		// Island world: the document seed populates the shim, so the load's value comes through.
 		expect(
 			await text(page, '[data-shared-data]'),
-			"shared component's $page.data via the seeded shim"
+			"shared component's page.data via the seeded shim"
 		).toBe('islandworld');
 		expect(
 			errs.filter((e) => !FAVICON_RE.test(e)),
@@ -80,9 +82,7 @@ test.describe('$app/stores split brain', () => {
 	}) => {
 		// No module-id fork: the header is ONE (shimmed) module. On csr=true the kit-world page thread
 		// hands the shim Kit's REAL reactive `page` (url, params, and — the bcms crash — DATA), so the
-		// shared copy reads Kit's truth. `$app/state` reads stay live through the thread's getters;
-		// `$app/stores` subscribers get a fresh snapshot per notification (island set_page events),
-		// which on a Kit page means effectively per-subscription — the documented static-read trade-off.
+		// shared copy reads Kit's truth; `$app/state` reads stay live through the thread's getters.
 		const errs: string[] = [];
 		page.on('pageerror', (e) => errs.push(e.message));
 		await page.goto('/kit', { waitUntil: 'networkidle' });
@@ -92,7 +92,7 @@ test.describe('$app/stores split brain', () => {
 			'the same header reads its own pathname (/kit)'
 		).toBe('/kit');
 		// PAGE DATA leg (the bcms all-products crash, verbatim shape): the shared component calls a
-		// method on `$page.data.<field>` in onMount. The island shim starts with `data: {}` and is
+		// method on `page.data.<field>` in onMount. The island shim starts with `data: {}` and is
 		// NEVER seeded on a Kit-booted document — without the kit-page bridge the read returns
 		// undefined, the method call throws inside Kit's synchronous hydrate flush, and every
 		// component mount after it dies. The bridge hands the shim Kit's REAL page data.
@@ -106,10 +106,10 @@ test.describe('$app/stores split brain', () => {
 		).toEqual([]);
 	});
 
-	test("build output: no copy of the header bundles Kit's real (empty-under-csr=false) client store", () => {
-		// `$app/stores`'s real client reads `getContext('__svelte__')`; on a csr=false island that store
-		// is never populated → `page.url` undefined → the crash. With the eager walk the header (and its
-		// transitive deps) are shimmed in EVERY chunk that carries them, so none bundle `__svelte__`.
+	test("build output: no copy of the header bundles Kit's real (empty-under-csr=false) client page", () => {
+		// Kit's real client page is never populated on a csr=false island → `page.url` is `a:` → the
+		// crash. With the eager walk the header (and its transitive deps) are shimmed in EVERY chunk that
+		// carries them, so none bundle Kit's client page.
 		const clientDir = path.join(repo, 'apps/playground/.svelte-kit/output/client/_app/immutable');
 		expect(fs.existsSync(clientDir), `client output exists at ${clientDir}`).toBe(true);
 		const MARKER = 'og-e2e-split-brain';
@@ -134,11 +134,8 @@ test.describe('$app/stores split brain', () => {
 				const dep = path.resolve(path.dirname(chunkPath), m[1]);
 				if (fs.existsSync(dep)) closure.push(fs.readFileSync(dep, 'utf-8'));
 			}
-			if (closure.some((code) => code.includes('__svelte__'))) leaks.push(rel);
+			if (closure.some((code) => KIT_CLIENT_PAGE_RE.test(code))) leaks.push(rel);
 		}
-		expect(
-			leaks,
-			"no copy of the header bundles Kit's real $app/stores (shimmed everywhere)"
-		).toEqual([]);
+		expect(leaks, "no copy of the header bundles Kit's real client page (shimmed everywhere)").toEqual([]);
 	});
 });

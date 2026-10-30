@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { nav } from '$lib/docs.remote';
-	import { topicFromPath } from '$lib/topics';
+	import { nav } from '#lib/docs.remote.ts';
+	import { topicFromPath } from '#lib/topics.ts';
 	import type { NavGroup, NavLeaf } from 'ogygia/content';
 
 	// KEPT island across body-swaps (scroll survives) → everything derives from the URL. The topic

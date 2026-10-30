@@ -146,12 +146,12 @@ ogygia({ router: false })                      // opt out of the SPA router enti
 
 ### `barrels`
 
-Barrel imports become leaf imports at transform time. A barrel is a module that only re-exports other modules (`index.ts`, a package's `components.ts`, an `export * from` fan-out). Importing one name from it drags the whole graph in: in dev every module behind it is transformed and served, in build the chunk graph follows the import graph before tree-shaking, and a package that is not `sideEffects: false` keeps all of it. With `barrels` on, `import { Button } from '$lib/components'` is rewritten to `import Button from '…/components/Button.svelte'` before Svelte or ogygia see the file, so the graph holds only the leaves the file uses.
+Barrel imports become leaf imports at transform time. A barrel is a module that only re-exports other modules (`index.ts`, a package's `components.ts`, an `export * from` fan-out). Importing one name from it drags the whole graph in: in dev every module behind it is transformed and served, in build the chunk graph follows the import graph before tree-shaking, and a package that is not `sideEffects: false` keeps all of it. With `barrels` on, `import { Button } from '#lib/components'` is rewritten to `import Button from '…/components/Button.svelte'` before Svelte or ogygia see the file, so the graph holds only the leaves the file uses.
 
 ```ts
 ogygia({ barrels: true })                                  // every pure barrel in the project
 ogygia({ barrels: { packages: ['@acme/ui'] } })            // dependencies too, by name / glob / regex
-ogygia({ barrels: { force: ['$lib/registry'] } })          // an impure barrel: leaves moved, `import 'barrel'` kept
+ogygia({ barrels: { force: ['#lib/registry'] } })          // an impure barrel: leaves moved, `import 'barrel'` kept
 ogygia({ barrels: { keep: [/stores\/index\.ts$/] } })      // never touch these
 ```
 

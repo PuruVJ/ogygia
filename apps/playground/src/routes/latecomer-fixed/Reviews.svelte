@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getReviews } from '$lib/latecomer.remote';
+	import { getReviews } from '#lib/latecomer.remote.ts';
 	const reviews = await getReviews();
 	let open = $state(false);
 </script>

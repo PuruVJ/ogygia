@@ -9,7 +9,7 @@
  * THE FIX, from existing primitives — no user file is modified, no `r.*` call-site analysis:
  *  1. CLOSURE (build data): a router MODULE is any module importing `'ogygia/router'` — wherever it
  *     lives, however many routers it defines, whatever function wraps them. Its transitive `.svelte`
- *     imports (followed through relative/$lib `.ts`/`.js` barrels — build-data resolution, not import
+ *     imports (followed through relative/#lib `.ts`/`.js` barrels — build-data resolution, not import
  *     rewriting) are the components any of its routers could render: the ROOTS.
  *  2. EMISSION (client leg, vite/index.ts): each root's whole transitive CSS (its own scoped styles +
  *     every child component's + plain `.css` imports, in cascade order) is compiled and emitted as ONE
@@ -25,18 +25,13 @@
  *     `claim_region_css` (deduped with held-region links), and hands `document()` the head tags.
  */
 import { fs, path } from '../host.js';
-import {
-	collectFoucCssReachable,
-	compileFoucScopedCss,
-	resolveFoucImportSpec
-} from '../fouc-css.js';
+import { collectFoucCssReachable, compileFoucScopedCss } from '../fouc-css.js';
+import { app_file } from '../app-resolve.js';
 
 const PATH_SEP = /[/\\]/;
 const SVELTE_RE = /\.svelte$/;
 const BARREL_RE = /\.(?:ts|js|mjs)$/;
 const CSS_EXT_RE = /\.css$/;
-/** Candidate suffixes for an extensionless spec, Vite resolution order-ish. */
-const RESOLVE_SUFFIXES = ['', '.ts', '.js', '.mjs', '.svelte', '/index.ts', '/index.js'];
 
 export const ROUTER_CSS_KEY_PREFIX = 'rcss:';
 
@@ -49,14 +44,13 @@ export function router_css_key(root: string, abs: string): string {
 
 /**
  * The `.svelte` ROOTS of the app's router modules: BFS from every module that imports
- * `'ogygia/router'`, through relative/`$lib` `.ts`/`.js` re-exports (barrels — resolved as build
+ * `'ogygia/router'`, through relative/`#lib` `.ts`/`.js` re-exports (barrels — resolved as build
  * DATA, imports untouched), collecting `.svelte` leaves. `module_specs` is the prescan's import-spec
  * record (module abs path → its import/export-from specifiers). Sorted for determinism across legs.
  */
 export function router_css_roots(
 	router_modules: ReadonlySet<string>,
 	module_specs: ReadonlyMap<string, readonly string[]>,
-	lib_dir: string,
 	exists: (p: string) => boolean = (p) => {
 		try {
 			return fs.statSync(p).isFile();
@@ -68,15 +62,9 @@ export function router_css_roots(
 	const roots = new Set<string>();
 	const visited = new Set<string>();
 
-	const resolve_spec = (spec: string, importer: string): string | null => {
-		const base = resolveFoucImportSpec(spec.split('?')[0], importer, lib_dir);
-		if (!base) return null; // package import — out of scope (library components use the app-side mark rules)
-		for (const suffix of RESOLVE_SUFFIXES) {
-			const candidate = path.normalize(base + suffix);
-			if (exists(candidate)) return candidate;
-		}
-		return null;
-	};
+	// (a package import resolves to null — out of scope: library components use the app-side mark rules)
+	const resolve_spec = (spec: string, importer: string): string | null =>
+		app_file(spec.split('?')[0], importer, { is_file: exists });
 
 	const visit = (mod: string) => {
 		if (visited.has(mod)) return;
@@ -101,7 +89,6 @@ export async function router_css_module(
 	roots: readonly string[],
 	opts: {
 		root: string;
-		lib_dir: string;
 		is_dev: boolean;
 		read_file: (p: string) => string | null;
 		/** the bundler's resolver, for the dev tree-CSS walk (compiler/fouc-css.ts) */
@@ -126,7 +113,6 @@ export async function router_css_module(
 			for (const e of await collectFoucCssReachable(abs, {
 				resolve: opts.resolve,
 				root: opts.root,
-				libDir: opts.lib_dir,
 				readFile: opts.read_file
 			})) {
 				const e_rel = posix(path.relative(opts.root, e.abs));
@@ -163,9 +149,8 @@ export async function router_css_module(
 	// PROD: hrefs resolve lazily from the island-deps handoff (written by the client leg, read at
 	// render — Kit is SSR-first, so resolution must not happen at module init). Kit's base is applied
 	// HERE, in generated code: the handoff stores base-less hrefs. It is the configured base itself,
-	// root-absolute — Kit's build define (`$app/paths` no longer exports `base` on Kit 3, and its
-	// `base` was page-relative during SSR on Kit 2: a router navigation carries these links into a
-	// page at another depth). The raw handoff href is the claim key, so a held region linking the
+	// root-absolute — Kit's build define (`$app/paths` has no `base` export, and its `resolve()` is
+	// page-relative during SSR: a router navigation carries these links into a page at another depth). The raw handoff href is the claim key, so a held region linking the
 	// same sheet dedupes against us.
 	lines.push(`import { islandCss } from 'virtual:ogygia/island-deps';`);
 	lines.push(`const base = typeof __SVELTEKIT_PATHS_BASE__ !== 'undefined' ? __SVELTEKIT_PATHS_BASE__ : '';`);

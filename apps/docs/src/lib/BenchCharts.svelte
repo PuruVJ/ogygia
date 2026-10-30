@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Renders the committed ogygiaBench results (bench/results/latest.json, copied here) as charts.
 	// Headline: client JS vs post length — islands stay flat, whole-page hydration climbs.
-	import data from '$lib/bench/results.json';
+	import data from '#lib/bench/results.json';
 
 	type Row = {
 		post: string;

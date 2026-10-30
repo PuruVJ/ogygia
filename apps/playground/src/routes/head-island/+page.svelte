@@ -1,6 +1,6 @@
 <script lang="ts">
 	// HEAD OWNERSHIP (e2e/head-ownership.spec.ts), page A: a woken island owns head content.
-	import HeadIsland from '$lib/HeadIsland.svelte' with { wake: 'load' };
+	import HeadIsland from '#lib/HeadIsland.svelte' with { wake: 'load' };
 </script>
 
 <svelte:head>

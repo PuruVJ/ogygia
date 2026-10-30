@@ -1,5 +1,5 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 	// The site's OWN ogygia nav, queried over the wire (bodies stripped). Section labels + hrefs are
 	// ogygia-derived (the same `NavTree` the sidebar renders), so the homepage is on ogygia too.
 	//
@@ -8,7 +8,7 @@
 	// `await_invalid` and NO island-level boundary can restore async from below that point. `{#await}`
 	// is its own async block that Svelte handles in sync render mode, so it works AND keeps this
 	// widget's loading state LOCAL (a boundary with `pending` up the tree stays the author's choice).
-	import { nav } from '$lib/docs.remote';
+	import { nav } from '#lib/docs.remote.ts';
 
 	// TOP-LEVEL AWAIT, deliberately: this island lives inside a `demo` snippet handed to ShowcaseCard,
 	// so it renders through the portable-snippet path — whose server leg now threads the outer async

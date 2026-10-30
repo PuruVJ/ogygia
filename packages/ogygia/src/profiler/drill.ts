@@ -575,7 +575,7 @@ function build_tree(
 		// a gap names what was pending across it, with the line that queued it (`Immediate from
 		// routes/x/+page.server.ts:52`): that line is its place, and its load file its lane
 		const file = s.kind === 'gap' ? pending_place(s.pending) : s.file;
-		// the load file on its stack (a `$lib` helper a load ran), else the file it sits in
+		// the load file on its stack (a `#lib` helper a load ran), else the file it sits in
 		const lane = in_load ? (s.lane ?? lane_of([file])) : undefined;
 		const key = s.kind[0] + '\0' + label + '\0' + (lane ?? '');
 		const g =

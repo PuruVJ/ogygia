@@ -23,7 +23,7 @@ The regions you already met. They render on the server for the first paint, then
 
 ```svelte
 <script>
-	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
+	import Counter from '#lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
 <Counter />

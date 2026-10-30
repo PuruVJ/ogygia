@@ -1,5 +1,5 @@
 <script lang="ts">
-	import SingleFlight from '$lib/SingleFlight.svelte' with { wake: 'load' };
+	import SingleFlight from '#lib/SingleFlight.svelte' with { wake: 'load' };
 </script>
 
 <h1 data-static-shell>Single-flight</h1>

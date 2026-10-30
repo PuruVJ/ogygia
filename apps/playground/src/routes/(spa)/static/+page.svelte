@@ -3,8 +3,8 @@
 	// - The counter is a normal island: SSR'd into the static file, hydrates from it.
 	// - The greeting is a server island: the static file carries only its ogygiaFallback + a signed
 	//   endpoint reference; at runtime the browser fetches the personalized HTML and swaps it in.
-	import Counter from '$lib/Counter.svelte' with { wake: 'load' };
-	import Greeting from '$lib/Greeting.svelte' with { render: 'deferred' };
+	import Counter from '#lib/Counter.svelte' with { wake: 'load' };
+	import Greeting from '#lib/Greeting.svelte' with { render: 'deferred' };
 </script>
 
 <h1 data-static-shell>Prerendered page</h1>

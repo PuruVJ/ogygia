@@ -1,4 +1,4 @@
-import { currentUser, statusCounts } from '$lib/server/db.js';
+import { currentUser, statusCounts } from '#lib/server/db.js';
 import type { LayoutServerLoad } from './$types';
 
 // Rich, non-trivial load data: a Date, a Map, nested objects — all devalue-serialized

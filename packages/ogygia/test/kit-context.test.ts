@@ -6,7 +6,7 @@
  * fresh root that must carry the same key — or `page.data` during SSR crashes with "reading 'page'
  * of undefined" (the bug this pins: found on a router-served MFE page).
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import {
@@ -68,11 +68,27 @@ describe('kit_render_context', () => {
 	});
 });
 
-describe('kit_render_context — Kit’s `__svelte__` stores context ($app/stores)', () => {
-	// The deprecated-but-everywhere `$page` store: Kit's server `$app/stores` destructures
-	// `getContext('__svelte__')` into `{ page, navigating, updated }`. Found on a real header whose
-	// every component reads `$page`: inside a server island it died with "Region render failed".
-	it('carries page/navigating/updated stores that answer synchronously', () => {
+describe('kit_render_context — the `__svelte__` stores context ($app/stores, `legacy.appStores`)', () => {
+	// The old `$page` store: a shimmed server `$app/stores` destructures `getContext('__svelte__')`
+	// into `{ page, navigating, updated }`. Found on a real header whose every component reads
+	// `$page`: inside a server island it died with "Region render failed". Kit 3 removed the store,
+	// so the context rides only for an app that keeps it (`ogygia({ legacy: { appStores: true } })`).
+	const with_legacy = async () => {
+		vi.stubGlobal('__OGYGIA_LEGACY_APP_STORES__', true);
+		vi.resetModules();
+		return (await import('../src/server/kit-context.js')).kit_render_context;
+	};
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.resetModules();
+	});
+
+	it('off by default: only Kit’s `__request__` context', () => {
+		expect(kit_render_context(page_of({})).has(KIT_STORES_CONTEXT)).toBe(false);
+	});
+
+	it('carries page/navigating/updated stores that answer synchronously', async () => {
+		const kit_render_context = await with_legacy();
 		const page = page_of({ status: 404, data: { site: 'ACME' } });
 		const stores = kit_render_context(page).get(KIT_STORES_CONTEXT) as {
 			page: { subscribe(fn: (v: KitPage) => void): () => void };
@@ -93,7 +109,8 @@ describe('kit_render_context — Kit’s `__svelte__` stores context ($app/store
 		return expect(stores.updated.check()).resolves.toBe(false);
 	});
 
-	it('the same page object feeds both contexts', () => {
+	it('the same page object feeds both contexts', async () => {
+		const kit_render_context = await with_legacy();
 		const page = page_of({ url: new URL('http://localhost/x/') });
 		const ctx = kit_render_context(page);
 		const via_state = (ctx.get(KIT_REQUEST_CONTEXT) as { page: KitPage }).page;

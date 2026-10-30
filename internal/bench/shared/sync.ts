@@ -17,8 +17,8 @@ if (!kind || !['ogygia', 'sveltekit', 'mochi', 'astro'].includes(kind)) {
 const root = join(BENCH, 'frameworks', kind);
 
 const scripts = {
-	ogygia: "import Counter from '$lib/Counter.svelte' with { wake: 'load' };",
-	sveltekit: "import Counter from '$lib/Counter.svelte';",
+	ogygia: "import Counter from '#lib/Counter.svelte' with { wake: 'load' };",
+	sveltekit: "import Counter from '#lib/Counter.svelte';",
 	mochi: "import Counter from '../Counter.svelte';",
 	astro: "import Counter from '../../components/Counter.svelte';"
 };

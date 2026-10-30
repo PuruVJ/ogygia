@@ -1,9 +1,9 @@
 <script lang="ts">
 	// PLAIN TWIN of ../+page.svelte: identical markup, no marked imports → no islands, no props
 	// sidecars, no seed, no region fingerprints. Whatever ../ costs above this route is ogygia.
-	import BenchBlock from '$lib/bench/BenchBlock.svelte';
-	import BenchHeader from '$lib/bench/BenchHeader.svelte';
-	import { header_config } from '$lib/bench/data';
+	import BenchBlock from '#lib/bench/BenchBlock.svelte';
+	import BenchHeader from '#lib/bench/BenchHeader.svelte';
+	import { header_config } from '#lib/bench/data.ts';
 	let { data } = $props();
 </script>
 

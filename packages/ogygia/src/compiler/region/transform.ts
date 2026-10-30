@@ -2,6 +2,7 @@ import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import { createHash } from '../host.js';
 import { foucCssVirtualId } from '../fouc-css.js';
+import { app_spec_path } from '../app-resolve.js';
 import { collectCaptureInfo } from '../free-vars.js';
 import { parse_module } from '../parse/oxc.js';
 import { strategyKey, regionIdentity, regionId } from './identity.js';
@@ -34,7 +35,6 @@ function warn_unparsed(id: string, err: unknown): void {
 /** The resolved context the adapter/driver threads into a host transform. */
 interface HostCtx {
 	root: string;
-	libDir: string;
 	readFile: (abs: string) => string | null;
 	pathModule: typeof NodePath;
 	dev: boolean;
@@ -68,7 +68,6 @@ interface HostCtx {
 /** The resolved context threaded into a `.ts`/`.js` region mint (`transformTsRegions`). */
 interface TsRegionCtx {
 	root: string;
-	libDir: string;
 	pathModule: typeof NodePath;
 	dev: boolean;
 	virtualPathFor: (hostId: string, iid: string) => string;
@@ -828,7 +827,8 @@ function assert_swr_lake_crossable(node: SvelteNode, err: (node: SvelteNode, msg
 /**
  * Resolve a marked import specifier to the component path baked into generated modules.
  *
- * `$lib` + relative specifiers resolve to ABSOLUTE file paths (build machinery — emitFile prescan,
+ * Relative and `#…` subpath specifiers (Kit's `#lib`, any package.json `"imports"` entry) resolve to
+ * ABSOLUTE file paths (build machinery — emitFile prescan,
  * HMR invalidation, fouc-css — keys on them). Anything else (a PACKAGE specifier like
  * `'ogygia/content/tab-group'`, or a Vite alias) is kept VERBATIM: every generated virtual module
  * (island entry, wrapper, child synth, region binding) re-emits the original specifier and Vite's
@@ -848,14 +848,8 @@ function resolve_component_path(spec: string, host_id: string, ctx: HostCtx) {
 				`it has no directory. Its real origin must be threaded (HostCtx.originOf); this is an ogygia bug, please report it.`
 		);
 	}
-	if (spec === '$lib' || spec.startsWith('$lib/')) {
-		return ctx.pathModule.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
-	}
-	if (spec.startsWith('.')) {
-		return ctx.pathModule.resolve(ctx.pathModule.dirname(host_id), spec);
-	}
 	// Package / alias / absolute specifier — re-emitted verbatim into generated modules.
-	return spec;
+	return app_spec_path(spec, host_id) ?? spec;
 }
 
 /**
@@ -870,7 +864,6 @@ function resolve_component_path(spec: string, host_id: string, ctx: HostCtx) {
  * @param id absolute host path
  * @param ctx
  * @param ctx.root project root (abs)
- * @param ctx.libDir abs path for `$lib`
  * @param ctx.readFile sync file reader for filename-strategy lookup
  * @param ctx.virtualPathFor virtual module id for an island
  * @returns
@@ -1875,7 +1868,7 @@ class FileCompilation {
 			const componentPath = resolve_component_path(entry_spec, origin, ctx);
 			if (!componentPath) {
 				throw new Error(
-					`[ogygia] ${rel_host}: region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
+					`[ogygia] ${rel_host}: region import '${local}' needs a module specifier (#lib/…, relative, or a package specifier like 'pkg/component').`
 				);
 			}
 			// asRegion regions ride in as a synthetic default-import; `exportName` is the barrel export the
@@ -2530,7 +2523,7 @@ function parse_import_attrs(raw: string) {
  *
  * @param source
  * @param id absolute module path
- * @param ctx same context fields as {@link transformHost} (root, libDir, dev, devUrlFor,
+ * @param ctx same context fields as {@link transformHost} (root, dev, devUrlFor,
  *   virtualPathFor, importKeys, idSalt, pathModule)
  * @returns
  */
@@ -2626,18 +2619,12 @@ class TsRegionCompilation {
 	}
 
 	/**
-	 * Same policy as transformHost's resolve_component_path: $lib/relative → absolute file path,
-	 * anything else (package specifier / alias) is kept verbatim and re-emitted for Vite to resolve.
+	 * Same policy as transformHost's resolve_component_path: relative / `#…` subpath → absolute file
+	 * path, anything else (package specifier / alias) is kept verbatim and re-emitted for Vite to resolve.
 	 */
 	#resolve_spec(spec: string) {
-		const ctx = this.#ctx;
-		const path = this.#path;
 		if (typeof spec !== 'string' || !spec.trim()) return null;
-		if (spec === '$lib' || spec.startsWith('$lib/')) {
-			return path.join(ctx.libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
-		}
-		if (spec.startsWith('.')) return path.resolve(path.dirname(this.#id), spec);
-		return spec;
+		return app_spec_path(spec, this.#id) ?? spec;
 	}
 
 	/** Region-identity path — filesystem components key on their posix path; a package spec is its
@@ -2853,7 +2840,7 @@ class TsRegionCompilation {
 			const componentPath = this.#resolve_spec(spec);
 			if (!componentPath) {
 				throw new Error(
-					`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier ($lib/…, relative, or a package specifier like 'pkg/component').`
+					`[ogygia] ${rel_host}: held-region import '${local}' needs a module specifier (#lib/…, relative, or a package specifier like 'pkg/component').`
 				);
 			}
 			const marker = has_render

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// query (server state) + command (mutation) + query.refresh(), all client-side.
-	import { getCount, bump } from '$lib/greetings.remote';
+	import { getCount, bump } from '#lib/greetings.remote.ts';
 	const count = getCount();
 	let busy = $state(false);
 	async function inc() {

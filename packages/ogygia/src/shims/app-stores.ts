@@ -54,7 +54,12 @@ export const page = {
 export const navigating = {
 	subscribe(run: (value: unknown) => void) {
 		const kit = kit_bridge();
-		if (kit) return toStore(() => kit.navigating.current ?? null).subscribe(run);
+		// the store's value: the navigation in flight (Kit's `navigating` fields), or null
+		if (kit)
+			return toStore(() => {
+				const n = kit.navigating;
+				return n.to ? { from: n.from, to: n.to, type: n.type, willUnload: n.willUnload, delta: n.delta, complete: n.complete } : null;
+			}).subscribe(run);
 		run(null);
 		return () => {};
 	}

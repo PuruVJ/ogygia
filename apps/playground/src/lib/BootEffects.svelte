@@ -5,7 +5,7 @@
 	// setStores / onMount / beforeNavigate.
 	import { onMount } from 'svelte';
 	import { beforeNavigate } from '$app/navigation';
-	import { bootStore } from '$lib/boot-store.svelte.js';
+	import { bootStore } from '#lib/boot-store.svelte.js';
 
 	let { data } = $props();
 

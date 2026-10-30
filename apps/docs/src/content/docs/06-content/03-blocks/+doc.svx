@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-  import BlocksDemo from '$lib/demos/BlocksDemo.svelte';
+  import BlocksDemo from '#lib/demos/BlocksDemo.svelte';
 </script>
 
 A **block** page is data: a tree of nodes. Each node names a component `type` plus its `props`. `blocks()` renders that tree the same way that `markdown()` renders `.svx`: as an entry `body` that you drop in with `<Region of={entry.body} />`. It is the render half of a visual page builder. Your CMS (or a JSON file) owns the layout. ogygia owns the rendering.
@@ -63,7 +63,7 @@ Nodes nest through `children`: a `Grid` holds `Feature`s, a section holds a grid
 
 ```ts
 import { content, blocks } from 'ogygia/content';
-import { registry } from '$lib/blocks';
+import { registry } from '#lib/blocks';
 
 export const pages = content({
   loader: blocks(import.meta.glob('./pages/*.json'), registry)
@@ -74,7 +74,7 @@ Then render it exactly like a markdown body: the same `get()`, the same `<Region
 
 ```ts title=+page.ts
 // universal, NOT +page.server.ts
-import { pages } from '$lib/blocks/pages';
+import { pages } from '#lib/blocks/pages';
 export const load = async () => ({ page: await pages.get('landing') });
 ```
 

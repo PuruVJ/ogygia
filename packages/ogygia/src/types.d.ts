@@ -217,8 +217,8 @@ declare const __OGYGIA_DEVTOOLS_LAZY__: boolean;
 /** the profiler's browser half ships (the profiler or devtools is configured); otherwise every
  *  `if (BEACON) …` folds out and runtime/beacon.ts leaves the bundle */
 declare const __OGYGIA_BEACON__: boolean;
-/** The app's Kit major version (2, 3), or null when the plugin found none (kit-paths.ts). */
-declare const __OGYGIA_KIT_MAJOR__: number | null;
+/** `ogygia({ legacy: { appStores: true } })`: render roots carry the `$app/stores` context */
+declare const __OGYGIA_LEGACY_APP_STORES__: boolean;
 
 declare module 'virtual:ogygia/router-css' {
 	// Generated component→CSS registrations for the server router — side-effect only.
@@ -248,18 +248,14 @@ declare module 'virtual:ogygia/transportables' {
 	export const wire_all: boolean;
 }
 declare module 'virtual:ogygia/kit-wire' {
-	export function stringify_remote_arg(value: unknown, transport: unknown): string;
-	export function stringify_command_arg(value: unknown, transport: unknown): Promise<string>;
 	export function create_remote_key(id: string, payload: string): string;
 }
 
 declare module '$app/paths' {
-	export const base: string;
-	export const assets: string;
 	export function resolve(id: string, params?: Record<string, string>): string;
 	export function asset(file: string): string;
 }
-// `$app/env` (Kit ≥ 2.70 and Kit 3; Kit 3 deprecates `$app/environment`)
+// `$app/env` (Kit's replacement for `$app/environment`)
 declare module '$app/env' {
 	export const building: boolean;
 	export const browser: boolean;
@@ -274,30 +270,11 @@ declare module '$app/server' {
 	};
 }
 
-// Minimal ambient for the one Kit type the library imports (`Handle` in hooks.ts). The lib does
-// not depend on @sveltejs/kit; the CONSUMER's real Kit types back the shipped `dist/hooks.d.ts`
-// (`@sveltejs/kit` is externalised by tsdown). Not shipped (types.d.ts is excluded from tsdown).
-declare module '@sveltejs/kit' {
-	export interface RequestEvent {
-		url: URL;
-		[key: string]: unknown;
-	}
-	export interface ResolveOptions {
-		transformPageChunk?: (input: {
-			html: string;
-			done: boolean;
-		}) => string | undefined | Promise<string | undefined>;
-	}
-	export type Handle = (input: {
-		event: RequestEvent;
-		resolve: (event: RequestEvent, opts?: ResolveOptions) => Response | Promise<Response>;
-	}) => Response | Promise<Response>;
-}
-
-// Kit's INTERNAL server request store (deep import, same posture as the vite deep-imports).
-// `get_request_store()` returns the live per-request state; `state.remote` is the map Kit
-// populates during a csr=false render but only serializes when csr===true (see hooks.ts). Only
-// the fields the flicker-seeding path reads are declared. Not shipped (types.d.ts excluded).
+// Kit's INTERNAL server request store (deep import, same posture as the vite deep-imports; Kit
+// publishes no types for it). `get_request_store()` returns the live per-request state;
+// `state.remote` is the map Kit populates during a csr=false render but only serializes when
+// csr===true (see hooks.ts). Only the fields the flicker-seeding path reads are declared. Not
+// shipped (types.d.ts excluded).
 declare module '@sveltejs/kit/internal/server' {
 	export interface RemoteInternals {
 		id: string;
@@ -308,11 +285,9 @@ declare module '@sveltejs/kit/internal/server' {
 		data: Map<RemoteInternals, Record<string, Promise<unknown>>> | null;
 	}
 	export interface RequestState {
-		transport?: Record<
-			string,
-			{ encode: (v: unknown) => unknown; decode: (v: unknown) => unknown }
-		>;
 		remote: RequestRemoteState;
+		/** inside a remote query, where Kit refuses `event.url` / `params` / `route` */
+		is_in_remote_query?: boolean;
 	}
 	export interface RequestStore {
 		event: unknown;

@@ -11,15 +11,15 @@
 	import '@fontsource/fira-mono/400.css';
 	import '@fontsource/atkinson-hyperlegible/400.css';
 	import '@fontsource/atkinson-hyperlegible/700.css';
-	import '$lib/styles/tokens.css';
-	import '$lib/styles/base.css';
-	import '$lib/styles/content.css';
-	import '$lib/styles/twoslash.css';
+	import '#lib/styles/tokens.css';
+	import '#lib/styles/base.css';
+	import '#lib/styles/content.css';
+	import '#lib/styles/twoslash.css';
 
 	import * as ogygia from 'ogygia';
 	import { preference } from 'ogygia';
 	// Island: the header carries client state now (mobile bottom-bar hide-on-scroll, the drawer).
-	import Header from '$lib/Header.svelte' with { wake: 'load' };
+	import Header from '#lib/Header.svelte' with { wake: 'load' };
 
 	let { children } = $props();
 

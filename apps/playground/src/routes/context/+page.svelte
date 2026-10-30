@@ -3,22 +3,22 @@
 	// islands read it via get() with different hydration strategies, at different depths, alongside a
 	// plain-value context, a defaulted context, a shadowing inner provider, and a transportable prop.
 	import { Provide } from 'ogygia';
-	import CtxWriter from '$lib/CtxWriter.svelte' with { wake: 'load' };
-	import PlainCtxReader from '$lib/PlainCtxReader.svelte' with { wake: 'load' };
-	import CtxReader from '$lib/CtxReader.svelte' with { wake: 'load' };
-	import CtxReaderIdle from '$lib/CtxReader.svelte' with { wake: 'idle' };
-	import CtxReaderVisible from '$lib/CtxReader.svelte' with { wake: 'visible' };
+	import CtxWriter from '#lib/CtxWriter.svelte' with { wake: 'load' };
+	import PlainCtxReader from '#lib/PlainCtxReader.svelte' with { wake: 'load' };
+	import CtxReader from '#lib/CtxReader.svelte' with { wake: 'load' };
+	import CtxReaderIdle from '#lib/CtxReader.svelte' with { wake: 'idle' };
+	import CtxReaderVisible from '#lib/CtxReader.svelte' with { wake: 'visible' };
 	// Deferred CLIENT island: fetched from the endpoint, then hydrated → client get() joins context.
-	import CtxReaderDeferHydrate from '$lib/CtxReader.svelte' with { wake: 'load' };
+	import CtxReaderDeferHydrate from '#lib/CtxReader.svelte' with { wake: 'load' };
 	// Pure SERVER island: rendered in isolation on the endpoint (no page provider) and NOT hydrated →
 	// it can only ever see the context default. Documents the server-island isolation boundary.
-	import CtxReaderServer from '$lib/CtxReader.svelte' with { render: 'deferred' };
-	import CtxNestOuter from '$lib/CtxNestOuter.svelte' with { wake: 'load' };
-	import CtxCoexist from '$lib/CtxCoexist.svelte' with { wake: 'load' };
-	import ThemeReader from '$lib/ThemeReader.svelte' with { wake: 'load' };
-	import OrphanReader from '$lib/OrphanReader.svelte' with { wake: 'load' };
-	import { SharedCounter } from '$lib/counter-object.svelte.js';
-	import { roomCtx, themeCtx } from '$lib/room-context.svelte.js';
+	import CtxReaderServer from '#lib/CtxReader.svelte' with { render: 'deferred' };
+	import CtxNestOuter from '#lib/CtxNestOuter.svelte' with { wake: 'load' };
+	import CtxCoexist from '#lib/CtxCoexist.svelte' with { wake: 'load' };
+	import ThemeReader from '#lib/ThemeReader.svelte' with { wake: 'load' };
+	import OrphanReader from '#lib/OrphanReader.svelte' with { wake: 'load' };
+	import { SharedCounter } from '#lib/counter-object.svelte.js';
+	import { roomCtx, themeCtx } from '#lib/room-context.svelte.js';
 
 	const counter = new SharedCounter('room', 5);
 	const inner = new SharedCounter('inner', 99);

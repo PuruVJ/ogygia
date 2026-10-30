@@ -6,7 +6,7 @@
  */
 export const heroCode = import.meta.og.code(
 	`<script>
-  import Counter from '$lib/Counter.svelte' with {
+  import Counter from '#lib/Counter.svelte' with {
     +++wake: 'load'+++
   };
 </script>
@@ -21,7 +21,7 @@ export const heroCodeHtml = String(heroCode.props.html);
 
 export const loadCode = import.meta.og.code(
 	`<script>
-  import Panel from '$lib/Panel.svelte' with {
+  import Panel from '#lib/Panel.svelte' with {
     +++wake: 'load'+++
   };
 </script>
@@ -32,7 +32,7 @@ export const loadCode = import.meta.og.code(
 
 export const visibleCode = import.meta.og.code(
 	`<script>
-  import Chart from '$lib/Chart.svelte' with {
+  import Chart from '#lib/Chart.svelte' with {
     +++wake: 'visible'+++
   };
 </script>
@@ -44,7 +44,7 @@ export const visibleCode = import.meta.og.code(
 export const lakeCode = import.meta.og.code(
 	`<script>
   // a frozen subtree inside an island: SSR HTML, ships no client JS
-  import Snapshot from '$lib/Snapshot.svelte' with {
+  import Snapshot from '#lib/Snapshot.svelte' with {
     +++wake: 'none'+++
   };
 </script>
@@ -55,7 +55,7 @@ export const lakeCode = import.meta.og.code(
 
 export const serverCode = import.meta.og.code(
 	`<script>
-  import Greeting from '$lib/Greeting.svelte' with {
+  import Greeting from '#lib/Greeting.svelte' with {
     +++render: 'deferred'+++
   };
 </script>
@@ -145,7 +145,7 @@ export const docNav = withRemotes(docs).list({
 export const contentMarkdownCode = import.meta.og.code(
 	`<!-- posts/hello.svx — markdown, with real islands in the prose -->
 <script>
-  import Chart from '$lib/Chart.svelte' with { wake: 'visible' };
+  import Chart from '#lib/Chart.svelte' with { wake: 'visible' };
 </script>
 
 # {frontmatter.title}

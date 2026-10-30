@@ -45,12 +45,32 @@ export const page = {
 		const b = kit_bridge();
 		if (b) return b.page.state ?? {};
 		return page_state.state ?? {};
+	},
+	get shallow() {
+		return kit_bridge()?.page.shallow ?? null;
 	}
 };
 
+// Kit's `navigating`: a navigation in flight (Kit's, on a Kit-booted document), every field null when
+// there is none — the island document has no Kit navigation, so null there.
 export const navigating = {
-	get current() {
-		return kit_bridge()?.navigating.current ?? null;
+	get from() {
+		return kit_bridge()?.navigating.from ?? null;
+	},
+	get to() {
+		return kit_bridge()?.navigating.to ?? null;
+	},
+	get type() {
+		return kit_bridge()?.navigating.type ?? null;
+	},
+	get willUnload() {
+		return kit_bridge()?.navigating.willUnload ?? null;
+	},
+	get delta() {
+		return kit_bridge()?.navigating.delta ?? null;
+	},
+	get complete() {
+		return kit_bridge()?.navigating.complete ?? null;
 	}
 };
 export const updated = {

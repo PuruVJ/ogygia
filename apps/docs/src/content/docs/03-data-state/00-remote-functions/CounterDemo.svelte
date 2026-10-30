@@ -1,7 +1,7 @@
 <script lang="ts">
-	import '$lib/styles/widget.css';
+	import '#lib/styles/widget.css';
 	import { onMount } from 'svelte';
-	import { getCount, bump, reset } from '$lib/demos/counter.remote';
+	import { getCount, bump, reset } from '#lib/demos/counter.remote.ts';
 
 	// This doc page is prerendered, so a query cannot run during its SSR. Read it in the browser only
 	// (onMount) — the island hydrates, then fetches. `.current` stays put while a call is in flight.

@@ -8,6 +8,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Simplify } from './view.js';
 import { json_response, redirect_response } from './respond.js';
+import { observe_read } from '../freeze/observe.js';
 
 /** The visitor's identity — plain claims (`sub`, roles, whatever the app's session carries). */
 export type Visitor = Record<string, unknown> & { sub?: string };
@@ -87,6 +88,8 @@ export function make_ctx(
 				// signature-bound claims from an upstream shell win (they are PROOF, not config)
 				const claims = (request as unknown as Record<symbol, Visitor | undefined>)[CLAIMS];
 				visitor_memo = claims ?? visitor_resolver?.(ctx);
+				// an identity is personalization: a page that reads one is never frozen for everyone
+				observe_read(request, 'visitor', visitor_memo);
 			}
 			return visitor_memo;
 		},

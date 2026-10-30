@@ -1,7 +1,7 @@
 /**
  * Test harness: a throwaway project on disk (real files — the index reads the file system) and a
  * tiny resolver that mirrors what Vite gives the plugin: relative specifiers with extension /
- * index probing, a `$lib` alias, and bare specifiers through a fake `node_modules` with `exports`.
+ * index probing, a `#lib` alias, and bare specifiers through a fake `node_modules` with `exports`.
  */
 import {
 	mkdtempSync,
@@ -101,8 +101,8 @@ export function fixture(files: Record<string, string>): Fixture {
 				}
 			},
 			resolve: async (spec, importer) => {
-				if (spec.startsWith('$lib/')) return resolve_file(path.posix.join(root, 'lib', spec.slice(5)));
-				if (spec === '$lib') return resolve_file(path.posix.join(root, 'lib'));
+				if (spec.startsWith('#lib/')) return resolve_file(path.posix.join(root, 'lib', spec.slice(5)));
+				if (spec === '#lib') return resolve_file(path.posix.join(root, 'lib'));
 				if (spec.startsWith('.')) return resolve_file(path.posix.join(path.posix.dirname(importer), spec));
 				if (spec.startsWith('/')) return resolve_file(spec);
 				if (spec.startsWith('virtual:')) return spec;

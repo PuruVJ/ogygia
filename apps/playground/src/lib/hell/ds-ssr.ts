@@ -9,7 +9,7 @@
 // Written to match the shape it has in production, not to be fast: N renders per page, sequential
 // splices over a 2 MB string, regexes over the whole document. The profiler's `instrument` makes
 // every render a span and `span` names the phases, so the report can say what this pass costs.
-import type { Handle } from '@sveltejs/kit';
+import type { Handle } from '@sveltejs/kit/hooks';
 import { renderToString as ionicRenderToString, type HydrateResults, type SerializeDocumentOptions } from '@ionic/core/hydrate';
 import { instrument, span } from 'ogygia/profiler';
 

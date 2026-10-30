@@ -6,7 +6,7 @@
 	//   - `rawDescriptor` = a `region: 'raw'` held descriptor → rendered through `region()` + `<Region>`.
 	import type { Component } from 'svelte';
 	import { Region, region } from 'ogygia';
-	import { registry } from '$lib/ts-registry';
+	import { registry } from '#lib/ts-registry.ts';
 
 	const Widget = registry[0].component as Component<Record<string, unknown>>;
 	const rawDescriptor = registry[1].component as Component<Record<string, unknown>>;

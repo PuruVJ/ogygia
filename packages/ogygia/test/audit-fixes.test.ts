@@ -11,7 +11,6 @@ const HOST = '/app/src/routes/+page.svelte';
 function makeCtx(overrides: Record<string, unknown> = {}) {
 	return {
 		root: ROOT,
-		libDir: '/app/src/lib',
 		readFile: () => null,
 		pathModule: path,
 		dev: false,

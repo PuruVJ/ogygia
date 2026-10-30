@@ -5,6 +5,7 @@
  */
 import { routes, page, layout, error, redirect } from 'ogygia/router';
 import { csr_flag } from '@corp/contracts';
+import type { Peer } from 'ogygia/federation';
 import CmsShell from './CmsShell.svelte';
 import PostsShell from './PostsShell.svelte';
 import Home from './Home.svelte';
@@ -40,7 +41,17 @@ export const cms_router = routes(
 	{
 		...shell({
 			'/': page(Home, {
-				load: async () => ({ posts: POSTS.map(({ id, title }) => ({ id, title })) })
+				load: async () => {
+					// (imported lazily: peers.server.ts exposes THIS table, so a static import would read
+					// the table before it exists)
+					const { dash }: { dash: Peer } = await import('./peers.server.js');
+					return {
+						posts: POSTS.map(({ id, title }) => ({ id, title })),
+						// the dash team's widget, stitched into the cms page — a third hop when the cms is
+						// itself mounted in the shell (one trace id across all three; `unavailable` if dash is down)
+						kpis: await dash.widget('kpis', { org: 'cms' })
+					};
+				}
 			}),
 			'/lab': page(csr_flag.pick({ static: Lab, hydrated: LabLive }), {
 				load: (c) => ({ mode: csr_flag(c), stamp: csr_flag.stamp(c) })

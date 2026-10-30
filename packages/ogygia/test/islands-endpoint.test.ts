@@ -20,7 +20,7 @@ const { mpaSpeculationRules } = await import('../src/compiler/link/speculation.j
 
 afterEach(() => configure_islands_endpoint(undefined));
 
-const at = (path: string) => ({ url: new URL('https://a.test' + path) }) as never;
+const at = (path: string) => ({ url: new URL('https://a.test' + path), isRemoteRequest: false }) as never;
 
 describe('the islands endpoint', () => {
 	it('defaults to /__ogygia__, for the handler and the mint alike', () => {

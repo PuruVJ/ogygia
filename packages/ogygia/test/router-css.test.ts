@@ -17,7 +17,6 @@ import {
 } from '../src/router-css.js';
 
 const ROOT = '/app';
-const LIB = '/app/src/lib';
 
 /** In-memory module graph: path → import specs; `.svelte`/`.ts` existence from the map's keys. */
 function graph(files: Record<string, string[]>) {
@@ -29,11 +28,11 @@ function graph(files: Record<string, string[]>) {
 describe('router_css_roots — the component closure of router modules', () => {
 	it('collects direct .svelte imports', () => {
 		const { specs, exists } = graph({
-			'/app/src/routes/x/+server.ts': ['ogygia/router', './Shell.svelte', '$lib/Home.svelte'],
+			'/app/src/routes/x/+server.ts': ['ogygia/router', './Shell.svelte', '../../lib/Home.svelte'],
 			'/app/src/routes/x/Shell.svelte': [],
 			'/app/src/lib/Home.svelte': []
 		});
-		const roots = router_css_roots(new Set(['/app/src/routes/x/+server.ts']), specs, LIB, exists);
+		const roots = router_css_roots(new Set(['/app/src/routes/x/+server.ts']), specs, exists);
 		expect(roots).toEqual(['/app/src/lib/Home.svelte', '/app/src/routes/x/Shell.svelte']);
 	});
 
@@ -45,7 +44,7 @@ describe('router_css_roots — the component closure of router modules', () => {
 			'/app/src/pages/deep/index.ts': ['./Docs.svelte'],
 			'/app/src/pages/deep/Docs.svelte': []
 		});
-		const roots = router_css_roots(new Set(['/app/src/app.ts']), specs, LIB, exists);
+		const roots = router_css_roots(new Set(['/app/src/app.ts']), specs, exists);
 		expect(roots).toEqual(['/app/src/pages/Home.svelte', '/app/src/pages/deep/Docs.svelte']);
 	});
 
@@ -55,7 +54,7 @@ describe('router_css_roots — the component closure of router modules', () => {
 			'/app/src/components/index.ts': ['./Card.svelte'],
 			'/app/src/components/Card.svelte': []
 		});
-		const roots = router_css_roots(new Set(['/app/src/r.ts']), specs, LIB, exists);
+		const roots = router_css_roots(new Set(['/app/src/r.ts']), specs, exists);
 		expect(roots).toEqual(['/app/src/components/Card.svelte']);
 	});
 
@@ -65,13 +64,13 @@ describe('router_css_roots — the component closure of router modules', () => {
 			'/app/src/b.ts': ['./a.ts', './X.svelte'],
 			'/app/src/X.svelte': []
 		});
-		const roots = router_css_roots(new Set(['/app/src/a.ts']), specs, LIB, exists);
+		const roots = router_css_roots(new Set(['/app/src/a.ts']), specs, exists);
 		expect(roots).toEqual(['/app/src/X.svelte']);
 	});
 
 	it('no router modules → no roots', () => {
 		const { specs, exists } = graph({ '/app/src/a.ts': ['./X.svelte'], '/app/src/X.svelte': [] });
-		expect(router_css_roots(new Set(), specs, LIB, exists)).toEqual([]);
+		expect(router_css_roots(new Set(), specs, exists)).toEqual([]);
 	});
 });
 
@@ -80,14 +79,13 @@ describe('router_css_module — the generated virtual', () => {
 
 	it('emits an inert module for zero roots', async () => {
 		expect(
-			await router_css_module([], { root: ROOT, lib_dir: LIB, is_dev: false, read_file: () => null })
+			await router_css_module([], { root: ROOT, is_dev: false, read_file: () => null })
 		).toBe('export {};\n');
 	});
 
 	it("prod: registers each root with a handoff thunk (islandCss key + Kit's configured base)", async () => {
 		const src = await router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
-			lib_dir: LIB,
 			is_dev: false,
 			read_file: () => null
 		});
@@ -110,7 +108,6 @@ describe('router_css_module — the generated virtual', () => {
 		};
 		const src = await router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
-			lib_dir: LIB,
 			is_dev: true,
 			read_file: read(files)
 		});
@@ -136,7 +133,6 @@ describe('router_css_module — the generated virtual', () => {
 		};
 		const src = await router_css_module(['/app/src/lib/Shell.svelte'], {
 			root: ROOT,
-			lib_dir: LIB,
 			is_dev: true,
 			read_file: read(files)
 		});

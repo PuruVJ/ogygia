@@ -34,7 +34,6 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 		root: '/repl',
 		base: '/',
 		app_dir: '_app',
-		libDir: '/repl/src/lib',
 		is_dev: true,
 		id_salt: 'repl',
 		visibleMargin: undefined,

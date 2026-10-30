@@ -20,6 +20,11 @@ export const FRAGMENT_BASE = '/og/fragment/';
 /** Thaw notices: `POST /og/thaw` (signed, JSON `{ id, hop, build, tags }`). */
 export const THAW_PATH = '/og/thaw';
 
+/** What a section from a dead or failing peer renders as — inline, so the consuming page is never
+ *  blocked by another team (a mount's failed slot, a static `page()` / `widget()` hop). */
+export const UNAVAILABLE_CARD =
+	'<div data-og-mount-failed style="border:1px dashed #dc2626;border-radius:8px;padding:1rem;color:#dc2626">This section is temporarily unavailable.</div>';
+
 // ── headers ──────────────────────────────────────────────────────────────────────────────────
 const SIG_HEADER = 'x-og-sig';
 const TS_HEADER = 'x-og-ts';

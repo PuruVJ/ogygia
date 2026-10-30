@@ -3,7 +3,7 @@
 	// reader as a `visible` island. The inner reader degrades to inline and hydrates WITH this outer
 	// island. During that single hydrate CURRENT_REGION is this outer region, so the inner reader's
 	// get() still walks up the DOM to the page provider — nesting must not break the context read.
-	import CtxReader from '$lib/CtxReader.svelte' with { wake: 'visible' };
+	import CtxReader from '#lib/CtxReader.svelte' with { wake: 'visible' };
 
 	let n = $state(0);
 </script>

@@ -2,9 +2,9 @@
 	// Continuity demo: each page builds a FRESH server SessionCart (new instance, fresh stamp). The
 	// named codec reunites the client with the ONE live session cart, so the cart follows across SPA
 	// navigations while each page's server stamp merges in.
-	import SessionCartWidget from '$lib/SessionCartWidget.svelte' with { wake: 'load' };
-	import { SessionCart } from '$lib/session-cart.svelte.js';
-	import { next_stamp } from '$lib/lakes/stamp.js';
+	import SessionCartWidget from '#lib/SessionCartWidget.svelte' with { wake: 'load' };
+	import { SessionCart } from '#lib/session-cart.svelte.js';
+	import { next_stamp } from '#lib/lakes/stamp.js';
 
 	const cart = new SessionCart([], next_stamp());
 </script>

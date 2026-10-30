@@ -98,7 +98,7 @@ The page component reads one function and renders the view. The [`<Doc>`](/docs/
 <script>
 	import { page } from '$app/state';
 	import { Doc } from 'ogygia/content';
-	import * as docs from '$lib/site.remote';
+	import * as docs from '#lib/site.remote';
 
 	const view = await docs.page(page.params.slug);
 </script>
@@ -113,7 +113,7 @@ And the layout mounts the shell over the `meta` remote. Thus the corpus never en
 	import DocsShell from 'ogygia/content/docs-shell';
 	import 'ogygia/content/theme.css';
 	import 'ogygia/content/shell.css';
-	import { meta } from '$lib/site.remote';
+	import { meta } from '#lib/site.remote';
 	let { children } = $props();
 
 	const shellMeta = await meta();

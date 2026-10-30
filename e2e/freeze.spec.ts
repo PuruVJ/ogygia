@@ -38,7 +38,8 @@ test.describe('FREEZE (render-on-write): store/serve/invalidate + prefix nuke + 
 	test.beforeAll(async () => {
 		test.setTimeout(15 * 60_000);
 		// ── 1. build the fixture (consumes the live workspace ogygia) ───────────────────────────────
-		const built = spawnSync('pnpm', ['--dir', dir, 'build'], { stdio: 'inherit' });
+		// (adapter-node takes the origin at build time: the server below answers on it)
+		const built = spawnSync('pnpm', ['--dir', dir, 'build'], { stdio: 'inherit', env: { ...process.env, ORIGIN: origin } });
 		expect(built.status, 'repro-freeze build').toBe(0);
 
 		// ── 2. boot the chain: emulators first (origin adapters purge INTO them) ────────────────────
@@ -50,7 +51,6 @@ test.describe('FREEZE (render-on-write): store/serve/invalidate + prefix nuke + 
 			cwd: dir,
 			env: {
 				PORT: String(ORIGIN_PORT),
-				ORIGIN: origin,
 				EDGE_AKAMAI_URL: akamai.base,
 				EDGE_CF_URL: cf.base,
 				EDGE_SITE_URL: origin

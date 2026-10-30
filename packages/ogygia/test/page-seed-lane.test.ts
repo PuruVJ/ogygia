@@ -52,4 +52,12 @@ describe('PageSeed.serialize', () => {
 		expect(v.data).toEqual({ ok: 1 });
 		expect(v.error).toBeUndefined();
 	});
+
+	it('one non-serializable data KEY is dropped, never the keys beside it (a server-only value in a load)', () => {
+		// a region value the page renders on the server: a symbol-keyed object devalue refuses
+		const server_only = { [Symbol('region')]: true, html: '<div></div>' };
+		const out = PageSeed.serialize(page({ site: 'ACME', kpis: server_only }))!;
+		const v = parse(out.text) as { data: Record<string, unknown> };
+		expect(v.data).toEqual({ site: 'ACME' });
+	});
 });

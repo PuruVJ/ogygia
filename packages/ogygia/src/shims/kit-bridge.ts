@@ -21,8 +21,7 @@ export interface KitNavigation {
 	goto(url: string | URL, opts?: unknown): Promise<void>;
 	invalidate(resource?: unknown): Promise<void>;
 	invalidateAll(): Promise<void>;
-	/** Kit 2.7x and Kit 3; absent on older Kit. */
-	refreshAll?(): Promise<void>;
+	refreshAll(): Promise<void>;
 	preloadData(url: string | URL): Promise<unknown>;
 	preloadCode(url?: string): Promise<void>;
 	pushState(url: string | URL, state: unknown): void;
@@ -31,13 +30,24 @@ export interface KitNavigation {
 	beforeNavigate(callback: (navigation: unknown) => void): void;
 	afterNavigate(callback: (navigation: unknown) => void): void;
 	onNavigate(callback: (navigation: unknown) => unknown): void;
+	snapshot(options: { id?: string; capture: () => unknown; restore: (value: never) => void; reset?: () => void }): void;
+}
+
+/** Kit's `navigating` from `$app/state`: every field null when no navigation is in flight. */
+export interface KitNavigating {
+	from: unknown;
+	to: { url: URL } | null;
+	type: string | null;
+	willUnload: boolean | null;
+	delta: number | null;
+	complete: Promise<void> | null;
 }
 
 export interface KitPageBridge {
 	page: PageSnapshot;
-	navigating: { current: unknown };
-	/** Kit's real navigation module (see {@link KitNavigation}). Absent on an older thread. */
-	navigation?: KitNavigation;
+	navigating: KitNavigating;
+	/** Kit's real navigation module (see {@link KitNavigation}). */
+	navigation: KitNavigation;
 }
 
 const KIT_PAGE_KEY = Symbol.for('ogygia.kit-page');

@@ -1,6 +1,6 @@
 /**
  * THE `<Name>.svelte` A ROUTE IMPORTS: from its `+page.svelte` / `+layout.svelte` files (src-relative
- * paths), each import of a file with that name, resolved: `$lib/hell/X.svelte` → `lib/hell/X.svelte`,
+ * paths), each import of a file with that name, resolved: `#lib/hell/X.svelte` → `lib/hell/X.svelte`,
  * `./X.svelte` beside the route file. What tells two same-named components apart (a component is
  * named after its file, and a `Button.svelte` can live in several folders).
  */
@@ -16,7 +16,7 @@ export function route_imports(
 		const src = read(file);
 		if (!src) continue;
 		const dir = file.slice(0, file.lastIndexOf('/'));
-		// an import spread over lines (`import X from` / `  '$lib/X.svelte'`, `} from '…'`): the spec
+		// an import spread over lines (`import X from` / `  '#lib/X.svelte'`, `} from '…'`): the spec
 		// line has `from`, or follows a line that ends with it
 		let after_from = false;
 		for (const line of src.split('\n')) {
@@ -30,7 +30,7 @@ export function route_imports(
 				if (end === -1) continue;
 				const start = line.lastIndexOf(q, end) + 1;
 				const spec = line.slice(start, end + leaf.length);
-				if (spec.startsWith('$lib/')) out.add('lib/' + spec.slice(5));
+				if (spec.startsWith('#lib/')) out.add('lib/' + spec.slice(5));
 				else if (spec.startsWith('.')) {
 					// `./X` / `../x/X` against the route file's folder
 					const parts = dir.split('/');
@@ -47,7 +47,7 @@ export function route_imports(
 }
 
 /**
- * THE APP MODULES A SERVER FILE IMPORTS: each `$lib/…` or relative import of a script module
+ * THE APP MODULES A SERVER FILE IMPORTS: each `#lib/…` or relative import of a script module
  * (`.svelte` files and packages left out), src-relative and resolved against the file's folder —
  * the candidates to read, each as written (no extension) and with `.ts` / `.js` / `/index.ts` /
  * `/index.js`. One file's `import … from '…'` and `export … from '…'` lines; no regex.
@@ -64,9 +64,9 @@ export function module_imports(file: string, src: string): string[] {
 			const b = a === -1 ? -1 : line.indexOf(q, a + 1);
 			if (b === -1) continue;
 			const spec = line.slice(a + 1, b);
-			if (spec.endsWith('.svelte') || !(spec.startsWith('$lib/') || spec.startsWith('./') || spec.startsWith('../'))) continue;
+			if (spec.endsWith('.svelte') || !(spec.startsWith('#lib/') || spec.startsWith('./') || spec.startsWith('../'))) continue;
 			let base: string;
-			if (spec.startsWith('$lib/')) base = 'lib/' + spec.slice(5);
+			if (spec.startsWith('#lib/')) base = 'lib/' + spec.slice(5);
 			else {
 				const parts = dir ? dir.split('/') : [];
 				for (const seg of spec.split('/')) {

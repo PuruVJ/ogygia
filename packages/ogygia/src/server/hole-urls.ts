@@ -2,7 +2,7 @@
  * Absolute URLs inside a hole's HTML.
  *
  * A server island renders in its OWN request — `/__ogygia__?…` — and Kit's `asset()` (with the
- * default `paths.relative`) emits every URL relative to THAT request: `./_app/immutable/x.js`,
+ * default `relative: true`) emits every URL relative to THAT request: `./_app/immutable/x.js`,
  * `./__ogygia__?…`. The HTML then lands in a page at any depth (`/docs/guides/`), and a
  * region entry / nested-hole endpoint / region-css link inside it would resolve against the page:
  * `/docs/guides/_app/…` → 404, a dead island in a live hole. The batch parcel and an

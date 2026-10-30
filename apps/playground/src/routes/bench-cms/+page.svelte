@@ -1,11 +1,11 @@
 <script lang="ts">
 	// SERVER-COST BENCH: 20 block islands (half load, half visible) fed identity slices of the seed, a
 	// header island with a ~300 KB config prop outside page.data, one `$page` reader. See +page.server.ts.
-	import BlockLoad from '$lib/bench/BenchBlock.svelte' with { wake: 'load' };
-	import BlockVisible from '$lib/bench/BenchBlock.svelte' with { wake: 'visible' };
-	import BenchHeader from '$lib/bench/BenchHeader.svelte' with { wake: 'load' };
-	import BenchPageReader from '$lib/bench/BenchPageReader.svelte' with { wake: 'load' };
-	import { header_config } from '$lib/bench/data';
+	import BlockLoad from '#lib/bench/BenchBlock.svelte' with { wake: 'load' };
+	import BlockVisible from '#lib/bench/BenchBlock.svelte' with { wake: 'visible' };
+	import BenchHeader from '#lib/bench/BenchHeader.svelte' with { wake: 'load' };
+	import BenchPageReader from '#lib/bench/BenchPageReader.svelte' with { wake: 'load' };
+	import { header_config } from '#lib/bench/data.ts';
 	let { data } = $props();
 </script>
 

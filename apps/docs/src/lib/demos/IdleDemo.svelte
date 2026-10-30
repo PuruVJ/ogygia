@@ -1,7 +1,7 @@
 <script lang="ts">
-	import DemoBlock from '$lib/DemoBlock.svelte';
-	import IdleLive from '$lib/demos/IdleLive.svelte';
-	import IdleFrozen from '$lib/demos/IdleFrozen.svelte';
+	import DemoBlock from '#lib/DemoBlock.svelte';
+	import IdleLive from '#lib/demos/IdleLive.svelte';
+	import IdleFrozen from '#lib/demos/IdleFrozen.svelte';
 
 	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>

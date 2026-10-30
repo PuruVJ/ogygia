@@ -1,6 +1,6 @@
 <script lang="ts">
 	// /inferno's page over the fixed load and card (see +page.server.ts).
-	import ResultCard from '$lib/inferno-fixed/ResultCard.svelte';
+	import ResultCard from '#lib/inferno-fixed/ResultCard.svelte';
 
 	let { data } = $props();
 </script>

@@ -178,7 +178,7 @@ describe('site init — existing layout', () => {
 		const shell = [
 			'<script lang="ts">',
 			"\timport DocsShell from 'ogygia/content/docs-shell';",
-			"\timport { site } from '$lib/docs';",
+			"\timport { site } from '#lib/docs';",
 			'\tlet { children } = $props();',
 			'</script>',
 			'',

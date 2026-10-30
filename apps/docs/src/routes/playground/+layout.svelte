@@ -18,7 +18,7 @@
 	import daidalos from 'ogygia/content/themes/daidalos.css?url';
 	import kalliope from 'ogygia/content/themes/kalliope.css?url';
 	import nephele from 'ogygia/content/themes/nephele.css?url';
-	import ThemePicker from '$lib/playground/ThemePicker.svelte' with { wake: 'load' };
+	import ThemePicker from '#lib/playground/ThemePicker.svelte' with { wake: 'load' };
 	const themes = { thalassa, stock, alexandria, pyros, zephyros, selas, daidalos, kalliope, nephele };
 	// Self-hosted variable fonts — the theme references Inter / JetBrains Mono; point its tokens at the
 	// `@fontsource-variable` family names below.
@@ -27,7 +27,7 @@
 	// LEAK-FREE: the corpus lives in `docs.server.ts`; we pull only the shell bundle over the wire via
 	// the `meta` remote and hand it to `<DocsShell {meta}>`. Nothing here imports the collections.
 	import { page } from '$app/state';
-	import { meta } from '$lib/playground/docs.remote';
+	import { meta } from '#lib/playground/docs.remote.ts';
 	import { BlogShell } from 'ogygia/content';
 	let { children } = $props();
 	// The blog genre gets its OWN chrome (centered, no docs sidebar); everything else uses the docs

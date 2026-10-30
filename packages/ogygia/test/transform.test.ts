@@ -2,8 +2,11 @@
 // virtual modules, path+strategy dedupe, props/fallback/children rules, defer+hydrate, lakes,
 // presets, and csr-independent emit metadata. Runs against built `../dist/compiler/region/transform.js`.
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import path from 'node:path';
+import * as host from '../dist/compiler/host.js';
+import * as app_resolve from '../dist/compiler/app-resolve.js';
+import { with_app_package } from './_helpers/app-package.js';
 import {
 	transformHost,
 	normalize_import_keys,
@@ -21,6 +24,10 @@ import {
 const ROOT = '/app';
 const HOST = '/app/src/routes/+page.svelte';
 
+let restore = () => {};
+beforeAll(() => (restore = with_app_package(host, app_resolve)));
+afterAll(() => restore());
+
 function idFor(
 	compRel: string,
 	mark: { strategy: string; options?: Record<string, unknown> },
@@ -32,7 +39,6 @@ function idFor(
 function makeCtx(overrides: Record<string, unknown> = {}) {
 	return {
 		root: ROOT,
-		libDir: '/app/src/lib',
 		readFile: () => null,
 		pathModule: path,
 		dev: false,
@@ -270,14 +276,14 @@ describe('portable binding rewrite', () => {
 
 	test('csr=false client omit (DEV): CSS-only fouc-css virtual for FOUC (not component JS)', () => {
 		const r = run(
-			wrap(`import Nav from '$lib/SideNav.svelte' with { wake: 'load' };`, '<Nav />'),
+			wrap(`import Nav from '#lib/SideNav.svelte' with { wake: 'load' };`, '<Nav />'),
 			makeCtx({ linkVirtualIsland: false, dev: true })
 		)!;
 		expect(r.code).toContain(CLIENT_BINDING_STUB);
 		expect(r.code).toContain(
 			`import "virtual:ogygia/fouc-css/${encodeURIComponent('src/lib/SideNav.svelte')}.js";`
 		);
-		expect(r.code).not.toMatch(/from ["']\$lib\/SideNav\.svelte["']/);
+		expect(r.code).not.toMatch(/from ["']#lib\/SideNav\.svelte["']/);
 		expect(r.code).not.toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
@@ -286,12 +292,12 @@ describe('portable binding rewrite', () => {
 	// chunk closure. A page host importing 30 marked blocks and rendering 5 must not link 30 sheets.
 	test('csr=false client omit (BUILD): island gets the stub and NO fouc-css link', () => {
 		const r = run(
-			wrap(`import Nav from '$lib/SideNav.svelte' with { wake: 'load' };`, '<Nav />'),
+			wrap(`import Nav from '#lib/SideNav.svelte' with { wake: 'load' };`, '<Nav />'),
 			makeCtx({ linkVirtualIsland: false, dev: false })
 		)!;
 		expect(r.code).toContain(CLIENT_BINDING_STUB);
 		expect(r.code).not.toContain('virtual:ogygia/fouc-css/');
-		expect(r.code).not.toMatch(/from ["']\$lib\/SideNav\.svelte["']/);
+		expect(r.code).not.toMatch(/from ["']#lib\/SideNav\.svelte["']/);
 		expect(r.code).not.toMatch(/virtual:ogygia\/wrapper\//);
 	});
 
@@ -316,9 +322,9 @@ describe('portable binding rewrite', () => {
 	test('cross-host identity: same component path yields same id', () => {
 		const mark = loadMark;
 		const host2 = '/app/src/routes/about/+page.svelte';
-		const r1 = run(wrap(`import C from '$lib/C.svelte' with { wake: 'load' };`, '<C />'))!;
+		const r1 = run(wrap(`import C from '#lib/C.svelte' with { wake: 'load' };`, '<C />'))!;
 		const r2 = transformHost(
-			wrap(`import C from '$lib/C.svelte' with { wake: 'load' };`, '<C />'),
+			wrap(`import C from '#lib/C.svelte' with { wake: 'load' };`, '<C />'),
 			host2,
 			makeCtx()
 		)!;

@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import type { EntryGenerator } from './$types';
-import { docs } from '$lib/site.server';
-import { resolve_flat, flat_entries } from '$lib/flat-alias.server';
+import { docs } from '#lib/site.server.ts';
+import { resolve_flat, flat_entries } from '#lib/flat-alias.server.ts';
 
 // Every leaf slug in the dimensioned outline (union across topics) PLUS the flat aliases — the
 // aliases prerender as redirect stubs, so upstream-scheme links work even on static hosting.

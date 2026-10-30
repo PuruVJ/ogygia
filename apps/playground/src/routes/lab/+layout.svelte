@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The island below lives in the LAYOUT — shared by every /lab route — which is exactly what the
 	// server-delta "keep unchanged regions" test needs. `wake: 'load'` = a normal hydrate island.
-	import LabPersist from '$lib/lab/LabPersist.svelte' with { wake: 'load' };
+	import LabPersist from '#lib/lab/LabPersist.svelte' with { wake: 'load' };
 	let { children } = $props();
 </script>
 

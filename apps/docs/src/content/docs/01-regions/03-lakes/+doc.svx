@@ -33,7 +33,7 @@ Inside an island that hydrates, ordinary markup compiles into the client bundle 
 The island below is interactive: the counter counts. The snapshot inside it is a lake: server HTML, lifted out and restored around the hydration of the island. It ships no JS of its own.
 
 <script>
-  import LakeDemo from '$lib/demos/LakeDemo.svelte' with { wake: 'load' };
+  import LakeDemo from '#lib/demos/LakeDemo.svelte' with { wake: 'load' };
 </script>
 
 <div class="doc-demo">
@@ -62,7 +62,7 @@ A lake also works at the top of a page, as site chrome, and it survives a page t
 
 ```svelte title=+layout.svelte
 <script>
-  import Header from '$lib/Header.svelte' with { wake: 'none' };
+  import Header from '#lib/Header.svelte' with { wake: 'none' };
   let { children } = $props();
 </script>
 

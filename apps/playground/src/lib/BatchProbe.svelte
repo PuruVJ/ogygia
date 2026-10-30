@@ -2,7 +2,7 @@
 	// query.batch demo: three simultaneous getSquare() calls in the same tick collapse into ONE
 	// network request. All three results share the same `batchAt` (one server run) and report the
 	// batch size (3). Proves Kit's reused client-side batching works inside an island.
-	import { getSquare } from '$lib/greetings.remote';
+	import { getSquare } from '#lib/greetings.remote.ts';
 
 	const a = getSquare(2);
 	const b = getSquare(5);
