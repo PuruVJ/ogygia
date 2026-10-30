@@ -1,15 +1,12 @@
-name: Release
+name: Changesets
 
 on:
   push:
     branches:
       - main
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,12 +14,21 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+        with:
+          # all history, so changesets can link each changelog entry to its commit and PR
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: pnpm install --frozen-lockfile
-      - uses: changesets/action@v2
+      - uses: pnpm/action-setup@v6
         with:
-          publish-script: pnpm run release
+          run_install: true
+      - run: pnpm run build:lib
+      - name: Create Release Pull Request or Publish to npm
+        uses: changesets/action@v2
+        with:
+          version-script: pnpm ci:version
+          publish-script: pnpm ci:release
+          commit-message: 'chore: update versions'
+          pr-title: 'chore: update versions'
           create-github-releases: true
