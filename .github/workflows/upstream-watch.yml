@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Branch/tag to test (default: kit3-compat)'
+        description: 'Branch/tag to test (default: next)'
         required: false
-        default: 'kit3-compat'
+        default: 'next'
 
 permissions:
   contents: read
@@ -24,12 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      # The latest SvelteKit is 3: watch the branch that supports it — main is SvelteKit 2, so
-      # `--latest` there can only fail (Kit 3 refuses `svelte.config.js`), never on upstream news.
-      # Flip to 'main' when kit3-compat merges. (It watched `passage` long after passage merged.)
+      # Watch the line ogygia ships from: `next` (0.9, SvelteKit 2 and 3). Flip to 'main' when
+      # next merges into it. (It watched `passage`, then `kit3-compat`, long after both were done.)
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || 'kit3-compat' }}
+          ref: ${{ github.event.inputs.ref || 'next' }}
 
       - uses: pnpm/action-setup@v4
 
@@ -65,15 +64,20 @@ jobs:
       - name: Record the baseline verdict
         run: echo "BASELINE=${{ steps.baseline.outcome }}" >> "$GITHUB_ENV"
 
-      - name: Bump svelte + @sveltejs/kit to latest across the workspace
+      - name: Bump svelte + @sveltejs/kit to the latest of each line
         run: |
-          # `--latest` ignores the semver ranges and jumps to the newest published versions. Runs in
-          # every workspace package that depends on them (docs, playground, lib devDeps).
-          pnpm -r update --latest svelte @sveltejs/kit
-          # Record the resolved versions the apps actually build against, for the failure report.
+          # SvelteKit 2: the workspace apps take the newest svelte / kit their ranges allow (Kit 2's
+          # latest — `--latest` would jump them to Kit 3, which refuses their `svelte.config.js`).
+          pnpm -r update svelte @sveltejs/kit
+          # SvelteKit 3: the Kit 3 app e2e/kit3.spec.ts builds on the packed ogygia takes the newest
+          # Kit 3 and svelte (it installs standalone, outside the workspace).
+          KIT3=$(npm view @sveltejs/kit version)
+          SVELTE_LATEST=$(npm view svelte version)
+          (cd internal/repro-kit3 && npm pkg set "devDependencies.@sveltejs/kit=$KIT3" "devDependencies.svelte=$SVELTE_LATEST")
+          # Record the versions under test, for the failure report.
           {
             echo "SVELTE_VERSION=$(node -p "require('./apps/docs/node_modules/svelte/package.json').version")"
-            echo "KIT_VERSION=$(node -p "require('./apps/docs/node_modules/@sveltejs/kit/package.json').version")"
+            echo "KIT_VERSION=$(node -p "require('./apps/docs/node_modules/@sveltejs/kit/package.json').version") (apps) / ${KIT3} (Kit 3 app, svelte ${SVELTE_LATEST})"
           } >> "$GITHUB_ENV"
 
       - name: Show the versions under test
@@ -130,7 +134,7 @@ jobs:
             printf '%s\n\n' "${VERDICT}"
             printf '%s\n\n' 'Reproduce locally:'
             printf '%s\n' '```sh'
-            printf '%s\n' 'pnpm -r update --latest svelte @sveltejs/kit'
+            printf '%s\n' 'pnpm -r update svelte @sveltejs/kit'
             printf '%s\n' 'pnpm run check && pnpm run e2e'
             printf '%s\n\n' '```'
             printf 'Failing run: %s\n' "${RUN_URL}"
