@@ -101,7 +101,7 @@ export function browser_page_report(
 			known.add(i.fp);
 			regions.push({ fp: i.fp, name: name_of(i.fp, i.entry), kind: 'island', wake: rows.find((r) => r.fp === i.fp) ? 'load' : '', hydrated: true });
 		}
-	const failures = (visit.regions ?? []).filter((r) => r.failed !== undefined).map((r) => ({ fp: r.fp, message: r.failed || 'it threw', ...(r.failed_span ? { span: r.failed_span } : {}), ...(r.failed_turn !== undefined ? { turn: r.failed_turn } : {}) }));
+	const failures = (visit.regions ?? []).filter((r) => r.failed !== undefined).map((r) => ({ fp: r.fp, message: r.failed || 'it threw', ...(r.failed_span ? { span: r.failed_span } : {}) }));
 	const span = (s: InteractionCpu['wait']) => (s ? { ms: s.ms, top: s.top.map(as_fn) } : null);
 	const browser = browser_of(visit.ua);
 	const input: PageInput = {

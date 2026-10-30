@@ -275,22 +275,8 @@ export function forecast_of(
 			saving_of(set, { wait: wait_cap, cpu: cpu_cap }, now);
 		// biggest first, each with the render after it AND every one above it: the groups share no
 		// line, so the running total is honest — where to stop reads off the list
-		// ONE TITLE PER FIX: the same kind of problem in two places made two fixes with one title — two
-		// rows no reader could tell apart (and the checklist, keyed by title, failed to hydrate). A
-		// title that repeats names its place
-		const seen = new Map<string, number>();
-		for (const { top } of tops) seen.set(top.title, (seen.get(top.title) ?? 0) + 1);
-		const named = new Set<string>();
-		const title_of = (top: Item): string => {
-			if (seen.get(top.title) === 1) return top.title;
-			const site = top.p?.sites[0];
-			let t = site ? `${top.title} (${site.file}:${site.line})` : top.title;
-			for (let n = 2; named.has(t); n++) t = `${top.title} (${n})`;
-			named.add(t);
-			return t;
-		};
 		const parts: Forecast['parts'] = tops.map(({ top, others }, i) => ({
-			title: title_of(top),
+			title: top.title,
 			kind: top.kind,
 			ms: r1(top.ms),
 			wait: top.wait,
