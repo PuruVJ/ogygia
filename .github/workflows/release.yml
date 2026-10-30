@@ -1,0 +1,53 @@
+name: Release
+
+# On every push to main (.changeset/README.md):
+#   - changesets waiting → open / update the "Version packages" PR (`pnpm run version-packages`);
+#   - none waiting (that PR just merged) → `pnpm run release`: publish `ogygia` to npm if its version
+#     is not there yet, then its `v<version>` tag and GitHub release. A no-op when all three exist.
+#
+# npm publishing is TRUSTED PUBLISHING (OIDC, `id-token: write`): no npm token is stored. It needs the
+# trusted publisher set once on npmjs.com → ogygia → Settings: GitHub Actions, repository
+# PuruVJ/ogygia, workflow `release.yml`.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      # Node 24 ships npm 11: trusted publishing needs npm ≥ 11.5.1 (upgraded to be sure)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: changesets/action@v1
+        with:
+          version: pnpm run version-packages
+          publish: pnpm run release
+          title: 'Version packages'
+          commit: 'Version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
