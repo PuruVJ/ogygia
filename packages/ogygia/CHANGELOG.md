@@ -8,6 +8,14 @@ All notable changes to **ogygia** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- A refused hole request says why: its 403 carries `x-ogygia-deny` (`foreign-key`, `sig`, `unknown-id`, …) and `x-ogygia-key`, the answering server's key fingerprint, which every hole URL now also carries as `&k=`.
+- The runtime never retries a 403 from the islands endpoint: the fallback stands, and devtools and the profiler show the reason (or that a proxy, CDN or firewall in front answered).
+- The signing key is read at first use, so an `OGYGIA_SECRET` the host loads after the server's modules still counts; a production server signing with the build's random key logs it once.
+
 ## [0.8.6] - 2026-10-28
 
 ### Fixed

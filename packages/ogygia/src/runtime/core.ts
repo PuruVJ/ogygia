@@ -1094,7 +1094,7 @@ class OgygiaRegion extends HTMLElement {
 			if (import.meta.env.DEV) {
 				if (deny !== undefined) {
 					console.warn(
-						`[ogygia] region answer refused for ${endpoint}: the islands endpoint refused its capability (403: ${deny}). ` +
+						`[ogygia] region answer refused for ${endpoint}: ${deny.startsWith('not ogygia') ? deny : `the islands endpoint refused its capability (403: ${deny})`}. ` +
 							(deny.startsWith('foreign-key')
 								? 'The page and its islands endpoint came from different deployments (two keys): route the endpoint to the deployment that served the page, or give every deployment one OGYGIA_SECRET. '
 								: '') +

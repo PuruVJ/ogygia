@@ -98,13 +98,17 @@ export class RegionAnswerRefused extends Error {
 	}
 }
 
+/** The reason a 403 without `x-ogygia-deny` gets: ogygia's handle never answered it. */
+export const NOT_OGYGIA_403 = 'not ogygia: a proxy, CDN or firewall in front answered (a 403 without x-ogygia-deny)';
+
 /**
  * A 403 from the islands endpoint, as one line: its `x-ogygia-deny` reason, and for `foreign-key`
- * the two keys (the capability's `&k=`, the answering server's `x-ogygia-key`). '' when the 403
- * carries no reason (a server before reasons, or a CDN rule in front).
+ * the two keys (the capability's `&k=`, the answering server's `x-ogygia-key`). A 403 with no reason
+ * came from something in front of the handle (a bot wall), or from a server before reasons.
  */
 export function deny_of(res: Response, endpoint: string): string {
-	const why = res.headers.get('x-ogygia-deny') ?? '';
+	const why = res.headers.get('x-ogygia-deny');
+	if (why === null) return NOT_OGYGIA_403;
 	if (why !== 'foreign-key') return why;
 	let minted = '';
 	try {

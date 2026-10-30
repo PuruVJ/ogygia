@@ -2066,14 +2066,19 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		if (h.reason === 'forbidden') {
 			const why = h.message ?? 'no reason given';
 			const split = why.startsWith('foreign-key');
+			const front = why.startsWith('not ogygia');
 			findings.push({
 				code: 'hole-failed',
 				severity: 'error',
-				message: `${h.name} never got its answer: the islands endpoint refused its capability (403: ${why}), and the fallback stands.`,
+				message: front
+					? `${h.name} never got its answer: something in front of ogygia's handle refused the request (403 without x-ogygia-deny), and the fallback stands.`
+					: `${h.name} never got its answer: the islands endpoint refused its capability (403: ${why}), and the fallback stands.`,
 				fix: split
 					? 'The page and its islands endpoint came from different deployments, each signing with its own key: route the islands endpoint to the deployment that served the page, and give every deployment the same OGYGIA_SECRET at runtime.'
-					: why === 'unknown-id'
-						? 'The page names a hole the answering deployment does not have: the page came from another build (a cache kept it across a deploy, or another backend served it).'
+					: front
+						? `ogygia's handle never saw this request: a proxy, CDN or firewall in front of it (bot protection, a WAF rule) refused ${path(h.endpoint)}. Let that path through there.`
+						: why === 'unknown-id'
+						? 'The page names a hole the answering deployment does not have: the page came from a build whose holes differ (a hole component moved or was renamed, or its import options changed), kept by a cache across a deploy or served by another backend.'
 						: `Open ${h.endpoint ?? 'the hole’s endpoint'} (signed for this page): its x-ogygia-deny header says why the server refused it.`,
 				fps: h.fp ? [h.fp] : []
 			});

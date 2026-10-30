@@ -2001,16 +2001,31 @@ class OgygiaHandle {
 	// shaping (403/500 + rate-limit interleaving vs null→client-fetch), which is where they legitimately
 	// differ; only the trust decisions are shared.
 
-	/** Charset/length/expiry gate — cheap, runs BEFORE any HMAC (P5-HMAC-CPU). */
-	#capability_gate_ok(id: string, payload: string, ttl_raw: string, exp_raw: string): boolean {
-		if (!this.#capability_shape_ok(id, payload, ttl_raw)) return false;
-		const exp = Number(exp_raw);
-		return Number.isFinite(exp) && exp >= Math.floor(Date.now() / 1000);
-	}
-
-	/** The charset/length half of the gate (the renewal gate pairs it with its own expiry rule). */
-	#capability_shape_ok(id: string, payload: string, ttl_raw: string): boolean {
-		return is_region_id(id) && payload.length <= MAX_REGION_PROPS_LEN && is_region_ttl(ttl_raw);
+	/**
+	 * Every check a capability passes BEFORE any HMAC (P5-HMAC-CPU), in order: charset/length (ids
+	 * are 12-hex from the transform; `ttl` is signed, but charset-gated here so a forged value never
+	 * reaches a response header), expiry (a renewal instead needs one inside the renew window: a URL
+	 * that has not expired never renews), and the signing key it names. Null when it passes, else why
+	 * it is refused.
+	 */
+	#capability_precheck(
+		id: string,
+		payload: string,
+		ttl_raw: string,
+		exp_raw: string,
+		k: string | null,
+		renewal = false
+	): RegionDeny | null {
+		if (!is_region_id(id) || payload.length > MAX_REGION_PROPS_LEN || !is_region_ttl(ttl_raw)) return 'shape';
+		const now = Math.floor(Date.now() / 1000);
+		if (renewal) {
+			if (!renewable_expiry(exp_raw, now)) return 'renew-window';
+		} else {
+			const exp = Number(exp_raw);
+			if (!Number.isFinite(exp) || exp < now) return 'expired';
+		}
+		if (foreign_key(k)) return 'foreign-key';
+		return null;
 	}
 
 	/**
@@ -2100,7 +2115,7 @@ class OgygiaHandle {
 		const ttl_raw = params.get('ttl') ?? '';
 		const sig = params.get('sig') ?? '';
 
-		if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) return null;
+		if (this.#capability_precheck(id, payload, ttl_raw, exp_raw, params.get('k'))) return null;
 		if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) return null;
 
 		if (!Object.hasOwn(island_modules, id)) return null;
@@ -2193,39 +2208,28 @@ class OgygiaHandle {
 		// cache) once with `&renew=1`. The answer carries the fresh capability in
 		// `x-ogygia-capability`; the runtime adopts it for the hole's later fetches.
 		let renewed: string | null = null;
+		const renewal = url.searchParams.get('renew') === '1';
 
-		if (url.searchParams.get('renew') === '1') {
-			// Shape + the renew window (expired, by at most RENEW_WINDOW_SEC) BEFORE HMAC; a URL that
-			// has not expired never renews (nothing to rescue — and no fresh URL for a live one).
-			if (!this.#capability_shape_ok(id, payload, ttl_raw)) return region_denied('shape');
-			if (!renewable_expiry(exp_raw, Math.floor(Date.now() / 1000))) return region_denied('renew-window');
-			if (foreign_key(k)) return region_denied('foreign-key');
-			if (this.probe_rate.limited(ip)) {
-				return region_response('Too Many Requests', { status: 429 });
-			}
+		// Every check before HMAC (P5-HMAC-CPU) — the batch path runs the same one.
+		const refused = this.#capability_precheck(id, payload, ttl_raw, exp_raw, k, renewal);
+		if (refused) {
+			if (import.meta.env.DEV && refused === 'foreign-key')
+				console.warn(`[ogygia] region endpoint 403: id "${id}" was signed by key ${k}, this server signs with ${signing_key().fp}`);
+			return region_denied(refused);
+		}
+
+		// Pre-HMAC probe — forged floods hit this, not render() (HMAC-CPU-DOS).
+		if (this.probe_rate.limited(ip)) {
+			return region_response('Too Many Requests', { status: 429 });
+		}
+
+		if (renewal) {
 			const fresh = this.#renew_capability(id, payload, exp_raw, ttl_raw, sig, event);
 			if (!fresh) return region_denied(this.#region_session(event) !== '' ? 'renew-session' : 'sig');
 			exp_raw = fresh.exp;
 			sig = fresh.sig;
 			renewed = `${url.pathname}?id=${encodeURIComponent(id)}&props=${payload}&exp=${exp_raw}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${sig}&k=${signing_key().fp}`;
 		} else {
-			// Length/charset/expiry gate BEFORE HMAC (P5-HMAC-CPU). Ids are always 12-hex from the
-			// transform; `ttl` (cache max-age seconds) is signed, but charset-gate it here so a forged
-			// value can't reach the response header before verify rejects it.
-			if (!this.#capability_shape_ok(id, payload, ttl_raw)) return region_denied('shape');
-			if (!this.#capability_gate_ok(id, payload, ttl_raw, exp_raw)) return region_denied('expired');
-			// Minted by another deployment's key: no MAC to check (a string compare, before the probe).
-			if (foreign_key(k)) {
-				if (import.meta.env.DEV)
-					console.warn(`[ogygia] region endpoint 403: id "${id}" was signed by key ${k}, this server signs with ${signing_key().fp}`);
-				return region_denied('foreign-key');
-			}
-
-			// Pre-HMAC probe — forged floods hit this, not render() (HMAC-CPU-DOS).
-			if (this.probe_rate.limited(ip)) {
-				return region_response('Too Many Requests', { status: 429 });
-			}
-
 			// Verify (session-bound) before consulting the manifest — bad MAC never distinguishes
 			// unknown vs known id.
 			if (!this.#verify_region_mac(id, payload, exp_raw, ttl_raw, sig, event)) {
