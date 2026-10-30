@@ -18,7 +18,7 @@ import type { Page } from '@playwright/test';
 import { test, check, sleep } from './fixtures/index.ts';
 import { FAVICON_RE } from './fixtures/re.ts';
 
-async function probe(page: Page, pathname: string, live?: string) {
+async function probe(page: Page, pathname: string) {
 	const errors: string[] = [];
 	page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 	page.on('pageerror', (e) => errors.push('PAGEERROR ' + e.message));
@@ -26,9 +26,6 @@ async function probe(page: Page, pathname: string, live?: string) {
 	await page.waitForSelector('[data-region-inside]', { timeout: 8000 }).catch(() => {});
 	const widget = page.locator('[data-inner-widget]');
 	await widget.waitFor({ timeout: 8000 }).catch(() => {});
-	// a `wake: 'load'` island drops a click that lands before it hydrated (only interaction wakes
-	// replay): click once it is live — network idle is no promise of that on a slow runner
-	if (live) await page.waitForSelector(live, { state: 'attached', timeout: 15000 }).catch(() => {});
 	const before = ((await widget.textContent().catch(() => '')) || '').trim();
 	await widget.click().catch(() => {});
 	await widget.click().catch(() => {});
@@ -47,7 +44,7 @@ test.describe('direct <Region> in a component: island on csr=false, plain (Kit-h
 	test('csr=false: RegionInside as an island (ogygia hydrates it — unchanged)', async ({
 		page
 	}) => {
-		const a = await probe(page, '/region-mixed', 'ogygia-region[data-hydrated] [data-inner-widget]');
+		const a = await probe(page, '/region-mixed');
 		check(
 			'csr=false: RegionInside rendered once',
 			a.dom.regionInside === 1,

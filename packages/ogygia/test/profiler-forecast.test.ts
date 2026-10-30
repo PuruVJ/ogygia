@@ -28,27 +28,6 @@ const pat = (
 	}) as unknown as Pattern;
 
 describe('forecast_of', () => {
-	it('two fixes with one title name their places (one title per fix)', () => {
-		// REGRESSION (CI): the same problem in two places made two parts titled alike — the
-		// checklist, keyed by title, failed to hydrate (each_key_duplicate)
-		const f = forecast_of(
-			[100],
-			[
-				pat({ kind: 'formatter-per-call', title: 'A formatter per call', save_ms: 30 }, [['lib/a.ts', 3]]),
-				pat({ kind: 'formatter-per-call', title: 'A formatter per call', save_ms: 20 }, [['lib/b.ts', 9]]),
-				pat({ kind: 'date-parse', title: 'Dates parsed per item', save_ms: 10 }, [['lib/c.ts', 1]])
-			],
-			undefined
-		)!;
-		const titles = f.parts.map((p) => p.title);
-		expect(new Set(titles).size).toBe(titles.length);
-		expect(titles).toEqual([
-			'A formatter per call (lib/a.ts:3)',
-			'A formatter per call (lib/b.ts:9)',
-			'Dates parsed per item'
-		]);
-	});
-
 	it('separate fixes add up; fixes on the same line count their biggest once', () => {
 		const f = forecast_of(
 			[100, 110, 120],

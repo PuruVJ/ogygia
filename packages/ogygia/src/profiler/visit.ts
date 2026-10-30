@@ -85,8 +85,6 @@ export interface VisitRegion {
 	failed?: string;
 	/** a failed island's wake → its failure (page clock) */
 	failed_span?: [number, number];
-	/** when the failed island's hydrate step began (page clock): from here to the failure it held the thread */
-	failed_turn?: number;
 	/** document px */
 	top: number;
 	height: number;
@@ -376,7 +374,6 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 			const s = r.failed_span;
 			if (Array.isArray(s) && s.length === 2 && typeof s[0] === 'number' && typeof s[1] === 'number' && s[0] >= 0 && s[1] >= s[0] && s[1] < MAX_MS)
 				out.failed_span = [s[0], s[1]];
-			if (typeof r.failed_turn === 'number' && r.failed_turn >= 0 && r.failed_turn < MAX_MS) out.failed_turn = r.failed_turn;
 		}
 		regions.push(out);
 	}
