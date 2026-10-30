@@ -544,9 +544,14 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		check('page: failed hydration → Broken', named('hydrate-failed', 'Broken'));
 		check('page: eager island below the fold → BelowEager', named('eager-offscreen', 'BelowEager'));
 		check('page: layout shift on waking → Grower', named('hydration-shift', 'Grower'));
+		// (the WAITING findings — queued, held-idle, late-interactive — list every island that waited,
+		// not a culprit: on a slow CI machine a healthy island honestly waits behind Heavy and the dev
+		// server's first compile, and is named there. A decoy named by any other finding is a false blame.)
+		const WAITING = ['queued', 'held-idle', 'late-interactive'];
 		check(
 			'page: no finding names a decoy',
-			!view?.findings.some((f) => f.code !== 'queued' && f.names.some((n: string) => ['Healthy', 'BelowLazy', 'OnClick'].includes(n)))
+			!view?.findings.some((f) => !WAITING.includes(f.code) && f.names.some((n: string) => ['Healthy', 'BelowLazy', 'OnClick'].includes(n))),
+			JSON.stringify(view?.findings)
 		);
 		check('page: an island row per hydration', (view?.rows ?? 0) >= 4, String(view?.rows));
 		check('page: vitals measured (TTFB, FCP)', !!view?.vitals.includes('ttfb') && view.vitals.includes('fcp'), JSON.stringify(view?.vitals));
