@@ -28,7 +28,7 @@
  * still waits). On a Kit-hydrated document Kit's own start sets the pace, so nothing waits on the
  * critical resources there (the window still applies).
  */
-import { after_document_painted, yield_task } from './schedule.js';
+import { after_document_painted } from './schedule.js';
 import { kit_hydrates_page } from './kit-boot.js';
 import { emit as dt_emit } from '../devtools/bus.js';
 
@@ -255,62 +255,23 @@ function waits_for_critical(kind: LoadKind, cls: LoadClass): boolean {
 	return !(kind === 'content' && cls === 'visible');
 }
 
-/**
- * Starts go out across tasks: a start's holder runs its own start-up synchronously (an island adds
- * its graph links and starts its imports; the first one also the runtime's lazy chunks), so when the
- * gate opened on a page of 21 islands, every one of those ran in the task that opened it — one long
- * task (52 ms on a 4×-throttled runner). After this much work in one task the drain yields.
- */
-const START_BUDGET_MS = 16;
-let draining = false;
-let drain_again = false;
-
 function drain(): void {
-	if (draining) {
-		drain_again = true;
-		return;
-	}
 	if (!queue.length) return;
-	draining = true;
-	void drain_queue().finally(() => {
-		draining = false;
-		if (drain_again) {
-			drain_again = false;
-			drain();
+	queue.sort((a, b) => RANK[a.cls()] - RANK[b.cls()] || a.order - b.order);
+	for (let i = 0; i < queue.length;) {
+		const e = queue[i];
+		const cls = e.cls();
+		if (!critical_done && waits_for_critical(e.kind, cls)) {
+			i++;
+			continue;
 		}
-	});
-}
-
-async function drain_queue(): Promise<void> {
-	let until = now() + START_BUDGET_MS;
-	for (;;) {
-		drain_again = false;
-		queue.sort((a, b) => RANK[a.cls()] - RANK[b.cls()] || a.order - b.order);
-		let yielded = false;
-		for (let i = 0; i < queue.length;) {
-			const e = queue[i];
-			const cls = e.cls();
-			if (!critical_done && waits_for_critical(e.kind, cls)) {
-				i++;
-				continue;
-			}
-			const background = cls === 'ahead' || cls === 'speculative';
-			if (background && in_flight_background >= BACKGROUND_WINDOW) {
-				i++;
-				continue;
-			}
-			queue.splice(i, 1);
-			start(e, cls, background);
-			// the holder's continuation (its synchronous start-up) runs in this microtask turn
-			await null;
-			if (now() >= until) {
-				await yield_task();
-				until = now() + START_BUDGET_MS;
-				yielded = true;
-				break; // classes may have moved (scroll, promote) while the page had the thread
-			}
+		const background = cls === 'ahead' || cls === 'speculative';
+		if (background && in_flight_background >= BACKGROUND_WINDOW) {
+			i++;
+			continue;
 		}
-		if (!yielded && !drain_again) return;
+		queue.splice(i, 1);
+		start(e, cls, background);
 	}
 }
 
@@ -363,8 +324,6 @@ function now(): number {
 export function reset_load_scheduler(): void {
 	queue.length = 0;
 	in_flight_background = 0;
-	draining = false;
-	drain_again = false;
 	critical = null;
 	critical_done = false;
 	release_critical = null;
