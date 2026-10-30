@@ -1,0 +1,38 @@
+name: pnpm audit
+
+# Checks the lockfile against the npm advisory database: weekly, when the lockfile changes, and on
+# demand. `--prod` audits what runs in production — the published package's dependencies and the
+# apps' runtime ones — not dev and build tooling, which never ships to a user. Fails on high or
+# critical advisories. (`pnpm audit` reads only the lockfile: no install needed.)
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  push:
+    branches:
+      - main
+    paths:
+      - pnpm-lock.yaml
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Audit production dependencies against npm advisories
+        run: pnpm audit --prod --audit-level=high
