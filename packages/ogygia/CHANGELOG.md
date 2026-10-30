@@ -8,6 +8,12 @@ changeset, written by the release: do not edit by hand.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.10.0
+
+### Minor Changes
+
+- [#33](https://github.com/PuruVJ/ogygia/pull/33) [`0884b9a`](https://github.com/PuruVJ/ogygia/commit/0884b9a2fab903bec15df9df0e83ead50b7ba0c9) Thanks [@PuruVJ](https://github.com/PuruVJ)! - **Breaking:** a `render: 'deferred'` hole's timing is the new `fetch` key (`with { render: 'deferred', fetch: 'visible' }`); pairing it with `wake` fails the build with the line to write, and `wake` now only means when an island's JS runs.
+
 ## 0.9.0
 
 ### Minor Changes
