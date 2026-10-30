@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # the next minor's line (.changeset/README.md): it releases as usual, under npm's `latest`
+      - next
 
 jobs:
   version:
@@ -29,6 +31,6 @@ jobs:
         with:
           version-script: pnpm ci:version
           publish-script: pnpm ci:release
-          commit-message: 'chore: update versions'
-          pr-title: 'chore: update versions'
+          commit-message: 'chore: update versions (${{ github.ref_name }})'
+          pr-title: 'chore: update versions (${{ github.ref_name }})'
           create-github-releases: true
