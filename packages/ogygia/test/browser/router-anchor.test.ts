@@ -68,3 +68,22 @@ test('data-sveltekit-reload: the nearest ancestor decides, either direction', ()
 	expect(reload_opt_out(document.getElementById('out')!)).toBe(true); // …and a bare attr below it opts out again
 	expect(reload_opt_out(document.getElementById('top')!)).toBe(true); // only the layout applies here
 });
+
+// Regression (field report): a link a web component renders in its shadow tree ignored the page's
+// `data-sveltekit-reload` around the component (`closest` stops at the shadow root), so a card's link
+// in a full-load subtree was swapped in place.
+test('data-sveltekit-reload: decided across shadow roots, nearest still wins', () => {
+	document.body.innerHTML = '<div data-sveltekit-reload><x-card id="card"></x-card></div><div data-sveltekit-reload="false"><x-card id="opted"></x-card></div>';
+	const link_in = (id: string, inner = '') => {
+		const root = document.getElementById(id)!.attachShadow({ mode: 'open' });
+		root.innerHTML = `${inner}<a href="/x">x</a>`;
+		return root.querySelector('a')!;
+	};
+	expect(reload_opt_out(link_in('card'))).toBe(true);
+	expect(reload_opt_out(link_in('opted'))).toBe(false);
+	// inside the shadow tree, an attribute nearer the link wins over the page's
+	document.body.innerHTML = '<div data-sveltekit-reload><x-card id="inner"></x-card></div>';
+	const root = document.getElementById('inner')!.attachShadow({ mode: 'open' });
+	root.innerHTML = '<p data-sveltekit-reload="off"><a href="/y">y</a></p>';
+	expect(reload_opt_out(root.querySelector('a')!)).toBe(false);
+});

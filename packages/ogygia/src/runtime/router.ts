@@ -14,6 +14,7 @@
 import { kit_hydrates_page } from './kit-boot.js';
 import { slots } from './slots.js';
 import { publish_nav } from './nav-handle.js';
+import { nearest_attr } from './nearest-attr.js';
 
 const WS = /\s+/;
 
@@ -140,12 +141,12 @@ export function same_document(a: URL, b: URL) {
  * `"false"` = SPA navigation — so a layout can opt a whole subtree OUT of the SPA and a child
  * subtree can opt back IN. Presence alone used to force a reload, which turned a
  * `data-sveltekit-reload="false"` subtree (an app's way of saying "SPA here") into full loads.
+ * Across shadow roots: a link a web component renders in its own shadow tree sits under the page's
+ * markup all the same (a card's link in a full-load subtree was swapped in place).
  */
 export function reload_opt_out(anchor: Element): boolean {
-	const holder = anchor.closest('[data-sveltekit-reload]');
-	if (!holder) return false;
-	const v = holder.getAttribute('data-sveltekit-reload');
-	return v !== 'off' && v !== 'false';
+	const v = nearest_attr(anchor, 'data-sveltekit-reload');
+	return v !== null && v !== 'off' && v !== 'false';
 }
 
 /**

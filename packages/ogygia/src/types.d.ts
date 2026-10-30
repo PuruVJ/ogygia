@@ -23,6 +23,9 @@ declare module 'virtual:ogygia/region-endpoint' {
 	/** The island `data-og-fp` over its module URL + canonical props text (server/fingerprint.ts);
 	 *  `''` on the client, which only ever reads the attribute. */
 	export function islandFingerprint(entry: string, canonical: string): string;
+	/** A hole's own stylesheet hrefs (by region id), for a render that inlines it in the page;
+	 *  `[]` on the client. */
+	export function holeCss(entry: string): string[];
 }
 declare module 'virtual:ogygia/server-manifest' {
 	export const islands: Record<string, () => Promise<{ default: unknown }>>;
@@ -30,6 +33,11 @@ declare module 'virtual:ogygia/server-manifest' {
 	export const island_url: Record<string, string>;
 	/** Server-island id → its component name (`SlowHole`), where the component file is known. */
 	export const island_name: Record<string, string>;
+	/** Server-island id → its render identity (the component it renders), signed into its capabilities. */
+	export const island_render: Record<string, string>;
+	/** Render identity → a server-island id of this build that renders it: answers a capability
+	 *  minted by another build, whose id this one does not have. */
+	export const render_island: Record<string, string>;
 	/** Server-island id → its server tree reads `page.data` (the build's answer); `null` in dev:
 	 *  unknown, so every hole looks its page up. */
 	export const island_reads_page_data: Record<string, boolean> | null;
@@ -116,9 +124,10 @@ declare module 'virtual:ogygia/devtools-boot-url' {
 	export default url;
 }
 declare module 'virtual:ogygia/secret' {
-	export const secret: string;
-	/** True when the key is env-provided (OGYGIA_SECRET) and thus survives redeploys. */
-	export const secretStable: boolean;
+	/** This build's random key material (server leg; '' on the client). */
+	export const buildKey: string;
+	/** True when the build saw an `OGYGIA_SECRET` (its region ids are salted from it). */
+	export const buildHadSecret: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;
@@ -128,7 +137,8 @@ declare module 'virtual:ogygia/sign' {
 		exp: number | string,
 		props: string,
 		session?: string,
-		ttl?: number | string
+		ttl?: number | string,
+		render?: string
 	): string;
 }
 declare module 'virtual:ogygia/request-event' {
@@ -181,6 +191,8 @@ declare module 'virtual:ogygia/router-config' {
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regions: { ttl } })` (default 3600). */
 	export const regionTtl: number;
+	/** Seconds after expiry an anonymous capability still renews. From `ogygia({ regions: { maxPageAge } })` (default 8 days). */
+	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/route-csr' {
 	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the

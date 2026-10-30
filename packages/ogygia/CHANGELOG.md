@@ -3,51 +3,82 @@ title: Releases
 summary: Each release of ogygia, newest first.
 ---
 
-All notable changes to **ogygia** are documented in this file.
+All notable changes to **ogygia** are documented in this file, newest first. Each entry is a PR's
+changeset, written by the release: do not edit by hand.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - Unreleased
+## 0.9.0
 
-### Changed
+### Minor Changes
 
-- **Breaking:** ogygia supports what SvelteKit 3 and Svelte 5 support — SvelteKit 3, Svelte 5.57+ and Vite 8; SvelteKit 2 is no longer supported.
-- **Breaking:** Kit's config (routes dir, `outDir`, `inlineStyleThreshold`) is read from `sveltekit({...})` in the vite config; ogygia no longer reads `svelte.config.js`.
-- **Breaking:** islands no longer get a `$app/stores` shim (SvelteKit 3 removed the store) unless `legacy: { appStores: true }` is on.
-- The compiler follows every app import through one resolver — relative paths, the app's Vite aliases and `#lib` or any other package.json `"imports"` entry — in place of its `$lib` special case.
-- Devtools and profiler advice names `sveltekit({ inlineStyleThreshold })`, and `ogygia init` adds Kit's `#lib` imports to an app that lacks them.
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - Raised minimums to the versions ogygia is tested on: `svelte` ^5.56.8, `playwright` and `@playwright/test` ^1.62.0 (for `ogygia/testing`), and the `magic-string` dependency ^1.4.5.
 
-### Added
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - SvelteKit 3 support, alongside SvelteKit 2: builds no longer fail on `refreshAll` ([#37](https://github.com/PuruVJ/ogygia/issues/37)), islands on csr=true pages get Kit's page, the `$page` store no longer uses the removed `$app/stores`, custom-type remote arguments encode on csr=false pages, and a remote form in an island on a csr=true page no longer reloads the page.
 
-- `ogygia({ legacy: { appStores: true } })` keeps `$app/stores` working in islands for an app that shims it, and seed shaping reads its `$page` usage to decide which `page.data` keys ship.
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - The `vite` peer is `^8.2.4`: Vite 8, from the first version past its published advisories. SvelteKit 2 and SvelteKit 3 both run on it.
+
+### Patch Changes
+
+- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - `devalue` is required at `^5.9.3`, the first version with the fixes for its published advisories.
+
+## 0.8.8 - 2026-10-30
 
 ### Fixed
 
-- SvelteKit 3 production builds no longer fail with `"refreshAll" is not exported`; a remote `form()` in an island refreshes its queries and the page's data after a successful submit, without a reload.
-- Islands on csr=true pages get Kit's page on SvelteKit 3 (Kit 3 moved its generated client entry).
-- A remote function argument of a custom transport type now encodes on csr=false pages under SvelteKit 3.
-- A remote form in an island on a csr=true page no longer reloads the page after a submit or a redirect; it goes through Kit's router.
-- The `$app/navigation` shim exports `refreshAll` and `snapshot`, and the `$app/stores` shim exports `getStores`, so islands importing them build.
-- ogygia imports `$app/env` instead of `$app/environment` (deprecated in SvelteKit 3).
-- The profiler and ogygia's other lazily loaded server code load in dev under SvelteKit 3's module runner.
-- A region returned by a remote query no longer crashes on SvelteKit 3 (Kit refuses `event.url` there); its asset and hole URLs are root-absolute.
-- A load's custom transport types reach the page seed, the remote seed and a hole's page lookup again under SvelteKit 3.
-- A frozen page no longer freezes a signed-in visitor's render: reading the router's `c.visitor` keeps the page per-request.
-- A static `page()` / `widget()` from a peer that is down renders an inline "unavailable" card instead of breaking the page, and such a page is not frozen.
-- A static peer hop continues the request's trace (one `traceparent` trace-id across shell → cms → dash).
-- Islands on a Kit page see Kit's real `navigating` (`from`, `to`, `type`, …) and `page.shallow`.
-- A federated widget returning `region(Comp, props)` and an `expose`d typed router type-check, as documented.
-- A `page.data` key that cannot be serialized (a region value the page renders on the server) drops only that key from the page seed, not every key beside it.
-- Dev pre-bundles devalue under strict pnpm installs (no "Failed to resolve dependency" warning).
-- Going back while the next page is still loading no longer leaves that page on screen under the old address.
-- Island downloads released together start across tasks, so a page with many islands makes no long task when they wake.
-- The page seed parses before the first island's hydrate step, and the runtime's lazy code starts in a task of its own, so neither adds to an island's task.
-- Devtools and the profiler no longer blame ogygia's scheduler ("held with nothing ahead") for a wait the page's own long task or a failing island caused.
-- The profiler's "pick your fixes" checklist no longer fails when two fixes share a title; repeated titles name their place.
-- ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
+- A hole on a page cached across a deploy keeps rendering when its component is unchanged: its URL signs the component it renders (`&r=`), so a new preset, `wake` or build-time `OGYGIA_SECRET` no longer turns it into `unknown-id`.
 
-## [0.8.3] - 2026-10-19
+## 0.8.7 - 2026-10-30
+
+### Added
+
+- `regions.maxPageAge` sets the oldest a cached copy of a page can be and still renew its holes (default 8 days, the old fixed window), for a CDN that keeps pages longer without saying so in `cache-control`.
+
+### Fixed
+
+- A refused hole request says why: its 403 carries `x-ogygia-deny` (`foreign-key`, `sig`, `unknown-id`, …) and `x-ogygia-key`, the answering server's key fingerprint, which every hole URL now also carries as `&k=`.
+- The runtime never retries a 403 from the islands endpoint: the fallback stands, and devtools and the profiler show the reason (or that a proxy, CDN or firewall in front answered).
+- The signing key is read at first use, so an `OGYGIA_SECRET` the host loads after the server's modules still counts; a production server signing with the build's random key logs it once.
+
+## 0.8.6 - 2026-10-28
+
+### Fixed
+
+- A hole created fresh in the browser (Kit remounting a page whose hydration failed, or an island re-creating a snippet) renders its fallback again, so an on-demand hole whose fallback is its trigger can still be woken (it came back empty in 0.8.5).
+- A hole in a live snippet that an island re-creates fetches again by its identity on any page, not only on a Kit-hydrated one.
+
+## 0.8.5 - 2026-10-22
+
+### Changed
+
+- An island inside a live snippet an island renders follows the nested rule: it renders inline and hydrates with that island.
+- An island sets `data-hydrated` and fires `ogygia:hydrated` once the live snippets it renders have hydrated too.
+- A hole nested in an island renders inline as static HTML, like a lake: its component never ships to the browser, and an island inside it wakes on its own.
+
+### Fixed
+
+- A hole inside a live snippet an island renders stays deferred: it ships its fallback, loads on its schedule and is never bundled into the island (it never loaded before).
+- A live snippet that renders a template-root snippet, or reads a `<script module>` import or value, an exported declaration or a `$:` declaration, no longer throws `ReferenceError` at render.
+- A lake inside a live snippet an island renders keeps its frozen region, so the island inside it wakes and the lake's HTML is no longer discarded beside other snippet content.
+- A live snippet an island renders reads the page's contexts on the server and in the browser, as the island does.
+- An island inside a frozen snippet wakes on its own.
+- A snippet passed to an island on a Kit-hydrated page no longer causes a hydration mismatch.
+- A hole on a Kit-hydrated page keeps its address and its landed HTML through Kit's hydration (a hole inside an island could go empty).
+- With an app transform, a router navigation no longer leaves a web component's server tree in the light DOM of a live host its own runtime already unpacked (a site nav collapsed to one unstyled item): a page the router fetches is rendered as an answer, every host restored before the swap.
+- A first-load copy of a transformed page that reaches the router (a frozen page, a prerender, a cache that ignores `Vary`) is loaded instead of swapped in; transformed documents vary on `x-ogygia-spa`.
+- A link inside a web component's shadow tree honors the `data-sveltekit-reload` around the component.
+
+## 0.8.4 - 2026-10-22
+
+### Fixed
+
+- ogygia always uses the app's SvelteKit: a second copy resolved from ogygia's own location (a linked ogygia whose peer resolved another Kit) left the devtools' server events, the freeze verdict and the page seed without their request.
+- A hole's answer morphed into a custom element with a shadow root keeps the answer's order: a reordered or newly shown child no longer stays in or lands at the wrong place.
+- A baked held region on a Kit-hydrated page no longer throws a hydration mismatch that emptied it: the region element is adopted as it stands, like a lake's.
+- Islands inside a baked held region on a Kit-hydrated page wake on the runtime instead of being left to Kit, which never hydrates them.
+- Custom elements inside a baked held region keep what the server's transform wrote (a closed dropdown no longer loses `hidden` and shifts the page).
+
+## 0.8.3 - 2026-10-19
 
 ### Added
 
@@ -82,7 +113,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A click on a `load`, `idle`, `visible` or media island before it is live is no longer lost: the island wakes at once and the click is replayed when it is live, as on an `interaction` island; `hydratedBy()` then says `'interaction'`.
 - A Ctrl/Cmd/Shift- or middle-click on a link in an island that is not live yet opens the link as the browser would; before, it was canceled and replayed, and the replay could not open it.
 
-## [0.8.2] - 2026-10-14
+## 0.8.2 - 2026-10-14
 
 ### Changed
 
@@ -92,13 +123,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A hole's CSS now carries components taken through a package (its `exports`, a TypeScript entry included) or a barrel — only the names imported — and an island inside a hole brings its own CSS, so what it renders after a click is styled.
 
-## [0.8.1] - 2026-10-13
+## 0.8.1 - 2026-10-13
 
 ### Fixed
 
 - `handle({ endpoint })` now moves every hole and live-region URL a page mints, not only the handler; before, every hole asked the old `/__ogygia__` path and stayed empty.
 
-## [0.8.0] - 2026-10-09
+## 0.8.0 - 2026-10-09
 
 The **passage** release: the runtime and the compiler rebuilt on one identity primitive, regions that move instead of reset across navigations, a standalone compiler, a production SSR profiler, a devtools dock, a typed router, frozen pages and fragment federation. Underneath, one load scheduler, one DOM ownership model and one page model replace per-path rules.
 
@@ -224,7 +255,7 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - The per-host csr context cascade is one per-document signal (`documentIsCsrTrue()`).
 - The on-demand-hole browser tests no longer depend on where the runner's pointer rests, and the weekly upstream watcher gained a baseline leg.
 
-## [0.7.0] - 2026-08-20
+## 0.7.0 - 2026-08-20
 
 ### Breaking changes
 
@@ -251,13 +282,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - One shared region-option parser, one emitter per region kind, and side-channel emits centralized.
 
-## [0.6.6] - 2026-08-19
+## 0.6.6 - 2026-08-19
 
 ### Fixed
 
 - A `{#snippet}` forwarded into an island no longer emits duplicate imports.
 
-## [0.6.5] - 2026-08-19
+## 0.6.5 - 2026-08-19
 
 ### Removed
 
@@ -267,7 +298,7 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - `ogygia/profiler` is in the published export map.
 
-## [0.6.4] - 2026-08-19
+## 0.6.4 - 2026-08-19
 
 ### Added
 
@@ -277,13 +308,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - Profiler: native runtime frames are named instead of rendering as "—".
 
-## [0.6.3] - 2026-08-19
+## 0.6.3 - 2026-08-19
 
 ### Fixed
 
 - A `DocsShell` sidebar no longer drowns its own page cross-fade.
 
-## [0.6.2] - 2026-08-19
+## 0.6.2 - 2026-08-19
 
 ### Fixed
 
@@ -291,13 +322,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - A static server island no longer 404s a bare region id on navigation.
 - A page transition between different shells no longer stutters.
 
-## [0.6.1] - 2026-08-19
+## 0.6.1 - 2026-08-19
 
 ### Fixed
 
 - Placed client-island CSS no longer vanishes in a production build.
 
-## [0.6.0] - 2026-08-16
+## 0.6.0 - 2026-08-16
 
 ### Breaking changes
 
@@ -346,14 +377,14 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - The region batch endpoint rejects oversized bodies (413) before reading them.
 - A full audit of the signed-capability pipeline.
 
-## [0.5.1] - 2026-08-13
+## 0.5.1 - 2026-08-13
 
 ### Fixed
 
 - Published `exports` resolve to `dist`, not `src`.
 - The browser runtime no longer disappears to tree-shaking.
 
-## [0.5.0] - 2026-08-12
+## 0.5.0 - 2026-08-12
 
 ### Breaking changes
 
@@ -402,14 +433,14 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - A live command refresh with only refresh keys works.
 - The morph keeps form state with a keyed diff.
 
-## [0.4.3] - 2026-08-07
+## 0.4.3 - 2026-08-07
 
 ### Fixed
 
 - `invalidateAll` is a soft seed refresh, not a body swap and view transition.
 - `csr = false` FOUC CSS no longer double-owns island component JS, and client stubs keep the entry import that carries island CSS.
 
-## [0.4.0] - 2026-08-07
+## 0.4.0 - 2026-08-07
 
 ### Breaking changes
 
@@ -427,13 +458,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - The static-tag-only requirement, and the tag-hoist virtual modules.
 
-## [0.3.5] - 2026-08-07
+## 0.3.5 - 2026-08-07
 
 ### Fixed
 
 - Nested server and deferred-client islands keep their authored attributes.
 
-## [0.3.4] - 2026-08-07
+## 0.3.4 - 2026-08-07
 
 ### Added
 
@@ -443,13 +474,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - `defer` + `hydrate` is no longer a build error; `hydrate: 'none'` + `defer` warns in dev and is treated as defer-only.
 
-## [0.3.3] - 2026-08-07
+## 0.3.3 - 2026-08-07
 
 ### Changed
 
 - `hydrate: 'load'` also modulepreloads the island's dependency chunks.
 
-## [0.3.2] - 2026-08-07
+## 0.3.2 - 2026-08-07
 
 ### Changed
 
@@ -459,13 +490,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - Relative island entries on nested routes resolve against the document, not the runtime module.
 
-## [0.3.1] - 2026-08-07
+## 0.3.1 - 2026-08-07
 
 ### Fixed
 
 - The client build no longer emits thin island entry facades.
 
-## [0.3.0] - 2026-08-06
+## 0.3.0 - 2026-08-06
 
 ### Changed
 

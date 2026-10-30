@@ -12,7 +12,8 @@ import {
 	is_redirected_answer,
 	is_same_origin_response,
 	island_module_url,
-	RegionAnswerRefused
+	RegionAnswerRefused,
+	deny_of
 } from './region-endpoint-url.js';
 import { island_entry_of, import_entry, on_entry_fallback, pin_region_urls } from './entry-locations.js';
 import {
@@ -248,6 +249,31 @@ function dom_ready() {
 	if (typeof document === 'undefined' || document.readyState !== 'loading')
 		return Promise.resolve();
 	return new Promise((r) => document.addEventListener('DOMContentLoaded', r, { once: true }));
+}
+
+/** Where a live snippet's pending hydrate waits on its host region (region-snippet.ts `hold_host`). */
+const SNIPPET_BOOTS = Symbol.for('ogygia.snippet-boots');
+/** A snippet whose entry never arrives must not hold its host's signal forever. */
+const SNIPPET_BOOT_CAP_MS = 10_000;
+
+/** Settle the live snippets a just-hydrated region renders — and the snippets those render, which
+ *  register as they boot — or the cap, whichever is first. A failed boot settles too. */
+async function snippets_settled(region: Element): Promise<void> {
+	const host = region as Element & { [SNIPPET_BOOTS]?: Promise<unknown>[] };
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const cap = new Promise<void>((r) => (timer = setTimeout(r, SNIPPET_BOOT_CAP_MS)));
+	let capped = false;
+	void cap.then(() => (capped = true));
+	try {
+		for (let batch = host[SNIPPET_BOOTS]; batch?.length && !capped; batch = host[SNIPPET_BOOTS]) {
+			host[SNIPPET_BOOTS] = [];
+			await Promise.race([Promise.allSettled(batch), cap]);
+			await Promise.resolve(); // (their effects, and the snippets they render, register)
+		}
+	} finally {
+		clearTimeout(timer);
+		delete host[SNIPPET_BOOTS];
+	}
 }
 
 /**
@@ -529,10 +555,11 @@ class OgygiaRegion extends HTMLElement {
 		// Region rule (DESIGN.md): a nested region rides its awake ancestor's hydration — its SSR DOM
 		// is already inside that parent, so self-running would double-hydrate. Two exceptions self-run:
 		// a DEFERRED region (its HTML is remote, never in the parent's DOM), and a region inside an
-		// ADOPTED SLOT (`<ogygia-slot>`) — slot children are host-page content the parent island adopts
-		// as opaque DOM; they are NOT part of its hydrated graph, so nothing else will wake them.
+		// ADOPTED SLOT (`<ogygia-slot>`, or a frozen snippet's `<ogygia-snippet data-og-static>`) — host-page
+		// content the parent island adopts as opaque DOM; NOT part of its hydrated graph, so nothing else
+		// will wake them.
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
-		const slot = this.parentElement && this.parentElement.closest('ogygia-slot');
+		const slot = this.parentElement && this.parentElement.closest('ogygia-slot,ogygia-snippet[data-og-static]');
 		const in_adopted_slot = !!(boundary && slot && boundary.contains(slot));
 		// Third exception (fragment federation): a FOREIGN-ORIGIN entry — a stitched fragment's
 		// island, possibly swapped in post-hoc by a client-stitch hole — is by construction NOT
@@ -690,6 +717,8 @@ class OgygiaRegion extends HTMLElement {
 				// Swapping that in put a site's account page — scripts, skeletons, a second header —
 				// into every hole of its header for signed-in visitors. Refused: the fallback stands.
 				if (is_redirected_answer(res)) throw new RegionAnswerRefused('redirected', res.url);
+				// A refused capability is deterministic (its key, its MAC, its id): no retry would differ.
+				if (res.status === 403) throw new RegionAnswerRefused('forbidden', res.url || endpoint, deny_of(res, endpoint));
 				if (!res.ok) throw new Error('status ' + res.status);
 				// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
 				if (res.status === 204) return KEEP_FALLBACK_HTML;
@@ -1062,11 +1091,21 @@ class OgygiaRegion extends HTMLElement {
 			this.#adopt_renewed();
 		} catch (err) {
 			if ((err as { name?: string })?.name === 'AbortError' || outer.aborted) return;
-			// A refused answer is deterministic (a redirect rule in front of the handle, not a flaky
-			// network): say what answered instead and do not retry.
+			// A refused answer is deterministic (a redirect rule in front of the handle, a refused
+			// capability, not a flaky network): say what answered instead and do not retry.
 			const refused = err instanceof RegionAnswerRefused;
+			// (a refused capability's reason travels as the failure's message)
+			const deny = refused && err.reason === 'forbidden' ? err.deny || 'no reason given' : undefined;
 			if (import.meta.env.DEV) {
-				if (refused) {
+				if (deny !== undefined) {
+					console.warn(
+						`[ogygia] region answer refused for ${endpoint}: ${deny.startsWith('not ogygia') ? deny : `the islands endpoint refused its capability (403: ${deny})`}. ` +
+							(deny.startsWith('foreign-key')
+								? 'The page and its islands endpoint came from different deployments (two keys): route the endpoint to the deployment that served the page, or give every deployment one OGYGIA_SECRET. '
+								: '') +
+							'The fallback stands.'
+					);
+				} else if (refused) {
 					console.warn(
 						`[ogygia] region answer refused for ${endpoint}: the request was ${err.reason === 'redirected' ? 'redirected to' : 'answered with a whole document at'} ${err.final_url}. ` +
 							`A handle in front of ogygia.handle() (an auth redirect, a locale bounce, a 404 handler) took the region request — exempt the islands endpoint there. The fallback stands.`
@@ -1093,6 +1132,7 @@ class OgygiaRegion extends HTMLElement {
 						reason: refused ? err.reason : 'error',
 						...(final_path ? { final_path } : {}),
 						...(refused ? {} : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+						...(deny !== undefined ? { message: deny.slice(0, 200) } : {}),
 						attempts: this.#fetch_attempts,
 						t: Math.round(performance.now())
 					});
@@ -1105,6 +1145,7 @@ class OgygiaRegion extends HTMLElement {
 					endpoint,
 					reason: refused ? err.reason : 'error',
 					...(refused ? { final_url: err.final_url } : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+					...(deny !== undefined ? { message: deny.slice(0, 200) } : {}),
 					attempt: this.#fetch_attempts,
 					final
 				});
@@ -1239,14 +1280,18 @@ class OgygiaRegion extends HTMLElement {
 			this.#ssr_html = null; // awake (or not ours): the server copy has done its job
 			this.#unwatch();
 			if (!this.#app) return; // not ours (Kit-hydrated page) or torn out mid-hydrate
+			const t_done = now_ms();
+			// (Svelte's `hydrate()` runs `$effect` and onMount in a microtask it queued during the call; one
+			// awaited now runs after it — mounted means they ran)
+			await Promise.resolve();
+			const t_mounted = now_ms();
+			// The live snippets it renders hydrate after it (their entries import): it is awake once they
+			// are, so `data-hydrated` and the event wait for them. Its own timings stay its own.
+			await snippets_settled(this);
+			if (!this.isConnected || !this.#app) return;
 			this.setAttribute('data-hydrated', '');
-			if (BEACON) beacon_hydrated(this, t0, t_loaded, now_ms(), ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
-			// (after its effects: Svelte's `hydrate()` runs `$effect` and onMount in a microtask it queued
-			// during the call, and a microtask queued now runs after it — mounted means they ran)
-			if (DEVTOOLS) {
-				const ids = dt_ids(this);
-				queueMicrotask(() => dt_emit({ domain: 'runtime', name: 'region.hydrate.done', ...ids, ms: now_ms() - dt_t0 }));
-			}
+			if (BEACON) beacon_hydrated(this, t0, t_loaded, t_done, ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
+			if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.done', ...dt_ids(this), ms: t_mounted - dt_t0 });
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			// (a failed island stops being watched; its copy, if kept, counts as changed from here)

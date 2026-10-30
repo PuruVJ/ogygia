@@ -351,7 +351,7 @@
 						<span class="name" style:width="{LABEL_W}px" title={f.name}>{f.name}</span>
 						<span class="track" style:width="{trackW}px"><i class="seg h-failed" style:left="0px" style:width="{trackW}px"></i></span>
 						<span class="t">none</span>
-						<span class="tags"><b class="tag err">{f.reason === 'error' ? `failed ${f.attempts}×${f.message ? ` (${f.message})` : ''}` : f.reason === 'redirected' ? 'redirected' : 'answered with a page'}</b></span>
+						<span class="tags"><b class="tag err">{f.reason === 'error' ? `failed ${f.attempts}×${f.message ? ` (${f.message})` : ''}` : f.reason === 'forbidden' ? `refused${f.message ? ` (${f.message})` : ''}` : f.reason === 'redirected' ? 'redirected' : 'answered with a page'}</b></span>
 					</div>
 				{/each}
 				{#each view.holes ?? [] as h, i (h.endpoint ?? i)}

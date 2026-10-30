@@ -95,6 +95,16 @@ export interface RegionsOptions {
 	 * the page's cache life; a hole on an older cached copy renews itself when it wakes.
 	 */
 	ttl?: number;
+	/**
+	 * The oldest a cached copy of a page can be and still get its holes, in seconds (default
+	 * `691200`, 8 days). An anonymous hole whose capability expired while a cache kept its page
+	 * renews itself for up to this long after that expiry; past it, the hole keeps its fallback.
+	 * Raise it to the longest your CDN may serve a page when the page does not say so in its
+	 * `cache-control`. `0` turns renewal off. Unlike `ttl` it never lengthens a hole URL's life (a
+	 * renewed URL lives `ttl`), and a hole bound to a session never renews. A renewable URL replays its
+	 * props: keep hole props to routing keys (a locale, a page), and read anything sensitive at render.
+	 */
+	maxPageAge?: number;
 }
 
 /**
@@ -365,6 +375,7 @@ export interface ResolvedOgygiaConfig {
 	rate_limit: { max: number; windowMs: number };
 	session_cookie: string;
 	region_ttl: number;
+	renew_window: number;
 	router_enabled: boolean;
 	router_view_transitions: boolean;
 	continuity_forms: boolean;
@@ -375,11 +386,13 @@ export interface ResolvedOgygiaConfig {
 /**
  * Normalize the router / rate-limit / session / ttl / continuity / server-delta options into the flat
  * config the factory threads into `CompileCtx` + `Program`. Pure — no defaults leak back into `options`.
- * `defaultRegionTtl` is passed in (the endpoint's DEFAULT_REGION_TTL_SEC) to keep this Vite-free.
+ * `defaultRegionTtl` / `defaultRenewWindow` are passed in (the endpoint's DEFAULT_REGION_TTL_SEC,
+ * shared-cache's RENEW_WINDOW_SEC) to keep this Vite-free.
  */
 export function resolve_options(
 	options: OgygiaOptions,
-	defaultRegionTtl: number
+	defaultRegionTtl: number,
+	defaultRenewWindow = 8 * 24 * 3600
 ): ResolvedOgygiaConfig {
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
 	const rate_limit =
@@ -401,6 +414,16 @@ export function resolve_options(
 		86400,
 		Math.max(60, Math.floor(options.regions?.ttl ?? defaultRegionTtl))
 	);
+
+	// Renewal window (seconds) after a capability expired: `regions.maxPageAge`. `0` = never renew; at
+	// most 10 years (the prerender capability life — nothing outlives that).
+	const renew_raw = options.regions?.maxPageAge;
+	if (renew_raw !== undefined && !(typeof renew_raw === 'number' && Number.isFinite(renew_raw) && renew_raw >= 0)) {
+		throw new Error(
+			`[ogygia] regions.maxPageAge must be a number of seconds ≥ 0 (got ${String(renew_raw)}). Write e.g. \`30 * 24 * 3600\` for 30 days, or \`0\` to turn renewal off.`
+		);
+	}
+	const renew_window = Math.min(10 * 365 * 24 * 3600, Math.floor(renew_raw ?? defaultRenewWindow));
 
 	// ROUTER config (app-wide, one place). On by default; View Transitions on unless disabled. `false`
 	// tree-shakes the whole feature out. Baked into `virtual:ogygia/router-config` for the handle.
@@ -431,6 +454,7 @@ export function resolve_options(
 		rate_limit,
 		session_cookie,
 		region_ttl,
+		renew_window,
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,

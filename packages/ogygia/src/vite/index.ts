@@ -66,6 +66,7 @@ import { write_module_map } from './module-map.js';
 import { fill_profiler_maps } from './profiler-maps.js';
 import { debarrel } from '../compiler/debarrel/plugin.js';
 import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
+import { RENEW_WINDOW_SEC } from '../server/shared-cache.js';
 import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
 import {
 	buildFoucCssModuleSource,
@@ -276,12 +277,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		rate_limit,
 		session_cookie,
 		region_ttl,
+		renew_window,
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
 		server_delta,
 		devtools
-	} = resolve_options(options, DEFAULT_REGION_TTL_SEC);
+	} = resolve_options(options, DEFAULT_REGION_TTL_SEC, RENEW_WINDOW_SEC);
 	// The devtools value everything downstream reads (define, CompileCtx, dev middleware). A build with
 	// it on gets the lazy form (`devtools_lazy`): launcher only, no measuring until someone opens it.
 	let devtools_effective = devtools;
@@ -740,6 +742,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						rate_limit,
 						session_cookie,
 						region_ttl,
+						renew_window,
 						router_enabled,
 						router_view_transitions,
 						client_hooks,

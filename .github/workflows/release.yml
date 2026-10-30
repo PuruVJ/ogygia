@@ -1,0 +1,36 @@
+name: Changesets
+
+on:
+  push:
+    branches:
+      - main
+      # the next minor's line (.changeset/README.md): it releases as usual, under npm's `latest`
+      - next
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # all history, so changesets can link each changelog entry to its commit and PR
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: true
+      - run: pnpm run build:lib
+      - name: Create Release Pull Request or Publish to npm
+        uses: changesets/action@v2
+        with:
+          version-script: pnpm ci:version
+          publish-script: pnpm ci:release
+          commit-message: 'chore: update versions (${{ github.ref_name }})'
+          pr-title: 'chore: update versions (${{ github.ref_name }})'
+          create-github-releases: true

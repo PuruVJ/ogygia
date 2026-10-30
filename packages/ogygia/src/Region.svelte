@@ -19,13 +19,13 @@
 	 * into the browser. The runtime custom element (`core.ts`) is unchanged; only the `.svelte` wrappers
 	 * collapsed into this file.
 	 */
-	import { untrack, getContext, setContext, createRawSnippet } from 'svelte';
+	import { untrack, getContext, getAllContexts, setContext, createRawSnippet, mount, unmount } from 'svelte';
 	import { KIT_REQUEST_CONTEXT, kit_page_version, kit_request_event } from './server/kit-context.js';
 	import { stringify } from 'devalue';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
 	import { runtime_bootstrap } from './server/entry-location.js';
-	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint } from 'virtual:ogygia/region-endpoint';
+	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint, holeCss } from 'virtual:ogygia/region-endpoint';
 	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
 	// Kit's `asset()`, taking ogygia's base-less `/…` URLs (kit-paths.ts)
 	import { kit_asset as asset } from './kit-paths.js';
@@ -36,7 +36,7 @@
 	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
 	import { region_css_tag } from './server/region-css.js';
 	import { escape_amp, escape_amp_quot, escape_attr } from './escape.js';
-	import { isNested, setNested, isInLake, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
+	import { isNested, setNested, isInLake, isInLiveSnippet, setInLiveSnippet, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
 	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
 	import { isRegion } from './region.js';
 	// (LateIslandAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
@@ -128,6 +128,35 @@
 
 	const LT = String.fromCharCode(60); // <
 	const GT = String.fromCharCode(62); // >
+
+	/**
+	 * ADOPTION — the one shape of every OPAQUE region (region-attrs.ts `OPAQUE_SELECTOR`: a lake, a hole,
+	 * a baked live region) a client hydrates over. Its inside is never a Svelte tree the browser could
+	 * render — server HTML, a fallback a fetched answer replaces, a server-only component — so it renders
+	 * through ONE snippet: the SERVER form emits exactly the region element with its inside, the CLIENT
+	 * form is a raw snippet, and hydration ADOPTS the element verbatim at its position — no walk into it,
+	 * no attribute set, nothing to mismatch (the adoption slot children get). As a template the browser
+	 * leg rendered placeholders, `{@html}` walks, or empty `endpoint`s over the server's DOM: Svelte
+	 * discarded it, threw, or blanked an address. CREATED FRESH in the browser instead (Kit remounting
+	 * after a failed hydration, a Kit client navigation, an `{#if}` re-creating it in an island or a
+	 * snippet) the element comes up empty, and each kind refills it from its own source of content: a
+	 * hole renders its fallback (the page's snippet: what the server showed until the answer lands, and
+	 * what an `interaction` hole is woken through), a lake repaints from the runtime's copy (lakes.ts), a
+	 * baked region morphs in its live value. `setup` sees the element either way.
+	 * @param {() => string} attrs the element's attribute text (both legs)
+	 * @param {(renderer: never) => void} [inner] SERVER: renders its inside into the element
+	 * @param {(el: Element) => void | (() => void)} [setup] CLIENT: the adopted (or created) element
+	 */
+	function adopt_region(attrs, inner, setup) {
+		return typeof window === 'undefined'
+			? /** @param {{ push(html: string): void }} renderer */
+				(renderer) => {
+					renderer.push(LT + 'ogygia-region' + attrs() + GT);
+					inner?.(/** @type {never} */ (renderer));
+					renderer.push(LT + '/ogygia-region' + GT);
+				}
+			: createRawSnippet(() => ({ render: () => LT + 'ogygia-region' + attrs() + GT + LT + '/ogygia-region' + GT, setup }));
+	}
 	/** Context mark: "this subtree renders inside Kit's own page pass" (see `kit_page_pass`). */
 	const KIT_PAGE_PASS = Symbol.for('ogygia.kit-page-pass');
 
@@ -174,7 +203,15 @@
 
 	// Nested rule (islands/server): a region inside an already-awake region hydrates with its parent,
 	// so it degrades to a plain inline render. Read once at init (a wrapper's mode is fixed per usage).
-	const nested = isNested();
+	// Except a HOLE in a live snippet's body: it keeps `render: 'deferred'` — a full hole, fetched on its
+	// schedule, never bundled into the island — and the snippet's hydrate adopts its element as it stands.
+	const in_live_snippet = isInLiveSnippet();
+	const nested = isNested() && !(is_server && in_live_snippet);
+	// (an island rendered inline in the snippet: the holes of its own template follow the nested rule)
+	if (is_island && nested && in_live_snippet) setInLiveSnippet(false);
+	// the contexts a hole created fresh in the browser renders its fallback with (`hole_adopt`): the
+	// page's, as when the fallback rendered in its tree
+	const region_contexts = typeof window !== 'undefined' && is_server ? getAllContexts() : undefined;
 
 	// `requestEvent()` inside a region rendered by Kit's OWN page pass: Kit's `__request__` context
 	// carries `{ page }` only (ogygia's render roots add `event` themselves). Re-set the same key
@@ -329,15 +366,16 @@
 		const entry = untrack(() => (is_server ? __entry : island_entry));
 		console.warn(
 			is_server
-				? `[ogygia] nested server island "${entry}" is inside another island; rendering it inline as a normal component ('server' strategy ignored).`
+				? `[ogygia] nested server island "${entry}" is inside another island; it renders inline as frozen HTML (no JS ships; islands inside it wake on their own) — 'deferred' ignored.`
 				: `[ogygia] nested island "${entry}" is inside another island; it hydrates with its parent (strategy ignored).`
 		);
 	}
 	// Freeze bare snippet PROPS (named-snippet props) to static region snippets (server) so the island
 	// BODY and the serialized PAYLOAD render byte-for-byte identically — hydration then adopts the frozen
-	// HTML with no mismatch. A live (branded) snippet passes through; `nested` islands render inline, no
-	// crossing, so untouched. CHILDREN are not frozen — they cross via the slot marker below.
-	const island_props_ready = $derived(nested ? island_props : prepare_region_props(island_props));
+	// HTML with no mismatch. A live (branded) snippet passes through; an INLINE island (nested, or on a
+	// csr=true page, where Kit's client renders the snippet as written) has no crossing, so untouched.
+	// CHILDREN are not frozen — they cross via the slot marker below.
+	const island_props_ready = $derived(island_inline ? island_props : prepare_region_props(island_props));
 
 	// ── slot crossing: an island's children render IN-PLACE, the client ADOPTS them ──
 	// The marker id fencing THIS island's children to its payload pointer. Server-assigned; the client
@@ -595,11 +633,59 @@
 	const server_identity = $derived(
 		nested || !is_server ? '' : fingerprint_of(__entry, '', (server_wire ?? plan_props_wire(__props || {}, __entry)).canonical)
 	);
+	// A hole a client hydrates over — in a live snippet's body, or on a KIT-HYDRATED document — is adopted
+	// (`adopt_region`): its browser leg cannot mint the hole's address, and as a template it blanked
+	// `endpoint` (Svelte sets a dynamic attribute during hydration) and, when the HTML had already landed,
+	// the content with it (a csr=true page's hole inside an inline island went empty in dev). A re-created
+	// one has no address; the runtime finds the hole's facts by identity, as for a hole Kit rebuilt.
+	const hole_attrs = () => {
+		/** @param {string} name @param {unknown} v */
+		const a = (name, v) => (v == null || v === '' ? '' : ' ' + name + '="' + escape_attr(String(v)) + '"');
+		return (
+			' entry="' + escape_attr(server_region_entry) + '" render="defer"' +
+			a('stitch', __stitch) + a('prefetch', __prefetch) + a('when', __defer) + a('wake', __hydrate) +
+			a('margin', __margin) + a('hydrate-margin', __hydrateMargin) +
+			' endpoint="' + escape_attr(server_endpoint) + '"' + a('data-og-hole', server_identity) + a('src', server_region_src)
+		);
+	};
+	const hole_adopt = adopt_region(
+		hole_attrs,
+		(renderer) => {
+			if (ogygiaFallback) SlotBoundary(renderer, /** @type {never} */ ({ children: ogygiaFallback }));
+		},
+		(el) => {
+			// created fresh (adopted, it holds the server's): its fallback, rendered here as the server
+			// did — the rebuilt hole's address comes back from the holes record, the fallback is the page's
+			if (el.firstChild || !ogygiaFallback) return;
+			const app = mount(SlotBoundary, { target: el, props: { children: ogygiaFallback }, context: region_contexts });
+			return () => void unmount(app);
+		}
+	);
+	// A hole NESTED in an island renders in the page pass (`deferred` ignored, the nested rule) — as a
+	// LAKE: frozen server HTML the island adopts and lifts around its hydrate, never hydrated itself. A
+	// hole ships no JS wherever it sits (the client wrapper has no component — emit.ts), and the
+	// islands authored inside it emit real regions (LakeBoundary) and wake on their own.
+	const hole_frozen = adopt_region(
+		() => ' entry="' + escape_attr(String(__entry || '')) + '" wake="none" remount="cache"',
+		(renderer) => {
+			const Component = /** @type {(r: unknown, p: unknown) => void} */ (/** @type {unknown} */ (__component));
+			if (Component) LakeBoundary(renderer, /** @type {never} */ ({ children: (/** @type {unknown} */ r) => Component(r, __props || {}) }));
+		}
+	);
+	// …and its stylesheets: the page never imported its component (the client wrapper has none), so
+	// link them as its endpoint answer would (server-only; the client hoists `data-ogygia-region-css`)
+	const hole_css_html = $derived.by(() => {
+		if (!is_server || !nested) return '';
+		let html = '';
+		for (const href of claim_region_css(holeCss(__entry || ''))) html += region_css_tag(href, asset(href));
+		return html;
+	});
 	// On a KIT-HYDRATED document the facts ride the document tail too (server/document-tail.ts
-	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. A csr=false
-	// document has no Kit client to rebuild it, so nothing is recorded there. Decided once at init —
-	// the SSR pass renders each region exactly once.
-	if (tail && is_csr && is_server && !nested) {
+	// `hole()`): Kit's root can be cleared and mounted fresh, the tail outside it cannot. Decided once
+	// at init — the SSR pass renders each region exactly once.
+	// So do a live snippet's holes, on any document: the island re-creates the snippet in the browser
+	// (an `{#if}` toggling), and the hole created fresh fetches by its identity, as a rebuilt one does.
+	if (tail && (is_csr || in_live_snippet) && is_server && !nested) {
 		untrack(() => {
 			const endpoint = server_endpoint;
 			if (endpoint) tail.hole(server_identity, endpoint, server_props_script);
@@ -643,16 +729,15 @@
 	const lake_endpoint = $derived(
 		lake_inside && lake_swr ? makeRegionEndpoint(__entry || '', __props || {}) : ''
 	);
-	// A lake on a KIT-HYDRATED document (a csr=true page). Kit's client hydrates this wrapper too,
-	// but the lake's component is the render-nothing placeholder on the client (its JS ships to no
-	// browser), so a normal template here would MISMATCH — Svelte then discards the SSR DOM and
-	// re-renders, and the lake vanishes (found on a site header under a csr=true page). Instead the
-	// lake renders through ONE snippet whose SERVER form emits exactly one element (the frozen region
-	// with the lake's HTML inside) and whose CLIENT form is a raw snippet: hydration ADOPTS the
-	// element at the render position verbatim — no diff, no mismatch, the server HTML stays. (The same
-	// adoption an island's slot children get.) It is a real frozen region: LakeBoundary resets
-	// `nested` and marks the lake's inside, so the islands and holes authored in there emit their
-	// real regions and wake on the runtime, which Kit never touches.
+	// Every lake a client hydrates over — inside an island, or on a KIT-HYDRATED document (a csr=true
+	// page) — is adopted (`adopt_region`). The lake's component is the render-nothing placeholder on the
+	// client (its JS ships to no browser), so a normal template MISMATCHED wherever the lake's HTML was
+	// still there when the client hydrated: under Kit (Svelte discarded the SSR DOM and the lake
+	// vanished — a site header under a csr=true page), and inside a live snippet, which hydrates after
+	// its host island restored its lakes. An island's own lakes are lifted out around its hydrate, so
+	// it adopts the empty element and the runtime puts the HTML back (lakes.ts). It is a real frozen
+	// region: LakeBoundary resets `nested` and marks the lake's inside, so the islands and holes
+	// authored in there emit their real regions and wake on the runtime.
 	const lake_attrs = $derived.by(() => {
 		/** @param {unknown} v */
 		const esc = (v) => escape_attr(String(v));
@@ -664,30 +749,22 @@
 		if (lake_endpoint) s += ' endpoint="' + esc(lake_endpoint) + '"';
 		return s;
 	});
-	const lake_adopt =
-		typeof window === 'undefined'
-			? // SERVER: a server-convention snippet (`(renderer) => …`) — one element, the lake inside.
-				/** @param {{ push(html: string): void }} renderer */
-				(renderer) => {
-					renderer.push(LT + 'ogygia-region' + lake_attrs + GT);
-					LakeBoundary(/** @type {never} */ (renderer), /** @type {never} */ ({ children }));
-					renderer.push(LT + '/ogygia-region' + GT);
-				}
-			: createRawSnippet(() => ({
-					render: () => LT + 'ogygia-region' + lake_attrs + GT + LT + '/ogygia-region' + GT,
-					/** @param {Element} el */
-					setup: (el) => {
-						// Created fresh on the client (a Kit client-side navigation mounted this lake, or Kit
-						// gave up hydrating the document and mounted fresh), so there was no SSR element to
-						// adopt: a lake is server HTML, and there is none here. The runtime repaints it from
-						// the copy it took of the SSR children when the lake first connected (lakes.ts), if
-						// this document had them; a route Kit client-renders from scratch has nothing.
-						if (!el.firstChild && import.meta.env && import.meta.env.DEV)
-							console.warn(
-								`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation, or a hydration failure — look for an error above). The runtime restores it from its server HTML when this document rendered it; otherwise it stays empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
-							);
-					}
-				}));
+	const lake_adopt = adopt_region(
+		() => lake_attrs,
+		(renderer) => LakeBoundary(renderer, /** @type {never} */ ({ children })),
+		(el) => {
+			// Created fresh on the client (a Kit client-side navigation mounted this lake, or Kit gave up
+			// hydrating the document and mounted fresh), so there was no SSR element to adopt: a lake is
+			// server HTML, and there is none here. The runtime repaints it from the copy it took of the SSR
+			// children when the lake first connected (lakes.ts), if this document had them; a route Kit
+			// client-renders from scratch has nothing. (Inside an island an empty element is the lifted
+			// lake, which the runtime fills right after.)
+			if (is_csr && !el.firstChild && import.meta.env && import.meta.env.DEV)
+				console.warn(
+					`[ogygia] lake "${__entry}" was mounted by Kit on the client with no server HTML to adopt (a client-side navigation, or a hydration failure — look for an error above). The runtime restores it from its server HTML when this document rendered it; otherwise it stays empty. A lake is server HTML: keep chrome lakes in a layout that persists across navigations, or serve that route csr=false.`
+				);
+		}
+	);
 
 	// ─────────────────────────────────────────────── head (runtime + preload) ──
 	// The runtime bootstrap for this page. Claim once, for a top-level island/server placement, and for
@@ -774,7 +851,7 @@
 		(is_island
 			? runtime_script + island_preload_head + island_css_html + kit_island_meta
 			: is_server
-				? runtime_script + server_preload
+				? runtime_script + server_preload + hole_css_html
 				: runtime_script) +
 			region_css_html +
 			content_css_html
@@ -787,6 +864,25 @@
 	// islands inside); the runtime morphs them in.
 	// svelte-ignore state_referenced_locally
 	const baked_html = __baked ? (/** @type {{ html?: string } | undefined} */ (resolved)?.html ?? '') : '';
+	// The baked region is OPAQUE (region-attrs.ts `OPAQUE_SELECTOR`): its HTML is server-only, never a
+	// Svelte tree the client could hydrate — the same as a lake's — so it is adopted (`adopt_region`). As
+	// an `{@html}`, Svelte walked its siblings to the first empty comment and the render's own top-level
+	// markers stopped it inside: `hydration_mismatch`, and Kit remounted the page with the region
+	// emptied. Later values morph in.
+	/** @type {Element | null} */
+	let baked_el = $state(null);
+	const baked_adopt = adopt_region(
+		() => ' live data-og-baked',
+		(renderer) => /** @type {{ push(html: string): void }} */ (renderer).push(baked_html),
+		(el) => {
+			baked_el = el;
+			return () => (baked_el = null);
+		}
+	);
+	// (reads `resolved` too: a Promise `of` that re-resolves morphs the mounted region in place)
+	$effect(() => {
+		if (baked_el) apply_live(/** @type {Element & { applyLive?: (v: unknown) => void }} */ (baked_el));
+	});
 	/** @param {Element & { applyLive?: (v: unknown) => void }} node */
 	function apply_live(node) {
 		// Reads `resolved`, so the attachment re-runs when a Promise `of` re-resolves — the mounted
@@ -887,7 +983,7 @@
 		>{#if Component}<Component {...island_props_body} />{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html island_props_inline}{/if}
 {:else if is_server}
 	{@const Component = __component}
-	{#if nested}{#if Component}<Component {...__props} />{/if}{:else}<ogygia-region
+	{#if nested}{@render hole_frozen()}{:else if in_live_snippet || is_csr}{@render hole_adopt()}<!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{:else}<ogygia-region
 			entry={server_region_entry}
 			render="defer"
 			stitch={__stitch || undefined}
@@ -901,20 +997,7 @@
 			src={server_region_src || undefined}
 		>{#if ogygiaFallback}<SlotBoundary>{@render ogygiaFallback()}</SlotBoundary>{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html server_props_script}{/if}
 {:else if is_lake}
-	{#if is_csr}{@render lake_adopt()}{:else if lake_inside}
-		<ogygia-region
-			entry={__entry}
-			wake="none"
-			remount={__remount}
-			when={lake_swr ? __when : undefined}
-			max-age={__maxAge != null ? String(__maxAge) : undefined}
-			on-expire={__onExpire || undefined}
-			margin={lake_swr && __margin ? __margin : undefined}
-			endpoint={lake_endpoint || undefined}
-		>
-			<LakeBoundary>{@render children?.()}</LakeBoundary>
-		</ogygia-region>
-	{:else}
+	{#if is_csr || lake_inside}{@render lake_adopt()}{:else}
 		{@render children?.()}
 	{/if}
 {:else if resolved?.kind === 'inline'}
@@ -927,8 +1010,7 @@
 	<!-- Baked (awaited in the render): the first HTML is in the page, written ONCE — a later value
 	     never re-renders it, the runtime morphs it in (applyLive). Otherwise the placeholder (or legacy
 	     children) shows until the styled HTML paints. -->
-	{#if __baked}<ogygia-region live data-og-baked {@attach apply_live}><!-- svelte-ignore hydration_html_changed -->{@html baked_html}</ogygia-region
-		>{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
+	{#if __baked}{@render baked_adopt()}{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
 {:else if resolved}
 	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
 	{#key identity(d)}

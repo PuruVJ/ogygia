@@ -137,6 +137,17 @@ export function order_owner(el: Element): 'render' | 'element' {
 	return is_self_owned(el) ? 'element' : 'render';
 }
 
+/**
+ * Does a self-owned element SLOT its light DOM — show it through a shadow root's `<slot>`s, in
+ * document order — rather than render it itself? Then it has no reason to move a child: the children
+ * are partly its own (it may add some), but the RENDER's nodes keep the render's order (morph.ts
+ * `reconcile_by_identity`). One with no shadow root may relocate and wrap them: its arrangement stands.
+ * (a closed shadow root is invisible here: such an element is taken to arrange, the safe side)
+ */
+export function slots_light_dom(el: Element): boolean {
+	return el.shadowRoot !== null && is_upgraded_ce(el);
+}
+
 /** A live region whose first HTML was baked into the page by Svelte's `{@html}` (Region.svelte,
  *  PromiseRegionAwait): kept for the element's life — Svelte's block anchors stay among its children. */
 export const BAKED_ATTR = 'data-og-baked';

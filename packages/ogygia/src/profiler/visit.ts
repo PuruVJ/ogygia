@@ -8,6 +8,7 @@
  */
 import { hole_segments, HOLE_SEG_LABEL } from '../devtools/hole-segments.js';
 import type { NavPhases, PageInteraction, PageNav } from '../devtools/page-insights.js';
+import type { RegionRefusal } from '../runtime/region-endpoint-url.js';
 
 export interface VisitNav {
 	/** ms from navigation start */
@@ -143,7 +144,7 @@ export interface Visit {
 	/** Svelte's hydration warnings (dev) */
 	warnings?: { code: string; message: string; file?: string; fp?: string }[];
 	/** holes whose answer never came, by island id (the report's hole rows name them) */
-	holes_failed?: { id: string; reason: 'redirected' | 'document' | 'error'; final_path?: string; message?: string; attempts: number }[];
+	holes_failed?: { id: string; reason: RegionRefusal | 'error'; final_path?: string; message?: string; attempts: number }[];
 	/** files a preload fetched and something else downloaded again: the preload went unused */
 	/** (`vary`: a font's Vary header, from the report's own weighing — never sent by a beacon) */
 	/** `hole`: the URL is a hole the runtime asked for (its preload is ogygia's own) */
@@ -401,7 +402,7 @@ export function parse_visit(page: unknown, raw: unknown): Visit | null {
 	const holes_failed: NonNullable<Visit['holes_failed']> = [];
 	for (const h of (Array.isArray(v.holes_failed) ? v.holes_failed : []).slice(0, 30) as Record<string, unknown>[]) {
 		const id = str(h?.id, 40);
-		const reason = h?.reason === 'redirected' || h?.reason === 'document' || h?.reason === 'error' ? h.reason : null;
+		const reason = h?.reason === 'redirected' || h?.reason === 'document' || h?.reason === 'forbidden' || h?.reason === 'error' ? h.reason : null;
 		if (!id || !reason) continue;
 		const final_path = str(h.final_path, 300);
 		const message = str(h.message, 200);

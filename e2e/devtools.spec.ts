@@ -544,9 +544,14 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		check('page: failed hydration → Broken', named('hydrate-failed', 'Broken'));
 		check('page: eager island below the fold → BelowEager', named('eager-offscreen', 'BelowEager'));
 		check('page: layout shift on waking → Grower', named('hydration-shift', 'Grower'));
+		// (the WAITING findings — queued, held-idle, late-interactive — list every island that waited,
+		// not a culprit: on a slow CI machine a healthy island honestly waits behind Heavy and the dev
+		// server's first compile, and is named there. A decoy named by any other finding is a false blame.)
+		const WAITING = ['queued', 'held-idle', 'late-interactive'];
 		check(
 			'page: no finding names a decoy',
-			!view?.findings.some((f) => f.code !== 'queued' && f.names.some((n: string) => ['Healthy', 'BelowLazy', 'OnClick'].includes(n)))
+			!view?.findings.some((f) => !WAITING.includes(f.code) && f.names.some((n: string) => ['Healthy', 'BelowLazy', 'OnClick'].includes(n))),
+			JSON.stringify(view?.findings)
 		);
 		check('page: an island row per hydration', (view?.rows ?? 0) >= 4, String(view?.rows));
 		check('page: vitals measured (TTFB, FCP)', !!view?.vitals.includes('ttfb') && view.vitals.includes('fcp'), JSON.stringify(view?.vitals));
@@ -593,15 +598,16 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		const rows = await page.evaluate(() => (window as any).__dt_qa('[data-og-hydration] tr[data-status]').length);
 		expect(errors).toEqual([]);
 		expect(rows).toBeGreaterThan(1);
-		// an island nested in an awake island rides its hydration (no data-hydrated of its own): it is
-		// awake, and the Hydration tab says whose hydration it rode — never "asleep"
+		// an island inside a live snippet an island renders is part of that island (it renders inline,
+		// with no region of its own): the Hydration tab lists no island "asleep" and none left riding
 		await page.goto('/portable-snippet', { waitUntil: 'load' });
 		await page.waitForTimeout(1500);
-		const riding = await page.evaluate(async () => {
+		const statuses = await page.evaluate(async () => {
 			const h = await (window as any).__ogygia_testing.hydration();
-			return h.islands.filter((i: any) => i.reason.startsWith('rides ')).map((i: any) => i.status);
+			return h.islands.map((i: any) => (i.reason.startsWith('rides ') ? 'riding' : i.status));
 		});
-		expect(riding, 'a riding island, awake').toEqual(['clean']);
+		expect(statuses.length, 'the page lists its islands').toBeGreaterThan(0);
+		expect(statuses.filter((s: string) => s !== 'clean'), 'every island awake, none riding').toEqual([]);
 		// a Kit-hydrated page with no island: the dock still mounts (its boot runs before Kit's client
 		// hands the page the dev server's gates) and says why there is nothing to inspect
 		await page.goto('/kit', { waitUntil: 'load' });

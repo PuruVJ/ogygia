@@ -269,11 +269,27 @@ Name / options for the session cookie that ogygia uses to scope signed capabilit
 
 How long a signed region capability URL stays valid, in seconds (default `3600`, clamped to 60–86400). Keep it short: a harvested URL ages out.
 
-Holes outlive it where they have to. Prerendered and frozen pages sign their holes for the life of the deploy. On a page whose load marks it shared-cacheable, for example `setHeaders({ 'cache-control': 'public, s-maxage=604800' })`, an anonymous hole is signed for the page's cache life. A hole on an older cached copy renews itself when it wakes: the endpoint re-signs a URL it minted, anonymous holes only. A `cache-control` header a handle sets after the render is invisible to the mint, so set it from a load.
+Holes outlive it where they have to. Prerendered and frozen pages sign their holes for the life of the deploy. On a page whose load marks it shared-cacheable, for example `setHeaders({ 'cache-control': 'public, s-maxage=604800' })`, an anonymous hole is signed for the page's cache life. A hole on an older cached copy renews itself when it wakes: the endpoint re-signs a URL it minted, anonymous holes only, up to [`regions.maxPageAge`](#ogygiavite-regionsmaxpageage) after it expired. A `cache-control` header a handle sets after the render is invisible to the mint, so set it from a load.
+
+### `regions.maxPageAge`
+
+The oldest a cached copy of a page can be and still get its holes, in seconds (default 8 days). It sets how long after a hole's URL expired the hole can still renew itself. Past it, the hole keeps its fallback, and its request answers `403` with `x-ogygia-deny: renew-window`. `0` turns renewal off.
+
+Raise it when your CDN keeps pages longer than 8 days and the page does not say so in its `cache-control` (a TTL set in the CDN's own configuration):
+
+```ts
+ogygia({ regions: { maxPageAge: 30 * 24 * 3600 } });
+```
+
+It is not a longer `ttl`. A renewed URL still lives only `regions.ttl`, and a hole bound to a session never renews. A renewable URL replays the props signed into it, so keep a hole's props to routing keys (a locale, a page) and read anything sensitive at render time.
 
 ### `OGYGIA_SECRET`
 
-The HMAC secret that signs `render: 'deferred'` capability URLs. Set it in the environment, for stable signatures across a deployment. Otherwise, a per-build key is generated. Server islands and `render: 'live'` need the [server handle](/docs/start/install) installed, to serve the endpoint.
+The HMAC secret that signs `render: 'deferred'` capability URLs. Set it in the environment, for stable signatures across a deployment. Otherwise, a per-build key is generated. Every deployment that serves your pages or your islands endpoint needs the same value at runtime: a hole signed by one key and checked by another is refused (`x-ogygia-deny: foreign-key`).
+
+A hole's URL signs the component it renders, so a page cached across a deploy keeps its holes as long as their components still exist: a changed preset, `wake` or build-time `OGYGIA_SECRET` does not matter. A hole whose component was moved, renamed or removed is refused (`x-ogygia-deny: unknown-id`) and keeps its fallback.
+
+Server islands and `render: 'live'` need the [server handle](/docs/start/install) installed, to serve the endpoint.
 
 ## `ogygia/server`
 

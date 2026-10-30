@@ -28,11 +28,14 @@
 		"bench:run": "node internal/bench/benchmark.ts --config frameworks.config.json --out results/latest.md --json",
 		"profiler:answer-key": "node internal/bench/profiler-answer-key.mjs --serve --build",
 		"profiler:answer-key:no-maps": "node internal/bench/profiler-answer-key.mjs --serve --build --no-maps",
-		"pub": "pnpm --filter ogygia publish",
+		"changeset": "changeset",
+		"ci:version": "changeset version",
+		"ci:release": "changeset publish",
 		"format": "oxfmt packages/ogygia/src packages/ogygia/test",
 		"format:check": "oxfmt --check packages/ogygia/src packages/ogygia/test"
 	},
 	"devDependencies": {
+		"@changesets/changelog-github": "^1.0.1",
 		"@changesets/cli": "^3.0.3",
 		"@playwright/test": "1.62.1",
 		"@types/node": "^26.1.2",

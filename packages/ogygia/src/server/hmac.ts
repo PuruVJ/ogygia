@@ -75,19 +75,36 @@ export class Hmac {
 	}
 
 	/**
-	 * MAC message for a signed region capability (`v1`, always five length-prefixed fields).
-	 * Empty `session`/`ttl` are still fields (prerender / unbound / no-store) — never optional concat.
-	 * `ttl` is the response cache max-age in seconds (`''` = no-store); signing it keeps a harvested
-	 * URL from being re-pointed at a longer browser cache.
+	 * MAC message for a signed region capability. Every field is length-prefixed (`<utf8 bytes>:<value>`),
+	 * so a field's content can never forge a `|` boundary. Two versions:
+	 *
+	 * - `v1|id|exp|props|session|ttl` — the capability names only its region `id` (the wrapper that
+	 *   minted it: component ⊕ page-side schedule ⊕ the build's salt). Only a build that has that
+	 *   exact id can answer it. Minted before render identities (ogygia ≤ 0.8.6); still verified, so
+	 *   pages cached before an upgrade keep their holes.
+	 * - `v2|id|exp|props|session|ttl|render` — the same five, plus the region's render identity (the
+	 *   URL's `r`: the component the endpoint renders, compiler/region/identity.ts `renderId`). Signing
+	 *   it lets a build that no longer has `id` (another schedule, preset or salt) answer the
+	 *   capability with its own entry for that component, and only for that component. Every current
+	 *   mint is `v2`.
+	 *
+	 * The version follows from the URL: a capability with `r` is checked as `v2`, one without as `v1`.
+	 * A `v2` MAC never verifies as `v1` (the prefix and the field count differ), so stripping `r` or
+	 * swapping it for another component breaks the signature. Empty `session`/`ttl` are still fields
+	 * (prerender / unbound / no-store) — never optional concat. `ttl` is the response cache max-age in
+	 * seconds (`''` = no-store); signing it keeps a harvested URL from being re-pointed at a longer
+	 * browser cache.
 	 */
 	static region_message(
 		id: string,
 		exp: number | string,
 		props: string,
 		session = '',
-		ttl: number | string = ''
+		ttl: number | string = '',
+		render = ''
 	): string {
-		return `v1|${lp(String(id))}|${lp(String(exp))}|${lp(String(props))}|${lp(String(session))}|${lp(String(ttl))}`;
+		const v1 = `${lp(String(id))}|${lp(String(exp))}|${lp(String(props))}|${lp(String(session))}|${lp(String(ttl))}`;
+		return render === '' ? `v1|${v1}` : `v2|${v1}|${lp(String(render))}`;
 	}
 }
 

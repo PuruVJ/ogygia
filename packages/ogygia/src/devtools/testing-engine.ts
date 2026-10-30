@@ -11,7 +11,7 @@ import { region_name_by_fp } from './regions.js';
 import { snapshot } from './bus.js';
 import { ensure_region_names } from './names.js';
 import { TESTING_ENGINE_VERSION } from './testing-version.js';
-import { nearest_attr } from './nearest-attr.js';
+import { nearest_attr } from '../runtime/nearest-attr.js';
 import { charge, own_cost } from '../runtime/own-cost.js';
 import { apply_attr_rules, type AttrRule } from './attr-rules.js';
 import { testing_lean } from './switch.js';

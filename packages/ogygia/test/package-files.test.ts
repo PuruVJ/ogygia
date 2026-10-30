@@ -34,6 +34,7 @@ const base_ctx_init = {
 	rate_limit: { max: 0, windowMs: 0 },
 	session_cookie: '',
 	region_ttl: 60,
+	renew_window: 691200,
 	router_enabled: true,
 	router_view_transitions: true,
 	runtime_dir: '/og/dist/runtime',

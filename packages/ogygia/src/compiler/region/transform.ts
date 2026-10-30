@@ -1802,12 +1802,28 @@ class FileCompilation {
 			else if (pat.type === 'RestElement') collect_pattern_names(pat.argument);
 			else if (pat.type === 'AssignmentPattern') collect_pattern_names(pat.left);
 		};
-		for (const node of instance_body) {
-			if (node.type === 'VariableDeclaration')
+		// Both scripts: a `<script module>` value is as much the host's as an instance one, and a name
+		// left out here was taken for a global — the synth then threw `ReferenceError` at render.
+		const declare = (node: SvelteNode) => {
+			if (node?.type === 'VariableDeclaration')
 				for (const d of node.declarations) collect_pattern_names(d.id);
-			else if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') {
+			else if (node?.type === 'FunctionDeclaration' || node?.type === 'ClassDeclaration') {
 				if (node.id?.name) host_declared.add(node.id.name);
+			} else if (node?.type === 'ExportNamedDeclaration') declare(node.declaration);
+			// legacy `$: name = …` declares `name`
+			else if (node?.type === 'LabeledStatement' && node.label?.name === '$') {
+				const e = node.body?.type === 'ExpressionStatement' ? node.body.expression : null;
+				if (e?.type === 'AssignmentExpression') collect_pattern_names(e.left);
 			}
+		};
+		for (const node of instance_body) declare(node);
+		for (const node of module_body) declare(node);
+		// `<script module>` imports: the synth re-imports them like instance imports (cleaned of attributes).
+		const module_imports = new Map<string, string>();
+		for (const node of module_body) {
+			if (node.type !== 'ImportDeclaration') continue;
+			const cleaned = clean_import_text(source, node);
+			for (const spec of node.specifiers) module_imports.set(spec.local.name, cleaned);
 		}
 
 		// Best-effort store detection, for warning when a store crosses a boundary as an OBJECT:
@@ -1965,6 +1981,18 @@ class FileCompilation {
 									exportName,
 									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
 									lang
+								),
+								// a hole ships no JS: its client leg adopts server HTML (deferred or frozen)
+								// and never needs the component
+								wrapperClientSource: server_wrapper_source(
+									iid,
+									componentPath,
+									entryPath,
+									mark.options,
+									exportName,
+									ctx.dev ? ctx.devUrlFor(entryPath) : islandPublicUrl(iid, ctx.appDir),
+									lang,
+									false
 								),
 								source: island_entry_source(componentPath, iid, exportName),
 								hostPath: origin,
@@ -2144,10 +2172,23 @@ class FileCompilation {
 					bind_pattern(node.parameters);
 					if (!root && node.expression?.name) block_bound.add(node.expression.name);
 				}
+				// a legacy slot prop (`let:item`, `let:item={{ id }}`) binds its children's scope
+				for (const a of node.attributes ?? []) {
+					if (a.type !== 'LetDirective') continue;
+					if (a.expression) bind_pattern(a.expression);
+					else if (a.name) block_bound.add(a.name);
+				}
 				for (const k of CHILD_KEYS) if (node[k]?.nodes) walk_bound(node[k].nodes, false);
 			}
 		};
 		walk_bound(ast.fragment?.nodes ?? [], true);
+
+		// ROOT snippets: declared at the template root, hoisted, in scope everywhere in the host. A live
+		// body that renders one (`{@render banner('top')}`) carries it into its synth — it is neither an
+		// import nor a capture, and left out it was taken for a global (`ReferenceError` at render).
+		const root_snippets = new Map<string, SvelteNode>();
+		for (const n of ast.fragment?.nodes ?? [])
+			if (n.type === 'SnippetBlock' && n.expression?.name) root_snippets.set(n.expression.name, n);
 
 		let portable_emitted = false;
 		const portable_imports: string[] = [];
@@ -2192,6 +2233,29 @@ class FileCompilation {
 			// exactly as the `free` loop below does. Otherwise a snippet that only reassigns its own param was
 			// wrongly left native and failed to cross as a region.
 			if ([...mutated].some((m) => !param_names.has(m))) continue;
+			// The root snippets the body renders, and those they render: copied into the synth whole, their
+			// own free names joining the body's (imports re-imported, host values captured). One that writes
+			// host state or reads a `$store` can't come along (the rewrites below cover the body only), so
+			// the body stays native.
+			const carried: SvelteNode[] = [];
+			const pending = [...free].filter((nm) => root_snippets.has(nm) && !param_names.has(nm));
+			const carried_names = new Set<string>();
+			let carry_blocked = false;
+			while (pending.length && !carry_blocked) {
+				const nm = pending.pop()!;
+				if (carried_names.has(nm)) continue;
+				carried_names.add(nm);
+				const node = root_snippets.get(nm)!;
+				const info = collectCaptureInfo([node]);
+				if (info.mutated.size || info.stores.size) carry_blocked = true;
+				carried.push(node);
+				for (const f of info.free) {
+					if (root_snippets.has(f)) pending.push(f);
+					else free.add(f);
+				}
+			}
+			if (carry_blocked) continue;
+			for (const nm of carried_names) free.delete(nm);
 			// Store auto-subscriptions (`$country`) read in the body: the `$` sugar is HOST-scoped.
 			// Re-emitted verbatim it names an out-of-scope `$`-identifier in the runes-mode synth
 			// ("illegal variable name" pointing at generated code). Capture the subscription VALUE
@@ -2266,6 +2330,12 @@ class FileCompilation {
 						);
 					}
 					captures.push(nm);
+				} else if (module_imports.has(nm)) {
+					const text = module_imports.get(nm)!.trim();
+					if (!seen_imports.has(text)) {
+						seen_imports.add(text);
+						cleaned_imports.push(text);
+					}
 				}
 				// else: a global — referenced directly in the entry, needs no wiring.
 			}
@@ -2287,8 +2357,10 @@ class FileCompilation {
 			} else {
 				markup = source.slice(body_start, body_end);
 			}
+			// (template-root snippets are hoisted: their order in the synth does not matter)
+			const carried_src = carried.map((n) => source.slice(n.start, n.end)).join('\n');
 			const hash = createHash('md5')
-				.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}`)
+				.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}\0${carried_src}`)
 				.digest('hex')
 				.slice(0, 12);
 			// host identity via #component_identity: a declared-package host keys `<pkg>/<rel>`
@@ -2308,9 +2380,9 @@ class FileCompilation {
 				// on a customer page), so a body that opens with one keeps its snippet around it — the
 				// same scope it was authored in, rendered once.
 				const wrapped = body.some((n: SvelteNode) => n.type === 'ConstTag');
-				const template = wrapped
-					? `{#snippet __og_body()}\n${markup}\n{/snippet}\n{@render __og_body()}`
-					: markup;
+				const template =
+					(carried_src ? carried_src + '\n' : '') +
+					(wrapped ? `{#snippet __og_body()}\n${markup}\n{/snippet}\n{@render __og_body()}` : markup);
 				const synth =
 					`<script${lang}>\n` +
 					`\timport 'virtual:ogygia/transportables-eager';\n` +
@@ -2630,6 +2702,17 @@ class TsRegionCompilation {
 						exportName,
 						this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
 						''
+					),
+					// (a hole ships no JS — see the placed-hole record)
+					wrapperClientSource: server_wrapper_source(
+						iid,
+						componentPath,
+						entryPath,
+						options,
+						exportName,
+						this.#ctx.dev ? this.#ctx.devUrlFor(entryPath) : islandPublicUrl(iid, this.#ctx.appDir),
+						'',
+						false
 					),
 					source: island_entry_source(componentPath, iid, exportName),
 					hostPath: this.#id,

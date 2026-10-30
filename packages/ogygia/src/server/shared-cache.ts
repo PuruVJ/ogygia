@@ -22,8 +22,9 @@
  */
 import { PRERENDER_REGION_TTL_SEC } from './endpoint.js';
 
-/** How long after expiry a capability can still be renewed: the longest a stale document is
- *  expected to live in a shared cache (a week of `s-maxage` plus a day of revalidation). */
+/** The default for how long after expiry a capability can still be renewed
+ *  (`regions.maxPageAge`): the longest a stale document is expected to live in a shared cache (a
+ *  week of `s-maxage` plus a day of revalidation). */
 export const RENEW_WINDOW_SEC = 8 * 24 * 3600;
 
 /**
@@ -77,15 +78,16 @@ export function mint_ttl_sec(o: { stored: boolean; session: string; shared: numb
 	return Math.min(PRERENDER_REGION_TTL_SEC, Math.max(o.region_ttl, 2 * o.shared));
 }
 
-/** A renewable expiry: an integer that HAS passed, by at most {@link RENEW_WINDOW_SEC}. */
-export function renewable_expiry(exp_raw: string, now_sec: number): boolean {
-	if (exp_raw === '' || exp_raw.length > 12) return false;
+/** A renewable expiry: an integer that HAS passed, by at most `window` seconds (the app's
+ *  `regions.maxPageAge`; `0` renews nothing). */
+export function renewable_expiry(exp_raw: string, now_sec: number, window = RENEW_WINDOW_SEC): boolean {
+	if (window <= 0 || exp_raw === '' || exp_raw.length > 12) return false;
 	for (let i = 0; i < exp_raw.length; i++) {
 		const c = exp_raw.charCodeAt(i);
 		if (c < 48 || c > 57) return false;
 	}
 	const exp = Number(exp_raw);
-	return exp < now_sec && now_sec - exp <= RENEW_WINDOW_SEC;
+	return exp < now_sec && now_sec - exp <= window;
 }
 
 // ── the per-request seam ─────────────────────────────────────────────────────────────────────────

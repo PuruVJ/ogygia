@@ -22,7 +22,7 @@ test.describe('deferred holes on a csr=true page Kit rebuilds in the browser', (
 	test('SSR: every hole carries its address and identity; the tail records the facts outside Kit’s root', async ({ baseURL }) => {
 		const html = await (await fetch(baseURL + '/hole-kit-rebuild/')).text();
 		const holes = html.match(HOLE_TAG_G) || [];
-		check('two holes on the page (a shared component keeps its marks on a csr=true page)', holes.length === 2, String(holes.length));
+		check('three holes on the page (a shared component keeps its marks on a csr=true page)', holes.length === 3, String(holes.length));
 		check('each hole: endpoint + data-og-hole', holes.every((h) => HOLE_WITH_ADDRESS_RE.test(h)), holes.join('\n'));
 		check('the runtime ships (the holes are ours to fetch)', /data-ogygia-runtime/.test(html));
 		const record = HOLES_RECORD_RE.exec(html);
@@ -70,6 +70,17 @@ test.describe('deferred holes on a csr=true page Kit rebuilds in the browser', (
 		check('the island inside the hole’s answer hydrated with its props (start=5)', (await cbtn.textContent())!.includes('count is 5'));
 		await cbtn.click();
 		check('and is interactive after the rebuild (5 → 6)', (await cbtn.textContent())!.includes('count is 6'));
+
+		// REGRESSION (field report on 0.8.5): an on-demand hole whose fallback is its own trigger came
+		// back from the rebuild EMPTY (the adopted element is created bare in the browser), so nothing
+		// could ever wake it. A hole created fresh renders its fallback again.
+		const trigger = page.locator('[data-rebuild-on-demand] [data-rebuild-trigger]');
+		await trigger.waitFor({ timeout: 10_000 });
+		check('the on-demand hole’s trigger is back after the rebuild', (await trigger.count()) === 1);
+		check('and it has not fetched-and-swapped on its own (still on demand)', (await page.locator('[data-rebuild-on-demand] [data-server-greeting]').count()) === 0);
+		await trigger.hover();
+		await page.waitForSelector('[data-rebuild-on-demand] [data-server-greeting]', { timeout: 10_000 });
+		check('waking it through its trigger lands the answer', (await page.locator('[data-rebuild-on-demand] [data-server-greeting]').textContent())!.includes('Chosen, stranger'));
 		check('no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	});
 });

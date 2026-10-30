@@ -22,7 +22,7 @@
  * isomorphic (server calls `render`, client calls `setup`), so one factory serves both legs of both
  * modes with no manual environment branch.
  */
-import { createRawSnippet, hydrate, unmount, type Component, type Snippet } from 'svelte';
+import { createRawSnippet, getAllContexts, hydrate, unmount, type Component, type Snippet } from 'svelte';
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER, DEV } from 'esm-env';
 import { register_kind, mint } from './ref.js';
@@ -60,6 +60,39 @@ type RegionSnippet = Snippet & { __ogRegion?: RegionSnippetDescriptor };
 // and the client's adopted node agree byte-for-byte. `display:contents` keeps it out of layout.
 const WRAP_OPEN = '<ogygia-snippet style="display:contents">';
 const WRAP_CLOSE = '</ogygia-snippet>';
+// A frozen snippet is adopted HTML nothing hydrates, like slot children: marked, so a region inside it
+// wakes on its own instead of waiting on the host island's hydration (runtime/core.ts).
+const STATIC_OPEN = '<ogygia-snippet data-og-static style="display:contents">';
+
+// A live snippet renders in a root of its own on both legs, yet it belongs to the tree that renders
+// it: it takes that tree's contexts — the page's, and "inside an awake region" (context.ts). Without
+// them a lake inside it rendered bare and the island in the lake waited on its host forever, and a
+// page `setContext` read as unset on the server.
+const host_context = (): Map<unknown, unknown> | null => {
+	try {
+		return getAllContexts();
+	} catch {
+		return null;
+	}
+};
+/** context.ts `isInLiveSnippet` reads it: a hole in the body stays deferred (Region.svelte). */
+const LIVE_SNIPPET_KEY = Symbol.for('ogygia.live-snippet');
+const with_host = (context: Map<unknown, unknown>, host: Map<unknown, unknown> | null) => {
+	if (host) for (const [k, v] of host) context.set(k, v);
+	context.set(LIVE_SNIPPET_KEY, true);
+	return context;
+};
+
+/** Where a live snippet's pending hydrate waits on its host region: a global key, as the runtime
+ *  bundle and each island-entry bundle carry their own copy of this module (runtime/core.ts reads it). */
+const SNIPPET_BOOTS = Symbol.for('ogygia.snippet-boots');
+
+/** The host region is awake only once its snippets are: it signals `data-hydrated` after them. */
+function hold_host(el: Element, booted: Promise<unknown>) {
+	const host = el.closest('ogygia-region') as (Element & { [SNIPPET_BOOTS]?: Promise<unknown>[] }) | null;
+	// (a snippet re-created after its host signalled — an `{#if}` toggling — has nothing to hold)
+	if (host && !host.hasAttribute('data-hydrated')) (host[SNIPPET_BOOTS] ??= []).push(booted);
+}
 
 /**
  * The ONE factory. Build a region snippet from its descriptor (+ the live entry when we're at its
@@ -122,17 +155,18 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 		const server_snip = ((renderer: ServerRenderer, ...args: unknown[]) => {
 			// Server snippet args arrive as raw values; forward call-time params as `__ogArgs`.
 			const props = args.length ? { ...desc.p, __ogArgs: args } : desc.p;
+			const host = host_context();
 			const can_async =
 				!!live_entry && renderer?.global?.mode === 'async' && typeof renderer.child === 'function';
 			if (can_async) {
 				renderer.child(async (r) => {
-					const out = await ssr_render(live_entry!, { props, context: kit_render_context() });
+					const out = await ssr_render(live_entry!, { props, context: with_host(kit_render_context(), host) });
 					thread_head(r, (out.head || '') + dev_css_link);
 					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 				});
 			} else {
 				const out = live_entry
-					? ssr_render(live_entry, { props, context: kit_render_context() })
+					? ssr_render(live_entry, { props, context: with_host(kit_render_context(), host) })
 					: { head: '', body: '' };
 				thread_head(renderer, (out.head || '') + dev_css_link);
 				renderer.push(WRAP_OPEN + out.body + WRAP_CLOSE);
@@ -142,6 +176,7 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 		return server_snip;
 	}
 	const snip = createRawSnippet((...params: Array<() => unknown>) => {
+		const host = host_context();
 		// Snippet params arrive as getters (both legs). A live snippet forwards them to its entry as
 		// `__ogArgs`, so a parameterized `{#snippet row(item)}` crosses alive and renders per call.
 		const live_props = () =>
@@ -152,13 +187,13 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				: {};
 		return {
 			render: () => {
-				if (desc.m === 'static') return WRAP_OPEN + desc.h + WRAP_CLOSE;
+				if (desc.m === 'static') return STATIC_OPEN + desc.h + WRAP_CLOSE;
 				// live: inline the entry's SSR on the server; empty on the client (setup hydrates it).
 				return (
 					WRAP_OPEN +
 					(BROWSER || !live_entry
 						? ''
-						: ssr_render(live_entry, { props: live_props(), context: kit_render_context() }).body) +
+						: ssr_render(live_entry, { props: live_props(), context: with_host(kit_render_context(), host) }).body) +
 					WRAP_CLOSE
 				);
 			},
@@ -167,12 +202,15 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				let app: unknown;
 				let dead = false;
 				const boot = (Comp: Component) => {
-					if (!dead) app = hydrate(Comp, { target: el, props: live_props() });
+					if (!dead) app = hydrate(Comp, { target: el, props: live_props(), context: with_host(new Map(), host) });
 				};
 				if (live_entry) boot(live_entry);
 				else
-					// its location (the page's island graph named it), not the stable name
-					import_entry<{ default: Component }>((desc as { e: string }).e).then((m) => boot(m.default));
+					hold_host(
+						el,
+						// its location (the page's island graph named it), not the stable name
+						import_entry<{ default: Component }>((desc as { e: string }).e).then((m) => boot(m.default))
+					);
 				return () => {
 					dead = true;
 					if (app) unmount(app as never);

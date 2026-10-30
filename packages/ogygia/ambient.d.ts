@@ -40,6 +40,8 @@ declare module 'virtual:ogygia/server-manifest' {
 	export const island_url: Record<string, string>;
 	/** Server-island id → its component name (`SlowHole`), where the component file is known. */
 	export const island_name: Record<string, string>;
+	export const island_render: Record<string, string>;
+	export const render_island: Record<string, string>;
 }
 declare module 'virtual:ogygia/region-endpoint' {
 	export function makeRegionEndpoint(entry: string, props?: Record<string, unknown>): string;
@@ -50,8 +52,8 @@ declare module 'virtual:ogygia/region-endpoint' {
 	): string;
 }
 declare module 'virtual:ogygia/secret' {
-	export const secret: string;
-	export const secretStable: boolean;
+	export const buildKey: string;
+	export const buildHadSecret: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;
@@ -61,7 +63,8 @@ declare module 'virtual:ogygia/sign' {
 		exp: number | string,
 		props: string,
 		session?: string,
-		ttl?: number | string
+		ttl?: number | string,
+		render?: string
 	): string;
 }
 declare module 'virtual:ogygia/request-event' {
@@ -82,6 +85,7 @@ declare module 'virtual:ogygia/session-cookie' {
 }
 declare module 'virtual:ogygia/region-ttl' {
 	export const regionTtl: number;
+	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<

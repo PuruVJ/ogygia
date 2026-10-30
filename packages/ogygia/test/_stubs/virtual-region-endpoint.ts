@@ -4,6 +4,7 @@
 export const makeRegionEndpoint = () => '';
 export const mintServerIsland = () => '';
 export const known_region_fps = (): ReadonlySet<string> => new Set();
+export const holeCss = (): string[] => [];
 // A real-shaped island fingerprint (16 hex, a function of entry + canonical text): tests assert on
 // `data-og-fp` and on sidecar ids keyed by it. The universal lane hash stands in for the server's
 // native digest (server/fingerprint.ts needs `node:crypto`, and this stub loads in the browser

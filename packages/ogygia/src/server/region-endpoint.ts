@@ -2,7 +2,7 @@
  * Build a signed region capability URL (same shape as server-island holes).
  * Used by Region's lake branch for `render: 'live'`. Client build gets a stub that returns ''.
  */
-import { secret, secretStable } from 'virtual:ogygia/secret';
+import { signing_key } from './signing-key.js';
 import { sessionCookie } from 'virtual:ogygia/session-cookie';
 import { regionTtl } from 'virtual:ogygia/region-ttl';
 import { sign, region_mac_message } from 'virtual:ogygia/sign';
@@ -23,6 +23,15 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
 import { B64Url } from './payload.js';
 import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
 import { ensure_prop_kinds } from './region-props.js';
+import { island_url, island_render } from 'virtual:ogygia/server-manifest';
+import { islandCss } from 'virtual:ogygia/island-deps';
+
+/** A hole's own stylesheet hrefs, by region id — the list its endpoint answer links (hooks.ts
+ *  `region_css_links`), for a render that inlines the hole in the page instead (Region.svelte). */
+export function holeCss(entry: string): string[] {
+	const url = island_url[entry];
+	return url ? islandCss(url) : [];
+}
 
 /** Same families as encode_region_props — one seam law for island props. */
 const PROP_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);
@@ -76,21 +85,6 @@ export function known_region_fps(): ReadonlySet<string> {
 	return set;
 }
 
-/**
- * One warning per build (shared Symbol key → one message total across every mint path): a
- * prerendered hole signed with the per-build random key dies on the NEXT deploy (new key, old
- * static file). Real PPR needs a stable OGYGIA_SECRET.
- */
-function warn_unstable_secret(): void {
-	if (!building || secretStable) return;
-	const g = globalThis as Record<symbol, unknown>;
-	const K = Symbol.for('ogygia.prerender-secret-warned');
-	if (g[K]) return;
-	g[K] = true;
-	console.warn(
-		'[ogygia] prerendered page mints region capabilities signed with a per-build random key — they stop verifying after your next deploy while the static HTML lives on. Set a stable OGYGIA_SECRET env var so prerendered holes survive redeploys.'
-	);
-}
 
 /**
  * Shared minting core for signed region capabilities — the ONE source of truth for the
@@ -124,15 +118,19 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 			region_ttl: regionTtl
 		})
 	);
-	warn_unstable_secret();
+	const key = signing_key();
 	// A hole is dynamic by default (`ttl` 0 → the handle answers `no-store`); a positive `ttl` opts
 	// into a `private, max-age=ttl` browser cache. Empty string when 0 keeps the MAC field stable.
 	const ttl_field = ttl > 0 ? String(Math.floor(ttl)) : '';
-	const sig = sign(secret, region_mac_message(entry, exp, payload, session, ttl_field));
+	// `r`: what the endpoint renders (the component), signed — a build that no longer has this `id`
+	// (another schedule, preset or salt) still answers it (compiler/region/identity.ts `renderId`)
+	const render = island_render[entry] ?? '';
+	const sig = sign(key.secret, region_mac_message(entry, exp, payload, session, ttl_field, render));
 	const ttl_param = ttl_field ? `&ttl=${ttl_field}` : '';
 	if (DEVTOOLS)
 		record_server_event({ domain: 'server', name: 'server.capability.minted', id: entry, ttl });
-	return `${resolve(islands_endpoint())}?id=${encodeURIComponent(entry)}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}`;
+	// `k`: the minter's key fingerprint, outside the MAC (server/signing-key.ts)
+	return `${resolve(islands_endpoint())}?id=${encodeURIComponent(entry)}${render ? `&r=${render}` : ''}&props=${payload}&exp=${exp}${ttl_param}&sig=${sig}&k=${key.fp}`;
 }
 
 /**

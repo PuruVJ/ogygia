@@ -29,6 +29,29 @@ describe('mark', () => {
 		expect(m.record.hosts.get(2)!.children.get(1)!.text).toBe(' Sign in ');
 	});
 
+	it('a document the router fetched is an answer: every host planned, as in a region answer', () => {
+		const html = doc(`<demo-card class="shell"><p>server</p></demo-card>` + island(`<demo-card class="own"><i>ok</i></demo-card>`));
+		// loaded as a document, the server-owned host is left to its own runtime
+		expect(mark(html, 'document', false)!.html).toContain('<demo-card og-u="0" class="shell">');
+		// fetched by the router, it meets a live host its runtime already unpacked: planned, restorable
+		const m = mark(html, 'document', false, true)!;
+		expect(m.html).toContain('<demo-card og-h="0" class="shell"><p og-c="0.0">server</p>');
+		expect(m.html).toContain('<demo-card og-h="1" class="own">');
+		expect([...m.record.hosts.values()].every((h) => h.planned)).toBe(true);
+	});
+
+	it('a baked live region is opaque like a lake: on a Kit-hydrated document its hosts get no plan, its islands keep theirs', () => {
+		const baked = (inner: string) => `<ogygia-region live data-og-baked>${inner}</ogygia-region>`;
+		const m = mark(doc(baked(`<demo-card hidden><p>x</p></demo-card>` + island(`<demo-card class="own"><i>ok</i></demo-card>`))), 'document', true)!;
+		// nothing hydrates the baked region's own markup: restoring it to Svelte's render would undo the
+		// transform (a server-added `hidden` lost before the element's runtime set it again)
+		expect(m.html).toContain('<demo-card og-u="0" hidden>');
+		// an island inside it is still Svelte's: planned
+		expect(m.html).toContain('<demo-card og-h="1" class="own">');
+		// the same for a lake, the shape it now shares
+		expect(mark(doc(`<ogygia-region wake="none"><demo-card><p>x</p></demo-card></ogygia-region>`), 'document', true)!.html).toContain('og-u="0"');
+	});
+
 	it('a Kit-hydrated document is Svelte-owned throughout its body; a region answer plans every host', () => {
 		expect(mark(doc('<demo-card><p>x</p></demo-card>'), 'document', true)!.html).toContain('og-h="0"');
 		expect(mark('<demo-card><p>x</p></demo-card>', 'region', false)!.html).toContain('og-h="0"');
