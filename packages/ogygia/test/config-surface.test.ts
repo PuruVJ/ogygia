@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ogygia } from '../src/vite/index.js';
 import { resolve_options } from '../src/vite/options.js';
+import { region_ttl_module } from '../src/compiler/link/caps.js';
 import { rewrite_loaders, extract_preset } from '../src/compiler/content/loaders.js';
 import { islandBridge } from '../src/vite/island-bridge.js';
 
@@ -50,6 +51,31 @@ describe('regions.ttl — the capability lifetime', () => {
 		expect(ttl({ ttl: 600 })).toBe(600);
 		expect(ttl({ ttl: 5 })).toBe(60);
 		expect(ttl({ ttl: 10 * 86400 })).toBe(86400);
+	});
+});
+
+describe('regions.maxPageAge — the oldest cached page whose holes still come back', () => {
+	const renew = (regions?: { maxPageAge?: number }) => resolve_options({ regions }, 3600, 691200).renew_window;
+	it('defaults to 8 days', () => {
+		expect(renew()).toBe(691200);
+	});
+	it('takes the app’s own number (a CDN that keeps pages longer)', () => {
+		expect(renew({ maxPageAge: 30 * 24 * 3600 })).toBe(2592000);
+		expect(renew({ maxPageAge: 0 })).toBe(0);
+	});
+	it('is capped at the prerender capability life (10 years)', () => {
+		expect(renew({ maxPageAge: 1e12 })).toBe(10 * 365 * 24 * 3600);
+	});
+	it('rejects anything but seconds ≥ 0', () => {
+		for (const bad of [-1, Number.NaN, Infinity, '30d' as never])
+			expect(() => resolve_options({ regions: { maxPageAge: bad } }, 3600)).toThrow(/regions\.maxPageAge/);
+	});
+	it('never touches the hole URL life (ttl)', () => {
+		expect(resolve_options({ regions: { maxPageAge: 30 * 24 * 3600 } }, 3600).region_ttl).toBe(3600);
+	});
+	it('reaches the server (and never the browser) through virtual:ogygia/region-ttl', () => {
+		expect(region_ttl_module(true, 3600, 2592000)).toContain('export const renewWindow = 2592000;');
+		expect(region_ttl_module(false, 3600, 2592000)).toContain('export const renewWindow = 0;');
 	});
 });
 

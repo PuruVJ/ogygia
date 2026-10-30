@@ -82,6 +82,8 @@ export interface CompileCtxInit {
 	session_cookie: string;
 	/** Capability-URL TTL in seconds. */
 	region_ttl: number;
+	/** How long after expiry an anonymous capability still renews, in seconds (`0` = never). */
+	renew_window: number;
 	/** Router on (app-wide). `false` tree-shakes the feature out. */
 	router_enabled: boolean;
 	/** View Transitions on for SPA navs. */
@@ -126,6 +128,7 @@ export class CompileCtx {
 	readonly rate_limit: { max: number; windowMs: number };
 	readonly session_cookie: string;
 	readonly region_ttl: number;
+	readonly renew_window: number;
 	readonly router_enabled: boolean;
 	readonly router_view_transitions: boolean;
 	readonly client_hooks: string | null;
@@ -167,6 +170,7 @@ export class CompileCtx {
 		this.rate_limit = init.rate_limit;
 		this.session_cookie = init.session_cookie;
 		this.region_ttl = init.region_ttl;
+		this.renew_window = init.renew_window;
 		this.router_enabled = init.router_enabled;
 		this.router_view_transitions = init.router_view_transitions;
 		this.client_hooks = init.client_hooks ?? null;

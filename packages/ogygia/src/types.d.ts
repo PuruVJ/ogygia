@@ -119,9 +119,10 @@ declare module 'virtual:ogygia/devtools-boot-url' {
 	export default url;
 }
 declare module 'virtual:ogygia/secret' {
-	export const secret: string;
-	/** True when the key is env-provided (OGYGIA_SECRET) and thus survives redeploys. */
-	export const secretStable: boolean;
+	/** This build's random key material (server leg; '' on the client). */
+	export const buildKey: string;
+	/** True when the build saw an `OGYGIA_SECRET` (its region ids are salted from it). */
+	export const buildHadSecret: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;
@@ -184,6 +185,8 @@ declare module 'virtual:ogygia/router-config' {
 declare module 'virtual:ogygia/region-ttl' {
 	/** Capability URL TTL in seconds. From `ogygia({ regions: { ttl } })` (default 3600). */
 	export const regionTtl: number;
+	/** Seconds after expiry an anonymous capability still renews. From `ogygia({ regions: { maxPageAge } })` (default 8 days). */
+	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/route-csr' {
 	/** Route ids (Kit `route.id`, group-stripped) whose effective csr is true — SSR leg only; the

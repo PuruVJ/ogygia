@@ -88,6 +88,15 @@ describe('renewable_expiry: the renewal gate’s time rule', () => {
 	it('only a plain integer (no sign, fraction, exponent or padding)', () => {
 		for (const bad of ['', '-1', '1.5', '1e9', ' 1', '0x10', '9'.repeat(13)]) expect(renewable_expiry(bad, now)).toBe(false);
 	});
+	it('the app’s window (regions.renewWindow): 30 days renews a 9-day-old capability, not a 31-day one', () => {
+		const month = 30 * 24 * 3600;
+		expect(renewable_expiry(String(now - 9 * 24 * 3600), now, month)).toBe(true);
+		expect(renewable_expiry(String(now - month), now, month)).toBe(true);
+		expect(renewable_expiry(String(now - month - 1), now, month)).toBe(false);
+	});
+	it('a window of 0 renews nothing', () => {
+		expect(renewable_expiry(String(now - 1), now, 0)).toBe(false);
+	});
 });
 
 describe('the per-request seam', () => {

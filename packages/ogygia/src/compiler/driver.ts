@@ -1197,7 +1197,8 @@ export class Compiler {
 			});
 		}
 		if (id === RESOLVED(V_SECRET)) {
-			return secret_module(ssr, ctx.build_secret);
+			// (ids are salted only from a build-time OGYGIA_SECRET: a salt means the build had one)
+			return secret_module(ssr, ctx.build_secret, ctx.id_salt !== '');
 		}
 		if (id === RESOLVED(V_SIGN)) {
 			return sign_module(ssr, ctx.hmac_module);
@@ -1253,7 +1254,7 @@ export class Compiler {
 			return session_cookie_module(ssr, ctx.session_cookie);
 		}
 		if (id === RESOLVED(V_REGION_TTL)) {
-			return region_ttl_module(ssr, ctx.region_ttl);
+			return region_ttl_module(ssr, ctx.region_ttl, ctx.renew_window);
 		}
 		if (id === RESOLVED(V_ROUTE_CSR)) {
 			return route_csr_module(ssr, kit_dirs(ctx.root).routes_dir);

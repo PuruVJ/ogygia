@@ -12,7 +12,8 @@ import {
 	is_redirected_answer,
 	is_same_origin_response,
 	island_module_url,
-	RegionAnswerRefused
+	RegionAnswerRefused,
+	deny_of
 } from './region-endpoint-url.js';
 import { island_entry_of, import_entry, on_entry_fallback, pin_region_urls } from './entry-locations.js';
 import {
@@ -711,6 +712,8 @@ class OgygiaRegion extends HTMLElement {
 				// Swapping that in put a site's account page — scripts, skeletons, a second header —
 				// into every hole of its header for signed-in visitors. Refused: the fallback stands.
 				if (is_redirected_answer(res)) throw new RegionAnswerRefused('redirected', res.url);
+				// A refused capability is deterministic (its key, its MAC, its id): no retry would differ.
+				if (res.status === 403) throw new RegionAnswerRefused('forbidden', res.url || endpoint, deny_of(res, endpoint));
 				if (!res.ok) throw new Error('status ' + res.status);
 				// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
 				if (res.status === 204) return KEEP_FALLBACK_HTML;
@@ -1083,11 +1086,21 @@ class OgygiaRegion extends HTMLElement {
 			this.#adopt_renewed();
 		} catch (err) {
 			if ((err as { name?: string })?.name === 'AbortError' || outer.aborted) return;
-			// A refused answer is deterministic (a redirect rule in front of the handle, not a flaky
-			// network): say what answered instead and do not retry.
+			// A refused answer is deterministic (a redirect rule in front of the handle, a refused
+			// capability, not a flaky network): say what answered instead and do not retry.
 			const refused = err instanceof RegionAnswerRefused;
+			// (a refused capability's reason travels as the failure's message)
+			const deny = refused && err.reason === 'forbidden' ? err.deny || 'no reason given' : undefined;
 			if (import.meta.env.DEV) {
-				if (refused) {
+				if (deny !== undefined) {
+					console.warn(
+						`[ogygia] region answer refused for ${endpoint}: ${deny.startsWith('not ogygia') ? deny : `the islands endpoint refused its capability (403: ${deny})`}. ` +
+							(deny.startsWith('foreign-key')
+								? 'The page and its islands endpoint came from different deployments (two keys): route the endpoint to the deployment that served the page, or give every deployment one OGYGIA_SECRET. '
+								: '') +
+							'The fallback stands.'
+					);
+				} else if (refused) {
 					console.warn(
 						`[ogygia] region answer refused for ${endpoint}: the request was ${err.reason === 'redirected' ? 'redirected to' : 'answered with a whole document at'} ${err.final_url}. ` +
 							`A handle in front of ogygia.handle() (an auth redirect, a locale bounce, a 404 handler) took the region request — exempt the islands endpoint there. The fallback stands.`
@@ -1114,6 +1127,7 @@ class OgygiaRegion extends HTMLElement {
 						reason: refused ? err.reason : 'error',
 						...(final_path ? { final_path } : {}),
 						...(refused ? {} : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+						...(deny !== undefined ? { message: deny.slice(0, 200) } : {}),
 						attempts: this.#fetch_attempts,
 						t: Math.round(performance.now())
 					});
@@ -1126,6 +1140,7 @@ class OgygiaRegion extends HTMLElement {
 					endpoint,
 					reason: refused ? err.reason : 'error',
 					...(refused ? { final_url: err.final_url } : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+					...(deny !== undefined ? { message: deny.slice(0, 200) } : {}),
 					attempt: this.#fetch_attempts,
 					final
 				});

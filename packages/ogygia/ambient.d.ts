@@ -50,8 +50,8 @@ declare module 'virtual:ogygia/region-endpoint' {
 	): string;
 }
 declare module 'virtual:ogygia/secret' {
-	export const secret: string;
-	export const secretStable: boolean;
+	export const buildKey: string;
+	export const buildHadSecret: boolean;
 }
 declare module 'virtual:ogygia/sign' {
 	export function sign(secret: string, message: string): string;
@@ -82,6 +82,7 @@ declare module 'virtual:ogygia/session-cookie' {
 }
 declare module 'virtual:ogygia/region-ttl' {
 	export const regionTtl: number;
+	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/transport' {
 	export const transport: Record<
