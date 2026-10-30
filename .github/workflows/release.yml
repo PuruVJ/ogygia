@@ -1,103 +1,28 @@
 name: Release
 
-# The Changesets release flow (https://changesets.dev/guide/automating), trusted publishing:
-#   - changesets waiting → `version`: open / update the "Version packages" PR;
-#   - none waiting, an unpublished version → `pack` + `publish`: publish `ogygia` to npm (OIDC, no
-#     stored token), push its tag and create its GitHub release.
-# `id-token: write` only on the publish job.
-
 on:
   push:
     branches:
       - main
 
-permissions: {}
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  select-mode:
-    runs-on: ubuntu-latest
-    outputs:
-      mode: ${{ steps.select-mode.outputs.mode }}
-      publish-plan-artifact-id: ${{ steps.select-mode.outputs.publish-plan-artifact-id }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
-      - id: select-mode
-        uses: changesets/action/select-mode@v2
-
-  version:
-    if: needs.select-mode.outputs.mode == 'version'
-    needs: select-mode
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
-      - uses: changesets/action/version@v2
-
-  pack:
-    if: needs.select-mode.outputs.mode == 'publish'
-    needs: select-mode
-    runs-on: ubuntu-latest
-    outputs:
-      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build:lib
-      - run: pnpm --filter ogygia run verify:package
-      - id: pack
-        uses: changesets/action/pack@v2
-        with:
-          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
-
-  publish:
-    needs: pack
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - uses: changesets/action/publish@v2
+      - uses: changesets/action@v2
         with:
-          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          publish-script: pnpm run release
           create-github-releases: true

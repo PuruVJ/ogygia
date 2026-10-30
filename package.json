@@ -29,6 +29,7 @@
 		"profiler:answer-key": "node internal/bench/profiler-answer-key.mjs --serve --build",
 		"profiler:answer-key:no-maps": "node internal/bench/profiler-answer-key.mjs --serve --build --no-maps",
 		"changeset": "changeset",
+		"release": "pnpm run build:lib && changeset publish",
 		"format": "oxfmt packages/ogygia/src packages/ogygia/test",
 		"format:check": "oxfmt --check packages/ogygia/src packages/ogygia/test"
 	},
