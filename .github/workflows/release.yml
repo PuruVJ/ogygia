@@ -1,53 +1,34 @@
-name: Release
-
-# On every push to main (.changeset/README.md):
-#   - changesets waiting → open / update the "Version packages" PR (`pnpm run version-packages`);
-#   - none waiting (that PR just merged) → `pnpm run release`: publish `ogygia` to npm if its version
-#     is not there yet, then its `v<version>` tag and GitHub release. A no-op when all three exist.
-#
-# npm publishing is TRUSTED PUBLISHING (OIDC, `id-token: write`): no npm token is stored. It needs the
-# trusted publisher set once on npmjs.com → ogygia → Settings: GitHub Actions, repository
-# PuruVJ/ogygia, workflow `release.yml`.
+name: Changesets
 
 on:
   push:
     branches:
       - main
 
-concurrency: release-${{ github.ref }}
-
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
-
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
+          # all history, so changesets can link each changelog entry to its commit and PR
           fetch-depth: 0
-
-      - uses: pnpm/action-setup@v4
-
-      # Node 24 ships npm 11: trusted publishing needs npm ≥ 11.5.1 (upgraded to be sure)
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
-
-      - run: npm install -g npm@latest
-
-      - run: pnpm install --frozen-lockfile
-
-      - uses: changesets/action@v1
+      - uses: pnpm/action-setup@v6
         with:
-          version: pnpm run version-packages
-          publish: pnpm run release
-          title: 'Version packages'
-          commit: 'Version packages'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          run_install: true
+      - run: pnpm run build:lib
+      - name: Create Release Pull Request or Publish to npm
+        uses: changesets/action@v2
+        with:
+          version-script: pnpm ci:version
+          publish-script: pnpm ci:release
+          commit-message: 'chore: update versions'
+          pr-title: 'chore: update versions'
+          create-github-releases: true

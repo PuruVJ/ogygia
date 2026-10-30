@@ -3,18 +3,18 @@ title: Releases
 summary: Each release of ogygia, newest first.
 ---
 
-All notable changes to **ogygia** are documented in this file.
+All notable changes to **ogygia** are documented in this file, newest first. Each entry is a PR's
+changeset, written by the release: do not edit by hand.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.8] - 2026-10-30
+## 0.8.8 - 2026-10-30
 
 ### Fixed
 
 - A hole on a page cached across a deploy keeps rendering when its component is unchanged: its URL signs the component it renders (`&r=`), so a new preset, `wake` or build-time `OGYGIA_SECRET` no longer turns it into `unknown-id`.
 
-## [0.8.7] - 2026-10-30
+## 0.8.7 - 2026-10-30
 
 ### Added
 
@@ -26,14 +26,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The runtime never retries a 403 from the islands endpoint: the fallback stands, and devtools and the profiler show the reason (or that a proxy, CDN or firewall in front answered).
 - The signing key is read at first use, so an `OGYGIA_SECRET` the host loads after the server's modules still counts; a production server signing with the build's random key logs it once.
 
-## [0.8.6] - 2026-10-28
+## 0.8.6 - 2026-10-28
 
 ### Fixed
 
 - A hole created fresh in the browser (Kit remounting a page whose hydration failed, or an island re-creating a snippet) renders its fallback again, so an on-demand hole whose fallback is its trigger can still be woken (it came back empty in 0.8.5).
 - A hole in a live snippet that an island re-creates fetches again by its identity on any page, not only on a Kit-hydrated one.
 
-## [0.8.5] - 2026-10-22
+## 0.8.5 - 2026-10-22
 
 ### Changed
 
@@ -54,7 +54,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A first-load copy of a transformed page that reaches the router (a frozen page, a prerender, a cache that ignores `Vary`) is loaded instead of swapped in; transformed documents vary on `x-ogygia-spa`.
 - A link inside a web component's shadow tree honors the `data-sveltekit-reload` around the component.
 
-## [0.8.4] - 2026-10-22
+## 0.8.4 - 2026-10-22
 
 ### Fixed
 
@@ -64,7 +64,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Islands inside a baked held region on a Kit-hydrated page wake on the runtime instead of being left to Kit, which never hydrates them.
 - Custom elements inside a baked held region keep what the server's transform wrote (a closed dropdown no longer loses `hidden` and shifts the page).
 
-## [0.8.3] - 2026-10-19
+## 0.8.3 - 2026-10-19
 
 ### Added
 
@@ -99,7 +99,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A click on a `load`, `idle`, `visible` or media island before it is live is no longer lost: the island wakes at once and the click is replayed when it is live, as on an `interaction` island; `hydratedBy()` then says `'interaction'`.
 - A Ctrl/Cmd/Shift- or middle-click on a link in an island that is not live yet opens the link as the browser would; before, it was canceled and replayed, and the replay could not open it.
 
-## [0.8.2] - 2026-10-14
+## 0.8.2 - 2026-10-14
 
 ### Changed
 
@@ -109,13 +109,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A hole's CSS now carries components taken through a package (its `exports`, a TypeScript entry included) or a barrel — only the names imported — and an island inside a hole brings its own CSS, so what it renders after a click is styled.
 
-## [0.8.1] - 2026-10-13
+## 0.8.1 - 2026-10-13
 
 ### Fixed
 
 - `handle({ endpoint })` now moves every hole and live-region URL a page mints, not only the handler; before, every hole asked the old `/__ogygia__` path and stayed empty.
 
-## [0.8.0] - 2026-10-09
+## 0.8.0 - 2026-10-09
 
 The **passage** release: the runtime and the compiler rebuilt on one identity primitive, regions that move instead of reset across navigations, a standalone compiler, a production SSR profiler, a devtools dock, a typed router, frozen pages and fragment federation. Underneath, one load scheduler, one DOM ownership model and one page model replace per-path rules.
 
@@ -241,7 +241,7 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - The per-host csr context cascade is one per-document signal (`documentIsCsrTrue()`).
 - The on-demand-hole browser tests no longer depend on where the runner's pointer rests, and the weekly upstream watcher gained a baseline leg.
 
-## [0.7.0] - 2026-08-20
+## 0.7.0 - 2026-08-20
 
 ### Breaking changes
 
@@ -268,13 +268,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - One shared region-option parser, one emitter per region kind, and side-channel emits centralized.
 
-## [0.6.6] - 2026-08-19
+## 0.6.6 - 2026-08-19
 
 ### Fixed
 
 - A `{#snippet}` forwarded into an island no longer emits duplicate imports.
 
-## [0.6.5] - 2026-08-19
+## 0.6.5 - 2026-08-19
 
 ### Removed
 
@@ -284,7 +284,7 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - `ogygia/profiler` is in the published export map.
 
-## [0.6.4] - 2026-08-19
+## 0.6.4 - 2026-08-19
 
 ### Added
 
@@ -294,13 +294,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - Profiler: native runtime frames are named instead of rendering as "—".
 
-## [0.6.3] - 2026-08-19
+## 0.6.3 - 2026-08-19
 
 ### Fixed
 
 - A `DocsShell` sidebar no longer drowns its own page cross-fade.
 
-## [0.6.2] - 2026-08-19
+## 0.6.2 - 2026-08-19
 
 ### Fixed
 
@@ -308,13 +308,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - A static server island no longer 404s a bare region id on navigation.
 - A page transition between different shells no longer stutters.
 
-## [0.6.1] - 2026-08-19
+## 0.6.1 - 2026-08-19
 
 ### Fixed
 
 - Placed client-island CSS no longer vanishes in a production build.
 
-## [0.6.0] - 2026-08-16
+## 0.6.0 - 2026-08-16
 
 ### Breaking changes
 
@@ -363,14 +363,14 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - The region batch endpoint rejects oversized bodies (413) before reading them.
 - A full audit of the signed-capability pipeline.
 
-## [0.5.1] - 2026-08-13
+## 0.5.1 - 2026-08-13
 
 ### Fixed
 
 - Published `exports` resolve to `dist`, not `src`.
 - The browser runtime no longer disappears to tree-shaking.
 
-## [0.5.0] - 2026-08-12
+## 0.5.0 - 2026-08-12
 
 ### Breaking changes
 
@@ -419,14 +419,14 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 - A live command refresh with only refresh keys works.
 - The morph keeps form state with a keyed diff.
 
-## [0.4.3] - 2026-08-07
+## 0.4.3 - 2026-08-07
 
 ### Fixed
 
 - `invalidateAll` is a soft seed refresh, not a body swap and view transition.
 - `csr = false` FOUC CSS no longer double-owns island component JS, and client stubs keep the entry import that carries island CSS.
 
-## [0.4.0] - 2026-08-07
+## 0.4.0 - 2026-08-07
 
 ### Breaking changes
 
@@ -444,13 +444,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - The static-tag-only requirement, and the tag-hoist virtual modules.
 
-## [0.3.5] - 2026-08-07
+## 0.3.5 - 2026-08-07
 
 ### Fixed
 
 - Nested server and deferred-client islands keep their authored attributes.
 
-## [0.3.4] - 2026-08-07
+## 0.3.4 - 2026-08-07
 
 ### Added
 
@@ -460,13 +460,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - `defer` + `hydrate` is no longer a build error; `hydrate: 'none'` + `defer` warns in dev and is treated as defer-only.
 
-## [0.3.3] - 2026-08-07
+## 0.3.3 - 2026-08-07
 
 ### Changed
 
 - `hydrate: 'load'` also modulepreloads the island's dependency chunks.
 
-## [0.3.2] - 2026-08-07
+## 0.3.2 - 2026-08-07
 
 ### Changed
 
@@ -476,13 +476,13 @@ The **passage** release: the runtime and the compiler rebuilt on one identity pr
 
 - Relative island entries on nested routes resolve against the document, not the runtime module.
 
-## [0.3.1] - 2026-08-07
+## 0.3.1 - 2026-08-07
 
 ### Fixed
 
 - The client build no longer emits thin island entry facades.
 
-## [0.3.0] - 2026-08-06
+## 0.3.0 - 2026-08-06
 
 ### Changed
 
