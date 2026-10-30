@@ -234,8 +234,8 @@ export const page = D;`;
 		expect(r!.code).toContain('virtual:ogygia/wrapper/');
 	});
 
-	test('render: deferred takes `wake` as its fetch schedule (+ margin on visible)', () => {
-		const src = `import D from './D.svelte' with { render: 'deferred', wake: 'visible' };
+	test('render: deferred takes `fetch` as its timing (+ margin on visible)', () => {
+		const src = `import D from './D.svelte' with { render: 'deferred', fetch: 'visible' };
 export const page = D;`;
 		const r = transformTsRegions(src, id, makeCtx({ visibleMargin: '150px' }));
 		const isl = r!.islands[0] as Record<string, unknown>;
@@ -243,12 +243,24 @@ export const page = D;`;
 		expect(String(isl.wrapperSource)).toContain('__margin');
 	});
 
-	test('render: deferred accepts interaction (an on-demand hole) and rejects none', () => {
-		const ok = `import D from './D.svelte' with { render: 'deferred', wake: 'interaction' };`;
+	test('render: deferred accepts fetch: interaction (an on-demand hole) and rejects none', () => {
+		const ok = `import D from './D.svelte' with { render: 'deferred', fetch: 'interaction' };`;
 		const r = transformTsRegions(ok, id, makeCtx());
 		expect((r!.islands[0] as Record<string, unknown>).fetchWhen).toBe('interaction');
-		const bad = `import D from './D.svelte' with { render: 'deferred', wake: 'none' };`;
-		expect(() => transformTsRegions(bad, id, makeCtx())).toThrow(/fetch/i);
+		const bad = `import D from './D.svelte' with { render: 'deferred', fetch: 'none' };`;
+		expect(() => transformTsRegions(bad, id, makeCtx())).toThrow(/a hole must fetch/);
+	});
+
+	test('the retired render: deferred + wake timing fails, naming the fetch to write', () => {
+		const old = `import D from './D.svelte' with { render: 'deferred', wake: 'visible' };`;
+		expect(() => transformTsRegions(old, id, makeCtx())).toThrow(
+			/that spelling is gone\. Write `render: 'deferred', fetch: 'visible'` instead/
+		);
+	});
+
+	test('a lone fetch is refused (it is a deferred hole’s timing)', () => {
+		const lone = `import D from './D.svelte' with { fetch: 'visible' };`;
+		expect(() => transformTsRegions(lone, id, makeCtx())).toThrow(/without `render: 'deferred'`/);
 	});
 
 	test('render: live is rejected on a .ts import (svelte-only)', () => {

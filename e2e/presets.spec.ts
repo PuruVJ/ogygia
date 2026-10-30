@@ -129,12 +129,12 @@ test.describe('transform-level: region syntax + presets + errors', () => {
 		{
 			const r = run(
 				wrap(
-					`import C from './C.svelte' with { render: 'deferred', wake: 'idle' };`,
+					`import C from './C.svelte' with { render: 'deferred', fetch: 'idle' };`,
 					'<C>{#snippet ogygiaFallback()}x{/snippet}</C>'
 				)
 			);
 			check(
-				'render: deferred -> server island, fetch on wake, no hydrate module',
+				'render: deferred -> server island, fetch on its fetch schedule, no hydrate module',
 				MODE_SERVER_RE.test(wrap_src(r)) &&
 					DEFER_IDLE_RE.test(wrap_src(r)) &&
 					!HYDRATE_ATTR_RE.test(wrap_src(r)) &&
@@ -151,7 +151,7 @@ test.describe('transform-level: region syntax + presets + errors', () => {
 				...base_ctx,
 				presets: {
 					...base_ctx.presets,
-					srvVisible: { render: 'deferred', wake: 'visible', margin: '150px' }
+					srvVisible: { render: 'deferred', fetch: 'visible', margin: '150px' }
 				}
 			};
 			const r = run(

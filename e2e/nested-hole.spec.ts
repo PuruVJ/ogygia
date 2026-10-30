@@ -15,7 +15,7 @@ test.describe('deferred hole → snippets → nested islands via relative import
 		page.on('pageerror', (e) => errs.push(String(e)));
 
 		await page.goto('/nested-hole', { waitUntil: 'networkidle' });
-		// the hole is `render: 'deferred', wake: 'load'` — its HTML swaps in after the shell
+		// the hole is `render: 'deferred'` (fetched on load) — its HTML swaps in after the shell
 		await page.locator('[data-nested-hole]').waitFor();
 		check(
 			'hole rendered on the far side (fallback gone)',

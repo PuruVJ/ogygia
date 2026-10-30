@@ -18,12 +18,13 @@ The full vocabulary in one place. When a word in the docs is unfamiliar, it is d
 
 ## Attributes & schedules
 
-- **`wake`**: the import attribute that schedules a region: when the JS of an island runs, or when a `deferred`/`live` region fetches. `'none'` makes a lake.
+- **`wake`**: the import attribute that schedules an island: when its JS runs. On a `live` region, when it revalidates. `'none'` makes a lake.
+- **`fetch`**: the schedule of a `render: 'deferred'` hole: when its HTML arrives. `with { render: 'deferred', fetch: 'visible' }`. A hole never takes `wake`.
 - **`render`**: the delivery mode: `static` (inline HTML, the default), `deferred` (a server-island hole, fetched), `live` (a hole that revalidates).
 - **`region: 'raw'`**: marks a held, server-chosen region (given to `region()` where the transform cannot see the call).
 - **`keep`**: keep the node + state of a live island across SPA navigation (was `persist`).
 - **`preset`**: a named bundle of attributes defined in plugin config, applied with `with { preset: 'name' }`.
-- **`load` / `idle` / `visible` / `interaction` / `(media)`**: the schedules. `interaction` (islands only) wakes on the first pointer/key/focus, and replays the click that woke it. On an island, they say when JS runs. On a `deferred`/`live` region, when the HTML fetches. See [Timing & nesting](/docs/regions/timing-nesting).
+- **`load` / `idle` / `visible` / `interaction` / `(media)`**: the schedules. `interaction` wakes an island on the first pointer/key/focus, and replays the click that woke it. On a hole, it fetches on the first hover or focus. On an island (`wake`), they say when JS runs. On a `deferred` hole (`fetch`), when the HTML arrives. See [Timing & nesting](/docs/regions/timing-nesting).
 
 ## Mechanics
 
