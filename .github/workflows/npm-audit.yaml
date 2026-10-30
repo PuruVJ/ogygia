@@ -2,6 +2,9 @@ name: npm audit
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - ci/devopssecurityscan
 
 permissions:
   contents: read
