@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+      # the next minor, in changesets pre mode (.changeset/pre.json): publishes `x.y.z-next.n` under
+      # the npm `next` tag, so `latest` stays on main's releases
+      - next
 
 jobs:
   version:
@@ -29,6 +32,6 @@ jobs:
         with:
           version-script: pnpm ci:version
           publish-script: pnpm ci:release
-          commit-message: 'chore: update versions'
-          pr-title: 'chore: update versions'
+          commit-message: 'chore: update versions (${{ github.ref_name }})'
+          pr-title: 'chore: update versions (${{ github.ref_name }})'
           create-github-releases: true
