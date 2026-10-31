@@ -23,9 +23,11 @@ import {
 	transformHost,
 	islandVirtualId,
 	wrapperVirtualId,
-	CLIENT_BINDING_STUB
-} from './compiler/index.ts';
-import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.ts';
+	CLIENT_BINDING_STUB,
+	collect_flag_sites,
+	flags_manifest,
+	type FlagSite
+} from 'ogygia/internal/compiler';
 
 /** The profiler's report reading (`@ogygia/devtools/report`), as these tools use it: loaded from the
  *  app's own install on first need — core does not depend on the plugin. */
@@ -768,7 +770,7 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 		}
 		const trace = (await page.evaluate(() =>
 			(
-				window as { __ogygia_devtools: { trace(): { events: unknown[] } } }
+				window as unknown as { __ogygia_devtools: { trace(): { events: unknown[] } } }
 			).__ogygia_devtools.trace()
 		)) as {
 			events: DtEvent[];

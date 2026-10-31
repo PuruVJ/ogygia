@@ -22,10 +22,8 @@ const pkg_root = fileURLToPath(new URL('.', import.meta.url));
 // `.svelte.js`. They are emitted as entries here (the `$app/state` vite alias imports the built
 // `.svelte.js` by absolute path, so it must exist in dist even though nothing else imports it).
 // tsdown accepts an ARRAY of configs — [0] is the library (unbundled, externalized), [1] is the
-// `ogygia` CLI (`npx ogygia init`), built as a SINGLE self-contained bundle so the published package
-// declares no extra runtime dependency for it. cli.ts is excluded from the library build (entry
-// negation) so this bundled copy is the only dist/cli.* — the library's externals would otherwise
-// emit a broken cli with `@sveltejs/sv-utils` left external.
+// `ogygia` command's front door (`npx ogygia init` → @ogygia/cli), one self-contained file; cli.ts is
+// excluded from the library build (entry negation) so it is the only dist/cli.*.
 export default defineConfig([
 	{
 		entry: ['src/**/*.ts', '!src/**/*.d.ts', '!src/cli.ts'],
@@ -69,7 +67,7 @@ export default defineConfig([
 		dts: false,
 		clean: false, // library build [0] already cleaned dist/
 		treeshake: true,
-		// Bundle EVERYTHING (`@sveltejs/sv-utils` + its deps) into one file; keep only node builtins external.
+		// one file; only node builtins external
 		deps: {
 			alwaysBundle: [/.*/],
 			neverBundle: [/^node:/]

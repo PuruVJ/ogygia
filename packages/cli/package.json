@@ -1,0 +1,53 @@
+{
+	"name": "@ogygia/cli",
+	"private": true,
+	"version": "0.10.2",
+	"description": "The ogygia command line: init and site scaffolds, the AI skill, the MCP server, perf budgets and bisect, federation keys and catalogs",
+	"type": "module",
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
+		"directory": "packages/cli"
+	},
+	"keywords": ["ogygia", "sveltekit", "cli", "mcp"],
+	"bin": {
+		"ogygia-cli": "./dist/cli.mjs"
+	},
+	"exports": {
+		"./bin": "./dist/cli.mjs",
+		"./package.json": "./package.json"
+	},
+	"files": ["dist", "ai", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && vitest run",
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"ogygia": "workspace:^",
+		"playwright": "^1.62.0",
+		"svelte": "^5.56.8"
+	},
+	"peerDependenciesMeta": {
+		"playwright": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@ogygia/devtools": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@sveltejs/sv-utils": "^0.3.3",
+		"@types/node": "^26.1.2",
+		"ogygia": "workspace:*",
+		"svelte": "5.56.8",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}

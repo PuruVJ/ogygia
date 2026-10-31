@@ -666,6 +666,40 @@ importers:
         specifier: ^3.5.13
         version: 3.5.41(typescript@6.0.3)
 
+  packages/cli:
+    dependencies:
+      playwright:
+        specifier: ^1.62.0
+        version: 1.62.1
+    devDependencies:
+      '@ogygia/devtools':
+        specifier: workspace:*
+        version: link:../devtools
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@sveltejs/sv-utils':
+        specifier: ^0.3.3
+        version: 0.3.3
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      ogygia:
+        specifier: workspace:*
+        version: link:../ogygia
+      svelte:
+        specifier: 5.56.8
+        version: 5.56.8
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
   packages/content:
     dependencies:
       '@orama/orama':
@@ -852,9 +886,6 @@ importers:
       '@ogygia/tsdown-plugin-svelte':
         specifier: workspace:*
         version: link:../tsdown-plugin-svelte
-      '@sveltejs/sv-utils':
-        specifier: ^0.3.3
-        version: 0.3.3
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.2.0
         version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))

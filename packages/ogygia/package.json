@@ -141,7 +141,6 @@
 	},
 	"files": [
 		"dist",
-		"ai",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md",
@@ -185,7 +184,6 @@
 	},
 	"devDependencies": {
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@sveltejs/sv-utils": "^0.3.3",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",
 		"@vitest/browser": "4.1.10",

@@ -31,3 +31,5 @@ export { Compiler, type Profiler } from './driver.ts';
 export { Program, strip_id, host_key } from './program.ts';
 export { CompileCtx, type CompileCtxInit } from './ctx.ts';
 export * from './ids.ts';
+// The flag sites a module reads, and the manifest of them (`ogygia mcp`'s flags tool, from @ogygia/cli).
+export { collect_flag_sites, flags_manifest, FLAGS_SPEC, type FlagSite } from './flags.ts';
