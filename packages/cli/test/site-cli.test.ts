@@ -126,9 +126,10 @@ describe('site init — svelte.config project', () => {
 		expect(sc).toMatch(/compilerOptions:[\s\S]*experimental:[\s\S]*async:\s*true/);
 		expect(sc).toContain('adapter()'); // the user's adapter survived
 
-		// vite.config: the ogygia() plugin, but NO args added to sveltekit() (that would drop async)
+		// vite.config: ogygia() then content() beside it, but NO args added to sveltekit() (that would
+		// drop async)
 		const vc = read(dir, 'vite.config.ts');
-		expect(vc).toMatch(/ogygia\(\{\s*plugins:\s*\[\s*content\(\{\s*markdown:/);
+		expect(vc).toMatch(/ogygia\(\),\s*content\(\{\s*markdown:[^)]*\),\s*sveltekit\(\)/);
 		expect(vc).toMatch(/import \{ content \} from ['"]@ogygia\/content\/vite['"]/);
 		expect(vc).toMatch(/sveltekit\(\)/);
 		// the content package is a dependency next to ogygia

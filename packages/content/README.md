@@ -14,7 +14,7 @@ import { ogygia } from 'ogygia/vite';
 import { content } from '@ogygia/content/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ plugins: [content({ markdown: {} })] }), sveltekit()]
+	plugins: [ogygia(), content({ markdown: {} }), sveltekit()]
 });
 ```
 
@@ -44,6 +44,6 @@ import { content } from '@ogygia/content';
 export const docs = content({ loader: import.meta.og.loader.markdown('../content/docs') });
 ```
 
-`get(id)` gives the entry with its body as a region. The wire layer (`remotes`, `withRemotes`) is `@ogygia/content/remote`; markdown helpers are `@ogygia/content/markdown`; the shell is `@ogygia/content/docs-shell`.
+`get(id)` gives the entry with its body as a region. The wire layer (`remotes`, `withRemotes`) is `@ogygia/content/server`; markdown helpers are `@ogygia/content/markdown`; the shell is `@ogygia/content/docs-shell`.
 
 Docs: [Content collections](https://ogygia.puruvj.dev/docs/content/collections).

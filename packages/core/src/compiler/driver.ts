@@ -71,7 +71,7 @@ import {
 	kit_transport_module,
 	source_crosses_wire
 } from './link/transport.ts';
-import { server_manifest_module, server_island_ids, PAGE_DATA_READS_TOKEN } from './link/server-manifest.ts';
+import { server_manifest_module, server_islands_module, server_island_ids, PAGE_DATA_READS_TOKEN } from './link/server-manifest.ts';
 import { manifest_module } from './link/manifest.ts';
 import { dev_hmr_client_source } from './dev/dev-hmr.ts';
 import { same_module_path, island_vpaths_affected_by_file } from './dev/hmr.ts';
@@ -104,6 +104,7 @@ import {
 	V_SESSION_COOKIE,
 	V_REGION_TTL,
 	V_SERVER_MANIFEST,
+	V_SERVER_ISLANDS,
 	V_MANIFEST,
 	V_TRANSPORTABLES,
 	V_TRANSPORTABLES_EAGER,
@@ -1289,6 +1290,10 @@ export class Compiler {
 				(iid: string) => ctx.island_public_url(iid)
 			);
 		}
+		if (id === RESOLVED(V_SERVER_ISLANDS)) {
+			if (ssr) this.prescan();
+			return server_islands_module(ssr, program);
+		}
 		if (id === RESOLVED(V_MANIFEST)) {
 			return manifest_module(is_dev);
 		}
@@ -1395,6 +1400,7 @@ export class Compiler {
 		if (source === V_ROUTE_CSR) return RESOLVED(V_ROUTE_CSR);
 		if (source === V_ROUTE_OPTIONS) return RESOLVED(V_ROUTE_OPTIONS);
 		if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
+		if (source === V_SERVER_ISLANDS) return RESOLVED(V_SERVER_ISLANDS);
 		if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 		if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
 		// csr=false client hosts rewrite marked bindings here — not a hydrate entry.
@@ -2027,6 +2033,7 @@ export class Compiler {
 
 		for (const vpath of affected) invalidate(vpath);
 		invalidate(RESOLVED(V_SERVER_MANIFEST));
+		invalidate(RESOLVED(V_SERVER_ISLANDS));
 		invalidate(RESOLVED(V_MANIFEST));
 		return true;
 	}

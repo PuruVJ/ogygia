@@ -78,10 +78,10 @@ export default defineConfig({
 	plugins: [
 		ogygia({
 			// How far ahead of the viewport a `visible` island starts loading.
-			visible: { margin: '200px' },
-			// The docs kit: Markdown with Shiki, heading ids and collected headings.
-			plugins: [content({ markdown: {} })]
+			visible: { margin: '200px' }
 		}),
+		// The docs kit: Markdown with Shiki, heading ids and collected headings.
+		content({ markdown: {} }),
 		sveltekit()
 	]
 });

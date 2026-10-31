@@ -20,10 +20,13 @@ export class SizedLru<V> {
 	readonly #entries = new Map<string, Entry<V>>();
 	#bytes = 0;
 
-	constructor(
-		readonly max_bytes: number,
-		readonly max_entries: number
-	) {}
+	readonly max_bytes: number;
+	readonly max_entries: number;
+
+	constructor(max_bytes: number, max_entries: number) {
+		this.max_bytes = max_bytes;
+		this.max_entries = max_entries;
+	}
 
 	/** The live value for `key` (an LRU touch), or `null` on a miss or past `expires`. */
 	get(key: string, now: number): V | null {

@@ -6,7 +6,7 @@
 // not. The server manifest maps each render identity to the entry that renders it.
 import { describe, it, expect } from 'vitest';
 import { renderId, regionIdentity, regionId } from '../src/compiler/region/identity.ts';
-import { server_manifest_module } from '../src/compiler/link/server-manifest.ts';
+import { server_islands_module, server_manifest_module } from '../src/compiler/link/server-manifest.ts';
 
 const HOLE = 'src/lib/header/holes/MegaMenuHole.svelte';
 const mark = (options: Record<string, unknown>) => ({ strategy: 'server', options });
@@ -47,6 +47,15 @@ describe('the server manifest maps render identities', () => {
 		expect(src).toContain('"bbbbbbbbbbbb": "r00000000001"');
 		expect(src).toContain('"aaaaaaaaaaaa": "r00000000001"');
 		expect(src).toMatch(/render_island = \{\n {2}"r00000000001": "aaaaaaaaaaaa",\n {2}"r00000000002": "cccccccccccc"\n\}/);
+	});
+
+	it('the islands’ loaders live one dynamic import away (Kit links CSS one import deep)', () => {
+		const p = program([['aaaaaaaaaaaa', 'r00000000001']]);
+		const manifest = server_manifest_module(true, p, false, () => '', () => '');
+		expect(manifest).toContain(`export const load_islands = () => import("virtual:ogygia/server-islands");`);
+		expect(manifest).not.toContain('import("virtual:aaaaaaaaaaaa")');
+		expect(server_islands_module(true, p)).toContain('"aaaaaaaaaaaa": () => import("virtual:aaaaaaaaaaaa")');
+		expect(server_islands_module(false, p)).toBe('export const islands = {\n\n};\n');
 	});
 
 	it('the browser leg carries none of it', () => {

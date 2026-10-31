@@ -13,7 +13,7 @@ You read a flag when you **call it**. You branch with `pick`. You connect a vend
 
 ## Installing
 
-Flags are their own package. Install it, and list its plugin in `ogygia()`:
+Flags are their own package. Install it, and list its plugin beside `ogygia()`:
 
 ```bash
 pnpm add @ogygia/flags
@@ -23,7 +23,7 @@ pnpm add @ogygia/flags
 import { ogygia } from 'ogygia/vite';
 import { flags } from '@ogygia/flags/vite';
 
-ogygia({ plugins: [flags()] })
+plugins: [ogygia(), flags(), sveltekit()]
 ```
 
 A native `flag()` decides without the plugin. The plugin primes a `decide({ source })` one time per request, and drains the `exposure` sink at the end of each request. See [Plugins](/docs/reference/plugins).

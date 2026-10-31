@@ -184,7 +184,7 @@ function resolved_for(c: CtxLike, name: string): { variant: string; value?: unkn
 		// so every read silently ignores the source. Say it once.
 		_unprimed_warned = true;
 		console.warn(
-			'[ogygia] flags: `decide({ source })` is set but no request was primed — add `flags()` to `ogygia({ plugins })` in vite.config.'
+			'[ogygia] flags: `decide({ source })` is set but no request was primed — list `flags()` beside `ogygia()` in vite.config `plugins`.'
 		);
 	}
 	return map?.[name];
@@ -371,7 +371,7 @@ export function flag(
 			// plugin could keep ONE variant of an A/B'd page for everyone. Say it once, loudly.
 			_unstarted_warned = true;
 			console.warn(
-				'[ogygia] flags: a flag was read on the server but the flags plugin is not running — add `flags()` (from `@ogygia/flags/vite`) to `ogygia({ plugins })`. Until then flag reads are not reported to the request, and a stored page could keep one variant.'
+				'[ogygia] flags: a flag was read on the server but the flags plugin is not running — list `flags()` (from `@ogygia/flags/vite`) beside `ogygia()` in vite.config `plugins`. Until then flag reads are not reported to the request, and a stored page could keep one variant.'
 			);
 		}
 		const cached = memo.get(c.request);

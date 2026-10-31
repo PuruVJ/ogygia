@@ -31,7 +31,7 @@ For a *page assembled from typed blocks*, not a single markdown body, see [Block
 
 ## Installing
 
-Collections are their own package. Install it, and list its plugin in `ogygia()`:
+Collections are their own package. Install it, and list its plugin beside `ogygia()`:
 
 ```bash
 pnpm add @ogygia/content
@@ -41,7 +41,7 @@ pnpm add @ogygia/content
 import { ogygia } from 'ogygia/vite';
 import { content } from '@ogygia/content/vite';
 
-ogygia({ plugins: [content({ markdown: {} })] })
+plugins: [ogygia(), content({ markdown: {} }), sveltekit()]
 ```
 
 `markdown` turns the markdown pipeline on. A collection over JSON, a CMS or an API needs only `content()`. For markdown, `svelte.config.js` also takes `preprocess()` and `extensions()` from `@ogygia/content/vite` (see [Install](/docs/start/install)). For the macro types (`import.meta.og.loader`, `og.code`, `og.md`), add one line to `src/ogygia.d.ts`:
@@ -138,7 +138,7 @@ export const entries = async () => (await docs.refs()).map((e) => ({ slug: e.id 
 `list` and `live.list` mint real Kit remotes. Mint them in a `.remote.ts`. Kit requires each export there to be a remote. The consumer passes the args:
 
 ```ts title=src/lib/docs.remote.ts
-import { withRemotes } from '@ogygia/content/remote';
+import { withRemotes } from '@ogygia/content/server';
 import { docs } from './collections.server';
 
 export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title: e.data.title }) });
@@ -159,16 +159,18 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 `markdown()` is the built-in source for a glob of `.svx` / `.md` files. It runs an opinionated pipeline: mdsvex for the body, Shiki for fences, pandoc-style heading ids, and a headings collector that fills the `meta.headings` of each entry.
 
-Set the pipeline on with the `content()` plugin from `@ogygia/content/vite`, in the `plugins` of `ogygia()`. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` through `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
+Set the pipeline on with the `content()` plugin from `@ogygia/content/vite`, listed beside `ogygia()`. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` through `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
 
 ```ts title=vite.config.ts
 import { content } from '@ogygia/content/vite';
 
-ogygia({
+export default defineConfig({
   plugins: [
+    ogygia(),
     content({
       markdown: {} // defaults: Shiki themes, heading ids, headings collector
-    })
+    }),
+    sveltekit()
   ]
 });
 ```
@@ -239,7 +241,7 @@ const press = content({
 `get(id)` fetches one post on demand, not a full list. Mint the wire remotes in a `.remote.ts`, exactly as for a file-backed collection:
 
 ```ts
-import { withRemotes } from '@ogygia/content/remote';
+import { withRemotes } from '@ogygia/content/server';
 export const list = withRemotes(press).list({ map: (e) => ({ id: e.id, title: e.data.title }) });
 ```
 

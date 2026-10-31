@@ -27,12 +27,15 @@ describe('legacy option renames — errors with the new spelling, never silent a
 	});
 	it('rejects content (now the @ogygia/content plugin)', () => {
 		expect(() => ogygia({ content: { markdown: {} } } as never)).toThrow(
-			/plugins: \[content\(\{ markdown, presets \}\)\]/
+			/list `content\(\{ markdown, presets \}\)`.*beside `ogygia\(\)`/
 		);
 	});
 	it('rejects devtools and profiler (now the @ogygia/devtools plugin)', () => {
-		expect(() => ogygia({ devtools: true } as never)).toThrow(/plugins: \[devtools\(\)\]/);
+		expect(() => ogygia({ devtools: true } as never)).toThrow(/list `devtools\(\)`.*beside `ogygia\(\)`/);
 		expect(() => ogygia({ profiler: true } as never)).toThrow(/devtools\(\{ profiler/);
+	});
+	it('rejects plugins (they are Vite plugins listed beside ogygia())', () => {
+		expect(() => ogygia({ plugins: [] } as never)).toThrow(/plugins: \[ogygia\(\), flags\(\), sveltekit\(\)\]/);
 	});
 });
 

@@ -275,10 +275,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 		transforms.script(({ ast, js }) => {
 			js.imports.addNamed(ast, { from: 'ogygia/vite', imports: ['ogygia'] });
 			if (markdown) js.imports.addNamed(ast, { from: '@ogygia/content/vite', imports: ['content'] });
-			js.vite.addPlugin(ast, {
-				code: markdown ? 'ogygia({ plugins: [content({ markdown: {} })] })' : 'ogygia()',
-				mode: 'prepend'
-			});
+			// prepended in reverse: the list reads `ogygia(), content(…), …`
+			if (markdown) js.vite.addPlugin(ast, { code: 'content({ markdown: {} })', mode: 'prepend' });
+			js.vite.addPlugin(ast, { code: 'ogygia()', mode: 'prepend' });
 		})
 	);
 	stdout.write(`  ${ok('✓')} ${viteConfig} ${dim('(plugin)')}\n`);

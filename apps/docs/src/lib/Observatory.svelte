@@ -251,18 +251,15 @@ import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 
 export default {
 	plugins: [
-		ogygia({
-			plugins: [
-				content({
-					markdown: {
-						containers: true,      // ::: tip / warning / danger callouts
-						tabs: true,            // ::: tabs and ::: code-group
-						headingAnchors: true,  // hover permalink on each heading
-						themes: { light: 'github-light', dark: 'github-dark' },
-						code: { transformers: [diff_markers(), inline_markers()] },
-					},
-				}),
-			],
+		ogygia(),
+		content({
+			markdown: {
+				containers: true,      // ::: tip / warning / danger callouts
+				tabs: true,            // ::: tabs and ::: code-group
+				headingAnchors: true,  // hover permalink on each heading
+				themes: { light: 'github-light', dark: 'github-dark' },
+				code: { transformers: [diff_markers(), inline_markers()] },
+			},
 		}),
 		sveltekit(),
 	],

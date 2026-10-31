@@ -22,7 +22,7 @@ Module federation shares **JS modules** between builds at runtime. That couples 
 
 ## Installing
 
-Federation is its own package, built on the [server router](/docs/app/server-router). Install it in every app that federates, shell and MFE alike, and list its plugin in `ogygia()`:
+Federation is its own package, built on the [server router](/docs/app/server-router). Install it in every app that federates, shell and MFE alike, and list its plugin beside `ogygia()`:
 
 ```bash
 pnpm add @ogygia/federation @ogygia/router
@@ -32,7 +32,7 @@ pnpm add @ogygia/federation @ogygia/router
 import { ogygia } from 'ogygia/vite';
 import { federation } from '@ogygia/federation/vite';
 
-ogygia({ plugins: [federation()] })
+plugins: [ogygia(), federation(), sveltekit()]
 ```
 
 The plugin serves the federation endpoints from the handle, and keeps the exports that let another app's page wake this app's islands. See [Plugins](/docs/reference/plugins).

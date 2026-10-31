@@ -8,6 +8,7 @@ const SHARED: (string | RegExp)[] = [
 	'svelte',
 	/^svelte\//,
 	/^@sveltejs\/kit(\/|$)/,
+	/^vite(\/|$)/,
 	'esm-env',
 	/^node:/,
 	/^virtual:/,
@@ -15,6 +16,21 @@ const SHARED: (string | RegExp)[] = [
 	// components ship as preprocessed source beside the JS (the svelte pass): the app compiles them
 	/\.svelte$/
 ];
+
+/** `import.meta.resolve('./x.ts')`: a plugin naming a realm module next to its factory. */
+const RESOLVE_TS_RE = /import\.meta\.resolve\((['"])(\.{1,2}\/[^'"]+?)\.ts\1\)/g;
+
+/** A source file names its sibling `./x.ts`; the shipped file beside it is `./x.js` (the structure
+ *  is kept, so the relative path holds). */
+function resolve_to_js() {
+	return {
+		name: 'ogygia:import-meta-resolve-js',
+		renderChunk(code: string) {
+			const out = code.replace(RESOLVE_TS_RE, (_m, q: string, spec: string) => `import.meta.resolve(${q}${spec}.js${q})`);
+			return out === code ? null : { code: out, map: null };
+		}
+	};
+}
 
 export interface LibraryOptions extends Omit<UserConfig, 'entry' | 'deps'> {
 	/** Source entries. Default: every `.ts` under `src`. */
@@ -41,7 +57,7 @@ export function library(options: LibraryOptions = {}): UserConfig {
 		dts: true,
 		clean: true,
 		...rest,
-		plugins: [svelte(svelte_options), ...(Array.isArray(plugins) ? plugins : [plugins])],
+		plugins: [svelte(svelte_options), resolve_to_js(), ...(Array.isArray(plugins) ? plugins : [plugins])],
 		deps: { neverBundle: [...SHARED, ...external] }
 	};
 }

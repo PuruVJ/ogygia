@@ -32,8 +32,10 @@ import {
 	type LoadDef,
 	type LoadInput,
 	type PageDef,
+	type KeyedTable,
 	type PageHtmlView,
-	type RouteTable
+	type RouteTable,
+	type TableShape
 } from './define.ts';
 import type { InferMap } from './infer.ts';
 import type { HrefArgs } from './view.ts';
@@ -90,7 +92,7 @@ export interface RoutesOptions {
 }
 
 /** The router value. `$infer` is a type-only phantom read as `typeof app.$infer`. */
-export interface Router<T extends RouteTable = RouteTable> {
+export interface Router<T extends TableShape = RouteTable> {
 	readonly __ogrouter: true;
 	/** `(request) => Response | null` — null on no-match (a catchall 404s its own way). */
 	fetch(request: Request, event?: RequestEvent): Promise<Response | null>;
@@ -129,7 +131,7 @@ interface Leaf {
  * decision self-registers for federation carry like any flag read. Type-transparent: `$infer`
  * sees the entry exactly as if unwrapped.
  */
-export function when<T extends PageDef | Endpoint>(gate: (c: Ctx) => boolean, entry: T): T {
+export function when<T extends object>(gate: (c: Ctx) => boolean, entry: T): T {
 	return { ...(entry as object), __ogwhen: gate } as unknown as T;
 }
 
@@ -138,7 +140,8 @@ const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
 // emitter escapes; the wire is trusted federation, the law is unconditional).
 const LAST_SLASH_RE = /\/$/;
 
-export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions = {}): Router<T> {
+export function routes<const T extends KeyedTable<T>>(typed: T, opts: RoutesOptions = {}): Router<T> {
+	const table = typed as RouteTable;
 	const base = (opts.base ?? '').replace(LAST_SLASH_RE, '');
 	const slash = opts.slash ?? 'ignore';
 	const root_load = to_load(opts.load);

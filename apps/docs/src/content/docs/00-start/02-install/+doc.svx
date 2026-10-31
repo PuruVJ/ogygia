@@ -94,7 +94,7 @@ export const transport = { ...ogygia.transport };
 
 ### Markdown, Shiki & mdsvex (optional)
 
-For `.svx` / `.md` [content collections](/docs/content/collections), add the content package. It brings mdsvex and Shiki. Then add its `content()` plugin to the `plugins` of `ogygia()`:
+For `.svx` / `.md` [content collections](/docs/content/collections), add the content package. It brings mdsvex and Shiki. Then list its `content()` plugin beside `ogygia()`:
 
 ```bash
 pnpm add @ogygia/content
@@ -108,9 +108,8 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [
-    ogygia({
-      plugins: [content({ markdown: {} })] // {} = defaults: Shiki + heading ids + collected headings
-    }),
+    ogygia(),
+    content({ markdown: {} }), // {} = defaults: Shiki + heading ids + collected headings
     sveltekit()
   ]
 });
@@ -139,7 +138,7 @@ The content macros (`import.meta.og.loader`, `og.code`, `og.md`) bring their own
 
 ### Other features (optional)
 
-Flags, frozen pages, federation, the server router, the devtools dock and the profiler work the same way. Each is a package you install, with a plugin you list once in `ogygia({ plugins: [...] })`. See [Plugins](/docs/reference/plugins) for the list.
+Flags, frozen pages, federation, the server router, the devtools dock and the profiler work the same way. Each is a package you install, with a plugin you list once beside `ogygia()`: `plugins: [ogygia(), flags(), sveltekit()]`. See [Plugins](/docs/reference/plugins) for the list.
 
 ## Adopt one route at a time
 

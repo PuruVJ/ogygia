@@ -4,7 +4,7 @@
  * ```ts
  * // vite.config: the switch (+ serializable policy)
  * import { freeze } from '@ogygia/freeze/vite';
- * ogygia({ plugins: [freeze()] })
+ * plugins: [ogygia(), freeze(), sveltekit()]
  *
  * // hooks.server.ts: live objects, only for tier 2/3
  * import { freeze, valkey, upstash, akamai, cloudfront } from '@ogygia/freeze';

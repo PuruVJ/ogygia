@@ -24,7 +24,8 @@ import type { Handle, RequestEvent } from '@sveltejs/kit';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
-import { islands as island_modules, island_url, island_name, island_reads_page_data, render_island } from 'virtual:ogygia/server-manifest';
+// (the islands' loaders come through `load_islands()`, a dynamic import — link/server-manifest.ts)
+import { load_islands, island_url, island_name, island_reads_page_data, render_island } from 'virtual:ogygia/server-manifest';
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.ts';
@@ -369,7 +370,7 @@ set_source_recorder((tag) => {
 });
 // ROUTE OPTIONS: each Kit page's declared plugin options, baked by the compiler
 set_page_route_options(route_options);
-// PLUGINS (`ogygia({ plugins })`): each one's server half, live — its app made, its shared hooks
+// PLUGINS (listed beside `ogygia()`): each one's server half, live — its app made, its shared hooks
 // registered, its `setup` run — once, when this module loads.
 // Their `app.sign` / `app.verify` use the region key, read at first use (an env the host fills after
 // module eval still counts).
@@ -497,7 +498,7 @@ function capability_of(params: URLSearchParams): Capability {
  * Null when this build renders neither: the component is gone, moved or renamed.
  */
 function capability_target(cap: Capability): string | null {
-	if (Object.hasOwn(island_modules, cap.id)) return cap.id;
+	if (Object.hasOwn(island_url, cap.id)) return cap.id;
 	if (cap.render !== '' && Object.hasOwn(render_island, cap.render)) return render_island[cap.render];
 	return null;
 }
@@ -670,7 +671,7 @@ class OgygiaHandle {
 		if (path === null) {
 			return new Response('Bad Request', { status: 400 });
 		}
-		// PLUGINS (`ogygia({ plugins })`, design: internal/notes/packages.md): each one's `request`
+		// PLUGINS (design: internal/notes/packages.md): each one's `request`
 		// stage runs HERE, above the endpoint/page split, so page renders, remote-function calls AND
 		// the region endpoint (deferred/live holes, the per-visitor leg of a cached page) all see what
 		// it set up (flags prime their source here). Its `done` stage runs at the request's end, always
@@ -1721,7 +1722,7 @@ class OgygiaHandle {
 
 		const target = capability_target(cap);
 		if (target === null) return null;
-		const load = island_modules[target];
+		const load = (await load_islands()).islands[target];
 		if (typeof load !== 'function') return null;
 
 		const props = await this.#decode_region_props(payload, load);
@@ -1855,11 +1856,11 @@ class OgygiaHandle {
 		if (target === null) {
 			if (import.meta.env.DEV)
 				console.warn(
-					`[ogygia] region endpoint 403: id "${id}"${cap.render ? ` (component ${cap.render})` : ''} is not in the server manifest (${Object.keys(island_modules).length} known)`
+					`[ogygia] region endpoint 403: id "${id}"${cap.render ? ` (component ${cap.render})` : ''} is not in the server manifest (${Object.keys(island_url).length} known)`
 				);
 			return region_denied('unknown-id');
 		}
-		const load = island_modules[target];
+		const load = (await load_islands()).islands[target];
 		if (typeof load !== 'function') return region_denied('unknown-id');
 
 		// Same status as bad MAC on any decode failure (STATUS-ORACLE); the reason is only ever

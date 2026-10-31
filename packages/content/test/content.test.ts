@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { content, enrich, glob, markdown, json } from '../src/index.ts';
 import type { Source, SourceEntry } from '../src/index.ts';
 import { parseFrontmatter } from '../src/markdown/frontmatter.ts';
-import { withRemotes } from '../src/remote.ts';
+import { withRemotes } from '../src/server.ts';
 import { content_hmr as contentPlugin, invalidateModuleTree } from '../src/vite/hmr.ts';
 import type { ModuleNode, ViteDevServer } from 'vite';
 

@@ -15,7 +15,7 @@ related:
 
 ## With Playwright
 
-Install the package beside Playwright. It is a test helper, not a plugin: nothing goes in `ogygia()` for it.
+Install the package beside Playwright. It is a test helper, not a plugin: nothing goes in `vite.config.ts` for it.
 
 ```bash
 pnpm add -D @ogygia/testing @playwright/test

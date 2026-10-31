@@ -39,11 +39,13 @@ const PAGE_SPECIFIER_HINT_RE = /\$app\/st(?:ate|ores)/;
 /** The analysis giving up on a module: WHY, and WHERE (a source offset), so the build can name the
  *  line that makes a page ship all of `page.data`. */
 class All extends Error {
-	constructor(
-		public readonly why: string,
-		public readonly at: number | null
-	) {
+	readonly why: string;
+	readonly at: number | null;
+
+	constructor(why: string, at: number | null) {
 		super(why);
+		this.why = why;
+		this.at = at;
 	}
 }
 
@@ -230,7 +232,11 @@ class Scan {
 	/** Module-level function declarations by name (`function f(p) {}` / `const f = (p) => …`). */
 	readonly #local_fns = new Map<string, Node>();
 
-	constructor(private readonly code: string) {}
+	private readonly code: string;
+
+	constructor(code: string) {
+		this.code = code;
+	}
 
 	/** For {@link summarize_export}: the helper's own parameter IS the page, inside the helper. */
 	seed_param(name: string, fn: Node): void {

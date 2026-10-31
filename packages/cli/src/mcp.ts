@@ -750,7 +750,7 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 		if (!has_hook)
 			return fail(
 				`${url} loaded, but window.__ogygia_devtools is absent — the app is not a devtools build. Run its dev/build with ` +
-					`OGYGIA_DEVTOOLS=1 (or the devtools plugin, \`plugins: [devtools()]\`, in vite.config), then retry.`
+					`OGYGIA_DEVTOOLS=1 (or list the devtools plugin beside ogygia() in vite.config: \`plugins: [ogygia(), devtools(), sveltekit()]\`), then retry.`
 			);
 		await page.waitForTimeout(wait);
 		if (do_scroll) {
@@ -1457,7 +1457,7 @@ async function find_local_profiler(base: string, key: string): Promise<string[]>
 const NOT_MOUNTED = (base: string, where: string) =>
 	`The profiler is not mounted at ${base} on ${where}. Install @ogygia/devtools and turn it on in vite.config.ts:\n\n` +
 	`  import { devtools } from '@ogygia/devtools/vite';\n` +
-	`  ogygia({ plugins: [devtools({ profiler: true /* or { secret, path, … } */ })] })\n\n` +
+	`  plugins: [ogygia(), devtools({ profiler: true /* or { secret, path, … } */ }), sveltekit()]\n\n` +
 	`ogygia.handle() mounts it for you — no hooks wiring needed. Restart the server, then retry.`;
 
 async function tool_profile(args: Attrs): Promise<ToolResult> {

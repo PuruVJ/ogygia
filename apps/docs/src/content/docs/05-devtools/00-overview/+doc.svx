@@ -17,7 +17,7 @@ The devtools are their own package. Install it:
 pnpm add @ogygia/devtools
 ```
 
-Then list its plugin in `ogygia()`. It is compiled behind a gate. Thus, where the plugin is not listed, the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. The plugin list is code, so you decide where it is on:
+Then list its plugin beside `ogygia()`. It is compiled behind a gate. Thus, where the plugin is not listed, the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. The plugin list is code, so you decide where it is on:
 
 ```ts title=vite.config.ts
 import { ogygia } from 'ogygia/vite';
@@ -25,9 +25,9 @@ import { devtools } from '@ogygia/devtools/vite';
 
 export default defineConfig(({ mode }) => ({
   plugins: [
-    ogygia({
-      plugins: [...(mode !== 'production' ? [devtools()] : [])]   // dev server and preview builds, never production
-    }),
+    ogygia(),
+    ...(mode !== 'production' ? [devtools()] : []),   // dev server and preview builds, never production
+    sveltekit(),
   ],
 }));
 ```

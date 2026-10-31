@@ -3,8 +3,7 @@
  * only, no bodies). `postDoc` resolves one post's view and bakes its body into a region ticket for
  * `<BlogPost>`. The corpus stays in `blog.server.ts`; routes import only these.
  */
-import { remotes } from '@ogygia/content/remote';
-import { withRemotes } from '@ogygia/content/remote';
+import { remotes, withRemotes } from '@ogygia/content/server';
 import { posts, blog } from './blog.server';
 
 export const { page: postPage } = remotes(blog, { base: '/playground/blog' });

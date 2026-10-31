@@ -1,0 +1,8 @@
+---
+title: '@ogygia/devtools/profiler'
+summary: Spans — time your own server work inside a profiled request.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/devtools/profiler

@@ -24,16 +24,23 @@ export const is_thenable = (v: unknown): v is PromiseLike<unknown> =>
 
 /** Serializable stand-in for a pending promise leaf (streaming path). Encodes to its id. */
 export class DeferRef {
-	constructor(public readonly id: number) {}
+	readonly id: number;
+
+	constructor(id: number) {
+		this.id = id;
+	}
 }
 
 /** Serializable stand-in for an already-settled promise leaf (non-navigate path). Encodes to
  *  `[ok, value]`; the client revives it as a resolved/rejected Promise. */
 export class SettledRef {
-	constructor(
-		public readonly ok: boolean,
-		public readonly value: unknown
-	) {}
+	readonly ok: boolean;
+	readonly value: unknown;
+
+	constructor(ok: boolean, value: unknown) {
+		this.ok = ok;
+		this.value = value;
+	}
 }
 
 // devalue reducers for the page seed. A DeferRef serializes to `[id]` and a SettledRef to `[ok, value]`

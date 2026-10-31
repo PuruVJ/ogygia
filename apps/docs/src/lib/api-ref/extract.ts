@@ -29,14 +29,32 @@ async function loadTs(): Promise<TS> {
 const require_ = createRequire(import.meta.url);
 
 /** The packages the reference documents (`> MODULE: <package>[/<subpath>]`). */
-const DOCUMENTED_PACKAGES = ['ogygia', '@ogygia/content'];
+const DOCUMENTED_PACKAGES = [
+	'ogygia',
+	'@ogygia/content',
+	'@ogygia/router',
+	'@ogygia/flags',
+	'@ogygia/federation',
+	'@ogygia/freeze',
+	'@ogygia/devtools',
+	'@ogygia/testing'
+];
+/** Packages whose types the documented ones re-export (`ogygia` is a thin shell over core). */
+const TYPE_SOURCES = [...DOCUMENTED_PACKAGES, '@ogygia/core'];
 
-/** A package root — resolve the entry (the export map hides `./package.json`), walk up. */
+/** A package root — resolve the entry (the export map hides `./package.json`), walk up. A package the
+ *  docs do not depend on directly (core) resolves from `ogygia`, which does. */
 const pkg_roots = new Map<string, string>();
 export function packageRoot(name = 'ogygia'): string {
 	const hit = pkg_roots.get(name);
 	if (hit) return hit;
-	let dir = path.dirname(require_.resolve(name));
+	let entry: string;
+	try {
+		entry = require_.resolve(name);
+	} catch {
+		entry = createRequire(path.join(packageRoot('ogygia'), 'package.json')).resolve(name);
+	}
+	let dir = path.dirname(entry);
 	for (let i = 0; i < 6; i++) {
 		const pj = path.join(dir, 'package.json');
 		if (fs.existsSync(pj) && JSON.parse(fs.readFileSync(pj, 'utf8')).name === name) {
@@ -48,13 +66,13 @@ export function packageRoot(name = 'ogygia'): string {
 	throw new Error(`[api-ref] could not locate the ${name} package root.`);
 }
 
-/** `@ogygia/content/remote` → `@ogygia/content`; `ogygia/vite` → `ogygia`. */
+/** `@ogygia/content/server` → `@ogygia/content`; `ogygia/vite` → `ogygia`. */
 function packageNameOf(moduleId: string): string {
 	const parts = moduleId.split('/');
 	return moduleId.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
-/** Module id (`@ogygia/content/remote`) → the export map's `types` file, absolute. */
+/** Module id (`@ogygia/content/server`) → the export map's `types` file, absolute. */
 export function dtsPathFor(moduleId: string): string | null {
 	const name = packageNameOf(moduleId);
 	const root = packageRoot(name);
@@ -116,7 +134,7 @@ export function distStamp(): string {
 			}
 		}
 	};
-	for (const name of DOCUMENTED_PACKAGES) walk(path.join(packageRoot(name), 'dist'));
+	for (const name of TYPE_SOURCES) walk(path.join(packageRoot(name), 'dist'));
 	return (h >>> 0).toString(36);
 }
 
@@ -260,10 +278,11 @@ export async function extractModule(moduleId: string): Promise<ApiModule> {
 	const rank = { function: 0, component: 1, class: 2, const: 3, interface: 4, type: 5, other: 6 };
 	out.sort((a, b) => rank[a.kind] - rank[b.kind] || a.name.localeCompare(b.name));
 
+	const dists = TYPE_SOURCES.map((name) => path.join(packageRoot(name), 'dist') + path.sep);
 	const files = program
 		.getSourceFiles()
 		.map((f) => f.fileName)
-		.filter((f) => f.includes('/ogygia/dist/'));
+		.filter((f) => dists.some((d) => path.resolve(f).startsWith(d)));
 
 	const mod: ApiModule = { id: moduleId, exports: out, files };
 	memo.set(moduleId, { key, mod });

@@ -5,7 +5,7 @@
  * Everything here surfaces through the ONE `@ogygia/content` barrel.
  *
  * **Browser-safe.** Import anywhere (routes, `+page`, islands, `.remote.ts`). The Kit remotes that an
- * island sidebar awaits are minted from `@ogygia/content/remote` in a `.remote.ts`.
+ * island sidebar awaits are minted from `@ogygia/content/server` in a `.remote.ts`.
  *
  * ```ts
  * import { content, markdown, json, outline, site } from '@ogygia/content';

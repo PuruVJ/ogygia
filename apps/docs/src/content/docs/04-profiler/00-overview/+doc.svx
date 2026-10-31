@@ -32,14 +32,14 @@ The profiler is part of `@ogygia/devtools`. Install it:
 pnpm add @ogygia/devtools
 ```
 
-Then set it on in `vite.config.ts` — nowhere else. List the `devtools()` plugin in `ogygia()`. `ogygia.handle()` mounts it for you. Thus `src/hooks.server.ts` stays a plain `sequence(...)`:
+Then set it on in `vite.config.ts` — nowhere else. List the `devtools()` plugin beside `ogygia()`. `ogygia.handle()` mounts it for you. Thus `src/hooks.server.ts` stays a plain `sequence(...)`:
 
 ```ts
 import { ogygia } from 'ogygia/vite';
 import { devtools } from '@ogygia/devtools/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ plugins: [devtools({ profiler: true })] }), sveltekit()]
+	plugins: [ogygia(), devtools({ profiler: true }), sveltekit()]
 });
 ```
 

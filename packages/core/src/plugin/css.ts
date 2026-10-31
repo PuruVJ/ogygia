@@ -9,7 +9,8 @@
  * Its own subpath: the generated registry is a virtual module, so it stays out of `ogygia/plugin` (every
  * plugin's server realm) — and it is imported on the first call, never at module load.
  */
-import { router_css_of } from '../router-css.ts';
+import { DEV } from 'esm-env';
+import { router_css_active, router_css_of } from '../router-css.ts';
 import { claim_region_css } from '../context.ts';
 
 // ── regexes
@@ -18,6 +19,7 @@ const STYLE_CLOSE_G = /<\/style/gi;
 // The generated virtual only resolves under the app's Vite pipeline; anywhere else (bare node,
 // `ogygia mcp`) the import rejects and CSS linking is a silent no-op — those realms render data.
 let rcss_ready: Promise<unknown> | null | undefined;
+let warned_inactive = false;
 function registry_ready(): Promise<unknown> | null {
 	if (rcss_ready === undefined) {
 		try {
@@ -33,7 +35,13 @@ function registry_ready(): Promise<unknown> | null {
  *  each component's whole-tree CSS, linked once per request. */
 export async function componentCssHead(components: readonly unknown[]): Promise<string> {
 	const ready = registry_ready();
-	if (ready) await ready;
+	const registry = ready ? await ready : null;
+	if (DEV && registry && !warned_inactive && components.length && !router_css_active()) {
+		warned_inactive = true;
+		console.warn(
+			'[ogygia] a page rendered outside Kit\'s routes, but no plugin declared page modules, so its components\' CSS is not linked. Using `@ogygia/router`? List `router()` from `@ogygia/router/vite` beside `ogygia()` in vite.config `plugins`.'
+		);
+	}
 	const entries = components.flatMap((c) => router_css_of(c));
 	if (!entries.length) return '';
 	const keys = entries.map((e) => e.key);

@@ -13,7 +13,7 @@ time, then freezes. It is stored whole: HTML, headers, permanent redirects. Each
 is a byte read. A publish thaws it, and the next request renders it again, one time. Kit, your loads, and Svelte never run on a hit. Cost moves from O(requests) to
 O(publishes). Prerendering is the special case where the only publish is a deploy.
 
-Frozen pages are their own package. Install it, and list its plugin in `ogygia()`:
+Frozen pages are their own package. Install it, and list its plugin beside `ogygia()`:
 
 ```bash
 pnpm add @ogygia/freeze
@@ -23,7 +23,7 @@ pnpm add @ogygia/freeze
 import { ogygia } from 'ogygia/vite';
 import { freeze } from '@ogygia/freeze/vite';
 
-ogygia({ plugins: [freeze()] })
+plugins: [ogygia(), freeze(), sveltekit()]
 ```
 
 That is the full adoption. The default store is an in-process LRU, with a 24-hour TTL backstop
@@ -40,7 +40,7 @@ To flip the whole app to **opt-in**, so that nothing is stored unless a route as
 default off:
 
 ```ts title=vite.config.ts
-ogygia({ plugins: [freeze({ default: false })] })
+plugins: [ogygia(), freeze({ default: false }), sveltekit()]
 ```
 
 Then a page or a layout opts in with `export const freeze = true`. It **cascades like `csr`**:

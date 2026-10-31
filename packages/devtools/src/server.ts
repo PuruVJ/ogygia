@@ -1,5 +1,5 @@
 /**
- * The SERVER half of `devtools()` (found by name: `@ogygia/devtools/server`). With the profiler on it
+ * The SERVER half of `devtools()` (its `server`). With the profiler on it
  * wraps every request (`handle`): it times the render and serves its UI at `/__profiler`, and turns
  * on core's request stats, its data. The profiler itself — node:inspector, crypto, the UI's render
  * path — loads on the first request through a dynamic import, so an app pays for it only when it is

@@ -1,6 +1,6 @@
 ---
 title: Plugins
-summary: The features beyond regions ship as their own packages. Install one, list its plugin once in the plugins option of ogygia(), and the build wires its server and browser halves in. The package list, and the plugin API the first-party packages are built on.
+summary: The features beyond regions ship as their own packages. Install one, list its plugin once beside ogygia() in your Vite config, and the build wires its server and browser halves in. The package list, and the plugin API the first-party packages are built on.
 related:
   - reference/api
   - start/install
@@ -11,7 +11,7 @@ The core package, `ogygia`, is the region system: islands, lakes, holes, held re
 
 ## Turn a feature on
 
-Install the package. Then list its plugin once, in `ogygia({ plugins })`. Each factory comes from `<package>/vite`:
+Install the package. Then list its plugin once in the `plugins` of your Vite config, beside `ogygia()`. Each plugin is a Vite plugin of its own, and `ogygia()` finds it there. Each factory comes from `<package>/vite`:
 
 ::: code-group
 
@@ -34,18 +34,21 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [
-    ogygia({ plugins: [flags(), freeze({ ttl: 600 })] }),
+    ogygia(),
+    flags(),
+    freeze({ ttl: 600 }),
     sveltekit()
   ]
 });
 ```
 
-That is the only place a plugin is named. `ogygia.handle()` in `hooks.server.ts` already runs every listed plugin's server half, and the page runtime boots every browser half. Nothing else changes in your app.
+`ogygia()` comes first, the feature plugins after it, and `sveltekit()` last. That is the only place a plugin is named. `ogygia.handle()` in `hooks.server.ts` already runs every listed plugin's server half, and the page runtime boots every browser half. Nothing else changes in your app.
 
 A few rules hold for every plugin:
 
-- **Call the factory.** `plugins: [flags()]`, not `plugins: [flags]`. The build says so if you forget.
+- **Call the factory.** `flags()`, not `flags`. The build says so if you forget.
 - **Once each.** A plugin listed twice is a build error.
+- **Only with `ogygia()`.** A plugin listed without `ogygia()` fails the build, and says so. The old `plugins` option of `ogygia()` is gone: passing it is a build error that names the new spelling.
 - **Options are plain JSON.** They reach the plugin's server half at run time. Live objects (a store client, a vendor SDK) are set up in `hooks.server.ts`, through the package's own API.
 - **List it only where you want it.** The list is code, so a plugin can depend on the mode: `...(mode !== 'production' ? [devtools()] : [])`.
 
@@ -74,11 +77,11 @@ A plugin is three pieces, each in its own file, so server code never reaches a b
 
 | Piece | Where | Made with |
 | --- | --- | --- |
-| The **plugin** | the package's `./vite` export, loaded by vite.config | `definePlugin` from `ogygia/vite` |
-| The **server half** | the package's `./server` export | `defineServer` from `ogygia/plugin` |
-| The **browser half** | the package's `./client` export | `defineClient` from `ogygia/plugin/client` |
+| The **plugin** | the package's `./vite` export, listed beside `ogygia()` in vite.config | `definePlugin` from `ogygia/vite`, which returns a Vite plugin |
+| The **server half** | a module the plugin names in `server` | `defineServer` from `ogygia/plugin` |
+| The **browser half** | a module the plugin names in `client` | `defineClient` from `ogygia/plugin/client` |
 
-The halves are **found by name**. The build looks for `<name>/server` and `<name>/client` in the package's `exports`. Either one may be missing. They resolve exactly like the app's own imports of the package, so the plugin's modules exist once. The build imports them statically: nothing is looked up at run time, and a feature with no plugin listed costs zero bytes.
+The plugin **names its halves**: `server` and `client` hold each module's location, resolved next to the plugin's own file with `import.meta.resolve`. Either one may be missing. They are files of the package itself, so the plugin's modules exist once, and they need no entry in the package's `exports`: those stay yours to name. The build imports them statically: nothing is looked up at run time, and a feature with no plugin listed costs zero bytes.
 
 ### The plugin: `definePlugin`
 
@@ -87,7 +90,8 @@ import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
 
 export function freeze(options: { ttl?: number } = {}): OgygiaPlugin<{ ttl: number }> {
   return definePlugin({
-    name: '@ogygia/freeze',            // the package name: its identity, and where its halves live
+    name: '@ogygia/freeze',            // the package name: its identity
+    server: import.meta.resolve('./server.ts'),
     options: { ttl: options.ttl ?? 86400 },
     build(b) {
       b.routeOption('freeze');         // pages may say `export const freeze = false`
@@ -99,10 +103,28 @@ export function freeze(options: { ttl?: number } = {}): OgygiaPlugin<{ ttl: numb
 | Field | What it is |
 | --- | --- |
 | `name` | The package name. It must resolve from the app. |
+| `server` | The server half's location: `import.meta.resolve('./server.ts')`. A built package ships `./server.js` beside the plugin's file, and its build rewrites the extension. |
+| `client` | The browser half's location, the same way. |
 | `options` | Plain JSON. The server half reads it as `app.options` and `ctx.options`. |
 | `enforce` | `'pre'` or `'post'`: run before or after the other plugins, in every realm. Otherwise, list order. |
-| `vite` | Vite plugins the plugin brings. They run before ogygia's own. |
 | `build(b)` | Build-time contributions, with the build context `b`. |
+
+`definePlugin` returns a Vite plugin. It carries the definition under a symbol of its own (`Symbol.for('ogygia.plugin')`). That is how `ogygia()` finds it in the `plugins` list, so a plugin's name needs no convention: its package name is enough.
+
+#### Vite hooks of its own
+
+A plugin that needs Vite hooks of its own returns an array: its `definePlugin(...)` and a plain Vite plugin beside it. Vite flattens the array, so the app still lists one `yaml()`. `content()` and `devtools()` work this way.
+
+```ts title=src/vite.ts
+import { definePlugin } from 'ogygia/vite';
+
+export function yaml() {
+  return [
+    definePlugin({ name: 'ogygia-yaml', server: import.meta.resolve('./server.ts') }),
+    { name: 'ogygia-yaml:transform', transform(code, id) { /* a plain Vite plugin */ } }
+  ];
+}
+```
 
 ### The build context: `b`
 

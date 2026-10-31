@@ -17,7 +17,7 @@
  * ```
  *
  * To mint the Kit remotes that cross the wire (`list` / `live.*`), wrap it with `withRemotes()` from
- * `@ogygia/content/remote` inside a `.remote.ts`.
+ * `@ogygia/content/server` inside a `.remote.ts`.
  */
 import type { ContentRef, ContentRelations, Entry, SchemaLike } from './index.ts';
 import type { GroupMeta, Source } from './source.ts';

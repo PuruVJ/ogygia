@@ -148,9 +148,21 @@ User pushback folded in: no `use()`/`provide()` string lookups, no module paths 
 
 1. **Plugin** — `definePlugin({ name: '@ogygia/freeze', options, enforce?, build?(b) })` from
    `ogygia/vite`. `name` is the package name (validated at config time: it must resolve from the app).
-2. **Realms** — the package's own `./server`, `./client`, `./devtools` exports, found by name
-   (`${name}/server`); resolved through the package's exports exactly like the app's imports, so
-   there is always ONE copy of the plugin's modules (the sibling-file idea would split src vs dist).
+   It RETURNS A VITE PLUGIN carrying the definition under `Symbol.for('ogygia.plugin')` (user's
+   pick over a name convention like `ogygia:*`; registered so two ogygia copies agree) (user, 2026-10-31: `/vite` must
+   mean a real Vite plugin). The app lists it beside `ogygia()`, before `sveltekit()`
+   (`plugins: [ogygia(), freeze(), sveltekit()]`); `ogygia()`'s config hook walks the Vite list and
+   finds them (wrong order, or a plugin without `ogygia()`, is a build error). `ogygia({ plugins })`
+   and the definition's `vite` field are gone: a factory needing Vite hooks of its own returns
+   `[definePlugin({…}), itsVitePlugin]`. Package ROOTS stay the runtime; factories stay on `/vite`
+   (the Kit / Tailwind convention, decided over root-exported factories).
+2. **Realms** — NAMED by the plugin (user, 2026-10-31: "not happy with the implicitness"):
+   `server: import.meta.resolve('./server.ts')`, `client: …('./client.ts')`. Package exports are
+   free again (`@ogygia/content/server` got its name back). ONE copy still holds: the factory loads
+   from `src` in the workspace (its export points at src; every package root is strip-safe, guarded
+   by `erasableSyntaxOnly`) and from `dist` when installed, and the shared tsdown build rewrites
+   `import.meta.resolve('./x.ts')` to `./x.js`, so the realm is always the sibling of the copy the
+   app runs. (Was: `${name}/server` exports found by name.)
 3. **Hooks** — core lifecycle hooks (`request` / `page` first, `response` sequential, `done`
    parallel) AND shared hooks, one mechanism. Plugins implement shared hooks as methods; anyone calls
    them through `app.notify.<hook>(…)` (every plugin) or `app.ask.<hook>(…)` (first non-undefined

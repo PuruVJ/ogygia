@@ -1,11 +1,11 @@
 /**
- * The plugin API v2 (internal/notes/packages.md): config-time checks, realms found by name, the
+ * The plugin API v2 (internal/notes/packages.md): config-time checks, realms named by the plugin, the
  * generated `virtual:ogygia/server-plugins`, shared hooks, facts, route options, and the test starter.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { check_plugins, definePlugin, resolve_plugins } from '../src/vite/plugin-api.ts';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { check_plugins, definePlugin, find_plugins, PLUGIN, resolve_plugins, type PluginDefinition } from '../src/vite/plugin-api.ts';
 import { server_plugins_module, route_options_module } from '../src/compiler/link/caps.ts';
 import { defineServer } from '../src/plugin/index.ts';
 import { facts_of, mark_per_visitor } from '../src/plugin/facts.ts';
@@ -14,45 +14,90 @@ import { clear_route_options, register_route_options, route_option, set_page_rou
 import { strip_route_options } from '../src/compiler/kit.ts';
 import { startPlugin } from '../src/plugin/testing.ts';
 
-/** An app of the repo's (the federation demo's dash): it depends on `@ogygia/flags`, which has a
- *  `./server` realm. */
+/** An app of the repo's (the federation demo's dash): it depends on `@ogygia/flags`. */
 const APP = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../examples/mfe/dash');
+/** a real server realm module */
+const FLAGS_SERVER = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../flags/src/server.ts');
 
-describe('ogygia({ plugins }) — config-time shape check', () => {
-	it('names the uncalled factory', () => {
-		const flags = () => definePlugin({ name: '@ogygia/flags' });
-		expect(() => check_plugins([flags])).toThrow(/write `flags\(\)`/);
+/** a definition as `resolve_plugins` takes it */
+const def = <Options = undefined>(d: PluginDefinition<Options>): PluginDefinition<Options> => d;
+
+describe('a plugin is a Vite plugin, found beside ogygia()', () => {
+	it('definePlugin returns a Vite plugin carrying its definition', () => {
+		const plugin = definePlugin({ name: '@ogygia/flags', options: { x: 1 } });
+		expect(plugin.name).toBe('@ogygia/flags');
+		expect(plugin[PLUGIN]).toEqual({ name: '@ogygia/flags', options: { x: 1 } });
+		// a registered symbol: another copy of ogygia reads the same key; never an enumerable field
+		expect(PLUGIN).toBe(Symbol.for('ogygia.plugin'));
+		expect(Object.keys(plugin)).not.toContain('api');
 	});
-	it('refuses a plugin listed twice, junk, and non-JSON options', () => {
-		expect(() => check_plugins([definePlugin({ name: 'a' }), definePlugin({ name: 'a' })])).toThrow(/listed twice/);
-		expect(() => check_plugins([{}])).toThrow(/must be a plugin/);
-		expect(() => check_plugins(definePlugin({ name: 'a' }) as never)).toThrow(/must be an array/);
+	it('finds definitions in the Vite list: nested arrays, promises, other plugins skipped, in order', async () => {
+		const a = definePlugin({ name: 'a' });
+		const b = definePlugin({ name: 'b' });
+		const found = await find_plugins([{ name: 'ogygia' }, [a, false, { name: 'other' }], Promise.resolve([b]), null]);
+		expect(found.map((p) => p.name)).toEqual(['a', 'b']);
+		expect(await find_plugins(undefined)).toEqual([]);
+	});
+	it('ogygia() and its plugins come before sveltekit()', async () => {
+		const kit = [{ name: 'vite-plugin-sveltekit-setup' }, { name: 'vite-plugin-sveltekit-compile' }];
+		const flags = definePlugin({ name: '@ogygia/flags' });
+		await expect(find_plugins([{ name: 'ogygia' }, flags, kit])).resolves.toHaveLength(1);
+		await expect(find_plugins([{ name: 'ogygia' }, kit, flags])).rejects.toThrow(/`@ogygia\/flags` is listed after `sveltekit\(\)`/);
+		await expect(find_plugins([kit, [{ name: 'ogygia' }], flags])).rejects.toThrow(/`ogygia\(\)` is listed after `sveltekit\(\)`/);
+	});
+	it('names the uncalled factory', async () => {
+		const flags = () => definePlugin({ name: '@ogygia/flags' });
+		await expect(find_plugins([flags])).rejects.toThrow(/`flags\(\)`, not `flags`/);
+	});
+	it('refuses a plugin listed twice, a nameless one, and non-JSON options', async () => {
+		await expect(find_plugins([definePlugin({ name: 'a' }), definePlugin({ name: 'a' })])).rejects.toThrow(/listed twice/);
+		expect(() => check_plugins([{}])).toThrow(/needs a `name`/);
 		const cyclic: Record<string, unknown> = {};
 		cyclic.self = cyclic;
-		expect(() => check_plugins([definePlugin({ name: 'a', options: cyclic })])).toThrow(/plain JSON/);
+		expect(() => check_plugins([def({ name: 'a', options: cyclic })])).toThrow(/plain JSON/);
+	});
+	it('listed without ogygia(), it fails the build saying what to add', () => {
+		const plugin = definePlugin({ name: '@ogygia/flags' });
+		const resolved = (names: string[]) => ({ plugins: names.map((name) => ({ name })) }) as never;
+		const hook = plugin.configResolved as (config: never) => void;
+		expect(() => hook(resolved(['@ogygia/flags', 'vite:svelte']))).toThrow(/`ogygia\(\)` is not/);
+		expect(() => hook(resolved(['ogygia', '@ogygia/flags']))).not.toThrow();
 	});
 });
 
-describe('realms, found by name', () => {
-	it('a package with a `./server` export gets its server realm wired, options carried', () => {
-		const out = resolve_plugins([definePlugin({ name: '@ogygia/flags', options: { x: 1 } })], APP, true);
-		expect(out.servers).toEqual([{ name: '@ogygia/flags', module: '@ogygia/flags/server', options: { x: 1 } }]);
+describe('realms, named by the plugin', () => {
+	it('a plugin naming its `server` gets that module wired, options carried', () => {
+		const posix = FLAGS_SERVER.split(path.sep).join('/');
+		const plugin = def({ name: '@ogygia/flags', server: pathToFileURL(FLAGS_SERVER).href, client: FLAGS_SERVER, options: { x: 1 } });
+		const out = resolve_plugins([plugin], APP, true);
+		expect(out.servers).toEqual([{ name: '@ogygia/flags', module: posix, options: { x: 1 } }]);
+		expect(out.clients).toEqual([posix]);
+	});
+	it('no realm named, none wired: a package export called `./server` means nothing', () => {
+		const out = resolve_plugins([def({ name: '@ogygia/flags' })], APP, true);
+		expect(out.servers).toEqual([]);
+		expect(out.clients).toEqual([]);
+	});
+	it('a realm that is not a file, or not a location, fails loudly', () => {
+		expect(() => resolve_plugins([def({ name: '@ogygia/flags', server: './server.ts' })], APP, true)).toThrow(/is not a file/);
+		expect(() => resolve_plugins([def({ name: '@ogygia/flags', server: FLAGS_SERVER + '.nope' })], APP, true)).toThrow(/is not a file/);
+		expect(() => check_plugins([{ name: 'a', server: 1 }])).toThrow(/module location/);
 	});
 	it('a name that is not a package the app resolves fails loudly', () => {
-		expect(() => resolve_plugins([definePlugin({ name: '@ogygia/nope' })], APP, true)).toThrow(/no package by that name/);
+		expect(() => resolve_plugins([def({ name: '@ogygia/nope' })], APP, true)).toThrow(/no package by that name/);
 	});
 	it('`enforce` orders plugins: pre, the rest, post', () => {
 		const seen: string[] = [];
 		const p = (name: string, enforce?: 'pre' | 'post') =>
-			definePlugin({ name: '@ogygia/flags', enforce, build: () => void seen.push(name) });
+			def({ name: '@ogygia/flags', enforce, build: () => void seen.push(name) });
 		// (one real package, three manifests: only the order of the build hooks is under test)
 		resolve_plugins([p('mid'), p('last', 'post'), p('first', 'pre')], APP, true);
 		expect(seen).toEqual(['first', 'mid', 'last']);
 	});
 	it('`b.routeOption` collects names; a Kit option or a second owner is refused', () => {
-		const out = resolve_plugins([definePlugin({ name: '@ogygia/flags', build: (b) => b.routeOption('freeze') })], APP, true);
+		const out = resolve_plugins([def({ name: '@ogygia/flags', build: (b) => b.routeOption('freeze') })], APP, true);
 		expect(out.route_options).toEqual(['freeze']);
-		expect(() => resolve_plugins([definePlugin({ name: '@ogygia/flags', build: (b) => b.routeOption('csr') })], APP, true)).toThrow(
+		expect(() => resolve_plugins([def({ name: '@ogygia/flags', build: (b) => b.routeOption('csr') })], APP, true)).toThrow(
 			/Kit does not own/
 		);
 	});
@@ -60,7 +105,7 @@ describe('realms, found by name', () => {
 		const file = path.join(APP, 'src/pages.ts');
 		const out = resolve_plugins(
 			[
-				definePlugin({
+				def({
 					name: '@ogygia/flags',
 					build: (b) => {
 						b.pageModules({ importers: ['@ogygia/router'] });
@@ -73,7 +118,7 @@ describe('realms, found by name', () => {
 		);
 		expect(out.page_modules).toEqual({ importers: ['@ogygia/router'], files: [file] });
 		expect(() =>
-			resolve_plugins([definePlugin({ name: '@ogygia/flags', build: (b) => b.pageModules({ files: ['src/pages.ts'] }) })], APP, true)
+			resolve_plugins([def({ name: '@ogygia/flags', build: (b) => b.pageModules({ files: ['src/pages.ts'] }) })], APP, true)
 		).toThrow(/absolute paths/);
 	});
 });

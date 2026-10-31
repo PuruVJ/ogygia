@@ -54,10 +54,10 @@ export interface CompileCtxInit {
 	/** A plugin asked for the build's measurement data (`b.measure()`: the profiler) — embedded maps,
 	 *  per-island detail. */
 	measure: boolean;
-	/** The server halves of `ogygia({ plugins })` (module id + options), in app order — baked into
+	/** The server halves of the app's plugins (module path + options), in app order — baked into
 	 *  `virtual:ogygia/server-plugins`. Optional (default none). */
 	server_plugins?: readonly ServerRealm[];
-	/** The browser halves of `ogygia({ plugins })` (`<plugin>/client` specifiers), in app order —
+	/** The browser halves of the app's plugins (absolute module paths), in app order —
 	 *  imported by the runtime's boot. Optional (default none). */
 	client_plugins?: readonly string[];
 	/** Route options the plugins declare (`compile.routeOptions`) — stripped from route files and

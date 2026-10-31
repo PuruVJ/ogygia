@@ -29,6 +29,15 @@ export interface RouterCssEntry {
 
 const registry = new WeakMap<object, () => RouterCssEntry[]>();
 
+/** Did the generated registry register anything? It is empty only when no plugin declared page
+ *  modules (`b.pageModules()`) — then a programmatic page renders without its CSS. */
+let any_registered = false;
+
+/** True once the build's page-module registry has registered at least one component. */
+export function router_css_active(): boolean {
+	return any_registered;
+}
+
 /** DEV registrations, keyed by the component's source path — pure DATA, no component imports.
  *
  *  Structural constraint (learned the hard way): the generated dev virtual must not `import` the
@@ -42,6 +51,7 @@ const path_registry = new Map<string, RouterCssEntry[]>();
 
 /** Called by the generated `virtual:ogygia/router-css` — one registration per reachable component. */
 export function register_router_css(component: unknown, entries: () => RouterCssEntry[]): void {
+	any_registered = true;
 	if (
 		(typeof component === 'function' || (typeof component === 'object' && component !== null)) &&
 		!registry.has(component as object)
@@ -52,6 +62,7 @@ export function register_router_css(component: unknown, entries: () => RouterCss
 
 /** Dev-mode registration: `abs posix source path → entries`, no component identity needed. */
 export function register_router_css_paths(map: Record<string, RouterCssEntry[]>): void {
+	any_registered = true;
 	for (const key in map) path_registry.set(key, map[key]);
 }
 

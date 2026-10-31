@@ -14,7 +14,7 @@ import { ogygia } from 'ogygia/vite';
 import { router } from '@ogygia/router/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ plugins: [router()] }), sveltekit()]
+	plugins: [ogygia(), router(), sveltekit()]
 });
 ```
 

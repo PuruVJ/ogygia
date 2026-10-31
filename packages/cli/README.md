@@ -16,7 +16,7 @@ To pin it, add it beside `ogygia`:
 pnpm add -D @ogygia/cli
 ```
 
-It is not a plugin: nothing goes in `ogygia({ plugins })` for it.
+It is not a plugin: nothing goes in vite.config for it.
 
 ## Commands
 

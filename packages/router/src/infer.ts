@@ -9,7 +9,7 @@
  * its ancestors + own. See internal/notes/router-v2.md.
  */
 import type { Snippet } from 'svelte';
-import type { LoadDef, LayoutDef, PageDef, RouteTable, VerbEntry } from './define.ts';
+import type { LoadDef, LayoutDef, PageDef, TableShape, VerbEntry } from './define.ts';
 import type { ActionFailure } from './respond.ts';
 import type { Params, Simplify, StandardSchemaV1, InferOutput } from './view.ts';
 
@@ -126,6 +126,6 @@ type EndpointEntries<T> = {
 };
 
 /** The full `$infer` map: page paths ⊕ endpoint paths ⊕ layout `(name)`s. */
-export type InferMap<T extends RouteTable> = Simplify<
+export type InferMap<T extends TableShape> = Simplify<
 	PageEntries<T> & EndpointEntries<T> & AllLayoutEntries<T>
 >;

@@ -88,13 +88,16 @@ export type RegionRefusal = 'redirected' | 'document' | 'forbidden';
  *  culprit. */
 export class RegionAnswerRefused extends Error {
 	override name = 'RegionAnswerRefused';
-	constructor(
-		public readonly reason: RegionRefusal,
-		public readonly final_url: string,
-		/** `forbidden`: the server's `x-ogygia-deny`, with its key fingerprint and the capability's */
-		public readonly deny?: string
-	) {
+	readonly reason: RegionRefusal;
+	readonly final_url: string;
+	/** `forbidden`: the server's `x-ogygia-deny`, with its key fingerprint and the capability's */
+	readonly deny?: string;
+
+	constructor(reason: RegionRefusal, final_url: string, deny?: string) {
 		super(`region answer refused: ${reason}${deny ? ` (${deny})` : ''} (${final_url})`);
+		this.reason = reason;
+		this.final_url = final_url;
+		this.deny = deny;
 	}
 }
 

@@ -84,7 +84,7 @@ The collection holds the compiled corpus, possibly megabytes of markdown. The si
 
 ```ts title=src/lib/site.remote.ts
 // the wire layer
-import { remotes } from '@ogygia/content/remote';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './site.server';
 
 export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });

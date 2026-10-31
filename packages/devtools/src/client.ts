@@ -1,5 +1,5 @@
 /**
- * The BROWSER half of `devtools()` (found by name: `@ogygia/devtools/client`): the dock's launcher, and
+ * The BROWSER half of `devtools()` (its `client`): the dock's launcher, and
  * the leftovers watch (what a region's component leaves running after it leaves the page). With the dock off
  * (`devtools({ dock: false })`, core's events not compiled in) every hook here folds to nothing.
  */

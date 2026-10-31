@@ -48,7 +48,11 @@ function cache_root(): string | null {
 }
 
 export class BuildCache<T> {
-	constructor(readonly namespace: string) {}
+	readonly namespace: string;
+
+	constructor(namespace: string) {
+		this.namespace = namespace;
+	}
 
 	/** This namespace's DIRECTORY, for artifact trees the consumer manages itself (git checkouts).
 	 *  Returns the ensured absolute path, or `null` when the cache is unavailable. */

@@ -4,7 +4,7 @@
  * the corpus into the client bundle. `meta` is the whole shell bundle ({ nav, switcher, data }) fed
  * to `<Shell {meta}>`; `doc` resolves one page (baking a markdown body into a region ticket).
  */
-import { remotes } from '@ogygia/content/remote';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './docs.server';
 
 export const { meta, page, search } = remotes(docs, { base: '/playground' });

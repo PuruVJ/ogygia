@@ -18,7 +18,7 @@ import { ogygia } from 'ogygia/vite';
 import { federation } from '@ogygia/federation/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ plugins: [federation()] }), sveltekit()]
+	plugins: [ogygia(), federation(), sveltekit()]
 });
 ```
 

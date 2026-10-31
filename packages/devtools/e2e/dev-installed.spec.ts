@@ -44,7 +44,7 @@ const FILES: Record<string, string> = {
 	'package.json': '{ "name": "installed-app", "private": true, "type": "module" }\n',
 	'svelte.config.js': 'export default { kit: {} };\n',
 	// (devtools on, the way an app turns it on in dev: its dock's packages must be found up front)
-	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia({ plugins: [devtools()] }), sveltekit()] };\n",
+	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia(), devtools(), sveltekit()] };\n",
 	'src/app.html': '<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',
 	'src/routes/+page.ts': 'export const csr = false;\n',
 	// an island with a snippet prop (its children: they cross as a wired value) …
@@ -187,7 +187,7 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		// imports load ogygia by path — the server restarts on the config change
 		fs.writeFileSync(
 			path.join(app, 'vite.config.js'),
-			"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia({ plugins: [devtools()] }), sveltekit()], optimizeDeps: { include: ['ogygia/runtime'] } };\n"
+			"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia(), devtools(), sveltekit()], optimizeDeps: { include: ['ogygia/runtime'] } };\n"
 		);
 		await page.waitForTimeout(6000);
 		let said: string[] = [];

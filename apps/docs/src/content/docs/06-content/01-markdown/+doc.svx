@@ -121,7 +121,7 @@ Wire them one time in your app config. They are inert on fences that carry no ma
 import { content } from '@ogygia/content/vite';
 import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 
-ogygia({ plugins: [content({ markdown: { code: { transformers: [diff_markers(), inline_markers()] } } })] })
+plugins: [ogygia(), content({ markdown: { code: { transformers: [diff_markers(), inline_markers()] } } }), sveltekit()]
 ```
 
 ::: note Where each dialect is off

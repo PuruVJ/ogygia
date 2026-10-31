@@ -21,7 +21,7 @@ const Body: StandardSchemaV1<{ title: string }> = {
 
 const app = routes({
 	'/posts/[id]': {
-		GET: GET<'/posts/[id]'>((c) => ({ id: c.params.id, q: c.search.q ?? null }))
+		GET: GET((c) => ({ id: c.params.id, q: c.search.q ?? null }))
 	},
 	'/posts': { POST: POST(Body, (c) => ({ created: c.input.title })) },
 	'/gone': { DELETE: () => null } // plain null → finalize's 204

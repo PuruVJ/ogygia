@@ -1,0 +1,8 @@
+---
+title: '@ogygia/router'
+summary: The server router — routes, pages, layouts, loads, actions, endpoints.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/router

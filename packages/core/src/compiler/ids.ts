@@ -26,7 +26,7 @@ export const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
 export const V_SECRET = 'virtual:ogygia/secret';
 export const V_SIGN = 'virtual:ogygia/sign';
 export const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
-/** The app's plugins' SERVER halves (`ogygia({ plugins })`), statically imported in plugin order.
+/** The app's plugins' SERVER halves, statically imported in plugin order.
  *  SERVER only; the client gets an empty list. */
 export const V_SERVER_PLUGINS = 'virtual:ogygia/server-plugins';
 /** THE PROFILER'S MAPS, carried as code: the server build's module map and every server chunk's
@@ -47,6 +47,9 @@ export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';
  *  page's `<style>` reach the document (see link/router-css.ts). SSR-only, imported by `ogygia/plugin/css`. */
 export const V_ROUTER_CSS = 'virtual:ogygia/router-css';
 export const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
+/** The server islands' loaders (`id → () => import(entry)`), reached only through the manifest's
+ *  `load_islands()` — see link/server-manifest.ts for why they live one dynamic import away. */
+export const V_SERVER_ISLANDS = 'virtual:ogygia/server-islands';
 export const V_REQUEST_EVENT = 'virtual:ogygia/request-event';
 /** SSR-only map of csr=true route ids — lets Region degrade a csr=false layout's islands to inline
  *  when the LEAF page is csr=true (Kit hydrates the whole document). Client leg is an empty set;

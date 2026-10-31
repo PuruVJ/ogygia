@@ -1,0 +1,8 @@
+---
+title: '@ogygia/freeze'
+summary: Frozen pages — stores and edge adapters.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/freeze

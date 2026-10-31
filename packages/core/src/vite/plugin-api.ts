@@ -4,31 +4,51 @@
  *
  *   export const freeze = (options: FreezeOptions = {}) =>
  *     definePlugin({
- *       name: '@ogygia/freeze',            // the package name: the plugin's identity
- *       options,                            // JSON; reaches the server realm as `app.options`
+ *       name: '@ogygia/freeze',                        // the package name: the plugin's identity
+ *       options,                                        // JSON; reaches the server realm as `app.options`
+ *       server: import.meta.resolve('./server.ts'),     // the server realm (`defineServer`)
  *       build(b) { b.routeOption('freeze'); }
  *     });
  *
- * REALMS are found by name: the package's own `./server`, `./client`, `./devtools` exports. They
- * resolve through the package's exports exactly like the app's imports of the package, so a plugin's
- * modules exist once (never a src copy beside a dist copy).
+ * A plugin IS a Vite plugin: the app lists it beside `ogygia()` (`plugins: [ogygia(), freeze(),
+ * sveltekit()]`), and `ogygia()` finds it there by the definition it carries under {@link PLUGIN} —
+ * never by its name. A factory that needs Vite hooks of its own returns them beside it, as an array.
+ *
+ * REALMS are named by the plugin: `server` and `client` point at the modules themselves, resolved
+ * next to the factory (`import.meta.resolve`), so they are the same files the package's own imports
+ * reach and a plugin's modules exist once. A package's export names stay its own.
  */
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Plugin as VitePlugin } from 'vite';
 import type { ServerRealm } from '../compiler/link/caps.ts';
 
-/** What an app puts in `ogygia({ plugins })` — the value a plugin's factory returns. */
-export interface OgygiaPlugin<Options = unknown> {
-	/** The plugin's package name (`'@ogygia/freeze'`): its identity, and where its realms live. */
+/** Where `definePlugin` puts the definition on the Vite plugin it returns. A registered symbol, so a
+ *  second copy of ogygia in one app still recognizes the first's plugins. */
+export const PLUGIN: unique symbol = Symbol.for('ogygia.plugin');
+
+/** The value a plugin's factory returns: a Vite plugin carrying its definition. */
+export interface OgygiaPlugin<Options = unknown> extends VitePlugin {
+	readonly [PLUGIN]: PluginDefinition<Options>;
+}
+
+/** What a plugin is: the argument to `definePlugin`. */
+export interface PluginDefinition<Options = unknown> {
+	/** The plugin's package name (`'@ogygia/freeze'`): its identity. */
 	name: string;
+	/** The SERVER realm: a module whose default export is `defineServer({…})` (`ogygia/plugin`), as a
+	 *  `file:` URL or an absolute path — `import.meta.resolve('./server.ts')`. */
+	server?: string;
+	/** The BROWSER realm: a module whose default export is `defineClient({…})` (`ogygia/plugin/client`),
+	 *  booted on every page — same form as `server`. */
+	client?: string;
 	/** Settings for every realm (JSON: no functions, no clients — live objects are configured at
 	 *  runtime, in hooks.server.ts). */
 	options?: Options;
 	/** Run before (`'pre'`) or after (`'post'`) the other plugins, in every realm. */
 	enforce?: 'pre' | 'post';
-	/** Vite plugins this plugin brings (ogygia's own plugin list carries them, before its own). */
-	vite?: VitePlugin[];
 	/** Build-time contributions, with the build context. */
 	build?(b: BuildContext): void;
 }
@@ -108,19 +128,61 @@ export interface BuildContext {
 	pageModules(modules: { importers?: string[]; files?: string[] }): void;
 }
 
-/** Typed identity: a plugin. */
-export function definePlugin<Options = undefined>(plugin: OgygiaPlugin<Options>): OgygiaPlugin<Options> {
-	return plugin;
+/** The name of `ogygia()`'s own Vite plugin: what a listed plugin looks for beside it. */
+const OGYGIA_VITE_PLUGIN = 'ogygia';
+
+/** A plugin, as the Vite plugin the app lists beside `ogygia()`. */
+export function definePlugin<Options = undefined>(definition: PluginDefinition<Options>): OgygiaPlugin<Options> {
+	return {
+		name: definition.name,
+		[PLUGIN]: definition,
+		configResolved(config) {
+			if (!config.plugins.some((p) => p.name === OGYGIA_VITE_PLUGIN))
+				throw new Error(
+					`[ogygia] \`${definition.name}\` is listed in vite.config but \`ogygia()\` is not — add \`ogygia()\` from \`ogygia/vite\` to \`plugins\`.`
+				);
+		}
+	};
 }
 
-/** The realms a plugin may have, as package export subpaths. */
-const REALMS = ['server', 'client', 'devtools'] as const;
+/** The prefix of SvelteKit's own Vite plugins' names (`sveltekit()` returns several). */
+const KIT_VITE_PLUGIN_PREFIX = 'vite-plugin-sveltekit';
 
-/** What the build takes from `ogygia({ plugins })`. */
+/** The plugin definitions in the app's Vite plugin list (nested arrays and promises included), in
+ *  list order, shape-checked. `ogygia()` and its plugins come before `sveltekit()`: Vite runs
+ *  same-stage hooks in list order, and theirs (the content pre-transforms, the config ogygia hands
+ *  Kit) must see a module before Kit's do. */
+export async function find_plugins(list: unknown): Promise<PluginDefinition[]> {
+	const found: unknown[] = [];
+	let kit_seen = false;
+	const walk = async (entry: unknown): Promise<void> => {
+		const value = await entry;
+		if (Array.isArray(value)) {
+			for (const item of value) await walk(item);
+			return;
+		}
+		if (typeof value === 'function')
+			throw new Error('[ogygia] a function is listed in vite.config `plugins` — call the factory: `flags()`, not `flags`.');
+		const plugin = value as { name?: unknown; [PLUGIN]?: { name?: unknown } } | null;
+		const name = typeof plugin?.name === 'string' ? plugin.name : '';
+		const definition = plugin?.[PLUGIN];
+		if (name.startsWith(KIT_VITE_PLUGIN_PREFIX)) kit_seen = true;
+		const own = name === OGYGIA_VITE_PLUGIN;
+		if ((own || definition) && kit_seen)
+			throw new Error(
+				`[ogygia] \`${own ? 'ogygia()' : String(definition?.name)}\` is listed after \`sveltekit()\` in vite.config — list \`ogygia()\` and its plugins first: \`plugins: [ogygia(), flags(), sveltekit()]\`.`
+			);
+		if (definition) found.push(definition);
+	};
+	await walk(list);
+	return check_plugins(found);
+}
+
+/** What the build takes from the app's plugins. */
 export interface ResolvedPlugins {
 	/** each server realm, in plugin order (`enforce` applied) */
 	servers: ServerRealm[];
-	/** each browser realm (`<name>/client`), in plugin order */
+	/** each browser realm (an absolute path), in plugin order */
 	clients: string[];
 	/** every route option any plugin reads */
 	route_options: string[];
@@ -145,12 +207,7 @@ const MACRO_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
 /** core's own `import.meta.og.*` constructs: a plugin may never claim one */
 const CORE_MACROS = new Set(['wire', '$', 'source', 'store', 'bake']);
 
-/** Collect each plugin's Vite plugins, in plugin order (`ogygia()` places them before its own). */
-export function plugin_vite_plugins(plugins: readonly OgygiaPlugin[]): VitePlugin[] {
-	return order(plugins).flatMap((p) => p.vite ?? []);
-}
-
-function order(plugins: readonly OgygiaPlugin[]): OgygiaPlugin[] {
+function order(plugins: readonly PluginDefinition[]): PluginDefinition[] {
 	return [
 		...plugins.filter((p) => p.enforce === 'pre'),
 		...plugins.filter((p) => p.enforce !== 'pre' && p.enforce !== 'post'),
@@ -163,21 +220,20 @@ const ROUTE_OPTION_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
 const KIT_ROUTE_OPTIONS = new Set(['csr', 'ssr', 'prerender', 'trailingSlash', 'config', 'entries']);
 
 /**
- * Config-time shape check (when `ogygia()` is called): each entry is a plugin value — not the factory
- * itself — named once, with JSON options.
+ * Config-time shape check of the definitions found: each named once, its realms locations, its
+ * options JSON.
  */
-export function check_plugins(plugins: unknown): OgygiaPlugin[] {
-	if (plugins === undefined) return [];
-	if (!Array.isArray(plugins)) throw new Error('[ogygia] `plugins` must be an array: `plugins: [flags()]`.');
+export function check_plugins(plugins: readonly unknown[]): PluginDefinition[] {
 	const seen = new Set<string>();
-	for (const p of plugins as unknown[]) {
-		if (typeof p === 'function')
-			throw new Error('[ogygia] a plugin factory was passed uncalled — write `flags()`, not `flags`.');
-		const plugin = p as Partial<OgygiaPlugin> | null;
+	for (const p of plugins) {
+		const plugin = p as Partial<PluginDefinition> | null;
 		if (!plugin || typeof plugin !== 'object' || typeof plugin.name !== 'string' || plugin.name === '')
-			throw new Error('[ogygia] each `plugins` entry must be a plugin (the value `definePlugin()` returns).');
+			throw new Error('[ogygia] a plugin definition needs a `name` (its package name).');
 		if (seen.has(plugin.name)) throw new Error(`[ogygia] plugin \`${plugin.name}\` is listed twice.`);
 		seen.add(plugin.name);
+		for (const realm of ['server', 'client'] as const)
+			if (plugin[realm] !== undefined && typeof plugin[realm] !== 'string')
+				throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`${realm}\` is a module location — \`import.meta.resolve('./${realm}.ts')\`.`);
 		if (plugin.options !== undefined) {
 			try {
 				JSON.stringify(plugin.options);
@@ -186,20 +242,18 @@ export function check_plugins(plugins: unknown): OgygiaPlugin[] {
 			}
 		}
 	}
-	return plugins as OgygiaPlugin[];
+	return plugins as PluginDefinition[];
 }
 
-/** Does `<name>/<realm>` resolve from the app? Absent export: no such realm. A package the app cannot
- *  resolve at all is a mistake, said loudly. */
-function realm_exists(req: NodeJS.Require, name: string, realm: string): boolean {
-	try {
-		req.resolve(`${name}/${realm}`);
-		return true;
-	} catch (e) {
-		const code = (e as { code?: string }).code;
-		if (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' || code === 'MODULE_NOT_FOUND') return false;
-		throw e;
-	}
+/** A realm's module as an absolute POSIX path (what the generated imports name), or null when the
+ *  plugin has none. A location that is not a file is a mistake, said loudly. */
+function realm_path(plugin: PluginDefinition, realm: 'server' | 'client'): string | null {
+	const where = plugin[realm];
+	if (where === undefined) return null;
+	const abs = where.startsWith('file:') ? fileURLToPath(where) : where;
+	if (!path.isAbsolute(abs) || !fs.existsSync(abs))
+		throw new Error(`[ogygia] plugin \`${plugin.name}\`: its \`${realm}\` realm \`${where}\` is not a file — resolve it next to the factory: \`import.meta.resolve('./${realm}.ts')\`.`);
+	return abs.split(path.sep).join('/');
 }
 
 function package_resolves(req: NodeJS.Require, name: string): boolean {
@@ -213,12 +267,12 @@ function package_resolves(req: NodeJS.Require, name: string): boolean {
 }
 
 /**
- * When the app's root and mode are known (the `config` hook): order the plugins (`enforce`), find their
- * realms by name, run their `build` hooks. `markup_transform` is the configured compiler's island
+ * When the app's root and mode are known (the `config` hook): order the plugins (`enforce`), check their
+ * realms, run their `build` hooks. `markup_transform` is the configured compiler's island
  * transform for preprocessed markup (what `b.markup()` hands back).
  */
 export function resolve_plugins(
-	plugins: readonly OgygiaPlugin[],
+	plugins: readonly PluginDefinition[],
 	root: string,
 	dev: boolean,
 	markup_transform: MarkupRegions['transform'] = () => null
@@ -242,9 +296,10 @@ export function resolve_plugins(
 	for (const plugin of ordered) {
 		if (!package_resolves(req, plugin.name))
 			throw new Error(`[ogygia] plugin \`${plugin.name}\`: no package by that name resolves from ${root} — its name must be its package name.`);
-		if (realm_exists(req, plugin.name, REALMS[0]))
-			out.servers.push({ name: plugin.name, module: `${plugin.name}/server`, options: plugin.options ?? {} });
-		if (realm_exists(req, plugin.name, REALMS[1])) out.clients.push(`${plugin.name}/client`);
+		const server = realm_path(plugin, 'server');
+		if (server) out.servers.push({ name: plugin.name, module: server, options: plugin.options ?? {} });
+		const client = realm_path(plugin, 'client');
+		if (client) out.clients.push(client);
 		plugin.build?.({
 			root,
 			dev,

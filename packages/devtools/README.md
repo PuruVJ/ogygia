@@ -14,12 +14,7 @@ import { ogygia } from 'ogygia/vite';
 import { devtools } from '@ogygia/devtools/vite';
 
 export default defineConfig(({ mode }) => ({
-	plugins: [
-		ogygia({
-			plugins: [...(mode !== 'production' ? [devtools({ profiler: true })] : [])]
-		}),
-		sveltekit()
-	]
+	plugins: [ogygia(), ...(mode !== 'production' ? [devtools({ profiler: true })] : []), sveltekit()]
 }));
 ```
 

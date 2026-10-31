@@ -1,7 +1,7 @@
 /**
- * `content()` — content collections, markdown and the content macros, for
- * `ogygia({ plugins: [content({ markdown, presets })] })` in vite.config. The svelte config takes the
- * value-free halves from here too:
+ * `content()` — content collections, markdown and the content macros, listed beside `ogygia()` in
+ * vite.config `plugins` (`content({ markdown, presets })`). The svelte config takes the value-free
+ * halves from here too:
  *
  * ```js
  * // svelte.config.js
@@ -59,7 +59,7 @@ export interface ContentOptions extends ContentHmrOptions {
 	presets?: Record<string, ContentPreset>;
 }
 
-export function content(options: ContentOptions = {}): OgygiaPlugin {
+export function content(options: ContentOptions = {}): [OgygiaPlugin, ...VitePlugin[]] {
 	const { markdown, presets, ...hmr } = options;
 	if (presets) validate_presets(presets, !!markdown);
 	// The svelte config's `preprocess()` / `extensions()` read this; vite.config evaluates the plugin
@@ -69,9 +69,8 @@ export function content(options: ContentOptions = {}): OgygiaPlugin {
 	const exts = markdown_extensions();
 
 	let root = '';
-	return definePlugin({
+	const plugin = definePlugin({
 		name: '@ogygia/content',
-		vite: [content_hmr(hmr), content_checks(() => root, exts)],
 		build(b) {
 			root = b.root;
 			for (const { name, handler } of snippet_macros(() => bridge.markdownConfig as MarkdownOptions | null))
@@ -103,6 +102,7 @@ export function content(options: ContentOptions = {}): OgygiaPlugin {
 			}
 		}
 	});
+	return [plugin, content_hmr(hmr), content_checks(() => root, exts)];
 }
 
 type ContentBridgePresets = NonNullable<typeof bridge.contentPresets>;

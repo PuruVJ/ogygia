@@ -16,7 +16,7 @@ Always, for a site() site. The remotes are the one sanctioned path from the serv
 ## Mint them
 
 ```ts title=src/lib/site.remote.ts
-import { remotes } from '@ogygia/content/remote';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './site.server';
 
 export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });

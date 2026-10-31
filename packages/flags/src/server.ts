@@ -1,5 +1,5 @@
 /**
- * The flags plugin's server realm (found by name: `@ogygia/flags/server`).
+ * The flags plugin's server realm (named by `flags()`).
  * `request`: prime the decision source once, above the page / hole split, so every read stays sync.
  * `done`: drain queued exposures at the request's end, always (the serverless-safe tail).
  */

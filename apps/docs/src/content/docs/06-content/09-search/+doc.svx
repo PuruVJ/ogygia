@@ -26,7 +26,7 @@ export const GET = docs.emit.search();
 
 ```ts [server query]
 // src/lib/site.remote.ts — when the index shouldn't ship
-import { remotes } from '@ogygia/content/remote';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './site.server';
 export const { search } = remotes(docs, { base: '/docs' });
 ```

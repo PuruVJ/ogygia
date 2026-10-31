@@ -1,5 +1,5 @@
 /**
- * `router()` — the server router, for `ogygia({ plugins: [router()] })` in vite.config. A `routes()` table
+ * `router()` — the server router, listed beside `ogygia()` in vite.config. A `routes()` table
  * renders pages outside Kit's routes, so nothing file-derived links their components' CSS: listing the
  * plugin tells the build that every module importing `@ogygia/router` is a page module, and every
  * component it can reach gets its whole-tree CSS linked when it renders. It also makes the package the

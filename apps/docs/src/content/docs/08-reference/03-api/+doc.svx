@@ -106,7 +106,7 @@ The function is inlined through `Function.prototype.toString`. Thus it must be *
 import { ogygia } from 'ogygia/vite';
 ```
 
-`ogygia(options)` is the Vite plugin. It runs before `sveltekit()`. Each option is optional. The root of the options is the region system itself: its defaults (`visible`), its named presets (`presets`), and how long its holes' URLs live (`ttl`, `maxPageAge`). Beside them sit the client router, and `plugins`: every feature that lives in its own package. Each plugin keeps its own settings, so a region preset can never hold content config, and the reverse.
+`ogygia(options)` is the Vite plugin. It runs before `sveltekit()`. Each option is optional. The root of the options is the region system itself: its defaults (`visible`), its named presets (`presets`), and how long its holes' URLs live (`ttl`, `maxPageAge`). Beside them sits the client router.
 
 ```ts
 ogygia({
@@ -114,10 +114,11 @@ ogygia({
   presets: {
     demo: { wake: 'visible', margin: '200px' },
     frozenLive: { render: 'live', wake: 'load' }
-  },
-  plugins: [content({ markdown: {} })]
+  }
 })
 ```
+
+Every feature that lives in its own package (content, flags, freeze, federation, the server router, devtools) is a Vite plugin of its own, listed beside `ogygia()` in the `plugins` of your Vite config: `plugins: [ogygia(), flags(), freeze({ ttl: 600 }), sveltekit()]`. `ogygia()` finds them there. Each plugin keeps its own settings, so a region preset can never hold content config, and the reverse. See [Plugins](/docs/reference/plugins).
 
 The old `regions: { … }` wrapper is a build error that names the new spelling. Its keys moved to the root, unchanged.
 
@@ -130,20 +131,6 @@ ogygia({ visible: { margin: '200px' } })
 ```
 
 There is no preload setting. The page carries each island's chunk list as data, and the runtime preloads an island's whole graph when it wakes, after the page has painted ([how the bytes arrive](/docs/regions/timing-nesting)). The old `preload` key is a build error.
-
-### `plugins`
-
-The features that ship as their own packages, listed once, in order. Install the package, import its factory from `<package>/vite`, and call it:
-
-```ts
-import { ogygia } from 'ogygia/vite';
-import { flags } from '@ogygia/flags/vite';
-import { freeze } from '@ogygia/freeze/vite';
-
-ogygia({ plugins: [flags(), freeze({ ttl: 600 })] })
-```
-
-That is the only place a plugin is named. The build finds its server and browser halves by its package name, so `hooks.server.ts` never mentions it. See [Plugins](/docs/reference/plugins) for the package list and how a plugin plugs in.
 
 ### `router`
 
@@ -246,19 +233,15 @@ Turns on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` 
 ```ts
 import { content } from '@ogygia/content/vite';
 
-ogygia({ plugins: [content({ markdown: {} })] })
+plugins: [ogygia(), content({ markdown: {} }), sveltekit()]
 ```
 
 **`presets`** are named markdown variants, with the same grammar as the presets of each subsystem. A [loader macro](/docs/macros/loaders) opts a full collection in with `{ preset: 'name' }`. The files of that collection compile through the config of the preset, merged over `markdown` (per setting key). Under the hood, each opted-in file is its own module *variant*. Thus the same file used by another collection (under another preset, or none) renders independently. There is nothing to conflict.
 
 ```ts
-ogygia({
-  plugins: [
-    content({
-      markdown: { overrides: true },                      // the defaults
-      presets: { plain: { markdown: { overrides: false } } }  // a named variant
-    })
-  ]
+content({
+  markdown: { overrides: true },                      // the defaults
+  presets: { plain: { markdown: { overrides: false } } }  // a named variant
 })
 ```
 
@@ -368,7 +351,7 @@ An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), 
 
 ## Plugin packages
 
-Each feature below is its own package. Install it, and list its factory once in [`plugins`](#ogygiavite-plugins). See [Plugins](/docs/reference/plugins).
+Each feature below is its own package. Install it, and list its plugin once beside `ogygia()` in your Vite config. See [Plugins](/docs/reference/plugins).
 
 | Package | Plugin | Imports in app code |
 | --- | --- | --- |

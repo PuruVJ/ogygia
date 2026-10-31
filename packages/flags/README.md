@@ -14,7 +14,7 @@ import { ogygia } from 'ogygia/vite';
 import { flags } from '@ogygia/flags/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ plugins: [flags()] }), sveltekit()]
+	plugins: [ogygia(), flags(), sveltekit()]
 });
 ```
 

@@ -123,22 +123,21 @@ Pass an object in place of `true` to the `profiler` option of the `devtools()` p
 // vite.config.ts
 import { devtools } from '@ogygia/devtools/vite';
 
-ogygia({
-  plugins: [devtools({
-    profiler: {
-      secret: process.env.OGYGIA_PROFILER_SECRET, // default: the OGYGIA_PROFILER_SECRET env var
-      path: '/__profiler',                        // UI base path
-      sampleInterval: 500,                        // µs between CPU samples
-      maxReports: 6,                              // profiles kept in memory (gzipped)
-      network: true,                              // patch fetch/http to attribute calls
-      serverTiming: undefined,                    // default: on in dev, off in production
-      heap: true,                                 // sample heap allocations while recording
-      enabled: true,                              // master switch
-      trap: { over: 800 },                        // catch the slow one (off by default; see below)
-      sample: { every: 60, window: 2000 },        // always-on sampling (off by default; see below)
-      clientCpu: true,                            // the beacon records the browser's main-thread CPU (Chromium)
-    },
-  })],
+// listed beside ogygia(): plugins: [ogygia(), devtools({ … }), sveltekit()]
+devtools({
+  profiler: {
+    secret: process.env.OGYGIA_PROFILER_SECRET, // default: the OGYGIA_PROFILER_SECRET env var
+    path: '/__profiler',                        // UI base path
+    sampleInterval: 500,                        // µs between CPU samples
+    maxReports: 6,                              // profiles kept in memory (gzipped)
+    network: true,                              // patch fetch/http to attribute calls
+    serverTiming: undefined,                    // default: on in dev, off in production
+    heap: true,                                 // sample heap allocations while recording
+    enabled: true,                              // master switch
+    trap: { over: 800 },                        // catch the slow one (off by default; see below)
+    sample: { every: 60, window: 2000 },        // always-on sampling (off by default; see below)
+    clientCpu: true,                            // the beacon records the browser's main-thread CPU (Chromium)
+  },
 });
 ```
 

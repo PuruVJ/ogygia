@@ -184,7 +184,7 @@ A danger block for the things that will bite. `csr = true` opts a whole route ba
 ::: details Show the config
 ```ts
 export default defineConfig({
-	plugins: [ogygia({ plugins: [content({ markdown: { containers: true } })] }), sveltekit()]
+	plugins: [ogygia(), content({ markdown: { containers: true } }), sveltekit()]
 });
 ```
 :::

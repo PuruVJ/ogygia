@@ -6,10 +6,15 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { startPlugin } from '@ogygia/core/plugin/testing';
 import { register_hooks, ask } from '../../core/src/plugin/hooks.ts';
+import type { PluginDefinition } from '@ogygia/core/vite';
 import { freeze as freezePlugin } from '../src/vite.ts';
 import server, { type FreezeServerOptions } from '../src/server.ts';
 import { freeze } from '../src/index.ts';
 import { reset_for_tests } from '../src/registry.ts';
+
+/** the definition `definePlugin` put on the Vite plugin */
+const definition = (plugin: ReturnType<typeof freezePlugin>) =>
+	(plugin as unknown as Record<symbol, PluginDefinition<FreezeServerOptions>>)[Symbol.for('ogygia.plugin')];
 
 // The server half reads Kit's `$app/env`; outside an app, nothing is building and this is no dev server.
 vi.mock('$app/env', () => ({ building: false, dev: false }));
@@ -17,17 +22,18 @@ vi.mock('$app/env', () => ({ building: false, dev: false }));
 describe('freeze() — the vite value', () => {
 	it('names the package and normalizes its options', () => {
 		const plugin = freezePlugin();
+		const options = (o?: Parameters<typeof freezePlugin>[0]) => definition(freezePlugin(o)).options;
 		expect(plugin.name).toBe('@ogygia/freeze');
-		expect(plugin.options).toEqual({ ttl: 86400, default: true });
-		expect(freezePlugin({ ttl: 999_999 }).options?.ttl).toBe(86400);
-		expect(freezePlugin({ ttl: 0 }).options?.ttl).toBe(1);
-		expect(freezePlugin({ ttl: 12.7 }).options?.ttl).toBe(12);
-		expect(freezePlugin({ default: false }).options?.default).toBe(false);
+		expect(options()).toEqual({ ttl: 86400, default: true });
+		expect(options({ ttl: 999_999 })?.ttl).toBe(86400);
+		expect(options({ ttl: 0 })?.ttl).toBe(1);
+		expect(options({ ttl: 12.7 })?.ttl).toBe(12);
+		expect(options({ default: false })?.default).toBe(false);
 	});
 
 	it('its build hook registers the `freeze` route option', () => {
 		const names: string[] = [];
-		freezePlugin().build!({
+		definition(freezePlugin()).build!({
 			root: '/',
 			dev: true,
 			routeOption: (n) => void names.push(n),

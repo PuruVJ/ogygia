@@ -1,12 +1,12 @@
 /**
  * Server-only remote layer for an ogygia site. The ONLY ogygia module that imports `$app/server`, so
  * it must be used from a `.remote.ts` (Kit guarantees those run on the server). Mirrors
- * `withRemotes()` from `@ogygia/content/remote`: the browser-safe `site()` defines the site once;
+ * `withRemotes()` from `@ogygia/content/server`: the browser-safe `site()` defines the site once;
  * `remotes(site)` mints the wire access.
  *
  * ```ts
  * // docs.remote.ts
- * import { remotes } from '@ogygia/content/remote';
+ * import { remotes } from '@ogygia/content/server';
  * import { site } from './docs';
  * export const { nav, search } = remotes(site, { base: '/docs' });
  * ```
@@ -18,7 +18,7 @@
  *    dynamic-site path — distinct from the prerendered `search.json` + worker (the static path).
  */
 import { prerender, query } from '$app/server';
-import type { ContentMode } from '../remote.ts';
+import type { ContentMode } from '../server.ts';
 import type { Site, SiteMeta } from './site.ts';
 import type { SearchHit } from './search.ts';
 import type { PageView, NavTree } from './types.ts';

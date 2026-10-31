@@ -36,13 +36,17 @@ declare module 'virtual:ogygia/manifest' {
 	>;
 }
 declare module 'virtual:ogygia/server-manifest' {
-	export const islands: Record<string, () => Promise<{ default: unknown }>>;
+	/** The server islands' loaders, one dynamic import away. */
+	export function load_islands(): Promise<typeof import('virtual:ogygia/server-islands')>;
 	/** Server-island id → its built client-chunk URL (the key `islandCss()` is keyed by). */
 	export const island_url: Record<string, string>;
 	/** Server-island id → its component name (`SlowHole`), where the component file is known. */
 	export const island_name: Record<string, string>;
 	export const island_render: Record<string, string>;
 	export const render_island: Record<string, string>;
+}
+declare module 'virtual:ogygia/server-islands' {
+	export const islands: Record<string, () => Promise<{ default: unknown }>>;
 }
 declare module 'virtual:ogygia/region-endpoint' {
 	export function makeRegionEndpoint(entry: string, props?: Record<string, unknown>): string;

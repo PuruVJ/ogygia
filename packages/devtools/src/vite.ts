@@ -1,6 +1,6 @@
 /**
- * `devtools()` — the in-page dock and the SSR profiler, for `ogygia({ plugins: [devtools()] })` in
- * vite.config. List it only where you want it:
+ * `devtools()` — the in-page dock and the SSR profiler, listed beside `ogygia()`
+ * in vite.config. List it only where you want it:
  *
  *   plugins: [...(mode !== 'production' ? [devtools({ profiler: true })] : [])]
  *
@@ -37,17 +37,18 @@ const posix = (p: string) => p.split(path.sep).join('/');
 /** the server half's dynamic import of the profiler (src `.ts` or built `.js`) */
 const PROFILER_IMPORT_RE = /import\((['"])\.\/profiler\/index\.(ts|js)\1\)/;
 
-export function devtools(options: DevtoolsOptions = {}): OgygiaPlugin<DevtoolsServerOptions> {
+export function devtools(options: DevtoolsOptions = {}): [OgygiaPlugin<DevtoolsServerOptions>, VitePlugin] {
 	const dock = options.dock !== false;
 	const profiler: ProfilerOptions | null = options.profiler
 		? options.profiler === true
 			? {}
 			: { ...options.profiler }
 		: null;
-	return definePlugin<DevtoolsServerOptions>({
+	const plugin = definePlugin<DevtoolsServerOptions>({
 		name: '@ogygia/devtools',
+		server: import.meta.resolve('./server.ts'),
+		client: import.meta.resolve('./client.ts'),
 		options: { profiler },
-		vite: [devtools_vite(dock, profiler)],
 		build(b) {
 			if (dock) b.events({ lazy: !b.dev });
 			if (profiler) {
@@ -64,6 +65,7 @@ export function devtools(options: DevtoolsOptions = {}): OgygiaPlugin<DevtoolsSe
 			}
 		}
 	});
+	return [plugin, devtools_vite(dock, profiler)];
 }
 
 /** The plugin's own Vite side: its client dependencies for the dev optimizer, the build warnings, and

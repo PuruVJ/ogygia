@@ -10,7 +10,7 @@
  * export const docs = content({ from, format, schema, relations });
  *
  * // docs.remote.ts — server-only
- * import { withRemotes } from '@ogygia/content/remote';
+ * import { withRemotes } from '@ogygia/content/server';
  * const r = withRemotes(docs);
  * export const docNav  = r.list({ map: (e) => ({ id: e.id, title: e.data.title }) });
  * export const feed    = r.live.list({ map });

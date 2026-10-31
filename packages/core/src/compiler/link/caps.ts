@@ -54,7 +54,7 @@ export function sign_module(ssr: boolean, hmac_module: string): string {
 export interface ServerRealm {
 	/** the plugin's (package) name */
 	name: string;
-	/** `<name>/server` */
+	/** the realm module's absolute POSIX path (the plugin's `server`) */
 	module: string;
 	/** the plugin's options (JSON) */
 	options: unknown;

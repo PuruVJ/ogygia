@@ -1,0 +1,8 @@
+---
+title: '@ogygia/router/api'
+summary: The typed fetch client for a route table's endpoints.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/router/api

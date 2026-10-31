@@ -18,17 +18,6 @@ export default defineConfig({
 	server: { watch: { ignored: ['**/.vercel/**'] } },
 	plugins: [
 		ogygia({
-			// devtools: the SSR profiler, always (its UI islands build, its handle mounts it; secret from
-			// OGYGIA_PROFILER_SECRET at runtime; + the background recorders the hell page exercises: a trap
-			// for any request over 400 ms, a 1 s coarse sample every 20 s; serverTiming on in the built
-			// preview too, so the hell page's own API routes answer the profiler's nested-trace ask). The
-			// DOCK is on with OGYGIA_DEVTOOLS=1 (the dev-server specs set it).
-			plugins: [
-				devtools({
-					dock: !!process.env.OGYGIA_DEVTOOLS,
-					profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true }
-				})
-			],
 			// the palaestra's core options, so the lab's copies of its pages render the same way
 			barrels: true,
 			router: { serverDelta: true },
@@ -38,6 +27,15 @@ export default defineConfig({
 				// economics can watch (hits vs misses)
 				cachedRecs: { render: 'deferred', maxAge: '5m' }
 			}
+		}),
+		// devtools: the SSR profiler, always (its UI islands build, its handle mounts it; secret from
+		// OGYGIA_PROFILER_SECRET at runtime; + the background recorders the hell page exercises: a trap
+		// for any request over 400 ms, a 1 s coarse sample every 20 s; serverTiming on in the built
+		// preview too, so the hell page's own API routes answer the profiler's nested-trace ask). The
+		// DOCK is on with OGYGIA_DEVTOOLS=1 (the dev-server specs set it).
+		devtools({
+			dock: !!process.env.OGYGIA_DEVTOOLS,
+			profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true }
 		}),
 		sveltekit()
 	]

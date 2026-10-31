@@ -8,7 +8,7 @@
  *   export const docs = content({ loader: markdown(import.meta.glob('./docs/**\/*.svx')), schema });
  *
  * Read paths — `get` / `entry` / `ids` / `entries` + the content graph — live here. To mint the Kit
- * remotes that cross the wire, wrap it with `withRemotes()` from `@ogygia/content/remote` in a
+ * remotes that cross the wire, wrap it with `withRemotes()` from `@ogygia/content/server` in a
  * `.remote.ts`.
  */
 import type { RegionValue } from '@ogygia/core';
@@ -143,9 +143,9 @@ export type { ContentHandle, ContentOptions } from './factory.ts';
 
 export { parseSchema } from './schema.ts';
 
-// Remote types live in the server-only `@ogygia/content/remote` module; re-export TYPES here
+// Remote types live in the server-only `@ogygia/content/server` module; re-export TYPES here
 // (type-only, fully erased — never pulls `$app/server` into a browser graph).
-export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './remote.ts';
+export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './server.ts';
 
 // The `import.meta.og.*` ambient types (loader.*, wire, …) live in the package-root
 // `ambient.d.ts`, surfaced to apps via the `ogygia/types` reference every scaffold carries — ONE

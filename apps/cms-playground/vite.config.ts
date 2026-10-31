@@ -8,5 +8,5 @@ import { defineConfig } from 'vite';
 // content() brings the `import.meta.og.regions` block-registry macro.
 export default defineConfig({
 	resolve: { dedupe: ['@sveltejs/kit'] },
-	plugins: [ogygia({ plugins: [content()] }), sveltekit()]
+	plugins: [ogygia(), content(), sveltekit()]
 });

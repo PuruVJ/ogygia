@@ -1,0 +1,8 @@
+---
+title: '@ogygia/devtools/profiler/storage'
+summary: Where the profiler keeps its runs — the storage interface. Adapters live at /storage/sqlite, /storage/redis and /storage/postgres.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/devtools/profiler/storage

@@ -28,8 +28,10 @@ declare module 'virtual:ogygia/region-endpoint' {
 	export function holeCss(entry: string): string[];
 }
 declare module 'virtual:ogygia/server-manifest' {
-	export const islands: Record<string, () => Promise<{ default: unknown }>>;
-	/** Server-island id → its built client-chunk URL (the key `islandCss()` is keyed by). */
+	/** The server islands' loaders, one dynamic import away (link/server-manifest.ts says why). */
+	export function load_islands(): Promise<typeof import('virtual:ogygia/server-islands')>;
+	/** Server-island id → its built client-chunk URL (the key `islandCss()` is keyed by). Its keys are
+	 *  the server islands this build has. */
 	export const island_url: Record<string, string>;
 	/** Server-island id → its component name (`SlowHole`), where the component file is known. */
 	export const island_name: Record<string, string>;
@@ -41,6 +43,10 @@ declare module 'virtual:ogygia/server-manifest' {
 	/** Server-island id → its server tree reads `page.data` (the build's answer); `null` in dev:
 	 *  unknown, so every hole looks its page up. */
 	export const island_reads_page_data: Record<string, boolean> | null;
+}
+declare module 'virtual:ogygia/server-islands' {
+	/** Server-island id → its loader. */
+	export const islands: Record<string, () => Promise<{ default: unknown }>>;
 }
 declare module 'virtual:ogygia/runtime-url' {
 	const url: string;
@@ -153,7 +159,7 @@ declare module 'virtual:ogygia/rate-limit' {
 	export const rateLimit: { max: number; windowMs: number };
 }
 declare module 'virtual:ogygia/server-plugins' {
-	/** The server realms of `ogygia({ plugins })` (name, options, the `<name>/server` module), in
+	/** The server realms of the plugins listed beside `ogygia()` (name, options, the module each names in `server`), in
 	 *  plugin order. SERVER only (client: empty). */
 	export const plugins: readonly import('./plugin/server.js').ServerPluginEntry[];
 }

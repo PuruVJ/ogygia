@@ -19,7 +19,7 @@ Use it when your routes are *computed*: a CMS whose paths come from a database, 
 
 ## Installing
 
-The server router is its own package. Install it, and list its plugin in `ogygia()`:
+The server router is its own package. Install it, and list its plugin beside `ogygia()`:
 
 ```bash
 pnpm add @ogygia/router
@@ -29,7 +29,7 @@ pnpm add @ogygia/router
 import { ogygia } from 'ogygia/vite';
 import { router } from '@ogygia/router/vite';
 
-ogygia({ plugins: [router()] })
+plugins: [ogygia(), router(), sveltekit()]
 ```
 
 The plugin tells the build that every module importing `@ogygia/router` renders pages. Thus each component those pages reach gets its CSS linked when it renders. See [Plugins](/docs/reference/plugins).
@@ -247,18 +247,20 @@ An endpoint is the `+server.ts` shape, written as an object of **uppercase verb 
 },
 ```
 
-`c.params` is typed from the **table key**: a bare handler reads `c.params.id`, with no pattern restated. When you need typed params in a *pulled-out* handler, or a **body schema**, use the exported verb wrappers `GET` / `POST` / `PUT` / `DELETE` / `PATCH`: the same "bare or wrapper" choice as `load()`/`action()`:
+The **table key types each handler**. `c.params.id` is a `string`, and `c.params.slug` on that route is an error. The handler's return type is kept, so the [typed API client](#typed-api-client) knows what it answers. This holds at the top of the table, inside `layout(...)` tables, and behind `when()`. A **body schema** takes the verb wrappers `POST` / `PUT` / `PATCH`, and the key still types `c.params`:
 
 ```ts
 import { POST, type Handler } from '@ogygia/router';
 
 // body schema on POST/PUT/PATCH → validated JSON body into c.input (400 on bad input)
-'/posts': { POST: POST(NewPostSchema, (c) => c.json(create(c.input))) },
+'/posts/[id]': { PUT: POST(EditPostSchema, (c) => update(c.params.id, c.input)) },
 
-// pulled out + typed by the pattern
-const readPost: Handler<'/posts/[id]'> = (c) => c.json(read(c.params.id));
+// a handler written outside the table: `satisfies` checks it against its route and keeps its return type
+const readPost = ((c) => read(c.params.id)) satisfies Handler<'/posts/[id]'>;
 '/posts/[id]': { GET: readPost },
 ```
+
+Write `satisfies`, not a type annotation (`const readPost: Handler<…>`). An annotation replaces the handler's own return type with the annotation's, so the typed client would read `unknown`.
 
 `GET`/`DELETE` take no body schema (their input is path params + query, already typed). `HEAD` and `OPTIONS` are handled automatically from the verb set. A wrong method 405s, with an `Allow` header.
 

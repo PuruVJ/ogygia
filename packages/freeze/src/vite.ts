@@ -1,5 +1,5 @@
 /**
- * `freeze()` — frozen pages (render-on-write), for `ogygia({ plugins: [freeze()] })` in vite.config.
+ * `freeze()` — frozen pages (render-on-write), listed beside `ogygia()` in vite.config.
  * The SWITCH + serializable policy, nothing else: a page whose render observed no personalization
  * is stored whole and served as bytes until `freeze.invalidate(url)` /
  * `freeze.invalidateWhere({ prefix })` or the TTL backstop. Live adapters (a valkey client, CDN
@@ -25,6 +25,7 @@ export interface FreezeOptions {
 export function freeze(options: FreezeOptions = {}): OgygiaPlugin<FreezeServerOptions> {
 	return definePlugin<FreezeServerOptions>({
 		name: '@ogygia/freeze',
+		server: import.meta.resolve('./server.ts'),
 		options: {
 			ttl: Math.min(86400, Math.max(1, Math.floor(options.ttl ?? 86400))),
 			default: options.default ?? true

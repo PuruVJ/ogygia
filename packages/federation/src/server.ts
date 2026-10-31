@@ -1,5 +1,5 @@
 /**
- * The federation plugin's server realm (found by name: `@ogygia/federation/server`).
+ * The federation plugin's server realm (named by `federation()`).
  *
  * `setup`: hold the app (facts, shared hooks, signer) and install the deferred-hole signer.
  * `request`: a `federate()` in hooks.server.ts serves `/og/fragment/*`, `/og/thaw` and the

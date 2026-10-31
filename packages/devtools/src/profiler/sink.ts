@@ -15,7 +15,11 @@ export type SinkRow =
 export class SinkBuffer {
 	#rows: SinkRow[] = [];
 	#bytes = 0;
-	constructor(readonly max_bytes: number = 512 * 1024) {}
+	readonly max_bytes: number;
+
+	constructor(max_bytes: number = 512 * 1024) {
+		this.max_bytes = max_bytes;
+	}
 	push(row: SinkRow): void {
 		const line = JSON.stringify(row);
 		// a full buffer drops the OLDEST request rows first, never a window or a catch

@@ -14,7 +14,7 @@ import { ogygia } from 'ogygia/vite';
 import { freeze } from '@ogygia/freeze/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ plugins: [freeze({ ttl: 86400 })] }), sveltekit()]
+	plugins: [ogygia(), freeze({ ttl: 86400 }), sveltekit()]
 });
 ```
 

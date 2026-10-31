@@ -28,11 +28,11 @@ export interface ComponentPick {
 export type Load<P extends string = string> = (c: Ctx<Params<P>>) => unknown;
 /** TYPE helper for a pulled-out or inline action (mirrors {@link Load}). */
 export type Action<P extends string = string> = (c: Ctx<Params<P>>) => unknown;
-/** TYPE helper for a pulled-out endpoint handler. `In` (a schema output) types `c.input` — the
- *  validated JSON body of a `POST`/`PUT`/`PATCH`. Verb-agnostic (the method doesn't change the ctx).
- *  Supply the pattern for typed params — `Handler<'/p/[id]'>` → `c.params.id`. A BARE handler in an
- *  endpoint object is key-driven by `routes()` (its params come from the table key), so it needs no
- *  pattern; this explicit form is for the pulled-out case and the `GET<'/p'>(fn)` wrappers. */
+/** TYPE helper for an endpoint handler written OUTSIDE its table. `In` (a schema output) types
+ *  `c.input` — the validated JSON body of a `POST`/`PUT`/`PATCH`. Verb-agnostic (the method doesn't
+ *  change the ctx). Check against it with `satisfies`, which keeps the handler's own return type (the
+ *  payload `$infer` and `api()` read): `const getPost = ((c) => …) satisfies Handler<'/p/[id]'>`.
+ *  Inside a table nothing is needed: the key types the handler. */
 export type Handler<P extends string = string, In = undefined> = (
 	c: Ctx<Params<P>, Record<string, string>, In>
 ) => unknown;
@@ -244,6 +244,10 @@ export function page<S extends PageServer>(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type RouteDef = PageDef<any, any, any, any, any> | Endpoint;
 export type RouteTable = Record<string, RouteDef>;
+/** A table as `routes()` / `layout()` take it: any entries, checked by {@link KeyedTable} — which
+ *  is what types each entry by its key. (The constraint itself stays shapeless: a handler signature
+ *  here would be a second contextual type for every handler, and the two would cancel out.) */
+export type TableShape = Record<string, object>;
 
 /** A layout def, generic over its NAME and own LOAD (authored form) so `$infer` can key
  *  `App['(name)']` and merge its data into the chains that contain it. */
@@ -267,7 +271,10 @@ type WithLayout<D, Def extends LayoutDef> =
 
 export interface LayoutFn<Def extends LayoutDef> {
 	readonly __oglayout: Def;
-	<const T extends RouteTable>(table: T): { [K in keyof T]: WithLayout<T[K], Def> };
+	// `NoInfer`: spread into an outer table, this call's contextual type is that table's, still being
+	// inferred — letting it feed `T` hands the inner handlers a half-inferred `c`. `T` comes from the
+	// argument alone, where each key types its own entries.
+	<const T extends KeyedTable<T>>(table: T): NoInfer<{ [K in keyof T]: WithLayout<T[K], Def> }>;
 }
 
 /** `layout(name, Component, { load?, error?, freeze? })` — a named table→table wrapper. Applying it PREPENDS
@@ -302,29 +309,24 @@ export function layout<
 // ── endpoints ─────────────────────────────────────────────────────────────────────────────────────
 
 /** A verb entry produced by the `GET`/`POST`/… value wrappers — a handler plus (for body verbs) a
- *  body schema. Used as an endpoint object value in place of a bare handler when you want typed params
- *  (`GET<'/p'>(fn)`) or body validation (`POST(schema, fn)`). Symmetric with `load()`/`action()`.
- *  `Out`/`In` are PHANTOM types for `$infer` + the typed `api()` client: a PLAIN return is the
- *  endpoint's JSON payload (finalize() serializes it), a `Response` return erases to `unknown`;
- *  `In` is the body schema's output. */
-export interface VerbEntry<Out = unknown, In = undefined> {
+ *  body schema (`POST(schema, fn)`). Symmetric with `load()`/`action()`. `Out`/`In`/`P` are PHANTOM
+ *  types for `$infer` + the typed `api()` client: a PLAIN return is the endpoint's JSON payload
+ *  (finalize() serializes it), a `Response` return erases to `unknown`; `In` is the body schema's
+ *  output; `P` the params the handler was typed with (its table key's, inside a table). */
+export interface VerbEntry<Out = unknown, In = undefined, P = unknown> {
 	readonly __ogverb: true;
 	readonly handler: (c: Ctx) => unknown;
 	readonly bodySchema?: StandardSchemaV1;
 	/** phantom — never read at runtime */
-	readonly __types?: { out: Out; in: In };
+	readonly __types?: { out: Out; in: In; params: P };
 }
 
-/** A bare endpoint handler. `c.params` is an INDEXABLE record — `c.params.id` reads without restating
- *  the pattern (loose: `string | undefined`); reach for the `GET<'/p'>(fn)` wrapper when you want it
- *  STRICT. Concrete (not a conditional/intersection) so contextual typing reliably types `c`. */
-export type BareHandler = (
-	c: Ctx<Record<string, string | undefined>, Record<string, string>, undefined>
-) => unknown;
+/** Params a handler sees with no table key to type them (a wrapper outside a table): indexable. */
+type LooseParams = Record<string, string | undefined>;
 
-/** One verb slot of an endpoint object: a BARE handler (loose indexable params) OR a `GET(...)` /
- *  `POST(...)` wrapper (strict params via the pattern arg, or a body schema). */
-export type VerbSlot = BareHandler | VerbEntry;
+/** One verb slot of an endpoint object, as `RouteTable` accepts it: any handler, or a verb wrapper.
+ *  What a slot's `c` IS comes from its table key ({@link KeyedTable}). */
+export type VerbSlot = ((c: never) => unknown) | VerbEntry<unknown, unknown, unknown>;
 
 /** An endpoint route entry — the `+server.ts` shape, as an object of uppercase verb slots. Each verb
  *  is a bare handler or a verb wrapper. Distinguished from a page by having no `__ogkind`. */
@@ -338,6 +340,26 @@ export interface Endpoint {
 	PATCH?: VerbSlot;
 }
 
+/** The endpoint a table KEY types: every verb's `c.params` is that key's params, a bare handler's
+ *  and a wrapper's alike (the wrapper takes them through its contextual return type). */
+export type EndpointFor<K extends string> = {
+	[V in (typeof VERBS)[number]]?: Handler<K> | VerbEntry<unknown, unknown, Params<K>>;
+};
+
+/** What `routes()` and `layout()` check a table against: each endpoint entry typed by its own key, so
+ *  `'/posts/[id]': { GET: (c) => c.params.id }` reads a STRICT `id` and keeps its return type — no
+ *  pattern restated. A page is the other member (its params come from its `params` schema).
+ *
+ *  It is the table's own CONSTRAINT (`<const T extends KeyedTable<T>>(table: T)`), never intersected
+ *  with the table: the constraint depends on the keys alone, so it is a complete contextual type even
+ *  while the entries are being inferred — a wrapper (`GET(fn)`, `when(gate, entry)`, a spread
+ *  `layout()`) reads its key's params through it. No condition on an ENTRY here for the same reason:
+ *  a type that waits on the entry gives its handlers no contextual type at all. */
+export type KeyedTable<T> = {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	[K in keyof T]: EndpointFor<K & string> | PageDef<any, any, any, any, any>;
+};
+
 const VERBS = ['GET', 'DELETE', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH'] as const;
 
 // ── verb value wrappers (exported; used INSIDE the endpoint object) ────────────────────────────────
@@ -347,53 +369,45 @@ const verb_entry = (handler: (c: Ctx) => unknown, bodySchema?: StandardSchemaV1)
 	bodySchema
 });
 
-/** `GET(handler)` / `GET<'/p'>(handler)` — a verb wrapper for a GET slot: types `c.params` from the
- *  pattern arg. No body (GET has none), so no schema. Use as `{ GET: GET<'/p'>((c) => …) }`. */
-export function GET<P extends string = string, R = unknown>(
-	handler: (c: Ctx<Params<P>>) => R
-): VerbEntry<Awaited<R>> {
-	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>>;
+/** `GET(handler)` — a verb wrapper for a GET slot (no body, so no schema). Inside a table its
+ *  `c.params` are the key's; a bare `{ GET: (c) => … }` is the same thing — the wrapper exists for
+ *  symmetry with the body verbs. */
+export function GET<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P> {
+	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>, undefined, P>;
 }
 /** `DELETE(handler)` — a verb wrapper for a DELETE slot (no body schema). */
-export function DELETE<P extends string = string, R = unknown>(
-	handler: (c: Ctx<Params<P>>) => R
-): VerbEntry<Awaited<R>> {
-	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>>;
+export function DELETE<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P> {
+	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>, undefined, P>;
 }
 /** `POST(handler)` / `POST(bodySchema, handler)` — a POST slot. The schema validates the JSON body
  *  into `c.input` (400 on failure), like a `command` RF's typed argument. */
-export function POST<P extends string = string, R = unknown>(
-	handler: (c: Ctx<Params<P>>) => R
-): VerbEntry<Awaited<R>>;
-export function POST<P extends string, Sch extends StandardSchemaV1, R = unknown>(
+export function POST<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P>;
+export function POST<Sch extends StandardSchemaV1, P = LooseParams, R = unknown>(
 	schema: Sch,
-	handler: (c: Ctx<Params<P>, Record<string, string>, InferOutput<Sch>>) => R
-): VerbEntry<Awaited<R>, InferOutput<Sch>>;
+	handler: (c: Ctx<P, Record<string, string>, InferOutput<Sch>>) => R
+): VerbEntry<Awaited<R>, InferOutput<Sch>, P>;
 export function POST(a: unknown, b?: unknown): VerbEntry {
-	return b === undefined
-		? verb_entry(a as (c: Ctx) => unknown)
-		: verb_entry(b as (c: Ctx) => unknown, a as StandardSchemaV1);
+	return body_verb(a, b);
 }
 /** `PUT(handler)` / `PUT(bodySchema, handler)`. */
-export function PUT<P extends string = string, R = unknown>(
-	handler: (c: Ctx<Params<P>>) => R
-): VerbEntry<Awaited<R>>;
-export function PUT<P extends string, Sch extends StandardSchemaV1, R = unknown>(
+export function PUT<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P>;
+export function PUT<Sch extends StandardSchemaV1, P = LooseParams, R = unknown>(
 	schema: Sch,
-	handler: (c: Ctx<Params<P>, Record<string, string>, InferOutput<Sch>>) => R
-): VerbEntry<Awaited<R>, InferOutput<Sch>>;
+	handler: (c: Ctx<P, Record<string, string>, InferOutput<Sch>>) => R
+): VerbEntry<Awaited<R>, InferOutput<Sch>, P>;
 export function PUT(a: unknown, b?: unknown): VerbEntry {
-	return b === undefined
-		? verb_entry(a as (c: Ctx) => unknown)
-		: verb_entry(b as (c: Ctx) => unknown, a as StandardSchemaV1);
+	return body_verb(a, b);
 }
 /** `PATCH(handler)` / `PATCH(bodySchema, handler)`. */
-export function PATCH<P extends string = string>(handler: Handler<P>): VerbEntry;
-export function PATCH<P extends string, Sch extends StandardSchemaV1>(
+export function PATCH<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P>;
+export function PATCH<Sch extends StandardSchemaV1, P = LooseParams, R = unknown>(
 	schema: Sch,
-	handler: Handler<P, InferOutput<Sch>>
-): VerbEntry;
+	handler: (c: Ctx<P, Record<string, string>, InferOutput<Sch>>) => R
+): VerbEntry<Awaited<R>, InferOutput<Sch>, P>;
 export function PATCH(a: unknown, b?: unknown): VerbEntry {
+	return body_verb(a, b);
+}
+function body_verb(a: unknown, b: unknown): VerbEntry {
 	return b === undefined
 		? verb_entry(a as (c: Ctx) => unknown)
 		: verb_entry(b as (c: Ctx) => unknown, a as StandardSchemaV1);

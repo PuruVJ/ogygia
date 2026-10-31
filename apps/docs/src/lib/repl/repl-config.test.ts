@@ -49,7 +49,17 @@ export default { plugins: [ ogygia({
 	const c = parse_config_markdown(`ogygia({ content: { markdown: { code: { transformers: [diff_markers(), myCustom()] } } } })`);
 	ok('custom transformer dropped, diff kept', c && c.code?.transformers?.length === 1);
 }
-// the plugin shape: `ogygia({ plugins: [content({ markdown })] })`
+// the Vite plugin shape: `content({ markdown })` listed beside `ogygia()`
+{
+	const c = parse_config_markdown(`import { content } from '@ogygia/content/vite';
+export default { plugins: [ ogygia({ router: false }), flags(), content({ markdown: { tabs: false, themes: { light: 'nord' } } }), sveltekit() ] };`);
+	ok('beside ogygia(): content({ markdown }) read', c && c.tabs === false && c.themes?.light === 'nord');
+	const bare = parse_config_markdown(`export default { plugins: [ogygia(), content({ markdown: { tabs: true } }), sveltekit()] };`);
+	ok('beside a bare ogygia(): read', bare && bare.tabs === true);
+	const n = parse_config(`plugins: [ogygia(), content({ markdown: { flurb: true } })]`).notes;
+	ok('beside ogygia(): unknown markdown key → warn', n.some((x) => x.level === 'warn' && /markdown\.flurb.*ignored/.test(x.message)));
+}
+// the older nested shape: `ogygia({ plugins: [content({ markdown })] })`
 {
 	const c = parse_config_markdown(`import { content } from '@ogygia/content/vite';
 export default { plugins: [ ogygia({ router: false, plugins: [flags(), content({ markdown: { tabs: false, themes: { light: 'nord' } } })] }), sveltekit() ] };`);

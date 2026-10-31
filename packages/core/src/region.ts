@@ -156,21 +156,8 @@ function isBinding(value: unknown): value is RegionBinding {
 	);
 }
 
-/**
- * Make a held region with type-checked props.
- *
- * - A plain component import → an **inline** region (renders in this pass; can't cross the wire).
- * - A component imported `with { region: 'raw' }` → a **dual** region: inline where it's made,
- *   a signed ticket where it travels. Minting the marked form is server-only (the signer lives on
- *   the SSR leg) — call it in a load / remote / render context.
- *
- * **A dual region is awaitable.** `await region(Card, props)` renders the component to HTML on
- * the server and bakes it into the ticket, so the client swaps it in with no extra request. In an
- * async generator (`query.live`) or an async remote, `yield region(…)` / `return region(…)` is
- * awaited by the language, so the HTML travels automatically — LiveView over the channel you already
- * have. A held region you *don't* await renders inline where it lands (first paint, same SSR pass).
- */
-export function region<P extends Record<string, unknown>>(
+/** `region()` itself; the export below adds `region.snippet`. */
+function make_region<P extends Record<string, unknown>>(
 	component: Component<P>,
 	props: P,
 	opts?: RegionSchedule<P>,
@@ -345,9 +332,23 @@ export function prebaked_region(
 // `region.snippet()` — the SNIPPET shape of a region, sibling of `region()` for components. Freeze a
 // parameterless snippet to static server HTML, or build the raw `{ render, setup?, captures? }` form
 // (mirrors Svelte's `createRawSnippet`). Pure runtime, passable, renderable with plain `{@render}`.
-export namespace region {
-	export const snippet: typeof region_snippet = region_snippet;
-}
+/**
+ * Make a held region with type-checked props.
+ *
+ * - A plain component import → an **inline** region (renders in this pass; can't cross the wire).
+ * - A component imported `with { region: 'raw' }` → a **dual** region: inline where it's made,
+ *   a signed ticket where it travels. Minting the marked form is server-only (the signer lives on
+ *   the SSR leg) — call it in a load / remote / render context.
+ *
+ * **A dual region is awaitable.** `await region(Card, props)` renders the component to HTML on
+ * the server and bakes it into the ticket, so the client swaps it in with no extra request. In an
+ * async generator (`query.live`) or an async remote, `yield region(…)` / `return region(…)` is
+ * awaited by the language, so the HTML travels automatically — LiveView over the channel you already
+ * have. A held region you *don't* await renders inline where it lands (first paint, same SSR pass).
+ */
+export const region: typeof make_region & { snippet: typeof region_snippet } = Object.assign(make_region, {
+	snippet: region_snippet
+});
 
 /**
  * A pure-HTML region — what `import.meta.og.code()` / `.md()` inline. The html is baked at build

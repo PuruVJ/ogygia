@@ -10,8 +10,10 @@ import { decide, flag } from '../src/index.ts';
 const { app, ctx } = startPlugin(server, { name: '@ogygia/flags' });
 
 describe('flags()', () => {
-	it('is named by its package, so its server realm is found by name', () => {
-		expect(flags()).toEqual({ name: '@ogygia/flags' });
+	it('is named by its package and names its server realm, the module beside it', () => {
+		const plugin = flags();
+		expect(plugin.name).toBe('@ogygia/flags');
+		expect((plugin as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.plugin')]).toEqual({ name: '@ogygia/flags', server: new URL('../src/server.ts', import.meta.url).href });
 	});
 });
 

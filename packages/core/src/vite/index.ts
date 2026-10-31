@@ -35,10 +35,18 @@ export type { ImportKeys } from '../compiler/region/transform.ts';
 export { debarrel } from '../compiler/debarrel/plugin.ts';
 // the BUILD side of a plugin (design: internal/notes/packages.md, plugin API v2)
 export { definePlugin } from './plugin-api.ts';
-export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupRegions } from './plugin-api.ts';
+export type {
+	OgygiaPlugin,
+	PluginDefinition,
+	BuildContext,
+	MacroHandler,
+	MacroContext,
+	MarkupSource,
+	MarkupRegions
+} from './plugin-api.ts';
 export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.ts';
 export type { OgygiaPreset, OgygiaRateLimit, OgygiaOptions } from './options.ts';
-import { check_plugins, plugin_vite_plugins, resolve_plugins, type ResolvedPlugins } from './plugin-api.ts';
+import { find_plugins, resolve_plugins, type PluginDefinition, type ResolvedPlugins } from './plugin-api.ts';
 import type { ServerRealm } from '../compiler/link/caps.ts';
 import {
 	assert_no_legacy_options,
@@ -104,7 +112,8 @@ import {
 	V_ROUTE_CSR,
 	V_ROUTE_OPTIONS,
 	RESOLVED,
-	V_SERVER_MANIFEST
+	V_SERVER_MANIFEST,
+	V_SERVER_ISLANDS
 } from '../compiler/ids.ts';
 
 // Kit's generated CLIENT app entry — Kit 2 dev serves `generated/client/app.js` and the build inputs
@@ -194,9 +203,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const visibleMargin = options.visible?.margin;
 	const presets = options.presets || {};
 	validate_region_presets(presets);
-	// `ogygia({ plugins })` — shape-checked now; their realms are found and their `build` hooks run
-	// once the root and mode are known (configResolved). Standalone has no handle to wire into.
-	const app_plugins = standalone ? [] : check_plugins(options.plugins);
+	// The app's ogygia plugins: Vite plugins listed beside this one, found in the `config` hook (where
+	// the list, the root and the mode are known). Standalone has no handle to wire them into.
+	let app_plugins: PluginDefinition[] = [];
 	let server_plugins: ServerRealm[] = [];
 	let client_plugins: string[] = [];
 	let route_options: string[] = [];
@@ -401,9 +410,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					})
 				]
 			: []),
-		// The plugins' own Vite plugins (`vite` on a plugin: content's dev reload and pre-transforms),
-		// ahead of ogygia's own, so `ogygia()` stays the only plugin an app adds.
-		...plugin_vite_plugins(app_plugins),
 		{
 			name: 'ogygia',
 			enforce: 'pre',
@@ -419,10 +425,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// plugin (Kit 3 takes its config in vite.config only), else the svelte.config.js file.
 					await load_kit_dirs(path.resolve(userConfig.root ?? '.'), userConfig.plugins);
 
-					// PLUGINS: their realms, found by name, and their `build` hooks — here, where the root and
+					// PLUGINS: the realms they name, and their `build` hooks — here, where the root and
 					// the mode exist and before the defines below, which read what they asked for. (`b.markup()`
 					// hands back the island transform of the instance Vite configures: Kit evaluates the Vite
 					// config more than once.)
+					app_plugins = standalone ? [] : await find_plugins(userConfig.plugins);
 					const resolved = resolve_plugins(
 						app_plugins,
 						path.resolve(userConfig.root ?? '.'),
@@ -1274,6 +1281,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// manifest once more so the NEXT endpoint request sees the ids (driver: server_manifest_stale).
 				if (is_dev && vite_server && compiler.server_manifest_stale()) {
 					invalidate_module_id(vite_server, RESOLVED(V_SERVER_MANIFEST));
+					invalidate_module_id(vite_server, RESOLVED(V_SERVER_ISLANDS));
 				}
 				// DEV: an island this transform registered (a file added while the server runs) pulled
 				// modules into the island world that the server may already hold transformed for a

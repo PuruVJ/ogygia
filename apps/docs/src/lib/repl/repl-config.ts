@@ -1,6 +1,7 @@
 /**
- * Parse the `ogygia({ plugins: [content({ markdown })] })` options out of a workspace `vite.config.ts`
- * (the older `ogygia({ content: { markdown } })` spelling is read too), so a REPL user configures the
+ * Parse the `content({ markdown })` plugin's options (listed beside `ogygia()`) out of a workspace
+ * `vite.config.ts` (the older `ogygia({ plugins: [content(…)] })` and `ogygia({ content: { markdown } })`
+ * spellings are read too), so a REPL user configures the
  * markdown preview exactly as a real ogygia project does. Only the SAFE, in-browser
  * subset is applied (containers/tabs/heading-anchors/themes-by-name/diff+inline transformers); anything
  * that needs imports (a theme object, a custom transformer, loaders/router/regions) degrades to nothing
@@ -249,7 +250,12 @@ function diagnose(cfg: any): ConfigNote[] {
 /** Parse a `vite.config.*` source → the safe markdown config PLUS deliberate notes on anything the
  *  preview couldn't apply. `markdown` is null when there's no ogygia() call or it's unparseable. */
 export function parse_config(configSrc: string): { markdown: ReplMarkdownConfig | null; notes: ConfigNote[] } {
-	const objSrc = extract_call_object(configSrc, 'ogygia');
+	// `content({ … })` listed beside `ogygia()` reads as the older `ogygia({ content: { … } })` shape;
+	// an `ogygia({ … })` call that carries the content plugin itself is read as it stands
+	const ogygiaSrc = extract_call_object(configSrc, 'ogygia');
+	const contentSrc = extract_call_object(configSrc, 'content');
+	const nested = ogygiaSrc !== null && contentSrc !== null && ogygiaSrc.includes(contentSrc);
+	const objSrc = contentSrc !== null && !nested ? `{ content: ${contentSrc} }` : ogygiaSrc;
 	if (!objSrc) return { markdown: null, notes: [] };
 	const stub = (): undefined => undefined;
 	const helpers: Record<string, unknown> = {

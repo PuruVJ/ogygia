@@ -22,12 +22,13 @@ import { fill } from './match.ts';
 import type { HrefParams, Params } from './view.ts';
 
 export class ApiError extends Error {
-	constructor(
-		readonly status: number,
-		readonly body: unknown,
-		message?: string
-	) {
+	readonly status: number;
+	readonly body: unknown;
+
+	constructor(status: number, body: unknown, message?: string) {
 		super(message ?? `endpoint answered ${status}`);
+		this.status = status;
+		this.body = body;
 	}
 }
 

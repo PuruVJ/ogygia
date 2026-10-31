@@ -5,7 +5,6 @@
  */
 import type { ImportKeys } from '../compiler/region/transform.ts';
 import type { DebarrelOptions } from '../compiler/debarrel/options.ts';
-import type { OgygiaPlugin } from './plugin-api.ts';
 
 // ── regexes
 
@@ -76,7 +75,7 @@ export interface OgygiaRateLimit {
  * Options for the {@link ogygia} Vite plugin. The root is the region system itself — its defaults
  * (`visible`), its named presets (referenced from a use site by a LITERAL `preset: 'name'`:
  * `import X from '…' with { preset: 'name' }`), its holes' capability lifetimes — beside the client
- * router and the app's plugins (each feature package: `plugins: [...]`).
+ * router. Feature packages are Vite plugins listed beside it (`plugins: [ogygia(), flags(), sveltekit()]`).
  *
  * @example
  * ```ts
@@ -172,13 +171,6 @@ export interface OgygiaOptions {
 	sessionCookie?: false | string;
 
 	/**
-	 * The app's plugins, in order (`plugins: [flags(), freeze()]`). Named here once: the build finds
-	 * each plugin's realms by its name and wires them in (its server half into `ogygia.handle()`), so
-	 * hooks.server.ts never mentions it.
-	 */
-	plugins?: OgygiaPlugin[];
-
-	/**
 	 * Barrel imports become leaf imports at transform time — `import { Button } from '$lib'` (an
 	 * `index.ts` that re-exports forty files) becomes `import Button from '…/Button.svelte'`, so the
 	 * module graph (dev) and the chunk graph (build) hold only the leaves a file uses.
@@ -211,14 +203,16 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 	regionTtl: '`regionTtl` is `ttl` now — write `ogygia({ ttl: … })`.',
 	preload:
 		'`preload` is gone — there is nothing to choose any more. The page carries each island’s chunk list as data, and the runtime preloads an island’s whole graph when it wakes (after the page has painted), so no island code moves before its wake and none waits on a waterfall after it. Remove the key.',
+	plugins:
+		'`plugins` is gone — ogygia plugins are Vite plugins: list them beside `ogygia()` in vite.config, `plugins: [ogygia(), flags(), sveltekit()]`.',
 	freeze:
-		'`freeze` is a plugin now — install `@ogygia/freeze` and write `plugins: [freeze({ ttl, default })]` (from `@ogygia/freeze/vite`).',
+		'`freeze` is a plugin now — install `@ogygia/freeze` and list `freeze({ ttl, default })` (from `@ogygia/freeze/vite`) beside `ogygia()` in vite.config `plugins`.',
 	content:
-		'`content` is a plugin now — install `@ogygia/content` and write `plugins: [content({ markdown, presets })]` (from `@ogygia/content/vite`); the svelte config takes `preprocess()` / `extensions()` from there too.',
+		'`content` is a plugin now — install `@ogygia/content` and list `content({ markdown, presets })` (from `@ogygia/content/vite`) beside `ogygia()` in vite.config `plugins`; the svelte config takes `preprocess()` / `extensions()` from there too.',
 	devtools:
-		'`devtools` is a plugin now — install `@ogygia/devtools` and write `plugins: [devtools()]` (from `@ogygia/devtools/vite`); list it only where you want it, e.g. `...(mode !== \'production\' ? [devtools()] : [])`.',
+		'`devtools` is a plugin now — install `@ogygia/devtools` and list `devtools()` (from `@ogygia/devtools/vite`) beside `ogygia()` in vite.config `plugins`; only where you want it, e.g. `...(mode !== \'production\' ? [devtools()] : [])`.',
 	profiler:
-		'`profiler` is part of the devtools plugin now — install `@ogygia/devtools` and write `plugins: [devtools({ profiler: { … } })]` (from `@ogygia/devtools/vite`).'
+		'`profiler` is part of the devtools plugin now — install `@ogygia/devtools` and list `devtools({ profiler: { … } })` (from `@ogygia/devtools/vite`) beside `ogygia()` in vite.config `plugins`.'
 };
 
 /** The rename map: a legacy key errors with its new spelling, never silently no-ops. */
