@@ -5,7 +5,7 @@
 	import * as svelteRuntime from 'svelte';
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
-	import { add_sink } from 'ogygia/devtools';
+	import { add_sink } from 'ogygia/events';
 	import CodeMirror from './CodeMirror.svelte';
 	import FormattedCode from './FormattedCode.svelte';
 	import FileTree from './observatory/FileTree.svelte';

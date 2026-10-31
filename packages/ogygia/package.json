@@ -101,10 +101,6 @@
 			"types": "./dist/plugin/client.d.ts",
 			"default": "./src/plugin/client.ts"
 		},
-		"./devtools": {
-			"types": "./dist/devtools.d.ts",
-			"default": "./src/devtools.ts"
-		},
 		"./events": {
 			"types": "./dist/events.d.ts",
 			"default": "./src/events.ts"
@@ -246,10 +242,6 @@
 			"./plugin/client": {
 				"types": "./dist/plugin/client.d.ts",
 				"default": "./dist/plugin/client.js"
-			},
-			"./devtools": {
-				"types": "./dist/devtools.d.ts",
-				"default": "./dist/devtools.js"
 			},
 			"./events": {
 				"types": "./dist/events.d.ts",

@@ -364,7 +364,7 @@ An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), 
 
 ## `ogygia/events` · `ogygia/insights`
 
-`ogygia/events` is the event layer: the typed stream of what the framework did (island wakes, server renders, navigations), plus the bus and sink helpers (`add_sink`, `snapshot`, `clear`). It is compiled in only when a plugin asks for it (the devtools plugin does). `ogygia/devtools` is the same module under its old name. `ogygia/insights` is the analysis engine the dock, the profiler and the test helpers share.
+`ogygia/events` is the event layer: the typed stream of what the framework did (island wakes, server renders, navigations), plus the bus and sink helpers (`add_sink`, `snapshot`, `clear`). It is compiled in only when a plugin asks for it (the devtools plugin does). `ogygia/insights` is the analysis engine the dock, the profiler and the test helpers share.
 
 ## Plugin packages
 

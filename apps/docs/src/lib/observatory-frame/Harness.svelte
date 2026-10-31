@@ -8,7 +8,7 @@
 	 * + nav-link clicks are relayed back to the parent. It's a headless boot island (renders nothing).
 	 */
 	import { mount, unmount } from 'svelte';
-	import { add_sink } from 'ogygia/devtools';
+	import { add_sink } from 'ogygia/events';
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	type Any = any;
