@@ -82,12 +82,12 @@
 		return out;
 	});
 	const ledger = $derived.by(() => {
-		tick;
+		void tick;
 		return island_ledger(el?.getAttribute('entry'));
 	});
 
 	const model = $derived.by(() => {
-		tick;
+		void tick;
 		const info = region_info(el);
 		const t = region_transitive(info.entry);
 		const chunk = info.entry ? chunk_bytes(info.entry) : null;

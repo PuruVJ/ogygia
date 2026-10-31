@@ -26,8 +26,8 @@
 	});
 	const s = sortable(() => filtered, 'props_bytes');
 	let open = $state<string | null>(null);
-	const max_props = Math.max(...rows.map((r) => r.props_bytes), 1);
-	const max_js = Math.max(...rows.map((r) => r.js_bytes ?? 0), 1);
+	const max_props = $derived(Math.max(...rows.map((r) => r.props_bytes), 1));
+	const max_js = $derived(Math.max(...rows.map((r) => r.js_bytes ?? 0), 1));
 	const cols = $derived(9 + (hasJs ? 1 : 0) + (hasClient ? 1 : 0));
 	const WAKE_COLOR: Record<string, string> = {
 		load: '#e8734a',

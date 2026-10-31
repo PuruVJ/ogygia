@@ -46,6 +46,9 @@ async function until_up(app: App, path: string, ms = 120_000) {
 
 export const test = base.extend<Record<never, never>, { mfe: MfeServers }>({
 	mfe: [
+		// Playwright reads the destructured first argument to decide which fixtures to inject;
+		// the mfe specs need this worker fixture to take none, so the empty pattern must stay.
+		// oxlint-disable-next-line no-empty-pattern
 		async ({}, use) => {
 			const shell_keys = pair();
 			const cms_keys = pair();

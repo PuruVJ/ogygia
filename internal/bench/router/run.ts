@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
-import type { Browser, BrowserContext, Page, CDPSession } from 'playwright';
+import type { Browser, Page, CDPSession } from 'playwright';
 
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
 const PORT = Number(process.env.PORT || 3061);
@@ -69,6 +69,22 @@ let pageErrors = 0;
 let vtSkips = 0;
 
 // ── in-page instrumentation, installed on every document ────────────────────
+/** What INIT installs as `window.__ob`, read back inside `page.evaluate`. */
+type Probe = {
+	hyd: number[];
+	live: number[];
+	server: number[];
+	longtasks: Array<{ start: number; dur: number }>;
+	swapWait: () => Promise<number>;
+	/** wake:interaction: resolves when the replayed click has applied (set before it is read). */
+	ixDone: Promise<number>;
+	/** wake:interaction: when the sleeping island was clicked (set before it is read). */
+	ixT0: number;
+};
+/** The page window with the probe, plus the scroll start the wake:visible section stamps
+ *  before it reads it. */
+type ProbeWindow = Window & { __ob: Probe; __vt0: number };
+
 const INIT = `(() => {
 	const B = { hyd: [], live: [], server: [], longtasks: [] };
 	window.__ob = B;
@@ -180,7 +196,7 @@ async function freshPage(opts: { reducedMotion?: 'reduce' | 'no-preference' } = 
 /** Click `sel` in-page and time click → body swap, then hydration quiescence. */
 async function measureNav(page: Page, sel: string) {
 	const r = await page.evaluate(async (s) => {
-		const B = (window as any).__ob;
+		const B = (window as unknown as ProbeWindow).__ob;
 		B.hyd = [];
 		B.live = [];
 		B.server = [];
@@ -196,7 +212,7 @@ async function measureNav(page: Page, sel: string) {
 	await page
 		.waitForFunction(
 			() => {
-				const B = (window as any).__ob;
+				const B = (window as unknown as ProbeWindow).__ob;
 				return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
 			},
 			undefined,
@@ -204,7 +220,7 @@ async function measureNav(page: Page, sel: string) {
 		)
 		.catch(() => {});
 	const post = await page.evaluate(() => {
-		const B = (window as any).__ob;
+		const B = (window as unknown as ProbeWindow).__ob;
 		return {
 			hyd: B.hyd as number[],
 			longtasks: B.longtasks as Array<{ start: number; dur: number }>
@@ -246,7 +262,7 @@ banner('1/13  Boot — cold load of /');
 		await page
 			.waitForFunction(
 				() => {
-					const B = (window as any).__ob;
+					const B = (window as unknown as ProbeWindow).__ob;
 					return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
 				},
 				undefined,
@@ -257,7 +273,7 @@ banner('1/13  Boot — cold load of /');
 			const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
 			const res = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
 			const js = res.filter((e) => /\.js(\?|$)/.test(e.name));
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			return {
 				ttfb: nav.responseStart - nav.requestStart,
 				dcl: nav.domContentLoadedEventEnd,
@@ -509,7 +525,7 @@ banner('7/13  Back/forward — popstate → swap');
 		await measureNav(page, '[data-prefetch-hover]'); // now on /about
 		await sleep(100);
 		const b = await page.evaluate(async () => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			const p = B.swapWait();
 			const t0 = performance.now();
 			history.back();
@@ -518,7 +534,7 @@ banner('7/13  Back/forward — popstate → swap');
 		back.push(b);
 		await sleep(100);
 		const f = await page.evaluate(async () => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			const p = B.swapWait();
 			const t0 = performance.now();
 			history.forward();
@@ -550,7 +566,7 @@ banner('8/13  wake:visible — scroll into view → hydrated');
 		await page
 			.waitForFunction(
 				() => {
-					const B = (window as any).__ob;
+					const B = (window as unknown as ProbeWindow).__ob;
 					return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
 				},
 				undefined,
@@ -558,16 +574,18 @@ banner('8/13  wake:visible — scroll into view → hydrated');
 			)
 			.catch(() => {});
 		await page.evaluate(() => {
-			(window as any).__ob.hyd = [];
-			(window as any).__vt0 = performance.now();
+			(window as unknown as ProbeWindow).__ob.hyd = [];
+			(window as unknown as ProbeWindow).__vt0 = performance.now();
 			window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' as ScrollBehavior });
 		});
 		await page
-			.waitForFunction(() => (window as any).__ob.hyd.length >= 2, undefined, { timeout: 5000 })
+			.waitForFunction(() => (window as unknown as ProbeWindow).__ob.hyd.length >= 2, undefined, {
+				timeout: 5000
+			})
 			.catch(() => {});
 		const r = await page.evaluate(() => {
-			const B = (window as any).__ob;
-			const t0 = (window as any).__vt0;
+			const B = (window as unknown as ProbeWindow).__ob;
+			const t0 = (window as unknown as ProbeWindow).__vt0;
 			return {
 				first: B.hyd.length ? B.hyd[0] - t0 : null,
 				all: B.hyd.length ? B.hyd[B.hyd.length - 1] - t0 : null,
@@ -599,11 +617,13 @@ banner('9/13  wake:interaction — click → hydrate → replay applied');
 		const { context, page } = await freshPage();
 		await page.goto(BASE + '/interaction', { waitUntil: 'load' });
 		await page
-			.waitForFunction(() => (window as any).__ob.hyd.length >= 1, undefined, { timeout: 5000 })
+			.waitForFunction(() => (window as unknown as ProbeWindow).__ob.hyd.length >= 1, undefined, {
+				timeout: 5000
+			})
 			.catch(() => {});
 		await sleep(150);
 		await page.evaluate(() => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			B.hyd = [];
 			const region =
 				document.querySelector('[data-interaction-counter]')!.closest('ogygia-region') ||
@@ -631,7 +651,7 @@ banner('9/13  wake:interaction — click → hydrate → replay applied');
 			(document.querySelector('[data-i-btn]') as HTMLElement).click();
 		});
 		const r = await page.evaluate(async () => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			const done = await B.ixDone;
 			return { t0: B.ixT0, done, hyd: B.hyd[0] ?? null };
 		});
@@ -671,7 +691,7 @@ banner('10/13  Weave — SPA nav to 4 server islands (1s/1.5s/2s/3s delays)');
 		await page.goto(BASE + '/', { waitUntil: 'load' });
 		await sleep(150);
 		const r = await page.evaluate(async () => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			const swapP = B.swapWait();
 			const t0 = performance.now();
 			(document.querySelector('[data-weave-link]') as HTMLElement).click();
@@ -782,7 +802,7 @@ banner('12/13  Throughput — 40 alternating navs / ↔ /about');
 	for (let i = 0; i < 40; i++) {
 		const target = i % 2 === 0 ? '/about' : '/';
 		const r = await page.evaluate(async (href) => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			const p = B.swapWait();
 			const t = performance.now();
 			(document.querySelector(`nav a[href="${href}"]`) as HTMLElement).click();
@@ -831,7 +851,7 @@ banner('13/13  Memory — 60 navs, GC-to-GC growth');
 		for (let i = 0; i < 30; i++) {
 			await page.evaluate(
 				async (href) => {
-					const B = (window as any).__ob;
+					const B = (window as unknown as ProbeWindow).__ob;
 					const p = B.swapWait();
 					(document.querySelector(`nav a[href="${href}"]`) as HTMLElement).click();
 					await p;
@@ -990,7 +1010,7 @@ banner('Bonus 3  Slow-4G — wake:visible scroll → hydrated (idle module warmi
 		await page.goto(BASE + '/', { waitUntil: 'load' }).catch(() => {});
 		await sleep(3500); // idle warm runs over the slow link while the user reads above the fold
 		const r = await page.evaluate(async () => {
-			const B = (window as any).__ob;
+			const B = (window as unknown as ProbeWindow).__ob;
 			B.hyd = [];
 			const t0 = performance.now();
 			window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' as ScrollBehavior });

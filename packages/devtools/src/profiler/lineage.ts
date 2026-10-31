@@ -220,7 +220,10 @@ function scan(
 			src.charCodeAt(j - 2) === 46 &&
 			src.charCodeAt(j - 3) === 46
 		) {
-			if (bare_ok) ((whole = true), mark(j));
+			if (bare_ok) {
+				whole = true;
+				mark(j);
+			}
 			continue;
 		}
 		// whose: bare (a data prop name), or `page.data` / `$page.data`
@@ -245,7 +248,10 @@ function scan(
 			if (quote === 39 || quote === 34 || quote === 96) {
 				const close = src.indexOf(src[q], q + 1);
 				if (close > q) keys.add(src.slice(q + 1, close));
-			} else ((whole = true), mark(j));
+			} else {
+				whole = true;
+				mark(j);
+			}
 			continue;
 		}
 		// `= data` after a destructuring pattern: walk back over `=` and spaces to the `}`

@@ -596,7 +596,7 @@ export function beacon_hole_answered(
 		below_fold: rect.top + scrollY > innerHeight,
 		// which copy (copies of one component share the id): its server requests carry the same key
 		p: hole_copy_of(el.getAttribute('endpoint') ?? ''),
-		...(times ?? {})
+		...times
 	});
 	if (early_visit_done) resend_soon();
 }
@@ -1384,9 +1384,15 @@ function dom_shape(): DomShape | null {
 		let el: Element | null = root;
 		let d = 1;
 		while (el) {
-			if (d > depth) ((depth = d), (deepest = el));
+			if (d > depth) {
+				depth = d;
+				deepest = el;
+			}
 			const kids = el.childElementCount;
-			if (kids > widest_n) ((widest_n = kids), (widest = el));
+			if (kids > widest_n) {
+				widest_n = kids;
+				widest = el;
+			}
 			const first: Element | null = el.firstElementChild;
 			if (first) {
 				el = first;
@@ -2874,7 +2880,7 @@ export function beacon_page(): BeaconPage | null {
 	if (o) return o.beacon_page();
 	if (!collecting()) return null;
 	return {
-		vitals: { ...(vitals ?? {}) },
+		vitals: { ...vitals },
 		visit: build_visit(),
 		islands: visit_islands.slice(),
 		firsts: visit_firsts.slice(),

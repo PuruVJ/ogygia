@@ -16,7 +16,7 @@
 	let { tick = 0 } = $props();
 
 	const model = $derived.by(() => {
-		tick; // refresh with the panel tick
+		void tick; // refresh with the panel tick
 		const ev = snapshot();
 		const renders = ev.filter((e) => e.name === 'server.region.rendered');
 		const seeds = ev.filter((e) => e.name === 'server.seed.injected');

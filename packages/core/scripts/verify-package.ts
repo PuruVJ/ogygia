@@ -18,11 +18,21 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/** A subpath's condition map (`types` / `svelte` / `default` → file); every export here is flat. */
+type Conditions = Record<string, string>;
+type Exports = Record<string, string | Conditions>;
+type Manifest = {
+	name: string;
+	exports: Exports;
+	publishConfig?: { exports?: Exports };
+	dependencies?: Record<string, string>;
+};
+
 const pkg_root = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, '..'));
-const fail = [];
-const note = (m) => process.stdout.write(m + '\n');
+const fail: string[] = [];
+const note = (m: string) => process.stdout.write(m + '\n');
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ogygia-verify-'));
-const tarballs = [];
+const tarballs: string[] = [];
 
 /**
  * Pack one package, extract it, apply `publishConfig` and give it a node_modules: a real directory
@@ -30,21 +40,21 @@ const tarballs = [];
  * only Kit's virtual `$app`/`$env` stay absent), except its workspace dependencies, which are packed
  * and placed the same way (`ogygia` → `@ogygia/core`).
  */
-function unpack(dir, into) {
+function unpack(dir: string, into: string): Manifest {
 	note(`▸ npm pack ${path.relative(process.cwd(), dir) || '.'} …`);
-	const tarball = execFileSync('npm', ['pack', '--silent', '--pack-destination', os.tmpdir()], {
+	const packed = execFileSync('npm', ['pack', '--silent', '--pack-destination', os.tmpdir()], {
 		cwd: dir
 	})
 		.toString()
 		.trim()
-		.split('\n')
-		.pop();
+		.split('\n');
+	const tarball = packed[packed.length - 1];
 	const tarpath = path.join(os.tmpdir(), tarball);
 	tarballs.push(tarpath);
 	fs.mkdirSync(into, { recursive: true });
 	execFileSync('tar', ['-xzf', tarpath, '-C', into, '--strip-components=1']); // npm tarballs nest under package/
-	const manifest = JSON.parse(fs.readFileSync(path.join(into, 'package.json'), 'utf8'));
-	const source = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+	const manifest = JSON.parse(fs.readFileSync(path.join(into, 'package.json'), 'utf8')) as Manifest;
+	const source = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as Manifest;
 	// `npm pack` does NOT apply `publishConfig` (only `npm publish` does), so the tarball carries the
 	// DEV exports (src paths, for monorepo HMR). Apply publishConfig ourselves — exactly what publish
 	// does — and write it back, so node/tsc below resolve against the PUBLISHED shape, not the dev one.
@@ -59,7 +69,7 @@ function unpack(dir, into) {
 	const own_nm = path.join(dir, 'node_modules');
 	const nm = path.join(into, 'node_modules');
 	fs.mkdirSync(nm, { recursive: true });
-	const link = (rel) => {
+	const link = (rel: string) => {
 		const target = path.join(own_nm, rel);
 		if (fs.existsSync(target) && !fs.existsSync(path.join(nm, rel)))
 			fs.symlinkSync(fs.realpathSync(target), path.join(nm, rel), 'dir');
@@ -83,7 +93,7 @@ const root = path.join(work, 'package');
 const manifest = unpack(pkg_root, root);
 const exports = manifest.exports;
 
-const targets_of = (v) =>
+const targets_of = (v: string | Conditions): Conditions =>
 	typeof v === 'string' ? { default: v } : v && typeof v === 'object' ? v : {};
 
 // A failure at one of these boundaries is EXPECTED, not a package break: `$app`/`$env` are Kit
@@ -128,7 +138,7 @@ for (const [subpath, val] of Object.entries(exports)) {
 		await import(pathToFileURL(path.join(root, entry)).href);
 		imported++;
 	} catch (e) {
-		const msg = String(e?.message ?? e);
+		const msg = String((e as Error | undefined)?.message ?? e);
 		if (EXPECTED.test(msg)) {
 			imported++;
 			continue;
@@ -203,7 +213,9 @@ try {
 		`  typechecked ${type_subpaths.length} subpaths' declarations, ${ambient_subpaths.length} ambient reference(s)`
 	);
 } catch (e) {
-	const out = (e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '');
+	// execFileSync's error carries the child's captured output
+	const { stdout, stderr } = e as { stdout?: Buffer; stderr?: Buffer };
+	const out = (stdout?.toString() ?? '') + (stderr?.toString() ?? '');
 	// Only OUR subpaths' resolution matters; ignore peer-type noise (svelte/kit ambient) if any.
 	const ours = out
 		.split('\n')

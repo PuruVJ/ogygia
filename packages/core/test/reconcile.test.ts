@@ -81,7 +81,7 @@ const hasDOM = typeof document !== 'undefined';
 		stamp_region_keys(b);
 		const region = b.querySelector('ogygia-region')!;
 		const keep = b.querySelector('[data-ogygia-keep]')!;
-		expect(region.getAttribute('data-key')).toMatch(/^r[\x00 ][0-9a-f]{16}$/); // one identity: 'r' + 64-bit fp
+		expect(region.getAttribute('data-key')).toMatch(/^r[\0 ][0-9a-f]{16}$/); // one identity: 'r' + 64-bit fp
 		expect(keep.getAttribute('data-key')).toBe('k side');
 	});
 

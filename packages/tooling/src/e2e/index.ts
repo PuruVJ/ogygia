@@ -1,4 +1,3 @@
-/// <reference path="./global.d.ts" />
 // Shared Playwright fixtures + the suites' `check()` idiom — `@ogygia/tooling/e2e`, imported by every
 // package's e2e specs (packages/<name>/e2e, apps/palaestra/e2e). Siblings (by file name, `.ts` and
 // all): `/servers.ts` (spawn_server), `/re.ts` (shared regexes), `/packed.ts` (the packed ogygia),

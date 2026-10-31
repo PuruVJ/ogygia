@@ -113,6 +113,10 @@ export function register_fn_kind(): void {
 				// Registry miss + the payload carries the factory source (self-contained by the
 				// capture law) → rebuild from source. Indirect eval; a strict-CSP app (no
 				// 'unsafe-eval') should ship the fn manifest so this path never runs.
+				// The eval IS the fallback: rebuilding a function whose registry entry is missing,
+				// from the source the payload carries (documented only here, in this comment).
+				// test/fn-transport.test.ts ("registry MISS + source on the wire") covers it.
+				// oxlint-disable-next-line no-eval
 				factory = (0, eval)(`(${payload.s})`) as (...bound: unknown[]) => unknown;
 				fn_registry().factories.set(ref.t as string, factory); // once per tag
 			}

@@ -2,25 +2,29 @@
 // repo ships no jsdom/happy-dom on purpose. The shim import MUST come first: it installs
 // `globalThis.Node` / `globalThis.document`, which `morph.ts` reads at module load.
 import { describe, test, expect, beforeEach } from 'vitest';
-import { document, el, frag, DomElement, NS_SVG } from './_stubs/dom.ts';
-import { morph_children, install } from '../src/runtime/morph.ts';
+import { document, el, frag, DomElement, NS_SVG, type DomNode } from './_stubs/dom.ts';
+import {
+	morph_children as dom_morph_children,
+	install,
+	type MorphOptions
+} from '../src/runtime/morph.ts';
 import { swap_body } from '../src/runtime/reconcile.ts';
 import { slots } from '../src/runtime/slots.ts';
+
+// The shim is a structural subset of the DOM, not lib.dom's `Element` / `Node`. This adapter is the
+// one seam where shim nodes are handed to the real reconciler (the same cast `swap_body` calls use).
+function morph_children(parent: DomElement, new_nodes: DomNode[], options?: MorphOptions): void {
+	dom_morph_children(parent as unknown as Element, new_nodes as unknown as Node[], options);
+}
 
 beforeEach(() => {
 	document._active = null;
 });
 
-/** Morph `parent`'s children toward the children described by `html`. Returns the same parent. */
-function morph_to(parent: DomElement, html: string): DomElement {
-	morph_children(parent, frag(html));
-	return parent;
-}
-
 describe('install()', () => {
 	test('fills the morph slot with the exported reconciler', () => {
 		install();
-		expect(slots.morph).toBe(morph_children);
+		expect(slots.morph).toBe(dom_morph_children);
 	});
 });
 

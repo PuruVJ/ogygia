@@ -27,6 +27,8 @@
 		...(d.extras.drill ? { drill: d.extras.drill } : {}),
 		...(d.extras.forecast ? { forecast: d.extras.forecast } : {})
 	});
+	// read once, at setup: the two ids the compare page handed over
+	// svelte-ignore state_referenced_locally
 	void Promise.all([get_report(a), get_report(b)])
 		.then(([A, B]) => {
 			const da = A?.dump as Dump | undefined;

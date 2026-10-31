@@ -37,8 +37,9 @@ export type Handler<P extends string = string, In = undefined> = (
 	c: Ctx<Params<P>, Record<string, string>, In>
 ) => unknown;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyComponent = Component<any>;
+/** Any component. Props are a component's INPUT, so `never` props is the one shape every
+ *  component's props can stand in for: every `Component<Props>` is assignable to this. */
+export type AnyComponent = Component<never>;
 
 /** A load is a CALLABLE, memoized per request: `await session_load(c)` runs `.run(c)` once per
  *  request (the memo lives on `c`), so a layout and its child sharing a load never double-fetch —
@@ -241,8 +242,10 @@ export function page<S extends PageServer>(
 
 /** A table of route defs — the value `routes()` and `layout(name, C)(...)` both take. A page is a
  *  `page(...)` value; an endpoint is a plain `{ GET, POST, … }` object (the `+server.ts` shape). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type RouteDef = PageDef<any, any, any, any, any> | Endpoint;
+export type RouteDef = AnyPageDef | Endpoint;
+/** Any page def. Every PageDef parameter sits in a read-only (covariant) slot — `layouts`, and
+ *  the phantom `__types` — so the widest of each is the type every page def is assignable to. */
+export type AnyPageDef = PageDef<readonly LayoutDef[], unknown, unknown, unknown, unknown>;
 export type RouteTable = Record<string, RouteDef>;
 /** A table as `routes()` / `layout()` take it: any entries, checked by {@link KeyedTable} — which
  *  is what types each entry by its key. (The constraint itself stays shapeless: a handler signature
@@ -356,8 +359,7 @@ export type EndpointFor<K extends string> = {
  *  `layout()`) reads its key's params through it. No condition on an ENTRY here for the same reason:
  *  a type that waits on the entry gives its handlers no contextual type at all. */
 export type KeyedTable<T> = {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	[K in keyof T]: EndpointFor<K & string> | PageDef<any, any, any, any, any>;
+	[K in keyof T]: EndpointFor<K & string> | AnyPageDef;
 };
 
 const VERBS = ['GET', 'DELETE', 'HEAD', 'OPTIONS', 'POST', 'PUT', 'PATCH'] as const;

@@ -6,15 +6,19 @@
  */
 import type { Attachment } from 'svelte/attachments';
 
+/** The keys alone, as an `onkeydown` handler: for an element whose markup already gives it its
+ *  role and `tabindex="0"`, so the compiler sees the keyboard path next to the click. */
+export const press_key = (e: Event): void => {
+	const node = e.currentTarget as HTMLElement | SVGElement;
+	const k = (e as KeyboardEvent).key;
+	// a key pressed in a field inside (a filter in a row) is that field's
+	if (e.target !== node || (k !== 'Enter' && k !== ' ')) return;
+	e.preventDefault();
+	node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+};
+
 export const pressable: Attachment<HTMLElement | SVGElement> = (node) => {
 	if (node.tabIndex < 0) node.tabIndex = 0;
-	const onkey = (e: Event) => {
-		const k = (e as KeyboardEvent).key;
-		// a key pressed in a field inside (a filter in a row) is that field's
-		if (e.target !== node || (k !== 'Enter' && k !== ' ')) return;
-		e.preventDefault();
-		node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-	};
-	node.addEventListener('keydown', onkey);
-	return () => node.removeEventListener('keydown', onkey);
+	node.addEventListener('keydown', press_key);
+	return () => node.removeEventListener('keydown', press_key);
 };

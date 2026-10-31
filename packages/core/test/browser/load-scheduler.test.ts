@@ -234,7 +234,7 @@ test('a single start still goes out at once (no yield before the first)', async 
 	await critical_settled();
 	let started = false;
 	void load_slot({ kind: 'code', cls: 'user' }).ready.then(() => (started = true));
-	await null;
-	await null;
+	await Promise.resolve();
+	await Promise.resolve();
 	expect(started).toBe(true);
 });

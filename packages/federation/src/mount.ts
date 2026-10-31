@@ -26,7 +26,7 @@ function claims_for(c: Ctx, user_override?: (c: Ctx) => Claims | undefined): Cla
 	if (!buckets || Object.keys(buckets).length === 0) return base;
 	return {
 		...base,
-		experiments: { ...buckets, ...((base?.experiments as object | undefined) ?? {}) }
+		experiments: { ...buckets, ...(base?.experiments as object | undefined) }
 	};
 }
 
@@ -43,8 +43,7 @@ const FAILED =
 function mount_fn(
 	target: Peer | ComponentPick | ((c: Ctx) => Peer),
 	opts: MountOptions = {}
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-): PageDef<any, any, any, any, any> {
+): PageDef<readonly [], unknown, unknown, unknown, unknown> {
 	const fixed =
 		typeof target === 'function' ? null : '__ogpick' in target ? null : (target as Peer);
 	const resolve_peer = (c: Ctx): Peer => {

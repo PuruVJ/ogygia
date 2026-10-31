@@ -12,13 +12,15 @@
 
 	let mode = $state<Mode>('system');
 	if (typeof window !== 'undefined') {
+		let saved_mode: Mode = 'system';
 		try {
 			const saved = localStorage.getItem(KEY) as Mode | null;
-			mode = saved === 'light' || saved === 'dark' ? saved : 'system';
+			saved_mode = saved === 'light' || saved === 'dark' ? saved : 'system';
 		} catch {
 			/* private mode */
 		}
-		apply(mode);
+		mode = saved_mode;
+		apply(saved_mode);
 	}
 
 	function apply(m: Mode) {

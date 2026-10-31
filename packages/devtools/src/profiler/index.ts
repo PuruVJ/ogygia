@@ -408,7 +408,6 @@ const MAX_VITALS_PATHS = 200;
 const MAX_VITALS_SAMPLES = 30;
 const MAX_SAMPLED_WINDOWS = 60;
 const SAMPLED_FUNCTIONS_PER_WINDOW = 150;
-const BACKGROUND_INTERVAL_US = 10_000;
 
 interface UserTiming {
 	name: string;
@@ -1267,6 +1266,22 @@ class Profiler {
 
 	#collect_window(call: NetCall): void {
 		if (this.#window_net && this.#window_net.length < MAX_WINDOW_NET) this.#window_net.push(call);
+	}
+
+	/** An attributed request's context: its own calls (capped), each also offered to the window. */
+	#request_ctx(entry: RequestEntry): Ctx {
+		const collect_window = (call: NetCall) => this.#collect_window(call);
+		return {
+			entry,
+			net: [],
+			spans: [],
+			route: entry.route,
+			path: entry.path,
+			on_net(call) {
+				if (this.net.length < MAX_NET_PER_REQUEST) this.net.push(call);
+				collect_window(call);
+			}
+		};
 	}
 
 	#init(): Promise<void> {
@@ -2176,7 +2191,7 @@ class Profiler {
 			// that fell inside it — NOT a flat split of the total, which would charge a run for the
 			// profiler's start-up scan of compiled code (hundreds of ms on a big process, before the
 			// first render) or its final reads (after the last)
-			const per_run = new Array(n).fill(0) as number[];
+			const per_run = Array.from({ length: n }, () => 0);
 			const cpu_in_runs = analysis.overhead_by_run_ms ?? [];
 			for (let i = 0; i < n; i++) per_run[i] += cpu_in_runs[i] ?? 0;
 			if (gc_attr && cap.runs?.length) {
@@ -4604,7 +4619,7 @@ class Profiler {
 							'sec-fetch-mode': 'navigate',
 							'sec-fetch-dest': 'document',
 							accept: 'text/html',
-							...(replay?.headers ?? {}),
+							...replay?.headers,
 							...extra,
 							'x-og-profiler-internal': '1'
 						}
@@ -4929,7 +4944,8 @@ class Profiler {
 				const ri = run_windows.findIndex((w) => c.start >= w.start && c.start <= w.end);
 				if (ri === -1) continue;
 				const k = call_group(label_call(c.method, c.url));
-				(wait_runs[k] ??= new Array(run_windows.length).fill(0))[ri] += c.ms + (c.body_ms ?? 0);
+				(wait_runs[k] ??= Array.from({ length: run_windows.length }, () => 0))[ri] +=
+					c.ms + (c.body_ms ?? 0);
 			}
 			// TIMERS EVERY RENDER LEFT RUNNING, read before the io is scoped to one run: the same line
 			// started one in each render, and each is still open after them all
@@ -6332,7 +6348,11 @@ class Profiler {
 					if (this.#vitals.size >= MAX_VITALS_PATHS) {
 						let oldest: string | undefined;
 						let t = Infinity;
-						for (const [k, x] of this.#vitals) if (x.last < t) ((t = x.last), (oldest = k));
+						for (const [k, x] of this.#vitals)
+							if (x.last < t) {
+								t = x.last;
+								oldest = k;
+							}
 						if (oldest !== undefined) this.#vitals.delete(oldest);
 					}
 					this.#vitals.set(page, (e = { samples: [], last: now }));
@@ -6355,7 +6375,11 @@ class Profiler {
 					// drop the stalest fingerprint
 					let oldest: string | undefined;
 					let t = Infinity;
-					for (const [k, v] of this.#beacons) if (v.last < t) ((t = v.last), (oldest = k));
+					for (const [k, v] of this.#beacons)
+						if (v.last < t) {
+							t = v.last;
+							oldest = k;
+						}
 					if (oldest !== undefined) this.#beacons.delete(oldest);
 				}
 				this.#beacons.set(
@@ -6500,20 +6524,7 @@ class Profiler {
 		const attribute =
 			!!this.#als &&
 			(this.dev || (this.#recording_active() && !this.#trap_running) || header_profile);
-		const self = this;
-		const ctx: Ctx | null = attribute
-			? {
-					entry,
-					net: [],
-					spans: [],
-					route: entry.route,
-					path: entry.path,
-					on_net(call) {
-						if (this.net.length < MAX_NET_PER_REQUEST) this.net.push(call);
-						self.#collect_window(call);
-					}
-				}
-			: null;
+		const ctx: Ctx | null = attribute ? this.#request_ctx(entry) : null;
 		// THE KEEP-THE-ANSWERS RENDER: the profiler's own render, marked with this recording's token,
 		// is served the kept answers for the calls that answered the same in every timed render
 		const answers = this.#answers;

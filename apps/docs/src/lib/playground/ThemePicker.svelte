@@ -9,7 +9,7 @@
 
 	let { themes }: { themes: Record<string, string> } = $props();
 	const KEY = 'pg-theme';
-	const names = Object.keys(themes);
+	const names = $derived(Object.keys(themes));
 
 	let value = $state((typeof window !== 'undefined' && localStorage.getItem(KEY)) || 'thalassa');
 
@@ -18,6 +18,8 @@
 		if (link && themes[name]) link.href = themes[name];
 	}
 	// Re-hydration after each SPA nav lands here — re-apply the saved skin over the SSR default.
+	// Once per hydration, on purpose: later picks go through `apply` directly.
+	// svelte-ignore state_referenced_locally
 	if (typeof window !== 'undefined' && themes[value]) apply(value);
 
 	// Light/dark toggle — playground-only, and DELIBERATELY light/dark ONLY (no `system`) and

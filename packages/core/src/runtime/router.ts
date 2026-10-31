@@ -318,9 +318,9 @@ export class SpaRouter {
 			if (!this.run_before(from, url, type)) return;
 			this.supersede();
 			if (push && url.href !== location.href) {
-				push_state({ ...(history.state || {}), ogygia: true }, url.href);
+				push_state({ ...history.state, ogygia: true }, url.href);
 			} else if (url.href !== location.href) {
-				replace_state({ ...(history.state || {}), ogygia: true }, url.href);
+				replace_state({ ...history.state, ogygia: true }, url.href);
 			}
 			jump_to_hash(url.hash);
 			this.current_url = url;
@@ -475,7 +475,7 @@ export class SpaRouter {
 		});
 
 		// seed initial history entry so scroll is restored on the first back
-		replace_state({ ...(history.state || {}), ogygia: true });
+		replace_state({ ...history.state, ogygia: true });
 	}
 
 	#should_intercept(event: MouseEvent, anchor: HTMLAnchorElement | null) {

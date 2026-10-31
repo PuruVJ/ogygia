@@ -437,7 +437,10 @@ export function module_origin(id: string): string | undefined {
 	let top = '';
 	for (const t of ['/src/', '/dist/', '/esm/', '/build/']) {
 		const i = p.lastIndexOf(t);
-		if (i > at) ((at = i), (top = t));
+		if (i > at) {
+			at = i;
+			top = t;
+		}
 	}
 	return at === -1
 		? undefined

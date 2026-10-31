@@ -47,8 +47,8 @@ test.beforeEach(async ({ page }) => {
 	await page.addInitScript(() => {
 		const root = () =>
 			document.querySelector('[data-ogygia-devtools-host]')?.shadowRoot ?? document;
-		(window as any).__dt_q = (s: string) => root().querySelector(s);
-		(window as any).__dt_qa = (s: string) => root().querySelectorAll(s);
+		(window as DtWindow).__dt_q = (s: string) => root().querySelector(s);
+		(window as DtWindow).__dt_qa = (s: string) => root().querySelectorAll(s);
 	});
 });
 
@@ -63,14 +63,39 @@ const TIMELINE_RE = /timeline/;
 /** Minimal shape of the events we assert on (mirrors src/events/schema.ts). */
 type DtEvent = { domain: string; name: string; seq: number } & Record<string, unknown>;
 
+/** What the page holds for this spec, read in-page as `window as DtWindow`: the init script's
+ *  shadow-root queries and the devtools hooks (minimal shapes of the ones in src/ and core). */
+type DtWindow = typeof window & {
+	__dt_q(s: string): Element | null;
+	__dt_qa(s: string): NodeListOf<Element>;
+	__ogygia_devtools: {
+		version: number;
+		events(): DtEvent[];
+		trace(): { kind: string; version: number; events: DtEvent[] };
+	};
+	__ogygia_page?: () => {
+		nav?: { to: string } | null;
+		regions: { fp: string; name: string }[];
+		report: {
+			findings: { code: string; fps: string[] }[];
+			rows: unknown[];
+			vitals: { key: string }[];
+		};
+	} | null;
+	__ogygia_session?: { findings: { code: string; message: string }[] };
+	__ogygia_testing: {
+		hydration(): Promise<{ islands: { reason: string; status: string }[] }>;
+	};
+};
+
 /** Is `window.__ogygia_devtools` present (i.e. the served build compiled devtools in)? */
 async function devtools_present(page: Page): Promise<boolean> {
-	return page.evaluate(() => typeof (window as any).__ogygia_devtools !== 'undefined');
+	return page.evaluate(() => typeof (window as DtWindow).__ogygia_devtools !== 'undefined');
 }
 
 /** Read the whole event buffer. */
 async function events(page: Page): Promise<DtEvent[]> {
-	return page.evaluate(() => (window as any).__ogygia_devtools.events());
+	return page.evaluate(() => (window as DtWindow).__ogygia_devtools.events());
 }
 
 /** Wait (event-driven, bounded) until an event matching `pred` is buffered; returns it or null. */
@@ -84,7 +109,7 @@ async function wait_for_event(
 			// serialize the predicate as a string so it runs in-page
 			(predSrc: string) => {
 				const p = new Function('e', `return (${predSrc})(e)`) as (e: unknown) => boolean;
-				const hook = (window as any).__ogygia_devtools;
+				const hook = (window as DtWindow).__ogygia_devtools;
 				if (!hook) return false;
 				const hit = hook.events().find(p);
 				return hit ?? false;
@@ -150,7 +175,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		);
 
 		// ── schema handshake ──────────────────────────────────────────────────────
-		const version = await page.evaluate(() => (window as any).__ogygia_devtools.version);
+		const version = await page.evaluate(() => (window as DtWindow).__ogygia_devtools.version);
 		check('schema: window hook exposes a version', typeof version === 'number', `v${version}`);
 
 		// ── runtime.boot names the features this build shipped ────────────────────
@@ -208,7 +233,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await page.click('[data-og-overlay-toggle]');
 			await page.waitForTimeout(200);
 			const regionCount = await page.locator('ogygia-region').count();
-			const boxes = await page.evaluate(() => (window as any).__dt_qa('[data-og-box]').length);
+			const boxes = await page.evaluate(() => (window as DtWindow).__dt_qa('[data-og-box]').length);
 			check(
 				'lens: one overlay box per rendered region',
 				boxes === regionCount,
@@ -218,7 +243,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			if (island) await island.hover();
 			await page.waitForTimeout(150);
 			const tip = await page.evaluate(() => {
-				const t = (window as any).__dt_q('[data-og-overlay] + .tip, .tip');
+				const t = (window as DtWindow).__dt_q('[data-og-overlay] + .tip, .tip');
 				return t && getComputedStyle(t).display !== 'none' ? t.textContent || '' : '';
 			});
 			check(
@@ -232,7 +257,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await page.click('[data-og-tab="bytes"]');
 			await page.waitForTimeout(200);
 			const led = await page.evaluate(() => {
-				const win = (window as any).__dt_q('[data-og-win]');
+				const win = (window as DtWindow).__dt_q('[data-og-win]');
 				if (!win) return null;
 				const rows = win.querySelectorAll('tbody tr').length;
 				const total = win.querySelector('tfoot td:nth-child(3)')?.textContent || '';
@@ -250,7 +275,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await page.click('[data-og-tab="wire"]');
 			await page.waitForTimeout(150);
 			const wire = await page.evaluate(() => {
-				const win = (window as any).__dt_q('[data-og-win]');
+				const win = (window as DtWindow).__dt_q('[data-og-win]');
 				if (!win) return null;
 				const text = win.textContent || '';
 				const rows = win.querySelectorAll('tbody tr').length;
@@ -270,7 +295,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await page.click('[data-og-tab="hub"]');
 			await page.waitForTimeout(150);
 			const hubEmpty = await page.evaluate(() => {
-				const win = (window as any).__dt_q('[data-og-win]');
+				const win = (window as DtWindow).__dt_q('[data-og-win]');
 				return win
 					? /hub inspector/.test(win.textContent || '') &&
 							/no hub activity/.test(win.textContent || '')
@@ -282,7 +307,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		// ── the eager load island wakes on its own (no interaction) ───────────────
 		const loadWake = await wait_for_event(
 			page,
-			(e) => e.name === 'wake.fired' && (e as any).when === 'load'
+			(e) => e.name === 'wake.fired' && e.when === 'load'
 		);
 		check('load island: wake.fired(when=load) arrived', !!loadWake);
 		const loadHydrated = await wait_for_event(page, (e) => e.name === 'region.hydrate.done');
@@ -296,11 +321,11 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		// (its region.connected fires, but wake only "schedules" — the note's whole point.)
 		const before = await events(page);
 		const interactionConnected = before.find(
-			(e) => e.name === 'region.connected' && (e as any).wake === 'interaction'
+			(e) => e.name === 'region.connected' && e.wake === 'interaction'
 		);
 		check('interaction: region.connected(wake=interaction) present', !!interactionConnected);
 		const wokeInteractionEarly = before.some(
-			(e) => e.name === 'wake.fired' && (e as any).when === 'interaction'
+			(e) => e.name === 'wake.fired' && e.when === 'interaction'
 		);
 		check('interaction: NOT woken before use (no wake.fired yet)', !wokeInteractionEarly);
 
@@ -315,7 +340,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		);
 		const interactionHydrated = await wait_for_event(
 			page,
-			(e) => e.name === 'region.hydrate.done' && !!(e as any).fp
+			(e) => e.name === 'region.hydrate.done' && !!e.fp
 		);
 		check('interaction: region.hydrate.done arrived', !!interactionHydrated);
 
@@ -349,10 +374,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		// ── nav domain: navigate home, assert nav.start/finish + reconcile decisions ─
 		const evBeforeNav = (await events(page)).length;
 		await page.locator('nav a[href="/"]').click();
-		const navFinish = await wait_for_event(
-			page,
-			(e) => e.name === 'nav.finish' && (e as any).to === '/'
-		);
+		const navFinish = await wait_for_event(page, (e) => e.name === 'nav.finish' && e.to === '/');
 		check('nav: nav.finish(to=/) arrived', !!navFinish);
 		check(
 			'nav: finish carries a ms timing',
@@ -360,14 +382,16 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			`ms=${navFinish?.ms}`
 		);
 		// the Page tab follows the navigation: its report covers this page from the nav on
-		const page_nav = await page.evaluate(() => (window as any).__ogygia_page?.()?.nav?.to ?? null);
+		const page_nav = await page.evaluate(
+			() => (window as DtWindow).__ogygia_page?.()?.nav?.to ?? null
+		);
 		check(
 			'page view: knows the in-app navigation and reports from it',
 			page_nav === '/',
 			String(page_nav)
 		);
 		const afterNav = await events(page);
-		const navStart = afterNav.find((e) => e.name === 'nav.start' && (e as any).to === '/');
+		const navStart = afterNav.find((e) => e.name === 'nav.start' && e.to === '/');
 		check(
 			'nav: nav.start emitted before finish',
 			!!navStart && navStart.seq < (navFinish as DtEvent).seq
@@ -376,17 +400,17 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		check(
 			'nav: per-region reconcile decisions emitted (keep/patch/mount/remove)',
 			reconciles.length > 0,
-			reconciles.map((r) => (r as any).decision).join(',') || 'none'
+			reconciles.map((r) => r.decision).join(',') || 'none'
 		);
 
 		// ── Nav tab: the panel shows the last nav's per-region decisions + timing ──
 		{
-			const open = await page.evaluate(() => !!(window as any).__dt_q('[data-og-win]'));
+			const open = await page.evaluate(() => !!(window as DtWindow).__dt_q('[data-og-win]'));
 			if (!open) await page.click('[data-og-panel-toggle]');
 			await page.click('[data-og-tab="nav"]');
 			await page.waitForTimeout(150);
 			const nav = await page.evaluate(() => {
-				const win = (window as any).__dt_q('[data-og-win]');
+				const win = (window as DtWindow).__dt_q('[data-og-win]');
 				if (!win) return null;
 				const text = win.textContent || '';
 				const rows = win.querySelectorAll('tbody tr').length;
@@ -401,7 +425,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 
 		// ── trace: the buffer serializes to a portable, versioned, JSON-safe artifact ─
 		const trace = await page.evaluate(() => {
-			const t = (window as any).__ogygia_devtools.trace();
+			const t = (window as DtWindow).__ogygia_devtools.trace();
 			return {
 				kind: t.kind,
 				version: t.version,
@@ -422,12 +446,12 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		const tlLauncher = await page.$('[data-og-panel-toggle]');
 		if (tlLauncher) {
 			// ensure the window is open, then select the Timeline tab
-			const isOpen = await page.evaluate(() => !!(window as any).__dt_q('[data-og-win]'));
+			const isOpen = await page.evaluate(() => !!(window as DtWindow).__dt_q('[data-og-win]'));
 			if (!isOpen) await tlLauncher.click();
 			await page.click('[data-og-tab="timeline"]');
 			await page.waitForTimeout(250);
 			const tl = await page.evaluate(() => {
-				const win = (window as any).__dt_q('[data-og-win]');
+				const win = (window as DtWindow).__dt_q('[data-og-win]');
 				if (!win) return null;
 				const dots = win.querySelectorAll('.dot[title*="@ +"]').length;
 				const head = win.querySelector('.body h3')?.textContent || '';
@@ -453,7 +477,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		await page.click('[data-og-tab="hub"]');
 		await page.waitForTimeout(250);
 		const hub = await page.evaluate(() => {
-			const win = (window as any).__dt_q('[data-og-win]');
+			const win = (window as DtWindow).__dt_q('[data-og-win]');
 			if (!win) return null;
 			const rows = win.querySelectorAll('tbody tr').length;
 			const reunions = /1 instance/.test(win.textContent || '');
@@ -522,7 +546,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await anchor.hover();
 			await page.waitForTimeout(300);
 			const boxes = await page.evaluate(
-				() => (window as any).__dt_qa('[data-og-highlight] > div').length
+				() => (window as DtWindow).__dt_qa('[data-og-highlight] > div').length
 			);
 			check(
 				'profiler tab: hovering one lights its elements up on the page',
@@ -558,8 +582,8 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		await page.waitForTimeout(800);
 		await page.click('[data-og-session-stop]');
 		await page.locator('[data-og-session-findings]').waitFor({ timeout: 10_000 });
-		const report = await page.evaluate(() => (window as any).__ogygia_session);
-		const slow = report?.findings.find((f: any) => f.code === 'slow-interaction');
+		const report = await page.evaluate(() => (window as DtWindow).__ogygia_session);
+		const slow = report?.findings.find((f) => f.code === 'slow-interaction');
 		check(
 			'record: the slow click is found, in its island',
 			!!slow && slow.message.includes('SessionSlow'),
@@ -567,7 +591,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		);
 		check(
 			'record: a click that did nothing is found',
-			!!report?.findings.find((f: any) => f.code === 'dead-click' && f.message.includes('dead'))
+			!!report?.findings.find((f) => f.code === 'dead-click' && f.message.includes('dead'))
 		);
 		const chip = page.locator('[data-og-session-findings] li[data-code="slow-interaction"] .chip');
 		if (await chip.count()) {
@@ -575,7 +599,9 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await page.waitForTimeout(300);
 			check(
 				'record: "show on the page" lights the clicked element',
-				(await page.evaluate(() => (window as any).__dt_qa('[data-og-highlight] > div').length)) > 0
+				(await page.evaluate(
+					() => (window as DtWindow).__dt_qa('[data-og-highlight] > div').length
+				)) > 0
 			);
 		}
 
@@ -624,16 +650,16 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		await page.goto('/dt-lab', { waitUntil: 'load' });
 		await page.waitForTimeout(3500);
 		const view = await page.evaluate(() => {
-			const v = (window as any).__ogygia_page?.();
+			const v = (window as DtWindow).__ogygia_page?.();
 			if (!v) return null;
-			const name = new Map(v.regions.map((r: any) => [r.fp, r.name]));
+			const name = new Map(v.regions.map((r) => [r.fp, r.name] as const));
 			return {
-				findings: v.report.findings.map((f: any) => ({
+				findings: v.report.findings.map((f) => ({
 					code: f.code,
 					names: f.fps.map((fp: string) => name.get(fp))
 				})),
 				rows: v.report.rows.length,
-				vitals: v.report.vitals.map((x: any) => x.key)
+				vitals: v.report.vitals.map((x) => x.key)
 			};
 		});
 		check('page: window.__ogygia_page answers', !!view);
@@ -658,7 +684,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			!view?.findings.some(
 				(f) =>
 					!WAITING.includes(f.code) &&
-					f.names.some((n: string) => ['Healthy', 'BelowLazy', 'OnClick'].includes(n))
+					f.names.some((n) => n !== undefined && ['Healthy', 'BelowLazy', 'OnClick'].includes(n))
 			),
 			JSON.stringify(view?.findings)
 		);
@@ -740,7 +766,7 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 			await page.waitForTimeout(500);
 		}
 		const rows = await page.evaluate(
-			() => (window as any).__dt_qa('[data-og-hydration] tr[data-status]').length
+			() => (window as DtWindow).__dt_qa('[data-og-hydration] tr[data-status]').length
 		);
 		expect(errors).toEqual([]);
 		expect(rows).toBeGreaterThan(1);
@@ -749,8 +775,8 @@ test.describe('devtools (dev server, OGYGIA_DEVTOOLS=1): events, panel tabs, pag
 		await page.goto('/portable-snippet', { waitUntil: 'load' });
 		await page.waitForTimeout(1500);
 		const statuses = await page.evaluate(async () => {
-			const h = await (window as any).__ogygia_testing.hydration();
-			return h.islands.map((i: any) => (i.reason.startsWith('rides ') ? 'riding' : i.status));
+			const h = await (window as DtWindow).__ogygia_testing.hydration();
+			return h.islands.map((i) => (i.reason.startsWith('rides ') ? 'riding' : i.status));
 		});
 		expect(statuses.length, 'the page lists its islands').toBeGreaterThan(0);
 		expect(

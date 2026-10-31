@@ -91,7 +91,7 @@ test('an interaction island edited while asleep hydrates from its server markup 
 			'no recovery warning'
 		).toBe(false);
 		expect(
-			warns.some((w) => /^Failed to hydrate/.test(w)),
+			warns.some((w) => w.startsWith('Failed to hydrate')),
 			'Svelte’s own line from the speculative attempt is swallowed'
 		).toBe(false);
 	} finally {

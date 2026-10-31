@@ -426,7 +426,7 @@ const TRACKED = new Map(
 function push<F extends { name: string }>(stack: Stack<F>, f: F): void {
 	const slot = TRACKED.get(f.name) ?? -1;
 	(stack.slots ??= []).push(slot);
-	if (slot !== -1) (stack.open ??= new Array(TRACKED.size).fill(0))[slot]++;
+	if (slot !== -1) (stack.open ??= Array.from({ length: TRACKED.size }, () => 0))[slot]++;
 	stack.push(f);
 }
 

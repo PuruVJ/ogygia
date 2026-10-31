@@ -47,7 +47,6 @@
 			.then(() => (ready = true))
 			.catch((e) => {
 				error = e instanceof Error ? e.message : String(e);
-				// eslint-disable-next-line no-console
 				console.error('[ogygia/content] search index unavailable —', error);
 			});
 		return () => client?.destroy();

@@ -26,7 +26,6 @@ import flags_server from '../../flags/src/server.ts';
 startPlugin(flags_server, { name: '@ogygia/flags' });
 startPlugin(fed_server, { name: '@ogygia/federation' });
 
-const CLAIMS = Symbol.for('ogygia.claims.v1');
 const doc_json = (extra: Record<string, unknown> = {}, status = 200) =>
 	JSON.stringify({ status, title: 't', css: [], body: 'B', ...extra });
 

@@ -356,8 +356,8 @@ describe('freeze/observe', () => {
 		const event = fake_event({ locals: { user: {}, flags: [], nothing: null } });
 		const obs = observe_event(event as never);
 		event.cookies.get('consent'); // absent → undefined = default
-		event.locals.user; // {} = default
-		event.locals.flags; // [] = default
+		void event.locals.user; // {} = default
+		void event.locals.flags; // [] = default
 		expect(obs.disqualified_by).toBeNull();
 		expect(obs.wrote_cookie).toBe(false);
 	});
@@ -388,7 +388,7 @@ describe('freeze/observe', () => {
 	it('a populated locals read disqualifies, named', () => {
 		const event = fake_event({ locals: { user: { id: 7 } } });
 		const obs = observe_event(event as never);
-		event.locals.user;
+		void event.locals.user;
 		expect(obs.disqualified_by).toBe('locals.user');
 	});
 
@@ -397,7 +397,7 @@ describe('freeze/observe', () => {
 		const event = fake_event({ cookies: { session: 'abc' }, locals: { user: { id: 7 } } });
 		const obs = observe_event(event as never, facts);
 		event.cookies.get('session');
-		event.locals.user;
+		void event.locals.user;
 		expect(facts.perVisitor).toBe('cookie:session');
 		expect(obs.disqualified_by).toBe('cookie:session');
 	});

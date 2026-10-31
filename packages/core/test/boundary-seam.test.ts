@@ -5,7 +5,7 @@
  * store singletons) — each test models one pattern found there, so this suite IS the
  * migration contract: what auto-wires, what warns, what refuses (and how precisely).
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { get, writable, derived, readonly } from 'svelte/store';
 import { parse, stringify } from 'devalue';
 import {
@@ -22,17 +22,15 @@ import { REF_WIRE_KEY, ref_reviver } from '../src/ref.ts';
 
 /** The seams now emit ONE hub key — parse their output the way an island does. */
 const parse_seam = (text: string) =>
-	parse(text, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<
-		string,
-		unknown
-	>;
+	parse(text, { [REF_WIRE_KEY]: ref_reviver(true) }) as Record<string, unknown>;
 
 /** Round-trip helpers: server encode → client decode (remember) / server decode (fresh). */
 const enc = (v: unknown) => stringify(v, { [STORE_WIRE_KEY]: reduce_store });
+type StorePayload = Parameters<typeof revive_store>[0];
 const dec_client = (s: string) =>
-	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
+	parse(s, { [STORE_WIRE_KEY]: (d: StorePayload) => revive_store(d, true) });
 const dec_server = (s: string) =>
-	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, false) });
+	parse(s, { [STORE_WIRE_KEY]: (d: StorePayload) => revive_store(d, false) });
 
 /** The registries live on globalThis — flush the live map between tests via fresh ids
  *  (each test creates fresh stores, so ids never collide; nothing to reset). */

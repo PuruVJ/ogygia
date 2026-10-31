@@ -7,7 +7,7 @@
 		"dev": "vite dev --port 5174",
 		"build": "vite build",
 		"preview": "vite preview",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p e2e",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings && tsc -p e2e",
 		"e2e": "playwright test",
 		"test:repl": "node src/lib/repl/npm-resolve.test.ts && node src/lib/repl/browser-host.test.ts && node src/lib/repl/console-format.test.ts && node src/lib/repl/repl-config.test.ts && node src/lib/repl/markdown.test.ts && node src/lib/repl/cdn-plugin.test.ts && node src/lib/repl/hash.test.ts && node src/lib/repl/resolve-file.test.ts",
 		"test:e2e": "node observatory.e2e.ts"

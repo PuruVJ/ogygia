@@ -398,7 +398,6 @@ function eval_module(
 		// export const/let/var/function/class
 		.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
 	const __exports: Record<string, unknown> = {};
-	// eslint-disable-next-line no-new-func
 	new Function('__require', '__exports', body)(req, __exports);
 	return __exports;
 }
@@ -1301,7 +1300,9 @@ const SVELTE_EXTERNAL_ID = /^svelte(\/|$)/;
 // Never CDN-fetch `ogygia` (the published npm build is a different version + won't recompile in the REPL).
 const OGYGIA_EXTERNAL_ID = /^(ogygia|@ogygia\/[^/]+)(\/|$)/;
 // rolldown paints errors with ANSI color + a box-drawing source frame — strip both for the REPL readout.
-const ANSI = /\x1b\[[0-9;]*m/g;
+// The color codes open with the ESC control character, named here so the pattern reads as intended.
+const ESC = String.fromCharCode(0x1b);
+const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, 'g');
 const BUILD_FAILED = /^Build failed with \d+ errors?:\s*/;
 
 /** Reduce a rolldown build error to a one-line headline the UI can show (no ANSI, no source-frame box). */
@@ -1482,7 +1483,7 @@ async function bundle_preview(
 	const missing: string[] = [];
 	const workspace = {
 		name: 'workspace',
-		resolveId(id: string, importer: string | undefined) {
+		resolveId(id: string) {
 			if (files[id] != null) return id; // the entry / an exact workspace key
 			return resolve_file(id, files); // relative / $lib / basename → a workspace key, or null
 		},

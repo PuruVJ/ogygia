@@ -17,6 +17,8 @@
 
 	let rec = $state<StoredVisit | null>(null);
 	let looked = $state(false);
+	// read once, at setup: the page's latest visit from this browser's store
+	// svelte-ignore state_referenced_locally
 	void latest_visit(page)
 		.then((r) => (rec = r))
 		.finally(() => (looked = true));

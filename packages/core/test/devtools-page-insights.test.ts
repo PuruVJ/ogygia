@@ -249,7 +249,7 @@ describe('images the browser could hold no room for', () => {
 
 describe('kept out of the back/forward cache', () => {
 	const at = (bfcache: PageInput['bfcache']) =>
-		analyze_page(page({ ...(bfcache ? { bfcache } : {}) }), [], [], 3000).findings.find(
+		analyze_page(page(bfcache ? { bfcache } : {}), [], [], 3000).findings.find(
 			(f) => f.code === 'bfcache-blocked'
 		);
 	it("names who adds an 'unload' listener, and the browser's reasons when Back did not restore", () => {

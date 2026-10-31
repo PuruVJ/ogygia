@@ -10,7 +10,6 @@
 // the watchdog out, so this must run against a real `vite dev` server.
 //
 //   pnpm exec playwright test dev-stale-dep-reload
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, check, sleep, REPO as repo } from '@ogygia/tooling/e2e';
 import { spawn_server, type SpawnedServer } from '@ogygia/tooling/e2e/servers.ts';

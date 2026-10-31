@@ -589,10 +589,10 @@ export async function navigate(
 	// Update history SYNCHRONOUSLY (before any await) so the URL is correct and
 	// races between overlapping navigations can't drop the pushState.
 	if (replace) {
-		replace_state({ ...(history.state || {}), ogygia: true }, url.href);
+		replace_state({ ...history.state, ogygia: true }, url.href);
 	} else if (push) {
 		// save outgoing scroll into the current entry, then push the new URL
-		replace_state({ ...(history.state || {}), scroll: { x: scrollX, y: scrollY } });
+		replace_state({ ...history.state, scroll: { x: scrollX, y: scrollY } });
 		push_state({ ogygia: true }, url.href);
 	}
 
@@ -666,7 +666,7 @@ export async function navigate(
 
 	// Ours to render. A redirect REPLACES the intermediate URL (browser semantics), so the back
 	// button skips it.
-	if (dest !== url) replace_state({ ...(history.state || {}), ogygia: true }, dest.href);
+	if (dest !== url) replace_state({ ...history.state, ogygia: true }, dest.href);
 	// Same-document hash jumps already returned above (no VT). Cross-route swaps keep VT
 	// even when the target has a hash (A → B#C); scroll snaps after the transition.
 	const prefer_reduced_motion =

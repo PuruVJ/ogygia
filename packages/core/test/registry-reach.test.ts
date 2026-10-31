@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
+import { partial_ctx_init } from './_compile-ctx.ts';
 
 const FAN = 40;
 const DEPTH = 30;
@@ -53,21 +54,22 @@ function make_compiler() {
 		outHash: new Map<string, number>()
 	};
 	const compiler = new Compiler(program, profiler);
-	const ctx = new CompileCtx({
-		root,
-		base: '/',
-		libDir: path.join(root, 'src/lib'),
-		is_dev: false,
-		is_build: true,
-		id_salt: '',
-		visibleMargin: '0px',
-		presets: {},
-		import_keys: normalize_import_keys(undefined),
-		resolve_alias: [],
-		markdown_config: null,
-		pkg_root: '/nowhere/ogygia',
-		app_shims: {}
-	} as never);
+	const ctx = new CompileCtx(
+		partial_ctx_init({
+			root,
+			base: '/',
+			libDir: path.join(root, 'src/lib'),
+			is_dev: false,
+			is_build: true,
+			id_salt: '',
+			visibleMargin: '0px',
+			presets: {},
+			import_keys: normalize_import_keys(undefined),
+			resolve_alias: [],
+			pkg_root: '/nowhere/ogygia',
+			app_shims: {}
+		})
+	);
 	const reads = new Map<string, number>();
 	const read_file = ctx.read_file.bind(ctx);
 	ctx.read_file = (abs: string) => {

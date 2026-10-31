@@ -18,7 +18,7 @@ describe('transport — HTML-baked inline tickets', () => {
 		// `hi` is the HUB identity — minted per instance; the browser reunites decodes by it
 		expect(typeof t.hi).toBe('string');
 		expect((t.hi as string).length).toBeGreaterThan(0);
-		const { hi, ...wire } = t;
+		const { hi: _hi, ...wire } = t;
 		expect(wire).toEqual({ i: '', p: { a: 1 }, u: '', m: '', x: '<p>hi</p>' });
 	});
 

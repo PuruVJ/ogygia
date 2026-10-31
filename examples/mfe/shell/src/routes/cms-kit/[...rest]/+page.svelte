@@ -7,9 +7,7 @@
 
 <svelte:head>
 	{#if data.doc.title}<title>{data.doc.title}</title>{/if}
-	<!-- eslint-disable-next-line svelte/no-at-html-tags — trusted federation -->
 	{@html data.doc.css.join('') + (data.doc.head ?? '')}
 </svelte:head>
 
-<!-- eslint-disable-next-line svelte/no-at-html-tags — trusted federation -->
 {@html data.doc.body}

@@ -61,9 +61,8 @@
 			'requestIdleCallback' in window
 				? requestIdleCallback(load, { timeout: 2500 })
 				: setTimeout(load, 1);
-		document.readyState === 'complete'
-			? schedule()
-			: window.addEventListener('load', schedule, { once: true });
+		if (document.readyState === 'complete') schedule();
+		else window.addEventListener('load', schedule, { once: true });
 	}, fontsMonoUrl);
 </script>
 

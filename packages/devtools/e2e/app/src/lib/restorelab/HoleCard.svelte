@@ -3,7 +3,7 @@
 	// the answer goes in (before the island's copy of its markup, before it hydrates).
 	import type { Snippet } from 'svelte';
 	import HoleCount from './HoleCount.svelte' with { wake: 'load' };
-	let {}: { ogygiaFallback?: Snippet } = $props();
+	let { ogygiaFallback }: { ogygiaFallback?: Snippet } = $props();
 </script>
 
 <demo-card data-hole-card>

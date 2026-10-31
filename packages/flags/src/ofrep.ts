@@ -37,7 +37,7 @@ interface OfrepFlag {
 
 function default_context(c: CtxLike): Record<string, unknown> {
 	const sub = c.visitor?.sub;
-	return { ...(c.visitor ?? {}), ...(sub ? { targetingKey: sub } : {}) };
+	return { ...c.visitor, ...(sub ? { targetingKey: sub } : {}) };
 }
 
 export function ofrep(opts: OfrepOptions): FlagSource {
@@ -50,7 +50,7 @@ export function ofrep(opts: OfrepOptions): FlagSource {
 		try {
 			const res = await f(endpoint, {
 				method: 'POST',
-				headers: { 'content-type': 'application/json', ...(opts.headers ?? {}) },
+				headers: { 'content-type': 'application/json', ...opts.headers },
 				body: JSON.stringify({ context: ctx_of(c) }),
 				signal: AbortSignal.timeout(timeout)
 			});

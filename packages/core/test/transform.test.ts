@@ -17,9 +17,12 @@ import {
 	CLIENT_BINDING_STUB,
 	foucCssVirtualId
 } from '../dist/compiler/region/transform.js';
+import { HOST_CTX_DEFAULTS } from './_host-ctx.ts';
 
 const ROOT = '/app';
 const HOST = '/app/src/routes/+page.svelte';
+
+type HostCtx = Parameters<typeof transformHost>[2];
 
 function idFor(
 	compRel: string,
@@ -29,8 +32,9 @@ function idFor(
 	return regionId(regionIdentity(compRel, mark), salt);
 }
 
-function makeCtx(overrides: Record<string, unknown> = {}) {
+function makeCtx(overrides: Partial<HostCtx> = {}): HostCtx {
 	return {
+		...HOST_CTX_DEFAULTS,
 		root: ROOT,
 		libDir: '/app/src/lib',
 		readFile: () => null,

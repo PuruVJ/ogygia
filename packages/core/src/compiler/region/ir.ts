@@ -10,10 +10,10 @@
  * `transformHost` always used.
  */
 import type { ImportKeys } from './transform.ts';
+import type { AstNode } from '../parse/oxc.ts';
 
 /** A Svelte / ESTree node as the front-end walks it — dynamic access, loosely typed by design. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type SvelteNode = any;
+export type SvelteNode = AstNode;
 
 /** A region mark — the `{ strategy, options }` a `with { … }` clause or `asRegion(…)` resolves to. */
 export interface RegionMark {
@@ -23,7 +23,8 @@ export interface RegionMark {
 
 /** One host import the analyze pass indexed: its ImportDeclaration node + the `with {…}`-stripped text. */
 export interface HostImport {
-	node: SvelteNode;
+	/** the ImportDeclaration (or the synthetic one an asRegion call stands for), with its offsets */
+	node: SvelteNode & { start: number; end: number };
 	cleaned: string;
 }
 

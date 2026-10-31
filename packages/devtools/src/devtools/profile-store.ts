@@ -1,4 +1,3 @@
-/* oxlint-disable no-explicit-any -- reads the profiler's JSON answer, untyped on the wire; every field is checked before use. */
 /**
  * The devtools' copy of the last SSR profile per page — the native Profiler tab writes it, the Lens
  * roster and the island detail read it (joined by fingerprint, then by entry), so a server cost sits
@@ -141,7 +140,14 @@ export async function run_profile(
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-const arr = (v: unknown): Record<string, any>[] =>
+/**
+ * A record of the profiler's JSON answer, untyped on the wire (and possibly from another version):
+ * read deep and tolerant (`r.since?.score?.a`), with every value checked before use (`num`, `str`,
+ * `arr`, `String`), so a missing or odd field reads as empty instead of throwing.
+ */
+// oxlint-disable-next-line typescript/no-explicit-any
+type WireRecord = Record<string, any>;
+const arr = (v: unknown): WireRecord[] =>
 	Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : [];
 /** an island row's first hazard line — a value it renders before a guard around browser-only work */
 function slim_hazard(v: unknown): { hazard?: NonNullable<SlimIsland['hazard']> } {
@@ -174,7 +180,7 @@ function median(xs: number[]): number {
 
 /** The profiler's JSON answer (`/page?format=json`) cut to what the dock shows. Tolerant: a field
  *  the report lacks is left empty, never a throw. */
-export function slim_profile(r: Record<string, any>): SlimProfile {
+export function slim_profile(r: WireRecord): SlimProfile {
 	const target = r?.target ?? {};
 	// (`runs` are the renders with the profiler's own cost taken out — the forecast's base)
 	const runs = (Array.isArray(target.runs) ? target.runs : []).filter(

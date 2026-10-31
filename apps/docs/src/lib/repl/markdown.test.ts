@@ -167,8 +167,8 @@ async function main() {
 		try {
 			await compiles(md);
 			ok(`compiles: ${label}`, true);
-		} catch (e: any) {
-			ok(`compiles: ${label}`, false, e.message.split('\n')[0]);
+		} catch (e) {
+			ok(`compiles: ${label}`, false, (e as Error).message.split('\n')[0]);
 		}
 	}
 

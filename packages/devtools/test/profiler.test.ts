@@ -65,7 +65,13 @@ import { build_standalone } from '../src/profiler/standalone.ts';
 import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.ts';
 import { io_kind } from '../src/profiler/async-io.ts';
 import { raw_cookie_values } from '../src/profiler/session-cookie.ts';
-import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.ts';
+import {
+	report_json,
+	report_dump,
+	is_dump,
+	derive_findings,
+	type ReportExtras
+} from '../src/profiler/report.ts';
 import { parse_visit } from '../src/profiler/visit.ts';
 import {
 	budget_segments,
@@ -290,10 +296,7 @@ describe('report data (JSON, findings, budget, treemap, waiting)', () => {
 			timeDeltas: [1000, 1000, 1000, 1000]
 		};
 		const a = analyze(profile);
-		const j = report_json(a, meta, '/__profiler', { net: [], heap: null, mem: [] }) as Record<
-			string,
-			any
-		>;
+		const j = report_json(a, meta, '/__profiler', { net: [], heap: null, mem: [] });
 
 		expect(j.schema).toBe('ogygia-profiler-report');
 		expect(j.units.time).toBe('ms');
@@ -302,9 +305,9 @@ describe('report data (JSON, findings, budget, treemap, waiting)', () => {
 		expect(j.findings[0]).toHaveProperty('code');
 		expect(j.findings[0]).toHaveProperty('severity');
 		// component attribution survives into JSON
-		expect(j.components.map((c: any) => c.name)).toContain('Header');
+		expect(j.components.map((c) => c.name)).toContain('Header');
 		// budget covers the window and includes GC
-		expect(j.budget.some((b: any) => b.category === 'gc')).toBe(true);
+		expect(j.budget.some((b) => b.category === 'gc')).toBe(true);
 		expect(j.links.json).toBe('/__profiler/report/abc.json');
 		// round-trips through JSON.stringify (no functions, dates, or cycles)
 		expect(() => JSON.parse(JSON.stringify(j))).not.toThrow();
@@ -691,10 +694,10 @@ describe('I/O wait attribution', () => {
 			heap: null,
 			mem: [],
 			io: [{ type: 'Timeout', caller: 'queryDatabase (db.ts:4)', ms: 1500, start: 0 }]
-		}) as Record<string, any>;
-		const byWait = j.waiting.sort((x: any, y: any) => y.wait_ms - x.wait_ms);
+		});
+		const byWait = j.waiting.sort((x, y) => y.wait_ms - x.wait_ms);
 		expect(byWait[0]).toMatchObject({ caller: 'callService (data.ts:8)', kind: 'http' });
-		expect(j.waiting.find((w: any) => w.kind === 'timer')).toMatchObject({
+		expect(j.waiting.find((w) => w.kind === 'timer')).toMatchObject({
 			caller: 'queryDatabase (db.ts:4)'
 		});
 		expect(j.network.calls[0].caller).toBe('callService (data.ts:8)');
@@ -1352,6 +1355,7 @@ describe('timeline (critical path + phases)', () => {
 			cpu_ms: 0,
 			wait_ms: 0,
 			gap_ms: 0,
+			overhead_ms: 0,
 			phases: [],
 			parallelizable: [],
 			segments: [
@@ -1781,7 +1785,7 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			recovered: 0
 		}
 	];
-	const extras = { net: [], mem: [], weights, client } as never;
+	const extras: ReportExtras = { net: [], heap: null, mem: [], weights, client };
 
 	it('findings: the seed explained, devalue culprits, the wake advisor, hole economics, the browser side', () => {
 		const f = derive_findings(analyze(p1), meta as never, extras);
@@ -3228,14 +3232,16 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		dev_switch.dev = false;
 		try {
 			const handle = profiler({ secret: 'prof-key' });
-			const doc = (cookies: Record<string, string>, headers: Record<string, string> = {}) =>
-				handle({
-					event: {
-						...make_event('/some/page', { 'sec-fetch-dest': 'document', ...headers }),
-						cookies: { get: (k: string) => cookies[k] }
-					} as never,
-					resolve: async (_e, opts) => new Response(String(!!opts?.transformPageChunk))
-				}).then((r) => r.text());
+			const doc = async (cookies: Record<string, string>, headers: Record<string, string> = {}) =>
+				(
+					await handle({
+						event: {
+							...make_event('/some/page', { 'sec-fetch-dest': 'document', ...headers }),
+							cookies: { get: (k: string) => cookies[k] }
+						} as never,
+						resolve: async (_e, opts) => new Response(String(!!opts?.transformPageChunk))
+					})
+				).text();
 			expect(await doc({})).toBe('false');
 			expect(await doc({ og_profiler_beacon: '1' })).toBe('true');
 			expect(await doc({}, { 'x-profiler-key': 'prof-key' })).toBe('true');
@@ -3258,14 +3264,16 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			expect(set).toHaveLength(1);
 			expect(set[0].startsWith('og_profiler=') && set[0].includes('Path=/__profiler')).toBe(true);
 			const token = set[0].slice('og_profiler='.length, set[0].indexOf(';'));
-			const next = (cookie: string, path = '/__profiler') =>
-				handle({
-					event: {
-						...make_event(path, { cookie }),
-						cookies: { get: (k: string) => raw_cookie_values(cookie, k)[0] }
-					} as never,
-					resolve: async () => new Response('no')
-				}).then((r) => r.headers.getSetCookie());
+			const next = async (cookie: string, path = '/__profiler') =>
+				(
+					await handle({
+						event: {
+							...make_event(path, { cookie }),
+							cookies: { get: (k: string) => raw_cookie_values(cookie, k)[0] }
+						} as never,
+						resolve: async () => new Response('no')
+					})
+				).headers.getSetCookie();
 			expect(await next(`og_profiler=${token}`)).toEqual([
 				expect.stringMatching(/^og_profiler_beacon=1; Path=\/;/)
 			]);
@@ -6621,7 +6629,11 @@ describe('who caused the GC, on the host', () => {
 		function make_garbage(): number {
 			let n = 0;
 			for (let i = 0; i < 60; i++) {
-				const chunk = new Array(1024 * 128).fill(0).map((_, j) => ({ j, s: 'x' + j }));
+				// (a zero-filled array, then mapped: two allocations per chunk, with `map` on the stack)
+				const chunk = Array.from({ length: 1024 * 128 }, () => 0).map((_, j) => ({
+					j,
+					s: 'x' + j
+				}));
 				n += chunk.length;
 			}
 			return n;
@@ -6701,7 +6713,7 @@ describe('the profiler’s own cost is taken out', () => {
 		const handle = profiler({ secret: 'prof-key' });
 		const ev = make_event('/__profiler/page?p=/o&runs=2&cold=0');
 		(ev as { fetch: unknown }).fetch = async () => {
-			const junk = new Array(200_000).fill(0).map((_, i) => ({ i }));
+			const junk = Array.from({ length: 200_000 }, (_, i) => ({ i }));
 			return new Response('<html>' + junk.length + '</html>');
 		};
 		const rec = await handle({ event: ev, resolve: async () => new Response('no') });
@@ -6843,7 +6855,7 @@ describe('more from the same snapshot, on the host', () => {
 		const ev = make_event('/__profiler/page?p=/keep&runs=2&cold=0');
 		(ev as { fetch: unknown }).fetch = async () => {
 			for (let i = 0; i < 2000; i++) await Promise.resolve(i); // a small promise storm
-			const rows = new Array(20_000).fill(0).map((_, i) => ({ i, s: 'row ' + i }));
+			const rows = Array.from({ length: 20_000 }, (_, i) => ({ i, s: 'row ' + i }));
 			kept.push(rows); // ~1 MB kept per render
 			return new Response('<html>' + rows.length + '</html>');
 		};

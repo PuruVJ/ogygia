@@ -16,10 +16,10 @@
 	const W = 960;
 	const H = 72;
 	const BINS = 240;
-	const bins = density(stacks, BINS);
-	const comp_bins = density(stacks, BINS, 'component');
-	const bin_ms = stacks.window_ms / BINS;
-	const max_bin = Math.max(...bins, bin_ms, 0.001);
+	const bins = $derived(density(stacks, BINS));
+	const comp_bins = $derived(density(stacks, BINS, 'component'));
+	const bin_ms = $derived(stacks.window_ms / BINS);
+	const max_bin = $derived(Math.max(...bins, bin_ms, 0.001));
 	const x_of = (t: number) => (t / (stacks.window_ms || 1)) * W;
 	const t_of = (x: number) => Math.max(0, Math.min(stacks.window_ms, (x / W) * stacks.window_ms));
 

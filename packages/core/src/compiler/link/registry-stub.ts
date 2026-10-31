@@ -28,7 +28,7 @@
  * imports stay out, which is the leak this module exists for.
  */
 import { walk } from 'estree-walker';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 
 export const REGISTRY_STUB_PREFIX = 'virtual:ogygia/registry-stub/';
 
@@ -46,11 +46,10 @@ export function registry_client_path(id: string): string | null {
 	return id.endsWith(REGISTRY_CLIENT_QUERY) ? id.slice(0, -REGISTRY_CLIENT_QUERY.length) : null;
 }
 
-type EsNode = {
+type EsNode = AstNode & {
 	type: string;
 	start: number;
 	end: number;
-	[key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 };
 
 /** True when `node` is `import.meta.og.<prop>`. */

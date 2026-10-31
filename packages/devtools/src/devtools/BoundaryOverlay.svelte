@@ -61,7 +61,7 @@
 	});
 
 	const boxes = $derived.by(() => {
-		frame; // reactive dependency: recompute each animation frame
+		void frame; // reactive dependency: recompute each animation frame
 		if (!overlay) return [];
 		return all_regions()
 			.map((r) => {
@@ -139,7 +139,7 @@
 {#if overlay}
 	<div class="og-overlay" data-og-overlay class:focusing={focus != null || selected != null}>
 		{#each boxes as b (b.info.el)}
-			<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 			<div
 				class="box og-{b.info.kind}"
 				data-og-box={b.info.kind}
@@ -150,7 +150,6 @@
 				class:pickable={picking}
 				onclick={picking ? () => pick(b.info.el) : null}
 				role={picking ? 'button' : null}
-				tabindex={picking ? -1 : null}
 				style:left="{b.rect.left}px"
 				style:top="{b.rect.top}px"
 				style:width="{b.rect.width}px"

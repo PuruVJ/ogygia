@@ -51,7 +51,10 @@ function beacon_mark(...args: MarkArgs): void {
 			retrying = false;
 			for (const w of waiting.splice(0)) later.beacon_mark(...w);
 		} else if (++tries < 40) setTimeout(retry, 250);
-		else ((retrying = false), (waiting.length = 0));
+		else {
+			retrying = false;
+			waiting.length = 0;
+		}
 	};
 	setTimeout(retry, 250);
 }

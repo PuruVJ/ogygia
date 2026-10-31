@@ -58,13 +58,18 @@ interface BusState {
 
 const BUS_KEY = Symbol.for('ogygia.devtools.bus');
 
+/** `cap` empty ring slots (`undefined` until written; the readers skip empty slots). */
+function empty_ring(cap: number): (DevtoolsEvent | undefined)[] {
+	return Array.from<DevtoolsEvent | undefined>({ length: cap });
+}
+
 function bus(): BusState {
 	const g = globalThis as Record<symbol, unknown>;
 	return ((g[BUS_KEY] as BusState | undefined) ??= {
 		active: DEVTOOLS,
 		seq: 0,
 		cap: DEFAULT_CAP,
-		ring: new Array(DEFAULT_CAP),
+		ring: empty_ring(DEFAULT_CAP),
 		write: 0,
 		count: 0,
 		sinks: new Set(),
@@ -168,7 +173,7 @@ export function snapshot(): DevtoolsEvent[] {
 /** Drop every buffered event (the sinks are left registered). Used between e2e scenarios + traces. */
 export function clear(): void {
 	const b = bus();
-	b.ring = new Array(b.cap);
+	b.ring = empty_ring(b.cap);
 	b.write = 0;
 	b.count = 0;
 }
@@ -193,7 +198,7 @@ export function configure(opts: {
 		// Resize by re-ringing the current snapshot into a fresh buffer (keeps newest, drops overflow).
 		const kept = snapshot().slice(-opts.cap);
 		b.cap = opts.cap;
-		b.ring = new Array(opts.cap);
+		b.ring = empty_ring(opts.cap);
 		b.write = 0;
 		b.count = 0;
 		for (const ev of kept) {

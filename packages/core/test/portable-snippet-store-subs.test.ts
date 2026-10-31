@@ -23,7 +23,8 @@ const ctx = {
 	importKeys: {},
 	idSalt: '',
 	clientBindingStub: 'virtual:ogygia/client-binding-stub',
-	routeCsr: undefined
+	routeCsr: undefined,
+	linkVirtualIsland: true
 };
 
 let warn: ReturnType<typeof vi.spyOn>;

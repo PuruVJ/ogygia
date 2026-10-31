@@ -302,7 +302,7 @@ async function drain_queue(): Promise<void> {
 			queue.splice(i, 1);
 			start(e, cls, background);
 			// the holder's continuation (its synchronous start-up) runs in this microtask turn
-			await null;
+			await Promise.resolve();
 			if (now() >= until) {
 				await yield_task();
 				until = now() + START_BUDGET_MS;

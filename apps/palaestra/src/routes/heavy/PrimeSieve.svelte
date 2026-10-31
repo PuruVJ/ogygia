@@ -4,8 +4,13 @@
 	// profiler's "slowest components" table. `limit` scales the cost.
 	let { limit = 400_000 }: { limit?: number } = $props();
 
+	// The work stays inline in the script on purpose (it renders once, on the server), so the
+	// warnings about one-time reads and plain locals do not apply.
+	// svelte-ignore non_reactive_update
 	let count = 0;
+	// svelte-ignore non_reactive_update
 	let last = 0;
+	// svelte-ignore state_referenced_locally
 	for (let n = 2; n < limit; n++) {
 		let prime = true;
 		for (let d = 2; d * d <= n; d++) {

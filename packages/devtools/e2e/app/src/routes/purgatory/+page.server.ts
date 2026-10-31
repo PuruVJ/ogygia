@@ -6,6 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { BRANDS, PRODUCTS } from '$lib/inferno/data';
 import {
 	allTags,
+	// Unused on purpose: the DECOY in `load` shadows this module constant with a local of the same
+	// name, and internal/bench/profiler-answer-key.ts checks the profiler does not blame the import.
+	// oxlint-disable-next-line no-unused-vars
 	catalogRows,
 	flatten,
 	initials,

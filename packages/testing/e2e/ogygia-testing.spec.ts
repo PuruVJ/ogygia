@@ -313,7 +313,9 @@ test('record() across an in-app navigation: the first page keeps its island name
 		await page.waitForTimeout(400);
 		// the router swaps the page (no document load): the first page's islands leave the DOM
 		const soft = await page.evaluate(async () => {
-			const nav = (globalThis as any)[Symbol.for('ogygia.nav')];
+			const nav = (
+				globalThis as unknown as Record<symbol, { goto(href: string): Promise<unknown> }>
+			)[Symbol.for('ogygia.nav')];
 			const origin = performance.timeOrigin;
 			await nav.goto('/dt-lab');
 			return performance.timeOrigin === origin;

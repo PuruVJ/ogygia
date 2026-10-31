@@ -39,30 +39,32 @@ test('a fingerprinted island reports its hydration timing to the profiler beacon
 		// force the latter; either way exactly one beacon leaves
 		dispatchEvent(new Event('pagehide'));
 		// two beacons: the islands batch, then the page's web vitals (final only when the page hides)
+		type Visit = {
+			nav: { res_start: number };
+			islands: { fp: string; t0: number; done: number; ssr_bytes?: number }[];
+			viewport: number[];
+			resources: unknown[];
+		};
 		const bodies = sent.map(
 			(s) =>
-				JSON.parse(s.body) as { page: string; islands?: unknown[]; vitals?: Record<string, number> }
+				JSON.parse(s.body) as {
+					page: string;
+					islands?: unknown[];
+					vitals?: Record<string, number>;
+					visit?: Visit;
+				}
 		);
 		expect(sent.every((s) => s.url === '/__profiler/beacon')).toBe(true);
 		const island_posts = bodies.filter((b) => b.islands);
 		const vitals_posts = bodies.filter((b) => b.vitals);
-		const visit_posts = bodies.filter((b) => (b as { visit?: unknown }).visit);
+		const visit_posts = bodies.filter((b) => b.visit);
 		expect(island_posts).toHaveLength(1);
 		expect(vitals_posts).toHaveLength(1);
 		// the VISIT: navigation timing, the islands with their wake times on the page's clock, the
 		// viewport — posted early (first idle) and again, final, on hide; the server folds the two
 		expect(visit_posts.length).toBeGreaterThanOrEqual(1);
 		expect(visit_posts.length).toBeLessThanOrEqual(2);
-		const visit = (
-			visit_posts[visit_posts.length - 1] as {
-				visit: {
-					nav: { res_start: number };
-					islands: { fp: string; t0: number; done: number; ssr_bytes?: number }[];
-					viewport: number[];
-					resources: unknown[];
-				};
-			}
-		).visit;
+		const visit = visit_posts[visit_posts.length - 1].visit!;
 		expect(typeof visit.nav.res_start).toBe('number');
 		expect(visit.islands).toHaveLength(1);
 		expect(visit.islands[0].fp).toBe('0000aaaa1111bbbb');

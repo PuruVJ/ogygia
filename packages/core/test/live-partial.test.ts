@@ -9,6 +9,7 @@ import path from 'node:path';
 import { region, isRegion } from '../dist/region.js';
 import { ogygiaTransport } from '../dist/transport.js';
 import { transformHost } from '../dist/compiler/region/transform.js';
+import { HOST_CTX_DEFAULTS } from './_host-ctx.ts';
 
 /** A fake SSR partial-binding (what `virtual:ogygia/region/<iid>.js` exports on the server leg). */
 function fakeBinding(overrides: Record<string, unknown> = {}) {
@@ -26,7 +27,7 @@ function fakeBinding(overrides: Record<string, unknown> = {}) {
 
 describe('region() — awaitable dual partial', () => {
 	test('un-awaited dual carries no html and is not enumerable-thenable', () => {
-		const f = region(fakeBinding() as never, { n: 5 } as never) as Record<string, unknown>;
+		const f = region(fakeBinding() as never, { n: 5 } as never);
 		expect(isRegion(f)).toBe(true);
 		expect(f.kind).toBe('dual');
 		expect(f.html).toBeUndefined();
@@ -46,10 +47,7 @@ describe('region() — awaitable dual partial', () => {
 	});
 
 	test('a binding without __renderHtml (mis-wired) is not awaitable', () => {
-		const f = region(fakeBinding({ __renderHtml: undefined }) as never, {} as never) as Record<
-			string,
-			unknown
-		>;
+		const f = region(fakeBinding({ __renderHtml: undefined }) as never, {} as never);
 		expect((f as { then?: unknown }).then).toBeUndefined();
 	});
 });
@@ -103,8 +101,9 @@ describe('transform — SSR binding renders HTML, client leg stays metadata-only
 		export const f = region(Card, { id: 1 });
 	</script>`;
 
-	function ctx() {
+	function ctx(): Parameters<typeof transformHost>[2] {
 		return {
+			...HOST_CTX_DEFAULTS,
 			root: '/app',
 			libDir: '/app/src/lib',
 			readFile: () => null,
@@ -120,7 +119,7 @@ describe('transform — SSR binding renders HTML, client leg stays metadata-only
 
 	test('SSR leg renders through the one shared helper and exposes __renderHtml', () => {
 		const r = transformHost(src, '/app/src/routes/+page.svelte', ctx());
-		const isl = r!.islands[0] as Record<string, unknown>;
+		const isl = r!.islands[0];
 		const ssr = String(isl.bindingSsrSource);
 		// (ogygia's shared render, never a copy of it inlined per binding)
 		expect(ssr).toContain('render_region_html as __ogRegionHtml');

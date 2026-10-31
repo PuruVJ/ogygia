@@ -84,7 +84,7 @@ async function maybe_deploy_thaw(fed: Federation): Promise<void> {
 export async function serve_federation(event: RequestEvent): Promise<Response | null> {
 	const fed = current_federation();
 	if (!fed) return null;
-	const { url, request } = event;
+	const { url } = event;
 	const path = url.pathname;
 
 	if (path.endsWith(FRAGMENT_ROUTES_PATH)) {

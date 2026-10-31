@@ -11,7 +11,7 @@
 	let { steps }: { steps: RenderSteps } = $props();
 
 	let i = $state(0);
-	const n = steps.steps.length;
+	const n = $derived(steps.steps.length);
 	const cur = $derived<RenderStep>(steps.steps[Math.min(i, n - 1)]);
 	const pct = (ms: number) => (steps.window_ms > 0 ? (ms / steps.window_ms) * 100 : 0);
 	const color = (s: RenderStep) =>
@@ -35,10 +35,10 @@
 		}
 	}
 	// the biggest few steps, as jump targets
-	const big = [...steps.steps].sort((a, b) => b.ms - a.ms).slice(0, 5);
+	const big = $derived([...steps.steps].sort((a, b) => b.ms - a.ms).slice(0, 5));
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
 	class="stepper"
 	tabindex="0"

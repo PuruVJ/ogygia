@@ -13,14 +13,14 @@ interface ImportMetaOg {
 	 * `Source` instead — these four cover the static/compile-time cases. Server-only.
 	 */
 	readonly loader: {
-		/** A markdown/`.svx` collection from a LITERAL glob (e.g. `'./docs/**​/*.svx'`).
+		/** A markdown/`.svx` collection from a LITERAL glob (e.g. `'./docs/**\/*.svx'`).
 		 *  `meta.headings` comes for free. */
 		markdown(
 			glob: string,
 			opts?: { id?: (key: string) => string } & { preset?: string }
 		): import('@ogygia/content').Source<import('@ogygia/content').MarkdownMeta>;
 		/** A filesystem-CONVENTION collection from a LITERAL glob (e.g.
-		 *  `'../content/**​/{+doc.svx,+meta.json}'`) — `NN-` ordering, `+meta.json` labels. */
+		 *  `'../content/**\/{+doc.svx,+meta.json}'`) — `NN-` ordering, `+meta.json` labels. */
 		folder<Meta = Record<string, never>>(
 			glob: string,
 			opts?: import('@ogygia/content').FolderOptions<Meta> & { preset?: string }

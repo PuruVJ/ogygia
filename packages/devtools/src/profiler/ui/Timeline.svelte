@@ -14,7 +14,6 @@
 		type ViewSegment
 	} from '../timeline.ts';
 	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.ts';
-	import { pressable } from './press.ts';
 
 	let {
 		t,
@@ -45,18 +44,20 @@
 					: IO
 				: GAP;
 
-	const view = coalesce(t);
-	const steps = chain_steps(t);
-	const step_index = new Map(steps.map((s) => [s.i, s]));
-	const phase_total = t.phases.reduce((s, p) => s + p.cpu_ms + p.wait_ms, 0) || 1;
-	const saves = t.parallelizable.filter((g) => g.save_ms >= 1);
+	const view = $derived(coalesce(t));
+	const steps = $derived(chain_steps(t));
+	const step_index = $derived(new Map(steps.map((s) => [s.i, s])));
+	const phase_total = $derived(t.phases.reduce((s, p) => s + p.cpu_ms + p.wait_ms, 0) || 1);
+	const saves = $derived(t.parallelizable.filter((g) => g.save_ms >= 1));
 	// a save callout sits on the first block of its group (`at` indexes the same coalesced view);
 	// a chain of calls each too small to be a step (an N+1 loop) gets its callout after the list
-	const save_at = new Map<number, (typeof saves)[number]>();
-	for (const g of saves)
-		if (step_index.has(g.at[0]) && !save_at.has(g.at[0])) save_at.set(g.at[0], g);
-	const orphan_saves = saves.filter(
-		(g) => !step_index.has(g.at[0]) && g.save_ms >= Math.max(2, t.window_ms * 0.02)
+	const save_at = $derived.by(() => {
+		const m = new Map<number, (typeof saves)[number]>();
+		for (const g of saves) if (step_index.has(g.at[0]) && !m.has(g.at[0])) m.set(g.at[0], g);
+		return m;
+	});
+	const orphan_saves = $derived(
+		saves.filter((g) => !step_index.has(g.at[0]) && g.save_ms >= Math.max(2, t.window_ms * 0.02))
 	);
 	const chain_label = (calls: string[]) =>
 		calls.length <= 4
@@ -92,7 +93,7 @@
 	>
 </div>
 
-<!-- a group: its segments are pressable (an image cannot hold buttons), each named for a reader -->
+<!-- a group: its segments are buttons (an image cannot hold buttons), each named for a reader -->
 <div
 	class="bar"
 	role="group"
@@ -100,7 +101,8 @@
 	onmouseleave={() => (tip = null)}
 >
 	{#each view as s, i (i)}
-		<div
+		<button
+			type="button"
 			class="seg {s.kind}"
 			class:picked={picked === i}
 			style="width:{Math.max(pct(s), 0.2)}%;background:{fill(s)}"
@@ -113,15 +115,12 @@
 				tip = { i, x: r.left, y: r.bottom };
 			}}
 			onblur={() => (tip = null)}
-			role="button"
-			tabindex="0"
-			{@attach pressable}
 			aria-label="{s.kind === 'wait' ? 'wait: ' : ''}{s.label}"
 		>
 			{#if pct(s) > 5}<span style="color:{ink_on(dot(s))}"
 					>{s.kind === 'wait' ? 'wait: ' : ''}{s.label}</span
 				>{/if}
-		</div>
+		</button>
 	{/each}
 </div>
 {#if gc_in.length}
@@ -403,8 +402,14 @@
 		background: var(--bg-sunken);
 	}
 	/* no padding or border on a segment: hundreds of thin ones would each keep that much width and
-	   push the bar past its card. The divider is a shadow, the inset is on the label. */
+	   push the bar past its card (the shell's button padding, border and radius are taken off). The
+	   divider is a shadow, the inset is on the label. */
 	.seg {
+		border: 0;
+		border-radius: 0;
+		padding: 0;
+		margin: 0;
+		text-align: left;
 		min-width: 0;
 		overflow: hidden;
 		white-space: nowrap;

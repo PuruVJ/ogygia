@@ -98,11 +98,11 @@
 		if (s < 86400) return `${Math.round(s / 3600)}h ago`;
 		return `${Math.round(s / 86400)}d ago`;
 	};
-	const nav = [
+	const nav = $derived([
 		{ href: base, label: 'Dashboard', icon: '▦' },
 		{ href: `${base}/site`, label: 'Whole site', icon: '◈' },
 		{ href: `${base}/view`, label: 'Import .ogp', icon: '↥' }
-	];
+	]);
 	const is_here = (href: string) =>
 		typeof window !== 'undefined' &&
 		window.location.pathname === new URL(href, window.location.origin).pathname;

@@ -57,4 +57,13 @@ unformatted file. Code inside Markdown fences is left as written (doc snippets c
 highlight markers a formatter would break), and generated files (the lockfile, changelogs, benchmark
 results, the bundle-size snapshot) are ignored.
 
+**Linting and types.** One root `.oxlintrc.json` covers every file: oxlint's correctness rules plus
+`no-explicit-any`. Run `pnpm lint`; CI runs it next to the format check. `pnpm check` type-checks
+every package (its source, tests and e2e specs) and runs `svelte-check --fail-on-warnings` on every
+package and app with Svelte files, so a Svelte warning fails the build. When a fixture needs code a
+rule or warning flags (a test of that very behaviour), silence it at that spot, with the reason in a
+comment above (`// svelte-ignore <code>` or `// oxlint-disable-next-line <rule>`). The one wider
+exception: the devtools fixture app's planted-problem folders, whose code shape is the test, are
+listed once in its `svelte.config.js` with the reason.
+
 See `apps/palaestra/e2e/README.md` for core's suite list.

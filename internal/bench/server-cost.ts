@@ -105,7 +105,7 @@ for (const route of ['/bench-cms/plain', '/bench-cms', '/bench-cms/plain', '/ben
 	const r = await hammer(route);
 	results[route] = r;
 	console.log(
-		`  ${route.padEnd(18)} html ${(r.bytes / 1024).toFixed(0).padStart(5)} KB · min ${r.min} · p50 ${r.p50} · p95 ${r.p95} · p99 ${r.p99} ms · RSS ${r.rss0} → ${r.rss1} MB (${r.rss_samples.map(([i, m]) => m).join(',')})`
+		`  ${route.padEnd(18)} html ${(r.bytes / 1024).toFixed(0).padStart(5)} KB · min ${r.min} · p50 ${r.p50} · p95 ${r.p95} · p99 ${r.p99} ms · RSS ${r.rss0} → ${r.rss1} MB (${r.rss_samples.map(([, m]) => m).join(',')})`
 	);
 }
 const over = (k) =>

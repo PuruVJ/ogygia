@@ -132,7 +132,7 @@ export function density(
 	bins = 200,
 	by: 'all' | FrameCategory = 'all'
 ): number[] {
-	const out = new Array<number>(bins).fill(0);
+	const out = Array.from({ length: bins }, () => 0);
 	const w = index.window_ms || 1;
 	for (let i = 0; i < index.t.length; i++) {
 		const leaf = index.leaf[i];

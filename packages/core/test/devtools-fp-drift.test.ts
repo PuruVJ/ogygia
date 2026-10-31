@@ -53,10 +53,12 @@ describe('fp drift', () => {
 		expect(props_diff(c, d)).toEqual({ path: 'x.<URL>', was: '"http://a/1"', now: '"http://a/2"' });
 		// a value inside ogygia's ref wrapper (a store's): named as the author wrote it
 		class Ref {
-			constructor(
-				readonly k: string,
-				readonly d: unknown
-			) {}
+			readonly k: string;
+			readonly d: unknown;
+			constructor(k: string, d: unknown) {
+				this.k = k;
+				this.d = d;
+			}
 		}
 		const reducers = { OgygiaRef: (v: unknown) => v instanceof Ref && { k: v.k, d: v.d } };
 		const g = stringify({ cart: new Ref('store', { stamp: 1 }) }, reducers);

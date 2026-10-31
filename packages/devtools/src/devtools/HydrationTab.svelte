@@ -36,7 +36,7 @@
 	};
 
 	const model = $derived.by(() => {
-		tick;
+		void tick;
 		const { rows, measured } = hydration_rows();
 		const counts = {};
 		for (const r of rows) counts[r.status] = (counts[r.status] ?? 0) + 1;

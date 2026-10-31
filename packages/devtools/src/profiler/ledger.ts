@@ -308,7 +308,10 @@ export function build_ledger(input: LedgerInput): LedgerLine[] {
 			const a = acc(f.path, f.url || short_source(f.path), l.line);
 			a.cpu_ms += l.ms;
 			credit(a, f.name, l.ms);
-			if (l.ms > a.fn_ms) ((a.fn = f.key), (a.fn_ms = l.ms));
+			if (l.ms > a.fn_ms) {
+				a.fn = f.key;
+				a.fn_ms = l.ms;
+			}
 		}
 	}
 	// MERGED CALLS, split back: V8 inlines a small function into its caller and the profile then
@@ -368,7 +371,8 @@ export function build_ledger(input: LedgerInput): LedgerLine[] {
 			return out;
 		};
 		const touched = new Set<Acc>();
-		for (const a of [...by.values()]) {
+		// (a copy: `acc` adds the lines the time moves to)
+		for (const a of Array.from(by.values())) {
 			if (a.cpu_ms <= 0 || touched.has(a)) continue;
 			const caller = a.fn?.split(' ')[0];
 			const here = src(a.path, a.line, a.line)?.lines[0];
@@ -400,8 +404,10 @@ export function build_ledger(input: LedgerInput): LedgerLine[] {
 				for (const c of b.calls) credit(to, c.name, ms / b.calls.length);
 				to.fn ??= a.fn;
 				// the biggest move names where it came from
-				if (!to.merged || ms > to.merged_ms)
-					((to.merged = { from: a.line, callee: b.calls[0].name }), (to.merged_ms = ms));
+				if (!to.merged || ms > to.merged_ms) {
+					to.merged = { from: a.line, callee: b.calls[0].name };
+					to.merged_ms = ms;
+				}
 				touched.add(to);
 			}
 			touched.add(a);

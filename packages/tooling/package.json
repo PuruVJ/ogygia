@@ -11,12 +11,17 @@
 		"./e2e/*": "./src/e2e/*",
 		"./tsconfig.e2e.json": "./tsconfig.e2e.json"
 	},
+	"scripts": {
+		"check": "tsc -p ."
+	},
 	"dependencies": {
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
 		"@sveltejs/vite-plugin-svelte": "catalog:"
 	},
 	"devDependencies": {
-		"@playwright/test": "catalog:"
+		"@playwright/test": "catalog:",
+		"@types/node": "catalog:",
+		"typescript": "catalog:"
 	},
 	"peerDependencies": {
 		"@playwright/test": "catalog:",

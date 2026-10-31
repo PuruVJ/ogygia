@@ -1,8 +1,19 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	const d = () => page.data as any;
+	/** What routes/page-data-stress/+page.server.ts loads. `temp` is read structurally: its
+	 *  `fahrenheit` getter exists only if the transport rebuilt the class. */
+	type Temp = { fahrenheit?: number };
+	type StressData = {
+		rejects?: Promise<unknown>;
+		nested?: Promise<{ label?: string; inner?: Promise<string> }>;
+		many?: Promise<string>[];
+		falsy?: Promise<null>;
+		temp?: Temp;
+		tempAsync?: Promise<Temp>;
+	};
+	const d = () => page.data as StressData;
 	// Snapshot the many-array promise once so {#await} doesn't re-create it each render.
-	const many_all = Promise.all((d()?.many ?? []) as Promise<string>[]);
+	const many_all = Promise.all(d()?.many ?? []);
 </script>
 
 {#await d()?.rejects}

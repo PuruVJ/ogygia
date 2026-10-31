@@ -13,7 +13,7 @@ register_store_kind(); // a bound capture below is a store — its kind must be 
 
 const FAMILIES = new Set(['fn', 'store']);
 const enc = (v: unknown) => stringify(v, { [REF_WIRE_KEY]: ref_reducer(FAMILIES) });
-const dec = (s: string) => parse(s, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown });
+const dec = (s: string) => parse(s, { [REF_WIRE_KEY]: ref_reviver(true) });
 
 describe('fn kind (og.$ runtime half)', () => {
 	it('round-trip: handle crosses, client rebinds captures, call works', () => {
@@ -96,7 +96,7 @@ describe('og.$ boundary assertion runtime (__og_boundary) + fn as island prop', 
 		const { B64Url } = await import('../src/server/payload.ts');
 		const { REF_WIRE_KEY, ref_reviver } = await import('../src/ref.ts');
 		const props = parse(B64Url.decode(payload!), {
-			[REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown
+			[REF_WIRE_KEY]: ref_reviver(true)
 		}) as {
 			adder: (n: number) => number;
 			label: string;

@@ -27,8 +27,10 @@ const FUNCTION_TYPES = new Set([
 // Minimal estree shape for the function-scope handling (no @types/estree dependency).
 interface EsFunction {
 	id?: { name: string } | null;
-	params: unknown[];
+	params: SvelteNode[];
 }
+/** The estree node `estree-walker` walks (its own type, without depending on @types/estree). */
+type WalkNode = Parameters<typeof walk>[0];
 
 /** Accumulators threaded through the whole analysis. */
 interface Sink {
@@ -47,7 +49,7 @@ interface Sink {
 }
 
 /** Collect bound names from an estree binding pattern. */
-function collect_pattern_names(node: SvelteNode, out: Set<string>) {
+function collect_pattern_names(node: SvelteNode | null | undefined, out: Set<string>) {
 	if (!node) return;
 	switch (node.type) {
 		case 'Identifier':
@@ -115,7 +117,7 @@ function collect_write_roots(target: SvelteNode, roots: Set<string>) {
 /** Is this Identifier node a *reference* (a read) rather than a binding/property name? */
 function is_reference(
 	node: SvelteNode,
-	parent: SvelteNode,
+	parent: SvelteNode | null,
 	key: string | number | symbol | null | undefined
 ) {
 	if (!parent) return true;
@@ -171,7 +173,7 @@ function add_expression_refs(expr: SvelteNode, svelte_bound: Set<string>, sink: 
 		collect_write_roots(target, roots);
 		for (const r of roots) if (!has(r)) sink.mutated.add(r);
 	};
-	walk(expr, {
+	walk(expr as WalkNode, {
 		enter(node, parent, key) {
 			if (FUNCTION_TYPES.has(node.type)) {
 				const s = new Set<string>();

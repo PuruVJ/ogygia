@@ -103,69 +103,78 @@
 		/** rendered from this browser's own kept copy (the owner's): it can still be shared */
 		kept?: boolean;
 	} = $props();
+	// the one element the export buttons read the page's .ogp bytes from (`\x2f` is `/`: a literal
+	// closing script tag would end this script block)
+	const ogp_element = (b64: string) =>
+		`<script type="application/octet-stream" id="${OGP_ELEMENT_ID}">${b64}<\x2fscript>`;
 	const fmt_kb = (b: number) => `${Math.round(b / 1024)} KB`;
 	// The ogygia page score — derived here from the same meta+extras the findings read, so the card
 	// and the findings never disagree (report.ts serializes the same value for agents).
-	const score = page_score_of(meta, extras);
+	const score = $derived(page_score_of(meta, extras));
 	// ogygia's own cost on the profiled page: the request with the largest side-channels
-	const og =
+	const og = $derived(
 		[...meta.requests]
 			.filter((r) => r.og)
 			.sort(
 				(x, y) => y.og!.seed_bytes + y.og!.tail_bytes - (x.og!.seed_bytes + x.og!.tail_bytes)
-			)[0]?.og ?? null;
+			)[0]?.og ?? null
+	);
 	// history: this page's medians over time (page mode), newest last
-	const hist = history && history.points.length >= 2 ? history.points : null;
-	const hist_geom = hist
-		? (() => {
-				const w = 320,
-					h = 48,
-					pad = 4;
-				const max = Math.max(...hist.map((p) => p.median), 1);
-				const step = hist.length > 1 ? (w - 2 * pad) / (hist.length - 1) : 0;
-				const pts = hist.map(
-					(p, i) => [pad + i * step, h - pad - (p.median / max) * (h - 2 * pad)] as const
-				);
-				return { w, h, max, pts, poly: pts.map(([x, y]) => `${x},${y}`).join(' ') };
-			})()
-		: null;
-	const hist_prev = hist ? hist[hist.length - 2] : null;
-	const hist_last = hist ? hist[hist.length - 1] : null;
-	const hist_delta =
+	const hist = $derived(history && history.points.length >= 2 ? history.points : null);
+	const hist_geom = $derived.by(() => {
+		if (!hist) return null;
+		const w = 320,
+			h = 48,
+			pad = 4;
+		const max = Math.max(...hist.map((p) => p.median), 1);
+		const step = hist.length > 1 ? (w - 2 * pad) / (hist.length - 1) : 0;
+		const pts = hist.map(
+			(p, i) => [pad + i * step, h - pad - (p.median / max) * (h - 2 * pad)] as const
+		);
+		return { w, h, max, pts, poly: pts.map(([x, y]) => `${x},${y}`).join(' ') };
+	});
+	const hist_prev = $derived(hist ? hist[hist.length - 2] : null);
+	const hist_last = $derived(hist ? hist[hist.length - 1] : null);
+	const hist_delta = $derived(
 		hist_prev && hist_last && hist_prev.median > 0
 			? ((hist_last.median - hist_prev.median) / hist_prev.median) * 100
-			: 0;
+			: 0
+	);
 
-	const busy_pct = a.duration_ms > 0 ? (a.busy_ms / a.duration_ms) * 100 : 0;
-	const net = extras.net.filter((c) => c.ms >= 0);
-	const net_total = net.reduce((s, c) => s + c.ms + (c.body_ms ?? 0), 0);
-	const findings = derive_findings(a, meta, extras);
+	const busy_pct = $derived(a.duration_ms > 0 ? (a.busy_ms / a.duration_ms) * 100 : 0);
+	const net = $derived(extras.net.filter((c) => c.ms >= 0));
+	const net_total = $derived(net.reduce((s, c) => s + c.ms + (c.body_ms ?? 0), 0));
+	const findings = $derived(derive_findings(a, meta, extras));
 	// what fixing every slow pattern is worth, against the median render (page mode) or the window
-	const render_ms = meta.runs?.length
-		? [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)]
-		: a.duration_ms;
+	const render_ms = $derived(
+		meta.runs?.length
+			? [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)]
+			: a.duration_ms
+	);
 	// a CPU pattern's numbers cover every profiled render; a wait pattern's, one
-	const renders = meta.runs?.length || 1;
+	const renders = $derived(meta.runs?.length || 1);
 	// the report's own forecast (overlapping fixes counted once, moot ones left out, deleted work in);
 	// an older report without one: the plain sum, waits capped at the render's waiting
-	const fc = extras.forecast;
-	const old = fc
-		? undefined
-		: fix_impact(extras.patterns ?? [], render_ms, renders, a.timeline?.wait_ms);
-	const impact = fc
-		? {
-				render_ms: fc.now_ms,
-				after_ms: fc.after_ms,
-				pct: fc.now_ms > 0 ? Math.round(((fc.now_ms - fc.after_ms) / fc.now_ms) * 100) : 0,
-				cpu_ms: fc.cpu_ms,
-				wait_ms: fc.wait_ms,
-				delete_ms: fc.delete_ms
-			}
-		: old
-			? { ...old, delete_ms: 0 }
-			: undefined;
+	const fc = $derived(extras.forecast);
+	const old = $derived(
+		fc ? undefined : fix_impact(extras.patterns ?? [], render_ms, renders, a.timeline?.wait_ms)
+	);
+	const impact = $derived(
+		fc
+			? {
+					render_ms: fc.now_ms,
+					after_ms: fc.after_ms,
+					pct: fc.now_ms > 0 ? Math.round(((fc.now_ms - fc.after_ms) / fc.now_ms) * 100) : 0,
+					cpu_ms: fc.cpu_ms,
+					wait_ms: fc.wait_ms,
+					delete_ms: fc.delete_ms
+				}
+			: old
+				? { ...old, delete_ms: 0 }
+				: undefined
+	);
 	/** fixes whose saving another on the same lines already covers: counted once */
-	const covered = (fc?.parts ?? []).filter((p) => p.with?.length);
+	const covered = $derived((fc?.parts ?? []).filter((p) => p.with?.length));
 	// START HERE: the first three patterns (already ranked: a severe leak, then the biggest saving),
 	// each with the line to open — a wrapper's caller line when the site is a thin wrapper
 	/** `after`: one render once this and every step above it are done (the forecast's running total);
@@ -180,50 +189,52 @@
 		after?: number;
 		also?: string[];
 	};
-	const all_patterns: Start[] = (extras.patterns ?? []).map((p, i) => {
-		const s = p.sites[0];
-		// the caller that loops, else (a wait in a helper) the first line that called the helper
-		const at = s?.via?.find((v) => v.in_loop) ?? (p.wait ? s?.via?.[0] : undefined) ?? s;
-		const worth = p.kept_bytes
-			? `keeps ${fmt_bytes(p.kept_bytes)} a render${p.requests_left !== undefined ? `, heap full in ~${p.requests_left} requests` : ''}`
-			: p.seed_bytes
-				? `ships ${fmt_bytes(p.seed_bytes)} a page view`
-				: p.kind === 'sync-io' && !p.cost_ms
-					? 'blocks the server on every request (too quick to time here)'
-					: p.wait
-						? p.kind === 'same-document' || p.kind === 'almost-same-document'
-							? `~${fmt_ms(p.save_ms)} ms: the whole render, served from a cache`
-							: `~${fmt_ms(p.save_ms)} ms less waiting`
-						: `~${fmt_ms(p.save_ms / renders)} ms less CPU a render`;
-		// memory and seed lead where they are (they are sorted first for a reason); time, by ms a render
-		// (a leak that crashes the server, 8 MB+ a render, and a whole shipped seed lead; a small kept
-		// amount waits behind the time savings — the same rule as the agent's plan)
-		const value =
-			(p.kept_bytes ?? 0) >= 8 * 1048576 || p.seed_bytes
-				? Infinity
-				: p.kept_bytes
-					? -1
-					: p.wait
-						? p.save_ms
-						: p.save_ms / renders;
-		return {
-			i,
-			label: PATTERN_LABEL[p.kind],
-			where: at ? `${at.file}:${at.line}` : '',
-			worth,
-			href: `#pattern-${i}`,
-			value
-		};
-	});
-	const from_patterns = all_patterns.slice(0, 3);
+	const all_patterns: Start[] = $derived(
+		(extras.patterns ?? []).map((p, i) => {
+			const s = p.sites[0];
+			// the caller that loops, else (a wait in a helper) the first line that called the helper
+			const at = s?.via?.find((v) => v.in_loop) ?? (p.wait ? s?.via?.[0] : undefined) ?? s;
+			const worth = p.kept_bytes
+				? `keeps ${fmt_bytes(p.kept_bytes)} a render${p.requests_left !== undefined ? `, heap full in ~${p.requests_left} requests` : ''}`
+				: p.seed_bytes
+					? `ships ${fmt_bytes(p.seed_bytes)} a page view`
+					: p.kind === 'sync-io' && !p.cost_ms
+						? 'blocks the server on every request (too quick to time here)'
+						: p.wait
+							? p.kind === 'same-document' || p.kind === 'almost-same-document'
+								? `~${fmt_ms(p.save_ms)} ms: the whole render, served from a cache`
+								: `~${fmt_ms(p.save_ms)} ms less waiting`
+							: `~${fmt_ms(p.save_ms / renders)} ms less CPU a render`;
+			// memory and seed lead where they are (they are sorted first for a reason); time, by ms a render
+			// (a leak that crashes the server, 8 MB+ a render, and a whole shipped seed lead; a small kept
+			// amount waits behind the time savings — the same rule as the agent's plan)
+			const value =
+				(p.kept_bytes ?? 0) >= 8 * 1048576 || p.seed_bytes
+					? Infinity
+					: p.kept_bytes
+						? -1
+						: p.wait
+							? p.save_ms
+							: p.save_ms / renders;
+			return {
+				i,
+				label: PATTERN_LABEL[p.kind],
+				where: at ? `${at.file}:${at.line}` : '',
+				worth,
+				href: `#pattern-${i}`,
+				value
+			};
+		})
+	);
+	const from_patterns = $derived(all_patterns.slice(0, 3));
 	// WORK FOR DATA NOTHING READS (the drill-down's rows whose every key is unread): all of it goes,
 	// so it ranks with the patterns by its ms in one render
-	const unread = unread_rows(extras.drill);
-	const unread_ms = unread.reduce((s, r) => s + r.ms, 0);
+	const unread = $derived(unread_rows(extras.drill));
+	const unread_ms = $derived(unread.reduce((s, r) => s + r.ms, 0));
 	// a pattern inside that work (the date parsing in a function that builds only an unread key) is
 	// moot: deleting it beats speeding it up
-	const gone_names = new Set(unread.map((r) => r.label));
-	const gone_at = new Set(unread.flatMap((r) => (r.at ? [r.at] : [])));
+	const gone_names = $derived(new Set(unread.map((r) => r.label)));
+	const gone_at = $derived(new Set(unread.flatMap((r) => (r.at ? [r.at] : []))));
 	const moot = (i: number | string) => {
 		const p = typeof i === 'number' ? extras.patterns?.[i] : undefined;
 		return (
@@ -236,59 +247,63 @@
 	};
 	// WITH A FORECAST: its order (each saving once, a covered fix folded into the one that covers it)
 	// and its running total after each step; memory and a shipped seed still lead
-	const from_forecast: Start[] | undefined = fc?.parts.length
-		? [
-				...all_patterns.filter((s) => s.value === Infinity || s.value === -1),
-				...fc.parts.flatMap((p, rank): Start[] => {
-					if (p.kind === 'unread-work') {
-						const keys = p.title.slice(p.title.indexOf('(') + 1, -1);
-						// the place to edit: a LINE row that fills the key (the load's line), else the biggest row
-						const rows = unread.filter((r) => r.keys.join(', ') === keys);
-						const row = rows.find((r) => r.kind === 'line' && r.at) ?? rows[0];
+	const from_forecast: Start[] | undefined = $derived(
+		fc?.parts.length
+			? [
+					...all_patterns.filter((s) => s.value === Infinity || s.value === -1),
+					...fc.parts.flatMap((p, rank): Start[] => {
+						if (p.kind === 'unread-work') {
+							const keys = p.title.slice(p.title.indexOf('(') + 1, -1);
+							// the place to edit: a LINE row that fills the key (the load's line), else the biggest row
+							const rows = unread.filter((r) => r.keys.join(', ') === keys);
+							const row = rows.find((r) => r.kind === 'line' && r.at) ?? rows[0];
+							return [
+								{
+									i: `unread-${rank}`,
+									label: 'Work for data nothing reads',
+									where: row?.at ?? row?.label ?? '',
+									worth: `~${fmt_ms(p.ms)} ms a render (${keys})`,
+									href: '#drill',
+									value: 1e9 - rank,
+									...(p.after_ms !== undefined ? { after: p.after_ms } : {})
+								}
+							];
+						}
+						const at = (extras.patterns ?? []).findIndex((x) => x.title === p.title);
+						if (at === -1) return [];
 						return [
 							{
-								i: `unread-${rank}`,
-								label: 'Work for data nothing reads',
-								where: row?.at ?? row?.label ?? '',
-								worth: `~${fmt_ms(p.ms)} ms a render (${keys})`,
-								href: '#drill',
+								...all_patterns[at],
 								value: 1e9 - rank,
-								...(p.after_ms !== undefined ? { after: p.after_ms } : {})
+								...(p.after_ms !== undefined ? { after: p.after_ms } : {}),
+								...(p.with?.length ? { also: p.with } : {})
 							}
 						];
-					}
-					const at = (extras.patterns ?? []).findIndex((x) => x.title === p.title);
-					if (at === -1) return [];
-					return [
-						{
-							...all_patterns[at],
-							value: 1e9 - rank,
-							...(p.after_ms !== undefined ? { after: p.after_ms } : {}),
-							...(p.with?.length ? { also: p.with } : {})
-						}
-					];
-				})
+					})
+				]
+			: undefined
+	);
+	const start_here: Start[] = $derived(
+		(
+			from_forecast ?? [
+				...from_patterns.filter((s) => unread_ms < 1 || !moot(s.i)),
+				...(unread_ms >= 1
+					? [
+							{
+								i: 'unread',
+								label: 'Work for data nothing reads',
+								where: unread[0].at ?? unread[0].label,
+								worth: `~${fmt_ms(unread_ms)} ms a render (${[...new Set(unread.flatMap((r) => r.keys))].slice(0, 3).join(', ')})`,
+								href: '#drill',
+								value: unread_ms
+							}
+						]
+					: [])
 			]
-		: undefined;
-	const start_here: Start[] = (
-		from_forecast ?? [
-			...from_patterns.filter((s) => unread_ms < 1 || !moot(s.i)),
-			...(unread_ms >= 1
-				? [
-						{
-							i: 'unread',
-							label: 'Work for data nothing reads',
-							where: unread[0].at ?? unread[0].label,
-							worth: `~${fmt_ms(unread_ms)} ms a render (${[...new Set(unread.flatMap((r) => r.keys))].slice(0, 3).join(', ')})`,
-							href: '#drill',
-							value: unread_ms
-						}
-					]
-				: [])
-		]
-	)
-		.sort((x, y) => y.value - x.value)
-		.slice(0, 3);
+		)
+			.sort((x, y) => y.value - x.value)
+			.slice(0, 3)
+	);
 	// group the findings by the area they touch, so "what to fix" reads as a few labelled clusters,
 	// not one wall — warnings float to the top of each cluster
 	const FCAT_ORDER = ['Network', 'CPU', 'Memory', 'Data & seed', 'Islands & delivery', 'Overview'];
@@ -302,23 +317,28 @@
 			return 'CPU';
 		return 'Overview';
 	};
-	const finding_groups = FCAT_ORDER.map((label) => ({
-		label,
-		items: findings
-			.filter((f) => fcat(f.code) === label)
-			.sort((x, y) => (x.severity === y.severity ? 0 : x.severity === 'warn' ? -1 : 1))
-	})).filter((g) => g.items.length);
-	const warn_count = findings.filter((f) => f.severity === 'warn').length;
+	const finding_groups = $derived(
+		FCAT_ORDER.map((label) => ({
+			label,
+			items: findings
+				.filter((f) => fcat(f.code) === label)
+				.sort((x, y) => (x.severity === y.severity ? 0 : x.severity === 'warn' ? -1 : 1))
+		})).filter((g) => g.items.length)
+	);
+	const warn_count = $derived(findings.filter((f) => f.severity === 'warn').length);
 
 	// component memory join + counts
-	const allocByName = new Map<string, number>();
-	for (const h of extras.heap ?? [])
-		allocByName.set(h.name, (allocByName.get(h.name) ?? 0) + h.self_bytes);
-	// a component's bytes: everything allocated under it, nested components excluded
-	for (const c of extras.heap_components ?? []) allocByName.set(c.name, c.bytes);
-	const hasAlloc = allocByName.size > 0;
-	const hasCounts =
-		a.components.some((c) => c.calls != null) || a.functions.some((f) => f.calls != null);
+	const allocByName = $derived.by(() => {
+		const m = new Map<string, number>();
+		for (const h of extras.heap ?? []) m.set(h.name, (m.get(h.name) ?? 0) + h.self_bytes);
+		// a component's bytes: everything allocated under it, nested components excluded
+		for (const c of extras.heap_components ?? []) m.set(c.name, c.bytes);
+		return m;
+	});
+	const hasAlloc = $derived(allocByName.size > 0);
+	const hasCounts = $derived(
+		a.components.some((c) => c.calls != null) || a.functions.some((f) => f.calls != null)
+	);
 
 	// PER CALL: the time adds up every render, the call count is ONE render's (the coverage render),
 	// so one call is the time per render over the calls in a render
@@ -331,172 +351,197 @@
 			alloc: allocByName.get(f.name) ?? null
 		};
 	};
-	const compRows = a.components.map(withExtras);
-	const compMaxTotal = Math.max(...a.components.map((c) => c.total_ms), 1);
+	const compRows = $derived(a.components.map(withExtras));
+	const compMaxTotal = $derived(Math.max(...a.components.map((c) => c.total_ms), 1));
 
-	const stats: { value: string; label: string }[] = [
-		{ value: fmt_ms(meta.duration_ms) + ' ms', label: 'window' },
-		{ value: busy_pct.toFixed(0) + '%', label: 'CPU busy' },
-		{ value: net.length ? fmt_ms(net_total) + ' ms' : '0', label: `network (${net.length} calls)` },
-		// per render, the unit of the render time and the lines (the window holds every run)
-		{
-			value: fmt_ms((extras.gc_attr ? extras.gc_attr.summary.total_ms : a.gc_ms) / renders) + ' ms',
-			label: renders > 1 ? 'garbage collection per render' : 'garbage collection'
-		},
-		{ value: String(meta.requests.length), label: 'requests in window' }
-	];
-	if (extras.gc)
-		stats.push({
-			value: fmt_ms(extras.gc.max_ms) + ' ms',
-			label: `GC pause max (${extras.gc.count})`
-		});
-	if (meta.loop_delay)
-		stats.push({ value: fmt_ms(meta.loop_delay.p99) + ' ms', label: 'loop delay p99' });
-	if (meta.elu_percent !== undefined)
-		stats.push({ value: meta.elu_percent.toFixed(0) + '%', label: 'event loop use' });
-	if (meta.rss_mb !== undefined) stats.push({ value: meta.rss_mb + ' MB', label: 'memory (rss)' });
-	stats.push({ value: String(a.sample_count), label: 'samples' });
-	if (meta.overhead && meta.overhead.cpu_ms + meta.overhead.gc_ms > 0)
-		stats.push({
-			value: `−${fmt_ms(meta.overhead.cpu_ms + meta.overhead.gc_ms)} ms`,
-			label: `profiler's own cost, taken out${meta.overhead.per_run_ms ? ` (${fmt_ms(meta.overhead.per_run_ms)} ms per render)` : ''}`
-		});
+	const stats = $derived.by(() => {
+		const out: { value: string; label: string }[] = [
+			{ value: fmt_ms(meta.duration_ms) + ' ms', label: 'window' },
+			{ value: busy_pct.toFixed(0) + '%', label: 'CPU busy' },
+			{
+				value: net.length ? fmt_ms(net_total) + ' ms' : '0',
+				label: `network (${net.length} calls)`
+			},
+			// per render, the unit of the render time and the lines (the window holds every run)
+			{
+				value:
+					fmt_ms((extras.gc_attr ? extras.gc_attr.summary.total_ms : a.gc_ms) / renders) + ' ms',
+				label: renders > 1 ? 'garbage collection per render' : 'garbage collection'
+			},
+			{ value: String(meta.requests.length), label: 'requests in window' }
+		];
+		if (extras.gc)
+			out.push({
+				value: fmt_ms(extras.gc.max_ms) + ' ms',
+				label: `GC pause max (${extras.gc.count})`
+			});
+		if (meta.loop_delay)
+			out.push({ value: fmt_ms(meta.loop_delay.p99) + ' ms', label: 'loop delay p99' });
+		if (meta.elu_percent !== undefined)
+			out.push({ value: meta.elu_percent.toFixed(0) + '%', label: 'event loop use' });
+		if (meta.rss_mb !== undefined) out.push({ value: meta.rss_mb + ' MB', label: 'memory (rss)' });
+		out.push({ value: String(a.sample_count), label: 'samples' });
+		if (meta.overhead && meta.overhead.cpu_ms + meta.overhead.gc_ms > 0)
+			out.push({
+				value: `−${fmt_ms(meta.overhead.cpu_ms + meta.overhead.gc_ms)} ms`,
+				label: `profiler's own cost, taken out${meta.overhead.per_run_ms ? ` (${fmt_ms(meta.overhead.per_run_ms)} ms per render)` : ''}`
+			});
+		return out;
+	});
 
-	const runsMedian =
+	const runsMedian = $derived(
 		meta.trigger === 'page' && meta.runs?.length
 			? [...meta.runs].sort((x, y) => x - y)[Math.floor(meta.runs.length / 2)]
-			: 0;
+			: 0
+	);
 
-	const budget = budget_segments(a);
-	const tree = build_treemap(a);
-	const legend = treemap_legend(a);
-	const hosts = top_hosts(net).slice(0, 12);
-	const netSorted = [...net]
-		.sort((x, y) => y.ms + (y.body_ms ?? 0) - (x.ms + (x.body_ms ?? 0)))
-		.slice(0, 60);
-	const wf = waterfall_rows(net);
-	const waiting = waiting_rows(net, extras.io ?? []);
-	const spans = span_rows(extras.spans);
-	const span_runs = meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1;
-	const tagged = meta.requests.filter((r) => r.tags && Object.keys(r.tags).length);
-	const waitMax = waiting[0]?.ms || 1;
-	const spark = build_spark(extras.mem);
-	const measures = extras.measures ?? [];
-	const heap = extras.heap ?? [];
-	const files = a.files.filter((f) => f.category !== 'idle').slice(0, 25);
-	const buckets = a.buckets.filter((b) => b.category !== 'idle').slice(0, 15);
-	const maxBucket = Math.max(...a.buckets.map((b) => b.self_ms), 1);
+	const budget = $derived(budget_segments(a));
+	const tree = $derived(build_treemap(a));
+	const legend = $derived(treemap_legend(a));
+	const hosts = $derived(top_hosts(net).slice(0, 12));
+	const netSorted = $derived(
+		[...net].sort((x, y) => y.ms + (y.body_ms ?? 0) - (x.ms + (x.body_ms ?? 0))).slice(0, 60)
+	);
+	const wf = $derived(waterfall_rows(net));
+	const waiting = $derived(waiting_rows(net, extras.io ?? []));
+	const spans = $derived(span_rows(extras.spans));
+	const span_runs = $derived(meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1);
+	const tagged = $derived(meta.requests.filter((r) => r.tags && Object.keys(r.tags).length));
+	const waitMax = $derived(waiting[0]?.ms || 1);
+	const spark = $derived(build_spark(extras.mem));
+	const measures = $derived(extras.measures ?? []);
+	const heap = $derived(extras.heap ?? []);
+	const files = $derived(a.files.filter((f) => f.category !== 'idle').slice(0, 25));
+	const buckets = $derived(a.buckets.filter((b) => b.category !== 'idle').slice(0, 15));
+	const maxBucket = $derived(Math.max(...a.buckets.map((b) => b.self_ms), 1));
 	// the ogygia side of the page: islands (server + build + browser joined), the seed, the holes
-	const islands = island_rows(a, meta, extras);
-	const hasJs = islands.some((r) => r.js_bytes !== null);
-	const hasClient = islands.some((r) => !!r.client);
-	const flagged = islands.filter((r) => r.advice).length;
-	const seed = seed_rows(meta);
-	const holes = hole_rows(meta);
-	const vitals = extras.vitals ?? null;
-	const client_marks = extras.client_marks ?? [];
+	const islands = $derived(island_rows(a, meta, extras));
+	const hasJs = $derived(islands.some((r) => r.js_bytes !== null));
+	const hasClient = $derived(islands.some((r) => !!r.client));
+	const flagged = $derived(islands.filter((r) => r.advice).length);
+	const seed = $derived(seed_rows(meta));
+	const holes = $derived(hole_rows(meta));
+	const vitals = $derived(extras.vitals ?? null);
+	const client_marks = $derived(extras.client_marks ?? []);
 	// every island fingerprint on the page → its component name (the browser's pictures are keyed by fingerprint)
-	const fp_names: Record<string, string> = {};
-	for (const r of island_rows_of(meta)) fp_names[r.fp] = island_name(r);
+	const fp_names = $derived.by(() => {
+		const out: Record<string, string> = {};
+		for (const r of island_rows_of(meta)) out[r.fp] = island_name(r);
+		return out;
+	});
 	// each hole id → its component (and props, for a single copy): One clock's hole lanes
-	const hole_names: Record<string, string> = {};
-	for (const h of holes)
-		if (h.name) hole_names[h.id] = h.props && h.count <= 1 ? `${h.name} ${h.props}` : h.name;
-	const visit = extras.visit ?? null;
-	const server_clock = a.timeline
-		? {
-				window_ms: a.timeline.window_ms,
-				phases: a.timeline.phases.map((p) => ({
-					phase: p.phase,
-					label: PHASE_LABEL[p.phase] ?? p.phase,
-					cpu_ms: p.cpu_ms,
-					wait_ms: p.wait_ms
-				}))
-			}
-		: null;
-	const page_path = meta.page ?? meta.request?.path ?? null;
+	const hole_names = $derived.by(() => {
+		const out: Record<string, string> = {};
+		for (const h of holes)
+			if (h.name) out[h.id] = h.props && h.count <= 1 ? `${h.name} ${h.props}` : h.name;
+		return out;
+	});
+	const visit = $derived(extras.visit ?? null);
+	const server_clock = $derived(
+		a.timeline
+			? {
+					window_ms: a.timeline.window_ms,
+					phases: a.timeline.phases.map((p) => ({
+						phase: p.phase,
+						label: PHASE_LABEL[p.phase] ?? p.phase,
+						cpu_ms: p.cpu_ms,
+						wait_ms: p.wait_ms
+					}))
+				}
+			: null
+	);
+	const page_path = $derived(meta.page ?? meta.request?.path ?? null);
 	// WHO CAUSED THE GC: the pauses on the timeline's clock (the window starts `window_offset_ms` into the capture)
-	const gc_attr = extras.gc_attr ?? null;
-	const gc_ticks = gc_attr
-		? gc_attr.pauses.map((p) => ({
-				t: p.t - (gc_attr.window_offset_ms ?? 0),
-				ms: p.ms,
-				kind: p.kind,
-				why: p.why,
-				top: p.top
-					.slice(0, 3)
-					.map(
-						(x) =>
-							`${x.name}${x.component && x.component !== x.name ? ` in ${x.component}` : ''} ${Math.round(x.share * 100)}%`
-					)
-					.join(', ')
-			}))
-		: [];
+	const gc_attr = $derived(extras.gc_attr ?? null);
+	const gc_ticks = $derived(
+		gc_attr
+			? gc_attr.pauses.map((p) => ({
+					t: p.t - (gc_attr.window_offset_ms ?? 0),
+					ms: p.ms,
+					kind: p.kind,
+					why: p.why,
+					top: p.top
+						.slice(0, 3)
+						.map(
+							(x) =>
+								`${x.name}${x.component && x.component !== x.name ? ` in ${x.component}` : ''} ${Math.round(x.share * 100)}%`
+						)
+						.join(', ')
+				}))
+			: []
+	);
 	// the pauses on the capture's clock, for the heap chart (it spans every run)
-	const gc_on_capture = gc_attr
-		? gc_attr.pauses.map((p) => ({ t: p.t, ms: p.ms, kind: p.kind }))
-		: [];
+	const gc_on_capture = $derived(
+		gc_attr ? gc_attr.pauses.map((p) => ({ t: p.t, ms: p.ms, kind: p.kind })) : []
+	);
 	// the scrubber's marks: the pauses inside the window, the few longest
-	const scrub_marks = gc_ticks
-		.filter((g) => g.t >= 0 && (a.timeline ? g.t <= a.timeline.window_ms : true))
-		.sort((x, y) => y.ms - x.ms)
-		.slice(0, 8)
-		.map((g) => ({ t: g.t, label: `GC ${fmt_ms(g.ms)}` }));
+	const scrub_marks = $derived(
+		gc_ticks
+			.filter((g) => g.t >= 0 && (a.timeline ? g.t <= a.timeline.window_ms : true))
+			.sort((x, y) => y.ms - x.ms)
+			.slice(0, 8)
+			.map((g) => ({ t: g.t, label: `GC ${fmt_ms(g.ms)}` }))
+	);
 	const fmt_mb = (b: number) => `${Math.round((b / 1048576) * 10) / 10} MB`;
 	// more from the same snapshot: deopts, sync I/O, promises, memo candidates, what a render keeps
-	const deopt_rows = a.deopts ?? [];
-	const sync_rows = sync_io(a);
-	const memo_rows = memo_candidates(a, gc_attr?.makers ?? []);
+	const deopt_rows = $derived(a.deopts ?? []);
+	const sync_rows = $derived(sync_io(a));
+	const memo_rows = $derived(memo_candidates(a, gc_attr?.makers ?? []));
 	// THE FUNCTIONS TABLE: the 80 with the most self time, plus every function another part of the
 	// report links to (`#fn=<key>`). A slow pattern's line, a path's middle frame or a leak's maker
 	// often has little self time; without its row the link opened nothing (43 of 67 on a heavy page).
 	const fn_key = (f: { key?: string; name: string; url?: string }) => f.key ?? f.name + ' ' + f.url;
-	const linked = new Set<string>();
-	for (const f of findings) if (f.anchor?.startsWith('fn:')) linked.add(f.anchor.slice(3));
-	for (const l of extras.ledger ?? []) if (l.fn) linked.add(l.fn);
-	for (const p of extras.patterns ?? [])
-		for (const s of p.sites) {
-			if (s.fn) linked.add(s.fn);
-			for (const v of s.via ?? []) if (v.fn) linked.add(v.fn);
-		}
-	const walk_path = (n: import('../analyze.ts').PathNode) => {
-		if (n.key && n.category !== 'component') linked.add(n.key);
-		for (const c of n.children) walk_path(c);
-	};
-	for (const g of a.paths ?? []) walk_path(g.tree);
-	for (const s of sync_rows) linked.add(s.key);
-	for (const m of memo_rows) linked.add(m.key);
-	for (const d of deopt_rows) linked.add(d.key);
-	const fnRows = [
-		...a.functions.slice(0, 80),
-		...a.functions.slice(80).filter((f) => linked.has(fn_key(f)))
-	].map(withExtras);
+	const linked = $derived.by(() => {
+		const out = new Set<string>();
+		for (const f of findings) if (f.anchor?.startsWith('fn:')) out.add(f.anchor.slice(3));
+		for (const l of extras.ledger ?? []) if (l.fn) out.add(l.fn);
+		for (const p of extras.patterns ?? [])
+			for (const s of p.sites) {
+				if (s.fn) out.add(s.fn);
+				for (const v of s.via ?? []) if (v.fn) out.add(v.fn);
+			}
+		const walk_path = (n: import('../analyze.ts').PathNode) => {
+			if (n.key && n.category !== 'component') out.add(n.key);
+			for (const c of n.children) walk_path(c);
+		};
+		for (const g of a.paths ?? []) walk_path(g.tree);
+		for (const s of sync_rows) out.add(s.key);
+		for (const m of memo_rows) out.add(m.key);
+		for (const d of deopt_rows) out.add(d.key);
+		return out;
+	});
+	const fnRows = $derived(
+		[
+			...a.functions.slice(0, 80),
+			...a.functions.slice(80).filter((f) => linked.has(fn_key(f)))
+		].map(withExtras)
+	);
 	// the rows a `#fn=` link can reach: a key outside them gets no link (a library frame with no
 	// time of its own sits on a path but has no row)
-	const fn_keys = fnRows.map(fn_key);
-	const fn_known = new Set(fn_keys);
+	const fn_keys = $derived(fnRows.map(fn_key));
+	const fn_known = $derived(new Set(fn_keys));
 	const anchor_ok = (anchor: string) => !anchor.startsWith('fn:') || fn_known.has(anchor.slice(3));
-	const promises = extras.promises ?? null;
-	const promises_per_render = promises
-		? Math.round(promises.count / Math.max(meta.runs?.length ?? 1, 1))
-		: 0;
-	const retained = extras.retained ?? null;
+	const promises = $derived(extras.promises ?? null);
+	const promises_per_render = $derived(
+		promises ? Math.round(promises.count / Math.max(meta.runs?.length ?? 1, 1)) : 0
+	);
+	const retained = $derived(extras.retained ?? null);
 	// the render step by step, when the heap grew, the instance's other requests, the data's lineage, the spans' values
-	const steps = a.timeline ? (render_steps(a.timeline, a.stacks) ?? null) : null;
-	const alloc = extras.alloc ?? null;
-	const contention = extras.contention ?? null;
-	const contention_others = contention
-		? contention.requests.filter((r) => r.kind === 'other').length
-		: 0;
-	const lineage = extras.lineage ?? null;
-	const lineage_keys = lineage ? lineage.keys.slice(0, 40) : [];
-	const value_rows = span_values(extras.spans);
-	const cold = cold_rows(a, meta);
-	const holes_seen = holes.some((h) => h.requests > 0);
+	const steps = $derived(a.timeline ? (render_steps(a.timeline, a.stacks) ?? null) : null);
+	const alloc = $derived(extras.alloc ?? null);
+	const contention = $derived(extras.contention ?? null);
+	const contention_others = $derived(
+		contention ? contention.requests.filter((r) => r.kind === 'other').length : 0
+	);
+	const lineage = $derived(extras.lineage ?? null);
+	const lineage_keys = $derived(lineage ? lineage.keys.slice(0, 40) : []);
+	const value_rows = $derived(span_values(extras.spans));
+	const cold = $derived(cold_rows(a, meta));
+	const holes_seen = $derived(holes.some((h) => h.requests > 0));
 	// page mode: N runs of one page → fold identical requests into one row with the count + medians
-	const reqs = request_rows(meta.requests, meta.trigger === 'page').slice(0, 60);
-	const folded = meta.trigger === 'page' && reqs.some((r) => r.count > 1);
-	const title = `SSR profile — ${label_of(meta)}`;
+	const reqs = $derived(request_rows(meta.requests, meta.trigger === 'page').slice(0, 60));
+	const folded = $derived(meta.trigger === 'page' && reqs.some((r) => r.count > 1));
+	const title = $derived(`SSR profile — ${label_of(meta)}`);
 	const VERDICT_LABEL: Record<string, string> = {
 		island: 'read by an island',
 		server: 'server only, not shipped',
@@ -504,9 +549,9 @@
 		unread: 'nobody reads it',
 		unknown: 'unknown'
 	};
-	const contention_self = contention
-		? contention.requests.filter((r) => r.kind === 'self').length
-		: 0;
+	const contention_self = $derived(
+		contention ? contention.requests.filter((r) => r.kind === 'self').length : 0
+	);
 </script>
 
 <svelte:head><title>{title}</title></svelte:head>
@@ -541,7 +586,7 @@
 		<DownloadHtml {base} id={meta.id} />
 		<a class="btn" href="{base}/view">Import<span class="sub">.ogp</span></a>
 	</div>
-	{#if ogpB64}{@html `<script type="application/octet-stream" id="${OGP_ELEMENT_ID}">${ogpB64}</script>`}{/if}
+	{#if ogpB64}{@html ogp_element(ogpB64)}{/if}
 	<p class="hint">
 		<a href={base}>← dashboard</a> ·
 		<DownloadHtml {base} id={meta.id} as="json" link /> (agents) ·

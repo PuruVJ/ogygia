@@ -23,7 +23,7 @@ export function rehypeOverrides(tags: readonly string[]) {
 	const set = new Set(tags);
 	const walk = (node: HastNode) => {
 		if (node.type === 'element' && node.tagName && set.has(node.tagName)) {
-			node.properties = { ...(node.properties ?? {}), tag: node.tagName };
+			node.properties = { ...node.properties, tag: node.tagName };
 			node.tagName = SLOT_TAG;
 		}
 		if (Array.isArray(node.children)) node.children.forEach(walk);

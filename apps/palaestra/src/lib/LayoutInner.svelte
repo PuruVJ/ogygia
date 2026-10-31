@@ -11,6 +11,8 @@
 	let { data, children } = $props();
 
 	// A template var computed in the script (like currentDir / isPreferenceCenter in x.svelte).
+	// (a region's props never change after it renders, so reading `data` once is right)
+	// svelte-ignore state_referenced_locally
 	const currentDir = data?.rtl ? 'rtl' : 'ltr';
 
 	// Drop-in setContext → records on the server, page marker seeds child islands.

@@ -16,11 +16,15 @@ import {
 	regionId,
 	regionBindingVirtualId
 } from '../dist/compiler/region/transform.js';
+import { HOST_CTX_DEFAULTS } from './_host-ctx.ts';
 
 const ROOT = '/app';
 
-function makeCtx(overrides: Record<string, unknown> = {}) {
+type HostCtx = Parameters<typeof transformHost>[2];
+
+function makeCtx(overrides: Partial<HostCtx> = {}): HostCtx {
 	return {
+		...HOST_CTX_DEFAULTS,
 		root: ROOT,
 		libDir: '/app/src/lib',
 		readFile: () => null,
@@ -59,7 +63,7 @@ describe('transformHost — held region in .svelte (region: raw)', () => {
 		expect(r).not.toBeNull();
 		const iid = heldId('src/lib/Card.svelte');
 		expect(r!.islands).toHaveLength(1);
-		const isl = r!.islands[0] as Record<string, unknown>;
+		const isl = r!.islands[0];
 		expect(isl.id).toBe(iid);
 		expect(isl.server).toBe(true);
 		expect(isl.kind).toBe('hydrate');
@@ -117,7 +121,7 @@ export const loadCard = query(async (n) => region(Card, { id: n }));`;
 		expect(r).not.toBeNull();
 		const iid = heldId('src/lib/Card.svelte');
 		expect(r!.islands).toHaveLength(1);
-		const isl = r!.islands[0] as Record<string, unknown>;
+		const isl = r!.islands[0];
 		expect(isl.id).toBe(iid);
 		expect(isl.server).toBe(true);
 		expect(isl.kind).toBe('hydrate');
@@ -170,7 +174,7 @@ export const y = 1;`;
 			const s = `import C from './C.svelte' with { wake: '${value}' };
 export const f = region(C, {});`;
 			const r = transformTsRegions(s, id, makeCtx());
-			const isl = r!.islands[0] as Record<string, unknown>;
+			const isl = r!.islands[0];
 			expect(isl.kind).toBe('hydrate');
 			expect(isl.strategy).toBe(hydrate);
 			// HELD + crossable: keeps its server-manifest entry + the live/morph mark (so `region()` can
@@ -196,9 +200,7 @@ export const f = region(C, {});`;
 		const s = `import C from './C.svelte' with { wake: 'visible' };
 export const f = region(C, {});`;
 		const r = transformTsRegions(s, id, makeCtx({ visibleMargin: '200px' }));
-		expect(String((r!.islands[0] as Record<string, unknown>).bindingSsrSource)).toContain(
-			'__hydrateMargin: "200px"'
-		);
+		expect(String(r!.islands[0].bindingSsrSource)).toContain('__hydrateMargin: "200px"');
 	});
 
 	test('rejects an unknown wake value', () => {
@@ -211,7 +213,7 @@ export const f = region(C, {});`;
 		const src = `import Card from '$lib/Card.svelte' with { region: 'raw' };
 export const loadCard = region(Card, {});`;
 		const r = transformTsRegions(src, id, makeCtx());
-		expect((r!.islands[0] as Record<string, unknown>).id).toBe(svelteId);
+		expect(r!.islands[0].id).toBe(svelteId);
 	});
 
 	test('returns null when no held import is present', () => {
@@ -222,7 +224,7 @@ export const loadCard = region(Card, {});`;
 		const src = `import D from './D.svelte' with { render: 'deferred' };
 export const page = D;`;
 		const r = transformTsRegions(src, id, makeCtx());
-		const isl = r!.islands[0] as Record<string, unknown>;
+		const isl = r!.islands[0];
 		expect(isl.server).toBe(true);
 		expect(isl.kind).toBe('defer');
 		expect(isl.strategy).toBe('server');
@@ -238,7 +240,7 @@ export const page = D;`;
 		const src = `import D from './D.svelte' with { render: 'deferred', fetch: 'visible' };
 export const page = D;`;
 		const r = transformTsRegions(src, id, makeCtx({ visibleMargin: '150px' }));
-		const isl = r!.islands[0] as Record<string, unknown>;
+		const isl = r!.islands[0];
 		expect(isl.fetchWhen).toBe('visible');
 		expect(String(isl.wrapperSource)).toContain('__margin');
 	});
@@ -246,7 +248,7 @@ export const page = D;`;
 	test('render: deferred accepts fetch: interaction (an on-demand hole) and rejects none', () => {
 		const ok = `import D from './D.svelte' with { render: 'deferred', fetch: 'interaction' };`;
 		const r = transformTsRegions(ok, id, makeCtx());
-		expect((r!.islands[0] as Record<string, unknown>).fetchWhen).toBe('interaction');
+		expect(r!.islands[0].fetchWhen).toBe('interaction');
 		const bad = `import D from './D.svelte' with { render: 'deferred', fetch: 'none' };`;
 		expect(() => transformTsRegions(bad, id, makeCtx())).toThrow(/a hole must fetch/);
 	});
@@ -271,8 +273,7 @@ export const page = D;`;
 
 describe('transformTsRegions — import.meta.og.asRegion (barrel / named in .ts)', () => {
 	const id = '/app/src/lib/registry.ts';
-	const isl0 = (r: ReturnType<typeof transformTsRegions>) =>
-		r!.islands[0] as Record<string, unknown>;
+	const isl0 = (r: ReturnType<typeof transformTsRegions>) => r!.islands[0];
 
 	test('a NAMED barrel import → a mountable held binding (same record as a .ts wake mark)', () => {
 		const src = `import { Header } from '@design/system';
@@ -340,7 +341,7 @@ const F = import.meta.og.asRegion(Footer, { wake: 'load' });
 export const registry = [H, F];`;
 		const r = transformTsRegions(src, id, makeCtx());
 		expect(r!.islands).toHaveLength(2);
-		expect(new Set(r!.islands.map((i) => (i as Record<string, unknown>).id)).size).toBe(2);
+		expect(new Set(r!.islands.map((i) => i.id)).size).toBe(2);
 	});
 
 	// ── misuse (loud build errors) ──────────────────────────────────────────────

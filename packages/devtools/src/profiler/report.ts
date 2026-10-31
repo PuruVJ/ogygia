@@ -164,8 +164,10 @@ export function fair_shares(ivs: readonly (readonly [number, number])[]): {
 		let k = 0;
 		while (lo <= hi) {
 			const mid = (lo + hi) >> 1;
-			if (times[mid] <= t) ((k = mid), (lo = mid + 1));
-			else hi = mid - 1;
+			if (times[mid] <= t) {
+				k = mid;
+				lo = mid + 1;
+			} else hi = mid - 1;
 		}
 		return integral[k] ?? 0;
 	};
@@ -1340,16 +1342,14 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					(overlapped
 						? ' Some ran at the same time: their CPU is the process’s over each one, so it overlaps.'
 						: ''),
-				{
-					...(slow[0].ms >= 1000
-						? {
-								fix:
-									slow[0].cpu_ms >= slow[0].ms * 0.5
-										? 'It is computing: profile that page on its own (page mode) for the lines.'
-										: 'It is waiting: the network table and the upstream split say on what.'
-							}
-						: {})
-				}
+				slow[0].ms >= 1000
+					? {
+							fix:
+								slow[0].cpu_ms >= slow[0].ms * 0.5
+									? 'It is computing: profile that page on its own (page mode) for the lines.'
+									: 'It is waiting: the network table and the upstream split say on what.'
+						}
+					: {}
 			);
 		}
 	}
@@ -5080,7 +5080,7 @@ export function report_json(
 		browser:
 			extras.vitals || extras.client_marks || extras.client_cpu || extras.visit
 				? {
-						...(extras.vitals ?? {}),
+						...extras.vitals,
 						...(extras.client_marks ? { marks: extras.client_marks } : {}),
 						// the latest visit the beacon saw: navigation + paints + counts (the full lanes live in the report page)
 						...(extras.visit

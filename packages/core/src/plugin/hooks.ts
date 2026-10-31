@@ -56,7 +56,8 @@ export const notify: Notify = new Proxy({} as Notify, {
 	get:
 		(_, name: string) =>
 		async (...args: unknown[]): Promise<void> => {
-			for (const impl of [...implementations]) {
+			// (a copy: an implementation may join or leave while a hook awaits)
+			for (const impl of implementations.slice()) {
 				const fn = impl[name];
 				if (typeof fn !== 'function') continue;
 				try {
@@ -73,7 +74,8 @@ export const ask: Ask = new Proxy({} as Ask, {
 	get:
 		(_, name: string) =>
 		async (...args: unknown[]): Promise<unknown> => {
-			for (const impl of [...implementations]) {
+			// (a copy: an implementation may join or leave while a hook awaits)
+			for (const impl of implementations.slice()) {
 				const fn = impl[name];
 				if (typeof fn !== 'function') continue;
 				try {

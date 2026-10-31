@@ -5,7 +5,6 @@
  * The md5 here is the standard algorithm, so region ids match the real Node build byte-for-byte.
  */
 
-/* eslint-disable no-bitwise */
 function md5_hex(input: string): string {
 	// UTF-8 encode.
 	const bytes = new TextEncoder().encode(input);

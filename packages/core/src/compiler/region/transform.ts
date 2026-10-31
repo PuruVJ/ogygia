@@ -9,15 +9,13 @@ import { parse_module } from '../parse/oxc.ts';
 import { strategyKey, regionIdentity, regionId } from './identity.ts';
 import { regionBindingVirtualId } from '../ids.ts';
 import {
-	component_import_line,
 	island_entry_source,
-	island_wrapper_source,
 	server_wrapper_source,
 	lake_wrapper_source,
 	make_region_binding,
 	make_wake_island
 } from './emit.ts';
-import type { FileIR, SvelteNode, HostImport, RegionMark } from './ir.ts';
+import type { SvelteNode, HostImport, RegionMark } from './ir.ts';
 import type * as NodePath from 'node:path';
 import { blank_styles } from '../blank-styles.ts';
 
@@ -794,12 +792,19 @@ const SWR_EVENT_ATTR = new Set([
 	'onformdata'
 ]);
 
+/** A template `<Component>` node, which the parser gives its name and offsets. */
+function is_component_node(
+	n: SvelteNode
+): n is SvelteNode & { type: 'Component'; name: string; start: number; end: number } {
+	return n.type === 'Component';
+}
+
 /**
  * Everything a `render: 'live'` region needs must survive the wire: the endpoint re-renders the
  * component from devalue'd PROPS alone. Children (snippets) and `bind:` targets cannot cross, and
  * silently losing them on revalidate would be worse than refusing the build.
  */
-function assert_swr_lake_crossable(node: SvelteNode, err: (node: SvelteNode, msg: string) => void) {
+function assert_swr_lake_crossable(node: SvelteNode, err: (name: string, msg: string) => void) {
 	const kids = (node.fragment?.nodes ?? []).filter(
 		(n: SvelteNode) => !(n.type === 'Text' && !String(n.data ?? '').trim())
 	);
@@ -1405,7 +1410,7 @@ class FileCompilation {
 					const mark = this.#marked_components.get(name)!;
 					if (mark.strategy === 'lake') {
 						if (mark.options?.remount === 'swr')
-							assert_swr_lake_crossable(node, (specifiers: SvelteNode, msg: string) =>
+							assert_swr_lake_crossable(node, (specifiers: string, msg: string) =>
 								this.#err(specifiers, msg)
 							);
 					} else if (mark.strategy === 'server' || mark.strategy === 'held') {
@@ -1456,7 +1461,7 @@ class FileCompilation {
 	}
 
 	/** `[ogygia] host: import { … } — msg` — the region-import error formatter. */
-	#err(specifiers: SvelteNode, msg: string) {
+	#err(specifiers: string, msg: string) {
 		return new Error(`[ogygia] ${this.#rel_host}: import { ${specifiers} } — ${msg}`);
 	}
 
@@ -1618,7 +1623,7 @@ class FileCompilation {
 			compLocal: string;
 			node: { start: number; end: number };
 		}> = [];
-		const as_region_nodes = new Set(); // the const statements, overwritten via their synthetic import
+		const as_region_nodes = new Set<SvelteNode>(); // the const statements, overwritten via their synthetic import
 		for (const node of instance_body) {
 			if (node.type !== 'VariableDeclaration') continue;
 			const hits = node.declarations.filter(
@@ -2168,7 +2173,7 @@ class FileCompilation {
 		const portable_allowed = !id.includes('node_modules');
 		const walk_portable = (nodes: SvelteNode[]) => {
 			for (const node of nodes ?? []) {
-				if (node.type === 'Component') {
+				if (is_component_node(node)) {
 					const base_name = String(node.name || '').split('.')[0];
 					const mark = marked_components.get(base_name);
 					const island_site = !!mark && !['lake', 'server', 'held'].includes(mark.strategy);
@@ -2871,7 +2876,6 @@ class TsRegionCompilation {
 	run() {
 		const source = this.#source;
 		const id = this.#id;
-		const ctx = this.#ctx;
 		const import_keys = this.#import_keys;
 		const regionKey = this.#regionKey;
 		const wakeKey = this.#wakeKey;
@@ -2889,9 +2893,6 @@ class TsRegionCompilation {
 		)
 			return null;
 
-		const path = this.#path;
-		const root = this.#root;
-		const salt = this.#salt;
 		const rel_host = this.#rel_host;
 
 		const s = new MagicString(source);
@@ -2983,7 +2984,7 @@ class TsRegionCompilation {
 					)
 						legal_nodes.add(node);
 				}
-				const find_stray = (n: SvelteNode): SvelteNode => {
+				const find_stray = (n: SvelteNode | null): SvelteNode | null => {
 					if (!n || typeof n !== 'object') return null;
 					if (Array.isArray(n)) {
 						for (const x of n) {

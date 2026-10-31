@@ -1,21 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { transformHost, islandId } from '../dist/compiler/region/transform.js';
+import { transformHost, islandId, wrapperVirtualId } from '../dist/compiler/region/transform.js';
 import { rewrite_lake_import_to_placeholder } from '../dist/vite/index.js';
 import { RateLimiter } from '../dist/server/rate-limit.js';
 import { sign, verify, region_mac_message } from '../dist/server/hmac.js';
+import { HOST_CTX_DEFAULTS } from './_host-ctx.ts';
 
 const ROOT = '/app';
 const HOST = '/app/src/routes/+page.svelte';
 
-function makeCtx(overrides: Record<string, unknown> = {}) {
+type HostCtx = Parameters<typeof transformHost>[2];
+
+function makeCtx(overrides: Partial<HostCtx> = {}): HostCtx {
 	return {
+		...HOST_CTX_DEFAULTS,
 		root: ROOT,
 		libDir: '/app/src/lib',
 		readFile: () => null,
 		pathModule: path,
 		dev: false,
 		virtualPathFor: (_hostId: string, iid: string) => `virtual:ogygia/island/${iid}.js`,
+		// the transform's own fallback when a caller omits it
+		wrapperPathFor: (_hostId: string, iid: string) => wrapperVirtualId(iid),
 		devUrlFor: (p: string) => '/@id/' + p,
 		visibleMargin: '0px',
 		presets: {},

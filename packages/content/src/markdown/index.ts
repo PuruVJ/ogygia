@@ -631,7 +631,7 @@ export function ogygiaPresetPreprocess(): PreprocessorGroup {
 				);
 			}
 			const base = (bridge.markdownConfig as MarkdownOptions | null) ?? {};
-			g = ogygiaPreprocess({ ...base, ...(bag.markdown ?? {}) } as MarkdownOptions);
+			g = ogygiaPreprocess({ ...base, ...bag.markdown } as MarkdownOptions);
 			bridge.scan = default_scan; // the preset pipeline registered itself — undo; default owns scan
 			groups.set(preset, g);
 		}

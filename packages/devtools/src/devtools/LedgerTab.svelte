@@ -25,18 +25,18 @@
 	// THE EXACT LEDGER (a build): the page's island graph names every file each island needs, the
 	// browser says what each file weighed — each file counted once, and per island what only it needs
 	const exact = $derived.by(() => {
-		tick;
+		void tick;
 		return page_ledger();
 	});
 	// the modules the build shipped twice that this page loads both copies of (the last profile's)
 	const twice = $derived.by(() => {
-		tick;
+		void tick;
 		profiles_version();
 		return profile_for(location.pathname)?.assets?.twice ?? [];
 	});
 
 	const model = $derived.by(() => {
-		tick; // refresh with the panel tick
+		void tick; // refresh with the panel tick
 
 		// Group regions by entry chunk (dedupe: same component + strategy = ONE chunk, N instances).
 		const groups = new Map();

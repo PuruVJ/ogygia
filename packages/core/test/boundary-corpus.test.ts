@@ -7,7 +7,7 @@
  * the live progress checklist of the transportable seam.
  */
 import { describe, it, expect } from 'vitest';
-import { get, writable, readable, derived, readonly } from 'svelte/store';
+import { get, writable, derived, readonly } from 'svelte/store';
 import { parse, stringify } from 'devalue';
 import {
 	STORE_WIRE_KEY,
@@ -22,11 +22,13 @@ import { serialize_provided_context } from '../src/context-bridge.ts';
 import { set_ctx_recorder, record_ctx } from '../src/context-registry.ts';
 import { REF_WIRE_KEY, ref_reviver } from '../src/ref.ts';
 
+type StorePayload = Parameters<typeof revive_store>[0];
+
 const enc = (v: unknown) => stringify(v, { [STORE_WIRE_KEY]: reduce_store });
 const dec_client = (s: string) =>
-	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
+	parse(s, { [STORE_WIRE_KEY]: (d: StorePayload) => revive_store(d, true) });
 const dec_server = (s: string) =>
-	parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, false) });
+	parse(s, { [STORE_WIRE_KEY]: (d: StorePayload) => revive_store(d, false) });
 const refusals = (v: unknown, key = '') =>
 	classify_boundary(v, key).filter((f) => f.kind === 'refuse');
 const warns = (v: unknown, key = '') => classify_boundary(v, key).filter((f) => f.kind === 'warn');
@@ -281,7 +283,7 @@ describe('Group 6: exposure hazards', () => {
 		]);
 		const text = serialize_provided_context(map);
 		const out = parse(text!, {
-			[REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown
+			[REF_WIRE_KEY]: ref_reviver(true)
 		}) as Record<string, unknown>;
 		expect(out.dir).toBe('rtl');
 		expect(is_store(out.pageType)).toBe(true);

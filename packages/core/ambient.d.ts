@@ -179,4 +179,16 @@ interface ImportMetaOg {
 			keep?: string;
 		}
 	): C;
+	/**
+	 * Declare a data source: `export const loadContent = import.meta.og.source(async (…) => …)`.
+	 * Each call during a server render files a receipt (the source's `file#export` id plus a
+	 * fingerprint of its arguments), so an invalidation names the function and its arguments
+	 * instead of URL strings. Returns the SAME function. `opts.key` canonicalizes exotic
+	 * arguments yourself (the default fingerprint is structural). Legal only as a top-level
+	 * `export const`; anything else is a build error.
+	 */
+	source<A extends unknown[], R>(
+		fn: (...args: A) => R,
+		opts?: { key?: (...args: A) => string }
+	): (...args: A) => R;
 }

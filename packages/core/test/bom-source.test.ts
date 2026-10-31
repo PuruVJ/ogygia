@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { compile } from 'svelte/compiler';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
+import { partial_ctx_init } from './_compile-ctx.ts';
 import { stamp_opaque } from '../src/compiler/ownership-stamps.ts';
 import { strip_bom } from '../src/compiler/bom.ts';
 
@@ -43,21 +44,22 @@ function make_compiler() {
 	};
 	const compiler = new Compiler(program, profiler);
 	compiler.configure(
-		new CompileCtx({
-			root,
-			base: '/',
-			libDir: path.join(root, 'src/lib'),
-			is_dev: false,
-			is_build: true,
-			id_salt: '',
-			visibleMargin: '0px',
-			presets: {},
-			import_keys: normalize_import_keys(undefined),
-			resolve_alias: [],
-			markdown_config: null,
-			pkg_root: '/nowhere/ogygia',
-			app_shims: {}
-		} as never)
+		new CompileCtx(
+			partial_ctx_init({
+				root,
+				base: '/',
+				libDir: path.join(root, 'src/lib'),
+				is_dev: false,
+				is_build: true,
+				id_salt: '',
+				visibleMargin: '0px',
+				presets: {},
+				import_keys: normalize_import_keys(undefined),
+				resolve_alias: [],
+				pkg_root: '/nowhere/ogygia',
+				app_shims: {}
+			})
+		)
 	);
 	return compiler;
 }

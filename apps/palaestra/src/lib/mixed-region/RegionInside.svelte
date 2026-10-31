@@ -12,6 +12,7 @@
 
 	let { start = 0 }: { start?: number } = $props();
 	// A marked binding + region() → an interactive DUAL held region.
+	// svelte-ignore state_referenced_locally
 	const held = region(InnerWidget, { start, label: 'held' });
 </script>
 

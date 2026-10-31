@@ -37,13 +37,13 @@
 	});
 
 	const prof = $derived.by(() => {
-		tick;
-		bump;
+		void tick;
+		void bump;
 		profiles_version();
 		return profile_for(path.startsWith('/') ? path : '/' + path);
 	});
 	const elapsed = $derived.by(() => {
-		tick; // the panel's pulse moves the counter
+		void tick; // the panel's pulse moves the counter
 		return running ? Math.max(0, (performance.now() - started) / 1000) : 0;
 	});
 	// a rough length for the next run, from the last one of this page (warm-up + the renders)
@@ -82,7 +82,7 @@
 		return fp ? document.querySelector(`ogygia-region[data-og-fp="${fp}"]`) : null;
 	}
 	const on_page = $derived.by(() => {
-		tick;
+		void tick;
 		const set = new Set();
 		for (const el of document.querySelectorAll('ogygia-region[data-og-fp]'))
 			set.add(el.getAttribute('data-og-fp'));

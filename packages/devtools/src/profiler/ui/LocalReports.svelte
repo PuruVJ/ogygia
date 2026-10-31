@@ -11,7 +11,7 @@
 	let { base, server_ids = [] }: { base: string; server_ids?: string[] } = $props();
 	let rows = $state<Omit<StoredDump, 'dump'>[]>([]);
 	let loaded = $state(false);
-	const on_server = new Set(server_ids);
+	const on_server = $derived(new Set(server_ids));
 	void list_reports()
 		.then((r) => (rows = r))
 		.finally(() => (loaded = true));

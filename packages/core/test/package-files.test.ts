@@ -12,7 +12,7 @@ import { discover_package_files } from '../src/vite/package-files.ts';
 import { CompileCtx, type CompileCtxInit, type PackageScan } from '../src/compiler/ctx.ts';
 import { Compiler } from '../src/compiler/driver.ts';
 import { Program } from '../src/compiler/program.ts';
-import { normalize_import_keys } from '../src/compiler/region/transform.ts';
+import { normalize_import_keys, type ImportKeys } from '../src/compiler/region/transform.ts';
 
 let app: string;
 
@@ -22,14 +22,14 @@ const base_ctx_init = {
 	base: '',
 	app_dir: '_app',
 	libDir: '/repo/src/lib',
-	profiler_config: null,
+	measure: false,
 	is_dev: false,
 	id_salt: '',
 	visibleMargin: undefined,
 	presets: {},
-	import_keys: {} as never,
+	// no import keys at all: the island-hint matcher matches nothing (the harness overrides it)
+	import_keys: {} as ImportKeys,
 	resolve_alias: [],
-	markdown_config: null,
 	pkg_root: '/og',
 	build_secret: 's',
 	rate_limit: { max: 0, windowMs: 0 },
@@ -45,7 +45,6 @@ const base_ctx_init = {
 	client_binding_stub_file: '/og/dist/c.js',
 	app_shims: {},
 	is_build: true,
-	content_presets: null,
 	devtools: false
 } satisfies Omit<CompileCtxInit, 'pkg_scan'>;
 
@@ -207,7 +206,7 @@ describe('undeclared-marks warning', () => {
 		);
 		return compiler;
 	};
-	const noop_emit = () => {};
+	const noop_emit = () => '';
 	const marked = `import W from './W.svelte' with { wake: 'load' };\nexport const t = W;\n`;
 
 	it('a dependency .ts with marks but NO declaration warns loudly (was silent death)', async () => {

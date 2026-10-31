@@ -24,7 +24,7 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rolldown } from 'rolldown';
+import { rolldown, type OutputChunk } from 'rolldown';
 import {
 	generateRuntimeEntrySource,
 	resolveFeatures
@@ -143,13 +143,7 @@ async function measure(marks: RuntimeMarks): Promise<Pick<Row, 'boot' | 'total' 
 	});
 	const { output } = await bundle.generate({ format: 'es', minify: true });
 	await bundle.close();
-	const chunks = output.filter((o: any) => o.type === 'chunk') as Array<{
-		code: string;
-		isEntry: boolean;
-		fileName: string;
-		name: string;
-		imports: string[];
-	}>;
+	const chunks = output.filter((o): o is OutputChunk => o.type === 'chunk');
 	// BOOT is the entry chunk plus everything it imports STATICALLY (a module the entry shares with
 	// a lazy chunk lands in a shared chunk the entry still loads at boot); the rest is lazy.
 	const by_name = new Map(chunks.map((c) => [c.fileName, c]));

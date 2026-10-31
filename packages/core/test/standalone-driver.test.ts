@@ -6,6 +6,7 @@
 
 import { describe, test, expect } from 'vitest';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
+import { partial_ctx_init } from './_compile-ctx.ts';
 
 const ROOT = '/standalone-app';
 
@@ -28,19 +29,20 @@ function make_compiler() {
 	};
 	const compiler = new Compiler(program, profiler);
 	compiler.configure(
-		new CompileCtx({
-			root: ROOT,
-			base: '/',
-			libDir: `${ROOT}/src/lib`,
-			is_dev: false,
-			id_salt: '',
-			visibleMargin: '0px',
-			presets: {},
-			import_keys: normalize_import_keys(undefined),
-			resolve_alias: [],
-			markdown_config: null,
-			pkg_root: '/nowhere/ogygia'
-		})
+		new CompileCtx(
+			partial_ctx_init({
+				root: ROOT,
+				base: '/',
+				libDir: `${ROOT}/src/lib`,
+				is_dev: false,
+				id_salt: '',
+				visibleMargin: '0px',
+				presets: {},
+				import_keys: normalize_import_keys(undefined),
+				resolve_alias: [],
+				pkg_root: '/nowhere/ogygia'
+			})
+		)
 	);
 	return { compiler, program };
 }

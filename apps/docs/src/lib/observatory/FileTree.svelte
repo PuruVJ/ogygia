@@ -108,7 +108,7 @@
 	const tree = $derived(build(files));
 
 	function icon(name: string): string {
-		if (/\.svelte$/.test(name)) return '◆';
+		if (name.endsWith('.svelte')) return '◆';
 		if (/\.(ts|js)$/.test(name)) return '⬡';
 		if (/\.(json)$/.test(name)) return '{}';
 		if (/\.(md|svx)$/.test(name)) return '¶';

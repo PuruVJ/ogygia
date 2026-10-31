@@ -249,7 +249,7 @@ export function similarity(a: string, b: string): number {
 	const n = b.length;
 	const d: number[][] = Array.from({ length: m + 1 }, (_, i) => [
 		i,
-		...new Array<number>(n).fill(0)
+		...Array.from({ length: n }, () => 0)
 	]);
 	for (let j = 1; j <= n; j++) d[0][j] = j;
 	for (let i = 1; i <= m; i++) {

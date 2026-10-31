@@ -17,7 +17,7 @@
  * file and line (the wire/asRegion macro laws).
  */
 import { og_js_regions, find_og_calls, type JsRegion } from '../parse/scan.ts';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 import { og_member } from './wire.ts';
 
 // ── regexes
@@ -26,8 +26,7 @@ const EXPORT_CONST_TAIL_RE = /\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*$/;
 const MARKER = 'import.meta.og.source';
 const IMPORT_LINE = `import { __og_source } from 'ogygia/internal';\n`;
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+type Node = AstNode;
 
 type Edit = { start: number; end: number; text: string };
 

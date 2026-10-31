@@ -60,7 +60,7 @@ const wrap = (imports: string, markup: string) => `<script>\n${imports}\n</scrip
 
 function marks_for(source: string, hostId = HOST) {
 	const program = new Program({ forms: false, router: false });
-	const result = /\.svelte$/.test(hostId)
+	const result = hostId.endsWith('.svelte')
 		? transformHost(source, hostId, ctx)
 		: transformTsRegions(source, hostId, ctx);
 	expect(result).not.toBeNull();

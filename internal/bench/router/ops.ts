@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import type { OpsWindow } from './ops-cases.ts';
 
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
 const entry = join(repo, 'internal/bench/router/ops-cases.ts');
@@ -45,14 +46,16 @@ const page = await browser.newPage();
 await page.setContent('<!doctype html><html><body></body></html>');
 await page.addScriptTag({ content: code });
 
-const names: string[] = await page.evaluate(() => Object.keys((window as any).__opscases));
+const names: string[] = await page.evaluate(() =>
+	Object.keys((window as unknown as OpsWindow).__opscases)
+);
 
 // Warm each case (JIT), then measure best-of-ROUNDS ops/sec over a fixed time budget.
 const results: Array<{ name: string; opsPerSec: number; nsPerOp: number }> = [];
 for (const name of names) {
 	const best = await page.evaluate(
 		({ name, budget, rounds }) => {
-			const fn = (window as any).__opscases[name] as () => unknown;
+			const fn = (window as unknown as OpsWindow).__opscases[name];
 			// warm
 			for (let i = 0; i < 10000; i++) fn();
 			let bestOps = 0;

@@ -6,6 +6,8 @@
 
 	let { data, children } = $props();
 
+	// a csr=false layout renders once, on the server: reading `data` once is right
+	// svelte-ignore state_referenced_locally
 	const plain = { rtl: data.rtl, appName: data.appName };
 </script>
 

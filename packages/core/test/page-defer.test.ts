@@ -30,6 +30,11 @@ import {
 
 const g = globalThis as unknown as Record<PropertyKey, unknown>;
 
+/** `page_defer_revivers()` typed for devalue's `parse`: each reviver names its own payload, devalue
+ *  takes `(value: any) => any` (the same hand-off `runtime/wire-format.ts` makes). */
+const revivers = (): Parameters<typeof parse>[1] =>
+	page_defer_revivers() as Parameters<typeof parse>[1];
+
 /** Fresh per-document registry + global for each case (both are singletons on globalThis). */
 beforeEach(() => {
 	delete g[PAGE_DEFER_REGISTRY_KEY as unknown as string];
@@ -92,7 +97,7 @@ describe('page-defer codec round-trip', () => {
 			0
 		);
 		const text = stringify(staged, defer_reducer);
-		const revived = parse(text, page_defer_revivers()) as {
+		const revived = parse(text, revivers()) as {
 			locale: string;
 			slow: Promise<unknown>;
 		};
@@ -111,7 +116,7 @@ describe('page-defer codec round-trip', () => {
 	it('id 0 is not dropped by the reducer (the falsy-id trap)', () => {
 		// A single promise gets id 0; a bare-id reducer would read 0 as "not handled" and lose the marker.
 		const { staged } = stage_deferred({ only: Promise.resolve(1) }, 0);
-		const revived = parse(stringify(staged, defer_reducer), page_defer_revivers()) as {
+		const revived = parse(stringify(staged, defer_reducer), revivers()) as {
 			only: unknown;
 		};
 		expect(revived.only).toBeInstanceOf(Promise);
@@ -175,7 +180,10 @@ describe('page-defer codec round-trip', () => {
 
 	it('a CUSTOM transport type round-trips through a streamed resolve (injected encoders/decoders)', async () => {
 		class Temp {
-			constructor(public c: number) {}
+			c: number;
+			constructor(c: number) {
+				this.c = c;
+			}
 			get f() {
 				return this.c * 1.8 + 32;
 			}
@@ -213,7 +221,7 @@ describe('page-defer settle path (non-navigate / SPA fallback)', () => {
 			slow: SettledRef;
 		};
 		expect(settled.slow).toBeInstanceOf(SettledRef);
-		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as {
+		const revived = parse(stringify(settled, page_seed_reducers), revivers()) as {
 			locale: string;
 			slow: Promise<unknown>;
 		};
@@ -228,7 +236,7 @@ describe('page-defer settle path (non-navigate / SPA fallback)', () => {
 		};
 		expect(settled.boom).toBeInstanceOf(SettledRef);
 		expect(settled.boom.ok).toBe(false);
-		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as {
+		const revived = parse(stringify(settled, page_seed_reducers), revivers()) as {
 			boom: Promise<unknown>;
 		};
 		await expect(revived.boom).rejects.toThrow('DENIED');
@@ -242,7 +250,7 @@ describe('page-defer settle path (non-navigate / SPA fallback)', () => {
 		};
 		expect(settled.user).toBeInstanceOf(SettledRef);
 		expect((settled.user.value as { profile: SettledRef }).profile).toBeInstanceOf(SettledRef);
-		const revived = parse(stringify(settled, page_seed_reducers), page_defer_revivers()) as {
+		const revived = parse(stringify(settled, page_seed_reducers), revivers()) as {
 			user: Promise<{ profile: Promise<unknown> }>;
 		};
 		const u = await revived.user;
@@ -267,8 +275,9 @@ describe('page-defer script safety', () => {
 	});
 
 	it('the inline bootstrap defines the resolve global and queues until live', () => {
-		// Run the bootstrap in this realm.
-		// eslint-disable-next-line no-eval
+		// Run the bootstrap in this realm. It is the inline script's text, so it runs as the browser runs
+		// an inline script: an indirect eval, global scope.
+		// oxlint-disable-next-line no-eval
 		(0, eval)(PAGE_DEFER_BOOTSTRAP);
 		expect(typeof g[PAGE_DEFER_GLOBAL]).toBe('function');
 		// Before install, a call is queued (no throw).

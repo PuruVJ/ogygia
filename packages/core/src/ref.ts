@@ -224,7 +224,8 @@ export function dispose_scope(scope: Scope): void {
 	}
 	const ds = reg.scope_disposers.get(scope);
 	if (ds !== undefined)
-		for (const fn of [...ds]) {
+		// (a copy: a disposer may remove itself or another from the set)
+		for (const fn of Array.from(ds)) {
 			try {
 				fn();
 			} catch {

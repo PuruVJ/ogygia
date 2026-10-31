@@ -38,9 +38,9 @@ function want_of(pristine: string): Element {
 }
 const drop_ws = (root: ParentNode) => {
 	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-	const doomed: Node[] = [];
+	const doomed: Text[] = [];
 	for (let n = walker.nextNode(); n; n = walker.nextNode())
-		if (!n.textContent?.trim()) doomed.push(n);
+		if (n instanceof Text && !n.textContent?.trim()) doomed.push(n);
 	doomed.forEach((n) => n.remove());
 };
 

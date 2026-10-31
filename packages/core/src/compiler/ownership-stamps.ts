@@ -27,6 +27,7 @@ import { blank_styles } from './blank-styles.ts';
 import { strip_bom } from './bom.ts';
 // the runtime's reader and this writer share the constants
 import { HTML_PARENT_ATTR, OPAQUE_ATTR } from '../runtime/ownership.ts';
+import type { AstNode } from './parse/oxc.ts';
 
 /** A cheap presence test before parsing: one of the three shapes could be in this file. */
 const MAY_STAMP_RE =
@@ -54,7 +55,7 @@ const DYNAMIC_KINDS = new Set([
 	'SlotElement'
 ]);
 
-type Node = { type: string; start: number; end: number; [k: string]: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Node = AstNode & { type: string; start: number; end: number };
 
 const is_blank = (n: Node) => n.type === 'Text' && !String(n.data ?? '').trim();
 

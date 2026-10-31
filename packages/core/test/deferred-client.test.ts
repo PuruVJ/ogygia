@@ -12,11 +12,14 @@ import {
 	region_schedule
 } from '../src/runtime/region-attrs.ts';
 
-class FakeEl {
-	constructor(readonly attrs: Record<string, string> = {}) {}
-	getAttribute(name: string) {
-		return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name]! : null;
-	}
+/** Minimal Element-like (no DOM env). The helpers read only `getAttribute`, so that subset is
+ *  handed to their `Element` signatures. */
+function fake_el(attrs: Record<string, string> = {}): Element {
+	const el: Pick<Element, 'getAttribute'> = {
+		getAttribute: (name) =>
+			Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name]! : null
+	};
+	return el as Element;
 }
 
 /** Mirror of ServerIsland `wants_modulepreload` (no second idle/IO when phase-2 is load). */
@@ -53,7 +56,7 @@ describe('deferred client island runtime contracts', () => {
 	});
 
 	it('DOM attrs: phase-1 uses when; phase-2 reads hydrate (awake deferred region)', () => {
-		const el = new FakeEl({
+		const el = fake_el({
 			render: 'defer',
 			when: 'idle',
 			wake: 'visible',
@@ -71,7 +74,7 @@ describe('deferred client island runtime contracts', () => {
 	});
 
 	it('defer-only hole: no phase-2 hydrate schedule', () => {
-		const el = new FakeEl({ render: 'defer', when: 'load' });
+		const el = fake_el({ render: 'defer', when: 'load' });
 		expect(is_deferred(el)).toBe(true);
 		expect(is_awake(el)).toBe(false);
 		expect(region_hydrate_schedule(el)).toBe(null);

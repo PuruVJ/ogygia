@@ -39,9 +39,8 @@ export function window_profile(
 ): CpuProfile {
 	const samples = p.samples ?? [];
 	const deltas = p.timeDeltas ?? [];
-	const out: number[] = new Array(samples.length);
 	let t_us = p.startTime;
-	for (let i = 0; i < samples.length; i++) {
+	const out = samples.map((sample, i) => {
 		t_us += deltas[i] ?? 0;
 		const t = t_us / 1000;
 		let inside = false;
@@ -50,8 +49,8 @@ export function window_profile(
 				inside = true;
 				break;
 			}
-		out[i] = inside ? samples[i] : 2; // (node 2 is (idle) in a converted browser trace)
-	}
+		return inside ? sample : 2; // (node 2 is (idle) in a converted browser trace)
+	});
 	return { ...p, samples: out };
 }
 

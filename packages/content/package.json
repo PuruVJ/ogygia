@@ -102,7 +102,7 @@
 	},
 	"scripts": {
 		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
+		"check": "tsc -p . && svelte-check --tsconfig ./tsconfig.check.json --fail-on-warnings && tsc -p test && tsc -p e2e && vitest run",
 		"test": "vitest run",
 		"e2e": "playwright test"
 	},
@@ -120,6 +120,7 @@
 		"@types/node": "catalog:",
 		"shiki": "catalog:",
 		"svelte": "catalog:",
+		"svelte-check": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"valibot": "catalog:",

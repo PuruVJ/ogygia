@@ -44,7 +44,7 @@ test('21 load islands: no task ≥ 50 ms, viewport islands first, then document 
 	// their modules land in network order, staggered one task each, and a ready island below the
 	// fold holds its turn while one of them is still loading.
 	expect(
-		[...order.slice(0, 3)].sort((a, b) => a - b),
+		order.slice(0, 3).sort((a, b) => a - b),
 		`order: ${order.join(', ')}`
 	).toEqual([18, 19, 20]);
 	expect([...order].sort((a, b) => a - b)).toEqual(Array.from({ length: 21 }, (_, i) => i));

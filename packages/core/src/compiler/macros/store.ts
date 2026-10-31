@@ -21,13 +21,12 @@
  * fails loudly at runtime — `import.meta.og` is undefined without the transform).
  */
 import { og_js_regions } from '../parse/scan.ts';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 import { og_member } from './wire.ts';
 
 const MARKER = 'import.meta.og.store';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+type Node = AstNode;
 
 function walk(node: Node, visit: (n: Node) => void): void {
 	visit(node);

@@ -39,10 +39,10 @@
 	});
 	const s = sortable(() => filtered, 'self_ms');
 	let open = $state<string | null>(null);
-	const hasSplit = rows.some((r) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0) > 0);
-	const hasParent = rows.some((r) => !!r.parent);
+	const hasSplit = $derived(rows.some((r) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0) > 0));
+	const hasParent = $derived(rows.some((r) => !!r.parent));
 	// page mode: the spread across runs (min / median / max), a cold first run marked
-	const hasRuns = rows.some((r) => (r.runs_ms?.length ?? 0) > 1);
+	const hasRuns = $derived(rows.some((r) => (r.runs_ms?.length ?? 0) > 1));
 	const cols = $derived(
 		7 + (hasAlloc ? 1 : 0) + (hasSplit ? 1 : 0) + (hasParent ? 1 : 0) + (hasRuns ? 1 : 0)
 	);

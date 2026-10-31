@@ -47,7 +47,7 @@
 	// number, so the ticks that rebuild the view do not re-run a check that queries every selector
 	const nav_key = $derived(view?.nav?.t ?? 0);
 	$effect(() => {
-		nav_key;
+		void nav_key;
 		const id = setTimeout(
 			() => {
 				check_styles();
@@ -76,7 +76,7 @@
 	const trackW = $derived(Math.max(160, wrapW - LABEL_W - 70));
 
 	const view = $derived.by(() => {
-		tick;
+		void tick;
 		try {
 			return read_page();
 		} catch {

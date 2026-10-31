@@ -5,7 +5,7 @@
 	// every reload. Server-only: no client JS ships for this component. `Fallback<{}>` declares the
 	// reserved `ogygiaFallback` slot so svelte-check accepts the fallback snippet at the call site;
 	// the compiler consumes that snippet, this component never receives it.
-	let {}: Fallback = $props();
+	let { ogygiaFallback }: Fallback = $props();
 	await new Promise((r) => setTimeout(r, 650));
 	const at = new Date().toLocaleTimeString();
 </script>

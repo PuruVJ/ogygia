@@ -3,6 +3,7 @@
 	// browser-mode test asserts the SSR button node is ADOPTED (same node after hydrate), not
 	// re-created — Svelte's mismatch recovery would silently replace it (see foreign-dom.md).
 	let { start = 0 }: { start?: number } = $props();
+	// svelte-ignore state_referenced_locally
 	let count = $state(start);
 </script>
 

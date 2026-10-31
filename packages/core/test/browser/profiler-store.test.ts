@@ -23,15 +23,15 @@ test('reports: put, get, list newest first with the median, delete, and a cap on
 	await clear_all();
 	expect(await put_report(dump('r1', '/a', 1000))).toBe(true);
 	expect(await put_report(dump('r2', '/a', 2000, [5, 7, 9]))).toBe(true);
-	expect(
-		await put_report({
-			kind: 'ogygia-profiler-dump',
-			version: 1,
-			meta: { id: 'r3', created: 3000, trigger: 'request', request: { path: '/req' } },
-			analysis: {},
-			extras: {}
-		})
-	).toBe(true);
+	// a request-triggered dump (no page): the store's parameter types only the `meta` it reads
+	const request_dump = {
+		kind: 'ogygia-profiler-dump',
+		version: 1,
+		meta: { id: 'r3', created: 3000, trigger: 'request', request: { path: '/req' } },
+		analysis: {},
+		extras: {}
+	};
+	expect(await put_report(request_dump)).toBe(true);
 	const list = await list_reports();
 	expect(list.map((r) => r.id)).toEqual(['r3', 'r2', 'r1']);
 	expect(list[1]).toMatchObject({ page: '/a', median: 7, trigger: 'page', label: '/a' });

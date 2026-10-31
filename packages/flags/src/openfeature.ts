@@ -48,7 +48,7 @@ export interface OpenFeatureOptions {
 
 function default_context(c: CtxLike): EvaluationContextLike {
 	const sub = c.visitor?.sub;
-	return { ...(c.visitor ?? {}), ...(sub ? { targetingKey: sub } : {}) };
+	return { ...c.visitor, ...(sub ? { targetingKey: sub } : {}) };
 }
 
 export function openfeature(

@@ -16,10 +16,10 @@
  */
 import { parse_roots } from './page-keys.ts';
 import { OWN_PACKAGE_NAMES, OWN_SPECIFIER_SOURCE } from '../../own-package.ts';
+import type { AstNode } from '../parse/oxc.ts';
 
 /** Loose AST node — the parser hands ESTree-ish objects; positions/back-refs are skipped by the walk. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type SvelteNode = Record<string, any>;
+type SvelteNode = AstNode;
 
 // (`ogygia` in an app; `@ogygia/core` in a plugin package's own components)
 const OGYGIA_NAMED_IMPORT = new RegExp(

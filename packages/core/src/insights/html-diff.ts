@@ -88,11 +88,17 @@ function myers(a: string[], b: string[], max_d: number): DiffOp[] | null {
 						kk === -dd || (kk !== dd && pv[off + kk - 1] < pv[off + kk + 1]) ? kk + 1 : kk - 1;
 					const px = pv[off + prev_k];
 					const py = px - prev_k;
-					while (cx > px && cy > py) (ops.push({ op: 'same', text: a[--cx] }), cy--);
+					while (cx > px && cy > py) {
+						ops.push({ op: 'same', text: a[--cx] });
+						cy--;
+					}
 					if (cx === px) ops.push({ op: 'add', text: b[--cy] });
 					else ops.push({ op: 'del', text: a[--cx] });
 				}
-				while (cx > 0 && cy > 0) (ops.push({ op: 'same', text: a[--cx] }), cy--);
+				while (cx > 0 && cy > 0) {
+					ops.push({ op: 'same', text: a[--cx] });
+					cy--;
+				}
 				return ops.reverse();
 			}
 		}

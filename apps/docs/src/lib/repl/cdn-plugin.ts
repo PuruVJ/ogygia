@@ -5,6 +5,7 @@
  * CJS→ESM / JSON itself. svelte (and any configured runtime) stays EXTERNAL so the mounted app shares
  * the host's instance. Works with node `rolldown` (tests) and `@rolldown/browser` (the worker).
  */
+import type { Plugin } from '@rolldown/browser';
 import {
 	parse_specifier,
 	resolve_entry,
@@ -147,8 +148,7 @@ export function wasm_module(base64: string, as_url: boolean): string {
 	);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RolldownPlugin = any;
+type RolldownPlugin = Plugin;
 
 export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 	const fetchFn = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));

@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Interactive leaf — its registry import bakes wake:'load'. Solid border fingerprint.
 	let { start = 0 }: { start?: number } = $props();
+	// svelte-ignore state_referenced_locally
 	let n = $state(start);
 </script>
 

@@ -13,15 +13,14 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 const root = path.join(process.cwd(), 'apps/palaestra');
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ctx: any = {
+const ctx: Parameters<typeof transformHost>[2] = {
 	root,
 	libDir: path.join(root, 'src/lib'),
 	pathModule: path,
 	dev: false,
 	ssr: true,
 	linkVirtualIsland: true,
-	csrTrue: false,
+	routeCsr: undefined, // not a route host
 	visibleMargin: '0px',
 	idSalt: 'stress',
 	presets: {},

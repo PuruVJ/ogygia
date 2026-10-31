@@ -8,10 +8,7 @@ import { serialize_provided_context } from '../dist/context-bridge.js';
 import { REF_WIRE_KEY, ref_reviver } from '../dist/ref.js';
 
 const parse_marker = (payload: string) =>
-	parse(payload, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown }) as Record<
-		string,
-		unknown
-	>;
+	parse(payload, { [REF_WIRE_KEY]: ref_reviver(true) }) as Record<string, unknown>;
 
 const map = (entries: [string, unknown][]) => new Map<string, unknown>(entries);
 

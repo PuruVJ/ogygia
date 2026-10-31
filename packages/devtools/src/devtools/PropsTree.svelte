@@ -26,7 +26,9 @@
 	const type = $derived(classify(value));
 	const expandable = $derived(['array', 'object', 'map', 'set'].includes(type));
 
-	let open = $state(depth < 2); // auto-expand the top couple of levels
+	// auto-expand the top couple of levels: a seed, the toggle owns it after
+	// svelte-ignore state_referenced_locally
+	let open = $state(depth < 2);
 
 	const entries = $derived.by(() => {
 		if (type === 'array') return value.map((v, i) => [i, v]);

@@ -202,10 +202,14 @@ export function tag(key: string, value: string | number | boolean): void {
  */
 /** The attrs callback of `instrument`: the result, then the call's arguments. Declared method-style
  *  so a callback naming fewer arguments than the function takes (`(r, tag) => …` for a two-argument
- *  renderer) is accepted, and so it never narrows the wrapped signature. */
-export type InstrumentAttrs<A extends unknown[], R> = {
-	bivariant(result: Awaited<R>, ...args: NoInfer<A>): SpanAttrs | undefined;
-}['bivariant'];
+ *  renderer) is accepted, and so it never narrows the wrapped signature. `NoInfer` wraps the whole
+ *  callback, not its rest argument: on the rest tuple alone it made a shorter callback a tuple-length
+ *  mismatch, so the `(r, tag) => …` form above did not type-check. */
+export type InstrumentAttrs<A extends unknown[], R> = NoInfer<
+	{
+		bivariant(result: Awaited<R>, ...args: A): SpanAttrs | undefined;
+	}['bivariant']
+>;
 export function instrument<A extends unknown[], R>(
 	fn: (...args: A) => R,
 	name: string,

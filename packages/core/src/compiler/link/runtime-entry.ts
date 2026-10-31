@@ -168,7 +168,8 @@ export function resolveFeatures(marks: RuntimeMarks): FeatureId[] {
 	let changed = true;
 	while (changed) {
 		changed = false;
-		for (const id of [...selected]) {
+		// (a copy: the pass adds to `selected`; what it adds is walked on the next pass)
+		for (const id of Array.from(selected)) {
 			for (const d of FEATURES[id].deps) {
 				if (!selected.has(d)) {
 					selected.add(d);

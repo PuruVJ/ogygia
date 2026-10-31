@@ -1608,15 +1608,20 @@ export function analyze_page(
 			for (const i of page.islands) {
 				const from = i.turn ?? i.loaded;
 				const overlap = Math.min(work_end(i), f.end) - Math.max(from, f.start);
-				if (overlap > best_overlap) ((best_overlap = overlap), (best = i));
+				if (overlap > best_overlap) {
+					best_overlap = overlap;
+					best = i;
+				}
 			}
 			const key = best ? best.fp : `${f.url}\0${f.fn}`;
 			const label = best
 				? `${name_of(best.fp, best.entry)} while it hydrated`
 				: `${file(f.url)}${f.fn ? ` (${f.fn})` : ''}`;
 			const g = groups.get(key);
-			if (g) ((g.ms += f.ms), g.n++);
-			else groups.set(key, { label, ...(best ? { fp: best.fp } : {}), ms: f.ms, n: 1 });
+			if (g) {
+				g.ms += f.ms;
+				g.n++;
+			} else groups.set(key, { label, ...(best ? { fp: best.fp } : {}), ms: f.ms, n: 1 });
 		}
 		const top = [...groups.values()].filter((g) => g.ms >= 30).sort((a, b) => b.ms - a.ms);
 		if (top.length)
@@ -1642,8 +1647,11 @@ export function analyze_page(
 		const by_file = new Map<string, { n: number; bytes: number; top: number; fp?: string }>();
 		for (const i of below) {
 			const g = by_file.get(file(i.url));
-			if (g) (g.n++, (g.bytes += i.bytes), (g.top = Math.min(g.top, i.top)));
-			else
+			if (g) {
+				g.n++;
+				g.bytes += i.bytes;
+				g.top = Math.min(g.top, i.top);
+			} else
 				by_file.set(file(i.url), {
 					n: 1,
 					bytes: i.bytes,

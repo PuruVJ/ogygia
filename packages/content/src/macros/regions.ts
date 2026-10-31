@@ -86,7 +86,7 @@ export function rewrite_regions(src: string, id: string): string {
 }
 
 /** Resolve a LITERAL glob (relative to `dir`) to sorted absolute file paths. Supports the shapes a
- *  block folder uses (`*.svelte`, `**​/*.svelte`, `blocks/*.svelte`). */
+ *  block folder uses (`*.svelte`, `**\/*.svelte`, `blocks/*.svelte`). */
 function glob_relative(dir: string, glob: string): string[] {
 	// `fs.globSync` (Node ≥ 22) with cwd = the module's directory; sort for deterministic output.
 	const matches = fs.globSync(glob, { cwd: dir }) as string[];

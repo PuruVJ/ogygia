@@ -5,6 +5,8 @@
 
 	const words = 'lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod'.split(' ');
 	let doc = '';
+	// inline on purpose: it renders once, on the server, and the cost must land in this component
+	// svelte-ignore state_referenced_locally
 	for (let p = 0; p < paragraphs; p++) {
 		let line = '';
 		for (let w = 0; w < 40; w++) line += words[(p * 7 + w * 13) % words.length] + ' ';
