@@ -8,6 +8,12 @@ changeset, written by the release: do not edit by hand.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.10.2
+
+### Patch Changes
+
+- [#65](https://github.com/ogygiajs/ogygia/pull/65) [`87e9b21`](https://github.com/ogygiajs/ogygia/commit/87e9b213f3b63da4898f402a29cbc57af4aaa75d) Thanks [@PuruVJ](https://github.com/PuruVJ)! - The repository now lives at github.com/ogygiajs/ogygia; package links point there.
+
 ## 0.10.1
 
 ### Patch Changes
