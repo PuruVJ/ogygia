@@ -52,7 +52,7 @@ test("ogygia/profiler/client carries no beacon of its own: its marks reach the p
 	const store = globalThis as Record<symbol, unknown>;
 	const got: unknown[][] = [];
 	// @ts-expect-error a query makes a fresh module instance
-	const { mark } = await import('../src/profiler/client.ts?fresh=1');
+	const { mark } = await import('../../devtools/src/profiler/client.ts?fresh=1');
 	delete store[key];
 	// before any runtime: held
 	mark.start('early').end();

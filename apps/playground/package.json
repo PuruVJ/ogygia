@@ -37,6 +37,7 @@
     "@rolldown/browser": "1.2.2",
     "devalue": "^5.9.0",
     "@ogygia/content": "workspace:*",
+    "@ogygia/devtools": "workspace:*",
     "@ogygia/flags": "workspace:*",
     "ogygia": "workspace:*",
     "repro-hole-css-kit": "workspace:*",

@@ -169,6 +169,9 @@ importers:
       '@ogygia/content':
         specifier: workspace:*
         version: link:../../packages/content
+      '@ogygia/devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
       '@sveltejs/adapter-vercel':
         specifier: ^6.3.4
         version: 6.3.4(@sveltejs/kit@2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(rollup@4.62.4)(supports-color@8.1.1)
@@ -238,6 +241,9 @@ importers:
       '@ogygia/content':
         specifier: workspace:*
         version: link:../../packages/content
+      '@ogygia/devtools':
+        specifier: workspace:*
+        version: link:../../packages/devtools
       '@ogygia/flags':
         specifier: workspace:*
         version: link:../../packages/flags
@@ -706,6 +712,49 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
 
+  packages/devtools:
+    dependencies:
+      '@neodrag/svelte':
+        specifier: 3.0.0-next.12
+        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
+      devalue:
+        specifier: ^5.9.3
+        version: 5.9.4
+    devDependencies:
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@ogygia/tsdown-plugin-svelte':
+        specifier: workspace:*
+        version: link:../tsdown-plugin-svelte
+      '@sveltejs/kit':
+        specifier: ^2.70.0
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.2.0
+        version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      ogygia:
+        specifier: workspace:*
+        version: link:../ogygia
+      svelte:
+        specifier: 5.56.8
+        version: 5.56.8
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
   packages/federation:
     devDependencies:
       '@ogygia/flags':
@@ -800,9 +849,6 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
     devDependencies:
-      '@neodrag/svelte':
-        specifier: 3.0.0-next.12
-        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
       '@ogygia/tsdown-plugin-svelte':
         specifier: workspace:*
         version: link:../tsdown-plugin-svelte

@@ -53,8 +53,9 @@ import {
 	install_window_sink as dt_install_window_sink,
 	ingest_server_events as dt_ingest_server
 } from '../events/sinks.ts';
-import { install_devtools_ui as dt_install_ui } from '../devtools/ui.ts';
-import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../devtools/leftovers.ts';
+// TEMP(devtools-split): the dock's launcher + leftovers watch live in packages/devtools until they plug in through a hook
+import { install_devtools_ui as dt_install_ui } from '../../../devtools/src/devtools/ui.ts';
+import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../../../devtools/src/devtools/leftovers.ts';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.

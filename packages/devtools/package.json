@@ -1,0 +1,110 @@
+{
+	"name": "@ogygia/devtools",
+	"private": true,
+	"version": "0.10.2",
+	"description": "Devtools for ogygia: the in-page dock, and the SSR profiler with its report, client marks and storage adapters",
+	"type": "module",
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
+		"directory": "packages/devtools"
+	},
+	"keywords": ["ogygia", "sveltekit", "devtools", "profiler", "performance"],
+	"exports": {
+		".": {
+			"types": "./dist/devtools/index.d.ts",
+			"svelte": "./src/devtools/index.ts",
+			"default": "./src/devtools/index.ts"
+		},
+		"./profiler": {
+			"types": "./dist/profiler/span.d.ts",
+			"default": "./src/profiler/span.ts"
+		},
+		"./profiler/client": {
+			"types": "./dist/profiler/client.d.ts",
+			"default": "./src/profiler/client.ts"
+		},
+		"./profiler/storage": {
+			"types": "./dist/profiler/storage/index.d.ts",
+			"default": "./src/profiler/storage/index.ts"
+		},
+		"./profiler/storage/sqlite": {
+			"types": "./dist/profiler/storage/sqlite.d.ts",
+			"default": "./src/profiler/storage/sqlite.ts"
+		},
+		"./profiler/storage/redis": {
+			"types": "./dist/profiler/storage/redis.d.ts",
+			"default": "./src/profiler/storage/redis.ts"
+		},
+		"./profiler/storage/postgres": {
+			"types": "./dist/profiler/storage/postgres.d.ts",
+			"default": "./src/profiler/storage/postgres.ts"
+		}
+	},
+	"files": ["dist", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && vitest run",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@neodrag/svelte": "3.0.0-next.12",
+		"devalue": "^5.9.3"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": ">=2.70.2 <4",
+		"ogygia": "workspace:^",
+		"svelte": "^5.56.8",
+		"vite": "^8.2.4"
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"@ogygia/tsdown-plugin-svelte": "workspace:*",
+		"@sveltejs/kit": "^2.70.0",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@types/node": "^26.1.2",
+		"ogygia": "workspace:*",
+		"svelte": "5.56.8",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vite": "^8.3.5",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/devtools/index.d.ts",
+				"svelte": "./dist/devtools/index.js",
+				"default": "./dist/devtools/index.js"
+			},
+			"./profiler": {
+				"types": "./dist/profiler/span.d.ts",
+				"default": "./dist/profiler/span.js"
+			},
+			"./profiler/client": {
+				"types": "./dist/profiler/client.d.ts",
+				"default": "./dist/profiler/client.js"
+			},
+			"./profiler/storage": {
+				"types": "./dist/profiler/storage/index.d.ts",
+				"default": "./dist/profiler/storage/index.js"
+			},
+			"./profiler/storage/sqlite": {
+				"types": "./dist/profiler/storage/sqlite.d.ts",
+				"default": "./dist/profiler/storage/sqlite.js"
+			},
+			"./profiler/storage/redis": {
+				"types": "./dist/profiler/storage/redis.d.ts",
+				"default": "./dist/profiler/storage/redis.js"
+			},
+			"./profiler/storage/postgres": {
+				"types": "./dist/profiler/storage/postgres.d.ts",
+				"default": "./dist/profiler/storage/postgres.js"
+			}
+		}
+	}
+}

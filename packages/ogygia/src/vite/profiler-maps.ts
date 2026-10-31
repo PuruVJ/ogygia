@@ -13,7 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { PROFILER_MAPS_PLACEHOLDER } from '../compiler/ids.ts';
-import { GZ_PREFIX } from '../profiler/embedded-maps.ts';
+// TEMP(devtools-split): the reading side lives in packages/devtools
+import { GZ_PREFIX } from '../../../devtools/src/profiler/embedded-maps.ts';
 import { build_module_map } from './module-map.ts';
 import { client_maps_stash } from './server-sourcemaps.ts';
 

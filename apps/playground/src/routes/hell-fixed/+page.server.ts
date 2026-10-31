@@ -9,7 +9,7 @@
 // the cache that never hits. (No PATTERN comments: this page measures the forecast.)
 import { readFile } from 'node:fs/promises';
 import type { PageServerLoad } from './$types';
-import { span, tag } from 'ogygia/profiler';
+import { span, tag } from '@ogygia/devtools/profiler';
 import { catalog, PRODUCTS } from '$lib/hell-fixed/data';
 
 async function queryDatabase(ms: number): Promise<{ rows: number }> {

@@ -59,5 +59,5 @@ export { api, ApiError, type ApiClient, type ApiClientOptions } from './client-a
 
 // (fragment federation — `federate()`, `mount()`, `user` — is its own plugin: `@ogygia/federation`)
 // For plugins that build on the router:
-export { is_http_error as isHttpError } from './respond.ts';
-export type { ComponentPick } from './define.ts';
+export { is_http_error as isHttpError, is_redirect as isRedirect } from './respond.ts';
+export type { ComponentPick, AnyComponent } from './define.ts';

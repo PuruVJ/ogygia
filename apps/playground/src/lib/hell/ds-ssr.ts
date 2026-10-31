@@ -11,7 +11,7 @@
 // every render a span and `span` names the phases, so the report can say what this pass costs.
 import type { Handle } from '@sveltejs/kit';
 import { renderToString as ionicRenderToString, type HydrateResults, type SerializeDocumentOptions } from '@ionic/core/hydrate';
-import { instrument, span } from 'ogygia/profiler';
+import { instrument, span } from '@ogygia/devtools/profiler';
 
 // PATTERN library-per-item (a full renderer run per tag) · PATTERN kept-per-render (it keeps ~60 MB each page)
 const render = (html: string, options?: SerializeDocumentOptions): Promise<HydrateResults> => ionicRenderToString(html, options);

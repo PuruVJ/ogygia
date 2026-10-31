@@ -11,7 +11,7 @@ import {
 	embedded_source,
 	GZ_PREFIX,
 	load_embedded_maps
-} from '../src/profiler/embedded-maps.ts';
+} from '../../devtools/src/profiler/embedded-maps.ts';
 
 // a build's embedded maps: the app's own file, a workspace package's `src/` (reached by `../`), a
 // dependency
@@ -39,8 +39,8 @@ vi.mock('virtual:ogygia/profiler-maps', () => ({
 		}
 	})
 }));
-import { module_imports, route_imports } from '../src/profiler/route-imports.ts';
-import { sourcemap_resolver } from '../src/profiler/analyze.ts';
+import { module_imports, route_imports } from '../../devtools/src/profiler/route-imports.ts';
+import { sourcemap_resolver } from '../../devtools/src/profiler/analyze.ts';
 
 // The profiler's maps travel inside the code, so any adapter ships them; a map that points at another
 // built file is followed one step further.

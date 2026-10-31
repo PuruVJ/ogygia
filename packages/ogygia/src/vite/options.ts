@@ -5,7 +5,8 @@
  */
 import type { ImportKeys } from '../compiler/region/transform.ts';
 import type { DebarrelOptions } from '../compiler/debarrel/options.ts';
-import type { ProfilerOptions } from '../profiler/index.ts';
+// TEMP(devtools-split): the `profiler` option's type, from packages/devtools until the option moves
+import type { ProfilerOptions } from '../../../devtools/src/profiler/index.ts';
 import type { OgygiaPlugin } from './plugin-api.ts';
 
 // ── regexes

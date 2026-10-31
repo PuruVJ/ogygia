@@ -2,7 +2,7 @@
 // fetches them for every page underneath. The page's own load awaits `parent()` before it starts
 // its calls — the classic chain.
 import type { LayoutServerLoad } from './$types';
-import { span } from 'ogygia/profiler';
+import { span } from '@ogygia/devtools/profiler';
 
 export const load: LayoutServerLoad = async ({ url, fetch }) => {
 	const session = await span('svc.session', async () => {

@@ -2,7 +2,7 @@
 // mark (a function, a promise, an event, a handle) rides the same batched beacon as the islands;
 // without the tag nothing is queued or sent.
 import { expect, test } from 'vitest';
-import { mark } from '../../src/profiler/client.ts';
+import { mark } from '../../../devtools/src/profiler/client.ts';
 import { _reset_beacon, _beacon_state, beacon_mark } from '../../src/runtime/beacon.ts';
 
 function with_tag(): { meta: HTMLMetaElement; sent: string[]; restore: () => void } {

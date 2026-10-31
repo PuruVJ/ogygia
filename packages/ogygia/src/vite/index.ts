@@ -140,6 +140,7 @@ import {
 	scan_entry_pattern,
 	PROFILER_UI_DIR,
 	PROFILER_ROUTER_MODULE,
+	DEVTOOLS_ROOT_ID,
 	OGYGIA_HOOKS_MODULE,
 	OGYGIA_REGION_MODULES,
 	OGYGIA_INJECTED_IMPORTS,
@@ -164,7 +165,9 @@ const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
 const CSS_EXT_RE = /\.css$/;
 const STYLE_BEARING_FILE_RE = /\.(svelte|css|scss|sass|less|styl)$/;
-const PROFILER_DYNAMIC_IMPORT_RE = /import\((['"])\.\/profiler\/index\.js\1\)/;
+// TEMP(devtools-split): the built hooks module's profiler import (tsdown emits the packages/devtools
+// sources it follows under dist/devtools/src/)
+const PROFILER_DYNAMIC_IMPORT_RE = /import\((['"])\.\/devtools\/src\/profiler\/index\.js\1\)/;
 /** The bundler's resolver as the CSS walk's (compiler/fouc-css.ts `collectFoucCssReachable`): what
  *  the build resolves, the walk reaches — a package's `exports`, a workspace link, an alias. */
 function bundler_resolve(ctx: {
@@ -235,12 +238,18 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// root the same way an app's is (it imports the literal 'ogygia/router') — no hand-seeding.
 	const pkg_scan: PackageScan[] = [];
 	if (profiler_config) {
-		pkg_scan.push({
-			name: 'ogygia',
-			root: PKG_ROOT_ID.slice(0, -1),
-			dirs: [real_posix(PROFILER_UI_DIR)],
-			files: [real_posix(PROFILER_ROUTER_MODULE)]
-		});
+		// TEMP(devtools-split): the profiler UI lives in packages/devtools; its entry keeps the name
+		// 'ogygia' (so its islands keep their `ogygia/src/profiler/ui/…` identities), and this package's
+		// own root keeps its entry for every other own file
+		pkg_scan.push(
+			{ name: 'ogygia', root: PKG_ROOT_ID.slice(0, -1), dirs: [], files: [] },
+			{
+				name: 'ogygia',
+				root: DEVTOOLS_ROOT_ID.slice(0, -1),
+				dirs: [real_posix(PROFILER_UI_DIR)],
+				files: [real_posix(PROFILER_ROUTER_MODULE)]
+			}
+		);
 	}
 
 	// Router / rate-limit / session / ttl / continuity / server-delta → the flat config (pure derivation).
@@ -530,7 +539,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 									'svelte/server',
 									// (ogygia's dependency, not the app's: under pnpm the app root can't resolve it bare)
 									'ogygia > devalue',
-									...(devtools_effective ? ['ogygia > @neodrag/svelte', 'ogygia > @neodrag/svelte/resize'] : [])
+									// TEMP(devtools-split): the dock's dependency is @ogygia/devtools' now
+									...(devtools_effective ? ['@ogygia/devtools > @neodrag/svelte', '@ogygia/devtools > @neodrag/svelte/resize'] : [])
 								]
 							: [];
 					// ONE OGYGIA IN THE DEV BROWSER: ogygia itself is never pre-bundled. An installed
@@ -753,7 +763,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					opt.entries = entries;
 					const have = new Set(entries);
 					for (const abs of compiler.island_scan_entries()) {
-						const pattern = scan_entry_pattern(abs);
+						// TEMP(devtools-split): the profiler UI's islands (packages/devtools) stay out of the dep scan
+						const pattern = real_posix(abs).startsWith(DEVTOOLS_ROOT_ID) ? null : scan_entry_pattern(abs);
 						if (pattern !== null && !have.has(pattern)) {
 							have.add(pattern);
 							entries.push(pattern);
@@ -1271,7 +1282,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				if (is_dev && options?.ssr && id === OGYGIA_HOOKS_MODULE) {
 					source = source.replace(
 						PROFILER_DYNAMIC_IMPORT_RE,
-						'import(/* @vite-ignore */ ((s) => s)($1./profiler/index.js$1))'
+						'import(/* @vite-ignore */ ((s) => s)($1./devtools/src/profiler/index.js$1))'
 					);
 				}
 

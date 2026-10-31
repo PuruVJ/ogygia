@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { build_module_map } from '../src/vite/module-map.ts';
-import { module_category } from '../src/profiler/module-map.ts';
+import { module_category } from '../../devtools/src/profiler/module-map.ts';
 
 // A build without sourcemaps leaves only chunk names: the module map says which source module is
 // at which lines of each server chunk, so a frame is filed by what it is.

@@ -1,7 +1,7 @@
 // THE BROWSER STORE (profiler/ui/store.ts) in a real browser: a report's dump is kept and listed,
 // the newest MAX stay, a page's visits come back newest first, and everything is best-effort.
 import { expect, test } from 'vitest';
-import { put_report, get_report, list_reports, delete_report, list_visits, latest_visit, clear_all } from '../../src/profiler/ui/store.ts';
+import { put_report, get_report, list_reports, delete_report, list_visits, latest_visit, clear_all } from '../../../devtools/src/profiler/ui/store.ts';
 
 const dump = (id: string, page: string, created: number, runs: number[] = [10, 20, 30]) => ({ kind: 'ogygia-profiler-dump', version: 1, meta: { id, page, created, trigger: 'page', runs }, analysis: { busy_ms: 1 }, extras: {} });
 

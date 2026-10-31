@@ -1142,7 +1142,8 @@ export class Compiler {
 			// (the Page tab, fed by the beacon started here) and says why the island tools are absent.
 			// Empty when devtools is off (never injected then).
 			if (!ctx.devtools) return `export {}`;
-			const ui_path = `${ctx.runtime_dir}/../devtools/ui.js`.replace(BACKSLASH_G, '/');
+			// TEMP(devtools-split): the dock ships from packages/devtools (`dist/vite/../runtime` → its dist)
+			const ui_path = `${ctx.runtime_dir}/../../../devtools/dist/devtools/ui.js`.replace(BACKSLASH_G, '/');
 			return (
 				// the dev server hands `define`s (the devtools gate among them) to the page as globals
 				// from Vite's env module: it must run before the dock reads the gate. Kit's own client

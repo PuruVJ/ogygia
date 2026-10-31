@@ -69,6 +69,14 @@ export const OGYGIA_INJECTED_IMPORTS: Set<string> = new Set(['ogygia/internal', 
  */
 const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
 
+// TEMP(devtools-split): the devtools package's root (packages/devtools, the workspace sibling — `../../..`
+// from `src/vite/` or `dist/vite/`), with the same src/dist pick as this package's own files.
+/** The `@ogygia/devtools` package root (native path). */
+export const DEVTOOLS_ROOT: string = fileURLToPath(new URL('../../../devtools', import.meta.url));
+/** THE own-files test for the devtools package's module ids (cf. PKG_ROOT_ID). */
+export const DEVTOOLS_ROOT_ID: string = id_dir(DEVTOOLS_ROOT);
+const DT_HAS_SRC = fs.existsSync(path.join(DEVTOOLS_ROOT, 'src/profiler/profiler-router.ts'));
+
 /**
  * ogygia's own profiler UI components — island `.svelte` files marked INSIDE ogygia's source and
  * rendered only from server code (`document()` pages), so no app file ever marks them and the src
@@ -78,9 +86,10 @@ const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
  * (App islands — including workspace-package components marked at an app import site — need none of
  * this; the mark lives in app source and the src walk already finds it.)
  */
-export const PROFILER_UI_DIR: string = OG_HAS_SRC
-	? path.join(PKG_ROOT, 'src/profiler/ui')
-	: path.join(PKG_ROOT, 'dist/profiler/ui');
+// TEMP(devtools-split): the profiler lives in packages/devtools now
+export const PROFILER_UI_DIR: string = DT_HAS_SRC
+	? path.join(DEVTOOLS_ROOT, 'src/profiler/ui')
+	: path.join(DEVTOOLS_ROOT, 'dist/profiler/ui');
 
 /**
  * The profiler's OWN server router (`ogygia/router`, shipped in dist) — never in app source, so the
@@ -89,9 +98,10 @@ export const PROFILER_UI_DIR: string = OG_HAS_SRC
  * each wrapping `Shell`) become router-css roots, so their scoped `<style>` blocks are emitted +
  * linked exactly like an app router page's. Parallel to PROFILER_UI_DIR's src/dist self-reference.
  */
-export const PROFILER_ROUTER_MODULE: string = OG_HAS_SRC
-	? path.join(PKG_ROOT, 'src/profiler/profiler-router.ts')
-	: path.join(PKG_ROOT, 'dist/profiler/profiler-router.js');
+// TEMP(devtools-split): the profiler lives in packages/devtools now
+export const PROFILER_ROUTER_MODULE: string = DT_HAS_SRC
+	? path.join(DEVTOOLS_ROOT, 'src/profiler/profiler-router.ts')
+	: path.join(DEVTOOLS_ROOT, 'dist/profiler/profiler-router.js');
 
 /**
  * ogygia's own `hooks` module (the `ogygia/server` handle), as the POSIX id Vite hands the transform

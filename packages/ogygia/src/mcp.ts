@@ -25,9 +25,10 @@ import {
 	CLIENT_BINDING_STUB
 } from './compiler/index.ts';
 import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.ts';
-import { ogp_decode, is_ogp } from './profiler/crypto.ts';
-import { report_json, is_dump } from './profiler/report.ts';
-import { fix_impact } from './profiler/patterns.ts';
+// TEMP(devtools-split): the profiler's report reading lives in packages/devtools until it plugs in through a hook
+import { ogp_decode, is_ogp } from '../../devtools/src/profiler/crypto.ts';
+import { report_json, is_dump } from '../../devtools/src/profiler/report.ts';
+import { fix_impact } from '../../devtools/src/profiler/patterns.ts';
 
 // ── regexes
 const TRAILING_SLASH_RE = /\/$/;
@@ -780,7 +781,8 @@ type ProfileReport = {
 	/** one render's critical path: its waiting caps what the wait fixes together take off */
 	timeline?: { wait_ms?: number } | null;
 	/** one render after every fix named, overlapping fixes counted once (forecast.ts) */
-	forecast?: import('./profiler/forecast.ts').Forecast | null;
+	// TEMP(devtools-split)
+	forecast?: import('../../devtools/src/profiler/forecast.ts').Forecast | null;
 	summary?: {
 		verdict?: string;
 		window_ms?: number;

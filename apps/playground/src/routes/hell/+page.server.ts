@@ -2,12 +2,12 @@
 // awaited one after another, a "database" wait, a file read, one Promise.all that is fine, and an
 // N+1 loop fetching one product endpoint per card. Point the profiler at /hell.
 //
-// Instrumented with `span` / `tag` from ogygia/profiler — the waits the sampler cannot see
+// Instrumented with `span` / `tag` from @ogygia/devtools/profiler — the waits the sampler cannot see
 // (the database pool, a cache lookup, a queue drain) get names, the request gets a tenant.
 // PATTERN almost-same-document: every render stamps fresh ids (the web-component renderer's c-id / s-id, the cards' data-track)
 import { readFile } from 'node:fs/promises';
 import type { PageServerLoad } from './$types';
-import { span, tag } from 'ogygia/profiler';
+import { span, tag } from '@ogygia/devtools/profiler';
 import { catalog, PRODUCTS } from '$lib/hell/data';
 
 async function queryDatabase(ms: number): Promise<{ rows: number }> {

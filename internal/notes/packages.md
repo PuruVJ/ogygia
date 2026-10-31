@@ -438,6 +438,15 @@ by the docs Observatory. Keep as core subpaths.
 4. The main-package question. Option: `ogygia` = batteries included (depends on every `@ogygia/*`,
    maps today's option keys onto plugins, zero migration); `@ogygia/core` = lean. Bundles are the
    same either way; only install size differs.
+6. TODO TO DISCUSS (user, 2026-10-31): SCOPE THE E2E SUITE like turbo scopes unit tests. Today it is
+   one root Playwright run, outside turbo, always in full. Idea: group specs by owning package, give
+   each package an `e2e` turbo task keyed on its own inputs + core's build, so a devtools change runs
+   only devtools e2e and a core change runs all. Blocker: most specs run against the playground, which
+   depends on every plugin (any plugin change rebuilds it → everything reruns) — real scoping needs a
+   small fixture app per package (federation: examples/mfe, freeze: repro-freeze exist; content and
+   devtools have none). After the split, its own round.
+7. Event-layer export name: `ogygia/events` (recommended; added in R7 step 1) vs keeping
+   `ogygia/devtools` (currently an alias) vs folding into `ogygia/insights`.
 
 ## Also found while mapping (small, unrelated fixes)
 

@@ -38,7 +38,8 @@ import { profilerConfig } from 'virtual:ogygia/profiler-config';
  *  config object — no profiler code loaded to decide. `path` mirrors ProfilerOptions.path (default). */
 const PROFILER_ON_DEMAND = !!(profilerConfig as { onDemand?: boolean } | null)?.onDemand;
 const PROFILER_UI_PATH = (profilerConfig as { path?: string } | null)?.path || '/__profiler';
-import { profiler_demand_skip } from './profiler/on-demand.ts';
+// TEMP(devtools-split): the profiler lives in packages/devtools until it plugs in through a hook
+import { profiler_demand_skip } from '../../devtools/src/profiler/on-demand.ts';
 import { route_options } from 'virtual:ogygia/route-options';
 import { set_page_route_options } from './plugin/routes.ts';
 import {
@@ -702,10 +703,12 @@ class OgygiaHandle {
 		if (this.#profiler !== undefined) return this.#profiler;
 		if (!profilerConfig) return (this.#profiler = null);
 		try {
-			const { profiler } = await import('./profiler/index.ts');
+			// TEMP(devtools-split): the profiler lives in packages/devtools until it plugs in through a hook
+			const { profiler } = await import('../../devtools/src/profiler/index.ts');
 			// a runtime store (set via `setProfilerStore` in hooks.server.ts) — a live DB object the
 			// build-time config could not carry; merged over the serializable config here
-			const { getProfilerStore } = await import('./profiler/storage/index.ts').catch(() => ({ getProfilerStore: () => undefined }));
+			// TEMP(devtools-split)
+			const { getProfilerStore } = await import('../../devtools/src/profiler/storage/index.ts').catch(() => ({ getProfilerStore: () => undefined }));
 			const store = getProfilerStore();
 			this.#profiler = profiler({ ...(profilerConfig as Parameters<typeof profiler>[0]), ...(store ? { store } : {}) });
 		} catch {

@@ -43,6 +43,13 @@ export default defineConfig({
 			'virtual:ogygia/region-endpoint': fileURLToPath(new URL('./test/_stubs/virtual-region-endpoint.ts', import.meta.url)),
 			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url)),
 			'virtual:ogygia/route-csr': fileURLToPath(new URL('./test/_stubs/virtual-route-csr.ts', import.meta.url)),
+			// The server graph `ogygia/internal/server` loads (the region signer) — reached by the
+			// profiler's modules (packages/devtools) a suite here imports.
+			'virtual:ogygia/secret': fileURLToPath(new URL('./test/_stubs/virtual-secret.ts', import.meta.url)),
+			'virtual:ogygia/sign': fileURLToPath(new URL('./test/_stubs/virtual-sign.ts', import.meta.url)),
+			'virtual:ogygia/session-cookie': fileURLToPath(new URL('./test/_stubs/virtual-session-cookie.ts', import.meta.url)),
+			'virtual:ogygia/region-ttl': fileURLToPath(new URL('./test/_stubs/virtual-region-ttl.ts', import.meta.url)),
+			'virtual:ogygia/server-manifest': fileURLToPath(new URL('./test/_stubs/virtual-server-manifest.ts', import.meta.url)),
 			// The browser runtime (`runtime/core.ts` → `app-transport.ts`) reads the app's transport codecs.
 			'virtual:ogygia/transport': fileURLToPath(new URL('./test/_stubs/virtual-transport.ts', import.meta.url))
 		}

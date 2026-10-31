@@ -8,6 +8,7 @@
  *   export default defineServer<Options, State>({
  *     setup(app) { … },                       // once: app.options, app.notify, app.ask, app.facts()
  *     state: () => ({ … }),                   // fresh per request: ctx.state
+ *     handle(ctx, next) { return next(); },   // AROUND: wraps the whole request, like Kit's handle
  *     async page(ctx) { … },                  // FIRST: a Response answers the page request
  *     async response(ctx, res) { … },         // SEQUENTIAL: a Response replaces the page's
  *     done(ctx) { … },                        // PARALLEL: the request's end, always
@@ -17,7 +18,7 @@
  * First-party only until the ports settle (user ruling, 2026-10-31). Pure helpers that need no
  * context live in `ogygia/plugin/utils`.
  */
-import type { RequestEvent } from '@sveltejs/kit';
+import type { Handle, RequestEvent } from '@sveltejs/kit';
 import type { RequestFacts } from './facts.ts';
 import type { Ask, Notify, ServerHooks } from './hooks.ts';
 import type { DevtoolsEventInput } from '../events/schema.ts';
@@ -75,12 +76,31 @@ export interface RequestContext<Options = undefined, State = undefined> {
 
 type MaybePromise<T> = T | Promise<T>;
 
+/** Kit's `resolve()` options (a `transformPageChunk`, `filterSerializedResponseHeaders`, …). */
+export type ResolveOptions = NonNullable<Parameters<Parameters<Handle>[0]['resolve']>[1]>;
+
+/** A request as an AROUND hook sees it: before anything is decided about it. */
+export interface HandleContext<Options = undefined> {
+	/** Kit's own event, untouched. */
+	readonly event: RequestEvent;
+	readonly options: Options;
+	readonly app: ServerApp<Options>;
+}
+
 /** A plugin's server half: lifecycle hooks plus any shared hooks it implements. */
 export type ServerPlugin<Options = undefined, State = undefined> = Partial<ServerHooks> & {
 	/** Once, when the server starts. */
 	setup?(app: ServerApp<Options>): void;
 	/** Fresh per-request state, handed back on `ctx.state`. */
 	state?(): State;
+	/**
+	 * AROUND — the whole request, shaped like Kit's `handle`: `next()` runs the rest (the later plugins'
+	 * `handle`, then ogygia) and returns its response; return it, or your own. The first plugin's is the
+	 * outermost. `next(options)` passes Kit `resolve()` options: a `transformPageChunk` sees the finished
+	 * document, after ogygia's own. Most plugins want the stages below instead; this is for what must
+	 * wrap everything (a profiler timing the render, serving its own UI).
+	 */
+	handle?(ctx: HandleContext<Options>, next: (options?: ResolveOptions) => Promise<Response>): MaybePromise<Response>;
 	/** FIRST — every request, before anything else in the handle (above the page / hole split).
 	 *  A Response answers it. */
 	request?(ctx: RequestContext<Options, State>): MaybePromise<void | Response>;

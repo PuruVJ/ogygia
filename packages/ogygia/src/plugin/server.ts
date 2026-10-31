@@ -3,8 +3,8 @@
  * `setup` called once, shared hooks registered) and makes each request's per-plugin contexts. Used
  * by hooks.ts only.
  */
-import type { RequestEvent } from '@sveltejs/kit';
-import type { RequestContext, ServerApp, ServerPlugin } from './index.ts';
+import type { Handle, RequestEvent } from '@sveltejs/kit';
+import type { RequestContext, ResolveOptions, ServerApp, ServerPlugin } from './index.ts';
 import { current_facts, facts_of, mark_per_visitor, type RequestFacts } from './facts.ts';
 import { ask, notify, register_hooks } from './hooks.ts';
 import { route_option } from './routes.ts';
@@ -53,6 +53,44 @@ export function start_plugins(entries: readonly ServerPluginEntry[], signer: App
 		server.setup?.(app);
 		return { def: server, app };
 	});
+}
+
+/** Two `resolve()` option sets as one: the inner transform (ogygia's document injection) runs first,
+ *  the outer (a plugin's `handle`) sees the finished chunk; the other options merge, outer last. */
+export function compose_resolve_options(inner?: ResolveOptions, outer?: ResolveOptions): ResolveOptions | undefined {
+	if (!inner) return outer;
+	if (!outer) return inner;
+	const a = inner.transformPageChunk;
+	const b = outer.transformPageChunk;
+	return {
+		...inner,
+		...outer,
+		transformPageChunk: !a
+			? b
+			: !b
+				? a
+				: async (input) => {
+						const first = await a(input);
+						if (first === undefined) return first;
+						return b({ ...input, html: first });
+					}
+	};
+}
+
+/** The plugins' `handle` hooks nested around `core`, first plugin outermost. No hook: `core` itself. */
+export function around(plugins: readonly LivePlugin[], core: Handle): Handle {
+	let inner = core;
+	for (let i = plugins.length - 1; i >= 0; i--) {
+		const { def, app } = plugins[i];
+		const handle = def.handle;
+		if (!handle) continue;
+		const next_handle = inner;
+		inner = async ({ event, resolve }) =>
+			handle({ event, options: app.options, app }, (outer) =>
+				Promise.resolve(next_handle({ event, resolve: (ev, opts) => resolve(ev, compose_resolve_options(opts, outer)) }))
+			);
+	}
+	return inner;
 }
 
 /** The per-plugin contexts of one request. */

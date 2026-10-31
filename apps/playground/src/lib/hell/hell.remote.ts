@@ -1,5 +1,5 @@
 import { query, getRequestEvent } from '$app/server';
-import { span } from 'ogygia/profiler';
+import { span } from '@ogygia/devtools/profiler';
 
 // A remote function awaited DURING the page's SSR (PriceTicker's top-level await): it runs
 // in-process, waits on a "pricing service" round trip, and is on the render's critical path —

@@ -48,6 +48,11 @@
 			"types": "./dist/internal-server.d.ts",
 			"default": "./src/internal-server.ts"
 		},
+		"./internal/instruments": {
+			"svelte": "./src/internal-instruments.ts",
+			"types": "./dist/internal-instruments.d.ts",
+			"default": "./src/internal-instruments.ts"
+		},
 		"./internal/register": {
 			"svelte": "./src/internal-register.ts",
 			"types": "./dist/internal-register.d.ts",
@@ -75,30 +80,6 @@
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
 		},
-		"./profiler": {
-			"types": "./dist/profiler/span.d.ts",
-			"default": "./src/profiler/span.ts"
-		},
-		"./profiler/client": {
-			"types": "./dist/profiler/client.d.ts",
-			"default": "./src/profiler/client.ts"
-		},
-		"./profiler/storage": {
-			"types": "./dist/profiler/storage/index.d.ts",
-			"default": "./src/profiler/storage/index.ts"
-		},
-		"./profiler/storage/sqlite": {
-			"types": "./dist/profiler/storage/sqlite.d.ts",
-			"default": "./src/profiler/storage/sqlite.ts"
-		},
-		"./profiler/storage/redis": {
-			"types": "./dist/profiler/storage/redis.d.ts",
-			"default": "./src/profiler/storage/redis.ts"
-		},
-		"./profiler/storage/postgres": {
-			"types": "./dist/profiler/storage/postgres.d.ts",
-			"default": "./src/profiler/storage/postgres.ts"
-		},
 		"./markup": {
 			"types": "./dist/markup.d.ts",
 			"default": "./src/markup.ts"
@@ -124,8 +105,8 @@
 			"default": "./src/plugin/testing.ts"
 		},
 		"./devtools": {
-			"types": "./dist/devtools/index.d.ts",
-			"default": "./src/devtools/index.ts"
+			"types": "./dist/events/index.d.ts",
+			"default": "./src/events/index.ts"
 		},
 		"./events": {
 			"types": "./dist/events/index.d.ts",
@@ -180,7 +161,6 @@
 		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
-		"@neodrag/svelte": "3.0.0-next.12",
 		"@playwright/test": "^1.62.0",
 		"@sveltejs/kit": ">=2.70.2 <4",
 		"playwright": "^1.62.0",
@@ -200,7 +180,6 @@
 		}
 	},
 	"devDependencies": {
-		"@neodrag/svelte": "3.0.0-next.12",
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
 		"@sveltejs/sv-utils": "^0.3.3",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
@@ -252,6 +231,11 @@
 				"svelte": "./dist/internal-server.js",
 				"default": "./dist/internal-server.js"
 			},
+			"./internal/instruments": {
+				"types": "./dist/internal-instruments.d.ts",
+				"svelte": "./dist/internal-instruments.js",
+				"default": "./dist/internal-instruments.js"
+			},
 			"./internal/register": {
 				"types": "./dist/internal-register.d.ts",
 				"svelte": "./dist/internal-register.js",
@@ -275,30 +259,6 @@
 			"./server": {
 				"types": "./dist/hooks.d.ts",
 				"default": "./dist/hooks.js"
-			},
-			"./profiler": {
-				"types": "./dist/profiler/span.d.ts",
-				"default": "./dist/profiler/span.js"
-			},
-			"./profiler/client": {
-				"types": "./dist/profiler/client.d.ts",
-				"default": "./dist/profiler/client.js"
-			},
-			"./profiler/storage": {
-				"types": "./dist/profiler/storage/index.d.ts",
-				"default": "./dist/profiler/storage/index.js"
-			},
-			"./profiler/storage/sqlite": {
-				"types": "./dist/profiler/storage/sqlite.d.ts",
-				"default": "./dist/profiler/storage/sqlite.js"
-			},
-			"./profiler/storage/redis": {
-				"types": "./dist/profiler/storage/redis.d.ts",
-				"default": "./dist/profiler/storage/redis.js"
-			},
-			"./profiler/storage/postgres": {
-				"types": "./dist/profiler/storage/postgres.d.ts",
-				"default": "./dist/profiler/storage/postgres.js"
 			},
 			"./markup": {
 				"types": "./dist/markup.d.ts",
@@ -325,8 +285,8 @@
 				"default": "./dist/plugin/testing.js"
 			},
 			"./devtools": {
-				"types": "./dist/devtools/index.d.ts",
-				"default": "./dist/devtools/index.js"
+				"types": "./dist/events/index.d.ts",
+				"default": "./dist/events/index.js"
 			},
 			"./events": {
 				"types": "./dist/events/index.d.ts",
