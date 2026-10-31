@@ -53,8 +53,9 @@ export default defineConfig({
 					// render: live — baked static content that revalidates (was the swr lake)
 					frozenSwr: { render: 'live', wake: 'load' },
 					// a deferred hole that opts INTO a browser cache (default is no-store): 1h max-age,
-					// signed into the endpoint. Exercised by verify/server-islands.ts.
-					cachedGreeting: { render: 'deferred', maxAge: '1h' },
+					// signed into the endpoint. Exercised by verify/server-islands.ts. (`fetch` spelled out: a
+					// preset with a hole's timing must build — 0.10.0 rejected the key.)
+					cachedGreeting: { render: 'deferred', fetch: 'load', maxAge: '1h' },
 					// the hell page's second recommendations hole: a render cache the profiler's hole
 					// economics can watch (hits vs misses)
 					cachedRecs: { render: 'deferred', maxAge: '5m' }

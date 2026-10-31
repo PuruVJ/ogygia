@@ -94,6 +94,18 @@ describe('regions.presets — config-time validation', () => {
 			})
 		).not.toThrow();
 	});
+	it('takes `fetch`, a deferred hole\'s timing (0.10.0 rejected it: no deferred preset could be written)', () => {
+		expect(() =>
+			ogygia({
+				regions: {
+					presets: {
+						megamenu: { render: 'deferred', fetch: 'interaction', prefetch: 'idle' },
+						countrySelector: { render: 'deferred', fetch: 'idle', maxAge: '1h' }
+					}
+				}
+			})
+		).not.toThrow();
+	});
 	it('rejects an empty preset', () => {
 		expect(() => ogygia({ regions: { presets: { nothing: {} } } })).toThrow(/nothing is empty/);
 	});

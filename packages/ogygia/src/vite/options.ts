@@ -302,6 +302,7 @@ export function assert_no_legacy_options(options: OgygiaOptions): void {
 const REGION_PRESET_KEYS = new Set([
 	'render',
 	'wake',
+	'fetch',
 	'margin',
 	'maxAge',
 	'onExpire',
