@@ -1,7 +1,7 @@
 {
 	"name": "@ogygia/content",
 	"private": true,
-	"version": "0.10.1",
+	"version": "0.10.2",
 	"description": "Content for ogygia: collections, markdown with Shiki, docs and blog shells, search, and the content macros",
 	"type": "module",
 	"license": "MIT",

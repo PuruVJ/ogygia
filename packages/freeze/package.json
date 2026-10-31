@@ -1,7 +1,7 @@
 {
 	"name": "@ogygia/freeze",
 	"private": true,
-	"version": "0.10.1",
+	"version": "0.10.2",
 	"description": "Frozen pages for ogygia: a page whose render read nothing personal is stored once and served as bytes",
 	"type": "module",
 	"sideEffects": false,
