@@ -1,6 +1,5 @@
 {
 	"name": "@ogygia/testing",
-	"private": true,
 	"version": "0.10.2",
 	"description": "Testing for ogygia: the devtools and the profiler as test primitives, for Playwright or any runner and page driver",
 	"type": "module",
@@ -27,7 +26,7 @@
 		"e2e": "playwright test"
 	},
 	"peerDependencies": {
-		"@playwright/test": "^1.62.0",
+		"@playwright/test": "catalog:peers",
 		"@ogygia/core": "workspace:^"
 	},
 	"peerDependenciesMeta": {
@@ -38,12 +37,12 @@
 	"devDependencies": {
 		"@ogygia/devtools": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "1.62.1",
+		"@playwright/test": "catalog:",
 		"@ogygia/core": "workspace:*",
-		"@types/node": "^26.1.2",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",

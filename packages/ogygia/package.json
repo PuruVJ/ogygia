@@ -141,10 +141,10 @@
 		"@ogygia/core": "workspace:*"
 	},
 	"peerDependencies": {
-		"@sveltejs/kit": ">=2.70.2 <4",
-		"rolldown": ">=1.0.0",
-		"svelte": "^5.56.8",
-		"vite": "^8.2.4"
+		"@sveltejs/kit": "catalog:peers",
+		"rolldown": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
 	},
 	"peerDependenciesMeta": {
 		"rolldown": {
@@ -153,9 +153,10 @@
 	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
-		"@types/node": "^26.1.2",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3"
+		"@sveltejs/kit": "catalog:",
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:"
 	},
 	"publishConfig": {
 		"exports": {

@@ -3,10 +3,10 @@
 	"private": true,
 	"description": "Other SvelteKit majors' sources, read by packages/core/test/kit-shim-surface.test.ts. Its own importer, so Kit 3's peers (svelte ^5.57) never move the versions ogygia and the apps resolve.",
 	"devDependencies": {
-		"@sveltejs/kit3": "npm:@sveltejs/kit@3.0.1",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"svelte": "5.57.2",
-		"typescript": "^6.0.3",
-		"vite": "^8.2.0"
+		"@sveltejs/kit3": "catalog:kit3",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"svelte": "catalog:kit3",
+		"typescript": "catalog:",
+		"vite": "catalog:"
 	}
 }

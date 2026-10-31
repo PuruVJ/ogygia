@@ -11,19 +11,19 @@
 	},
 	"devDependencies": {
 		"@ogygia/content": "workspace:*",
-		"@sveltejs/adapter-node": "^5.5.7",
-		"@sveltejs/kit": "^2.70.2",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"svelte": "^5.56.8",
-		"svelte-check": "^4.7.4",
-		"typescript": "^6.0.3",
-		"vite": "^8.2.0"
+		"@sveltejs/adapter-node": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:"
 	},
 	"dependencies": {
-		"bits-ui": "^2.18.1",
-		"devalue": "^5.9.0",
-		"mdsvex": "^0.12.8",
+		"bits-ui": "catalog:",
+		"devalue": "catalog:",
+		"mdsvex": "catalog:",
 		"ogygia": "workspace:*",
-		"valibot": "^1.4.2"
+		"valibot": "catalog:"
 	}
 }

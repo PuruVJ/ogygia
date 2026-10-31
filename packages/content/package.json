@@ -1,6 +1,5 @@
 {
 	"name": "@ogygia/content",
-	"private": true,
 	"version": "0.10.2",
 	"description": "Content for ogygia: collections, markdown with Shiki, docs and blog shells, search, and the content macros",
 	"type": "module",
@@ -19,10 +18,10 @@
 			"svelte": "./src/index.ts",
 			"default": "./src/index.ts"
 		},
-		"./remote": {
-			"types": "./dist/remote.d.ts",
-			"svelte": "./src/remote.ts",
-			"default": "./src/remote.ts"
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"svelte": "./src/server.ts",
+			"default": "./src/server.ts"
 		},
 		"./markdown": {
 			"types": "./dist/markdown/index.d.ts",
@@ -30,7 +29,7 @@
 		},
 		"./vite": {
 			"types": "./dist/vite/index.d.ts",
-			"default": "./dist/vite/index.js"
+			"default": "./src/vite/index.ts"
 		},
 		"./slot": {
 			"types": "./dist/site/components/SiteSlot.svelte.d.ts",
@@ -58,30 +57,30 @@
 	},
 	"dependencies": {
 		"@orama/orama": "^3.1.18",
-		"bits-ui": "^2.18.1",
-		"mdsvex": "^0.12.8"
+		"bits-ui": "catalog:",
+		"mdsvex": "catalog:"
 	},
 	"peerDependencies": {
-		"@sveltejs/kit": ">=2.70.2 <4",
+		"@sveltejs/kit": "catalog:peers",
 		"@ogygia/core": "workspace:^",
-		"shiki": "^3.0.0 || ^4.0.0",
-		"svelte": "^5.56.8",
-		"vite": "^8.2.4"
+		"shiki": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
 	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "1.62.1",
-		"@sveltejs/kit": "^2.70.0",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
 		"@ogygia/core": "workspace:*",
-		"@types/node": "^26.1.2",
-		"shiki": "^4.4.1",
-		"svelte": "5.56.8",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"valibot": "^1.4.2",
-		"vite": "^8.3.5",
-		"vitest": "^4.1.10"
+		"@types/node": "catalog:",
+		"shiki": "catalog:",
+		"svelte": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"valibot": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",
@@ -91,10 +90,10 @@
 				"svelte": "./dist/index.js",
 				"default": "./dist/index.js"
 			},
-			"./remote": {
-				"types": "./dist/remote.d.ts",
-				"svelte": "./dist/remote.js",
-				"default": "./dist/remote.js"
+			"./server": {
+				"types": "./dist/server.d.ts",
+				"svelte": "./dist/server.js",
+				"default": "./dist/server.js"
 			},
 			"./markdown": {
 				"types": "./dist/markdown/index.d.ts",

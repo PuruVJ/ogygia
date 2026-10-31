@@ -1,6 +1,5 @@
 {
 	"name": "@ogygia/federation",
-	"private": true,
 	"version": "0.10.2",
 	"description": "Fragment federation for ogygia: apps share pages and widgets as signed region values, with cross-app thaw",
 	"type": "module",
@@ -19,13 +18,9 @@
 			"types": "./dist/index.d.ts",
 			"default": "./src/index.ts"
 		},
-		"./server": {
-			"types": "./dist/server.d.ts",
-			"default": "./src/server.ts"
-		},
 		"./vite": {
 			"types": "./dist/vite.d.ts",
-			"default": "./dist/vite.js"
+			"default": "./src/vite.ts"
 		}
 	},
 	"files": ["dist", "README.md"],
@@ -37,20 +32,22 @@
 	},
 	"peerDependencies": {
 		"@ogygia/router": "workspace:^",
-		"@ogygia/core": "workspace:^"
+		"@ogygia/core": "workspace:^",
+		"vite": "catalog:peers"
 	},
 	"devDependencies": {
 		"@ogygia/flags": "workspace:*",
 		"@ogygia/freeze": "workspace:*",
 		"@ogygia/router": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "1.62.1",
-		"@sveltejs/kit": "^2.70.0",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
 		"@ogygia/core": "workspace:*",
-		"@types/node": "^26.1.2",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",
@@ -58,10 +55,6 @@
 			".": {
 				"types": "./dist/index.d.ts",
 				"default": "./dist/index.js"
-			},
-			"./server": {
-				"types": "./dist/server.d.ts",
-				"default": "./dist/server.js"
 			},
 			"./vite": {
 				"types": "./dist/vite.d.ts",

@@ -1,6 +1,5 @@
 {
 	"name": "@ogygia/router",
-	"private": true,
 	"version": "0.10.2",
 	"description": "The server router for ogygia: Kit's routing model as values (routes, layouts, loads, actions, endpoints, streamed pages), with a typed fetch client",
 	"type": "module",
@@ -25,33 +24,33 @@
 		},
 		"./vite": {
 			"types": "./dist/vite.d.ts",
-			"default": "./dist/vite.js"
+			"default": "./src/vite.ts"
 		}
 	},
 	"files": ["dist", "README.md"],
 	"scripts": {
 		"build": "tsdown",
-		"check": "tsc -p . && tsc -p e2e && vitest run",
+		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
 		"test": "vitest run",
 		"e2e": "playwright test"
 	},
 	"peerDependencies": {
-		"@sveltejs/kit": ">=2.70.2 <4",
+		"@sveltejs/kit": "catalog:peers",
 		"@ogygia/core": "workspace:^",
-		"svelte": "^5.56.8"
+		"svelte": "catalog:peers"
 	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "1.62.1",
-		"@sveltejs/kit": "^2.70.0",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"@types/node": "^26.1.2",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
 		"@ogygia/core": "workspace:*",
-		"svelte": "5.56.8",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"vite": "^8.3.5",
-		"vitest": "^4.1.10"
+		"svelte": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",

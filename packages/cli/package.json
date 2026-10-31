@@ -1,6 +1,5 @@
 {
 	"name": "@ogygia/cli",
-	"private": true,
 	"version": "0.10.2",
 	"description": "The ogygia command line: init and site scaffolds, the AI skill, the MCP server, perf budgets and bisect, federation keys and catalogs",
 	"type": "module",
@@ -28,8 +27,8 @@
 	},
 	"peerDependencies": {
 		"@ogygia/core": "workspace:^",
-		"playwright": "^1.62.0",
-		"svelte": "^5.56.8"
+		"playwright": "catalog:peers",
+		"svelte": "catalog:peers"
 	},
 	"peerDependenciesMeta": {
 		"playwright": {
@@ -40,12 +39,12 @@
 		"@ogygia/devtools": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
 		"@sveltejs/sv-utils": "^0.3.3",
-		"@types/node": "^26.1.2",
+		"@types/node": "catalog:",
 		"@ogygia/core": "workspace:*",
-		"svelte": "5.56.8",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"svelte": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public"

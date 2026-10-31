@@ -1,6 +1,5 @@
 {
 	"name": "@ogygia/core",
-	"private": true,
 	"version": "0.10.2",
 	"type": "module",
 	"sideEffects": [
@@ -141,17 +140,17 @@
 		"verify:package": "node scripts/verify-package.ts"
 	},
 	"dependencies": {
-		"devalue": "^5.9.3",
-		"esm-env": "^1.2.2",
+		"devalue": "catalog:",
+		"esm-env": "catalog:",
 		"estree-walker": "^3.0.3",
-		"magic-string": "^1.4.5",
+		"magic-string": "catalog:",
 		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
-		"@sveltejs/kit": ">=2.70.2 <4",
-		"rolldown": ">=1.0.0",
-		"svelte": "^5.56.8",
-		"vite": "^8.2.4"
+		"@sveltejs/kit": "catalog:peers",
+		"rolldown": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
 	},
 	"peerDependenciesMeta": {
 		"rolldown": {
@@ -160,21 +159,22 @@
 	},
 	"devDependencies": {
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"@types/node": "^26.1.2",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
 		"@vitest/browser": "4.1.10",
 		"@vitest/browser-playwright": "4.1.10",
 		"oxlint": "^1.77.0",
-		"rolldown": ">=1.0.0",
+		"rolldown": "catalog:",
 		"sass-embedded": "^1.104.1",
-		"svelte": "5.56.8",
-		"svelte-check": "^4.7.4",
-		"svelte2tsx": "^0.7.60",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"valibot": "^1.4.2",
-		"vite": "^8.3.5",
-		"vitest": "^4.1.10"
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"svelte2tsx": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"valibot": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",

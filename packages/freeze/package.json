@@ -19,13 +19,9 @@
 			"types": "./dist/index.d.ts",
 			"default": "./src/index.ts"
 		},
-		"./server": {
-			"types": "./dist/server.d.ts",
-			"default": "./src/server.ts"
-		},
 		"./vite": {
 			"types": "./dist/vite.d.ts",
-			"default": "./dist/vite.js"
+			"default": "./src/vite.ts"
 		}
 	},
 	"files": ["dist", "README.md"],
@@ -42,13 +38,13 @@
 		"@ogygia/flags": "workspace:*",
 		"@ogygia/router": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "1.62.1",
-		"@sveltejs/kit": "^2.70.0",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
 		"@ogygia/core": "workspace:*",
-		"@types/node": "^26.1.2",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",
@@ -56,10 +52,6 @@
 			".": {
 				"types": "./dist/index.d.ts",
 				"default": "./dist/index.js"
-			},
-			"./server": {
-				"types": "./dist/server.d.ts",
-				"default": "./dist/server.js"
 			},
 			"./vite": {
 				"types": "./dist/vite.d.ts",

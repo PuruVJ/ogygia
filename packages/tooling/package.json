@@ -13,15 +13,15 @@
 	},
 	"dependencies": {
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0"
+		"@sveltejs/vite-plugin-svelte": "catalog:"
 	},
 	"devDependencies": {
-		"@playwright/test": "1.62.1"
+		"@playwright/test": "catalog:"
 	},
 	"peerDependencies": {
-		"@playwright/test": "1.62.1",
-		"tsdown": "^0.22.14",
-		"vitest": "^4.1.10"
+		"@playwright/test": "catalog:",
+		"tsdown": "catalog:",
+		"vitest": "catalog:"
 	},
 	"peerDependenciesMeta": {
 		"@playwright/test": {

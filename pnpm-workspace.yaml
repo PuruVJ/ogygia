@@ -22,6 +22,78 @@ allowBuilds:
   '@parcel/watcher': false
   '@swc/core': true
   esbuild: true
+# ONE version per dependency that more than one workspace package uses: `"x": "catalog:"`.
+# `pnpm publish` writes the real range into the published package.json.
+catalog:
+  # svelte + kit
+  svelte: 5.56.8
+  '@sveltejs/kit': ^2.70.2
+  '@sveltejs/vite-plugin-svelte': ^7.2.0
+  '@sveltejs/adapter-node': ^5.5.7
+  '@sveltejs/adapter-vercel': ^6.3.4
+  svelte-check: ^4.7.4
+  svelte2tsx: ^0.7.60
+  # build
+  vite: ^8.3.5
+  rolldown: ^1.2.2
+  '@rolldown/browser': 1.2.2
+  tsdown: ^0.23.4
+  typescript: ^6.0.3
+  '@types/node': ^26.1.2
+  vite-plugin-wasm: ^3.6.0
+  path-browserify: ^1.0.1
+  magic-string: ^1.4.5
+  # test
+  vitest: ^4.1.10
+  '@playwright/test': 1.62.1
+  playwright: ^1.62.1
+  axe-core: ^4.13.0
+  # runtime
+  devalue: ^5.9.3
+  esm-env: ^1.2.2
+  valibot: ^1.4.2
+  # content
+  mdsvex: ^0.12.8
+  shiki: ^4.4.1
+  mdast-util-from-markdown: ^2.0.2
+  # ui
+  bits-ui: ^2.18.1
+  '@neodrag/svelte': 3.0.0-next.12
+  '@codemirror/commands': ^6.11.0
+  '@codemirror/lang-html': ^6.4.12
+  '@codemirror/lang-javascript': ^6.2.5
+  '@codemirror/state': ^6.7.1
+  '@codemirror/view': ^6.43.9
+catalogs:
+  # What an APP may have, for the published packages' peerDependencies: `"x": "catalog:peers"`.
+  # Wider than what we test with (the default catalog), on purpose.
+  peers:
+    '@playwright/test': ^1.62.0
+    '@sveltejs/kit': '>=2.70.2 <4'
+    playwright: ^1.62.0
+    rolldown: '>=1.0.0'
+    shiki: ^3.0.0 || ^4.0.0
+    svelte: ^5.56.8
+    vite: ^8.2.4
+  # TypeScript 7 (the native compiler): the root's fast type-check, and `@typescript/native` beside
+  # TypeScript 6 in the apps (svelte-check and the libraries' d.ts emit still run on 6).
+  tsgo:
+    typescript: ^7.0.2
+    '@typescript/native': npm:typescript@^7.0.2
+  # Kit 3, read by core's kit-shim-surface test (internal/kit-sources), and the svelte its peers ask
+  # for: its own importer, so they never move the versions ogygia and the apps resolve.
+  kit3:
+    '@sveltejs/kit3': npm:@sveltejs/kit@3.0.1
+    svelte: 5.57.2
+  # internal/repro: the CONTROL repro (plain Svelte on Vite 6, no ogygia), frozen at the versions its
+  # measurements were taken on.
+  repro-control:
+    vite: 6.3.6
+    '@sveltejs/vite-plugin-svelte': 5.1.1
+    svelte: 5.56.8
+# Not workspace members, so no catalog reaches them; their pins stay inline, on purpose: the adapter
+# fixture (apps/palaestra/e2e/adapters/fixture), the benchmark apps (internal/bench/frameworks/*,
+# exact versions so runs compare) and the Kit 3 app (internal/repro-kit3, installs the packed ogygia).
 minimumReleaseAgeExclude:
   - '@rolldown/binding-android-arm64@1.2.2'
   - '@rolldown/binding-linux-arm-gnueabihf@1.2.2'
