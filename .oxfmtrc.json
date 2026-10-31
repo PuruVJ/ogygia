@@ -21,6 +21,9 @@
 		"svelte/**",
 		"kit/**",
 		"pnpm-lock.yaml",
-		"**/CHANGELOG.md"
+		"**/CHANGELOG.md",
+		"internal/bench/results/**",
+		"apps/docs/src/lib/bench/results.json",
+		"apps/palaestra/e2e/bundle-size.snapshot.json"
 	]
 }

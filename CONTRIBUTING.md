@@ -50,11 +50,11 @@ is `@ogygia/tooling/e2e`. The library's `check` runs `tsc --noEmit && vitest run
 transform unit suite + the `no-explicit-any` lint gate). `svelte-check` remains the template/markup
 guard for the palaestra and the fixture apps.
 
-> **Formatter note (empirical, oxfmt 0.62):** oxfmt was evaluated as the repo formatter and **not
-> adopted** — the released version does not format `.svelte` (a `.svelte` file passes through
-> unchanged), its default `.ts` style diverges from the repo's single-quote/tab style (there is no
-> prior Prettier config to preserve), and its default mode writes in place. A `.ts`-only reformat
-> would be a large, `.svelte`-inconsistent churn for no functional gain. Revisit once oxfmt gains
-> first-class Svelte support.
+**Formatting.** The whole repository is formatted with [oxfmt](https://oxc.rs/docs/guide/usage/formatter)
+(`.oxfmtrc.json`: tabs, single quotes, 100 columns, `.svelte` through its Svelte support, `.svx` as
+Markdown). Run `pnpm format` before you commit; CI runs `pnpm format:check` and fails on an
+unformatted file. Code inside Markdown fences is left as written (doc snippets carry diff and
+highlight markers a formatter would break), and generated files (the lockfile, changelogs, benchmark
+results, the bundle-size snapshot) are ignored.
 
 See `apps/palaestra/e2e/README.md` for core's suite list.
