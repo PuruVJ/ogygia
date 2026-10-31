@@ -1,6 +1,6 @@
 {
 	"$schema": "https://openapi.vercel.sh/vercel.json",
 	"framework": "sveltekit",
-	"buildCommand": "pnpm --filter svelte-dev^... build && pnpm --filter svelte-dev build",
+	"buildCommand": "pnpm -w exec turbo run build --filter=svelte-dev^... && pnpm --filter svelte-dev build",
 	"installCommand": "pnpm install --frozen-lockfile"
 }
