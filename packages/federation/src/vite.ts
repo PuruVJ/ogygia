@@ -9,6 +9,9 @@ import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
 export function federation(): OgygiaPlugin {
 	return definePlugin({
 		name: '@ogygia/federation',
+		// federation is built on the server router, which ships `.svelte`: server-inlined like a listed
+		// plugin even when the app does not list `router()` itself
+		vite: [{ name: 'ogygia:federation', config: () => ({ ssr: { noExternal: ['@ogygia/router'] } }) }],
 		build(b) {
 			b.foreignHydrate();
 		}

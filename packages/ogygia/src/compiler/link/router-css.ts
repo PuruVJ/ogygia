@@ -1,13 +1,14 @@
 /**
  * `virtual:ogygia/router-css` — how a SERVER-ROUTER page's `<style>` reaches the document.
  *
- * THE GAP: Kit links a route's stylesheets from its file-derived route manifest. `ogygia/router`
+ * THE GAP: Kit links a route's stylesheets from its file-derived route manifest. `@ogygia/router`
  * routes are VALUES (`r.page(Home)`) rendered through `document()` — no route, so nothing ever
  * emitted or linked their CSS: a router page's scoped `<style>` (and its plain `.css` imports)
  * silently never loaded. (The playground's own rtr components are style-less for exactly this reason.)
  *
  * THE FIX, from existing primitives — no user file is modified, no `r.*` call-site analysis:
- *  1. CLOSURE (build data): a router MODULE is any module importing `'ogygia/router'` — wherever it
+ *  1. CLOSURE (build data): a router MODULE is a PAGE MODULE a plugin named (`b.pageModules()`): any
+ *     module importing one of its specifiers (`'@ogygia/router'`), or a file it names — wherever it
  *     lives, however many routers it defines, whatever function wraps them. Its transitive `.svelte`
  *     imports (followed through relative/$lib `.ts`/`.js` barrels — build-data resolution, not import
  *     rewriting) are the components any of its routers could render: the ROOTS.
@@ -21,7 +22,8 @@
  *     the router module holds, so identity survives barrels — and registers it in the runtime WeakMap
  *     with a thunk resolving its stylesheet entries (prod: handoff hrefs + `$app/paths` base; dev:
  *     inline CSS compiled here, Kit-style).
- *  4. LINKING (render): `render_page` looks up the components it actually renders, claims through
+ *  4. LINKING (render): the router hands the components it actually renders to `componentCssHead()`
+ *     (`ogygia/plugin/css`), which claims through
  *     `claim_region_css` (deduped with held-region links), and hands `document()` the head tags.
  */
 import { fs, path } from '../host.ts';
@@ -48,8 +50,8 @@ export function router_css_key(root: string, abs: string): string {
 }
 
 /**
- * The `.svelte` ROOTS of the app's router modules: BFS from every module that imports
- * `'ogygia/router'`, through relative/`$lib` `.ts`/`.js` re-exports (barrels — resolved as build
+ * The `.svelte` ROOTS of the app's router modules: BFS from every page module (`b.pageModules()`),
+ * through relative/`$lib` `.ts`/`.js` re-exports (barrels — resolved as build
  * DATA, imports untouched), collecting `.svelte` leaves. `module_specs` is the prescan's import-spec
  * record (module abs path → its import/export-from specifiers). Sorted for determinism across legs.
  */

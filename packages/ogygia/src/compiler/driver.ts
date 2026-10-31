@@ -186,7 +186,6 @@ const ISLAND_DEP_EXTS = ['', '.svelte', '.ts', '.js', '.svelte.ts', '.svelte.js'
 // Runs once per file in the prescan walk; module-level so it compiles once.
 const MODULE_SPEC_RE =
 	/(?:^|[\n;])\s*(?:import|export)\b[^;'"()]*?from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
-const ROUTER_PKG_SPEC = 'ogygia/router';
 /** Where Kit's `$app` alias points (Kit 2 and 3: `resolve.alias` `$app` → `<kit>/src/runtime/app`). */
 const KIT_RUNTIME_APP = '/@sveltejs/kit/src/runtime/app/';
 /**
@@ -538,6 +537,11 @@ export class Compiler {
 
 		const src_dir = path.join(root, 'src');
 		clean_stale_ogygia_dirs(src_dir);
+		// PAGE MODULES (`b.pageModules({ importers })`): a module importing one of these specifiers renders
+		// pages outside Kit's routes — a router-css root (link/router-css.ts).
+		const page_importers = ctx.page_importers;
+		const imports_page_spec = (specs: string[]): boolean =>
+			page_importers.length > 0 && specs.some((s) => page_importers.includes(s));
 		const scan_file = (full: string, name: string) => {
 			if (name.endsWith('.svelte')) {
 				const src = ctx.read_file(full);
@@ -545,10 +549,10 @@ export class Compiler {
 				if (!runtime_marks.context && source_uses_ogygia_context(src)) runtime_marks.context = true;
 				if (!program.crosses_wire && source_crosses_wire(src)) program.crosses_wire = true;
 				{
-					// Router-css closure data: this module's import specs + whether it defines routers.
+					// Router-css closure data: this module's import specs + whether it is a page module.
 					const specs = extract_module_specs(src);
 					if (specs.length) program.module_specs.set(full, specs);
-					if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
+					if (imports_page_spec(specs)) program.router_modules.add(full);
 					if (specs.includes(FLAGS_SPEC))
 						program.flag_sites.push(...collect_flag_sites(src, full, flag_site_file(ctx, full)));
 				}
@@ -573,10 +577,10 @@ export class Compiler {
 				)
 					program.crosses_wire = true;
 				{
-					// Router-css closure data: this module's import specs + whether it defines routers.
+					// Router-css closure data: this module's import specs + whether it is a page module.
 					const specs = extract_module_specs(src);
 					if (specs.length) program.module_specs.set(full, specs);
-					if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
+					if (imports_page_spec(specs)) program.router_modules.add(full);
 					if (specs.includes(FLAGS_SPEC))
 						program.flag_sites.push(...collect_flag_sites(src, full, flag_site_file(ctx, full)));
 				}
@@ -619,6 +623,16 @@ export class Compiler {
 			for (const p of ctx.pkg_scan) {
 				for (const d of p.dirs) walk(d);
 				for (const f of p.files) scan_file(f, f.slice(f.lastIndexOf('/') + 1));
+			}
+			// Page modules named by path (`b.pageModules({ files })`): roots whatever they import. One the
+			// walks above did not reach still needs its import specs for the closure.
+			for (const f of ctx.page_files) {
+				program.router_modules.add(f);
+				if (!program.module_specs.has(f)) {
+					const src = ctx.read_file(f);
+					const specs = src == null ? [] : extract_module_specs(src);
+					if (specs.length) program.module_specs.set(f, specs);
+				}
 			}
 			if (P) prof.prescanMs += performance.now() - __ps;
 		}
@@ -868,11 +882,10 @@ export class Compiler {
 	router_css_roots(): string[] {
 		const ctx = this.#ctx!;
 		if (ctx.is_build && this.#router_css_roots_cache) return this.#router_css_roots_cache;
-		// One path for ALL router modules — app source AND declared surfaces (the shipped profiler
-		// router imports the literal 'ogygia/router', so the prescan of its declared entry detects
-		// it like any app router module; no injected special case). The walk's recursion is bounded
-		// by prescanned module_specs, so profiler-router's type-import of `./index.js` dead-ends
-		// instead of dragging the host graph in.
+		// One path for ALL page modules (`b.pageModules()`) — app source AND declared surfaces: an
+		// importer of a page specifier is detected by the prescan wherever it lives, a named file joins
+		// directly (the profiler's router). The walk's recursion is bounded by prescanned module_specs,
+		// so profiler-router's type-import of `./index.js` dead-ends instead of dragging the host graph in.
 		const roots = new Set(
 			router_css_roots(this.program.router_modules, this.program.module_specs, ctx.libDir)
 		);

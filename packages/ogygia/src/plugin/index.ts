@@ -130,6 +130,25 @@ export const STORED_DOCUMENT_META = '<meta name="ogygia-freeze" content="hit">';
  *  itself (the same as `ogygia`'s, without loading the whole front door). */
 export { og_html_region as htmlRegion, region } from '../region.ts';
 
+// ── route options a programmatic router declares
+/** A programmatic router (a `routes()` table answering inside the handle) joins the route-option
+ *  lookup: for a pathname it claims, its matcher answers each option (`ctx.routeOption(name)`).
+ *  Keyed: registering the same key again REPLACES the stale matcher (dev re-evaluates the table). */
+export { register_route_options as registerRouteOptions } from './routes.ts';
+export type { RouteOptionMatcher, RouteOptionVerdict } from './routes.ts';
+
+// ── late regions: a region that resolves after the document flushed, down the same response
+/** Arm THIS request's late-region capture before a render that will deliver late chunks: a
+ *  `<Region of={promise}>` then registers its promise and wraps its placeholder in a slot. */
+export { open_late_scope as openLateScope } from '../late-region-registry.ts';
+/** Drain THIS request's registered late regions (after the render): `{ id, promise }` per slot, or
+ *  null when none registered. Draining clears the list. */
+export { take_late_regions as takeLateRegions } from '../late-region-registry.ts';
+export type { LateRegion } from '../late-region-registry.ts';
+/** The late wire: `lateSlot(id, html)` is the swappable slot, `lateChunk(id, html)` one later state
+ *  for it, `LATE_BOOT_SCRIPT` the inline head script that swaps chunks in as the document parses. */
+export { late_slot as lateSlot, late_chunk as lateChunk, LATE_BOOT_SCRIPT } from '../server/late-wire.ts';
+
 import { REGION_BRAND } from '../region-brand.ts';
 import type { DeferredRegion } from '../region.ts';
 

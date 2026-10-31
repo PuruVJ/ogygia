@@ -1,26 +1,13 @@
 /**
- * Shared type helpers for `ogygia/router`: route-pattern params (derived from the pattern string) and
- * the Standard Schema interface used to gate endpoints. The value layer (the builder) lives in
- * builder.ts; this module is types only.
+ * Shared type helpers for `@ogygia/router`: route-pattern params (derived from the pattern string) and
+ * the Standard Schema interface used to gate endpoints (core's: `ogygia/plugin/utils`). The value layer
+ * lives in define.ts; this module is types only.
  */
+import type { StandardSchemaV1 } from 'ogygia/plugin/utils';
 
-// The Standard Schema interface (the `~standard` spec Zod / Valibot / ArkType all implement — the very
-// thing Kit's remote functions consume). An endpoint's `get(schema, handler)` validates against this.
-export interface StandardSchemaV1<Output = unknown> {
-	readonly '~standard': {
-		readonly version: 1;
-		readonly vendor: string;
-		readonly validate: (value: unknown) => StandardResult<Output> | Promise<StandardResult<Output>>;
-		readonly types?: { readonly output: Output };
-	};
-}
-export type StandardResult<Output> =
-	| { readonly value: Output; readonly issues?: undefined }
-	| { readonly issues: ReadonlyArray<StandardIssue> };
-export interface StandardIssue {
-	readonly message: string;
-	readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }>;
-}
+// An endpoint's `GET(schema, handler)` validates against the Standard Schema interface (the `~standard`
+// spec Zod / Valibot / ArkType all implement — the very thing Kit's remote functions consume).
+export type { StandardSchemaV1, StandardResult, StandardIssue } from 'ogygia/plugin/utils';
 export type InferOutput<S> = S extends StandardSchemaV1<infer O> ? O : never;
 
 /** Route params derived from the pattern string via template literals — `/docs/[slug]` → { slug: string },

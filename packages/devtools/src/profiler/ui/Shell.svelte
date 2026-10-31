@@ -5,7 +5,7 @@
 	 * scoped in their own components (Treemap / Flame / Waterfall / ReportBody / ShareLink /
 	 * PermalinkGate); the shared vocabulary is the imported sheet.
 	 *
-	 * Reaching a routeless, server-only-rendered page: the profiler renders through `ogygia/router` +
+	 * Reaching a routeless, server-only-rendered page: the profiler renders through `@ogygia/router` +
 	 * `document()`, so its component CSS is emitted + linked by the SERVER-ROUTER CSS mechanism
 	 * (link/router-css.ts) — Shell is a transitive child of every page component, so this sheet ships on
 	 * every profiler page.

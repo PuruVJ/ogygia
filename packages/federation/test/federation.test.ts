@@ -13,7 +13,7 @@ import { mint_hole, set_hole_signer } from '../src/hole.ts';
 import { sign_headers, verify_signed_request, lift_document } from '../src/wire.ts';
 import { set_federation } from '../src/registry.ts';
 import fed_server from '../src/server.ts';
-import { routes } from 'ogygia/router';
+import { routes } from '@ogygia/router';
 import { startPlugin } from 'ogygia/plugin/testing';
 // (core internals a test drives: the running code's request)
 import { facts_of, set_current_request } from '../../ogygia/src/plugin/facts.ts';

@@ -14,50 +14,18 @@
  *
  * Swapping is driven by ONE small classic inline script in the head (module scripts don't run
  * until parsing ENDS, which for a streamed document is the very thing we're not waiting for).
- * Same CSP posture as ogygia's existing `script()` head primitive. SPA navigations fetch the
- * COMPLETED stream, so there the runtime applies remaining templates after the body swap.
+ * The slot, chunk and boot script are core's late wire (`ogygia/plugin`): core's `<Region
+ * of={promise}>` emits the same slots and its runtime applies the same chunks. SPA navigations
+ * fetch the COMPLETED stream, so there the runtime applies remaining templates after the body swap.
  *
  * Streaming's honest trades (documented): status/title/headers flush with the first yield — a
  * late error can't change an already-sent 200, and Server-Timing set after the flush is lost.
  */
-import { escape_text } from '../escape.ts';
+import { lateChunk as late_chunk, LATE_BOOT_SCRIPT } from 'ogygia/plugin';
+import { escapeText as escape_text } from 'ogygia/plugin/utils';
 
 /** The slot id for the page position (one streamed slot per page in v1). */
 export const PAGE_SLOT_ID = 'pg';
-
-/** Wrap the FIRST yield's html as the swappable slot (display:contents — layout-invisible). */
-export function slot_html(id: string, html: string): string {
-	return `<og-late-slot data-og-slot="${id}" style="display:contents">${html}</og-late-slot>`;
-}
-
-/** A late chunk: inert template + nothing else — the boot script (or the runtime, post-SPA-swap)
- *  performs the swap. Multiple chunks for one slot apply in order (progressive states). */
-export function late_chunk(id: string, html: string): string {
-	return `<template data-og-late="${id}">${html}</template>`;
-}
-
-/**
- * The classic inline boot: observes streamed-in `<template data-og-late>` nodes DURING parse and
- * swaps each into its slot immediately (stylesheet links hoist to head first so the swap never
- * paints unstyled). Kept dependency-free and tiny — it must run before any module script can.
- */
-export const LATE_BOOT_SCRIPT: string =
-	'<script data-og-late-boot>(function(){' +
-	'function ap(t){var id=t.getAttribute("data-og-late");var s=document.querySelector(' +
-	"'og-late-slot[data-og-slot=\"'+id+'\"]');if(!s){t.remove();return}" +
-	'var c=t.content;var ls=c.querySelectorAll(\'link[rel="stylesheet"],style\');' +
-	'for(var i=0;i<ls.length;i++){var l=ls[i];var h=l.getAttribute&&l.getAttribute("href");' +
-	"if(h&&document.head.querySelector('link[href=\"'+h+'\"]'))l.remove();" +
-	'else document.head.appendChild(l)}' +
-	'while(s.firstChild)s.removeChild(s.firstChild);s.appendChild(c);t.remove()}' +
-	'var mo=new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var ad=ms[i].addedNodes;' +
-	'for(var j=0;j<ad.length;j++){var n=ad[j];if(n.nodeType===1&&n.tagName==="TEMPLATE"&&' +
-	'n.hasAttribute("data-og-late"))ap(n)}}});' +
-	'mo.observe(document.documentElement,{childList:true,subtree:true});' +
-	'addEventListener("DOMContentLoaded",function(){' +
-	'var ts=document.querySelectorAll("template[data-og-late]");' +
-	'for(var i=0;i<ts.length;i++)ap(ts[i]);mo.disconnect()},{once:true});' +
-	'})()</script>';
 
 /** Bake ANY yielded value to html: a string passes through, an inline region carries its html,
  *  a component/held region AWAITS into its bake (island shells + prefixed CSS links included —
@@ -83,11 +51,11 @@ export async function bake_yield(v: unknown): Promise<string> {
 			// a region with NO html after resolution: an unmarked import in a server-only module
 			// bakes nothing (no identity, no client leg — the round-1 `region: 'raw'` rule).
 			throw new Error(
-				"[ogygia/router] a yielded region did not bake — mark its import (`with { region: 'raw' }` or a wake) so the component has an identity + client leg."
+				"[@ogygia/router] a yielded region did not bake — mark its import (`with { region: 'raw' }` or a wake) so the component has an identity + client leg."
 			);
 	}
 	throw new Error(
-		'[ogygia/router] a streamed page must yield regions (region(C, props) / og_html_region(html)) or html strings.'
+		'[@ogygia/router] a streamed page must yield regions (region(C, props) / og_html_region(html)) or html strings.'
 	);
 }
 

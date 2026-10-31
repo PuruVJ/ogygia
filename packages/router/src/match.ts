@@ -44,7 +44,7 @@ const INNER_PARAM = /\[([a-zA-Z_$][\w$]*)\]/g;
 export function compile(pattern: string): CompiledPattern {
 	if (!pattern.startsWith('/')) {
 		throw new Error(
-			`[ogygia/router] route pattern must start with "/": ${JSON.stringify(pattern)}`
+			`[@ogygia/router] route pattern must start with "/": ${JSON.stringify(pattern)}`
 		);
 	}
 	const segs = pattern.split('/').filter((s) => s !== '');
@@ -58,7 +58,7 @@ export function compile(pattern: string): CompiledPattern {
 		if ((m = seg.match(REST))) {
 			if (i !== segs.length - 1) {
 				throw new Error(
-					`[ogygia/router] a [...rest] segment must be last: ${JSON.stringify(pattern)}`
+					`[@ogygia/router] a [...rest] segment must be last: ${JSON.stringify(pattern)}`
 				);
 			}
 			params.push({ name: m[1], rest: true });
@@ -96,7 +96,7 @@ export function compile(pattern: string): CompiledPattern {
 			// any bracket left after removing the valid [param] groups = a malformed segment
 			const leftover = seg.replace(STRIP_PARAMS, '');
 			if (leftover.includes('[') || leftover.includes(']') || (!has_static && !has_param)) {
-				throw new Error(`[ogygia/router] malformed segment ${JSON.stringify(seg)} in ${pattern}`);
+				throw new Error(`[@ogygia/router] malformed segment ${JSON.stringify(seg)} in ${pattern}`);
 			}
 			rx += inner;
 			digits.push(!has_param ? 4 : has_static ? 3 : 2);

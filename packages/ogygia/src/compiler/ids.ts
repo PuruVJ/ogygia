@@ -44,7 +44,7 @@ export const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 export const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';
 /** Generated component→CSS registrations for the SERVER router — the module that makes a router
- *  page's `<style>` reach the document (see link/router-css.ts). SSR-only, imported by ogygia/router. */
+ *  page's `<style>` reach the document (see link/router-css.ts). SSR-only, imported by `ogygia/plugin/css`. */
 export const V_ROUTER_CSS = 'virtual:ogygia/router-css';
 export const V_SERVER_MANIFEST = 'virtual:ogygia/server-manifest';
 export const V_REQUEST_EVENT = 'virtual:ogygia/request-event';

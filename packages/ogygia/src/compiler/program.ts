@@ -116,7 +116,8 @@ export class Program {
 	/** Absolute paths of app modules that define a transportable class (built during prescan). */
 	readonly transportable_modules: Set<string> = new Set();
 
-	/** App modules importing `'ogygia/router'` (server-router definition sites) + every walked
+	/** PAGE MODULES (`b.pageModules()`: importers of a page specifier such as `'@ogygia/router'`, plus
+	 *  files named directly — server-router definition sites) + every walked
 	 *  module's import specifiers — the build data `virtual:ogygia/router-css` computes its
 	 *  component closure from (see link/router-css.ts). Filled during the prescan walk. */
 	readonly router_modules: Set<string> = new Set();

@@ -39,6 +39,7 @@
     "@ogygia/content": "workspace:*",
     "@ogygia/devtools": "workspace:*",
     "@ogygia/flags": "workspace:*",
+    "@ogygia/router": "workspace:*",
     "ogygia": "workspace:*",
     "repro-hole-css-kit": "workspace:*",
     "repro-island-pkg": "workspace:*",

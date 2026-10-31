@@ -3,7 +3,7 @@
 // without), a boolean flag() slots straight in as the gate, and the same `pick` verb that chooses
 // components and values chooses INFRASTRUCTURE (mount(v2.pick({ off, on }))).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { routes, when } from 'ogygia/router';
+import { routes, when } from '@ogygia/router';
 import { startPlugin } from 'ogygia/plugin/testing';
 import { mount } from '../src/mount.ts';
 import { make_peer } from '../src/peer.ts';

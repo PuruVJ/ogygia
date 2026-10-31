@@ -101,7 +101,7 @@ Both `peer.page(path)` (a remote **route**) and `peer.widget(name, props)` (a re
 The peer handles are **server values** (they hold the signing key, so they live in a `.server.ts`). In practice you build the region in a `load` and render it from `data`:
 
 ```ts title=src/lib/shell-router.ts
-import { routes, page } from 'ogygia/router';
+import { routes, page } from '@ogygia/router';
 import { cms, dash } from '$lib/federation.server';
 import Home from '$lib/views/Home.svelte';
 
@@ -146,7 +146,7 @@ Pass `claims` on the dials to override the visitor identity for that one hop (th
 Where a region is a **slot** the shell owns, a mount is a **route** the MFE owns. One table entry renders a whole remote app under shell chrome:
 
 ```ts
-import { mount } from 'ogygia/router';
+import { mount } from '@ogygia/federation';
 import { cms } from '$lib/federation.server';
 
 // in the route table:
@@ -177,7 +177,7 @@ You can also pass a plain resolver — `mount((c) => peer)`. Stickiness comes fr
 The shell does not have to use the ogygia router. From an ordinary Kit catchall (`src/routes/cms/[...rest]/`):
 
 ```ts title=+page.server.ts
-import { mount } from 'ogygia/router';
+import { mount } from '@ogygia/federation';
 import { cms } from '$lib/federation.server';
 
 const m = mount.kit(cms, { user: (e) => session_from(e.cookies) });
@@ -203,7 +203,7 @@ Same peer, same signing, same reliability dials. Two honest differences: identit
 Inside an exposed router's loads, actions, and endpoints — and in a widget's `make(props, { user })` — read the verified, signature-bound visitor claims with `user`:
 
 ```ts
-import { user } from 'ogygia/router';   // also exported from 'ogygia/federation'
+import { user } from '@ogygia/federation';
 
 load: async (c) => {
   const viewer = user(c);               // the shell's session, carried on-behalf-of; undefined when anonymous

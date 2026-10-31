@@ -71,6 +71,11 @@ export interface CompileCtxInit {
 	 *  for exactly these paths. Optional (default none): standalone/browser hosts have no
 	 *  node_modules to declare from. */
 	pkg_scan?: PackageScan[];
+	/** PAGE MODULES (`b.pageModules()`): modules that render pages outside Kit's routes, whose reachable
+	 *  components get router-css. `page_importers`: a compiled module importing one of these specifiers
+	 *  is one; `page_files`: absolute paths that are page modules themselves. Optional (default none). */
+	page_importers?: readonly string[];
+	page_files?: readonly string[];
 	is_dev: boolean;
 	id_salt: string;
 	visibleMargin: string | undefined;
@@ -122,6 +127,8 @@ export class CompileCtx {
 	readonly app_dir: string;
 	readonly libDir: string;
 	readonly pkg_scan: PackageScan[];
+	readonly page_importers: readonly string[];
+	readonly page_files: readonly string[];
 	readonly measure: boolean;
 	readonly server_plugins: readonly ServerRealm[];
 	readonly client_plugins: readonly string[];
@@ -166,6 +173,8 @@ export class CompileCtx {
 		this.app_dir = init.app_dir;
 		this.libDir = init.libDir;
 		this.pkg_scan = init.pkg_scan ?? [];
+		this.page_importers = init.page_importers ?? [];
+		this.page_files = init.page_files ?? [];
 		this.measure = init.measure;
 		this.server_plugins = init.server_plugins ?? [];
 		this.client_plugins = init.client_plugins ?? [];

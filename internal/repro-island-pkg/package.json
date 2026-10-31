@@ -15,6 +15,7 @@
 		}
 	},
 	"dependencies": {
+		"@ogygia/router": "workspace:*",
 		"ogygia": "workspace:*"
 	}
 }

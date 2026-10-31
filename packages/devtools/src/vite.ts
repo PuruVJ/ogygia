@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isMainThread } from 'node:worker_threads';
-import type { Plugin as VitePlugin } from 'vite';
+import type { Plugin as VitePlugin, UserConfig } from 'vite';
 import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
 import type { ProfilerOptions } from './profiler/index.ts';
 import type { DevtoolsServerOptions } from './server.ts';
@@ -53,12 +53,14 @@ export function devtools(options: DevtoolsOptions = {}): OgygiaPlugin<DevtoolsSe
 			if (profiler) {
 				b.measure();
 				// the profiler UI: real islands, rendered only from its handle (no app file marks them), and
-				// its server router, whose page components' scoped styles ride router-css
+				// its server router — a page module, whose page components' scoped styles ride router-css
+				const profiler_router = path.join(PKG_ROOT, FROM_SRC ? 'src/profiler/profiler-router.ts' : 'dist/profiler/profiler-router.js');
 				b.files({
 					root: PKG_ROOT,
 					dirs: [path.join(PKG_ROOT, FROM_SRC ? 'src/profiler/ui' : 'dist/profiler/ui')],
-					files: [path.join(PKG_ROOT, FROM_SRC ? 'src/profiler/profiler-router.ts' : 'dist/profiler/profiler-router.js')]
+					files: [profiler_router]
 				});
+				b.pageModules({ files: [profiler_router] });
 			}
 		}
 	});
@@ -94,9 +96,13 @@ function devtools_vite(dock: boolean, profiler: ProfilerOptions | null): VitePlu
 			}
 			// the dock's drag and resize, named through this package (under a strict install the app cannot
 			// resolve them bare): found late in dev, each re-optimized and reloaded the page
-			return dock && env.command === 'serve'
-				? { optimizeDeps: { include: ['@ogygia/devtools > @neodrag/svelte', '@ogygia/devtools > @neodrag/svelte/resize'] } }
-				: undefined;
+			const out: UserConfig = {};
+			if (dock && env.command === 'serve')
+				out.optimizeDeps = { include: ['@ogygia/devtools > @neodrag/svelte', '@ogygia/devtools > @neodrag/svelte/resize'] };
+			// the profiler is built on the server router, which ships `.svelte`: server-inlined like a listed
+			// plugin even when the app does not list `router()` itself
+			if (profiler) out.ssr = { noExternal: ['@ogygia/router'] };
+			return out;
 		},
 		transform(code, id, opts) {
 			// DEV ONLY: sever the server half → profiler EDGE from Vite's import analysis. Kit's dev "inline

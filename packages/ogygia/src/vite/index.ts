@@ -207,13 +207,17 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// measurement data (`b.measure()`, the profiler) and core's event emits (`b.events()`, devtools).
 	let measure = false;
 	// Compile surfaces beyond the app's src — ONE mechanism for a plugin's own pages (`b.files()`: the
-	// profiler UI and its server-router module, DETECTED as a router-css root the way an app's is) and
-	// for dependencies that declare `"ogygia": { "files": […] }` in their package.json. Filled in the
-	// config hook (root known); captured by reference into the CompileCtx built in configResolved.
+	// profiler UI and its server-router module) and for dependencies that declare `"ogygia": { "files":
+	// […] }` in their package.json. Filled in the config hook (root known); captured by reference into
+	// the CompileCtx built in configResolved.
 	const pkg_scan: PackageScan[] = [];
 	/** the roots of plugins' own pages (`b.files()`), as module-id prefixes */
 	const plugin_file_roots: string[] = [];
 	let declared_scanned = false;
+	// PAGE MODULES (`b.pageModules()`: a programmatic router) — the router-css roots: importers of these
+	// specifiers, and these files (real POSIX paths, like the scan's).
+	let page_importers: string[] = [];
+	let page_files: string[] = [];
 
 	// Router / rate-limit / session / ttl / continuity / server-delta → the flat config (pure derivation).
 	const {
@@ -428,6 +432,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					measure = resolved.measure;
 					devtools_effective = resolved.events !== false;
 					devtools_lazy = resolved.events !== false && resolved.events.lazy;
+					page_importers = resolved.page_modules.importers;
+					page_files = resolved.page_modules.files.map(real_posix);
 					for (const p of resolved.files)
 						if (!pkg_scan.some((s) => s.name === p.name)) {
 							plugin_file_roots.push(real_posix(p.root) + '/');
@@ -666,6 +672,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						app_dir,
 						libDir,
 						pkg_scan,
+						page_importers,
+						page_files,
 						measure,
 						server_plugins,
 						client_plugins,

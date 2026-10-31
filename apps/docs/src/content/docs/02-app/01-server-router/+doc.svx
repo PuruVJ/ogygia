@@ -20,7 +20,7 @@ Use it when your routes are *computed*: a CMS whose paths come from a database, 
 ## The whole thing in one file
 
 ```ts title=src/lib/router.ts
-import { routes, page, layout, load, redirect, error, fail } from 'ogygia/router';
+import { routes, page, layout, load, redirect, error, fail } from '@ogygia/router';
 import AppShell from '$lib/views/AppShell.svelte';
 import Home from '$lib/views/Home.svelte';
 import Doc from '$lib/views/Doc.svelte';
@@ -152,7 +152,7 @@ A load is a function of `c` that returns the data of the page. Declare it inline
 page(Doc, { load: async (c) => ({ doc: await docs.get(c.params.slug) }) }),
 
 // pulled out, typed by the pattern
-import type { Load } from 'ogygia/router';
+import type { Load } from '@ogygia/router';
 const docLoad: Load<'/docs/[slug]'> = async (c) => ({ doc: await docs.get(c.params.slug) });
 page(Doc, { load: docLoad }),
 ```
@@ -233,7 +233,7 @@ An endpoint is the `+server.ts` shape, written as an object of **uppercase verb 
 `c.params` is typed from the **table key**: a bare handler reads `c.params.id`, with no pattern restated. When you need typed params in a *pulled-out* handler, or a **body schema**, use the exported verb wrappers `GET` / `POST` / `PUT` / `DELETE` / `PATCH`: the same "bare or wrapper" choice as `load()`/`action()`:
 
 ```ts
-import { POST, type Handler } from 'ogygia/router';
+import { POST, type Handler } from '@ogygia/router';
 
 // body schema on POST/PUT/PATCH → validated JSON body into c.input (400 on bad input)
 '/posts': { POST: POST(NewPostSchema, (c) => c.json(create(c.input))) },
@@ -279,7 +279,7 @@ routes(table, {
 Thrown from a load, action, or handler. The exact names of Kit, imported from `ogygia/router`:
 
 ```ts
-import { redirect, error, fail } from 'ogygia/router';
+import { redirect, error, fail } from '@ogygia/router';
 
 redirect(303, '/login');            // → a redirect Response
 error(404, 'Not found');            // → the nearest error boundary (page) / JSON (endpoint)
@@ -337,7 +337,7 @@ The table already knows the path grammar, body schema, and payload of each endpo
 ```ts
 export type App = typeof app.$infer;                 // the map the app already exports
 
-import { api } from 'ogygia/router/client';           // browser-safe (islands can import it)
+import { api } from '@ogygia/router/api';           // browser-safe (islands can import it)
 const svc = api<App>('https://svc.internal');
 
 const post = await svc.get('/posts/[id]', { params: { id: '1' } });   // payload: typed
@@ -413,7 +413,7 @@ Each set fills the pattern into the `entries()` crawl list of the router. A dyna
 Wrap a table entry (a page, an endpoint object, a [`mount()`](/docs/app/federation)), and it exists only when the gate says so:
 
 ```ts
-import { when } from 'ogygia/router';
+import { when } from '@ogygia/router';
 import { checkoutV2, exportsFlag, cmsRollout } from '$lib/flags';
 
 routes({

@@ -2,7 +2,7 @@ import { sequence } from '@sveltejs/kit/hooks';
 import { handle as ogygiaHandle } from 'ogygia/server';
 import { freeze, akamai, cloudfront } from '@ogygia/freeze';
 import { env } from '$env/dynamic/private';
-import { routes, page, layout } from 'ogygia/router';
+import { routes, page, layout } from '@ogygia/router';
 import Shell from '$lib/r/Shell.svelte';
 import Frozen from '$lib/r/Frozen.svelte';
 import Plain from '$lib/r/Plain.svelte';

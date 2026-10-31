@@ -5,7 +5,7 @@
  * `mount()` — the wire behavior (status/redirect/form translation, canary, streaming) is unchanged;
  * it just takes a `Peer` instead of a `client()`.
  */
-import { page, redirect, type PageDef, type ComponentPick, type Ctx } from 'ogygia/router';
+import { page, redirect, type PageDef, type ComponentPick, type Ctx } from '@ogygia/router';
 import { fed_app } from './app.ts';
 import { child_traceparent, type Claims, type FragmentDocument } from './wire.ts';
 import type { Peer } from './types.ts';

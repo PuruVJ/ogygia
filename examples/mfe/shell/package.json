@@ -13,6 +13,7 @@
 		"@ogygia/federation": "workspace:*",
 		"@ogygia/flags": "workspace:*",
 		"@ogygia/freeze": "workspace:*",
+		"@ogygia/router": "workspace:*",
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {

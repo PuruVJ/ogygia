@@ -36,7 +36,8 @@ describe('freeze() — the vite value', () => {
 			markup: () => ({ transform: () => null }),
 			events: () => {},
 			measure: () => {},
-			files: () => {}
+			files: () => {},
+			pageModules: () => {}
 		});
 		expect(names).toEqual(['freeze']);
 	});

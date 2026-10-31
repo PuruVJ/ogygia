@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compile, compile_all, match_one, match_path } from '../src/router/match.ts';
+import { compile, compile_all, match_one, match_path } from '../src/match.ts';
 
 describe('router pattern matching', () => {
 	it('matches root, static, and params', () => {

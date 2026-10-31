@@ -4,7 +4,7 @@
  * package's `ogygia.files` declaration the compiler would skip this file and the mark would be
  * silently inert (the exact silent death the declaration mechanism exists to prevent).
  */
-import { page } from 'ogygia/router';
+import { page } from '@ogygia/router';
 import PkgPage from './pages/PkgPage.svelte';
 // the cms `/lab` pattern: the whole page as ONE island via a marked binding in the table's .ts
 import BoardLive from './pages/Board.svelte' with { wake: 'load' };

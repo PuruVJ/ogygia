@@ -3,6 +3,7 @@ import { ogygia } from 'ogygia/vite';
 import { flags } from '@ogygia/flags/vite';
 import { content } from '@ogygia/content/vite';
 import { devtools } from '@ogygia/devtools/vite';
+import { router } from '@ogygia/router/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -40,6 +41,8 @@ export default defineConfig({
 			// and e2e/devtools.ts proves tree-shaking — and on with OGYGIA_DEVTOOLS=1.
 			plugins: [
 				flags(),
+				// router: the server router behind /rtr (and the distributed table repro-island-pkg ships)
+				router(),
 				content({ markdown: {} }),
 				devtools({
 					dock: !!process.env.OGYGIA_DEVTOOLS,

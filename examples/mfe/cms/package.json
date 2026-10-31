@@ -12,6 +12,7 @@
 		"@corp/contracts": "workspace:*",
 		"@ogygia/federation": "workspace:*",
 		"@ogygia/flags": "workspace:*",
+		"@ogygia/router": "workspace:*",
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {

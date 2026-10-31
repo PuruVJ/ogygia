@@ -1,14 +1,18 @@
 /**
  * ROUTE OPTIONS × the programmatic router — `page(C, { freeze })` / `layout(name, C, { freeze })` /
  * `routes(table, { freeze })` cascade, registered with the generic route-option registry the
- * handle consults (plugin/routes.ts). Matcher grammar: `undefined` = not this table's · `null` =
- * claimed, nothing declared · boolean = declared, deepest wins. `route_option` folds the first two
+ * handle consults (core's plugin/routes.ts). Matcher grammar: `undefined` = not this table's · `null` =
+ * claimed, nothing declared · boolean = declared, deepest wins. `routeOption` folds the first two
  * into `undefined` (the plugin's default applies), but a claiming table still SHADOWS the file
  * world: dispatch would answer from the table, never from a Kit page.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { routes, page, layout } from '../src/router/index.ts';
-import { route_option, clear_route_options, set_page_route_options } from '../src/plugin/routes.ts';
+import { routes, page, layout } from '../src/index.ts';
+import {
+	routeOption as route_option,
+	clearRouteOptions as clear_route_options,
+	setPageRouteOptions as set_page_route_options
+} from 'ogygia/plugin/testing';
 
 const C = (() => null) as never;
 const freeze = (path: string) => route_option('freeze', null, path);

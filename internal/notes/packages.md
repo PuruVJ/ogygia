@@ -376,6 +376,32 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
       (legacy-key errors name the new spelling).
 - NEXT (user, 2026-10-31: "yes love it lets do it"): FLATTEN `regions.*` onto ogygia()'s root —
   `visible`, `presets`, `ttl`, `maxPageAge`; `regions` becomes a legacy key with the new spelling.
+- R10 SERVER ROUTER → `@ogygia/router` (AS BUILT). src/router moved to packages/router (`.` = the
+  router, `./api` = the typed fetch client, `./vite` = `router()`); the CLIENT router stays core. Six
+  router tests moved with it (router-dispatch, -api-client, -match, -schema, -infer.test-d,
+  route-options-router); core's router-css.test stays (it tests the compiler link). Door pieces:
+  - BUILD `b.pageModules({ importers?, files? })`: modules that render pages outside Kit's routes; every
+    component they import gets its whole-tree CSS linked when it renders. Replaces the compiler's
+    hardcoded `'ogygia/router'` prescan spec (`ctx.page_importers` / `ctx.page_files`; importers apply to
+    every compiled file, `ogygia.files` surfaces included). `router()` passes `importers:
+    ['@ogygia/router']`; devtools passes `files: [profiler-router]` (its `b.files` stays for the UI).
+  - `ogygia/plugin/css` (own subpath, so `virtual:ogygia/router-css` stays out of every plugin's server
+    realm; the virtual is now imported on first call): `componentCssHead(components)` (was router/css-head.ts).
+  - `ogygia/plugin`: `registerRouteOptions` (+ types), `openLateScope` / `takeLateRegions` (+ `LateRegion`),
+    and the late wire `lateSlot` / `lateChunk` / `LATE_BOOT_SCRIPT` (moved to src/server/late-wire.ts:
+    core's protocol, also spoken by PromiseRegion*.svelte and runtime/router-nav.ts).
+  - `ogygia/plugin/utils`: `escapeText`; `StandardSchemaV1` (+ `StandardResult`, `StandardIssue`) now
+    DEFINED in core (src/plugin/standard-schema.ts), the router re-exports it.
+  - `ogygia/plugin/testing`: `routeOption`, `clearRouteOptions`, `setPageRouteOptions`.
+  - `document()` comes from `ogygia/server`; RawHtml.svelte has a router-own twin.
+  - Module identity: route options live on a `Symbol.for` slot; the late registry, the router-css
+    registry and `claim_region_css` are reached through core subpaths that resolve to the same files
+    `ogygia/server` / `ogygia/internal/register` load (src in the workspace, dist when published).
+  - NOT `./client` for the fetch client: `<name>/client` is a plugin's browser REALM (found by name,
+    booted on every page), so listing `router()` would have booted the api module as a client plugin.
+  - LEFT: the router still declares the `freeze` route option by name (router.ts `option_of`, define.ts
+    `freeze` fields) — generalizing it is the "route `meta` freeze reads" edge cut above. Docs: only the
+    server-router + federation pages' import lines changed; the docs pass comes later.
 
 ## Performance rules (the bar every step must pass)
 
@@ -412,8 +438,8 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
 
 | Package | From | Notes |
 |---|---|---|
-| `@ogygia/core` | everything else, incl. the CLIENT nav (runtime/router.ts, `ogygia/router/client`) | `ogygia` re-exports it (Q4) |
-| `@ogygia/router` | src/router (the SERVER router: `routes()`, `page`, `mount` hosts) | core imports none of it (checked); federation + profiler build on it; compiler's router prescan + router-css become its compile facet |
+| `@ogygia/core` | everything else, incl. the CLIENT nav (runtime/router.ts, runtime/router-nav.ts, `virtual:ogygia/router-config`; it has no public subpath) | `ogygia` re-exports it (Q4) |
+| `@ogygia/router` | src/router (the SERVER router: `routes()`, `page`, `mount` hosts) + `client-api.ts` (the typed `api<App>()` fetch client, was `ogygia/router/client`, now `@ogygia/router/api`) | DONE R10. Core imported one piece of it (`StandardSchemaV1`, re-exported by `ogygia/plugin/utils`), now reversed; federation + profiler build on it; the compiler's router prescan became `b.pageModules()`; router-css stays core (`ogygia/plugin/css`) |
 | `@ogygia/devtools` | src/devtools + src/profiler (MERGED, user 2026-10-31) | one plugin `devtools({ profiler })`: in-page panel + server profiler, each its own on-switch; profiler stays a lazy import; storage adapters as `/profiler/storage/*` subpaths; `@neodrag/svelte` peer moves here |
 | `@ogygia/content` | src/content, Blocks.svelte, markdown macros | mdsvex, shiki, orama, bits-ui peers move here |
 | `@ogygia/federation` | src/federation | |

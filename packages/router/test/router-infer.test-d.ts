@@ -1,6 +1,6 @@
 /* Type-level guard for router v2 `$infer` — merged cascade data (Kit's rule), schema-coerced params,
  * typed search, action-return form, and layout keys `App['(name)']`. tsc-only (no runtime). */
-import { routes, page, layout, type StandardSchemaV1 } from '../src/router/index.ts';
+import { routes, page, layout, type StandardSchemaV1 } from '../src/index.ts';
 import type { Component } from 'svelte';
 
 const C = (() => {}) as unknown as Component<Record<string, unknown>>;
@@ -35,7 +35,7 @@ const app = routes(
 type App = typeof app.$infer;
 
 // ── endpoint entries + the typed api() client ─────────────────────────────────────────────────
-import { GET, POST, api } from '../src/router/index.ts';
+import { GET, POST, api } from '../src/index.ts';
 
 const Body: StandardSchemaV1<{ title: string }> = NumId as never;
 const typedApp = routes({

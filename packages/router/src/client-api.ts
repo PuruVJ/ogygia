@@ -15,7 +15,8 @@
  * status and the parsed error body.
  *
  * BROWSER-SAFE by construction: this module imports only the light path grammar (match.ts) —
- * no svelte, no node builtins — so islands can import `ogygia/router/client` directly.
+ * no svelte, no node builtins — so islands can import `@ogygia/router/api` directly. (Not
+ * `/client`: that subpath is a plugin's browser realm, booted on every page.)
  */
 import { fill } from './match.ts';
 import type { HrefParams, Params } from './view.ts';

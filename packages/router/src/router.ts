@@ -8,13 +8,19 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Component } from 'svelte';
-import { document } from '../document.ts';
-import { escape_text } from '../escape.ts';
-import { region } from '../region.ts';
+import { document } from 'ogygia/server';
+import {
+	region,
+	registerRouteOptions as register_route_options,
+	openLateScope as open_late_scope,
+	takeLateRegions as take_late_regions,
+	lateSlot as slot_html
+} from 'ogygia/plugin';
+import { componentCssHead as router_css_head } from 'ogygia/plugin/css';
+import { escapeText as escape_text, type StandardSchemaV1 } from 'ogygia/plugin/utils';
 import LayoutChain from './LayoutChain.svelte';
-import RawHtml from '../RawHtml.svelte';
+import RawHtml from './RawHtml.svelte';
 import { compile_all, match_path, fill, type CompiledPattern } from './match.ts';
-import { register_route_options } from '../plugin/routes.ts';
 import { make_ctx, type Ctx, type Visitor } from './ctx.ts';
 import {
 	compile_endpoint,
@@ -30,7 +36,7 @@ import {
 	type RouteTable
 } from './define.ts';
 import type { InferMap } from './infer.ts';
-import type { StandardSchemaV1, HrefArgs } from './view.ts';
+import type { HrefArgs } from './view.ts';
 import {
 	error,
 	finalize,
@@ -43,12 +49,9 @@ import {
 	options_response,
 	redirect_response
 } from './respond.ts';
-import { router_css_head } from './css-head.ts';
-import { open_late_scope, take_late_regions } from '../late-region-registry.ts';
 import {
 	is_stream_slot,
 	bake_yield,
-	slot_html,
 	stream_document,
 	page_slot_chunks,
 	late_region_chunks,
@@ -149,7 +152,7 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 				const prev = seen_layout.get(l.name);
 				if (prev && prev !== l.component)
 					throw new Error(
-						`[ogygia/router] two different layouts share the name ${JSON.stringify(l.name)} — names must be unique (they key App['(name)']).`
+						`[@ogygia/router] two different layouts share the name ${JSON.stringify(l.name)} — names must be unique (they key App['(name)']).`
 					);
 				seen_layout.set(l.name, l.component);
 			}
@@ -396,8 +399,8 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 							node.component as { __ogpick: (c: Ctx, data: Record<string, unknown>) => unknown }
 						).__ogpick(ctx, data)
 					: node.component;
-		// An html view renders through ogygia's OWN pure-HTML region component (og_html_region's
-		// RawHtml) — the wire document is just html + css, no bespoke page component. Its css tags
+		// An html view renders through the router's own pure-HTML component (RawHtml.svelte, the
+		// twin of og_html_region's) — the wire document is just html + css, no bespoke page component. Its css tags
 		// + escaped title join the DOCUMENT head (the router owns the head; a component would have
 		// needed <svelte:head>).
 		const html_view =

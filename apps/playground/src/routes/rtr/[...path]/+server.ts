@@ -1,5 +1,5 @@
 import { base } from '$app/paths';
-import { routes, page, layout } from 'ogygia/router';
+import { routes, page, layout } from '@ogygia/router';
 // DISTRIBUTED ROUTES: a table fragment shipped by a dependency (`ogygia.files`-declared) —
 // its pages + the islands inside them compile like app source (e2e/island-pkg.ts).
 import { pkg_table } from 'repro-island-pkg/routes';

@@ -1,13 +1,13 @@
 /**
- * Component → CSS registry for the SERVER router (`ogygia/router`).
+ * Component → CSS registry for the SERVER router (`@ogygia/router`, any page module).
  *
  * A router page/layout/error component is a runtime VALUE (`r.page(Home)`), so unlike a Kit route
  * there is no file-derived place to link its stylesheets from — historically its `<style>` never
  * reached the page (see link/router-css.ts for the whole story). The fix is Kit's association done
  * value-wise: the build emits `virtual:ogygia/router-css`, a generated module (never user code) that
  * imports each component the app's router modules can reach and registers it HERE with a thunk
- * yielding its stylesheet entries. `render_page` then looks up exactly the components it renders and
- * links them through `document()`'s head.
+ * yielding its stylesheet entries. `componentCssHead()` (plugin/css.ts) then looks up exactly the
+ * components a render places and links them through `document()`'s head.
  *
  * The thunk shape covers both modes:
  *  - prod:  `{ key, href }` — `<link rel="stylesheet">` to the emitted asset (key = the raw handoff
@@ -32,7 +32,7 @@ const registry = new WeakMap<object, () => RouterCssEntry[]>();
 /** DEV registrations, keyed by the component's source path — pure DATA, no component imports.
  *
  *  Structural constraint (learned the hard way): the generated dev virtual must not `import` the
- *  components it registers. The virtual is reachable from `ogygia/router` — which the profiler's
+ *  components it registers. The virtual is reachable from `ogygia/plugin/css` — which the profiler's
  *  handle welds into the graph territory SvelteKit's dev "inline all styles" collector can crawl
  *  from ANY page (via Kit's generated internal.js → hooks). Component imports would drag every
  *  router page's whole tree — scoped styles, plain `.css` imports — into that crawl, leaking a

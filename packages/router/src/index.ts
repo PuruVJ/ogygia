@@ -1,8 +1,10 @@
 /**
- * ogygia/router — Kit's routing model, expressed as values (v2). No filesystem convention, no
+ * @ogygia/router — Kit's routing model, expressed as values (v2). No filesystem convention, no
  * codegen: you import functions, build a flat table, export the router + its `$infer` type map.
+ * List `router()` from `@ogygia/router/vite` in `ogygia({ plugins })`: the build then links the CSS of
+ * every component a module importing this package can reach.
  *
- *     import { routes, layout, page, load, action, get, redirect, error, fail } from 'ogygia/router';
+ *     import { routes, layout, page, load, action, get, redirect, error, fail } from '@ogygia/router';
  *
  *     const shell = layout('app', AppShell, { load: async (c) => ({ user: c.locals?.user }) });
  *

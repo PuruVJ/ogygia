@@ -84,14 +84,6 @@
 			"types": "./dist/markup.d.ts",
 			"default": "./src/markup.ts"
 		},
-		"./router": {
-			"types": "./dist/router/index.d.ts",
-			"default": "./src/router/index.ts"
-		},
-		"./router/client": {
-			"types": "./dist/router/client-api.d.ts",
-			"default": "./src/router/client-api.ts"
-		},
 		"./plugin": {
 			"types": "./dist/plugin/index.d.ts",
 			"default": "./src/plugin/index.ts"
@@ -99,6 +91,10 @@
 		"./plugin/utils": {
 			"types": "./dist/plugin/utils.d.ts",
 			"default": "./src/plugin/utils.ts"
+		},
+		"./plugin/css": {
+			"types": "./dist/plugin/css.d.ts",
+			"default": "./src/plugin/css.ts"
 		},
 		"./plugin/testing": {
 			"types": "./dist/plugin/testing.d.ts",
@@ -254,14 +250,6 @@
 				"types": "./dist/markup.d.ts",
 				"default": "./dist/markup.js"
 			},
-			"./router": {
-				"types": "./dist/router/index.d.ts",
-				"default": "./dist/router/index.js"
-			},
-			"./router/client": {
-				"types": "./dist/router/client-api.d.ts",
-				"default": "./dist/router/client-api.js"
-			},
 			"./plugin": {
 				"types": "./dist/plugin/index.d.ts",
 				"default": "./dist/plugin/index.js"
@@ -269,6 +257,10 @@
 			"./plugin/utils": {
 				"types": "./dist/plugin/utils.d.ts",
 				"default": "./dist/plugin/utils.js"
+			},
+			"./plugin/css": {
+				"types": "./dist/plugin/css.d.ts",
+				"default": "./dist/plugin/css.js"
 			},
 			"./plugin/testing": {
 				"types": "./dist/plugin/testing.d.ts",

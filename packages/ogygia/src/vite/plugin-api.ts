@@ -100,6 +100,12 @@ export interface BuildContext {
 	/** Compile a package's files as app source (their islands, router-css roots): `dirs` / `files`
 	 *  absolute, under `root` (the package's directory). For a plugin's own pages (a UI it serves). */
 	files(scan: { root: string; dirs?: string[]; files?: string[] }): void;
+	/** Modules that render pages outside Kit's routes (a programmatic router): every component they
+	 *  import gets its whole-tree CSS linked when it renders (`componentCssHead()` from
+	 *  `ogygia/plugin/css`). `importers`: any compiled module importing one of these specifiers is a
+	 *  page module; `files`: absolute paths that are page modules themselves (compiled ones: app source,
+	 *  or a `files()` / `ogygia.files` surface). */
+	pageModules(modules: { importers?: string[]; files?: string[] }): void;
 }
 
 /** Typed identity: a plugin. */
@@ -130,6 +136,9 @@ export interface ResolvedPlugins {
 	measure: boolean;
 	/** package files compiled as app source, per plugin */
 	files: { name: string; root: string; dirs: string[]; files: string[] }[];
+	/** page modules (`b.pageModules()`): the specifiers whose importers are page modules, and files
+	 *  that are page modules themselves */
+	page_modules: { importers: string[]; files: string[] };
 }
 
 const MACRO_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
@@ -225,7 +234,8 @@ export function resolve_plugins(
 		markup: [],
 		events: false,
 		measure: false,
-		files: []
+		files: [],
+		page_modules: { importers: [], files: [] }
 	};
 	const option_owner = new Map<string, string>();
 	const macro_owner = new Map<string, string>();
@@ -275,6 +285,15 @@ export function resolve_plugins(
 			},
 			files(scan) {
 				out.files.push({ name: plugin.name, root: scan.root, dirs: scan.dirs ?? [], files: scan.files ?? [] });
+			},
+			pageModules(modules) {
+				for (const spec of modules.importers ?? [])
+					if (!out.page_modules.importers.includes(spec)) out.page_modules.importers.push(spec);
+				for (const file of modules.files ?? []) {
+					if (!path.isAbsolute(file))
+						throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`pageModules({ files })\` takes absolute paths (got \`${file}\`).`);
+					if (!out.page_modules.files.includes(file)) out.page_modules.files.push(file);
+				}
 			}
 		});
 	}

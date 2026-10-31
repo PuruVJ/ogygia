@@ -5,7 +5,7 @@
  * buffer to the FINAL yield. mount({ stream }) is the sugar: fallback → doc | offline card.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { routes, page } from 'ogygia/router';
+import { routes, page } from '@ogygia/router';
 import { mount } from '../src/mount.ts';
 import { make_peer } from '../src/peer.ts';
 

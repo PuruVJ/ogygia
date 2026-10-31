@@ -55,6 +55,26 @@ describe('realms, found by name', () => {
 			/Kit does not own/
 		);
 	});
+	it('`b.pageModules` collects importer specifiers and absolute files, once each', () => {
+		const file = path.join(PLAYGROUND, 'src/pages.ts');
+		const out = resolve_plugins(
+			[
+				definePlugin({
+					name: '@ogygia/flags',
+					build: (b) => {
+						b.pageModules({ importers: ['@ogygia/router'] });
+						b.pageModules({ importers: ['@ogygia/router'], files: [file] });
+					}
+				})
+			],
+			PLAYGROUND,
+			true
+		);
+		expect(out.page_modules).toEqual({ importers: ['@ogygia/router'], files: [file] });
+		expect(() =>
+			resolve_plugins([definePlugin({ name: '@ogygia/flags', build: (b) => b.pageModules({ files: ['src/pages.ts'] }) })], PLAYGROUND, true)
+		).toThrow(/absolute paths/);
+	});
 });
 
 describe('virtual:ogygia/server-plugins', () => {

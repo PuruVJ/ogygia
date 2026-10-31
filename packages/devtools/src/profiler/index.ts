@@ -224,9 +224,9 @@ import { register_profiler_file } from './frames.ts';
 
 // The span recorder's `begin` lives in this file: skip its frame when finding a span's caller.
 register_profiler_file();
-import { error, type Router, type Ctx as RouteCtx } from 'ogygia/router';
+import { error, type Router, type Ctx as RouteCtx } from '@ogygia/router';
 import { app_asset_rel, client_dir_candidates, client_file_finder } from './client-files.ts';
-import { isHttpError as is_http_error, isRedirect as is_redirect } from 'ogygia/router';
+import { isHttpError as is_http_error, isRedirect as is_redirect } from '@ogygia/router';
 import { build_profiler_router } from './profiler-router.ts';
 import { detect_dev } from './env.ts';
 import { refresh_target } from './refresh-stub.ts';
@@ -2453,7 +2453,7 @@ class Profiler {
 		};
 	}
 
-	// ---- profiler UI: an ogygia/router handler-mode dogfood ---------------
+	// ---- profiler UI: an @ogygia/router handler-mode dogfood ---------------
 	// The gate does AUTH ONLY — no rendering. /login + /logout manage the session and are always
 	// reachable; everything else needs a valid session (dev = open). Every page below is a `view()` the
 	// router renders through document(); the profiler itself never touches document/region.

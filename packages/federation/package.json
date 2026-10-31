@@ -35,10 +35,12 @@
 		"test": "vitest run"
 	},
 	"peerDependencies": {
+		"@ogygia/router": "workspace:^",
 		"ogygia": "workspace:^"
 	},
 	"devDependencies": {
 		"@ogygia/flags": "workspace:*",
+		"@ogygia/router": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
 		"@sveltejs/kit": "^2.70.0",
 		"ogygia": "workspace:*",

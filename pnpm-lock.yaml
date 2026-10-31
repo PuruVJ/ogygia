@@ -247,6 +247,9 @@ importers:
       '@ogygia/flags':
         specifier: workspace:*
         version: link:../../packages/flags
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../../packages/router
       '@replit/codemirror-lang-svelte':
         specifier: ^6.0.0
         version: 6.0.0(@codemirror/autocomplete@6.20.3)(@codemirror/lang-css@6.3.1)(@codemirror/lang-html@6.4.12)(@codemirror/lang-javascript@6.2.5)(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.9)(@lezer/common@1.5.2)(@lezer/highlight@1.2.3)(@lezer/javascript@1.5.4)(@lezer/lr@1.4.10)
@@ -436,6 +439,9 @@ importers:
       '@ogygia/flags':
         specifier: workspace:*
         version: link:../../../packages/flags
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../../../packages/router
       ogygia:
         specifier: workspace:*
         version: link:../../../packages/ogygia
@@ -516,6 +522,9 @@ importers:
       '@ogygia/freeze':
         specifier: workspace:*
         version: link:../../../packages/freeze
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../../../packages/router
       ogygia:
         specifier: workspace:*
         version: link:../../../packages/ogygia
@@ -611,6 +620,9 @@ importers:
       '@ogygia/freeze':
         specifier: workspace:*
         version: link:../../packages/freeze
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../../packages/router
       ogygia:
         specifier: workspace:*
         version: link:../../packages/ogygia
@@ -638,6 +650,9 @@ importers:
 
   internal/repro-island-pkg:
     dependencies:
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../../packages/router
       ogygia:
         specifier: workspace:*
         version: link:../../packages/ogygia
@@ -755,6 +770,9 @@ importers:
         specifier: ^5.9.3
         version: 5.9.4
     devDependencies:
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../router
       '@ogygia/tooling':
         specifier: workspace:*
         version: link:../tooling
@@ -794,6 +812,9 @@ importers:
       '@ogygia/flags':
         specifier: workspace:*
         version: link:../flags
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../router
       '@ogygia/tooling':
         specifier: workspace:*
         version: link:../tooling
@@ -919,6 +940,39 @@ importers:
       valibot:
         specifier: ^1.4.2
         version: 1.4.2(typescript@6.0.3)
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
+  packages/router:
+    devDependencies:
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@sveltejs/kit':
+        specifier: ^2.70.0
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.2.0
+        version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      ogygia:
+        specifier: workspace:*
+        version: link:../ogygia
+      svelte:
+        specifier: 5.56.8
+        version: 5.56.8
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
       vite:
         specifier: ^8.3.5
         version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)

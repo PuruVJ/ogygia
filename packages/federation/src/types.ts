@@ -7,7 +7,7 @@
  * team that baked its fragments.
  */
 import type { RegionValue } from 'ogygia';
-import type { Router } from 'ogygia/router';
+import type { Router } from '@ogygia/router';
 import type { Claims } from './wire.ts';
 
 /** Visitor claims resolver — `federate({ visitor })`. Reads the LIVE event (cookies, locals);
