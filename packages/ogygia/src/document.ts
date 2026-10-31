@@ -31,7 +31,7 @@ import { analyze } from './seed-refs.js';
 import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import { runtime_bootstrap } from './server/entry-location.js';
-import { freeze_capture_active } from './freeze/capture.js';
+import { current_facts } from './plugin/facts.js';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import { kit_render_context, type KitPage } from './server/kit-context.js';
 import { open_ask_scope, read_seed_ask, record_page } from './page-seed-registry.js';
@@ -205,10 +205,10 @@ export async function document(
 
 	const headers = new Headers({ 'content-type': 'text/html; charset=utf-8' });
 	// Programmatic documents are rendered per request — `no-store` by default, cacheable ones
-	// override via `headers`. Under an eligible FREEZE request the verdict owns this header
-	// instead (frozen → `public, s-maxage`; refused → `private, no-store`): stamping it here
-	// would read as the APP refusing, and no router page could ever freeze.
-	if (!freeze_capture_active()) headers.set('cache-control', 'no-store');
+	// override via `headers`. Under a render a plugin may store (`facts.storable`) the store's verdict
+	// owns this header instead (stored → `public, s-maxage`; refused → `private, no-store`):
+	// stamping it here would read as the APP refusing, and no router page could ever be stored.
+	if (!current_facts()?.storable) headers.set('cache-control', 'no-store');
 	if (options.headers) {
 		for (const [k, v] of new Headers(options.headers)) headers.set(k, v);
 	}

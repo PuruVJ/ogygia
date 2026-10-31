@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@ogygia/flags": "workspace:*",
+		"@ogygia/freeze": "workspace:*",
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {

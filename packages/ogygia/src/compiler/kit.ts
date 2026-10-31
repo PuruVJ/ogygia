@@ -148,12 +148,6 @@ export function kit_inline_style_threshold(root: string): number {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CSR_EXPORT = /export\s+const\s+csr(?:\s*:\s*boolean)?\s*=\s*(true|false)/;
-const FREEZE_EXPORT = /export\s+const\s+freeze(?:\s*:\s*boolean)?\s*=\s*(true|false)/;
-// Strip form (global): a route option file's `export const freeze = …` is REMOVED before Kit
-// sees the module — Kit's export validators reject any non-Kit page export. Length-preserving
-// (blanked to a same-length comment) so byte offsets — and source maps — are untouched.
-const FREEZE_EXPORT_STRIP_G =
-	/export\s+const\s+freeze(?:\s*:\s*boolean)?\s*=\s*(?:true|false)\s*;?/g;
 const OPTION_FILE_RE = /(?:^|[/\\])\+(?:page|layout)(?:\.server)?\.(?:js|ts)$/;
 // Comment strippers shared by the option-file readers: a COMMENTED-OUT `export const csr|freeze`
 // must never win the first-match read. Block comments, plus WHOLE-LINE `//` only (a partial-line
@@ -190,13 +184,33 @@ function read_csr_uncached(file: string): boolean | undefined {
 	}
 }
 
-/** Read `export const freeze = true|false` from a route options file; `undefined` if unset/absent.
+// ── ROUTE OPTIONS (a plugin's per-route boolean: plugin/routes.ts) ─────────────────────────
+// `export const <name> = true|false` in a page/layout option file, for each name a plugin declares
+// (`compile.routeOptions`). Read with Kit's own cascade (option-file chain, deepest declaration
+// wins, layouts included — the walk `csr` uses), and STRIPPED before Kit sees the module: Kit's
+// export validators reject any non-Kit page export. Names are validated identifiers (options.ts),
+// so the patterns built from them are safe; built once per name, used at build/dev time only.
+const option_read_re = new Map<string, RegExp>();
+const option_strip_re = new Map<string, RegExp>();
+function read_re(name: string): RegExp {
+	let re = option_read_re.get(name);
+	if (!re) option_read_re.set(name, (re = new RegExp(`export\\s+const\\s+${name}(?:\\s*:\\s*boolean)?\\s*=\\s*(true|false)`)));
+	return re;
+}
+function strip_re(name: string): RegExp {
+	let re = option_strip_re.get(name);
+	if (!re)
+		option_strip_re.set(name, (re = new RegExp(`export\\s+const\\s+${name}(?:\\s*:\\s*boolean)?\\s*=\\s*(?:true|false)\\s*;?`, 'g')));
+	return re;
+}
+
+/** Read `export const <name> = true|false` from a route options file; `undefined` if unset/absent.
  *  Same comment-stripping as {@link read_csr} so a commented-out declaration never wins. */
-export function read_freeze(file: string): boolean | undefined {
+export function read_route_option(file: string, name: string): boolean | undefined {
 	try {
 		let src = fs.readFileSync(file, 'utf-8');
 		src = src.replace(BLOCK_COMMENT_G, '').replace(LINE_COMMENT_G, '');
-		const m = FREEZE_EXPORT.exec(src);
+		const m = read_re(name).exec(src);
 		return m ? m[1] === 'true' : undefined;
 	} catch {
 		return undefined;
@@ -204,20 +218,21 @@ export function read_freeze(file: string): boolean | undefined {
 }
 
 /** True for a route option file (`+page(.server).{js,ts}` / `+layout(.server).{js,ts}`) under
- *  `routesDir` — where an `export const freeze` may live and must be stripped before Kit. */
+ *  `routesDir` — where a route option may live and must be stripped before Kit. */
 export function is_route_option_file(id: string, routesDir: string): boolean {
 	const clean = id.split('?')[0];
 	return clean.startsWith(routesDir) && OPTION_FILE_RE.test(clean);
 }
 
-/** Remove `export const freeze = true|false` from a route option file's source (length-preserving),
- *  so Kit's export validators never see the non-Kit page export. The VALUE is read from disk
- *  separately ({@link read_freeze} / {@link freezeRouteIds}); this only keeps Kit from choking. */
-export function strip_freeze_export(code: string): string {
-	if (!code.includes('freeze')) return code; // cheap out — the common file has none
-	return code.replace(FREEZE_EXPORT_STRIP_G, (m) =>
-		m.length >= 4 ? '/*' + ' '.repeat(m.length - 4) + '*/' : ' '.repeat(m.length)
-	);
+/** Remove each declared `export const <name> = true|false` from a route option file's source
+ *  (length-preserving: blanked to a same-length comment, so offsets and source maps hold). The
+ *  VALUES are read from disk separately ({@link page_route_options}); this keeps Kit from choking. */
+export function strip_route_options(code: string, names: readonly string[]): string {
+	for (const name of names) {
+		if (!code.includes(name)) continue; // cheap out — the common file has none
+		code = code.replace(strip_re(name), (m) => (m.length >= 4 ? '/*' + ' '.repeat(m.length - 4) + '*/' : ' '.repeat(m.length)));
+	}
+	return code;
 }
 
 const OPTION_FILES_PAGE = ['+page.js', '+page.ts', '+page.server.js', '+page.server.ts'];
@@ -423,25 +438,21 @@ export function csrTrueRouteIds(routesDir: string): string[] {
 	return [...ids];
 }
 
-// ── FREEZE opt-in (per-route / per-layout) ────────────────────────────────────────────────
-// `export const freeze = true|false` in a page/layout option file marks a route in or out of the
-// render-on-write store, using Kit's OWN cascade rule (option-file chain, deepest declaration wins,
-// layouts included — the same walk `csr` uses). The config `default` fills an unset route: `true`
-// keeps today's auto-by-observed-purity behaviour (opt OUT with `= false`); `false` is opt-in
-// (nothing stores unless a route/layout sets `= true`). Opt-in only makes a page ELIGIBLE — the
-// observed-purity check still refuses an impure render. Memoized per routesDir; cleared on a dev
-// route-topology change alongside the csr maps.
-const _page_freeze = new Map<string, Map<string, boolean | undefined>>();
+// ── ROUTE OPTIONS, per page ───────────────────────────────────────────────────────────────
+// Each page's declared value for every plugin route option, by Kit's cascade (see
+// read_route_option above). The plugin applies its own default to an undeclared page. Memoized per
+// routesDir + names; cleared on a dev route-topology change alongside the csr maps.
+const _page_options = new Map<string, Record<string, Record<string, boolean>>>();
 
 // A `+page.*` file: svelte host, universal, OR server — a route dir with ANY of these produces a
-// page RESPONSE. Unlike csr (which is about hydrating a rendered `+page.svelte`), a frozen page can
-// store a redirect-only route (a `+page.server.ts` that throws `redirect()`, no `+page.svelte`), so
-// the freeze enumeration must include those too.
+// page RESPONSE. Unlike csr (which is about hydrating a rendered `+page.svelte`), a route option
+// can concern a redirect-only route (a `+page.server.ts` that throws `redirect()`, no
+// `+page.svelte`: a stored redirect), so the enumeration includes those too.
 const PAGE_FILE_RE = /^\+page(\.server)?\.(svelte|js|ts)$/;
 
 /** Every route dir with a `+page.*` file — a route that produces a page response (rendered HTML or
  *  a stored redirect). Broader than {@link pageLeaves} (svelte-only) on purpose. */
-function freeze_page_dirs(routesDir: string): string[] {
+function option_page_dirs(routesDir: string): string[] {
 	const dirs = new Set<string>();
 	const walk = (dir: string) => {
 		for (const e of route_entries(dir)) {
@@ -454,10 +465,10 @@ function freeze_page_dirs(routesDir: string): string[] {
 	return [...dirs];
 }
 
-/** Own-chain effective `freeze` for one page DIR — deepest-wins over the layout chain (root →
- *  the dir, its own `+layout` included) then the page's own option files. `undefined` = no
- *  declaration anywhere (use the config default). */
-function own_chain_freeze(pageDir: string, routesDir: string): boolean | undefined {
+/** Own-chain declared value of one option for one page DIR — deepest-wins over the layout chain
+ *  (root → the dir, its own `+layout` included) then the page's own option files. `undefined` = no
+ *  declaration anywhere (the plugin's default applies). */
+function own_chain_option(pageDir: string, routesDir: string, name: string): boolean | undefined {
 	let val: boolean | undefined;
 	const rel = path.relative(routesDir, pageDir);
 	const parts = rel ? rel.split(path.sep) : [];
@@ -469,25 +480,15 @@ function own_chain_freeze(pageDir: string, routesDir: string): boolean | undefin
 	}
 	for (const d of chain) {
 		for (const f of OPTION_FILES_LAYOUT) {
-			const v = read_freeze(path.join(d, f));
+			const v = read_route_option(path.join(d, f), name);
 			if (v !== undefined) val = v;
 		}
 	}
 	for (const f of OPTION_FILES_PAGE) {
-		const v = read_freeze(path.join(pageDir, f));
+		const v = read_route_option(path.join(pageDir, f), name);
 		if (v !== undefined) val = v;
 	}
 	return val;
-}
-
-function page_freeze(routesDir: string): Map<string, boolean | undefined> {
-	let m = _page_freeze.get(routesDir);
-	if (!m) {
-		m = new Map();
-		for (const dir of freeze_page_dirs(routesDir)) m.set(dir, own_chain_freeze(dir, routesDir));
-		_page_freeze.set(routesDir, m);
-	}
-	return m;
 }
 
 /** A page directory's Kit `route.id`, group-stripped (`normalize_route_id`). */
@@ -496,23 +497,24 @@ function page_route_id(dir: string, routesDir: string): string {
 	return normalize_route_id('/' + (rel ? rel.split(path.sep).join('/') : ''));
 }
 
-/** Route ids (Kit `route.id`, group-stripped) whose EFFECTIVE freeze opt-in is TRUE, given the
- *  config `default`. The handle gates the render-on-write store/serve path on membership. */
-export function freezeRouteIds(routesDir: string, defaultOn: boolean): string[] {
-	const ids = new Set<string>();
-	for (const [dir, eff] of page_freeze(routesDir)) {
-		if ((eff ?? defaultOn) === true) ids.add(page_route_id(dir, routesDir));
+/** Every page route id (group-stripped) → each declared option's value. Undeclared options are
+ *  absent, so the plugin applies its default; a page with none declared maps to `{}`. */
+export function page_route_options(routesDir: string, names: readonly string[]): Record<string, Record<string, boolean>> {
+	const key = routesDir + '\0' + names.join(',');
+	let m = _page_options.get(key);
+	if (!m) {
+		m = {};
+		for (const dir of option_page_dirs(routesDir)) {
+			const values: Record<string, boolean> = {};
+			for (const name of names) {
+				const v = own_chain_option(dir, routesDir, name);
+				if (v !== undefined) values[name] = v;
+			}
+			m[page_route_id(dir, routesDir)] = values;
+		}
+		_page_options.set(key, m);
 	}
-	return [...ids];
-}
-
-/** EVERY page route id (group-stripped), opted in or not. The handle uses membership to tell "a
- *  Kit page whose cascaded value is false" from "not a page at all" (an endpoint route, or a
- *  request no file route claimed) — the latter fall back to the config `default`. */
-export function pageRouteIds(routesDir: string): string[] {
-	const ids = new Set<string>();
-	for (const dir of page_freeze(routesDir).keys()) ids.add(page_route_id(dir, routesDir));
-	return [...ids];
+	return m;
 }
 
 // Memoized per routesDir — a build-constant walked once, not per-transform. Dev route-topology
@@ -540,7 +542,7 @@ export function clear_route_csr_cache(): void {
 	_csr_of_file.clear();
 	_has_csr_true.clear();
 	_page_worlds.clear();
-	_page_freeze.clear();
+	_page_options.clear();
 }
 
 // The build-time keepalive route ogygia injects to defeat Kit's skip (see index.ts). It must be

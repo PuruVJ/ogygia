@@ -1,14 +1,51 @@
 /**
- * `import.meta.og.source(fn)` — the RUNTIME half (the compiler rewrites the macro to
- * `__og_source('<file#export>', fn, opts?)`, injecting this import). Isomorphic + tiny:
- * on the server, each call during a may-be-stored render records a receipt tag
- * (`s:<id>:<fingerprint(args)>`) into the request bag; everywhere else it is a pure
- * pass-through. `freeze.invalidate(fn, args)` reads the stamped id off the function —
- * one side, no strings, typos are type errors.
+ * DATA SOURCES — `import.meta.og.source(fn)`, the RUNTIME half (the compiler rewrites the macro to
+ * `__og_source('<file#export>', fn, opts?)`, injecting the import from `ogygia/internal`).
+ * Isomorphic + tiny: on the server, each call records a receipt tag (`s:<id>:<fingerprint(args)>`)
+ * — kept with the request's facts while its render may be stored (the invalidation reverse
+ * index), and shown to an observer (a federated fragment reporting what its render read);
+ * everywhere else it is a pure pass-through. `sourceTag(fn, args)` (the plugin door) reads the
+ * stamped id back off the function — one side, no strings, typos are type errors.
+ *
+ * The recorder and observer ride ONE `globalThis` slot: several module instances (dist entries,
+ * a plugin package beside core) must share the seam.
  */
-import { record_source_read } from './capture.js';
 // The house hash — runtime/hash.ts owns FNV-1a (region fps, flag buckets); never re-rolled.
-import { fnv1a } from '../runtime/hash.js';
+import { fnv1a } from './runtime/hash.js';
+
+interface SourceSlots {
+	recorder: ((tag: string) => void) | null;
+	observer: ((tag: string) => void) | null;
+}
+const slots: SourceSlots = ((globalThis as unknown as Record<symbol, SourceSlots>)[Symbol.for('ogygia.sources')] ??= {
+	recorder: null,
+	observer: null
+});
+
+/** hooks.ts installs this once — files a receipt with the current request's facts. */
+export function set_source_recorder(fn: ((tag: string) => void) | null): void {
+	slots.recorder = fn;
+}
+
+/** federate() installs this once — every receipt tag. */
+export function set_source_observer(fn: ((tag: string) => void) | null): void {
+	slots.observer = fn;
+}
+
+/** Called by the `__og_source` wrapper on every invocation (and by a peer handle for the tags it
+ *  ADOPTS from a remote fragment). Neither seam may fail the app's own call. */
+export function record_source_read(tag: string): void {
+	try {
+		slots.recorder?.(tag);
+	} catch {
+		/* a receipt must never fail the app's own call */
+	}
+	try {
+		slots.observer?.(tag);
+	} catch {
+		/* same law */
+	}
+}
 
 /** The identity stamp — read by `freeze.invalidate(fn, args)`. */
 export const SOURCE_ID: unique symbol = Symbol.for('ogygia.freeze.source-id');
@@ -68,4 +105,18 @@ export function __og_source<A extends unknown[], R>(
 	Object.defineProperty(wrapped, SOURCE_ID, { value: id });
 	if (opts?.key) Object.defineProperty(wrapped, SOURCE_KEY, { value: opts.key });
 	return wrapped;
+}
+
+/** A function stamped by the macro. */
+type SourceFn = ((...args: never[]) => unknown) & {
+	[SOURCE_ID]?: string;
+	[SOURCE_KEY]?: (...args: unknown[]) => string;
+};
+
+/** The receipt tag one `(source, args)` call files, or null when `fn` is not a declared source. */
+export function source_tag_of(fn: SourceFn, args: unknown[] = []): string | null {
+	const id = fn[SOURCE_ID];
+	if (!id) return null;
+	const key_fn = fn[SOURCE_KEY];
+	return source_tag(id, key_fn ? key_fn(...args) : fingerprint_args(args));
 }

@@ -158,8 +158,9 @@ declare module 'virtual:ogygia/profiler-config' {
 	export const profilerConfig: Record<string, unknown> | null;
 }
 declare module 'virtual:ogygia/server-plugins' {
-	/** The server halves of `ogygia({ plugins })`, in app order. SERVER only (client: empty). */
-	export const plugins: readonly import('./plugin/index.js').ServerPlugin<unknown>[];
+	/** The server realms of `ogygia({ plugins })` (name, options, the `<name>/server` module), in
+	 *  plugin order. SERVER only (client: empty). */
+	export const plugins: readonly import('./plugin/server.js').ServerPluginEntry[];
 }
 declare module 'virtual:ogygia/profiler-maps' {
 	/** The server build's module map and chunk sourcemaps as one JSON string (filled after the build),
@@ -167,20 +168,10 @@ declare module 'virtual:ogygia/profiler-maps' {
 	const maps: string | null;
 	export default maps;
 }
-declare module 'virtual:ogygia/freeze-config' {
-	/** Freeze policy from `ogygia({ freeze })`, or `null` when off. SERVER only (client: null).
-	 *  Non-null turns the handle's freeze (render-on-write) read/write path on. `default` is the
-	 *  app-wide opt-in (true = auto by observed purity, false = per-route opt-in). */
-	export const freezeConfig: { ttl: number; default: boolean } | null;
-}
-declare module 'virtual:ogygia/freeze-routes' {
-	/** Route ids (group-stripped) whose effective `export const freeze` opt-in is true, given the
-	 *  config `default` — the handle gates the store/serve path on membership. SSR leg only; the
-	 *  client leg is an empty set (the route list never ships to the browser). */
-	export const freeze_routes: ReadonlySet<string>;
-	/** EVERY page route id (group-stripped), opted in or not — lets the handle tell "a page whose
-	 *  cascaded value is false" from "not a page" (endpoint / unclaimed → config `default`). */
-	export const freeze_pages: ReadonlySet<string>;
+declare module 'virtual:ogygia/route-options' {
+	/** Every Kit page route id (group-stripped) → the plugin route options it declares (cascaded like
+	 *  csr; an undeclared option is absent). SSR leg only; `{}` on the client. */
+	export const route_options: Record<string, Record<string, boolean>>;
 }
 declare module 'virtual:ogygia/session-cookie' {
 	/** Cookie name sealed into the region MAC, or '' when unbound. From `ogygia({ sessionCookie })`. */

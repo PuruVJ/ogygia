@@ -1,12 +1,13 @@
 /**
- * `ogygia/freeze` — frozen pages (render-on-write). SERVER ONLY.
+ * `@ogygia/freeze` — frozen pages (render-on-write). SERVER ONLY.
  *
  * ```ts
  * // vite.config: the switch (+ serializable policy)
- * ogygia({ freeze: true })
+ * import { freeze } from '@ogygia/freeze/vite';
+ * ogygia({ plugins: [freeze()] })
  *
  * // hooks.server.ts: live objects, only for tier 2/3
- * import { freeze, valkey, upstash, akamai, cloudfront, cloudfrontAdapter } from 'ogygia/freeze';
+ * import { freeze, valkey, upstash, akamai, cloudfront } from '@ogygia/freeze';
  * freeze.configure({ store: valkey(client), edge: [akamai(creds), cloudfront(cfg)] });
  *
  * // anywhere server-side (CMS publish webhook):

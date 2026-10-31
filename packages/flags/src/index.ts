@@ -14,8 +14,9 @@
  * `onExposure` / `batchExposures` / `.bucket` / `.on` / `.stamp` collapses to: `flag()`, calling
  * it, `.pick()`, `.value()`, and one `decide()`.
  */
-import { DEV } from 'esm-env';
-import { fnv1a32, personalRead, noteAssignment, type StandardSchemaV1 } from 'ogygia/plugin';
+import { BROWSER, DEV } from 'esm-env';
+import { fnv1a32, type StandardSchemaV1 } from 'ogygia/plugin/utils';
+import { flags_app } from './app.js';
 
 export type CtxLike = {
 	request: Request;
@@ -189,10 +190,12 @@ function resolved_for(c: CtxLike, name: string): { variant: string; value?: unkn
 	return map?.[name];
 }
 let _unprimed_warned = false;
+let _unstarted_warned = false;
 
 /** Record the decided variant as a request fact: federation carries the set as signed claims. */
 function record_assigned(c: CtxLike, name: string, variant: string): void {
-	noteAssignment(c.request, name, variant);
+	const facts = flags_app()?.facts(c.request);
+	if (facts) facts.assignments[name] = variant;
 }
 
 // ── override (?og-exp) ───────────────────────────────────────────────────────────────────────
@@ -357,9 +360,20 @@ export function flag(
 
 	const bucket = (c: CtxLike): string => {
 		// every READ (fresh or memoized) is a per-visitor read: an A/B'd page must never be stored as
-		// ONE variant for everyone (freeze reads the fact). Priming deliberately does not report: it
-		// touches cookies on every request whether or not the page reads a flag.
-		personalRead(`flag:${name}`);
+		// ONE variant for everyone (a store plugin reads the fact). Priming deliberately does not
+		// report: it touches cookies on every request whether or not the page reads a flag.
+		const app = flags_app();
+		if (app) {
+			const facts = app.facts(c.request);
+			if (facts.perVisitor === null) facts.perVisitor = `flag:${name}`;
+		} else if (!BROWSER && !_unstarted_warned) {
+			// read on a server where the plugin never started: nothing reports the read, so a store
+			// plugin could keep ONE variant of an A/B'd page for everyone. Say it once, loudly.
+			_unstarted_warned = true;
+			console.warn(
+				'[ogygia] flags: a flag was read on the server but the flags plugin is not running — add `flags()` (from `@ogygia/flags/vite`) to `ogygia({ plugins })`. Until then flag reads are not reported to the request, and a stored page could keep one variant.'
+			);
+		}
 		const cached = memo.get(c.request);
 		if (cached !== undefined) return cached;
 		const variant = compute(c);

@@ -7,7 +7,12 @@ import { routes, when, mount } from '../src/router/index.js';
 import { make_peer } from '../src/federation/peer.js';
 // (the router's own flag integration; moves with the router into its package)
 import { flag, decide } from '../../flags/src/index.js';
-import { assignments } from '../src/plugin/facts.js';
+import flags_server from '../../flags/src/server.js';
+import { facts_of } from '../src/plugin/facts.js';
+import { startPlugin } from '../src/plugin/testing.js';
+
+// a flag read records its decision as a request fact through the started plugin
+startPlugin(flags_server, { name: '@ogygia/flags' });
 
 beforeEach(() => decide({ overrides: () => true, source: undefined, exposure: undefined }));
 afterEach(() => vi.unstubAllGlobals());
@@ -59,7 +64,7 @@ describe('when() — a gated-off route does not exist', () => {
 		});
 		const req = new Request('http://s/g?og-exp=when-carried:on');
 		await app.fetch(req);
-		expect(assignments(req)).toEqual({ 'when-carried': 'on' });
+		expect(facts_of(req).assignments).toEqual({ 'when-carried': 'on' });
 	});
 });
 

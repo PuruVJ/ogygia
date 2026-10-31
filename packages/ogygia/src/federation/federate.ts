@@ -7,8 +7,8 @@
  * Called at server module-eval (in or under hooks.server.ts). The handle reads the registration
  * back to serve `/og/fragment/*`, `/og/thaw`, and the deferred remote-region holes.
  */
-import { set_source_observer } from '../freeze/capture.js';
-import { set_thaw_notifier } from '../freeze/registry.js';
+import { set_source_observer } from '../source.js';
+import { register_hooks } from '../plugin/hooks.js';
 import { make_peer } from './peer.js';
 import { set_federation, current_federation } from './registry.js';
 import {
@@ -34,6 +34,7 @@ export function end_source_capture(): void {
 	active_sources = null;
 }
 
+let off_thaw: (() => void) | null = null;
 let observer_installed = false;
 function ensure_source_observer(): void {
 	if (observer_installed) return;
@@ -94,11 +95,18 @@ export function federate<P extends Record<string, PeerConfig>>(
 	set_federation(fed);
 	ensure_source_observer();
 
-	// THAW: every freeze.invalidate() on THIS app tells the peers that baked its fragments. A peer
-	// is notified whether or not it has a key (a pure consumer still needs to drop its SWR copies);
-	// signing only happens when this app has a private key.
-	set_thaw_notifier(async (tags) => {
-		await broadcast_thaw(fed, { id: crypto.randomUUID(), hop: 0, tags });
+	// THAW: every invalidation of THIS app's stored pages (the shared `invalidated` hook a store
+	// plugin calls) tells the peers that baked its fragments. A peer is notified whether or not it
+	// has a key (a pure consumer still needs to drop its SWR copies); signing only happens when this
+	// app has a private key. One implementation per process: a re-run of federate() replaces it.
+	// Fire and forget — a peer that is down never fails a publish (the TTL backstop holds).
+	off_thaw?.();
+	off_thaw = register_hooks({
+		invalidated(tags: string[] | 'all') {
+			void broadcast_thaw(fed, { id: crypto.randomUUID(), hop: 0, tags }).catch((e) => {
+				console.warn('[ogygia] federation: thaw notice to peers failed —', e);
+			});
+		}
 	});
 
 	return out;

@@ -11,6 +11,7 @@
 	"dependencies": {
 		"@corp/contracts": "workspace:*",
 		"@ogygia/flags": "workspace:*",
+		"@ogygia/freeze": "workspace:*",
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {

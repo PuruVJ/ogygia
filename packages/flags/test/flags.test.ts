@@ -13,7 +13,13 @@ import {
 	type CtxLike,
 	type FlagSource
 } from '../src/index.js';
-import { assignments as assigned_buckets, type StandardSchemaV1 } from 'ogygia/plugin';
+import type { StandardSchemaV1 } from 'ogygia/plugin/utils';
+import { startPlugin } from 'ogygia/plugin/testing';
+import server from '../src/server.js';
+
+// the plugin, started: a flag read records its decision as a request fact through its app
+const { app } = startPlugin(server, { name: '@ogygia/flags' });
+const assigned_buckets = (request: Request) => app.facts(request).assignments;
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 
@@ -290,6 +296,6 @@ describe('federation — decided flags auto-carry', () => {
 	it('a flag never read this request does NOT carry', () => {
 		flag('unread', 100);
 		const c = ctx('http://s/x', { vid: 'v1' });
-		expect(assigned_buckets(c.request)).toBeUndefined();
+		expect(assigned_buckets(c.request)).toEqual({});
 	});
 });

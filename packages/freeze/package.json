@@ -1,0 +1,65 @@
+{
+	"name": "@ogygia/freeze",
+	"private": true,
+	"version": "0.10.1",
+	"description": "Frozen pages for ogygia: a page whose render read nothing personal is stored once and served as bytes",
+	"type": "module",
+	"sideEffects": false,
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"directory": "packages/freeze"
+	},
+	"keywords": ["ogygia", "sveltekit", "cache", "cdn", "esi"],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./src/index.ts"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"default": "./src/server.ts"
+		},
+		"./vite": {
+			"types": "./dist/vite.d.ts",
+			"default": "./dist/vite.js"
+		}
+	},
+	"files": ["dist", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && vitest run",
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"ogygia": "workspace:^"
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"@sveltejs/kit": "^2.70.0",
+		"ogygia": "workspace:*",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"./server": {
+				"types": "./dist/server.d.ts",
+				"default": "./dist/server.js"
+			},
+			"./vite": {
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
+			}
+		}
+	}
+}

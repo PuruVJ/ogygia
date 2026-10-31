@@ -8,8 +8,7 @@
 import {
 	csrTrueRouteIds,
 	errorCsrTrueRouteIds,
-	freezeRouteIds,
-	pageRouteIds,
+	page_route_options,
 	rootLayoutCsrTrue
 } from '../kit.js';
 
@@ -68,20 +67,31 @@ export function profiler_config_module(
  * plugin, in the order the app listed them. The handle runs their stages straight off this list; an
  * app with no plugins gets an empty one (and the client always does).
  */
-export function server_plugins_module(ssr: boolean, modules: readonly string[]): string {
-	if (!ssr || modules.length === 0) return `export const plugins = [];`;
-	const imports = modules.map((m, i) => `import p${i} from ${JSON.stringify(m)};`).join('\n');
-	return `${imports}\nexport const plugins = [${modules.map((_, i) => `p${i}`).join(', ')}];`;
+/** One plugin's server realm, as the build wires it. */
+export interface ServerRealm {
+	/** the plugin's (package) name */
+	name: string;
+	/** `<name>/server` */
+	module: string;
+	/** the plugin's options (JSON) */
+	options: unknown;
 }
 
-/**
- * `virtual:ogygia/freeze-config` — SERVER only: the freeze policy from `ogygia({ freeze })`,
- * or `null` when off. Non-null turns the handle's freeze read/write path on (the switch +
- * serializable policy; live store/edge adapters enter via `freeze.configure()` in hooks).
- */
-export function freeze_config_module(ssr: boolean, freeze_config: { ttl: number } | null): string {
-	if (!ssr) return `export const freezeConfig = null;`;
-	return `export const freezeConfig = ${JSON.stringify(freeze_config)};`;
+export function server_plugins_module(ssr: boolean, realms: readonly ServerRealm[]): string {
+	if (!ssr || realms.length === 0) return `export const plugins = [];`;
+	const imports = realms.map((r, i) => `import p${i} from ${JSON.stringify(r.module)};`).join('\n');
+	const list = realms
+		.map((r, i) => `{ name: ${JSON.stringify(r.name)}, options: ${JSON.stringify(r.options)}, server: p${i} }`)
+		.join(',\n\t');
+	return `${imports}\nexport const plugins = [\n\t${list}\n];`;
+}
+
+/** `virtual:ogygia/route-options` — SERVER only: every Kit page route id → the plugin route options
+ *  it declares (`export const <name>`, cascaded like csr; undeclared options absent). Empty on the
+ *  client, and when no plugin declares an option: the route list never ships to the browser. */
+export function route_options_module(ssr: boolean, routesDir: string, names: readonly string[]): string {
+	if (!ssr || names.length === 0) return `export const route_options = {};`;
+	return `export const route_options = ${JSON.stringify(page_route_options(routesDir, names))};`;
 }
 
 /** `virtual:ogygia/rate-limit` — SERVER only; the region handle is the only consumer. */
@@ -123,18 +133,5 @@ export function route_csr_module(ssr: boolean, routesDir: string): string {
 		`export const csr_true_routes = new Set(${JSON.stringify(csrTrueRouteIds(routesDir))});\n` +
 		`export const error_csr_true_routes = new Set(${JSON.stringify(errorCsrTrueRouteIds(routesDir))});\n` +
 		`export const root_layout_csr_true = ${rootLayoutCsrTrue(routesDir)};`
-	);
-}
-
-/** `virtual:ogygia/freeze-routes` — SERVER only: the route ids whose effective `export const
- *  freeze` opt-in is true, given the config `default`. The handle stores/serves a page only when
- *  its route is in this set (then the observed-purity check still decides eligibility). Empty on the
- *  client — the route list never ships to the browser. */
-export function freeze_routes_module(ssr: boolean, routesDir: string, defaultOn: boolean): string {
-	if (!ssr)
-		return `export const freeze_routes = new Set();\nexport const freeze_pages = new Set();`;
-	return (
-		`export const freeze_routes = new Set(${JSON.stringify(freezeRouteIds(routesDir, defaultOn))});\n` +
-		`export const freeze_pages = new Set(${JSON.stringify(pageRouteIds(routesDir))});`
 	);
 }

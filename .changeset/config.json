@@ -3,7 +3,7 @@
 	"baseBranch": "main",
 	"access": "public",
 	"ignore": [],
-	"fixed": [["ogygia", "@ogygia/flags"]],
+	"fixed": [["ogygia", "@ogygia/flags", "@ogygia/freeze"]],
 	"linked": [],
 	"format": "auto",
 	"updateInternalDependencies": "patch",

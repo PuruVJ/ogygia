@@ -14,7 +14,7 @@ import { region } from '../region.js';
 import LayoutChain from './LayoutChain.svelte';
 import RawHtml from '../RawHtml.svelte';
 import { compile_all, match_path, fill, type CompiledPattern } from './match.js';
-import { register_freeze_router } from '../freeze/routers.js';
+import { register_route_options } from '../plugin/routes.js';
 import { make_ctx, type Ctx, type Visitor } from './ctx.js';
 import {
 	compile_endpoint,
@@ -170,12 +170,13 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 	const compiled: CompiledPattern[] = compile_all(leaves.map((l) => l.pattern));
 	const by_pattern = new Map(leaves.map((l) => [l.pattern, l]));
 
-	// FREEZE opt-in, cascaded like the file world: page > innermost … outermost layout > table
-	// (`layouts` is OUTERMOST-first, so scan from the end). Endpoints are never pages → null
-	// ("mine, undeclared" — the handle applies the config default). Registered under a key so a
-	// dev re-evaluation of hooks.server.ts REPLACES this table's matcher instead of shadowing it.
-	const freeze_of = (leaf: Leaf): boolean | null => {
-		if (!is_page(leaf.def)) return null;
+	// ROUTE OPTIONS (plugin/routes.ts), cascaded like the file world: page > innermost … outermost
+	// layout > table (`layouts` is OUTERMOST-first, so scan from the end). Endpoints are never
+	// pages → null ("mine, undeclared" — the plugin applies its default). The router declares
+	// `freeze` today. Registered under a key so a dev re-evaluation of hooks.server.ts REPLACES this
+	// table's matcher instead of shadowing it.
+	const option_of = (leaf: Leaf, option: string): boolean | null => {
+		if (option !== 'freeze' || !is_page(leaf.def)) return null;
 		if (leaf.def.freeze !== undefined) return leaf.def.freeze;
 		for (let i = leaf.def.layouts.length - 1; i >= 0; i--) {
 			const f = leaf.def.layouts[i].freeze;
@@ -183,7 +184,7 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		}
 		return opts.freeze ?? null;
 	};
-	register_freeze_router(base + '|' + leaves.map((l) => l.pattern).join(','), (pathname) => {
+	register_route_options(base + '|' + leaves.map((l) => l.pattern).join(','), (pathname, option) => {
 		let path = pathname;
 		if (base) {
 			if (path === base) path = '/';
@@ -192,7 +193,7 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 		}
 		path = canonical_slash(path, slash) ?? path;
 		const hit = match_path(compiled, path);
-		return hit ? freeze_of(by_pattern.get(hit.pattern)!) : undefined;
+		return hit ? option_of(by_pattern.get(hit.pattern)!, option) : undefined;
 	});
 
 	const href_fn = (pattern: string, params?: Record<string, string | number>) =>

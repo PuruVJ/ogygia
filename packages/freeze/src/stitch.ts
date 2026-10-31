@@ -18,7 +18,7 @@
 /** Cheap presence probe — the capture uses it to flag entries; serves use it to skip the scan. */
 export const STITCH_HOLE_RE: RegExp = /<ogygia-region\b[^>]*\bstitch\b[^>]*>/;
 
-import { escape_amp_quot } from '../escape.js';
+import { escapeAttr as escape_amp_quot } from 'ogygia/plugin/utils';
 
 // Hoisted tokens for the balanced scan (regions NEST — a hole's fallback can contain regions).
 const REGION_TOKEN_RE = /<ogygia-region\b[^>]*>|<\/ogygia-region>/g;

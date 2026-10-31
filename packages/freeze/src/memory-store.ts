@@ -6,7 +6,7 @@
  */
 import type { FreezeEntry, FreezePutOptions, FreezeStore } from './types.js';
 import { normalize_prefix, subtree_prefix } from './key.js';
-import { SizedLru } from '../server/sized-lru.js';
+import { SizedLru } from 'ogygia/plugin/utils';
 
 /** Resident budget for frozen pages (a stored page can be multi-MB; a count alone bounds nothing). */
 const DEFAULT_MAX_BYTES = 64 * 1024 * 1024;

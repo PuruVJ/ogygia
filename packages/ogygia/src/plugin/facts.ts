@@ -1,40 +1,74 @@
 /**
- * Shared request FACTS — the only state plugins share with core and with each other. A fact is
- * filled by whoever learns it and read by whoever needs it; neither side imports the other.
+ * FACTS — per-request shared state. A fact is filled by whoever learns it and read by whoever needs
+ * it; neither side imports the other. Keyed by the `Request` (every request has its own record, made
+ * on first touch, gone with the request), so a plugin's own code can reach them outside a hook too:
+ * a `flag()` read during the render holds its request.
  *
- * The state sits on ONE global slot, not module scope: a plugin package and core can end up as two
- * module instances of this file (a workspace link, a dual install, src beside dist), and a fact
- * written through one must be read through the other.
+ * Plugins add their own facts by declaration merging:
+ *
+ *   declare module 'ogygia/plugin' { interface RequestFacts { myThing?: string } }
+ *
+ * One global slot, not module scope: a plugin package and core can end up as two module instances
+ * of this file (src beside dist, a dual install), and a fact written through one must be read
+ * through the other.
  */
-interface FactsSlot {
-	personal_sink: ((label: string) => void) | null;
-	assigned: WeakMap<Request, Record<string, string>>;
+export interface RequestFacts {
+	/** This render MAY be stored and served to others later (a plugin decided so before the render):
+	 *  the holes it mints get prerender-grade capabilities, and data-source receipts are kept. */
+	storable: boolean;
+	/** The first reason this render is per-visitor (a flag read, a streamed promise, a personal
+	 *  cookie or header a plugin observed), named for the dev note — or null. */
+	perVisitor: string | null;
+	/** The page streams load promises after the document. */
+	streamed: boolean;
+	/** The response belongs to one browser (devtools switched on for it): never store or share it. */
+	private: boolean;
+	/** An app transform renders this router-fetched page as an ANSWER, a form a store keyed by path
+	 *  does not hold. */
+	answerForm: boolean;
+	/** Data-source receipts (`s:<id>:<fp>`) filed while `storable`; null otherwise. */
+	sources: string[] | null;
+	/** Every flag decided for this request (name → variant): federation carries them as claims. */
+	assignments: Record<string, string>;
 }
-const slot: FactsSlot = ((globalThis as Record<symbol, FactsSlot | undefined>)[Symbol.for('ogygia.facts.v1')] ??= {
-	personal_sink: null,
-	assigned: new WeakMap()
+
+interface FactsSlot {
+	by_request: WeakMap<Request, RequestFacts>;
+	/** core (hooks.ts): the Request of the code running now, through Kit's request store */
+	current: (() => Request | undefined) | null;
+}
+const slot: FactsSlot = ((globalThis as Record<symbol, FactsSlot | undefined>)[Symbol.for('ogygia.facts.v2')] ??= {
+	by_request: new WeakMap(),
+	current: null
 });
 
-/** Core only (hooks.ts): where a personal read lands for the current request. */
-export function set_personal_read_sink(fn: ((label: string) => void) | null): void {
-	slot.personal_sink = fn;
+/** This request's facts (made on first touch). */
+export function facts_of(request: Request): RequestFacts {
+	let facts = slot.by_request.get(request);
+	if (!facts)
+		slot.by_request.set(
+			request,
+			(facts = { storable: false, perVisitor: null, streamed: false, private: false, answerForm: false, sources: null, assignments: {} })
+		);
+	return facts;
 }
 
-/** This render read something that differs per visitor (a flag decision), named for the dev note
- *  (`flag:hero`). A page that did must never be stored and served to everyone — the freeze verdict
- *  reads it. Safe in any bundle: on the client, or outside a page render, it is a no-op. */
-export function personal_read(label: string): void {
-	slot.personal_sink?.(label);
+/** Core only (hooks.ts): how the running code's Request is found. */
+export function set_current_request(fn: (() => Request | undefined) | null): void {
+	slot.current = fn;
 }
 
-/** A flag decided `variant` for this request (flags write it on every read). */
-export function note_assignment(request: Request, name: string, variant: string): void {
-	let map = slot.assigned.get(request);
-	if (!map) slot.assigned.set(request, (map = {}));
-	map[name] = variant;
+/** The facts of the request the running code belongs to, or null outside one (the client, a test). */
+export function current_facts(): RequestFacts | null {
+	try {
+		const request = slot.current?.();
+		return request ? facts_of(request) : null;
+	} catch {
+		return null;
+	}
 }
 
-/** Every (flag → variant) this request decided so far — federation carries it as signed claims. */
-export function assignments(request: Request): Record<string, string> | undefined {
-	return slot.assigned.get(request);
+/** Name the first reason a render is per-visitor (later reasons do not replace it). */
+export function mark_per_visitor(facts: RequestFacts, reason: string): void {
+	if (facts.perVisitor === null) facts.perVisitor = reason;
 }

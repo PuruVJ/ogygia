@@ -136,14 +136,6 @@
 			"types": "./dist/router/client-api.d.ts",
 			"default": "./src/router/client-api.ts"
 		},
-		"./freeze": {
-			"types": "./dist/freeze/index.d.ts",
-			"default": "./src/freeze/index.ts"
-		},
-		"./freeze/source": {
-			"types": "./dist/freeze/source-runtime.d.ts",
-			"default": "./src/freeze/source-runtime.ts"
-		},
 		"./federation": {
 			"types": "./dist/federation/index.d.ts",
 			"default": "./src/federation/index.ts"
@@ -151,6 +143,14 @@
 		"./plugin": {
 			"types": "./dist/plugin/index.d.ts",
 			"default": "./src/plugin/index.ts"
+		},
+		"./plugin/utils": {
+			"types": "./dist/plugin/utils.d.ts",
+			"default": "./src/plugin/utils.ts"
+		},
+		"./plugin/testing": {
+			"types": "./dist/plugin/testing.d.ts",
+			"default": "./src/plugin/testing.ts"
 		},
 		"./devtools": {
 			"types": "./dist/devtools/index.d.ts",
@@ -379,14 +379,6 @@
 				"types": "./dist/router/client-api.d.ts",
 				"default": "./dist/router/client-api.js"
 			},
-			"./freeze": {
-				"types": "./dist/freeze/index.d.ts",
-				"default": "./dist/freeze/index.js"
-			},
-			"./freeze/source": {
-				"types": "./dist/freeze/source-runtime.d.ts",
-				"default": "./dist/freeze/source-runtime.js"
-			},
 			"./federation": {
 				"types": "./dist/federation/index.d.ts",
 				"default": "./dist/federation/index.js"
@@ -394,6 +386,14 @@
 			"./plugin": {
 				"types": "./dist/plugin/index.d.ts",
 				"default": "./dist/plugin/index.js"
+			},
+			"./plugin/utils": {
+				"types": "./dist/plugin/utils.d.ts",
+				"default": "./dist/plugin/utils.js"
+			},
+			"./plugin/testing": {
+				"types": "./dist/plugin/testing.d.ts",
+				"default": "./dist/plugin/testing.js"
 			},
 			"./devtools": {
 				"types": "./dist/devtools/index.d.ts",

@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { freeze } from 'ogygia/freeze';
+import { freeze } from '@ogygia/freeze';
 import { cms_publish } from '$lib/server/state.js';
 import { read_doc } from '$lib/server/sources.js';
 

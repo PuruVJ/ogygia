@@ -26,6 +26,8 @@ export { __register_transportable } from './live-transport.js';
 export { __og_$, __register_fn } from './fn-transport.js';
 export { __og_store, __register_store_factory, mark_store } from './store-transport.js';
 export { __og_boundary, configure_boundary } from './boundary.js';
+// `import.meta.og.source(fn)` compiles to `__og_source('<file#export>', fn)`.
+export { __og_source } from './source.js';
 export { __tag_context } from './context-bridge.js';
 
 // Compiler-emitted currency — never hand-authored, so they live on the INTERNAL barrel (the public

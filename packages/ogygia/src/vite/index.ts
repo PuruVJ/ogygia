@@ -35,6 +35,9 @@ export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.js';
 export type { ImportKeys } from '../compiler/region/transform.js';
 // The debarrel pass as a standalone plugin for any Vite app (inside ogygia it rides `barrels`).
 export { debarrel } from '../compiler/debarrel/plugin.js';
+// the BUILD side of a plugin (design: internal/notes/packages.md, plugin API v2)
+export { definePlugin } from './plugin-api.js';
+export type { OgygiaPlugin, BuildContext } from './plugin-api.js';
 export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.js';
 export type {
 	OgygiaPreset,
@@ -43,10 +46,11 @@ export type {
 	ContentPreset,
 	OgygiaOptions
 } from './options.js';
+import { check_plugins, resolve_plugins } from './plugin-api.js';
+import type { ServerRealm } from '../compiler/link/caps.js';
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
-	validate_plugins,
 	validate_content_presets,
 	resolve_options
 } from './options.js';
@@ -59,7 +63,7 @@ import {
 	resolve_kit_paths,
 	kit_major,
 	is_route_option_file,
-	strip_freeze_export,
+	strip_route_options,
 	kit_dirs,
 	kit_inline_style_threshold
 } from '../compiler/kit.js';
@@ -107,7 +111,7 @@ import {
 	V_KIT_WIRE,
 	V_ROUTER_CSS,
 	V_ROUTE_CSR,
-	V_FREEZE_ROUTES,
+	V_ROUTE_OPTIONS,
 	RESOLVED,
 	V_SERVER_MANIFEST
 } from '../compiler/ids.js';
@@ -208,9 +212,11 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const visibleMargin = options.regions?.visible?.margin;
 	const presets = options.regions?.presets || {};
 	validate_region_presets(presets);
-	// `ogygia({ plugins })` — each plugin's server half, wired into the handle through
-	// `virtual:ogygia/server-plugins` (standalone has no handle to wire into)
-	const server_plugins = standalone ? [] : validate_plugins(options.plugins);
+	// `ogygia({ plugins })` — shape-checked now; their realms are found and their `build` hooks run
+	// once the root and mode are known (configResolved). Standalone has no handle to wire into.
+	const app_plugins = standalone ? [] : check_plugins(options.plugins);
+	let server_plugins: ServerRealm[] = [];
+	let route_options: string[] = [];
 	const import_keys = normalize_import_keys(options.importKeys);
 	// `ogygia({ profiler })` — the profiler is configured ONLY here. Normalized to a config object (or
 	// null when off) and baked into `virtual:ogygia/profiler-config`; `ogygia.handle()` reads it and
@@ -232,22 +238,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		typeof options.profiler === 'object' &&
 		'secret' in options.profiler &&
 		!options.profiler.secret;
-	// `ogygia({ freeze })` — the render-on-write switch + serializable policy, baked into
-	// `virtual:ogygia/freeze-config` (the profiler-config pipe). Live adapters (store clients,
-	// purge creds) can never ride a virtual module — they enter via `freeze.configure()` in
-	// hooks.server.ts. TTL backstop clamped to [1, 86400]: nothing is stale forever.
-	const freeze_config: { ttl: number; default: boolean } | null =
-		!standalone && options.freeze
-			? {
-					ttl: Math.min(
-						86400,
-						Math.max(1, Math.floor(options.freeze === true ? 86400 : (options.freeze.ttl ?? 86400)))
-					),
-					// `true` / `{ }` / `{ ttl }` → default ON (auto by observed purity, opt OUT per route).
-					// `{ default: false }` → OPT-IN (a route/layout opts IN with `export const freeze = true`).
-					default: options.freeze === true ? true : (options.freeze.default ?? true)
-				}
-			: null;
 	// Compile surfaces beyond the app's src — ONE mechanism for ogygia's own profiler UI and for
 	// dependencies that declare `"ogygia": { "files": […] }` in their package.json (discovered in
 	// the config hook, where root is known; the array is captured by reference into the CompileCtx
@@ -723,6 +713,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks, kit_transport_init } =
 					resolve_kit_paths(root));
 
+				// PLUGINS: their realms, found by name, and their `build` hooks (now that root + mode exist)
+				({ servers: server_plugins, route_options } = resolve_plugins(app_plugins, root, is_dev));
+
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
 				// the snapshot is complete before the driver is first called.
@@ -735,7 +728,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						pkg_scan,
 						profiler_config,
 						server_plugins,
-						freeze_config,
+						route_options,
 						is_dev,
 						id_salt,
 						visibleMargin,
@@ -1064,8 +1057,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					clear_route_csr_cache();
 					if (vite_server) {
 						invalidate_module_id(vite_server, RESOLVED(V_ROUTE_CSR));
-						// FREEZE: an `export const freeze` add/flip changes the opt-in route set too.
-						invalidate_module_id(vite_server, RESOLVED(V_FREEZE_ROUTES));
+						// a plugin route option (`export const freeze`) add/flip changes the baked values too
+						invalidate_module_id(vite_server, RESOLVED(V_ROUTE_OPTIONS));
 					}
 				}
 				// Unlink often skips handleHotUpdate; drop islands that still import the deleted file.
@@ -1323,13 +1316,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					source += KIT_PAGE_THREAD;
 				}
 
-				// FREEZE opt-in: strip `export const freeze = true|false` from a route option file
-				// before Kit imports the module — Kit's export validators reject any non-Kit page
-				// option, in all three legs (server node analysis, client runtime, build analyse). We
-				// run enforce:'pre', so Kit only ever sees the stripped module; the VALUE is read from
-				// disk into `virtual:ogygia/freeze-routes`, independent of this in-memory strip.
-				if (freeze_config && is_route_option_file(id, kit_dirs(root).routes_dir)) {
-					source = strip_freeze_export(source);
+				// ROUTE OPTIONS: strip each plugin's `export const <name> = true|false` from a route
+				// option file before Kit imports the module — Kit's export validators reject any non-Kit
+				// page option, in all three legs (server node analysis, client runtime, build analyse).
+				// We run enforce:'pre', so Kit only ever sees the stripped module; the VALUES are read
+				// from disk into `virtual:ogygia/route-options`, independent of this in-memory strip.
+				if (route_options.length && is_route_option_file(id, kit_dirs(root).routes_dir)) {
+					source = strip_route_options(source, route_options);
 				}
 
 				// The whole per-file pass — content-preset tag ▸ macros ▸ host-island transform ▸ ts-region

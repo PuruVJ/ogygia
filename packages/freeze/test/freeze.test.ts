@@ -2,11 +2,11 @@
 // when REDIS_URL is set), observed purity, single-flight + fan-out, and the two edge adapters'
 // REAL request shapes (signing included) captured through a stubbed fetch.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { freeze_key, normalize_prefix, prefix_tags, PREFIX_TAG_DEPTH } from '../src/freeze/key.js';
-import { memory_store } from '../src/freeze/memory-store.js';
-import { valkey, type ValkeyLike } from '../src/freeze/adapters/valkey.js';
-import { akamai } from '../src/freeze/adapters/akamai.js';
-import { cloudfront } from '../src/freeze/adapters/cloudfront.js';
+import { freeze_key, normalize_prefix, prefix_tags, PREFIX_TAG_DEPTH } from '../src/key.js';
+import { memory_store } from '../src/memory-store.js';
+import { valkey, type ValkeyLike } from '../src/adapters/valkey.js';
+import { akamai } from '../src/adapters/akamai.js';
+import { cloudfront } from '../src/adapters/cloudfront.js';
 import {
 	configure,
 	reset_for_tests,
@@ -16,10 +16,10 @@ import {
 	begin_flight,
 	invalidate,
 	invalidateWhere
-} from '../src/freeze/registry.js';
-import { observe_event } from '../src/freeze/observe.js';
-import { find_stitch_holes, stitch_html } from '../src/freeze/stitch.js';
-import type { FreezeEntry, FreezeStore, EdgeAdapter } from '../src/freeze/types.js';
+} from '../src/registry.js';
+import { observe_event } from '../src/observe.js';
+import { find_stitch_holes, stitch_html } from '../src/stitch.js';
+import type { FreezeEntry, FreezeStore, EdgeAdapter } from '../src/types.js';
 
 const page_entry = (html = '<html>x</html>'): FreezeEntry => ({
 	kind: 'page',
@@ -224,7 +224,14 @@ const REDIS_URL = process.env.REDIS_URL;
 describe.skipIf(!REDIS_URL)('store contract: valkey (REAL server via REDIS_URL)', () => {
 	// Lane 2: identical spec against a live server. Loaded lazily so the suite has no redis dep.
 	it('runs the shared contract', async () => {
-		const { createClient } = await import('redis');
+		// a variable specifier: the typecheck never needs redis installed either
+		const redis = 'redis';
+		const { createClient } = (await import(/* @vite-ignore */ redis)) as {
+			createClient(options: { url?: string }): {
+				connect(): Promise<unknown>;
+				quit(): Promise<unknown>;
+			};
+		};
 		const client = createClient({ url: REDIS_URL });
 		await client.connect();
 		try {
@@ -383,6 +390,22 @@ describe('freeze/observe', () => {
 		const obs = observe_event(event as never);
 		event.locals.user;
 		expect(obs.disqualified_by).toBe('locals.user');
+	});
+
+	it('the reason lands in the request facts (perVisitor); the first one wins', () => {
+		const facts = { perVisitor: null as string | null };
+		const event = fake_event({ cookies: { session: 'abc' }, locals: { user: { id: 7 } } });
+		const obs = observe_event(event as never, facts);
+		event.cookies.get('session');
+		event.locals.user;
+		expect(facts.perVisitor).toBe('cookie:session');
+		expect(obs.disqualified_by).toBe('cookie:session');
+	});
+
+	it('a reason already on the facts (a flag read) is what the observation reports', () => {
+		const facts = { perVisitor: 'flag:hero' as string | null };
+		const obs = observe_event(fake_event() as never, facts);
+		expect(obs.disqualified_by).toBe('flag:hero');
 	});
 });
 

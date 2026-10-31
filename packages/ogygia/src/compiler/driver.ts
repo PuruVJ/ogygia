@@ -65,12 +65,11 @@ import {
 	sign_module,
 	profiler_config_module,
 	server_plugins_module,
-	freeze_config_module,
 	rate_limit_module,
 	session_cookie_module,
 	region_ttl_module,
 	route_csr_module,
-	freeze_routes_module
+	route_options_module
 } from './link/caps.js';
 import { router_config_module } from './link/router-config.js';
 import {
@@ -116,8 +115,7 @@ import {
 	V_MANIFEST,
 	V_TRANSPORTABLES,
 	V_TRANSPORTABLES_EAGER,
-	V_FREEZE_CONFIG,
-	V_FREEZE_ROUTES
+	V_ROUTE_OPTIONS
 } from './ids.js';
 import { strip_id, host_key } from './program.js';
 import { mentions_page_store, page_data_keys_answer } from './link/page-keys.js';
@@ -1267,9 +1265,6 @@ export class Compiler {
 				? `export default ${JSON.stringify(PROFILER_MAPS_PLACEHOLDER)};`
 				: 'export default null;';
 		}
-		if (id === RESOLVED(V_FREEZE_CONFIG)) {
-			return freeze_config_module(ssr, ctx.freeze_config);
-		}
 		if (id === RESOLVED(V_ROUTER_CONFIG)) {
 			return router_config_module(ctx.router_enabled, ctx.router_view_transitions);
 		}
@@ -1282,12 +1277,8 @@ export class Compiler {
 		if (id === RESOLVED(V_ROUTE_CSR)) {
 			return route_csr_module(ssr, kit_dirs(ctx.root).routes_dir);
 		}
-		if (id === RESOLVED(V_FREEZE_ROUTES)) {
-			return freeze_routes_module(
-				ssr,
-				kit_dirs(ctx.root).routes_dir,
-				ctx.freeze_config?.default ?? false
-			);
+		if (id === RESOLVED(V_ROUTE_OPTIONS)) {
+			return route_options_module(ssr, kit_dirs(ctx.root).routes_dir, ctx.route_options);
 		}
 		if (id === RESOLVED(V_SERVER_MANIFEST)) {
 			// Populated in BOTH dev and build (unlike the client manifest, which dev fills from URLs).
@@ -1405,7 +1396,7 @@ export class Compiler {
 		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);
 		if (source === V_REGION_TTL) return RESOLVED(V_REGION_TTL);
 		if (source === V_ROUTE_CSR) return RESOLVED(V_ROUTE_CSR);
-		if (source === V_FREEZE_ROUTES) return RESOLVED(V_FREEZE_ROUTES);
+		if (source === V_ROUTE_OPTIONS) return RESOLVED(V_ROUTE_OPTIONS);
 		if (source === V_SERVER_MANIFEST) return RESOLVED(V_SERVER_MANIFEST);
 		if (source === V_REQUEST_EVENT) return RESOLVED(V_REQUEST_EVENT);
 		if (source === V_REGION_ENDPOINT) return RESOLVED(V_REGION_ENDPOINT);
@@ -1418,7 +1409,6 @@ export class Compiler {
 		if (source === V_TRANSPORT) return RESOLVED(V_TRANSPORT);
 		if (source === V_TRANSPORTABLES) return RESOLVED(V_TRANSPORTABLES);
 		if (source === V_TRANSPORTABLES_EAGER) return RESOLVED(V_TRANSPORTABLES_EAGER);
-		if (source === V_FREEZE_CONFIG) return RESOLVED(V_FREEZE_CONFIG);
 		if (is_registry_stub_id(source)) return RESOLVED(source);
 
 		// csr=false CLIENT leg of a BUILD: a route host's import of a `.ts`/`.js` REGION REGISTRY

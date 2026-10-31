@@ -8,7 +8,7 @@ import type { DebarrelOptions } from '../compiler/debarrel/options.js';
 import type { ProfilerOptions } from '../profiler/index.js';
 import type { ContentPluginOptions } from '../content/vite/plugin.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
-import { PLUGIN_API, type OgygiaPlugin } from '../plugin/index.js';
+import type { OgygiaPlugin } from './plugin-api.js';
 
 // ── regexes
 const IDENT_NAME_RE = /^[\w-]+$/;
@@ -235,29 +235,11 @@ export interface OgygiaOptions {
 	profiler?: boolean | ProfilerOptions;
 
 	/**
-	 * The app's plugins, in order — each one a `@ogygia/*` package's `/vite` factory
-	 * (`plugins: [flags()]`). Named here once: the build wires each plugin's server half into
-	 * `ogygia.handle()`, so hooks.server.ts never mentions it.
+	 * The app's plugins, in order (`plugins: [flags(), freeze()]`). Named here once: the build finds
+	 * each plugin's realms by its name and wires them in (its server half into `ogygia.handle()`), so
+	 * hooks.server.ts never mentions it.
 	 */
 	plugins?: OgygiaPlugin[];
-
-	/**
-	 * Frozen pages (render-on-write) — the SWITCH + serializable policy, nothing else.
-	 * `true` turns the handle's freeze read/write path on with the tier-1 in-process store: a
-	 * page whose render observed no personalization is stored whole and served as bytes until
-	 * `freeze.invalidate(url)` / `freeze.invalidateWhere({ prefix })` or the TTL backstop.
-	 * Live adapters (a valkey client, CDN purge creds) can never ride a virtual module — they are
-	 * configured in hooks.server.ts via `freeze.configure({ store, edge })` from
-	 * `'ogygia/freeze'`. `{ ttl }` overrides the backstop seconds (clamped to [1, 86400]).
-	 *
-	 * `{ default }` sets the app-wide opt-in: `true` (the default, and what a bare `true` gives)
-	 * keeps the auto behaviour — every eligible page is stored, observed-purity refuses the rest,
-	 * and a route opts OUT with `export const freeze = false`. `false` flips the whole app to
-	 * OPT-IN: nothing is stored unless a page or a layout it sits under declares
-	 * `export const freeze = true` (it cascades like `csr`, deepest declaration wins). The export
-	 * is read and stripped by ogygia before Kit sees it, so Kit never rejects the non-Kit option.
-	 */
-	freeze?: boolean | { ttl?: number; default?: boolean };
 
 	/**
 	 * Barrel imports become leaf imports at transform time — `import { Button } from '$lib'` (an
@@ -290,7 +272,9 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 	presets: '`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.',
 	continuity:
 		'`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it.',
-	regionTtl: '`regionTtl` moved into the regions subsystem — write `regions: { ttl: … }`.'
+	regionTtl: '`regionTtl` moved into the regions subsystem — write `regions: { ttl: … }`.',
+	freeze:
+		'`freeze` is a plugin now — install `@ogygia/freeze` and write `plugins: [freeze({ ttl, default })]` (from `@ogygia/freeze/vite`).'
 };
 
 /** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
@@ -305,36 +289,6 @@ export function assert_no_legacy_options(options: OgygiaOptions): void {
 			'[ogygia] `regions.preload` is gone — there is nothing to choose any more. The page carries each island’s chunk list as data, and the runtime preloads an island’s whole graph when it wakes (after the page has painted), so no island code moves before its wake and none waits on a waterfall after it. Remove the key.'
 		);
 	}
-}
-
-/**
- * Config-time plugin check: each entry is a plugin value (not the factory itself), written against
- * this core's `PLUGIN_API`, named once. Returns the server-half module ids in app order.
- */
-export function validate_plugins(plugins: unknown): string[] {
-	if (plugins === undefined) return [];
-	if (!Array.isArray(plugins)) throw new Error('[ogygia] `plugins` must be an array: `plugins: [flags()]`.');
-	const seen = new Set<string>();
-	const servers: string[] = [];
-	for (const p of plugins as unknown[]) {
-		if (typeof p === 'function')
-			throw new Error('[ogygia] a plugin factory was passed uncalled — write `flags()`, not `flags`.');
-		const plugin = p as Partial<OgygiaPlugin> | null;
-		if (!plugin || typeof plugin !== 'object' || typeof plugin.name !== 'string' || plugin.name === '')
-			throw new Error('[ogygia] each `plugins` entry must be a plugin (the value a `/vite` factory returns).');
-		if (plugin.api !== PLUGIN_API)
-			throw new Error(
-				`[ogygia] plugin \`${plugin.name}\` was written for plugin API ${plugin.api}, this ogygia speaks ${PLUGIN_API} — install matching versions.`
-			);
-		if (seen.has(plugin.name)) throw new Error(`[ogygia] plugin \`${plugin.name}\` is listed twice.`);
-		seen.add(plugin.name);
-		if (plugin.server !== undefined) {
-			if (typeof plugin.server !== 'string' || plugin.server === '')
-				throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`server\` must be a module id.`);
-			servers.push(plugin.server);
-		}
-	}
-	return servers;
 }
 
 const REGION_PRESET_KEYS = new Set([

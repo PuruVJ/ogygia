@@ -9,6 +9,7 @@
 import { fs } from './host.js';
 import { strip_bom } from './bom.js';
 import { islandVirtualId } from './ids.js';
+import type { ServerRealm } from './link/caps.js';
 import {
 	islandChunkFileName,
 	islandPublicUrl,
@@ -53,12 +54,12 @@ export interface CompileCtxInit {
 	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
 	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
 	profiler_config: Record<string, unknown> | null;
-	/** Server-half module ids of `ogygia({ plugins })`, in app order — baked into
+	/** The server halves of `ogygia({ plugins })` (module id + options), in app order — baked into
 	 *  `virtual:ogygia/server-plugins`. Optional (default none). */
-	server_plugins?: readonly string[];
-	/** `ogygia({ freeze })` normalized (or `null` when off) — baked into
-	 *  `virtual:ogygia/freeze-config`; non-null turns the handle's freeze read/write path on. */
-	freeze_config: { ttl: number; default: boolean } | null;
+	server_plugins?: readonly ServerRealm[];
+	/** Route options the plugins declare (`compile.routeOptions`) — stripped from route files and
+	 *  baked into `virtual:ogygia/route-options`. Optional (default none). */
+	route_options?: readonly string[];
 	/** Dependency packages that DECLARED their ogygia compile surface (`"ogygia": { "files": […] }`
 	 *  in THEIR package.json) — prescanned + transformed like app source, node_modules gates lifted
 	 *  for exactly these paths. Optional (default none): standalone/browser hosts have no
@@ -118,8 +119,8 @@ export class CompileCtx {
 	readonly libDir: string;
 	readonly pkg_scan: PackageScan[];
 	readonly profiler_config: Record<string, unknown> | null;
-	readonly server_plugins: readonly string[];
-	readonly freeze_config: { ttl: number; default: boolean } | null;
+	readonly server_plugins: readonly ServerRealm[];
+	readonly route_options: readonly string[];
 	readonly is_dev: boolean;
 	readonly id_salt: string;
 	readonly visibleMargin: string | undefined;
@@ -162,7 +163,7 @@ export class CompileCtx {
 		this.pkg_scan = init.pkg_scan ?? [];
 		this.profiler_config = init.profiler_config;
 		this.server_plugins = init.server_plugins ?? [];
-		this.freeze_config = init.freeze_config;
+		this.route_options = init.route_options ?? [];
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;
 		this.visibleMargin = init.visibleMargin;

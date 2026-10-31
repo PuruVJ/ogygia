@@ -24,7 +24,7 @@ import { og_member } from './wire.js';
 const EXPORT_CONST_TAIL_RE = /\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*$/;
 
 const MARKER = 'import.meta.og.source';
-const IMPORT_LINE = `import { __og_source } from 'ogygia/freeze/source';\n`;
+const IMPORT_LINE = `import { __og_source } from 'ogygia/internal';\n`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Node = Record<string, any>;

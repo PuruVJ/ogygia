@@ -12,11 +12,15 @@ import { mount } from '../src/federation/mount.js';
 import { mint_hole, set_hole_signer } from '../src/federation/hole.js';
 import { sign_headers, verify_signed_request, lift_document } from '../src/federation/wire.js';
 import { set_federation } from '../src/federation/registry.js';
-import { set_source_observer } from '../src/freeze/capture.js';
-import { set_thaw_notifier } from '../src/freeze/registry.js';
+import { set_source_observer } from '../src/source.js';
 import { routes } from '../src/router/index.js';
 // (federation's flag carry; moves with federation into its package)
 import { flag } from '../../flags/src/index.js';
+import flags_server from '../../flags/src/server.js';
+import { startPlugin } from '../src/plugin/testing.js';
+
+// a flag read records its decision as a request fact through the started plugin
+startPlugin(flags_server, { name: '@ogygia/flags' });
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 const doc_json = (extra: Record<string, unknown> = {}, status = 200) =>
@@ -26,7 +30,6 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 	set_federation(null);
 	set_source_observer(null);
-	set_thaw_notifier(null);
 	set_hole_signer(null);
 });
 
@@ -323,18 +326,8 @@ describe('remote regions', () => {
 });
 
 describe('cross-app thaw', () => {
-	it('every freeze.invalidate() fires a notice to peers with the evicted tags', async () => {
-		const notices: (string[] | 'all')[] = [];
-		set_thaw_notifier(async (tags) => {
-			notices.push(tags);
-		});
-		const { freeze } = await import('../src/freeze/index.js');
-		await freeze.invalidate('/cms/solar');
-		expect(notices).toContainEqual(['p:/cms/solar']);
-		await freeze.invalidateWhere({ prefix: '/cms/' });
-		expect(notices).toContainEqual('all');
-	});
-
+	// (a store plugin announcing its invalidations through the shared `invalidated` hook is tested
+	// with the store: packages/freeze/test/freeze.test.ts)
 	it('peer.drop evicts cached documents by their adopted tags', async () => {
 		let calls = 0;
 		vi.stubGlobal('fetch', async () => {

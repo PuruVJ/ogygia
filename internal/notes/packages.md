@@ -101,7 +101,72 @@ cross-subsystem setters:
 fold into it; `freeze_capture_active()` becomes a core `response_stored` fact freeze sets and the
 region endpoint reads; `document_is_freeze()` becomes a generic "served from store" document fact).
 
-## The substrate: what plugins see, and how
+## Plugin API v2 — seven concepts (PROPOSED 2026-10-31, replaces the loose-functions door below)
+
+User: "can the plugin system be extremely well done? like the rollup plugin system… a very powerful
+ctx… right now feels all over the place… think harder, future possibilities, more flexible,
+extensible yet more elegant."
+
+The whole API is seven concepts. Every ad-hoc mechanism in core folds into one of them.
+
+1. **Plugin** — a manifest: `name`, `options` (validated, JSON, flows to every realm), `entries`
+   (one module per realm), `build(b)` (compile hooks). Built in vite.config, read in node, so tools
+   (MCP, Observatory, docs) can introspect it without running a build.
+2. **Realms** — where code runs. Each entry module default-exports `define<Realm>(…)`:
+   `server` (request lifecycle), `client` (browser runtime feature, with its boot/hydrate phase in the
+   manifest so the build places it statically), `devtools` (panels + insights). Future realms slot in
+   the same way: `cli` (commands), `mcp` (tools), `testing` (matchers). One file per realm, like
+   Kit's `+page.server.ts` / `+page.ts`: node code never leaks into a browser bundle.
+3. **Hooks** — named moments, each with a KIND (Rollup's taxonomy): *first* (first answer wins:
+   server `page`), *sequential* (each may replace: `response`), *parallel* (all run, no answer:
+   `done`). Ordering is per plugin (`enforce: 'pre' | 'post'`) and per hook (`{ order, handler }`),
+   like Vite. Documented once, the same everywhere.
+4. **Context** — every hook gets a ctx scoped to its moment: `b` (build), `app` (server process:
+   once, in `setup`), `ctx` (one request). Everything stateful lives there; nothing is a loose import.
+5. **Events** — notifications, many listeners, no answers (`store:invalidated`). Typed by
+   declaration merging; namespaced by the plugin that owns them.
+6. **Services** — capabilities, ONE provider, typed callers: `app.provide('page-store', api)` /
+   `app.use('page-store')` → the API or `undefined` (an optional dependency, checked). Federation
+   asks for `page-store`, not for "freeze": any store plugin can provide it.
+7. **Facts** — per-request shared state, `ctx.facts`, a declaration-mergeable record: core declares
+   `storable`, `perVisitor`, `streamed`, `private`, `sources`; a plugin may add its own. App code
+   outside a hook (a `flag()` read during render) reaches them through `app.current()`.
+
+Pure helpers (hash, escape, LRU, Standard Schema types) need no context: `ogygia/plugin/utils`.
+No `api` version number: the fixed package versions and the peer range already guarantee a match.
+Build API from `ogygia/vite` (loads in plain node); runtime API from `ogygia/plugin`.
+
+What folds in and gets deleted: every cross-subsystem `set_*` seam (→ services / events), the
+`Symbol.for` cross-module registries (→ services), the client FEATURES table (→ core's own features
+become client-realm entries: one mechanism for core and plugins), devtools tabs (→ devtools realm),
+the MCP flags tool (→ mcp realm), the ad-hoc request/answer events (`cache.build` → a service call).
+
+### v2 as DECIDED (user, 2026-10-31) — five concepts
+
+User pushback folded in: no `use()`/`provide()` string lookups, no module paths in strings, no
+`import.meta` first argument ("name is good, it's standard, do it").
+
+1. **Plugin** — `definePlugin({ name: '@ogygia/freeze', options, enforce?, build?(b) })` from
+   `ogygia/vite`. `name` is the package name (validated at config time: it must resolve from the app).
+2. **Realms** — the package's own `./server`, `./client`, `./devtools` exports, found by name
+   (`${name}/server`); resolved through the package's exports exactly like the app's imports, so
+   there is always ONE copy of the plugin's modules (the sibling-file idea would split src vs dist).
+3. **Hooks** — core lifecycle hooks (`request` / `page` first, `response` sequential, `done`
+   parallel) AND shared hooks, one mechanism. Plugins implement shared hooks as methods; anyone calls
+   them through `app.notify.<hook>(…)` (every plugin) or `app.ask.<hook>(…)` (first non-undefined
+   answer, plugin order). Core owns the common names (`invalidate`, `invalidated`, `lastBuild`);
+   plugin-only hooks carry the plugin's name. Typed by declaration merging (`interface ServerHooks`).
+4. **Context** — `b` (build), `app` (server process, in `setup`), `ctx` (one request: `event`, `path`,
+   `state`, `options`, `facts`, `routeOption()`, `renderHole()`, `devtools()`).
+5. **Facts** — per-request record keyed by the Request (`app.facts(request)`, `ctx.facts`),
+   declaration-mergeable: `storable`, `perVisitor`, `streamed`, `private`, `answerForm`, `sources`,
+   `assignments`.
+
+Pure helpers: `ogygia/plugin/utils`. No `api` number. Tree-shaking: client realms' hooks are read
+statically by the compiler → one build-time constant per client hook, so an unimplemented hook's call
+site compiles away (proved by tests).
+
+## The substrate: what plugins see, and how (v1, superseded by v2 above)
 
 User ruling 2026-10-31: `plugins: [...]` list. Asked next: what does the middle layer look like, how
 do plugins reach internals, what is exposed.
@@ -208,6 +273,41 @@ something here, the answer is a new fact or port member, designed, not a path im
 
 `PLUGIN_API` is one integer. First-party plugins release in a changesets **fixed** group with core,
 so their versions always match. A breaking port change bumps `PLUGIN_API` and the group together.
+
+## Progress log (the finish line: every package split, core renamed last)
+
+Order (user: "do it all"): freeze → federation → router → content → devtools+profiler →
+testing + cli → compile port completes (flags collector out) → core move (`packages/core` =
+`@ogygia/core`, `packages/ogygia` = shell re-exporting it; plugins switch to `@ogygia/core/plugin`).
+Core rename goes LAST: many build paths key off the package name `ogygia`.
+
+- R1 5b1bdd45 substrate + @ogygia/flags + packages/tooling. R2 380d0ac8 turbo, .ts scripts,
+  changeset. R3 24fe64be isolated declarations for core.
+- R4 FREEZE (in progress). The cut:
+  - CORE keeps: `stitch` (a dial on core holes); data sources (`og.source` macro + `__og_source`
+    runtime, moved to src/source.ts, injected from `ogygia/internal`; record/observer seams);
+    the "served from store" document meta the runtime reads (`STORED_DOCUMENT_META`).
+  - NEW door pieces: request FACTS on the RequestBag (`stored` → prerender-grade hole capabilities,
+    `per_request` → first reason the render is per-visitor (personal reads, streamed promise),
+    `streamed`, `private` (devtools-personal), `answer_form` (app transform + router fetch),
+    `sources` (og.source receipts while `stored`)), read via `requestFacts()`; ROUTE OPTIONS
+    (`compile.routeOptions: ['freeze']` → compiler strips + cascades `export const <name>` like csr;
+    the router registers its programmatic verdicts; `routeOption(name, routeId, pathname)`); a
+    SERVER EVENT BUS (`on` / `emit` → listener results): `cache.invalidated` (freeze → federation
+    thaw notices), `cache.invalidate` (federation inbound thaw → freeze), `cache.build` (deploy
+    thaw marker); plugin `options` (JSON) handed to a server-half factory; stages `page` (page
+    requests only, may answer) and `response` (may replace); `req.renderHole(endpoint)`.
+  - FREEZE package: registry/stores/edges/flights/stitch/observe/adapters + the capture/serve code
+    that lived in hooks.ts; `freeze({ ttl, default })` replaces `ogygia({ freeze })`.
+  - BUILT on plugin API v2 (uncommitted at time of writing): core door `ogygia/plugin` (defineServer,
+    RequestContext, ServerApp, facts, shared hooks), `ogygia/plugin/utils`, `ogygia/plugin/testing`
+    (`startPlugin`), build side `definePlugin` in `ogygia/vite`; flags rebuilt on it; freeze moved to
+    packages/freeze. Data sources (`og.source`) stayed core (src/source.ts, injected from
+    `ogygia/internal`); route options are core (`plugin/routes.ts`, compiler `page_route_options`).
+  - LEFT FOR LATER ROUNDS: docs pages still say `ogygia({ freeze })`, `ogygia/flag`, `ogygia/freeze`
+    (one docs pass at the end); client-hook DCE lands with the first client realm (devtools).
+  - TODO (user, 2026-10-31): RENAME freeze. "Elegant, punchy, but conveys no meaning." Nobody uses
+    it yet, so the rename is free: package, plugin, `export const freeze`, the docs. Not now.
 
 ## Performance rules (the bar every step must pass)
 

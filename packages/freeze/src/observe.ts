@@ -30,8 +30,9 @@ const DISQUALIFYING_HEADERS = new Set([
 
 export interface Observation {
 	/** First personalization read that returned a NON-default value, or null — the verdict input.
-	 *  Named (`cookie:consent`, `header:accept-language`, `locals.user`) for the dev note. */
-	disqualified_by: string | null;
+	 *  Named (`cookie:consent`, `header:accept-language`, `locals.user`) for the dev note. It IS the
+	 *  request's `perVisitor` fact: a flag read or a streamed promise lands there too. */
+	readonly disqualified_by: string | null;
 	/** The render (or the app) wrote a cookie — always per-request. */
 	wrote_cookie: boolean;
 }
@@ -54,10 +55,18 @@ function is_default_value(value: unknown): boolean {
  * Returns the live observation the verdict reads after the render. Patching is per-request
  * (the event dies with the request) — nothing to restore.
  */
-export function observe_event(event: RequestEvent): Observation {
-	const obs: Observation = { disqualified_by: null, wrote_cookie: false };
+export function observe_event(
+	event: RequestEvent,
+	facts: { perVisitor: string | null } = { perVisitor: null }
+): Observation {
+	const obs: Observation = {
+		get disqualified_by() {
+			return facts.perVisitor;
+		},
+		wrote_cookie: false
+	};
 	const disqualify = (label: string) => {
-		if (obs.disqualified_by === null) obs.disqualified_by = label;
+		if (facts.perVisitor === null) facts.perVisitor = label;
 	};
 
 	// cookies — record non-default gets; any write during the render is per-request by definition.
