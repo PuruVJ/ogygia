@@ -4,8 +4,8 @@
  * each `YYYY-MM-DD-slug.md` filename and orders newest-first. Server-only: the wire layer is
  * `blog.remote.ts`. `blog` gives us `doc()` (a post's view + prev/next) for `<BlogPost>`.
  */
-import { content, dated } from 'ogygia/content';
-import { site, outline, fields } from 'ogygia/content';
+import { content, dated } from '@ogygia/content';
+import { site, outline, fields } from '@ogygia/content';
 
 export const posts = content({
 	// The whole playground corpus — blog included — compiles through the `playground` content

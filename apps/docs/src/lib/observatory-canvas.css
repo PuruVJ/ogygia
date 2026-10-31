@@ -99,7 +99,7 @@
 }
 
 /* Diff-marked fences (the `+++`/`--- ` line dialect + `+++x+++`/`---x---` inline dialect, enabled in the
-   REPL's content pipeline). Mirrors ogygia/content theme.css so a `.md` fence shows real diff colours in
+   REPL's content pipeline). Mirrors @ogygia/content theme.css so a `.md` fence shows real diff colours in
    the preview — NOT :where()'d: the marks must paint (they're the feature), still only inside .og-canvas. */
 .og-canvas pre.og-has-diff .og-diff {
 	display: inline-block;
@@ -142,7 +142,7 @@
 	text-decoration-color: light-dark(rgb(185 28 28 / 0.6), rgb(248 113 113 / 0.6));
 }
 
-/* Admonitions (`::: tip` etc. → .og-admonition), ported from ogygia/content theme.css so content
+/* Admonitions (`::: tip` etc. → .og-admonition), ported from @ogygia/content theme.css so content
    previews show real coloured callouts. Each variant sets one hue token; border/tint/title derive. */
 .og-canvas .og-admonition {
 	--og-adm-c: var(--obs-accent, #14b8a6);

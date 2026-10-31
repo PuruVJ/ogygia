@@ -11,27 +11,38 @@ The devtools are a dock that mounts on each `csr = false` page, and x-rays the i
 
 ## Enabling
 
-One flag in the Vite plugin. It is compiled behind a gate. Thus, when off (the default), the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. You decide where it is on:
+The devtools are their own package. Install it:
+
+```bash
+pnpm add @ogygia/devtools
+```
+
+Then list its plugin beside `ogygia()`. It is compiled behind a gate. Thus, where the plugin is not listed, the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. The plugin list is code, so you decide where it is on:
 
 ```ts title=vite.config.ts
 import { ogygia } from 'ogygia/vite';
+import { devtools } from '@ogygia/devtools/vite';
 
 export default defineConfig(({ mode }) => ({
   plugins: [
-    ogygia({ devtools: mode !== 'production' }),   // dev server and preview builds, never production
+    ogygia(),
+    ...(mode !== 'production' ? [devtools()] : []),   // dev server and preview builds, never production
+    sveltekit(),
   ],
 }));
 ```
+
+`devtools()` takes two switches: `dock` (the dock, on by default) and `profiler` (the [SSR profiler](/docs/profiler/overview), off by default). See [Plugins](/docs/reference/plugins).
 
 On the dev server, a launcher appears at the bottom of each `csr = false` page. In a build it stays hidden until you turn it on in your browser (see below).
 
 ### What measuring costs the page
 
-Devtools measures the page it shows, so it must not change what it measures. Loaded one after the other with measuring on and off, a heavy page (17,000 elements, 30 islands) takes about 15 ms more main-thread time and 1.6 KB more HTML (the server's events), with no measurable change in server time. With the dock open, each tab does at most a few ms of its own work every 3 seconds, and never a long task. `internal/bench/devtools-build-check.mjs` checks the first two numbers on every run.
+Devtools measures the page it shows, so it must not change what it measures. Loaded one after the other with measuring on and off, a heavy page (17,000 elements, 30 islands) takes about 15 ms more main-thread time and 1.6 KB more HTML (the server's events), with no measurable change in server time. With the dock open, each tab does at most a few ms of its own work every 3 seconds, and never a long task. `internal/bench/devtools-build-check.ts` checks the first two numbers on every run.
 
 ### In a build (a preview deploy)
 
-With the flag on in a build (a QA, UAT or preview deploy), a page carries only a small switch (about 10 KB of JS with the event recorder). Visitors see nothing: no launcher, no measuring, no server event data. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
+With the plugin listed in a build (a QA, UAT or preview deploy), a page carries only a small switch (about 10 KB of JS with the event recorder). Visitors see nothing: no launcher, no measuring, no server event data. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
 
 Turn devtools on in your own browser:
 
@@ -59,7 +70,7 @@ The launcher peeks up from the bottom edge. Hover to show it. Click (or **Alt+O*
 - **Hub**: the identity spine. Per `Ref` id: its kind, resolve count, reunion (memo-hit) count, and disposal.
 - **Nav**: per-region SPA-navigation decisions (keep / patch / mount / remove), with timing. Thus you see the reconciler at work.
 - **Timeline**: client-realm events on a time axis, one lane per region, with hydrate bars.
-- **Profiler**: runs the [SSR profiler](/docs/profiler/overview) on this page, right in the dock (needs `ogygia({ profiler: true })`). It shows the score, the server render time and what it would be after the fixes, the findings, the heaviest components, and the outbound calls. Each island's server row joins the island on the page: hover to light it up, click to open it. The island's detail card then shows the same numbers under "on the server". The full report is one click away.
+- **Profiler**: runs the [SSR profiler](/docs/profiler/overview) on this page, right in the dock (needs `devtools({ profiler: true })`). It shows the score, the server render time and what it would be after the fixes, the findings, the heaviest components, and the outbound calls. Each island's server row joins the island on the page: hover to light it up, click to open it. The island's detail card then shows the same numbers under "on the server". The full report is one click away.
 
 ## The Page tab
 
@@ -123,7 +134,7 @@ On a Kit-hydrated page (`csr = true`) ogygia's runtime never boots, so there are
 After an in-app navigation (ogygia's router swaps the page without a reload), the tab reports on the new page: its findings and island rows count from the navigation. An island on both pages with the same props is kept by the router, still awake, with no code to load and nothing to hydrate. The tab lists those as kept, so a page whose islands were all reused does not read as "nothing woke". The Styles section reads the new page's sheets. The vitals stay the first page's load, labelled as such, since a navigation paints nothing the browser reports. The load CPU trace is the first page's too; record the main thread again for this one.
 
 ::: tip Checked against planted problems
-The playground's `/dt-lab` page plants one problem per island, next to healthy decoys. `internal/bench/devtools-answer-key.mjs` loads it like a hurried visitor, and checks that each problem is found on its island and that no decoy is named. `/dt-third` plants other origins (a blocking script that edits an island, a script that loads three more). `/dt-styles` plants an unscoped component and a sheet of 600 rules for markup the page does not have. On `/dt-many` (320 islands, scrolled) the key checks the runtime itself: no island may wait with nothing ahead of it. `internal/bench/devtools-click-check.mjs` presses every button, link, row and chip in every tab on each lab page: each press must change something, throw nothing, and stay on the page. `internal/bench/profiler-click-check.mjs` does the same on a profiler report, the dashboard and the compare page. The same key checks the profiler's report of the same visits. `internal/bench/all-keys.mjs` runs every key, each against the server it needs.
+The playground's `/dt-lab` page plants one problem per island, next to healthy decoys. `internal/bench/devtools-answer-key.ts` loads it like a hurried visitor, and checks that each problem is found on its island and that no decoy is named. `/dt-third` plants other origins (a blocking script that edits an island, a script that loads three more). `/dt-styles` plants an unscoped component and a sheet of 600 rules for markup the page does not have. On `/dt-many` (320 islands, scrolled) the key checks the runtime itself: no island may wait with nothing ahead of it. `internal/bench/devtools-click-check.ts` presses every button, link, row and chip in every tab on each lab page: each press must change something, throw nothing, and stay on the page. `internal/bench/profiler-click-check.ts` does the same on a profiler report, the dashboard and the compare page. The same key checks the profiler's report of the same visits. `internal/bench/all-keys.ts` runs every key, each against the server it needs.
 :::
 
 ## Recording a session
@@ -150,7 +161,7 @@ With the profiler on, **and the server** (on by default) records the server over
 | slow navigation | An in-app navigation took half a second or more. |
 
 ::: tip Checked against planted problems
-The playground's `/dt-session` page plants one problem per island (a slow handler, a late answer, a late banner, repeated and failed requests, an error, DOM churn), with a dead button and a healthy decoy. `internal/bench/devtools-session-key.mjs` records a session there like a visitor would, and checks that each problem is found and named, and that the decoy is never named.
+The playground's `/dt-session` page plants one problem per island (a slow handler, a late answer, a late banner, repeated and failed requests, an error, DOM churn), with a dead button and a healthy decoy. `internal/bench/devtools-session-key.ts` records a session there like a visitor would, and checks that each problem is found and named, and that the decoy is never named.
 :::
 
 ## The Hydration tab
@@ -179,7 +190,7 @@ Click a roster row, or use "pick on page" and click a region. Its detail card op
 
 ## Keyboard and screen readers
 
-The dock is a heading with a tab list: the tabs are announced as tabs, with the open one selected, and the panel below them is a region you can focus and scroll with the keyboard. Its text meets 4.5:1 contrast. Everything you can click, Tab reaches: a row's name is a button, so Enter opens the row as a click does. `internal/bench/devtools-a11y-check.mjs` checks every tab with axe, measures the contrast of each text against the background under it, and fails on any control only a mouse can press.
+The dock is a heading with a tab list: the tabs are announced as tabs, with the open one selected, and the panel below them is a region you can focus and scroll with the keyboard. Its text meets 4.5:1 contrast. Everything you can click, Tab reaches: a row's name is a button, so Enter opens the row as a click does. `internal/bench/devtools-a11y-check.ts` checks every tab with axe, measures the contrast of each text against the background under it, and fails on any control only a mouse can press.
 
 ::: tip
 The devtools never mount on [profiler](/docs/profiler/overview) pages, the embedded frame of the Profiler tab included. Thus the tools never x-ray themselves.

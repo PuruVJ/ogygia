@@ -1,5 +1,5 @@
 /**
- * `> MODULE: ogygia/content` — the docs' auto-generated API reference, as a remark plugin (the same
+ * `> MODULE: @ogygia/content` — the docs' auto-generated API reference, as a remark plugin (the same
  * directive shape svelte-dev's expand-types uses). Wired `{ enforce: 'pre', plugin: expandApi }` so
  * the generated headings/fences flow through ogygia's built-in passes (TOC, anchors, code ids, the
  * link audit) exactly as if hand-authored. The markdown comes from the package's own rolled-up
@@ -48,7 +48,7 @@ function svelteSafe(node: Node): void {
 	for (const c of node.children ?? []) svelteSafe(c);
 }
 
-const DIRECTIVE = /^MODULE:\s*(ogygia(?:\/[\w/-]+)?)\s*$/;
+const DIRECTIVE = /^MODULE:\s*((?:ogygia|@ogygia\/[\w-]+)(?:\/[\w/-]+)?)\s*$/;
 
 /** The directive text of a `> MODULE: x` blockquote (a single paragraph of plain text), or null. */
 function directiveOf(node: Node): string | null {

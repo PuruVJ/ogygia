@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
 	import { cms, preview_ctx } from '$lib/cms';
 
 	// csr=false: the block body renders in this page's own SSR pass, so the Counter island inside

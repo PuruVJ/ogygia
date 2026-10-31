@@ -39,13 +39,13 @@
 		"typescript": { "optional": true }
 	},
 	"devDependencies": {
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"@types/node": "^26.1.2",
-		"svelte": "^5.40.0",
-		"svelte2tsx": "^0.7.60",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"vitest": "^4.1.10"
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
+		"svelte": "catalog:",
+		"svelte2tsx": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
 	},
 	"publishConfig": {
 		"access": "public",

@@ -1,79 +1,18 @@
-import { fileURLToPath } from 'node:url';
-import { svelte } from '@ogygia/tsdown-plugin-svelte';
 import { defineConfig } from 'tsdown';
+import { library } from '@ogygia/tooling/tsdown';
 
-// Ship `.svelte` COMPONENTS and standalone `.css` into dist/ at their parallel paths, plus a
-// `.svelte.d.ts` beside each component: the svelte-package treatment without compiling the
-// template (packages/tsdown-plugin-svelte). Script AND markup TS is stripped, so shipped
-// components are plain JS the consumer's own Svelte compiles. NOTE: svelte2tsx needs classic
-// TypeScript; it hard-refuses the TS7 Go port, so this package pins `typescript@6`.
-const pkg_root = fileURLToPath(new URL('.', import.meta.url));
-
-// Build the library's JS/TS modules to dist/ with .d.ts, PRESERVING the source module
-// structure (`unbundle`). Structure must stay parallel because:
-//   - the vite plugin resolves sibling modules via `new URL('../runtime/index.js', ...)` /
-//     `../shims/*.js` (fileURLToPath) — those targets must exist at the same relative paths;
-//   - the `.svelte` wrappers import `./server/*.js` relatively.
-//
-// The `.svelte` COMPONENTS (with templates) are NOT compiled here — they ship as raw source
-// (copied by `copy:svelte`) and the CONSUMER's vite-plugin-svelte compiles them. The `.svelte.ts`
-// runes MODULES (page-store, app-state) are template-free TypeScript: tsdown strips their types
-// and leaves the `$state` runes intact, so the consumer's svelte pipeline compiles the emitted
-// `.svelte.js`. They are emitted as entries here (the `$app/state` vite alias imports the built
-// `.svelte.js` by absolute path, so it must exist in dist even though nothing else imports it).
-// tsdown accepts an ARRAY of configs — [0] is the library (unbundled, externalized), [1] is the
-// `ogygia` CLI (`npx ogygia init`), built as a SINGLE self-contained bundle so the published package
-// declares no extra runtime dependency for it. cli.ts is excluded from the library build (entry
-// negation) so this bundled copy is the only dist/cli.* — the library's externals would otherwise
-// emit a broken cli with `@sveltejs/sv-utils` left external.
+// [0] the re-exports (every subpath forwards to the same subpath of `@ogygia/core`, left an import).
+// [1] the `ogygia` command's front door (`npx ogygia init` → @ogygia/cli), `dist/cli.mjs`: ONE
+//     self-contained file, only node builtins external.
 export default defineConfig([
-	{
-		entry: ['src/**/*.ts', '!src/**/*.d.ts', '!src/cli.ts'],
-		format: 'esm',
-		platform: 'neutral', // library runs in node (vite plugin/hooks) AND the browser (runtime)
-		unbundle: true,
-		dts: true,
-		clean: true,
-		treeshake: false, // keep every module intact; nothing here is dead code
-		plugins: [svelte({ root: pkg_root })],
-		deps: {
-			// never inline — peers / deps / consumer-resolved specifiers
-			neverBundle: [
-				'svelte',
-				'svelte/compiler',
-				'svelte/server',
-				/^@sveltejs\/kit(\/|$)/,
-				'devalue',
-				'magic-string',
-				'estree-walker',
-				// content deps / optional peers
-				'yaml',
-				'mdsvex',
-				'shiki',
-				'vite',
-				// lazy optional peer of js_to_ts() — bundling would freeze a store path (it once
-				// resolved to typescript/lib/version.js and shipped a ts with no ScriptTarget)
-				'typescript',
-				// consumer-resolved specifiers
-				/^node:/,
-				/^virtual:/,
-				/^\$app\//,
-				/\.svelte$/, // the 3 wrapper components (shipped as source)
-				'ogygia/runtime',
-				'ogygia/internal',
-				'ogygia/internal/server',
-				'ogygia/router'
-			]
-		}
-	},
+	library({ entry: ['src/**/*.ts', '!src/**/*.d.ts', '!src/cli.ts'] }),
 	{
 		entry: ['src/cli.ts'],
 		format: 'esm',
 		platform: 'node',
 		dts: false,
-		clean: false, // library build [0] already cleaned dist/
+		clean: false, // the library build [0] cleaned dist/
 		treeshake: true,
-		// Bundle EVERYTHING (`@sveltejs/sv-utils` + its deps) into one file; keep only node builtins external.
 		deps: {
 			alwaysBundle: [/.*/],
 			neverBundle: [/^node:/]

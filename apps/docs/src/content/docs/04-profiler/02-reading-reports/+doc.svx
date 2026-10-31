@@ -55,7 +55,7 @@ With a browser visit, JS at start also counts what the HTML never names but the 
 - **Islands that wake when visible and were on your first screen.** They wake at load on that screen, so they count at start. An island you scrolled to later does not.
 
 ::: tip Checked against a twin
-The playground's `/score-lab` and `/score-lab-kit` carry the same article and the same code editor. One ships the editor as a lazy island, the other the usual fully hydrated way. `internal/bench/profiler-score-key.mjs` checks that the second one's editor code is counted, and that it scores well below the first, with and without a browser visit.
+The playground's `/score-lab` and `/score-lab-kit` carry the same article and the same code editor. One ships the editor as a lazy island, the other the usual fully hydrated way. `internal/bench/profiler-score-key.ts` checks that the second one's editor code is counted, and that it scores well below the first, with and without a browser visit.
 :::
 
 The agent JSON carries the score and the weighed files (`assets`: totals, the 40 largest files, what could not be weighed).
@@ -204,7 +204,7 @@ The CPU sampler hears the whole process, so another page's work lands in the sam
 Two waits never show on their own: a database driver on its own socket pool, and a promise chain (a queue, a cache client, a worker). They are the grey "nothing recorded" on the timeline. Name them in the code:
 
 ```ts
-import { span, tag } from 'ogygia/profiler';
+import { span, tag } from '@ogygia/devtools/profiler';
 
 export const load = async ({ params, locals }) => {
 	tag('tenant', locals.tenant);
@@ -235,7 +235,7 @@ A span that reports a number (`span('db.query', fn, (rows) => ({ rows: rows.leng
 A design system's `renderToString`, a database client's `query`, an SDK method: called from many places, impossible to wrap at each one. `instrument` wraps it once, and every call is a span:
 
 ```ts
-import { instrument } from 'ogygia/profiler';
+import { instrument } from '@ogygia/devtools/profiler';
 import { renderToString as core } from '@acme/design-system/hydrate';
 
 // an ESM import is read-only, so bind the wrapped function
@@ -249,10 +249,10 @@ The `attrs` function gets the result and the call's arguments, so a span can car
 
 ### The browser's side: `mark`
 
-What the server profile cannot see at all is the visitor's browser: a design system's CDN components hydrating, a widget booting, a font arriving. `mark` from `ogygia/profiler/client` is the browser twin of `span`:
+What the server profile cannot see at all is the visitor's browser: a design system's CDN components hydrating, a widget booting, a font arriving. `mark` from `@ogygia/devtools/profiler/client` is the browser twin of `span`:
 
 ```ts
-import { mark } from 'ogygia/profiler/client';
+import { mark } from '@ogygia/devtools/profiler/client';
 
 mark.event('ds.hydrate', 'components-ready');   // a web-components runtime's "all hydrated" event
 await mark('widget.boot', () => widget.init(), { version: '3' });
@@ -348,7 +348,7 @@ Production client chunks are minified, so a browser frame is `Y` in `chunks/DvQX
 
 ## With the keyboard
 
-Everything on a report that takes a click also takes the keyboard. Tab reaches each table row, sort header, timeline block and seed row, and Enter or Space presses it. A focused timeline block shows the detail a hover would, and a sort header tells a screen reader its order. The CPU treemap and the flame graph are pictures of data the tables also list; the flame graph's search box zooms to the heaviest match on Enter. `internal/bench/profiler-click-check.mjs` fails on any control only a mouse can press.
+Everything on a report that takes a click also takes the keyboard. Tab reaches each table row, sort header, timeline block and seed row, and Enter or Space presses it. A focused timeline block shows the detail a hover would, and a sort header tells a screen reader its order. The CPU treemap and the flame graph are pictures of data the tables also list; the flame graph's search box zooms to the heaviest match on Enter. `internal/bench/profiler-click-check.ts` fails on any control only a mouse can press.
 
 ## Take the report with you: the standalone HTML
 

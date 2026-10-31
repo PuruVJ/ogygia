@@ -14,7 +14,7 @@ A content collection is a typed view over a folder of files. You describe where 
 
 ```ts
 // src/content/config.ts
-import { content, markdown } from 'ogygia/content';
+import { content, markdown } from '@ogygia/content';
 import { z } from 'zod';
 
 export const guides = content({
@@ -45,7 +45,7 @@ A source knows how to find files and how to parse them. ogygia ships three.
 Reads `.svx` files. Each file compiles to a Svelte component, its frontmatter is parsed, and its headings are extracted for the on-this-page rail.
 
 ```ts
-import { markdown } from 'ogygia/content';
+import { markdown } from '@ogygia/content';
 
 const source = markdown('guides/**/+doc.svx');
 ```
@@ -66,7 +66,7 @@ interface MarkdownEntry {
 Reads `.json` files as pure data. Useful for API references, config-driven pages, or anything you generate rather than write by hand.
 
 ```ts
-import { content, json } from 'ogygia/content';
+import { content, json } from '@ogygia/content';
 import { z } from 'zod';
 
 export const api = content({

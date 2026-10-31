@@ -6,8 +6,8 @@
  * an ordinary content entry `body`. In a real app the `from` glob would be a loader hitting Builder's
  * Content API; here we glob local fixtures in Builder's exact JSON shape.
  */
-import { glob, blocks, mapRaw } from 'ogygia/content';
-import type { BlockNode, BlockRegistry, GlobMap, Source } from 'ogygia/content';
+import { glob, blocks, mapRaw } from '@ogygia/content';
+import type { BlockNode, BlockRegistry, GlobMap, Source } from '@ogygia/content';
 
 /** A Builder element (the relevant subset): `component.name` + `component.options` + `children`. */
 type BuilderElement = {

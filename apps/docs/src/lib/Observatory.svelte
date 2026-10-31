@@ -5,7 +5,7 @@
 	import * as svelteRuntime from 'svelte';
 	// The devtools event bus — in "islands" mode the page's REAL runtime emits hydration events for our
 	// injected regions; we tap the bus to show the true lifecycle story (Rung-0 layer → an instrument).
-	import { add_sink } from 'ogygia/devtools';
+	import { add_sink } from 'ogygia/events';
 	import CodeMirror from './CodeMirror.svelte';
 	import FormattedCode from './FormattedCode.svelte';
 	import FileTree from './observatory/FileTree.svelte';
@@ -246,19 +246,19 @@ export default {
 	// `containers`/`tabs`/`themes` and watch the preview recompile (see repl-config.ts + apply_content_config).
 	const VITE_CONFIG_CONTENT = `import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
-import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+import { content } from '@ogygia/content/vite';
+import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 
 export default {
 	plugins: [
-		ogygia({
-			content: {
-				markdown: {
-					containers: true,      // ::: tip / warning / danger callouts
-					tabs: true,            // ::: tabs and ::: code-group
-					headingAnchors: true,  // hover permalink on each heading
-					themes: { light: 'github-light', dark: 'github-dark' },
-					code: { transformers: [diff_markers(), inline_markers()] },
-				},
+		ogygia(),
+		content({
+			markdown: {
+				containers: true,      // ::: tip / warning / danger callouts
+				tabs: true,            // ::: tabs and ::: code-group
+				headingAnchors: true,  // hover permalink on each heading
+				themes: { light: 'github-light', dark: 'github-dark' },
+				code: { transformers: [diff_markers(), inline_markers()] },
 			},
 		}),
 		sveltekit(),
@@ -513,7 +513,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 `
 		},
 		// A CONTENT page — the real ogygia markdown pipeline (mdsvex + Shiki + admonitions), live in-browser.
-		// Includes a vite.config.ts: edit its `content.markdown` options to reconfigure the preview.
+		// Includes a vite.config.ts: edit its `content({ markdown })` options to reconfigure the preview.
 		content: {
 			'vite.config.ts': VITE_CONFIG_CONTENT,
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -596,7 +596,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// Share via URL (Rung 6): the whole workspace round-trips through the URL HASH — which browsers never
 	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. The codec
 	// (base64url(gzip(json)), legacy-format reads, and the untrusted-input sanitizer) lives in the pure,
-	// unit-tested ./repl/hash module — see hash.test.mjs.
+	// unit-tested ./repl/hash module — see hash.test.ts.
 
 	let files = $state<FileMap>(structuredClone(PRESETS['demo app']));
 	let active = $state<string>('src/routes/+page.svelte');
@@ -798,7 +798,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		else if (kind === 'live')
 			lines.push(`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`);
 		else if (kind === 'preset')
-			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ regions: { presets } }) config.`);
+			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ presets }) config.`);
 		else lines.push(`It's a client island: marked with { wake: '${wake ?? 'load'}' }, so it hydrates ${hydrate_phrase(wake)} — that's why it ships its own JS.`);
 		if (s?.ships)
 			lines.push(`Ships ${fmt_bytes(s.bytes)} — its client entry plus the <Region> wrapper that mounts it. Only this subtree hydrates; the rest of the page stays server HTML.`);
@@ -1023,7 +1023,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		add('svelte/motion', import('svelte/motion'));
 	}
 	// ogygia's runtime is EXTERNAL in the worker bundle. The content pipeline injects `import { TabGroup,
-	// Tab } from 'ogygia/content'` for `::: tabs` / `::: code-group` — but those are ISLANDS (children cross
+	// Tab } from '@ogygia/content'` for `::: tabs` / `::: code-group` — but those are ISLANDS (children cross
 	// via the region bridge), so mounting the host's real ones in the plain live mount fails. Hand the eval
 	// a passthrough (renders children + label) for ANY ogygia named import → content shows stacked instead
 	// of crashing. The real, interactive version lives in the preview's "islands" mode.
@@ -1197,7 +1197,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		// ogygia runtime (external): content wrappers (TabGroup/Tab/…) → a children-rendering passthrough so
 		// the live mount shows their content instead of crashing on the island region bridge.
 		if (spec === 'ogygia/internal') return ogygia_internal_module;
-		if (spec === 'ogygia' || spec.startsWith('ogygia/')) return ogygia_passthrough;
+		if (spec === 'ogygia' || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) return ogygia_passthrough;
 		return {};
 	}
 	/** Eval a CJS module string with our svelte-providing require; returns its exports. The `console` param

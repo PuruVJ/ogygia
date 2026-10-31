@@ -7,7 +7,7 @@ client boot with no long task of ogygia's making; every fix REPLACES the machine
 
 ## Measurements (before)
 
-Server, `internal/bench/server-cost.mjs` (playground `/bench-cms` vs its no-ogygia twin `/bench-cms/plain`,
+Server, `internal/bench/server-cost.ts` (palaestra `/bench-cms` vs its no-ogygia twin `/bench-cms/plain`,
 same components, same data; 300 req × 4 concurrent; `--cpu-prof` on the vite preview process):
 
 | | plain | islands | delta |
@@ -113,11 +113,11 @@ reducers into one tagged reducer (would change the client revivers; the reducer 
   exactly one result allocation. Plus `hooks.ts` must not import `node:async_hooks`.
 - `test/seed-json-lane.test.ts`: plain tree → `data-format="json"`; a Date/Map/thenable → devalue; byte
   and round-trip equality.
-- `internal/bench/server-cost.mjs` is the before/after harness (numbers above are the baseline).
+- `internal/bench/server-cost.ts` is the before/after harness (numbers above are the baseline).
 - Browser: `test/browser/hydration-schedule.test.ts` (no task > 50 ms of ogygia's making for 21 load
   islands; viewport-first order), `test/browser/seed-single-parse.test.ts` (parse count = 1; stale-ref
   regression across a reconcile nav), `e2e/long-task-budget.spec.ts` on the bench page.
-- `e2e/bundle-size.ts` hard-fails above the snapshot + 2 %.
+- `apps/palaestra/e2e/bundle-size.ts` hard-fails above the snapshot + 2 %.
 
 ## Server, round 2 — 2026-09-19
 

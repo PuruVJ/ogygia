@@ -278,7 +278,7 @@
 	<div class="content-showcase">
 		<ShowcaseCard
 			title="Content collection"
-			tag="ogygia/content"
+			tag="@ogygia/content"
 			marker="live over the wire · no bodies shipped"
 			code={contentCollectionCode}
 			stack

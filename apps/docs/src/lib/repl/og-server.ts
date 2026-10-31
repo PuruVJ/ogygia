@@ -12,7 +12,7 @@
  * Region.svelte:610) runs here.
  */
 // The worker-safe region seam — region()/isRegion/og_html_region WITHOUT Region.svelte or the client
-// runtime (which reference `window` and can't load in a Web Worker). See packages/ogygia/src/region-core.ts.
+// runtime (which reference `window` and can't load in a Web Worker). See packages/core/src/region-core.ts.
 import { region, isRegion, og_html_region } from 'ogygia/internal/region-core';
 // The compiler appends `import { … } from 'ogygia/internal/register'` to any module with an exported
 // class / createContext / `import.meta.og.$` / `.store` (see compiler/content/transportables.ts +

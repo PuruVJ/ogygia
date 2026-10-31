@@ -52,7 +52,7 @@ A check is a named object with a `page` hook, a `site` hook, or both. Each retur
 
 ```ts title=$lib/checks.ts
 // a house rule: every page fills its summary
-import type { Check, Finding } from 'ogygia/content';
+import type { Check, Finding } from '@ogygia/content';
 
 export function requireSummary(): Check {
 	return {
@@ -74,7 +74,7 @@ export function requireSummary(): Check {
 ```
 
 ```ts
-import { links } from 'ogygia/content';
+import { links } from '@ogygia/content';
 import { requireSummary } from '$lib/checks';
 
 export const docs = site({ outline: docs, checks: [links(), requireSummary()] });

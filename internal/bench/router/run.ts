@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
 // ogygia — router benchmark. Real Chromium (Playwright + CDP) against the
-// production playground build, measuring every router aspect:
+// production palaestra build, measuring every router aspect:
 //
 //   boot            cold-load timing, JS payload, script eval, hydration settle
 //   soft nav        click → body-swap → islands hydrated (cold cache vs warm)
@@ -16,8 +16,8 @@
 //   memory          60 navs, GC-to-GC heap / DOM-node / listener growth
 //   cpu throttle    cold+warm nav again at 4× CPU slowdown
 //
-//   node internal/bench/router/run.ts             # reuse existing playground build
-//   node internal/bench/router/run.ts --build     # rebuild lib + playground first
+//   node internal/bench/router/run.ts             # reuse existing palaestra build
+//   node internal/bench/router/run.ts --build     # rebuild lib + palaestra first
 //   PORT=3061 BENCH_N=20 node internal/bench/router/run.ts
 //
 // Results → internal/bench/results/router-latest.{md,json}
@@ -90,19 +90,19 @@ const INIT = `(() => {
 
 // ── build (optional) + serve ────────────────────────────────────────────────
 if (doBuild) {
-	banner('Building library + playground');
+	banner('Building library + palaestra');
 	const ok =
-		spawnSync('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/ogygia'), stdio: 'inherit' }).status === 0 &&
-		spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], { cwd: join(repo, 'apps/playground'), stdio: 'inherit' }).status === 0;
+		spawnSync('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/core'), stdio: 'inherit' }).status === 0 &&
+		spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], { cwd: join(repo, 'apps/palaestra'), stdio: 'inherit' }).status === 0;
 	if (!ok) process.exit(1);
-} else if (!existsSync(join(repo, 'apps/playground/.svelte-kit/output/server'))) {
-	console.error('No playground build found — run with --build first.');
+} else if (!existsSync(join(repo, 'apps/palaestra/.svelte-kit/output/server'))) {
+	console.error('No palaestra build found — run with --build first.');
 	process.exit(1);
 }
 
-banner(`Serving playground at ${BASE}`);
+banner(`Serving palaestra at ${BASE}`);
 const server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'], {
-	cwd: join(repo, 'apps/playground'),
+	cwd: join(repo, 'apps/palaestra'),
 	env: { ...process.env, ORIGIN: BASE },
 	stdio: 'ignore'
 });
@@ -777,7 +777,7 @@ json.meta = meta;
 const md = [
 	'# ogygia router benchmark',
 	'',
-	`Real Chromium (Playwright), production playground build, local preview server. ${meta.date}, commit \`${meta.commit}\`, n=${N} per timing scenario unless noted. Local network ≈ zero RTT — deployed cold-nav numbers grow by your network latency; warm/prefetched numbers do not.`,
+	`Real Chromium (Playwright), production palaestra build, local preview server. ${meta.date}, commit \`${meta.commit}\`, n=${N} per timing scenario unless noted. Local network ≈ zero RTT — deployed cold-nav numbers grow by your network latency; warm/prefetched numbers do not.`,
 	'',
 	...report.flatMap(({ section: s, lines }) => [`## ${s}`, '', '```', ...lines, '```', '']),
 	`Real page/console errors during the whole run: **${pageErrors}**`,

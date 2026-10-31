@@ -1,5 +1,5 @@
 /**
- * Docs content collection — dogfoods `ogygia/content`.
+ * Docs content collection — dogfoods `@ogygia/content`.
  *
  * Each page is a folder: `NN-section/NN-page/+doc.svx`, with the page's demo components colocated
  * beside it. Order + section come from the `NN-` folder prefixes; `generateId` strips them so URLs
@@ -10,7 +10,7 @@
  * route can call `get()` without dragging `$app/server` into the graph. The `docNav` remote is
  * minted by wrapping this same `docs` with `withRemotes()` in `docs.remote.ts` (server-only).
  */
-import { content } from 'ogygia/content';
+import { content } from '@ogygia/content';
 import * as v from 'valibot';
 
 const docSchema = v.object({

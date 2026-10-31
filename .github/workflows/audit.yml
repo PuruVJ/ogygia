@@ -1,11 +1,14 @@
 name: Dependency audit
 
-# Checks dependencies against the npm advisory database: weekly, when the lockfile changes, and on
-# demand. The report (.github/scripts/audit-report.mjs) is split by how each advisory reaches ogygia:
-# its dependencies, the peers the app installs, and this repository's dev tooling. It goes to the run's
-# summary; on a PR, onto the PR as a comment (a same-repository PR: a fork's token cannot comment);
-# otherwise into ONE open "Dependency audit" issue, updated in place (closed, the next run opens a new
-# one). The job fails only when ogygia's own dependency range cannot reach a fixed version of a high or
+# Checks the dependencies of every PUBLISHED package (each non-private package under packages/:
+# `ogygia`, `@ogygia/core`, the `@ogygia/*` plugins, the CLI…) against the npm advisory database:
+# weekly (advisories appear without a commit), whenever the dependencies can change (the lockfile, the
+# catalogs in pnpm-workspace.yaml, a package's package.json), and on demand. The report
+# (.github/scripts/audit-report.ts) is split by how each advisory reaches a package: its dependencies,
+# the peers the app installs, and this repository's dev tooling. It goes to the run's summary; on a PR,
+# onto the PR as a comment (a same-repository PR: a fork's token cannot comment); otherwise into ONE
+# open "Dependency audit" issue, updated in place (closed, the next run opens a new one). The job fails
+# only when a published package's own dependency range cannot reach a fixed version of a high or
 # critical advisory.
 
 on:
@@ -14,13 +17,18 @@ on:
   push:
     branches:
       - main
+      - next
     paths:
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - 'packages/*/package.json'
   pull_request:
     paths:
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - 'packages/*/package.json'
       - .github/workflows/audit.yml
-      - .github/scripts/audit-report.mjs
+      - .github/scripts/audit-report.ts
   workflow_dispatch:
 
 permissions:
@@ -48,7 +56,7 @@ jobs:
         id: audit
         run: |
           set +e
-          node .github/scripts/audit-report.mjs > audit-report.md
+          node .github/scripts/audit-report.ts > audit-report.md
           echo "code=$?" >> "$GITHUB_OUTPUT"
           cat audit-report.md >> "$GITHUB_STEP_SUMMARY"
 
@@ -71,6 +79,6 @@ jobs:
             gh issue create --title "Dependency audit" --label dependency-audit --body-file audit-report.md
           fi
 
-      - name: Fail on an advisory a fresh install of ogygia would get
+      - name: Fail on an advisory a fresh install of a published package would get
         if: steps.audit.outputs.code != '0'
         run: exit 1

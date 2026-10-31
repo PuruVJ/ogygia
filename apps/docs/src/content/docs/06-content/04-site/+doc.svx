@@ -7,7 +7,7 @@ related:
   - content/collections
 ---
 
-A [collection](/docs/content/collections) answers **what exists**: a set of typed entries. The site layer answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It builds directly on collections, and lives in the same `ogygia/content` barrel. **This site is one**: each page that you read is arranged, navigated, and searched by it. The **[Playground ↗](/playground)** is a second one: the stock shell, nine swappable themes, a version × locale switcher, a blog genre, and an OpenAPI reference, all minted by one `site()` call.
+A [collection](/docs/content/collections) answers **what exists**: a set of typed entries. The site layer answers **how they read as a site**: the nav tree, the order, the prev/next, the search index, the sitemap, the shell around the page. It builds directly on collections, and lives in the same `@ogygia/content` barrel. **This site is one**: each page that you read is arranged, navigated, and searched by it. The **[Playground ↗](/playground)** is a second one: the stock shell, nine swappable themes, a version × locale switcher, a blog genre, and an OpenAPI reference, all minted by one `site()` call.
 
 You give it collections and an arrangement. It mints small, data-returning, browser-safe functions that the routes and the shell consume. The corpus itself never crosses the wire.
 
@@ -39,7 +39,7 @@ The scaffold is ordinary app code that you own: a `folder()` collection, a `site
 
 ```ts title=src/lib/site.server.ts
 // server-only: the corpus can never reach a client bundle
-import { site, links } from 'ogygia/content';
+import { site, links } from '@ogygia/content';
 import { guides } from './collections.server';
 
 export const docs = site({
@@ -84,7 +84,7 @@ The collection holds the compiled corpus, possibly megabytes of markdown. The si
 
 ```ts title=src/lib/site.remote.ts
 // the wire layer
-import { remotes } from 'ogygia/content/server';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './site.server';
 
 export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });
@@ -97,7 +97,7 @@ The page component reads one function and renders the view. The [`<Doc>`](/docs/
 ```svelte title=src/routes/docs/[...slug]/+page.svelte
 <script>
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
 	import * as docs from '$lib/site.remote';
 
 	const view = await docs.page(page.params.slug);
@@ -110,9 +110,9 @@ And the layout mounts the shell over the `meta` remote. Thus the corpus never en
 
 ```svelte title=src/routes/docs/+layout.svelte
 <script>
-	import DocsShell from 'ogygia/content/docs-shell';
-	import 'ogygia/content/theme.css';
-	import 'ogygia/content/shell.css';
+	import DocsShell from '@ogygia/content/docs-shell';
+	import '@ogygia/content/theme.css';
+	import '@ogygia/content/shell.css';
 	import { meta } from '$lib/site.remote';
 	let { children } = $props();
 

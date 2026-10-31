@@ -1,0 +1,11 @@
+{
+	// svelte-check only: some components keep a plain-JS `<script>` (Region, LayoutChain,
+	// Devtools…), and TS reaches their types only with `allowJs`, which `isolatedDeclarations`
+	// refuses. `tsc -p .` still checks the declarations.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": false,
+		"isolatedDeclarations": false
+	}
+}

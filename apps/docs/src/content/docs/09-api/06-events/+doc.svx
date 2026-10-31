@@ -1,0 +1,8 @@
+---
+title: ogygia/events
+summary: The event layer — island wakes, server renders, navigations, and the sinks that read them.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: ogygia/events

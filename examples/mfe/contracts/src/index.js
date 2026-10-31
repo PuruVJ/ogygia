@@ -4,7 +4,7 @@
  * Cart belongs to the dash team; changing a shape here is a reviewed version bump.
  */
 import { SharedState } from 'ogygia';
-import { flag } from 'ogygia/flag';
+import { flag } from '@ogygia/flags';
 
 /** @type {SharedState<{ items: string[] }>} */
 export const cart = new SharedState('corp.cart', { items: [] });

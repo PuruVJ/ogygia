@@ -7,12 +7,14 @@
 **/.tarballs
 .git
 docs
-playground
+apps/palaestra
 verify
 talks
 experiment
 packages/content
 bench/results/fidelity.md
 
-# ...but ogygia ships its built dist (the image reuses it instead of rebuilding tsdown)
+# ...but ogygia ships its built dist (the image reuses it instead of rebuilding tsdown): the `ogygia`
+# package and the `@ogygia/core` it re-exports
 !packages/ogygia/dist
+!packages/core/dist

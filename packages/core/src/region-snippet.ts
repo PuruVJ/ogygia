@@ -1,0 +1,460 @@
+/**
+ * Region snippets — the snippet shape of a region. "Everything that crosses an island boundary is a
+ * region; components and snippets are its two shapes; static freezes, live wakes."
+ *
+ * A snippet handed to a component is a function, so it can't cross an island boundary directly (devalue
+ * can't stringify a function). A region snippet is a real Svelte snippet — same-graph `{@render}`
+ * renders it inline — that also carries a serializable DESCRIPTOR and knows how to REVIVE on the far
+ * side. One primitive, two modes:
+ *
+ *  - **live** — the compiler, at a snippet's DEFINITION site, compiles its body into an island ENTRY
+ *    and constructs a live region snippet (`{ m:'live', e, p }`). It renders the entry inline on the
+ *    server and HYDRATES it on the client, so the markup comes alive. This is the former "portable
+ *    snippet" path, unchanged in behavior, now expressed as the live mode of this one primitive.
+ *  - **static** — a PLAIN snippet reaching a boundary is FROZEN to its server-rendered HTML
+ *    (`{ m:'static', h }`). The client adopts that HTML byte-for-byte; nothing re-runs. No compiler
+ *    involvement, so it survives wrappers, re-exports, and a consumer swapping in their own component.
+ *    Correct for markdown content (prose, code): static, never reactive.
+ *
+ * The boundary law lives in ONE place — {@link reduce_region_snippet}: a branded region snippet crosses
+ * as its descriptor; a bare snippet is captured static; a parameterized snippet that can't be frozen
+ * throws, loudly. Revival is its single inverse, {@link revive_region_snippet}. `createRawSnippet` is
+ * isomorphic (server calls `render`, client calls `setup`), so one factory serves both legs of both
+ * modes with no manual environment branch.
+ */
+import { createRawSnippet, getAllContexts, hydrate, unmount, type Component, type Snippet } from 'svelte';
+import { render as ssr_render } from 'svelte/server';
+import { BROWSER, DEV } from 'esm-env';
+import { register_kind, mint } from './ref.ts';
+import { kit_render_context, kit_request_event } from './server/kit-context.ts';
+import { islands_endpoint } from './server/endpoint.ts';
+import { PORTABLE_FORM, with_portable_forms } from './portable-form.ts';
+import { analyze } from './seed-refs.ts';
+import { fnv1a, fnv1a32 } from './runtime/hash.ts';
+import { import_entry } from './runtime/entry-locations.ts';
+
+/**
+ * A hand-written SERVER component that renders a bare snippet: svelte has no public API to
+ * stringify a snippet, but a server component is just `($$renderer, $$props) => void` and a server
+ * snippet is `($$renderer) => void` — so the component simply invokes the snippet. Hand-written
+ * (not a `.svelte` file) so this module stays importable from plain node (endpoints, tests)
+ * without a svelte compiler in the loader.
+ */
+const RenderSnippet = (($$renderer: unknown, $$props: { s: Snippet }) => {
+	($$props.s as unknown as (r: unknown) => void)($$renderer);
+}) as unknown as Component;
+
+/** Devalue custom-type name a region snippet crosses under (wire-stable; was `OgygiaS`). */
+export const REGION_SNIPPET_WIRE_KEY = 'OgygiaS';
+
+/** The serializable stand-in a region snippet crosses as, discriminated by mode. */
+export type RegionSnippetDescriptor =
+	| { m: 'live'; e: string; p: Record<string, unknown> } // entry url + captured props
+	| { m: 'static'; h: string } // frozen server HTML (single-rooted)
+	| { m: 'slot'; id: string }; // ADOPT the in-place `<ogygia-slot data-og-slot=id>` DOM range
+
+/** A snippet stamped with its region descriptor. */
+type RegionSnippet = Snippet & { __ogRegion?: RegionSnippetDescriptor };
+
+// A single-root, layout-neutral wrapper so (a) `createRawSnippet` sees one root and (b) the SSR frame
+// and the client's adopted node agree byte-for-byte. `display:contents` keeps it out of layout.
+const WRAP_OPEN = '<ogygia-snippet style="display:contents">';
+const WRAP_CLOSE = '</ogygia-snippet>';
+// A frozen snippet is adopted HTML nothing hydrates, like slot children: marked, so a region inside it
+// wakes on its own instead of waiting on the host island's hydration (runtime/core.ts).
+const STATIC_OPEN = '<ogygia-snippet data-og-static style="display:contents">';
+
+// A live snippet renders in a root of its own on both legs, yet it belongs to the tree that renders
+// it: it takes that tree's contexts — the page's, and "inside an awake region" (context.ts). Without
+// them a lake inside it rendered bare and the island in the lake waited on its host forever, and a
+// page `setContext` read as unset on the server.
+const host_context = (): Map<unknown, unknown> | null => {
+	try {
+		return getAllContexts();
+	} catch {
+		return null;
+	}
+};
+/** context.ts `isInLiveSnippet` reads it: a hole in the body stays deferred (Region.svelte). */
+const LIVE_SNIPPET_KEY = Symbol.for('ogygia.live-snippet');
+const with_host = (context: Map<unknown, unknown>, host: Map<unknown, unknown> | null) => {
+	if (host) for (const [k, v] of host) context.set(k, v);
+	context.set(LIVE_SNIPPET_KEY, true);
+	return context;
+};
+
+/** Where a live snippet's pending hydrate waits on its host region: a global key, as the runtime
+ *  bundle and each island-entry bundle carry their own copy of this module (runtime/core.ts reads it). */
+const SNIPPET_BOOTS = Symbol.for('ogygia.snippet-boots');
+
+/** The host region is awake only once its snippets are: it signals `data-hydrated` after them. */
+function hold_host(el: Element, booted: Promise<unknown>) {
+	const host = el.closest('ogygia-region') as (Element & { [SNIPPET_BOOTS]?: Promise<unknown>[] }) | null;
+	// (a snippet re-created after its host signalled — an `{#if}` toggling — has nothing to hold)
+	if (host && !host.hasAttribute('data-hydrated')) (host[SNIPPET_BOOTS] ??= []).push(booted);
+}
+
+/**
+ * The ONE factory. Build a region snippet from its descriptor (+ the live entry when we're at its
+ * definition site and it's in the same bundle). Handles both modes and both legs.
+ */
+function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null): RegionSnippet {
+	// SLOT: the server rendered the real children in-place inside `<ogygia-slot data-og-slot=id>`; this
+	// pointer only ever revives on the CLIENT. Hydration ADOPTS the element at the render position
+	// without calling `render` at all (svelte's raw-snippet hydration), so `render` only runs when the
+	// island RE-CREATES the snippet later (e.g. an `{#if}` around `{@render children()}` toggling) —
+	// capture the marked element's HTML NOW, while it is still in the pre-hydration DOM, so re-creates
+	// re-inject the same markup (a nested `<ogygia-region>` inside re-wakes itself on reconnect).
+	if (desc.m === 'slot') {
+		const el = BROWSER ? document.querySelector(`ogygia-slot[data-og-slot="${desc.id}"]`) : null;
+		const h = el ? (el as HTMLElement).outerHTML : slot_marker_open(desc.id) + SLOT_MARKER_CLOSE;
+		const slot_snip = createRawSnippet(() => ({
+			render: () => h,
+			setup: () => {}
+		})) as RegionSnippet;
+		slot_snip.__ogRegion = desc;
+		return slot_snip;
+	}
+	// SERVER leg of a LIVE snippet: hand-written server snippet instead of `createRawSnippet` (whose
+	// server form is just `renderer.push(render())` — a SYNC string, which forced the entry's SSR
+	// through the sync renderer and made any top-level `await` inside the snippet body throw
+	// `await_invalid`). Here the OUTER renderer is threaded through: in async SSR the entry renders
+	// inside `renderer.child(async …)` — full async support, content assembles into the right position
+	// out-of-order — and in sync SSR (or without the internal APIs) it falls back to the old inline
+	// path byte-for-byte. `renderer.global.mode`/`child` are internal svelte APIs; the feature-detect
+	// degrades safely if they move.
+	if (!BROWSER && desc.m === 'live') {
+		type HeadChild = { push(html: string): void };
+		type ServerRenderer = {
+			push(html: string): void;
+			child(fn: (r: ServerRenderer) => unknown): unknown;
+			head?(fn: (child: HeadChild) => void): void;
+			global?: { mode?: string };
+		};
+		// The entry's inline SSR carries its OWN `<svelte:head>` — the nested islands' `island_preload`
+		// hints (correct priority already baked by Region.svelte) and their scoped-CSS links. `ssr_render`
+		// isolates that into `.head`; thread it into the DOCUMENT head so a portable forwarded through a
+		// PLAIN host still gets its islands' preloads — not only when a host island's props happen to carry
+		// the descriptor (the props-gated path in Region.svelte covers only island hosts). Same threading
+		// pattern svelte uses for async/boundary head; feature-detected so it degrades to body-only if the
+		// internal `head` renderer moves. A same-href hint the props path also emits is deduped downstream.
+		const thread_head = (r: ServerRenderer, head: string | undefined) => {
+			if (head && typeof r.head === 'function') r.head((child) => child.push(head));
+		};
+		// DEV: the synth ENTRY's own scoped `<style>` (a snippet body carries the host's styles) reaches
+		// the client only by executing its module — but a FROZEN snippet on a csr=false page never imports
+		// it, so its CSS silently never applied (dev ≠ prod, which ships it via fouc-css). In dev `desc.e`
+		// is the entry's module url; emit its region-css link so the runtime imports it on boot (executing
+		// it injects the scoped `<style>`), the same channel islands use. In prod `desc.e` is a built JS
+		// asset, so this DEV branch DCEs out and the entry CSS ships through the build handoff.
+		// (a modulepreload, as region_css_tag writes a dev module href: as a stylesheet link the browser
+		// fetched the module a second time as CSS — Safari logged "non CSS MIME types are not allowed")
+		const dev_css_link = DEV
+			? `<link rel="modulepreload" href="${desc.e}" data-ogygia-region-css>`
+			: '';
+		const server_snip = ((renderer: ServerRenderer, ...args: unknown[]) => {
+			// Server snippet args arrive as raw values; forward call-time params as `__ogArgs`.
+			const props = args.length ? { ...desc.p, __ogArgs: args } : desc.p;
+			const host = host_context();
+			const can_async =
+				!!live_entry && renderer?.global?.mode === 'async' && typeof renderer.child === 'function';
+			if (can_async) {
+				renderer.child(async (r) => {
+					const out = await ssr_render(live_entry!, { props, context: with_host(kit_render_context(), host) });
+					thread_head(r, (out.head || '') + dev_css_link);
+					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
+				});
+			} else {
+				const out = live_entry
+					? ssr_render(live_entry, { props, context: with_host(kit_render_context(), host) })
+					: { head: '', body: '' };
+				thread_head(renderer, (out.head || '') + dev_css_link);
+				renderer.push(WRAP_OPEN + out.body + WRAP_CLOSE);
+			}
+		}) as unknown as RegionSnippet;
+		server_snip.__ogRegion = desc;
+		return server_snip;
+	}
+	const snip = createRawSnippet((...params: Array<() => unknown>) => {
+		const host = host_context();
+		// Snippet params arrive as getters (both legs). A live snippet forwards them to its entry as
+		// `__ogArgs`, so a parameterized `{#snippet row(item)}` crosses alive and renders per call.
+		const live_props = () =>
+			desc.m === 'live'
+				? params.length
+					? { ...desc.p, __ogArgs: params.map((g) => g()) }
+					: desc.p
+				: {};
+		return {
+			render: () => {
+				if (desc.m === 'static') return STATIC_OPEN + desc.h + WRAP_CLOSE;
+				// live: inline the entry's SSR on the server; empty on the client (setup hydrates it).
+				return (
+					WRAP_OPEN +
+					(BROWSER || !live_entry
+						? ''
+						: ssr_render(live_entry, { props: live_props(), context: with_host(kit_render_context(), host) }).body) +
+					WRAP_CLOSE
+				);
+			},
+			setup: (el: Element) => {
+				if (desc.m === 'static') return; // frozen: adopt the SSR HTML, nothing to boot
+				let app: unknown;
+				let dead = false;
+				const boot = (Comp: Component) => {
+					if (!dead) app = hydrate(Comp, { target: el, props: live_props(), context: with_host(new Map(), host) });
+				};
+				if (live_entry) boot(live_entry);
+				else
+					hold_host(
+						el,
+						// its location (the page's island graph named it), not the stable name
+						import_entry<{ default: Component }>((desc as { e: string }).e).then((m) => boot(m.default))
+					);
+				return () => {
+					dead = true;
+					if (app) unmount(app as never);
+				};
+			}
+		};
+	}) as RegionSnippet;
+	snip.__ogRegion = desc;
+	return snip;
+}
+
+/** Freeze a plain snippet to a static region snippet by SSR-rendering it once (SERVER only). A snippet
+ *  that needs parameters can't be frozen — surface that as the actionable boundary error. `label` names
+ *  the island prop when known, so a plain function passed by mistake points at the right prop. */
+function capture_static(snippet: Snippet, label?: string): RegionSnippet {
+	let body: string;
+	try {
+		body = ssr_render(RenderSnippet, { props: { s: snippet }, context: kit_render_context() }).body;
+	} catch (e) {
+		// A Svelte snippet is just a function, so ogygia can't tell a real snippet from a plain
+		// callback until it tries to render it — which is HERE. Lead with "function" (not "snippet"):
+		// the most common cause is a plain function passed as a prop, which never crosses an island.
+		const where = label ? `prop \`${label}\`` : 'a function prop';
+		throw new Error(
+			`[ogygia] ${where} is a function that can't cross the island boundary — ` +
+				`${e instanceof Error ? e.message : String(e)}. Island props must be SERIALIZABLE; a function ` +
+				`crosses only as a Svelte snippet that freezes to HTML, and this one didn't. Usually one of:\n` +
+				`  • it's a PLAIN function (an event handler / callback) — those can't cross into an island; ` +
+				`pass serializable data as props and keep the behavior inside the island component;\n` +
+				`  • it's a snippet WITH PARAMETERS — declare it as a {#snippet} so it crosses LIVE, or pass ` +
+				`its data as props;\n` +
+				`  • it's children containing a NESTED island — keep those out of frozen children for now.`
+		);
+	}
+	return make({ m: 'static', h: body });
+}
+
+// ── live constructor: emitted by the compiler at a snippet's definition site ──
+/**
+ * Definition-site factory (compiler-emitted). Brands the snippet AS WRITTEN (`native`) — it keeps
+ * rendering in place, in the host's tree: the host's context, its scoped CSS, a nested island as a plain
+ * page island — with the descriptor (`__ogRegion`, what crosses the wire) and its PORTABLE form: the
+ * body compiled to `Entry`, rendered in isolation on the server and hydrated alone on the client. Only a
+ * boundary swaps the portable form in (portable-form.ts, via {@link prepare_region_props}), so the server
+ * markup and the client's revived snippet agree. `Entry` is `null` in a client bundle (the far side
+ * imports it by url). The native function is branded in place (not wrapped), so its identity — what a
+ * `{@render}` keys on — is stable across re-evaluations of the prop.
+ */
+export function og_portable(
+	native: Snippet,
+	Entry: Component | null,
+	props: Record<string, unknown>,
+	url: string
+): RegionSnippet {
+	const desc: RegionSnippetDescriptor = { m: 'live', e: url, p: props };
+	const snip = native as RegionSnippet;
+	snip.__ogRegion = desc;
+	let portable: RegionSnippet | null = null;
+	Object.defineProperty(snip, PORTABLE_FORM, {
+		configurable: true,
+		enumerable: false,
+		get: () => (portable ??= make(desc, Entry))
+	});
+	return snip;
+}
+
+// ── public API: `region.snippet()` — pure runtime, static by default, mirrors `createRawSnippet` ──
+export interface RawRegionSnippet {
+	/** Single-root HTML for SSR + hydration match (same rule as `createRawSnippet`). */
+	render: (...captures: unknown[]) => string;
+	/** Client behavior after mount/adoption. DROPPED if this snippet is reduced across a wire. */
+	setup?: (root: Element, ...captures: unknown[]) => (() => void) | void;
+	/** Devalue-serializable inputs — same law as island props. */
+	captures?: unknown[];
+}
+
+/** Lift a parameterless snippet, or a raw `{ render, setup?, captures? }`, into a region snippet. */
+export function region_snippet(input: Snippet | RawRegionSnippet): RegionSnippet {
+	// Lifting a bare snippet freezes it via SSR (`render`) — a server-only capture. Guarding the
+	// client path keeps `svelte/server` out of the client graph (the raw `{render,setup}` form below
+	// is fully client-safe and is what an island actually revives from).
+	if (typeof input === 'function' && !BROWSER) return capture_static(input as Snippet); // lift form
+	if (typeof input === 'function') {
+		throw new Error(
+			'[ogygia] region_snippet(fn) freezes a snippet by server-rendering it — call it during SSR, ' +
+				'not on the client. Pass a raw { render, setup } region snippet for client-constructed regions.'
+		);
+	}
+	const caps = input.captures ?? [];
+	const snip = createRawSnippet(() => ({
+		render: () => WRAP_OPEN + input.render(...caps) + WRAP_CLOSE,
+		setup: input.setup ? (el: Element) => void input.setup!(el, ...caps) : () => {}
+	})) as RegionSnippet;
+	// Reduced form carries the rendered HTML (setup can't cross a wire — it warns there, not here).
+	snip.__ogRegion = { m: 'static', h: input.render(...caps) };
+	return snip;
+}
+
+/**
+ * Prepare an island's props for crossing: freeze each BARE snippet prop to a single-rooted static
+ * region snippet, so the SAME value renders the island body AND serializes — the body HTML and the
+ * revived client snippet then agree byte-for-byte, and hydration adopts cleanly. Server-only (uses SSR
+ * capture). A branded (live) snippet, at any depth, is swapped for its PORTABLE form; non-snippet values
+ * pass through untouched. Returns the original object when nothing changed (no needless copy).
+ */
+export function prepare_region_props(input: Record<string, unknown>): Record<string, unknown> {
+	if (BROWSER) return input; // freezing is an SSR capture; the client revives from the descriptor
+	// JSON-exact props hold no function at any depth, so no snippet to freeze or swap: skip both walks.
+	// (The measure is cached per props object, and the props wire asks for the same one right after.)
+	if (analyze(input).json) return input;
+	// A branded snippet (at any depth) crosses in its PORTABLE form, so this island's server body
+	// renders the same shape its client revives (portable-form.ts).
+	const props = with_portable_forms(input);
+	let out: Record<string, unknown> | null = null;
+	for (const k in props) {
+		const v = props[k];
+		if (
+			typeof v === 'function' &&
+			!(v as RegionSnippet).__ogRegion &&
+			(v as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.fn')] === undefined // og.$ fn: crosses as a fn ref
+		) {
+			(out ??= { ...props })[k] = capture_static(v as Snippet, k);
+		}
+	}
+	return out ?? props;
+}
+
+// ── slot mode: children cross by IN-PLACE render + client adoption (no capture, no double-render) ──
+/** The SSR marker that fences an island's in-place children so the client can adopt exactly that range.
+ *  `display:contents` keeps it layout-neutral. */
+export function slot_marker_open(id: string): string {
+	return `<ogygia-slot data-og-slot="${id}" style="display:contents">`;
+}
+export const SLOT_MARKER_CLOSE = '</ogygia-slot>';
+
+/**
+ * Slot marker ids: PER REQUEST, so two renders of the same page mint the same ids and the HTML is
+ * byte-identical across requests (a host's post-render cache, a freeze store, an ETag all key on
+ * the bytes; a process-wide counter made every page differ from its previous render). Page-unique
+ * within one SSR pass is all the id must be — it fences a marker to its payload pointer. A hole
+ * response is spliced INTO a page that has its own sequence, so an endpoint render prefixes its
+ * ids with its region id and can never collide with the page's. Off-request (a test, a tool, the
+ * client) the process counter stands in. The request comes through the kit-context reader the
+ * handle installs (no Vite virtual here — this module is imported by plain-Node consumers too).
+ *
+ * COUNTED PER `key` (the island's entry): with async SSR, regions start in the order their data
+ * arrives, so ONE counter for the page gave an island in an async branch a different number on each
+ * request (and every island after it). Per entry, an island's id moves only against another copy of
+ * the SAME island that started in a different order — rare, and still page-unique.
+ */
+const slot_seq_by_request = new WeakMap<object, { prefix: string; n: Map<string, { n: number; tag: string }> }>();
+let _slot_seq = 0;
+export function next_slot_id(key = ''): string {
+	const event = kit_request_event() as { url?: URL } | null;
+	if (event && typeof event === 'object') {
+		let seq = slot_seq_by_request.get(event);
+		if (!seq) {
+			const url = event.url;
+			const hole = url?.pathname.endsWith(islands_endpoint())
+				? (url.searchParams.get('id') ?? '').slice(0, 6)
+				: '';
+			slot_seq_by_request.set(event, (seq = { prefix: hole ? hole + '-' : '', n: new Map() }));
+		}
+		// (each entry's tag hashed once per request: the next copies only count)
+		let c = seq.n.get(key);
+		if (!c) seq.n.set(key, (c = { n: 0, tag: key ? fnv1a32(key).toString(36) + '-' : '' }));
+		return 'og' + seq.prefix + c.tag + (++c.n).toString(36);
+	}
+	_slot_seq = (_slot_seq + 1) & 0x7fffffff;
+	return 'og' + _slot_seq.toString(36);
+}
+
+/** The serialize-only stand-in for in-place children: a branded value the codec reduces to a `slot`
+ *  descriptor. Never rendered (the server body renders the real children); on the client it revives to a
+ *  snippet that ADOPTS the marked DOM range. */
+export function slot_pointer(id: string): RegionSnippet {
+	const snip = (() => {}) as unknown as RegionSnippet;
+	snip.__ogRegion = { m: 'slot', id };
+	return snip;
+}
+
+// ── the boundary law, as the hub's SNIPPET kind: one encode, one decode, both modes ──
+/** The hub kind: a snippet is a renderable Ref ("a snippet is a region", now literal). A branded
+ *  region snippet crosses as its descriptor; a bare snippet FREEZES at the boundary (server-only —
+ *  the BROWSER guard also keeps `capture_static` → `svelte/server` DCE-able out of client bundles);
+ *  a bare function on the CLIENT falls through (never claimed — it can't freeze there). */
+/** Explicit registration — called at module scope AND from live-transport's install():
+ *  a bare side-effect import gets tree-shaken (the package marks JS side-effect-free),
+ *  which silently un-registers the kind in client bundles. A CALLED import cannot be dropped. */
+export function register_snippet_kind(): void {
+	register_kind({
+		k: 'snippet',
+		match(value) {
+			if (typeof value !== 'function') return false;
+			if ((value as RegionSnippet).__ogRegion) return true;
+			// an og.$-branded fn belongs to the FN kind — freezing it as a snippet would be wrong
+			if ((value as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.fn')] !== undefined)
+				return false;
+			return !BROWSER; // a bare snippet is only claimable where it can freeze (SSR capture)
+		},
+		encode(value) {
+			const branded = (value as RegionSnippet).__ogRegion;
+			if (branded) return { d: branded };
+			return { d: capture_static(value as unknown as Snippet).__ogRegion };
+		},
+		decode(ref) {
+			return make(ref.d as RegionSnippetDescriptor);
+		},
+		stable_id: snippet_stable_id
+	});
+}
+
+/**
+ * A snippet's ref id from its descriptor: decode reads only `d` and a revived snippet holds no state,
+ * so equal descriptors are the same snippet — and a render names it the same every time (a random id
+ * here changed the fingerprint and the bytes of every island with children, on every request).
+ *  - `slot`: its slot id, already page-unique and stable (next_slot_id);
+ *  - `static`: a hash of its frozen HTML;
+ *  - `live`: a hash of its entry and props — only when the props are JSON-exact (seed-refs `analyze`,
+ *    the JSON lane's own rule): `JSON.stringify` turns a Map, a Set, a Date or a class instance into
+ *    something that two different values share, and those must not share a revived snippet.
+ *    Anything else keeps a random id.
+ */
+function snippet_stable_id(d: unknown): string | undefined {
+	const desc = d as RegionSnippetDescriptor;
+	if (desc.m === 'slot') return 'slot:' + desc.id;
+	if (desc.m === 'static') return 's' + fnv1a(desc.h);
+	if (desc.m === 'live' && analyze(desc.p).json) return 'l' + fnv1a(desc.e + '\0' + JSON.stringify(desc.p));
+	return undefined;
+}
+
+const SNIPPET_ONLY = new Set(['snippet']);
+
+/** Codec encode (legacy `OgygiaS` wire shape: the bare descriptor). Branded region snippet → its
+ *  descriptor; a bare snippet → frozen static; anything else falls through. */
+export function reduce_region_snippet(value: unknown): RegionSnippetDescriptor | undefined {
+	register_snippet_kind();
+	const ref = mint(value, SNIPPET_ONLY);
+	return ref === undefined ? undefined : (ref.d as RegionSnippetDescriptor);
+}
+
+/** Codec decode. Rebuild a live snippet from the descriptor (both modes). Snippets are functions,
+ *  which the hub deliberately never memoizes — each consumer revives its own (stateless until
+ *  rendered), exactly the pre-hub behavior. */
+export function revive_region_snippet(desc: RegionSnippetDescriptor): RegionSnippet {
+	return make(desc);
+}

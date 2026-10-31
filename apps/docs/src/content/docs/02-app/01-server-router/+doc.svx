@@ -7,7 +7,7 @@ related:
   - regions/held-regions
 ---
 
-`ogygia/router` is **the routing model of SvelteKit, expressed as values** instead of a file tree. One ordinary module declares the full route table: pages, layouts, loads, actions, endpoints. The types thread through it. Thus each component reads its `data`, `params`, and `form` fully typed, with **no codegen and no `$types` import**.
+`@ogygia/router` is **the routing model of SvelteKit, expressed as values** instead of a file tree. One ordinary module declares the full route table: pages, layouts, loads, actions, endpoints. The types thread through it. Thus each component reads its `data`, `params`, and `form` fully typed, with **no codegen and no `$types` import**.
 
 It runs on the **server**: it matches the request, runs the load cascade, and renders the page through its layout chain. It is the counterpart to the [SPA router](/docs/app/spa-router), which navigates between those pages on the client. Use either alone. Together, the server router defines routes, and the SPA router moves between them.
 
@@ -17,10 +17,27 @@ All that a Kit user knows carries over: `+layout.svelte` loads, the data cascade
 Use it when your routes are *computed*: a CMS whose paths come from a database, a tool whose pages are generated, a package that ships its own routes. Or when you want the full route table, its loaders, and its components in one place, not scattered across `+page.svelte` / `+page.server.ts` / `+server.ts`. For a few ordinary pages, the file routes of Kit are simpler. This is not a replacement that you must adopt.
 :::
 
+## Installing
+
+The server router is its own package. Install it, and list its plugin beside `ogygia()`:
+
+```bash
+pnpm add @ogygia/router
+```
+
+```ts title=vite.config.ts
+import { ogygia } from 'ogygia/vite';
+import { router } from '@ogygia/router/vite';
+
+plugins: [ogygia(), router(), sveltekit()]
+```
+
+The plugin tells the build that every module importing `@ogygia/router` renders pages. Thus each component those pages reach gets its CSS linked when it renders. See [Plugins](/docs/reference/plugins).
+
 ## The whole thing in one file
 
 ```ts title=src/lib/router.ts
-import { routes, page, layout, load, redirect, error, fail } from 'ogygia/router';
+import { routes, page, layout, load, redirect, error, fail } from '@ogygia/router';
 import AppShell from '$lib/views/AppShell.svelte';
 import Home from '$lib/views/Home.svelte';
 import Doc from '$lib/views/Doc.svelte';
@@ -137,7 +154,7 @@ routes(
 );
 ```
 
-| Kit | ogygia/router |
+| Kit | @ogygia/router |
 | --- | --- |
 | `+layout-foo.svelte` (a named layout) | `layout('foo', Foo)` |
 | `+page@foo.svelte` (reset to `foo`) | place the route inside `foo(…)` but outside the inner wraps |
@@ -152,7 +169,7 @@ A load is a function of `c` that returns the data of the page. Declare it inline
 page(Doc, { load: async (c) => ({ doc: await docs.get(c.params.slug) }) }),
 
 // pulled out, typed by the pattern
-import type { Load } from 'ogygia/router';
+import type { Load } from '@ogygia/router';
 const docLoad: Load<'/docs/[slug]'> = async (c) => ({ doc: await docs.get(c.params.slug) });
 page(Doc, { load: docLoad }),
 ```
@@ -230,18 +247,20 @@ An endpoint is the `+server.ts` shape, written as an object of **uppercase verb 
 },
 ```
 
-`c.params` is typed from the **table key**: a bare handler reads `c.params.id`, with no pattern restated. When you need typed params in a *pulled-out* handler, or a **body schema**, use the exported verb wrappers `GET` / `POST` / `PUT` / `DELETE` / `PATCH`: the same "bare or wrapper" choice as `load()`/`action()`:
+The **table key types each handler**. `c.params.id` is a `string`, and `c.params.slug` on that route is an error. The handler's return type is kept, so the [typed API client](#typed-api-client) knows what it answers. This holds at the top of the table, inside `layout(...)` tables, and behind `when()`. A **body schema** takes the verb wrappers `POST` / `PUT` / `PATCH`, and the key still types `c.params`:
 
 ```ts
-import { POST, type Handler } from 'ogygia/router';
+import { POST, type Handler } from '@ogygia/router';
 
 // body schema on POST/PUT/PATCH → validated JSON body into c.input (400 on bad input)
-'/posts': { POST: POST(NewPostSchema, (c) => c.json(create(c.input))) },
+'/posts/[id]': { PUT: POST(EditPostSchema, (c) => update(c.params.id, c.input)) },
 
-// pulled out + typed by the pattern
-const readPost: Handler<'/posts/[id]'> = (c) => c.json(read(c.params.id));
+// a handler written outside the table: `satisfies` checks it against its route and keeps its return type
+const readPost = ((c) => read(c.params.id)) satisfies Handler<'/posts/[id]'>;
 '/posts/[id]': { GET: readPost },
 ```
+
+Write `satisfies`, not a type annotation (`const readPost: Handler<…>`). An annotation replaces the handler's own return type with the annotation's, so the typed client would read `unknown`.
 
 `GET`/`DELETE` take no body schema (their input is path params + query, already typed). `HEAD` and `OPTIONS` are handled automatically from the verb set. A wrong method 405s, with an `Allow` header.
 
@@ -276,10 +295,10 @@ routes(table, {
 
 ## Control flow: redirect, error, fail
 
-Thrown from a load, action, or handler. The exact names of Kit, imported from `ogygia/router`:
+Thrown from a load, action, or handler. The exact names of Kit, imported from `@ogygia/router`:
 
 ```ts
-import { redirect, error, fail } from 'ogygia/router';
+import { redirect, error, fail } from '@ogygia/router';
 
 redirect(303, '/login');            // → a redirect Response
 error(404, 'Not found');            // → the nearest error boundary (page) / JSON (endpoint)
@@ -337,7 +356,7 @@ The table already knows the path grammar, body schema, and payload of each endpo
 ```ts
 export type App = typeof app.$infer;                 // the map the app already exports
 
-import { api } from 'ogygia/router/client';           // browser-safe (islands can import it)
+import { api } from '@ogygia/router/api';           // browser-safe (islands can import it)
 const svc = api<App>('https://svc.internal');
 
 const post = await svc.get('/posts/[id]', { params: { id: '1' } });   // payload: typed
@@ -413,7 +432,7 @@ Each set fills the pattern into the `entries()` crawl list of the router. A dyna
 Wrap a table entry (a page, an endpoint object, a [`mount()`](/docs/app/federation)), and it exists only when the gate says so:
 
 ```ts
-import { when } from 'ogygia/router';
+import { when } from '@ogygia/router';
 import { checkoutV2, exportsFlag, cmsRollout } from '$lib/flags';
 
 routes({
@@ -458,15 +477,15 @@ routes(table, {
   miss: (c) => c.error(404),    // response for an unmatched path under `base`
   load: authGuard,              // a table-wide load before EVERY route — a guard with no chrome
   visitor: session,             // THE identity → c.visitor (see above)
-  experiments: [csrExp],        // auto-carried into federation hops — see Experiments
+  flags: [csrMode],             // decided up front, carried into federation hops — see Flags & experiments
 });
 ```
 
 The table-wide `load` is the root `+layout.server.ts` load of Kit, without a component. It runs before each route (pages *and* endpoints). It throws `redirect`/`error` to gate. Its data merges into each page. It is the place for auth, when there is no shared shell to hang it on.
 
-## Kit ↔ ogygia/router
+## Kit ↔ @ogygia/router
 
-| SvelteKit | ogygia/router |
+| SvelteKit | @ogygia/router |
 | --- | --- |
 | `src/routes/` tree | one `routes({ … })` table |
 | `+page.svelte` | first arg of `page()` |
@@ -479,7 +498,7 @@ The table-wide `load` is the root `+layout.server.ts` load of Kit, without a com
 | `await parent()` | read the merged `data`; in a load, `await sharedLoad(c)` |
 | `page.data` | the leaf page's merged `data` |
 | `depends` + `invalidate` / `invalidateAll` | `invalidateAll()` (re-runs the branch's loads) |
-| `throw redirect()` / `error()` | same names, from `ogygia/router` |
+| `throw redirect()` / `error()` | same names, from `@ogygia/router` |
 | `./$types` (`PageData`, …) | `App['/path']` — no codegen |
 | `$app/state`, `$app/navigation` | work unchanged on router pages |
 

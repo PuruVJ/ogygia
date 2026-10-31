@@ -12,8 +12,8 @@
 	// own skin (never ogygia theme.css). An empty `header` snippet removes the top header, so the
 	// floating sidebar panel is the chrome: brand row (`side` snippet), search, theme toggle, and the
 	// docs nav — exactly the shape the bespoke SideNav had, now rendered by the Shell's built-ins.
-	import DocsShell from 'ogygia/content/docs-shell';
-	import 'ogygia/content/shell.css'; // layout FORM only (@layer ogygia — the unlayered skin wins)
+	import DocsShell from '@ogygia/content/docs-shell';
+	import '@ogygia/content/shell.css'; // layout FORM only (@layer ogygia — the unlayered skin wins)
 	import '$lib/styles/shell-skin.css'; // the site's LOOK on the .ph-* hooks
 	import SiteHeader from '$lib/SiteHeader.svelte';
 	import * as ogygia from 'ogygia';

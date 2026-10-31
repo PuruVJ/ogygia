@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '$lib/styles/widget.css';
-	import type { Cart } from './cart-store.svelte.js';
+	import type { Cart } from './cart-store.svelte.ts';
 
 	let { cart }: { cart: Cart } = $props();
 </script>

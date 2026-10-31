@@ -26,7 +26,7 @@ export const GET = docs.emit.search();
 
 ```ts [server query]
 // src/lib/site.remote.ts — when the index shouldn't ship
-import { remotes } from 'ogygia/content/server';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './site.server';
 export const { search } = remotes(docs, { base: '/docs' });
 ```
@@ -41,7 +41,7 @@ The same engine (`docs.search`), the same section documents, the same ranking. O
 
 ```svelte
 <script>
-	import { Search } from 'ogygia/content';
+	import { Search } from '@ogygia/content';
 </script>
 
 <Search base="/docs" placeholder="Search the docs" />
@@ -93,7 +93,7 @@ export const load = async ({ url }) => ({
 
 ```svelte
 <script>
-	import { SearchPage } from 'ogygia/content';
+	import { SearchPage } from '@ogygia/content';
 	let { data } = $props();
 </script>
 

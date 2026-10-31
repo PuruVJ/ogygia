@@ -1,0 +1,8 @@
+---
+title: '@ogygia/devtools'
+summary: The in-page dock.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/devtools

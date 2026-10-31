@@ -2,22 +2,22 @@
 	// Dogfood the Shell. Header extras are a SNIPPET — it renders in the desktop header and,
 	// because the compiler makes a forwarded snippet PORTABLE, crosses into the mobile island's sheet
 	// footer and comes alive there.
-	import DocsShell from 'ogygia/content/docs-shell';
+	import DocsShell from '@ogygia/content/docs-shell';
 	// Styling is OPT-IN: the Shell ships no CSS, so we import the ogygia look explicitly.
 	// FORM + LANGUAGE compose: shell.css is the building blocks (layout only); the LANGUAGE is one
 	// of nine zen-garden theme files, loaded via a swappable <link> (see <svelte:head>) so the
 	// floating ThemePicker can switch skins at runtime. Thalassa is the default.
-	// (The STOCK pair still works too: `import 'ogygia/content/theme.css'` BEFORE shell.css.)
-	import 'ogygia/content/shell.css'; // the FORM: header + sidebar + content grid + mobile chrome
-	import stock from 'ogygia/content/theme.css?url'; // the stock default language
-	import thalassa from 'ogygia/content/themes/thalassa.css?url';
-	import alexandria from 'ogygia/content/themes/alexandria.css?url';
-	import pyros from 'ogygia/content/themes/pyros.css?url';
-	import zephyros from 'ogygia/content/themes/zephyros.css?url';
-	import selas from 'ogygia/content/themes/selas.css?url';
-	import daidalos from 'ogygia/content/themes/daidalos.css?url';
-	import kalliope from 'ogygia/content/themes/kalliope.css?url';
-	import nephele from 'ogygia/content/themes/nephele.css?url';
+	// (The STOCK pair still works too: `import '@ogygia/content/theme.css'` BEFORE shell.css.)
+	import '@ogygia/content/shell.css'; // the FORM: header + sidebar + content grid + mobile chrome
+	import stock from '@ogygia/content/theme.css?url'; // the stock default language
+	import thalassa from '@ogygia/content/themes/thalassa.css?url';
+	import alexandria from '@ogygia/content/themes/alexandria.css?url';
+	import pyros from '@ogygia/content/themes/pyros.css?url';
+	import zephyros from '@ogygia/content/themes/zephyros.css?url';
+	import selas from '@ogygia/content/themes/selas.css?url';
+	import daidalos from '@ogygia/content/themes/daidalos.css?url';
+	import kalliope from '@ogygia/content/themes/kalliope.css?url';
+	import nephele from '@ogygia/content/themes/nephele.css?url';
 	import ThemePicker from '$lib/playground/ThemePicker.svelte' with { wake: 'load' };
 	const themes = { thalassa, stock, alexandria, pyros, zephyros, selas, daidalos, kalliope, nephele };
 	// Self-hosted variable fonts — the theme references Inter / JetBrains Mono; point its tokens at the
@@ -28,7 +28,7 @@
 	// the `meta` remote and hand it to `<DocsShell {meta}>`. Nothing here imports the collections.
 	import { page } from '$app/state';
 	import { meta } from '$lib/playground/docs.remote';
-	import { BlogShell } from 'ogygia/content';
+	import { BlogShell } from '@ogygia/content';
 	let { children } = $props();
 	// The blog genre gets its OWN chrome (centered, no docs sidebar); everything else uses the docs
 	// Shell. Branch here so the blog isn't double-wrapped, and skip the docs `meta` fetch on blog pages.

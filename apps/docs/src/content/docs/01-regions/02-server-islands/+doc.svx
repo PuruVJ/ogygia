@@ -100,10 +100,10 @@ Pass an `ogygiaFallback` snippet. It shows in the placeholder until the real HTM
 
 ## Caching: dynamic by default
 
-A server island is **fresh on each request**. Its endpoint is served with `Cache-Control: no-store`. A reload renders it again. That is the correct default for a hole (a per-request clock, cookie-personal data). To let a hole stay in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-regionspresets):
+A server island is **fresh on each request**. Its endpoint is served with `Cache-Control: no-store`. A reload renders it again. That is the correct default for a hole (a per-request clock, cookie-personal data). To let a hole stay in the browser cache, give it a `maxAge` in a [preset](/docs/reference/api#ogygiavite-presets):
 
 ```ts title=vite.config.ts
-ogygia({ regions: { presets: { pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' } } } })
+ogygia({ presets: { pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' } } })
 ```
 
 ```svelte

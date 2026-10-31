@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import { TabGroup, Tab } from 'ogygia/content';
+	import { TabGroup, Tab } from '@ogygia/content';
 	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 	import Stopwatch from '$lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
 	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
@@ -112,7 +112,7 @@ A reference-style table with more rows, the kind an API page produces:
 ### Bash
 
 ```bash
-pnpm add ogygia
+pnpm add ogygia @ogygia/content
 pnpm dev --host --port 4321
 git commit -m "docs: add kitchen sink"
 ```
@@ -120,7 +120,7 @@ git commit -m "docs: add kitchen sink"
 ### TypeScript
 
 ```ts
-import { content, markdown, json } from 'ogygia/content';
+import { content, markdown, json } from '@ogygia/content';
 import { z } from 'zod';
 
 export const guides = content({
@@ -173,7 +173,8 @@ export async function resolve(slug: string) {
 		"preview": "vite preview"
 	},
 	"dependencies": {
-		"ogygia": "^0.5.0",
+		"@ogygia/content": "^0.11.0",
+		"ogygia": "^0.11.0",
 		"svelte": "^5.0.0"
 	}
 }
@@ -257,8 +258,8 @@ Tabs are not only for shells. Here they compare the same config across formats:
 
 ```ts
 export default {
-	content: 'src/content',
-	defaultWake: 'visible'
+	visible: { margin: '200px' },
+	presets: { chart: { wake: 'visible' } }
 };
 ```
 
@@ -267,8 +268,8 @@ export default {
 
 ```json
 {
-	"content": "src/content",
-	"defaultWake": "visible"
+	"visible": { "margin": "200px" },
+	"presets": { "chart": { "wake": "visible" } }
 }
 ```
 

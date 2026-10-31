@@ -1,0 +1,9 @@
+{
+	"$schema": "https://turborepo.com/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"e2e": {
+			"dependsOn": ["^build", "build", "content-e2e-app#fixture"]
+		}
+	}
+}

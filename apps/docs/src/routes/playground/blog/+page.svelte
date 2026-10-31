@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The blog INDEX — post refs over the wire (corpus server-only), rendered by <BlogList>.
-	import { BlogList } from 'ogygia/content';
+	import { BlogList } from '@ogygia/content';
 	import { postList } from '$lib/playground/blog.remote';
 
 	const posts = await postList();

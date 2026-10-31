@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/content';
-	import type { PageView } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
+	import type { PageView } from '@ogygia/content';
 	import * as docs from '$lib/docs.remote'; // namespace: `page` would clash with $app/state
 	import { TOPICS, topicFromPath, type DocData } from '$lib/topics';
 

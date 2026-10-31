@@ -11,20 +11,21 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
-		"@shikijs/twoslash": "3.23.0",
-		"@sveltejs/adapter-vercel": "^6.3.4",
-		"@sveltejs/kit": "^2.70.2",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"magic-string": "^1.1.0",
-		"svelte": "^5.56.8",
-		"svelte-check": "^4.7.4",
-		"svelte2tsx": "^0.7.60",
+		"@ogygia/content": "workspace:*",
+		"@shikijs/twoslash": "^4.5.0",
+		"@sveltejs/adapter-vercel": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"magic-string": "catalog:",
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"svelte2tsx": "catalog:",
 		"twoslash": "0.3.9",
 		"twoslash-svelte": "0.3.9",
-		"typescript": "^6.0.3",
-		"vite": "^8.2.0",
+		"typescript": "catalog:",
+		"vite": "catalog:",
 		"vite-imagetools": "^12.0.0",
-		"vitest": "^4.1.10"
+		"vitest": "catalog:"
 	},
 	"dependencies": {
 		"@fontsource/atkinson-hyperlegible": "^5.2.5",
@@ -32,12 +33,12 @@
 		"@fontsource/eb-garamond": "^5.2.5",
 		"@fontsource/fira-mono": "^5.2.5",
 		"@fontsource/fira-sans": "^5.2.5",
-		"bits-ui": "^2.18.1",
-		"devalue": "^5.9.0",
-		"mdast-util-from-markdown": "^2.0.2",
-		"mdsvex": "^0.12.8",
+		"bits-ui": "catalog:",
+		"devalue": "catalog:",
+		"mdast-util-from-markdown": "catalog:",
+		"mdsvex": "catalog:",
 		"ogygia": "workspace:*",
-		"shiki": "^3.9.1",
-		"valibot": "^1.4.2"
+		"shiki": "catalog:",
+		"valibot": "catalog:"
 	}
 }

@@ -3,7 +3,7 @@
  * Nested layouts + loads (merged cascade), a form action (method passthrough over the wire),
  * a redirect, a miss → everything the shell's mount must translate faithfully.
  */
-import { routes, page, layout, error, redirect } from 'ogygia/router';
+import { routes, page, layout, error, redirect } from '@ogygia/router';
 import { csr_flag } from '@corp/contracts';
 import CmsShell from './CmsShell.svelte';
 import PostsShell from './PostsShell.svelte';

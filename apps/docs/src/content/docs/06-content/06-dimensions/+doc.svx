@@ -20,7 +20,7 @@ You declare the axes, and a `resolve` that sources the outline for a coordinate.
 ::: code-group
 
 ```ts [one axis — versions]
-import { site, dimensions } from 'ogygia/content';
+import { site, dimensions } from '@ogygia/content';
 import { v1, v2 } from './collections.server';
 
 export const docs = site({

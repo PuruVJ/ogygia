@@ -2,9 +2,6 @@
 	"name": "ogygia",
 	"version": "0.10.2",
 	"type": "module",
-	"sideEffects": [
-		"**/*.css"
-	],
 	"description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
@@ -23,12 +20,12 @@
 			"default": "./src/index.ts"
 		},
 		"./vite": {
-			"types": "./dist/vite/index.d.ts",
-			"default": "./dist/vite/index.js"
+			"types": "./dist/vite.d.ts",
+			"default": "./dist/vite.js"
 		},
 		"./runtime": {
-			"types": "./dist/runtime/index.d.ts",
-			"default": "./src/runtime/index.ts"
+			"types": "./dist/runtime.d.ts",
+			"default": "./src/runtime.ts"
 		},
 		"./hooks": {
 			"types": "./dist/hooks.d.ts",
@@ -44,142 +41,84 @@
 			"default": "./src/internal.ts"
 		},
 		"./internal/server": {
-			"svelte": "./src/internal-server.ts",
-			"types": "./dist/internal-server.d.ts",
-			"default": "./src/internal-server.ts"
+			"svelte": "./src/internal/server.ts",
+			"types": "./dist/internal/server.d.ts",
+			"default": "./src/internal/server.ts"
+		},
+		"./internal/instruments": {
+			"svelte": "./src/internal/instruments.ts",
+			"types": "./dist/internal/instruments.d.ts",
+			"default": "./src/internal/instruments.ts"
 		},
 		"./internal/register": {
-			"svelte": "./src/internal-register.ts",
-			"types": "./dist/internal-register.d.ts",
-			"default": "./src/internal-register.ts"
+			"svelte": "./src/internal/register.ts",
+			"types": "./dist/internal/register.d.ts",
+			"default": "./src/internal/register.ts"
 		},
 		"./internal/compiler-ids": {
-			"svelte": "./src/compiler/ids.ts",
-			"types": "./dist/compiler/ids.d.ts",
-			"default": "./src/compiler/ids.ts"
+			"svelte": "./src/internal/compiler-ids.ts",
+			"types": "./dist/internal/compiler-ids.d.ts",
+			"default": "./src/internal/compiler-ids.ts"
 		},
 		"./internal/region-core": {
-			"types": "./dist/region-core.d.ts",
-			"default": "./dist/region-core.js"
+			"types": "./dist/internal/region-core.d.ts",
+			"default": "./dist/internal/region-core.js"
 		},
 		"./internal/reconcile": {
-			"svelte": "./src/internal-reconcile.ts",
-			"types": "./dist/internal-reconcile.d.ts",
-			"default": "./src/internal-reconcile.ts"
+			"svelte": "./src/internal/reconcile.ts",
+			"types": "./dist/internal/reconcile.d.ts",
+			"default": "./src/internal/reconcile.ts"
 		},
 		"./internal/compiler": {
-			"types": "./dist/compiler/index.d.ts",
-			"default": "./dist/compiler/index.js"
-		},
-		"./content": {
-			"types": "./dist/content/index.d.ts",
-			"svelte": "./src/content/index.ts",
-			"default": "./src/content/index.ts"
-		},
-		"./content/server": {
-			"types": "./dist/content/server.d.ts",
-			"svelte": "./src/content/server.ts",
-			"default": "./src/content/server.ts"
-		},
-		"./content/markdown": {
-			"types": "./dist/content/markdown/index.d.ts",
-			"default": "./dist/content/markdown/index.js"
-		},
-		"./content/vite": {
-			"types": "./dist/content/vite/index.d.ts",
-			"default": "./dist/content/vite/index.js"
-		},
-		"./content/theme.css": "./src/content/site/theme.css",
-		"./content/themes/*": "./src/content/site/themes/*",
-		"./content/slot": {
-			"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
-			"svelte": "./src/content/site/components/SiteSlot.svelte",
-			"default": "./src/content/site/components/SiteSlot.svelte"
+			"types": "./dist/internal/compiler.d.ts",
+			"default": "./dist/internal/compiler.js"
 		},
 		"./server": {
-			"types": "./dist/hooks.d.ts",
-			"default": "./src/hooks.ts"
-		},
-		"./profiler": {
-			"types": "./dist/profiler/span.d.ts",
-			"default": "./src/profiler/span.ts"
-		},
-		"./profiler/client": {
-			"types": "./dist/profiler/client.d.ts",
-			"default": "./src/profiler/client.ts"
-		},
-		"./profiler/storage": {
-			"types": "./dist/profiler/storage/index.d.ts",
-			"default": "./src/profiler/storage/index.ts"
-		},
-		"./profiler/storage/sqlite": {
-			"types": "./dist/profiler/storage/sqlite.d.ts",
-			"default": "./src/profiler/storage/sqlite.ts"
-		},
-		"./profiler/storage/redis": {
-			"types": "./dist/profiler/storage/redis.d.ts",
-			"default": "./src/profiler/storage/redis.ts"
-		},
-		"./profiler/storage/postgres": {
-			"types": "./dist/profiler/storage/postgres.d.ts",
-			"default": "./src/profiler/storage/postgres.ts"
+			"types": "./dist/server.d.ts",
+			"default": "./src/server.ts"
 		},
 		"./markup": {
 			"types": "./dist/markup.d.ts",
 			"default": "./src/markup.ts"
 		},
-		"./router": {
-			"types": "./dist/router/index.d.ts",
-			"default": "./src/router/index.ts"
+		"./plugin": {
+			"types": "./dist/plugin.d.ts",
+			"default": "./src/plugin.ts"
 		},
-		"./router/client": {
-			"types": "./dist/router/client-api.d.ts",
-			"default": "./src/router/client-api.ts"
+		"./plugin/utils": {
+			"types": "./dist/plugin/utils.d.ts",
+			"default": "./src/plugin/utils.ts"
 		},
-		"./flag": {
-			"types": "./dist/flags.d.ts",
-			"default": "./src/flags.ts"
+		"./plugin/css": {
+			"types": "./dist/plugin/css.d.ts",
+			"default": "./src/plugin/css.ts"
 		},
-		"./freeze": {
-			"types": "./dist/freeze/index.d.ts",
-			"default": "./src/freeze/index.ts"
+		"./plugin/testing": {
+			"types": "./dist/plugin/testing.d.ts",
+			"default": "./src/plugin/testing.ts"
 		},
-		"./freeze/source": {
-			"types": "./dist/freeze/source-runtime.d.ts",
-			"default": "./src/freeze/source-runtime.ts"
+		"./plugin/client": {
+			"types": "./dist/plugin/client.d.ts",
+			"default": "./src/plugin/client.ts"
 		},
-		"./federation": {
-			"types": "./dist/federation/index.d.ts",
-			"default": "./src/federation/index.ts"
+		"./events": {
+			"types": "./dist/events.d.ts",
+			"default": "./src/events.ts"
 		},
-		"./flag/openfeature": {
-			"types": "./dist/flags/openfeature.d.ts",
-			"default": "./src/flags/openfeature.ts"
-		},
-		"./devtools": {
-			"types": "./dist/devtools/index.d.ts",
-			"default": "./src/devtools/index.ts"
-		},
-		"./testing": {
-			"types": "./dist/testing/index.d.ts",
-			"default": "./src/testing/index.ts"
+		"./insights": {
+			"types": "./dist/insights.d.ts",
+			"default": "./src/insights.ts"
 		},
 		"./types": {
 			"types": "./ambient.d.ts"
 		},
-		"./content/shell.css": "./src/content/site/shell.css",
-		"./content/docs-shell": {
-			"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
-			"svelte": "./src/content/site/components/DocsShell.svelte",
-			"default": "./src/content/site/components/DocsShell.svelte"
-		},
 		"./internal/compiler-browser": {
-			"types": "./dist/compiler/browser.d.ts",
-			"default": "./dist/compiler/browser.js"
+			"types": "./dist/internal/compiler-browser.d.ts",
+			"default": "./dist/internal/compiler-browser.js"
 		},
 		"./internal/compiler-browser-full": {
-			"types": "./dist/compiler/browser-full.d.ts",
-			"default": "./dist/compiler/browser-full.js"
+			"types": "./dist/internal/compiler-browser-full.d.ts",
+			"default": "./dist/internal/compiler-browser-full.js"
 		}
 	},
 	"bin": {
@@ -187,7 +126,6 @@
 	},
 	"files": [
 		"dist",
-		"ai",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md",
@@ -195,80 +133,30 @@
 	],
 	"scripts": {
 		"build": "tsdown",
-		"test": "vitest run",
-		"test:node": "vitest run --project node",
-		"test:browser": "vitest run --project browser",
-		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json && vitest run && pnpm run lint",
+		"check": "tsc -p .",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
-		"verify:package": "node scripts/verify-package.mjs"
+		"verify:package": "node ../core/scripts/verify-package.ts ."
 	},
 	"dependencies": {
-		"devalue": "^5.9.3",
-		"esm-env": "^1.2.2",
-		"estree-walker": "^3.0.3",
-		"magic-string": "^1.4.5",
-		"tinyglobby": "^0.2.17"
+		"@ogygia/core": "workspace:*"
 	},
 	"peerDependencies": {
-		"@neodrag/svelte": "3.0.0-next.12",
-		"@orama/orama": "^3.0.0",
-		"@playwright/test": "^1.62.0",
-		"@sveltejs/kit": ">=2.70.2 <4",
-		"bits-ui": "^2.0.0",
-		"mdsvex": "^0.12.0",
-		"playwright": "^1.62.0",
-		"rolldown": ">=1.0.0",
-		"shiki": "^3.0.0 || ^4.0.0",
-		"svelte": "^5.56.8",
-		"vite": "^8.2.4"
+		"@sveltejs/kit": "catalog:peers",
+		"rolldown": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
 	},
 	"peerDependenciesMeta": {
-		"@orama/orama": {
-			"optional": true
-		},
-		"bits-ui": {
-			"optional": true
-		},
-		"mdsvex": {
-			"optional": true
-		},
-		"playwright": {
-			"optional": true
-		},
-		"@playwright/test": {
-			"optional": true
-		},
 		"rolldown": {
-			"optional": true
-		},
-		"shiki": {
 			"optional": true
 		}
 	},
 	"devDependencies": {
-		"@neodrag/svelte": "3.0.0-next.12",
-		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@orama/orama": "^3.1.18",
-		"@sveltejs/sv-utils": "^0.3.3",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"@types/node": "^26.1.2",
-		"@vitest/browser": "4.1.10",
-		"@vitest/browser-playwright": "4.1.10",
-		"bits-ui": "^2.18.1",
-		"mdsvex": "^0.12.8",
-		"oxlint": "^1.77.0",
-		"rolldown": ">=1.0.0",
-		"sass-embedded": "^1.104.1",
-		"shiki": "^4.4.1",
-		"svelte": "5.56.8",
-		"svelte-check": "^4.7.4",
-		"svelte2tsx": "^0.7.60",
-		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"valibot": "^1.4.2",
-		"vite": "^8.3.5",
-		"vitest": "^4.1.10"
+		"@ogygia/tooling": "workspace:*",
+		"@sveltejs/kit": "catalog:",
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:"
 	},
 	"publishConfig": {
 		"exports": {
@@ -278,12 +166,12 @@
 				"default": "./dist/index.js"
 			},
 			"./vite": {
-				"types": "./dist/vite/index.d.ts",
-				"default": "./dist/vite/index.js"
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
 			},
 			"./runtime": {
-				"types": "./dist/runtime/index.d.ts",
-				"default": "./dist/runtime/index.js"
+				"types": "./dist/runtime.d.ts",
+				"default": "./dist/runtime.js"
 			},
 			"./hooks": {
 				"types": "./dist/hooks.d.ts",
@@ -299,143 +187,85 @@
 				"default": "./dist/internal.js"
 			},
 			"./internal/server": {
-				"types": "./dist/internal-server.d.ts",
-				"svelte": "./dist/internal-server.js",
-				"default": "./dist/internal-server.js"
+				"types": "./dist/internal/server.d.ts",
+				"svelte": "./dist/internal/server.js",
+				"default": "./dist/internal/server.js"
+			},
+			"./internal/instruments": {
+				"types": "./dist/internal/instruments.d.ts",
+				"svelte": "./dist/internal/instruments.js",
+				"default": "./dist/internal/instruments.js"
 			},
 			"./internal/register": {
-				"types": "./dist/internal-register.d.ts",
-				"svelte": "./dist/internal-register.js",
-				"default": "./dist/internal-register.js"
+				"types": "./dist/internal/register.d.ts",
+				"svelte": "./dist/internal/register.js",
+				"default": "./dist/internal/register.js"
 			},
 			"./internal/compiler-ids": {
-				"types": "./dist/compiler/ids.d.ts",
-				"svelte": "./dist/compiler/ids.js",
-				"default": "./dist/compiler/ids.js"
+				"types": "./dist/internal/compiler-ids.d.ts",
+				"svelte": "./dist/internal/compiler-ids.js",
+				"default": "./dist/internal/compiler-ids.js"
 			},
 			"./internal/region-core": {
-				"types": "./dist/region-core.d.ts",
-				"svelte": "./dist/region-core.js",
-				"default": "./dist/region-core.js"
+				"types": "./dist/internal/region-core.d.ts",
+				"svelte": "./dist/internal/region-core.js",
+				"default": "./dist/internal/region-core.js"
 			},
 			"./internal/reconcile": {
-				"types": "./dist/internal-reconcile.d.ts",
-				"svelte": "./dist/internal-reconcile.js",
-				"default": "./dist/internal-reconcile.js"
-			},
-			"./content": {
-				"types": "./dist/content/index.d.ts",
-				"svelte": "./dist/content/index.js",
-				"default": "./dist/content/index.js"
-			},
-			"./content/markdown": {
-				"types": "./dist/content/markdown/index.d.ts",
-				"default": "./dist/content/markdown/index.js"
-			},
-			"./content/vite": {
-				"types": "./dist/content/vite/index.d.ts",
-				"default": "./dist/content/vite/index.js"
-			},
-			"./content/theme.css": "./dist/content/site/theme.css",
-			"./content/themes/*": "./dist/content/site/themes/*",
-			"./content/slot": {
-				"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
-				"svelte": "./dist/content/site/components/SiteSlot.svelte",
-				"default": "./dist/content/site/components/SiteSlot.svelte"
+				"types": "./dist/internal/reconcile.d.ts",
+				"svelte": "./dist/internal/reconcile.js",
+				"default": "./dist/internal/reconcile.js"
 			},
 			"./server": {
-				"types": "./dist/hooks.d.ts",
-				"default": "./dist/hooks.js"
-			},
-			"./profiler": {
-				"types": "./dist/profiler/span.d.ts",
-				"default": "./dist/profiler/span.js"
-			},
-			"./profiler/client": {
-				"types": "./dist/profiler/client.d.ts",
-				"default": "./dist/profiler/client.js"
-			},
-			"./profiler/storage": {
-				"types": "./dist/profiler/storage/index.d.ts",
-				"default": "./dist/profiler/storage/index.js"
-			},
-			"./profiler/storage/sqlite": {
-				"types": "./dist/profiler/storage/sqlite.d.ts",
-				"default": "./dist/profiler/storage/sqlite.js"
-			},
-			"./profiler/storage/redis": {
-				"types": "./dist/profiler/storage/redis.d.ts",
-				"default": "./dist/profiler/storage/redis.js"
-			},
-			"./profiler/storage/postgres": {
-				"types": "./dist/profiler/storage/postgres.d.ts",
-				"default": "./dist/profiler/storage/postgres.js"
+				"types": "./dist/server.d.ts",
+				"default": "./dist/server.js"
 			},
 			"./markup": {
 				"types": "./dist/markup.d.ts",
 				"default": "./dist/markup.js"
 			},
-			"./router": {
-				"types": "./dist/router/index.d.ts",
-				"default": "./dist/router/index.js"
+			"./plugin": {
+				"types": "./dist/plugin.d.ts",
+				"default": "./dist/plugin.js"
 			},
-			"./router/client": {
-				"types": "./dist/router/client-api.d.ts",
-				"default": "./dist/router/client-api.js"
+			"./plugin/utils": {
+				"types": "./dist/plugin/utils.d.ts",
+				"default": "./dist/plugin/utils.js"
 			},
-			"./flag": {
-				"types": "./dist/flags.d.ts",
-				"default": "./dist/flags.js"
+			"./plugin/css": {
+				"types": "./dist/plugin/css.d.ts",
+				"default": "./dist/plugin/css.js"
 			},
-			"./freeze": {
-				"types": "./dist/freeze/index.d.ts",
-				"default": "./dist/freeze/index.js"
+			"./plugin/testing": {
+				"types": "./dist/plugin/testing.d.ts",
+				"default": "./dist/plugin/testing.js"
 			},
-			"./freeze/source": {
-				"types": "./dist/freeze/source-runtime.d.ts",
-				"default": "./dist/freeze/source-runtime.js"
+			"./plugin/client": {
+				"types": "./dist/plugin/client.d.ts",
+				"default": "./dist/plugin/client.js"
 			},
-			"./federation": {
-				"types": "./dist/federation/index.d.ts",
-				"default": "./dist/federation/index.js"
+			"./events": {
+				"types": "./dist/events.d.ts",
+				"default": "./dist/events.js"
 			},
-			"./flag/openfeature": {
-				"types": "./dist/flags/openfeature.d.ts",
-				"default": "./dist/flags/openfeature.js"
-			},
-			"./devtools": {
-				"types": "./dist/devtools/index.d.ts",
-				"default": "./dist/devtools/index.js"
-			},
-			"./testing": {
-				"types": "./dist/testing/index.d.ts",
-				"default": "./dist/testing/index.js"
+			"./insights": {
+				"types": "./dist/insights.d.ts",
+				"default": "./dist/insights.js"
 			},
 			"./internal/compiler": {
-				"types": "./dist/compiler/index.d.ts",
-				"default": "./dist/compiler/index.js"
-			},
-			"./content/server": {
-				"types": "./dist/content/server.d.ts",
-				"svelte": "./dist/content/server.js",
-				"default": "./dist/content/server.js"
+				"types": "./dist/internal/compiler.d.ts",
+				"default": "./dist/internal/compiler.js"
 			},
 			"./types": {
 				"types": "./ambient.d.ts"
 			},
-			"./content/shell.css": "./dist/content/site/shell.css",
-			"./content/docs-shell": {
-				"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
-				"svelte": "./dist/content/site/components/DocsShell.svelte",
-				"default": "./dist/content/site/components/DocsShell.svelte"
-			},
 			"./internal/compiler-browser": {
-				"types": "./dist/compiler/browser.d.ts",
-				"default": "./dist/compiler/browser.js"
+				"types": "./dist/internal/compiler-browser.d.ts",
+				"default": "./dist/internal/compiler-browser.js"
 			},
 			"./internal/compiler-browser-full": {
-				"types": "./dist/compiler/browser-full.d.ts",
-				"default": "./dist/compiler/browser-full.js"
+				"types": "./dist/internal/compiler-browser-full.d.ts",
+				"default": "./dist/internal/compiler-browser-full.js"
 			}
 		}
 	}

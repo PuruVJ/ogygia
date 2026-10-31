@@ -1,0 +1,31 @@
+{
+	"name": "@ogygia/tooling",
+	"private": true,
+	"version": "0.0.0",
+	"description": "Shared build and test config for the ogygia packages: each package's tsdown.config.ts calls library(), its vitest.config.ts pluginTests(), its playwright.config.ts suite() (the e2e harness: @ogygia/tooling/e2e).",
+	"type": "module",
+	"exports": {
+		"./tsdown": "./src/tsdown.ts",
+		"./vitest": "./src/vitest.ts",
+		"./e2e": "./src/e2e/index.ts",
+		"./e2e/*": "./src/e2e/*",
+		"./tsconfig.e2e.json": "./tsconfig.e2e.json"
+	},
+	"dependencies": {
+		"@ogygia/tsdown-plugin-svelte": "workspace:*",
+		"@sveltejs/vite-plugin-svelte": "catalog:"
+	},
+	"devDependencies": {
+		"@playwright/test": "catalog:"
+	},
+	"peerDependencies": {
+		"@playwright/test": "catalog:",
+		"tsdown": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependenciesMeta": {
+		"@playwright/test": {
+			"optional": true
+		}
+	}
+}

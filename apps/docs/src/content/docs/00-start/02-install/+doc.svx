@@ -94,22 +94,22 @@ export const transport = { ...ogygia.transport };
 
 ### Markdown, Shiki & mdsvex (optional)
 
-For `.svx` / `.md` [content collections](/docs/content/collections), add the optional peers. Then set markdown on under the **same** `ogygia()` surface. There is no separate plugin:
+For `.svx` / `.md` [content collections](/docs/content/collections), add the content package. It brings mdsvex and Shiki. Then list its `content()` plugin beside `ogygia()`:
 
 ```bash
-pnpm add -D mdsvex shiki
+pnpm add @ogygia/content
 ```
 
 ```ts title=vite.config.ts
 import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
+import { content } from '@ogygia/content/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [
-    ogygia({
-      content: { markdown: {} } // {} = defaults: Shiki + heading ids + collected headings
-    }),
+    ogygia(),
+    content({ markdown: {} }), // {} = defaults: Shiki + heading ids + collected headings
     sveltekit()
   ]
 });
@@ -119,15 +119,26 @@ Put `extensions` and `preprocess` in **`svelte.config.js`**. Do not put them inl
 
 ```js title=svelte.config.js
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { ogygia } from 'ogygia/vite';
+import { preprocess, extensions } from '@ogygia/content/vite';
 
 export default {
-  extensions: ogygia.extensions(), // includes .svelte, adds .svx / .md
-  preprocess: [vitePreprocess(), ...ogygia.preprocess()]
+  extensions: extensions(), // includes .svelte, adds .svx / .md
+  preprocess: [vitePreprocess(), ...preprocess()]
 };
 ```
 
-`mdsvex` and `shiki` stay optional peers. `ogygia.preprocess()` is synchronous. When markdown is off, it does not load mdsvex. mdsvex loads at first use. If mdsvex is absent, you get an error with an install hint. `ogygia.extensions()` adds `.svx` / `.md` only when markdown is on. Set themes and headings under `content: { markdown }`. See [content collections](/docs/content/collections).
+`preprocess()` is synchronous. When markdown is off, it does not load mdsvex. mdsvex loads at first use. `extensions()` adds `.svx` / `.md` only when markdown is on. Set themes and headings under `content({ markdown })`. See [content collections](/docs/content/collections).
+
+The content macros (`import.meta.og.loader`, `og.code`, `og.md`) bring their own types. Add a second line to `src/ogygia.d.ts`:
+
+```ts
+/// <reference types="ogygia/types" />
+/// <reference types="@ogygia/content/types" />
+```
+
+### Other features (optional)
+
+Flags, frozen pages, federation, the server router, the devtools dock and the profiler work the same way. Each is a package you install, with a plugin you list once beside `ogygia()`: `plugins: [ogygia(), flags(), sveltekit()]`. See [Plugins](/docs/reference/plugins) for the list.
 
 ## Adopt one route at a time
 

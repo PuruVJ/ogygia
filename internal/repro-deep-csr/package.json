@@ -12,11 +12,11 @@
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-node": "^5.5.7",
-		"@sveltejs/kit": "^2.70.2",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
-		"svelte": "^5.56.8",
-		"typescript": "^6.0.3",
-		"vite": "^8.2.0"
+		"@sveltejs/adapter-node": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"svelte": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:"
 	}
 }

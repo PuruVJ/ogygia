@@ -2,16 +2,21 @@ name: e2e
 
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   pull_request:
   workflow_dispatch:
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # (a cold run builds each suite's fixture app as well as the palaestra)
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # a pull request runs only the packages its changes reach (`turbo --affected` diffs against
+          # the base branch, so it needs the history)
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -29,6 +34,16 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
+      # turbo's local cache: a package whose inputs did not change replays its build, check and e2e
+      - name: Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.workflow }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.workflow }}-
+            turbo-${{ runner.os }}-
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
@@ -37,20 +52,32 @@ jobs:
       - name: Warm wrangler
         run: npx --yes wrangler --version
 
-      # Root `check` (build:lib + svelte-check over lib/playground + e2e tsc) — the e2e suite
-      # alone never runs it, which let type debt rot invisibly until upstream-watch tripped on it.
-      - name: Type-check (build:lib, check:lib, check:playground, check:verify)
-        run: pnpm run check
+      # Root `check` (build:lib + every package's check, the fixture apps' and the palaestra's
+      # svelte-check, each package's e2e tsc) — the e2e suites alone never run it, which let type debt
+      # rot invisibly until upstream-watch tripped on it. Two tasks at a time: every package's check runs
+      # its own vitest pool (core's with a browser), and turbo's default ten at once on this 4-core
+      # runner starved them into timeouts.
+      - name: Type-check (build:lib, every package's check)
+        run: pnpm run check --concurrency=2
 
-      # Playwright test runner (playwright.config.ts): globalSetup builds lib + playground, webServer
-      # serves it, every spec under e2e/ runs (playground suites, self-booting fixture suites, the
-      # adapters matrix). `pnpm run check` above already ran the Vitest browser-mode island tests.
-      - name: Run the full e2e suite (verify + adapters, node + bun)
-        run: pnpm run e2e
+      # Every package's e2e suite (its specs in packages/<name>/e2e against its own fixture app; core's
+      # in apps/palaestra/e2e), through turbo's `e2e` task: a suite whose package, fixture app and
+      # dependencies' builds did not change replays from the cache. One suite at a time (their ports
+      # differ, the machine is shared). A pull request: only the packages its changes reach
+      # (`--affected`, diffed against the base branch — a core change reaches every package). A push to
+      # main/next, or a manual run: every suite.
+      - name: Run the e2e suites (by package; adapters on node + bun)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pnpm turbo run e2e --concurrency=1 --affected
+          else
+            pnpm turbo run e2e --concurrency=1
+          fi
         env:
+          TURBO_SCM_BASE: origin/${{ github.base_ref || 'main' }}
           OGYGIA_E2E_WRANGLER: '1'
           # Stable CI-only signing key so the warn-path probe's production build is silent (locally
-          # this comes from apps/playground/.env, which is gitignored). NOT a production secret —
+          # this comes from apps/palaestra/.env, which is gitignored). NOT a production secret —
           # the Vercel deploy sets its own OGYGIA_SECRET.
           OGYGIA_SECRET: 3f9a2b7c1e5d8046af62c93b1d7e4058a6c2f19b3e8d70425c9a1f6b8d3e07c4
 
@@ -61,6 +88,7 @@ jobs:
         with:
           name: playwright-report
           path: |
-            playwright-report/
-            test-results/
+            **/playwright-report/
+            **/test-results/
+            !**/node_modules/**
           retention-days: 7

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
 	import * as docs from '$lib/playground/docs.remote'; // namespace: `page` would clash with $app/state
 	import OperationDoc from '$lib/playground/openapi/OperationDoc.svelte';
 	import type { Operation } from '$lib/playground/openapi';

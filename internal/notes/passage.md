@@ -148,7 +148,7 @@ eval → throw. PROD IS NOW EVAL-FREE (browser-verified: x119.00 with data-ogygi
 executing-inline is the same CSP class as the defer bootstrap. The eval fallback remains as
 the last-resort tier only. `og.store` construct also
 SHIPPED (og-store.ts + __og_store: factory registered at module load, products branded, corpus
-C9 round-trip green). Fixture: apps/playground/src/routes/dollar-fn + e2e/dollar-fn.ts
+C9 round-trip green). Fixture: apps/palaestra/src/routes/dollar-fn + apps/palaestra/e2e/dollar-fn.spec.ts
 (STANDALONE — user must register it in e2e/run.ts CHECKS).
 
 ## (historical) og.$ notes

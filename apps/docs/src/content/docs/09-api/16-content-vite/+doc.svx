@@ -1,0 +1,8 @@
+---
+title: '@ogygia/content/vite'
+summary: The content plugin, and the svelte config's preprocess() and extensions().
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/content/vite

@@ -13,17 +13,26 @@ time, then freezes. It is stored whole: HTML, headers, permanent redirects. Each
 is a byte read. A publish thaws it, and the next request renders it again, one time. Kit, your loads, and Svelte never run on a hit. Cost moves from O(requests) to
 O(publishes). Prerendering is the special case where the only publish is a deploy.
 
+Frozen pages are their own package. Install it, and list its plugin beside `ogygia()`:
+
+```bash
+pnpm add @ogygia/freeze
+```
+
 ```ts title=vite.config.ts
-ogygia({ freeze: true })
+import { ogygia } from 'ogygia/vite';
+import { freeze } from '@ogygia/freeze/vite';
+
+plugins: [ogygia(), freeze(), sveltekit()]
 ```
 
 That is the full adoption. The default store is an in-process LRU, with a 24-hour TTL backstop
-(`freeze: { ttl }` to shorten it). Stampedes single-flight: fifty concurrent cold requests
-make exactly one render.
+(`freeze({ ttl })` in seconds, to shorten it). Stampedes single-flight: fifty concurrent cold requests
+make exactly one render. See [Plugins](/docs/reference/plugins).
 
 ## Whole-app, or opt-in
 
-By default (`freeze: true`) the whole app is on. Each eligible page is stored, and the
+By default (`freeze()`) the whole app is on. Each eligible page is stored, and the
 observed-purity check below refuses the rest, so a personalized page opts itself out. A single
 route opts out with `export const freeze = false`.
 
@@ -31,7 +40,7 @@ To flip the whole app to **opt-in**, so that nothing is stored unless a route as
 default off:
 
 ```ts title=vite.config.ts
-ogygia({ freeze: { default: false } })
+plugins: [ogygia(), freeze({ default: false }), sveltekit()]
 ```
 
 Then a page or a layout opts in with `export const freeze = true`. It **cascades like `csr`**:
@@ -101,7 +110,7 @@ carries expired holes (set a stable `OGYGIA_SECRET`).
 ## Invalidation: three grammars
 
 ```ts title=hooks.server.ts (or any server module)
-import { freeze } from 'ogygia/freeze';
+import { freeze } from '@ogygia/freeze';
 
 await freeze.invalidate('/fr/fr/solar/');             // exact URL — the CMS-webhook case
 await freeze.invalidateWhere({ prefix: '/fr/fr/' });  // subtree — a locale or section nuke
@@ -128,7 +137,7 @@ Pass `{ key: (…args) => string }` to canonicalize exotic argument shapes.
 Live objects cannot ride vite config. They are wired one time, in hooks:
 
 ```ts title=src/hooks.server.ts
-import { freeze, valkey, akamai, cloudfront } from 'ogygia/freeze';
+import { freeze, valkey, akamai, cloudfront } from '@ogygia/freeze';
 
 freeze.configure({
 	store: valkey(client),                             // or upstash({ url, token }),

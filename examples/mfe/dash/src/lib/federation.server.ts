@@ -3,7 +3,7 @@
  * the shell and the cms both call it, so both are peers (their public keys verify inbound calls
  * and their thaw notices). dash's own private key signs its outbound thaw notices.
  */
-import { federate } from 'ogygia/federation';
+import { federate } from '@ogygia/federation';
 import { region } from 'ogygia';
 // `region: 'raw'`: the fragment root ships as HTML only, but the mark gives its scoped stylesheet
 // a real client asset the bake links.

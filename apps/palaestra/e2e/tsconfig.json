@@ -1,0 +1,4 @@
+{
+	"extends": "@ogygia/tooling/tsconfig.e2e.json",
+	"include": ["*.ts", "../playwright.config.ts"]
+}

@@ -1,7 +1,7 @@
 /* Dogfood: the docs page rendered by ogygia `<Doc>` (emits `.og-*`), restyled to the site's look.
    This is the customization ladder's CSS rung — ogygia owns structure, we own pixels. The rules
    below are the old `doc-page.css`, ported onto the `.og-*` hooks and painted from the site tokens.
-   We do NOT import `ogygia/content/theme.css`; these are the only styles the ogygia chrome gets. */
+   We do NOT import `@ogygia/content/theme.css`; these are the only styles the ogygia chrome gets. */
 
 /* Crumbs + summary: the bespoke page had neither. `<Doc crumbs={false}>` drops crumbs; hide summary. */
 .og-summary {

@@ -4,7 +4,7 @@
  * load has no `c.visitor`). One tradeoff vs the router's mount(): an upstream 4xx becomes Kit's
  * error(status) — right status, shell's error page (the router keeps the MFE's error body too).
  */
-import { mount } from 'ogygia/router';
+import { mount } from '@ogygia/federation';
 import { cms, session } from '$lib/federation.server.js';
 
 const m = mount.kit(cms, { user: () => session() });

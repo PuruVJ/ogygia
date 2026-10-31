@@ -1,6 +1,6 @@
 <script lang="ts">
 	import '$lib/styles/widget.css';
-	import { cartCtx } from './cart-store.svelte.js';
+	import { cartCtx } from './cart-store.svelte.ts';
 
 	// No prop — the cart comes from the nearest <Provide> above, across the island boundary.
 	const cart = cartCtx.get();

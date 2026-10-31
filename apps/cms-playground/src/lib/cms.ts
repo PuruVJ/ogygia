@@ -5,8 +5,8 @@
  *  - `refs()` is a shallow index fetch (no bodies on the wire); `get()` fetches one full document.
  * The loader shape now matches the CMS's own endpoints 1:1.
  */
-import { blocks, content, type RawRecord, type RawSource } from 'ogygia/content';
-import { fields, site } from 'ogygia/content';
+import { blocks, content, type RawRecord, type RawSource } from '@ogygia/content';
+import { fields, site } from '@ogygia/content';
 import { registry } from './blocks/registry';
 
 // A CMS is external, so its address is config (env in production). Request-blind by design.

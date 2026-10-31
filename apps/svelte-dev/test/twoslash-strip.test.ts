@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { twoslash_strip } from '../src/lib/markdown/twoslash-strip.ts';
-import type { Fence } from 'ogygia/content/markdown';
+import type { Fence } from '@ogygia/content/markdown';
 
 const strip = twoslash_strip();
 const fence = (source: string, lang = 'js'): Fence => ({ lang, raw_meta: '', meta: {}, source });

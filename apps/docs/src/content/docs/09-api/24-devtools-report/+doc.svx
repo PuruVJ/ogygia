@@ -1,0 +1,8 @@
+---
+title: '@ogygia/devtools/report'
+summary: The build report.
+---
+
+Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
+
+> MODULE: @ogygia/devtools/report

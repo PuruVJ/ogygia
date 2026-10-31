@@ -252,14 +252,21 @@ Shipped in `src/router/` (v1 builder DELETED). Settled surface:
 - **Table**: flat `routes(table, opts?)`. Pages = `page(Comp, { load?, actions?, params?, search? })`.
   Endpoints = plain `{ GET, POST, PUT, DELETE, PATCH }` OBJECT (the +server.ts shape).
 - **Verbs**: uppercase. Bare handler `{ GET: (c) => … }`, OR the exported wrapper
-  `{ GET: GET<'/p'>(fn) }` / `{ POST: POST(BodySchema, fn) }` (typed params / body schema → `c.input`).
-  Same "bare or wrapper" duality as `load()`/`action()`, and `Handler<P, In>` type helper.
-- **Bare endpoint params**: a bare `{ GET: (c) => c.params.id }` reads `c.params` as an INDEXABLE
-  `Record<string, string|undefined>` (loose — no pattern restated, reliable contextual typing). Strict
-  params via the `GET<'/p'>(fn)` wrapper. (A `KeyedTable<T>` constraint that key-drove STRICT params
-  from the table key was tried and REVERTED — it was contextual-typing-fragile: worked in isolation,
-  degraded to `Handler<string>` with real helper types like the profiler's. Loose-but-reliable beats
-  strict-but-fragile for a public API.)
+  `{ POST: POST(BodySchema, fn) }` (body schema → `c.input`). `Handler<P, In>` type helper for a
+  handler written outside its table, used with `satisfies` (an annotation would erase its return).
+- **THE KEY TYPES EVERY HANDLER** (2026-11-01, user: "the right thing, not the patch-y way"): strict
+  `c.params` from the table key and the handler's own return kept, bare or wrapped, top level, in
+  `layout()` tables (nested too), behind `when()`. `GET<'/p'>(fn)` is GONE (an explicit type arg
+  disables inference of the return, so `api()` read `unknown`). How it holds (the 2026-08 attempt was
+  reverted as fragile; these are the three reasons it was): (1) the table's CONSTRAINT is
+  `KeyedTable<T>` (`<const T extends KeyedTable<T>>(table: T)`) — never `T & KeyedTable<T>`, whose T half
+  is still being inferred when wrappers need their contextual type; (2) no condition on an ENTRY in
+  `KeyedTable` (a type waiting on the entry gives no contextual type → `c: any`); (3) `layout()`'s
+  return is `NoInfer<…>`, so a spread layout table never takes `T` from the outer half-inferred table.
+  `RouteTable`'s verb slots accept `(c: never) => unknown`: a handler signature in the constraint was a
+  second contextual type that cancelled the key's. Wrappers carry the params as a phantom
+  (`VerbEntry<Out, In, P>`), inferred from the contextual return type. Guarded by
+  test/router-infer.test-d.ts (now in `check`).
 - **Layouts**: `layout('name', Comp, { load?, error? })(subtable)` — named (keys `App['(name)']`),
   nesting = spread a wrapped sub-table, breaking out = PLACEMENT (route outside the wrap). No `@`.
 - **Loads**: `load()` wrapper memoizes per request (parent-sharing); bare fn or `Load<'/p'>` type helper.

@@ -5,7 +5,7 @@
  * never the collection. The `.svx` demos inside a body wake from the baked ticket exactly as they
  * would in-pass. (Search is client-side — a worker over the static `/search.json`; see `SideNav`.)
  */
-import { remotes } from 'ogygia/content/server';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './docs.server';
 
 // `meta` = the leak-free shell bundle (`{ nav, switcher }`) the Shell needs; `doc` = one page view.

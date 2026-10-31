@@ -2,7 +2,7 @@
 	import { Provide } from 'ogygia';
 	import CtxCount from './CtxCount.svelte' with { wake: 'load' };
 	import CtxAdd from './CtxAdd.svelte' with { wake: 'load' };
-	import { Cart, cartCtx } from './cart-store.svelte.js';
+	import { Cart, cartCtx } from './cart-store.svelte.ts';
 
 	// One live cart, provided to the subtree. Neither island below receives it as a prop —
 	// they call cartCtx.get() and reach this same instance across the island boundary.

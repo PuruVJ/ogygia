@@ -8,7 +8,7 @@
  * must be installed first (region ids / fence keys hash through the compiler seam).
  */
 import { compile } from 'svelte/compiler';
-import { ogygiaPreprocess, diff_markers, inline_markers } from 'ogygia/content/markdown';
+import { ogygiaPreprocess, diff_markers, inline_markers } from '@ogygia/content/markdown';
 import type { ReplMarkdownConfig } from './repl-config.ts';
 
 export const MD_MODULE = /\.(md|svx)(\?|$)/;

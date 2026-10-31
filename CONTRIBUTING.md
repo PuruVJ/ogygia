@@ -37,14 +37,18 @@ no-explicit-any`, error) for `.ts`; the `scripts/no-any.mjs` script still covers
 ## Verifying a change
 
 ```bash
-pnpm run check          # no-any (svelte) + build lib + [tsc + vitest + oxlint] (lib) + svelte-check (playground) + tsc (verify) — must be 0/0
-pnpm --filter playground build
-ORIGIN=http://localhost:3060 PORT=3060 node playground/build/index.js &   # prod
-# then run every suite in verify/*.ts against the running server (and against `pnpm --filter playground dev`)
+pnpm run check          # build lib + every package's check ([tsc + vitest + oxlint], its e2e tsc) + svelte-check (palaestra, fixture apps, docs) — must be 0/0
+pnpm test:e2e           # every package's e2e suite through turbo; unchanged suites replay from the cache
+pnpm turbo run e2e --filter=@ogygia/devtools   # one package's suite (its libraries built first)
+pnpm --filter palaestra e2e split-brain         # one spec of core's suite (libraries already built)
 ```
 
-The library's `check` runs `tsc --noEmit && vitest run && oxlint` (the transform unit suite + the
-`no-explicit-any` lint gate). `svelte-check` remains the template/markup guard for the playground.
+Each package's e2e specs live with the package (`packages/<name>/e2e/*.spec.ts`, its own
+`playwright.config.ts` and fixture app in `e2e/app`); core's specs run against the palaestra
+(`apps/palaestra/e2e`). The shared harness (`check()`, `spawn_server`, the regexes, the suite config)
+is `@ogygia/tooling/e2e`. The library's `check` runs `tsc --noEmit && vitest run && oxlint` (the
+transform unit suite + the `no-explicit-any` lint gate). `svelte-check` remains the template/markup
+guard for the palaestra and the fixture apps.
 
 > **Formatter note (empirical, oxfmt 0.62):** oxfmt was evaluated as the repo formatter and **not
 > adopted** — the released version does not format `.svelte` (a `.svelte` file passes through
@@ -53,4 +57,4 @@ The library's `check` runs `tsc --noEmit && vitest run && oxlint` (the transform
 > would be a large, `.svelte`-inconsistent churn for no functional gain. Revisit once oxfmt gains
 > first-class Svelte support.
 
-See `verify/README.md` for the full suite list.
+See `apps/palaestra/e2e/README.md` for core's suite list.

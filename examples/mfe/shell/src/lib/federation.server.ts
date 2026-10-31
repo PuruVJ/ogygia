@@ -4,7 +4,7 @@
  * key signs every outbound hop. `visitor` is THE identity, signed on-behalf-of into every hop and
  * derived server-side at deferred-hole time (never via the browser).
  */
-import { federate } from 'ogygia/federation';
+import { federate } from '@ogygia/federation';
 import { env } from '$env/dynamic/private';
 
 /** The shell's session (pretend): a real app reads cookies / its auth layer here. */

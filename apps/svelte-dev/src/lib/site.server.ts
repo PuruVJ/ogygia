@@ -4,8 +4,8 @@
  * chain), so the corpus is mechanically un-leakable. The wire surface is minted in `docs.remote.ts` /
  * `blog.remote.ts`; server machinery (emissions, prerender entries, load guards) imports this directly.
  */
-import { content, numbered, dated } from 'ogygia/content';
-import { site, dimensions } from 'ogygia/content';
+import { content, numbered, dated } from '@ogygia/content';
+import { site, dimensions } from '@ogygia/content';
 import * as v from 'valibot';
 import type { TopicKey } from './topics';
 

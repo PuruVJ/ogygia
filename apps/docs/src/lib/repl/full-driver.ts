@@ -27,9 +27,12 @@ import { make_repl_host } from './browser-host.ts';
 /** The two-dial import-attribute grammar (defaults). */
 const IMPORT_KEYS = { wake: 'wake', render: 'render', preset: 'preset', region: 'region' };
 
+/** The plugins' `import.meta.og.*` macros the driver runs (content's `code` / `md`). */
+export type ReplMacros = NonNullable<ConstructorParameters<typeof CompileCtx>[0]['macros']>;
+
 /** A CompileCtx tuned for the REPL: a `/repl` root, dev mode, signing/endpoint fields stubbed (the
  *  Observatory shows the compiler OUTPUT, it doesn't serve signed endpoints). */
-function repl_ctx(markdown_config: unknown): CompileCtx {
+function repl_ctx(macros: ReplMacros): CompileCtx {
 	return new CompileCtx({
 		root: '/repl',
 		base: '/',
@@ -41,12 +44,13 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 		presets: {},
 		import_keys: IMPORT_KEYS as never,
 		resolve_alias: [],
-		markdown_config,
+		macros,
 		pkg_root: '/node_modules/ogygia', // never matches a /repl/* file → auto-brand won't skip user source
 		build_secret: 'repl',
 		rate_limit: { max: 0, windowMs: 0 },
 		session_cookie: '',
 		region_ttl: 3600,
+		renew_window: 0,
 		router_enabled: true,
 		router_view_transitions: true,
 		runtime_dir: '/node_modules/ogygia/dist/runtime',
@@ -56,9 +60,7 @@ function repl_ctx(markdown_config: unknown): CompileCtx {
 		client_binding_stub_file: '/node_modules/ogygia/dist/runtime/client-binding-stub.js',
 		app_shims: {},
 		is_build: false,
-		content_presets: null,
-		profiler_config: null, // no SSR profiler in the browser REPL
-		freeze_config: null, // no frozen pages in the browser REPL
+		measure: false, // no SSR profiler in the browser REPL
 		devtools: false // the REPL shows compiler output; no devtools instruments to bake
 	});
 }
@@ -269,7 +271,7 @@ export class ReplDriver {
 
 	/** Run the full driver over the workspace, returning the transformed host for each csr leg. A fresh
 	 *  Program/Compiler per call keeps cross-file linker state from leaking between edits. */
-	async analyze(files: Record<string, string>, markdown_config: unknown, host_rel: string): Promise<DriverResult> {
+	async analyze(files: Record<string, string>, macros: ReplMacros, host_rel: string): Promise<DriverResult> {
 		this.#files = files;
 		const host_id = '/repl/' + host_rel.replace(/^\/+/, '');
 		const src = files[host_rel] ?? '';
@@ -279,7 +281,7 @@ export class ReplDriver {
 		// linker Program (registry / region kinds / marks) the Regions view reads.
 		const leg = async (ssr: boolean): Promise<{ code: string | null; compiler: Compiler }> => {
 			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
-			compiler.configure(repl_ctx(markdown_config));
+			compiler.configure(repl_ctx(macros));
 			try {
 				const r = await compiler.transform_module(src, host_id, { ssr, emitFile });
 				return { code: r?.code ?? src, compiler };
@@ -313,7 +315,7 @@ export class ReplDriver {
 	 *  compiles its own client island modules). */
 	async ssr_leg(
 		files: Record<string, string>,
-		markdown_config: unknown,
+		macros: ReplMacros,
 		host_rel: string
 	): Promise<{ ssr: string | null; regions: DriverRegion[]; error?: string }> {
 		this.#files = files;
@@ -321,7 +323,7 @@ export class ReplDriver {
 		const src = files[host_rel] ?? '';
 		try {
 			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
-			compiler.configure(repl_ctx(markdown_config));
+			compiler.configure(repl_ctx(macros));
 			const r = await compiler.transform_module(src, host_id, { ssr: true, emitFile: () => '' });
 			return { ssr: r?.code ?? src, regions: extract_regions(compiler) };
 		} catch (e) {

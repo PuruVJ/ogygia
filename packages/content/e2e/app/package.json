@@ -1,0 +1,26 @@
+{
+	"name": "content-e2e-app",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"description": "@ogygia/content's e2e fixture app: a markdown body's scoped CSS (/content-css) and the blocks registry demos (/blocks, /blocks-direct).",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-node": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:"
+	},
+	"dependencies": {
+		"@ogygia/content": "workspace:*",
+		"ogygia": "workspace:*"
+	}
+}

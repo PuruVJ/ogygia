@@ -1,5 +1,0 @@
-.vercel
-.env*
-build
-# internal/bench/cache-bust-check.mjs keeps its two builds here while it runs
-.cache-check

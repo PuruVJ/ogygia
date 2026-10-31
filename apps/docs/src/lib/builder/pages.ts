@@ -3,8 +3,8 @@
  * (swap the glob for a loader that hits Builder's Content API and nothing else changes). Each entry's
  * `body` is the rendered block tree; look one up with `builderPages.get(slug)`.
  */
-import { content } from 'ogygia/content';
-import type { ContentHandle } from 'ogygia/content';
+import { content } from '@ogygia/content';
+import type { ContentHandle } from '@ogygia/content';
 import { builderSource } from './from-builder';
 import { registry } from './registry';
 

@@ -465,7 +465,7 @@ the WHOLE html today; `serve` would forfeit that edge copy. ESI (Akamai/Fastly/V
 - Deck S18 (`/fr/fr/esi`): stored → public s-maxage + Surrogate-Control + etag + esi tags; cookied
   second serve = plain hit with the same bytes; the include src fetched from origin with the cookie
   renders the personal header; render count stays 1. Units: `test/freeze-esi.test.ts`.
-- Deck S19 + `pnpm demo:esi` (`e2e/demo/esi.ts`): the akamai EMULATOR now processes ESI like the
+- Deck S19 + `pnpm demo:esi` (`packages/freeze/e2e/demo-esi.ts`): the akamai EMULATOR now processes ESI like the
   real edge (strips `<esi:remove>`, fetches each include from origin WITH THE VIEWER'S COOKIE,
   resolved against the page url, per serve; the cached copy stays the raw shell; `x-edge-akamai-esi:
   assembled` + `esi` count in `/__edge/state`) — a cookied request is an edge HIT that says

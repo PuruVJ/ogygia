@@ -11,7 +11,7 @@ related:
 **[Playground ↗](/playground)** is a second site, built inside this one, on all the features below: four markdown corpora, an OpenAPI reference rendered from JSON data, a dated blog, a version × locale switcher, and search. Each one is a `content()` collection.
 :::
 
-[Remote functions](/docs/data-state/remote-functions) move data. But for most sites, the largest data is the writing itself. `ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it**: each page that you read is a `.svx` entry rendered through it.
+[Remote functions](/docs/data-state/remote-functions) move data. But for most sites, the largest data is the writing itself. `@ogygia/content` gives SvelteKit content collections that fit the islands model. **This docs site is built on it**: each page that you read is a `.svx` entry rendered through it.
 
 You learn one API and use it in all locations. Define a collection one time with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time. The read surface (`refs`, `get`) never changes.
 
@@ -29,12 +29,33 @@ One rule controls the full surface: **the boundary picks the representation.** S
 
 For a *page assembled from typed blocks*, not a single markdown body, see [Blocks](/docs/content/blocks). It is a separate, block-level API.
 
+## Installing
+
+Collections are their own package. Install it, and list its plugin beside `ogygia()`:
+
+```bash
+pnpm add @ogygia/content
+```
+
+```ts title=vite.config.ts
+import { ogygia } from 'ogygia/vite';
+import { content } from '@ogygia/content/vite';
+
+plugins: [ogygia(), content({ markdown: {} }), sveltekit()]
+```
+
+`markdown` turns the markdown pipeline on. A collection over JSON, a CMS or an API needs only `content()`. For markdown, `svelte.config.js` also takes `preprocess()` and `extensions()` from `@ogygia/content/vite` (see [Install](/docs/start/install)). For the macro types (`import.meta.og.loader`, `og.code`, `og.md`), add one line to `src/ogygia.d.ts`:
+
+```ts
+/// <reference types="@ogygia/content/types" />
+```
+
 ## Define the collection once, in a server module
 
 The `loader` of a collection holds the compiled corpus. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`). Then Kit mechanically makes sure that no client module can import it. Thus the corpus can never reach a browser bundle:
 
 ```ts title=src/lib/collections.server.ts
-import { content } from 'ogygia/content';
+import { content } from '@ogygia/content';
 import * as v from 'valibot';
 
 export const docs = content({
@@ -117,7 +138,7 @@ export const entries = async () => (await docs.refs()).map((e) => ({ slug: e.id 
 `list` and `live.list` mint real Kit remotes. Mint them in a `.remote.ts`. Kit requires each export there to be a remote. The consumer passes the args:
 
 ```ts title=src/lib/docs.remote.ts
-import { withRemotes } from 'ogygia/content/server';
+import { withRemotes } from '@ogygia/content/server';
 import { docs } from './collections.server';
 
 export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title: e.data.title }) });
@@ -138,13 +159,19 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 `markdown()` is the built-in source for a glob of `.svx` / `.md` files. It runs an opinionated pipeline: mdsvex for the body, Shiki for fences, pandoc-style heading ids, and a headings collector that fills the `meta.headings` of each entry.
 
-Set the pipeline on under the one plugin surface. There is no separate preprocessor to register. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` through `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
+Set the pipeline on with the `content()` plugin from `@ogygia/content/vite`, listed beside `ogygia()`. An empty `markdown: {}` uses the defaults (Shiki `github-light` / `github-dark` through `light-dark()`, pandoc `## Title {#id}` heading ids, collected `h2`–`h4`, wrapper class `code-only`):
 
 ```ts title=vite.config.ts
-ogygia({
-  content: {
-    markdown: {} // defaults: Shiki themes, heading ids, headings collector
-  }
+import { content } from '@ogygia/content/vite';
+
+export default defineConfig({
+  plugins: [
+    ogygia(),
+    content({
+      markdown: {} // defaults: Shiki themes, heading ids, headings collector
+    }),
+    sveltekit()
+  ]
 });
 ```
 
@@ -194,7 +221,7 @@ A `loader` is not limited to a glob. Each object with `refs` / `get` is a source
 A source is two async methods. `refs()` lists the corpus as light metadata. `get(id)` fetches one full entry:
 
 ```ts
-import { content } from 'ogygia/content';
+import { content } from '@ogygia/content';
 
 const press = content({
   schema,
@@ -214,7 +241,7 @@ const press = content({
 `get(id)` fetches one post on demand, not a full list. Mint the wire remotes in a `.remote.ts`, exactly as for a file-backed collection:
 
 ```ts
-import { withRemotes } from 'ogygia/content/server';
+import { withRemotes } from '@ogygia/content/server';
 export const list = withRemotes(press).list({ map: (e) => ({ id: e.id, title: e.data.title }) });
 ```
 
@@ -225,7 +252,7 @@ A source that fetches defaults to `query` mode: resolved at request time, not at
 ogygia ships `markdown()`, `json()`, and `blocks()`, but **not** a `.yaml` or raw-text loader. Its built-in YAML is frontmatter-only, nothing more. Both are a few lines over a glob with `defineSource`, exactly how the built-ins are made. Thus bring the parser that you like:
 
 ```ts
-import { content, defineSource, toRawSource } from 'ogygia/content';
+import { content, defineSource, toRawSource } from '@ogygia/content';
 import { parse as parseYaml } from 'yaml'; // npm i yaml
 
 // .yaml files → data-only entries
@@ -292,7 +319,7 @@ Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions
 - **Do** keep `markdown: {}` at the defaults to start. The built-in Shiki themes and heading collector cover most sites.
 - **Do** build your TOC from `entry.meta.headings`. Do not parse the body again.
 - **Do** map wire entries to a held region of your own `with { region }` component, when the client must render them. `<Region>` is the one renderable that crosses the wire.
-- **Don't** register a separate mdsvex plugin. Configuration lives fully under `ogygia({ content: { markdown } })`.
+- **Don't** register a separate mdsvex plugin. Configuration lives fully under `content({ markdown })`.
 - **Don't** expect a compiled body from a CMS row. Those sources deliver **data**. Render it through a held region.
 - **Don't** promise live continuity on serverless. An in-memory stream is per-isolate there.
 

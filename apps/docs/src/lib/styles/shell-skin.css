@@ -1,6 +1,6 @@
 /* The Shell chrome, painted in the SITE's design — the second rung of the same ladder as
    doc-skin.css: ogygia owns STRUCTURE (`.og-*` hooks from Shell/Sidebar/Search/ShellBar),
-   we own PIXELS. We do NOT import `ogygia/content/theme.css`; `shell.css` gives layout only,
+   we own PIXELS. We do NOT import `@ogygia/content/theme.css`; `shell.css` gives layout only,
    and everything visual here comes from the docs tokens (app.css), so the site looks exactly
    as it did on the bespoke SideNav — same palette, same fonts, same feel. */
 

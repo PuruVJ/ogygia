@@ -24,7 +24,7 @@ A collection is a small config object. It points at a folder, picks a format, an
 
 ```ts
 // src/content/config.ts
-import { content, markdown } from 'ogygia/content';
+import { content, markdown } from '@ogygia/content';
 import { z } from 'zod';
 
 export const guides = content({
@@ -67,7 +67,7 @@ The page component pulls the document from `data` and renders its component. Eve
 
 ```svelte
 <script lang="ts">
-	import { Doc, SideNav, OnThisPage } from 'ogygia/content';
+	import { Doc, SideNav, OnThisPage } from '@ogygia/content';
 
 	let { data } = $props();
 	const { doc, nav } = data;

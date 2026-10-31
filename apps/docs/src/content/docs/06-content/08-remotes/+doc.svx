@@ -16,7 +16,7 @@ Always, for a site() site. The remotes are the one sanctioned path from the serv
 ## Mint them
 
 ```ts title=src/lib/site.remote.ts
-import { remotes } from 'ogygia/content/server';
+import { remotes } from '@ogygia/content/server';
 import { docs } from './site.server';
 
 export const { nav, meta, page, search } = remotes(docs, { base: '/docs' });
@@ -39,7 +39,7 @@ A body is a live [region](/docs/regions/held-regions): a same-pass SSR render. I
 
 ```svelte
 <script>
-	import { Doc } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
 	import * as docs from '$lib/site.remote';
 
 	const view = (await docs.page(slug))!;   // view.entry.body is a baked ticket

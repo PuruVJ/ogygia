@@ -6,7 +6,7 @@
 	 * from a CMS and nothing else changes.
 	 */
 	import BlockTree from './blocks/BlockTree.svelte';
-	import type { BlockNode } from 'ogygia/content';
+	import type { BlockNode } from '@ogygia/content';
 	import { registry } from './blocks/registry';
 
 	const tree: BlockNode[] = [
