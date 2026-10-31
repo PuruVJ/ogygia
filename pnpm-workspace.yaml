@@ -44,7 +44,7 @@ catalog:
   path-browserify: ^1.0.1
   magic-string: ^1.4.5
   # test
-  vitest: ^4.1.10
+  vitest: ^4.1.12
   '@playwright/test': 1.62.1
   playwright: ^1.62.1
   axe-core: ^4.13.0
