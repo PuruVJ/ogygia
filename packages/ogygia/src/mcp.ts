@@ -1752,7 +1752,7 @@ function tool_scan(args: Attrs): ToolResult {
 				if (isl.componentPath) kind_by_component.set(base(isl.componentPath), isl.kind ?? '');
 		} catch (e) {
 			const raw = (e instanceof Error ? e.message : String(e)).replace(WS_G, ' ').trim();
-			// "unknown preset" is a scan limitation (we don't load the app's ogygia({ regions: { presets } })
+			// "unknown preset" is a scan limitation (we don't load the app's ogygia({ presets })
 			// config), not a real violation — count it for a footnote instead of flagging it.
 			if (UNKNOWN_PRESET_RE.test(raw)) preset_marks++;
 			else violations.push({ file: rel(f), severity: 'error', msg: raw });
@@ -1816,7 +1816,7 @@ function tool_scan(args: Attrs): ToolResult {
 		: `\n\n## ✅ No rule violations across ${files.length} files.`;
 
 	const preset_note = preset_marks
-		? `\n\n> ${preset_marks} import(s) use a \`preset\` — resolved from your \`ogygia({ regions: { presets } })\` config at build, not checked here.`
+		? `\n\n> ${preset_marks} import(s) use a \`preset\` — resolved from your \`ogygia({ presets })\` config at build, not checked here.`
 		: '';
 	return text(
 		`# ogygia scan — ${dir}\n\n` +

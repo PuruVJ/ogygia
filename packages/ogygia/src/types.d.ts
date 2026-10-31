@@ -179,9 +179,9 @@ declare module 'virtual:ogygia/router-config' {
 	export const viewTransitions: boolean;
 }
 declare module 'virtual:ogygia/region-ttl' {
-	/** Capability URL TTL in seconds. From `ogygia({ regions: { ttl } })` (default 3600). */
+	/** Capability URL TTL in seconds. From `ogygia({ ttl })` (default 3600). */
 	export const regionTtl: number;
-	/** Seconds after expiry an anonymous capability still renews. From `ogygia({ regions: { maxPageAge } })` (default 8 days). */
+	/** Seconds after expiry an anonymous capability still renews. From `ogygia({ maxPageAge })` (default 8 days). */
 	export const renewWindow: number;
 }
 declare module 'virtual:ogygia/route-csr' {

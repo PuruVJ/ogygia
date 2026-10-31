@@ -73,13 +73,29 @@ export interface OgygiaRateLimit {
 }
 
 /**
- * The `regions` subsystem — island defaults + the named preset dictionary. One grammar shared by
- * every subsystem: defaults at the root, variance in `presets`, referenced from a use site by a
- * LITERAL `preset: 'name'` (here: `import X from '…' with { preset: 'name' }`).
+ * Options for the {@link ogygia} Vite plugin. The root is the region system itself — its defaults
+ * (`visible`), its named presets (referenced from a use site by a LITERAL `preset: 'name'`:
+ * `import X from '…' with { preset: 'name' }`), its holes' capability lifetimes — beside the client
+ * router and the app's plugins (each feature package: `plugins: [...]`).
+ *
+ * @example
+ * ```ts
+ * import { ogygia } from 'ogygia/vite';
+ * export default defineConfig({
+ *   plugins: [
+ *     ogygia({
+ *       visible: { margin: '200px' },
+ *       presets: { chart: { wake: 'visible', margin: '200px' } },
+ *       ttl: 3600
+ *     }),
+ *     sveltekit()
+ *   ]
+ * });
+ * ```
  */
-export interface RegionsOptions {
+export interface OgygiaOptions {
 	/**
-	 * Global defaults for islands that use `wake: 'visible'` / `render`+`wake: 'visible'`
+	 * Defaults for regions that wake `'visible'` (`wake: 'visible'` / `render` + `wake: 'visible'`)
 	 * without their own `margin` (via a preset).
 	 */
 	visible?: {
@@ -109,33 +125,6 @@ export interface RegionsOptions {
 	 * props: keep hole props to routing keys (a locale, a page), and read anything sensitive at render.
 	 */
 	maxPageAge?: number;
-}
-
-/**
- * Options for the {@link ogygia} Vite plugin — one top-level key per subsystem, each subsystem
- * `defaults + its own presets`.
- *
- * @example
- * ```ts
- * import { ogygia } from 'ogygia/vite';
- * export default defineConfig({
- *   plugins: [
- *     ogygia({
- *       regions: {
- *         visible: { margin: '200px' },
- *         presets: { chart: { wake: 'visible', margin: '200px' } },
- *         ttl: 3600
- *       }
- *     }),
- *     sveltekit()
- *   ]
- * });
- * ```
- */
-export interface OgygiaOptions {
-	/** The regions subsystem: island defaults (`visible.margin`), named island presets, and the
-	 *  capability lifetime of deferred/live holes (`ttl`). */
-	regions?: RegionsOptions;
 
 	/**
 	 * Client-side SPA router — app-wide, on by default. It intercepts same-origin links, swaps
@@ -164,7 +153,7 @@ export interface OgygiaOptions {
 	 * Defaults stay `hydrate` / `defer` / `preset`. Escape hatch if another tool already
 	 * uses those names on the same imports.
 	 *
-	 * Preset **definitions** ({@link RegionsOptions.presets}) still use canonical `hydrate` /
+	 * Preset **definitions** ({@link OgygiaOptions.presets}) still use canonical `hydrate` /
 	 * `defer` / `margin` / `remount` — only the `with { … }` spellings in source change.
 	 */
 	importKeys?: Partial<ImportKeys>;
@@ -211,16 +200,17 @@ export interface OgygiaOptions {
 }
 
 /**
- * The pre-v3 option spellings, killed by the config-surface collapse. Detected at config load and
- * answered with the exact new spelling — a rename map, never silent aliasing (a legacy key that
- * silently did nothing would un-tune real apps).
+ * Retired option spellings. Detected at config load and answered with the exact new spelling — a
+ * rename map, never silent aliasing (a legacy key that silently did nothing would un-tune real apps).
  */
 const LEGACY_OPTION_RENAMES: Record<string, string> = {
-	visible: '`visible` moved into the regions subsystem — write `regions: { visible: { … } }`.',
-	presets: '`presets` moved into the regions subsystem — write `regions: { presets: { … } }`.',
+	regions:
+		'`regions` is gone — its keys sit at the root now: write `visible`, `presets`, `ttl` and `maxPageAge` directly in `ogygia({ … })`.',
 	continuity:
 		'`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it.',
-	regionTtl: '`regionTtl` moved into the regions subsystem — write `regions: { ttl: … }`.',
+	regionTtl: '`regionTtl` is `ttl` now — write `ogygia({ ttl: … })`.',
+	preload:
+		'`preload` is gone — there is nothing to choose any more. The page carries each island’s chunk list as data, and the runtime preloads an island’s whole graph when it wakes (after the page has painted), so no island code moves before its wake and none waits on a waterfall after it. Remove the key.',
 	freeze:
 		'`freeze` is a plugin now — install `@ogygia/freeze` and write `plugins: [freeze({ ttl, default })]` (from `@ogygia/freeze/vite`).',
 	content:
@@ -231,17 +221,12 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 		'`profiler` is part of the devtools plugin now — install `@ogygia/devtools` and write `plugins: [devtools({ profiler: { … } })]` (from `@ogygia/devtools/vite`).'
 };
 
-/** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
+/** The rename map: a legacy key errors with its new spelling, never silently no-ops. */
 export function assert_no_legacy_options(options: OgygiaOptions): void {
 	for (const key of Object.keys(LEGACY_OPTION_RENAMES)) {
 		if (key in (options as Record<string, unknown>)) {
 			throw new Error(`[ogygia] ${LEGACY_OPTION_RENAMES[key]}`);
 		}
-	}
-	if (options.regions && 'preload' in options.regions) {
-		throw new Error(
-			'[ogygia] `regions.preload` is gone — there is nothing to choose any more. The page carries each island’s chunk list as data, and the runtime preloads an island’s whole graph when it wakes (after the page has painted), so no island code moves before its wake and none waits on a waterfall after it. Remove the key.'
-		);
 	}
 }
 
@@ -266,13 +251,13 @@ export function validate_region_presets(presets: Record<string, unknown>): void 
 	for (const [name, bag] of Object.entries(presets)) {
 		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
 			throw new Error(
-				`[ogygia] regions.presets.${name} is empty — a preset with nothing is a mistake.`
+				`[ogygia] presets.${name} is empty — a preset with nothing is a mistake.`
 			);
 		}
 		for (const k of Object.keys(bag)) {
 			if (!REGION_PRESET_KEYS.has(k)) {
 				throw new Error(
-					`[ogygia] regions.presets.${name}: unknown key \`${k}\`. A regions preset takes ${[...REGION_PRESET_KEYS].join(', ')}.`
+					`[ogygia] presets.${name}: unknown key \`${k}\`. A preset takes ${[...REGION_PRESET_KEYS].join(', ')}.`
 				);
 			}
 		}
@@ -320,15 +305,15 @@ export function resolve_options(
 	// Capability URL TTL (seconds). Clamped to [60, 86400].
 	const region_ttl = Math.min(
 		86400,
-		Math.max(60, Math.floor(options.regions?.ttl ?? defaultRegionTtl))
+		Math.max(60, Math.floor(options.ttl ?? defaultRegionTtl))
 	);
 
-	// Renewal window (seconds) after a capability expired: `regions.maxPageAge`. `0` = never renew; at
-	// most 10 years (the prerender capability life — nothing outlives that).
-	const renew_raw = options.regions?.maxPageAge;
+	// Renewal window (seconds) after a capability expired: `maxPageAge`. `0` = never renew; at most 10
+	// years (the prerender capability life — nothing outlives that).
+	const renew_raw = options.maxPageAge;
 	if (renew_raw !== undefined && !(typeof renew_raw === 'number' && Number.isFinite(renew_raw) && renew_raw >= 0)) {
 		throw new Error(
-			`[ogygia] regions.maxPageAge must be a number of seconds ≥ 0 (got ${String(renew_raw)}). Write e.g. \`30 * 24 * 3600\` for 30 days, or \`0\` to turn renewal off.`
+			`[ogygia] maxPageAge must be a number of seconds ≥ 0 (got ${String(renew_raw)}). Write e.g. \`30 * 24 * 3600\` for 30 days, or \`0\` to turn renewal off.`
 		);
 	}
 	const renew_window = Math.min(10 * 365 * 24 * 3600, Math.floor(renew_raw ?? defaultRenewWindow));

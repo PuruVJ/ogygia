@@ -801,7 +801,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		else if (kind === 'live')
 			lines.push(`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`);
 		else if (kind === 'preset')
-			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ regions: { presets } }) config.`);
+			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ presets }) config.`);
 		else lines.push(`It's a client island: marked with { wake: '${wake ?? 'load'}' }, so it hydrates ${hydrate_phrase(wake)} — that's why it ships its own JS.`);
 		if (s?.ships)
 			lines.push(`Ships ${fmt_bytes(s.bytes)} — its client entry plus the <Region> wrapper that mounts it. Only this subtree hydrates; the rest of the page stays server HTML.`);

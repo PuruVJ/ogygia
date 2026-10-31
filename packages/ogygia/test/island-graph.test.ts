@@ -90,10 +90,10 @@ describe('island graph — the document tail', () => {
 	});
 });
 
-describe('regions.preload is gone', () => {
+describe('preload is gone', () => {
 	it('the key is a build error that says why', () => {
-		expect(() => assert_no_legacy_options({ regions: { preload: 'all' } } as never)).toThrow(/regions\.preload/);
-		expect(() => assert_no_legacy_options({ regions: {} })).not.toThrow();
+		expect(() => assert_no_legacy_options({ preload: 'all' } as never)).toThrow(/`preload` is gone/);
+		expect(() => assert_no_legacy_options({})).not.toThrow();
 	});
 
 	it('the minted virtual module no longer exports a policy', () => {

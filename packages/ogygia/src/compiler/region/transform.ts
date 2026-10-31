@@ -1110,7 +1110,7 @@ class FileCompilation {
 		if (inline.has(import_keys.preset)) {
 			if (inline.size > 1) {
 				throw fail(
-					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ regions: { presets } })).`
+					`\`${import_keys.preset}\` must be the only import attribute — put its options (margin, maxAge, …) in the preset definition (ogygia({ presets })).`
 				);
 			}
 			from_preset = inline.get(import_keys.preset)!;
@@ -1152,7 +1152,7 @@ class FileCompilation {
 					k !== 'prefetch'
 				) {
 					throw fail(
-						`\`${k}\` is not allowed inline. Use \`${import_keys.wake}\`, \`${import_keys.fetch}\`, \`${import_keys.render}\`, \`keep\`, \`stitch\`, \`prefetch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ regions: { presets } })).`
+						`\`${k}\` is not allowed inline. Use \`${import_keys.wake}\`, \`${import_keys.fetch}\`, \`${import_keys.render}\`, \`keep\`, \`stitch\`, \`prefetch\`, or a named \`${import_keys.preset}\` — options like \`margin\` / \`maxAge\` belong in plugin config (ogygia({ presets })).`
 					);
 				}
 			}

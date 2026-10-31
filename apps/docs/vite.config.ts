@@ -128,12 +128,10 @@ export default defineConfig(({ command }) => ({
 		crossOriginIsolation(),
 		wasm(),
 		ogygia({
-			regions: {
-				visible: { margin: '120px' },
-				presets: {
-					demo: { wake: 'visible', margin: '200px' },
-					frozenSwr: { render: 'live', wake: 'load' },
-				},
+			visible: { margin: '120px' },
+			presets: {
+				demo: { wake: 'visible', margin: '200px' },
+				frozenSwr: { render: 'live', wake: 'load' },
 			},
 			plugins: [
 				// The devtools dock (launcher + Lens/Bytes/Wire/Nav/Timeline) — dev only, so the built docs

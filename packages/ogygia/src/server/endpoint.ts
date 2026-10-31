@@ -35,14 +35,14 @@ export const MAX_REGION_PROPS_LEN = 8192;
 
 /**
  * Default capability TTL (seconds) for DYNAMIC pages. Shorter than a day so harvested URLs age
- * out; override via `ogygia({ regions: { ttl } })`.
+ * out; override via `ogygia({ ttl })`.
  */
 export const DEFAULT_REGION_TTL_SEC = 3600;
 
 /**
  * Capability TTL for PRERENDERED pages (10 years — effectively the life of the deploy). A static
  * file lives on the CDN indefinitely, so an aging capability would strand every hole on it after
- * `regions.ttl` (real PPR would silently die in an hour). Safe: the capability's props are already
+ * `ttl` (real PPR would silently die in an hour). Safe: the capability's props are already
  * baked into the public static HTML, and the mint seals an EMPTY session at prerender — signing
  * that same public tuple for longer reveals nothing new. Redeploy survival additionally needs a
  * stable `OGYGIA_SECRET` (the default per-build key rotates; ServerIsland warns at build).

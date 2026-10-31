@@ -203,7 +203,7 @@ function resolve_strategy(attrs: Record<string, unknown>) {
 	if (wake === 'none')
 		return { kind: 'lake', color: '#f59e0b', detail: 'frozen SSR DOM inside an island, no client module' };
 	if (attrs.preset)
-		return { kind: 'preset', color: '#14b8a6', detail: `bundle '${attrs.preset}' from ogygia({ regions.presets })` };
+		return { kind: 'preset', color: '#14b8a6', detail: `bundle '${attrs.preset}' from ogygia({ presets })` };
 	return { kind: 'island', color: '#14b8a6', detail: `hydrates on '${wake || 'load'}'` };
 }
 

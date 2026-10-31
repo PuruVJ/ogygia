@@ -104,10 +104,10 @@ export function mint_region_capability(entry: string, payload: string, ttl = 0):
 	// Prerendered (real PPR): the capability lives in a static file that outlives any TTL — mint it
 	// effectively-forever (props are public in the HTML; session sealed empty). A render a plugin may
 	// store (`facts.storable`) is the prerender case at request time — the stored HTML outlives
-	// `regions.ttl`, so its holes mint prerender-grade too (a stored page must never carry expired
+	// `ttl`, so its holes mint prerender-grade too (a stored page must never carry expired
 	// hole URLs). An anonymous
 	// hole on a document the app marked shared-cacheable (a load's `cache-control`) outlives that
-	// cache life (server/shared-cache.ts). Everything else keeps the short `regions.ttl` window so
+	// cache life (server/shared-cache.ts). Everything else keeps the short `ttl` window so
 	// harvested URLs age out.
 	const stored = building || current_facts()?.storable === true;
 	const exp = capability_expiry(

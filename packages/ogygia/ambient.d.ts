@@ -168,7 +168,7 @@ interface ImportMetaOg {
 				render?: 'static' | 'deferred' | 'live';
 				/** a held region handed to `region()` — must be the ONLY option (`'raw'`). */
 				region?: 'raw';
-				/** a named preset from `ogygia({ regions: { presets } })` — must be the ONLY option. */
+				/** a named preset from `ogygia({ presets })` — must be the ONLY option. */
 				preset?: string;
 				/** keep the live island (DOM + state) across SPA navigations. */
 				keep?: string;

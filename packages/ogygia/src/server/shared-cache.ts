@@ -2,7 +2,7 @@
  * HOLES ON A CACHED DOCUMENT — a deferred hole's capability must outlive the document it sits in.
  *
  * A page whose load says `cache-control: public, s-maxage=604800` is served from a CDN for a week,
- * but its holes were minted for `regions.ttl` (an hour by default, capped at a day): once that passed,
+ * but its holes were minted for `ttl` (an hour by default, capped at a day): once that passed,
  * every visitor served the cached copy got a 403 for every hole, and nothing logged it. Prerender
  * already solves the same problem by signing for the life of the deploy; this is the request-time
  * equivalent, bounded by what the app itself declared.
@@ -23,7 +23,7 @@
 import { PRERENDER_REGION_TTL_SEC } from './endpoint.ts';
 
 /** The default for how long after expiry a capability can still be renewed
- *  (`regions.maxPageAge`): the longest a stale document is expected to live in a shared cache (a
+ *  (`maxPageAge`): the longest a stale document is expected to live in a shared cache (a
  *  week of `s-maxage` plus a day of revalidation). */
 export const RENEW_WINDOW_SEC: number = 8 * 24 * 3600;
 
@@ -70,7 +70,7 @@ function seconds(raw: string): number | null {
  * The capability lifetime to mint with: prerender-grade for a stored page (prerender / freeze);
  * for an anonymous hole on a document shared caches keep for `shared` seconds, twice that (so the
  * window-aligned expiry still covers the whole cache life), capped at prerender-grade; else
- * `regions.ttl`. A session-bound hole is never extended — its document is the visitor's own.
+ * `ttl`. A session-bound hole is never extended — its document is the visitor's own.
  */
 export function mint_ttl_sec(o: { stored: boolean; session: string; shared: number; region_ttl: number }): number {
 	if (o.stored) return PRERENDER_REGION_TTL_SEC;
@@ -79,7 +79,7 @@ export function mint_ttl_sec(o: { stored: boolean; session: string; shared: numb
 }
 
 /** A renewable expiry: an integer that HAS passed, by at most `window` seconds (the app's
- *  `regions.maxPageAge`; `0` renews nothing). */
+ *  `maxPageAge`; `0` renews nothing). */
 export function renewable_expiry(exp_raw: string, now_sec: number, window: number = RENEW_WINDOW_SEC): boolean {
 	if (window <= 0 || exp_raw === '' || exp_raw.length > 12) return false;
 	for (let i = 0; i < exp_raw.length; i++) {

@@ -37,7 +37,7 @@ export { debarrel } from '../compiler/debarrel/plugin.ts';
 export { definePlugin } from './plugin-api.ts';
 export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupRegions } from './plugin-api.ts';
 export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.ts';
-export type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.ts';
+export type { OgygiaPreset, OgygiaRateLimit, OgygiaOptions } from './options.ts';
 import { check_plugins, plugin_vite_plugins, resolve_plugins, type ResolvedPlugins } from './plugin-api.ts';
 import type { ServerRealm } from '../compiler/link/caps.ts';
 import {
@@ -154,7 +154,7 @@ import {
 	RUNTIME_HASH
 } from './paths.ts';
 
-import type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.ts';
+import type { OgygiaPreset, OgygiaRateLimit, OgygiaOptions } from './options.ts';
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
@@ -190,8 +190,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 
 	assert_no_legacy_options(options);
 
-	const visibleMargin = options.regions?.visible?.margin;
-	const presets = options.regions?.presets || {};
+	const visibleMargin = options.visible?.margin;
+	const presets = options.presets || {};
 	validate_region_presets(presets);
 	// `ogygia({ plugins })` — shape-checked now; their realms are found and their `build` hooks run
 	// once the root and mode are known (configResolved). Standalone has no handle to wire into.
