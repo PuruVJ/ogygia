@@ -56,7 +56,15 @@ export interface PageInteraction {
 	target: string;
 	fp?: string;
 	/** (`forced`: of a script's time, the browser laying the page out because it read sizes after a change) */
-	scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; island?: string; forced?: number }[];
+	scripts?: {
+		url: string;
+		fn: string;
+		invoker: string;
+		ms: number;
+		phase: 'delay' | 'handler' | 'paint';
+		island?: string;
+		forced?: number;
+	}[];
 }
 
 /** The slowest interaction, sampled (JS Self-Profiling): the functions that ran while it waited and
@@ -162,8 +170,33 @@ export interface PageInput {
 		/** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 		warnings?: { code: string; message: string; file?: string; fp?: string; t?: number }[];
 		/** (`lcp_priority`: the largest paint's own fetchpriority, when it sets one) */
-		paints?: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_tag?: string; lcp_url?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low'; held?: { outcome: 'arrived' | 'input' | 'cap' | 'none'; resources: number; waited_ms: number } };
-		resources?: { url: string; type: string; start: number; end: number; req_start?: number; res_start?: number; transfer?: number; size?: number; blocking?: boolean; weighed?: true }[];
+		paints?: {
+			fcp?: number;
+			lcp?: number;
+			lcp_fp?: string;
+			lcp_tag?: string;
+			lcp_url?: string;
+			lcp_replaced?: true;
+			lcp_lazy?: true;
+			lcp_priority?: 'high' | 'low';
+			held?: {
+				outcome: 'arrived' | 'input' | 'cap' | 'none';
+				resources: number;
+				waited_ms: number;
+			};
+		};
+		resources?: {
+			url: string;
+			type: string;
+			start: number;
+			end: number;
+			req_start?: number;
+			res_start?: number;
+			transfer?: number;
+			size?: number;
+			blocking?: boolean;
+			weighed?: true;
+		}[];
 		/** every file by type, when the visit lists only some of them one by one */
 		resource_totals?: { type: string; count: number; transfer: number; size: number }[];
 		viewport?: [number, number];
@@ -187,10 +220,21 @@ export interface PageInput {
 		font_faces?: { family: string; display: string; urls: string[] }[];
 		/** images whose pixels are 4× or more what their box shows (the screen's pixel ratio counted),
 		 *  their files 50 KB or more: natural and shown sizes, the file's bytes, the island it is in */
-		images_oversized?: { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[];
+		images_oversized?: {
+			url: string;
+			natural: [number, number];
+			shown: [number, number];
+			dpr: number;
+			bytes: number;
+			fp?: string;
+		}[];
 		/** long frames (50 ms or more) that began while the page scrolled, with their two biggest scripts */
 		/** (`island`: the island whose file the script is, when the profiler named it from the build's chunks) */
-		scroll_jank?: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number; island?: string }[] }[];
+		scroll_jank?: {
+			start: number;
+			ms: number;
+			scripts: { url: string; fn: string; invoker: string; ms: number; island?: string }[];
+		}[];
 		/** scripts that forced style and layout (5 ms or more): their window, the forced ms, the
 		 *  script's file and entry function (an island's hydration shows as the runtime's own task) */
 		forced_layout?: { start: number; end: number; ms: number; url: string; fn: string }[];
@@ -201,13 +245,27 @@ export interface PageInput {
 		images_unsized?: string[];
 		/** the page's size in elements, when 1,500 or more: the deepest nesting, the element with the
 		 *  most children, the islands holding the most (depth 0: past 60,000, only counted) */
-		dom?: { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
+		dom?: {
+			nodes: number;
+			depth: number;
+			deepest: string;
+			widest: { at: string; children: number };
+			islands: { fp: string; nodes: number }[];
+		};
 		/** islands whose own file failed to load and fell back to their stable name (the page came
 		 *  from a build whose files are gone); `name` when the reader could name the island */
 		entry_fallbacks?: { entry: string; src: string; recovered: boolean; name?: string }[];
 		/** content-named files the browser fetched again (revalidated, or downloaded on a reload);
 		 *  `name` when the reader could name the island */
-		refetched?: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; runtime?: boolean; name?: string }[];
+		refetched?: {
+			url: string;
+			how: 'revalidated' | 'downloaded';
+			bytes: number;
+			ms: number;
+			entry?: string;
+			runtime?: boolean;
+			name?: string;
+		}[];
 		/** the slowest interaction (the one INP reports), split by phase, with the scripts of the long
 		 *  frames around it; `island` on a script when the reader could name the island its file is */
 		interaction?: PageInteraction;
@@ -248,7 +306,13 @@ export interface PageInput {
 	 *  page), page clock; absent when it was opened later or not at all */
 	dock_open_at?: number;
 	/** what islands that left the page left running (devtools/leftovers.ts; devtools only) */
-	leftovers?: { name: string; intervals: number; listeners: string[]; fires: number; last_ago?: number }[];
+	leftovers?: {
+		name: string;
+		intervals: number;
+		listeners: string[];
+		fires: number;
+		last_ago?: number;
+	}[];
 	/** wheel / touch listeners still attached that hold scrolling (not passive), by the island (or
 	 *  the file) that added each (devtools/leftovers.ts; devtools only) */
 	scroll_blockers?: { owner: string; type: string; on: string; forced: boolean }[];
@@ -564,20 +628,27 @@ export function prebundled_names(keys: readonly string[]): string[] {
  * ogygia is one package under its two names (`ogygia` re-exports `@ogygia/core`): an app pre-bundles
  * `ogygia/…` while the compiler's imports load core's files raw.
  */
-export function dev_two_copies(urls: readonly string[], prebundled: readonly string[]): { pkg: string; raw: number; example: string }[] {
+export function dev_two_copies(
+	urls: readonly string[],
+	prebundled: readonly string[]
+): { pkg: string; raw: number; example: string }[] {
 	const name_of = (pkg: string) => (OWN_PACKAGE_NAMES.includes(pkg) ? 'ogygia' : pkg);
 	const pre = new Set(prebundled.map(name_of));
 	const by = new Map<string, { pkg: string; raw: number; example: string }>();
 	for (const u of urls) {
 		const nm = u.lastIndexOf('/node_modules/');
 		if (nm === -1 || u.includes('/node_modules/.vite/')) continue;
-		const parts = u.slice(nm + 14).split('?')[0].split('/');
+		const parts = u
+			.slice(nm + 14)
+			.split('?')[0]
+			.split('/');
 		const folder = parts[0].startsWith('@') ? `${parts[0]}/${parts[1] ?? ''}` : parts[0];
 		const pkg = name_of(folder);
 		if (!pre.has(pkg)) continue;
 		const g = by.get(pkg);
 		if (g) g.raw++;
-		else by.set(pkg, { pkg, raw: 1, example: parts.slice(folder.startsWith('@') ? 2 : 1).join('/') });
+		else
+			by.set(pkg, { pkg, raw: 1, example: parts.slice(folder.startsWith('@') ? 2 : 1).join('/') });
 	}
 	return [...by.values()].sort((a, b) => b.raw - a.raw);
 }
@@ -590,8 +661,17 @@ export function dev_two_copies(urls: readonly string[], prebundled: readonly str
  * them (just over the largest, in whole KB), how many, how many bytes. Null under two sheets. The
  * profiler's page weight (`style`) and the Page tab's resources (`css`) both ask it.
  */
-export function inline_threshold_tune(blocking: readonly { url: string; kind: string; bytes: number }[]): { threshold: number; files: number; bytes: number } | null {
-	const sheets = blocking.filter((x) => (x.kind === 'style' || x.kind === 'css') && x.url.includes('/_app/immutable/') && x.bytes > 0).sort((a, b) => a.bytes - b.bytes);
+export function inline_threshold_tune(
+	blocking: readonly { url: string; kind: string; bytes: number }[]
+): { threshold: number; files: number; bytes: number } | null {
+	const sheets = blocking
+		.filter(
+			(x) =>
+				(x.kind === 'style' || x.kind === 'css') &&
+				x.url.includes('/_app/immutable/') &&
+				x.bytes > 0
+		)
+		.sort((a, b) => a.bytes - b.bytes);
 	let files = 0;
 	let bytes = 0;
 	let largest = 0;
@@ -671,7 +751,11 @@ export function encoding_only(a: string, b: string): boolean {
 }
 
 /** Where two strings first differ, as a short "server … / now …" pair (the markup-changed proof). */
-export function first_difference(a: string, b: string, span = 60): { at: number; server: string; now: string } | null {
+export function first_difference(
+	a: string,
+	b: string,
+	span = 60
+): { at: number; server: string; now: string } | null {
 	// (Svelte's block markers are re-anchored on hydration and nobody sees them)
 	a = without_comments(a);
 	b = without_comments(b);
@@ -695,8 +779,18 @@ export function first_difference(a: string, b: string, span = 60): { at: number;
  *  that the browser holds as `"true"` / `"false"` — written bare (Svelte hands a custom element its
  *  attributes as values, and a bare one's is `true`; measured: `={true}` and `=""` agree on both
  *  sides). Its name, the element's tag, the browser's value. */
-export function boolean_attr_at(server: string, now: string, at: number): { name: string; tag: string; now: 'true' | 'false' } | null {
-	if (at < 2 || server.charCodeAt(at - 1) !== 34 || server.charCodeAt(at - 2) !== 61 || server.charCodeAt(at) !== 34) return null;
+export function boolean_attr_at(
+	server: string,
+	now: string,
+	at: number
+): { name: string; tag: string; now: 'true' | 'false' } | null {
+	if (
+		at < 2 ||
+		server.charCodeAt(at - 1) !== 34 ||
+		server.charCodeAt(at - 2) !== 61 ||
+		server.charCodeAt(at) !== 34
+	)
+		return null;
 	const v = now.startsWith('true"', at) ? 'true' : now.startsWith('false"', at) ? 'false' : null;
 	if (!v) return null;
 	let s = at - 2;
@@ -710,18 +804,31 @@ export function boolean_attr_at(server: string, now: string, at: number): { name
 	const lt = server.lastIndexOf('<', s);
 	if (!name || lt === -1) return null;
 	let e = lt + 1;
-	while (e < s && server.charCodeAt(e) !== 32 && server.charCodeAt(e) !== 10 && server.charCodeAt(e) !== 9) e++;
+	while (
+		e < s &&
+		server.charCodeAt(e) !== 32 &&
+		server.charCodeAt(e) !== 10 &&
+		server.charCodeAt(e) !== 9
+	)
+		e++;
 	const tag = server.slice(lt + 1, e);
 	return tag.indexOf('-') !== -1 ? { name, tag, now: v } : null;
 }
 
-export function analyze_page(page: PageInput, regions: RegionFact[], failures: Failure[] = [], now: number = Infinity, cpu: CpuSummary | null = null): PageReport {
+export function analyze_page(
+	page: PageInput,
+	regions: RegionFact[],
+	failures: Failure[] = [],
+	now: number = Infinity,
+	cpu: CpuSummary | null = null
+): PageReport {
 	/** " — mostly in `fn (file:line)`" from the CPU trace, for a finding about this island (or '') */
 	const why_cpu = (fp: string | null): string => {
 		const f = fp ? cpu?.islands[fp]?.top[0] : cpu?.outside.top[0];
 		if (!f || f.self_ms < 5) return '';
 		// (the island's own component: its name once — "Thrash (… mostly its own code (Thrash.svelte:5))")
-		if (fp && f.name === name_of(fp) && f.file) return `; mostly its own code (${f.file.slice(f.file.lastIndexOf('/') + 1)}${f.line !== null ? `:${f.line}` : ''})`;
+		if (fp && f.name === name_of(fp) && f.file)
+			return `; mostly its own code (${f.file.slice(f.file.lastIndexOf('/') + 1)}${f.line !== null ? `:${f.line}` : ''})`;
 		return `; mostly ${fn_label(f)}`;
 	};
 	/** " — mostly <script>" from the long animation frames, when no CPU trace names it (or '') */
@@ -742,7 +849,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const findings: PageFinding[] = [];
 	const by_fp = new Map<string, RegionFact>();
 	for (const r of regions) if (r.fp && !by_fp.has(r.fp)) by_fp.set(r.fp, r);
-	const name_of = (fp: string | undefined, entry?: string) => (fp && by_fp.get(fp)?.name) || entry || fp || 'an island';
+	const name_of = (fp: string | undefined, entry?: string) =>
+		(fp && by_fp.get(fp)?.name) || entry || fp || 'an island';
 	const vh = page.visit?.viewport?.[1] ?? 0;
 	const vw = page.visit?.viewport?.[0] ?? 0;
 
@@ -766,12 +874,17 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// foot landing as a banner opened above it excused the banner)
 	const island_tops = new Map<string, number[]>();
 	for (const r of regions)
-		if (r.kind === 'island' && typeof r.top === 'number') (island_tops.get(r.name) ?? island_tops.set(r.name, []).get(r.name)!).push(r.top);
+		if (r.kind === 'island' && typeof r.top === 'number')
+			(island_tops.get(r.name) ?? island_tops.set(r.name, []).get(r.name)!).push(r.top);
 	const sheet_of = (url: string): string | null => {
 		const q = url.indexOf('.svelte?');
 		return q === -1 ? null : url.slice(url.lastIndexOf('/', q) + 1, q);
 	};
-	const dev_css = page.dev ? (page.visit?.resources ?? []).filter((r) => r.url.includes('type=style')).map((r) => ({ end: r.end, of: sheet_of(r.url) })) : [];
+	const dev_css = page.dev
+		? (page.visit?.resources ?? [])
+				.filter((r) => r.url.includes('type=style'))
+				.map((r) => ({ end: r.end, of: sheet_of(r.url) }))
+		: [];
 	const by_dev_css = (t: number, name: string, top: number | undefined) =>
 		dev_css.some((e) => {
 			if (e.end > t + 5 || t - e.end > 250) return false;
@@ -785,7 +898,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// (the island's own work: its hydrate step and the effects Svelte runs right after it)
 		const end = work_end(i);
 		let shift = 0;
-		for (const s of page.shifts) if (s.fp === i.fp && s.t >= i.done - 16 && s.t <= end + SHIFT_WINDOW_MS && !by_dev_css(s.t, fact?.name ?? '', fact?.top)) shift += s.value;
+		for (const s of page.shifts)
+			if (
+				s.fp === i.fp &&
+				s.t >= i.done - 16 &&
+				s.t <= end + SHIFT_WINDOW_MS &&
+				!by_dev_css(s.t, fact?.name ?? '', fact?.top)
+			)
+				shift += s.value;
 		let lt = 0;
 		for (const t of page.longtasks) {
 			const a = Math.max(t.t, lo);
@@ -873,8 +993,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	}
 	const recovered = all_recovered.filter((r) => !same.includes(r));
 	if (recovered.length) {
-		const touched = recovered.some((r) => page.islands.find((i) => i.fp === r.fp)?.healed) || touched_page;
-		const lines = touched ? [] : hazards_of(page, recovered.map((r) => r.name));
+		const touched =
+			recovered.some((r) => page.islands.find((i) => i.fp === r.fp)?.healed) || touched_page;
+		const lines = touched
+			? []
+			: hazards_of(
+					page,
+					recovered.map((r) => r.name)
+				);
 		findings.push({
 			code: 'recovered',
 			severity: 'error',
@@ -882,12 +1008,15 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				`${list(recovered.map((r) => r.name))} threw away the server HTML and rendered again in the browser (a flash and a double render). ` +
 				(touched
 					? 'Something changed the markup between the server and hydration.'
-					: 'No script in the browser edited ' + (recovered.length === 1 ? 'it' : 'them') + ' before waking: either its HTML was rewritten on the way from the server, or the component itself drew a different tree in the browser.' + (lines.length ? ` ${hazard_words(lines)}` : '')),
+					: 'No script in the browser edited ' +
+						(recovered.length === 1 ? 'it' : 'them') +
+						' before waking: either its HTML was rewritten on the way from the server, or the component itself drew a different tree in the browser.' +
+						(lines.length ? ` ${hazard_words(lines)}` : '')),
 			fix: touched
 				? 'Look for a script that edits the page before islands wake (an A/B tool, a DOM injector), or markup the browser rewrites (invalid nesting like a <div> in a <p>).'
 				: lines.length
 					? `${hazard_fix(lines)} If it is none of them, look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter).`
-					: 'Look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter), then in its components for what the browser sees differently: a block ({#if}, {#each}, {#await}) whose condition reads `window`, `Date`, `Math.random()` or storage; a context set only on the server (a csr=false layout\'s setContext); an `await` at the top of its script; or markup the browser rewrites (a <div> in a <p>).',
+					: "Look for a rewrite on the way (a transformPageChunk, an HTML middleware or edge rewriter), then in its components for what the browser sees differently: a block ({#if}, {#each}, {#await}) whose condition reads `window`, `Date`, `Math.random()` or storage; a context set only on the server (a csr=false layout's setContext); an `await` at the top of its script; or markup the browser rewrites (a <div> in a <p>).",
 			fps: recovered.map((r) => r.fp)
 		});
 	}
@@ -917,15 +1046,23 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const snap = page.snapshots?.find((s) => s.fp === changed[0].fp);
 		const d = snap ? first_difference(snap.ssr, snap.hydrated) : null;
 		// a harmless-looking cause: a bare attribute on a custom element (`<my-card data-x>`, Svelte 5)
-		const bool = d && snap ? boolean_attr_at(without_comments(snap.ssr), without_comments(snap.hydrated), d.at) : null;
+		const bool =
+			d && snap
+				? boolean_attr_at(without_comments(snap.ssr), without_comments(snap.hydrated), d.at)
+				: null;
 		// (the lines of its own that draw differently in the browser: the dev server read them)
-		const changed_lines = hazards_of(page, changed.map((r) => r.name));
+		const changed_lines = hazards_of(
+			page,
+			changed.map((r) => r.name)
+		);
 		findings.push({
 			code: 'markup-changed',
 			severity: 'warn',
 			message:
 				`${list(changed.map((r) => r.name))} rendered different markup in the browser than on the server, so the page changes as it wakes.` +
-				(d ? ` First difference in ${changed[0].name}: server "${clip(d.server)}", browser "${clip(d.now)}".` : '') +
+				(d
+					? ` First difference in ${changed[0].name}: server "${clip(d.server)}", browser "${clip(d.now)}".`
+					: '') +
 				(changed_lines.length && !bool ? ` ${hazard_words(changed_lines)}` : ''),
 			fix: bool
 				? `\`${bool.name}\` on <${bool.tag}> is written bare: the server writes ${bool.name}="" and Svelte's hydrate sets it to "${bool.now}" — Svelte hands a custom element its attributes as values, and a bare attribute's value is \`true\`. So the island's markup changes as it wakes, and CSS or the component reading the value sees two. Give it a value, the same on both sides: \`${bool.name}=""\` (or \`${bool.name}="true"\` when the component reads it as a flag).`
@@ -941,8 +1078,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// (and islands clicked that have not woken at all)
 	const asleep_hit = page.firsts
 		.map((f) => by_fp.get(f.fp))
-		.filter((r): r is RegionFact => !!r && r.kind === 'island' && r.wake !== 'interaction' && !r.hydrated && !latest.has(r.fp));
-	const early_labels = [...early.map((r) => `${r.name} (${Math.round(r.early_ms!)} ms before it woke)`), ...asleep_hit.map((r) => `${r.name} (still asleep)`)];
+		.filter(
+			(r): r is RegionFact =>
+				!!r && r.kind === 'island' && r.wake !== 'interaction' && !r.hydrated && !latest.has(r.fp)
+		);
+	const early_labels = [
+		...early.map((r) => `${r.name} (${Math.round(r.early_ms!)} ms before it woke)`),
+		...asleep_hit.map((r) => `${r.name} (still asleep)`)
+	];
 	if (early_labels.length)
 		findings.push({
 			code: 'early-click',
@@ -960,7 +1103,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: shifted.some((r) => r.shift >= 0.1) ? 'warn' : 'info',
 			message:
 				`Hydrating ${list(shifted.map((r) => `${r.name} (CLS ${r.shift})`))} moved the layout: the island's size changed when it woke.` +
-				(page.shifts_from === 'boxes' ? " (Estimated: this browser reports no layout shifts, so each is the island's box before and after it woke, scored the way a layout shift is.)" : ''),
+				(page.shifts_from === 'boxes'
+					? " (Estimated: this browser reports no layout shifts, so each is the island's box before and after it woke, scored the way a layout shift is.)"
+					: ''),
 			fix: 'Render the island at its final size on the server (the same content, or a placeholder with a fixed height), so waking it changes nothing on screen.',
 			fps: shifted.map((r) => r.fp)
 		});
@@ -999,7 +1144,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			if (!q.below_fold) continue;
 			const a = q.t0 + q.load_ms;
 			const b = a + (q.queue_ms ?? 0);
-			const spans: { name: string; s: number; e: number; failed: boolean }[] = rows.filter((o) => o !== q && !o.below_fold).map((o) => ({ name: o.name, s: o.t0, e: o.t0 + o.load_ms, failed: false }));
+			const spans: { name: string; s: number; e: number; failed: boolean }[] = rows
+				.filter((o) => o !== q && !o.below_fold)
+				.map((o) => ({ name: o.name, s: o.t0, e: o.t0 + o.load_ms, failed: false }));
 			for (const f of failures) {
 				if (!f.span || !f.fp) continue;
 				const top_px = by_fp.get(f.fp)?.top;
@@ -1008,7 +1155,11 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			}
 			for (const sp of spans) {
 				const hit = Math.min(b, sp.e) - Math.max(a, sp.s);
-				if (hit >= 50) held_for.set(sp.name, { ms: Math.max(held_for.get(sp.name)?.ms ?? 0, hit), failed: sp.failed });
+				if (hit >= 50)
+					held_for.set(sp.name, {
+						ms: Math.max(held_for.get(sp.name)?.ms ?? 0, hit),
+						failed: sp.failed
+					});
 			}
 		}
 		const holders = [...held_for].sort((x, y) => y[1].ms - x[1].ms).slice(0, 3);
@@ -1026,7 +1177,7 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix:
 				holders.length && held_ms >= (top[0]?.[1] ?? 0)
 					? `The first-screen island${holders.length === 1 ? '' : 's'} loading slowly ${holders.length === 1 ? 'is' : 'are'} the cost: make ${holders.length === 1 ? 'its' : 'their'} code smaller or faster to load${holders.some(([, h]) => h.failed) ? ' (and fix the one that failed)' : ''}. The hold is bounded (a second), so a module that never comes cannot stall the rest.`
-					: 'The islands ahead of it are the cost. Make them lighter, or move islands that are not needed at load to wake=\'visible\' or \'idle\'.',
+					: "The islands ahead of it are the cost. Make them lighter, or move islands that are not needed at load to wake='visible' or 'idle'.",
 			fps: queued.map((r) => r.fp)
 		});
 	}
@@ -1075,7 +1226,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			// …and any failed island's hydrate STEP, for every island: the step held the thread until it
 			// threw (a failing first-screen island's step — its retry against the server copy, its dev
 			// error — read as the scheduler idling while the next island waited)
-			for (const f of failures) if (f.span && typeof f.turn === 'number' && f.turn <= f.span[1]) busy.push([f.turn, f.span[1]]);
+			for (const f of failures)
+				if (f.span && typeof f.turn === 'number' && f.turn <= f.span[1])
+					busy.push([f.turn, f.span[1]]);
 			// …and every long task: the thread was taken (the page's own script, a third party), and no
 			// turn can be handed out inside a task — a planted busy loop on the lab page read as ogygia's
 			// scheduler holding the islands after it
@@ -1117,14 +1270,24 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'info',
 			message:
 				`${list(slow.map((r) => `${r.name} (${r.load_ms} ms)`))} waited a long time for its code to arrive.` +
-				(compiled.length ? ` ${compiled.length === slow.length ? 'Most of the wait' : `For ${list(compiled.map((r) => r.name))}, most of it`} was the dev server compiling the files on this first request: reload for a warm reading.` : ''),
-			fix: 'Check the island\'s imports in the Bytes tab: a big dependency, or a chain of imports loaded one after another. (Dev serves modules one by one; a build is faster.)',
+				(compiled.length
+					? ` ${compiled.length === slow.length ? 'Most of the wait' : `For ${list(compiled.map((r) => r.name))}, most of it`} was the dev server compiling the files on this first request: reload for a warm reading.`
+					: ''),
+			fix: "Check the island's imports in the Bytes tab: a big dependency, or a chain of imports loaded one after another. (Dev serves modules one by one; a build is faster.)",
 			fps: slow.map((r) => r.fp)
 		});
 
 	// ── eager islands below the fold ──
 	// (one that draws nothing here is nowhere on the page: its own finding below)
-	const eager_below = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && !r.hidden && vh && typeof r.top === 'number' && r.top >= vh);
+	const eager_below = regions.filter(
+		(r) =>
+			r.kind === 'island' &&
+			EAGER.has(r.wake) &&
+			!r.hidden &&
+			vh &&
+			typeof r.top === 'number' &&
+			r.top >= vh
+	);
 	if (eager_below.length) {
 		// (copies of one island are one set of files: its own bytes once)
 		const own = new Map<string, number>();
@@ -1153,7 +1316,10 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// (pre-bundled into .vite/deps AND served raw from its folder: a module with state — a store, a
 	// registry, a feature slot — has two instances, and what one writes the other never reads)
 	if (page.dev && page.prebundled?.length) {
-		const twice = dev_two_copies((page.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url), page.prebundled);
+		const twice = dev_two_copies(
+			(page.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url),
+			page.prebundled
+		);
 		if (twice.length) {
 			const top = twice[0];
 			findings.push({
@@ -1172,9 +1338,18 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const broke = new Set(failures.map((f) => f.fp));
 	// (nor a headless one — only `hidden` markers: it is there for its effects, no screen shows it;
 	// below, its weight when that is the news)
-	const eager_hidden = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && r.hidden && !r.headless && !broke.has(r.fp));
+	const eager_hidden = regions.filter(
+		(r) => r.kind === 'island' && EAGER.has(r.wake) && r.hidden && !r.headless && !broke.has(r.fp)
+	);
 	// ── a headless island whose own code is no small thing ──
-	const headless = regions.filter((r) => r.kind === 'island' && EAGER.has(r.wake) && r.headless && !broke.has(r.fp) && (r.own_bytes ?? 0) >= EAGER_BELOW_SMALL);
+	const headless = regions.filter(
+		(r) =>
+			r.kind === 'island' &&
+			EAGER.has(r.wake) &&
+			r.headless &&
+			!broke.has(r.fp) &&
+			(r.own_bytes ?? 0) >= EAGER_BELOW_SMALL
+	);
 	if (headless.length) {
 		const own = new Map<string, number>();
 		for (const r of headless) own.set(r.name, r.own_bytes!);
@@ -1195,15 +1370,26 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const one = names.length === 1;
 		// each island by what the sheets say: the query that shows it, or nothing readable
 		const query_of = new Map<string, string>();
-		for (const r of eager_hidden) if (r.shows_at && !query_of.has(r.name)) query_of.set(r.name, r.shows_at);
+		for (const r of eager_hidden)
+			if (r.shows_at && !query_of.has(r.name)) query_of.set(r.name, r.shows_at);
 		const shown = names.filter((n) => query_of.has(n));
 		const unknown = names.filter((n) => !query_of.has(n));
 		const own = new Map<string, number>();
 		for (const r of eager_hidden) if (r.own_bytes) own.set(r.name, r.own_bytes);
 		const own_total = [...own.values()].reduce((s, n) => s + n, 0);
 		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
-		const shows = shown.length ? [one ? `the page's CSS shows it only at ${query_of.get(shown[0])}` : `the page's CSS shows ${shown.map((n) => `${n} only at ${query_of.get(n)}`).join(', ')}`] : [];
-		const bare = unknown.length ? (one ? 'no box of its own, hidden by its CSS or empty' : `${list(unknown)} ${unknown.length === 1 ? 'has' : 'have'} no box of ${unknown.length === 1 ? 'its' : 'their'} own (hidden by CSS, or empty)`) : '';
+		const shows = shown.length
+			? [
+					one
+						? `the page's CSS shows it only at ${query_of.get(shown[0])}`
+						: `the page's CSS shows ${shown.map((n) => `${n} only at ${query_of.get(n)}`).join(', ')}`
+				]
+			: [];
+		const bare = unknown.length
+			? one
+				? 'no box of its own, hidden by its CSS or empty'
+				: `${list(unknown)} ${unknown.length === 1 ? 'has' : 'have'} no box of ${unknown.length === 1 ? 'its' : 'their'} own (hidden by CSS, or empty)`
+			: '';
 		const first_q = shown.length ? query_of.get(shown[0])! : '';
 		findings.push({
 			code: 'eager-hidden',
@@ -1211,7 +1397,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			message:
 				`${list(names)} draw${one ? 's' : ''} nothing on this screen (${vw ? `${vw} px wide` : 'this size'}) but load${one ? 's' : ''} ${one ? 'its' : 'their'} code at page load: ` +
 				`${[...shows, ...(bare ? [bare] : [])].join('; ')}.` +
-				(own_total ? ` ${kb(own_total)} of that code ${one ? 'is its own' : 'is theirs alone'}.` : ''),
+				(own_total
+					? ` ${kb(own_total)} of that code ${one ? 'is its own' : 'is theirs alone'}.`
+					: ''),
 			fix:
 				(shown.length === 1
 					? `Wake ${one ? 'it' : shown[0]} by that media query (\`with { wake: '${first_q}' }\`): the code loads only on the screens that show it, and wakes there as the screen changes.`
@@ -1238,7 +1426,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				severity: compiling.length === late.length ? 'info' : 'warn',
 				message:
 					`${list(late.map((r) => `${r.name} (${Math.round(r.done - lcp)} ms)`))} on the first screen woke long after the page looked finished (LCP ${Math.round(lcp)} ms). A visitor can click it and get nothing in that gap.` +
-					(compiling.length ? ` ${compiling.length === late.length ? 'Most of the gap' : `For ${list(compiling.map((r) => r.name))}, most of it`} was the dev server compiling its code on this first request: reload for a warm reading.` : ''),
+					(compiling.length
+						? ` ${compiling.length === late.length ? 'Most of the gap' : `For ${list(compiling.map((r) => r.name))}, most of it`} was the dev server compiling its code on this first request: reload for a warm reading.`
+						: ''),
 				fix: 'Shrink what it loads and what hydrates before it, or render it as plain HTML (a lake) if it does not need to be interactive at once.',
 				fps: late.map((r) => r.fp)
 			});
@@ -1248,7 +1438,10 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// a changed attribute elsewhere in it (a tracking id) repaints nothing
 		const lcp_fp = page.visit?.paints?.lcp_fp;
 		const hit = lcp_fp ? rows.find((r) => r.fp === lcp_fp) : undefined;
-		if (hit && (hit.recovered || (hit.changed && (page.visit?.paints?.lcp_replaced || lcp >= hit.done))))
+		if (
+			hit &&
+			(hit.recovered || (hit.changed && (page.visit?.paints?.lcp_replaced || lcp >= hit.done)))
+		)
 			findings.push({
 				code: 'lcp-repaint',
 				severity: 'warn',
@@ -1284,7 +1477,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			const face = faces.find((f) => f.urls.includes(r.url));
 			if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
 			if (late.some((l) => l.family === face.family)) continue;
-			late.push({ family: face.family, display: face.display, after: Math.round(r.end - fcp_at), file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0] });
+			late.push({
+				family: face.family,
+				display: face.display,
+				after: Math.round(r.end - fcp_at),
+				file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0]
+			});
 		}
 		// …OR IT HELD THE FIRST PAINT ITSELF: a browser that counts no paint until text shows (Safari)
 		// puts the first paint just after the font lands, so "after the first paint" never holds — the
@@ -1298,7 +1496,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				const face = faces.find((f) => f.urls.includes(r.url));
 				if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
 				if (held.some((l) => l.family === face.family)) continue;
-				held.push({ family: face.family, display: face.display, at: Math.round(r.end), file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0] });
+				held.push({
+					family: face.family,
+					display: face.display,
+					at: Math.round(r.end),
+					file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0]
+				});
 			}
 		if (late.length || held.length)
 			findings.push({
@@ -1330,13 +1533,23 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 
 	// ── images sent far bigger than shown: the bytes past what the box shows are bytes nobody sees ──
 	const big = (page.visit?.images_oversized ?? [])
-		.map((i) => ({ ...i, waste: Math.round(i.bytes * (1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1]))) }))
+		.map((i) => ({
+			...i,
+			waste: Math.round(
+				i.bytes * (1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1]))
+			)
+		}))
 		.sort((a, b) => b.waste - a.waste);
 	const big_waste = big.reduce((n, i) => n + i.waste, 0);
 	if (big.length && big_waste >= 50_000) {
 		const kb = (n: number) => `${Math.round(n / 1024)} KB`;
 		const file = (u: string) => u.slice(u.lastIndexOf('/') + 1).split('?')[0] || u;
-		const named = big.slice(0, 3).map((i) => `${file(i.url)} (${i.natural[0]}×${i.natural[1]}, shown at ${i.shown[0]}×${i.shown[1]}${i.dpr !== 1 ? ` on a ${i.dpr}× screen` : ''}${i.fp ? ` in ${name_of(i.fp)}` : ''})`);
+		const named = big
+			.slice(0, 3)
+			.map(
+				(i) =>
+					`${file(i.url)} (${i.natural[0]}×${i.natural[1]}, shown at ${i.shown[0]}×${i.shown[1]}${i.dpr !== 1 ? ` on a ${i.dpr}× screen` : ''}${i.fp ? ` in ${name_of(i.fp)}` : ''})`
+			);
 		findings.push({
 			code: 'image-oversized',
 			severity: 'warn',
@@ -1395,12 +1608,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			for (const i of page.islands) {
 				const from = i.turn ?? i.loaded;
 				const overlap = Math.min(work_end(i), f.end) - Math.max(from, f.start);
-				if (overlap > best_overlap) (best_overlap = overlap), (best = i);
+				if (overlap > best_overlap) ((best_overlap = overlap), (best = i));
 			}
 			const key = best ? best.fp : `${f.url}\0${f.fn}`;
-			const label = best ? `${name_of(best.fp, best.entry)} while it hydrated` : `${file(f.url)}${f.fn ? ` (${f.fn})` : ''}`;
+			const label = best
+				? `${name_of(best.fp, best.entry)} while it hydrated`
+				: `${file(f.url)}${f.fn ? ` (${f.fn})` : ''}`;
 			const g = groups.get(key);
-			if (g) (g.ms += f.ms), g.n++;
+			if (g) ((g.ms += f.ms), g.n++);
 			else groups.set(key, { label, ...(best ? { fp: best.fp } : {}), ms: f.ms, n: 1 });
 		}
 		const top = [...groups.values()].filter((g) => g.ms >= 30).sort((a, b) => b.ms - a.ms);
@@ -1428,10 +1643,21 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		for (const i of below) {
 			const g = by_file.get(file(i.url));
 			if (g) (g.n++, (g.bytes += i.bytes), (g.top = Math.min(g.top, i.top)));
-			else by_file.set(file(i.url), { n: 1, bytes: i.bytes, top: i.top, ...(i.fp ? { fp: i.fp } : {}) });
+			else
+				by_file.set(file(i.url), {
+					n: 1,
+					bytes: i.bytes,
+					top: i.top,
+					...(i.fp ? { fp: i.fp } : {})
+				});
 		}
 		const groups = [...by_file].sort((a, b) => b[1].bytes - a[1].bytes);
-		const named = groups.slice(0, 3).map(([f, g]) => `${f}${g.n > 1 ? ` ×${g.n}` : ''} (${kb(g.bytes)}, ${vh ? `${(g.top / vh).toFixed(1)} screens` : `${g.top}px`} down${g.fp ? `, in ${name_of(g.fp)}` : ''})`);
+		const named = groups
+			.slice(0, 3)
+			.map(
+				([f, g]) =>
+					`${f}${g.n > 1 ? ` ×${g.n}` : ''} (${kb(g.bytes)}, ${vh ? `${(g.top / vh).toFixed(1)} screens` : `${g.top}px`} down${g.fp ? `, in ${name_of(g.fp)}` : ''})`
+			);
 		findings.push({
 			code: 'images-eager-below',
 			severity: 'warn',
@@ -1483,7 +1709,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	const load_end = page.visit?.nav?.load ?? 0;
 	if (load_end && now - load_end >= NEVER_MS) {
 		const failed = new Set(failures.map((f) => f.fp));
-		const asleep = regions.filter((r) => r.kind === 'island' && r.wake === 'load' && !r.hydrated && !failed.has(r.fp));
+		const asleep = regions.filter(
+			(r) => r.kind === 'island' && r.wake === 'load' && !r.hydrated && !failed.has(r.fp)
+		);
 		if (asleep.length)
 			findings.push({
 				code: 'never-woke',
@@ -1500,7 +1728,13 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const head = `${v.label} is ${v.key === 'cls' ? v.value : `${Math.round(v.value)} ms`} (${v.rating === 'poor' ? 'poor' : 'needs work'}; good is ${v.key === 'cls' ? '≤ ' + LIMITS[v.key][0] : '≤ ' + LIMITS[v.key][0] + ' ms'}).`;
 		const why =
 			v.key === 'inp'
-				? explain_interaction(page.visit?.interaction, rows, name_of, page.visit?.origin, page.interaction_cpu)
+				? explain_interaction(
+						page.visit?.interaction,
+						rows,
+						name_of,
+						page.visit?.origin,
+						page.interaction_cpu
+					)
 				: v.key === 'lcp'
 					? explain_lcp(page, name_of)
 					: v.key === 'cls'
@@ -1514,16 +1748,31 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// findings in place of the bare vital: the profiler words the vitals from all its visits, and
 		// keeps this visit's why)
 		findings.push({
-			code: why ? (v.key === 'inp' ? 'slow-interaction' : v.key === 'lcp' ? 'slow-lcp' : v.key === 'ttfb' ? 'slow-ttfb' : v.key === 'fcp' ? 'slow-fcp' : 'shift-cause') : `vital-${v.key}`,
+			code: why
+				? v.key === 'inp'
+					? 'slow-interaction'
+					: v.key === 'lcp'
+						? 'slow-lcp'
+						: v.key === 'ttfb'
+							? 'slow-ttfb'
+							: v.key === 'fcp'
+								? 'slow-fcp'
+								: 'shift-cause'
+				: `vital-${v.key}`,
 			// (a why that is the dev server's own cost — a page compiling on its first request — is a note)
 			severity: why && 'note' in why && why.note ? 'info' : v.rating === 'poor' ? 'warn' : 'info',
 			message: why ? `${head} ${why.message}` : head,
 			...(why ? { fix: why.fix } : {}),
-			fps: v.key === 'lcp' && page.visit?.paints?.lcp_fp ? [page.visit.paints.lcp_fp] : why?.fps ?? [],
+			fps:
+				v.key === 'lcp' && page.visit?.paints?.lcp_fp
+					? [page.visit.paints.lcp_fp]
+					: (why?.fps ?? []),
 			// (the page compiling on its first request: the first byte's note only — a dev CSS shift is not a compile)
 			// (the dev server's own doing: its first compile held the first byte, or the CSS it adds with
 			// JavaScript moved the page — a reload reads it differently, never a change of the code)
-			...((v.key === 'ttfb' || v.key === 'cls') && why && 'note' in why && why.note ? { dev_compile: true as const } : {})
+			...((v.key === 'ttfb' || v.key === 'cls') && why && 'note' in why && why.note
+				? { dev_compile: true as const }
+				: {})
 		});
 	}
 
@@ -1549,15 +1798,33 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// (a first byte the browser hid: the HTML's end, the latest it can have begun — never 0)
 	const html_at = page.visit?.nav?.res_start ?? page.visit?.nav?.res_end ?? 0;
 	let blocked_until = 0;
-	for (const r of page.visit?.resources ?? []) if (r.blocking && r.start < fcp) blocked_until = Math.max(blocked_until, r.end);
+	for (const r of page.visit?.resources ?? [])
+		if (r.blocking && r.start < fcp) blocked_until = Math.max(blocked_until, r.end);
 	const held_ms = blocking.length ? Math.max(0, blocked_until - html_at) : 0;
 	// (the first paint's own explanation already names that file as what it waited on: one card,
 	// at the louder of the two severities — not the same cause told twice)
-	const fcp_card = held_ms >= 200 ? findings.find((f) => f.code === 'slow-fcp' && f.message.includes('waiting for') && f.message.includes(short(blocking[0].url))) : undefined;
+	const fcp_card =
+		held_ms >= 200
+			? findings.find(
+					(f) =>
+						f.code === 'slow-fcp' &&
+						f.message.includes('waiting for') &&
+						f.message.includes(short(blocking[0].url))
+				)
+			: undefined;
 	// THE ONE NUMBER (a build): the inlineStyleThreshold that takes the small sheets off the paint,
 	// the profiler's own reckoning over the sheets this browser waited on
-	const tune = held_ms >= 200 ? inline_threshold_tune((page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp).map((r) => ({ url: r.url, kind: r.type, bytes: r.size ?? 0 }))) : null;
-	const tune_text = tune ? `With \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these stylesheets (${(tune.bytes / 1024).toFixed(1)} KB) arrive inside the HTML: ${blocking.length - tune.files} file${blocking.length - tune.files === 1 ? '' : 's'} left to wait on instead of ${blocking.length}.` : '';
+	const tune =
+		held_ms >= 200
+			? inline_threshold_tune(
+					(page.visit?.resources ?? [])
+						.filter((r) => r.blocking && r.start < fcp)
+						.map((r) => ({ url: r.url, kind: r.type, bytes: r.size ?? 0 }))
+				)
+			: null;
+	const tune_text = tune
+		? `With \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these stylesheets (${(tune.bytes / 1024).toFixed(1)} KB) arrive inside the HTML: ${blocking.length - tune.files} file${blocking.length - tune.files === 1 ? '' : 's'} left to wait on instead of ${blocking.length}.`
+		: '';
 	if (fcp_card) {
 		if (held_ms >= 600) fcp_card.severity = 'warn';
 		if (tune_text) fcp_card.fix = `${fcp_card.fix ?? ''} ${tune_text}`.trim();
@@ -1566,12 +1833,18 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			code: 'render-blocking',
 			severity: held_ms >= 600 ? 'warn' : 'info',
 			message: `${blocking.length} file${blocking.length === 1 ? '' : 's'} blocked the first paint for ${Math.round(held_ms)} ms after the HTML arrived; the slowest took ${Math.round(blocking[0].ms)} ms (${short(blocking[0].url)}).`,
-			fix: tune_text ? `${tune_text} Merge or trim the rest, and load scripts as modules (they do not block).` : 'Inline small stylesheets, merge the rest, and load scripts as modules (they do not block).',
+			fix: tune_text
+				? `${tune_text} Merge or trim the rest, and load scripts as modules (they do not block).`
+				: 'Inline small stylesheets, merge the rest, and load scripts as modules (they do not block).',
 			fps: []
 		});
-	const bytes_by = new Map<string, { type: string; count: number; transfer: number; size: number }>();
+	const bytes_by = new Map<
+		string,
+		{ type: string; count: number; transfer: number; size: number }
+	>();
 	// (all the files when the visit has their totals; the listed ones are only the first 200)
-	if (page.visit?.resource_totals?.length) for (const t of page.visit.resource_totals) bytes_by.set(t.type, { ...t });
+	if (page.visit?.resource_totals?.length)
+		for (const t of page.visit.resource_totals) bytes_by.set(t.type, { ...t });
 	else
 		for (const r of page.visit?.resources ?? []) {
 			const b = bytes_by.get(r.type) ?? { type: r.type, count: 0, transfer: 0, size: 0 };
@@ -1620,8 +1893,13 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			severity: 'warn',
 			message: `Svelte warned while hydrating: ${groups
 				.slice(0, 3)
-				.map((g) => `${g.code}${g.file ? ` in ${short(g.file)}` : ''}${g.fps.size ? ` (${list([...g.fps].map((fp) => name_of(fp)))})` : ''}${g.n > 1 ? ` ×${g.n}` : ''}`)
-				.join('; ')}. The server and the browser disagreed; Svelte kept the server's value, so the screen does not show it.`,
+				.map(
+					(g) =>
+						`${g.code}${g.file ? ` in ${short(g.file)}` : ''}${g.fps.size ? ` (${list([...g.fps].map((fp) => name_of(fp)))})` : ''}${g.n > 1 ? ` ×${g.n}` : ''}`
+				)
+				.join(
+					'; '
+				)}. The server and the browser disagreed; Svelte kept the server's value, so the screen does not show it.`,
 			fix: 'Make the value the same on both sides (a value only the server has belongs in props; time, random and browser-only reads belong in an effect).',
 			fps
 		});
@@ -1664,7 +1942,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	}
 
 	// ── a hole on the first screen whose answer came slowly: its fallback is what the visitor saw ──
-	const slow_holes = (page.hole_waits ?? []).filter((h) => !h.below_fold && h.wait_ms >= SLOW_HOLE_MS).sort((a, b) => b.wait_ms - a.wait_ms);
+	const slow_holes = (page.hole_waits ?? [])
+		.filter((h) => !h.below_fold && h.wait_ms >= SLOW_HOLE_MS)
+		.sort((a, b) => b.wait_ms - a.wait_ms);
 	if (slow_holes.length) {
 		const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 		const dur = (ms: number) => (ms >= 1000 ? secs(ms) : `${Math.round(ms)} ms`);
@@ -1673,34 +1953,69 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const all = page.hole_waits ?? [];
 		const split = (h: HoleWait) => {
 			const shown = h.shown_at ?? -Infinity;
-			const before = h.left_at !== undefined && h.shown_at !== undefined ? Math.max(0, h.left_at - shown) : undefined;
-			const ttfb = h.first_at !== undefined && h.left_at !== undefined ? Math.max(0, h.first_at - Math.max(h.left_at, shown)) : undefined;
+			const before =
+				h.left_at !== undefined && h.shown_at !== undefined
+					? Math.max(0, h.left_at - shown)
+					: undefined;
+			const ttfb =
+				h.first_at !== undefined && h.left_at !== undefined
+					? Math.max(0, h.first_at - Math.max(h.left_at, shown))
+					: undefined;
 			// hole requests in flight as it left (or ending just then: the slot it took): the gate was full
 			// (a batched hole took no slot: it rode one request with the others)
 			const ahead =
 				h.left_at === undefined || h.batch_size
 					? 0
-					: all.filter((o) => o !== h && o.left_at !== undefined && o.end_at !== undefined && o.left_at < h.left_at! && o.end_at >= h.left_at! - 50).length;
-			return { before, queue: h.server_queue_ms, server: h.server_ms ?? ttfb, rendered: h.server_ms !== undefined, ahead };
+					: all.filter(
+							(o) =>
+								o !== h &&
+								o.left_at !== undefined &&
+								o.end_at !== undefined &&
+								o.left_at < h.left_at! &&
+								o.end_at >= h.left_at! - 50
+						).length;
+			return {
+				before,
+				queue: h.server_queue_ms,
+				server: h.server_ms ?? ttfb,
+				rendered: h.server_ms !== undefined,
+				ahead
+			};
 		};
 		const parts = (h: HoleWait) => {
 			const s = split(h);
 			const out: string[] = [];
-			if (s.before !== undefined && s.before >= 200) out.push(`${dur(s.before)} before its request left`);
-			if (s.queue !== undefined && s.queue >= 200) out.push(`${dur(s.queue)} waiting for a render slot on the server`);
-			if (s.server !== undefined && s.server >= 50) out.push(`${dur(s.server)} ${s.rendered ? 'the server render' : 'waiting on the server'}`);
+			if (s.before !== undefined && s.before >= 200)
+				out.push(`${dur(s.before)} before its request left`);
+			if (s.queue !== undefined && s.queue >= 200)
+				out.push(`${dur(s.queue)} waiting for a render slot on the server`);
+			if (s.server !== undefined && s.server >= 50)
+				out.push(`${dur(s.server)} ${s.rendered ? 'the server render' : 'waiting on the server'}`);
 			// (its answer was one part of a batch: it landed when the server rendered it, not after the others)
-			if (h.batch_size && h.batch_size > 1) out.push(`its part of one request for ${h.batch_size} holes`);
+			if (h.batch_size && h.batch_size > 1)
+				out.push(`its part of one request for ${h.batch_size} holes`);
 			return out.length ? `: ${out.join(', ')}` : '';
 		};
 		const splits = slow_holes.map(split);
 		// the server's render slots were full: slow holes ahead held them while they awaited data
-		const slotted = splits.every((s, i) => s.queue !== undefined && s.queue >= slow_holes[i].wait_ms * 0.4);
-		const late = !slotted && splits.every((s, i) => s.before !== undefined && s.before >= slow_holes[i].wait_ms * 0.4);
+		const slotted = splits.every(
+			(s, i) => s.queue !== undefined && s.queue >= slow_holes[i].wait_ms * 0.4
+		);
+		const late =
+			!slotted &&
+			splits.every((s, i) => s.before !== undefined && s.before >= slow_holes[i].wait_ms * 0.4);
 		const gated = late && splits.some((s) => s.ahead >= HOLE_GATE);
 		const known = splits.filter((s) => s.server !== undefined);
-		const render_bound = !late && !slotted && known.length === splits.length && splits.every((s, i) => s.server! >= slow_holes[i].wait_ms * 0.6);
-		const elsewhere = !late && !slotted && known.length === splits.length && splits.every((s, i) => s.server! < slow_holes[i].wait_ms * 0.4);
+		const render_bound =
+			!late &&
+			!slotted &&
+			known.length === splits.length &&
+			splits.every((s, i) => s.server! >= slow_holes[i].wait_ms * 0.6);
+		const elsewhere =
+			!late &&
+			!slotted &&
+			known.length === splits.length &&
+			splits.every((s, i) => s.server! < slow_holes[i].wait_ms * 0.4);
 		const ahead = Math.max(...splits.map((s) => s.ahead));
 		findings.push({
 			code: 'hole-slow',
@@ -1709,16 +2024,16 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			fix: slotted
 				? `It waited on the server for a render slot: a server process renders ${REGION_RENDER_CONCURRENCY} holes at a time, and each holds its slot while it awaits its data, so slow holes make the next one wait (every visitor’s, on that process). Make the slow holes answer sooner (a maxAge, faster data), or put fewer of them on one page. The Server-Timing on its answer has the split.`
 				: gated
-				? `It waited for its turn: the runtime runs ${HOLE_GATE} hole requests at a time, and ${ahead} were ahead of it. Put fewer holes on the first screen (render the ones that are the same for every visitor with the page, or merge small ones into one), or make the ones ahead answer sooner (a maxAge).`
-				: late
-					? 'Its request left late: the page was busy (long tasks) when it was due, or the hole woke late. The long tasks and the wake order on this tab show which.'
-					: render_bound
-						? `${splits.every((s) => s.rendered) ? 'The server render' : 'The server'} is the wait: give the hole a maxAge if its answer is the same for a while, start its data sooner (or in parallel), or render it with the page if it is the same for every visitor.`
-						: elsewhere
-							? splits.every((s) => s.before !== undefined)
-								? 'The server answered quickly and the request left on time: the wait came after the first byte (a large answer, its styles, or the swap) or on the network.'
-								: 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
-							: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
+					? `It waited for its turn: the runtime runs ${HOLE_GATE} hole requests at a time, and ${ahead} were ahead of it. Put fewer holes on the first screen (render the ones that are the same for every visitor with the page, or merge small ones into one), or make the ones ahead answer sooner (a maxAge).`
+					: late
+						? 'Its request left late: the page was busy (long tasks) when it was due, or the hole woke late. The long tasks and the wake order on this tab show which.'
+						: render_bound
+							? `${splits.every((s) => s.rendered) ? 'The server render' : 'The server'} is the wait: give the hole a maxAge if its answer is the same for a while, start its data sooner (or in parallel), or render it with the page if it is the same for every visitor.`
+							: elsewhere
+								? splits.every((s) => s.before !== undefined)
+									? 'The server answered quickly and the request left on time: the wait came after the first byte (a large answer, its styles, or the swap) or on the network.'
+									: 'The server answered quickly: the wait came before or around the request. Its request started late (the page was busy, or the hole woke late), or the network or something in front of the server held it. The report’s One clock section shows when it left.'
+								: 'The hole’s server render or its data is slow: give it a maxAge if its answer is the same for a while, start its data sooner, or render it with the page if it is the same for every visitor. The profiler’s Holes section has its server time.',
 			fps: []
 		});
 	}
@@ -1729,7 +2044,11 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		const first = drift[0];
 		const whose = (d: (typeof drift)[number]) => (drift.length === 1 ? 'its' : `${d.name}'s`);
 		const said = (d: (typeof drift)[number]) =>
-			d.path ? `${whose(d)} prop \`${d.path}\` was ${d.was}, now ${d.now}` : d.was !== undefined ? `${whose(d)} props went from …${d.was}… to …${d.now}…` : `${whose(d)} props changed`;
+			d.path
+				? `${whose(d)} prop \`${d.path}\` was ${d.was}, now ${d.now}`
+				: d.was !== undefined
+					? `${whose(d)} props went from …${d.was}… to …${d.now}…`
+					: `${whose(d)} props changed`;
 		findings.push({
 			code: 'fp-unstable',
 			severity: 'info',
@@ -1742,9 +2061,17 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// ── what an island left running after it left the page ──
 	for (const l of page.leftovers ?? []) {
 		const what: string[] = [];
-		if (l.intervals) what.push(l.intervals === 1 ? 'an interval running' : `${l.intervals} intervals running`);
-		if (l.listeners.length) what.push(l.listeners.length === 1 ? `a ${l.listeners[0]} listener attached` : `${l.listeners.length} listeners attached (${counted(l.listeners)})`);
-		const ran = l.intervals ? ` (still running: ${l.fires} run${l.fires === 1 ? '' : 's'} so far${l.last_ago !== undefined ? `, the last ${l.last_ago < 1000 ? `${l.last_ago} ms` : `${(l.last_ago / 1000).toFixed(1)} s`} ago` : ''})` : '';
+		if (l.intervals)
+			what.push(l.intervals === 1 ? 'an interval running' : `${l.intervals} intervals running`);
+		if (l.listeners.length)
+			what.push(
+				l.listeners.length === 1
+					? `a ${l.listeners[0]} listener attached`
+					: `${l.listeners.length} listeners attached (${counted(l.listeners)})`
+			);
+		const ran = l.intervals
+			? ` (still running: ${l.fires} run${l.fires === 1 ? '' : 's'} so far${l.last_ago !== undefined ? `, the last ${l.last_ago < 1000 ? `${l.last_ago} ms` : `${(l.last_ago / 1000).toFixed(1)} s`} ago` : ''})`
+			: '';
 		findings.push({
 			code: 'island-leftover',
 			severity: 'warn',
@@ -1769,8 +2096,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 					: ns
 						? `The page answers with Cache-Control: ${ns} (the profiler's last run of it saw so): the browser keeps no page marked no-store in its back/forward cache, so Back and Forward load it from the server again instead of showing it at once.`
 						: 'This load came from Back or Forward, and the browser did not restore the page from its back/forward cache: it loaded from the server again.') +
-				(unload.length && ns ? ` It also answers with Cache-Control: ${ns}, which keeps it out too.` : '') +
-				(bf?.not_restored?.length ? ` The browser's reasons for this load: ${bf.not_restored.join(', ')}.` : ''),
+				(unload.length && ns
+					? ` It also answers with Cache-Control: ${ns}, which keeps it out too.`
+					: '') +
+				(bf?.not_restored?.length
+					? ` The browser's reasons for this load: ${bf.not_restored.join(', ')}.`
+					: ''),
 			fix: "Listen to 'pagehide' (or 'visibilitychange') instead of 'unload': it runs at the same moment and keeps the cache. A `Cache-Control: no-store` on the page keeps it out too.",
 			fps: []
 		});
@@ -1779,7 +2110,14 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 	// ── listeners that hold scrolling: the browser waits for each before it scrolls ──
 	const blockers = page.scroll_blockers ?? [];
 	if (blockers.length) {
-		const said = [...new Set(blockers.map((b) => `${b.owner}'s '${b.type}' listener on ${b.on}${b.forced ? ' (passive: false)' : ''}`))];
+		const said = [
+			...new Set(
+				blockers.map(
+					(b) =>
+						`${b.owner}'s '${b.type}' listener on ${b.on}${b.forced ? ' (passive: false)' : ''}`
+				)
+			)
+		];
 		findings.push({
 			code: 'scroll-blocking',
 			severity: 'warn',
@@ -1828,7 +2166,12 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 						: b.status >= 400
 							? `was answered ${b.status}`
 							: `ended without ${missed === b.sent ? 'any of them' : `${missed} of them`}`;
-		const front = b.refused !== undefined || b.status === 405 || b.status === 403 || b.status === 401 || b.status === 404;
+		const front =
+			b.refused !== undefined ||
+			b.status === 405 ||
+			b.status === 403 ||
+			b.status === 401 ||
+			b.status === 404;
 		findings.push({
 			code: 'hole-batch-missed',
 			severity: missed === b.sent ? 'warn' : 'info',
@@ -1853,7 +2196,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// fetch with no headers): the two match by construction, so a second download is the browser's
 		// choice, not the page's markup — Safari does not reuse it where Chromium does
 		const safari = !!page.browser?.startsWith('Safari');
-		const ours = (m: PreloadMiss) => m.type === 'fetch' && m.crossorigin === 'anonymous' && m.hole === true;
+		const ours = (m: PreloadMiss) =>
+			m.type === 'fetch' && m.crossorigin === 'anonymous' && m.hole === true;
 		// SAFARI NEVER HANDS A FETCH PRELOAD TO A LATER fetch(): every crossorigin and credentials
 		// pairing, every Cache-Control (no-store to public max-age), Vary or not, isolated or not — two
 		// requests each time, where Chromium makes one (fonts it does reuse). So no attribute fixes it
@@ -1862,24 +2206,30 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// HTML's own stylesheet, and downloaded again once the rule comes from a stylesheet added after
 		// the page parsed (a dev server's CSS, an island's) — any Cache-Control, isolated or not.
 		// Without `Vary: Origin` it is reused either way; Chromium reuses it always
-		const varies = (m: PreloadMiss) => !!m.vary && m.vary.toLowerCase().split(',').some((v) => v.trim() === 'origin' || v.trim() === '*');
-		const safari_font = (m: PreloadMiss) => safari && m.type === 'font' && m.crossorigin !== null && varies(m);
+		const varies = (m: PreloadMiss) =>
+			!!m.vary &&
+			m.vary
+				.toLowerCase()
+				.split(',')
+				.some((v) => v.trim() === 'origin' || v.trim() === '*');
+		const safari_font = (m: PreloadMiss) =>
+			safari && m.type === 'font' && m.crossorigin !== null && varies(m);
 		const why = (m: PreloadMiss) =>
 			safari_font(m)
 				? `its answer says \`Vary: ${m.vary}\`: ${page.browser} does not reuse a font preload that varies by Origin once the @font-face asking for it comes from a stylesheet added after the page parsed${page.dev ? " (on a dev server both are common: it answers every file with Vary: Origin and adds the page's CSS by script)" : ''}`
 				: ours(m)
-				? `ogygia's own hole preload and its runtime's fetch match (crossorigin="anonymous", credentials same-origin)${safari ? `; ${page.browser} never hands a fetch preload to a later fetch() — whatever its crossorigin or Cache-Control — so it fetched the answer again` : ''}`
-				: safari_fetch(m)
-				? `${page.browser} never hands a fetch preload to a later fetch(), whatever its crossorigin, credentials or Cache-Control: in Safari it is always a second download (Chromium uses it)`
-				: m.type === 'font' && m.crossorigin === null
-				? 'a font always loads in CORS mode: its preload needs `crossorigin`'
-				: m.type === 'fetch' && m.crossorigin === null
-					? 'a fetch preload needs `crossorigin` (`anonymous` for a same-origin `fetch()`, `use-credentials` for `credentials: "include"`)'
-					: m.type === 'fetch' || m.type === 'font'
-						? `its \`crossorigin="${m.crossorigin}"\`${m.crossorigin ? '' : ' (anonymous)'} does not match the request's credentials`
-						: m.type === 'script'
-							? 'a module script is preloaded with `<link rel="modulepreload">`, not `rel="preload" as="script"`'
-							: 'its `as` or `crossorigin` does not match how the page requests the file';
+					? `ogygia's own hole preload and its runtime's fetch match (crossorigin="anonymous", credentials same-origin)${safari ? `; ${page.browser} never hands a fetch preload to a later fetch() — whatever its crossorigin or Cache-Control — so it fetched the answer again` : ''}`
+					: safari_fetch(m)
+						? `${page.browser} never hands a fetch preload to a later fetch(), whatever its crossorigin, credentials or Cache-Control: in Safari it is always a second download (Chromium uses it)`
+						: m.type === 'font' && m.crossorigin === null
+							? 'a font always loads in CORS mode: its preload needs `crossorigin`'
+							: m.type === 'fetch' && m.crossorigin === null
+								? 'a fetch preload needs `crossorigin` (`anonymous` for a same-origin `fetch()`, `use-credentials` for `credentials: "include"`)'
+								: m.type === 'fetch' || m.type === 'font'
+									? `its \`crossorigin="${m.crossorigin}"\`${m.crossorigin ? '' : ' (anonymous)'} does not match the request's credentials`
+									: m.type === 'script'
+										? 'a module script is preloaded with `<link rel="modulepreload">`, not `rel="preload" as="script"`'
+										: 'its `as` or `crossorigin` does not match how the page requests the file';
 		const wasted = misses.reduce((a, m) => a + m.bytes, 0);
 		findings.push({
 			code: 'preload-unused',
@@ -1891,13 +2241,17 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				(misses.every(ours)
 					? " Nothing in the page's markup to change: it is the hole preload ogygia writes, in a browser that never uses one."
 					: [
-							misses.some((m) => !ours(m) && safari_fetch(m)) ? ' No attribute changes a fetch preload in Safari: to start the request early there too, begin it in an inline script and hand its promise to the code that reads it — or drop the preload where Safari is most of the traffic.' : '',
+							misses.some((m) => !ours(m) && safari_fetch(m))
+								? ' No attribute changes a fetch preload in Safari: to start the request early there too, begin it in an inline script and hand its promise to the code that reads it — or drop the preload where Safari is most of the traffic.'
+								: '',
 							misses.some(safari_font)
 								? page.dev
 									? " For the fonts: a build drops the dev server's habits (its CSS linked, its files answered by the host), so check whether the host also answers fonts with Vary: Origin and whether a stylesheet naming them is added by script."
 									: ' For the fonts: answer them without `Vary: Origin` (a font is the same whoever asks; a CORS header alone does not need it), or name them in a stylesheet the HTML links.'
 								: '',
-							misses.some((m) => !ours(m) && !safari_fetch(m) && !safari_font(m)) ? ' The preload and the request must match exactly, or the browser fetches the file again.' : ''
+							misses.some((m) => !ours(m) && !safari_fetch(m) && !safari_font(m))
+								? ' The preload and the request must match exactly, or the browser fetches the file again.'
+								: ''
 						].join('')),
 			fps: []
 		});
@@ -1912,7 +2266,11 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			return p.slice(p.lastIndexOf('/') + 1) || u;
 		};
 		const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
-		const WHAT: Record<string, string> = { image: 'no image on the page shows it', font: 'no @font-face names it', style: 'no stylesheet link loads it' };
+		const WHAT: Record<string, string> = {
+			image: 'no image on the page shows it',
+			font: 'no @font-face names it',
+			style: 'no stylesheet link loads it'
+		};
 		findings.push({
 			code: 'preload-never-used',
 			severity: 'warn',
@@ -1934,13 +2292,16 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			return p.slice(p.lastIndexOf('/') + 1) || u;
 		};
 		const kb = (n: number) => `${(n / 1024).toFixed(1)} KB`;
-		const names = [...(raw_doc ? [`the page's HTML (${kb(raw_doc)})`] : []), ...raw_files.slice(0, 4).map((f) => `${file(f.url)} (${f.type}, ${kb(f.bytes)})`)];
+		const names = [
+			...(raw_doc ? [`the page's HTML (${kb(raw_doc)})`] : []),
+			...raw_files.slice(0, 4).map((f) => `${file(f.url)} (${f.type}, ${kb(f.bytes)})`)
+		];
 		const more = raw_files.length - 4;
 		findings.push({
 			code: 'uncompressed',
 			severity: raw_total >= UNCOMPRESSED_WARN ? 'warn' : 'info',
 			message: `${list(names)}${more > 0 ? ` and ${more} more` : ''} came down uncompressed: ${kb(raw_total)} over the wire where gzip or brotli usually sends a quarter to a third of that. Every visitor on a slow connection waits for the difference.`,
-			fix: 'Turn on compression where the response leaves your server: a compression middleware, the adapter\'s precompress option for built files, or the CDN\'s setting. A `Cache-Control: no-transform` on the response, or a proxy that strips `Accept-Encoding`, also keeps it off.',
+			fix: "Turn on compression where the response leaves your server: a compression middleware, the adapter's precompress option for built files, or the CDN's setting. A `Cache-Control: no-transform` on the response, or a proxy that strips `Accept-Encoding`, also keeps it off.",
 			fps: []
 		});
 	}
@@ -1961,7 +2322,10 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			parts.push(
 				`${list(woke.map(name))} woke on the current build's code through ${woke.length === 1 ? 'its' : 'their'} stable name${woke.length === 1 ? '' : 's'}: the page's HTML and ${woke.length === 1 ? 'that island' : 'those islands'} now come from different builds`
 			);
-		if (dead.length) parts.push(`${list(dead.map(name))} stayed asleep: ${dead.length === 1 ? 'its' : 'their'} stable name failed too`);
+		if (dead.length)
+			parts.push(
+				`${list(dead.map(name))} stayed asleep: ${dead.length === 1 ? 'its' : 'their'} stable name failed too`
+			);
 		findings.push({
 			code: 'island-file-gone',
 			severity: dead.length ? 'error' : 'warn',
@@ -1985,7 +2349,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// what the new page woke after it showed (its islands, until the next navigation)
 		const woke = page.islands.filter((i) => i.t0 >= n.t && i.t0 < next);
 		const wake_end = woke.length ? Math.max(...woke.map(work_end)) : n.swapped;
-		const heaviest = woke.map((i) => ({ name: name_of(i.fp), ms: work_end(i) - (i.turn ?? i.loaded) })).sort((a, b) => b.ms - a.ms)[0];
+		const heaviest = woke
+			.map((i) => ({ name: name_of(i.fp), ms: work_end(i) - (i.turn ?? i.loaded) }))
+			.sort((a, b) => b.ms - a.ms)[0];
 		// the fetch, split by the page request's own timing: the server's first byte, the download
 		const kb_of = (b: number) => (b >= 1024 ? `${Math.round(b / 1024)} KB` : `${b} B`);
 		const known = n.server !== undefined && n.download !== undefined;
@@ -2006,7 +2372,13 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// or waiting on something that is neither
 		const srv = n.on_server;
 		const srv_other = srv ? Math.max(0, srv.ms - srv.cpu_ms - srv.net_ms) : 0;
-		const srv_top = !srv ? null : srv.cpu_ms >= srv.net_ms && srv.cpu_ms >= srv_other ? 'cpu' : srv.net_ms >= srv_other ? 'net' : 'other';
+		const srv_top = !srv
+			? null
+			: srv.cpu_ms >= srv.net_ms && srv.cpu_ms >= srv_other
+				? 'cpu'
+				: srv.net_ms >= srv_other
+					? 'net'
+					: 'other';
 		const server_sentence = srv
 			? ` On the server that page took ${srv.ms} ms: ${srv.cpu_ms} ms running code, ${srv.net_count ? `${srv.net_ms} ms waiting on ${srv.net_count} outbound call${srv.net_count === 1 ? '' : 's'}` : 'no outbound calls'}, and ${srv_other} ms waiting on something else${srv.inflight ? ` (${srv.inflight} other request${srv.inflight === 1 ? ' was' : 's were'} running: its CPU is shared)` : ''}.`
 			: '';
@@ -2017,22 +2389,26 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 				`The in-app navigation to ${n.to} took ${Math.round(ms)} ms before the new page showed: ${parts.map((p) => p.text).join(', ')}.` +
 				(top.key === 'fetch' && !heavy_page ? server_sentence : '') +
 				// (devtools: the profiler's last run of the page it went to, when its request log is not here)
-				(top.key === 'fetch' && !heavy_page && !srv && page.server_profiles ? server_says(page.server_profiles[n.to.split('?')[0]]).replace('this page', 'that page') : '') +
-				(woke.length ? ` Then ${woke.length === 1 ? 'its island woke' : `${woke.length} islands woke`} over ${Math.round(Math.max(0, wake_end - n.swapped))} ms${heaviest && heaviest.ms >= 20 ? ` (${heaviest.name} ${Math.round(heaviest.ms)} ms to hydrate)` : ''}.` : ''),
+				(top.key === 'fetch' && !heavy_page && !srv && page.server_profiles
+					? server_says(page.server_profiles[n.to.split('?')[0]]).replace('this page', 'that page')
+					: '') +
+				(woke.length
+					? ` Then ${woke.length === 1 ? 'its island woke' : `${woke.length} islands woke`} over ${Math.round(Math.max(0, wake_end - n.swapped))} ms${heaviest && heaviest.ms >= 20 ? ` (${heaviest.name} ${Math.round(heaviest.ms)} ms to hydrate)` : ''}.`
+					: ''),
 			fix:
 				top.key === 'fetch' && heavy_page
 					? `The page itself is the wait: ${n.bytes ? `${kb_of(n.bytes)} of HTML` : 'its HTML'} took longer to download than the server took to answer. Send less (render below-the-fold parts later, trim repeated markup and inline data), and make sure it is compressed.`
 					: top.key === 'fetch' && srv_top === 'cpu'
-					? "The server's own code is the wait: profile that page (its report names the slow load or component and the lines in it), and render less on it."
-					: top.key === 'fetch' && srv_top === 'net'
-					? "The page's outbound calls are the wait: run them in parallel instead of one after another, cache the ones that repeat, or move the slow one out of the page's load (stream it, or a hole)."
-					: top.key === 'fetch' && srv_top === 'other'
-					? "The server waited on something that is neither its code nor an outbound call it could see: a timer, a lock, a connection pool, a database driver that does not use fetch. Look at what that page's load awaits."
-					: top.key === 'fetch'
-					? "The server's answer is the wait: make that page's load faster (profile the page itself: its report names the slow load), or render it with less. The router starts the fetch at the click, so the server's time is the visitor's."
-					: top.key === 'styles'
-						? "Its stylesheets were not in the browser yet: the router waits for them so the page never shows unstyled. Share one stylesheet across pages, or keep each page's small, so the next page's are cached or quick."
-						: 'The swap itself is heavy: a large page body to parse and put in, or many islands to reconcile. Send less HTML (render below-the-fold parts later), or split the page.',
+						? "The server's own code is the wait: profile that page (its report names the slow load or component and the lines in it), and render less on it."
+						: top.key === 'fetch' && srv_top === 'net'
+							? "The page's outbound calls are the wait: run them in parallel instead of one after another, cache the ones that repeat, or move the slow one out of the page's load (stream it, or a hole)."
+							: top.key === 'fetch' && srv_top === 'other'
+								? "The server waited on something that is neither its code nor an outbound call it could see: a timer, a lock, a connection pool, a database driver that does not use fetch. Look at what that page's load awaits."
+								: top.key === 'fetch'
+									? "The server's answer is the wait: make that page's load faster (profile the page itself: its report names the slow load), or render it with less. The router starts the fetch at the click, so the server's time is the visitor's."
+									: top.key === 'styles'
+										? "Its stylesheets were not in the browser yet: the router waits for them so the page never shows unstyled. Share one stylesheet across pages, or keep each page's small, so the next page's are cached or quick."
+										: 'The swap itself is heavy: a large page body to parse and put in, or many islands to reconcile. Send less HTML (render below-the-fold parts later), or split the page.',
 			fps: []
 		});
 	}
@@ -2050,7 +2426,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		// the costliest first, so the names that fit are the files that cost most: a revalidation's
 		// cost is its round trip (a 304 reports no body), a download's its bytes
 		const revalidated = again.filter((f) => f.how === 'revalidated').sort((a, b) => b.ms - a.ms);
-		const downloaded = again.filter((f) => f.how === 'downloaded').sort((a, b) => b.bytes - a.bytes);
+		const downloaded = again
+			.filter((f) => f.how === 'downloaded')
+			.sort((a, b) => b.bytes - a.bytes);
 		const parts: string[] = [];
 		if (revalidated.length) {
 			// (the requests overlap: the slowest is what the page waited, not their sum)
@@ -2059,7 +2437,9 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 			);
 		}
 		if (downloaded.length)
-			parts.push(`${downloaded.length === 1 ? 'one' : downloaded.length} came down again on this reload (${list(downloaded.map(name))}, ${kb(downloaded.reduce((a, f) => a + f.bytes, 0))}) though the browser had just loaded ${downloaded.length === 1 ? 'it' : 'them'}`);
+			parts.push(
+				`${downloaded.length === 1 ? 'one' : downloaded.length} came down again on this reload (${list(downloaded.map(name))}, ${kb(downloaded.reduce((a, f) => a + f.bytes, 0))}) though the browser had just loaded ${downloaded.length === 1 ? 'it' : 'them'}`
+			);
 		findings.push({
 			code: 'files-fetched-again',
 			severity: 'warn',
@@ -2094,8 +2474,8 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 					: front
 						? `ogygia's handle never saw this request: a proxy, CDN or firewall in front of it (bot protection, a WAF rule) refused ${path(h.endpoint)}. Let that path through there.`
 						: why === 'unknown-id'
-						? 'The page names a hole the answering deployment does not have: the page came from a build whose holes differ (a hole component moved or was renamed, or its import options changed), kept by a cache across a deploy or served by another backend.'
-						: `Open ${h.endpoint ?? 'the hole’s endpoint'} (signed for this page): its x-ogygia-deny header says why the server refused it.`,
+							? 'The page names a hole the answering deployment does not have: the page came from a build whose holes differ (a hole component moved or was renamed, or its import options changed), kept by a cache across a deploy or served by another backend.'
+							: `Open ${h.endpoint ?? 'the hole’s endpoint'} (signed for this page): its x-ogygia-deny header says why the server refused it.`,
 				fps: h.fp ? [h.fp] : []
 			});
 			continue;
@@ -2129,10 +2509,19 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
 		host_ms.set(host, Math.max(host_ms.get(host) ?? 0, 0) + (cpu?.by_host?.[host] ? 0 : s.ms));
 	}
 	const tp = origin
-		? third_party(page.visit?.resources ?? [], origin, cpu?.by_host || page.visit?.scripts ? host_ms : null, page.visit?.named ? new Set(page.visit.named) : undefined, page.visit?.nav?.dom_interactive, page.visit?.in_page ? new Set(page.visit.in_page) : undefined)
+		? third_party(
+				page.visit?.resources ?? [],
+				origin,
+				cpu?.by_host || page.visit?.scripts ? host_ms : null,
+				page.visit?.named ? new Set(page.visit.named) : undefined,
+				page.visit?.nav?.dom_interactive,
+				page.visit?.in_page ? new Set(page.visit.in_page) : undefined
+			)
 		: null;
 	const edited = [
-		...page.islands.filter((i) => i.changed || i.recovered || i.healed).map((i) => ({ name: name_of(i.fp, i.entry), done: i.done })),
+		...page.islands
+			.filter((i) => i.changed || i.recovered || i.healed)
+			.map((i) => ({ name: name_of(i.fp, i.entry), done: i.done })),
 		...failures.map((f) => ({ name: name_of(f.fp), done: Infinity }))
 	];
 	for (const f of third_party_findings(tp, edited)) findings.push({ ...f, fps: [] });
@@ -2163,23 +2552,41 @@ export function analyze_page(page: PageInput, regions: RegionFact[], failures: F
  *  of a font file landing after the first paint, whose face hides its text until then (font-display
  *  auto/block). The page's text was there all along, invisible: the font, not the server, set the
  *  LCP. Shared by the Page tab's split and the profiler's LCP gap. */
-export function lcp_font(visit: PageInput['visit'] | null | undefined): { family: string; file: string; end: number } | null {
+export function lcp_font(
+	visit: PageInput['visit'] | null | undefined
+): { family: string; file: string; end: number } | null {
 	const p = visit?.paints;
 	const faces = visit?.font_faces;
-	if (!p || p.lcp_url || typeof p.lcp !== 'number' || typeof p.fcp !== 'number' || !faces?.length) return null;
+	if (!p || p.lcp_url || typeof p.lcp !== 'number' || typeof p.fcp !== 'number' || !faces?.length)
+		return null;
 	let best: { family: string; file: string; end: number } | null = null;
 	for (const r of visit.resources ?? []) {
 		// (the file's end is the network's clock, the paint the main thread's: a paint may read up to
 		// 100 ms before the file it waited for)
 		// (in at the first paint itself, when that paint came long after the HTML: a browser that counts
 		// no paint until the text shows — Safari — puts its first paint just after the font it waited for)
-		const held_first = typeof visit.nav?.res_end === 'number' && p.fcp - visit.nav.res_end >= 300 && r.end <= p.fcp && p.fcp - r.end <= 60;
-		if (r.type !== 'font' || (r.end <= p.fcp && !held_first) || r.end - p.lcp > 100 || p.lcp - r.end > 200) continue;
+		const held_first =
+			typeof visit.nav?.res_end === 'number' &&
+			p.fcp - visit.nav.res_end >= 300 &&
+			r.end <= p.fcp &&
+			p.fcp - r.end <= 60;
+		if (
+			r.type !== 'font' ||
+			(r.end <= p.fcp && !held_first) ||
+			r.end - p.lcp > 100 ||
+			p.lcp - r.end > 200
+		)
+			continue;
 		const face = faces.find((f) => f.urls.includes(r.url));
 		if (!face || (face.display !== 'auto' && face.display !== 'block')) continue;
 		// (no later than the paint: the parts never run backwards)
 		const end = Math.min(r.end, p.lcp);
-		if (!best || end > best.end) best = { family: face.family, file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0], end };
+		if (!best || end > best.end)
+			best = {
+				family: face.family,
+				file: r.url.slice(r.url.lastIndexOf('/') + 1).split('?')[0],
+				end
+			};
 	}
 	return best;
 }
@@ -2187,13 +2594,17 @@ export function lcp_font(visit: PageInput['visit'] | null | undefined): { family
 /** WHAT THE LARGEST PAINT'S DOWNLOAD SHARED THE NETWORK WITH: images far below the first screen,
  *  not lazy, whose own download overlapped the largest paint's file (or, a text paint, the wait from
  *  the first byte to the paint). Shared by the Page tab's split and the profiler's LCP gap. */
-export function lcp_rivals(visit: PageInput['visit'] | null | undefined): { bytes: number; files: string[] } | null {
+export function lcp_rivals(
+	visit: PageInput['visit'] | null | undefined
+): { bytes: number; files: string[] } | null {
 	const below = visit?.images_eager_below;
 	const p = visit?.paints;
 	if (!visit || !below?.length || typeof p?.lcp !== 'number') return null;
 	const resources = visit.resources ?? [];
 	const res = p.lcp_url ? resources.find((r) => r.url === p.lcp_url) : undefined;
-	const from = res ? (res.req_start ?? res.start) : (visit.nav?.res_start ?? visit.nav?.res_end ?? 0);
+	const from = res
+		? (res.req_start ?? res.start)
+		: (visit.nav?.res_start ?? visit.nav?.res_end ?? 0);
 	const to = res ? res.end : p.lcp;
 	let bytes = 0;
 	const files: string[] = [];
@@ -2224,7 +2635,8 @@ export function late_found(
 ): string {
 	const tag = p?.lcp_tag ?? '';
 	// (lazy: the browser held it until layout — a late start of its own making, whatever woke when)
-	if (p?.lcp_lazy) return 'It carries `loading="lazy"`: the browser held its fetch until layout said it was on screen. Drop it from the first screen\'s images, and give this one `fetchpriority="high"`.';
+	if (p?.lcp_lazy)
+		return 'It carries `loading="lazy"`: the browser held its fetch until layout said it was on screen. Drop it from the first screen\'s images, and give this one `fetchpriority="high"`.';
 	if (p?.lcp_url && tag && !LCP_OWN_FILE.has(tag))
 		return `It is a CSS background image (on the ${tag}): the browser finds it only once the stylesheet has arrived and the element is laid out. Put it in the server HTML as an \`<img>\` with \`fetchpriority="high"\`, or preload it (\`<link rel="preload" as="image" fetchpriority="high">\`).`;
 	const asked = res ? (res.req_start ?? res.start) : undefined;
@@ -2241,7 +2653,10 @@ export function late_found(
 	return 'The browser found it late: put it in the HTML as an `<img>` (not a CSS background or a script-added one), never `loading="lazy"` on the first screen, and preload it with `fetchpriority="high"`.';
 }
 
-function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[] } | null {
+function explain_lcp(
+	page: PageInput,
+	name_of: (fp: string | undefined) => string
+): { message: string; fix: string; fps: string[] } | null {
 	const p = page.visit?.paints;
 	const lcp = p?.lcp ?? page.vitals.lcp;
 	const ttfb = page.visit?.nav?.res_start;
@@ -2251,7 +2666,9 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 		const s = q === -1 ? u : u.slice(0, q);
 		return s.slice(s.lastIndexOf('/') + 1) || u;
 	};
-	const res = p?.lcp_url ? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url) : undefined;
+	const res = p?.lcp_url
+		? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url)
+		: undefined;
 	const what = `${p?.lcp_tag ? `the ${p.lcp_tag}` : 'an element'}${p?.lcp_url ? ` (${file(p.lcp_url)})` : ''}${p?.lcp_fp ? ` in ${name_of(p.lcp_fp)}` : ''}`;
 	const ms = (n: number) => `${Math.round(Math.max(0, n))} ms`;
 	type Part = { key: 'ttfb' | 'delay' | 'load' | 'render' | 'font'; ms: number; text: string };
@@ -2260,14 +2677,22 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 	if (font) {
 		parts = [
 			{ key: 'ttfb', ms: ttfb, text: `${ms(ttfb)} until the HTML's first byte` },
-			{ key: 'font', ms: font.end - ttfb, text: `${ms(font.end - ttfb)} waiting for its font '${font.family}' (${font.file}), the text invisible until it came` },
+			{
+				key: 'font',
+				ms: font.end - ttfb,
+				text: `${ms(font.end - ttfb)} waiting for its font '${font.family}' (${font.file}), the text invisible until it came`
+			},
 			{ key: 'render', ms: lcp - font.end, text: `${ms(lcp - font.end)} more before it painted` }
 		];
 	} else if (res) {
 		const asked = res.req_start ?? res.start;
 		parts = [
 			{ key: 'ttfb', ms: ttfb, text: `${ms(ttfb)} until the HTML's first byte` },
-			{ key: 'delay', ms: asked - ttfb, text: `${ms(asked - ttfb)} before the browser began fetching it` },
+			{
+				key: 'delay',
+				ms: asked - ttfb,
+				text: `${ms(asked - ttfb)} before the browser began fetching it`
+			},
 			{ key: 'load', ms: res.end - asked, text: `${ms(res.end - asked)} downloading it` },
 			{ key: 'render', ms: lcp - res.end, text: `${ms(lcp - res.end)} more before it painted` }
 		];
@@ -2282,18 +2707,21 @@ function explain_lcp(page: PageInput, name_of: (fp: string | undefined) => strin
 		top.key === 'ttfb'
 			? "The server's first byte is most of it: make the page's own render faster (the profiler's report of this page names the slow load), or cache it."
 			: top.key === 'font'
-				? "The text was there, hidden by its font: give the @font-face `font-display: swap` (or `optional`) and preload the font file, so the text paints at once."
+				? 'The text was there, hidden by its font: give the @font-face `font-display: swap` (or `optional`) and preload the font file, so the text paints at once.'
 				: top.key === 'delay'
 					? late_found(p, res, page.islands, name_of)
 					: top.key === 'load'
 						? 'The file itself is slow to download: make it smaller (a modern format, sized to how it is shown, `srcset`), and serve it from close by.'
 						: 'It was ready but did not paint: render-blocking stylesheets or scripts held the first paint, or a script (an island waking) shows the element. Render it with the server HTML, and inline or trim what blocks.';
 	// (a download or a late start that shared the network with images nobody saw yet)
-	const rivals = top.key === 'load' || top.key === 'delay' || top.key === 'font' ? lcp_rivals(page.visit) : null;
+	const rivals =
+		top.key === 'load' || top.key === 'delay' || top.key === 'font' ? lcp_rivals(page.visit) : null;
 	const kb = (n: number) => `${Math.round(n / 1024)} KB`;
 	return {
 		message: `The largest paint was ${what}: ${parts.map((x) => x.text).join(', ')}.${rivals ? ` Beside it, ${kb(rivals.bytes)} of images far below the first screen downloaded (${rivals.files.join(', ')}).` : ''}`,
-		fix: rivals ? `${fix} And give the images below the first screen \`loading="lazy"\`: they took a share of the network the largest paint needed.` : fix,
+		fix: rivals
+			? `${fix} And give the images below the first screen \`loading="lazy"\`: they took a share of the network the largest paint needed.`
+			: fix,
 		fps: p?.lcp_fp ? [p.lcp_fp] : []
 	};
 }
@@ -2351,7 +2779,8 @@ export function vitals_moved(
 				for (const q of pb) {
 					const was = pa.find((p) => p.key === q.key);
 					if (!was) continue;
-					if (!best || Math.abs(q.ms - was.ms) > Math.abs(best.b - best.a)) best = { label: q.label, a: Math.round(was.ms), b: Math.round(q.ms) };
+					if (!best || Math.abs(q.ms - was.ms) > Math.abs(best.b - best.a))
+						best = { label: q.label, a: Math.round(was.ms), b: Math.round(q.ms) };
 				}
 				if (best && Math.abs(best.b - best.a) >= PART_FLOOR_MS) m.part = best;
 			}
@@ -2371,7 +2800,9 @@ export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | nu
 			{ key: 'paint', label: 'painting the next frame', ms: i.presentation }
 		];
 	}
-	const nav = page.visit?.nav as { res_start?: number; res_end?: number; phases?: NavPhases } | undefined;
+	const nav = page.visit?.nav as
+		| { res_start?: number; res_end?: number; phases?: NavPhases }
+		| undefined;
 	if (key === 'ttfb') {
 		const p = nav?.phases;
 		if (!p) return null;
@@ -2389,7 +2820,9 @@ export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | nu
 		const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp;
 		if (typeof fcp !== 'number') return null;
 		const html_end = Math.max(first, nav?.res_end ?? first);
-		const blocked_until = (page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp).reduce((m, r) => Math.max(m, r.end), html_end);
+		const blocked_until = (page.visit?.resources ?? [])
+			.filter((r) => r.blocking && r.start < fcp)
+			.reduce((m, r) => Math.max(m, r.end), html_end);
 		return [
 			{ key: 'ttfb', label: 'the first byte', ms: first },
 			{ key: 'html', label: 'the HTML download', ms: html_end - first },
@@ -2400,7 +2833,9 @@ export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | nu
 	const p = page.visit?.paints;
 	const lcp = p?.lcp ?? page.vitals.lcp;
 	if (typeof lcp !== 'number') return null;
-	const res = p?.lcp_url ? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url) : undefined;
+	const res = p?.lcp_url
+		? (page.visit?.resources ?? []).find((r) => r.url === p.lcp_url)
+		: undefined;
 	const font = res ? null : lcp_font(page.visit);
 	if (font)
 		return [
@@ -2408,10 +2843,11 @@ export function vital_parts(page: PageInput, key: PartedVital): VitalPart[] | nu
 			{ key: 'font', label: `its font '${font.family}'`, ms: font.end - first },
 			{ key: 'render', label: 'the render', ms: lcp - font.end }
 		];
-	if (!res) return [
-		{ key: 'ttfb', label: 'the first byte', ms: first },
-		{ key: 'render', label: 'the render', ms: lcp - first }
-	];
+	if (!res)
+		return [
+			{ key: 'ttfb', label: 'the first byte', ms: first },
+			{ key: 'render', label: 'the render', ms: lcp - first }
+		];
 	const asked = res.req_start ?? res.start;
 	return [
 		{ key: 'ttfb', label: 'the first byte', ms: first },
@@ -2434,18 +2870,26 @@ const HELD_OPEN_MS = 250;
  * promise by its `page.data` key and when it settled). With no visit, the profiled render alone
  * says it (its chunks: the early part, then the tail after the longest pause).
  */
-export function explain_held_open(page: PageInput, rows: readonly IslandRow[], name_of: (fp: string) => string): PageFinding | null {
+export function explain_held_open(
+	page: PageInput,
+	rows: readonly IslandRow[],
+	name_of: (fp: string) => string
+): PageFinding | null {
 	const ms = (n: number) => `${Math.round(n)} ms`;
 	const kb = (n: number) => (n >= 1024 ? `${(n / 1024).toFixed(1)} KB` : `${n} B`);
 	const held = page.held_open;
 	// the streamed promises that settled last (within a few ms of the last one): what held it
 	const last_at = held?.keys.length ? Math.max(...held.keys.map((k) => k.at)) : undefined;
-	const holders = held && last_at !== undefined ? held.keys.filter((k) => k.at >= last_at - 20) : [];
+	const holders =
+		held && last_at !== undefined ? held.keys.filter((k) => k.at >= last_at - 20) : [];
 	const holder_text = holders.length
-		? holders.map((k) => (k.key ? `\`page.data.${k.key}\`` : 'a streamed promise')).filter((x, i, a) => a.indexOf(x) === i).join(', ')
+		? holders
+				.map((k) => (k.key ? `\`page.data.${k.key}\`` : 'a streamed promise'))
+				.filter((x, i, a) => a.indexOf(x) === i)
+				.join(', ')
 		: '';
 	const fix_streamed =
-		'A promise the load returns without awaiting streams, and the document stays open until it settles, so every island waits for it. If the islands need the value anyway, await it in the load: the page ships with it, and nothing waits after. If only one part of the page needs it, make that part a server island (`render: \'deferred\'`): it loads after the page, and the page\'s islands wake without it.';
+		"A promise the load returns without awaiting streams, and the document stays open until it settles, so every island waits for it. If the islands need the value anyway, await it in the load: the page ships with it, and nothing waits after. If only one part of the page needs it, make that part a server island (`render: 'deferred'`): it loads after the page, and the page's islands wake without it.";
 	const nav = page.visit?.nav;
 	const fcp = page.visit?.paints?.fcp ?? page.vitals.fcp;
 	if (nav && typeof nav.res_start === 'number' && typeof nav.res_end === 'number') {
@@ -2503,8 +2947,13 @@ function explain_fcp(page: PageInput): { message: string; fix: string; fps: stri
 	const html_end = Math.max(first, nav.res_end ?? first);
 	const blockers = (page.visit?.resources ?? []).filter((r) => r.blocking && r.start < fcp);
 	const blocked_until = blockers.reduce((m, r) => Math.max(m, r.end), html_end);
-	const slowest = blockers.reduce<(typeof blockers)[number] | undefined>((a, r) => (!a || r.end - r.start > a.end - a.start ? r : a), undefined);
-	const busy = page.longtasks.filter((t) => t.t < fcp && t.t + t.ms > blocked_until).reduce((a, t) => a + Math.min(t.t + t.ms, fcp) - Math.max(t.t, blocked_until), 0);
+	const slowest = blockers.reduce<(typeof blockers)[number] | undefined>(
+		(a, r) => (!a || r.end - r.start > a.end - a.start ? r : a),
+		undefined
+	);
+	const busy = page.longtasks
+		.filter((t) => t.t < fcp && t.t + t.ms > blocked_until)
+		.reduce((a, t) => a + Math.min(t.t + t.ms, fcp) - Math.max(t.t, blocked_until), 0);
 	const ms = (n: number) => `${Math.round(Math.max(0, n))} ms`;
 	const file = (u: string) => {
 		const q = u.indexOf('?');
@@ -2514,8 +2963,16 @@ function explain_fcp(page: PageInput): { message: string; fix: string; fps: stri
 	const parts = [
 		{ key: 'ttfb', ms: first, text: `${ms(first)} until the HTML's first byte` },
 		{ key: 'html', ms: html_end - first, text: `${ms(html_end - first)} downloading the HTML` },
-		{ key: 'blocking', ms: blocked_until - html_end, text: `${ms(blocked_until - html_end)} waiting for ${blockers.length === 1 ? 'a file that blocks' : `${blockers.length} files that block`} the paint${slowest ? ` (the slowest ${file(slowest.url)}, ${ms(slowest.end - slowest.start)})` : ''}` },
-		{ key: 'render', ms: fcp - blocked_until, text: `${ms(fcp - blocked_until)} more before it painted${busy >= 50 ? ` (${ms(busy)} of it long tasks)` : ''}` }
+		{
+			key: 'blocking',
+			ms: blocked_until - html_end,
+			text: `${ms(blocked_until - html_end)} waiting for ${blockers.length === 1 ? 'a file that blocks' : `${blockers.length} files that block`} the paint${slowest ? ` (the slowest ${file(slowest.url)}, ${ms(slowest.end - slowest.start)})` : ''}`
+		},
+		{
+			key: 'render',
+			ms: fcp - blocked_until,
+			text: `${ms(fcp - blocked_until)} more before it painted${busy >= 50 ? ` (${ms(busy)} of it long tasks)` : ''}`
+		}
 	].filter((p) => p.ms >= 1 || p.key === 'ttfb');
 	const top = parts.reduce((a, b) => (b.ms > a.ms ? b : a));
 	const fix =
@@ -2526,7 +2983,11 @@ function explain_fcp(page: PageInput): { message: string; fix: string; fps: stri
 				: top.key === 'blocking'
 					? `The paint waits for ${slowest ? file(slowest.url) : 'blocking files'}: inline the few rules the first screen needs and load the rest without blocking, and give scripts in the head \`defer\` or \`type="module"\`.`
 					: 'Everything had arrived, but the main thread was busy: a script ran before the first paint. Move it after (defer it, or run it on idle).';
-	return { message: `The first paint came after ${parts.map((p) => p.text).join(', ')}.`, fix, fps: [] };
+	return {
+		message: `The first paint came after ${parts.map((p) => p.text).join(', ')}.`,
+		fix,
+		fps: []
+	};
 }
 
 /**
@@ -2545,7 +3006,9 @@ function server_says(brief: ServerProfileBrief | undefined): string {
 	return ` The profiler's last run of this page (${ago}): the server render took ${Math.round(brief.render_ms)} ms${brief.calls ? `, ${brief.calls} outbound call${brief.calls === 1 ? '' : 's'} (${Math.round(brief.calls_ms)} ms)` : ', no outbound calls'}${brief.top ? `; it says: ${brief.top}` : ''}.`;
 }
 
-function explain_ttfb(page: PageInput): { message: string; fix: string; fps: string[]; note?: boolean } | null {
+function explain_ttfb(
+	page: PageInput
+): { message: string; fix: string; fps: string[]; note?: boolean } | null {
 	const p = page.visit?.nav?.phases;
 	if (!p) return null;
 	const ms = (n: number) => `${Math.round(n)} ms`;
@@ -2553,13 +3016,22 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
 		{ key: 'redirect', ms: p.redirect ?? 0, text: `${ms(p.redirect ?? 0)} in redirects` },
 		{ key: 'worker', ms: p.worker ?? 0, text: `${ms(p.worker ?? 0)} starting a service worker` },
 		{ key: 'dns', ms: p.dns ?? 0, text: `${ms(p.dns ?? 0)} looking up the address` },
-		{ key: 'connect', ms: (p.connect ?? 0) + (p.tls ?? 0), text: `${ms((p.connect ?? 0) + (p.tls ?? 0))} connecting${p.tls ? ` (${ms(p.tls)} of it TLS)` : ''}` },
+		{
+			key: 'connect',
+			ms: (p.connect ?? 0) + (p.tls ?? 0),
+			text: `${ms((p.connect ?? 0) + (p.tls ?? 0))} connecting${p.tls ? ` (${ms(p.tls)} of it TLS)` : ''}`
+		},
 		{ key: 'wait', ms: p.wait ?? 0, text: `${ms(p.wait ?? 0)} waiting for the server's answer` }
 	].filter((s) => s.ms >= 1);
 	if (!steps.length) return null;
 	const top = steps.reduce((a, b) => (b.ms > a.ms ? b : a));
-	const st = (page.visit?.nav?.server_timing ?? []).filter((s) => s.ms >= 1).sort((a, b) => b.ms - a.ms).slice(0, 4);
-	const said = st.length ? ` The server's Server-Timing says: ${list(st.map((s) => `${s.desc || s.name} ${ms(s.ms)}`))}.` : '';
+	const st = (page.visit?.nav?.server_timing ?? [])
+		.filter((s) => s.ms >= 1)
+		.sort((a, b) => b.ms - a.ms)
+		.slice(0, 4);
+	const said = st.length
+		? ` The server's Server-Timing says: ${list(st.map((s) => `${s.desc || s.name} ${ms(s.ms)}`))}.`
+		: '';
 	// THE WAIT, SPLIT BY THE RENDER: SvelteKit's render time rides the document's Server-Timing (the
 	// profiler's `ssr` entry, for its own user); what the wait holds beyond it came before the render
 	// or around it — on the dev server, mostly the page compiling on its first request
@@ -2582,8 +3054,16 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
 						? 'The page is a prerendered file, and still slow to arrive: serve it from close to the visitor (a CDN keeps the built files at the edge), and check what stands in front of the files — a function or a middleware answering them first, a cold start, a slow origin.'
 						: "The server's answer is the cost: profile the page (its report names the slow load and the lines in it), cache the HTML where it is the same for everyone, or stream it so the first byte leaves before the slow part.";
 	// (devtools: the server's side from the Profiler tab's last run of this page, when the wait is it)
-	const profiled = page.server_profiles && top.key === 'wait' && !compiling ? server_says(page.server_profile) : '';
-	return { message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}${split}${profiled}`, fix, fps: [], ...(compiling ? { note: true } : {}) };
+	const profiled =
+		page.server_profiles && top.key === 'wait' && !compiling
+			? server_says(page.server_profile)
+			: '';
+	return {
+		message: `Before the page's first byte: ${steps.map((s) => s.text).join(', ')}.${said}${split}${profiled}`,
+		fix,
+		fps: [],
+		...(compiling ? { note: true } : {})
+	};
 }
 
 /**
@@ -2593,7 +3073,11 @@ function explain_ttfb(page: PageInput): { message: string; fix: string; fps: str
  * in, an image arrived with no size set, a web font swapped in, an island hydrated. The fix is the
  * cause's; an unknown one says what to look at.
  */
-function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: string | undefined) => string): { message: string; fix: string; fps: string[]; note?: true } | null {
+function explain_cls(
+	page: PageInput,
+	rows: readonly IslandRow[],
+	name_of: (fp: string | undefined) => string
+): { message: string; fix: string; fps: string[]; note?: true } | null {
 	const shifts = [...page.shifts].sort((a, b) => a.t - b.t);
 	if (!shifts.length) return null;
 	// the sessions: a new one after a second's gap, or past five seconds long
@@ -2632,37 +3116,40 @@ function explain_cls(page: PageInput, rows: readonly IslandRow[], name_of: (fp: 
 	};
 	type Cause = { at: number; kind: 'hole' | 'img' | 'font' | 'island' | 'devcss'; name: string };
 	const causes: Cause[] = [];
-	for (const h of page.hole_waits ?? []) if (h.shown_at !== undefined) causes.push({ at: h.shown_at + h.wait_ms, kind: 'hole', name: h.name });
+	for (const h of page.hole_waits ?? [])
+		if (h.shown_at !== undefined)
+			causes.push({ at: h.shown_at + h.wait_ms, kind: 'hole', name: h.name });
 	for (const r of page.visit?.resources ?? []) {
 		if (r.type === 'img') causes.push({ at: r.end, kind: 'img', name: file(r.url) });
 		else if (r.type === 'font') causes.push({ at: r.end, kind: 'font', name: file(r.url) });
 		// (the dev server serves a component's CSS as a module — `X.svelte?svelte&type=style` — and
 		// adds it with JavaScript after the first paint; a build links it in the head)
-		else if (page.dev && r.url.includes('type=style')) causes.push({ at: r.end, kind: 'devcss', name: file(r.url) });
+		else if (page.dev && r.url.includes('type=style'))
+			causes.push({ at: r.end, kind: 'devcss', name: file(r.url) });
 	}
 	for (const r of rows) causes.push({ at: r.done, kind: 'island', name: r.name });
 	let cause: Cause | undefined;
-	for (const c of causes) if (c.at <= big.t + 5 && big.t - c.at <= WINDOW && (!cause || c.at > cause.at)) cause = c;
-	const because =
-		!cause
-			? ''
-			: cause.kind === 'hole'
-				? ` It came right after ${cause.name.startsWith('the hole') ? cause.name : `the hole ${cause.name}`}'s answer swapped in: the answer is not the size of its fallback.`
-				: cause.kind === 'img'
-					? ` It came right after the image ${cause.name} arrived: it had no size set, so the page made room when it loaded.`
-					: cause.kind === 'font'
-						? ` It came right after the web font ${cause.name} arrived: text re-laid out in it.`
-						: cause.kind === 'devcss'
-							? ` It came right after ${cause.name}'s styles arrived: the dev server adds a component's CSS with JavaScript after the first paint, so the page re-laid out in them. A build links that CSS in the head — this shift is the dev server's, not your page's.`
-							: ` It came right after ${cause.name} hydrated: the island's size changed as it woke.`;
+	for (const c of causes)
+		if (c.at <= big.t + 5 && big.t - c.at <= WINDOW && (!cause || c.at > cause.at)) cause = c;
+	const because = !cause
+		? ''
+		: cause.kind === 'hole'
+			? ` It came right after ${cause.name.startsWith('the hole') ? cause.name : `the hole ${cause.name}`}'s answer swapped in: the answer is not the size of its fallback.`
+			: cause.kind === 'img'
+				? ` It came right after the image ${cause.name} arrived: it had no size set, so the page made room when it loaded.`
+				: cause.kind === 'font'
+					? ` It came right after the web font ${cause.name} arrived: text re-laid out in it.`
+					: cause.kind === 'devcss'
+						? ` It came right after ${cause.name}'s styles arrived: the dev server adds a component's CSS with JavaScript after the first paint, so the page re-laid out in them. A build links that CSS in the head — this shift is the dev server's, not your page's.`
+						: ` It came right after ${cause.name} hydrated: the island's size changed as it woke.`;
 	const fix = !cause
 		? 'Nothing the page timed explains it: look for content added above what is on screen (a banner, an ad, a late script), or an animation that moves layout instead of `transform`.'
 		: cause.kind === 'hole'
 			? 'Give the hole a fallback the size of its answer (a placeholder with a fixed or `min-height`), so the swap changes nothing around it.'
 			: cause.kind === 'img'
-				? 'Set the image\'s `width` and `height` (or an `aspect-ratio`) so its space is kept before it loads.'
+				? "Set the image's `width` and `height` (or an `aspect-ratio`) so its space is kept before it loads."
 				: cause.kind === 'font'
-					? 'Match the fallback font\'s metrics (`size-adjust`, `ascent-override`), or preload the font, so the swap does not move text.'
+					? "Match the fallback font's metrics (`size-adjust`, `ascent-override`), or preload the font, so the swap does not move text."
 					: cause.kind === 'devcss'
 						? 'Nothing to fix for this shift: check the page on a build (preview or deploy), where the CSS is in the head before the first paint.'
 						: 'Render the island at its final size on the server (the same content, or a placeholder of that height), so waking it changes nothing on screen.';
@@ -2712,14 +3199,23 @@ function explain_interaction(
 	cpu?: InteractionCpuInput
 ): { message: string; fix: string; fps: string[] } | null {
 	if (!i || !(i.delay + i.processing + i.presentation > 0)) return null;
-	const what = i.name === 'click' || i.name.startsWith('pointer') || i.name.startsWith('mouse') ? 'a click' : i.name.startsWith('key') ? 'a key press' : `a ${i.name}`;
+	const what =
+		i.name === 'click' || i.name.startsWith('pointer') || i.name.startsWith('mouse')
+			? 'a click'
+			: i.name.startsWith('key')
+				? 'a key press'
+				: `a ${i.name}`;
 	const where = i.fp ? `in ${name_of(i.fp)}` : 'outside any island';
 	const on = i.target ? ` on ${i.target}` : '';
 	const ms = (n: number) => `${Math.round(n)} ms`;
 	const phases = [
 		{ key: 'delay' as const, ms: i.delay, text: `${ms(i.delay)} before its handlers could run` },
 		{ key: 'handler' as const, ms: i.processing, text: `${ms(i.processing)} in its handlers` },
-		{ key: 'paint' as const, ms: i.presentation, text: `${ms(i.presentation)} to paint the next frame` }
+		{
+			key: 'paint' as const,
+			ms: i.presentation,
+			text: `${ms(i.presentation)} to paint the next frame`
+		}
 	];
 	const top = phases.reduce((a, b) => (b.ms > a.ms ? b : a));
 	const scripts = i.scripts ?? [];
@@ -2727,7 +3223,9 @@ function explain_interaction(
 	// what the input waited behind: islands hydrating then (their hydrate step overlapped the wait),
 	// else the scripts of the long frames that ran in it
 	const wait_end = i.t + i.delay;
-	const hydrating = rows.filter((r) => r.fp !== i.fp && Math.min(r.done, wait_end) - Math.max(r.done - r.hydrate_ms, i.t) > 1);
+	const hydrating = rows.filter(
+		(r) => r.fp !== i.fp && Math.min(r.done, wait_end) - Math.max(r.done - r.hydrate_ms, i.t) > 1
+	);
 	const behind = hydrating.length
 		? `${list(hydrating.map((r) => r.name))} ${hydrating.length === 1 ? 'was' : 'were'} hydrating`
 		: of_phase('delay').length
@@ -2751,7 +3249,8 @@ function explain_interaction(
 	const sampled = cpu && Math.abs(cpu.t - i.t) < 2 ? cpu : undefined;
 	// (only a frame that reads as source: a built chunk's minified `Ce` in `og-region.x.js:1` tells a
 	// reader less than the frames do — the profiler source-maps a build's, the page cannot)
-	const readable = (f: CpuFn) => f.file.endsWith('.svelte') || f.file.startsWith('src/') || f.file.includes('/src/');
+	const readable = (f: CpuFn) =>
+		f.file.endsWith('.svelte') || f.file.startsWith('src/') || f.file.includes('/src/');
 	const pick = (s: { ms: number; top: CpuFn[] } | null | undefined) => {
 		const f = s?.top.find((x) => x.kind === 'app') ?? s?.top[0];
 		return f && readable(f) ? f : undefined;
@@ -2760,7 +3259,8 @@ function explain_interaction(
 	const wait_fn = pick(sampled?.wait);
 	// (a line of the served code is not the source's: without a map, the function and its file only)
 	const fn_label = (f: CpuFn) => (sampled?.mapped ? label_of(f) : label_of({ ...f, line: null }));
-	const own_handler = !!handler && !!i.fp && handler.invoker.includes('.on') && own_origin(handler.url);
+	const own_handler =
+		!!handler && !!i.fp && handler.invoker.includes('.on') && own_origin(handler.url);
 	const handler_text = handler_fn
 		? `${own_handler || (!handler && i.fp) ? `${name_of(i.fp)}'s ${fn_label(handler_fn)}` : fn_label(handler_fn)}, ${Math.round(handler_fn.self_ms)} ms sampled`
 		: !handler
@@ -2778,11 +3278,15 @@ function explain_interaction(
 	// THE HANDLERS' FORCED LAYOUT: of their time, the browser laying the page out mid-run because the
 	// code read a size after a change (a third of it or more, 16 ms or more: what to say first)
 	const forced_ms = of_phase('handler').reduce((s, x) => s + (x.forced ?? 0), 0);
-	const forced = forced_ms >= 16 && forced_ms >= i.processing * 0.3 ? Math.min(forced_ms, i.processing) : 0;
-	const forced_text = forced ? `; ${ms(forced)} of it the browser laying the page out again because the code read sizes after changing it` : '';
+	const forced =
+		forced_ms >= 16 && forced_ms >= i.processing * 0.3 ? Math.min(forced_ms, i.processing) : 0;
+	const forced_text = forced
+		? `; ${ms(forced)} of it the browser laying the page out again because the code read sizes after changing it`
+		: '';
 	const parts = phases.map((p) => {
 		if (p.key === 'delay' && wait_text && p.ms >= 16) return `${p.text} (${wait_text})`;
-		if (p.key === 'handler' && handler_text && p.ms >= 16) return `${p.text} (mostly ${handler_text}${forced_text})`;
+		if (p.key === 'handler' && handler_text && p.ms >= 16)
+			return `${p.text} (mostly ${handler_text}${forced_text})`;
 		if (p.key === 'handler' && forced) return `${p.text} (${forced_text.slice(2)})`;
 		return p.text;
 	});
@@ -2807,13 +3311,22 @@ function explain_interaction(
  * window, when that took 80 ms or more (a transform: a warm dev server answers in a few). 0 off the
  * dev server, or when the visit does not list the files.
  */
-export function dev_compile_ms(page: Pick<PageInput, 'dev' | 'visit'>, r: Pick<IslandRow, 't0' | 'load_ms'>): number {
+export function dev_compile_ms(
+	page: Pick<PageInput, 'dev' | 'visit'>,
+	r: Pick<IslandRow, 't0' | 'load_ms'>
+): number {
 	if (!page.dev) return 0;
 	const from = r.t0 - 5;
 	const to = r.t0 + r.load_ms + 5;
 	const spans: [number, number][] = [];
 	for (const f of page.visit?.resources ?? []) {
-		if (f.req_start === undefined || f.res_start === undefined || f.req_start < from || f.res_start > to) continue;
+		if (
+			f.req_start === undefined ||
+			f.res_start === undefined ||
+			f.req_start < from ||
+			f.res_start > to
+		)
+			continue;
 		if (f.res_start - f.req_start >= 80) spans.push([f.req_start, f.res_start]);
 	}
 	spans.sort((a, b) => a[0] - b[0]);

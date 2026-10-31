@@ -12,7 +12,9 @@
 
 	// The `/api` reference is OpenAPI operations (structured `data`, no markdown body) — detect them by
 	// the `method` the openapi() source stamps on `meta`, and render with OperationDoc.
-	const isOperation = $derived((view.entry.meta as { method?: string } | undefined)?.method != null);
+	const isOperation = $derived(
+		(view.entry.meta as { method?: string } | undefined)?.method != null
+	);
 </script>
 
 {#if isOperation}

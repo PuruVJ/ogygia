@@ -4,13 +4,13 @@ Four words. That’s it.
 
 Trust boundaries and “why it must stay this way” notes live in [`INVARIANTS.md`](./INVARIANTS.md).
 
-| Word | Meaning | Code |
-| ---- | ------- | ---- |
-| **Page** | SSR HTML. No Kit client — ogygia runtime is a WC + router (~7.6 KB min+br). Hydrate islands put their **module URL** on `<ogygia-region entry>` (Astro-style); the sticky runtime does not embed an app-wide regions map. | `csr = false` |
-| **Island** | A component that becomes interactive (gets JS). The marked import binding **is** the island (portable wrapper). | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
-| **Lake** | Static HTML *inside* an island — no JS for that bit. Lake imports are portable wrappers too. | `with { hydrate: 'none' }` used inside an island |
-| **Server island** | HTML loaded from the server later. Placeholder first. No JS. | `with { defer: 'load' }` (or `idle` / `visible` / media) |
-| **Deferred client island** | HTML later, then JS on that DOM. | `with { defer: '…', hydrate: '…' }` |
+| Word                       | Meaning                                                                                                                                                                                                                   | Code                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| **Page**                   | SSR HTML. No Kit client — ogygia runtime is a WC + router (~7.6 KB min+br). Hydrate islands put their **module URL** on `<ogygia-region entry>` (Astro-style); the sticky runtime does not embed an app-wide regions map. | `csr = false`                                                      |
+| **Island**                 | A component that becomes interactive (gets JS). The marked import binding **is** the island (portable wrapper).                                                                                                           | `with { hydrate: 'load' }` (or `idle` / `visible` / a media query) |
+| **Lake**                   | Static HTML _inside_ an island — no JS for that bit. Lake imports are portable wrappers too.                                                                                                                              | `with { hydrate: 'none' }` used inside an island                   |
+| **Server island**          | HTML loaded from the server later. Placeholder first. No JS.                                                                                                                                                              | `with { defer: 'load' }` (or `idle` / `visible` / media)           |
+| **Deferred client island** | HTML later, then JS on that DOM.                                                                                                                                                                                          | `with { defer: '…', hydrate: '…' }`                                |
 
 `hydrate` and `defer` are the import attributes. Everything else is English.
 
@@ -34,12 +34,12 @@ import A from './A.svelte' with { hydrate: 'load' };
 
 Same timing words for both:
 
-| Value | Meaning |
-| ----- | ------- |
-| `load` | Right away |
-| `idle` | When the browser is idle |
-| `visible` | When scrolled into view |
-| `'(media query)'` | When the query matches |
+| Value             | Meaning                  |
+| ----------------- | ------------------------ |
+| `load`            | Right away               |
+| `idle`            | When the browser is idle |
+| `visible`         | When scrolled into view  |
+| `'(media query)'` | When the query matches   |
 
 - On an **island**, that means when JS starts.
 - On a **server island**, that means when the placeholder is replaced with real HTML.
@@ -94,7 +94,7 @@ Plain module-level `$state` already shares across islands with no ceremony (one 
 
 ## Route weaving — no new word
 
-Each `defer: 'load'` hole fetches its own signed HTML on load. On a SPA navigation the router prescans the incoming page and pulls **all** its holes down **one** batch request to `/🏝️` — no fetch-per-hole waterfall. Each hole's HTML streams back as a `<template data-ogygia-slot>` parcel the moment that region settles (out of order, fast-first). A forged or errored call in the batch is dropped, not fatal — its region falls back to its own fetch, so weaving never changes correctness. `idle` / `visible` / media holes keep fetching on their own schedule (deferring the *server* work is their point). A command that returns a region rides the same parcel format for single-flight mutation.
+Each `defer: 'load'` hole fetches its own signed HTML on load. On a SPA navigation the router prescans the incoming page and pulls **all** its holes down **one** batch request to `/🏝️` — no fetch-per-hole waterfall. Each hole's HTML streams back as a `<template data-ogygia-slot>` parcel the moment that region settles (out of order, fast-first). A forged or errored call in the batch is dropped, not fatal — its region falls back to its own fetch, so weaving never changes correctness. `idle` / `visible` / media holes keep fetching on their own schedule (deferring the _server_ work is their point). A command that returns a region rides the same parcel format for single-flight mutation.
 
 `hydrate: 'none'` with any `defer` is nonsense (HTML later and no JS) — use `defer` alone. Dev warns and treats it as defer-only.
 
@@ -102,13 +102,13 @@ Each `defer: 'load'` hole fetches its own signed HTML on load. On a SPA navigati
 
 Walk up the tree. The closest marked parent decides.
 
-| Nesting | What happens |
-| ------- | ------------ |
-| Island on the page | Gets its own JS |
-| Island inside an island | Shares the parent’s JS (one interactive tree, not two) |
-| Lake inside an island | Stays static HTML; lake JS never ships |
-| Island inside a lake | Gets its own JS again |
-| Server island inside an island | Renders inline with the parent (`defer` ignored) |
+| Nesting                        | What happens                                           |
+| ------------------------------ | ------------------------------------------------------ |
+| Island on the page             | Gets its own JS                                        |
+| Island inside an island        | Shares the parent’s JS (one interactive tree, not two) |
+| Lake inside an island          | Stays static HTML; lake JS never ships                 |
+| Island inside a lake           | Gets its own JS again                                  |
+| Server island inside an island | Renders inline with the parent (`defer` ignored)       |
 
 ```
 page → island → lake → island → …

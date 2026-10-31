@@ -17,7 +17,8 @@
 		.finally(() => (loaded = true));
 	const when = (ms: number) => new Date(ms).toLocaleString();
 	/** the previous kept report of the same page, for a compare link */
-	const prev_of = (r: Omit<StoredDump, 'dump'>) => rows.find((o) => o.page === r.page && o.at < r.at && o.trigger === 'page');
+	const prev_of = (r: Omit<StoredDump, 'dump'>) =>
+		rows.find((o) => o.page === r.page && o.at < r.at && o.trigger === 'page');
 	async function forget(id: string) {
 		await delete_report(id);
 		rows = rows.filter((r) => r.id !== id);
@@ -25,19 +26,32 @@
 </script>
 
 {#if loaded && rows.length}
-	<h2>Kept in this browser <span class="hint" style="font-weight:400">({rows.length} — reports this browser stored itself; they outlive the server)</span></h2>
+	<h2>
+		Kept in this browser <span class="hint" style="font-weight:400"
+			>({rows.length} — reports this browser stored itself; they outlive the server)</span
+		>
+	</h2>
 	<table>
-		<thead><tr><th>when</th><th>page</th><th class="num">median</th><th>on this server</th><th><span class="sr-only">actions</span></th></tr></thead>
+		<thead
+			><tr
+				><th>when</th><th>page</th><th class="num">median</th><th>on this server</th><th
+					><span class="sr-only">actions</span></th
+				></tr
+			></thead
+		>
 		<tbody>
 			{#each rows as r (r.id)}
 				{@const prev = prev_of(r)}
 				<tr>
 					<td class="file">{when(r.at)}</td>
-					<td class="fn"><a href="{base}/report/{r.id}">{r.label}</a> <span class="hint">{r.trigger}</span></td>
+					<td class="fn"
+						><a href="{base}/report/{r.id}">{r.label}</a> <span class="hint">{r.trigger}</span></td
+					>
 					<td class="num">{r.median !== null ? `${fmt_ms(r.median)} ms` : '—'}</td>
 					<td class="file">{on_server.has(r.id) ? 'yes' : 'no (browser only)'}</td>
 					<td class="file">
-						{#if prev}<a href="{base}/compare/{prev.id}/{r.id}">compare with previous</a> · {/if}
+						{#if prev}<a href="{base}/compare/{prev.id}/{r.id}">compare with previous</a> ·
+						{/if}
 						<button class="link" onclick={() => forget(r.id)}>forget</button>
 					</td>
 				</tr>

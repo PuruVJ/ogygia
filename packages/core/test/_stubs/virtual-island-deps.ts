@@ -50,8 +50,14 @@ export function set_island_remotes(v: string[] | null) {
 // profiler's wake advisor; null when the handoff has none.
 export const islandInteractivity = (
 	_entry: string
-): { handlers: number; state: number; effects: number; binds: number; actions: number; files: number } | null =>
-	null;
+): {
+	handlers: number;
+	state: number;
+	effects: number;
+	binds: number;
+	actions: number;
+	files: number;
+} | null => null;
 // `chunkContents(href)` — the readable source list of a hashed client chunk; null when unknown.
 // A test sets the map with `set_chunk_contents(...)`.
 let chunk_contents: Record<string, string[]> = {};
@@ -68,24 +74,35 @@ export function set_entry_locations(map: Record<string, string>) {
 }
 // `chunkHeavy(href)` — a chunk's rendered total and heaviest named modules; null when unknown.
 let chunk_heavy: Record<string, { total: number; top: { name: string; bytes: number }[] }> = {};
-export const chunkHeavy = (href: string): { total: number; top: { name: string; bytes: number }[] } | null => chunk_heavy[href] ?? null;
+export const chunkHeavy = (
+	href: string
+): { total: number; top: { name: string; bytes: number }[] } | null => chunk_heavy[href] ?? null;
 export function set_chunk_heavy(map: typeof chunk_heavy) {
 	chunk_heavy = map;
 }
 // `chunkBarrels(href)` — the re-export barrels a chunk still holds; null when unknown.
 let chunk_barrels: Record<string, { name: string; fanout: number }[]> = {};
-export const chunkBarrels = (href: string): { name: string; fanout: number }[] | null => chunk_barrels[href] ?? null;
+export const chunkBarrels = (href: string): { name: string; fanout: number }[] | null =>
+	chunk_barrels[href] ?? null;
 export function set_chunk_barrels(map: typeof chunk_barrels) {
 	chunk_barrels = map;
 }
 // `chunkDuplicates()` — the modules the build shipped twice; null when none.
-let chunk_dupes: { name: string; copies: { file: string; bytes: number; from?: string }[] }[] | null = null;
+let chunk_dupes:
+	| { name: string; copies: { file: string; bytes: number; from?: string }[] }[]
+	| null = null;
 export const chunkDuplicates = () => chunk_dupes;
 export function set_chunk_dupes(v: typeof chunk_dupes) {
 	chunk_dupes = v;
 }
 // `islandHazards(entry)` — an island's lines that draw differently in the browser; null when unknown.
-type StubHazard = { file: string; line: number; code: string; kind: 'await' | 'browser'; reads?: string };
+type StubHazard = {
+	file: string;
+	line: number;
+	code: string;
+	kind: 'await' | 'browser';
+	reads?: string;
+};
 let island_hazards: Record<string, StubHazard[]> = {};
 export const islandHazards = (entry: string): StubHazard[] | null => island_hazards[entry] ?? null;
 export function set_island_hazards(map: typeof island_hazards) {

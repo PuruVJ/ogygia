@@ -102,7 +102,8 @@ export function module_category(id: string): { category: FrameCategory; pkg?: st
 		const rest = posix.slice(nm + 'node_modules/'.length).split('/');
 		const folder = rest[0].startsWith('@') ? `${rest[0]}/${rest[1]}` : rest[0];
 		const pkg = folder === '@ogygia/core' ? 'ogygia' : folder;
-		if ((pkg === 'ogygia' || pkg === '@ogygia/devtools') && rest.includes('profiler')) return { category: 'profiler' };
+		if ((pkg === 'ogygia' || pkg === '@ogygia/devtools') && rest.includes('profiler'))
+			return { category: 'profiler' };
 		if (pkg === 'svelte') return { category: 'svelte', pkg };
 		return { category: 'dependency', pkg };
 	}

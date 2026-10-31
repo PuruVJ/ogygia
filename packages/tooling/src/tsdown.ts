@@ -26,7 +26,10 @@ function resolve_to_js() {
 	return {
 		name: 'ogygia:import-meta-resolve-js',
 		renderChunk(code: string) {
-			const out = code.replace(RESOLVE_TS_RE, (_m, q: string, spec: string) => `import.meta.resolve(${q}${spec}.js${q})`);
+			const out = code.replace(
+				RESOLVE_TS_RE,
+				(_m, q: string, spec: string) => `import.meta.resolve(${q}${spec}.js${q})`
+			);
 			return out === code ? null : { code: out, map: null };
 		}
 	};
@@ -48,7 +51,13 @@ export interface LibraryOptions extends Omit<UserConfig, 'entry' | 'deps'> {
  * core plus the app's own libraries left as imports.
  */
 export function library(options: LibraryOptions = {}): UserConfig {
-	const { entry = ['src/**/*.ts', '!src/**/*.d.ts'], external = [], svelte: svelte_options, plugins = [], ...rest } = options;
+	const {
+		entry = ['src/**/*.ts', '!src/**/*.d.ts'],
+		external = [],
+		svelte: svelte_options,
+		plugins = [],
+		...rest
+	} = options;
 	return {
 		entry,
 		format: 'esm',
@@ -57,7 +66,11 @@ export function library(options: LibraryOptions = {}): UserConfig {
 		dts: true,
 		clean: true,
 		...rest,
-		plugins: [svelte(svelte_options), resolve_to_js(), ...(Array.isArray(plugins) ? plugins : [plugins])],
+		plugins: [
+			svelte(svelte_options),
+			resolve_to_js(),
+			...(Array.isArray(plugins) ? plugins : [plugins])
+		],
 		deps: { neverBundle: [...SHARED, ...external] }
 	};
 }

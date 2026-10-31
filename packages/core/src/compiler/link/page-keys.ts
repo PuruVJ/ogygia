@@ -32,7 +32,16 @@ const PAGE_SPECIFIER_RE = /^\$app\/(?:state|stores)$/;
 /** The page fields that are never shaped — reading them commits nothing about `data`. */
 const SAFE_FIELDS = new Set(['url', 'params', 'route', 'status', 'error', 'form', 'state']);
 /** Keys the walker never descends into (positions, back-references). */
-const SKIP_KEYS = new Set(['start', 'end', 'loc', 'range', 'parent', 'metadata', 'leadingComments', 'trailingComments']);
+const SKIP_KEYS = new Set([
+	'start',
+	'end',
+	'loc',
+	'range',
+	'parent',
+	'metadata',
+	'leadingComments',
+	'trailingComments'
+]);
 /** Cheap pre-filter for the transform hot path: no page specifier in the text → nothing to parse. */
 const PAGE_SPECIFIER_HINT_RE = /\$app\/st(?:ate|ores)/;
 
@@ -60,22 +69,39 @@ export type AllReason = { why: string; line: number | null };
  */
 export type PendingCall = { specifier: string; imported: string; arg: number; line: number | null };
 
-export type PageKeysAnswer = { keys: PageKeys | null; reason: AllReason | null; pending: PendingCall[] };
+export type PageKeysAnswer = {
+	keys: PageKeys | null;
+	reason: AllReason | null;
+	pending: PendingCall[];
+};
 
 /**
  * The top-level `page.data` keys a module reads, or `'all'` when a read cannot be pinned to a
  * literal key, or `null` when the module never imports the page (nothing to ship for it).
  * `kind` picks the parser: `'svelte'` for a component source, `'script'` for `.ts` / `.js`.
  */
-export function page_data_keys(code: string, id: string, kind: 'svelte' | 'script'): PageKeys | null {
+export function page_data_keys(
+	code: string,
+	id: string,
+	kind: 'svelte' | 'script'
+): PageKeys | null {
 	return page_data_keys_answer(code, id, kind).keys;
 }
 
 /** The same answer with the reason an `'all'` was given (for the build report). */
-export function page_data_keys_answer(code: string, id: string, kind: 'svelte' | 'script'): PageKeysAnswer {
+export function page_data_keys_answer(
+	code: string,
+	id: string,
+	kind: 'svelte' | 'script'
+): PageKeysAnswer {
 	if (!PAGE_SPECIFIER_HINT_RE.test(code)) return { keys: null, reason: null, pending: [] };
 	const roots = parse_roots(code, id, kind);
-	if (!roots) return { keys: 'all', reason: { why: 'the module did not parse here (the bundler will say why)', line: null }, pending: [] };
+	if (!roots)
+		return {
+			keys: 'all',
+			reason: { why: 'the module did not parse here (the bundler will say why)', line: null },
+			pending: []
+		};
 	const scan = new Scan(code);
 	try {
 		for (const root of roots) scan.collect_bindings(root);
@@ -83,7 +109,12 @@ export function page_data_keys_answer(code: string, id: string, kind: 'svelte' |
 		for (const root of roots) scan.walk(root, null, null);
 		return { keys: scan.keys, reason: null, pending: scan.pending };
 	} catch (e) {
-		if (e instanceof All) return { keys: 'all', reason: { why: e.why, line: e.at === null ? null : line_of(code, e.at) }, pending: [] };
+		if (e instanceof All)
+			return {
+				keys: 'all',
+				reason: { why: e.why, line: e.at === null ? null : line_of(code, e.at) },
+				pending: []
+			};
 		throw e;
 	}
 }
@@ -96,7 +127,13 @@ export function page_data_keys_answer(code: string, id: string, kind: 'svelte' |
  */
 export type ExportSummary = PageKeys | { follow: string[]; imported: string };
 
-export function summarize_export(code: string, id: string, kind: 'svelte' | 'script', name: string, arg: number): ExportSummary {
+export function summarize_export(
+	code: string,
+	id: string,
+	kind: 'svelte' | 'script',
+	name: string,
+	arg: number
+): ExportSummary {
 	const roots = parse_roots(code, id, kind);
 	if (!roots) return 'all';
 	let fn: Node | null = null;
@@ -109,10 +146,25 @@ export function summarize_export(code: string, id: string, kind: 'svelte' | 'scr
 	const imports = new Map<string, { specifier: string; imported: string }>();
 	for (const root of roots) {
 		visit(root, (node) => {
-			if (node.type === 'FunctionDeclaration' && node.id?.name && !enclosing_scope(node)) local_fns.set(node.id.name, node);
-			if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' && node.init && (node.init.type === 'ArrowFunctionExpression' || node.init.type === 'FunctionExpression') && !enclosing_scope(node)) local_fns.set(node.id.name, node.init);
-			if (node.type === 'ImportDeclaration') for (const s of node.specifiers ?? []) if (s.type === 'ImportSpecifier') imports.set(s.local.name, { specifier: String(node.source?.value ?? ''), imported: spec_name(s.imported) ?? s.local.name });
-			if (node.type === 'ExportAllDeclaration' && node.source) stars.push(String(node.source.value));
+			if (node.type === 'FunctionDeclaration' && node.id?.name && !enclosing_scope(node))
+				local_fns.set(node.id.name, node);
+			if (
+				node.type === 'VariableDeclarator' &&
+				node.id?.type === 'Identifier' &&
+				node.init &&
+				(node.init.type === 'ArrowFunctionExpression' || node.init.type === 'FunctionExpression') &&
+				!enclosing_scope(node)
+			)
+				local_fns.set(node.id.name, node.init);
+			if (node.type === 'ImportDeclaration')
+				for (const s of node.specifiers ?? [])
+					if (s.type === 'ImportSpecifier')
+						imports.set(s.local.name, {
+							specifier: String(node.source?.value ?? ''),
+							imported: spec_name(s.imported) ?? s.local.name
+						});
+			if (node.type === 'ExportAllDeclaration' && node.source)
+				stars.push(String(node.source.value));
 			if (node.type !== 'ExportNamedDeclaration') return;
 			for (const s of node.specifiers ?? []) {
 				if (spec_name(s.exported) !== name) continue;
@@ -131,7 +183,13 @@ export function summarize_export(code: string, id: string, kind: 'svelte' | 'scr
 			if (d.type === 'FunctionDeclaration' && d.id?.name === name) fn = d;
 			if (d.type === 'VariableDeclaration') {
 				for (const v of d.declarations ?? []) {
-					if (v.id?.type === 'Identifier' && v.id.name === name && v.init && (v.init.type === 'ArrowFunctionExpression' || v.init.type === 'FunctionExpression')) fn = v.init;
+					if (
+						v.id?.type === 'Identifier' &&
+						v.id.name === name &&
+						v.init &&
+						(v.init.type === 'ArrowFunctionExpression' || v.init.type === 'FunctionExpression')
+					)
+						fn = v.init;
 				}
 			}
 		});
@@ -163,7 +221,14 @@ function line_of(code: string, offset: number): number {
 
 /** Climb out of the wrappers TypeScript and the parsers put around an expression without
  *  changing what it is: `(page as any)`, `page!`, `page satisfies T`, `(page)`, an optional chain. */
-const WRAPPERS = new Set(['TSAsExpression', 'TSNonNullExpression', 'TSSatisfiesExpression', 'TSTypeAssertion', 'ParenthesizedExpression', 'ChainExpression']);
+const WRAPPERS = new Set([
+	'TSAsExpression',
+	'TSNonNullExpression',
+	'TSSatisfiesExpression',
+	'TSTypeAssertion',
+	'ParenthesizedExpression',
+	'ChainExpression'
+]);
 function unwrap_up(node: Node): { node: Node; parent: Node | null; key: string | null } {
 	let cur = node;
 	let parent = cur.__parent as Node | null;
@@ -212,11 +277,20 @@ export function parse_roots(code: string, id: string, kind: 'svelte' | 'script')
 	return roots;
 }
 
-
 // ── the analysis ───────────────────────────────────────────────────────────────────────────────
 
 /** Function-like nodes: the scopes an alias lives in. */
-const SCOPE_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ClassMethod', 'MethodDefinition', 'PropertyDefinition', 'Program', 'Fragment', 'Root']);
+const SCOPE_TYPES = new Set([
+	'FunctionDeclaration',
+	'FunctionExpression',
+	'ArrowFunctionExpression',
+	'ClassMethod',
+	'MethodDefinition',
+	'PropertyDefinition',
+	'Program',
+	'Fragment',
+	'Root'
+]);
 
 class Scan {
 	/** Every name that IS the page: import locals (module-wide), whole-page aliases and
@@ -269,19 +343,33 @@ class Scan {
 	collect_bindings(root: Node): void {
 		visit(root, (node) => {
 			// module-level functions a `helper(page)` call can be followed into without leaving the file
-			if (node.type === 'FunctionDeclaration' && node.id?.name && !enclosing_scope(node)) this.#local_fns.set(node.id.name, node);
-			if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' && node.init && (node.init.type === 'ArrowFunctionExpression' || node.init.type === 'FunctionExpression') && !enclosing_scope(node)) this.#local_fns.set(node.id.name, node.init);
+			if (node.type === 'FunctionDeclaration' && node.id?.name && !enclosing_scope(node))
+				this.#local_fns.set(node.id.name, node);
+			if (
+				node.type === 'VariableDeclarator' &&
+				node.id?.type === 'Identifier' &&
+				node.init &&
+				(node.init.type === 'ArrowFunctionExpression' || node.init.type === 'FunctionExpression') &&
+				!enclosing_scope(node)
+			)
+				this.#local_fns.set(node.id.name, node.init);
 			if (node.type !== 'ImportDeclaration') return;
 			const specifier = String(node.source?.value ?? '');
 			for (const s of node.specifiers ?? []) {
-				if (s.type === 'ImportSpecifier') this.#imports.set(s.local.name, { specifier, imported: spec_name(s.imported) ?? s.local.name });
-				else if (s.type === 'ImportDefaultSpecifier') this.#imports.set(s.local.name, { specifier, imported: 'default' });
+				if (s.type === 'ImportSpecifier')
+					this.#imports.set(s.local.name, {
+						specifier,
+						imported: spec_name(s.imported) ?? s.local.name
+					});
+				else if (s.type === 'ImportDefaultSpecifier')
+					this.#imports.set(s.local.name, { specifier, imported: 'default' });
 			}
 			if (!PAGE_SPECIFIER_RE.test(specifier)) return;
 			for (const s of node.specifiers ?? []) {
 				if (s.type === 'ImportNamespaceSpecifier' || s.type === 'ImportDefaultSpecifier')
 					throw new All('the page store is imported as a namespace', s.start ?? null);
-				if (s.type === 'ImportSpecifier' && spec_name(s.imported) === 'page') this.#add_ref(s.local.name, null);
+				if (s.type === 'ImportSpecifier' && spec_name(s.imported) === 'page')
+					this.#add_ref(s.local.name, null);
 			}
 		});
 		if (!this.refs.size) return;
@@ -289,7 +377,11 @@ class Scan {
 		while (grew) {
 			grew = false;
 			visit(root, (node) => {
-				if (node.type === 'VariableDeclarator' && node.init && this.is_page_value(unwrap_down(node.init))) {
+				if (
+					node.type === 'VariableDeclarator' &&
+					node.init &&
+					this.is_page_value(unwrap_down(node.init))
+				) {
 					if (node.id?.type === 'Identifier') {
 						if (this.#add_ref(node.id.name, node)) grew = true;
 					} else {
@@ -314,7 +406,12 @@ class Scan {
 						});
 					}
 					// page.subscribe((p) => …): the subscriber's parameter is the page inside it
-					if (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.name === 'subscribe' && this.is_page_value(callee.object)) {
+					if (
+						callee?.type === 'MemberExpression' &&
+						!callee.computed &&
+						callee.property?.name === 'subscribe' &&
+						this.is_page_value(callee.object)
+					) {
 						const fn = args[0];
 						const p = fn?.params?.[0];
 						if (fn && p?.type === 'Identifier' && this.#add_ref(p.name, fn.body ?? fn)) {
@@ -329,14 +426,22 @@ class Scan {
 						if (args[0]?.type === 'Identifier' && this.is_page_value(args[0])) {
 							if (param?.type === 'Identifier') {
 								if (this.#add_ref(param.name, fn)) grew = true;
-							} else if (param) throw new All('a derived() over the page destructures its parameter', param.start ?? null);
+							} else if (param)
+								throw new All(
+									'a derived() over the page destructures its parameter',
+									param.start ?? null
+								);
 						} else if (args[0]?.type === 'ArrayExpression') {
 							args[0].elements.forEach((el: Node, i: number) => {
 								if (el?.type !== 'Identifier' || !this.is_page_value(el)) return;
 								const p = param?.type === 'ArrayPattern' ? param.elements[i] : null;
 								if (p?.type === 'Identifier') {
 									if (this.#add_ref(p.name, fn)) grew = true;
-								} else throw new All('a derived([…, page, …]) does not name the page parameter', (p ?? el).start ?? null);
+								} else
+									throw new All(
+										'a derived([…, page, …]) does not name the page parameter',
+										(p ?? el).start ?? null
+									);
 							});
 						}
 					}
@@ -366,7 +471,11 @@ class Scan {
 			for (const child of node) this.walk(child, parent, key);
 			return;
 		}
-		if (typeof node.type === 'string' && this.is_page_value(node) && !is_declaration(node, parent, key)) {
+		if (
+			typeof node.type === 'string' &&
+			this.is_page_value(node) &&
+			!is_declaration(node, parent, key)
+		) {
 			this.judge(node, parent, key);
 			if (node.type === 'CallExpression') return; // `get(page)` consumed as a unit
 		}
@@ -383,7 +492,11 @@ class Scan {
 				return;
 			}
 		}
-		if (node.type === 'LogicalExpression' && node.operator === '&&' && runs_on(node.left) === 'server') {
+		if (
+			node.type === 'LogicalExpression' &&
+			node.operator === '&&' &&
+			runs_on(node.left) === 'server'
+		) {
 			this.walk(node.left, node, 'left');
 			return;
 		}
@@ -396,7 +509,13 @@ class Scan {
 
 	judge(value: Node, raw_parent: Node | null, raw_key: string | null): void {
 		// `(page as any).data.x`, `page!.data.x`, `(page).data.x`: the wrapper is not the consumer
-		const { node: v, parent, key } = raw_parent && WRAPPERS.has(raw_parent.type) ? unwrap_up(value) : { node: value, parent: raw_parent, key: raw_key };
+		const {
+			node: v,
+			parent,
+			key
+		} = raw_parent && WRAPPERS.has(raw_parent.type)
+			? unwrap_up(value)
+			: { node: value, parent: raw_parent, key: raw_key };
 		const at = value.start ?? null;
 		if (!parent) throw new All('the page is used bare', at);
 		// `page.<field>` — the one shape that commits nothing (safe field) or a key (`data.x`)
@@ -410,16 +529,31 @@ class Scan {
 			if (field === 'subscribe') {
 				// `page.subscribe((p) => …)`: the callback parameter is the page, tracked in pass 1
 				const call = parent.__parent as Node | null;
-				const fn = call?.type === 'CallExpression' && (parent.__key as string) === 'callee' ? call.arguments?.[0] : null;
-				if (fn && (fn.type === 'ArrowFunctionExpression' || fn.type === 'FunctionExpression') && fn.params?.[0]?.type === 'Identifier') return;
+				const fn =
+					call?.type === 'CallExpression' && (parent.__key as string) === 'callee'
+						? call.arguments?.[0]
+						: null;
+				if (
+					fn &&
+					(fn.type === 'ArrowFunctionExpression' || fn.type === 'FunctionExpression') &&
+					fn.params?.[0]?.type === 'Identifier'
+				)
+					return;
 				throw new All('`page.subscribe(…)` hands a subscriber the whole page', at);
 			}
-			throw new All(field === null ? 'the page is indexed with an expression' : `\`page.${field}\` is read`, at);
+			throw new All(
+				field === null ? 'the page is indexed with an expression' : `\`page.${field}\` is read`,
+				at
+			);
 		}
 		// `const p = page` / `const v = get(page)` — an alias, tracked in pass 1
 		if (parent.type === 'VariableDeclarator' && key === 'init') return;
 		// `derived(page, …)` / `derived([…, page, …], …)` — the callback param is tracked in pass 1
-		if (parent.type === 'CallExpression' && key === 'arguments' && parent.callee?.type === 'Identifier') {
+		if (
+			parent.type === 'CallExpression' &&
+			key === 'arguments' &&
+			parent.callee?.type === 'Identifier'
+		) {
 			const name = parent.callee.name;
 			if (name === 'derived' || name === 'get') return;
 			const fn = this.#local_fns.get(name);
@@ -427,12 +561,20 @@ class Scan {
 				// followed at collect time: the parameter is the page inside the helper
 				const i = parent.arguments.indexOf(v);
 				if (fn.params?.[i]?.type === 'Identifier') return;
-				throw new All(`the whole page is passed to \`${name}(…)\`, whose parameter is destructured`, at);
+				throw new All(
+					`the whole page is passed to \`${name}(…)\`, whose parameter is destructured`,
+					at
+				);
 			}
 			const imp = this.#imports.get(name);
 			if (imp) {
 				// an IMPORTED helper: the build follows the call into that module (summarize_export)
-				this.pending.push({ specifier: imp.specifier, imported: imp.imported, arg: parent.arguments.indexOf(v), line: at === null ? null : line_of(this.code, at) });
+				this.pending.push({
+					specifier: imp.specifier,
+					imported: imp.imported,
+					arg: parent.arguments.indexOf(v),
+					line: at === null ? null : line_of(this.code, at)
+				});
 				return;
 			}
 			throw new All(`the whole page is passed to \`${name}(…)\``, at);
@@ -442,7 +584,14 @@ class Scan {
 			return;
 		}
 		// `Object.keys(page)` reads names, never values: nothing of `data` can leave through it
-		if (parent.type === 'CallExpression' && key === 'arguments' && parent.callee?.type === 'MemberExpression' && parent.callee.object?.name === 'Object' && parent.callee.property?.name === 'keys') return;
+		if (
+			parent.type === 'CallExpression' &&
+			key === 'arguments' &&
+			parent.callee?.type === 'MemberExpression' &&
+			parent.callee.object?.name === 'Object' &&
+			parent.callee.property?.name === 'keys'
+		)
+			return;
 		throw new All('the whole page escapes (passed on, returned, spread, exported or compared)', at);
 	}
 
@@ -452,7 +601,12 @@ class Scan {
 		const at = data_member.start ?? null;
 		// `page.data || {}` / `page.data ?? {}`: the fallback is not a read — judge what consumes the
 		// whole expression (`const { a, b } = $page?.data || {}` is the common Svelte 4 guard)
-		while (owner && owner.type === 'LogicalExpression' && (owner.operator === '||' || owner.operator === '??') && owner_key === 'left') {
+		while (
+			owner &&
+			owner.type === 'LogicalExpression' &&
+			(owner.operator === '||' || owner.operator === '??') &&
+			owner_key === 'left'
+		) {
 			const up = unwrap_up(owner);
 			owner = up.parent;
 			owner_key = up.key;
@@ -464,21 +618,36 @@ class Scan {
 			this.keys.add(k);
 			return;
 		}
-		if (owner.type === 'VariableDeclarator' && owner_key === 'init' && owner.id?.type === 'ObjectPattern') {
+		if (
+			owner.type === 'VariableDeclarator' &&
+			owner_key === 'init' &&
+			owner.id?.type === 'ObjectPattern'
+		) {
 			for (const p of owner.id.properties) {
-				if (p.type !== 'Property' || p.computed) throw new All('`page.data` is destructured with a rest or computed key', p.start ?? at);
-				const k = p.key?.type === 'Identifier' ? p.key.name : p.key?.type === 'Literal' ? String(p.key.value) : null;
-				if (k === null) throw new All('`page.data` is destructured with a non-literal key', p.start ?? at);
+				if (p.type !== 'Property' || p.computed)
+					throw new All('`page.data` is destructured with a rest or computed key', p.start ?? at);
+				const k =
+					p.key?.type === 'Identifier'
+						? p.key.name
+						: p.key?.type === 'Literal'
+							? String(p.key.value)
+							: null;
+				if (k === null)
+					throw new All('`page.data` is destructured with a non-literal key', p.start ?? at);
 				this.keys.add(k);
 			}
 			return;
 		}
 		const how =
-			owner.type === 'CallExpression' ? `\`page.data\` is handed whole to ${call_name(owner)}(…)`
-			: owner.type === 'VariableDeclarator' ? '`page.data` is aliased whole (`const d = page.data`)'
-			: owner.type === 'SpreadElement' ? '`page.data` is spread'
-			: owner.type === 'ReturnStatement' || owner.type === 'ArrowFunctionExpression' ? '`page.data` is returned whole'
-			: `\`page.data\` is used whole (${owner.type})`;
+			owner.type === 'CallExpression'
+				? `\`page.data\` is handed whole to ${call_name(owner)}(…)`
+				: owner.type === 'VariableDeclarator'
+					? '`page.data` is aliased whole (`const d = page.data`)'
+					: owner.type === 'SpreadElement'
+						? '`page.data` is spread'
+						: owner.type === 'ReturnStatement' || owner.type === 'ArrowFunctionExpression'
+							? '`page.data` is returned whole'
+							: `\`page.data\` is used whole (${owner.type})`;
 		throw new All(how, at);
 	}
 }
@@ -514,7 +683,8 @@ function runs_on(test: Node | null | undefined): 'server' | 'client' | null {
 		n.operator === 'typeof' &&
 		n.argument?.type === 'Identifier' &&
 		(n.argument.name === 'window' || n.argument.name === 'document');
-	const undef = (n: Node) => (n?.type === 'Literal' || n?.type === 'StringLiteral') && n.value === 'undefined';
+	const undef = (n: Node) =>
+		(n?.type === 'Literal' || n?.type === 'StringLiteral') && n.value === 'undefined';
 	const l = unwrap_down(t.left);
 	const r = unwrap_down(t.right);
 	if (!((typeof_global(l) && undef(r)) || (typeof_global(r) && undef(l)))) return null;
@@ -523,7 +693,8 @@ function runs_on(test: Node | null | undefined): 'server' | 'client' | null {
 
 function enclosing_scope(node: Node): Node | null {
 	for (let n = node.__parent as Node | null; n; n = n.__parent as Node | null) {
-		if (SCOPE_TYPES.has(n.type)) return n.type === 'Program' || n.type === 'Fragment' || n.type === 'Root' ? null : n;
+		if (SCOPE_TYPES.has(n.type))
+			return n.type === 'Program' || n.type === 'Fragment' || n.type === 'Root' ? null : n;
 	}
 	return null;
 }
@@ -548,7 +719,8 @@ function member_name(m: Node): string | null {
 	if (!m.computed) return m.property?.type === 'Identifier' ? m.property.name : null;
 	const p = m.property;
 	if (p?.type === 'Literal' && typeof p.value === 'string') return p.value;
-	if (p?.type === 'TemplateLiteral' && p.expressions?.length === 0) return p.quasis?.[0]?.value?.cooked ?? null;
+	if (p?.type === 'TemplateLiteral' && p.expressions?.length === 0)
+		return p.quasis?.[0]?.value?.cooked ?? null;
 	return null;
 }
 
@@ -565,10 +737,27 @@ function is_declaration(node: Node, parent: Node | null, key: string | null): bo
 	if (parent.type === 'VariableDeclarator' && key === 'id') return true;
 	if (parent.type === 'Property' && key === 'key' && !parent.computed) return true;
 	if (parent.type === 'MemberExpression' && key === 'property' && !parent.computed) return true;
-	if (parent.type === 'ImportSpecifier' || parent.type === 'ImportDefaultSpecifier' || parent.type === 'ImportNamespaceSpecifier') return true;
+	if (
+		parent.type === 'ImportSpecifier' ||
+		parent.type === 'ImportDefaultSpecifier' ||
+		parent.type === 'ImportNamespaceSpecifier'
+	)
+		return true;
 	if (key === 'params') return true;
-	if (parent.type === 'ArrayPattern' || parent.type === 'ObjectPattern' || parent.type === 'AssignmentPattern' || parent.type === 'RestElement') return true;
-	if ((parent.type === 'FunctionDeclaration' || parent.type === 'FunctionExpression' || parent.type === 'ClassDeclaration') && key === 'id') return true;
+	if (
+		parent.type === 'ArrayPattern' ||
+		parent.type === 'ObjectPattern' ||
+		parent.type === 'AssignmentPattern' ||
+		parent.type === 'RestElement'
+	)
+		return true;
+	if (
+		(parent.type === 'FunctionDeclaration' ||
+			parent.type === 'FunctionExpression' ||
+			parent.type === 'ClassDeclaration') &&
+		key === 'id'
+	)
+		return true;
 	if (parent.type === 'LabeledStatement' && key === 'label') return true;
 	return false;
 }
@@ -583,7 +772,11 @@ function visit(root: Node, fn: (node: Node) => void): void {
 			return;
 		}
 		if (typeof node.type === 'string') {
-			Object.defineProperty(node, '__parent', { value: parent, enumerable: false, configurable: true });
+			Object.defineProperty(node, '__parent', {
+				value: parent,
+				enumerable: false,
+				configurable: true
+			});
 			Object.defineProperty(node, '__key', { value: key, enumerable: false, configurable: true });
 			fn(node);
 		}
@@ -603,7 +796,10 @@ const FOLLOW_MAX_HOPS = 4;
 const SVELTE_EXT_RE = /\.svelte$/;
 const SCRIPT_EXT_RE = /\.(?:[cm]?[jt]sx?)$/;
 
-export type PendingResolver = (specifier: string, importer: string) => Promise<{ id: string } | null | undefined>;
+export type PendingResolver = (
+	specifier: string,
+	importer: string
+) => Promise<{ id: string } | null | undefined>;
 
 /**
  * For every module with pending `helper(page)` calls: resolve each helper, summarize its export,
@@ -628,7 +824,10 @@ export async function follow_pending_page_calls(
 			const answer = await summarize_call(call, module, resolve, read, summaries);
 			if (answer.keys === 'all') {
 				keys = 'all';
-				program.page_key_reasons.set(module, { why: `the whole page is passed to \`${call.imported}(…)\` — ${answer.why}`, line: call.line });
+				program.page_key_reasons.set(module, {
+					why: `the whole page is passed to \`${call.imported}(…)\` — ${answer.why}`,
+					line: call.line
+				});
 				break;
 			}
 			keys = merge_page_keys(keys, answer.keys) ?? keys;
@@ -655,16 +854,22 @@ async function summarize_call(
 		} catch {
 			resolved = null;
 		}
-		if (!resolved?.id) return { keys: 'all', why: `\`${specifier}\` could not be resolved from the caller` };
+		if (!resolved?.id)
+			return { keys: 'all', why: `\`${specifier}\` could not be resolved from the caller` };
 		const file = resolved.id.split('?')[0];
 		const memo_key = `${file}#${name}#${call.arg}`;
 		const hit = memo.get(memo_key);
 		if (hit) return { keys: hit, why: '' };
 		const kind = SVELTE_EXT_RE.test(file) ? 'svelte' : SCRIPT_EXT_RE.test(file) ? 'script' : null;
 		const code = kind ? read(file) : null;
-		if (!kind || code === null) return { keys: 'all', why: `the helper's module (${file}) could not be read` };
+		if (!kind || code === null)
+			return { keys: 'all', why: `the helper's module (${file}) could not be read` };
 		const summary = summarize_export(code, file, kind, name, call.arg);
-		if (summary === 'all') return { keys: 'all', why: `\`${name}\` in ${file} hands the page on, or is not a plain function` };
+		if (summary === 'all')
+			return {
+				keys: 'all',
+				why: `\`${name}\` in ${file} hands the page on, or is not a plain function`
+			};
 		if (!is_reexport(summary)) {
 			memo.set(memo_key, summary);
 			return { keys: summary, why: '' };
@@ -677,7 +882,13 @@ async function summarize_call(
 			continue;
 		}
 		for (const source of summary.follow) {
-			const sub = await summarize_call({ ...call, specifier: source, imported: summary.imported }, file, resolve, read, memo);
+			const sub = await summarize_call(
+				{ ...call, specifier: source, imported: summary.imported },
+				file,
+				resolve,
+				read,
+				memo
+			);
 			if (sub.keys !== 'all') return sub;
 		}
 		return { keys: 'all', why: `\`${name}\` was not found behind the \`export *\` of ${file}` };

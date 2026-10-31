@@ -16,8 +16,8 @@
 		clicked {clicks} times
 	</button>
 	<p class="hint">
-		In the <code>static</code> arm this button is server HTML with no JS — clicking does
-		nothing. In the <code>hydrated</code> arm the page woke as one island and it counts.
+		In the <code>static</code> arm this button is server HTML with no JS — clicking does nothing. In
+		the <code>hydrated</code> arm the page woke as one island and it counts.
 	</p>
 </section>
 

@@ -35,7 +35,10 @@ describe('backtracks', () => {
 describe('regex_literals', () => {
 	it('the literals on a line, not a division, a string or a comment', () => {
 		expect(regex_literals('return /^([a-z0-9]+-?)*$/.test(s);')).toEqual(['^([a-z0-9]+-?)*$']);
-		expect(regex_literals("t.replace(/[/\\]]+/g, '_').split(/,\\s*/)")).toEqual(['[/\\]]+', ',\\s*']);
+		expect(regex_literals("t.replace(/[/\\]]+/g, '_').split(/,\\s*/)")).toEqual([
+			'[/\\]]+',
+			',\\s*'
+		]);
 		expect(regex_literals('const half = total / 2 / count;')).toEqual([]);
 		expect(regex_literals('const u = "a/b/c"; // /x+/')).toEqual([]);
 		expect(regex_literals('const ok = !/^\\d+$/.test(v) && x;')).toEqual(['^\\d+$']);
@@ -45,12 +48,20 @@ describe('regex_literals', () => {
 describe('slow-regex', () => {
 	it('no RegExp frame (V8 charged the pattern to the line): a literal that can backtrack still names it', () => {
 		const path = '/app/src/lib/slug.ts';
-		const src = ['export function isSlug(s: string) {', '\treturn /^([a-z0-9]+-?)*$/.test(s);', '}'];
+		const src = [
+			'export function isSlug(s: string) {',
+			'\treturn /^([a-z0-9]+-?)*$/.test(s);',
+			'}'
+		];
 		const source = (p: string, a: number, b: number) =>
 			p === path ? { start: a, lines: src.slice(a - 1, b) } : undefined;
-		const functions = [fn({ key: 'isSlug', name: 'isSlug', path, line: 1, calls: 400, lines: [{ line: 2, ms: 75 }] })];
+		const functions = [
+			fn({ key: 'isSlug', name: 'isSlug', path, line: 1, calls: 400, lines: [{ line: 2, ms: 75 }] })
+		];
 		const ledger = build_ledger({ functions, source, code: (p, l) => source(p, l, l)?.lines[0] });
-		const p = find_patterns({ ledger, functions, source, renders: 3 }).find((x) => x.kind === 'slow-regex')!;
+		const p = find_patterns({ ledger, functions, source, renders: 3 }).find(
+			(x) => x.kind === 'slow-regex'
+		)!;
 		expect(p.title).toBe('A regular expression can backtrack, and runs slowly');
 		expect(p.sites[0].line).toBe(2);
 	});
@@ -72,7 +83,14 @@ describe('slow-regex', () => {
 			line: 1,
 			lines: [{ line: 2, ms: 4 }],
 			callees: [
-				{ key: 're1', name: 'RegExp: ^(\\w+\\s?)*$', category: 'node', file: '', ms: 60, share: 0.9 },
+				{
+					key: 're1',
+					name: 'RegExp: ^(\\w+\\s?)*$',
+					category: 'node',
+					file: '',
+					ms: 60,
+					share: 0.9
+				},
 				{ key: 're2', name: 'RegExp: [aeiou]', category: 'node', file: '', ms: 0.2, share: 0.01 }
 			]
 		})
@@ -81,7 +99,10 @@ describe('slow-regex', () => {
 	it('the ledger charges a pattern’s own code to the line that writes it', () => {
 		const ledger = build_ledger({ functions, source, code: (p, l) => source(p, l, l)?.lines[0] });
 		const l2 = ledger.find((l) => l.line === 2)!;
-		expect(l2).toMatchObject({ lib_ms: 60, libs: [{ name: 'RegExp: ^(\\w+\\s?)*$', pkg: 'Node', ms: 60 }] });
+		expect(l2).toMatchObject({
+			lib_ms: 60,
+			libs: [{ name: 'RegExp: ^(\\w+\\s?)*$', pkg: 'Node', ms: 60 }]
+		});
 		expect(ledger.find((l) => l.line === 3)?.lib_ms).toBe(0.2);
 	});
 
@@ -96,7 +117,9 @@ describe('slow-regex', () => {
 
 	it('a short value cleaned per item is not "the whole string rescanned", however much it adds up to', () => {
 		const p3 = '/app/src/lib/names.ts';
-		const s3 = ["export const initials = (names: string[]) => names.map((n) => n.replace(/\\b(\\w)\\w*/g, '$1'));"];
+		const s3 = [
+			"export const initials = (names: string[]) => names.map((n) => n.replace(/\\b(\\w)\\w*/g, '$1'));"
+		];
 		const source3 = (p: string, a: number, b: number) =>
 			p === p3 ? { start: a, lines: s3.slice(a - 1, b) } : undefined;
 		const row = {
@@ -116,7 +139,9 @@ describe('slow-regex', () => {
 		const run = (calls?: number, alloc = row.alloc_bytes) =>
 			find_patterns({
 				ledger: [{ ...row, alloc_bytes: alloc }] as never,
-				functions: [fn({ key: 'arrow', name: '(anonymous)', path: p3, line: 1, ...(calls ? { calls } : {}) })],
+				functions: [
+					fn({ key: 'arrow', name: '(anonymous)', path: p3, line: 1, ...(calls ? { calls } : {}) })
+				],
 				source: source3,
 				renders: 1
 			}).some((x) => x.kind === 'rescan-in-loop');
@@ -127,19 +152,42 @@ describe('slow-regex', () => {
 		expect(run(undefined, 5 * 1024 * 1024)).toBe(true);
 	});
 
-	it('read into an inlined callee, the caller\'s one call is not the callee\'s: its bytes are every item\'s', () => {
+	it("read into an inlined callee, the caller's one call is not the callee's: its bytes are every item's", () => {
 		const page = '/app/src/routes/+page.server.ts';
 		const lib = '/app/src/lib/names.ts';
 		const files: Record<string, string[]> = {
-			[page]: ["import { initials } from '$lib/names';", 'export async function load() {', '\tconst inits = sorted.map((p) => initials(p.name));', '}'],
-			[lib]: ['export function initials(name: string) {', "\treturn name.replace(/\\b(\\w)\\w*/g, '$1');", '}']
+			[page]: [
+				"import { initials } from '$lib/names';",
+				'export async function load() {',
+				'\tconst inits = sorted.map((p) => initials(p.name));',
+				'}'
+			],
+			[lib]: [
+				'export function initials(name: string) {',
+				"\treturn name.replace(/\\b(\\w)\\w*/g, '$1');",
+				'}'
+			]
 		};
-		const source = (p: string, a: number, b: number) => (files[p] ? { start: a, lines: files[p].slice(a - 1, b) } : undefined);
+		const source = (p: string, a: number, b: number) =>
+			files[p] ? { start: a, lines: files[p].slice(a - 1, b) } : undefined;
 		// V8 inlined `initials`: its cost sits on the caller's line, whose function ran once
 		const run = (alloc: number) =>
 			find_patterns({
 				ledger: [
-					{ path: page, file: 'routes/+page.server.ts', line: 3, code: files[page][2], cpu_ms: 3, alloc_bytes: alloc, gc_ms: 0, retained_bytes: 0, lib_ms: 0, who: [], score: 1, fn: 'load' }
+					{
+						path: page,
+						file: 'routes/+page.server.ts',
+						line: 3,
+						code: files[page][2],
+						cpu_ms: 3,
+						alloc_bytes: alloc,
+						gc_ms: 0,
+						retained_bytes: 0,
+						lib_ms: 0,
+						who: [],
+						score: 1,
+						fn: 'load'
+					}
 				] as never,
 				functions: [
 					fn({ key: 'load', name: 'load', path: page, line: 2, calls: 1 }),
@@ -167,10 +215,16 @@ describe('slow-regex', () => {
 				line: 1,
 				calls: 10_000,
 				lines: [{ line: 1, ms: 2 }],
-				callees: [{ key: 're', name: 'RegExp: [aeiou]', category: 'node', file: '', ms: 8, share: 0.8 }]
+				callees: [
+					{ key: 're', name: 'RegExp: [aeiou]', category: 'node', file: '', ms: 8, share: 0.8 }
+				]
 			})
 		];
-		const ledger = build_ledger({ functions: f2, source: source2, code: (p, l) => source2(p, l, l)?.lines[0] });
+		const ledger = build_ledger({
+			functions: f2,
+			source: source2,
+			code: (p, l) => source2(p, l, l)?.lines[0]
+		});
 		expect(ledger[0].lib_ms).toBe(8);
 		const out = find_patterns({ ledger, functions: f2, source: source2, renders: 1 });
 		expect(out.some((x) => x.kind === 'slow-regex')).toBe(false);

@@ -120,7 +120,11 @@
 	// On a `dimensions()` site the slug selects the coordinate's tree; ignored on a plain site.
 	const tree: NavTree = meta ? meta.nav : await site!.nav({ base: the_base, slug: current_slug });
 	// The version/locale switcher (plain data → native links; `null` on a non-dimensioned site).
-	const switcher = meta ? meta.switcher : site ? await site.switcher(current_slug, { base: the_base }) : null;
+	const switcher = meta
+		? meta.switcher
+		: site
+			? await site.switcher(current_slug, { base: the_base })
+			: null;
 </script>
 
 <svelte:head>

@@ -27,7 +27,9 @@ describe('export map — the basic shapes', () => {
 		expect(m.entries.get('Button')).toEqual(leaf(f, 'lib/Button.svelte', 'default'));
 		expect(m.entries.get('c')).toEqual(leaf(f, 'lib/c.ts', 'c'));
 		expect(m.entries.has('default'), 'a star never carries default').toBe(false);
-		expect([...m.deps]).toEqual(expect.arrayContaining([f.id('lib/index.ts'), f.id('lib/a.ts'), f.id('lib/c.ts')]));
+		expect([...m.deps]).toEqual(
+			expect.arrayContaining([f.id('lib/index.ts'), f.id('lib/a.ts'), f.id('lib/c.ts')])
+		);
 	});
 
 	it('import-then-export bindings resolve like direct re-exports', async () => {
@@ -45,13 +47,19 @@ describe('export map — the basic shapes', () => {
 	});
 
 	it('export * as ns → a namespace leaf', async () => {
-		f = fixture({ 'lib/n.ts': 'export const one = 1;', 'lib/index.ts': `export * as ns from './n';` });
+		f = fixture({
+			'lib/n.ts': 'export const one = 1;',
+			'lib/index.ts': `export * as ns from './n';`
+		});
 		const m = (await f.index().map(f.id('lib/index.ts'), '$lib'))!;
 		expect(m.entries.get('ns')).toEqual({ id: f.id('lib/n.ts'), namespace: true });
 	});
 
 	it('a .js barrel with .js-suffixed relative specifiers (nodenext style) resolves the same', async () => {
-		f = fixture({ 'lib/a.ts': 'export const a = 1;', 'lib/index.js': `export { a } from './a.js';` });
+		f = fixture({
+			'lib/a.ts': 'export const a = 1;',
+			'lib/index.js': `export { a } from './a.js';`
+		});
 		const i = f.index({
 			resolve: async (spec, importer) => {
 				const base = spec.endsWith('.js') ? spec.slice(0, -3) : spec;
@@ -84,8 +92,12 @@ describe('nesting — barrels of barrels', () => {
 		});
 		const m = (await f.index().map(f.id('lib/index.ts'), '$lib'))!;
 		expect(m.entries.get('deep')).toEqual(leaf(f, 'lib/leaf.ts', 'deep'));
-		expect(m.entries.get('own'), 'an impure module IS the leaf for its own names').toEqual(leaf(f, 'lib/impure.ts', 'own'));
-		expect(m.entries.get('viaImpure'), 'but its re-exports still resolve through it').toEqual(leaf(f, 'lib/leaf.ts', 'deep'));
+		expect(m.entries.get('own'), 'an impure module IS the leaf for its own names').toEqual(
+			leaf(f, 'lib/impure.ts', 'own')
+		);
+		expect(m.entries.get('viaImpure'), 'but its re-exports still resolve through it').toEqual(
+			leaf(f, 'lib/leaf.ts', 'deep')
+		);
 	});
 
 	it('explicit re-exports win over stars; two stars with different leaves for one name are ambiguous', async () => {
@@ -156,7 +168,10 @@ describe('where the walk stops', () => {
 	});
 
 	it('kept beats everything; a non-candidate is never mapped', async () => {
-		f = fixture({ 'lib/leaf.ts': 'export const l = 1;', 'lib/index.ts': `export { l } from './leaf';` });
+		f = fixture({
+			'lib/leaf.ts': 'export const l = 1;',
+			'lib/index.ts': `export { l } from './leaf';`
+		});
 		expect(await f.index({ kept: () => true }).map(f.id('lib/index.ts'), '$lib')).toBeNull();
 		expect(await f.index({ candidate: () => false }).map(f.id('lib/index.ts'), '$lib')).toBeNull();
 	});
@@ -167,7 +182,9 @@ describe('where the walk stops', () => {
 			'lib/mid.ts': `export { l } from './leaf';`,
 			'lib/index.ts': `export * from './mid';`
 		});
-		const m = (await f.index({ kept: (id) => id.endsWith('/mid.ts') }).map(f.id('lib/index.ts'), '$lib'))!;
+		const m = (await f
+			.index({ kept: (id) => id.endsWith('/mid.ts') })
+			.map(f.id('lib/index.ts'), '$lib'))!;
 		expect(m.opaque).toBe(true);
 		expect(m.entries.has('l')).toBe(false);
 	});
@@ -178,7 +195,8 @@ describe('where the walk stops', () => {
 			'lib/index.ts': `export { l } from './leaf';\nexport { default as raw } from './leaf.ts?raw';`
 		});
 		const i = f.index({
-			resolve: async (spec, importer) => (spec.endsWith('?raw') ? f.id('lib/leaf.ts') + '?raw' : f.host().resolve(spec, importer))
+			resolve: async (spec, importer) =>
+				spec.endsWith('?raw') ? f.id('lib/leaf.ts') + '?raw' : f.host().resolve(spec, importer)
 		});
 		expect(await i.map(f.id('lib/index.ts') + '?raw', '$lib')).toBeNull();
 		const m = (await i.map(f.id('lib/index.ts'), '$lib'))!;
@@ -207,13 +225,19 @@ describe('where the walk stops', () => {
 			'lib/index.ts': `export { l } from './leaf';\nexport * from './cjs';`
 		});
 		const m = (await f.index().map(f.id('lib/index.ts'), '$lib'))!;
-		expect(m.opaque, 'a CJS module parses but declares no exports and runs code — an impure leaf with nothing to see').toBe(false);
+		expect(
+			m.opaque,
+			'a CJS module parses but declares no exports and runs code — an impure leaf with nothing to see'
+		).toBe(false);
 		expect(m.entries.has('c')).toBe(false);
 	});
 
 	it('follow_packages: false makes a star into node_modules opaque; true walks it', async () => {
 		f = fixture({
-			'node_modules/pkg/package.json': JSON.stringify({ name: 'pkg', exports: { '.': './index.js', './leaf': './leaf.js' } }),
+			'node_modules/pkg/package.json': JSON.stringify({
+				name: 'pkg',
+				exports: { '.': './index.js', './leaf': './leaf.js' }
+			}),
 			'node_modules/pkg/leaf.js': 'export const p = 1;',
 			'node_modules/pkg/index.js': `export * from './leaf.js';`,
 			'lib/index.ts': `export * from 'pkg';`
@@ -227,7 +251,10 @@ describe('where the walk stops', () => {
 
 	it('a package barrel is a candidate only when opted in (packages), then its exports map is walked', async () => {
 		f = fixture({
-			'node_modules/@scope/ui/package.json': JSON.stringify({ name: '@scope/ui', exports: { '.': './index.js', './components': './components.js' } }),
+			'node_modules/@scope/ui/package.json': JSON.stringify({
+				name: '@scope/ui',
+				exports: { '.': './index.js', './components': './components.js' }
+			}),
 			'node_modules/@scope/ui/Button.svelte': '<button/>',
 			'node_modules/@scope/ui/components.js': `export { default as Button } from './Button.svelte';`,
 			'node_modules/@scope/ui/index.js': `export * from './components.js';`
@@ -236,7 +263,10 @@ describe('where the walk stops', () => {
 		const id = f.id('node_modules/@scope/ui/components.js');
 		expect(await f.index().map(id, spec)).toBeNull();
 		const m = (await f.index({ packages: ['@scope/ui'] }).map(id, spec))!;
-		expect(m.entries.get('Button')).toEqual({ id: f.id('node_modules/@scope/ui/Button.svelte'), name: 'default' });
+		expect(m.entries.get('Button')).toEqual({
+			id: f.id('node_modules/@scope/ui/Button.svelte'),
+			name: 'default'
+		});
 	});
 });
 
@@ -260,7 +290,9 @@ describe('concurrency — what a real build does', () => {
 				return slow(f, 5)(spec, importer);
 			}
 		});
-		const maps = await Promise.all(Array.from({ length: 200 }, () => i.map(f.id('lib/index.ts'), '$lib')));
+		const maps = await Promise.all(
+			Array.from({ length: 200 }, () => i.map(f.id('lib/index.ts'), '$lib'))
+		);
 		expect(maps.every((m) => m === maps[0])).toBe(true);
 		expect(maps[0]!.entries.get('a')).toEqual(leaf(f, 'lib/a.ts', 'a'));
 		expect(maps[0]!.entries.get('b')).toEqual(leaf(f, 'lib/b.ts', 'b'));
@@ -277,7 +309,10 @@ describe('concurrency — what a real build does', () => {
 		});
 		const i = f.index({ resolve: slow(f, 3) });
 		// start both at once: each one's star reaches the other while it is in flight
-		const [a1, b1] = await Promise.all([i.map(f.id('lib/a.ts'), './a'), i.map(f.id('lib/b.ts'), './b')]);
+		const [a1, b1] = await Promise.all([
+			i.map(f.id('lib/a.ts'), './a'),
+			i.map(f.id('lib/b.ts'), './b')
+		]);
 		expect(a1!.entries.get('la')).toEqual(leaf(f, 'lib/la.ts', 'la'));
 		expect(b1!.entries.get('lb')).toEqual(leaf(f, 'lib/lb.ts', 'lb'));
 		// whichever side met the other mid-flight is provisional and gets rebuilt on the next ask
@@ -294,13 +329,19 @@ describe('concurrency — what a real build does', () => {
 		const files: Record<string, string> = {};
 		for (let b = 0; b < 20; b++) {
 			for (let l = 0; l < 5; l++) files[`lib/b${b}/l${l}.ts`] = `export const n${b}_${l} = ${l};`;
-			files[`lib/b${b}/index.ts`] = Array.from({ length: 5 }, (_, l) => `export * from './l${l}';`).join('\n');
+			files[`lib/b${b}/index.ts`] = Array.from(
+				{ length: 5 },
+				(_, l) => `export * from './l${l}';`
+			).join('\n');
 		}
-		files['lib/index.ts'] = Array.from({ length: 20 }, (_, b) => `export * from './b${b}';`).join('\n');
+		files['lib/index.ts'] = Array.from({ length: 20 }, (_, b) => `export * from './b${b}';`).join(
+			'\n'
+		);
 		f = fixture(files);
 		const i = f.index({ resolve: slow(f, 1) });
 		const asks = [];
-		for (let k = 0; k < 60; k++) asks.push(i.map(f.id(k % 3 === 0 ? 'lib/index.ts' : `lib/b${k % 20}/index.ts`), 'x'));
+		for (let k = 0; k < 60; k++)
+			asks.push(i.map(f.id(k % 3 === 0 ? 'lib/index.ts' : `lib/b${k % 20}/index.ts`), 'x'));
 		const maps = await Promise.all(asks);
 		for (const m of maps) expect(m).not.toBeNull();
 		const top = (await i.map(f.id('lib/index.ts'), 'x'))!;
@@ -336,18 +377,26 @@ describe('cache + invalidation', () => {
 			'lib/index.ts': `export * from './mid';`
 		});
 		const i = f.index();
-		expect((await i.map(f.id('lib/index.ts'), '$lib'))!.entries.get('l')).toEqual(leaf(f, 'lib/leaf.ts', 'l'));
+		expect((await i.map(f.id('lib/index.ts'), '$lib'))!.entries.get('l')).toEqual(
+			leaf(f, 'lib/leaf.ts', 'l')
+		);
 		f.write('lib/mid.ts', `export * from './leaf';\nsideEffect();`);
 		i.invalidate(f.id('lib/mid.ts'));
 		const m = (await i.map(f.id('lib/index.ts'), '$lib'))!;
-		expect(m.entries.get('l'), 'mid is impure now: l still resolves THROUGH it to the leaf').toEqual(leaf(f, 'lib/leaf.ts', 'l'));
+		expect(
+			m.entries.get('l'),
+			'mid is impure now: l still resolves THROUGH it to the leaf'
+		).toEqual(leaf(f, 'lib/leaf.ts', 'l'));
 	});
 
 	it('at scale: a 2 000-name barrel over 200 leaves maps in well under a second and points every name home', async () => {
 		const files: Record<string, string> = {};
 		const lines: string[] = [];
 		for (let i = 0; i < 200; i++) {
-			files[`lib/leaves/l${i}.ts`] = Array.from({ length: 10 }, (_, j) => `export const n${i}_${j} = ${j};`).join('\n');
+			files[`lib/leaves/l${i}.ts`] = Array.from(
+				{ length: 10 },
+				(_, j) => `export const n${i}_${j} = ${j};`
+			).join('\n');
 			lines.push(`export * from './leaves/l${i}';`);
 		}
 		files['lib/index.ts'] = lines.join('\n');

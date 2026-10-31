@@ -142,7 +142,7 @@ describe('mount({ stream: true }) — the sugar', () => {
 	it('a COMPONENT fallback bakes as an inline region into the flushed part', async () => {
 		vi.stubGlobal('fetch', async () => new Response(doc_json('late-body')));
 		const { default: RawHtml } = await import('../../core/src/RawHtml.svelte');
-const app = routes({
+		const app = routes({
 			'/cms/[...rest]': mount(peer(), {
 				stream: { fallback: RawHtml as never }
 			})

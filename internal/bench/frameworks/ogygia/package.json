@@ -1,7 +1,7 @@
 {
 	"name": "ogygia-bench",
-	"private": true,
 	"version": "0.0.0",
+	"private": true,
 	"type": "module",
 	"scripts": {
 		"sync": "node ../../shared/sync.ts ogygia",
@@ -12,8 +12,8 @@
 		"prepare": "svelte-kit sync || echo ''"
 	},
 	"dependencies": {
-		"ogygia": "file:/Users/puruvj/Projects/sk-islands/internal/bench/.tarballs/ogygia-0.8.0.tgz",
-		"@ogygia/content": "file:/Users/puruvj/Projects/sk-islands/internal/bench/.tarballs/ogygia-content-0.10.1.tgz"
+		"@ogygia/content": "file:/Users/puruvj/Projects/sk-islands/internal/bench/.tarballs/ogygia-content-0.10.1.tgz",
+		"ogygia": "file:/Users/puruvj/Projects/sk-islands/internal/bench/.tarballs/ogygia-0.8.0.tgz"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-static": "3.0.10",

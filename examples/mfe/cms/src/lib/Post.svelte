@@ -1,10 +1,15 @@
 <script lang="ts">
 	import LikeButton from './LikeButton.svelte' with { wake: 'load' };
-	let { data }: {
+	let {
+		data
+	}: {
 		data: {
 			post: { id: string; title: string; body: string };
 			comments: string[];
-			base: string; site: string; section: string; count: number;
+			base: string;
+			site: string;
+			section: string;
+			count: number;
 			viewer: { sub?: string; roles?: string[] } | null;
 		};
 	} = $props();

@@ -11,7 +11,8 @@ import { fake_scoped } from '../fixtures/fake-scoped-render.ts';
 import { init_shadow_registries } from '../../src/runtime/parse-html.ts';
 
 const SHEET = '<template data-og-head="demo-card.shadow">b{color:rgb(255, 0, 0)}</template>';
-const island = (inner: string) => `<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
+const island = (inner: string) =>
+	`<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
 const doc = (body: string) => `<!doctype html><html><head></head><body>${body}</body></html>`;
 
 /** the settled page's body, parsed into this document (the head sheet too), and the original */
@@ -78,7 +79,11 @@ test('a stand-in keeps the parser from splitting the page’s link, and becomes 
 });
 
 test('an answer’s fragment: restored before insertion, its sheets adopted once the host is in the page', async () => {
-	const s = await transformMarkup('<demo-card class="x"> hi </demo-card>', (h) => SHEET + fake_scoped(h), { kind: 'region' });
+	const s = await transformMarkup(
+		'<demo-card class="x"> hi </demo-card>',
+		(h) => SHEET + fake_scoped(h),
+		{ kind: 'region' }
+	);
 	const tpl = document.createElement('template');
 	tpl.innerHTML = s.html;
 	restore(tpl.content);
@@ -98,7 +103,11 @@ test('a router swap: a root the swap left in the parsed page is skipped, and eve
 	// kept the live host), they count as connected (their document is their root), adopting a page
 	// sheet into one threw "Sharing constructed stylesheets in multiple documents", and the throw
 	// stopped the loop before the roots that did go in
-	const s = await transformMarkup(doc(island('<demo-card> left </demo-card><demo-card> taken </demo-card>')), fake_scoped, { kind: 'document' });
+	const s = await transformMarkup(
+		doc(island('<demo-card> left </demo-card><demo-card> taken </demo-card>')),
+		fake_scoped,
+		{ kind: 'document' }
+	);
 	document.head.insertAdjacentHTML('beforeend', SHEET);
 	const incoming = new DOMParser().parseFromString(s.html, 'text/html');
 	restore(incoming);
@@ -113,7 +122,11 @@ test('a router swap: a root the swap left in the parsed page is skipped, and eve
 
 test('an answer still waiting for its stylesheet keeps its roots while another answer goes in', async () => {
 	const answer = async (text: string) => {
-		const s = await transformMarkup(`<demo-card> ${text} </demo-card>`, (h) => SHEET + fake_scoped(h), { kind: 'region' });
+		const s = await transformMarkup(
+			`<demo-card> ${text} </demo-card>`,
+			(h) => SHEET + fake_scoped(h),
+			{ kind: 'region' }
+		);
 		const tpl = document.createElement('template');
 		tpl.innerHTML = s.html;
 		restore(tpl.content);
@@ -134,7 +147,9 @@ test('a host upgraded before the restore reached it is left as served, and says 
 	const host = document.querySelector('demo-card')!;
 	host.attachShadow({ mode: 'open' }); // what a component constructor does on upgrade
 	let late = '';
-	document.addEventListener('ogygia:restore-late', (e) => (late = (e as CustomEvent).detail.host), { once: true });
+	document.addEventListener('ogygia:restore-late', (e) => (late = (e as CustomEvent).detail.host), {
+		once: true
+	});
 	expect(restore(document)).toBe(0);
 	expect(late).toBe('0');
 	expect(host.shadowRoot!.childNodes.length).toBe(0);
@@ -143,13 +158,24 @@ test('a host upgraded before the restore reached it is left as served, and says 
 test('dev: the check compares each restored host with Svelte’s children, and names the first difference', async () => {
 	const inner = ' Sign in <i>ok</i>';
 	// a transform that loses a child ogygia can't know about (it strips the tag along with the node)
-	const lossy = (h: string) => fake_scoped(h).split(/<i c-id="0\.1" og-c="0\.1">ok<\/i>/).join('');
-	const s = await transformMarkup(doc(island(`<demo-card class="own">${inner}</demo-card>`)), lossy, { kind: 'document', dev: true });
+	const lossy = (h: string) =>
+		fake_scoped(h)
+			.split(/<i c-id="0\.1" og-c="0\.1">ok<\/i>/)
+			.join('');
+	const s = await transformMarkup(
+		doc(island(`<demo-card class="own">${inner}</demo-card>`)),
+		lossy,
+		{ kind: 'document', dev: true }
+	);
 	const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
 	document.head.insertAdjacentHTML('beforeend', SHEET);
 	document.body.innerHTML = check_script(s.check!) + body;
 	let diff = '';
-	document.addEventListener('ogygia:restore-mismatch', (e) => (diff = (e as CustomEvent).detail.diff), { once: true });
+	document.addEventListener(
+		'ogygia:restore-mismatch',
+		(e) => (diff = (e as CustomEvent).detail.diff),
+		{ once: true }
+	);
 	const quiet = console.error;
 	console.error = () => {};
 	try {
@@ -173,25 +199,48 @@ test('text a render trimmed inside a custom element it did not render comes back
 test('the dev check reads class as tokens and style as declarations, an empty one as absent', async () => {
 	const inner = '<p style="" class="">x</p><p style="--cols: 4">y</p>';
 	// a serializer that normalizes class and style on every element it writes
-	const normalizing = (h: string) => fake_scoped(h).split(' style=""').join('').split(' class=""').join('').split('--cols: 4"').join('--cols: 4;"');
-	const s = await transformMarkup(doc(island(`<demo-card class="own">${inner}</demo-card>`)), normalizing, { kind: 'document', dev: true });
+	const normalizing = (h: string) =>
+		fake_scoped(h)
+			.split(' style=""')
+			.join('')
+			.split(' class=""')
+			.join('')
+			.split('--cols: 4"')
+			.join('--cols: 4;"');
+	const s = await transformMarkup(
+		doc(island(`<demo-card class="own">${inner}</demo-card>`)),
+		normalizing,
+		{ kind: 'document', dev: true }
+	);
 	const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
 	document.head.insertAdjacentHTML('beforeend', SHEET);
 	document.body.innerHTML = check_script(s.check!) + body;
 	let diff = '';
-	document.addEventListener('ogygia:restore-mismatch', (e) => (diff = (e as CustomEvent).detail.diff), { once: true });
+	document.addEventListener(
+		'ogygia:restore-mismatch',
+		(e) => (diff = (e as CustomEvent).detail.diff),
+		{ once: true }
+	);
 	restore(document);
 	expect(diff).toBe('');
 });
 
 test('a custom element keeps the class tokens its render added beside Svelte’s (recorded for the hydrate); a plain element gets Svelte’s alone', async () => {
 	const check = async (inner: string, edit: (h: string) => string) => {
-		const s = await transformMarkup(doc(island(`<demo-card class="own">${inner}</demo-card>`)), (h) => edit(fake_scoped(h)), { kind: 'document', dev: true });
+		const s = await transformMarkup(
+			doc(island(`<demo-card class="own">${inner}</demo-card>`)),
+			(h) => edit(fake_scoped(h)),
+			{ kind: 'document', dev: true }
+		);
 		const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
 		document.head.insertAdjacentHTML('beforeend', SHEET);
 		document.body.innerHTML = check_script(s.check!) + body;
 		let diff = '';
-		document.addEventListener('ogygia:restore-mismatch', (e) => (diff = (e as CustomEvent).detail.diff), { once: true });
+		document.addEventListener(
+			'ogygia:restore-mismatch',
+			(e) => (diff = (e as CustomEvent).detail.diff),
+			{ once: true }
+		);
 		const quiet = console.error;
 		console.error = () => {};
 		try {
@@ -201,16 +250,29 @@ test('a custom element keeps the class tokens its render added beside Svelte’s
 		}
 		return diff;
 	};
-	const slider = () => document.querySelector('x-slider') as Element & { __og_svelte_class?: string };
+	const slider = () =>
+		document.querySelector('x-slider') as Element & { __og_svelte_class?: string };
 	// the component adds `bottom center` to its own host: kept beside Svelte's, Svelte's recorded, no report
-	expect(await check('<x-slider class="gap-6">a</x-slider>', (h) => h.split('class="gap-6"').join('class="gap-6 bottom center"'))).toBe('');
+	expect(
+		await check('<x-slider class="gap-6">a</x-slider>', (h) =>
+			h.split('class="gap-6"').join('class="gap-6 bottom center"')
+		)
+	).toBe('');
 	expect(slider().getAttribute('class')).toBe('gap-6 bottom center');
 	expect(slider().__og_svelte_class).toBe('gap-6');
 	// a token of Svelte's the render dropped comes back; the component's stays
-	expect(await check('<x-slider class="gap-6 wide">a</x-slider>', (h) => h.split('class="gap-6 wide"').join('class="gap-6 bottom"'))).toBe('');
+	expect(
+		await check('<x-slider class="gap-6 wide">a</x-slider>', (h) =>
+			h.split('class="gap-6 wide"').join('class="gap-6 bottom"')
+		)
+	).toBe('');
 	expect(slider().getAttribute('class')).toBe('gap-6 wide bottom');
 	// a plain element is Svelte's alone: exactly Svelte's class again
-	expect(await check('<p class="gap-6">a</p>', (h) => h.split('class="gap-6"').join('class="gap-6 extra"'))).toBe('');
+	expect(
+		await check('<p class="gap-6">a</p>', (h) =>
+			h.split('class="gap-6"').join('class="gap-6 extra"')
+		)
+	).toBe('');
 	expect(document.querySelector('demo-card p')!.getAttribute('class')).toBe('gap-6');
 });
 
@@ -256,7 +318,11 @@ test('a DOM without adoptable sheets or CSS.escape (jsdom): a <style> per root',
 	await served('<demo-card class="own"> x </demo-card>');
 	const desc = Object.getOwnPropertyDescriptor(ShadowRoot.prototype, 'adoptedStyleSheets')!;
 	const escape = CSS.escape;
-	Object.defineProperty(ShadowRoot.prototype, 'adoptedStyleSheets', { configurable: true, get: () => undefined, set: () => {} });
+	Object.defineProperty(ShadowRoot.prototype, 'adoptedStyleSheets', {
+		configurable: true,
+		get: () => undefined,
+		set: () => {}
+	});
 	(CSS as { escape?: unknown }).escape = undefined;
 	try {
 		expect(restore(document)).toBe(1);
@@ -269,7 +335,15 @@ test('a DOM without adoptable sheets or CSS.escape (jsdom): a <style> per root',
 });
 
 test('a planned host inside a declarative shadow root the page shipped is restored too', async () => {
-	const s = await transformMarkup(doc(island('<div class="wrap"><template shadowrootmode="open"><demo-card class="own"> deep </demo-card></template></div>')), fake_scoped, { kind: 'document' });
+	const s = await transformMarkup(
+		doc(
+			island(
+				'<div class="wrap"><template shadowrootmode="open"><demo-card class="own"> deep </demo-card></template></div>'
+			)
+		),
+		fake_scoped,
+		{ kind: 'document' }
+	);
 	const body = s.html.slice(s.html.indexOf('<body>') + 6, s.html.lastIndexOf('</body>'));
 	document.head.insertAdjacentHTML('beforeend', SHEET);
 	document.body.setHTMLUnsafe(body);
@@ -297,8 +371,13 @@ test('a root restored in an answer’s inert fragment gets the page’s registry
 			}
 		);
 	// the component's tree holds a custom element (a button in the host's shadow form)
-	const tree = (h: string) => fake_scoped(h).split('<b class="sc-demo-card">Card title</b>').join('<b class="sc-demo-card">Card title</b><demo-internal></demo-internal>');
-	const s = await transformMarkup('<demo-card class="x"> hi </demo-card>', (h) => SHEET + tree(h), { kind: 'region' });
+	const tree = (h: string) =>
+		fake_scoped(h)
+			.split('<b class="sc-demo-card">Card title</b>')
+			.join('<b class="sc-demo-card">Card title</b><demo-internal></demo-internal>');
+	const s = await transformMarkup('<demo-card class="x"> hi </demo-card>', (h) => SHEET + tree(h), {
+		kind: 'region'
+	});
 	const tpl = document.createElement('template');
 	tpl.innerHTML = s.html;
 	restore(tpl.content);
@@ -323,7 +402,9 @@ test('a declarative shadow root parsed in an inert fragment gets the page’s re
 			}
 		);
 	const tpl = document.createElement('template');
-	tpl.setHTMLUnsafe('<div class="host"><template shadowrootmode="open"><demo-internal-2></demo-internal-2></template></div>');
+	tpl.setHTMLUnsafe(
+		'<div class="host"><template shadowrootmode="open"><demo-internal-2></demo-internal-2></template></div>'
+	);
 	const host = document.createElement('section');
 	host.appendChild(tpl.content);
 	document.body.appendChild(host);

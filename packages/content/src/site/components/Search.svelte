@@ -94,14 +94,35 @@
 		href={search_action}
 		onpointerenter={() => void wake_palette()}
 		onfocus={() => void wake_palette()}
-		onclick={(e) => { e.preventDefault(); void open_palette(); }}
+		onclick={(e) => {
+			e.preventDefault();
+			void open_palette();
+		}}
 	>
-		<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+		<svg
+			width="15"
+			height="15"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg
+		>
 		<span class="og-search-trigger-label">{placeholder}</span>
 		<kbd class="og-search-kbd">⌘K</kbd>
 	</a>
 {/if}
 
 {#if Palette}
-	<Palette base={the_base} {endpoint} {query} {limit} {placeholder} action={search_action} {mode} bind:open />
+	<Palette
+		base={the_base}
+		{endpoint}
+		{query}
+		{limit}
+		{placeholder}
+		action={search_action}
+		{mode}
+		bind:open
+	/>
 {/if}

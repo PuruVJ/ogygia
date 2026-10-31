@@ -18,8 +18,15 @@ import path from 'node:path';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import { island_shim_source, runtime_shim_source } from '../src/compiler/link/entry-shim.ts';
-import { collectIslandDepModulepreloads, island_deps_module } from '../src/compiler/link/island-deps.ts';
-import { decode_island_graph, decode_island_locations, encode_island_graph } from '../src/island-graph.ts';
+import {
+	collectIslandDepModulepreloads,
+	island_deps_module
+} from '../src/compiler/link/island-deps.ts';
+import {
+	decode_island_graph,
+	decode_island_locations,
+	encode_island_graph
+} from '../src/island-graph.ts';
 import { DocumentTail, island_graph_script } from '../src/server/document-tail.ts';
 import { entry_src, runtime_bootstrap } from '../src/server/entry-location.ts';
 import { plan_props_wire } from '../src/server/props-wire.ts';
@@ -39,20 +46,33 @@ afterEach(() => {
 // ── the stable-name shims ────────────────────────────────────────────────────────────────────────
 describe('the stable-name shim: a plain static re-export of its location', () => {
 	it('an island shim re-exports every export and the default, by a relative path', () => {
-		expect(island_shim_source('_app/immutable/og-region.abc.js', '_app/immutable/chunks/Ab12.js')).toBe(
-			'export * from "./chunks/Ab12.js";\nexport { default } from "./chunks/Ab12.js";\n'
-		);
+		expect(
+			island_shim_source('_app/immutable/og-region.abc.js', '_app/immutable/chunks/Ab12.js')
+		).toBe('export * from "./chunks/Ab12.js";\nexport { default } from "./chunks/Ab12.js";\n');
 	});
 	it('wherever the bundler puts the location (an entry dir, a custom appDir, a deeper shim)', () => {
-		expect(island_shim_source('_app/immutable/og-region.abc.js', '_app/immutable/entry/og-region.abc.X1.js')).toContain('"./entry/og-region.abc.X1.js"');
-		expect(island_shim_source('my/app/immutable/og-region.abc.js', 'my/app/immutable/chunks/Q.js')).toContain('"./chunks/Q.js"');
-		expect(island_shim_source('_app/immutable/deep/og-region.abc.js', '_app/immutable/chunks/Q.js')).toContain('"../chunks/Q.js"');
+		expect(
+			island_shim_source(
+				'_app/immutable/og-region.abc.js',
+				'_app/immutable/entry/og-region.abc.X1.js'
+			)
+		).toContain('"./entry/og-region.abc.X1.js"');
+		expect(
+			island_shim_source('my/app/immutable/og-region.abc.js', 'my/app/immutable/chunks/Q.js')
+		).toContain('"./chunks/Q.js"');
+		expect(
+			island_shim_source('_app/immutable/deep/og-region.abc.js', '_app/immutable/chunks/Q.js')
+		).toContain('"../chunks/Q.js"');
 	});
 	it('the runtime shim runs the runtime (it has no exports)', () => {
-		expect(runtime_shim_source('_app/immutable/og-runtime.1234.js', '_app/immutable/chunks/Rt.js')).toBe('import "./chunks/Rt.js";\n');
+		expect(
+			runtime_shim_source('_app/immutable/og-runtime.1234.js', '_app/immutable/chunks/Rt.js')
+		).toBe('import "./chunks/Rt.js";\n');
 	});
 	it('the shim names no bundler magic (no import.meta file URLs, no top-level await)', () => {
-		const src = island_shim_source('_app/immutable/og-region.abc.js', '_app/immutable/chunks/Ab12.js') + runtime_shim_source('a/og-runtime.js', 'a/chunks/R.js');
+		const src =
+			island_shim_source('_app/immutable/og-region.abc.js', '_app/immutable/chunks/Ab12.js') +
+			runtime_shim_source('a/og-runtime.js', 'a/chunks/R.js');
 		expect(src).not.toMatch(/import\.meta|await /);
 	});
 });
@@ -63,13 +83,40 @@ describe('the collector keys every map by IDENTITY, the location being a hashed 
 	const ID_B = '/_app/immutable/og-region.bbbbbbbbbbbb.js';
 	const RT_ID = '/_app/immutable/og-runtime.0123456789ab-feat.js';
 	const bundle = {
-		'_app/immutable/chunks/LocA.js': { type: 'chunk', fileName: '_app/immutable/chunks/LocA.js', imports: ['_app/immutable/chunks/Shared.js'], moduleIds: ['/app/A.svelte'], viteMetadata: { importedCss: ['_app/immutable/assets/A.css'] } },
-		'_app/immutable/chunks/LocB.js': { type: 'chunk', fileName: '_app/immutable/chunks/LocB.js', imports: ['_app/immutable/chunks/Shared.js'], moduleIds: ['/app/B.svelte'] },
-		'_app/immutable/chunks/Shared.js': { type: 'chunk', fileName: '_app/immutable/chunks/Shared.js', imports: [], moduleIds: ['/node_modules/svelte/internal.js'] },
-		'_app/immutable/chunks/Rt.js': { type: 'chunk', fileName: '_app/immutable/chunks/Rt.js', imports: ['_app/immutable/chunks/Shared.js'], moduleIds: ['virtual:runtime'] },
+		'_app/immutable/chunks/LocA.js': {
+			type: 'chunk',
+			fileName: '_app/immutable/chunks/LocA.js',
+			imports: ['_app/immutable/chunks/Shared.js'],
+			moduleIds: ['/app/A.svelte'],
+			viteMetadata: { importedCss: ['_app/immutable/assets/A.css'] }
+		},
+		'_app/immutable/chunks/LocB.js': {
+			type: 'chunk',
+			fileName: '_app/immutable/chunks/LocB.js',
+			imports: ['_app/immutable/chunks/Shared.js'],
+			moduleIds: ['/app/B.svelte']
+		},
+		'_app/immutable/chunks/Shared.js': {
+			type: 'chunk',
+			fileName: '_app/immutable/chunks/Shared.js',
+			imports: [],
+			moduleIds: ['/node_modules/svelte/internal.js']
+		},
+		'_app/immutable/chunks/Rt.js': {
+			type: 'chunk',
+			fileName: '_app/immutable/chunks/Rt.js',
+			imports: ['_app/immutable/chunks/Shared.js'],
+			moduleIds: ['virtual:runtime']
+		},
 		// the shims are assets: never facades, never keys
-		'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'asset', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js' },
-		'_app/immutable/og-runtime.0123456789ab-feat.js': { type: 'asset', fileName: '_app/immutable/og-runtime.0123456789ab-feat.js' }
+		'_app/immutable/og-region.aaaaaaaaaaaa.js': {
+			type: 'asset',
+			fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js'
+		},
+		'_app/immutable/og-runtime.0123456789ab-feat.js': {
+			type: 'asset',
+			fileName: '_app/immutable/og-runtime.0123456789ab-feat.js'
+		}
 	};
 	const entries = {
 		islands: new Map([
@@ -78,7 +125,15 @@ describe('the collector keys every map by IDENTITY, the location being a hashed 
 		]),
 		runtime: RT_ID
 	};
-	const map = collectIslandDepModulepreloads(bundle as never, [], null, null, null, '_app/immutable/chunks/Rt.js', entries);
+	const map = collectIslandDepModulepreloads(
+		bundle as never,
+		[],
+		null,
+		null,
+		null,
+		'_app/immutable/chunks/Rt.js',
+		entries
+	);
 
 	it('js / css / page / remotes are keyed by the identity, never the hashed name', () => {
 		expect(Object.keys(map.js).sort()).toEqual([ID_A, ID_B, RT_ID].sort());
@@ -96,14 +151,31 @@ describe('the collector keys every map by IDENTITY, the location being a hashed 
 		expect(map.js[RT_ID]).toEqual(['/_app/immutable/chunks/Shared.js']);
 	});
 	it('without entries (a bundle from before hashing): a stable-named facade is its own identity, as before', () => {
-		const legacy = collectIslandDepModulepreloads(
-			{ '_app/immutable/og-region.cccccccccccc.js': { type: 'chunk', fileName: '_app/immutable/og-region.cccccccccccc.js', imports: ['_app/immutable/chunks/S.js'] }, '_app/immutable/chunks/S.js': { type: 'chunk', fileName: '_app/immutable/chunks/S.js', imports: [] } } as never
-		);
-		expect(legacy.js['/_app/immutable/og-region.cccccccccccc.js']).toEqual(['/_app/immutable/chunks/S.js']);
+		const legacy = collectIslandDepModulepreloads({
+			'_app/immutable/og-region.cccccccccccc.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/og-region.cccccccccccc.js',
+				imports: ['_app/immutable/chunks/S.js']
+			},
+			'_app/immutable/chunks/S.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/S.js',
+				imports: []
+			}
+		} as never);
+		expect(legacy.js['/_app/immutable/og-region.cccccccccccc.js']).toEqual([
+			'/_app/immutable/chunks/S.js'
+		]);
 	});
 	it('with entries given, a chunk that merely LOOKS like a stable name is not an entry', () => {
 		const odd = collectIslandDepModulepreloads(
-			{ '_app/immutable/og-region.dddddddddddd.js': { type: 'chunk', fileName: '_app/immutable/og-region.dddddddddddd.js', imports: [] } } as never,
+			{
+				'_app/immutable/og-region.dddddddddddd.js': {
+					type: 'chunk',
+					fileName: '_app/immutable/og-region.dddddddddddd.js',
+					imports: []
+				}
+			} as never,
 			[],
 			null,
 			null,
@@ -118,7 +190,10 @@ describe('the collector keys every map by IDENTITY, the location being a hashed 
 // ── the handoff, read at render time ──────────────────────────────────────────────────────────────
 describe('entryLocation: the handoff read at render time', () => {
 	const load_module = async (src: string) => {
-		const file = path.join(os.tmpdir(), `og-entry-loc-${process.pid}-${Math.random().toString(36).slice(2)}.mjs`);
+		const file = path.join(
+			os.tmpdir(),
+			`og-entry-loc-${process.pid}-${Math.random().toString(36).slice(2)}.mjs`
+		);
 		fs.writeFileSync(file, src);
 		try {
 			return await import(file);
@@ -126,18 +201,32 @@ describe('entryLocation: the handoff read at render time', () => {
 			fs.rmSync(file, { force: true });
 		}
 	};
-	const with_handoff = (json: unknown) => island_deps_module(true, false).replace("'__OGYGIA_ISLAND_DEPS_INLINE__'", JSON.stringify(JSON.stringify(json)));
+	const with_handoff = (json: unknown) =>
+		island_deps_module(true, false).replace(
+			"'__OGYGIA_ISLAND_DEPS_INLINE__'",
+			JSON.stringify(JSON.stringify(json))
+		);
 
 	it('an identity the build mapped → its location', async () => {
-		const m = await load_module(with_handoff({ entries: { '/_app/immutable/og-region.aaaaaaaaaaaa.js': '/_app/immutable/chunks/LocA.js' } }));
-		expect(m.entryLocation('/_app/immutable/og-region.aaaaaaaaaaaa.js')).toBe('/_app/immutable/chunks/LocA.js');
+		const m = await load_module(
+			with_handoff({
+				entries: { '/_app/immutable/og-region.aaaaaaaaaaaa.js': '/_app/immutable/chunks/LocA.js' }
+			})
+		);
+		expect(m.entryLocation('/_app/immutable/og-region.aaaaaaaaaaaa.js')).toBe(
+			'/_app/immutable/chunks/LocA.js'
+		);
 		expect(m.entryLocation('/_app/immutable/og-region.ffffffffffff.js')).toBeNull();
 		expect(m.entryLocation('')).toBeNull();
 	});
 	it('a handoff from before hashing (no entries), or a malformed one → null (the identity is served)', async () => {
 		expect((await load_module(with_handoff({ js: {} }))).entryLocation('/x.js')).toBeNull();
-		expect((await load_module(with_handoff({ entries: 'nope' }))).entryLocation('/x.js')).toBeNull();
-		expect((await load_module(with_handoff({ entries: { '/x.js': 42 } }))).entryLocation('/x.js')).toBeNull();
+		expect(
+			(await load_module(with_handoff({ entries: 'nope' }))).entryLocation('/x.js')
+		).toBeNull();
+		expect(
+			(await load_module(with_handoff({ entries: { '/x.js': 42 } }))).entryLocation('/x.js')
+		).toBeNull();
 	});
 	it('the client leg and the dev server know no location', async () => {
 		expect((await load_module(island_deps_module(false, false))).entryLocation('/x.js')).toBeNull();
@@ -160,13 +249,17 @@ describe("the island graph's `s`: locations of entries no element carries", () =
 		expect(JSON.parse(encode_island_graph(graph))).not.toHaveProperty('s');
 	});
 	it('malformed `s` entries are dropped, the rest kept; garbage decodes to nothing', () => {
-		expect(decode_island_locations('{"h":[],"e":{},"s":{"/a.js":"/A.js","/b.js":7,"/c.js":null}}')).toEqual(new Map([['/a.js', '/A.js']]));
+		expect(
+			decode_island_locations('{"h":[],"e":{},"s":{"/a.js":"/A.js","/b.js":7,"/c.js":null}}')
+		).toEqual(new Map([['/a.js', '/A.js']]));
 		expect(decode_island_locations('not json')).toEqual(new Map());
 		expect(decode_island_locations('{"h":[],"e":{},"s":"x"}')).toEqual(new Map());
 	});
 	it('a graph script is written for locations alone (a page whose only entry is a snippet)', () => {
 		const html = island_graph_script(new Map(), new Map([['/snip.js', '/chunks/Snip.js']]));
-		expect(decode_island_locations(GRAPH_RE.exec(html)![1])).toEqual(new Map([['/snip.js', '/chunks/Snip.js']]));
+		expect(decode_island_locations(GRAPH_RE.exec(html)![1])).toEqual(
+			new Map([['/snip.js', '/chunks/Snip.js']])
+		);
 		expect(island_graph_script(new Map(), null)).toBe('');
 	});
 });
@@ -179,11 +272,19 @@ describe('the document tail', () => {
 		tail.locate('/snip.js', '/chunks/Snip.js');
 		tail.locate('/snip.js', '/chunks/Other.js');
 		expect(tail.empty).toBe(false);
-		expect(decode_island_locations(GRAPH_RE.exec(tail.render())![1]).get('/snip.js')).toBe('/chunks/Snip.js');
+		expect(decode_island_locations(GRAPH_RE.exec(tail.render())![1]).get('/snip.js')).toBe(
+			'/chunks/Snip.js'
+		);
 	});
 	it("an island's recorded JS closure leads with its location — the file the profiler weighs", () => {
 		const tail = new DocumentTail();
-		tail.props('fp1', plan_props_wire({}, '/id.js'), { entry: '/id.js', name: 'T', module_url: '/chunks/Loc.js', wake: 'load', interactivity: null });
+		tail.props('fp1', plan_props_wire({}, '/id.js'), {
+			entry: '/id.js',
+			name: 'T',
+			module_url: '/chunks/Loc.js',
+			wake: 'load',
+			interactivity: null
+		});
 		tail.graph('/id.js', ['/chunks/Dep.js'], 'fp1', '/chunks/Loc.js');
 		const rows = (tail.render(null, true), tail.island_rows())!;
 		expect(rows[0].hints).toEqual(['/chunks/Loc.js', '/chunks/Dep.js']);
@@ -198,8 +299,12 @@ describe('the runtime bootstrap (server/entry-location.ts), shared by every docu
 		set_entry_locations({ '/og-runtime.js': '/chunks/Rt.js' });
 		set_island_deps({ '/og-runtime.js': ['/chunks/Shared.js'] });
 		const html = runtime_bootstrap();
-		expect(html).toContain('<script type="module" data-ogygia-runtime src="/chunks/Rt.js"></script>');
-		expect(html).toContain('<link rel="modulepreload" href="/chunks/Shared.js" data-ogygia-runtime-dep>');
+		expect(html).toContain(
+			'<script type="module" data-ogygia-runtime src="/chunks/Rt.js"></script>'
+		);
+		expect(html).toContain(
+			'<link rel="modulepreload" href="/chunks/Shared.js" data-ogygia-runtime-dep>'
+		);
 		expect(html).not.toContain('/og-runtime.js');
 	});
 	it('no location (dev, a handoff from before hashing): the identity itself', () => {
@@ -220,10 +325,13 @@ describe('the runtime bootstrap (server/entry-location.ts), shared by every docu
 describe('Region writes the identity as `entry` and the location as `src`', () => {
 	const ENTRY = '/islands/tiny.js';
 	const render_island = () => {
-		const out = render(region, { props: { __mode: 'island', __entry: ENTRY, __component: Tiny, __props: {} } });
+		const out = render(region, {
+			props: { __mode: 'island', __entry: ENTRY, __component: Tiny, __props: {} }
+		});
 		return out.head + out.body;
 	};
-	const attr = (html: string, name: string) => new RegExp(`<ogygia-region[^>]*\\s${name}="([^"]*)"`).exec(html)?.[1];
+	const attr = (html: string, name: string) =>
+		new RegExp(`<ogygia-region[^>]*\\s${name}="([^"]*)"`).exec(html)?.[1];
 
 	it('a mapped island: `entry` stays its identity, `src` is its location', () => {
 		set_entry_locations({ [ENTRY]: '/chunks/Tiny.Hh12.js' });
@@ -241,7 +349,15 @@ describe('Region writes the identity as `entry` and the location as `src`', () =
 		expect(fp(render_island())).toBe(before);
 	});
 	it('the client wrapper’s location (`__src`) wins where the server has none', () => {
-		const out = render(region, { props: { __mode: 'island', __entry: ENTRY, __src: '/from/client.js', __component: Tiny, __props: {} } });
+		const out = render(region, {
+			props: {
+				__mode: 'island',
+				__entry: ENTRY,
+				__src: '/from/client.js',
+				__component: Tiny,
+				__props: {}
+			}
+		});
 		expect(attr(out.body, 'src')).toBe('/from/client.js');
 	});
 });
@@ -250,7 +366,8 @@ describe('Region writes the identity as `entry` and the location as `src`', () =
 describe("the router's warm scan: identity and location off an open tag", () => {
 	it('reads each attribute exactly, never a longer name that ends the same', async () => {
 		const { tag_attr } = await import('../src/runtime/router-nav.ts');
-		const attrs = ' entry="./_app/immutable/og-region.aaaaaaaaaaaa.js" data-src="./nope.js" src="./_app/immutable/chunks/Loc.js" wake="load"';
+		const attrs =
+			' entry="./_app/immutable/og-region.aaaaaaaaaaaa.js" data-src="./nope.js" src="./_app/immutable/chunks/Loc.js" wake="load"';
 		expect(tag_attr(attrs, 'entry')).toBe('./_app/immutable/og-region.aaaaaaaaaaaa.js');
 		expect(tag_attr(attrs, 'src')).toBe('./_app/immutable/chunks/Loc.js');
 		expect(tag_attr(' entry="/a.js" data-src="/b.js"', 'src')).toBeNull();
@@ -279,7 +396,20 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 
 	const make = () => {
 		const program = new Program({ forms: true, router: true });
-		const compiler = new Compiler(program, { prof: { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 }, P: false, outHash: new Map() });
+		const compiler = new Compiler(program, {
+			prof: {
+				transformMs: 0,
+				transformN: 0,
+				transformHit: 0,
+				prescanMs: 0,
+				bakeMs: 0,
+				bakeN: 0,
+				resolveMs: 0,
+				loadMs: 0
+			},
+			P: false,
+			outHash: new Map()
+		});
 		compiler.configure(
 			new CompileCtx({
 				root,
@@ -295,7 +425,11 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 				resolve_alias: [],
 				markdown_config: null,
 				pkg_root: '/nowhere/ogygia',
-				app_shims: { '$app/state': '/x/a.js', '$app/stores': '/x/b.js', '$app/navigation': '/x/c.js' }
+				app_shims: {
+					'$app/state': '/x/a.js',
+					'$app/stores': '/x/b.js',
+					'$app/navigation': '/x/c.js'
+				}
 			})
 		);
 		compiler.prescan();
@@ -303,7 +437,13 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 	};
 	const fake_emit = () => {
 		const emitted: { id: string; name?: string; fileName?: string }[] = [];
-		return { emitted, emit: (c: { id: string; name?: string; fileName?: string }) => (emitted.push(c), `ref${emitted.length}`) };
+		return {
+			emitted,
+			emit: (c: { id: string; name?: string; fileName?: string }) => (
+				emitted.push(c),
+				`ref${emitted.length}`
+			)
+		};
 	};
 
 	it('every island and the runtime are emitted by NAME (hashed by the bundler), never a fixed file name', () => {
@@ -313,14 +453,21 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 		expect(emitted.length).toBe(3);
 		expect(emitted.every((c) => c.name && !c.fileName)).toBe(true);
 		expect(emitted.filter((c) => c.name!.startsWith('og-region.')).length).toBe(2);
-		expect(emitted.some((c) => c.name === 'og-runtime' || c.name!.startsWith('og-runtime-'))).toBe(true);
+		expect(emitted.some((c) => c.name === 'og-runtime' || c.name!.startsWith('og-runtime-'))).toBe(
+			true
+		);
 	});
 	it('our entries get a readable, content-hashed file name; every other chunk keeps the app’s naming', () => {
 		const compiler = make();
-		expect(compiler.entry_file_pattern('og-region.0123456789ab')).toBe('_app/immutable/[name].[hash].js');
+		expect(compiler.entry_file_pattern('og-region.0123456789ab')).toBe(
+			'_app/immutable/[name].[hash].js'
+		);
 		expect(compiler.entry_file_pattern('og-runtime')).toBe('_app/immutable/[name].[hash].js');
-		expect(compiler.entry_file_pattern('og-runtime-4b029c13h')).toBe('_app/immutable/[name].[hash].js');
-		for (const other of ['index', 'og-regionx', 'og-runtimeish', 'chunk', '', undefined]) expect(compiler.entry_file_pattern(other)).toBeNull();
+		expect(compiler.entry_file_pattern('og-runtime-4b029c13h')).toBe(
+			'_app/immutable/[name].[hash].js'
+		);
+		for (const other of ['index', 'og-regionx', 'og-runtimeish', 'chunk', '', undefined])
+			expect(compiler.entry_file_pattern(other)).toBeNull();
 	});
 	it('the runtime’s file names its features, like its stable name does', () => {
 		const compiler = make();
@@ -329,7 +476,10 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 		const runtime = emitted.find((c) => c.name!.startsWith('og-runtime'))!;
 		const stable = compiler.runtime_chunk_filename();
 		// the stable name: `…/og-runtime.<hash>[-<features>].js`
-		const tail = stable.slice(stable.lastIndexOf('/og-runtime.') + '/og-runtime.'.length, -'.js'.length);
+		const tail = stable.slice(
+			stable.lastIndexOf('/og-runtime.') + '/og-runtime.'.length,
+			-'.js'.length
+		);
 		const feat = tail.includes('-') ? tail.slice(tail.indexOf('-') + 1) : '';
 		expect(runtime.name).toBe(feat ? `og-runtime-${feat}` : 'og-runtime');
 	});
@@ -337,16 +487,25 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 		const compiler = make();
 		const { emit } = fake_emit();
 		compiler.emit_build_chunks(emit, { emitRuntime: true });
-		const names: Record<string, string> = { ref1: '_app/immutable/chunks/Rt.js', ref2: '_app/immutable/chunks/W.js', ref3: '_app/immutable/chunks/C.js' };
+		const names: Record<string, string> = {
+			ref1: '_app/immutable/chunks/Rt.js',
+			ref2: '_app/immutable/chunks/W.js',
+			ref3: '_app/immutable/chunks/C.js'
+		};
 		const e = compiler.entry_locations((ref: string) => names[ref]);
 		expect(Object.keys(e.locations).length).toBe(3);
 		for (const [identity, location] of Object.entries(e.locations)) {
-			expect(identity).toMatch(/^\/_app\/immutable\/og-(region\.[0-9a-f]{12}|runtime\.[\w-]+)\.js$/);
+			expect(identity).toMatch(
+				/^\/_app\/immutable\/og-(region\.[0-9a-f]{12}|runtime\.[\w-]+)\.js$/
+			);
 			expect(location).toMatch(/^\/_app\/immutable\/chunks\/\w+\.js$/);
 		}
 		expect(e.runtime_file).toBe('_app/immutable/chunks/Rt.js');
 		expect(e.locations[e.runtime!]).toBe('/_app/immutable/chunks/Rt.js');
-		expect([...e.islands.keys()].sort()).toEqual(['_app/immutable/chunks/C.js', '_app/immutable/chunks/W.js']);
+		expect([...e.islands.keys()].sort()).toEqual([
+			'_app/immutable/chunks/C.js',
+			'_app/immutable/chunks/W.js'
+		]);
 	});
 	it('a shim per entry at its stable name, re-exporting its location', () => {
 		const compiler = make();
@@ -369,6 +528,10 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 		expect(emitted.length).toBe(2);
 		const e = program_reset.entry_locations((ref: string) => `x/${ref}.js`);
 		expect(e.runtime).toBeNull();
-		expect(program_reset.entry_shims((ref: string) => `x/${ref}.js`).some((s: { fileName: string }) => s.fileName.includes('og-runtime'))).toBe(false);
+		expect(
+			program_reset
+				.entry_shims((ref: string) => `x/${ref}.js`)
+				.some((s: { fileName: string }) => s.fileName.includes('og-runtime'))
+		).toBe(false);
 	});
 });

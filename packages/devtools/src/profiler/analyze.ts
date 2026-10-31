@@ -31,7 +31,9 @@ export interface CallFrame {
  *  `//# sourceURL`), where the CPU profiler names it. Ids hold for the life of the process */
 const script_urls = new Map<string, string>();
 
-export function learn_script_urls(profile: { nodes?: readonly ProfileNode[] } | null | undefined): void {
+export function learn_script_urls(
+	profile: { nodes?: readonly ProfileNode[] } | null | undefined
+): void {
 	for (const n of profile?.nodes ?? []) {
 		const f = n.callFrame;
 		if (f.scriptId && f.url && !script_urls.has(f.scriptId)) script_urls.set(f.scriptId, f.url);
@@ -545,7 +547,8 @@ export function join_source(chunk: string, source: string): string {
 }
 
 /** ogygia under the name its users know: `@ogygia/core` is what the `ogygia` package re-exports */
-const ogygia_named = (pkg: string | undefined): string | undefined => (pkg === '@ogygia/core' ? 'ogygia' : pkg);
+const ogygia_named = (pkg: string | undefined): string | undefined =>
+	pkg === '@ogygia/core' ? 'ogygia' : pkg;
 
 function package_of(url: string): string | undefined {
 	const i = url.lastIndexOf('node_modules/');
@@ -972,7 +975,10 @@ export class SourceMapResolver {
 			// a function's own line above it (its types stripped): found by its name, counted from
 			if (at === -1 && i < line) {
 				const d = declared_function(gen[i] ?? '');
-				if (d) at = normed.findIndex((s) => s.includes(`function${d}(`) || s.startsWith(`${d}=`) || s.startsWith(`${d}:`));
+				if (d)
+					at = normed.findIndex(
+						(s) => s.includes(`function${d}(`) || s.startsWith(`${d}=`) || s.startsWith(`${d}:`)
+					);
 			}
 			if (at === -1) continue;
 			// the statement that starts at line i is still open on every line down to this one
@@ -1037,7 +1043,14 @@ export class SourceMapResolver {
 		url: string,
 		line: number
 	):
-		| { source: string; line: number; column: number; name?: string; near_name?: string; text?: true }
+		| {
+				source: string;
+				line: number;
+				column: number;
+				name?: string;
+				near_name?: string;
+				text?: true;
+		  }
 		| undefined {
 		for (let k = 1; k <= 3; k++) {
 			const m = this.resolve(url, line + k, 0);
@@ -1052,7 +1065,14 @@ export class SourceMapResolver {
 		line: number,
 		column: number
 	):
-		| { source: string; line: number; column: number; name?: string; near_name?: string; text?: true }
+		| {
+				source: string;
+				line: number;
+				column: number;
+				name?: string;
+				near_name?: string;
+				text?: true;
+		  }
 		| undefined {
 		const first = this.#resolve_one(url, line, column);
 		if (!first) return first;
@@ -1078,7 +1098,14 @@ export class SourceMapResolver {
 		line: number,
 		column: number
 	):
-		| { source: string; line: number; column: number; name?: string; near_name?: string; text?: true }
+		| {
+				source: string;
+				line: number;
+				column: number;
+				name?: string;
+				near_name?: string;
+				text?: true;
+		  }
 		| undefined {
 		let path = clean_url(url);
 		// a dev server's pre-bundled file carries its version (`dev-Cl0b.js?v=1db3`): the file (and
@@ -1090,7 +1117,12 @@ export class SourceMapResolver {
 		}
 		// (the dev server runs a `.ts` / `.svelte` module as transformed code, named by its id: any
 		// script can have a map there)
-		if (!this.#any_ext && !path.endsWith('.js') && !path.endsWith('.mjs') && !path.endsWith('.cjs')) {
+		if (
+			!this.#any_ext &&
+			!path.endsWith('.js') &&
+			!path.endsWith('.mjs') &&
+			!path.endsWith('.cjs')
+		) {
 			return undefined;
 		}
 		let entry = this.#cache.get(path);
@@ -1482,7 +1514,8 @@ export function analyze(
 		const r = resolved.get(n.id);
 		if (!r || r.name !== 'hash' || r.category !== 'app') continue;
 		const up = parent_of.get(n.id);
-		if (up !== undefined && resolved.get(up)?.name === 'render_response') resolved.set(n.id, { ...r, category: 'dependency', pkg: '@sveltejs/kit' });
+		if (up !== undefined && resolved.get(up)?.name === 'render_response')
+			resolved.set(n.id, { ...r, category: 'dependency', pkg: '@sveltejs/kit' });
 	}
 
 	// NODE WORK THE PROFILER ASKED FOR IS THE PROFILER'S: Node's own frames (`dispatch` under
@@ -1698,8 +1731,7 @@ export function analyze(
 				if (count > 0) agg.get(k)!.total_ms += s / 1000;
 			}
 			if (r.category === 'idle') idle_us += s;
-			else if (r.category === 'profiler')
-				overhead_us += s; // the profiler's own work: not the app's busy time
+			else if (r.category === 'profiler') overhead_us += s; // the profiler's own work: not the app's busy time
 			else {
 				busy_us += s;
 				if (r.category === 'gc') gc_us += s;
@@ -2005,7 +2037,7 @@ export function analyze(
 		let best_us = 0;
 		for (const [line, us] of m) {
 			sum += us;
-			if (us > best_us) (best_us = us), (best = line);
+			if (us > best_us) ((best_us = us), (best = line));
 		}
 		if (best > 0 && best_us >= sum / 2) stat.line = best;
 	}

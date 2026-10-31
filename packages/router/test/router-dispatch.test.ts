@@ -207,7 +207,10 @@ describe('miss — HTML boundary for page requests', () => {
 });
 
 describe('href — rename-safe links off the table keys', () => {
-	const app = routes({ '/docs/[slug]': { GET: (c) => c.text(c.params.slug ?? '') } }, { base: '/b' });
+	const app = routes(
+		{ '/docs/[slug]': { GET: (c) => c.text(c.params.slug ?? '') } },
+		{ base: '/b' }
+	);
 	it('fills params + prefixes base', () => {
 		expect(app.href('/docs/[slug]', { slug: 'intro' })).toBe('/b/docs/intro');
 	});

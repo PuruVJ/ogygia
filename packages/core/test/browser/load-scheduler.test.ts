@@ -124,7 +124,10 @@ test('a per-breakpoint preload whose media does not match is never waited for', 
 test('an imagesrcset preload (no href) is matched by any of its candidates', () => {
 	const link = document.createElement('link');
 	link.setAttribute('imagesrcset', ' /hero-560.jpg 560w,\n\t/hero-1200.jpg\t1200w, ');
-	expect(preload_urls(link)).toEqual([new URL('/hero-560.jpg', document.baseURI).href, new URL('/hero-1200.jpg', document.baseURI).href]);
+	expect(preload_urls(link)).toEqual([
+		new URL('/hero-560.jpg', document.baseURI).href,
+		new URL('/hero-1200.jpg', document.baseURI).href
+	]);
 	link.href = '/one.jpg';
 	expect(preload_urls(link)).toEqual([new URL('/one.jpg', document.baseURI).href]);
 	expect(preload_urls(document.createElement('link'))).toEqual([]);

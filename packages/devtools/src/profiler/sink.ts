@@ -8,8 +8,24 @@
  */
 
 export type SinkRow =
-	| { k: 'req'; t: number; path: string; route: string | null; ms: number; cpu: number; wait: number; status: number; og?: number }
-	| { k: 'win'; t0: number; t1: number; fns: { name: string; file: string; self_ms: number; category: string }[]; reqs?: number }
+	| {
+			k: 'req';
+			t: number;
+			path: string;
+			route: string | null;
+			ms: number;
+			cpu: number;
+			wait: number;
+			status: number;
+			og?: number;
+	  }
+	| {
+			k: 'win';
+			t0: number;
+			t1: number;
+			fns: { name: string; file: string; self_ms: number; category: string }[];
+			reqs?: number;
+	  }
 	| { k: 'trap'; t: number; path: string; ms: number; id: string; dump?: unknown };
 
 export class SinkBuffer {
@@ -71,7 +87,17 @@ export interface CloudPoint {
 
 export function cloud_points(rows: SinkRow[]): CloudPoint[] {
 	const out: CloudPoint[] = [];
-	for (const r of rows) if (r.k === 'req') out.push({ t: r.t, ms: r.ms, route: r.route ?? r.path, path: r.path, status: r.status, cpu: r.cpu, wait: r.wait });
+	for (const r of rows)
+		if (r.k === 'req')
+			out.push({
+				t: r.t,
+				ms: r.ms,
+				route: r.route ?? r.path,
+				path: r.path,
+				status: r.status,
+				cpu: r.cpu,
+				wait: r.wait
+			});
 	return out.sort((a, b) => a.t - b.t);
 }
 
@@ -109,7 +135,16 @@ export function layer_cake(rows: SinkRow[]): CakeRow[] {
 			const total = e.ms.reduce((a, b) => a + b, 0);
 			const cpu = Math.min(e.cpu, total);
 			const wait = Math.min(e.wait, total - cpu);
-			return { route, n: e.ms.length, cpu: r1(cpu), wait: r1(wait), rest: r1(total - cpu - wait), total: r1(total), p50: r1(pct(e.ms, 0.5)), p95: r1(pct(e.ms, 0.95)) };
+			return {
+				route,
+				n: e.ms.length,
+				cpu: r1(cpu),
+				wait: r1(wait),
+				rest: r1(total - cpu - wait),
+				total: r1(total),
+				p50: r1(pct(e.ms, 0.5)),
+				p95: r1(pct(e.ms, 0.95))
+			};
 		})
 		.sort((a, b) => b.total - a.total);
 }
@@ -117,8 +152,16 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /** The hot functions of the sampler windows that overlap [t0, t1] (a brushed selection of the
  *  cloud), merged by name + file and weighted by how much of each window is inside the range. */
-export function hot_for_range(rows: SinkRow[], t0: number, t1: number, limit = 40): { name: string; file: string; category: string; self_ms: number; windows: number }[] {
-	const by = new Map<string, { name: string; file: string; category: string; self_ms: number; windows: number }>();
+export function hot_for_range(
+	rows: SinkRow[],
+	t0: number,
+	t1: number,
+	limit = 40
+): { name: string; file: string; category: string; self_ms: number; windows: number }[] {
+	const by = new Map<
+		string,
+		{ name: string; file: string; category: string; self_ms: number; windows: number }
+	>();
 	for (const r of rows) {
 		if (r.k !== 'win' || r.t1 < t0 || r.t0 > t1) continue;
 		const span = Math.max(r.t1 - r.t0, 1);
@@ -131,7 +174,14 @@ export function hot_for_range(rows: SinkRow[], t0: number, t1: number, limit = 4
 			if (e) {
 				e.self_ms += f.self_ms * w;
 				e.windows++;
-			} else by.set(k, { name: f.name, file: f.file, category: f.category, self_ms: f.self_ms * w, windows: 1 });
+			} else
+				by.set(k, {
+					name: f.name,
+					file: f.file,
+					category: f.category,
+					self_ms: f.self_ms * w,
+					windows: 1
+				});
 		}
 	}
 	return [...by.values()]

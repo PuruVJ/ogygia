@@ -75,12 +75,12 @@ of>`, `placeholder`, CSS-travels, and nested-island wake all apply unchanged:
 
 The dials are the region dials, with the same meanings the freeze docs already give them:
 
-| dial | behavior | in a frozen shell |
-| --- | --- | --- |
-| `render: 'static'` (default) | one buffered signed hop during the shell render; HTML baked | baked into the frozen bytes; thawed by notices (§4) |
-| `render: 'deferred'` | a hole; the browser fetches it from the SHELL's handle, which signs and forwards to the peer with the visitor's claims derived at hole time | per-visitor, stays live |
-| `render: 'live'` | baked canonical + self-freshen on mount through the same hole endpoint | canonical in the frozen bytes, personal after JS |
-| `stitch: 'serve'` | spliced per serve at origin (`private, no-store`) | first response personal, no edge copy |
+| dial                         | behavior                                                                                                                                    | in a frozen shell                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `render: 'static'` (default) | one buffered signed hop during the shell render; HTML baked                                                                                 | baked into the frozen bytes; thawed by notices (§4) |
+| `render: 'deferred'`         | a hole; the browser fetches it from the SHELL's handle, which signs and forwards to the peer with the visitor's claims derived at hole time | per-visitor, stays live                             |
+| `render: 'live'`             | baked canonical + self-freshen on mount through the same hole endpoint                                                                      | canonical in the frozen bytes, personal after JS    |
+| `stitch: 'serve'`            | spliced per serve at origin (`private, no-store`)                                                                                           | first response personal, no edge copy               |
 
 - **Streamed mounts fold into the model.** A `render: 'deferred'` remote region inside a streamed
   page (`page(async function*)`) arrives down the stream as a late region; inside a buffered page
@@ -164,17 +164,17 @@ zero config. With the in-process memory store this fires every boot; `federate({
 
 ### 6. Deleted, kept, renamed
 
-| v1 | v2 |
-| --- | --- |
-| `client(origin, { sign, timeout, cache })` | `federate({ peers: { name: { origin, key, timeout, cache } } })` |
-| `expose(router, { verify })` + route file | `federate({ expose: router })` (handle-served) |
-| `catalog({...}, { verify })` + route file | `federate({ widgets: {...} })` (handle-served) |
-| `proxy({ dash }, { widgets })` + route file | deleted — deferred remote regions carry signed capabilities |
-| `client.widget(name, props, { claims })` | `await peer.widget(name, props)` |
-| `mount(client, { stream, fallback })` | `mount(peer)` (routes only); slots are `peer.page()` regions with dials |
-| `routes(table, { visitor })` | `federate({ visitor })` (table option kept as an alias that must agree) |
-| `verify.publicKeys` / `sign.privateKey` | `peers.X.key` (public, list) / `key` (private) |
-| `mount.kit`, `when`, `pick`, `keys` CLI, `fragments` CLI, traceparent, Server-Timing, CORS story | kept |
+| v1                                                                                               | v2                                                                      |
+| ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `client(origin, { sign, timeout, cache })`                                                       | `federate({ peers: { name: { origin, key, timeout, cache } } })`        |
+| `expose(router, { verify })` + route file                                                        | `federate({ expose: router })` (handle-served)                          |
+| `catalog({...}, { verify })` + route file                                                        | `federate({ widgets: {...} })` (handle-served)                          |
+| `proxy({ dash }, { widgets })` + route file                                                      | deleted — deferred remote regions carry signed capabilities             |
+| `client.widget(name, props, { claims })`                                                         | `await peer.widget(name, props)`                                        |
+| `mount(client, { stream, fallback })`                                                            | `mount(peer)` (routes only); slots are `peer.page()` regions with dials |
+| `routes(table, { visitor })`                                                                     | `federate({ visitor })` (table option kept as an alias that must agree) |
+| `verify.publicKeys` / `sign.privateKey`                                                          | `peers.X.key` (public, list) / `key` (private)                          |
+| `mount.kit`, `when`, `pick`, `keys` CLI, `fragments` CLI, traceparent, Server-Timing, CORS story | kept                                                                    |
 
 ## Security review of the changes
 

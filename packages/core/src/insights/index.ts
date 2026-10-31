@@ -79,7 +79,12 @@ export {
 export { analyze_cpu, is_trace, type CodeKind, type CpuFn, type CpuSummary } from './cpu.ts';
 export { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.ts';
 export { hole_segments, HOLE_SEG_LABEL } from './hole-segments.ts';
-export { hydration_hazards, hazard_fix, hazard_words, type IslandHazard } from './hydration-hazards.ts';
+export {
+	hydration_hazards,
+	hazard_fix,
+	hazard_words,
+	type IslandHazard
+} from './hydration-hazards.ts';
 export { apply_attr_rules, type AttrRule } from './attr-rules.ts';
 
 export {

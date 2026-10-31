@@ -282,7 +282,12 @@ function reconcile(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets, wa
  * @param walk the {@link MorphOptions.target} is Svelte's walk (the repair), threaded unchanged down
  * the recursion — a subtree the walk never enters is skipped.
  */
-function reconcile_children(parent: Element, new_nodes: ArrayLike<Node>, sets: IdSets, walk = false): void {
+function reconcile_children(
+	parent: Element,
+	new_nodes: ArrayLike<Node>,
+	sets: IdSets,
+	walk = false
+): void {
 	const count = new_nodes.length;
 	let cursor: ChildNode | null = parent.firstChild;
 	let idx = 0;
@@ -472,7 +477,8 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 	const placed_in_order: ChildNode[] = [];
 	// the tags the render produces here: an unmarked old element of one of them is the render's too
 	const render_tags = new Set<string>();
-	for (let i = 0; i < count; i++) if (new_nodes[i].nodeType === ELEMENT) render_tags.add((new_nodes[i] as Element).localName);
+	for (let i = 0; i < count; i++)
+		if (new_nodes[i].nodeType === ELEMENT) render_tags.add((new_nodes[i] as Element).localName);
 
 	let by_key: Map<string, ChildNode> | null = null;
 	const by_tag = new Map<string, Element[]>();
@@ -519,7 +525,8 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 					while (queue?.length && claimed.has(queue[0])) queue.shift();
 					match = queue?.shift() ?? null;
 				}
-				if (match !== null && old_inner !== null) release_holder(old_inner, sets!, match as Element);
+				if (match !== null && old_inner !== null)
+					release_holder(old_inner, sets!, match as Element);
 			}
 		} else if (next.nodeType === COMMENT) {
 			// a comment is a MARKER: only the same marker is its counterpart (another owner's anchor —
@@ -529,7 +536,12 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 			let first: ChildNode | null = null;
 			for (let j = 0; j < others.length; j++) {
 				const o = others[j];
-				if (o.nodeType !== COMMENT || claimed.has(o) || (o as Comment).data !== (next as Comment).data) continue;
+				if (
+					o.nodeType !== COMMENT ||
+					claimed.has(o) ||
+					(o as Comment).data !== (next as Comment).data
+				)
+					continue;
 				if (!slotted || anchor === null || anchor.compareDocumentPosition(o) & FOLLOWING) {
 					match = o;
 					break;
@@ -539,7 +551,11 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 			match ??= first;
 		} else {
 			// text: the next unclaimed text, in the element's order
-			while (other_at < others.length && (others[other_at].nodeType !== next.nodeType || claimed.has(others[other_at]))) other_at++;
+			while (
+				other_at < others.length &&
+				(others[other_at].nodeType !== next.nodeType || claimed.has(others[other_at]))
+			)
+				other_at++;
 			if (other_at < others.length) match = others[other_at++];
 		}
 		if (match !== null && !claimed.has(match)) {
@@ -547,7 +563,8 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 			const before = match.previousSibling;
 			morph_node(match, next, sets, false);
 			// (a keyed tag change replaced it: the replacement stands where it was)
-			const placed = match.parentNode === parent ? match : before ? before.nextSibling : parent.firstChild;
+			const placed =
+				match.parentNode === parent ? match : before ? before.nextSibling : parent.firstChild;
 			if (placed) {
 				mark_render_made(placed);
 				anchor = placed;
@@ -563,11 +580,15 @@ function reconcile_by_identity(parent: Element, new_nodes: ArrayLike<Node>, sets
 	}
 
 	// EXISTENCE: a render-made leftover goes; the element's own stay (text and comments included)
-	for (const list of by_tag.values()) for (const el of list) if (!claimed.has(el) && el.parentNode === parent) parent.removeChild(el);
-	if (by_key) for (const n of by_key.values()) if (n.parentNode === parent && render_made(n, render_tags)) parent.removeChild(n);
+	for (const list of by_tag.values())
+		for (const el of list) if (!claimed.has(el) && el.parentNode === parent) parent.removeChild(el);
+	if (by_key)
+		for (const n of by_key.values())
+			if (n.parentNode === parent && render_made(n, render_tags)) parent.removeChild(n);
 	if (slotted) {
 		// (a block marker is the render's by construction — `<!--[-->`, `<!--[!-->`, `<!--]-->`, `<!---->`)
-		for (const o of others) if (!claimed.has(o) && o.parentNode === parent && is_block_marker(o)) parent.removeChild(o);
+		for (const o of others)
+			if (!claimed.has(o) && o.parentNode === parent && is_block_marker(o)) parent.removeChild(o);
 		order_render_nodes(parent, placed_in_order);
 	}
 }
@@ -824,7 +845,8 @@ function clone(node: Node): Node {
 	const copy = owner_document(node).importNode(node, true);
 	// (a page whose app has a server transform: answers arrive restored, their hosts' shadow roots
 	// attached before insertion — the copy must keep them)
-	if (node.nodeType === ELEMENT && (globalThis as { __og_restore?: unknown }).__og_restore) carry_shadows(node as Element, copy as Element);
+	if (node.nodeType === ELEMENT && (globalThis as { __og_restore?: unknown }).__og_restore)
+		carry_shadows(node as Element, copy as Element);
 	return copy;
 }
 

@@ -22,8 +22,14 @@ export interface Anchor {
 	count: number;
 }
 
-const ms = (n: number) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : n >= 10 ? Math.round(n) + ' ms' : n.toFixed(1) + ' ms');
-const kb = (n: number) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
+const ms = (n: number) =>
+	n >= 1000 ? (n / 1000).toFixed(2) + ' s' : n >= 10 ? Math.round(n) + ' ms' : n.toFixed(1) + ' ms';
+const kb = (n: number) =>
+	n < 1024
+		? n + ' B'
+		: n < 1048576
+			? (n / 1024).toFixed(1) + ' KB'
+			: (n / 1048576).toFixed(2) + ' MB';
 
 /** a tag name we may put in a selector: letters, digits and dashes, starting with a letter */
 export function safe_tag(t: string): boolean {
@@ -32,7 +38,8 @@ export function safe_tag(t: string): boolean {
 	if (!((c0 >= 97 && c0 <= 122) || (c0 >= 65 && c0 <= 90))) return false;
 	for (let i = 1; i < t.length; i++) {
 		const c = t.charCodeAt(i);
-		if (!((c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 45)) return false;
+		if (!((c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 45))
+			return false;
 	}
 	return true;
 }
@@ -110,7 +117,9 @@ export function page_anchors(p: SlimProfile, doc: Document = document): Anchor[]
 	// the heaviest islands (server render, then props): where each one sits
 	const islands = p.islands
 		.filter((i) => i.fp && doc.querySelector(`ogygia-region[data-og-fp="${i.fp}"]`))
-		.sort((a, b) => (b.ssr_ms ?? 0) - (a.ssr_ms ?? 0) || (b.props_bytes ?? 0) - (a.props_bytes ?? 0))
+		.sort(
+			(a, b) => (b.ssr_ms ?? 0) - (a.ssr_ms ?? 0) || (b.props_bytes ?? 0) - (a.props_bytes ?? 0)
+		)
 		.slice(0, 4);
 	for (const i of islands) {
 		const fp = i.fp!;
@@ -119,7 +128,9 @@ export function page_anchors(p: SlimProfile, doc: Document = document): Anchor[]
 			title: `${i.name} (island)`,
 			detail: [
 				i.ssr_ms !== null ? `${ms(i.ssr_ms)} server render` : null,
-				i.props_bytes !== null ? `${kb(i.props_bytes)} props${i.culprit ? ` (not JSON: ${i.culprit})` : ''}` : null,
+				i.props_bytes !== null
+					? `${kb(i.props_bytes)} props${i.culprit ? ` (not JSON: ${i.culprit})` : ''}`
+					: null,
 				i.client_p50_ms !== null ? `${ms(i.client_p50_ms)} to hydrate` : null
 			]
 				.filter(Boolean)
@@ -167,7 +178,9 @@ export function page_anchors(p: SlimProfile, doc: Document = document): Anchor[]
 	// the largest paint
 	if (p.lcp && (p.lcp.fp || p.lcp.tag)) {
 		const find = () => {
-			const island = p.lcp!.fp ? doc.querySelector(`ogygia-region[data-og-fp="${p.lcp!.fp}"]`) : null;
+			const island = p.lcp!.fp
+				? doc.querySelector(`ogygia-region[data-og-fp="${p.lcp!.fp}"]`)
+				: null;
 			if (island && p.lcp!.tag && safe_tag(p.lcp!.tag)) {
 				const inner = island.querySelector(p.lcp!.tag);
 				if (inner) return [inner];

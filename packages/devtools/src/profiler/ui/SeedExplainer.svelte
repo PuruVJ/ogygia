@@ -10,43 +10,92 @@
 	import { row_id, follow_hash } from './row-anchor.svelte.ts';
 	import { pressable } from './press.ts';
 
-	let { rows, whole_by, total, seed_bytes }: { rows: SeedRow[]; whole_by: string[]; total: number; seed_bytes: number } = $props();
+	let {
+		rows,
+		whole_by,
+		total,
+		seed_bytes
+	}: { rows: SeedRow[]; whole_by: string[]; total: number; seed_bytes: number } = $props();
 	let picked = $state<string | null>(null);
 	const shipped = rows.filter((r) => r.shipped);
 	const dropped = rows.filter((r) => !r.shipped);
-	const REASON: Record<string, string> = { read: 'read by an island', referenced: 'props point into it', whole: 'an island reads page.data whole' };
-	$effect(() => follow_hash('seed', () => rows.map((r) => r.key), (k) => (picked = k)));
+	const REASON: Record<string, string> = {
+		read: 'read by an island',
+		referenced: 'props point into it',
+		whole: 'an island reads page.data whole'
+	};
+	$effect(() =>
+		follow_hash(
+			'seed',
+			() => rows.map((r) => r.key),
+			(k) => (picked = k)
+		)
+	);
 </script>
 
 {#if whole_by.length}
 	<p class="whole">
-		<b>{whole_by.join(', ')}</b> read{whole_by.length === 1 ? 's' : ''} <code>page.data</code> whole, so every key ships. Read the keys by
-		name and seed shaping drops the rest.
+		<b>{whole_by.join(', ')}</b> read{whole_by.length === 1 ? 's' : ''} <code>page.data</code> whole,
+		so every key ships. Read the keys by name and seed shaping drops the rest.
 	</p>
 {/if}
 <div class="rows">
 	{#each rows as r (r.key)}
-		<div class="row" id={row_id('seed', r.key)} class:picked={picked === r.key} class:dropped={!r.shipped} onclick={() => (picked = picked === r.key ? null : r.key)} role="button" tabindex="0" aria-expanded={picked === r.key} {@attach pressable}>
+		<div
+			class="row"
+			id={row_id('seed', r.key)}
+			class:picked={picked === r.key}
+			class:dropped={!r.shipped}
+			onclick={() => (picked = picked === r.key ? null : r.key)}
+			role="button"
+			tabindex="0"
+			aria-expanded={picked === r.key}
+			{@attach pressable}
+		>
 			<span class="key"><code>{r.key}</code></span>
 			<div class="track">
-				<div class="fill" class:ref={r.reason === 'referenced'} class:whole={r.reason === 'whole'} style="width:{Math.max(0.5, r.pct)}%"></div>
+				<div
+					class="fill"
+					class:ref={r.reason === 'referenced'}
+					class:whole={r.reason === 'whole'}
+					style="width:{Math.max(0.5, r.pct)}%"
+				></div>
 			</div>
 			<span class="num">{fmt_bytes(r.bytes)}</span>
 			<span class="why">
 				{#if !r.shipped}<span class="chip off">dropped</span>
-				{:else}<span class="chip" class:ref={r.reason === 'referenced'} class:whole={r.reason === 'whole'}>{REASON[r.reason ?? ''] ?? 'ships'}</span>{/if}
+				{:else}<span
+						class="chip"
+						class:ref={r.reason === 'referenced'}
+						class:whole={r.reason === 'whole'}>{REASON[r.reason ?? ''] ?? 'ships'}</span
+					>{/if}
 			</span>
 			{#if picked === r.key}
 				<div class="detail">
-					{#if r.readers_names.length}<div><span class="k">read by</span> {r.readers_names.join(', ')}</div>{/if}
-					{#if r.referenced_names.length}<div><span class="k">referenced by the props of</span> {r.referenced_names.join(', ')}</div>{/if}
+					{#if r.readers_names.length}<div>
+							<span class="k">read by</span>
+							{r.readers_names.join(', ')}
+						</div>{/if}
+					{#if r.referenced_names.length}<div>
+							<span class="k">referenced by the props of</span>
+							{r.referenced_names.join(', ')}
+						</div>{/if}
 					{#if !r.readers_names.length && !r.referenced_names.length}
-						<div class="hint">{r.shipped ? 'Nothing asks for this key by name: it ships because an island reads page.data whole.' : 'No island reads or references it, so seed shaping left it out of the seed.'}</div>
+						<div class="hint">
+							{r.shipped
+								? 'Nothing asks for this key by name: it ships because an island reads page.data whole.'
+								: 'No island reads or references it, so seed shaping left it out of the seed.'}
+						</div>
 					{/if}
 					{#if r.shipped && r.reason === 'read'}
-						<div class="hint">If the island needs only a part, return that part from load under its own key, or pass it as a prop.</div>
+						<div class="hint">
+							If the island needs only a part, return that part from load under its own key, or pass
+							it as a prop.
+						</div>
 					{:else if r.shipped && r.reason === 'referenced'}
-						<div class="hint">The cheap shape: the key ships once and the island's props point into it.</div>
+						<div class="hint">
+							The cheap shape: the key ships once and the island's props point into it.
+						</div>
 					{/if}
 				</div>
 			{/if}
@@ -54,7 +103,9 @@
 	{/each}
 </div>
 <p class="hint">
-	{shipped.length} of {rows.length} keys ship: {fmt_bytes(seed_bytes)} on the wire{#if dropped.length}, {fmt_bytes(dropped.reduce((s, r) => s + r.bytes, 0))} of {fmt_bytes(total)} left out by seed shaping{/if}. Click a key for who asks for it.
+	{shipped.length} of {rows.length} keys ship: {fmt_bytes(seed_bytes)} on the wire{#if dropped.length},
+		{fmt_bytes(dropped.reduce((s, r) => s + r.bytes, 0))} of {fmt_bytes(total)} left out by seed shaping{/if}.
+	Click a key for who asks for it.
 </p>
 
 <style>

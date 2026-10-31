@@ -56,14 +56,14 @@ A **runtime of about 7.6 KB** ships instead. It is a custom element (`<ogygia-re
 
 You mark an import with two attributes. `wake` says if the component ships client JS, and when the JS runs. `render` says where the HTML comes from, and when. The `wake` schedule is one small set of words:
 
-| Value | Meaning |
-| --- | --- |
-| `load` | Immediately |
-| `idle` | When the browser becomes idle |
-| `visible` | When the component scrolls into view |
-| `'(max-width: 600px)'` | When the media query matches |
+| Value                  | Meaning                              |
+| ---------------------- | ------------------------------------ |
+| `load`                 | Immediately                          |
+| `idle`                 | When the browser becomes idle        |
+| `visible`              | When the component scrolls into view |
+| `'(max-width: 600px)'` | When the media query matches         |
 
-On an **island**, the word says *when the JS runs*. On a **server island**, it says *when the HTML arrives*. The words are the same. The axes are different. For the full schedule, `visible` margins, and nested regions, see [Timing & nesting](/docs/regions/timing-nesting).
+On an **island**, the word says _when the JS runs_. On a **server island**, it says _when the HTML arrives_. The words are the same. The axes are different. For the full schedule, `visible` margins, and nested regions, see [Timing & nesting](/docs/regions/timing-nesting).
 
 ## One primitive, four kinds
 

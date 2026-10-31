@@ -1,8 +1,3 @@
-<div class="feel">
-	<p class="feel-status">Idle after {waited}</p>
-	<p class="feel-clock">{clock}</p>
-</div>
-
 <script lang="ts">
 	import '$lib/styles/feel.css';
 
@@ -18,3 +13,8 @@
 		return () => clearInterval(tick);
 	});
 </script>
+
+<div class="feel">
+	<p class="feel-status">Idle after {waited}</p>
+	<p class="feel-clock">{clock}</p>
+</div>

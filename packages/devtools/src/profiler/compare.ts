@@ -777,7 +777,20 @@ export interface PathDelta {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 /** finding codes about the recording's conditions, not the page's code (compare leaves them out) */
-const RUN_STATE_CODES = new Set(['cold-start', 'cold-instance', 'profiler-overhead', 'heap-filled-before', 'heap-near-limit', 'budget', 'dev-mode', 'low-confidence', 'busy-instance', 'runs-set-aside', 'summary', 'phases']);
+const RUN_STATE_CODES = new Set([
+	'cold-start',
+	'cold-instance',
+	'profiler-overhead',
+	'heap-filled-before',
+	'heap-near-limit',
+	'budget',
+	'dev-mode',
+	'low-confidence',
+	'busy-instance',
+	'runs-set-aside',
+	'summary',
+	'phases'
+]);
 /** warnings that fire when one number of the recording passes a cut (report.ts): the number, and the cut */
 const NEAR_CUT: Record<string, { value: (m: ReportMeta) => number | undefined; at: number }> = {
 	'loop-stall': { value: (m) => m.loop_delay?.p99, at: 50 }
@@ -1041,7 +1054,12 @@ export function compare_reports(
 		if (!cut) return false;
 		const x = cut.value(a.meta);
 		const y = cut.value(b.meta);
-		return x !== undefined && y !== undefined && Math.abs(x - cut.at) <= cut.at * 0.3 && Math.abs(y - cut.at) <= cut.at * 0.3;
+		return (
+			x !== undefined &&
+			y !== undefined &&
+			Math.abs(x - cut.at) <= cut.at * 0.3 &&
+			Math.abs(y - cut.at) <= cut.at * 0.3
+		);
 	};
 	const of_the_code = (f: string) => !RUN_STATE_CODES.has(code_of(f)) && !near_cut(code_of(f));
 	// paths by owner name
@@ -1135,12 +1153,20 @@ export function page_history(
 	/** the page score of a report, when the caller can compute it (the dashboard's trend) */
 	score_of?: (id: string) => number | undefined
 ): { page: string; points: { id: string; created: number; median: number; score?: number }[] }[] {
-	const by_page = new Map<string, { id: string; created: number; median: number; score?: number }[]>();
+	const by_page = new Map<
+		string,
+		{ id: string; created: number; median: number; score?: number }[]
+	>();
 	for (const m of metas) {
 		if (m.trigger !== 'page' || !m.page || !m.runs?.length) continue;
 		const list = by_page.get(m.page) ?? [];
 		const score = score_of?.(m.id);
-		list.push({ id: m.id, created: m.created, median: round2(median(m.runs)), ...(score !== undefined ? { score } : {}) });
+		list.push({
+			id: m.id,
+			created: m.created,
+			median: round2(median(m.runs)),
+			...(score !== undefined ? { score } : {})
+		});
 		by_page.set(m.page, list);
 	}
 	return [...by_page.entries()]

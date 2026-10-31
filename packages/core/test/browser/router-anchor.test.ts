@@ -10,14 +10,19 @@ import { anchor_of, reload_opt_out } from '../../src/runtime/router.ts';
 /** Click `target`; run `anchor_of` INSIDE the document-level listener, as the router does — the
  *  composed path is only readable while the event dispatches. Prevented there too: a real anchor
  *  click would navigate the test iframe away. */
-function click_and_resolve(target: Element): { target: EventTarget | null; anchor: HTMLAnchorElement | null } {
+function click_and_resolve(target: Element): {
+	target: EventTarget | null;
+	anchor: HTMLAnchorElement | null;
+} {
 	let out: { target: EventTarget | null; anchor: HTMLAnchorElement | null } | null = null;
 	const listener = (e: Event) => {
 		out = { target: e.target, anchor: anchor_of(e) };
 		e.preventDefault();
 	};
 	document.addEventListener('click', listener, { once: true });
-	target.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, cancelable: true }));
+	target.dispatchEvent(
+		new MouseEvent('click', { bubbles: true, composed: true, cancelable: true })
+	);
 	document.removeEventListener('click', listener);
 	expect(out).not.toBeNull();
 	return out!;
@@ -56,9 +61,15 @@ test('data-sveltekit-reload: bare and "true" opt out of the SPA; "off" and "fals
 	};
 	expect(reload_opt_out(anchor_in('<a href="/x">x</a>'))).toBe(false);
 	expect(reload_opt_out(anchor_in('<a href="/x" data-sveltekit-reload>x</a>'))).toBe(true);
-	expect(reload_opt_out(anchor_in('<div data-sveltekit-reload="true"><a href="/x">x</a></div>'))).toBe(true);
-	expect(reload_opt_out(anchor_in('<div data-sveltekit-reload="off"><a href="/x">x</a></div>'))).toBe(false);
-	expect(reload_opt_out(anchor_in('<div data-sveltekit-reload="false"><a href="/x">x</a></div>'))).toBe(false);
+	expect(
+		reload_opt_out(anchor_in('<div data-sveltekit-reload="true"><a href="/x">x</a></div>'))
+	).toBe(true);
+	expect(
+		reload_opt_out(anchor_in('<div data-sveltekit-reload="off"><a href="/x">x</a></div>'))
+	).toBe(false);
+	expect(
+		reload_opt_out(anchor_in('<div data-sveltekit-reload="false"><a href="/x">x</a></div>'))
+	).toBe(false);
 });
 
 test('data-sveltekit-reload: the nearest ancestor decides, either direction', () => {
@@ -73,7 +84,8 @@ test('data-sveltekit-reload: the nearest ancestor decides, either direction', ()
 // `data-sveltekit-reload` around the component (`closest` stops at the shadow root), so a card's link
 // in a full-load subtree was swapped in place.
 test('data-sveltekit-reload: decided across shadow roots, nearest still wins', () => {
-	document.body.innerHTML = '<div data-sveltekit-reload><x-card id="card"></x-card></div><div data-sveltekit-reload="false"><x-card id="opted"></x-card></div>';
+	document.body.innerHTML =
+		'<div data-sveltekit-reload><x-card id="card"></x-card></div><div data-sveltekit-reload="false"><x-card id="opted"></x-card></div>';
 	const link_in = (id: string, inner = '') => {
 		const root = document.getElementById(id)!.attachShadow({ mode: 'open' });
 		root.innerHTML = `${inner}<a href="/x">x</a>`;

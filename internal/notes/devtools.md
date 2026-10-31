@@ -21,7 +21,7 @@ halves in-tab, with the seam instrumented.
 to see inside it is the event layer anyway. Doing it ourselves: instant boot, everything reusable,
 and we already own every hard piece (DI'd compiler, browser-safe `svelte/server`, `$app/*` shims).
 
-**Why transform+link, not output-only:** the value is the *linked* picture — click an injected
+**Why transform+link, not output-only:** the value is the _linked_ picture — click an injected
 import in a transformed host and land in the virtual module the driver serves for it.
 
 ## Principles
@@ -46,14 +46,14 @@ The only rung that touches the framework. Everything after is a consumer.
   Ring buffer + pluggable sinks: `postMessage` (REPL), WS (vite plugin, later), buffer→JSON
   (traces), console (debug).
 - **Schema v1** (JSON-serializable, versioned; sizes always, payload bodies lazy):
-  | Domain | Events (first cut) |
-  |---|---|
-  | compile | island discovered (strategy, csr decision, iid, entry/wrapper), bytes per emit |
-  | server | region rendered (fp, mode, ms, html/props bytes), seeds injected, capability minted, server-delta skip |
-  | wire | props payload, context bridge, frame batch, `x-ogygia-known` sent |
+  | Domain  | Events (first cut)                                                                                                  |
+  | ------- | ------------------------------------------------------------------------------------------------------------------- |
+  | compile | island discovered (strategy, csr decision, iid, entry/wrapper), bytes per emit                                      |
+  | server  | region rendered (fp, mode, ms, html/props bytes), seeds injected, capability minted, server-delta skip              |
+  | wire    | props payload, context bridge, frame batch, `x-ogygia-known` sent                                                   |
   | runtime | features loaded, region connected, wake scheduled/fired (reason), hydrate ms, interaction replay, lake lift/restore |
-  | hub | mint, resolve hit/miss, watch fired, dispose_scope/ids |
-  | nav | nav start/finish, reconcile decision per region (keep/patch/mount/remove), fallback swap |
+  | hub     | mint, resolve hit/miss, watch fired, dispose_scope/ids                                                              |
+  | nav     | nav start/finish, reconcile decision per region (keep/patch/mount/remove), fallback swap                            |
 - **Emit-point audit first:** walk runtime/core, reconcile, router, ref, Region.svelte,
   server/region-endpoint, hooks — list every seam, THEN write the schema. Don't invent events the
   code can't cheaply produce.
@@ -132,6 +132,7 @@ The only rung that touches the framework. Everything after is a consumer.
 > **SHIPPED (v1):** `npx ogygia mcp` — a hand-rolled stdio JSON-RPC MCP server
 > (`packages/ogygia/src/mcp.ts`, dispatched from the CLI, built to `dist/mcp.js`). Zero runtime deps
 > beyond ogygia's own compiler (Playwright is an optional peer, only for `ogygia_debug`). Five tools:
+>
 > - **Compile-side** (real `transformHost` in plain Node — no browser/WASM, oxc auto-loads):
 >   `ogygia_compile` (island map + rewritten host), `ogygia_islands` (map alone), `ogygia_check` (runs
 >   the transform + reports any `[ogygia]` rule violation — the static half of `check_invariants`),

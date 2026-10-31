@@ -2,13 +2,14 @@
 
 transformHost µs/call (lower better) · runtime chunk gzip B · docs cold build s. Recorded by `node verify/bench.ts <label>`.
 
-| label | heavy µs | children µs | plain µs | docs rt gz | pg rt gz | docs build s |
-| --- | --- | --- | --- | --- | --- | --- |
-| baseline | 83.2 | 33.2 | 0.5 | 6682 | 7835 | 3.73 |
-| opt1-cache+regex | 82.7 | 32.9 | 0.0 | 6682 | 7835 | 3.70 |
-| opt2-single-parse | 83.3 | 32.9 | 0.0 | 6683 | 7834 | 3.67 |
+| label             | heavy µs | children µs | plain µs | docs rt gz | pg rt gz | docs build s |
+| ----------------- | -------- | ----------- | -------- | ---------- | -------- | ------------ |
+| baseline          | 83.2     | 33.2        | 0.5      | 6682       | 7835     | 3.73         |
+| opt1-cache+regex  | 82.7     | 32.9        | 0.0      | 6682       | 7835     | 3.70         |
+| opt2-single-parse | 83.3     | 32.9        | 0.0      | 6683       | 7834     | 3.67         |
 
 ## What changed per checkpoint
+
 - **baseline** — before any optimization.
 - **opt1-cache+regex** — (1) HEADLINE: removed `clear_transform_cache_for` from `unregister_host` — `register()` was evicting the content-keyed `transform_cache` immediately after `run_transform` wrote it (cache never hit → every host re-parsed 3× across prescan/SSR/client legs, plus an O(n) full-map scan per call = O(n²) over the build). Content-keying (`hit.code === source`) makes clearing unnecessary. (2) Memoized `import_keys_hint` RegExp + `normalize_import_keys` (were rebuilt per module per leg) → the no-island path (most files) went 0.5→0.0µs (~15×). (3) Hoisted invariant `KNOWN_STRATEGIES`/`HYDRATE_STRATEGIES`/`ATTR_SCHEMA`/`CHILD_KEYS`/`REGION_KEYS` out of per-call/per-import loops.
 - **opt2-single-parse** — `appendTransportRegistrations` parses each `.ts/.js` once (was 2 oxc parses when a module had both a `class` and `createContext`).
@@ -17,10 +18,10 @@ Note: cold docs build stayed ~3.7s across all checkpoints — it is dominated by
 
 ## scale
 
-| label | hosts | islands | content entries | transform ms | hosts/s | build+ids ms | get µs | backlink µs | entries ms | heap MB |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| default | 800 | 7902 | 200000 | 235 | 3404 | 85 | 0.34 | 1.46 | 15 | 164 |
-| millions | 5000 | 49473 | 2000000 | 1263 | 3958 | 1169 | 0.47 | 12.46 | 216 | 874 |
+| label    | hosts | islands | content entries | transform ms | hosts/s | build+ids ms | get µs | backlink µs | entries ms | heap MB |
+| -------- | ----- | ------- | --------------- | ------------ | ------- | ------------ | ------ | ----------- | ---------- | ------- |
+| default  | 800   | 7902    | 200000          | 235          | 3404    | 85           | 0.34   | 1.46        | 15         | 164     |
+| millions | 5000  | 49473   | 2000000         | 1263         | 3958    | 1169         | 0.47   | 12.46       | 216        | 874     |
 
 ### what the scale bench found (`node verify/bench-scale.ts [--huge]`)
 

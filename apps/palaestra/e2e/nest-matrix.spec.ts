@@ -50,7 +50,12 @@ function watch(page: Page): string[] {
 	page.on('pageerror', (e) => problems.push(e.message));
 	page.on('console', (m) => {
 		const text = m.text();
-		if (m.type() === 'error' || text.includes('hydration_mismatch') || text.includes('Failed to hydrate')) problems.push(text.slice(0, 200));
+		if (
+			m.type() === 'error' ||
+			text.includes('hydration_mismatch') ||
+			text.includes('Failed to hydrate')
+		)
+			problems.push(text.slice(0, 200));
 	});
 	return problems;
 }
@@ -77,9 +82,16 @@ for (const base of ['/nest-matrix', '/nest-matrix/kit']) {
 						await page.waitForTimeout(100);
 						after = Number(await count.innerText());
 					}
-					check(`${c}: island ${i + 1} is live (click counts)`, after === before + 1, `${before} → ${after}`);
+					check(
+						`${c}: island ${i + 1} is live (click counts)`,
+						after === before + 1,
+						`${before} → ${after}`
+					);
 				}
-				check(`${c}: every lake kept its server HTML`, (await box.locator('[data-snip-lake]').count()) === (LAKES[c] ?? 0));
+				check(
+					`${c}: every lake kept its server HTML`,
+					(await box.locator('[data-snip-lake]').count()) === (LAKES[c] ?? 0)
+				);
 				check(`${c}: no hydration failure or error`, problems.length === 0, problems.join(' | '));
 			});
 		}
@@ -88,12 +100,20 @@ for (const base of ['/nest-matrix', '/nest-matrix/kit']) {
 			const problems = watch(page);
 			const raw = await (await fetch(`${baseURL}${base}?only=snippet-context`)).text();
 			for (const label of ['direct', 'lake', 'island'])
-				check(`SSR: ${label} reader sees the page context`, raw.includes(`data-ctx-read="${label}"`) && raw.includes('>v2'), label);
+				check(
+					`SSR: ${label} reader sees the page context`,
+					raw.includes(`data-ctx-read="${label}"`) && raw.includes('>v2'),
+					label
+				);
 			await page.goto(`${base}?only=snippet-context`, { waitUntil: 'networkidle' });
 			const reads = await page
 				.locator('[data-case="snippet-context"] [data-ctx-read]')
 				.evaluateAll((els) => els.map((e) => (e.firstChild?.textContent ?? '').trim()));
-			check('browser: every reader sees v2', reads.length === 3 && reads.every((v) => v === 'v2'), reads.join(','));
+			check(
+				'browser: every reader sees v2',
+				reads.length === 3 && reads.every((v) => v === 'v2'),
+				reads.join(',')
+			);
 			check('no hydration failure or error', problems.length === 0, problems.join(' | '));
 		});
 	});
@@ -107,15 +127,24 @@ for (const c of ['snippet-hole', 'snippet-root-hole']) {
 		const snippet_at = raw.indexOf('<ogygia-snippet');
 		const hole_at = raw.indexOf('render="defer"', snippet_at);
 		check('SSR: the hole region sits inside the snippet', snippet_at > 0 && hole_at > snippet_at);
-		check('SSR: it carries a signed address', raw.slice(hole_at, raw.indexOf('>', hole_at)).includes('endpoint="'));
+		check(
+			'SSR: it carries a signed address',
+			raw.slice(hole_at, raw.indexOf('>', hole_at)).includes('endpoint="')
+		);
 		check('SSR: its content is not in the page', !raw.includes('data-mx-hole'));
 		const problems = watch(page);
 		await page.goto(`/nest-matrix?only=${c}`, { waitUntil: 'networkidle' });
 		const box = page.locator(`[data-case="${c}"]`);
 		await box.locator('[data-mx-hole]').first().waitFor();
 		check('browser: the hole landed', (await box.locator('[data-mx-hole]').count()) > 0);
-		check('browser: its fallback is gone', (await box.locator('[data-hole-fallback]').count()) === 0);
-		check('browser: its region kept its address', (await box.locator('ogygia-region[render="defer"][endpoint=""]').count()) === 0);
+		check(
+			'browser: its fallback is gone',
+			(await box.locator('[data-hole-fallback]').count()) === 0
+		);
+		check(
+			'browser: its region kept its address',
+			(await box.locator('ogygia-region[render="defer"][endpoint=""]').count()) === 0
+		);
 		check('no hydration failure or error', problems.length === 0, problems.join(' | '));
 	});
 }
@@ -124,14 +153,18 @@ for (const c of ['snippet-hole', 'snippet-root-hole']) {
 // it): created fresh, it renders its fallback again and fetches by its identity — on a page Kit loads
 // and on one it does not.
 for (const base of ['/nest-matrix', '/nest-matrix/kit']) {
-	test(`a hole in a re-created live snippet shows its fallback and lands again (${base})`, async ({ page }) => {
+	test(`a hole in a re-created live snippet shows its fallback and lands again (${base})`, async ({
+		page
+	}) => {
 		await page.goto(`${base}?only=snippet-hole-recreate`, { waitUntil: 'networkidle' });
 		const box = page.locator('[data-case="snippet-hole-recreate"]');
 		await box.locator('[data-mx-hole]').waitFor();
 		await box.locator('[data-toggle]').click();
 		await expect(box.locator('[data-mx-hole]')).toHaveCount(0);
 		await box.locator('[data-toggle]').click();
-		await expect(box.locator('[data-mx-hole]'), 'the hole lands again').toHaveCount(1, { timeout: 10_000 });
+		await expect(box.locator('[data-mx-hole]'), 'the hole lands again').toHaveCount(1, {
+			timeout: 10_000
+		});
 		check('its fallback is gone', (await box.locator('[data-hole-fallback]').count()) === 0);
 		const bump = box.locator('[data-bumper]');
 		await bump.scrollIntoViewIfNeeded();
@@ -146,18 +179,24 @@ for (const base of ['/nest-matrix', '/nest-matrix/kit']) {
 	});
 }
 
-test('the host signals ogygia:hydrated only once its live snippet content mounted', async ({ page }) => {
+test('the host signals ogygia:hydrated only once its live snippet content mounted', async ({
+	page
+}) => {
 	await page.addInitScript(() => {
 		const w = window as unknown as { __mounted_at_hydrated?: boolean | null };
 		w.__mounted_at_hydrated = null;
 		document.addEventListener('ogygia:hydrated', (e) => {
 			const host = e.target as Element;
 			if (!host.querySelector('ogygia-snippet')) return;
-			w.__mounted_at_hydrated = !!host.querySelector('[data-mx-mounted][data-mounted]') && host.hasAttribute('data-hydrated');
+			w.__mounted_at_hydrated =
+				!!host.querySelector('[data-mx-mounted][data-mounted]') &&
+				host.hasAttribute('data-hydrated');
 		});
 	});
 	await page.goto('/nest-matrix?only=snippet-timing', { waitUntil: 'networkidle' });
-	const seen = await page.evaluate(() => (window as unknown as { __mounted_at_hydrated?: boolean | null }).__mounted_at_hydrated);
+	const seen = await page.evaluate(
+		() => (window as unknown as { __mounted_at_hydrated?: boolean | null }).__mounted_at_hydrated
+	);
 	check('the host fired ogygia:hydrated', seen !== null);
 	check('its snippet content had mounted by then', seen === true);
 });

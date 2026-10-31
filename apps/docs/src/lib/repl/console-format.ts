@@ -44,7 +44,12 @@ export function inspect(v: unknown, seen: WeakSet<object> = new WeakSet(), depth
 	if (v instanceof RegExp) return v.toString();
 	if (v instanceof Error) return v.stack ? `${v.name}: ${v.message}` : `${v.name}: ${v.message}`;
 	// DOM node (guarded — no DOM in node tests)
-	const node = v as { nodeType?: number; tagName?: string; nodeName?: string; textContent?: string };
+	const node = v as {
+		nodeType?: number;
+		tagName?: string;
+		nodeName?: string;
+		textContent?: string;
+	};
 	if (typeof node.nodeType === 'number') {
 		if (node.tagName) return `<${node.tagName.toLowerCase()}>`;
 		if (node.nodeType === 3) return `#text "${(node.textContent || '').slice(0, 30)}"`;
@@ -63,7 +68,9 @@ export function inspect(v: unknown, seen: WeakSet<object> = new WeakSet(), depth
 		}
 		if (v instanceof Map) {
 			if (v.size === 0) return 'Map(0) {}';
-			const items = [...v].slice(0, MAX_ITEMS).map(([k, val]) => `${inspect(k, seen, depth + 1)} => ${inspect(val, seen, depth + 1)}`);
+			const items = [...v]
+				.slice(0, MAX_ITEMS)
+				.map(([k, val]) => `${inspect(k, seen, depth + 1)} => ${inspect(val, seen, depth + 1)}`);
 			return `Map(${v.size}) { ` + items.join(', ') + ' }';
 		}
 		if (v instanceof Set) {
@@ -72,7 +79,11 @@ export function inspect(v: unknown, seen: WeakSet<object> = new WeakSet(), depth
 			return `Set(${v.size}) { ` + items.join(', ') + ' }';
 		}
 		if (ArrayBuffer.isView(v) && !(v instanceof DataView)) {
-			const ta = v as unknown as { length: number; constructor: { name: string }; [i: number]: number };
+			const ta = v as unknown as {
+				length: number;
+				constructor: { name: string };
+				[i: number]: number;
+			};
 			const items = Array.from({ length: Math.min(ta.length, MAX_ITEMS) }, (_, i) => String(ta[i]));
 			return `${ta.constructor.name}(${ta.length}) [ ${items.join(', ')}${ta.length > MAX_ITEMS ? ', …' : ''} ]`;
 		}
@@ -84,7 +95,10 @@ export function inspect(v: unknown, seen: WeakSet<object> = new WeakSet(), depth
 		const keys = Object.keys(obj);
 		if (keys.length === 0) return prefix ? prefix + '{}' : '{}';
 		const shown = keys.slice(0, MAX_ITEMS);
-		const body = shown.map((k) => `${IDENT.test(k) ? k : q(k)}: ${inspect((obj as Record<string, unknown>)[k], seen, depth + 1)}`);
+		const body = shown.map(
+			(k) =>
+				`${IDENT.test(k) ? k : q(k)}: ${inspect((obj as Record<string, unknown>)[k], seen, depth + 1)}`
+		);
 		if (keys.length > MAX_ITEMS) body.push(`… ${keys.length - MAX_ITEMS} more`);
 		return prefix + '{ ' + body.join(', ') + ' }';
 	} catch {

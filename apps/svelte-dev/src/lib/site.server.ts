@@ -16,36 +16,36 @@ const schema = v.object({ title: v.optional(v.string(), '') });
 const folderOpts = {
 	page: /\.md$/,
 	meta: /(^|\/)index\.md$/,
-	convention: numbered({ duplicates: 'allow' }),
+	convention: numbered({ duplicates: 'allow' })
 };
 
 const collections = {
 	svelte: content({
 		loader: import.meta.og.loader.git('sveltejs/svelte@main:documentation/docs', folderOpts),
-		schema,
+		schema
 	}),
 	kit: content({
 		loader: import.meta.og.loader.git('sveltejs/kit@main:documentation/docs', folderOpts),
-		schema,
+		schema
 	}),
 	cli: content({
 		loader: import.meta.og.loader.git('sveltejs/cli@main:documentation/docs', folderOpts),
-		schema,
+		schema
 	}),
 	// svelte.dev's fourth topic — the AI/MCP tooling docs, from its own repo (same as their sync-docs).
 	ai: content({
 		loader: import.meta.og.loader.git('sveltejs/ai-tools@main:documentation/docs', folderOpts),
-		schema,
-	}),
+		schema
+	})
 };
 
 export const docs = site({
 	base: '/docs',
 	outline: dimensions({
 		axes: { topic: { values: ['svelte', 'kit', 'cli', 'ai'], default: 'svelte', label: 'Docs' } },
-		resolve: ({ topic }) => collections[topic as TopicKey],
+		resolve: ({ topic }) => collections[topic as TopicKey]
 	}),
-	prevNext: 'graph',
+	prevNext: 'graph'
 });
 
 // ── the blog — svelte.dev's actual posts, straight from their repo ──────────────
@@ -57,7 +57,7 @@ export const blogSchema = v.object({
 	description: v.optional(v.string(), ''),
 	author: v.optional(v.string(), ''),
 	authorURL: v.optional(v.string(), ''),
-	draft: v.optional(v.boolean(), false),
+	draft: v.optional(v.boolean(), false)
 });
 export type BlogData = v.InferOutput<typeof blogSchema>;
 
@@ -68,8 +68,8 @@ export const blog = content({
 		// convention then peels the date off each surviving filename.
 		page: /\.md$/,
 		meta: /(^|\/)index\.md$/,
-		convention: dated(),
+		convention: dated()
 	}),
 	schema: blogSchema,
-	filter: (e) => !e.data.draft,
+	filter: (e) => !e.data.draft
 });

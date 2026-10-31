@@ -37,8 +37,34 @@ type Tok =
 	| { t: 'raw'; start: number; end: number }
 	| { t: 'other'; start: number; end: number };
 
-const RAW = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes']);
-const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr', 'param', 'keygen', 'frame']);
+const RAW = new Set([
+	'script',
+	'style',
+	'textarea',
+	'title',
+	'xmp',
+	'iframe',
+	'noembed',
+	'noframes'
+]);
+const VOID = new Set([
+	'area',
+	'base',
+	'br',
+	'col',
+	'embed',
+	'hr',
+	'img',
+	'input',
+	'link',
+	'meta',
+	'source',
+	'track',
+	'wbr',
+	'param',
+	'keygen',
+	'frame'
+]);
 
 function is_space(c: number): boolean {
 	return c === 32 || c === 9 || c === 10 || c === 12 || c === 13;
@@ -142,7 +168,8 @@ class Lexer {
 		const lt = html.indexOf('<', i);
 		if (lt === -1) return this.#set('text', i, n);
 		const c1 = html.charCodeAt(lt + 1);
-		const is_tag = is_alpha(c1) || (c1 === 47 && is_alpha(html.charCodeAt(lt + 2))) || c1 === 33 || c1 === 63;
+		const is_tag =
+			is_alpha(c1) || (c1 === 47 && is_alpha(html.charCodeAt(lt + 2))) || c1 === 33 || c1 === 63;
 		if (!is_tag) {
 			// a stray `<` is text: keep scanning for the next real tag, one text token for the run
 			let j = lt + 1;
@@ -153,7 +180,12 @@ class Lexer {
 					break;
 				}
 				const d = html.charCodeAt(nx + 1);
-				if (is_alpha(d) || (d === 47 && is_alpha(html.charCodeAt(nx + 2))) || d === 33 || d === 63) {
+				if (
+					is_alpha(d) ||
+					(d === 47 && is_alpha(html.charCodeAt(nx + 2))) ||
+					d === 33 ||
+					d === 63
+				) {
 					j = nx;
 					break;
 				}
@@ -241,7 +273,15 @@ function parse_attrs(html: string, from: number, to: number): Attr[] {
 	return out;
 }
 
-const NAMED: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'" };
+const NAMED: Record<string, string> = {
+	amp: '&',
+	lt: '<',
+	gt: '>',
+	quot: '"',
+	apos: "'",
+	nbsp: ' ',
+	'#39': "'"
+};
 
 /** Decode character references (the common named ones and every numeric one): enough to compare two
  *  serializations of the same text or attribute value. */
@@ -262,7 +302,8 @@ export function decode(s: string): string {
 		const ref = s.slice(amp + 1, semi);
 		let ch: string | undefined;
 		if (ref.charCodeAt(0) === 35) {
-			const code = ref[1] === 'x' || ref[1] === 'X' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
+			const code =
+				ref[1] === 'x' || ref[1] === 'X' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
 			if (Number.isFinite(code) && code > 0 && code <= 0x10ffff) ch = String.fromCodePoint(code);
 		} else ch = NAMED[ref];
 		if (ch === undefined) {
@@ -292,11 +333,62 @@ function replace_all(s: string, from: string, to: string): string {
 // ─── the open-element stack, with the parser's implied closes ──────────────────────────────────────
 
 const P_CLOSERS = new Set([
-	'address', 'article', 'aside', 'blockquote', 'center', 'details', 'dialog', 'dir', 'div', 'dl', 'fieldset', 'figcaption', 'figure', 'footer', 'form', 'header', 'hgroup', 'main', 'menu', 'nav', 'ol', 'p', 'search', 'section', 'summary', 'ul',
-	'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'pre', 'listing', 'table', 'hr', 'xmp', 'li', 'dd', 'dt', 'plaintext'
+	'address',
+	'article',
+	'aside',
+	'blockquote',
+	'center',
+	'details',
+	'dialog',
+	'dir',
+	'div',
+	'dl',
+	'fieldset',
+	'figcaption',
+	'figure',
+	'footer',
+	'form',
+	'header',
+	'hgroup',
+	'main',
+	'menu',
+	'nav',
+	'ol',
+	'p',
+	'search',
+	'section',
+	'summary',
+	'ul',
+	'h1',
+	'h2',
+	'h3',
+	'h4',
+	'h5',
+	'h6',
+	'pre',
+	'listing',
+	'table',
+	'hr',
+	'xmp',
+	'li',
+	'dd',
+	'dt',
+	'plaintext'
 ]);
 const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
-const SCOPE = new Set(['applet', 'caption', 'html', 'table', 'td', 'th', 'marquee', 'object', 'template', 'foreignobject', 'desc']);
+const SCOPE = new Set([
+	'applet',
+	'caption',
+	'html',
+	'table',
+	'td',
+	'th',
+	'marquee',
+	'object',
+	'template',
+	'foreignobject',
+	'desc'
+]);
 
 interface Frame {
 	name: string;
@@ -327,7 +419,9 @@ type Stack<F extends { name: string } = Frame> = F[] & {
 	/** per tracked name, how many are open */
 	open?: number[];
 };
-const TRACKED = new Map(['a', 'nobr', 'button', 'form', 'li', 'dd', 'dt', 'p', 'td', 'th', 'tr'].map((n, i) => [n, i]));
+const TRACKED = new Map(
+	['a', 'nobr', 'button', 'form', 'li', 'dd', 'dt', 'p', 'td', 'th', 'tr'].map((n, i) => [n, i])
+);
 
 function push<F extends { name: string }>(stack: Stack<F>, f: F): void {
 	const slot = TRACKED.get(f.name) ?? -1;
@@ -424,7 +518,8 @@ function is_custom(name: string, foreign: boolean): boolean {
  *  dropdown lost `hidden` and pushed the page down until its own runtime set it again). */
 function region_kind(attrs: Attr[]): 'island' | 'lake' | 'hole' {
 	if (attrs.some((a) => a.name === 'endpoint')) return 'hole';
-	if (attrs.some((a) => (a.name === 'wake' && a.value === 'none') || a.name === 'data-og-baked')) return 'lake';
+	if (attrs.some((a) => (a.name === 'wake' && a.value === 'none') || a.name === 'data-og-baked'))
+		return 'lake';
 	return 'island';
 }
 
@@ -433,7 +528,14 @@ function trimmable(s: string): boolean {
 	if (!s.length) return false;
 	const a = s.charCodeAt(0);
 	const b = s.charCodeAt(s.length - 1);
-	return is_space(a) || is_space(b) || a === 160 || b === 160 || s.indexOf('&nbsp;') !== -1 || s.indexOf('&#160;') !== -1;
+	return (
+		is_space(a) ||
+		is_space(b) ||
+		a === 160 ||
+		b === 160 ||
+		s.indexOf('&nbsp;') !== -1 ||
+		s.indexOf('&#160;') !== -1
+	);
 }
 
 // ─── mark ──────────────────────────────────────────────────────────────────────────────────────────
@@ -489,7 +591,7 @@ function plan_hosts(html: string, kind: TransformKind, csr: boolean, answer: boo
 	const planned: boolean[] = [];
 	const stack: Stack<{ name: string; host: number; owned: boolean; foreign: boolean }> = [];
 	let in_body = kind !== 'document';
-	for (const tok = new Lexer(html); tok.next(); ) {
+	for (const tok = new Lexer(html); tok.next();) {
 		if (tok.t === 'start') {
 			const name = tok.name;
 			if (name === 'body') in_body = true;
@@ -498,15 +600,18 @@ function plan_hosts(html: string, kind: TransformKind, csr: boolean, answer: boo
 			if (close !== -1) cut(stack, close);
 			const parent = stack[stack.length - 1];
 			const foreign = name === 'svg' || name === 'math' || !!parent?.foreign;
-			let owned = (name === 'body' && kind === 'document' && csr) || (parent ? parent.owned : false);
-			if (name === 'ogygia-region') owned = region_kind(parse_attrs(html, tok.name_end, tok.end - 1)) === 'island';
+			let owned =
+				(name === 'body' && kind === 'document' && csr) || (parent ? parent.owned : false);
+			if (name === 'ogygia-region')
+				owned = region_kind(parse_attrs(html, tok.name_end, tok.end - 1)) === 'island';
 			let host = -1;
 			if (in_body && is_custom(name, foreign)) {
 				host = planned.length;
 				planned.push(answer || kind !== 'document' || owned);
 			}
 			// Svelte-owned markup starts here: every host above it gets the plan
-			if (owned && !(parent ? parent.owned : false)) for (const f of stack) if (f.host !== -1) planned[f.host] = true;
+			if (owned && !(parent ? parent.owned : false))
+				for (const f of stack) if (f.host !== -1) planned[f.host] = true;
 			if (!(VOID.has(name) || (tok.self && foreign))) push(stack, { name, host, owned, foreign });
 		} else if (tok.t === 'end') {
 			pop_to(stack, tok.name);
@@ -535,7 +640,12 @@ function has_custom_element(html: string, document: boolean): boolean {
  * planned, as in a region answer — see `plan_hosts`). Returns the tagged HTML, or `null` when there is
  * no custom element to tag (the transform then gets the HTML as is, and settle has nothing to do).
  */
-export function mark(html: string, kind: TransformKind, csr: boolean, answer = false): { html: string; record: MarkRecord } | null {
+export function mark(
+	html: string,
+	kind: TransformKind,
+	csr: boolean,
+	answer = false
+): { html: string; record: MarkRecord } | null {
 	if (!has_custom_element(html, kind === 'document')) return null;
 	const planned = plan_hosts(html, kind, csr, answer);
 	if (!planned.length) return null;
@@ -550,7 +660,7 @@ export function mark(html: string, kind: TransformKind, csr: boolean, answer = f
 	const top = () => stack[stack.length - 1];
 	const under_now = () => (top() ? top().under : -1);
 
-	for (const tok = new Lexer(html); tok.next(); ) {
+	for (const tok = new Lexer(html); tok.next();) {
 		if (tok.t === 'start') {
 			const name = tok.name;
 			if (name === 'body') in_body = true;
@@ -563,10 +673,15 @@ export function mark(html: string, kind: TransformKind, csr: boolean, answer = f
 			const child_of_host = !!parent && parent.host !== -1 && in_body;
 			// attributes are read only where something records them: a region's kind, a template's
 			// shadow mode, a host ogygia restores, a child of one (a host it won't restore records none)
-			const recorded = (custom && planned[next_k] === true) || (child_of_host && planned[parent.host] === true);
-			const attrs = name === 'ogygia-region' || name === 'template' || recorded ? parse_attrs(html, tok.name_end, tok.end - 1) : (NO_ATTRS as Attr[]);
+			const recorded =
+				(custom && planned[next_k] === true) || (child_of_host && planned[parent.host] === true);
+			const attrs =
+				name === 'ogygia-region' || name === 'template' || recorded
+					? parse_attrs(html, tok.name_end, tok.end - 1)
+					: (NO_ATTRS as Attr[]);
 			// (a Kit-hydrated document: Svelte owns its whole body, lakes and holes aside)
-			let owned = (name === 'body' && kind === 'document' && csr) || (parent ? parent.owned : false);
+			let owned =
+				(name === 'body' && kind === 'document' && csr) || (parent ? parent.owned : false);
 			if (name === 'ogygia-region') owned = region_kind(attrs) === 'island';
 			// the child tag: this element is child i of the custom element above it (a declarative
 			// shadow template is not a child once parsed: it becomes the host's shadow root)
@@ -575,7 +690,8 @@ export function mark(html: string, kind: TransformKind, csr: boolean, answer = f
 			if (child_of_host && !shadow_tpl) {
 				const i = parent.next++;
 				insert += ` og-c="${parent.host}.${i}"`;
-				if (planned[parent.host]) hosts.get(parent.host)!.children.set(i, { attrs: attr_map(attrs) });
+				if (planned[parent.host])
+					hosts.get(parent.host)!.children.set(i, { attrs: attr_map(attrs) });
 			}
 			let host = -1;
 			if (custom) {
@@ -691,7 +807,11 @@ export interface Settled {
 }
 
 /** The attributes a restore resets: `name → Svelte's value`, or `null` to remove. */
-function attr_diff(now: Attr[], was: Record<string, string>, keep: Set<string>): Record<string, string | null> | null {
+function attr_diff(
+	now: Attr[],
+	was: Record<string, string>,
+	keep: Set<string>
+): Record<string, string | null> | null {
 	let diff: Record<string, string | null> | null = null;
 	const seen = new Set<string>();
 	for (const a of now) {
@@ -701,12 +821,20 @@ function attr_diff(now: Attr[], was: Record<string, string>, keep: Set<string>):
 			if (was[a.name] !== a.value) (diff ??= {})[a.name] = was[a.name];
 		} else if (!keep.has(a.name)) (diff ??= {})[a.name] = null;
 	}
-	for (const name in was) if (!seen.has(name) && !name.startsWith('og-')) (diff ??= {})[name] = was[name];
+	for (const name in was)
+		if (!seen.has(name) && !name.startsWith('og-')) (diff ??= {})[name] = was[name];
 	return diff;
 }
 
 /** Rewrite a start tag: drop the attributes named in `drop`, append `add`, rename to `rename`. */
-function rewrite_start(html: string, tok: { start: number; end: number; name_end: number }, attrs: Attr[], drop: Set<string>, add: string, rename?: string): string {
+function rewrite_start(
+	html: string,
+	tok: { start: number; end: number; name_end: number },
+	attrs: Attr[],
+	drop: Set<string>,
+	add: string,
+	rename?: string
+): string {
 	let s = '<' + (rename ?? html.slice(tok.start + 1, tok.name_end));
 	let at = tok.name_end;
 	for (const a of attrs) {
@@ -775,20 +903,27 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 					const a = stack[s].host;
 					if (a === -1 || !plan.has(a)) continue;
 					const ra = record.hosts.get(a);
-					if (ra) out[p.comment_at] = `<!--og-t ${a}.${ra.text_next++} ${comment_json(decode(was))}-->`;
+					if (ra)
+						out[p.comment_at] = `<!--og-t ${a}.${ra.text_next++} ${comment_json(decode(was))}-->`;
 					break;
 				}
 			}
 			return;
 		}
 		if (p.og === 't') {
-			out[p.comment_at] = text !== null && decode(text) === decode(was) ? '' : `<!--og-t ${p.k}.${p.i} ${comment_json(decode(was))}-->`;
+			out[p.comment_at] =
+				text !== null && decode(text) === decode(was)
+					? ''
+					: `<!--og-t ${p.k}.${p.i} ${comment_json(decode(was))}-->`;
 			return;
 		}
-		out[p.comment_at] = text !== null && decode(text) === decode(was) ? `<!--og-c ${p.k}.${p.i} t-->` : `<!--og-c ${p.k}.${p.i} t ${comment_json(decode(was))}-->`;
+		out[p.comment_at] =
+			text !== null && decode(text) === decode(was)
+				? `<!--og-c ${p.k}.${p.i} t-->`
+				: `<!--og-c ${p.k}.${p.i} t ${comment_json(decode(was))}-->`;
 	};
 
-	for (const tok = new Lexer(html); tok.next(); ) {
+	for (const tok = new Lexer(html); tok.next();) {
 		// inside a head asset being lifted out of a document's body: nothing to rewrite until its end
 		if (head_cut) {
 			if (tok.t === 'end' && tok.name === head_cut.name && --head_cut.depth === 0) {
@@ -839,7 +974,10 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 			const parent = stack[stack.length - 1];
 			const has_og = og_in(tok.start, tok.end);
 			const head_attr = head_in(tok.start, tok.end);
-			const attrs = has_og || head_attr || close !== -1 ? parse_attrs(html, tok.name_end, tok.end - 1) : (NO_ATTRS as Attr[]);
+			const attrs =
+				has_og || head_attr || close !== -1
+					? parse_attrs(html, tok.name_end, tok.end - 1)
+					: (NO_ATTRS as Attr[]);
 			// a head asset in a document's body: lifted into the head (deduped by key)
 			if (doc && head_attr && !has_og) {
 				const key = attrs.find((a) => a.name === 'data-og-head')?.value;
@@ -861,7 +999,13 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 			const foreign = name === 'svg' || name === 'math' || !!parent?.foreign;
 			const is_host = !!og_h;
 			// the render introduced this element: inside a host, not a tagged child, or inherited
-			const introduced = og_c ? false : parent ? (parent.host !== -1 ? true : parent.introduced) : false;
+			const introduced = og_c
+				? false
+				: parent
+					? parent.host !== -1
+						? true
+						: parent.introduced
+					: false;
 			// a start tag the parser would restructure, where the render made either side of it
 			let stand_in = false;
 			if ((close !== -1 || drop) && !foreign) {
@@ -887,7 +1031,9 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 					remove.add('og-keep');
 				} else {
 					planned_host = true;
-					const keep = new Set((attrs.find((a) => a.name === 'og-keep')?.value ?? '').split(' ').filter(Boolean));
+					const keep = new Set(
+						(attrs.find((a) => a.name === 'og-keep')?.value ?? '').split(' ').filter(Boolean)
+					);
 					reset = attr_diff(attrs, record.hosts.get(k)?.attrs ?? {}, keep);
 				}
 			}
@@ -898,7 +1044,8 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 				// (a tagged child that is itself a host ogygia won't restore is server markup: its own runtime
 				// adopts it by the attributes the render gave it — they are not Svelte's to reset)
 				else if (!planned_host && og_h?.name !== 'og-u') {
-					const was = record.hosts.get(k)?.children.get(Number(og_c.value.slice(dot + 1)))?.attrs ?? {};
+					const was =
+						record.hosts.get(k)?.children.get(Number(og_c.value.slice(dot + 1)))?.attrs ?? {};
 					reset = attr_diff(attrs, was, new Set());
 				}
 			}
@@ -908,12 +1055,24 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 				stand_ins++;
 			}
 			if (remove.size || add || stand_in) {
-				out.push(html.slice(pos, tok.start), rewrite_start(html, tok, attrs, remove, add, stand_in ? 'og-as' : undefined));
+				out.push(
+					html.slice(pos, tok.start),
+					rewrite_start(html, tok, attrs, remove, add, stand_in ? 'og-as' : undefined)
+				);
 				pos = tok.end;
 			}
 			const is_void = VOID.has(name) || (tok.self && foreign);
 			if (!is_void)
-				push(stack, { name: stand_in ? 'og-as' : name, as: stand_in ? name : undefined, host: is_host ? Number(og_h!.value) : -1, next: 0, owned: false, under: -1, introduced, foreign });
+				push(stack, {
+					name: stand_in ? 'og-as' : name,
+					as: stand_in ? name : undefined,
+					host: is_host ? Number(og_h!.value) : -1,
+					next: 0,
+					owned: false,
+					under: -1,
+					introduced,
+					foreign
+				});
 			continue;
 		}
 		if (tok.t === 'end') {
@@ -940,7 +1099,8 @@ export function settle(html: string, record: MarkRecord, opts: { dev?: boolean }
 	if (opts.dev) {
 		for (const k of plan) {
 			const rec = record.hosts.get(k);
-			if (rec && rec.planned) (check ??= {})[k] = record.source.slice(rec.inner_start, rec.inner_end);
+			if (rec && rec.planned)
+				(check ??= {})[k] = record.source.slice(rec.inner_start, rec.inner_end);
 		}
 	}
 	return { html: out.join(''), planned: plan.size, stand_ins, head, ...(check ? { check } : {}) };
@@ -955,10 +1115,10 @@ export function check_script(check: Record<string, string>): string {
 function read_id(s: string, at: number): { id: number; end: number } | null {
 	let n = 0;
 	let j = at;
-	while (j < s.length && s.charCodeAt(j) >= 48 && s.charCodeAt(j) <= 57) n = n * 10 + (s.charCodeAt(j++) - 48);
+	while (j < s.length && s.charCodeAt(j) >= 48 && s.charCodeAt(j) <= 57)
+		n = n * 10 + (s.charCodeAt(j++) - 48);
 	return j === at ? null : { id: n, end: j };
 }
-
 
 /** Rewrite every host id in ogygia's marks through `map` (ids it lacks stay). */
 function remap(html: string, map: (id: number) => number | undefined): string {
@@ -970,8 +1130,18 @@ function remap(html: string, map: (id: number) => number | undefined): string {
 	for (let a = html.indexOf('og-'); a !== -1; a = html.indexOf('og-', a + 3)) {
 		const c = html.charCodeAt(a + 3);
 		let id_at = -1;
-		if ((c === 104 || c === 117 || c === 99) && html.charCodeAt(a + 4) === 61 && html.charCodeAt(a + 5) === 34) id_at = a + 6;
-		else if ((c === 99 || c === 116) && html.charCodeAt(a + 4) === 32 && html.startsWith('<!--', a - 4)) id_at = a + 5;
+		if (
+			(c === 104 || c === 117 || c === 99) &&
+			html.charCodeAt(a + 4) === 61 &&
+			html.charCodeAt(a + 5) === 34
+		)
+			id_at = a + 6;
+		else if (
+			(c === 99 || c === 116) &&
+			html.charCodeAt(a + 4) === 32 &&
+			html.startsWith('<!--', a - 4)
+		)
+			id_at = a + 5;
 		if (id_at === -1) continue;
 		const r = read_id(html, id_at);
 		if (!r) continue;

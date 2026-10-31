@@ -9,7 +9,12 @@ import { describe, expect, it } from 'vitest';
 import { stringify } from 'devalue';
 import { stage_deferred, defer_reducer, resolve_script } from '../src/server/page-stream.ts';
 import { PAGE_DEFER_GLOBAL, PAGE_DEFER_KEY } from '../src/page-defer.ts';
-import { analyze_page, defer_keys, explain_held_open, type PageInput } from '../src/insights/page-insights.ts';
+import {
+	analyze_page,
+	defer_keys,
+	explain_held_open,
+	type PageInput
+} from '../src/insights/page-insights.ts';
 import { byte_strip } from '../../devtools/src/profiler/byte-strip.ts';
 import { stream_tail } from '../../devtools/src/profiler/stream-tail.ts';
 
@@ -27,7 +32,9 @@ describe('defer_keys', () => {
 		expect(defer_keys(doc, PAGE_DEFER_KEY)).toEqual(want);
 		expect(defer_keys(seed, PAGE_DEFER_KEY)).toEqual(want);
 		expect(defer_keys('<html>no seed</html>')).toEqual(new Map());
-		expect(defer_keys('<script type="application/ogygia-page">{not json</script>')).toEqual(new Map());
+		expect(defer_keys('<script type="application/ogygia-page">{not json</script>')).toEqual(
+			new Map()
+		);
 	});
 });
 
@@ -48,15 +55,33 @@ describe('stream_tail', () => {
 		expect(tail.late_bytes).toBe(r0.length);
 		expect(tail.keys).toEqual([{ key: 'reviews', id: 0, left_ms: 1200 }]);
 		// (no long pause: nothing held)
-		expect(stream_tail(html, byte_strip(html), [{ end: head.length, t: 4 }, { end: html.length, t: 60 }])).toBeNull();
+		expect(
+			stream_tail(html, byte_strip(html), [
+				{ end: head.length, t: 4 },
+				{ end: html.length, t: 60 }
+			])
+		).toBeNull();
 	});
 });
 
-const page = (over: { res_end: number; fcp?: number; hydrate_at?: number; size?: number }): PageInput => {
+const page = (over: {
+	res_end: number;
+	fcp?: number;
+	hydrate_at?: number;
+	size?: number;
+}): PageInput => {
 	const hydrate_at = over.hydrate_at ?? over.res_end + 30;
 	return {
 		vitals: {},
-		visit: { nav: { res_start: 6, res_end: over.res_end, dcl: over.res_end + 5, ...(over.size ? { size: over.size } : {}) }, paints: { fcp: over.fcp ?? 25 } },
+		visit: {
+			nav: {
+				res_start: 6,
+				res_end: over.res_end,
+				dcl: over.res_end + 5,
+				...(over.size ? { size: over.size } : {})
+			},
+			paints: { fcp: over.fcp ?? 25 }
+		},
 		islands: [
 			// (their scheduler turn came at the start gate: the document's end)
 			{ fp: 'aaaa', t0: 30, loaded: 60, turn: hydrate_at, done: hydrate_at + 4 },
@@ -71,11 +96,21 @@ const regions = [
 	{ fp: 'aaaa', name: 'Reviews', kind: 'island' as const, wake: 'load', hydrated: true },
 	{ fp: 'bbbb', name: 'Healthy', kind: 'island' as const, wake: 'load', hydrated: true }
 ];
-const held = (p: PageInput) => analyze_page(p, regions).findings.find((f) => f.code === 'html-held-open');
+const held = (p: PageInput) =>
+	analyze_page(p, regions).findings.find((f) => f.code === 'html-held-open');
 
 describe('explain_held_open', () => {
 	it('the browser: painted early, the HTML kept coming, every island hydrated after its end — named with the key that held it', () => {
-		const f = held({ ...page({ res_end: 1207 }), held_open: { side: 'browser', keys: [{ key: 'title', at: 40 }, { key: 'reviews', at: 1207 }] } })!;
+		const f = held({
+			...page({ res_end: 1207 }),
+			held_open: {
+				side: 'browser',
+				keys: [
+					{ key: 'title', at: 40 },
+					{ key: 'reviews', at: 1207 }
+				]
+			}
+		})!;
 		expect(f.severity).toBe('warn');
 		expect(f.message).toContain('kept coming until 1207 ms');
 		expect(f.message).toContain('held by `page.data.reviews`');
@@ -94,10 +129,50 @@ describe('explain_held_open', () => {
 		expect(held(page({ res_end: 1200 }))!.fix).toContain('Something kept the response open');
 	});
 	it('the server alone (no visit): the tail left long after the rest, held by a key', () => {
-		const f = explain_held_open({ vitals: {}, visit: null, islands: [], firsts: [], shifts: [], longtasks: [], held_open: { side: 'server', keys: [{ key: 'reviews', at: 1201 }], early_ms: 4, early_bytes: 10240, late_ms: 1201, late_bytes: 74, islands: 2 } }, [], (fp) => fp)!;
+		const f = explain_held_open(
+			{
+				vitals: {},
+				visit: null,
+				islands: [],
+				firsts: [],
+				shifts: [],
+				longtasks: [],
+				held_open: {
+					side: 'server',
+					keys: [{ key: 'reviews', at: 1201 }],
+					early_ms: 4,
+					early_bytes: 10240,
+					late_ms: 1201,
+					late_bytes: 74,
+					islands: 2
+				}
+			},
+			[],
+			(fp) => fp
+		)!;
 		expect(f.message).toContain('stayed open until 1201 ms, held by `page.data.reviews`');
 		expect(f.message).toContain("the page's 2 islands wait 1197 ms longer");
 		// (a page without islands: nothing waits)
-		expect(explain_held_open({ vitals: {}, visit: null, islands: [], firsts: [], shifts: [], longtasks: [], held_open: { side: 'server', keys: [{ key: 'reviews', at: 1201 }], early_ms: 4, late_ms: 1201, islands: 0 } }, [], (fp) => fp)).toBeNull();
+		expect(
+			explain_held_open(
+				{
+					vitals: {},
+					visit: null,
+					islands: [],
+					firsts: [],
+					shifts: [],
+					longtasks: [],
+					held_open: {
+						side: 'server',
+						keys: [{ key: 'reviews', at: 1201 }],
+						early_ms: 4,
+						late_ms: 1201,
+						islands: 0
+					}
+				},
+				[],
+				(fp) => fp
+			)
+		).toBeNull();
 	});
 });

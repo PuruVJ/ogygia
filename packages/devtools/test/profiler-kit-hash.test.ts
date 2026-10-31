@@ -5,7 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import { analyze, type CpuProfile } from '../src/profiler/analyze.ts';
 
-const frame = (functionName: string, url = '', lineNumber = 0) => ({ functionName, url, lineNumber, columnNumber: 0 });
+const frame = (functionName: string, url = '', lineNumber = 0) => ({
+	functionName,
+	url,
+	lineNumber,
+	columnNumber: 0
+});
 
 function profile(parent: string): CpuProfile {
 	return {
@@ -14,7 +19,11 @@ function profile(parent: string): CpuProfile {
 		nodes: [
 			{ id: 1, callFrame: frame('(root)'), children: [2] },
 			{ id: 2, callFrame: frame(parent, 'file:///var/task/server/index.js', 1700), children: [3] },
-			{ id: 3, callFrame: frame('hash', 'file:///var/task/server/chunks/exports-1yKZVnuP.js', 64), positionTicks: [{ line: 68, ticks: 4 }] }
+			{
+				id: 3,
+				callFrame: frame('hash', 'file:///var/task/server/chunks/exports-1yKZVnuP.js', 64),
+				positionTicks: [{ line: 68, ticks: 4 }]
+			}
 		],
 		samples: [3, 3, 3, 3],
 		timeDeltas: [5000, 5000, 5000, 5000]

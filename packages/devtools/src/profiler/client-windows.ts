@@ -33,7 +33,10 @@ const MAX_WINDOWS = 16;
 const NOT_CODE = new Set<FrameCategory>(['idle', 'gc', 'v8', 'profiler']);
 
 /** The profile with every sample outside `spans` (ms, the page clock) turned idle. */
-export function window_profile(p: CpuProfile, spans: readonly (readonly [number, number])[]): CpuProfile {
+export function window_profile(
+	p: CpuProfile,
+	spans: readonly (readonly [number, number])[]
+): CpuProfile {
 	const samples = p.samples ?? [];
 	const deltas = p.timeDeltas ?? [];
 	const out: number[] = new Array(samples.length);
@@ -57,7 +60,14 @@ function top_of(a: Analysis): WindowFn[] {
 		.filter((f) => !NOT_CODE.has(f.category) && f.self_ms >= 1)
 		.sort((x, y) => y.self_ms - x.self_ms)
 		.slice(0, 3)
-		.map((f) => ({ name: f.label && f.name.startsWith('(anonymous') ? f.label : f.name, file: f.url, line: f.line || null, category: f.category, self_ms: f.self_ms, total_ms: f.total_ms }));
+		.map((f) => ({
+			name: f.label && f.name.startsWith('(anonymous') ? f.label : f.name,
+			file: f.url,
+			line: f.line || null,
+			category: f.category,
+			self_ms: f.self_ms,
+			total_ms: f.total_ms
+		}));
 }
 
 /** THE SLOWEST INTERACTION'S TWO SPANS, analyzed: what ran while its input waited, and what its
@@ -90,7 +100,11 @@ export function interaction_windows(
 
 /** Each island's hydrate window and the long tasks outside them, analyzed. `run` is the report's
  *  own analysis (its resolver, renamer and chunk categories). */
-export function client_windows(profile: CpuProfile, visit: Visit, run: (p: CpuProfile) => Analysis): ClientWindows {
+export function client_windows(
+	profile: CpuProfile,
+	visit: Visit,
+	run: (p: CpuProfile) => Analysis
+): ClientWindows {
 	// (to the end of the island's effects: Svelte runs them in a microtask right after `hydrate()`)
 	const end = (i: Visit['islands'][number]) => Math.max(i.done, i.fx ?? 0);
 	const windows = visit.islands

@@ -20,16 +20,22 @@ import type { BeforeNavigateCallback, AfterNavigateCallback } from '../runtime/r
 
 const kit = () => kit_bridge()?.navigation ?? null;
 const og = () =>
-	(globalThis as unknown as Record<symbol, NavHandle | undefined>)[Symbol.for('ogygia.nav')] ?? null;
+	(globalThis as unknown as Record<symbol, NavHandle | undefined>)[Symbol.for('ogygia.nav')] ??
+	null;
 
 /** No runtime on this document at all (neither Kit's nor ogygia's): the browser navigates. */
-function browser_goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}) {
+function browser_goto(
+	url: string | URL,
+	opts: { replaceState?: boolean; external?: boolean } = {}
+) {
 	const target = new URL(url, location.href);
 	if (target.protocol !== 'http:' && target.protocol !== 'https:') {
 		throw new Error('[ogygia] goto() only supports http(s) URLs');
 	}
 	if (target.origin !== location.origin && !opts.external) {
-		throw new Error('[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)');
+		throw new Error(
+			'[ogygia] goto() only supports same-origin URLs (pass { external: true } to leave)'
+		);
 	}
 	if (opts.replaceState) location.replace(target.href);
 	else location.assign(target.href);
@@ -37,7 +43,10 @@ function browser_goto(url: string | URL, opts: { replaceState?: boolean; externa
 }
 const NO_UNSUBSCRIBE = () => {};
 
-export function goto(url: string | URL, opts?: { replaceState?: boolean; external?: boolean }): Promise<void> {
+export function goto(
+	url: string | URL,
+	opts?: { replaceState?: boolean; external?: boolean }
+): Promise<void> {
 	const k = kit();
 	if (k) return k.goto(url, opts);
 	const o = og();
@@ -79,7 +88,9 @@ export function preloadData(url: string | URL): Promise<unknown> {
 	const k = kit();
 	if (k) return k.preloadData(url);
 	const o = og();
-	return o ? o.preloadData(url) : Promise.resolve({ type: 'loaded' as const, status: 200, data: {} });
+	return o
+		? o.preloadData(url)
+		: Promise.resolve({ type: 'loaded' as const, status: 200, data: {} });
 }
 
 export function preloadCode(url?: string): Promise<void> {
@@ -135,7 +146,12 @@ export function onNavigate(fn: (navigation: unknown) => unknown): () => void {
 }
 
 const VITE_QUERY = /\?[^)\s]*(?=:\d+:\d+\)?$)/;
-type SnapshotOptions ={ id?: string; capture: () => unknown; restore: (value: never) => void; reset?: () => void };
+type SnapshotOptions = {
+	id?: string;
+	capture: () => unknown;
+	restore: (value: never) => void;
+	reset?: () => void;
+};
 
 // Kit 3's `snapshot` (capture state before navigating, restore on history traversal): Kit's on a Kit
 // document; accept + no-op on ours (no Kit history to restore from). Kit names an unnamed snapshot

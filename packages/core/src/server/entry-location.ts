@@ -25,5 +25,8 @@ export function entry_src(identity: string): string {
  */
 export function runtime_bootstrap(resolve: (url: string) => string = (url) => url): string {
 	if (!runtime_url) return '';
-	return runtime_bootstrap_tags(resolve(entry_src(runtime_url)), islandDeps(runtime_url).map(resolve));
+	return runtime_bootstrap_tags(
+		resolve(entry_src(runtime_url)),
+		islandDeps(runtime_url).map(resolve)
+	);
 }

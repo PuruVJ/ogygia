@@ -18,7 +18,7 @@ There is **one primitive per app**: `federate()`. It declares the app's identity
 
 ## Not module federation
 
-Module federation shares **JS modules** between builds at runtime. That couples bundlers, versions, and upgrade schedules. Fragment federation shares **complete HTML plus self-contained islands**. Each team ships its own complete build, with its own Svelte copy (about 12 kB gz per extra build on a page). A foreign island hydrates through a function that the *producing* build exports, closed over its own Svelte. Thus version skew between teams is not a problem, and the broken dependency of one team cannot take down the code of another. The price of independence is a few kB. The gain is that "independent" is real.
+Module federation shares **JS modules** between builds at runtime. That couples bundlers, versions, and upgrade schedules. Fragment federation shares **complete HTML plus self-contained islands**. Each team ships its own complete build, with its own Svelte copy (about 12 kB gz per extra build on a page). A foreign island hydrates through a function that the _producing_ build exports, closed over its own Svelte. Thus version skew between teams is not a problem, and the broken dependency of one team cannot take down the code of another. The price of independence is a few kB. The gain is that "independent" is real.
 
 ## Installing
 
@@ -80,7 +80,7 @@ export const { shell } = federate({
 });
 ```
 
-**The peers map is symmetric and bidirectional.** Every app lists every app it talks to, in either direction. `peers.X.key` — the peer's **public** key(s) — verifies inbound calls *from* X. The top-level `key` — this app's **private** key — signs outbound calls *to* anyone. That one map is the whole trust config. A list of keys is rotation overlap. Extra origins on a peer are same-build **replicas**, tried in order for reads (a retried mutation risks a double write, so POSTs stay on the first). Audience defaults to the peer's origin host; set `audience` per peer only when a reverse proxy rewrites `Host` between the hops.
+**The peers map is symmetric and bidirectional.** Every app lists every app it talks to, in either direction. `peers.X.key` — the peer's **public** key(s) — verifies inbound calls _from_ X. The top-level `key` — this app's **private** key — signs outbound calls _to_ anyone. That one map is the whole trust config. A list of keys is rotation overlap. Extra origins on a peer are same-build **replicas**, tried in order for reads (a retried mutation risks a double write, so POSTs stay on the first). Audience defaults to the peer's origin host; set `audience` per peer only when a reverse proxy rewrites `Host` between the hops.
 
 **`visitor` is declared once.** It reads the live event (cookies, locals) and becomes the on-behalf-of identity signed into every hop, including the hole-time fetch of a deferred region. There is no second place to wire identity.
 
@@ -147,10 +147,10 @@ export const shell_router = routes({
 
 `page()` takes the route path (and an optional `search`); `widget()` takes the widget name and its props. Both take the **region dials** as a trailing argument:
 
-| dial | behavior | in a frozen shell |
-| --- | --- | --- |
-| `render: 'static'` (default) | one buffered signed hop during this render; the fragment HTML is baked into the page | baked into the frozen bytes; thawed by a notice from the peer |
-| `render: 'deferred'` | a hole; the browser fetches it from the shell's own signed endpoint, which derives the visitor's claims at hole time and forwards to the peer | per-visitor, stays live over a frozen shell |
+| dial                         | behavior                                                                                                                                      | in a frozen shell                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `render: 'static'` (default) | one buffered signed hop during this render; the fragment HTML is baked into the page                                                          | baked into the frozen bytes; thawed by a notice from the peer |
+| `render: 'deferred'`         | a hole; the browser fetches it from the shell's own signed endpoint, which derives the visitor's claims at hole time and forwards to the peer | per-visitor, stays live over a frozen shell                   |
 
 Pass `claims` on the dials to override the visitor identity for that one hop (the default is the federation's `visitor`, plus every experiment bucket the request decided). The fragment's CSS travels with it and is hoisted to `<head>`; the islands inside wake themselves once the HTML lands.
 
@@ -170,7 +170,7 @@ import { cms } from '$lib/federation.server';
 '/cms/[...rest]': mount(cms),
 ```
 
-GET loads the document. The redirects of the MFE re-throw as shell redirects. POSTs forward the form body and follow the PRG redirect of the MFE. Two channels ride the document beyond the body. **Status**: the MFE's own 404/500 page renders under shell chrome, and the shell *answers with that status* — a 200 around an error page poisons caches and SEO. **Head**: the SEO and social meta of the MFE page (`description`, `og:*`, canonical) joins the head of the shell; `charset`, `viewport`, and `http-equiv` stay the shell's own. A dead or slow MFE renders the shell's error boundary card. The page of the shell is never blocked by another team.
+GET loads the document. The redirects of the MFE re-throw as shell redirects. POSTs forward the form body and follow the PRG redirect of the MFE. Two channels ride the document beyond the body. **Status**: the MFE's own 404/500 page renders under shell chrome, and the shell _answers with that status_ — a 200 around an error page poisons caches and SEO. **Head**: the SEO and social meta of the MFE page (`description`, `og:*`, canonical) joins the head of the shell; `charset`, `viewport`, and `http-equiv` stay the shell's own. A dead or slow MFE renders the shell's error boundary card. The page of the shell is never blocked by another team.
 
 **Canary / blue-green** is a per-request resolver in place of a fixed peer. It is [A/B testing](/docs/app/experiments) of infrastructure itself, with the same `pick` verb that selects components:
 
@@ -213,7 +213,7 @@ export const actions = m.actions;
 {@html data.doc.body}
 ```
 
-Same peer, same signing, same reliability dials. Two honest differences: identity is read off the event (there is no `c.visitor` outside the router), and a Kit load cannot set a response status — an upstream 4xx becomes `error(status)` in Kit, so the status is correct but the *shell's* error page renders. The router's `mount()` keeps the MFE's own error body under shell chrome with the real status.
+Same peer, same signing, same reliability dials. Two honest differences: identity is read off the event (there is no `c.visitor` outside the router), and a Kit load cannot set a response status — an upstream 4xx becomes `error(status)` in Kit, so the status is correct but the _shell's_ error page renders. The router's `mount()` keeps the MFE's own error body under shell chrome with the real status.
 
 ## Reading the visitor: `user(c)`
 
@@ -232,7 +232,7 @@ load: async (c) => {
 
 ## Cross-app thaw
 
-This is the reason a fragment is a region. A remote fragment baked into a shell page is stored in the shell's [freeze store](/docs/data-state/freeze) like any other page. The question freezing always asks is *when does this stored page stop being true?* For a fragment, the answer lives on **another team's server**. Federation answers it with no config on either side.
+This is the reason a fragment is a region. A remote fragment baked into a shell page is stored in the shell's [freeze store](/docs/data-state/freeze) like any other page. The question freezing always asks is _when does this stored page stop being true?_ For a fragment, the answer lives on **another team's server**. Federation answers it with no config on either side.
 
 **A publish thaws its consumers.** Every `freeze.invalidate(...)` on any app already computes what it evicts. After the local evict and edge purge, it now also **notifies every peer**. Each peer drops the frozen pages and cached documents that baked the invalidated fragments, purges them at its own edges, and — if it is itself consumed — forwards the notice up the chain. So a publish on the CMS team thaws the shell pages that embedded CMS fragments. Nobody wired it.
 
@@ -279,7 +279,7 @@ The JS of a foreign island is loaded by **the page of another origin**, through 
 
 ## What crosses, what doesn't
 
-Fragment props are **plain data**. Snippets and children do not cross the boundary. A wired class that arrives from another *build* throws loudly; it does not half-revive into a foreign Svelte instance. For state shared between the islands of two teams on one page, a small contracts package that exports a `SharedState` operates across builds: values cross as devalue snapshots, live references never do, and any server that can print a JSON script tag can seed it.
+Fragment props are **plain data**. Snippets and children do not cross the boundary. A wired class that arrives from another _build_ throws loudly; it does not half-revive into a foreign Svelte instance. For state shared between the islands of two teams on one page, a small contracts package that exports a `SharedState` operates across builds: values cross as devalue snapshots, live references never do, and any server that can print a JSON script tag can seed it.
 
 **`page` does not cross either.** On the MFE server, `$app/state` is the page of the MFE. In the browser, a mounted island hydrates inside the document of the shell, and the same read is the page of the **shell**: the same URL, but the route, the params, and `page.data` of the shell. The MFE's own page seed stops at the fragment boundary. So an island that reads `page.data` paints the MFE value on the server and repaints with the shell value after hydrate. In dev, ogygia warns once per island, with the entry and the MFE origin. Pass the value as a prop, or read it with a remote function.
 

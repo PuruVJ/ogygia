@@ -61,7 +61,9 @@
 			// `keep`: the answer carries the report's dump so THIS BROWSER keeps it (IndexedDB) before
 			// navigating — on an ephemeral host the instance that rendered it may be gone by then
 			const suffix = format === 'ogp' ? '&format=ogp' : '&format=keep';
-			const res = await fetch_page(`${base}/page?p=${encodeURIComponent(path)}&runs=${runs}${suffix}`);
+			const res = await fetch_page(
+				`${base}/page?p=${encodeURIComponent(path)}&runs=${runs}${suffix}`
+			);
 			if (!res.ok) throw new Error(String(res.status));
 			if (format === 'ogp') {
 				const blob = await res.blob();
@@ -78,7 +80,11 @@
 				// /page renders N times and answers { id, url, dump }: keep the dump here, then open the report
 				let url = res.url;
 				try {
-					const keep = (await res.json()) as { id?: string; url?: string; dump?: { meta: { id: string; created: number; trigger: string } } };
+					const keep = (await res.json()) as {
+						id?: string;
+						url?: string;
+						dump?: { meta: { id: string; created: number; trigger: string } };
+					};
 					if (keep.url) url = keep.url;
 					// asked to check a fix: open the new report compared with the one it was run against
 					if (against && keep.id) url = `${base}/compare/${against}/${keep.id}`;
@@ -116,8 +122,8 @@
 	<p class="phase">{queued ? '⏳ ' : ''}{phase}</p>
 	{#if queued}
 		<p class="hint">
-			Waited {waited_s}s. Recordings run one at a time per worker (the V8 profiler is process-wide) —
-			this keeps polling until one is free, then measures automatically.
+			Waited {waited_s}s. Recordings run one at a time per worker (the V8 profiler is process-wide)
+			— this keeps polling until one is free, then measures automatically.
 		</p>
 	{:else}
 		<div class="track"><div class="fill" style="width:{p.value}%"></div></div>

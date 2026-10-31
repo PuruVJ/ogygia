@@ -9,7 +9,11 @@
 	import RebuildBox from './RebuildBox.svelte' with { render: 'deferred' };
 	// an on-demand hole whose fallback IS its trigger (a header's country selector): a rebuilt copy
 	// must show the fallback again, or there is nothing to wake it through
-	import OnDemand from './Greeting.svelte' with { render: 'deferred', fetch: 'interaction', prefetch: 'idle' };
+	import OnDemand from './Greeting.svelte' with {
+		render: 'deferred',
+		fetch: 'interaction',
+		prefetch: 'idle'
+	};
 </script>
 
 <div data-rebuild-static-hole>

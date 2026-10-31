@@ -6,7 +6,13 @@
 	 * that set the wall time, with the "awaits in a row" callouts. Solid = CPU, coloured by owner;
 	 * striped = waiting; dark = nothing recorded.
 	 */
-	import { chain_steps, coalesce, PHASE_LABEL, type Timeline, type ViewSegment } from '../timeline.ts';
+	import {
+		chain_steps,
+		coalesce,
+		PHASE_LABEL,
+		type Timeline,
+		type ViewSegment
+	} from '../timeline.ts';
 	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.ts';
 	import { pressable } from './press.ts';
 
@@ -30,7 +36,14 @@
 			: s.kind === 'wait'
 				? `repeating-linear-gradient(135deg, ${is_http(s) ? WAIT : IO} 0 4px, #0d1014 4px 6px)`
 				: GAP;
-	const dot = (s: ViewSegment) => (s.kind === 'cpu' ? CATEGORY_COLOR[s.category] || '#6b7280' : s.kind === 'wait' ? (is_http(s) ? WAIT : IO) : GAP);
+	const dot = (s: ViewSegment) =>
+		s.kind === 'cpu'
+			? CATEGORY_COLOR[s.category] || '#6b7280'
+			: s.kind === 'wait'
+				? is_http(s)
+					? WAIT
+					: IO
+				: GAP;
 
 	const view = coalesce(t);
 	const steps = chain_steps(t);
@@ -40,10 +53,15 @@
 	// a save callout sits on the first block of its group (`at` indexes the same coalesced view);
 	// a chain of calls each too small to be a step (an N+1 loop) gets its callout after the list
 	const save_at = new Map<number, (typeof saves)[number]>();
-	for (const g of saves) if (step_index.has(g.at[0]) && !save_at.has(g.at[0])) save_at.set(g.at[0], g);
-	const orphan_saves = saves.filter((g) => !step_index.has(g.at[0]) && g.save_ms >= Math.max(2, t.window_ms * 0.02));
+	for (const g of saves)
+		if (step_index.has(g.at[0]) && !save_at.has(g.at[0])) save_at.set(g.at[0], g);
+	const orphan_saves = saves.filter(
+		(g) => !step_index.has(g.at[0]) && g.save_ms >= Math.max(2, t.window_ms * 0.02)
+	);
 	const chain_label = (calls: string[]) =>
-		calls.length <= 4 ? calls.join(' → ') : `${calls[0]} → ${calls[1]} → … → ${calls[calls.length - 1]} (${calls.length} calls)`;
+		calls.length <= 4
+			? calls.join(' → ')
+			: `${calls[0]} → ${calls[1]} → … → ${calls[calls.length - 1]} (${calls.length} calls)`;
 
 	let tip = $state<{ i: number; x: number; y: number } | null>(null);
 	let picked = $state<number | null>(null);
@@ -52,7 +70,10 @@
 	function pick(i: number) {
 		picked = i;
 		const step = step_index.get(i);
-		if (step) document.getElementById(`tl-step-${i}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+		if (step)
+			document
+				.getElementById(`tl-step-${i}`)
+				?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 	}
 </script>
 
@@ -65,11 +86,19 @@
 	<span><i class="stripe" style="--c:{WAIT}"></i> waiting on a call</span>
 	<span><i class="stripe" style="--c:{IO}"></i> waiting on a timer / file / socket</span>
 	<span><i style="background:{GAP}"></i> nothing recorded</span>
-	<span class="hint">solid = the CPU was running that · striped = the server was waiting · hover a block, click it to jump to its step</span>
+	<span class="hint"
+		>solid = the CPU was running that · striped = the server was waiting · hover a block, click it
+		to jump to its step</span
+	>
 </div>
 
 <!-- a group: its segments are pressable (an image cannot hold buttons), each named for a reader -->
-<div class="bar" role="group" aria-label="the render, start to end" onmouseleave={() => (tip = null)}>
+<div
+	class="bar"
+	role="group"
+	aria-label="the render, start to end"
+	onmouseleave={() => (tip = null)}
+>
 	{#each view as s, i (i)}
 		<div
 			class="seg {s.kind}"
@@ -89,16 +118,29 @@
 			{@attach pressable}
 			aria-label="{s.kind === 'wait' ? 'wait: ' : ''}{s.label}"
 		>
-			{#if pct(s) > 5}<span style="color:{ink_on(dot(s))}">{s.kind === 'wait' ? 'wait: ' : ''}{s.label}</span>{/if}
+			{#if pct(s) > 5}<span style="color:{ink_on(dot(s))}"
+					>{s.kind === 'wait' ? 'wait: ' : ''}{s.label}</span
+				>{/if}
 		</div>
 	{/each}
 </div>
 {#if gc_in.length}
 	<div class="gc-row" role="img" aria-label="GC pauses in this render">
 		{#each gc_in as p, i (i)}
-			<i class="gc-tick {p.kind}" style="left:{(p.t / t.window_ms) * 100}%;width:{Math.max((p.ms / t.window_ms) * 100, 0.25)}%" title="GC {p.kind} · {fmt_ms(p.ms)} ms at {fmt_ms(p.t)} ms — {p.why}{p.top ? `. Mostly: ${p.top}` : ''}"></i>
+			<i
+				class="gc-tick {p.kind}"
+				style="left:{(p.t / t.window_ms) * 100}%;width:{Math.max(
+					(p.ms / t.window_ms) * 100,
+					0.25
+				)}%"
+				title="GC {p.kind} · {fmt_ms(p.ms)} ms at {fmt_ms(p.t)} ms — {p.why}{p.top
+					? `. Mostly: ${p.top}`
+					: ''}"
+			></i>
 		{/each}
-		<span class="gc-label hint">GC pauses ({gc_in.length}) — hover one for what filled the heap before it</span>
+		<span class="gc-label hint"
+			>GC pauses ({gc_in.length}) — hover one for what filled the heap before it</span
+		>
 	</div>
 {/if}
 <div class="axis">
@@ -106,25 +148,42 @@
 </div>
 {#if tip}
 	{@const s = view[tip.i]}
-	<div class="tip" style="left:{Math.min(tip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 380)}px;top:{tip.y + 16}px">
+	<div
+		class="tip"
+		style="left:{Math.min(
+			tip.x + 14,
+			(typeof window !== 'undefined' ? window.innerWidth : 1200) - 380
+		)}px;top:{tip.y + 16}px"
+	>
 		<div class="tip-h">
 			<i style="background:{dot(s)}"></i>
 			<b>{fmt_ms(s.t1 - s.t0)} ms</b> · {pct(s).toFixed(1)}% · from {fmt_ms(s.t0)} to {fmt_ms(s.t1)} ms
 		</div>
 		{#if s.within}<div class="dim">inside span <b>{s.within}</b></div>{/if}
 		{#if s.kind === 'cpu'}
-			<div>on the CPU: <b>{s.label}</b>{#if s.detail} — mostly {s.detail}{/if}</div>
+			<div>
+				on the CPU: <b>{s.label}</b>{#if s.detail}
+					— mostly {s.detail}{/if}
+			</div>
 			{#if s.file}<div class="mono">{s.file}</div>{/if}
 			<div class="dim">{CATEGORY_LABEL[s.category]} · {PHASE_LABEL[s.phase]}</div>
 		{:else if s.kind === 'wait'}
-			<div>waiting on {s.calls && s.calls.length > 1 ? `${s.calls.length} calls at once` : 'one call'} · {PHASE_LABEL[s.phase]}</div>
+			<div>
+				waiting on {s.calls && s.calls.length > 1 ? `${s.calls.length} calls at once` : 'one call'} ·
+				{PHASE_LABEL[s.phase]}
+			</div>
 			{#each (s.calls ?? []).slice(0, 8) as c, i (c.label + '\0' + i)}
-				<div class="mono">{c.label} <span class="dim">{fmt_ms(c.ms)} ms{c.caller ? ` · from ${c.caller}` : ''}</span></div>
+				<div class="mono">
+					{c.label}
+					<span class="dim">{fmt_ms(c.ms)} ms{c.caller ? ` · from ${c.caller}` : ''}</span>
+				</div>
 				{#if c.callers && c.callers.length > 1}
-					<div class="mono dim">  call path: {c.callers.join(' ← ')}</div>
+					<div class="mono dim">call path: {c.callers.join(' ← ')}</div>
 				{/if}
 				{#if c.timings?.length}
-					<div class="mono dim">  their side: {c.timings.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`).join(' · ')}</div>
+					<div class="mono dim">
+						their side: {c.timings.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`).join(' · ')}
+					</div>
 				{/if}
 			{/each}
 		{:else}
@@ -143,34 +202,64 @@
 	</div>
 {/if}
 <p class="hint totals">
-	<b>{fmt_ms(t.window_ms)} ms</b> wall · {fmt_ms(t.cpu_ms)} ms on the CPU · {fmt_ms(t.wait_ms)} ms waiting on calls
+	<b>{fmt_ms(t.window_ms)} ms</b> wall · {fmt_ms(t.cpu_ms)} ms on the CPU · {fmt_ms(t.wait_ms)} ms waiting
+	on calls
 	{#if t.gap_ms >= 0.5}· {fmt_ms(t.gap_ms)} ms unaccounted{/if}
 </p>
 
 {#if t.lanes?.length}
-	<h3>Load functions <span class="hint">each lane is one Kit load: when it ran, on this render's clock</span></h3>
+	<h3>
+		Load functions <span class="hint"
+			>each lane is one Kit load: when it ran, on this render's clock</span
+		>
+	</h3>
 	<div class="lanes">
 		{#each t.lanes as l (l.file)}
-			<div class="lane" class:chained={t.chain && (t.chain.page === l.file || t.chain.layout === l.file)}>
+			<div
+				class="lane"
+				class:chained={t.chain && (t.chain.page === l.file || t.chain.layout === l.file)}
+			>
 				<span class="lname" title={l.file}>
 					<code>{l.file.replace(/^routes\//, '')}</code>
 					<span class="kind" class:universal={l.kind === 'universal'}>{l.kind}</span>
-					{#if l.awaited_parent}<span class="kind parent" title="Kit's parent() ran under this load">await parent()</span>{/if}
+					{#if l.awaited_parent}<span class="kind parent" title="Kit's parent() ran under this load"
+							>await parent()</span
+						>{/if}
 				</span>
 				<div class="ltrack" title="from {fmt_ms(l.t0)} to {fmt_ms(l.t1)} ms">
-					<div class="lbar" style="left:{(l.t0 / t.window_ms) * 100}%;width:{Math.max(0.4, ((l.t1 - l.t0) / t.window_ms) * 100)}%">
-						<div class="lcpu" style="width:{l.t1 > l.t0 ? Math.min(100, (l.cpu_ms / (l.t1 - l.t0)) * 100) : 0}%"></div>
+					<div
+						class="lbar"
+						style="left:{(l.t0 / t.window_ms) * 100}%;width:{Math.max(
+							0.4,
+							((l.t1 - l.t0) / t.window_ms) * 100
+						)}%"
+					>
+						<div
+							class="lcpu"
+							style="width:{l.t1 > l.t0 ? Math.min(100, (l.cpu_ms / (l.t1 - l.t0)) * 100) : 0}%"
+						></div>
 					</div>
 				</div>
-				<span class="num">{fmt_ms(l.t0)}–{fmt_ms(l.t1)} ms <span class="hint">· {fmt_ms(l.cpu_ms)} ms CPU{l.wait_ms >= 0.5 ? ` + ${fmt_ms(l.wait_ms)} ms waiting` : ''}</span></span>
+				<span class="num"
+					>{fmt_ms(l.t0)}–{fmt_ms(l.t1)} ms
+					<span class="hint"
+						>· {fmt_ms(l.cpu_ms)} ms CPU{l.wait_ms >= 0.5
+							? ` + ${fmt_ms(l.wait_ms)} ms waiting`
+							: ''}</span
+					></span
+				>
 			</div>
 		{/each}
 	</div>
 	{#if t.chain}
 		<div class="save chain">
-			<b>{t.chain.page.replace(/^routes\//, '')}</b> started only after <b>{t.chain.layout.replace(/^routes\//, '')}</b> finished, {fmt_ms(t.chain.serial_ms)} ms in
-			{#if t.chain.explicit}— it awaits <code>parent()</code>.{:else}— Kit runs a page load and its layouts together unless the page awaits <code>parent()</code>.{/if}
-			Start the page's own fetches first and await <code>parent()</code> after, and the two overlap: <b>up to {fmt_ms(t.chain.serial_ms)} ms back</b>.
+			<b>{t.chain.page.replace(/^routes\//, '')}</b> started only after
+			<b>{t.chain.layout.replace(/^routes\//, '')}</b>
+			finished, {fmt_ms(t.chain.serial_ms)} ms in
+			{#if t.chain.explicit}— it awaits <code>parent()</code>.{:else}— Kit runs a page load and its
+				layouts together unless the page awaits <code>parent()</code>.{/if}
+			Start the page's own fetches first and await <code>parent()</code> after, and the two overlap:
+			<b>up to {fmt_ms(t.chain.serial_ms)} ms back</b>.
 		</div>
 	{/if}
 {/if}
@@ -181,18 +270,32 @@
 		<div class="prow">
 			<span class="name">{PHASE_LABEL[p.phase]}</span>
 			<div class="track">
-				<div class="cpu" style="width:{(p.cpu_ms / phase_total) * 100}%" title="CPU {fmt_ms(p.cpu_ms)} ms"></div>
-				<div class="wait" style="width:{(p.wait_ms / phase_total) * 100}%" title="waiting {fmt_ms(p.wait_ms)} ms"></div>
+				<div
+					class="cpu"
+					style="width:{(p.cpu_ms / phase_total) * 100}%"
+					title="CPU {fmt_ms(p.cpu_ms)} ms"
+				></div>
+				<div
+					class="wait"
+					style="width:{(p.wait_ms / phase_total) * 100}%"
+					title="waiting {fmt_ms(p.wait_ms)} ms"
+				></div>
 			</div>
-			<span class="num">{fmt_ms(p.cpu_ms)} ms CPU{#if p.wait_ms >= 0.5} <span class="hint">+ {fmt_ms(p.wait_ms)} ms waiting</span>{/if}</span>
+			<span class="num"
+				>{fmt_ms(p.cpu_ms)} ms CPU{#if p.wait_ms >= 0.5}
+					<span class="hint">+ {fmt_ms(p.wait_ms)} ms waiting</span>{/if}</span
+			>
 			{#if p.top?.length}
-				<span class="who hint">{p.top.map((o) => `${o.label} ${fmt_ms(o.ms)} ms`).join(' · ')}</span>
+				<span class="who hint">{p.top.map((o) => `${o.label} ${fmt_ms(o.ms)} ms`).join(' · ')}</span
+				>
 			{/if}
 		</div>
 	{/each}
 </div>
 
-<h3>The steps that set the time <span class="hint">in order, biggest first is the one to fix</span></h3>
+<h3>
+	The steps that set the time <span class="hint">in order, biggest first is the one to fix</span>
+</h3>
 <ol class="steps">
 	{#each steps as s (s.i)}
 		{@const g = save_at.get(s.i)}
@@ -207,15 +310,25 @@
 			{:else if s.seg.kind === 'wait'}
 				<span class="what">waiting: {s.seg.label}</span>
 				{#if s.seg.calls && s.seg.calls.length > 1}
-					<span class="hint">— {s.seg.calls.map((c) => `${c.label} ${fmt_ms(c.ms)} ms`).join(', ')}</span>
+					<span class="hint"
+						>— {s.seg.calls.map((c) => `${c.label} ${fmt_ms(c.ms)} ms`).join(', ')}</span
+					>
 				{:else if s.seg.calls?.[0]?.caller}
-					<span class="hint">— from {s.seg.calls[0].callers && s.seg.calls[0].callers.length > 1 ? s.seg.calls[0].callers.join(' ← ') : s.seg.calls[0].caller}</span>
+					<span class="hint"
+						>— from {s.seg.calls[0].callers && s.seg.calls[0].callers.length > 1
+							? s.seg.calls[0].callers.join(' ← ')
+							: s.seg.calls[0].caller}</span
+					>
 				{/if}
 				{#if s.seg.calls?.length === 1 && s.seg.calls[0].timings?.length}
 					{@const tm = s.seg.calls[0].timings}
 					{@const theirs = tm.reduce((a, t) => a + t.ms, 0)}
 					<div class="inside">
-						their Server-Timing: {tm.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`).join(' · ')}{#if theirs > 0} — <b>{fmt_ms(theirs)} ms on their side</b>, {fmt_ms(Math.max(0, s.ms - theirs))} ms network + framework{/if}
+						their Server-Timing: {tm
+							.map((t) => `${t.desc ?? t.name} ${fmt_ms(t.ms)} ms`)
+							.join(' · ')}{#if theirs > 0}
+							— <b>{fmt_ms(theirs)} ms on their side</b>, {fmt_ms(Math.max(0, s.ms - theirs))} ms network
+							+ framework{/if}
 					</div>
 				{/if}
 			{:else}
@@ -223,16 +336,23 @@
 				<span class="hint">— a promise chain, a driver on its own socket pool, a worker</span>
 			{/if}
 			<span class="pchip">{PHASE_LABEL[s.seg.phase]}</span>
-			{#if s.seg.within && !s.seg.label.startsWith('in ')}<span class="pchip span">in {s.seg.within}</span>{/if}
+			{#if s.seg.within && !s.seg.label.startsWith('in ')}<span class="pchip span"
+					>in {s.seg.within}</span
+				>{/if}
 			{#if s.seg.inside && s.seg.inside.length > 1}
 				<div class="inside">
-					{s.seg.parts} pieces: {s.seg.inside.slice(0, 5).map((p) => `${p.label} ${fmt_ms(p.ms)} ms`).join(' · ')}{s.seg.inside.length > 5 ? ' · …' : ''}
+					{s.seg.parts} pieces: {s.seg.inside
+						.slice(0, 5)
+						.map((p) => `${p.label} ${fmt_ms(p.ms)} ms`)
+						.join(' · ')}{s.seg.inside.length > 5 ? ' · …' : ''}
 				</div>
 			{/if}
 			{#if g}
 				<div class="save">
-					{g.calls.length} calls ran one after another ({chain_label(g.calls)}): started together they would cost
-					{fmt_ms(g.ms - g.save_ms)} ms instead of {fmt_ms(g.ms)} — <b>save ~{fmt_ms(g.save_ms)} ms</b> if they are independent.
+					{g.calls.length} calls ran one after another ({chain_label(g.calls)}): started together
+					they would cost
+					{fmt_ms(g.ms - g.save_ms)} ms instead of {fmt_ms(g.ms)} —
+					<b>save ~{fmt_ms(g.save_ms)} ms</b> if they are independent.
 				</div>
 			{/if}
 		</li>
@@ -303,7 +423,7 @@
 	}
 	.seg.wait span {
 		color: var(--text);
-		background: var(--bg-sunken)aa;
+		background: var(--bg-sunken) aa;
 		padding: 0 4px;
 		border-radius: 3px;
 	}

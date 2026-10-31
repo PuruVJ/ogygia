@@ -39,7 +39,9 @@ export interface RegionInfo {
 
 export function region_info(el: Element): RegionInfo {
 	const kind = region_kind(el);
-	const parent = el.hasAttribute('data-nested') ? (el.parentElement?.closest('ogygia-region') ?? undefined) : undefined;
+	const parent = el.hasAttribute('data-nested')
+		? (el.parentElement?.closest('ogygia-region') ?? undefined)
+		: undefined;
 	return {
 		el,
 		kind,
@@ -109,9 +111,13 @@ export function region_name(entry: string | null | undefined): string {
  * component + everything imported), published on `window.__ogygia_region_bytes` by the dock's mount
  * fetch. `null` when the island is still cold (never woken → no subgraph yet) or off a dev build.
  */
-export function region_transitive(
-	entry: string | null | undefined
-): { bytes: number; modules: number; top?: { file: string; bytes: number }[]; barrels?: { file: string; fanout: number }[]; hazards?: IslandHazard[] } | null {
+export function region_transitive(entry: string | null | undefined): {
+	bytes: number;
+	modules: number;
+	top?: { file: string; bytes: number }[];
+	barrels?: { file: string; fanout: number }[];
+	hazards?: IslandHazard[];
+} | null {
 	const id = island_id(entry);
 	const map = (typeof window !== 'undefined' && window.__ogygia_region_bytes) || null;
 	return (id && map && map[id]) || null;

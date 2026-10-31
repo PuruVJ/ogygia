@@ -11,10 +11,32 @@ import { createRequire } from 'node:module';
 const base = process.argv[2] ?? 'http://127.0.0.1:4183';
 const require = createRequire(new URL('../../package.json', import.meta.url));
 const { chromium } = require('playwright');
-const TABS = ['lens', 'page', 'record', 'hydration', 'bytes', 'wire', 'hub', 'nav', 'timeline', 'profiler'];
+const TABS = [
+	'lens',
+	'page',
+	'record',
+	'hydration',
+	'bytes',
+	'wire',
+	'hub',
+	'nav',
+	'timeline',
+	'profiler'
+];
 const PAGES = ['/dt-lab', '/dt-nest', '/dt-third', '/dt-styles'];
 // presses that start or end something bigger than a click (a session, a reload, the dock itself)
-const SKIP = ['reload', 'close', 'clear', 'record', 'stop', 'forget', 'reset', 'dock', 'undock', 'hide'];
+const SKIP = [
+	'reload',
+	'close',
+	'clear',
+	'record',
+	'stop',
+	'forget',
+	'reset',
+	'dock',
+	'undock',
+	'hide'
+];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -32,14 +54,28 @@ const signature = () =>
 			for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
 			return h;
 		};
-		const classes = [...r.querySelectorAll('*')].map((e) => e.className?.baseVal ?? e.className).join('|');
-		return [hash(r.textContent), hash(classes), r.querySelectorAll('*').length, document.body.innerHTML.length, scrollY, document.activeElement?.tagName].join(':');
+		const classes = [...r.querySelectorAll('*')]
+			.map((e) => e.className?.baseVal ?? e.className)
+			.join('|');
+		return [
+			hash(r.textContent),
+			hash(classes),
+			r.querySelectorAll('*').length,
+			document.body.innerHTML.length,
+			scrollY,
+			document.activeElement?.tagName
+		].join(':');
 	});
 const collect = () =>
 	page.evaluate(() => {
 		const r = document.querySelector('[data-ogygia-devtools-host]').shadowRoot;
-		window.__og_clickables = [...r.querySelectorAll('button, a[href], [role="button"], summary, tr, li, [tabindex]')].filter(
-			(e) => !e.hasAttribute('data-og-tab') && getComputedStyle(e).cursor === 'pointer' && e.getClientRects().length
+		window.__og_clickables = [
+			...r.querySelectorAll('button, a[href], [role="button"], summary, tr, li, [tabindex]')
+		].filter(
+			(e) =>
+				!e.hasAttribute('data-og-tab') &&
+				getComputedStyle(e).cursor === 'pointer' &&
+				e.getClientRects().length
 		);
 		return window.__og_clickables.length;
 	});
@@ -65,14 +101,17 @@ let pressed = 0;
 	await page.waitForTimeout(2500);
 	const timing = await page.evaluate(async (tabs) => {
 		const root = () => document.querySelector('[data-ogygia-devtools-host]')?.shadowRoot;
-		const toggle = () => document.querySelector('[data-og-panel-toggle]') ?? root()?.querySelector('[data-og-panel-toggle]');
+		const toggle = () =>
+			document.querySelector('[data-og-panel-toggle]') ??
+			root()?.querySelector('[data-og-panel-toggle]');
 		if (root()?.querySelector('[data-og-tab]')) {
 			toggle()?.click();
 			await new Promise((ok) => setTimeout(ok, 300));
 		}
 		const t0 = performance.now();
 		toggle()?.click();
-		for (let i = 0; i < 300 && !root()?.querySelector('[data-og-tab]'); i++) await new Promise((ok) => setTimeout(ok, 5));
+		for (let i = 0; i < 300 && !root()?.querySelector('[data-og-tab]'); i++)
+			await new Promise((ok) => setTimeout(ok, 5));
 		const open = performance.now() - t0;
 		let worst = 0;
 		let worst_tab = '';
@@ -90,7 +129,9 @@ let pressed = 0;
 	await page.waitForTimeout(2500);
 	const bad = timing.open > 500 || timing.worst > 150 || errors.length > e0;
 	if (bad) failed++;
-	console.log(`${bad ? '✗' : '✓'} 320 islands: the dock opens in ${timing.open} ms, the slowest tab (${timing.worst_tab}) shows in ${timing.worst} ms${errors.length > e0 ? `; errors: ${errors.slice(e0, e0 + 2).join(' | ')}` : ', no errors'}`);
+	console.log(
+		`${bad ? '✗' : '✓'} 320 islands: the dock opens in ${timing.open} ms, the slowest tab (${timing.worst_tab}) shows in ${timing.worst} ms${errors.length > e0 ? `; errors: ${errors.slice(e0, e0 + 2).join(' | ')}` : ', no errors'}`
+	);
 }
 try {
 	for (const path of PAGES) {
@@ -114,7 +155,9 @@ try {
 			for (let i = 0; i < Math.min(n, 80); i++) {
 				const label = await page.evaluate((i) => {
 					const e = window.__og_clickables[i];
-					return e?.isConnected ? `${e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 50)}"` : null;
+					return e?.isConnected
+						? `${e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 50)}"`
+						: null;
 				}, i);
 				if (!label || SKIP.some((w) => label.toLowerCase().includes(w))) continue;
 				const before = await signature();
@@ -133,12 +176,15 @@ try {
 					continue;
 				}
 				if ((await signature()) === before) dead.push(label);
-				if (!(await page.locator(`[data-og-tab="${tab}"][aria-selected="true"]`).count())) await open_tab();
+				if (!(await page.locator(`[data-og-tab="${tab}"][aria-selected="true"]`).count()))
+					await open_tab();
 				await collect();
 			}
 			if (dead.length || threw.length) {
 				failed++;
-				console.log(`✗ ${path} · ${tab}: ${dead.length ? `${dead.length} press(es) changed nothing: ${dead.slice(0, 5).join(', ')}` : ''}${threw.length ? ` ${threw.slice(0, 3).join(' | ')}` : ''}`);
+				console.log(
+					`✗ ${path} · ${tab}: ${dead.length ? `${dead.length} press(es) changed nothing: ${dead.slice(0, 5).join(', ')}` : ''}${threw.length ? ` ${threw.slice(0, 3).join(' | ')}` : ''}`
+				);
 			}
 		}
 		console.log(`· ${path}: every tab pressed`);
@@ -146,5 +192,9 @@ try {
 } finally {
 	await browser.close();
 }
-console.log(failed ? `FAILED (${failed})` : `✓ every press does something (${pressed} presses, ${PAGES.length} pages × ${TABS.length} tabs), no errors`);
+console.log(
+	failed
+		? `FAILED (${failed})`
+		: `✓ every press does something (${pressed} presses, ${PAGES.length} pages × ${TABS.length} tabs), no errors`
+);
 process.exit(failed ? 1 : 0);

@@ -41,7 +41,11 @@ describe('around()', () => {
 		const core: Handle = ({ event, resolve }) =>
 			resolve(event, { transformPageChunk: ({ html }) => html + '[core]' });
 		const handle = around(
-			[live('p', { handle: (_ctx, next) => next({ transformPageChunk: ({ html }) => html + '[plugin]' }) })],
+			[
+				live('p', {
+					handle: (_ctx, next) => next({ transformPageChunk: ({ html }) => html + '[plugin]' })
+				})
+			],
 			core
 		);
 		let out = '';

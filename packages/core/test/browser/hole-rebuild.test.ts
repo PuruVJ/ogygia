@@ -12,7 +12,8 @@ import { props_sidecar_of } from '../../src/runtime/sidecar.ts';
 
 const ENDPOINT = '/__ogygia__?id=feedface0001&props=W3t9XQ&exp=9999999999&sig=stub';
 const IDENTITY = 'a1b2c3d4e5f60718';
-const SIDECAR = '<script type="application/ogygia-props" data-ogygia-props data-og-format="json">[{"start":1},5]</script>';
+const SIDECAR =
+	'<script type="application/ogygia-props" data-ogygia-props data-og-format="json">[{"start":1},5]</script>';
 
 function html_response(html: string): Response {
 	const res = new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
@@ -48,12 +49,16 @@ test('a hole rendered again with no address gets its endpoint (and sidecar) back
 		await expect.poll(() => calls.length, { timeout: 10_000 }).toBe(1);
 		// Kit gives up: its root is cleared and mounted fresh — the client leg's hole has no address.
 		const root = document.querySelector('[data-kit-root]') as HTMLElement;
-		root.innerHTML =
-			`<ogygia-region render="defer" when="load" endpoint="" data-og-hole="${IDENTITY}"><p data-testid="fallback">fallback</p></ogygia-region>`;
+		root.innerHTML = `<ogygia-region render="defer" when="load" endpoint="" data-og-hole="${IDENTITY}"><p data-testid="fallback">fallback</p></ogygia-region>`;
 		const rebuilt = root.querySelector('ogygia-region')!;
-		expect(rebuilt.getAttribute('endpoint'), 'the record handed the address back on connect').toBe(ENDPOINT);
+		expect(rebuilt.getAttribute('endpoint'), 'the record handed the address back on connect').toBe(
+			ENDPOINT
+		);
 		await expect.poll(() => rebuilt.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
-		expect(rebuilt.querySelector('[data-testid="served"]'), 'the rebuilt hole filled from the server').not.toBeNull();
+		expect(
+			rebuilt.querySelector('[data-testid="served"]'),
+			'the rebuilt hole filled from the server'
+		).not.toBeNull();
 		expect(rebuilt.querySelector('[data-testid="fallback"]')).toBeNull();
 		// The props sidecar came back with the address, off the DOM (Kit's tree is never edited).
 		const sidecar = props_sidecar_of(rebuilt);

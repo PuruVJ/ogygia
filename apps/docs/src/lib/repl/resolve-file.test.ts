@@ -4,12 +4,19 @@
 // resolve arbitrarily). Node strips the .ts types natively.
 import { resolve_file } from './resolve-file.ts';
 
-let pass = 0, fail = 0;
+let pass = 0,
+	fail = 0;
 const ok = (label: string, cond: unknown, detail = '') => {
-	if (cond) { pass++; console.log(`  ✓ ${label}`); }
-	else { fail++; console.log(`  ✗ ${label}${detail ? '  — ' + detail : ''}`); }
+	if (cond) {
+		pass++;
+		console.log(`  ✓ ${label}`);
+	} else {
+		fail++;
+		console.log(`  ✗ ${label}${detail ? '  — ' + detail : ''}`);
+	}
 };
-const eq = (label: string, got: unknown, want: unknown) => ok(label + `  (→ ${JSON.stringify(got)})`, got === want, `wanted ${JSON.stringify(want)}`);
+const eq = (label: string, got: unknown, want: unknown) =>
+	ok(label + `  (→ ${JSON.stringify(got)})`, got === want, `wanted ${JSON.stringify(want)}`);
 
 console.log('resolve-file\n');
 
@@ -21,24 +28,52 @@ const demo = {
 
 // ── exact + relative ──
 eq('exact key', resolve_file('src/lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
-eq('./ prefix strips to a root key', resolve_file('./+page.svelte', { '+page.svelte': 'x' }), '+page.svelte');
+eq(
+	'./ prefix strips to a root key',
+	resolve_file('./+page.svelte', { '+page.svelte': 'x' }),
+	'+page.svelte'
+);
 eq('leading / strips', resolve_file('/src/lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
-eq('query string is ignored', resolve_file('src/lib/Counter.svelte?raw', demo), 'src/lib/Counter.svelte');
+eq(
+	'query string is ignored',
+	resolve_file('src/lib/Counter.svelte?raw', demo),
+	'src/lib/Counter.svelte'
+);
 
 // ── $lib alias (Kit <=2) ──
 eq('$lib/ maps to src/lib/', resolve_file('$lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
 eq('$lib/ nested', resolve_file('$lib/Header.svelte', demo), 'src/lib/Header.svelte');
 
 // ── #lib alias (Kit 3) ──
-eq('#lib/ maps to src/lib/ (Kit 3)', resolve_file('#lib/Counter.svelte', demo), 'src/lib/Counter.svelte');
-eq('$libfoo is NOT the alias', resolve_file('$libfoo/Counter.svelte', demo), 'src/lib/Counter.svelte'); // still found by basename fallback
+eq(
+	'#lib/ maps to src/lib/ (Kit 3)',
+	resolve_file('#lib/Counter.svelte', demo),
+	'src/lib/Counter.svelte'
+);
+eq(
+	'$libfoo is NOT the alias',
+	resolve_file('$libfoo/Counter.svelte', demo),
+	'src/lib/Counter.svelte'
+); // still found by basename fallback
 
 // ── move-tolerant basename fallback ──
 {
 	const moved = { 'src/routes/+page.svelte': 'x', 'Counter.svelte': 'x' }; // Counter dragged to root
-	eq('$lib import of a file moved to root still resolves by name', resolve_file('$lib/Counter.svelte', moved), 'Counter.svelte');
-	eq('#lib import of a moved file resolves by name', resolve_file('#lib/Counter.svelte', moved), 'Counter.svelte');
-	eq('relative import of a moved file resolves by name', resolve_file('../lib/Counter.svelte', moved), 'Counter.svelte');
+	eq(
+		'$lib import of a file moved to root still resolves by name',
+		resolve_file('$lib/Counter.svelte', moved),
+		'Counter.svelte'
+	);
+	eq(
+		'#lib import of a moved file resolves by name',
+		resolve_file('#lib/Counter.svelte', moved),
+		'Counter.svelte'
+	);
+	eq(
+		'relative import of a moved file resolves by name',
+		resolve_file('../lib/Counter.svelte', moved),
+		'Counter.svelte'
+	);
 }
 
 // ── the alias is a DIRECT mapping, not a fuzzy search: it never wanders outside src/lib ──
@@ -48,18 +83,33 @@ eq('$libfoo is NOT the alias', resolve_file('$libfoo/Counter.svelte', demo), 'sr
 		'src/lib/ui/Button.svelte': 'LIB',
 		'src/lib/Button.svelte': 'LIBROOT'
 	};
-	eq('$lib/ui/Button → the exact src/lib/ui path (not another Button)', resolve_file('$lib/ui/Button.svelte', dup), 'src/lib/ui/Button.svelte');
+	eq(
+		'$lib/ui/Button → the exact src/lib/ui path (not another Button)',
+		resolve_file('$lib/ui/Button.svelte', dup),
+		'src/lib/ui/Button.svelte'
+	);
 	// The exact alias path is GONE here. It must NOT invent src/components/ui/Button just because that
 	// shares the ui/Button tail — that would violate the convention. It degrades to a by-name pick.
 	const noExact = {
 		'src/other/Button.svelte': 'OTHER',
 		'src/components/ui/Button.svelte': 'UI'
 	};
-	eq('missing exact alias path degrades to a deterministic by-name pick (shortest)', resolve_file('$lib/ui/Button.svelte', noExact), 'src/other/Button.svelte');
+	eq(
+		'missing exact alias path degrades to a deterministic by-name pick (shortest)',
+		resolve_file('$lib/ui/Button.svelte', noExact),
+		'src/other/Button.svelte'
+	);
 	// pure basename tie → deterministic: shortest path, then lexical (not Object.keys order)
 	const tie = { 'b/X.svelte': 'x', 'a/X.svelte': 'x', 'aa/X.svelte': 'x' };
-	eq('a bare-name tie resolves deterministically (shortest, then lexical)', resolve_file('$lib/X.svelte', tie), 'a/X.svelte');
-	ok('duplicate resolution is stable across calls', resolve_file('$lib/X.svelte', tie) === resolve_file('$lib/X.svelte', tie));
+	eq(
+		'a bare-name tie resolves deterministically (shortest, then lexical)',
+		resolve_file('$lib/X.svelte', tie),
+		'a/X.svelte'
+	);
+	ok(
+		'duplicate resolution is stable across calls',
+		resolve_file('$lib/X.svelte', tie) === resolve_file('$lib/X.svelte', tie)
+	);
 }
 
 // ── misses ──

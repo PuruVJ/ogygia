@@ -17,11 +17,19 @@
 			<th>function</th>
 			<th>kind</th>
 			<th>wait</th>
-			<th class="num sort" class:active={s.key === 'count'} onclick={() => s.click('count')} {@attach pressable} aria-sort={s.aria('count')}
-				>count<span class="arr">{s.arrow('count')}</span></th
+			<th
+				class="num sort"
+				class:active={s.key === 'count'}
+				onclick={() => s.click('count')}
+				{@attach pressable}
+				aria-sort={s.aria('count')}>count<span class="arr">{s.arrow('count')}</span></th
 			>
-			<th class="num sort" class:active={s.key === 'ms'} onclick={() => s.click('ms')} {@attach pressable} aria-sort={s.aria('ms')}
-				>wait ms<span class="arr">{s.arrow('ms')}</span></th
+			<th
+				class="num sort"
+				class:active={s.key === 'ms'}
+				onclick={() => s.click('ms')}
+				{@attach pressable}
+				aria-sort={s.aria('ms')}>wait ms<span class="arr">{s.arrow('ms')}</span></th
 			>
 		</tr>
 	</thead>
@@ -31,7 +39,10 @@
 				<td class="fn">{r.caller}</td>
 				<td>{r.kind}</td>
 				<td class="split">
-					<div class="split-bar" title="{fmt_ms(r.ms)} ms across {r.count} call{r.count > 1 ? 's' : ''}">
+					<div
+						class="split-bar"
+						title="{fmt_ms(r.ms)} ms across {r.count} call{r.count > 1 ? 's' : ''}"
+					>
 						<div
 							class="slf"
 							style="width:{((r.ms / maxMs) * 100).toFixed(1)}%;background:{kind_color(r.kind)}"

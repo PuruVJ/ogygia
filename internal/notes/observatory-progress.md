@@ -134,6 +134,7 @@ The "islands" preview mode runs the ACTUAL ogygia runtime, no iframe, no service
   replays the click, Chart (visible) wakes on scroll. Zero errors.
 
 **The two unlocks** (both spiked/verified before building):
+
 1. A bare injected `<ogygia-region>` nested in the Observatory's own awake island is SKIPPED by the
    runtime's nested-region rule (it rides the parent's hydration). Wrapping it in `<ogygia-slot>` hits
    the **adopted-slot exception** (`in_adopted_slot`), so it self-runs. (Spike: bare → `data-nested`;

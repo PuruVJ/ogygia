@@ -12,7 +12,11 @@
  * Devtools' own UI lives in a shadow root and never shows here. Runs on demand (the Page tab), not
  * on a hot path.
  */
-import { find_unscoped, unscoped_finding, type UnscopedStyles } from '@ogygia/core/internal/instruments';
+import {
+	find_unscoped,
+	unscoped_finding,
+	type UnscopedStyles
+} from '@ogygia/core/internal/instruments';
 import { tool_fetch, tool_made } from '@ogygia/core/internal/instruments';
 import { paint_blocker } from '@ogygia/core/internal/instruments';
 
@@ -54,7 +58,21 @@ export interface StylesFinding {
 }
 
 // states a selector depends on that the page is not in right now; taken off before matching
-const STATES = [':hover', ':focus-visible', ':focus-within', ':focus', ':active', ':visited', ':target', ':open', ':popover-open', ':modal', ':user-invalid', ':user-valid', ':autofill'];
+const STATES = [
+	':hover',
+	':focus-visible',
+	':focus-within',
+	':focus',
+	':active',
+	':visited',
+	':target',
+	':open',
+	':popover-open',
+	':modal',
+	':user-invalid',
+	':user-valid',
+	':autofill'
+];
 
 /** Split a selector list on its top-level commas (`:is(a, b)` stays whole). */
 export function split_selectors(list: string): string[] {
@@ -88,7 +106,8 @@ export function matchable(sel: string): string {
 			const c = s[end];
 			if (c === '(') depth++;
 			else if (c === ')') depth--;
-			else if (depth === 0 && (c === ' ' || c === '>' || c === '+' || c === '~' || c === ',')) break;
+			else if (depth === 0 && (c === ' ' || c === '>' || c === '+' || c === '~' || c === ','))
+				break;
 			end++;
 		}
 		s = s.slice(0, at) + s.slice(end);
@@ -99,7 +118,8 @@ export function matchable(sel: string): string {
 		while (i !== -1) {
 			const next = s[i + st.length];
 			// a whole pseudo-class only (`:focus` must not eat the start of `:focus-visible`)
-			if (next === undefined || !(next === '-' || (next >= 'a' && next <= 'z'))) s = s.slice(0, i) + s.slice(i + st.length);
+			if (next === undefined || !(next === '-' || (next >= 'a' && next <= 'z')))
+				s = s.slice(0, i) + s.slice(i + st.length);
 			else i += st.length;
 			i = s.indexOf(st, i);
 		}
@@ -120,14 +140,22 @@ function file_of(href: string): string {
 function own_sheet(node: Element | null): boolean {
 	const id = node?.getAttribute('data-vite-dev-id');
 	// (this package's own source in the workspace: `packages/devtools/src/devtools/…`, no "ogygia" in it)
-	return !!id && (id.includes('ogygia') || id.includes('/devtools/src/devtools/')) && id.includes('/devtools/');
+	return (
+		!!id &&
+		(id.includes('ogygia') || id.includes('/devtools/src/devtools/')) &&
+		id.includes('/devtools/')
+	);
 }
 
 /** A sheet that styles the devtools panel and nothing on the page: in a build the panel's CSS is a
  *  linked file in the document, whatever its name. Its rules match inside the panel's shadow root
  *  and never in the document. Every rule is tried (which of the panel's parts are showing depends
  *  on its open tab), stopping at the first one the page itself uses. */
-function styles_the_panel(rules: CSSRuleList, doc: Document, panel: ShadowRoot | null | undefined): boolean {
+function styles_the_panel(
+	rules: CSSRuleList,
+	doc: Document,
+	panel: ShadowRoot | null | undefined
+): boolean {
 	if (!panel) return false;
 	let in_panel = false;
 	let stop = false;
@@ -163,9 +191,13 @@ function each_style_rule(list: CSSRuleList, fn: Walk) {
 }
 
 /** Read the page's stylesheets. `match: true` also tries every selector against the document. */
-export function read_styles(doc: Document = document, opts: { match?: boolean } = {}): StylesReport {
+export function read_styles(
+	doc: Document = document,
+	opts: { match?: boolean } = {}
+): StylesReport {
 	const res = new Map<string, PerformanceResourceTiming>();
-	for (const e of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) if (!tool_made(e)) res.set(e.name, e);
+	for (const e of performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+		if (!tool_made(e)) res.set(e.name, e);
 	const sheets: SheetRow[] = [];
 	const examples: { sel: string; len: number }[] = [];
 	let unreadable = 0;
@@ -186,14 +218,22 @@ export function read_styles(doc: Document = document, opts: { match?: boolean } 
 		const r = href ? res.get(href) : undefined;
 		const row: SheetRow = {
 			// (a dev server's injected <style> says which file it came from)
-			label: href ? file_of(href) : node?.getAttribute('data-vite-dev-id') ? file_of(node.getAttribute('data-vite-dev-id')!) : 'inline <style>',
+			label: href
+				? file_of(href)
+				: node?.getAttribute('data-vite-dev-id')
+					? file_of(node.getAttribute('data-vite-dev-id')!)
+					: 'inline <style>',
 			href,
 			rules: 0,
 			bytes: href ? (r?.decodedBodySize ?? 0) : (node?.textContent?.length ?? 0),
 			blocking: !!r && blocks(r),
 			unmatched: opts.match ? 0 : null,
 			unmatched_bytes: opts.match ? 0 : null,
-			ogygia: !!node && (node.hasAttribute('data-ogygia-region-css') || node.hasAttribute('data-ogygia-rcss') || (href ?? '').includes('og-rcss'))
+			ogygia:
+				!!node &&
+				(node.hasAttribute('data-ogygia-region-css') ||
+					node.hasAttribute('data-ogygia-rcss') ||
+					(href ?? '').includes('og-rcss'))
 		};
 		each_style_rule(rules, (rule) => {
 			row.rules++;
@@ -228,7 +268,8 @@ export function read_styles(doc: Document = document, opts: { match?: boolean } 
 		});
 		sheets.push(row);
 	}
-	const sum = (k: 'rules' | 'bytes' | 'unmatched' | 'unmatched_bytes') => sheets.reduce((s, x) => s + (x[k] ?? 0), 0);
+	const sum = (k: 'rules' | 'bytes' | 'unmatched' | 'unmatched_bytes') =>
+		sheets.reduce((s, x) => s + (x[k] ?? 0), 0);
 	examples.sort((a, b) => b.len - a.len);
 	return {
 		sheets: sheets.sort((a, b) => b.bytes - a.bytes),
@@ -244,10 +285,13 @@ export function read_styles(doc: Document = document, opts: { match?: boolean } 
 
 /** The build's unscoped-fallback markers in the page's sheets. Inline sheets read their node's
  *  text; linked ones one same-origin fetch each (the HTTP cache answers it). */
-export async function scan_unscoped(doc: Document = document): Promise<(UnscopedStyles & { sheet: string })[]> {
+export async function scan_unscoped(
+	doc: Document = document
+): Promise<(UnscopedStyles & { sheet: string })[]> {
 	const out: (UnscopedStyles & { sheet: string })[] = [];
 	const add = (css: string, sheet: string) => {
-		for (const u of find_unscoped(css)) if (!out.some((x) => x.file === u.file)) out.push({ ...u, sheet });
+		for (const u of find_unscoped(css))
+			if (!out.some((x) => x.file === u.file)) out.push({ ...u, sheet });
 	};
 	const jobs: Promise<void>[] = [];
 	for (const sheet of Array.from(doc.styleSheets)) {
@@ -279,12 +323,15 @@ export function styles_findings(s: StylesReport): StylesFinding[] {
 	// rules that match nothing: only once checked, and only when it is a real share of real bytes
 	if (s.unmatched_bytes >= 20 * 1024 && s.rules && s.unmatched / s.rules >= 0.5) {
 		const kb = Math.round(s.unmatched_bytes / 1024);
-		const worst = s.sheets.filter((x) => (x.unmatched_bytes ?? 0) > 0).sort((a, b) => (b.unmatched_bytes ?? 0) - (a.unmatched_bytes ?? 0)).slice(0, 3);
+		const worst = s.sheets
+			.filter((x) => (x.unmatched_bytes ?? 0) > 0)
+			.sort((a, b) => (b.unmatched_bytes ?? 0) - (a.unmatched_bytes ?? 0))
+			.slice(0, 3);
 		out.push({
 			code: 'css-unmatched',
 			severity: 'info',
 			message: `${Math.floor((s.unmatched / s.rules) * 100)}% of the page's CSS rules (${s.unmatched} of ${s.rules}, about ${kb} KB of rule text) match nothing on it right now. Most in: ${worst.map((w) => `${w.label} ${w.unmatched} rules`).join(', ')}.`,
-			fix: 'Styles in a component\'s own <style> load with that component. Move page-specific rules there, or split a big shared sheet by route. Menus, dialogs and content that appears later count as unmatched here: open them and check again.'
+			fix: "Styles in a component's own <style> load with that component. Move page-specific rules there, or split a big shared sheet by route. Menus, dialogs and content that appears later count as unmatched here: open them and check again."
 		});
 	}
 	return out;

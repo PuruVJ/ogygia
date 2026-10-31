@@ -2,9 +2,21 @@
 	import Contours from '$lib/Contours.svelte';
 	import { Region } from 'ogygia';
 	import {
-		heroCode, heroCodeHtml, loadCode, visibleCode, lakeCode, serverCode, fragmentCode,
-		livePartialCode, sharedObjectCode, contentCollectionCode, contentMarkdownCode,
-		contentJsonCode, contentCustomCode, dimensionsCode, composeCode
+		heroCode,
+		heroCodeHtml,
+		loadCode,
+		visibleCode,
+		lakeCode,
+		serverCode,
+		fragmentCode,
+		livePartialCode,
+		sharedObjectCode,
+		contentCollectionCode,
+		contentMarkdownCode,
+		contentJsonCode,
+		contentCustomCode,
+		dimensionsCode,
+		composeCode
 	} from '$lib/code/snippets';
 	// The hero demo hydrates on load; the showcase islands below each hydrate on the exact schedule
 	// their code shows, so `/` is itself a live demo of the library.
@@ -29,7 +41,6 @@
 	import { Cart } from '$lib/demos/cart-store.svelte.js';
 	import '$lib/styles/widget.css';
 
-
 	// One instance, handed to both islands below.
 	const cart = new Cart();
 </script>
@@ -51,9 +62,9 @@
 				<span class="hero-say" aria-label="pronounced oh-jee-jee-ya">oh-jee-jee-ya</span>
 			</p>
 			<p>
-				Your pages are HTML. Nothing hydrates until you say so. Mark a component and it wakes:
-				on load, on scroll, on whatever cue you pick. Everything else stays static. No Kit client
-				to boot, so you ship JavaScript only for what you marked.
+				Your pages are HTML. Nothing hydrates until you say so. Mark a component and it wakes: on
+				load, on scroll, on whatever cue you pick. Everything else stays static. No Kit client to
+				boot, so you ship JavaScript only for what you marked.
 			</p>
 			<div class="btn-row">
 				<a class="btn btn--primary" href="/docs/start/overview">Getting started</a>
@@ -87,8 +98,8 @@
 			<span class="beat-num">01</span>
 			<h3>One attribute wakes a component</h3>
 			<p>
-				Add <code>wake: 'load'</code> to an import. That one component wakes up. Everything
-				around it is just HTML. Kill the JavaScript and only the island stops.
+				Add <code>wake: 'load'</code> to an import. That one component wakes up. Everything around it
+				is just HTML. Kill the JavaScript and only the island stops.
 			</p>
 		</div>
 		<ShowcaseCard title="Client island" tag="wake: 'load'" code={loadCode}>
@@ -133,8 +144,8 @@
 			<span class="beat-num">03</span>
 			<h3>Freeze what never moves</h3>
 			<p>
-				Renders once and never moves? Mark it <code>wake: 'none'</code>. Server HTML, and not a
-				byte in the client bundle. That is a <strong>lake</strong>.
+				Renders once and never moves? Mark it <code>wake: 'none'</code>. Server HTML, and not a byte
+				in the client bundle. That is a <strong>lake</strong>.
 			</p>
 		</div>
 		<ShowcaseCard title="Lake" tag="wake: 'none'" marker="frozen · 0 KB JS" code={lakeCode}>
@@ -151,8 +162,8 @@
 			<span class="beat-num">04</span>
 			<h3>Hand a hole to the server</h3>
 			<p>
-				<code>render: 'deferred'</code> makes a server island. Rendered per request, personalized,
-				no client bundle. It fetches its own HTML after the shell paints.
+				<code>render: 'deferred'</code> makes a server island. Rendered per request, personalized, no
+				client bundle. It fetches its own HTML after the shell paints.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -176,8 +187,8 @@
 			<span class="beat-num">05</span>
 			<h3>Let the server choose the component</h3>
 			<p>
-				A <strong>held region</strong> goes further. The server picks <em>which</em> component,
-				signs the HTML, and sends it. The client paints it and never imports the options.
+				A <strong>held region</strong> goes further. The server picks <em>which</em> component, signs
+				the HTML, and sends it. The client paints it and never imports the options.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -215,15 +226,17 @@
 		</ShowcaseCard>
 	</div>
 
-	<p class="story-turn">Every region so far stands on its own. They can also share one live object.</p>
+	<p class="story-turn">
+		Every region so far stands on its own. They can also share one live object.
+	</p>
 
 	<div class="beat">
 		<div class="beat-head">
 			<span class="beat-num">07</span>
 			<h3>Share one object across islands</h3>
 			<p>
-				Two island bundles, one live object passed as a prop. The button writes, the counter
-				reads. No store, no event bus.
+				Two island bundles, one live object passed as a prop. The button writes, the counter reads.
+				No store, no event bus.
 			</p>
 		</div>
 		<ShowcaseCard
@@ -260,7 +273,6 @@
 			{/snippet}
 		</ShowcaseCard>
 	</div>
-
 </section>
 
 <section class="shell content-story" aria-labelledby="content-story">
@@ -269,9 +281,9 @@
 		<h2 id="content-story">Your content is a collection</h2>
 		<p>
 			The same idea covers your writing. Define a collection once with <code>content()</code>,
-			backed by markdown, JSON, or a CMS. You query it over the wire like any other remote
-			function, and the bodies never ship to the client. What you render is a region, so your
-			content wakes on the same schedules as everything else. These docs run on it.
+			backed by markdown, JSON, or a CMS. You query it over the wire like any other remote function,
+			and the bodies never ship to the client. What you render is a region, so your content wakes on
+			the same schedules as everything else. These docs run on it.
 		</p>
 	</div>
 
@@ -289,7 +301,9 @@
 		</ShowcaseCard>
 	</div>
 
-	<p class="content-lead">One <code>content()</code> definition; the source decides where it comes from.</p>
+	<p class="content-lead">
+		One <code>content()</code> definition; the source decides where it comes from.
+	</p>
 
 	<div class="content-beats">
 		<div class="beat">
@@ -337,10 +351,10 @@
 			<h2 id="live-shell-h">Everything above becomes a whole site</h2>
 			<p>
 				This is where it lands. Hand <code>site()</code> a collection and <code>DocsShell</code>
-				gives you the rest: nav built from filenames, prev/next, full-text search, versioning and
-				translations, <code>sitemap.xml</code> and <code>llms.txt</code>. The frame below is live.
-				Search it (hit <kbd>/</kbd>), switch the version or language, restyle it. This whole site
-				runs on it.
+				gives you the rest: nav built from filenames, prev/next, full-text search, versioning and translations,
+				<code>sitemap.xml</code>
+				and <code>llms.txt</code>. The frame below is live. Search it (hit <kbd>/</kbd>), switch the
+				version or language, restyle it. This whole site runs on it.
 			</p>
 		</div>
 	</div>
@@ -349,7 +363,12 @@
 		<div class="live-frame-bar">
 			<span class="live-frame-dots"><i></i><i></i><i></i></span>
 			<span class="live-frame-url">ogygia playground · DocsShell</span>
-			<a class="live-frame-open" href="/playground/getting-started/installation" target="_blank" rel="noreferrer">Open in full ↗</a>
+			<a
+				class="live-frame-open"
+				href="/playground/getting-started/installation"
+				target="_blank"
+				rel="noreferrer">Open in full ↗</a
+			>
 		</div>
 		<iframe
 			class="live-frame-view"
@@ -394,8 +413,8 @@
 				<span class="content-eyebrow">Composition</span>
 				<h3>Swap a region, or the whole shell</h3>
 				<p>
-					Every region of the shell is a snippet prop: leave it out for the built-in, pass a
-					snippet to replace it, pass <code>null</code> to remove it. Want to start from nothing?
+					Every region of the shell is a snippet prop: leave it out for the built-in, pass a snippet
+					to replace it, pass <code>null</code> to remove it. Want to start from nothing?
 					<code>Frame</code> is the same shell with none of the decisions made for you.
 					<a href="/docs/content/shell">Shells →</a>
 				</p>
@@ -420,7 +439,9 @@
 		</div>
 	</div>
 
-	<p class="content-lead">Start with everything: <code>npx ogygia site init</code>. Keep only what you use.</p>
+	<p class="content-lead">
+		Start with everything: <code>npx ogygia site init</code>. Keep only what you use.
+	</p>
 </section>
 
 <section class="shell applayer" aria-labelledby="applayer">
@@ -428,57 +449,57 @@
 		<span class="story-kicker">The app layer</span>
 		<h2 id="applayer">And it is still a fast app</h2>
 		<p>
-			The shell is what you see. Underneath, ogygia makes the page itself fast: prerender the
-			shell, batch the server holes, and navigate like a single-page app, all without writing
-			extra client code.
+			The shell is what you see. Underneath, ogygia makes the page itself fast: prerender the shell,
+			batch the server holes, and navigate like a single-page app, all without writing extra client
+			code.
 		</p>
 	</div>
 
 	<div class="applayer-beats">
-	<div class="beat">
-		<div class="beat-head">
-			<span class="beat-num">01</span>
-			<h3>Bake the shell, fill the holes</h3>
-			<p>
-				Partial prerendering serves a static file from the CDN, with server islands fetched live
-				per visitor. A reload demo shows one page telling two times.
-				<a href="/docs/app/router">Partial prerendering →</a>
-			</p>
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">01</span>
+				<h3>Bake the shell, fill the holes</h3>
+				<p>
+					Partial prerendering serves a static file from the CDN, with server islands fetched live
+					per visitor. A reload demo shows one page telling two times.
+					<a href="/docs/app/router">Partial prerendering →</a>
+				</p>
+			</div>
 		</div>
-	</div>
 
-	<div class="beat">
-		<div class="beat-head">
-			<span class="beat-num">02</span>
-			<h3>One request per navigation</h3>
-			<p>
-				The SPA router pulls a whole page's server-island holes down one batch, out of order, with no
-				waterfall. <a href="/docs/app/router#single-flight">Single-flight navigation →</a>
-			</p>
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">02</span>
+				<h3>One request per navigation</h3>
+				<p>
+					The SPA router pulls a whole page's server-island holes down one batch, out of order, with
+					no waterfall. <a href="/docs/app/router#single-flight">Single-flight navigation →</a>
+				</p>
+			</div>
 		</div>
-	</div>
 
-	<div class="beat">
-		<div class="beat-head">
-			<span class="beat-num">03</span>
-			<h3>Mutate and repaint in one trip</h3>
-			<p>
-				A command returns its re-rendered region in the same response, so the mounted region morphs
-				with no follow-up fetch. <a href="/docs/regions/held-regions">Single-flight →</a>
-			</p>
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">03</span>
+				<h3>Mutate and repaint in one trip</h3>
+				<p>
+					A command returns its re-rendered region in the same response, so the mounted region
+					morphs with no follow-up fetch. <a href="/docs/regions/held-regions">Single-flight →</a>
+				</p>
+			</div>
 		</div>
-	</div>
 
-	<div class="beat">
-		<div class="beat-head">
-			<span class="beat-num">04</span>
-			<h3>Prerender the next page on hover</h3>
-			<p>
-				Native Speculation Rules run the next page's JS and holes in a hidden tab, so the click is
-				instant. <a href="/docs/app/router#speculate">Speculation →</a>
-			</p>
+		<div class="beat">
+			<div class="beat-head">
+				<span class="beat-num">04</span>
+				<h3>Prerender the next page on hover</h3>
+				<p>
+					Native Speculation Rules run the next page's JS and holes in a hidden tab, so the click is
+					instant. <a href="/docs/app/router#speculate">Speculation →</a>
+				</p>
+			</div>
 		</div>
-	</div>
 	</div>
 </section>
 
@@ -909,7 +930,6 @@
 		z-index: 1;
 		min-width: 0;
 	}
-
 
 	@media (max-width: 1023px) {
 		.hero-grid {

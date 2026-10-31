@@ -22,7 +22,14 @@
  * isomorphic (server calls `render`, client calls `setup`), so one factory serves both legs of both
  * modes with no manual environment branch.
  */
-import { createRawSnippet, getAllContexts, hydrate, unmount, type Component, type Snippet } from 'svelte';
+import {
+	createRawSnippet,
+	getAllContexts,
+	hydrate,
+	unmount,
+	type Component,
+	type Snippet
+} from 'svelte';
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER, DEV } from 'esm-env';
 import { register_kind, mint } from './ref.ts';
@@ -89,7 +96,9 @@ const SNIPPET_BOOTS = Symbol.for('ogygia.snippet-boots');
 
 /** The host region is awake only once its snippets are: it signals `data-hydrated` after them. */
 function hold_host(el: Element, booted: Promise<unknown>) {
-	const host = el.closest('ogygia-region') as (Element & { [SNIPPET_BOOTS]?: Promise<unknown>[] }) | null;
+	const host = el.closest('ogygia-region') as
+		| (Element & { [SNIPPET_BOOTS]?: Promise<unknown>[] })
+		| null;
 	// (a snippet re-created after its host signalled — an `{#if}` toggling — has nothing to hold)
 	if (host && !host.hasAttribute('data-hydrated')) (host[SNIPPET_BOOTS] ??= []).push(booted);
 }
@@ -160,7 +169,10 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				!!live_entry && renderer?.global?.mode === 'async' && typeof renderer.child === 'function';
 			if (can_async) {
 				renderer.child(async (r) => {
-					const out = await ssr_render(live_entry!, { props, context: with_host(kit_render_context(), host) });
+					const out = await ssr_render(live_entry!, {
+						props,
+						context: with_host(kit_render_context(), host)
+					});
 					thread_head(r, (out.head || '') + dev_css_link);
 					r.push(WRAP_OPEN + out.body + WRAP_CLOSE);
 				});
@@ -193,7 +205,10 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 					WRAP_OPEN +
 					(BROWSER || !live_entry
 						? ''
-						: ssr_render(live_entry, { props: live_props(), context: with_host(kit_render_context(), host) }).body) +
+						: ssr_render(live_entry, {
+								props: live_props(),
+								context: with_host(kit_render_context(), host)
+							}).body) +
 					WRAP_CLOSE
 				);
 			},
@@ -202,14 +217,21 @@ function make(desc: RegionSnippetDescriptor, live_entry: Component | null = null
 				let app: unknown;
 				let dead = false;
 				const boot = (Comp: Component) => {
-					if (!dead) app = hydrate(Comp, { target: el, props: live_props(), context: with_host(new Map(), host) });
+					if (!dead)
+						app = hydrate(Comp, {
+							target: el,
+							props: live_props(),
+							context: with_host(new Map(), host)
+						});
 				};
 				if (live_entry) boot(live_entry);
 				else
 					hold_host(
 						el,
 						// its location (the page's island graph named it), not the stable name
-						import_entry<{ default: Component }>((desc as { e: string }).e).then((m) => boot(m.default))
+						import_entry<{ default: Component }>((desc as { e: string }).e).then((m) =>
+							boot(m.default)
+						)
 					);
 				return () => {
 					dead = true;
@@ -361,7 +383,10 @@ export const SLOT_MARKER_CLOSE = '</ogygia-slot>';
  * request (and every island after it). Per entry, an island's id moves only against another copy of
  * the SAME island that started in a different order — rare, and still page-unique.
  */
-const slot_seq_by_request = new WeakMap<object, { prefix: string; n: Map<string, { n: number; tag: string }> }>();
+const slot_seq_by_request = new WeakMap<
+	object,
+	{ prefix: string; n: Map<string, { n: number; tag: string }> }
+>();
 let _slot_seq = 0;
 export function next_slot_id(key = ''): string {
 	const event = kit_request_event() as { url?: URL } | null;
@@ -438,7 +463,8 @@ function snippet_stable_id(d: unknown): string | undefined {
 	const desc = d as RegionSnippetDescriptor;
 	if (desc.m === 'slot') return 'slot:' + desc.id;
 	if (desc.m === 'static') return 's' + fnv1a(desc.h);
-	if (desc.m === 'live' && analyze(desc.p).json) return 'l' + fnv1a(desc.e + '\0' + JSON.stringify(desc.p));
+	if (desc.m === 'live' && analyze(desc.p).json)
+		return 'l' + fnv1a(desc.e + '\0' + JSON.stringify(desc.p));
 	return undefined;
 }
 

@@ -7,11 +7,14 @@
 </script>
 
 <div data-shell>
-	<Region __mode="lake" __entry="lake-reader"><p data-frozen>frozen</p><Region
+	<Region __mode="lake" __entry="lake-reader"
+		><p data-frozen>frozen</p>
+		<Region
 			__mode="island"
 			__entry="/test/browser/fixtures/PageReader.svelte"
 			__component={PageReader}
 			__props={{}}
 			idle={true}
-		/></Region>
+		/></Region
+	>
 </div>

@@ -25,9 +25,15 @@ const app = () => ({
 	'lib/Unused.svelte': '<div>never imported: must not be in the graph</div>',
 	'lib/util.ts': 'export function util() { return "util-marker"; }',
 	'lib/index.ts': `export { default as Button } from './Button.svelte';\nexport { default as Card } from './Card.svelte';\nexport { default as Unused } from './Unused.svelte';\nexport { util } from './util';`,
-	'node_modules/@scope/ui/package.json': JSON.stringify({ name: '@scope/ui', type: 'module', exports: { '.': './index.js' } }),
-	'node_modules/@scope/ui/leaf.js': 'export const pkgLeaf = "leaf"; globalThis.__pkg_leaf_loaded = true;',
-	'node_modules/@scope/ui/heavy.js': 'export const heavy = "heavy"; globalThis.__heavy_loaded = true;',
+	'node_modules/@scope/ui/package.json': JSON.stringify({
+		name: '@scope/ui',
+		type: 'module',
+		exports: { '.': './index.js' }
+	}),
+	'node_modules/@scope/ui/leaf.js':
+		'export const pkgLeaf = "leaf"; globalThis.__pkg_leaf_loaded = true;',
+	'node_modules/@scope/ui/heavy.js':
+		'export const heavy = "heavy"; globalThis.__heavy_loaded = true;',
 	'node_modules/@scope/ui/index.js': `export { pkgLeaf } from './leaf.js';\nexport { heavy } from './heavy.js';`
 });
 
@@ -47,7 +53,10 @@ const module_ids = (out: Rollup.RollupOutput) =>
 	out.output.flatMap((c) => (c.type === 'chunk' ? Object.keys(c.modules) : []));
 
 const build_ids = async (cfg: ReturnType<typeof config>) => {
-	const out = (await build({ ...cfg, build: { write: false, minify: false } })) as Rollup.RollupOutput;
+	const out = (await build({
+		...cfg,
+		build: { write: false, minify: false }
+	})) as Rollup.RollupOutput;
 	return { out, ids: module_ids(out).map((m) => m.split('?')[0]) };
 };
 
@@ -69,7 +78,10 @@ describe('which ids are importers', () => {
 		// vite-plugin-svelte serves each component's CSS as `Foo.svelte?svelte&type=style&lang.css`:
 		// counted as a Svelte importer, the parser ran over plain CSS and every component with a
 		// <style> was reported "skipped" (3,233 false warnings in one production build)
-		f = fixture({ ...app(), 'src/App.svelte': `<script lang="ts">\n\timport { Card } from '$lib';\n</script>\n<Card />\n<p class="x">x</p>\n<style>\n\t.x { color: red }\n</style>` });
+		f = fixture({
+			...app(),
+			'src/App.svelte': `<script lang="ts">\n\timport { Card } from '$lib';\n</script>\n<Card />\n<p class="x">x</p>\n<style>\n\t.x { color: red }\n</style>`
+		});
 		const cfg = config(f);
 		cfg.plugins = [cfg.plugins[0], svelte({ configFile: false, emitCss: true })];
 		const warns: string[] = [];
@@ -77,7 +89,9 @@ describe('which ids are importers', () => {
 		console.warn = (...a: unknown[]) => void warns.push(a.map(String).join(' '));
 		try {
 			const { ids } = await build_ids(cfg);
-			expect(ids, 'the component was still rewritten: the unused leaf is gone').not.toContain(f.id('lib/Unused.svelte'));
+			expect(ids, 'the component was still rewritten: the unused leaf is gone').not.toContain(
+				f.id('lib/Unused.svelte')
+			);
 			expect(ids).toContain(f.id('lib/Card.svelte'));
 		} finally {
 			console.warn = orig;
@@ -97,8 +111,12 @@ describe('vite build', () => {
 		expect(ids, 'the barrel module itself is gone').not.toContain(f.id('lib/index.ts'));
 		expect(ids, 'a leaf nobody imported is gone').not.toContain(f.id('lib/Unused.svelte'));
 		expect(ids).toContain(f.id('node_modules/@scope/ui/leaf.js'));
-		expect(ids, 'the package barrel is gone').not.toContain(f.id('node_modules/@scope/ui/index.js'));
-		expect(ids, 'the package sibling nobody asked for is gone').not.toContain(f.id('node_modules/@scope/ui/heavy.js'));
+		expect(ids, 'the package barrel is gone').not.toContain(
+			f.id('node_modules/@scope/ui/index.js')
+		);
+		expect(ids, 'the package sibling nobody asked for is gone').not.toContain(
+			f.id('node_modules/@scope/ui/heavy.js')
+		);
 		const code = out.output.map((c) => (c.type === 'chunk' ? c.code : '')).join('\n');
 		expect(code).not.toContain('__heavy_loaded');
 		expect(code).toContain('__pkg_leaf_loaded');
@@ -110,14 +128,19 @@ describe('vite build', () => {
 		cfg.plugins = cfg.plugins.slice(1);
 		const { ids } = await build_ids(cfg);
 		expect(ids).toContain(f.id('lib/index.ts'));
-		expect(ids, 'a Svelte component is not sideEffects-free to the bundler, so the unused one survives').toContain(f.id('lib/Unused.svelte'));
+		expect(
+			ids,
+			'a Svelte component is not sideEffects-free to the bundler, so the unused one survives'
+		).toContain(f.id('lib/Unused.svelte'));
 	});
 
 	it('a `keep` matcher leaves that barrel alone even though it is pure', async () => {
 		f = fixture(app());
 		const { ids } = await build_ids(config(f, { keep: ['$lib'] }));
 		expect(ids).toContain(f.id('lib/index.ts'));
-		expect(ids, 'the package barrel is still bypassed').not.toContain(f.id('node_modules/@scope/ui/index.js'));
+		expect(ids, 'the package barrel is still bypassed').not.toContain(
+			f.id('node_modules/@scope/ui/index.js')
+		);
 	});
 
 	it('a package NOT opted in is left alone (dev pre-bundling safety)', async () => {
@@ -132,19 +155,43 @@ describe('vite build', () => {
 	it('the build report names the totals, the time, and the top barrels with their importer counts; `debug` narrates each rewrite', async () => {
 		f = fixture(app());
 		const lines: string[] = [];
-		const logger = { info: (m: string) => lines.push(m), warn() {}, warnOnce() {}, error() {}, clearScreen() {}, hasErrorLogged: () => false, hasWarned: false };
-		const cfg = { ...config(f, { debug: true }), customLogger: logger as never, logLevel: 'info' as const };
+		const logger = {
+			info: (m: string) => lines.push(m),
+			warn() {},
+			warnOnce() {},
+			error() {},
+			clearScreen() {},
+			hasErrorLogged: () => false,
+			hasWarned: false
+		};
+		const cfg = {
+			...config(f, { debug: true }),
+			customLogger: logger as never,
+			logLevel: 'info' as const
+		};
 		await build_ids(cfg);
 		const report = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;
-		expect(report).toMatch(/^\[ogygia\] barrels: 2 of \d+ files rewritten — 3 barrel imports → leaves \(4 names\), 2 barrels bypassed, \d+\.\d\d s first to last transform\n/);
+		expect(report).toMatch(
+			/^\[ogygia\] barrels: 2 of \d+ files rewritten — 3 barrel imports → leaves \(4 names\), 2 barrels bypassed, \d+\.\d\d s first to last transform\n/
+		);
 		expect(report).toContain('names  lib/index.ts  ← 2 importers');
 		expect(report).toContain('names  node_modules/@scope/ui/index.js  ← 1 importer');
 		expect(lines.filter((l) => l.startsWith('[ogygia] barrels: src/main.ts:'))).toHaveLength(2);
-		expect(lines).toContainEqual(expect.stringContaining('[ogygia] barrels: src/App.svelte: Card ← lib/index.ts → lib/Card.svelte'));
-		expect(report, 'two barrels fit under the default cut, so no "more" line').not.toContain('more barrel');
+		expect(lines).toContainEqual(
+			expect.stringContaining(
+				'[ogygia] barrels: src/App.svelte: Card ← lib/index.ts → lib/Card.svelte'
+			)
+		);
+		expect(report, 'two barrels fit under the default cut, so no "more" line').not.toContain(
+			'more barrel'
+		);
 		// `report: false` silences the block
 		lines.length = 0;
-		await build_ids({ ...config(f, { report: false }), customLogger: logger as never, logLevel: 'info' as const });
+		await build_ids({
+			...config(f, { report: false }),
+			customLogger: logger as never,
+			logLevel: 'info' as const
+		});
 		expect(lines.some((l) => /^\[ogygia\] barrels: \d/.test(l))).toBe(false);
 	});
 
@@ -158,14 +205,26 @@ describe('vite build', () => {
 		}
 		f = fixture(files);
 		const lines: string[] = [];
-		const logger = { info: (m: string) => lines.push(m), warn() {}, warnOnce() {}, error() {}, clearScreen() {}, hasErrorLogged: () => false, hasWarned: false };
+		const logger = {
+			info: (m: string) => lines.push(m),
+			warn() {},
+			warnOnce() {},
+			error() {},
+			clearScreen() {},
+			hasErrorLogged: () => false,
+			hasWarned: false
+		};
 		await build_ids({ ...config(f), customLogger: logger as never, logLevel: 'info' as const });
 		const short = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;
 		expect(short).toContain('14 barrels bypassed');
 		expect(short.split('\n').filter((l) => / names  /.test(l))).toHaveLength(8);
 		expect(short).toContain("… and 6 more barrels (`barrels: { report: 'all' }` lists every one)");
 		lines.length = 0;
-		await build_ids({ ...config(f, { report: 'all' }), customLogger: logger as never, logLevel: 'info' as const });
+		await build_ids({
+			...config(f, { report: 'all' }),
+			customLogger: logger as never,
+			logLevel: 'info' as const
+		});
 		const full = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;
 		expect(full.split('\n').filter((l) => / names  /.test(l))).toHaveLength(14);
 		expect(full).not.toContain('more barrel');
@@ -175,7 +234,10 @@ describe('vite build', () => {
 describe('vite dev', { timeout: 30_000 }, () => {
 	it('transformRequest returns leaf imports for a TS module and a Svelte component', async () => {
 		f = fixture(app());
-		const server = await createServer({ ...config(f), server: { middlewareMode: true, hmr: false } });
+		const server = await createServer({
+			...config(f),
+			server: { middlewareMode: true, hmr: false }
+		});
 		try {
 			const main = (await server.transformRequest('/src/main.ts'))!;
 			expect(main.code).toContain(`/lib/Button.svelte`);
@@ -191,13 +253,21 @@ describe('vite dev', { timeout: 30_000 }, () => {
 
 	it('editing a barrel re-points the importer on the next transform (watch + invalidate)', async () => {
 		f = fixture(app());
-		const server = await createServer({ ...config(f), server: { middlewareMode: true, hmr: false } });
+		const server = await createServer({
+			...config(f),
+			server: { middlewareMode: true, hmr: false }
+		});
 		try {
 			const before = (await server.transformRequest('/src/main.ts'))!;
 			expect(before.code).toContain('/lib/util.ts');
 			// the barrel changes: `util` now comes from a different leaf
 			f.write('lib/util2.ts', 'export function util() { return "util2"; }');
-			f.write('lib/index.ts', f.read('lib/index.ts').replace(`export { util } from './util';`, `export { util } from './util2';`));
+			f.write(
+				'lib/index.ts',
+				f
+					.read('lib/index.ts')
+					.replace(`export { util } from './util';`, `export { util } from './util2';`)
+			);
 			// what Vite's watcher does on a change to a watched file
 			server.watcher.emit('change', f.id('lib/index.ts'));
 			server.moduleGraph.invalidateAll();
@@ -220,7 +290,7 @@ describe('ogygia({ barrels }) wiring', () => {
 		expect(names(ogygia({ barrels: { keep: ['x'] } }))[0]).toBe('ogygia:debarrel');
 	});
 
-	it('the wired plugin skips imports carrying the app\'s region-mark keys (custom importKeys too), rewrites the rest', async () => {
+	it("the wired plugin skips imports carrying the app's region-mark keys (custom importKeys too), rewrites the rest", async () => {
 		f = fixture({
 			'lib/Button.svelte': '<button/>',
 			'lib/util.ts': 'export function util() { return "util-marker"; }',
@@ -228,7 +298,11 @@ describe('ogygia({ barrels }) wiring', () => {
 			'src/app.ts': `import { Button } from '$lib' with { hydrate: 'visible' };\nimport { util } from '$lib';`
 		});
 		const plugin = ogygia({ barrels: true, importKeys: { wake: 'hydrate' } })[0];
-		const transform = plugin.transform as (this: unknown, code: string, id: string) => Promise<{ code: string } | null>;
+		const transform = plugin.transform as (
+			this: unknown,
+			code: string,
+			id: string
+		) => Promise<{ code: string } | null>;
 		const ctx = {
 			resolve: async (spec: string, importer: string) => {
 				const id = await f.host().resolve(spec, importer);
@@ -236,9 +310,15 @@ describe('ogygia({ barrels }) wiring', () => {
 			},
 			addWatchFile() {}
 		};
-		(plugin.configResolved as (c: unknown) => void)({ root: f.root, command: 'serve', logger: { info() {} } });
+		(plugin.configResolved as (c: unknown) => void)({
+			root: f.root,
+			command: 'serve',
+			logger: { info() {} }
+		});
 		const out = await transform.call(ctx, f.read('src/app.ts'), f.id('src/app.ts'));
-		expect(out!.code).toBe(`import { Button } from '$lib' with { hydrate: 'visible' };\nimport { util } from '${f.id('lib/util.ts')}';`);
+		expect(out!.code).toBe(
+			`import { Button } from '$lib' with { hydrate: 'visible' };\nimport { util } from '${f.id('lib/util.ts')}';`
+		);
 	});
 
 	it('a specifier Vite cannot resolve (it THROWS from `this.resolve`) leaves that import alone and the rest still moves', async () => {
@@ -248,28 +328,62 @@ describe('ogygia({ barrels }) wiring', () => {
 			'src/app.ts': `import { Action } from 'svelte/action';\nimport { util } from '$lib';\nimport { deep } from '@vendor/pkg/src/types';`
 		});
 		const plugin = debarrel(true);
-		const transform = plugin.transform as (this: unknown, code: string, id: string) => Promise<{ code: string } | null>;
+		const transform = plugin.transform as (
+			this: unknown,
+			code: string,
+			id: string
+		) => Promise<{ code: string } | null>;
 		const ctx = {
 			resolve: async (spec: string, importer: string) => {
-				if (!spec.startsWith('$lib') && !spec.startsWith('.')) throw new Error(`Errored while resolving "${spec}" in \`this.resolve\`.`);
+				if (!spec.startsWith('$lib') && !spec.startsWith('.'))
+					throw new Error(`Errored while resolving "${spec}" in \`this.resolve\`.`);
 				const id = await f.host().resolve(spec, importer);
 				return id ? { id } : null;
 			},
 			addWatchFile() {}
 		};
-		(plugin.configResolved as (c: unknown) => void)({ root: f.root, command: 'build', logger: { info() {} } });
+		(plugin.configResolved as (c: unknown) => void)({
+			root: f.root,
+			command: 'build',
+			logger: { info() {} }
+		});
 		const out = await transform.call(ctx, f.read('src/app.ts'), f.id('src/app.ts'));
-		expect(out!.code).toBe(`import { Action } from 'svelte/action';\nimport { util } from '${f.id('lib/util.ts')}';\nimport { deep } from '@vendor/pkg/src/types';`);
+		expect(out!.code).toBe(
+			`import { Action } from 'svelte/action';\nimport { util } from '${f.id('lib/util.ts')}';\nimport { deep } from '@vendor/pkg/src/types';`
+		);
 	});
 });
 
 describe('the report names the components it had to skip', () => {
 	it('skipped components are counted and listed, with or without rewrites', async () => {
 		const { format_report } = await import('../../src/compiler/debarrel/plugin.ts');
-		const base = { files: 10, importers: 0, imports: 0, names: 0, first_ms: 0, last_ms: 100, barrels: new Map(), skipped: new Set(['/app/src/A.svelte', '/app/src/B.svelte']) };
+		const base = {
+			files: 10,
+			importers: 0,
+			imports: 0,
+			names: 0,
+			first_ms: 0,
+			last_ms: 100,
+			barrels: new Map(),
+			skipped: new Set(['/app/src/A.svelte', '/app/src/B.svelte'])
+		};
 		const none = format_report(base, '/app', 8);
-		expect(none).toContain('2 components skipped (could not be parsed; their imports stay on their barrels): src/A.svelte, src/B.svelte');
-		const some = format_report({ ...base, importers: 1, imports: 1, names: 1, barrels: new Map([['/app/src/lib/index.ts', { names: 1, importers: new Set(['/app/src/C.svelte']) }]]) }, '/app', 1);
+		expect(none).toContain(
+			'2 components skipped (could not be parsed; their imports stay on their barrels): src/A.svelte, src/B.svelte'
+		);
+		const some = format_report(
+			{
+				...base,
+				importers: 1,
+				imports: 1,
+				names: 1,
+				barrels: new Map([
+					['/app/src/lib/index.ts', { names: 1, importers: new Set(['/app/src/C.svelte']) }]
+				])
+			},
+			'/app',
+			1
+		);
 		expect(some).toContain('src/A.svelte and 1 more');
 		expect(format_report({ ...base, skipped: new Set() }, '/app', 8)).not.toContain('skipped');
 	});

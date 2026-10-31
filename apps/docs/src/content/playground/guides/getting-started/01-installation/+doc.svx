@@ -16,13 +16,13 @@ ogygia is an islands runtime and docs kit for SvelteKit. It renders your pages o
 
 ogygia builds directly on SvelteKit and Vite, so the requirements are the same versions those projects support today. If your app already runs on a recent Kit release, you are ready.
 
-| Requirement | Minimum | Recommended | Notes |
-| --- | --- | --- | --- |
-| Node.js | 18.13 | 20 LTS or newer | Needed for the Vite 5 toolchain. |
-| SvelteKit | 2.0 | latest 2.x | ogygia hooks into Kit's SSR pipeline. |
-| Svelte | 5.0 | latest 5.x | Runes mode is required. |
-| Vite | 5.0 | latest 5.x | The plugin runs as a Vite transform. |
-| Package manager | any | pnpm | Workspaces are well supported. |
+| Requirement     | Minimum | Recommended     | Notes                                 |
+| --------------- | ------- | --------------- | ------------------------------------- |
+| Node.js         | 18.13   | 20 LTS or newer | Needed for the Vite 5 toolchain.      |
+| SvelteKit       | 2.0     | latest 2.x      | ogygia hooks into Kit's SSR pipeline. |
+| Svelte          | 5.0     | latest 5.x      | Runes mode is required.               |
+| Vite            | 5.0     | latest 5.x      | The plugin runs as a Vite transform.  |
+| Package manager | any     | pnpm            | Workspaces are well supported.        |
 
 > **Runes only.** ogygia targets Svelte 5 in runes mode. Legacy reactive statements (`$:`) are not supported inside islands. If you are migrating an older app, convert your interactive components to `$state` and `$derived` first.
 

@@ -15,7 +15,10 @@ afterEach(() => {
 });
 
 test('Kit hydration adopts the hole verbatim: its address and landed HTML survive', () => {
-	document.body.innerHTML = '<script>__sveltekit_lab = {};</script><div data-mount>' + inject_html('hole_kit_ssr_b64') + '</div>';
+	document.body.innerHTML =
+		'<script>__sveltekit_lab = {};</script><div data-mount>' +
+		inject_html('hole_kit_ssr_b64') +
+		'</div>';
 	const mount = document.querySelector('[data-mount]') as HTMLElement;
 	const hole = document.querySelector('ogygia-region[render="defer"]') as HTMLElement;
 	expect(hole, 'the server rendered the hole').not.toBeNull();
@@ -35,7 +38,9 @@ test('Kit hydration adopts the hole verbatim: its address and landed HTML surviv
 	} finally {
 		console.warn = real_warn;
 	}
-	expect(document.querySelector('ogygia-region[render="defer"]'), 'the same element, adopted').toBe(hole);
+	expect(document.querySelector('ogygia-region[render="defer"]'), 'the same element, adopted').toBe(
+		hole
+	);
 	expect(hole.getAttribute('endpoint'), 'its address kept').toBe(endpoint);
 	expect(hole.querySelector('[data-landed]'), 'its landed HTML kept').not.toBeNull();
 	expect(warns.filter((w) => w.includes('hydration_mismatch'))).toEqual([]);

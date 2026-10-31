@@ -49,11 +49,11 @@ function warn_build_key(): void {
 		);
 	} else if (buildHadSecret) {
 		console.error(
-			'[ogygia] OGYGIA_SECRET was set when this app was built but is not set where it runs: region capabilities are signed with this build\'s random key, so every hole minted by another deployment (another backend behind the same CDN, the previous deploy) is refused (403, x-ogygia-deny: foreign-key). Set OGYGIA_SECRET in the server\'s runtime environment.'
+			"[ogygia] OGYGIA_SECRET was set when this app was built but is not set where it runs: region capabilities are signed with this build's random key, so every hole minted by another deployment (another backend behind the same CDN, the previous deploy) is refused (403, x-ogygia-deny: foreign-key). Set OGYGIA_SECRET in the server's runtime environment."
 		);
 	} else {
 		console.warn(
-			'[ogygia] OGYGIA_SECRET is not set: region capabilities are signed with this build\'s random key, so a page cached across a deploy, or served by another deployment than its islands endpoint, gets its holes refused (403, x-ogygia-deny: foreign-key). Set a stable OGYGIA_SECRET.'
+			"[ogygia] OGYGIA_SECRET is not set: region capabilities are signed with this build's random key, so a page cached across a deploy, or served by another deployment than its islands endpoint, gets its holes refused (403, x-ogygia-deny: foreign-key). Set a stable OGYGIA_SECRET."
 		);
 	}
 }

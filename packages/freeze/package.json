@@ -1,19 +1,29 @@
 {
 	"name": "@ogygia/freeze",
-	"private": true,
 	"version": "0.10.2",
+	"private": true,
 	"description": "Frozen pages for ogygia: a page whose render read nothing personal is stored once and served as bytes",
-	"type": "module",
-	"sideEffects": false,
+	"keywords": [
+		"cache",
+		"cdn",
+		"esi",
+		"ogygia",
+		"sveltekit"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/freeze"
 	},
-	"keywords": ["ogygia", "sveltekit", "cache", "cdn", "esi"],
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -24,30 +34,7 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
-		"test": "vitest run",
-		"e2e": "playwright test"
-	},
-	"peerDependencies": {
-		"@ogygia/core": "workspace:^"
-	},
-	"devDependencies": {
-		"@ogygia/flags": "workspace:*",
-		"@ogygia/router": "workspace:*",
-		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "catalog:",
-		"@sveltejs/kit": "catalog:",
-		"@ogygia/core": "workspace:*",
-		"@types/node": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
@@ -57,6 +44,28 @@
 				"types": "./dist/vite.d.ts",
 				"default": "./dist/vite.js"
 			}
-		}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
+	},
+	"devDependencies": {
+		"@ogygia/core": "workspace:*",
+		"@ogygia/flags": "workspace:*",
+		"@ogygia/router": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^"
 	}
 }

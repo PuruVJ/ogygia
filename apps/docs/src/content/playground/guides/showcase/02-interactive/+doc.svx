@@ -120,11 +120,11 @@ And the mechanism is just setting a CSS custom property from island state:
 
 Here is what is actually running on this page:
 
-| Demo | Wakes on | State | Reaches outside itself |
-| --- | --- | --- | --- |
-| Counter | `visible` | A single number | No |
-| Stopwatch | `visible` | Elapsed time + a timer | No |
-| Palette | `visible` | A hue value | Yes — writes `--og-accent` |
+| Demo      | Wakes on  | State                  | Reaches outside itself     |
+| --------- | --------- | ---------------------- | -------------------------- |
+| Counter   | `visible` | A single number        | No                         |
+| Stopwatch | `visible` | Elapsed time + a timer | No                         |
+| Palette   | `visible` | A hue value            | Yes — writes `--og-accent` |
 
 Notice that even Palette, which changes the whole page's color, does so through a single shared token rather than by re-rendering anything. It sets one CSS variable; the browser repaints. No prose re-runs, no other island is disturbed.
 

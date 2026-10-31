@@ -51,7 +51,9 @@ const ProductSchema = v.object({
 	currency: v.picklist(['EUR', 'USD', 'SEK', 'JPY']),
 	tags: v.array(v.string()),
 	updated: v.pipe(v.string(), v.isoTimestamp()),
-	reviews: v.array(v.object({ stars: v.number(), at: v.pipe(v.string(), v.isoTimestamp()), body: v.string() })),
+	reviews: v.array(
+		v.object({ stars: v.number(), at: v.pipe(v.string(), v.isoTimestamp()), body: v.string() })
+	),
 	specs: v.record(v.string(), v.string())
 });
 export function validateAll(products: Product[]): Product[] {
@@ -70,7 +72,8 @@ export function toView(p: ProductView): ProductView {
 }
 function scoreOf(p: ProductView): number {
 	let s = 0;
-	for (let k = 0; k < 40; k++) for (const r of p.reviews) s += (r.stars * (k + 1) + JSON.stringify(p.specs).length) % 7;
+	for (let k = 0; k < 40; k++)
+		for (const r of p.reviews) s += (r.stars * (k + 1) + JSON.stringify(p.specs).length) % 7;
 	return s / (40 * p.reviews.length);
 }
 
@@ -94,6 +97,7 @@ export function totalPrice(items: { price: number }[]): number {
 	return total;
 }
 
-export const specList = (specs: Record<string, string>) => Object.entries(specs).map(([k, val]) => `${k}: ${val}`);
+export const specList = (specs: Record<string, string>) =>
+	Object.entries(specs).map(([k, val]) => `${k}: ${val}`);
 
 export const pages = (n: number) => Array.from({ length: Math.ceil(n / 24) }, (_, i) => i + 1);

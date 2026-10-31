@@ -10,13 +10,20 @@ import { test, check, sleep } from '@ogygia/tooling/e2e';
 
 test('a visible island 4000px down fetches nothing until scrolled into view', async ({ page }) => {
 	const entries: string[] = [];
-	page.on('request', (r) => { if (/og-region\.[a-f0-9]+(\.[\w-]+)?\.js/.test(r.url())) entries.push(r.url().replace(/^.*\//, '')); });
+	page.on('request', (r) => {
+		if (/og-region\.[a-f0-9]+(\.[\w-]+)?\.js/.test(r.url()))
+			entries.push(r.url().replace(/^.*\//, ''));
+	});
 	await page.goto('/visible-below/', { waitUntil: 'networkidle' });
 	// the file the island loads: its location (`src`) in a build, its identity (`entry`) where it has none
 	const region = page.locator('[data-below] ogygia-region');
-	const entry = ((await region.getAttribute('src')) ?? (await region.getAttribute('entry')))!.replace(/^.*\//, '');
+	const entry = ((await region.getAttribute('src')) ??
+		(await region.getAttribute('entry')))!.replace(/^.*\//, '');
 	await sleep(3000); // well past any idle callback
-	check('island not hydrated before scroll', (await page.locator('[data-below] ogygia-region[data-hydrated]').count()) === 0);
+	check(
+		'island not hydrated before scroll',
+		(await page.locator('[data-below] ogygia-region[data-hydrated]').count()) === 0
+	);
 	check('island entry NOT requested before scroll', !entries.includes(entry), entries.join(', '));
 	await page.locator('[data-below]').scrollIntoViewIfNeeded();
 	await page.waitForSelector('[data-below] ogygia-region[data-hydrated]', { timeout: 10_000 });
@@ -24,5 +31,8 @@ test('a visible island 4000px down fetches nothing until scrolled into view', as
 	const btn = page.locator('[data-below] [data-counter] button');
 	check('SSR count kept', (await btn.textContent())!.includes('count is 3'));
 	await btn.click();
-	check('island interactive after its late fetch', (await btn.textContent())!.includes('count is 4'));
+	check(
+		'island interactive after its late fetch',
+		(await btn.textContent())!.includes('count is 4')
+	);
 });

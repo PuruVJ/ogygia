@@ -76,6 +76,4 @@ In dev, SSR query seeding degrades to a refetch, and the mutation proxy runs onl
 
 ---
 
-*Next chapter: [collections](/docs/content/collections) turn your content into typed entries.*
-
-
+_Next chapter: [collections](/docs/content/collections) turn your content into typed entries._

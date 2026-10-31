@@ -6,4 +6,6 @@
 	});
 </script>
 
-<p data-probe="steady" data-ran={woke ? 'steady' : undefined}>steady: {woke ? 'awake' : 'asleep'}</p>
+<p data-probe="steady" data-ran={woke ? 'steady' : undefined}>
+	steady: {woke ? 'awake' : 'asleep'}
+</p>

@@ -6,7 +6,11 @@ import type { PageServerLoad } from './$types';
 
 export const prerender = false;
 
-async function get(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function get(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/hell/api/${name}?ms=${ms}`);
 	return res.json();
 }

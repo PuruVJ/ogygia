@@ -12,9 +12,9 @@ The full vocabulary in one place. When a word in the docs is unfamiliar, it is d
 
 - **Page**: a route that ships as server HTML with no Kit client (`csr = false`). Only islands hydrate. See [How it works](/docs/start/overview).
 - **Island**: a component that becomes interactive when it gets JS on a schedule. See [Client islands](/docs/regions/client-islands).
-- **Lake**: static HTML *inside* an island that ships zero client JS. See [Lakes](/docs/regions/lakes).
+- **Lake**: static HTML _inside_ an island that ships zero client JS. See [Lakes](/docs/regions/lakes).
 - **Server island**: HTML fetched from the server after load. Placeholder first, no JS. See [Server islands](/docs/regions/server-islands).
-- **Held region**: a server-*chosen* renderable that you place like data (`<Region of={x} />`). See [Held regions](/docs/regions/held-regions).
+- **Held region**: a server-_chosen_ renderable that you place like data (`<Region of={x} />`). See [Held regions](/docs/regions/held-regions).
 
 ## Attributes & schedules
 
@@ -30,7 +30,7 @@ The full vocabulary in one place. When a word in the docs is unfamiliar, it is d
 
 - **Region**: the DOM element (`<ogygia-region>`) that the runtime manages for each island, lake, or server island.
 - **Runtime**: the ~7.6 KB runtime (~11.7 KB with the SPA router) that boots on a Page and wakes regions on schedule.
-- **Portable binding**: a marked import whose *binding* is the island. Thus you can pass it around like a component. See [Client islands](/docs/regions/client-islands).
+- **Portable binding**: a marked import whose _binding_ is the island. Thus you can pass it around like a component. See [Client islands](/docs/regions/client-islands).
 - **Nearest-boundary rule**: nesting is decided by the closest marked parent. See [Timing & nesting](/docs/regions/timing-nesting).
 - **Dedupe**: the same component + strategy makes one client chunk, however many times it is used.
 

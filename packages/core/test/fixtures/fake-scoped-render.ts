@@ -16,11 +16,19 @@
 export function fake_scoped(html: string): string {
 	let out = html;
 	out = render(out, 'demo-card', (inner) => {
-		const trimmed = inner.replace(/>\s+</g, '><').replace(/>\s+([^<\s])/g, '> $1').replace(/([^>\s])\s+</g, '$1 <');
+		const trimmed = inner
+			.replace(/>\s+</g, '><')
+			.replace(/>\s+([^<\s])/g, '> $1')
+			.replace(/([^>\s])\s+</g, '$1 <');
 		const stamped = trimmed.replace(/(<[a-z][\w-]*)( og-c=")/g, '$1 c-id="0.1"$2');
 		return `<div class="card sc-demo-card"><b class="sc-demo-card">Card title</b><slot class="sc-demo-card sc-demo-card-s">${stamped}</slot></div><!--o.0.1-->`;
 	});
-	out = render(out, 'demo-link', (inner) => `<a class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#"><slot class="sc-demo-link sc-demo-link-s">${inner}</slot></a>`);
+	out = render(
+		out,
+		'demo-link',
+		(inner) =>
+			`<a class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#"><slot class="sc-demo-link sc-demo-link-s">${inner}</slot></a>`
+	);
 	return out;
 }
 
@@ -38,7 +46,9 @@ function render(html: string, tag: string, tree: (inner: string) => string): str
 		const planned = / og-h="/.test(attrs);
 		let host = attrs;
 		if (planned) host += ` og-shadow="${tag}.shadow" og-keep="data-title"`;
-		host = /\sclass="/.test(host) ? host.replace(/\sclass="([^"]*)"/, ` class="$1 sc-${tag}-h"`) : host + ` class="sc-${tag}-h"`;
+		host = /\sclass="/.test(host)
+			? host.replace(/\sclass="([^"]*)"/, ` class="$1 sc-${tag}-h"`)
+			: host + ` class="sc-${tag}-h"`;
 		host += ' data-title="Card"';
 		out += html.slice(at, open) + `<${tag}${host}>` + tree(inner) + `</${tag}>`;
 		at = close + tag.length + 3;

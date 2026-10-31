@@ -50,7 +50,13 @@
 {#if link}
 	<a {href} download={name} onclick={download} aria-busy={busy}>{busy ? 'building…' : 'JSON'}</a>
 {:else}
-	<a class="btn" {href} download={name} onclick={download} aria-busy={busy} title="One HTML file with everything inlined — opens from disk, islands live. Built app only."
+	<a
+		class="btn"
+		{href}
+		download={name}
+		onclick={download}
+		aria-busy={busy}
+		title="One HTML file with everything inlined — opens from disk, islands live. Built app only."
 		>{busy ? 'Building…' : 'Download'}<span class="sub">.html</span></a
 	>
 {/if}

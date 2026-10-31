@@ -46,7 +46,10 @@ export function needs_island_entry_full_reload(
  * Absolute path equality with querystrings stripped (host vs component vs Vite watch paths).
  * @internal
  */
-export function same_module_path(a: string | null | undefined, b: string | null | undefined): boolean {
+export function same_module_path(
+	a: string | null | undefined,
+	b: string | null | undefined
+): boolean {
 	if (!a || !b) return false;
 	return path.resolve(a.split('?')[0]) === path.resolve(b.split('?')[0]);
 }

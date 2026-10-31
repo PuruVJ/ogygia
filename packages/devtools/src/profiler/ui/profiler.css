@@ -57,7 +57,8 @@
 
 	--font-display: 'Newsreader Variable', 'Newsreader', Georgia, serif;
 	--font-body: 'Instrument Sans Variable', 'Instrument Sans', system-ui, -apple-system, sans-serif;
-	--font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	--font-mono:
+		'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* Light palette — forced with `data-theme="light"`, or in system mode when the OS prefers light.
@@ -125,8 +126,7 @@
 }
 body {
 	background:
-		radial-gradient(1200px 600px at 80% -10%, rgba(111, 227, 176, 0.05), transparent 60%),
-		var(--bg);
+		radial-gradient(1200px 600px at 80% -10%, rgba(111, 227, 176, 0.05), transparent 60%), var(--bg);
 	color: var(--text);
 	font: 14px/1.55 var(--font-body);
 	-webkit-font-smoothing: antialiased;

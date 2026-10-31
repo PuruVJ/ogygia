@@ -9,7 +9,12 @@
 	import { row_href } from './row-anchor.svelte.ts';
 
 	// `renders`: how many renders the CPU numbers add up (page mode); a wait pattern is one render's
-	let { patterns, busy_ms = 0, renders = 1, fns }: { patterns: Pattern[]; busy_ms?: number; renders?: number; fns?: string[] } = $props();
+	let {
+		patterns,
+		busy_ms = 0,
+		renders = 1,
+		fns
+	}: { patterns: Pattern[]; busy_ms?: number; renders?: number; fns?: string[] } = $props();
 	// a site links to its function's row only when the functions table has that row
 	const known = $derived(fns ? new Set(fns) : null);
 	const linkable = (fn: string | undefined): fn is string => !!fn && (!known || known.has(fn));
@@ -38,13 +43,27 @@
 				<h3>{p.title}</h3>
 				{#if p.save_ms >= 0.1}
 					<span class="save" title="A rough estimate from what these lines cost">
-						{#if p.kind === 'same-document' || p.kind === 'almost-same-document'}saves ~{fmt_ms(p.save_ms)} ms: the whole render, answered from a cache{:else if p.wait}saves ~{fmt_ms(p.save_ms)} ms of waiting{:else}saves ~{fmt_ms(per(p.save_ms))} ms{renders > 1 ? ' per render' : ''}{#if share(p.save_ms) >= 1}&nbsp;({share(p.save_ms)}% of CPU){/if}{/if}
+						{#if p.kind === 'same-document' || p.kind === 'almost-same-document'}saves ~{fmt_ms(
+								p.save_ms
+							)} ms: the whole render, answered from a cache{:else if p.wait}saves ~{fmt_ms(
+								p.save_ms
+							)} ms of waiting{:else}saves ~{fmt_ms(per(p.save_ms))} ms{renders > 1
+								? ' per render'
+								: ''}{#if share(p.save_ms) >= 1}&nbsp;({share(p.save_ms)}% of CPU){/if}{/if}
 					</span>
 				{:else if p.seed_bytes}
-					<span class="save" title="The page seed, sent to the browser with every page view">ships {fmt_bytes(p.seed_bytes)} per page view</span>
+					<span class="save" title="The page seed, sent to the browser with every page view"
+						>ships {fmt_bytes(p.seed_bytes)} per page view</span
+					>
 				{:else if p.kept_bytes}
-					<span class="save" title="Measured: allocated by one more warm render and still alive after a full collection">
-						keeps {fmt_bytes(p.kept_bytes)} per render{#if p.growth === 'grows'} · confirmed{:else if p.growth === 'levels-off'} · levels off{/if}{#if p.requests_left !== undefined} · heap full in ~{p.requests_left.toLocaleString('en-US')} requests{/if}
+					<span
+						class="save"
+						title="Measured: allocated by one more warm render and still alive after a full collection"
+					>
+						keeps {fmt_bytes(p.kept_bytes)} per render{#if p.growth === 'grows'}
+							· confirmed{:else if p.growth === 'levels-off'}
+							· levels off{/if}{#if p.requests_left !== undefined}
+							· heap full in ~{p.requests_left.toLocaleString('en-US')} requests{/if}
 					</span>
 				{/if}
 			</header>
@@ -54,32 +73,77 @@
 				{#each p.sites as s, i (s.path + ':' + s.line + '\0' + (s.target ?? '') + '\0' + i)}
 					<li>
 						{#if linkable(s.fn)}
-							<a class="loc" href={row_href('fn:' + s.fn)} title={s.path + ':' + s.line}>{s.file}:{s.line}</a>
+							<a class="loc" href={row_href('fn:' + s.fn)} title={s.path + ':' + s.line}
+								>{s.file}:{s.line}</a
+							>
 						{:else}
 							<span class="loc" title={s.path + ':' + s.line}>{s.file}:{s.line}</span>
 						{/if}
-						{#if s.module}<span class="mod" title="the build has no sourcemap: the line number is the built chunk's">in {s.module}</span>{/if}
+						{#if s.module}<span
+								class="mod"
+								title="the build has no sourcemap: the line number is the built chunk's"
+								>in {s.module}</span
+							>{/if}
 						<span class="nums">
-							{#if s.wait_ms}{s.calls} call{s.calls === 1 ? '' : 's'} to {s.target} · {fmt_ms(s.wait_ms)} ms waiting{#if s.in_loop} · in a loop{/if}{/if}
-						{#if s.answer_bytes !== undefined} · the same {fmt_bytes(s.answer_bytes)} every render{/if}
-						{#if s.personal}<span class="tag" title="The request carried a cookie or an authorization header, and the recording rendered as one user: cache it per user, keyed by the session">per user</span>{/if}
-						<!-- what the service itself says about keeping its answer (its Cache-Control) -->
-						{#if s.upstream_cache?.no_store}<span class="tag" title="The service answered with Cache-Control: no-store — the answer was the same here, but it asks not to be kept. Check with its owner before caching it">service says: don't store</span>
-						{:else if s.upstream_cache?.no_cache}<span class="tag" title="The service answered with no-cache (or max-age=0): a copy may be kept, but every reuse must be checked with it first (an ETag or Last-Modified request)">service says: revalidate each time</span>
-						{:else if s.upstream_cache?.private && !s.upstream_cache.max_age}<span class="tag" title="The service marks its answer private: one user's, never a shared cache's">service says: private</span>
-						{:else if s.upstream_cache?.max_age}<span class="tag" title="The service's own Cache-Control allows keeping a copy this long: caching it that long is within what it promises">service allows {s.upstream_cache.max_age >= 60 ? `${Math.round(s.upstream_cache.max_age / 60)} min` : `${s.upstream_cache.max_age} s`} cache</span>{/if}
+							{#if s.wait_ms}{s.calls} call{s.calls === 1 ? '' : 's'} to {s.target} · {fmt_ms(
+									s.wait_ms
+								)} ms waiting{#if s.in_loop}
+									· in a loop{/if}{/if}
+							{#if s.answer_bytes !== undefined}
+								· the same {fmt_bytes(s.answer_bytes)} every render{/if}
+							{#if s.personal}<span
+									class="tag"
+									title="The request carried a cookie or an authorization header, and the recording rendered as one user: cache it per user, keyed by the session"
+									>per user</span
+								>{/if}
+							<!-- what the service itself says about keeping its answer (its Cache-Control) -->
+							{#if s.upstream_cache?.no_store}<span
+									class="tag"
+									title="The service answered with Cache-Control: no-store — the answer was the same here, but it asks not to be kept. Check with its owner before caching it"
+									>service says: don't store</span
+								>
+							{:else if s.upstream_cache?.no_cache}<span
+									class="tag"
+									title="The service answered with no-cache (or max-age=0): a copy may be kept, but every reuse must be checked with it first (an ETag or Last-Modified request)"
+									>service says: revalidate each time</span
+								>
+							{:else if s.upstream_cache?.private && !s.upstream_cache.max_age}<span
+									class="tag"
+									title="The service marks its answer private: one user's, never a shared cache's"
+									>service says: private</span
+								>
+							{:else if s.upstream_cache?.max_age}<span
+									class="tag"
+									title="The service's own Cache-Control allows keeping a copy this long: caching it that long is within what it promises"
+									>service allows {s.upstream_cache.max_age >= 60
+										? `${Math.round(s.upstream_cache.max_age / 60)} min`
+										: `${s.upstream_cache.max_age} s`} cache</span
+								>{/if}
 							{#if s.hits !== undefined && s.calls}the cache answered {s.hits} of {s.calls} calls{/if}
-							{#if s.kept_bytes}{fmt_bytes(s.kept_bytes)} kept{#if s.mem_via}, inside {s.mem_via}{/if}{#if s.grows === true}<span title="Held about one render's worth more after every render of the check. A cache that keeps more entries than the check had renders looks the same."> · grew every render checked</span>{:else if s.grows === false} · stopped growing (a bounded cache){/if}{/if}
+							{#if s.kept_bytes}{fmt_bytes(s.kept_bytes)} kept{#if s.mem_via}, inside {s.mem_via}{/if}{#if s.grows === true}<span
+										title="Held about one render's worth more after every render of the check. A cache that keeps more entries than the check had renders looks the same."
+									>
+										· grew every render checked</span
+									>{:else if s.grows === false}
+									· stopped growing (a bounded cache){/if}{/if}
 							{#if s.cpu_ms > 0}{fmt_ms(per(s.cpu_ms))} ms{/if}
-							{#if s.lib_ms}{s.cpu_ms > 0 ? ' · ' : ''}{fmt_ms(per(s.lib_ms))} ms in {s.libs?.[0] ?? 'a library'}{/if}
+							{#if s.lib_ms}{s.cpu_ms > 0 ? ' · ' : ''}{fmt_ms(per(s.lib_ms))} ms in {s.libs?.[0] ??
+									'a library'}{/if}
 							{#if s.alloc_bytes > 0}{s.cpu_ms > 0 ? ' · ' : ''}{fmt_bytes(per(s.alloc_bytes))}{/if}
-							{#if !s.wait_ms && renders > 1 && (s.cpu_ms > 0 || s.lib_ms || s.alloc_bytes > 0)}&nbsp;per render{/if}
+							{#if !s.wait_ms && renders > 1 && (s.cpu_ms > 0 || s.lib_ms || s.alloc_bytes > 0)}&nbsp;per
+								render{/if}
 							{#if s.calls && !s.wait_ms && s.hits === undefined}&nbsp;· ×{s.calls}{/if}
 						</span>
 						{#if s.context}
 							{@const shown = dedent(s.context.lines)}
 							<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-							<pre class="ctx" tabindex="0" aria-label="source around line {s.line}">{#each shown as ln, i (i)}<span class="cl" class:hot={s.context.start + i === s.line}><span class="cn">{s.context.start + i}</span>{ln}
+							<pre
+								class="ctx"
+								tabindex="0"
+								aria-label="source around line {s.line}">{#each shown as ln, i (i)}<span
+										class="cl"
+										class:hot={s.context.start + i === s.line}
+										><span class="cn">{s.context.start + i}</span>{ln}
 </span>{/each}</pre>
 						{:else}
 							<code>{s.code}</code>
@@ -97,7 +161,9 @@
 								<span class="vk">called from</span>
 								{#each s.via as v (v.path + ':' + v.line)}
 									<div class="vrow">
-										{#if linkable(v.fn)}<a class="loc" href={row_href('fn:' + v.fn)}>{v.file}:{v.line}</a>{:else}<span class="loc">{v.file}:{v.line}</span>{/if}
+										{#if linkable(v.fn)}<a class="loc" href={row_href('fn:' + v.fn)}
+												>{v.file}:{v.line}</a
+											>{:else}<span class="loc">{v.file}:{v.line}</span>{/if}
 										{#if v.in_loop}<span class="inloop">in a loop</span>{/if}
 										<code>{v.code}</code>
 									</div>

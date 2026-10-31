@@ -53,7 +53,10 @@ export function scan_entry_pattern(file: string, own_root: string = PKG_ROOT_ID)
 }
 
 /** The two ogygia self-imports the transform injects into hosts / generated island modules. */
-export const OGYGIA_INJECTED_IMPORTS: Set<string> = new Set(['ogygia/internal', 'ogygia/internal/server']);
+export const OGYGIA_INJECTED_IMPORTS: Set<string> = new Set([
+	'ogygia/internal',
+	'ogygia/internal/server'
+]);
 
 /**
  * DIRECT paths to ogygia's OWN injected runtime entries, resolved WITHOUT `this.resolve`. The
@@ -72,7 +75,10 @@ const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
 /** ogygia's `Region.svelte` — either copy, as the POSIX id Vite hands the transform hook (a workspace
  *  can load the src one and the dist one both): its LateIsland import is the awaiting one where the
  *  app runs Svelte's async mode (late-island.ts). */
-export const OGYGIA_REGION_MODULES: ReadonlySet<string> = new Set([PKG_ROOT_ID + 'src/Region.svelte', PKG_ROOT_ID + 'dist/Region.svelte']);
+export const OGYGIA_REGION_MODULES: ReadonlySet<string> = new Set([
+	PKG_ROOT_ID + 'src/Region.svelte',
+	PKG_ROOT_ID + 'dist/Region.svelte'
+]);
 export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 	? {
 			'ogygia/internal': path.join(PKG_ROOT, 'src/internal.ts'),
@@ -84,18 +90,19 @@ export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 		};
 
 /** Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false). */
-export const APP_SHIMS: { '$app/state': string; '$app/stores': string; '$app/navigation': string } = {
-	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
-	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
-	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
-};
+export const APP_SHIMS: { '$app/state': string; '$app/stores': string; '$app/navigation': string } =
+	{
+		'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
+		'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
+		'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
+	};
 
 // A lake's component code must ship in NO client chunk. In the CLIENT build of an island's virtual
 // module we swap every lake import for a render-nothing stub (the runtime lifts/restores the lake's
 // SSR DOM around hydration). SSR keeps the real component. Same empty `ClientBindingStub` used for
 // portable bindings — a lake placeholder and a binding stub are both "render nothing on the client".
 /** On-disk stub for `virtual:ogygia/client-binding-stub` (csr=false client hosts). */
-export const CLIENT_BINDING_STUB_FILE: string =fileURLToPath(
+export const CLIENT_BINDING_STUB_FILE: string = fileURLToPath(
 	new URL('../ClientBindingStub.svelte', import.meta.url)
 );
 
@@ -103,24 +110,24 @@ export const CLIENT_BINDING_STUB_FILE: string =fileURLToPath(
 // `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
 // modules those pull in (`client.js`, `state.svelte.js`) to tiny stubs, so the router graph
 // never loads. The old hand-rolled wire client is gone; these stubs are the only glue.
-export const STUB_CLIENT: string =fileURLToPath(
+export const STUB_CLIENT: string = fileURLToPath(
 	new URL('../shims/kit-remote/client-stub.js', import.meta.url)
 );
-export const STUB_STATE: string =fileURLToPath(
+export const STUB_STATE: string = fileURLToPath(
 	new URL('../shims/kit-remote/state-stub.js', import.meta.url)
 );
-export const STUB_PATHS: string =fileURLToPath(
+export const STUB_PATHS: string = fileURLToPath(
 	new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)
 );
 export const KIT_REMOTE_CLIENT: RegExp = /(^|\/)client\.js$/;
 export const KIT_REMOTE_STATE: RegExp = /state\.svelte\.js$/;
 
 /** Absolute path to real HMAC (SSR-only via `virtual:ogygia/sign`). */
-export const HMAC_MODULE: string =fileURLToPath(new URL('../server/hmac.js', import.meta.url));
+export const HMAC_MODULE: string = fileURLToPath(new URL('../server/hmac.js', import.meta.url));
 /** The prebuilt runtime dir the runtime chunk bundles (for `generateRuntimeEntrySource`). */
-export const RUNTIME_DIR: string =fileURLToPath(new URL('../runtime', import.meta.url));
+export const RUNTIME_DIR: string = fileURLToPath(new URL('../runtime', import.meta.url));
 /** Absolute path to SSR region-endpoint helper (signed capability URLs). */
-export const REGION_ENDPOINT_MODULE: string =fileURLToPath(
+export const REGION_ENDPOINT_MODULE: string = fileURLToPath(
 	new URL('../server/region-endpoint.js', import.meta.url)
 );
 
@@ -162,4 +169,4 @@ function runtime_content_hash(): string {
 }
 
 /** The runtime chunk's source-content hash (the immutable-filename base; feature hash rides on top). */
-export const RUNTIME_HASH: string =runtime_content_hash();
+export const RUNTIME_HASH: string = runtime_content_hash();

@@ -31,13 +31,18 @@ describe('strip_markup_ts', () => {
 	});
 
 	it('leaves type-looking text in strings and plain JS components alone', () => {
-		expect(strip_markup_ts('<script>let a = 1;</script><p>{a}</p>')).toBe('<script>let a = 1;</script><p>{a}</p>');
+		expect(strip_markup_ts('<script>let a = 1;</script><p>{a}</p>')).toBe(
+			'<script>let a = 1;</script><p>{a}</p>'
+		);
 		const src = '<script lang="ts">let a = 1;</script><p title="x as Y">{"b as C"} x as y</p>';
-		expect(strip_markup_ts(src)).toBe('<script>let a = 1;</script><p title="x as Y">{"b as C"} x as y</p>');
+		expect(strip_markup_ts(src)).toBe(
+			'<script>let a = 1;</script><p title="x as Y">{"b as C"} x as y</p>'
+		);
 	});
 
 	it('the output compiles as plain JS', () => {
-		const src = '<script lang="ts">let items = [1, 2];</script>{#snippet row(n: number)}<li>{n}</li>{/snippet}<ul>{#each items as i}{@render row(i as number)}{/each}</ul>';
+		const src =
+			'<script lang="ts">let items = [1, 2];</script>{#snippet row(n: number)}<li>{n}</li>{/snippet}<ul>{#each items as i}{@render row(i as number)}{/each}</ul>';
 		// the script is plain JS already, as it is after preprocess()
 		const js = strip_markup_ts(src);
 		expect(() => compile(js, { generate: 'server' })).not.toThrow();

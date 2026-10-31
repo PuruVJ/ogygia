@@ -151,7 +151,6 @@ export function neutralize_head_hydration_markers(): void {
 	for (const m of to_remove) m.remove();
 }
 
-
 /**
  * REPAIR the island's light DOM toward its server markup, keeping every element it still has.
  *
@@ -240,14 +239,14 @@ function culprit_hint(n: Node): string {
 	if (n.nodeType !== 1) return '';
 	const el = n as Element;
 	const tag = el.tagName.toLowerCase();
-	if (tag === 'style') return ' — an injected <style> (scoped CSS from a component/design-system runtime)';
+	if (tag === 'style')
+		return ' — an injected <style> (scoped CSS from a component/design-system runtime)';
 	if (tag === 'template' && el.hasAttribute('shadowrootmode'))
 		return ' — a declarative shadow-DOM template injected after SSR';
 	for (const a of el.attributes)
 		if (a.name.startsWith('sc-') || a.name === 's-id' || a.name === 'c-id' || a.name === 's-sn')
 			return ' — scoped web-component hydration marks (sc-*, s-id, c-id) a component runtime stamped over the island';
-	if (el.classList.contains('hydrated'))
-		return ' — a web-component runtime marked it `hydrated`';
+	if (el.classList.contains('hydrated')) return ' — a web-component runtime marked it `hydrated`';
 	return '';
 }
 
@@ -280,7 +279,10 @@ function describe_divergence(live: Node, want: Node, where = 'the island'): stri
 	for (let i = 0; i < a.length; i++) {
 		const x = a[i];
 		const y = b[i];
-		if (x.nodeType !== y.nodeType || (x.nodeType === 1 && (x as Element).tagName !== (y as Element).tagName))
+		if (
+			x.nodeType !== y.nodeType ||
+			(x.nodeType === 1 && (x as Element).tagName !== (y as Element).tagName)
+		)
 			return `${where}: the server sent ${node_label(y)} but the browser had ${node_label(x)}${culprit_hint(x)}`;
 		if (x.nodeType === 1) {
 			if (!walk_enters(x as Element)) continue; // never entered: see sequence_differs
@@ -820,7 +822,10 @@ export function hydrate_island(
 					reason: drift.reason || undefined
 				});
 			if (import.meta.env.DEV)
-				console.warn(HEALED_WARNING + (drift.reason ? `\nWhat drifted: ${drift.reason}` : ''), entry);
+				console.warn(
+					HEALED_WARNING + (drift.reason ? `\nWhat drifted: ${drift.reason}` : ''),
+					entry
+				);
 		}
 		if (drift.conflict) {
 			// Two owners wanted the same nodes (runtime/ownership.ts): the repair kept Svelte's walk

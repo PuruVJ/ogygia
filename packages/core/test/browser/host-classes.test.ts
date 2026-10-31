@@ -2,7 +2,11 @@
 // `class` whole): runtime/host-classes.ts, against the tokens the restorer recorded as Svelte's.
 import { afterEach, expect, test } from 'vitest';
 import { hydrate } from 'svelte';
-import { keep_host_classes, note_host_classes, SVELTE_CLASS } from '../../src/runtime/host-classes.ts';
+import {
+	keep_host_classes,
+	note_host_classes,
+	SVELTE_CLASS
+} from '../../src/runtime/host-classes.ts';
 import HostClass from './fixtures/HostClass.svelte';
 
 afterEach(() => {
@@ -16,7 +20,8 @@ function region(html: string): HTMLElement {
 	return el;
 }
 
-const restored = (el: Element, svelte: string) => ((el as unknown as Record<string, string>)[SVELTE_CLASS] = svelte);
+const restored = (el: Element, svelte: string) =>
+	((el as unknown as Record<string, string>)[SVELTE_CLASS] = svelte);
 
 test('the component’s tokens as they are just before the hydrate come back after Svelte’s write', () => {
 	const r = region('<x-hero class="relative sc-x-hero-h qds-theme-dark">a</x-hero>');
@@ -40,7 +45,9 @@ test('a token the component dropped on the client before the hydrate stays dropp
 });
 
 test('Svelte’s own tokens are never put back; unrestored and replaced elements are left alone', () => {
-	const r = region('<x-a class="wide mine">a</x-a><x-b class="theirs">b</x-b><x-c class="c own">c</x-c>');
+	const r = region(
+		'<x-a class="wide mine">a</x-a><x-b class="theirs">b</x-b><x-c class="c own">c</x-c>'
+	);
 	const [a, b, c] = Array.from(r.children);
 	restored(a, 'wide'); // Svelte's client value drops `wide`: Svelte wins
 	restored(c, 'c');

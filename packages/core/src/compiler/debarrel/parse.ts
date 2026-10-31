@@ -159,7 +159,8 @@ export function analyze_exports(code: string, id: string): ModuleShape | null {
 	// local binding → what it came from, for `import { a } from './x'; export { a as b }`
 	const bound = new Map<string, { source: string; imported: string; kind: ImportSpec['kind'] }>();
 	for (const d of imports)
-		for (const s of d.specs) bound.set(s.local, { source: d.source, imported: s.imported, kind: s.kind });
+		for (const s of d.specs)
+			bound.set(s.local, { source: d.source, imported: s.imported, kind: s.kind });
 
 	const exports: ExportRecord[] = [];
 	const own = new Set<string>();
@@ -206,7 +207,8 @@ export function analyze_exports(code: string, id: string): ModuleShape | null {
 					// declared here → own.
 					const b = bound.get(local);
 					if (b) {
-						if (b.kind === 'namespace') exports.push({ kind: 'star_ns', exported, source: b.source });
+						if (b.kind === 'namespace')
+							exports.push({ kind: 'star_ns', exported, source: b.source });
 						else
 							exports.push({
 								kind: 'reexport',

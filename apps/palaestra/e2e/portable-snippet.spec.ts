@@ -40,7 +40,11 @@ test.describe('a snippet forwarded THROUGH a plain shell into an island crosses 
 			bar.slice(0, 120)
 		);
 		check('SSR: nested island inside the crossed snippet seeded (5)', BUMPER_5_RE.test(bar));
-		check('SSR: the snippet’s opening {@const} evaluated inside the crossed copy', CONST_ENABLED_RE.test(bar), bar.slice(0, 160));
+		check(
+			'SSR: the snippet’s opening {@const} evaluated inside the crossed copy',
+			CONST_ENABLED_RE.test(bar),
+			bar.slice(0, 160)
+		);
 		// No-waterfall: the portable's entry is in its host island's graph, so it is preloaded with the
 		// host's chunks when the host wakes — and no island code is hinted from the HTML.
 		const graph_chunks = [...island_graph(raw).values()].flat();
@@ -66,7 +70,10 @@ test.describe('a snippet forwarded THROUGH a plain shell into an island crosses 
 			'crossed snippet survives hydration (not wiped)',
 			(await barGh.innerText()) === 'GitHub · Ada'
 		);
-		check('the opening {@const} holds after hydration', (await barGh.getAttribute('data-enabled')) === 'true');
+		check(
+			'the opening {@const} holds after hydration',
+			(await barGh.getAttribute('data-enabled')) === 'true'
+		);
 
 		const barBumper = page.locator('[data-portable-bar] [data-bumper-n]');
 		check('nested island seed inside crossed snippet', (await barBumper.innerText()) === '5');

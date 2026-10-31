@@ -202,7 +202,7 @@ const heroRedesign = flag('hero-redesign', { control: 50, bold: 50 }, { layer: '
 const heroVideo    = flag('hero-video',    { control: 50, video: 50 }, { layer: 'hero-surface' });
 ```
 
-For each visitor, the layer makes ONE sticky decision, before the logic of a member runs. It hashes `(layer name, visitor id)` over the **sorted** member names. That selects the **owner** for the visitor. Think of all traffic in N equal lanes, one lane per member. A read of a member flag then starts with one question: *am I the owner for this visitor?*
+For each visitor, the layer makes ONE sticky decision, before the logic of a member runs. It hashes `(layer name, visitor id)` over the **sorted** member names. That selects the **owner** for the visitor. Think of all traffic in N equal lanes, one lane per member. A read of a member flag then starts with one question: _am I the owner for this visitor?_
 
 - **Not the owner** → answer control, immediately. The targeting and the weights of the flag never run for that visitor.
 - **The owner** → continue as if the layer did not exist, inside your own lane.
@@ -215,7 +215,7 @@ Walkthrough: visitor `puru` hashes into the lane of `hero-video`. `heroRedesign(
 
 ## Measurement — `decide({ exposure })`
 
-ogygia ships **no metrics pipeline**. The decision is the primitive. The count is the job of your analytics. The one seam is an exposure sink. It fires one time per request per flag, on the first read. Under SSR, the decision *is* the render of the variant. Batching is built in:
+ogygia ships **no metrics pipeline**. The decision is the primitive. The count is the job of your analytics. The one seam is an exposure sink. It fires one time per request per flag, on the first read. Under SSR, the decision _is_ the render of the variant. Batching is built in:
 
 ```ts title=hooks.server.ts
 decide({

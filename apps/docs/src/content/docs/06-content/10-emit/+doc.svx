@@ -91,7 +91,7 @@ export const { GET, entries } = docs.emit.raw();
 Now `/docs/routing.md` serves the source of `/docs/routing`. **This site does exactly that**: append `.md` to a docs URL, this page included.
 
 ::: details Why the source and not the rendered HTML?
-The rendered page already exists at the `.html` address. A second HTML serialization adds nothing. The `.md` emission is the *authored artifact*: stable under restyles, cheap to diff, and the representation that models quote most faithfully. The one applied transformation is frontmatter stripping (by default), because YAML metadata is site plumbing, not prose.
+The rendered page already exists at the `.html` address. A second HTML serialization adds nothing. The `.md` emission is the _authored artifact_: stable under restyles, cheap to diff, and the representation that models quote most faithfully. The one applied transformation is frontmatter stripping (by default), because YAML metadata is site plumbing, not prose.
 :::
 
 ## RSS

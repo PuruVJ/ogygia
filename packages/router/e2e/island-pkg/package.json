@@ -3,9 +3,6 @@
 	"version": "0.0.0",
 	"private": true,
 	"type": "module",
-	"ogygia": {
-		"files": ["./src/widgets", "./src/pages/**/*.svelte", "./src/routes.ts"]
-	},
 	"exports": {
 		"./routes": "./src/routes.ts",
 		"./Panel.svelte": {
@@ -17,5 +14,12 @@
 	"dependencies": {
 		"@ogygia/router": "workspace:*",
 		"ogygia": "workspace:*"
+	},
+	"ogygia": {
+		"files": [
+			"./src/widgets",
+			"./src/pages/**/*.svelte",
+			"./src/routes.ts"
+		]
 	}
 }

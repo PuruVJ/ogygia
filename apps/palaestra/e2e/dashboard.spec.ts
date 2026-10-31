@@ -61,7 +61,10 @@ test.describe('page shim, island goto, client table, chart', () => {
 			'pagedata-probe: $derived over page.data updates after SPA nav to #6 (remount -> fresh)',
 			(await probe.textContent()).includes('#6')
 		);
-		check('orderdetail: SPA nav kept the document stamp (no reload)', (await document_stamp(page)) === m1);
+		check(
+			'orderdetail: SPA nav kept the document stamp (no reload)',
+			(await document_stamp(page)) === m1
+		);
 	});
 
 	// ---------- Orders list: FilterBar goto() shim + DataTable client sort ----------

@@ -15,14 +15,18 @@ export function build_app(dir: string): void {
 		return;
 	}
 	console.log(`▸ Building ${dir}`);
-	const res = spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], { cwd: dir, stdio: 'inherit' });
+	const res = spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], {
+		cwd: dir,
+		stdio: 'inherit'
+	});
 	if (res.status !== 0) throw new Error(`e2e build failed: ${dir}`);
 }
 
 /** Playwright `globalSetup`: build the app the config names in `metadata.build`. */
 export default function global_build(config: FullConfig): void {
 	const dir = config.metadata.build;
-	if (typeof dir !== 'string') throw new Error('e2e build: the config names no app (metadata.build)');
+	if (typeof dir !== 'string')
+		throw new Error('e2e build: the config names no app (metadata.build)');
 	build_app(dir);
 }
 

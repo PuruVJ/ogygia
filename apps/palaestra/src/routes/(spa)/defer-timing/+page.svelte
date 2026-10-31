@@ -8,11 +8,18 @@
 	import GLoad from '$lib/Greeting.svelte' with { render: 'deferred' };
 	import GIdle from '$lib/Greeting.svelte' with { render: 'deferred', fetch: 'idle' };
 	import GVisible from '$lib/Greeting.svelte' with { render: 'deferred', fetch: 'visible' };
-	import GMedia from '$lib/Greeting.svelte' with { render: 'deferred', fetch: '(min-width: 300px)' };
+	import GMedia from '$lib/Greeting.svelte' with {
+		render: 'deferred',
+		fetch: '(min-width: 300px)'
+	};
 	//   prefetch -> an ON-DEMAND hole (swaps on first hover) whose HTML is warmed at idle: the request
 	//               goes out at idle with no intent, the fallback stays, the hover swaps with no
 	//               second request (e2e/defer-timing.spec.ts)
-	import GPrefetch from '$lib/Greeting.svelte' with { render: 'deferred', fetch: 'interaction', prefetch: 'idle' };
+	import GPrefetch from '$lib/Greeting.svelte' with {
+		render: 'deferred',
+		fetch: 'interaction',
+		prefetch: 'idle'
+	};
 </script>
 
 <h1 data-static-shell>Defer timing variants</h1>
@@ -23,22 +30,38 @@
 
 <section data-defer="load">
 	<h2 data-static-shell>load</h2>
-	<GLoad salutation="Load">{#snippet ogygiaFallback()}<p class="fb" data-fallback-load>loading (load)…</p>{/snippet}</GLoad>
+	<GLoad salutation="Load"
+		>{#snippet ogygiaFallback()}<p class="fb" data-fallback-load>
+				loading (load)…
+			</p>{/snippet}</GLoad
+	>
 </section>
 
 <section data-defer="idle">
 	<h2 data-static-shell>idle</h2>
-	<GIdle salutation="Idle">{#snippet ogygiaFallback()}<p class="fb" data-fallback-idle>loading (idle)…</p>{/snippet}</GIdle>
+	<GIdle salutation="Idle"
+		>{#snippet ogygiaFallback()}<p class="fb" data-fallback-idle>
+				loading (idle)…
+			</p>{/snippet}</GIdle
+	>
 </section>
 
 <section data-defer="media">
 	<h2 data-static-shell>media</h2>
-	<GMedia salutation="Media">{#snippet ogygiaFallback()}<p class="fb" data-fallback-media>loading (media)…</p>{/snippet}</GMedia>
+	<GMedia salutation="Media"
+		>{#snippet ogygiaFallback()}<p class="fb" data-fallback-media>
+				loading (media)…
+			</p>{/snippet}</GMedia
+	>
 </section>
 
 <section data-defer="prefetch">
 	<h2 data-static-shell>interaction + prefetch: idle</h2>
-	<GPrefetch salutation="Prefetch">{#snippet ogygiaFallback()}<p class="fb" data-fallback-prefetch>hover me (prefetched at idle)…</p>{/snippet}</GPrefetch>
+	<GPrefetch salutation="Prefetch"
+		>{#snippet ogygiaFallback()}<p class="fb" data-fallback-prefetch>
+				hover me (prefetched at idle)…
+			</p>{/snippet}</GPrefetch
+	>
 </section>
 
 <!-- big spacer so the visible hole starts well below the fold -->
@@ -46,7 +69,11 @@
 
 <section data-defer="visible">
 	<h2 data-static-shell>visible (below the fold)</h2>
-	<GVisible salutation="Visible">{#snippet ogygiaFallback()}<p class="fb" data-fallback-visible>loading (visible)…</p>{/snippet}</GVisible>
+	<GVisible salutation="Visible"
+		>{#snippet ogygiaFallback()}<p class="fb" data-fallback-visible>
+				loading (visible)…
+			</p>{/snippet}</GVisible
+	>
 </section>
 
 <style>

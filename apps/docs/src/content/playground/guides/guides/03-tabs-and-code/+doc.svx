@@ -115,9 +115,11 @@ You rarely need the raw components. Two `:::` blocks cover most cases, and the t
 ```bash [npm]
 npm create ogygia@latest
 ```
+
 ```bash [pnpm]
 pnpm create ogygia
 ```
+
 ```bash [bun]
 bun create ogygia
 ```

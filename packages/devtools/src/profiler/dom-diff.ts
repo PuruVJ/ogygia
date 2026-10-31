@@ -38,7 +38,14 @@ export function tokenize_html(s: string): string[] {
 const MAX_CELLS = 2_000_000;
 
 export function html_diff(a: string, b: string): HtmlDiff {
-	if (a === b) return { ops: [{ kind: 'same', text: a }], added: 0, removed: 0, truncated: false, same_ratio: 1 };
+	if (a === b)
+		return {
+			ops: [{ kind: 'same', text: a }],
+			added: 0,
+			removed: 0,
+			truncated: false,
+			same_ratio: 1
+		};
 	const A = tokenize_html(a);
 	const B = tokenize_html(b);
 	// common prefix / suffix
@@ -63,7 +70,10 @@ export function html_diff(a: string, b: string): HtmlDiff {
 		const L = new Uint32Array((n + 1) * (m + 1));
 		for (let i = n - 1; i >= 0; i--) {
 			for (let j = m - 1; j >= 0; j--) {
-				L[i * (m + 1) + j] = midA[i] === midB[j] ? L[(i + 1) * (m + 1) + j + 1] + 1 : Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
+				L[i * (m + 1) + j] =
+					midA[i] === midB[j]
+						? L[(i + 1) * (m + 1) + j + 1] + 1
+						: Math.max(L[(i + 1) * (m + 1) + j], L[i * (m + 1) + j + 1]);
 			}
 		}
 		let i = 0;
@@ -94,7 +104,13 @@ export function html_diff(a: string, b: string): HtmlDiff {
 	const added = ops.filter((o) => o.kind === 'add').reduce((x, o) => x + o.text.length, 0);
 	const removed = ops.filter((o) => o.kind === 'del').reduce((x, o) => x + o.text.length, 0);
 	const longer = Math.max(A.length, B.length) || 1;
-	return { ops, added, removed, truncated, same_ratio: Math.round(((p + s + same_mid) / longer) * 1000) / 1000 };
+	return {
+		ops,
+		added,
+		removed,
+		truncated,
+		same_ratio: Math.round(((p + s + same_mid) / longer) * 1000) / 1000
+	};
 }
 
 export interface ShiftBox {
@@ -113,7 +129,16 @@ export interface ShiftBox {
 
 /** Layout-shift rectangles normalized to the viewport, biggest shift first; boxes outside the
  *  viewport are clipped, a missing rect is skipped. */
-export function shift_boxes(shifts: { t: number; value: number; fp?: string; from?: [number, number, number, number]; to?: [number, number, number, number] }[], viewport: [number, number] | undefined): ShiftBox[] {
+export function shift_boxes(
+	shifts: {
+		t: number;
+		value: number;
+		fp?: string;
+		from?: [number, number, number, number];
+		to?: [number, number, number, number];
+	}[],
+	viewport: [number, number] | undefined
+): ShiftBox[] {
 	const [vw, vh] = viewport ?? [1, 1];
 	if (!(vw > 0 && vh > 0)) return [];
 	const clamp = (n: number) => Math.max(0, Math.min(1, n));
@@ -122,7 +147,17 @@ export function shift_boxes(shifts: { t: number; value: number; fp?: string; fro
 		const to = s.to ?? s.from;
 		if (!to) continue;
 		const from = s.from ?? to;
-		out.push({ x: clamp(to[0] / vw), y: clamp(to[1] / vh), w: clamp(to[2] / vw), h: clamp(to[3] / vh), fx: clamp(from[0] / vw), fy: clamp(from[1] / vh), value: s.value, t: s.t, ...(s.fp ? { fp: s.fp } : {}) });
+		out.push({
+			x: clamp(to[0] / vw),
+			y: clamp(to[1] / vh),
+			w: clamp(to[2] / vw),
+			h: clamp(to[3] / vh),
+			fx: clamp(from[0] / vw),
+			fy: clamp(from[1] / vh),
+			value: s.value,
+			t: s.t,
+			...(s.fp ? { fp: s.fp } : {})
+		});
 	}
 	return out.sort((a, b) => b.value - a.value);
 }

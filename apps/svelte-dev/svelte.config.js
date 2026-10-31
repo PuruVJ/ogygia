@@ -23,7 +23,9 @@ const config = {
 				// Flattened-scheme /docs links are REAL now (the flat-alias layer 308s them) — a 404
 				// under /docs is a genuinely dead link and fails the build.
 				const out_of_scope =
-					/^\/(tutorial|playground|packages|chat|search|examples|repl|media|faq|apps|roadmap)(\/|$)/.test(path);
+					/^\/(tutorial|playground|packages|chat|search|examples|repl|media|faq|apps|roadmap)(\/|$)/.test(
+						path
+					);
 				if (status === 404 && out_of_scope) return;
 				// The blog is an 8-year ARCHIVE: old posts link legacy doc schemes (`/docs/svelte-components`)
 				// that are dead on svelte.dev too without their historical redirect map. Warn, don't fail —

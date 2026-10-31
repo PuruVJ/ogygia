@@ -16,7 +16,9 @@ test('a hydration warning: code, message, the component file', () => {
 });
 
 test('not a hydration warning: nothing', () => {
-	expect(parse_svelte_warning('%c[svelte] state_snapshot_uncloneable\n%cValue cannot be cloned')).toBeNull();
+	expect(
+		parse_svelte_warning('%c[svelte] state_snapshot_uncloneable\n%cValue cannot be cloned')
+	).toBeNull();
 	expect(parse_svelte_warning('some other warning')).toBeNull();
 });
 
@@ -24,7 +26,22 @@ test('the finding groups them and names the island when it knows it', () => {
 	const r = analyze_page(
 		{
 			vitals: {},
-			visit: { warnings: [{ code: 'hydration_html_changed', message: 'x', file: '/a/Card.svelte', fp: 'aaaaaaaa11111111' }, { code: 'hydration_html_changed', message: 'x', file: '/a/Card.svelte', fp: 'aaaaaaaa11111111' }] },
+			visit: {
+				warnings: [
+					{
+						code: 'hydration_html_changed',
+						message: 'x',
+						file: '/a/Card.svelte',
+						fp: 'aaaaaaaa11111111'
+					},
+					{
+						code: 'hydration_html_changed',
+						message: 'x',
+						file: '/a/Card.svelte',
+						fp: 'aaaaaaaa11111111'
+					}
+				]
+			},
 			islands: [],
 			firsts: [],
 			shifts: [],

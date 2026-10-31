@@ -30,7 +30,8 @@ describe('drop_dead_kit_resolves', () => {
 	});
 
 	it('leaves a document that merely mentions the words alone (not a chunk of its own)', async () => {
-		const doc = '<!doctype html><body><script>console.log("__sveltekit_ .resolve(")</script></body>';
+		const doc =
+			'<!doctype html><body><script>console.log("__sveltekit_ .resolve(")</script></body>';
 		expect(await drop_dead_kit_resolves(streamed([doc])).text()).toBe(doc);
 	});
 });

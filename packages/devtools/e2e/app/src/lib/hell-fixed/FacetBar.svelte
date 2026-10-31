@@ -18,16 +18,31 @@
 	{#each facets as f (f.dim)}
 		<div class="facet">
 			<h4><Icon name="filter" /> {f.dim}</h4>
-			<ul>{#each f.values.slice(0, 8) as v (v.key)}<li><a href="?{f.dim}={v.key}"><Badge label={v.key} count={v.count} /></a></li>{/each}</ul>
+			<ul>
+				{#each f.values.slice(0, 8) as v (v.key)}<li>
+						<a href="?{f.dim}={v.key}"><Badge label={v.key} count={v.count} /></a>
+					</li>{/each}
+			</ul>
 		</div>
 	{/each}
 </nav>
 <aside data-related>
 	<h4>Related to “{query}” <ion-badge color="tertiary">{related.length}</ion-badge></h4>
-	<ol>{#each related as r (r.product.id)}<li><a href="/p/{r.product.id}">{r.product.name}</a> <small>{Math.round(r.score * 100)}%</small></li>{/each}</ol>
+	<ol>
+		{#each related as r (r.product.id)}<li>
+				<a href="/p/{r.product.id}">{r.product.name}</a> <small>{Math.round(r.score * 100)}%</small>
+			</li>{/each}
+	</ol>
 </aside>
 
 <style>
-	nav { display: flex; gap: 16px; flex-wrap: wrap; }
-	.facet ul { list-style: none; padding: 0; }
+	nav {
+		display: flex;
+		gap: 16px;
+		flex-wrap: wrap;
+	}
+	.facet ul {
+		list-style: none;
+		padding: 0;
+	}
 </style>

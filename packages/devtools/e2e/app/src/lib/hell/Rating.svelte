@@ -4,5 +4,8 @@
 	let voted = $state(false);
 </script>
 
-<span data-rating>{'★'.repeat(Math.round(value))}{'☆'.repeat(5 - Math.round(value))} {value.toFixed(1)}
-	<button onclick={() => (voted = !voted)}>{voted ? 'voted' : 'vote'}</button></span>
+<span data-rating
+	>{'★'.repeat(Math.round(value))}{'☆'.repeat(5 - Math.round(value))}
+	{value.toFixed(1)}
+	<button onclick={() => (voted = !voted)}>{voted ? 'voted' : 'vote'}</button></span
+>

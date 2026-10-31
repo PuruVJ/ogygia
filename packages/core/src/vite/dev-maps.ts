@@ -42,8 +42,8 @@ export function install_dev_page_keys(
 	root: string
 ): void {
 	const ssr = () =>
-		(server as unknown as { environments?: Record<string, { moduleGraph?: SsrGraph }> }).environments
-			?.ssr?.moduleGraph;
+		(server as unknown as { environments?: Record<string, { moduleGraph?: SsrGraph }> })
+			.environments?.ssr?.moduleGraph;
 	const app_file = (f: string | null | undefined): f is string =>
 		!!f && f.startsWith(root) && !f.includes('/node_modules/');
 	const kind = (f: string) => (f.endsWith('.svelte') ? 'svelte' : 'script') as 'svelte' | 'script';
@@ -92,7 +92,8 @@ export function install_dev_page_keys(
 			const code = read(f);
 			if (!code) continue;
 			const a = page_data_keys_answer(code, f, kind(f));
-			if (a.keys === 'all' && a.reason) why.push({ file: f, line: a.reason.line, why: a.reason.why });
+			if (a.keys === 'all' && a.reason)
+				why.push({ file: f, line: a.reason.line, why: a.reason.why });
 			add(a.keys);
 			// `helper(page)`: what the imported helper reads of it (one level, as the build follows)
 			for (const p of a.pending) {
@@ -101,9 +102,15 @@ export function install_dev_page_keys(
 					.catch(() => null);
 				const target = resolved?.id?.split('?')[0];
 				const tcode = target && app_file(target) ? read(target) : undefined;
-				const s = tcode ? summarize_export(tcode, target!, kind(target!), p.imported, p.arg) : 'all';
+				const s = tcode
+					? summarize_export(tcode, target!, kind(target!), p.imported, p.arg)
+					: 'all';
 				if (s === 'all' || !(s instanceof Set)) {
-					why.push({ file: f, line: p.line, why: `the page is handed to ${p.imported}(), which the analysis cannot follow` });
+					why.push({
+						file: f,
+						line: p.line,
+						why: `the page is handed to ${p.imported}(), which the analysis cannot follow`
+					});
 					add('all');
 				} else add(s);
 			}
@@ -114,13 +121,15 @@ export function install_dev_page_keys(
 
 /** lines V8 counts before a module's first line: the `AsyncFunction` header, and `"use strict";` */
 function runner_offset(): number {
-	const AsyncFunction = (async function () {}).constructor as new (...a: string[]) => () => unknown;
+	const AsyncFunction = async function () {}.constructor as new (...a: string[]) => () => unknown;
 	const src = new AsyncFunction('a', 'b', '/*code*/').toString();
 	return src.slice(0, src.indexOf('/*code*/')).split('\n').length - 1 + 1;
 }
 
 type MapLike = { version?: number; mappings?: string; [k: string]: unknown };
-type Graph = { getModuleById(id: string): { transformResult?: { map?: MapLike | null } | null } | undefined };
+type Graph = {
+	getModuleById(id: string): { transformResult?: { map?: MapLike | null } | null } | undefined;
+};
 
 /**
  * THE BROWSER'S MODULES, TOO: a CPU trace from the browser names a frame by the URL the dev server
@@ -131,11 +140,17 @@ type Graph = { getModuleById(id: string): { transformResult?: { map?: MapLike | 
  */
 export const DEV_CLIENT_MAPS: unique symbol = Symbol.for('ogygia.profiler.dev-client-maps');
 
-type ClientGraph = { urlToModuleMap?: Map<string, { transformResult?: { map?: { mappings?: unknown } | null } | null }> };
+type ClientGraph = {
+	urlToModuleMap?: Map<
+		string,
+		{ transformResult?: { map?: { mappings?: unknown } | null } | null }
+	>;
+};
 
 export function install_dev_client_maps(server: ViteDevServer): void {
 	const graph = () =>
-		(server as unknown as { environments?: Record<string, { moduleGraph?: ClientGraph }> }).environments?.client?.moduleGraph;
+		(server as unknown as { environments?: Record<string, { moduleGraph?: ClientGraph }> })
+			.environments?.client?.moduleGraph;
 	(globalThis as Record<symbol, unknown>)[DEV_CLIENT_MAPS] = (url: string): string | undefined => {
 		const by_url = graph()?.urlToModuleMap;
 		if (!by_url) return undefined;

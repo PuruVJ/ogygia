@@ -1,6 +1,13 @@
 // Fake in-memory "database" (server-only module).
 const STATUSES = ['pending', 'shipped', 'delivered', 'cancelled'];
-const CUSTOMERS = ['Ada Lovelace', 'Alan Turing', 'Grace Hopper', 'Linus T.', 'Margaret H.', 'Ken T.'];
+const CUSTOMERS = [
+	'Ada Lovelace',
+	'Alan Turing',
+	'Grace Hopper',
+	'Linus T.',
+	'Margaret H.',
+	'Ken T.'
+];
 
 export interface Order {
 	id: number;
@@ -38,7 +45,13 @@ function seed(): Order[] {
 
 const ORDERS = seed();
 
-export function listOrders({ status, sort = 'id', dir = 'asc', page = 1, perPage = 20 }: ListOptions = {}) {
+export function listOrders({
+	status,
+	sort = 'id',
+	dir = 'asc',
+	page = 1,
+	perPage = 20
+}: ListOptions = {}) {
 	let rows = ORDERS.slice();
 	if (status && status !== 'all') rows = rows.filter((o) => o.status === status);
 	const key = sort as keyof Order;
@@ -60,15 +73,15 @@ export function getOrder(id: number) {
 	return {
 		...order,
 		lineItems: new Map(
-			Array.from(
-				{ length: order.items },
-				(_, k): [string, { qty: number; price: number }] => [
-					`SKU-${order.id}-${k + 1}`,
-					{ qty: k + 1, price: 9.99 + k }
-				]
-			)
+			Array.from({ length: order.items }, (_, k): [string, { qty: number; price: number }] => [
+				`SKU-${order.id}-${k + 1}`,
+				{ qty: k + 1, price: 9.99 + k }
+			])
 		),
-		shipping: { address: { city: 'Cambridge', country: 'UK' }, updatedAt: new Date(order.createdAt.getTime() + 86_400_000) }
+		shipping: {
+			address: { city: 'Cambridge', country: 'UK' },
+			updatedAt: new Date(order.createdAt.getTime() + 86_400_000)
+		}
 	};
 }
 
@@ -82,7 +95,12 @@ export function statusCounts() {
 export function analytics() {
 	const byStatus = statusCounts();
 	const revenue = ORDERS.reduce((sum, o) => sum + o.total, 0);
-	return { byStatus, revenue: Math.round(revenue * 100) / 100, count: ORDERS.length, generatedAt: new Date() };
+	return {
+		byStatus,
+		revenue: Math.round(revenue * 100) / 100,
+		count: ORDERS.length,
+		generatedAt: new Date()
+	};
 }
 
 export function currentUser() {

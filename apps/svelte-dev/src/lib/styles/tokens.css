@@ -61,8 +61,10 @@
 	--sk-font-h1: 500 var(--sk-font-size-h1) / 1.2 var(--sk-font-family-heading);
 	--sk-font-h2: 500 var(--sk-font-size-h2) / 1.2 var(--sk-font-family-heading);
 	--sk-font-h3: 500 var(--sk-font-size-h3) / 1.2 var(--sk-font-family-heading);
-	--sk-font-body: 400 var(--sk-font-size-body) / var(--sk-line-height-body) var(--sk-font-family-body);
-	--sk-font-body-small: 400 var(--sk-font-size-body-small) / var(--sk-line-height-body-small) var(--sk-font-family-body);
+	--sk-font-body: 400 var(--sk-font-size-body) / var(--sk-line-height-body)
+		var(--sk-font-family-body);
+	--sk-font-body-small: 400 var(--sk-font-size-body-small) / var(--sk-line-height-body-small)
+		var(--sk-font-family-body);
 	--sk-font-ui-small: 400 var(--sk-font-size-ui-small) / 1.5 var(--sk-font-family-ui);
 	--sk-font-ui-medium: 400 var(--sk-font-size-ui-medium) / 1.5 var(--sk-font-family-ui);
 	--sk-font-ui-large: 400 var(--sk-font-size-ui-large) / 1.5 var(--sk-font-family-ui);
@@ -88,9 +90,12 @@
 	--sk-raised-border: var(--sk-border);
 	--sk-raised-highlight: hsl(0, 0%, 95%);
 	--sk-raised-shadow: hsl(0, 0%, 86%);
-	--sk-raised-color: var(--sk-raised-highlight) var(--sk-raised-border) var(--sk-raised-border) var(--sk-raised-highlight);
-	--sk-raised-hover-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-border);
-	--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-border) var(--sk-raised-border) var(--sk-raised-shadow);
+	--sk-raised-color: var(--sk-raised-highlight) var(--sk-raised-border) var(--sk-raised-border)
+		var(--sk-raised-highlight);
+	--sk-raised-hover-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow)
+		var(--sk-raised-border);
+	--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-border) var(--sk-raised-border)
+		var(--sk-raised-shadow);
 	--sk-raised-width: 1px 2px 2px 1px;
 	--sk-raised-active-width: 2px 1px 1px 2px;
 
@@ -110,9 +115,12 @@
 			-webkit-font-smoothing: antialiased;
 			--sk-raised-highlight: hsl(var(--sk-bg-hue), 15%, 32%);
 			--sk-raised-shadow: var(--sk-bg-3);
-			--sk-raised-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-border);
-			--sk-raised-hover-color: var(--sk-raised-highlight) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-highlight);
-			--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-highlight) var(--sk-raised-highlight) var(--sk-raised-shadow);
+			--sk-raised-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow)
+				var(--sk-raised-border);
+			--sk-raised-hover-color: var(--sk-raised-highlight) var(--sk-raised-shadow)
+				var(--sk-raised-shadow) var(--sk-raised-highlight);
+			--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-highlight)
+				var(--sk-raised-highlight) var(--sk-raised-shadow);
 			--sk-bg-hue: 220;
 			--sk-fg-1: hsl(var(--sk-bg-hue), 2%, 90%);
 			--sk-fg-2: hsl(var(--sk-bg-hue), 3%, 80%);
@@ -153,9 +161,12 @@
 	-webkit-font-smoothing: antialiased;
 	--sk-raised-highlight: hsl(220, 15%, 32%);
 	--sk-raised-shadow: var(--sk-bg-3);
-	--sk-raised-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-border);
-	--sk-raised-hover-color: var(--sk-raised-highlight) var(--sk-raised-shadow) var(--sk-raised-shadow) var(--sk-raised-highlight);
-	--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-highlight) var(--sk-raised-highlight) var(--sk-raised-shadow);
+	--sk-raised-color: var(--sk-raised-border) var(--sk-raised-shadow) var(--sk-raised-shadow)
+		var(--sk-raised-border);
+	--sk-raised-hover-color: var(--sk-raised-highlight) var(--sk-raised-shadow)
+		var(--sk-raised-shadow) var(--sk-raised-highlight);
+	--sk-raised-active-color: var(--sk-raised-shadow) var(--sk-raised-highlight)
+		var(--sk-raised-highlight) var(--sk-raised-shadow);
 	--sk-bg-hue: 220;
 	--sk-fg-1: hsl(var(--sk-bg-hue), 2%, 90%);
 	--sk-fg-2: hsl(var(--sk-bg-hue), 3%, 80%);

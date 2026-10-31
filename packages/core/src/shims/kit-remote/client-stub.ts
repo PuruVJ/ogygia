@@ -6,7 +6,11 @@ import { query_responses, prerender_responses, query_map, live_query_map } from 
 
 export { query_responses, prerender_responses, query_map, live_query_map };
 
-export const app: { hooks: { transport: typeof transport }; decoders: typeof decoders; encoders: typeof encoders } = { hooks: { transport }, decoders, encoders };
+export const app: {
+	hooks: { transport: typeof transport };
+	decoders: typeof decoders;
+	encoders: typeof encoders;
+} = { hooks: { transport }, decoders, encoders };
 // Navigation is the `$app/navigation` shim's: Kit's real router on a Kit-booted document, the
 // ogygia runtime's handle on one ogygia owns, the browser with neither. A remote form's redirect or
 // refresh inside an island on a Kit page then goes through Kit, never a full reload. (`_goto`'s
@@ -17,7 +21,9 @@ export function set_nearest_error_page(): void {}
  *  are no client hooks to consult (the island world has no Kit client). */
 export async function handle_error(error: unknown): Promise<{ status?: number; message: string }> {
 	const body = (error as { body?: { message?: string } } | null)?.body;
-	return body && typeof body.message === 'string' ? (body as { message: string }) : { status: 500, message: 'Internal Error' };
+	return body && typeof body.message === 'string'
+		? (body as { message: string })
+		: { status: 500, message: 'Internal Error' };
 }
 
 /**

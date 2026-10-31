@@ -36,7 +36,13 @@ import { register_wire_kind } from '../live-transport.ts';
 import { register_store_kind, register_derived_kind } from '../store-transport.ts';
 import { register_snippet_kind } from '../region-snippet.ts';
 import { register_fn_kind } from '../fn-transport.ts';
-import { analyze, json_culprit, plan_seed_refs, SEED_REF_KEY, type SeedIndex } from '../seed-refs.ts';
+import {
+	analyze,
+	json_culprit,
+	plan_seed_refs,
+	SEED_REF_KEY,
+	type SeedIndex
+} from '../seed-refs.ts';
 
 /** The sidecar attribute naming a non-devalue payload format; absent = devalue. */
 export const WIRE_FORMAT_ATTR = 'data-og-format';
@@ -165,7 +171,8 @@ export function plan_props_wire(value: unknown, entry: string): PropsWire {
 			json: true,
 			live_entries: [],
 			wire_modules: [],
-			wire: (seed) => once(seed, () => (escaped ??= { text: escape_script_text(canonical), json: true })),
+			wire: (seed) =>
+				once(seed, () => (escaped ??= { text: escape_script_text(canonical), json: true })),
 			refs,
 			culprit: () => null
 		};
@@ -213,7 +220,12 @@ export type SidecarPlace = 'tail' | 'adjacent';
  * for the reconciler; in the TAIL also `id`, for an O(1) `getElementById` lookup by the runtime),
  * unkeyed otherwise; the format attribute names the JSON lane.
  */
-export function props_sidecar(fp: string, w: WireText, place: SidecarPlace = 'adjacent', wire_modules: readonly string[] = []): string {
+export function props_sidecar(
+	fp: string,
+	w: WireText,
+	place: SidecarPlace = 'adjacent',
+	wire_modules: readonly string[] = []
+): string {
 	// An `id` must be unique in the document, and only the document TAIL can promise that: it emits
 	// one sidecar per fingerprint for the whole page. An ADJACENT sidecar (a hole's answer, a baked or
 	// crossing render root) may repeat a fingerprint the tail — or another root — already carries, so
@@ -223,7 +235,9 @@ export function props_sidecar(fp: string, w: WireText, place: SidecarPlace = 'ad
 		(fp ? `="${fp}"` + (place === 'tail' ? ` id="og-props-${fp}"` : '') : '') +
 		(w.json ? ` ${WIRE_FORMAT_ATTR}="${WIRE_FORMAT_JSON}"` : '') +
 		// (the transportable classes the browser loads before it decodes these props)
-		(wire_modules.length ? ` ${WIRE_CLASSES_ATTR}="${wire_modules.join(' ').replaceAll('"', '&quot;')}"` : '') +
+		(wire_modules.length
+			? ` ${WIRE_CLASSES_ATTR}="${wire_modules.join(' ').replaceAll('"', '&quot;')}"`
+			: '') +
 		'>' +
 		w.text +
 		'</script>'

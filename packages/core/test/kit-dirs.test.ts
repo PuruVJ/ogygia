@@ -37,7 +37,10 @@ describe('kit.files.routes / kit.outDir', () => {
 				"export default { kit: { files: { routes: 'src/routes-v2' }, outDir: '.svelte-kit-v2' } };"
 		});
 		const d = await load_kit_dirs(root);
-		expect(d).toEqual({ routes_dir: join(root, 'src/routes-v2'), out_dir: join(root, '.svelte-kit-v2') });
+		expect(d).toEqual({
+			routes_dir: join(root, 'src/routes-v2'),
+			out_dir: join(root, '.svelte-kit-v2')
+		});
 		// cached for the compiler (sync) …
 		expect(kit_dirs(root)).toEqual(d);
 		// … and every path-derived helper follows it
@@ -49,25 +52,51 @@ describe('kit.files.routes / kit.outDir', () => {
 		const root = app({});
 		const setup = (options: object) => ({ name: 'vite-plugin-sveltekit-setup', api: { options } });
 		// Kit 3: `sveltekit({ … })` is a promise of plugins, its options flat
-		const kit3 = [{ name: 'ogygia' }, Promise.resolve([{ name: 'vite-plugin-svelte:config' }, setup({ files: { routes: 'src/r3' }, outDir: '.out3', inlineStyleThreshold: 2048 })])];
-		expect(await load_kit_dirs(root, kit3)).toEqual({ routes_dir: join(root, 'src/r3'), out_dir: join(root, '.out3') });
+		const kit3 = [
+			{ name: 'ogygia' },
+			Promise.resolve([
+				{ name: 'vite-plugin-svelte:config' },
+				setup({ files: { routes: 'src/r3' }, outDir: '.out3', inlineStyleThreshold: 2048 })
+			])
+		];
+		expect(await load_kit_dirs(root, kit3)).toEqual({
+			routes_dir: join(root, 'src/r3'),
+			out_dir: join(root, '.out3')
+		});
 		// Kit 2: the svelte config, Kit's options under `kit` — preferred over the file it was read from
-		const kit2_root = app({ 'svelte.config.js': "export default { kit: { files: { routes: 'src/from-file' } } };" });
-		expect(await load_kit_dirs(kit2_root, [[setup({ kit: { files: { routes: 'src/r2' }, outDir: '.out2' } })]])).toEqual({ routes_dir: join(kit2_root, 'src/r2'), out_dir: join(kit2_root, '.out2') });
+		const kit2_root = app({
+			'svelte.config.js': "export default { kit: { files: { routes: 'src/from-file' } } };"
+		});
+		expect(
+			await load_kit_dirs(kit2_root, [
+				[setup({ kit: { files: { routes: 'src/r2' }, outDir: '.out2' } })]
+			])
+		).toEqual({ routes_dir: join(kit2_root, 'src/r2'), out_dir: join(kit2_root, '.out2') });
 		// no Kit plugin in the list: the file
-		expect((await load_kit_dirs(kit2_root, [{ name: 'other' }, null, false])).routes_dir).toBe(join(kit2_root, 'src/from-file'));
+		expect((await load_kit_dirs(kit2_root, [{ name: 'other' }, null, false])).routes_dir).toBe(
+			join(kit2_root, 'src/from-file')
+		);
 	});
 
 	it('defaults to src/routes + .svelte-kit without a config, or with a config that sets neither', async () => {
 		const bare = app({});
-		expect(await load_kit_dirs(bare)).toEqual({ routes_dir: join(bare, 'src/routes'), out_dir: join(bare, '.svelte-kit') });
+		expect(await load_kit_dirs(bare)).toEqual({
+			routes_dir: join(bare, 'src/routes'),
+			out_dir: join(bare, '.svelte-kit')
+		});
 		const plain = app({ 'svelte.config.js': 'export default { kit: {} };' });
-		expect(await load_kit_dirs(plain)).toEqual({ routes_dir: join(plain, 'src/routes'), out_dir: join(plain, '.svelte-kit') });
+		expect(await load_kit_dirs(plain)).toEqual({
+			routes_dir: join(plain, 'src/routes'),
+			out_dir: join(plain, '.svelte-kit')
+		});
 	});
 
 	it('an unread root answers the defaults (never throws), a set root answers what was set', () => {
 		const root = app({});
-		expect(kit_dirs(root)).toEqual({ routes_dir: join(root, 'src/routes'), out_dir: join(root, '.svelte-kit') });
+		expect(kit_dirs(root)).toEqual({
+			routes_dir: join(root, 'src/routes'),
+			out_dir: join(root, '.svelte-kit')
+		});
 		set_kit_dirs(root, { routes_dir: join(root, 'r'), out_dir: join(root, 'o') });
 		expect(kit_dirs(root).routes_dir).toBe(join(root, 'r'));
 	});
@@ -77,6 +106,8 @@ describe('kit.files.routes / kit.outDir', () => {
 		expect(src).toContain(`path.join(cwd, ".svelte-kit-v2", 'og-region-deps.json')`);
 		expect(src).not.toContain(`'.svelte-kit'`);
 		// the default stays the default
-		expect(island_deps_module(true, false)).toContain(`path.join(cwd, ".svelte-kit", 'og-region-deps.json')`);
+		expect(island_deps_module(true, false)).toContain(
+			`path.join(cwd, ".svelte-kit", 'og-region-deps.json')`
+		);
 	});
 });

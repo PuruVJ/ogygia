@@ -8,7 +8,11 @@
 
 /** Kit's client output dirs to try, most likely first: the adapter's layout (`build/index.js` →
  *  `build/client`), Kit's own output during `vite preview`, and the two under the cwd. */
-export function client_dir_candidates(entry_dir: string | undefined, cwd: string, join: (...p: string[]) => string): string[] {
+export function client_dir_candidates(
+	entry_dir: string | undefined,
+	cwd: string,
+	join: (...p: string[]) => string
+): string[] {
 	const out: string[] = [];
 	const add = (d: string) => {
 		if (!out.includes(d)) out.push(d);

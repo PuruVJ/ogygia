@@ -9,7 +9,10 @@
 // Usage: pnpm exec playwright test kit-nested-assets
 import { expect, test } from '@playwright/test';
 
-test('a csr=true page below the root requests every ogygia file from the root, and none 404s', async ({ page, baseURL }) => {
+test('a csr=true page below the root requests every ogygia file from the root, and none 404s', async ({
+	page,
+	baseURL
+}) => {
 	const misses: string[] = [];
 	const ours: string[] = [];
 	page.on('response', (r) => {
@@ -22,17 +25,29 @@ test('a csr=true page below the root requests every ogygia file from the root, a
 	// Kit hydrated the page, and the lake's island woke
 	await page.locator('[data-kit-btn]').click();
 	await expect(page.locator('[data-kit-btn]')).toHaveText('kit:1');
-	await expect(page.locator('ogygia-region[data-hydrated]').first()).toBeAttached({ timeout: 10_000 });
+	await expect(page.locator('ogygia-region[data-hydrated]').first()).toBeAttached({
+		timeout: 10_000
+	});
 	await page.waitForTimeout(500);
 
 	expect(misses, 'no ogygia file 404s').toEqual([]);
 	expect(ours.length, 'the page loaded ogygia files at all').toBeGreaterThan(0);
-	expect(ours.filter((p) => p.startsWith('/lake-kit/')), 'none resolved against the page path').toEqual([]);
+	expect(
+		ours.filter((p) => p.startsWith('/lake-kit/')),
+		'none resolved against the page path'
+	).toEqual([]);
 	// and every island entry attribute the browser wrote is root-absolute
 	const relative = await page.evaluate(() =>
 		[...document.querySelectorAll('ogygia-region[entry], ogygia-region[src]')]
 			.flatMap((e) => [e.getAttribute('entry'), e.getAttribute('src')])
-			.filter((v): v is string => !!v && v.includes('og-region') && !v.startsWith('/') && !v.startsWith('.') && !v.includes('://'))
+			.filter(
+				(v): v is string =>
+					!!v &&
+					v.includes('og-region') &&
+					!v.startsWith('/') &&
+					!v.startsWith('.') &&
+					!v.includes('://')
+			)
 	);
 	expect(relative, 'no page-relative entry').toEqual([]);
 	void baseURL;

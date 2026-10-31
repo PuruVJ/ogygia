@@ -43,10 +43,8 @@ describe('fouc-css collector', () => {
 	// `.ts` module was a dead end. The bundler's resolver resolves it; a barrel is followed by name.
 	test('a package barrel and a local barrel: the names taken, and only those', async () => {
 		const files: Record<string, string> = {
-			'/app/src/lib/Menu.svelte':
-				`<script lang="ts">import { KitPanel, type KitProps } from '@kit/ui/components';\nimport { LocalBadge } from './bits/index';\n</script>\n<KitPanel /><LocalBadge />`,
-			'/kit/components.ts':
-				`import KitPanel from './src/KitPanel.svelte';\nexport { KitPanel };\nexport { default as KitUnused } from './src/KitUnused.svelte';\nexport * from './more';\nexport type KitProps = { a: number };`,
+			'/app/src/lib/Menu.svelte': `<script lang="ts">import { KitPanel, type KitProps } from '@kit/ui/components';\nimport { LocalBadge } from './bits/index';\n</script>\n<KitPanel /><LocalBadge />`,
+			'/kit/components.ts': `import KitPanel from './src/KitPanel.svelte';\nexport { KitPanel };\nexport { default as KitUnused } from './src/KitUnused.svelte';\nexport * from './more';\nexport type KitProps = { a: number };`,
 			'/kit/more.ts': `export { default as KitDeep } from './src/KitDeep.svelte';`,
 			'/kit/src/KitPanel.svelte': `<div class="p"></div><style>.p { color: red }</style>`,
 			'/kit/src/KitUnused.svelte': `<div class="u"></div><style>.u { color: red }</style>`,

@@ -8,7 +8,12 @@ const LOREM =
 
 export type MenuLink = { label: string; href: string; description: string; badge?: string };
 export type MenuColumn = { title: string; links: MenuLink[] };
-export type Menu = { title: string; href: string; columns: MenuColumn[]; promo: { title: string; body: string; image: string } };
+export type Menu = {
+	title: string;
+	href: string;
+	columns: MenuColumn[];
+	promo: { title: string; body: string; image: string };
+};
 export type HeaderConfig = {
 	brand: string;
 	locale: string;
@@ -38,12 +43,21 @@ export function header_config(): HeaderConfig {
 		locale: 'en-US',
 		updated: new Date('2026-09-20T00:00:00Z'),
 		menus,
-		utility: Array.from({ length: 12 }, (_, i) => ({ label: `Utility ${i}`, href: `/u/${i}`, description: '' })),
+		utility: Array.from({ length: 12 }, (_, i) => ({
+			label: `Utility ${i}`,
+			href: `/u/${i}`,
+			description: ''
+		})),
 		flags: Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`feature_${i}`, i % 3 === 0]))
 	};
 }
 
-export type Country = { code: string; name: string; region: string; links: { label: string; href: string }[] };
+export type Country = {
+	code: string;
+	name: string;
+	region: string;
+	links: { label: string; href: string }[];
+};
 export function countries(): Country[] {
 	const regions = ['Europe', 'Americas', 'Asia Pacific', 'Middle East', 'Africa'];
 	return Array.from({ length: 240 }, (_, i) => ({
@@ -79,7 +93,7 @@ export function product(i: number): Product {
 		family: `Family ${i % 7}`,
 		summary: `${LOREM.slice(0, 120)} (${i})`,
 		description: `${LOREM}(product ${i}) `.repeat(12),
-		price: 120 + (i * 37) % 900 + 0.99,
+		price: 120 + ((i * 37) % 900) + 0.99,
 		currency: 'EUR',
 		stock: (i * 13) % 50,
 		rating: 3 + ((i * 7) % 20) / 10,
@@ -91,10 +105,14 @@ export function product(i: number): Product {
 		})),
 		prices: Array.from({ length: 12 }, (_, q) => {
 			const qty = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000][q];
-			const unit = (120 + (i * 37) % 900) * (1 - q * 0.03);
+			const unit = (120 + ((i * 37) % 900)) * (1 - q * 0.03);
 			return { qty, unit, total: unit * qty };
 		}),
-		docs: Array.from({ length: 6 }, (_, d) => ({ title: `Datasheet ${i}.${d}`, href: `/docs/${i}/${d}.pdf`, bytes: 100_000 + d * 4096 }))
+		docs: Array.from({ length: 6 }, (_, d) => ({
+			title: `Datasheet ${i}.${d}`,
+			href: `/docs/${i}/${d}.pdf`,
+			bytes: 100_000 + d * 4096
+		}))
 	};
 }
 
@@ -103,7 +121,13 @@ export function taxonomy(depth = 0, path = 't'): Taxonomy {
 	return {
 		id: path,
 		name: `Node ${path}`,
-		...(depth < 4 ? { children: Array.from({ length: depth === 0 ? 6 : 4 }, (_, i) => taxonomy(depth + 1, `${path}.${i}`)) } : {})
+		...(depth < 4
+			? {
+					children: Array.from({ length: depth === 0 ? 6 : 4 }, (_, i) =>
+						taxonomy(depth + 1, `${path}.${i}`)
+					)
+				}
+			: {})
 	};
 }
 
@@ -126,6 +150,9 @@ export function catalog() {
 export function footer_columns() {
 	return Array.from({ length: 6 }, (_, c) => ({
 		title: `Footer ${c + 1}`,
-		links: Array.from({ length: 30 }, (_, l) => ({ label: `Footer link ${c}.${l}`, href: `/f/${c}/${l}` }))
+		links: Array.from({ length: 30 }, (_, l) => ({
+			label: `Footer link ${c}.${l}`,
+			href: `/f/${c}/${l}`
+		}))
 	}));
 }

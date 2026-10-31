@@ -12,7 +12,12 @@
  * as `jsonb`, so a hosted dashboard can query inside it (`dump->'meta'->>'page'`) without shipping
  * the whole blob.
  */
-import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.ts';
+import type {
+	ProfilerStore,
+	ProfilerRecord,
+	ProfilerSummary,
+	ProfilerVisitRecord
+} from './index.ts';
 
 /** browser visits kept per page (the profiler reads the latest ten) */
 const MAX_VISITS_PER_PAGE = 20;
@@ -26,13 +31,19 @@ async function resolve(client: PgLike | string): Promise<PgLike> {
 	if (typeof client !== 'string') return client;
 	// indirect specifier so the type checker does not require `pg` to be installed (runtime peer)
 	const pgName = 'pg';
-	const pg = (await import(pgName)) as unknown as { default?: { Pool: new (o: { connectionString: string }) => PgLike }; Pool?: new (o: { connectionString: string }) => PgLike };
+	const pg = (await import(pgName)) as unknown as {
+		default?: { Pool: new (o: { connectionString: string }) => PgLike };
+		Pool?: new (o: { connectionString: string }) => PgLike;
+	};
 	const Pool = pg.Pool ?? pg.default?.Pool;
 	if (!Pool) throw new Error("ogygia/profiler: postgresStore needs the 'pg' package.");
 	return new Pool({ connectionString: client });
 }
 
-export function postgresStore(client: PgLike | string, opts: { schema?: string; table?: string } = {}): ProfilerStore {
+export function postgresStore(
+	client: PgLike | string,
+	opts: { schema?: string; table?: string } = {}
+): ProfilerStore {
 	const base = opts.table ?? 'ogygia';
 	const q = (n: string) => (opts.schema ? `"${opts.schema}"."${base}_${n}"` : `"${base}_${n}"`);
 	const R = q('reports');
@@ -43,9 +54,13 @@ export function postgresStore(client: PgLike | string, opts: { schema?: string; 
 		c ??= await resolve(client);
 		ready ??= (async () => {
 			if (opts.schema) await c!.query(`CREATE SCHEMA IF NOT EXISTS "${opts.schema}"`);
-			await c!.query(`CREATE TABLE IF NOT EXISTS ${R} (id TEXT PRIMARY KEY, created BIGINT NOT NULL, page TEXT, trigger TEXT, label TEXT, median DOUBLE PRECISION, dump JSONB NOT NULL)`);
+			await c!.query(
+				`CREATE TABLE IF NOT EXISTS ${R} (id TEXT PRIMARY KEY, created BIGINT NOT NULL, page TEXT, trigger TEXT, label TEXT, median DOUBLE PRECISION, dump JSONB NOT NULL)`
+			);
 			await c!.query(`CREATE INDEX IF NOT EXISTS ${base}_reports_created ON ${R} (created DESC)`);
-			await c!.query(`CREATE TABLE IF NOT EXISTS ${V} (key TEXT PRIMARY KEY, page TEXT NOT NULL, at BIGINT NOT NULL, visit JSONB NOT NULL)`);
+			await c!.query(
+				`CREATE TABLE IF NOT EXISTS ${V} (key TEXT PRIMARY KEY, page TEXT NOT NULL, at BIGINT NOT NULL, visit JSONB NOT NULL)`
+			);
 			await c!.query(`CREATE INDEX IF NOT EXISTS ${base}_visits_page ON ${V} (page, at DESC)`);
 		})();
 		await ready;
@@ -71,24 +86,57 @@ export function postgresStore(client: PgLike | string, opts: { schema?: string; 
 			return typeof d === 'string' ? d : JSON.stringify(d);
 		},
 		async listReports(limit = 30): Promise<ProfilerSummary[]> {
-			const { rows } = await (await need()).query(`SELECT id,created,page,trigger,label,median FROM ${R} ORDER BY created DESC LIMIT $1`, [limit]);
-			return rows.map((r) => ({ id: r.id as string, created: Number(r.created), page: (r.page as string) ?? null, trigger: r.trigger as string, label: r.label as string, median: r.median === null ? null : Number(r.median) }));
+			const { rows } = await (
+				await need()
+			).query(
+				`SELECT id,created,page,trigger,label,median FROM ${R} ORDER BY created DESC LIMIT $1`,
+				[limit]
+			);
+			return rows.map((r) => ({
+				id: r.id as string,
+				created: Number(r.created),
+				page: (r.page as string) ?? null,
+				trigger: r.trigger as string,
+				label: r.label as string,
+				median: r.median === null ? null : Number(r.median)
+			}));
 		},
 		async deleteReport(id: string) {
 			await (await need()).query(`DELETE FROM ${R} WHERE id = $1`, [id]);
 		},
 		async prune(keep: number) {
-			await (await need()).query(`DELETE FROM ${R} WHERE id NOT IN (SELECT id FROM ${R} ORDER BY created DESC LIMIT $1)`, [keep]);
+			await (
+				await need()
+			).query(
+				`DELETE FROM ${R} WHERE id NOT IN (SELECT id FROM ${R} ORDER BY created DESC LIMIT $1)`,
+				[keep]
+			);
 		},
 		async putVisit(rec: ProfilerVisitRecord) {
 			const db = await need();
-			await db.query(`INSERT INTO ${V} (key,page,at,visit) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (key) DO UPDATE SET at=EXCLUDED.at,visit=EXCLUDED.visit`, [rec.key, rec.page, rec.at, rec.visit]);
+			await db.query(
+				`INSERT INTO ${V} (key,page,at,visit) VALUES ($1,$2,$3,$4::jsonb) ON CONFLICT (key) DO UPDATE SET at=EXCLUDED.at,visit=EXCLUDED.visit`,
+				[rec.key, rec.page, rec.at, rec.visit]
+			);
 			// the newest MAX_VISITS_PER_PAGE per page (the profiler reads the latest ten)
-			await db.query(`DELETE FROM ${V} WHERE page = $1 AND key NOT IN (SELECT key FROM ${V} WHERE page = $1 ORDER BY at DESC LIMIT $2)`, [rec.page, MAX_VISITS_PER_PAGE]);
+			await db.query(
+				`DELETE FROM ${V} WHERE page = $1 AND key NOT IN (SELECT key FROM ${V} WHERE page = $1 ORDER BY at DESC LIMIT $2)`,
+				[rec.page, MAX_VISITS_PER_PAGE]
+			);
 		},
 		async listVisits(page: string, limit = 10): Promise<ProfilerVisitRecord[]> {
-			const { rows } = await (await need()).query(`SELECT key,page,at,visit FROM ${V} WHERE page = $1 ORDER BY at DESC LIMIT $2`, [page, limit]);
-			return rows.map((r) => ({ key: r.key as string, page: r.page as string, at: Number(r.at), visit: typeof r.visit === 'string' ? (r.visit as string) : JSON.stringify(r.visit) }));
+			const { rows } = await (
+				await need()
+			).query(`SELECT key,page,at,visit FROM ${V} WHERE page = $1 ORDER BY at DESC LIMIT $2`, [
+				page,
+				limit
+			]);
+			return rows.map((r) => ({
+				key: r.key as string,
+				page: r.page as string,
+				at: Number(r.at),
+				visit: typeof r.visit === 'string' ? (r.visit as string) : JSON.stringify(r.visit)
+			}));
 		},
 		async close() {
 			await c?.end?.();

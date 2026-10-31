@@ -4,7 +4,16 @@
 // pattern the profiler should name, or why it must stay quiet. Profile it: /__profiler → "Profile one
 // page" → /limbo, or `node internal/bench/profiler-answer-key.ts --page=/limbo`.
 import { PRODUCTS } from '$lib/inferno/data';
-import { brandOf, brandOfIndexed, onSale, onSaleShallow, reviewDates, reviewDatesShared, specDirect, specOf } from '$lib/limbo/helpers';
+import {
+	brandOf,
+	brandOfIndexed,
+	onSale,
+	onSaleShallow,
+	reviewDates,
+	reviewDatesShared,
+	specDirect,
+	specOf
+} from '$lib/limbo/helpers';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;
@@ -21,6 +30,15 @@ export const load: PageServerLoad = async () => {
 	const colour_direct = items.map((p) => specDirect(p, 'spec_11'));
 	return {
 		count: items.length,
-		first: { dated: dated[0], shared: dated_shared[0], brand: branded[0], indexed: branded_indexed[0], sale: sale[0].price, shallow: sale_shallow[0].price, spec: colour[0], direct: colour_direct[0] }
+		first: {
+			dated: dated[0],
+			shared: dated_shared[0],
+			brand: branded[0],
+			indexed: branded_indexed[0],
+			sale: sale[0].price,
+			shallow: sale_shallow[0].price,
+			spec: colour[0],
+			direct: colour_direct[0]
+		}
 	};
 };

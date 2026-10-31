@@ -54,7 +54,11 @@ export function js_to_ts(): VariantGenerator {
 			const converted = convert(deps, fence.source, fence.lang);
 			if (converted == null) return [{ label: 'JS', value: 'js', fence }]; // nothing to convert → single
 			return [
-				{ label: 'TS', value: 'ts', fence: { ...fence, lang: fence.lang === 'svelte' ? 'svelte' : 'ts', source: converted } },
+				{
+					label: 'TS',
+					value: 'ts',
+					fence: { ...fence, lang: fence.lang === 'svelte' ? 'svelte' : 'ts', source: converted }
+				},
 				{ label: 'JS', value: 'js', fence }
 			];
 		}
@@ -93,7 +97,13 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 		// *\/ appears in some JsDoc comments in d.ts files due to the JSDoc-in-JSDoc problem
 		.replace(/\*\\\//g, '*/');
 
-	const ast = ts.createSourceFile('filename.ts', js_code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+	const ast = ts.createSourceFile(
+		'filename.ts',
+		js_code,
+		ts.ScriptTarget.Latest,
+		true,
+		ts.ScriptKind.TS
+	);
 	const code = new MagicString(js_code);
 	const imports = new Map<string, Set<string>>();
 
@@ -146,13 +156,24 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 			if (ts.isFunctionDeclaration(node)) {
 				// convert function to a `const`
 				if (type || satisfies) {
-					const is_export = node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
-					const is_async = node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword);
+					const is_export = node.modifiers?.some(
+						(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword
+					);
+					const is_async = node.modifiers?.some(
+						(modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword
+					);
 
-					code.overwrite(node.getStart(), node.name!.getStart(), is_export ? `export const ` : `const `);
+					code.overwrite(
+						node.getStart(),
+						node.name!.getStart(),
+						is_export ? `export const ` : `const `
+					);
 
 					const modifier = is_async ? 'async ' : '';
-					code.appendLeft(node.name!.getEnd(), type ? `: ${type} = ${modifier}` : ` = ${modifier}(`);
+					code.appendLeft(
+						node.name!.getEnd(),
+						type ? `: ${type} = ${modifier}` : ` = ${modifier}(`
+					);
 
 					code.prependRight(node.body!.getStart(), '=> ');
 
@@ -204,7 +225,9 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 				}
 
 				if (returns) {
-					const body = ts.isMethodDeclaration(node) ? node.body : (node.initializer as TS.ArrowFunction).body;
+					const body = ts.isMethodDeclaration(node)
+						? node.body
+						: (node.initializer as TS.ArrowFunction).body;
 					let start = body!.getStart();
 					while (code.original[start - 1] !== ')') start -= 1;
 					code.appendLeft(start, `: ${returns}`);
@@ -220,7 +243,9 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 				const end = node.getEnd();
 				code.overwrite(end - 1, end, ` as ${type}`);
 			} else {
-				throw new Error('Unhandled @type JsDoc->TS conversion: ' + js_code.slice(node.getStart(), node.getEnd()));
+				throw new Error(
+					'Unhandled @type JsDoc->TS conversion: ' + js_code.slice(node.getStart(), node.getEnd())
+				);
 			}
 
 			if (!comment) {
@@ -263,7 +288,9 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 			})
 			.join('\n');
 
-		const last_import = [...ast.statements].findLast((statement) => ts.isImportDeclaration(statement));
+		const last_import = [...ast.statements].findLast((statement) =>
+			ts.isImportDeclaration(statement)
+		);
 
 		if (last_import) {
 			code.appendLeft(last_import.getEnd(), '\n' + import_statements);
@@ -281,16 +308,19 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 		const type = text
 			.replace(/^\{|\}$/g, '') // remove surrounding `{` and `}`
 			.replace(/ \* ?/gm, '')
-			.replace(/import\('(.+?)'\)\.(\w+)(?:(<.+>))?/gms, (_, source: string, name: string, args = '') => {
-				const existing = imports.get(source);
-				if (existing) {
-					existing.add(name);
-				} else {
-					imports.set(source, new Set([name]));
-				}
+			.replace(
+				/import\('(.+?)'\)\.(\w+)(?:(<.+>))?/gms,
+				(_, source: string, name: string, args = '') => {
+					const existing = imports.get(source);
+					if (existing) {
+						existing.add(name);
+					} else {
+						imports.set(source, new Set([name]));
+					}
 
-				return name + args;
-			});
+					return name + args;
+				}
+			);
 
 		return type;
 	}

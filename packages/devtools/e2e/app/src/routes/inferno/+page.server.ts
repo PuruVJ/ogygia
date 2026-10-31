@@ -3,7 +3,17 @@
 // slow pattern the profiler should name. Profile it: /__profiler → "Profile one page" → /inferno.
 import { existsSync, readFileSync } from 'node:fs';
 import { PRODUCTS } from '$lib/inferno/data';
-import { attachBrands, forView, indexById, labelFor, matches, toView, totalPrice, validateAll, pages } from '$lib/inferno/catalog';
+import {
+	attachBrands,
+	forView,
+	indexById,
+	labelFor,
+	matches,
+	toView,
+	totalPrice,
+	validateAll,
+	pages
+} from '$lib/inferno/catalog';
 import { byName, newestReview } from '$lib/inferno/format';
 import { injectBadges, sitemapHtml } from '$lib/inferno/html';
 import type { PageServerLoad } from './$types';
@@ -13,7 +23,11 @@ export const prerender = false;
 // PATTERN same-document: nothing on the page changes between requests (the live value is never shown), so the whole render could be a cached copy
 
 // PATTERN same-answer: the test services answer the same bytes on every render (nothing is cached)
-async function svc(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function svc(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/hell/api/${name}?ms=${ms}`);
 	return res.json();
 }
@@ -71,7 +85,12 @@ export const load: PageServerLoad = async ({ url }) => {
 	const promos = await svc(origin, 'promos', 20);
 
 	// DECOY: four calls started together — already parallel, nothing to fix
-	const [a, b, c, d] = await Promise.all([svc(origin, 'nav', 20), svc(origin, 'footer', 20), svc(origin, 'seo', 20), svc(origin, 'flags', 20)]);
+	const [a, b, c, d] = await Promise.all([
+		svc(origin, 'nav', 20),
+		svc(origin, 'footer', 20),
+		svc(origin, 'seo', 20),
+		svc(origin, 'flags', 20)
+	]);
 
 	// DECOY: a live answer (a clock, stock ticks): different every render, so nothing to cache
 	const live = await (await fetch(`${origin}/hell/api/live?ms=15`)).json();
@@ -95,7 +114,9 @@ export const load: PageServerLoad = async ({ url }) => {
 	const hits = joined.filter((p) => matches(p, term));
 	const sorted = [...hits].sort(byName);
 	// "freshest first" for the sidebar: every product's review dates parsed again, inside a sort
-	const freshest = [...valid].sort((a, b) => newestReview(b.reviews) - newestReview(a.reviews)).slice(0, 5);
+	const freshest = [...valid]
+		.sort((a, b) => newestReview(b.reviews) - newestReview(a.reviews))
+		.slice(0, 5);
 	const index = indexById(sorted.slice(0, 700));
 	// PATTERN render-per-item: 120 results, so 120 ResultCards rendered on every request (one page of them would do)
 	const results = sorted.slice(0, 120).map((p) => toView({ ...forView(p) }));

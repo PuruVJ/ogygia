@@ -2,7 +2,8 @@
 	import '$lib/styles/widget.css';
 	import type { Snippet } from 'svelte';
 
-	let { salutation = 'Aloha', ogygiaFallback }: { salutation?: string; ogygiaFallback?: Snippet } = $props();
+	let { salutation = 'Aloha', ogygiaFallback }: { salutation?: string; ogygiaFallback?: Snippet } =
+		$props();
 
 	// Deferred server render: stamped at island-fetch time, not page SSR.
 	const at = new Date().toLocaleTimeString();

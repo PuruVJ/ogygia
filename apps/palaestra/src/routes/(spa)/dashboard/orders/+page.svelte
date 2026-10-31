@@ -10,7 +10,8 @@
 <FilterBar />
 
 <p data-orders-meta>
-	page {data.page}/{data.pages} · sort {data.sort} {data.dir} · status {data.status}
+	page {data.page}/{data.pages} · sort {data.sort}
+	{data.dir} · status {data.status}
 </p>
 
 <!-- server-rendered shell table (NOT an island); row links drive SPA nav -->

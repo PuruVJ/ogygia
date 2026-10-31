@@ -8,7 +8,13 @@
 import MagicString from 'magic-string';
 import { parse } from 'svelte/compiler';
 import { blank_styles } from '../blank-styles.ts';
-import { rewrite_imports, type Lookup, type RewriteMove, type RewritePolicy, type RewriteResult } from './rewrite.ts';
+import {
+	rewrite_imports,
+	type Lookup,
+	type RewriteMove,
+	type RewritePolicy,
+	type RewriteResult
+} from './rewrite.ts';
 
 type SvelteAst = ReturnType<typeof parse>;
 type Script = NonNullable<SvelteAst['instance']>;
@@ -16,7 +22,9 @@ type Script = NonNullable<SvelteAst['instance']>;
 function lang_of_block(block: Script): 'ts' | 'js' {
 	for (const attr of block.attributes) {
 		if (attr.type !== 'Attribute' || attr.name !== 'lang' || attr.value === true) continue;
-		const chunks: { type: string; data?: string }[] = Array.isArray(attr.value) ? attr.value : [attr.value];
+		const chunks: { type: string; data?: string }[] = Array.isArray(attr.value)
+			? attr.value
+			: [attr.value];
 		const v = chunks.map((t) => (t.type === 'Text' ? (t.data ?? '') : '')).join('');
 		return v === 'ts' || v === 'typescript' ? 'ts' : 'js';
 	}
@@ -46,8 +54,16 @@ export async function rewrite_svelte(
 	try {
 		ast = parse(blank_styles(code), { modern: true, filename });
 	} catch (err) {
-		const e = err as { code?: string; start?: { line?: number; column?: number }; message?: string };
-		on_skip?.({ code: e.code ?? (e.message ?? 'parse error').split('\n')[0].slice(0, 80), line: e.start?.line, column: e.start?.column !== undefined ? e.start.column + 1 : undefined });
+		const e = err as {
+			code?: string;
+			start?: { line?: number; column?: number };
+			message?: string;
+		};
+		on_skip?.({
+			code: e.code ?? (e.message ?? 'parse error').split('\n')[0].slice(0, 80),
+			line: e.start?.line,
+			column: e.start?.column !== undefined ? e.start.column + 1 : undefined
+		});
 		return null; // the Svelte compiler will report the syntax error
 	}
 	const ms = new MagicString(code);

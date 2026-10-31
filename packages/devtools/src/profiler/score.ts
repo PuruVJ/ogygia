@@ -17,7 +17,17 @@
 const KB = 1024;
 const MB = 1024 * 1024;
 
-export type ScoreKey = 'js' | 'weight' | 'blocking' | 'html' | 'data' | 'hydration' | 'server' | 'loading' | 'stability' | 'responsiveness';
+export type ScoreKey =
+	| 'js'
+	| 'weight'
+	| 'blocking'
+	| 'html'
+	| 'data'
+	| 'hydration'
+	| 'server'
+	| 'loading'
+	| 'stability'
+	| 'responsiveness';
 
 /** A category's contribution: its own 0–100 score, the weight it carries, and why. */
 export interface ScoreCategory {
@@ -93,7 +103,13 @@ export interface ScoreInputs {
 	/** SSR render time, ms (p50). null when not measured */
 	serverMs: number | null;
 	/** the browser's vitals over the visits, or null when none reported */
-	vitals: { lcp: number | null; cls: number | null; inp: number | null; fcp?: number | null; ttfb?: number | null } | null;
+	vitals: {
+		lcp: number | null;
+		cls: number | null;
+		inp: number | null;
+		fcp?: number | null;
+		ttfb?: number | null;
+	} | null;
 	/** total blocking time from the visits' long tasks (Σ over each task of ms − 50), or null */
 	tbt: number | null;
 	/** measures the visiting browser could not take, with why (`tbt`, `cls`): named in `missing`,
@@ -147,7 +163,19 @@ export function fmt_bytes(bytes: number): string {
 
 const ms = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.round(n)} ms`);
 
-type CurveKey = 'js' | 'weight' | 'blocking' | 'html' | 'data' | 'server' | 'lcp' | 'fcp' | 'ttfb' | 'cls' | 'inp' | 'tbt';
+type CurveKey =
+	| 'js'
+	| 'weight'
+	| 'blocking'
+	| 'html'
+	| 'data'
+	| 'server'
+	| 'lcp'
+	| 'fcp'
+	| 'ttfb'
+	| 'cls'
+	| 'inp'
+	| 'tbt';
 
 /** The control points, in one place: [p10 (scores 90), median (scores 50)]. */
 export const CURVES: { readonly [K in CurveKey]: readonly [p10: number, median: number] } = {
@@ -200,7 +228,9 @@ export function page_score(inp: ScoreInputs): PageScore {
 			weight: 10,
 			value: `${fmt_bytes(a.wire)} on the wire`,
 			note:
-				(wt >= 90 ? 'Light on the wire.' : `${fmt_bytes(a.wire)} crosses the network before the page is complete (HTML, scripts, styles, fonts, images at start). Slow connections pay for every one.`) +
+				(wt >= 90
+					? 'Light on the wire.'
+					: `${fmt_bytes(a.wire)} crosses the network before the page is complete (HTML, scripts, styles, fonts, images at start). Slow connections pay for every one.`) +
 				(inp.wasted
 					? ` A visit fetched ${fmt_bytes(inp.wasted.bytes)} for nothing: ${[inp.wasted.images ? `${fmt_bytes(inp.wasted.images)} of image pixels bigger than their boxes` : '', inp.wasted.preloads ? `${fmt_bytes(inp.wasted.preloads)} of preloads nothing used` : ''].filter(Boolean).join(' and ')}.`
 					: '')
@@ -213,9 +243,17 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: bl,
 			weight: 5,
 			value: `${a.blocking_count} file${a.blocking_count === 1 ? '' : 's'}, ${fmt_bytes(a.blocking)}`,
-			note: bl >= 90 ? 'Little stands between the HTML and the first paint.' : `${a.blocking_count} stylesheet(s) or sync script(s) in <head> (${fmt_bytes(a.blocking)}) must arrive before anything paints. Inline small CSS, merge the rest, load scripts as modules.`
+			note:
+				bl >= 90
+					? 'Little stands between the HTML and the first paint.'
+					: `${a.blocking_count} stylesheet(s) or sync script(s) in <head> (${fmt_bytes(a.blocking)}) must arrive before anything paints. Inline small CSS, merge the rest, load scripts as modules.`
 		});
-	} else missing.push({ key: 'js', label: 'JS, page weight, render-blocking', why: inp.assets_missing ?? 'the page could not be weighed' });
+	} else
+		missing.push({
+			key: 'js',
+			label: 'JS, page weight, render-blocking',
+			why: inp.assets_missing ?? 'the page could not be weighed'
+		});
 
 	if (inp.htmlBytes !== null) {
 		const h = curve(inp.htmlBytes, CURVES.html[0], CURVES.html[1]);
@@ -225,7 +263,10 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: h,
 			weight: 5,
 			value: fmt_bytes(inp.htmlBytes),
-			note: h >= 90 ? 'A compact document.' : `The HTML is ${fmt_bytes(inp.htmlBytes)}: the browser parses all of it before it is interactive. The byte strip shows which part (markup, shadow roots, props, seed) is the bulk.`
+			note:
+				h >= 90
+					? 'A compact document.'
+					: `The HTML is ${fmt_bytes(inp.htmlBytes)}: the browser parses all of it before it is interactive. The byte strip shows which part (markup, shadow roots, props, seed) is the bulk.`
 		});
 	}
 
@@ -237,7 +278,10 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: d,
 			weight: 10,
 			value: fmt_bytes(inp.dataBytes),
-			note: d >= 90 ? 'Little data rides along for hydration.' : `${fmt_bytes(inp.dataBytes)} of data (page seed, island props, inline script) ships so the browser can wake the page — serialized per request, parsed in the browser. Read fewer page.data keys in islands, pass smaller props.`,
+			note:
+				d >= 90
+					? 'Little data rides along for hydration.'
+					: `${fmt_bytes(inp.dataBytes)} of data (page seed, island props, inline script) ships so the browser can wake the page — serialized per request, parsed in the browser. Read fewer page.data keys in islands, pass smaller props.`,
 			...(inp.dataDetail?.length ? { detail: inp.dataDetail } : {})
 		});
 	}
@@ -245,7 +289,9 @@ export function page_score(inp: ScoreInputs): PageScore {
 	// hydration integrity: only for a page with islands, and only once the browser reported
 	if (inp.hasIslands && inp.browserSeen) {
 		const changed = inp.changed ?? 0;
-		const h = Math.round(100 * Math.exp(-(inp.recovered * 0.45 + inp.neverWoke * 0.35 + changed * 0.12)));
+		const h = Math.round(
+			100 * Math.exp(-(inp.recovered * 0.45 + inp.neverWoke * 0.35 + changed * 0.12))
+		);
 		cats.push({
 			key: 'hydration',
 			label: 'Hydration integrity',
@@ -257,7 +303,12 @@ export function page_score(inp: ScoreInputs): PageScore {
 					? 'Every island woke cleanly from its server markup.'
 					: `${inp.recovered} island(s) threw away their server HTML and rendered again (a flash + a double render), ${inp.neverWoke} never woke${changed ? `, ${changed} changed their markup as they woke` : ''}. The Islands table names each and why.`
 		});
-	} else if (inp.hasIslands) missing.push({ key: 'hydration', label: 'Hydration integrity', why: 'no browser visit reported yet (open the page with the profiler on)' });
+	} else if (inp.hasIslands)
+		missing.push({
+			key: 'hydration',
+			label: 'Hydration integrity',
+			why: 'no browser visit reported yet (open the page with the profiler on)'
+		});
 
 	if (inp.serverMs !== null) {
 		const s = curve(inp.serverMs, CURVES.server[0], CURVES.server[1]);
@@ -267,15 +318,26 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: s,
 			weight: 15,
 			value: ms(inp.serverMs),
-			note: s >= 90 ? 'The server renders the page quickly.' : `${ms(inp.serverMs)} of server work before the first byte leaves. The forecast and findings above name what to cut.`
+			note:
+				s >= 90
+					? 'The server renders the page quickly.'
+					: `${ms(inp.serverMs)} of server work before the first byte leaves. The forecast and findings above name what to cut.`
 		});
-	} else missing.push({ key: 'server', label: 'Server render', why: 'no server timing in this report' });
+	} else
+		missing.push({ key: 'server', label: 'Server render', why: 'no server timing in this report' });
 
 	const v = inp.vitals;
 	const loading: { s: number; w: number; t: string }[] = [];
-	if (v?.lcp != null) loading.push({ s: curve(v.lcp, CURVES.lcp[0], CURVES.lcp[1]), w: 60, t: `LCP ${ms(v.lcp)}` });
-	if (v?.fcp != null) loading.push({ s: curve(v.fcp, CURVES.fcp[0], CURVES.fcp[1]), w: 25, t: `FCP ${ms(v.fcp)}` });
-	if (v?.ttfb != null) loading.push({ s: curve(v.ttfb, CURVES.ttfb[0], CURVES.ttfb[1]), w: 15, t: `TTFB ${ms(v.ttfb)}` });
+	if (v?.lcp != null)
+		loading.push({ s: curve(v.lcp, CURVES.lcp[0], CURVES.lcp[1]), w: 60, t: `LCP ${ms(v.lcp)}` });
+	if (v?.fcp != null)
+		loading.push({ s: curve(v.fcp, CURVES.fcp[0], CURVES.fcp[1]), w: 25, t: `FCP ${ms(v.fcp)}` });
+	if (v?.ttfb != null)
+		loading.push({
+			s: curve(v.ttfb, CURVES.ttfb[0], CURVES.ttfb[1]),
+			w: 15,
+			t: `TTFB ${ms(v.ttfb)}`
+		});
 	if (loading.length) {
 		const w = loading.reduce((x, p) => x + p.w, 0);
 		const s = Math.round(loading.reduce((x, p) => x + p.s * p.w, 0) / w);
@@ -285,10 +347,18 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: s,
 			weight: 10,
 			value: loading.map((p) => p.t).join(' · '),
-			note: s >= 90 ? 'The page paints its main content quickly.' : 'The main content took long to paint in the visits measured. A slow first byte, blocking files, or a late-loading hero image are the usual causes.',
+			note:
+				s >= 90
+					? 'The page paints its main content quickly.'
+					: 'The main content took long to paint in the visits measured. A slow first byte, blocking files, or a late-loading hero image are the usual causes.',
 			detail: loading.map((p) => `${p.t} → ${p.s}`)
 		});
-	} else missing.push({ key: 'loading', label: 'Loading (LCP/FCP/TTFB)', why: 'no browser visit reported vitals' });
+	} else
+		missing.push({
+			key: 'loading',
+			label: 'Loading (LCP/FCP/TTFB)',
+			why: 'no browser visit reported vitals'
+		});
 
 	if (v?.cls != null) {
 		const s = curve(v.cls, CURVES.cls[0], CURVES.cls[1]);
@@ -298,16 +368,33 @@ export function page_score(inp: ScoreInputs): PageScore {
 			score: s,
 			weight: 5,
 			value: `CLS ${v.cls}`,
-			note: s >= 90 ? 'Nothing jumps around.' : `Content moved as the page loaded (CLS ${v.cls}). Reserve space for images and islands; render islands at their final size on the server.`
+			note:
+				s >= 90
+					? 'Nothing jumps around.'
+					: `Content moved as the page loaded (CLS ${v.cls}). Reserve space for images and islands; render islands at their final size on the server.`
 		});
-	} else missing.push({ key: 'stability', label: 'Visual stability (CLS)', why: inp.unmeasured?.cls ?? 'no browser visit reported layout shifts' });
+	} else
+		missing.push({
+			key: 'stability',
+			label: 'Visual stability (CLS)',
+			why: inp.unmeasured?.cls ?? 'no browser visit reported layout shifts'
+		});
 
 	const resp: { s: number; t: string }[] = [];
-	if (v?.inp != null) resp.push({ s: curve(v.inp, CURVES.inp[0], CURVES.inp[1]), t: `INP ${ms(v.inp)}` });
-	if (inp.tbt !== null) resp.push({ s: curve(inp.tbt, CURVES.tbt[0], CURVES.tbt[1]), t: `blocking time ${ms(inp.tbt)}` });
+	if (v?.inp != null)
+		resp.push({ s: curve(v.inp, CURVES.inp[0], CURVES.inp[1]), t: `INP ${ms(v.inp)}` });
+	if (inp.tbt !== null)
+		resp.push({
+			s: curve(inp.tbt, CURVES.tbt[0], CURVES.tbt[1]),
+			t: `blocking time ${ms(inp.tbt)}`
+		});
 	// half measured (INP, but no long tasks from this browser): scored on what was measured, and said
 	if (resp.length && inp.tbt === null && inp.unmeasured?.tbt)
-		missing.push({ key: 'responsiveness', label: 'Blocking time (part of responsiveness)', why: inp.unmeasured.tbt });
+		missing.push({
+			key: 'responsiveness',
+			label: 'Blocking time (part of responsiveness)',
+			why: inp.unmeasured.tbt
+		});
 	if (resp.length) {
 		const s = Math.round(resp.reduce((x, p) => x + p.s, 0) / resp.length);
 		cats.push({
@@ -317,17 +404,26 @@ export function page_score(inp: ScoreInputs): PageScore {
 			weight: 10,
 			value: resp.map((p) => p.t).join(' · '),
 			note:
-				(s >= 90 ? 'The main thread stayed free to answer input in the visits measured.' : 'Long tasks held the main thread in the visits measured: input waited. Less JS at start, and lighter hydration, free it.') +
+				(s >= 90
+					? 'The main thread stayed free to answer input in the visits measured.'
+					: 'Long tasks held the main thread in the visits measured: input waited. Less JS at start, and lighter hydration, free it.') +
 				' (Measured on the machine that visited: a slower phone pays more for the same JS — which JS at start scores.)',
 			detail: resp.map((p) => `${p.t} → ${p.s}`)
 		});
-	} else missing.push({ key: 'responsiveness', label: 'Responsiveness (INP/blocking time)', why: inp.unmeasured?.tbt ?? 'no browser visit reported long tasks or interactions' });
+	} else
+		missing.push({
+			key: 'responsiveness',
+			label: 'Responsiveness (INP/blocking time)',
+			why: inp.unmeasured?.tbt ?? 'no browser visit reported long tasks or interactions'
+		});
 
 	const total_weight = cats.reduce((s, c) => s + c.weight, 0);
-	const score = total_weight ? Math.round(cats.reduce((s, c) => s + c.score * c.weight, 0) / total_weight) : 0;
+	const score = total_weight
+		? Math.round(cats.reduce((s, c) => s + c.score * c.weight, 0) / total_weight)
+		: 0;
 	let worst: ScoreCategory | null = null;
 	for (const c of cats) {
-		c.lost = Math.round(((c.weight / (total_weight || 1)) * (100 - c.score)) * 10) / 10;
+		c.lost = Math.round((c.weight / (total_weight || 1)) * (100 - c.score) * 10) / 10;
 		if (c.lost > 0 && (!worst || c.lost > (worst.lost ?? 0))) worst = c;
 	}
 	return { score, grade: grade_of(score), categories: cats, worst, missing };

@@ -39,7 +39,9 @@ test('the captured markup is the server bytes, unaffected by a later live mutati
 	expect(pristine_ssr_of(island)).toBe(captured);
 	expect(pristine_ssr_of(island)).toMatch(/<\/span>\s+<x-icon>/);
 	// meanwhile the LIVE island really did lose its whitespace (proving the mutation happened)
-	expect([...island.childNodes].some((n) => n.nodeType === 3 && !n.textContent?.trim())).toBe(false);
+	expect([...island.childNodes].some((n) => n.nodeType === 3 && !n.textContent?.trim())).toBe(
+		false
+	);
 });
 
 test('a DEFERRED nested region is NOT stamped (it fetches its own answer)', () => {

@@ -17,7 +17,11 @@ async function queryDatabase(ms: number): Promise<{ rows: number }> {
 	return { rows: ms * 3 };
 }
 
-async function callService(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function callService(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/hell/api/${name}?ms=${ms}`);
 	return res.json();
 }
@@ -45,7 +49,11 @@ export const load: PageServerLoad = async ({ url, params, parent }) => {
 		span('svc.pricing', () => callService(origin, 'pricing', 40)),
 		span('svc.inventory', () => callService(origin, 'inventory', 35))
 	]);
-	const db = await span('db.rows', () => queryDatabase(60), (r) => ({ rows: r.rows }));
+	const db = await span(
+		'db.rows',
+		() => queryDatabase(60),
+		(r) => ({ rows: r.rows })
+	);
 	const manifest = (await span('cms.manifest', () => readFile('package.json', 'utf8'))).length;
 	const drained = await span('queue.drain', () => drainQueue(1500));
 	const segments = await span(
@@ -68,9 +76,16 @@ export const load: PageServerLoad = async ({ url, params, parent }) => {
 	]);
 	const stock: Record<string, number> = {};
 	const ids = Array.from({ length: Math.min(PRODUCTS, 16) }, (_, i) => `P${i}`);
-	for (const s of await Promise.all(ids.map((id) => span('stock.lookup', () => fetchStock(origin, id), { key: id })))) stock[s.id] = s.stock;
+	for (const s of await Promise.all(
+		ids.map((id) => span('stock.lookup', () => fetchStock(origin, id), { key: id }))
+	))
+		stock[s.id] = s.stock;
 	return {
-		catalog: span('cms.catalog', () => catalog(), (c) => ({ rows: c.products.length })),
+		catalog: span(
+			'cms.catalog',
+			() => catalog(),
+			(c) => ({ rows: c.products.length })
+		),
 		stock,
 		session,
 		pricing,

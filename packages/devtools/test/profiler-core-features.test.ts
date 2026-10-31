@@ -17,13 +17,27 @@ import type { SpanRecord } from '../src/profiler/span.ts';
 
 // a profile: (root) → load (routes/x/+page.server.ts) → fetchData ; (root) → Page.svelte → Card.svelte
 function profile(): CpuProfile {
-	const frame = (functionName: string, url: string, lineNumber = 1) => ({ functionName, url, lineNumber, columnNumber: 0, scriptId: '1' });
+	const frame = (functionName: string, url: string, lineNumber = 1) => ({
+		functionName,
+		url,
+		lineNumber,
+		columnNumber: 0,
+		scriptId: '1'
+	});
 	return {
 		nodes: [
 			{ id: 1, callFrame: frame('(root)', ''), children: [2, 4, 6] },
-			{ id: 2, callFrame: frame('load', 'file:///app/src/routes/x/+page.server.ts', 3), children: [3] },
+			{
+				id: 2,
+				callFrame: frame('load', 'file:///app/src/routes/x/+page.server.ts', 3),
+				children: [3]
+			},
 			{ id: 3, callFrame: frame('fetchData', 'file:///app/src/lib/data.ts', 9) },
-			{ id: 4, callFrame: frame('Page', 'file:///app/src/routes/x/+page.svelte', 1), children: [5] },
+			{
+				id: 4,
+				callFrame: frame('Page', 'file:///app/src/routes/x/+page.svelte', 1),
+				children: [5]
+			},
 			{ id: 5, callFrame: frame('Card', 'file:///app/src/lib/Card.svelte', 1) },
 			{ id: 6, callFrame: frame('(idle)', '') }
 		],
@@ -46,7 +60,12 @@ describe('the stack index', () => {
 			(id) => {
 				const n = frames.get(id)!;
 				const name = n.callFrame.functionName;
-				const cat = name === '(root)' || name === '(idle)' ? 'idle' : name === 'Page' || name === 'Card' ? 'component' : 'app';
+				const cat =
+					name === '(root)' || name === '(idle)'
+						? 'idle'
+						: name === 'Page' || name === 'Card'
+							? 'component'
+							: 'app';
 				return { name, url: n.callFrame.url, line: n.callFrame.lineNumber, category: cat };
 			},
 			(id) => parent.get(id),
@@ -67,7 +86,11 @@ describe('the stack index', () => {
 	});
 
 	it('answers a range and an instant', () => {
-		const a = analyze(profile(), undefined, undefined, { perf_start: 100, window: { start: 100, end: 110 }, calls: [] });
+		const a = analyze(profile(), undefined, undefined, {
+			perf_start: 100,
+			window: { start: 100, end: 110 },
+			calls: []
+		});
 		const idx = a.stacks!;
 		expect(idx).toBeDefined();
 		const whole = range_hot(idx, 0, 10);
@@ -98,14 +121,24 @@ describe('the stack index', () => {
 
 	it('is absent without a window and stride-samples past the cap', () => {
 		expect(analyze(profile()).stacks).toBeUndefined();
-		const big: CpuProfile = { nodes: profile().nodes, startTime: 0, endTime: 0, samples: [], timeDeltas: [] };
+		const big: CpuProfile = {
+			nodes: profile().nodes,
+			startTime: 0,
+			endTime: 0,
+			samples: [],
+			timeDeltas: []
+		};
 		// alternate leaves so nothing folds: 30k samples
 		for (let i = 0; i < 30_000; i++) {
 			big.samples!.push(i % 2 ? 3 : 5);
 			big.timeDeltas!.push(100);
 		}
 		big.endTime = 30_000 * 100;
-		const a = analyze(big, undefined, undefined, { perf_start: 0, window: { start: 0, end: 3000 }, calls: [] });
+		const a = analyze(big, undefined, undefined, {
+			perf_start: 0,
+			window: { start: 0, end: 3000 },
+			calls: []
+		});
 		expect(a.stacks!.raw).toBe(30_000);
 		expect(a.stacks!.leaf.length).toBeLessThanOrEqual(20_000);
 		// the lengths still sum to the CPU
@@ -128,7 +161,12 @@ describe('allocation on the timeline', () => {
 			{ t0: 25, t1: 40, label: 'toVM', category: 'app', file: 'lib/vm.ts:3' },
 			{ t0: 40, t1: 100, label: 'Footer', category: 'component' }
 		];
-		const out = alloc_timeline({ samples, running, gc: [{ t: 85, ms: 5 }], window: { offset_ms: 10, ms: 50 } })!;
+		const out = alloc_timeline({
+			samples,
+			running,
+			gc: [{ t: 85, ms: 5 }],
+			window: { offset_ms: 10, ms: 50 }
+		})!;
 		expect(out.grown_mb).toBe(36);
 		expect(out.period_ms).toBe(20);
 		expect(out.longest_gap_ms).toBe(20);
@@ -148,7 +186,26 @@ describe('allocation on the timeline', () => {
 });
 
 describe('the instance was not alone', () => {
-	const req = (path: string, pt: number, ms: number, cpu_ms: number, extra: Partial<RequestEntry> = {}): RequestEntry => ({ ts: 0, method: 'GET', path, route: null, status: 200, ms, cpu_ms, inflight: 0, net_ms: 0, net_count: 0, pt, ...extra });
+	const req = (
+		path: string,
+		pt: number,
+		ms: number,
+		cpu_ms: number,
+		extra: Partial<RequestEntry> = {}
+	): RequestEntry => ({
+		ts: 0,
+		method: 'GET',
+		path,
+		route: null,
+		status: 200,
+		ms,
+		cpu_ms,
+		inflight: 0,
+		net_ms: 0,
+		net_count: 0,
+		pt,
+		...extra
+	});
 	it('names the overlapping requests with a bounded CPU estimate', () => {
 		const out = contention({
 			requests: [
@@ -166,7 +223,11 @@ describe('the instance was not alone', () => {
 		expect(out.requests[1].kind).toBe('hole');
 		expect(out.inflight_at_start).toEqual([2]);
 		// a path the render itself called is the render waiting on itself
-		const self = contention({ requests: [req('/api/items', 120, 30, 5)], windows: [{ start: 100, end: 200 }], self_paths: new Set(['/api/items']) })!;
+		const self = contention({
+			requests: [req('/api/items', 120, 30, 5)],
+			windows: [{ start: 100, end: 200 }],
+			self_paths: new Set(['/api/items'])
+		})!;
 		expect(self.requests[0].kind).toBe('self');
 		expect(out.per_window[0].n).toBe(2);
 		// 100..150 and 120..140 → union 50 of 100
@@ -174,11 +235,17 @@ describe('the instance was not alone', () => {
 	});
 	it('counts every overlapping request, not only the 40 it lists', () => {
 		// three renders calling their own server 20 times each, and one stranger
-		const reqs = Array.from({ length: 60 }, (_, i) => req(`/api/p/${i % 20}`, 100 + (i % 3) * 100 + 5, 10, 2));
+		const reqs = Array.from({ length: 60 }, (_, i) =>
+			req(`/api/p/${i % 20}`, 100 + (i % 3) * 100 + 5, 10, 2)
+		);
 		reqs.push(req('/other', 110, 400, 50));
 		const out = contention({
 			requests: reqs,
-			windows: [{ start: 100, end: 190 }, { start: 200, end: 290 }, { start: 300, end: 390 }],
+			windows: [
+				{ start: 100, end: 190 },
+				{ start: 200, end: 290 },
+				{ start: 300, end: 390 }
+			],
 			self_paths: new Set(Array.from({ length: 20 }, (_, i) => `/api/p/${i}`))
 		})!;
 		expect(out.requests).toHaveLength(40);
@@ -187,7 +254,9 @@ describe('the instance was not alone', () => {
 	});
 	it("a render reading a prerender function over HTTP: the call, logged at its own address, is the render's own", () => {
 		const out = contention({
-			requests: [req('/_app/remote/ufd0c8/meta/WyIiXQ', 120, 1, 1, { remote: true, route: '/(docs)' })],
+			requests: [
+				req('/_app/remote/ufd0c8/meta/WyIiXQ', 120, 1, 1, { remote: true, route: '/(docs)' })
+			],
 			windows: [{ start: 100, end: 200 }],
 			self_paths: new Set(['/_app/remote/ufd0c8/meta/WyIiXQ'])
 		})!;
@@ -196,7 +265,9 @@ describe('the instance was not alone', () => {
 	});
 
 	it('is absent when nothing overlapped', () => {
-		expect(contention({ requests: [req('/b', 400, 50, 10)], windows: [{ start: 100, end: 200 }] })).toBeUndefined();
+		expect(
+			contention({ requests: [req('/b', 400, 50, 10)], windows: [{ start: 100, end: 200 }] })
+		).toBeUndefined();
 		expect(contention({ requests: [], windows: [] })).toBeUndefined();
 	});
 });
@@ -215,7 +286,14 @@ describe('data lineage from the code', () => {
 <title>{data.catalog.title}</title>
 <Child {data} />
 <Other data={data} />`;
-		expect(data_reads(src)!.sort()).toEqual(['catalog', 'flags', 'legacy', 'locale', 'session', 'user']);
+		expect(data_reads(src)!.sort()).toEqual([
+			'catalog',
+			'flags',
+			'legacy',
+			'locale',
+			'session',
+			'user'
+		]);
 		expect(data_prop_names(src)).toEqual(['data']);
 	});
 	it('sees a renamed prop, a spread, and a pass-through as whole', () => {
@@ -223,7 +301,10 @@ describe('data lineage from the code', () => {
 		expect(data_prop_names(renamed)).toEqual(['data', 'pd']);
 		expect(data_reads(renamed, data_prop_names(renamed))).toEqual(['items']);
 		expect(data_reads(`let { data } = $props();\nconst all = { ...data };`)).toBeNull();
-		expect(data_reads(`let { data } = $props();\nconst k = data.a;\nfn(data);`)).toEqual(['a', '*']);
+		expect(data_reads(`let { data } = $props();\nconst k = data.a;\nfn(data);`)).toEqual([
+			'a',
+			'*'
+		]);
 		expect(data_reads(`const metadata = 1; const dataset = 2;`)).toEqual([]);
 		expect(data_reads(`const alias = data;\nconst keys = Object.keys(page.data);`)).toBeNull();
 	});
@@ -244,10 +325,21 @@ describe('data lineage from the code', () => {
 	it('gives every key a verdict', () => {
 		const out = build_lineage({
 			components: [
-				{ name: 'x/+page.svelte', file: 'routes/x/+page.svelte', island: false, reads: ['catalog', 'title'] },
+				{
+					name: 'x/+page.svelte',
+					file: 'routes/x/+page.svelte',
+					island: false,
+					reads: ['catalog', 'title']
+				},
 				{ name: 'Cart', file: 'lib/Cart.svelte', island: true, reads: ['cart'] }
 			],
-			lanes: [{ file: 'routes/x/+page.server.ts', keys: ['catalog', 'title', 'cart', 'legacy'], wait_ms: 120 }],
+			lanes: [
+				{
+					file: 'routes/x/+page.server.ts',
+					keys: ['catalog', 'title', 'cart', 'legacy'],
+					wait_ms: 120
+				}
+			],
 			seed: { catalog: 40_000, cart: 500, legacy: 2000 }
 		})!;
 		const by = Object.fromEntries(out.keys.map((k) => [k.key, k]));
@@ -261,14 +353,29 @@ describe('data lineage from the code', () => {
 		expect(by.catalog.readers).toEqual([{ name: 'x/+page.svelte', island: false }]);
 	});
 	it('never calls a key unread when a reader could not be scanned or takes the whole object', () => {
-		const blind = build_lineage({ components: [{ name: 'P', file: 'p.svelte', island: false, reads: null }], lanes: [{ file: 'l.ts', keys: ['a'] }], seed: {} })!;
+		const blind = build_lineage({
+			components: [{ name: 'P', file: 'p.svelte', island: false, reads: null }],
+			lanes: [{ file: 'l.ts', keys: ['a'] }],
+			seed: {}
+		})!;
 		expect(blind.keys[0].verdict).toBe('unknown');
 		expect(blind.notes[0]).toContain('could not name');
-		const whole = build_lineage({ components: [{ name: 'P', file: 'p.svelte', island: false, reads: ['*'] }], lanes: [{ file: 'l.ts', keys: ['a'] }], seed: { a: 100 } })!;
+		const whole = build_lineage({
+			components: [{ name: 'P', file: 'p.svelte', island: false, reads: ['*'] }],
+			lanes: [{ file: 'l.ts', keys: ['a'] }],
+			seed: { a: 100 }
+		})!;
 		expect(whole.keys[0].verdict).toBe('unknown');
 		expect(whole.components[0].whole).toBe(true);
 		// an island that takes the page whole may read a key the server also names: not "server only"
-		const island_whole = build_lineage({ components: [{ name: 'P', file: 'p.svelte', island: false, reads: ['a'] }, { name: 'I', file: 'i.svelte', island: true, reads: ['*'] }], lanes: [{ file: 'l.ts', keys: ['a'] }], seed: { a: 100 } })!;
+		const island_whole = build_lineage({
+			components: [
+				{ name: 'P', file: 'p.svelte', island: false, reads: ['a'] },
+				{ name: 'I', file: 'i.svelte', island: true, reads: ['*'] }
+			],
+			lanes: [{ file: 'l.ts', keys: ['a'] }],
+			seed: { a: 100 }
+		})!;
 		expect(island_whole.keys[0].verdict).toBe('unknown');
 		expect(island_whole.keys[0].readers.map((r) => r.name)).toEqual(['P', 'I']);
 		expect(build_lineage({ components: [], lanes: [], seed: {} })).toBeUndefined();
@@ -283,9 +390,34 @@ describe('the render, step by step', () => {
 		gap_ms: 0,
 		overhead_ms: 0,
 		segments: [
-			{ t0: 0, t1: 10, kind: 'cpu', label: 'load', category: 'app', phase: 'load', file: 'routes/x/+page.server.ts:3' },
-			{ t0: 10, t1: 50, kind: 'wait', label: 'GET api/items', category: 'idle', phase: 'load', calls: [{ label: 'GET api/items', ms: 40 }], within: 'db' },
-			{ t0: 50, t1: 70, kind: 'cpu', label: 'Page', category: 'component', phase: 'render', detail: 'escape_html' },
+			{
+				t0: 0,
+				t1: 10,
+				kind: 'cpu',
+				label: 'load',
+				category: 'app',
+				phase: 'load',
+				file: 'routes/x/+page.server.ts:3'
+			},
+			{
+				t0: 10,
+				t1: 50,
+				kind: 'wait',
+				label: 'GET api/items',
+				category: 'idle',
+				phase: 'load',
+				calls: [{ label: 'GET api/items', ms: 40 }],
+				within: 'db'
+			},
+			{
+				t0: 50,
+				t1: 70,
+				kind: 'cpu',
+				label: 'Page',
+				category: 'component',
+				phase: 'render',
+				detail: 'escape_html'
+			},
 			{ t0: 70, t1: 70.5, kind: 'cpu', label: 'Page', category: 'component', phase: 'render' },
 			{ t0: 70.5, t1: 100, kind: 'cpu', label: 'Card', category: 'component', phase: 'render' }
 		],
@@ -309,21 +441,56 @@ describe('the render, step by step', () => {
 	});
 	it('folds the smallest steps under the cap and takes the stack from the index', () => {
 		const t = tl();
-		for (let i = 0; i < 50; i++) t.segments.push({ t0: 100 + i, t1: 101 + i, kind: 'cpu', label: `f${i}`, category: 'app', phase: 'render' });
+		for (let i = 0; i < 50; i++)
+			t.segments.push({
+				t0: 100 + i,
+				t1: 101 + i,
+				kind: 'cpu',
+				label: `f${i}`,
+				category: 'app',
+				phase: 'render'
+			});
 		t.window_ms = 150;
 		const out = render_steps(t, undefined, 10)!;
 		expect(out.steps.length).toBe(10);
 		expect(out.steps.reduce((n, s) => n + 1 + (s.folded ?? 0), 0)).toBe(54);
-		const a = analyze(profile(), undefined, undefined, { perf_start: 100, window: { start: 100, end: 110 }, calls: [] });
-		const with_stack = render_steps({ ...tl(), window_ms: 10, segments: [{ t0: 3, t1: 7, kind: 'cpu', label: 'Page', category: 'component', phase: 'render' }] }, a.stacks)!;
+		const a = analyze(profile(), undefined, undefined, {
+			perf_start: 100,
+			window: { start: 100, end: 110 },
+			calls: []
+		});
+		const with_stack = render_steps(
+			{
+				...tl(),
+				window_ms: 10,
+				segments: [
+					{ t0: 3, t1: 7, kind: 'cpu', label: 'Page', category: 'component', phase: 'render' }
+				]
+			},
+			a.stacks
+		)!;
 		expect(with_stack.steps[0].stack).toEqual(['Page', 'Card']);
 	});
 });
 
 describe('values, not just functions', () => {
-	const span = (name: string, ms: number, attrs: Record<string, number | string>): SpanRecord => ({ id: 0, name, start: 0, ms, attrs, route: null, path: null });
+	const span = (name: string, ms: number, attrs: Record<string, number | string>): SpanRecord => ({
+		id: 0,
+		name,
+		start: 0,
+		ms,
+		attrs,
+		route: null,
+		path: null
+	});
 	it('ranges each numeric attribute and fits the time against it', () => {
-		const rows = span_values([span('ds.render', 10, { tags: 100 }), span('ds.render', 20, { tags: 200 }), span('ds.render', 30, { tags: 300 }), span('ds.render', 41, { tags: 400, variant: 'fast' }), span('other', 5, { n: 1 })]);
+		const rows = span_values([
+			span('ds.render', 10, { tags: 100 }),
+			span('ds.render', 20, { tags: 200 }),
+			span('ds.render', 30, { tags: 300 }),
+			span('ds.render', 41, { tags: 400, variant: 'fast' }),
+			span('other', 5, { n: 1 })
+		]);
 		const r = rows.find((x) => x.span === 'ds.render' && x.attr === 'tags')!;
 		expect(r.n).toBe(4);
 		expect(r.min).toBe(100);
@@ -338,11 +505,20 @@ describe('values, not just functions', () => {
 	});
 	it('skips a constant value, an open span, and no spans', () => {
 		expect(span_values(undefined)).toEqual([]);
-		const rows = span_values([span('a', 1, { k: 5 }), span('a', 2, { k: 5 }), span('a', 3, { k: 5 }), span('a', -1, { k: 9 })]);
+		const rows = span_values([
+			span('a', 1, { k: 5 }),
+			span('a', 2, { k: 5 }),
+			span('a', 3, { k: 5 }),
+			span('a', -1, { k: 9 })
+		]);
 		expect(rows[0].n).toBe(3);
 		expect(rows[0].ms_per_unit).toBeUndefined();
 		// a spread under 5% of the value is noise, not a slope (three renders of one 2.7 MB document)
-		const narrow = span_values([span('p', 300, { bytes: 2_734_413 }), span('p', 290, { bytes: 2_734_417 }), span('p', 280, { bytes: 2_734_422 })]);
+		const narrow = span_values([
+			span('p', 300, { bytes: 2_734_413 }),
+			span('p', 290, { bytes: 2_734_417 }),
+			span('p', 280, { bytes: 2_734_422 })
+		]);
 		expect(narrow[0].ms_per_unit).toBeUndefined();
 	});
 });

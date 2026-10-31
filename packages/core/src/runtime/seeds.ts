@@ -177,7 +177,9 @@ function absorb_page_facts(): void {
 	if (kit) {
 		if (import.meta.env.DEV) {
 			const data = (kit.page.data ?? {}) as Record<string, unknown>;
-			const older = Object.keys(merged).filter((k) => data[k] !== merged![k] && JSON.stringify(data[k]) !== JSON.stringify(merged![k]));
+			const older = Object.keys(merged).filter(
+				(k) => data[k] !== merged![k] && JSON.stringify(data[k]) !== JSON.stringify(merged![k])
+			);
 			if (older.length)
 				console.warn(
 					`[ogygia] a region came back rendered with newer page.data (${older.join(', ')}) than this Kit page holds. Refresh the page's data (invalidateAll()) before refreshing the region, or the islands inside it hydrate against the older values.`

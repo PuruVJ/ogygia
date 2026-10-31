@@ -9,5 +9,7 @@
 <Region of={headerRegion()}>
 	{#snippet placeholder()}<p data-hl-placeholder>loading the header…</p>{/snippet}
 </Region>
-<button data-hl-switch onclick={async () => (await switchHeaderLocale('fr'), await invalidateAll())}>français</button>
+<button data-hl-switch onclick={async () => (await switchHeaderLocale('fr'), await invalidateAll())}
+	>français</button
+>
 <main><h1>header refresh (kit)</h1></main>

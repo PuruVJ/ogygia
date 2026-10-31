@@ -8,7 +8,7 @@ summary: Introducing the ogygia docs kit — a batteries-included shell for cont
 
 Welcome to the **ogygia** blog. This whole page is a content entry rendered through the blog shell: a dated header, the author, tags, and this body — all from one markdown file.
 
-The blog is a separate *genre* from the docs: a flat, dated corpus with `date`, `author`, and `tags` fields, ordered newest-first.
+The blog is a separate _genre_ from the docs: a flat, dated corpus with `date`, `author`, and `tags` fields, ordered newest-first.
 
 ```ts
 export const blog = content({ loader: /* … */, schema: fields.post });

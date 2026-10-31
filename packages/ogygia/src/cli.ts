@@ -37,5 +37,8 @@ function runner(): [string, string[]] {
 
 const bin = installed();
 const [cmd, pre] = bin ? [process.execPath, [bin]] : runner();
-const result = spawnSync(cmd, [...pre, ...args], { stdio: 'inherit', shell: process.platform === 'win32' && !bin });
+const result = spawnSync(cmd, [...pre, ...args], {
+	stdio: 'inherit',
+	shell: process.platform === 'win32' && !bin
+});
 process.exit(result.status ?? 1);

@@ -17,7 +17,11 @@
 				<li data-batch-5>5² = {r5.square} (batchAt {r5.batchAt}, size {r5.size})</li>
 				<li data-batch-9>9² = {r9.square} (batchAt {r9.batchAt}, size {r9.size})</li>
 			</ul>
-			<p data-batch-onerun>{r2.batchAt === r5.batchAt && r5.batchAt === r9.batchAt ? 'one batched run' : 'multiple runs'}</p>
+			<p data-batch-onerun>
+				{r2.batchAt === r5.batchAt && r5.batchAt === r9.batchAt
+					? 'one batched run'
+					: 'multiple runs'}
+			</p>
 		{/await}
 		{#snippet pending()}<span data-batch-pending>batching…</span>{/snippet}
 	</svelte:boundary>

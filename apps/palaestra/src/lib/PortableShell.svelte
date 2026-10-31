@@ -7,6 +7,8 @@
 	let { actions, children }: { actions?: Snippet; children?: Snippet } = $props();
 </script>
 
-<header data-shell-header>head:{#if actions}{@render actions()}{/if}</header>
+<header data-shell-header>
+	head:{#if actions}{@render actions()}{/if}
+</header>
 <main data-shell-main>{@render children?.()}</main>
 <PortableBar {actions} />

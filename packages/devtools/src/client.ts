@@ -5,7 +5,11 @@
  */
 import { defineClient, type ClientPlugin } from '@ogygia/core/plugin/client';
 import { install_devtools_ui } from './devtools/ui.ts';
-import { watch_leftovers, leftover_island_seen, leftover_island_gone } from './devtools/leftovers.ts';
+import {
+	watch_leftovers,
+	leftover_island_seen,
+	leftover_island_gone
+} from './devtools/leftovers.ts';
 
 const DOCK = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 

@@ -11,7 +11,10 @@
 	let {
 		component: Component,
 		initialProps
-	}: { component: SvelteComponent<Record<string, unknown>>; initialProps: Record<string, unknown> } = $props();
+	}: {
+		component: SvelteComponent<Record<string, unknown>>;
+		initialProps: Record<string, unknown>;
+	} = $props();
 
 	// Seed once from the incoming prop; later ticks replace it via setProps(). Intentional initial read.
 	// svelte-ignore state_referenced_locally

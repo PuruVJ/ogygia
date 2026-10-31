@@ -47,7 +47,11 @@ test.describe('direct <Region> in a component: island on csr=false, plain (Kit-h
 	test('csr=false: RegionInside as an island (ogygia hydrates it — unchanged)', async ({
 		page
 	}) => {
-		const a = await probe(page, '/region-mixed', 'ogygia-region[data-hydrated] [data-inner-widget]');
+		const a = await probe(
+			page,
+			'/region-mixed',
+			'ogygia-region[data-hydrated] [data-inner-widget]'
+		);
 		check(
 			'csr=false: RegionInside rendered once',
 			a.dom.regionInside === 1,

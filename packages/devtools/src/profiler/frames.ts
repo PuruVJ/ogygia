@@ -36,7 +36,9 @@ export function call_sites(below: (...a: never[]) => unknown): NodeJS.CallSite[]
 export function file_of(site: NodeJS.CallSite): string | undefined {
 	return (
 		site.getFileName() ??
-		(site as { getScriptNameOrSourceURL?: () => string | undefined }).getScriptNameOrSourceURL?.() ??
+		(
+			site as { getScriptNameOrSourceURL?: () => string | undefined }
+		).getScriptNameOrSourceURL?.() ??
 		undefined
 	);
 }

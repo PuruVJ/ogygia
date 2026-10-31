@@ -75,7 +75,9 @@ export function init_shadow_registries(under: Node): void {
 	for (let q = 0; q < scopes.length; q++) {
 		const walk = document.createTreeWalker(scopes[q], 1 /* SHOW_ELEMENT */);
 		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-			const sr = (n as Element).shadowRoot as (ShadowRoot & { customElementRegistry?: unknown }) | null;
+			const sr = (n as Element).shadowRoot as
+				| (ShadowRoot & { customElementRegistry?: unknown })
+				| null;
 			if (!sr) continue;
 			if (sr.customElementRegistry === null) ce.initialize(sr);
 			scopes.push(sr);

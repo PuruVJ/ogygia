@@ -28,7 +28,7 @@ The result is a region. Render it with `<Region of={…} />`. It ships as HTML, 
 
 - **`source`**: the code, as a static string or template literal. A template literal is the ergonomic choice: code is full of quotes and `<`, and a template needs none of them escaped. A `${…}` interpolation is a build error (it is a runtime value).
 - **`lang`**: the language, exactly as the first word of a fence infostring: `'ts'`, `'svelte'`, `'bash'`, whatever your Shiki langs include.
-- **`meta`**: optional, the **raw fence infostring**. Thus `'twoslash {2-4} file=app.ts'` behaves exactly as it would after the language in a markdown fence. Line highlighting, filename bars, twoslash, diff markers: all that your fence pipeline understands, `code()` understands, because it *is* your fence pipeline.
+- **`meta`**: optional, the **raw fence infostring**. Thus `'twoslash {2-4} file=app.ts'` behaves exactly as it would after the language in a markdown fence. Line highlighting, filename bars, twoslash, diff markers: all that your fence pipeline understands, `code()` understands, because it _is_ your fence pipeline.
 
 ## Dedent is automatic
 

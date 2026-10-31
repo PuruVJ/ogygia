@@ -16,7 +16,11 @@ async function queryDatabase(ms: number): Promise<{ rows: number }> {
 }
 
 // PATTERN same-answer: the test services answer the same bytes on every render (nothing is cached)
-async function callService(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function callService(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/hell/api/${name}?ms=${ms}`);
 	return res.json();
 }
@@ -51,7 +55,11 @@ export const load: PageServerLoad = async ({ url, params, parent }) => {
 	const pricing = await span('svc.pricing', () => callService(origin, 'pricing', 40));
 	const inventory = await span('svc.inventory', () => callService(origin, 'inventory', 35));
 	// a database round trip on its own socket (a timer here)
-	const db = await span('db.rows', () => queryDatabase(60), (r) => ({ rows: r.rows }));
+	const db = await span(
+		'db.rows',
+		() => queryDatabase(60),
+		(r) => ({ rows: r.rows })
+	);
 	// a file read (a CMS manifest)
 	const manifest = (await span('cms.manifest', () => readFile('package.json', 'utf8'))).length;
 	// the queue the hooks cannot see
@@ -85,7 +93,11 @@ export const load: PageServerLoad = async ({ url, params, parent }) => {
 	}
 	return {
 		// PATTERN render-per-item: every product becomes a ProductCard island on every request
-		catalog: span('cms.catalog', () => catalog(), (c) => ({ rows: c.products.length })),
+		catalog: span(
+			'cms.catalog',
+			() => catalog(),
+			(c) => ({ rows: c.products.length })
+		),
 		stock,
 		session,
 		pricing,

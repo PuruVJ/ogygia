@@ -219,7 +219,11 @@
 	border-radius: 8px 8px 0 0;
 	border-bottom: 1px solid color-mix(in srgb, var(--obs-border, #d4d4d8) 45%, transparent);
 	background: color-mix(in srgb, currentColor 5%, transparent);
-	font: 500 0.72rem/1 ui-monospace, 'SF Mono', Menlo, monospace;
+	font:
+		500 0.72rem/1 ui-monospace,
+		'SF Mono',
+		Menlo,
+		monospace;
 	opacity: 0.72;
 }
 

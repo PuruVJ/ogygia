@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_cpu, clean_file, kind_of, fn_label, type SelfProfileTrace } from '../src/insights/cpu.ts';
+import {
+	analyze_cpu,
+	clean_file,
+	kind_of,
+	fn_label,
+	type SelfProfileTrace
+} from '../src/insights/cpu.ts';
 
 const PAGE = 'http://127.0.0.1:4183/dt-lab';
 const R = {
@@ -22,11 +28,19 @@ function trace(): SelfProfileTrace {
 		{ name: 'draw', resourceId: 5, line: 9 }
 	];
 	// stacks: 0 boot, 1 boot>run, 2 boot>run>Heavy, 3 loop, 4 make_profiler, 5 draw
-	const stacks = [{ frameId: 2 }, { frameId: 1, parentId: 0 }, { frameId: 0, parentId: 1 }, { frameId: 3 }, { frameId: 4 }, { frameId: 5 }];
+	const stacks = [
+		{ frameId: 2 },
+		{ frameId: 1, parentId: 0 },
+		{ frameId: 0, parentId: 1 },
+		{ frameId: 3 },
+		{ frameId: 4 },
+		{ frameId: 5 }
+	];
 	const samples: SelfProfileTrace['samples'] = [];
 	let t = 0;
 	const at = (n: number, stackId?: number) => {
-		for (let i = 0; i < n; i++) samples.push({ timestamp: (t += 10), ...(stackId !== undefined ? { stackId } : {}) });
+		for (let i = 0; i < n; i++)
+			samples.push({ timestamp: (t += 10), ...(stackId !== undefined ? { stackId } : {}) });
 	};
 	at(2, 4); // 20 ms: the sampler's own start (t 10–20)
 	at(3, 1); // 30 ms: svelte run under boot (t 30–50)
@@ -49,10 +63,18 @@ describe('clean_file / kind_of', () => {
 		expect(kind_of(R.lib, PAGE)).toBe('dependency');
 		expect(kind_of(PAGE, PAGE)).toBe('page script');
 		// core under its own name: a checkout's packages/core, an install's @ogygia/core
-		expect(kind_of('http://127.0.0.1:4183/@fs/Users/x/sk/packages/core/src/runtime/core.ts', PAGE)).toBe('ogygia');
-		expect(kind_of('http://127.0.0.1:4183/node_modules/@ogygia/core/dist/runtime/core.js', PAGE)).toBe('ogygia');
-		expect(kind_of('http://127.0.0.1:4183/@fs/Users/x/sk/packages/core/src/events/bus.ts', PAGE)).toBe('devtools');
-		expect(kind_of('http://127.0.0.1:4183/node_modules/@ogygia/core/dist/insights/cpu.js', PAGE)).toBe('devtools');
+		expect(
+			kind_of('http://127.0.0.1:4183/@fs/Users/x/sk/packages/core/src/runtime/core.ts', PAGE)
+		).toBe('ogygia');
+		expect(
+			kind_of('http://127.0.0.1:4183/node_modules/@ogygia/core/dist/runtime/core.js', PAGE)
+		).toBe('ogygia');
+		expect(
+			kind_of('http://127.0.0.1:4183/@fs/Users/x/sk/packages/core/src/events/bus.ts', PAGE)
+		).toBe('devtools');
+		expect(
+			kind_of('http://127.0.0.1:4183/node_modules/@ogygia/core/dist/insights/cpu.js', PAGE)
+		).toBe('devtools');
 		expect(kind_of('', PAGE)).toBe('browser');
 	});
 });
@@ -70,7 +92,12 @@ describe('analyze_cpu', () => {
 	});
 
 	it('names the functions, with the measuring itself left out of the top list', () => {
-		expect(s.fns[0]).toMatchObject({ file: '/dt-lab', line: 16, kind: 'page script', self_ms: 220 });
+		expect(s.fns[0]).toMatchObject({
+			file: '/dt-lab',
+			line: 16,
+			kind: 'page script',
+			self_ms: 220
+		});
 		expect(s.fns.find((f) => f.name === 'make_profiler')).toBeUndefined();
 		const boot = s.fns.find((f) => f.name === 'boot');
 		expect(boot).toBeUndefined(); // no self time

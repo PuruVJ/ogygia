@@ -1,9 +1,9 @@
 {
 	"name": "freeze-e2e-app",
-	"private": true,
 	"version": "0.0.1",
-	"type": "module",
+	"private": true,
 	"description": "@ogygia/freeze's e2e fixture app (the scenario deck's origin, behind the edge emulators; also the ESI demo's).",
+	"type": "module",
 	"scripts": {
 		"dev": "vite dev --port 3073",
 		"build": "vite build",

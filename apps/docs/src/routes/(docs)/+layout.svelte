@@ -50,24 +50,21 @@
 
 	// Deferred JetBrains Mono: load after window load / idle so ui-monospace covers hero code first.
 	// The hashed URL is closed-over data, so it is passed as an arg (serialized for the inline script).
-	const monoTag = ogygia.script(
-		(href: string) => {
-			const load = () => {
-				const e = document.createElement('link');
-				e.rel = 'stylesheet';
-				e.href = href;
-				document.head.appendChild(e);
-			};
-			const schedule = () =>
-				'requestIdleCallback' in window
-					? requestIdleCallback(load, { timeout: 2500 })
-					: setTimeout(load, 1);
-			document.readyState === 'complete'
-				? schedule()
-				: window.addEventListener('load', schedule, { once: true });
-		},
-		fontsMonoUrl
-	);
+	const monoTag = ogygia.script((href: string) => {
+		const load = () => {
+			const e = document.createElement('link');
+			e.rel = 'stylesheet';
+			e.href = href;
+			document.head.appendChild(e);
+		};
+		const schedule = () =>
+			'requestIdleCallback' in window
+				? requestIdleCallback(load, { timeout: 2500 })
+				: setTimeout(load, 1);
+		document.readyState === 'complete'
+			? schedule()
+			: window.addEventListener('load', schedule, { once: true });
+	}, fontsMonoUrl);
 </script>
 
 <svelte:head>

@@ -2,16 +2,26 @@
 	"name": "@ogygia/router",
 	"version": "0.10.2",
 	"description": "The server router for ogygia: Kit's routing model as values (routes, layouts, loads, actions, endpoints, streamed pages), with a typed fetch client",
-	"type": "module",
+	"keywords": [
+		"ogygia",
+		"router",
+		"routing",
+		"server",
+		"sveltekit"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/router"
 	},
-	"keywords": ["ogygia", "sveltekit", "router", "routing", "server"],
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -27,33 +37,7 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
-		"test": "vitest run",
-		"e2e": "playwright test"
-	},
-	"peerDependencies": {
-		"@sveltejs/kit": "catalog:peers",
-		"@ogygia/core": "workspace:^",
-		"svelte": "catalog:peers"
-	},
-	"devDependencies": {
-		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "catalog:",
-		"@sveltejs/kit": "catalog:",
-		"@sveltejs/vite-plugin-svelte": "catalog:",
-		"@types/node": "catalog:",
-		"@ogygia/core": "workspace:*",
-		"svelte": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"vite": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
@@ -68,6 +52,31 @@
 				"types": "./dist/vite.d.ts",
 				"default": "./dist/vite.js"
 			}
-		}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
+	},
+	"devDependencies": {
+		"@ogygia/core": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
+		"svelte": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^",
+		"@sveltejs/kit": "catalog:peers",
+		"svelte": "catalog:peers"
 	}
 }

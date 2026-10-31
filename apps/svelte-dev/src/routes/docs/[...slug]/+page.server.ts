@@ -19,7 +19,6 @@ export const load = async ({ params }: { params: { slug: string } }) => {
 	const slug = params.slug ?? '';
 	if (slug && (await docs.page(slug, { base: '/docs' }))) return {};
 
-
 	const prefix =
 		slug === 'kit' || slug === 'cli' || slug === 'ai' ? `${slug}/` : slug === '' ? '' : null;
 	if (prefix !== null) {
@@ -34,7 +33,8 @@ export const load = async ({ params }: { params: { slug: string } }) => {
 	// slug is neither a real page nor a topic root, so a topic name in leaf position (`kit/svelte`
 	// from their relative `../svelte`) means that topic's root, and anything else resolves by leaf.
 	const flat = await resolve_flat(slug);
-	if (flat && typeof flat === 'object') redirect(308, flat.root === 'svelte' ? '/docs' : `/docs/${flat.root}`);
+	if (flat && typeof flat === 'object')
+		redirect(308, flat.root === 'svelte' ? '/docs' : `/docs/${flat.root}`);
 	if (typeof flat === 'string') redirect(308, `/docs/${flat}`);
 	error(404, 'Not found');
 };

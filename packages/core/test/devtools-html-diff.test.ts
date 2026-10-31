@@ -3,13 +3,20 @@ import { tokenize, html_diff } from '../src/insights/html-diff.ts';
 
 describe('tokenize', () => {
 	it('tags and text, comments out, whitespace folded', () => {
-		expect(tokenize('<!--[--><p class="a">hello   \n world</p><!--]-->')).toEqual(['<p class="a">', 'hello world', '</p>']);
+		expect(tokenize('<!--[--><p class="a">hello   \n world</p><!--]-->')).toEqual([
+			'<p class="a">',
+			'hello world',
+			'</p>'
+		]);
 	});
 });
 
 describe('html_diff', () => {
 	it('names exactly what changed, with context', () => {
-		const d = html_diff('<ul><li>a</li><li>b</li><li>c</li></ul><p>rendered on the server</p>', '<!--[--><ul><li>a</li><li>b</li><li>c</li></ul><p>rendered on the browser</p>');
+		const d = html_diff(
+			'<ul><li>a</li><li>b</li><li>c</li></ul><p>rendered on the server</p>',
+			'<!--[--><ul><li>a</li><li>b</li><li>c</li></ul><p>rendered on the browser</p>'
+		);
 		expect(d.removed).toBe(1);
 		expect(d.added).toBe(1);
 		const ops = d.hunks.flatMap((h) => h.ops);
@@ -19,9 +26,17 @@ describe('html_diff', () => {
 	});
 
 	it('an added attribute and an extra element', () => {
-		const d = html_diff('<div><span>x</span></div>', '<div data-x="1"><span>x</span><b>new</b></div>');
+		const d = html_diff(
+			'<div><span>x</span></div>',
+			'<div data-x="1"><span>x</span><b>new</b></div>'
+		);
 		const ops = d.hunks.flatMap((h) => h.ops);
-		expect(ops.filter((o) => o.op === 'add').map((o) => o.text)).toEqual(['<div data-x="1">', '<b>', 'new', '</b>']);
+		expect(ops.filter((o) => o.op === 'add').map((o) => o.text)).toEqual([
+			'<div data-x="1">',
+			'<b>',
+			'new',
+			'</b>'
+		]);
 		expect(ops.filter((o) => o.op === 'del').map((o) => o.text)).toEqual(['<div>']);
 	});
 

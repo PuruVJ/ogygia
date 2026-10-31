@@ -6,7 +6,11 @@
 </script>
 
 <div class="island" data-lazy-caller>
-	<button data-lazy-btn onclick={async () => (Callee = (await import('./LazyCallee.svelte')).default)}>load the caller</button>
+	<button
+		data-lazy-btn
+		onclick={async () => (Callee = (await import('./LazyCallee.svelte')).default)}
+		>load the caller</button
+	>
 	{#if Callee}
 		<Callee name="lazy" />
 	{/if}

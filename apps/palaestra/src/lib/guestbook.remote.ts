@@ -8,12 +8,7 @@ import { addEntry, listEntries } from './server/guestbook';
 export const signGuestbook = form(
 	v.object({
 		name: v.pipe(v.string(), v.trim(), v.minLength(1, 'name is required'), v.maxLength(64)),
-		message: v.pipe(
-			v.string(),
-			v.trim(),
-			v.minLength(1, 'message is required'),
-			v.maxLength(280)
-		)
+		message: v.pipe(v.string(), v.trim(), v.minLength(1, 'message is required'), v.maxLength(280))
 	}),
 	async ({ name, message }) => {
 		addEntry(name, message);

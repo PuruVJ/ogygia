@@ -26,7 +26,9 @@
 	} = $props();
 
 	// Newest first; stable for equal dates.
-	const sorted = $derived([...posts].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
+	const sorted = $derived(
+		[...posts].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+	);
 	const byYear = $derived.by(() => {
 		const groups: Array<[string, BlogPostRef[]]> = [];
 		for (const p of sorted) {
@@ -51,7 +53,9 @@
 				<div class="og-blog-card-meta">
 					{#if p.author}<span class="og-blog-card-author">{p.author}</span>{/if}
 					{#if p.tags?.length}
-						<span class="og-blog-card-tags">{#each p.tags as t (t)}<span class="og-blog-card-tag">{t}</span>{/each}</span>
+						<span class="og-blog-card-tags"
+							>{#each p.tags as t (t)}<span class="og-blog-card-tag">{t}</span>{/each}</span
+						>
 					{/if}
 				</div>
 			</div>

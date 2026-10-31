@@ -160,7 +160,12 @@ async function measure(marks: RuntimeMarks): Promise<Pick<Row, 'boot' | 'total' 
 		for (const dep of by_name.get(name)?.imports ?? []) walk(dep);
 	};
 	for (const c of chunks) if (c.isEntry) walk(c.fileName);
-	const boot = size(chunks.filter((c) => boot_set.has(c.fileName)).map((c) => c.code).join('\n'));
+	const boot = size(
+		chunks
+			.filter((c) => boot_set.has(c.fileName))
+			.map((c) => c.code)
+			.join('\n')
+	);
 	const total = size(chunks.map((c) => c.code).join('\n'));
 	const lazy = chunks
 		.filter((c) => !boot_set.has(c.fileName))
@@ -175,7 +180,9 @@ for (const p of PROFILES) {
 }
 
 if (update) {
-	const snap: Snapshot = Object.fromEntries(rows.map((r) => [r.name, { boot: r.boot, total: r.total }]));
+	const snap: Snapshot = Object.fromEntries(
+		rows.map((r) => [r.name, { boot: r.boot, total: r.total }])
+	);
 	writeFileSync(SNAPSHOT, JSON.stringify(snap, null, 2) + '\n');
 	console.log(`✓ baseline snapshot written → apps/palaestra/e2e/bundle-size.snapshot.json`);
 }
@@ -198,7 +205,13 @@ const delta = (cur: number, prev?: number) => {
 
 console.log(`\nogygia runtime (brotli) — isolated rolldown build, svelte externalized\n`);
 console.log(
-	'  ' + 'profile'.padEnd(16) + 'boot'.padEnd(11) + 'Δ'.padEnd(11) + 'total'.padEnd(11) + 'Δ'.padEnd(11) + 'lazy chunks'
+	'  ' +
+		'profile'.padEnd(16) +
+		'boot'.padEnd(11) +
+		'Δ'.padEnd(11) +
+		'total'.padEnd(11) +
+		'Δ'.padEnd(11) +
+		'lazy chunks'
 );
 console.log('  ' + '─'.repeat(84));
 const failures: string[] = [];

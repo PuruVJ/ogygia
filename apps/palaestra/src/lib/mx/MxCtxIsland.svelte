@@ -5,4 +5,6 @@
 	let n = $state(0);
 </script>
 
-<button data-bumper data-ctx-read="island" onclick={() => (n += 1)}>{v} <span data-bumper-n>{n}</span></button>
+<button data-bumper data-ctx-read="island" onclick={() => (n += 1)}
+	>{v} <span data-bumper-n>{n}</span></button
+>

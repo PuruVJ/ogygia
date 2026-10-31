@@ -1,41 +1,41 @@
 {
-  "name": "palaestra",
-  "version": "0.0.1",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p e2e",
-    "e2e": "playwright test"
-  },
-  "devDependencies": {
-    "@ogygia/tooling": "workspace:*",
-    "@playwright/test": "catalog:",
-    "@sveltejs/adapter-vercel": "catalog:",
-    "@sveltejs/kit": "catalog:",
-    "@sveltejs/vite-plugin-svelte": "catalog:",
-    "@types/node": "catalog:",
-    "@typescript/native": "catalog:tsgo",
-    "axe-core": "catalog:",
-    "crypto-browserify": "^3.12.1",
-    "path-browserify": "catalog:",
-    "playwright": "catalog:",
-    "rolldown": "catalog:",
-    "svelte": "catalog:",
-    "svelte-check": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vite-plugin-top-level-await": "^1.6.0",
-    "vite-plugin-wasm": "catalog:"
-  },
-  "dependencies": {
-    "@rolldown/browser": "catalog:",
-    "devalue": "catalog:",
-    "ogygia": "workspace:*",
-    "repro-hole-css-kit": "workspace:*",
-    "repro-subpkg": "workspace:*",
-    "valibot": "catalog:"
-  }
+	"name": "palaestra",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p e2e",
+		"e2e": "playwright test"
+	},
+	"dependencies": {
+		"@rolldown/browser": "catalog:",
+		"devalue": "catalog:",
+		"ogygia": "workspace:*",
+		"repro-hole-css-kit": "workspace:*",
+		"repro-subpkg": "workspace:*",
+		"valibot": "catalog:"
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "catalog:",
+		"@sveltejs/adapter-vercel": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
+		"@typescript/native": "catalog:tsgo",
+		"axe-core": "catalog:",
+		"crypto-browserify": "^3.12.1",
+		"path-browserify": "catalog:",
+		"playwright": "catalog:",
+		"rolldown": "catalog:",
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:",
+		"vite-plugin-top-level-await": "^1.6.0",
+		"vite-plugin-wasm": "catalog:"
+	}
 }

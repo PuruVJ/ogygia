@@ -12,7 +12,10 @@
 
 <svelte:head>
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ionic/core@8/css/ionic.bundle.css" />
-	<script type="module" src="https://cdn.jsdelivr.net/npm/@ionic/core@8/dist/ionic/ionic.esm.js"></script>
+	<script
+		type="module"
+		src="https://cdn.jsdelivr.net/npm/@ionic/core@8/dist/ionic/ionic.esm.js"
+	></script>
 </svelte:head>
 
 <DsHydrateMark />

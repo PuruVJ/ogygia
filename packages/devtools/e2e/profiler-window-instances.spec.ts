@@ -31,7 +31,12 @@ test.beforeAll(async () => {
 			})
 		);
 		// (an Origin header: a SvelteKit app refuses a cross-site POST without one)
-		api.push(await pw_request.newContext({ baseURL: origin, extraHTTPHeaders: { 'x-profiler-key': KEY, origin, accept: 'application/json' } }));
+		api.push(
+			await pw_request.newContext({
+				baseURL: origin,
+				extraHTTPHeaders: { 'x-profiler-key': KEY, origin, accept: 'application/json' }
+			})
+		);
 	}
 });
 test.afterAll(async () => {
@@ -54,9 +59,14 @@ test('a window started on one instance gathers the requests every instance serve
 	const stopped = await b.post('/__profiler/window/stop', { headers: tag });
 	expect(stopped.status()).toBe(200);
 	const body = await stopped.json();
-	expect(body.window.requests.map((r: { path: string }) => r.path).sort()).toEqual(['/dt-lab', '/interaction']);
+	expect(body.window.requests.map((r: { path: string }) => r.path).sort()).toEqual([
+		'/dt-lab',
+		'/interaction'
+	]);
 	expect(body.window.instances).toBe(2);
-	expect(body.window.requests.every((r: { cpu_ms: number }) => typeof r.cpu_ms === 'number')).toBe(true);
+	expect(body.window.requests.every((r: { cpu_ms: number }) => typeof r.cpu_ms === 'number')).toBe(
+		true
+	);
 
 	// a forged id is not the window's: nothing is written for it
 	const forged = { [start.header]: start.id.split('.')[0] + '.0000000000' };
@@ -82,5 +92,8 @@ test('stopped on the instance that started it: its CPU profile and every instanc
 	const body = await (await a.post('/__profiler/window/stop', { headers: tag })).json();
 	expect(body.engine).toMatchObject({ version: 3 });
 	expect(body.window.instances).toBe(2);
-	expect(body.window.requests.map((r: { path: string }) => r.path).sort()).toEqual(['/dt-lab', '/interaction']);
+	expect(body.window.requests.map((r: { path: string }) => r.path).sort()).toEqual([
+		'/dt-lab',
+		'/interaction'
+	]);
 });

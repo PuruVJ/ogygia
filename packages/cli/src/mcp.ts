@@ -41,7 +41,9 @@ interface ProfilerReading {
 		render_ms: number,
 		renders?: number,
 		wait_ms?: number
-	): { cpu_ms: number; wait_ms: number; render_ms: number; after_ms: number; pct: number } | undefined;
+	):
+		| { cpu_ms: number; wait_ms: number; render_ms: number; after_ms: number; pct: number }
+		| undefined;
 }
 let profiler_reading: ProfilerReading | null | undefined;
 async function load_profiler_reading(): Promise<ProfilerReading | null> {
@@ -688,7 +690,9 @@ function render_story(url: string, events: DtEvent[]): string {
 }
 
 /** What the page's restorer said (an app with `ogygia.handle({ transform })`), or '' when nothing. */
-function restore_section(events: { type: string; detail: { host?: string; diff?: string } }[]): string {
+function restore_section(
+	events: { type: string; detail: { host?: string; diff?: string } }[]
+): string {
 	if (!events.length) return '';
 	const lines = events.map((e) =>
 		e.type === 'ogygia:restore-late'
@@ -735,7 +739,11 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 			const w = window as unknown as { __og_restore_events?: { type: string; detail: unknown }[] };
 			const list: { type: string; detail: unknown }[] = (w.__og_restore_events = []);
 			for (const type of ['ogygia:restore-late', 'ogygia:restore-mismatch'])
-				document.addEventListener(type, (e) => list.push({ type, detail: (e as CustomEvent).detail }), true);
+				document.addEventListener(
+					type,
+					(e) => list.push({ type, detail: (e as CustomEvent).detail }),
+					true
+				);
 		});
 		try {
 			await page.goto(url, { waitUntil: 'load', timeout: 15000 });
@@ -810,8 +818,19 @@ type ReportForecast = {
 	delete_ms: number;
 	cpu_now_ms?: number;
 	cpu_after_ms?: number;
-	parts: { title: string; kind: string; ms: number; wait: boolean; after_ms?: number; with?: string[] }[];
-	answers?: { after_ms: number; wait_ms: number; measured?: { ms: number; renders: number; model_ms: number } };
+	parts: {
+		title: string;
+		kind: string;
+		ms: number;
+		wait: boolean;
+		after_ms?: number;
+		with?: string[];
+	}[];
+	answers?: {
+		after_ms: number;
+		wait_ms: number;
+		measured?: { ms: number; renders: number; model_ms: number };
+	};
 	cache?: boolean;
 	clamped?: boolean;
 	partial?: boolean;
@@ -913,7 +932,13 @@ type ProfileReport = {
 		moved: Array<{ path: string[]; kind: string; at?: string; d_ms: number; status: string }>;
 		order?: { earlier: string; kept_mb: number; requests_between: number };
 		fix_check?: { predicted_ms: number; measured_ms: number; verdict: string };
-		score?: { a: number; b: number; a_grade: string; b_grade: string; moved: { label: string; a: number; b: number }[] };
+		score?: {
+			a: number;
+			b: number;
+			a_grade: string;
+			b_grade: string;
+			moved: { label: string; a: number; b: number }[];
+		};
 	} | null;
 	ledger?: Array<{
 		file?: string;

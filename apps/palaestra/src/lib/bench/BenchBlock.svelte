@@ -16,7 +16,10 @@
 	<table>
 		<tbody>
 			{#each block.rows as row (row.sku)}
-				<tr><td>{row.sku}</td><td>{row.price.toFixed(2)}</td><td>{row.stock}</td><td>{row.desc}</td></tr>
+				<tr
+					><td>{row.sku}</td><td>{row.price.toFixed(2)}</td><td>{row.stock}</td><td>{row.desc}</td
+					></tr
+				>
 			{/each}
 		</tbody>
 	</table>

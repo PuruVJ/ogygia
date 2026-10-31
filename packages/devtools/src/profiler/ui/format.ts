@@ -69,7 +69,7 @@ export function ink_on(bg: string): string {
 	};
 	const L = 0.2126 * ch(1) + 0.7152 * ch(3) + 0.0722 * ch(5);
 	// contrast against white (L 1) vs against #06120c (L ≈ 0.005)
-	return (1.05 / (L + 0.05) >= (L + 0.05) / 0.055) ? '#ffffff' : '#06120c';
+	return 1.05 / (L + 0.05) >= (L + 0.05) / 0.055 ? '#ffffff' : '#06120c';
 }
 
 /** Bar color per I/O kind, for the Waiting-by-function bars. */
@@ -94,6 +94,7 @@ export function kind_color(kind: string): string {
 export function label_of(r: ReportMeta): string {
 	if (r.trigger === 'page') return `page ${r.page} ×${r.runs?.length ?? 0}`;
 	if (r.trigger === 'request') return `request ${r.request?.path ?? ''}`;
-	if (r.trigger === 'trap') return `caught ${r.request?.path ?? ''} (${Math.round(r.request?.ms ?? 0)} ms)`;
+	if (r.trigger === 'trap')
+		return `caught ${r.request?.path ?? ''} (${Math.round(r.request?.ms ?? 0)} ms)`;
 	return `${Math.round(r.duration_ms / 1000)}s window`;
 }

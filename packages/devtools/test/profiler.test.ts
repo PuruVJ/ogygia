@@ -52,14 +52,27 @@ import {
 	type SpanRecorder,
 	type SpanAttrs
 } from '../src/profiler/span.ts';
-import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name, browser_of, with_hidden_filled } from '../src/profiler/report.ts';
+import {
+	span_rows,
+	fair_shares,
+	lake_saving,
+	inline_threshold_tune,
+	remote_function_name,
+	browser_of,
+	with_hidden_filled
+} from '../src/profiler/report.ts';
 import { build_standalone } from '../src/profiler/standalone.ts';
 import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.ts';
 import { io_kind } from '../src/profiler/async-io.ts';
 import { raw_cookie_values } from '../src/profiler/session-cookie.ts';
 import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.ts';
 import { parse_visit } from '../src/profiler/visit.ts';
-import { budget_segments, build_treemap, island_rows, waiting_rows } from '../src/profiler/ui/report-data.ts';
+import {
+	budget_segments,
+	build_treemap,
+	island_rows,
+	waiting_rows
+} from '../src/profiler/ui/report-data.ts';
 import type { RequestEvent } from '@sveltejs/kit';
 // (core's stub, the file `virtual:ogygia/island-deps` is aliased to — pluginTests())
 import { set_chunk_contents } from '../../core/test/_stubs/virtual-island-deps.ts';
@@ -436,9 +449,15 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 			'low-confidence'
 		);
 		// a real page (200, a real body) that renders fast: a calm note, not a warning
-		const f = derive_findings(a, { ...base, page: '/x', run_status: 200, run_bytes: 5000, runs: [0.4, 0.5, 0.6] } as never, { net: [], mem: [] } as never).find((x) => x.code === 'low-confidence')!;
+		const f = derive_findings(
+			a,
+			{ ...base, page: '/x', run_status: 200, run_bytes: 5000, runs: [0.4, 0.5, 0.6] } as never,
+			{ net: [], mem: [] } as never
+		).find((x) => x.code === 'low-confidence')!;
 		expect(f.severity).toBe('info');
-		expect(f.message).toMatch(/^This page renders in about 0\.50 ms: only \d+ CPU samples? and no component took measurable time — there is little here to make faster/);
+		expect(f.message).toMatch(
+			/^This page renders in about 0\.50 ms: only \d+ CPU samples? and no component took measurable time — there is little here to make faster/
+		);
 	});
 
 	it('does NOT cry low-confidence on a real render', () => {
@@ -476,9 +495,20 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 
 	it("each island's own JS: shared chunks counted once, where no other island uses them", async () => {
 		const { island_js_unique } = await import('../src/profiler/report.ts');
-		const row = (entry: string, wake: string, module_url: string, hints: string[]) => ({ entry, wake, module_url, hints }) as never;
-		const rows = [row('A', 'load', '/a.js', ['/svelte.js', '/big-a.js']), row('B', 'visible', '/b.js', ['/svelte.js']), row('L', 'none', '/l.js', ['/big-a.js'])];
-		const w = { '/a.js': 1000, '/svelte.js': 40_000, '/big-a.js': 300_000, '/b.js': 800, '/l.js': 500 };
+		const row = (entry: string, wake: string, module_url: string, hints: string[]) =>
+			({ entry, wake, module_url, hints }) as never;
+		const rows = [
+			row('A', 'load', '/a.js', ['/svelte.js', '/big-a.js']),
+			row('B', 'visible', '/b.js', ['/svelte.js']),
+			row('L', 'none', '/l.js', ['/big-a.js'])
+		];
+		const w = {
+			'/a.js': 1000,
+			'/svelte.js': 40_000,
+			'/big-a.js': 300_000,
+			'/b.js': 800,
+			'/l.js': 500
+		};
 		const u = island_js_unique(rows, w)!;
 		// big-a is A's alone (the lake does not wake, so it does not count as a user); svelte is shared
 		expect(u.get('A')).toBe(301_000);
@@ -489,19 +519,45 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 
 	it('memory kept per render: the runway to the heap limit, and a package named as its owner', () => {
 		const a = analyze(empty_profile);
-		const site = (url: string, mb: number) => ({ name: 'f', url, line: 1, component: null, bytes: mb * 1048576, share: 0 });
-		const retained = { total_bytes: 64 * 1048576, render_ms: 900, sites: [site('file:///app/node_modules/@scope/renderer/hydrate/index.mjs', 50), site('file:///app/src/lib/x.ts', 3)] };
+		const site = (url: string, mb: number) => ({
+			name: 'f',
+			url,
+			line: 1,
+			component: null,
+			bytes: mb * 1048576,
+			share: 0
+		});
+		const retained = {
+			total_bytes: 64 * 1048576,
+			render_ms: 900,
+			sites: [
+				site('file:///app/node_modules/@scope/renderer/hydrate/index.mjs', 50),
+				site('file:///app/src/lib/x.ts', 3)
+			]
+		};
 		const meta = { ...base, page: '/x', run_status: 200, run_bytes: 90000, heap_limit_mb: 4096 };
-		const f = derive_findings(a, meta, { net: [], heap: null, mem: [], retained } as never).find((x) => x.code === 'retained-per-render')!;
+		const f = derive_findings(a, meta, { net: [], heap: null, mem: [], retained } as never).find(
+			(x) => x.code === 'retained-per-render'
+		)!;
 		expect(f.message).toContain('its 4096 MB heap runs out after about 64 renders of this page');
 		expect(f.message).toContain('78% of it is held inside @scope/renderer');
 		expect(f.fix).toContain("@scope/renderer's");
 		// app code holding it: the owner-release advice, no package named
 		const own = { ...retained, sites: [site('file:///app/src/lib/cache.ts', 60)] };
-		const g = derive_findings(a, meta, { net: [], heap: null, mem: [], retained: own } as never).find((x) => x.code === 'retained-per-render')!;
+		const g = derive_findings(a, meta, {
+			net: [],
+			heap: null,
+			mem: [],
+			retained: own
+		} as never).find((x) => x.code === 'retained-per-render')!;
 		expect(g.fix).toContain('module-level cache');
 		// on Lambda: the function's memory is the limit
-		const l = derive_findings(a, { ...meta, lambda: true, lambda_mb: 1024 }, { net: [], heap: null, mem: [], retained } as never).find((x) => x.code === 'retained-per-render')!;
+		const l = derive_findings(a, { ...meta, lambda: true, lambda_mb: 1024 }, {
+			net: [],
+			heap: null,
+			mem: [],
+			retained
+		} as never).find((x) => x.code === 'retained-per-render')!;
 		expect(l.message).toContain('its 1024 MB of memory runs out after about 16 renders');
 	});
 
@@ -517,19 +573,53 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 			samples: [2, 2],
 			timeDeltas: [10, 10]
 		});
-		const req = (path: string, ms: number, cpu_ms: number, net = 0) => ({ ts: 1, method: 'GET', path, route: path, status: 200, ms, cpu_ms, inflight: 0, net_ms: net ? ms - cpu_ms - 5 : 0, net_count: net });
-		const meta = { ...base, trigger: 'window' as const, duration_ms: 6000, requests: [req('/a', 120, 20), req('/slow', 3300, 200, 3), req('/b', 40, 30)] };
+		const req = (path: string, ms: number, cpu_ms: number, net = 0) => ({
+			ts: 1,
+			method: 'GET',
+			path,
+			route: path,
+			status: 200,
+			ms,
+			cpu_ms,
+			inflight: 0,
+			net_ms: net ? ms - cpu_ms - 5 : 0,
+			net_count: net
+		});
+		const meta = {
+			...base,
+			trigger: 'window' as const,
+			duration_ms: 6000,
+			requests: [req('/a', 120, 20), req('/slow', 3300, 200, 3), req('/b', 40, 30)]
+		};
 		// calls one after another from different requests: the test's pace, not an await chain
-		const net: NetCall[] = [0, 1000, 2000].map((start) => ({ start, epoch: start, ms: 900, method: 'GET', url: 'http://u/x', host: 'u', status: 200, kind: 'fetch', route: null, path: null }) as NetCall);
+		const net: NetCall[] = [0, 1000, 2000].map(
+			(start) =>
+				({
+					start,
+					epoch: start,
+					ms: 900,
+					method: 'GET',
+					url: 'http://u/x',
+					host: 'u',
+					status: 200,
+					kind: 'fetch',
+					route: null,
+					path: null
+				}) as NetCall
+		);
 		const found = derive_findings(a, meta, { net, heap: null, mem: [] });
 		const w = found.find((f) => f.code === 'window-requests')!;
 		expect(w.severity).toBe('warn');
-		expect(w.message).toContain('3 requests in the window; the slowest: GET /slow 3300 ms (200 ms CPU, 3100 ms waiting, 3095 ms of it on 3 outbound calls) · GET /a 120 ms');
+		expect(w.message).toContain(
+			'3 requests in the window; the slowest: GET /slow 3300 ms (200 ms CPU, 3100 ms waiting, 3095 ms of it on 3 outbound calls) · GET /a 120 ms'
+		);
 		expect(w.fix).toContain('waiting');
 		expect(found.map((f) => f.code)).not.toContain('sequential-network');
 		// a page recording still says it (one request's calls, back to back)
 		const page_meta = { ...base, page: '/x', run_status: 200, run_bytes: 90000, duration_ms: 3000 };
-		expect(derive_findings(a, page_meta, { net, heap: null, mem: [] }).map((f) => f.code)).toContain('sequential-network');
+		expect(
+			derive_findings(a, page_meta, { net, heap: null, mem: [] }).map((f) => f.code)
+		).toContain('sequential-network');
 	});
 });
 
@@ -659,7 +749,9 @@ describe('categorize', () => {
 			category: 'dependency',
 			pkg: 'ogygia'
 		});
-		expect(categorize(frame('og_entry_hydrate', '/app/node_modules/@ogygia/core/dist/entry-hydrate.js'))).toEqual({
+		expect(
+			categorize(frame('og_entry_hydrate', '/app/node_modules/@ogygia/core/dist/entry-hydrate.js'))
+		).toEqual({
 			category: 'dependency',
 			pkg: 'ogygia'
 		});
@@ -1708,7 +1800,9 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		// 20 KB of its own + the 100 KB chunk MegaHeader (awake) loads too: a lake saves the 20 KB
 		// (past 10 KB saved: a warning; a few KB would be a note)
 		expect(by['wake-inert'].severity).toBe('warn');
-		expect(by['wake-inert'].message).toContain('it loads 117 KB of JS for markup that never changes; 20 KB of it is its alone (the rest the page\'s other islands load too), what a lake saves.');
+		expect(by['wake-inert'].message).toContain(
+			"it loads 117 KB of JS for markup that never changes; 20 KB of it is its alone (the rest the page's other islands load too), what a lake saves."
+		);
 		expect(by['wake-crowd'].message).toContain(
 			'ProductCard has 48 copies on the page, each waking on visible with its own 80 B of props'
 		);
@@ -1722,24 +1816,83 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		// one module most of an island's own code, from the build's rendered sizes; the runtimes (and
 		// devalue, the props decoder) never count as the island's
 		const heavy = {
-			'/_app/immutable/aaaaaaaaaaaaaaaa.js': { total: 60_000, top: [{ name: 'src/lib/Icons.svelte', bytes: 45_000 }, { name: 'svelte runtime', bytes: 8_000 }, { name: 'src/lib/MegaHeader.svelte', bytes: 5_000 }] },
-			'/_app/immutable/bbbbbbbbbbbbbbbb.js': { total: 40_000, top: [{ name: 'devalue', bytes: 35_000 }, { name: 'src/lib/CountryPanel.svelte', bytes: 5_000 }] }
+			'/_app/immutable/aaaaaaaaaaaaaaaa.js': {
+				total: 60_000,
+				top: [
+					{ name: 'src/lib/Icons.svelte', bytes: 45_000 },
+					{ name: 'svelte runtime', bytes: 8_000 },
+					{ name: 'src/lib/MegaHeader.svelte', bytes: 5_000 }
+				]
+			},
+			'/_app/immutable/bbbbbbbbbbbbbbbb.js': {
+				total: 40_000,
+				top: [
+					{ name: 'devalue', bytes: 35_000 },
+					{ name: 'src/lib/CountryPanel.svelte', bytes: 5_000 }
+				]
+			}
 		};
-		const hv = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, heavy } as never).find((x) => x.code === 'island-heavy-module')!;
-		expect(hv.message).toBe("Icons.svelte is 87% of MegaHeader's own code (44 KB of 51 KB, before minifying).");
+		const hv = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ net: [], mem: [], weights, client, heavy } as never
+		).find((x) => x.code === 'island-heavy-module')!;
+		expect(hv.message).toBe(
+			"Icons.svelte is 87% of MegaHeader's own code (44 KB of 51 KB, before minifying)."
+		);
 		// a barrel an island ships whole, from the build's module info; Svelte's own index never counts
-		const barrels = { '/_app/immutable/aaaaaaaaaaaaaaaa.js': [{ name: 'svelte runtime', fanout: 71 }, { name: 'src/lib/ui/index.ts', fanout: 8 }] };
-		const br = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, barrels } as never).find((x) => x.code === 'island-barrel')!;
-		expect(br.message).toContain('MegaHeader ships a barrel whole: src/lib/ui/index.ts, and the 8 modules behind it');
+		const barrels = {
+			'/_app/immutable/aaaaaaaaaaaaaaaa.js': [
+				{ name: 'svelte runtime', fanout: 71 },
+				{ name: 'src/lib/ui/index.ts', fanout: 8 }
+			]
+		};
+		const br = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ net: [], mem: [], weights, client, barrels } as never
+		).find((x) => x.code === 'island-barrel')!;
+		expect(br.message).toContain(
+			'MegaHeader ships a barrel whole: src/lib/ui/index.ts, and the 8 modules behind it'
+		);
 		expect(br.message).not.toContain('svelte runtime');
 		// with the report's own visit: where the time went, and the advice for a queue, not a slow step
-		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [0, 1, 2].map((k) => ({ fp: 'aaaaaaaaaaaaaaaa', t0: 0, loaded: 10, turn: 10 + 90 + k, done: 110 + k })) };
-		const q = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, visit } as never).find((x) => x.code === 'client-hydrate')!;
-		expect(q.message).toContain('10.0 ms loading its modules, 91.0 ms waiting its turn behind other islands, 10.0 ms hydrating');
+		const visit = {
+			page: '/',
+			at: 1,
+			nav: {},
+			paints: {},
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [0, 1, 2].map((k) => ({
+				fp: 'aaaaaaaaaaaaaaaa',
+				t0: 0,
+				loaded: 10,
+				turn: 10 + 90 + k,
+				done: 110 + k
+			}))
+		};
+		const q = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ net: [], mem: [], weights, client, visit } as never
+		).find((x) => x.code === 'client-hydrate')!;
+		expect(q.message).toContain(
+			'10.0 ms loading its modules, 91.0 ms waiting its turn behind other islands, 10.0 ms hydrating'
+		);
 		expect(q.fix).toMatch(/waited for its turn/);
 		// another island hydrating inside that wait is named as the one that held the queue
-		const held = { ...visit, islands: [...visit.islands, { fp: 'bbbbbbbbbbbbbbbb', t0: 0, loaded: 5, turn: 12, done: 95 }] };
-		const h = derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights, client, visit: held } as never).find((x) => x.code === 'client-hydrate')!;
+		const held = {
+			...visit,
+			islands: [...visit.islands, { fp: 'bbbbbbbbbbbbbbbb', t0: 0, loaded: 5, turn: 12, done: 95 }]
+		};
+		const h = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ net: [], mem: [], weights, client, visit: held } as never
+		).find((x) => x.code === 'client-hydrate')!;
 		expect(h.message).toContain('most of it behind CountryPanel (');
 		expect(h.fix).toContain('CountryPanel held the queue');
 		// no weights (dev) → no JS figures, the advisor still speaks
@@ -1749,18 +1902,46 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		// an island whose code calls a remote function (a streaming query, a form spread onto <form>)
 		// or awaits in its markup changes after it wakes with no handler of its own: never inert
 		for (const marks of [{ remotes: 1 }, { awaits: 1 }]) {
-			const live_rows = rows.map((r) => (r.fp === 'bbbbbbbbbbbbbbbb' ? { ...r, interactivity: { ...r.interactivity!, ...marks } } : r));
-			const live_meta = { ...meta, requests: meta.requests.map((r) => ((r as { og?: object }).og ? { ...r, og: { ...og, island_rows: live_rows } } : r)) };
-			expect(derive_findings(analyze(p1), live_meta as never, extras).find((x) => x.code === 'wake-inert')).toBeUndefined();
+			const live_rows = rows.map((r) =>
+				r.fp === 'bbbbbbbbbbbbbbbb' ? { ...r, interactivity: { ...r.interactivity!, ...marks } } : r
+			);
+			const live_meta = {
+				...meta,
+				requests: meta.requests.map((r) =>
+					(r as { og?: object }).og ? { ...r, og: { ...og, island_rows: live_rows } } : r
+				)
+			};
+			expect(
+				derive_findings(analyze(p1), live_meta as never, extras).find(
+					(x) => x.code === 'wake-inert'
+				)
+			).toBeUndefined();
 		}
 	});
 
 	it('a page the build wrote as a file (no render ran): no render findings, the note says why', () => {
 		const rendered = derive_findings(analyze(p1), meta as never, extras).map((f) => f.code);
-		expect(rendered.some((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence'].includes(c))).toBe(true);
-		const file = derive_findings(analyze(p1), { ...meta, prerendered: true, run_static: true } as never, extras).map((f) => f.code);
+		expect(
+			rendered.some((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence'].includes(c))
+		).toBe(true);
+		const file = derive_findings(
+			analyze(p1),
+			{ ...meta, prerendered: true, run_static: true } as never,
+			extras
+		).map((f) => f.code);
 		expect(file).toContain('prerendered-page');
-		expect(file.filter((c) => ['top-cpu', 'phases', 'top-component', 'low-confidence', 'cold-start', 'n-plus-one'].includes(c))).toEqual([]);
+		expect(
+			file.filter((c) =>
+				[
+					'top-cpu',
+					'phases',
+					'top-component',
+					'low-confidence',
+					'cold-start',
+					'n-plus-one'
+				].includes(c)
+			)
+		).toEqual([]);
 	});
 
 	it('the screen the visit had: named on the findings it decides, and what a phone saw that a wide visit did not', () => {
@@ -1773,8 +1954,22 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			firsts: [],
 			shifts: [],
 			islands: [
-				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Sidebar.svelte', t0: 100, loaded: 120, turn: 125, done: 130 },
-				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', t0: 100, loaded: 120, turn: 125, done: 130 }
+				{
+					fp: 'aaaaaaaa11111111',
+					entry: '/src/lib/Sidebar.svelte',
+					t0: 100,
+					loaded: 120,
+					turn: 125,
+					done: 130
+				},
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/Footer.svelte',
+					t0: 100,
+					loaded: 120,
+					turn: 125,
+					done: 130
+				}
 			]
 		};
 		const wide = parse_visit('/hell', {
@@ -1782,8 +1977,20 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			at,
 			viewport: [1400, 900],
 			regions: [
-				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Sidebar.svelte', hydrated: true, top: 60, height: 800 },
-				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', hydrated: true, top: 2400, height: 80 }
+				{
+					fp: 'aaaaaaaa11111111',
+					entry: '/src/lib/Sidebar.svelte',
+					hydrated: true,
+					top: 60,
+					height: 800
+				},
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/Footer.svelte',
+					hydrated: true,
+					top: 2400,
+					height: 80
+				}
 			]
 		})!;
 		const phone = parse_visit('/hell', {
@@ -1791,29 +1998,73 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			at: at - 60_000,
 			viewport: [390, 844],
 			regions: [
-				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Sidebar.svelte', hydrated: true, top: 60, height: 0, hidden: true },
-				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', hydrated: true, top: 5200, height: 80 }
+				{
+					fp: 'aaaaaaaa11111111',
+					entry: '/src/lib/Sidebar.svelte',
+					hydrated: true,
+					top: 60,
+					height: 0,
+					hidden: true
+				},
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/Footer.svelte',
+					hydrated: true,
+					top: 5200,
+					height: 80
+				}
 			]
 		})!;
-		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit: wide, other_screen_visit: phone } as never);
+		const out = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, visit: wide, other_screen_visit: phone } as never
+		);
 		const below = out.find((f) => f.code === 'eager-offscreen')!;
-		expect(below.message.startsWith('In the browser, on a 1400×900 screen: Footer starts below the first screen')).toBe(true);
+		expect(
+			below.message.startsWith(
+				'In the browser, on a 1400×900 screen: Footer starts below the first screen'
+			)
+		).toBe(true);
 		const other = out.find((f) => f.code === 'other-screen')!;
 		// the phone's own news only: the Footer below its first screen is old news
-		expect(other.message.startsWith('On a 390×844 screen (another visit to this page) the browser saw what this one did not: Sidebar draws nothing on this screen (390 px wide)')).toBe(true);
+		expect(
+			other.message.startsWith(
+				'On a 390×844 screen (another visit to this page) the browser saw what this one did not: Sidebar draws nothing on this screen (390 px wide)'
+			)
+		).toBe(true);
 		expect(other.message).not.toContain('Footer');
 		expect(other.fps).toEqual(['aaaaaaaa11111111']);
 		// no other screen: no such finding
-		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some((f) => f.code === 'other-screen')).toBe(false);
+		expect(
+			derive_findings(analyze(p1), meta as never, { ...extras, visit: wide } as never).some(
+				(f) => f.code === 'other-screen'
+			)
+		).toBe(false);
 	});
 
 	it('the browser a visit came from: named from its user agent, and on its findings when it is not a Chromium one', () => {
-		expect(browser_of('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15')).toBe('Safari 18');
-		expect(browser_of('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')).toBe('Chrome 141');
-		expect(browser_of('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0')).toBe('Edge 141');
-		expect(browser_of('Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0')).toBe('Firefox 133');
+		expect(
+			browser_of(
+				'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15'
+			)
+		).toBe('Safari 18');
+		expect(
+			browser_of(
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+			)
+		).toBe('Chrome 141');
+		expect(
+			browser_of(
+				'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0'
+			)
+		).toBe('Edge 141');
+		expect(
+			browser_of('Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0')
+		).toBe('Firefox 133');
 		expect(browser_of('curl/8')).toBeNull();
-		const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15';
+		const safari =
+			'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15';
 		const visit = parse_visit('/hell', {
 			at: Date.now(),
 			ua: safari,
@@ -1825,21 +2076,62 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			longtasks: [],
 			firsts: [],
 			shifts: [],
-			islands: [{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', t0: 100, loaded: 120, turn: 125, done: 130 }],
-			regions: [{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', hydrated: true, top: 2400, height: 80 }]
+			islands: [
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/Footer.svelte',
+					t0: 100,
+					loaded: 120,
+					turn: 125,
+					done: 130
+				}
+			],
+			regions: [
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/Footer.svelte',
+					hydrated: true,
+					top: 2400,
+					height: 80
+				}
+			]
 		})!;
 		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit } as never);
-		expect(out.find((f) => f.code === 'browser-limits')!.message.startsWith('Safari 18, the browser that visited, does not report layout shifts')).toBe(true);
-		expect(out.find((f) => f.code === 'eager-offscreen')!.message.startsWith('In the browser (Safari 18), on a 1280×800 screen: Footer starts below')).toBe(true);
+		expect(
+			out
+				.find((f) => f.code === 'browser-limits')!
+				.message.startsWith('Safari 18, the browser that visited, does not report layout shifts')
+		).toBe(true);
+		expect(
+			out
+				.find((f) => f.code === 'eager-offscreen')!
+				.message.startsWith('In the browser (Safari 18), on a 1280×800 screen: Footer starts below')
+		).toBe(true);
 		// its beacon estimated the stalls from frames drawn late: kept through the parse, said in the limits
-		const framed = parse_visit('/hell', { ...visit, longtasks: [{ t: 900, ms: 205 }], longtasks_from: 'frames' })!;
+		const framed = parse_visit('/hell', {
+			...visit,
+			longtasks: [{ t: 900, ms: 205 }],
+			longtasks_from: 'frames'
+		})!;
 		expect(framed.longtasks_from).toBe('frames');
-		const limits = derive_findings(analyze(p1), meta as never, { ...extras, visit: framed } as never).find((f) => f.code === 'browser-limits')!.message;
+		const limits = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, visit: framed } as never
+		).find((f) => f.code === 'browser-limits')!.message;
 		expect(limits).toContain('long tasks (its stalls are estimated from the frames it drew late)');
 		// …and the wakes' shifts from the islands' boxes: kept, merged, said in the limits
-		const boxed = parse_visit('/hell', { ...visit, shifts: [{ t: 500, value: 0.06, fp: 'bbbbbbbb22222222' }], shifts_from: 'boxes' })!;
+		const boxed = parse_visit('/hell', {
+			...visit,
+			shifts: [{ t: 500, value: 0.06, fp: 'bbbbbbbb22222222' }],
+			shifts_from: 'boxes'
+		})!;
 		expect(boxed.shifts_from).toBe('boxes');
-		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: boxed } as never).find((f) => f.code === 'browser-limits')!.message).toContain("layout shifts (a wake that moved the layout is estimated from the island's box)");
+		expect(
+			derive_findings(analyze(p1), meta as never, { ...extras, visit: boxed } as never).find(
+				(f) => f.code === 'browser-limits'
+			)!.message
+		).toContain("layout shifts (a wake that moved the layout is estimated from the island's box)");
 	});
 
 	it('a cross-origin-isolated page in Safari: the first byte hidden, the visit kept, never a 0 ms first byte', () => {
@@ -1852,137 +2144,443 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			longtasks: [],
 			firsts: [],
 			shifts: [],
-			islands: [{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Footer.svelte', t0: 20, loaded: 30, turn: 31, done: 40 }]
+			islands: [
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/Footer.svelte',
+					t0: 20,
+					loaded: 30,
+					turn: 31,
+					done: 40
+				}
+			]
 		})!;
 		expect(hidden).not.toBeNull();
 		expect(hidden.nav).toMatchObject({ start_hidden: true, res_start: 2.2, res_end: 2.2 });
 		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit: hidden } as never);
-		expect(out.find((f) => f.code === 'first-byte-hidden')!.message).toContain("In the browser (Safari 26): The browser gave no time for this page's request and first byte (Safari does that for a cross-origin-isolated page");
+		expect(out.find((f) => f.code === 'first-byte-hidden')!.message).toContain(
+			"In the browser (Safari 26): The browser gave no time for this page's request and first byte (Safari does that for a cross-origin-isolated page"
+		);
 		// no first-byte number from it, anywhere
-		expect(JSON.stringify(report_json(analyze(p1), { ...meta, trigger: 'page' } as never, '/__profiler', { ...extras, visit: hidden } as never))).not.toContain('"ttfb":2.2');
+		expect(
+			JSON.stringify(
+				report_json(analyze(p1), { ...meta, trigger: 'page' } as never, '/__profiler', {
+					...extras,
+					visit: hidden
+				} as never)
+			)
+		).not.toContain('"ttfb":2.2');
 		// a visit with no document timing at all is still not one
-		expect(parse_visit('/', { at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [] })).toBeNull();
+		expect(
+			parse_visit('/', {
+				at: 1,
+				nav: {},
+				paints: {},
+				resources: [],
+				longtasks: [],
+				firsts: [],
+				shifts: [],
+				islands: []
+			})
+		).toBeNull();
 	});
 
 	it('another engine’s visit: what Safari saw that the latest Chrome visit did not, named with the browser', () => {
-		const base = { nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 }, paints: { fcp: 30, lcp: 30 }, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800] };
-		const chrome = parse_visit('/hell', { ...base, at: Date.now(), ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' })!;
+		const base = {
+			nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 },
+			paints: { fcp: 30, lcp: 30 },
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [],
+			viewport: [1280, 800]
+		};
+		const chrome = parse_visit('/hell', {
+			...base,
+			at: Date.now(),
+			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+		})!;
 		const safari = parse_visit('/hell', {
 			...base,
 			at: Date.now() - 60_000,
 			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
-			preload_misses: [{ url: 'http://x/__ogygia__?id=97f7&sig=9d', type: 'fetch', bytes: 574, as: 'fetch', crossorigin: 'anonymous' }]
+			preload_misses: [
+				{
+					url: 'http://x/__ogygia__?id=97f7&sig=9d',
+					type: 'fetch',
+					bytes: 574,
+					as: 'fetch',
+					crossorigin: 'anonymous'
+				}
+			]
 		})!;
-		const out = derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome, other_engine_visit: safari } as never);
+		const out = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, visit: chrome, other_engine_visit: safari } as never
+		);
 		const f = out.find((x) => x.code === 'other-browser')!;
-		expect(f.message.startsWith('In Safari 26 (another visit to this page) the browser saw what this one did not:')).toBe(true);
+		expect(
+			f.message.startsWith(
+				'In Safari 26 (another visit to this page) the browser saw what this one did not:'
+			)
+		).toBe(true);
 		expect(f.message).toContain('__ogygia__ (574 B) was preloaded, then downloaded again');
 		expect(f.fix).toContain('Safari 26 never hands a fetch preload to a later fetch()');
-		expect(derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome } as never).some((x) => x.code === 'other-browser')).toBe(false);
+		expect(
+			derive_findings(analyze(p1), meta as never, { ...extras, visit: chrome } as never).some(
+				(x) => x.code === 'other-browser'
+			)
+		).toBe(false);
 	});
 
 	it('a Safari visit’s hidden other-origin sizes take the report’s own weights, said whose they are', () => {
-		const lib = Array.from({ length: 6 }, (_, i) => ({ url: `https://cdn.lib.test/p-${i}.js`, type: 'script', start: 10 + i, end: 20 + i, transfer: 0, size: 0 }));
+		const lib = Array.from({ length: 6 }, (_, i) => ({
+			url: `https://cdn.lib.test/p-${i}.js`,
+			type: 'script',
+			start: 10 + i,
+			end: 20 + i,
+			transfer: 0,
+			size: 0
+		}));
 		const safari = parse_visit('/hell', {
 			at: Date.now(),
 			origin: 'http://app.test',
 			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15',
 			nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 },
 			paints: { fcp: 30, lcp: 30 },
-			resources: [...lib, { url: 'http://app.test/_app/a.js', type: 'script', start: 5, end: 9, transfer: 0, size: 0 }],
+			resources: [
+				...lib,
+				{ url: 'http://app.test/_app/a.js', type: 'script', start: 5, end: 9, transfer: 0, size: 0 }
+			],
 			longtasks: [],
 			firsts: [],
 			shifts: [],
 			islands: []
 		})!;
 		// the report weighed each library file (12 KB) — and the page's own file, never borrowed
-		const weighed = lib.map((r) => ({ url: r.url, kind: 'script', via: 'static-import', blocking: false, bytes: 12_288, wire: 4000 }));
-		const assets = { assets: [...weighed, { url: 'http://app.test/_app/a.js', kind: 'script', via: 'script', blocking: false, bytes: 999, wire: 500 }], missed: [], html: { bytes: 1, wire: 1 }, inline: { script: 0, style: 0 }, totals: { js: 74_727, js_wire: 24_500, css: 0, css_wire: 0, font: 0, image: 0, wire: 24_501, lazy_js: 0, blocking: 0, blocking_count: 0, js_files: 7 } };
+		const weighed = lib.map((r) => ({
+			url: r.url,
+			kind: 'script',
+			via: 'static-import',
+			blocking: false,
+			bytes: 12_288,
+			wire: 4000
+		}));
+		const assets = {
+			assets: [
+				...weighed,
+				{
+					url: 'http://app.test/_app/a.js',
+					kind: 'script',
+					via: 'script',
+					blocking: false,
+					bytes: 999,
+					wire: 500
+				}
+			],
+			missed: [],
+			html: { bytes: 1, wire: 1 },
+			inline: { script: 0, style: 0 },
+			totals: {
+				js: 74_727,
+				js_wire: 24_500,
+				css: 0,
+				css_wire: 0,
+				font: 0,
+				image: 0,
+				wire: 24_501,
+				lazy_js: 0,
+				blocking: 0,
+				blocking_count: 0,
+				js_files: 7
+			}
+		};
 		const sized = with_hidden_filled(safari, 'http://app.test', assets as never, undefined);
 		expect(sized.resources.filter((r) => r.weighed).length).toBe(6);
 		expect(sized.resources.find((r) => r.url.endsWith('/_app/a.js'))!.size).toBe(0);
 		// Safari says nothing of what held the first paint: the file the HTML makes blocking is marked;
 		// a Chrome visit's own word stands
-		const head = { ...assets, assets: [...assets.assets, { url: 'https://cdn.lib.test/p-0.js', kind: 'script', via: 'script', blocking: true, bytes: 12_288, wire: 4000 }] };
-		expect(with_hidden_filled(safari, 'http://app.test', head as never, undefined).resources.filter((r) => r.blocking).map((r) => r.url)).toEqual(['https://cdn.lib.test/p-0.js']);
+		const head = {
+			...assets,
+			assets: [
+				...assets.assets,
+				{
+					url: 'https://cdn.lib.test/p-0.js',
+					kind: 'script',
+					via: 'script',
+					blocking: true,
+					bytes: 12_288,
+					wire: 4000
+				}
+			]
+		};
+		expect(
+			with_hidden_filled(safari, 'http://app.test', head as never, undefined)
+				.resources.filter((r) => r.blocking)
+				.map((r) => r.url)
+		).toEqual(['https://cdn.lib.test/p-0.js']);
 		// a font Safari downloaded again: the weighing's Vary header rides onto the miss, and the browser
 		// finding names it as the cause
 		const font_url = 'http://app.test/fonts/serif.woff2';
-		const with_font = { ...head, assets: [...head.assets, { url: font_url, kind: 'font', via: 'preload', blocking: false, bytes: 140_000, wire: 140_000, vary: 'Origin' }] };
-		const refetched = { ...safari, preload_misses: [{ url: font_url, type: 'font', bytes: 140_000, as: 'font', crossorigin: 'anonymous' }] };
-		expect(with_hidden_filled(refetched, 'http://app.test', with_font as never, undefined).preload_misses![0].vary).toBe('Origin');
-		const pu = derive_findings(analyze(p1), meta as never, { ...extras, visit: refetched, assets: with_font } as never).find((x) => x.code === 'preload-unused')!;
-		expect(pu.fix).toContain('Its answer says `Vary: Origin`: Safari 26 does not reuse a font preload that varies by Origin');
+		const with_font = {
+			...head,
+			assets: [
+				...head.assets,
+				{
+					url: font_url,
+					kind: 'font',
+					via: 'preload',
+					blocking: false,
+					bytes: 140_000,
+					wire: 140_000,
+					vary: 'Origin'
+				}
+			]
+		};
+		const refetched = {
+			...safari,
+			preload_misses: [
+				{ url: font_url, type: 'font', bytes: 140_000, as: 'font', crossorigin: 'anonymous' }
+			]
+		};
+		expect(
+			with_hidden_filled(refetched, 'http://app.test', with_font as never, undefined)
+				.preload_misses![0].vary
+		).toBe('Origin');
+		const pu = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, visit: refetched, assets: with_font } as never
+		).find((x) => x.code === 'preload-unused')!;
+		expect(pu.fix).toContain(
+			'Its answer says `Vary: Origin`: Safari 26 does not reuse a font preload that varies by Origin'
+		);
 		expect(pu.fix).toContain('answer them without `Vary: Origin`');
-		const chrome_ua = { ...safari, ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' };
-		expect(with_hidden_filled(chrome_ua, 'http://app.test', head as never, undefined).resources.some((r) => r.blocking)).toBe(false);
-		const f = derive_findings(analyze(p1), meta as never, { ...extras, visit: safari, assets } as never).find((x) => x.code === 'third-party')!;
-		expect(f.message).toContain('served 72 KB of JS (this browser hid the size of each; weighed from the files themselves)');
+		const chrome_ua = {
+			...safari,
+			ua: 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+		};
+		expect(
+			with_hidden_filled(chrome_ua, 'http://app.test', head as never, undefined).resources.some(
+				(r) => r.blocking
+			)
+		).toBe(false);
+		const f = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, visit: safari, assets } as never
+		).find((x) => x.code === 'third-party')!;
+		expect(f.message).toContain(
+			'served 72 KB of JS (this browser hid the size of each; weighed from the files themselves)'
+		);
 		// nothing weighed: counted, as the devtools say it
-		const bare = derive_findings(analyze(p1), meta as never, { ...extras, visit: safari, assets: undefined } as never).find((x) => x.code === 'third-party')!;
+		const bare = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, visit: safari, assets: undefined } as never
+		).find((x) => x.code === 'third-party')!;
 		expect(bare.message).toContain('6 scripts, sizes hidden');
 		// a Chrome visit to the same page measured them: its sizes serve
 		const chrome = { ...safari, resources: lib.map((r) => ({ ...r, size: 2048 })) };
-		expect(with_hidden_filled(safari, 'http://app.test', undefined, chrome).resources.filter((r) => r.weighed && r.size === 2048).length).toBe(6);
+		expect(
+			with_hidden_filled(safari, 'http://app.test', undefined, chrome).resources.filter(
+				(r) => r.weighed && r.size === 2048
+			).length
+		).toBe(6);
 	});
 
 	it("the browser's vitals: a latest visit that loaded with the dock open says its paints may be the dock's", () => {
 		const vitals = { n: 1, ttfb: 2, fcp: 28, lcp: 28, cls: null, inp: null };
-		const base = { at: Date.now(), nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 }, resources: [], longtasks: [], firsts: [], shifts: [], islands: [] };
+		const base = {
+			at: Date.now(),
+			nav: { req_start: 1, res_start: 2, res_end: 3, dcl: 20, load: 40 },
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: []
+		};
 		const say = (dock_open_at?: number) =>
-			derive_findings(analyze(p1), meta as never, { ...extras, vitals, visit: parse_visit('/hell', { ...base, paints: { fcp: 28, lcp: 28 }, ...(dock_open_at !== undefined ? { dock_open_at } : {}) })! } as never).find((f) => f.code === 'browser-vitals')?.message ?? '';
-		expect(say(25)).toContain('The latest visit loaded with the devtools dock open, and its paints may be the dock’s');
+			derive_findings(
+				analyze(p1),
+				meta as never,
+				{
+					...extras,
+					vitals,
+					visit: parse_visit('/hell', {
+						...base,
+						paints: { fcp: 28, lcp: 28 },
+						...(dock_open_at !== undefined ? { dock_open_at } : {})
+					})!
+				} as never
+			).find((f) => f.code === 'browser-vitals')?.message ?? '';
+		expect(say(25)).toContain(
+			'The latest visit loaded with the devtools dock open, and its paints may be the dock’s'
+		);
 		expect(say()).not.toContain('dock');
 	});
 
 	it("the process's memory growth: said plainly, and not beside the render measured to keep memory", () => {
-		const mem = [{ t: 0, rss: 400, heap: 200 }, { t: 1000, rss: 494, heap: 290 }];
-		const plain = derive_findings(analyze(p1), meta as never, { ...extras, mem } as never).find((f) => f.code === 'mem-growth')!;
-		expect(plain.message).toBe("The server's memory grew 94 MB while the recording ran. A first recording grows it as caches and the heap reach their working size; one that grows it again each time is keeping something per render.");
+		const mem = [
+			{ t: 0, rss: 400, heap: 200 },
+			{ t: 1000, rss: 494, heap: 290 }
+		];
+		const plain = derive_findings(analyze(p1), meta as never, { ...extras, mem } as never).find(
+			(f) => f.code === 'mem-growth'
+		)!;
+		expect(plain.message).toBe(
+			"The server's memory grew 94 MB while the recording ran. A first recording grows it as caches and the heap reach their working size; one that grows it again each time is keeping something per render."
+		);
 		expect(plain.fix).toMatch(/^Record again/);
-		const retained = { total_bytes: 72 * 1048576, render_ms: 800, sites: [{ name: 'hydrateAppClosure', url: 'file:///w/node_modules/lib/x.js', line: 1, bytes: 54 * 1048576, share: 0.74 }] };
-		expect(derive_findings(analyze(p1), meta as never, { ...extras, mem, retained } as never).some((f) => f.code === 'mem-growth')).toBe(false);
+		const retained = {
+			total_bytes: 72 * 1048576,
+			render_ms: 800,
+			sites: [
+				{
+					name: 'hydrateAppClosure',
+					url: 'file:///w/node_modules/lib/x.js',
+					line: 1,
+					bytes: 54 * 1048576,
+					share: 0.74
+				}
+			]
+		};
+		expect(
+			derive_findings(analyze(p1), meta as never, { ...extras, mem, retained } as never).some(
+				(f) => f.code === 'mem-growth'
+			)
+		).toBe(false);
 	});
 
 	it('one module, two copies, both on this page: named with its files and why; a copy the page never loads is no finding', () => {
-		const asset = (url: string) => ({ url, kind: 'script' as const, blocking: false, via: 'html' as const, bytes: 60_000, wire: 20_000 });
+		const asset = (url: string) => ({
+			url,
+			kind: 'script' as const,
+			blocking: false,
+			via: 'html' as const,
+			bytes: 60_000,
+			wire: 20_000
+		});
 		const assets = {
-			assets: [asset('http://x/_app/immutable/og-runtime.A.js'), asset('http://x/_app/immutable/chunks/I.js')],
+			assets: [
+				asset('http://x/_app/immutable/og-runtime.A.js'),
+				asset('http://x/_app/immutable/chunks/I.js')
+			],
 			missed: [],
 			html: { bytes: 1, wire: 1 },
 			inline: { script: 0, style: 0 },
-			totals: { js: 120_000, js_wire: 40_000, css: 0, css_wire: 0, font: 0, image: 0, wire: 40_000, lazy_js: 0, blocking: 0, blocking_count: 0, js_files: 2 }
+			totals: {
+				js: 120_000,
+				js_wire: 40_000,
+				css: 0,
+				css_wire: 0,
+				font: 0,
+				image: 0,
+				wire: 40_000,
+				lazy_js: 0,
+				blocking: 0,
+				blocking_count: 0,
+				js_files: 2
+			}
 		};
 		const dupes = [
-			{ name: 'ogygia/runtime/beacon', copies: [{ file: '/_app/immutable/og-runtime.A.js', bytes: 50_461, from: 'ogygia/dist' }, { file: '/_app/immutable/chunks/I.js', bytes: 50_468, from: 'ogygia/src' }] },
-			{ name: 'ogygia/ref', copies: [{ file: '/_app/immutable/og-runtime.A.js', bytes: 4_900 }, { file: '/_app/immutable/chunks/Elsewhere.js', bytes: 1_400 }] }
+			{
+				name: 'ogygia/runtime/beacon',
+				copies: [
+					{ file: '/_app/immutable/og-runtime.A.js', bytes: 50_461, from: 'ogygia/dist' },
+					{ file: '/_app/immutable/chunks/I.js', bytes: 50_468, from: 'ogygia/src' }
+				]
+			},
+			{
+				name: 'ogygia/ref',
+				copies: [
+					{ file: '/_app/immutable/og-runtime.A.js', bytes: 4_900 },
+					{ file: '/_app/immutable/chunks/Elsewhere.js', bytes: 1_400 }
+				]
+			}
 		];
-		const f = derive_findings(analyze(p1), meta as never, { ...extras, assets, dupes } as never).find((x) => x.code === 'duplicate-module')!;
+		const f = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, assets, dupes } as never
+		).find((x) => x.code === 'duplicate-module')!;
 		expect(f.severity).toBe('warn');
-		expect(f.message).toContain('Two copies of ogygia/runtime/beacon ship on this page: in og-runtime.A.js (49 KB, from ogygia/dist) and I.js (49 KB, from ogygia/src)');
+		expect(f.message).toContain(
+			'Two copies of ogygia/runtime/beacon ship on this page: in og-runtime.A.js (49 KB, from ogygia/dist) and I.js (49 KB, from ogygia/src)'
+		);
 		expect(f.message).not.toContain('ogygia/ref');
 		expect(f.fix).toContain('`resolve.dedupe`');
-		expect(derive_findings(analyze(p1), meta as never, { ...extras, assets, dupes: [dupes[1]] } as never).some((x) => x.code === 'duplicate-module')).toBe(false);
+		expect(
+			derive_findings(
+				analyze(p1),
+				meta as never,
+				{ ...extras, assets, dupes: [dupes[1]] } as never
+			).some((x) => x.code === 'duplicate-module')
+		).toBe(false);
 	});
 
 	it("promises by the tens of thousands: Svelte's async renderer is named with what it renders most; an app's own is the loop", () => {
 		const a = analyze(p1);
 		const renders = { ...meta, trigger: 'page', runs: [10, 10] } as never;
-		const busy = { ...a, components: [...a.components, { ...a.components[0], name: 'HeavyRow', calls: 800 }, { ...a.components[0], name: 'Fractal', calls: 3280 }] };
-		const svelte = derive_findings(busy as never, renders, { ...extras, promises: { count: 33193, per_render: 16597, top: [{ caller: '#collect_content_async (svelte)', share: 0.99 }, { caller: 'load_page_nodes (@sveltejs/kit)', share: 0.01 }] } } as never).find((f) => f.code === 'promise-storm')!;
-		expect(svelte.message).toContain("16,597 promises per render, 99% of them from Svelte's async server renderer (#collect_content_async): it makes one for each component and block it renders");
-		expect(svelte.message).toContain('The components rendered most: Fractal ×3,280, HeavyRow ×800.');
+		const busy = {
+			...a,
+			components: [
+				...a.components,
+				{ ...a.components[0], name: 'HeavyRow', calls: 800 },
+				{ ...a.components[0], name: 'Fractal', calls: 3280 }
+			]
+		};
+		const svelte = derive_findings(busy as never, renders, {
+			...extras,
+			promises: {
+				count: 33193,
+				per_render: 16597,
+				top: [
+					{ caller: '#collect_content_async (svelte)', share: 0.99 },
+					{ caller: 'load_page_nodes (@sveltejs/kit)', share: 0.01 }
+				]
+			}
+		} as never).find((f) => f.code === 'promise-storm')!;
+		expect(svelte.message).toContain(
+			"16,597 promises per render, 99% of them from Svelte's async server renderer (#collect_content_async): it makes one for each component and block it renders"
+		);
+		expect(svelte.message).toContain(
+			'The components rendered most: Fractal ×3,280, HeavyRow ×800.'
+		);
 		expect(svelte.fix).toMatch(/^Render fewer pieces — Fractal first/);
 		expect(svelte.fix).toContain('experimental.async');
-		const own = derive_findings(a, renders, { ...extras, promises: { count: 40000, per_render: 20000, top: [{ caller: 'fetchRow (src/lib/rows.ts)', share: 0.9 }] } } as never).find((f) => f.code === 'promise-storm')!;
+		const own = derive_findings(a, renders, {
+			...extras,
+			promises: {
+				count: 40000,
+				per_render: 20000,
+				top: [{ caller: 'fetchRow (src/lib/rows.ts)', share: 0.9 }]
+			}
+		} as never).find((f) => f.code === 'promise-storm')!;
 		expect(own.message).toContain('Mostly from: fetchRow (src/lib/rows.ts) 90%');
 		expect(own.fix).toMatch(/^Find the loop that awaits per item/);
 	});
 
 	it('an island that threw its server DOM away and drew the same markup back: its own finding, no line of it blamed', () => {
 		const client = [
-			{ entry: '/src/lib/SameTree.svelte', hydrations: 1, p50_ms: 5, max_ms: 5, load_p50_ms: 2, recovered: 1 },
-			{ entry: '/src/lib/DiffTree.svelte', hydrations: 1, p50_ms: 5, max_ms: 5, load_p50_ms: 2, recovered: 1 }
+			{
+				entry: '/src/lib/SameTree.svelte',
+				hydrations: 1,
+				p50_ms: 5,
+				max_ms: 5,
+				load_p50_ms: 2,
+				recovered: 1
+			},
+			{
+				entry: '/src/lib/DiffTree.svelte',
+				hydrations: 1,
+				p50_ms: 5,
+				max_ms: 5,
+				load_p50_ms: 2,
+				recovered: 1
+			}
 		];
 		const visit = parse_visit('/hell', {
 			at: Date.now(),
@@ -1993,27 +2591,94 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			firsts: [],
 			shifts: [],
 			islands: [
-				{ fp: 'aaaaaaaa11111111', entry: '/src/lib/SameTree.svelte', t0: 100, loaded: 120, done: 130, recovered: true, ssr_bytes: 120 },
-				{ fp: 'bbbbbbbb22222222', entry: '/src/lib/DiffTree.svelte', t0: 100, loaded: 120, done: 130, recovered: true, changed: true, ssr_bytes: 90 }
+				{
+					fp: 'aaaaaaaa11111111',
+					entry: '/src/lib/SameTree.svelte',
+					t0: 100,
+					loaded: 120,
+					done: 130,
+					recovered: true,
+					ssr_bytes: 120
+				},
+				{
+					fp: 'bbbbbbbb22222222',
+					entry: '/src/lib/DiffTree.svelte',
+					t0: 100,
+					loaded: 120,
+					done: 130,
+					recovered: true,
+					changed: true,
+					ssr_bytes: 90
+				}
 			]
 		})!;
-		const hazards = { '/src/lib/SameTree.svelte': [{ file: 'src/lib/SameTree.svelte', line: 4, code: 'const server = typeof window === "undefined";', kind: 'browser' as const, reads: 'typeof window' }], '/src/lib/DiffTree.svelte': [{ file: 'src/lib/DiffTree.svelte', line: 4, code: 'const server = typeof window === "undefined";', kind: 'browser' as const, reads: 'typeof window' }] };
-		const out = derive_findings(analyze(p1), meta as never, { ...extras, client, visit, hazards } as never).filter((f) => f.code === 'hydration-mismatch');
+		const hazards = {
+			'/src/lib/SameTree.svelte': [
+				{
+					file: 'src/lib/SameTree.svelte',
+					line: 4,
+					code: 'const server = typeof window === "undefined";',
+					kind: 'browser' as const,
+					reads: 'typeof window'
+				}
+			],
+			'/src/lib/DiffTree.svelte': [
+				{
+					file: 'src/lib/DiffTree.svelte',
+					line: 4,
+					code: 'const server = typeof window === "undefined";',
+					kind: 'browser' as const,
+					reads: 'typeof window'
+				}
+			]
+		};
+		const out = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...extras, client, visit, hazards } as never
+		).filter((f) => f.code === 'hydration-mismatch');
 		expect(out).toHaveLength(2);
-		expect(out[0].message).toContain('SameTree discarded its server-rendered DOM and re-rendered in the browser (1 time seen) — and drew the same markup it threw away');
+		expect(out[0].message).toContain(
+			'SameTree discarded its server-rendered DOM and re-rendered in the browser (1 time seen) — and drew the same markup it threw away'
+		);
 		expect(out[0].message).not.toContain('SameTree.svelte:4');
 		expect(out[1].message).toContain('DiffTree discarded its server-rendered DOM');
 		expect(out[1].message).toContain('DiffTree.svelte:4');
 	});
 
 	it("a render reading a prerender function's answer over HTTP: its own call, named, not another visitor", () => {
-		const call = { method: 'GET', path: '/_app/remote/ufd0c8/meta/WyIiXQ', route: '/(docs)', status: 200, ms: 0.75, overlap_ms: 0.75, cpu_max_ms: 0.75, kind: 'self' as const, remote: true as const };
+		const call = {
+			method: 'GET',
+			path: '/_app/remote/ufd0c8/meta/WyIiXQ',
+			route: '/(docs)',
+			status: 200,
+			ms: 0.75,
+			overlap_ms: 0.75,
+			cpu_max_ms: 0.75,
+			kind: 'self' as const,
+			remote: true as const
+		};
 		const contention = {
 			requests: [call, { ...call, ms: 0.63, overlap_ms: 0.63, cpu_max_ms: 0.63 }],
-			counts: { self: 2, self_ms: 1.38, self_paths: [call.path], self_remote: 2, other: 0, hole: 0 },
-			overlap_ms: 1.38, cpu_max_ms: 1.38, inflight_at_start: [0, 0], per_window: [], busy_share: 0.11
+			counts: {
+				self: 2,
+				self_ms: 1.38,
+				self_paths: [call.path],
+				self_remote: 2,
+				other: 0,
+				hole: 0
+			},
+			overlap_ms: 1.38,
+			cpu_max_ms: 1.38,
+			inflight_at_start: [0, 0],
+			per_window: [],
+			busy_share: 0.11
 		};
-		const out = derive_findings(analyze(p1), { ...meta, trigger: 'page', runs: [6.7, 5.9] } as never, { ...extras, contention } as never);
+		const out = derive_findings(
+			analyze(p1),
+			{ ...meta, trigger: 'page', runs: [6.7, 5.9] } as never,
+			{ ...extras, contention } as never
+		);
 		expect(out.some((f) => f.code === 'busy-instance')).toBe(false);
 		const f = out.find((x) => x.code === 'self-fetch')!;
 		expect(f.message).toContain("a `prerender` remote function's answer (meta) over HTTP 1 time");
@@ -2022,13 +2687,42 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 		expect(remote_function_name('/api/items')).toBe('/api/items');
 	});
 
-	it("the Islands table: an island reading a browser-only value while rendering is told so, by its line", () => {
-		const hazards = { 'src/lib/CountryPanel.svelte': [{ file: 'src/lib/CountryPanel.svelte', line: 4, code: 'const here = navigator.language;', kind: 'browser' as const, reads: 'navigator.language' }] };
-		const row = island_rows(analyze(p1), meta as never, { net: [], mem: [], hazards } as never).find((r) => r.name === 'CountryPanel')!;
-		expect(row.advice).toBe('Its own code reads navigator.language while rendering (CountryPanel.svelte:4): the browser draws it differently, so its markup changes as it wakes. Read it after the wake ($effect, onMount), or pass it in as a prop.');
+	it('the Islands table: an island reading a browser-only value while rendering is told so, by its line', () => {
+		const hazards = {
+			'src/lib/CountryPanel.svelte': [
+				{
+					file: 'src/lib/CountryPanel.svelte',
+					line: 4,
+					code: 'const here = navigator.language;',
+					kind: 'browser' as const,
+					reads: 'navigator.language'
+				}
+			]
+		};
+		const row = island_rows(
+			analyze(p1),
+			meta as never,
+			{ net: [], mem: [], hazards } as never
+		).find((r) => r.name === 'CountryPanel')!;
+		expect(row.advice).toBe(
+			'Its own code reads navigator.language while rendering (CountryPanel.svelte:4): the browser draws it differently, so its markup changes as it wakes. Read it after the wake ($effect, onMount), or pass it in as a prop.'
+		);
 		// a guard around browser-only work is no prediction: the island's other advice stands
-		const guarded = { 'src/lib/CountryPanel.svelte': [{ ...hazards['src/lib/CountryPanel.svelte'][0], code: "if (typeof window !== 'undefined') {", reads: 'typeof window', guard: true as const }] };
-		expect(island_rows(analyze(p1), meta as never, { net: [], mem: [], hazards: guarded } as never).find((r) => r.name === 'CountryPanel')!.advice).not.toContain('while rendering');
+		const guarded = {
+			'src/lib/CountryPanel.svelte': [
+				{
+					...hazards['src/lib/CountryPanel.svelte'][0],
+					code: "if (typeof window !== 'undefined') {",
+					reads: 'typeof window',
+					guard: true as const
+				}
+			]
+		};
+		expect(
+			island_rows(analyze(p1), meta as never, { net: [], mem: [], hazards: guarded } as never).find(
+				(r) => r.name === 'CountryPanel'
+			)!.advice
+		).not.toContain('while rendering');
 	});
 
 	it('never-hydrated: the beacon reported other islands but not this one', () => {
@@ -2041,21 +2735,79 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			"CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported waking, while 1 other island did. No visit said where they sit on the page, so whether a visitor ever scrolled them into view is unknown: a visit from a browser carrying the profiler's key tells."
 		);
 		// a visit that placed them on its first screen: silent there is the failure
-		const on_screen = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800], regions: [{ fp: 'bbbbbbbbbbbbbbbb', entry: './_app/immutable/og-region.0123456789ab.js', wake: 'visible', top: 100, height: 300 }] };
-		const warned = derive_findings(analyze(p1), meta as never, { ...(extras as object), visit: on_screen } as never).find((x) => x.code === 'never-hydrated')!;
+		const on_screen = {
+			page: '/',
+			at: 1,
+			nav: {},
+			paints: {},
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [],
+			viewport: [1280, 800],
+			regions: [
+				{
+					fp: 'bbbbbbbbbbbbbbbb',
+					entry: './_app/immutable/og-region.0123456789ab.js',
+					wake: 'visible',
+					top: 100,
+					height: 300
+				}
+			]
+		};
+		const warned = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...(extras as object), visit: on_screen } as never
+		).find((x) => x.code === 'never-hydrated')!;
 		expect(warned.severity).toBe('warn');
-		expect(warned.message).toBe('CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.');
+		expect(warned.message).toBe(
+			'CountryPanel (wake: visible), ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.'
+		);
 		expect(warned.fix).toMatch(/can scroll/);
 		// …and below it, known by its fingerprint alone (a build's region names its built file, the row its source)
 		const below_fp = { ...on_screen, regions: [{ ...on_screen.regions[0], top: 2400 }] };
-		expect(derive_findings(analyze(p1), meta as never, { ...(extras as object), visit: below_fp } as never).find((x) => x.code === 'never-hydrated')!.message).toBe(
+		expect(
+			derive_findings(
+				analyze(p1),
+				meta as never,
+				{ ...(extras as object), visit: below_fp } as never
+			).find((x) => x.code === 'never-hydrated')!.message
+		).toBe(
 			'ProductCard (48 copies, wake: visible) never reported hydrating in your visits, while 1 other island did.'
 		);
 		// a `visible` island below the visit's first screen waited for a scroll that never came: not silent
 		// for a reason (the visit's region: its entry as the page writes it, `./…`)
-		const visit = { page: '/', at: 1, nav: {}, paints: {}, resources: [], longtasks: [], firsts: [], shifts: [], islands: [], viewport: [1280, 800], regions: [{ fp: 'cccccccccccccc00', entry: './_app/immutable/og-region.4b95bfb97fab.js', wake: 'visible', top: 2400, height: 300 }] };
-		const scrolled = derive_findings(analyze(p1), meta as never, { ...(extras as object), visit } as never).find((x) => x.code === 'never-hydrated')!;
-		expect(scrolled.message).toBe('CountryPanel (wake: visible) never reported hydrating in your visits, while 1 other island did.');
+		const visit = {
+			page: '/',
+			at: 1,
+			nav: {},
+			paints: {},
+			resources: [],
+			longtasks: [],
+			firsts: [],
+			shifts: [],
+			islands: [],
+			viewport: [1280, 800],
+			regions: [
+				{
+					fp: 'cccccccccccccc00',
+					entry: './_app/immutable/og-region.4b95bfb97fab.js',
+					wake: 'visible',
+					top: 2400,
+					height: 300
+				}
+			]
+		};
+		const scrolled = derive_findings(
+			analyze(p1),
+			meta as never,
+			{ ...(extras as object), visit } as never
+		).find((x) => x.code === 'never-hydrated')!;
+		expect(scrolled.message).toBe(
+			'CountryPanel (wake: visible) never reported hydrating in your visits, while 1 other island did.'
+		);
 		// no beacon at all: nothing to say
 		expect(
 			derive_findings(analyze(p1), meta as never, { net: [], mem: [], weights } as never).find(
@@ -2514,7 +3266,9 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 					} as never,
 					resolve: async () => new Response('no')
 				}).then((r) => r.headers.getSetCookie());
-			expect(await next(`og_profiler=${token}`)).toEqual([expect.stringMatching(/^og_profiler_beacon=1; Path=\/;/)]);
+			expect(await next(`og_profiler=${token}`)).toEqual([
+				expect.stringMatching(/^og_profiler_beacon=1; Path=\/;/)
+			]);
 			// flag and session both there: nothing to set
 			expect(await next(`og_profiler=${token}; og_profiler_beacon=1`)).toEqual([]);
 			const logout = await handle({
@@ -2526,7 +3280,9 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			expect(cleared[0].startsWith('og_profiler=;') && cleared[0].includes('Max-Age=0')).toBe(true);
 			const flag_off = await next('og_profiler_beacon=1', '/__profiler/login');
 			expect(flag_off).toHaveLength(1);
-			expect(flag_off[0].startsWith('og_profiler_beacon=;') && flag_off[0].includes('Max-Age=0')).toBe(true);
+			expect(
+				flag_off[0].startsWith('og_profiler_beacon=;') && flag_off[0].includes('Max-Age=0')
+			).toBe(true);
 		} finally {
 			dev_switch.dev = true;
 		}
@@ -2650,24 +3406,77 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 	});
 
 	it('fp-unstable: an island whose fingerprint moved between the profile’s own renders, its prop named; ogygia’s own ids never', () => {
-		const prof: CpuProfile = { startTime: 0, endTime: 10_000, nodes: [{ id: 1, callFrame: frame('(root)') }], samples: [1], timeDeltas: [10_000] };
-		const og = (rows: object[]) => ({ transform_ms: 1, islands: rows.length, hints: 0, holes: 0, seed_bytes: 0, remote_seed_bytes: 0, tail_bytes: 100, fnm_bytes: 0, ctx_bytes: 0, seed_json: true, island_rows: rows });
-		const row = (fp: string, entry: string, name: string, canonical: string) => ({ fp, entry, name, module_url: entry, wake: 'load', props_bytes: 10, canonical_bytes: canonical.length, canonical, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], interactivity: null, count: 1 });
+		const prof: CpuProfile = {
+			startTime: 0,
+			endTime: 10_000,
+			nodes: [{ id: 1, callFrame: frame('(root)') }],
+			samples: [1],
+			timeDeltas: [10_000]
+		};
+		const og = (rows: object[]) => ({
+			transform_ms: 1,
+			islands: rows.length,
+			hints: 0,
+			holes: 0,
+			seed_bytes: 0,
+			remote_seed_bytes: 0,
+			tail_bytes: 100,
+			fnm_bytes: 0,
+			ctx_bytes: 0,
+			seed_json: true,
+			island_rows: rows
+		});
+		const row = (fp: string, entry: string, name: string, canonical: string) => ({
+			fp,
+			entry,
+			name,
+			module_url: entry,
+			wake: 'load',
+			props_bytes: 10,
+			canonical_bytes: canonical.length,
+			canonical,
+			json: true,
+			culprit: null,
+			refs: 0,
+			ref_keys: [],
+			hints: [],
+			interactivity: null,
+			count: 1
+		});
 		const meta = (a: object[], b: object[]) => ({
-			id: 'x', created: 0, trigger: 'page' as const, page: '/p', runs: [10, 10], run_status: 200, run_bytes: 900, duration_ms: 20, node: 'v',
-			requests: [{ internal: true, og: og(a) }, { internal: true, og: og(b) }]
+			id: 'x',
+			created: 0,
+			trigger: 'page' as const,
+			page: '/p',
+			runs: [10, 10],
+			run_status: 200,
+			run_bytes: 900,
+			duration_ms: 20,
+			node: 'v',
+			requests: [
+				{ internal: true, og: og(a) },
+				{ internal: true, og: og(b) }
+			]
 		});
 		const steady = row('s1', '/Steady.js', 'Steady', '{"label":"x"}');
 		const f = derive_findings(
 			analyze(prof),
-			meta([row('a1', '/Stamped.js', 'Stamped', '{"stamp":1}'), steady], [row('a2', '/Stamped.js', 'Stamped', '{"stamp":2}'), steady]) as never,
+			meta(
+				[row('a1', '/Stamped.js', 'Stamped', '{"stamp":1}'), steady],
+				[row('a2', '/Stamped.js', 'Stamped', '{"stamp":2}'), steady]
+			) as never,
 			{ net: [], mem: [] } as never
 		).find((x) => x.code === 'fp-unstable');
-		expect(f?.message).toBe("Stamped rendered with a different fingerprint on the profiler's renders of the same page: its prop `stamp` was 1, then 2. If the page's data did not change between them, that value is made fresh on every render.");
+		expect(f?.message).toBe(
+			"Stamped rendered with a different fingerprint on the profiler's renders of the same page: its prop `stamp` was 1, then 2. If the page's data did not change between them, that value is made fresh on every render."
+		);
 		// only ogygia's own ids differ (a store's, random per render on purpose): quiet
 		const ids = derive_findings(
 			analyze(prof),
-			meta([row('c1', '/Cart.js', 'Cart', '[{"n":1},"8abbcc0c-8898-4cb0-b37d-30c8d0c5d149"]')], [row('c2', '/Cart.js', 'Cart', '[{"n":1},"bfa88d49-b4a9-4469-baad-ffe787a5fa4d"]')]) as never,
+			meta(
+				[row('c1', '/Cart.js', 'Cart', '[{"n":1},"8abbcc0c-8898-4cb0-b37d-30c8d0c5d149"]')],
+				[row('c2', '/Cart.js', 'Cart', '[{"n":1},"bfa88d49-b4a9-4469-baad-ffe787a5fa4d"]')]
+			) as never,
 			{ net: [], mem: [] } as never
 		);
 		expect(ids.some((x) => x.code === 'fp-unstable')).toBe(false);
@@ -2681,10 +3490,25 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2, 5] },
 				{ id: 2, callFrame: frame('add_node', kit, 80), children: [3] },
-				{ id: 3, callFrame: frame('uneval', '/app/node_modules/devalue/src/uneval.js', 1), children: [4] },
-				{ id: 4, callFrame: frame('stringify_string', '/app/node_modules/devalue/src/utils.js', 87) },
+				{
+					id: 3,
+					callFrame: frame('uneval', '/app/node_modules/devalue/src/uneval.js', 1),
+					children: [4]
+				},
+				{
+					id: 4,
+					callFrame: frame('stringify_string', '/app/node_modules/devalue/src/utils.js', 87)
+				},
 				// ogygia's own: the props on their way to the browser (devalue stringify, not under Kit)
-				{ id: 5, callFrame: frame('plan_props_wire', '/app/node_modules/ogygia/dist/server/props-wire.js', 10), children: [6] },
+				{
+					id: 5,
+					callFrame: frame(
+						'plan_props_wire',
+						'/app/node_modules/ogygia/dist/server/props-wire.js',
+						10
+					),
+					children: [6]
+				},
 				{ id: 6, callFrame: frame('stringify', '/app/node_modules/devalue/src/stringify.js', 1) }
 			],
 			samples: [3, 3, 4, 4, 4, 6],
@@ -2701,13 +3525,31 @@ describe('the ogygia / svelte / kit round: islands, seed, holes, lanes, markup v
 			duration_ms: 60,
 			node: 'v',
 			// the profiled render went through ogygia's csr=false path (its stats are on it)
-			requests: [{ internal: true, og: { transform_ms: 1, islands: 1, hints: 0, holes: 0, seed_bytes: 0, remote_seed_bytes: 0, tail_bytes: 100, fnm_bytes: 0, ctx_bytes: 0, seed_json: true } }]
+			requests: [
+				{
+					internal: true,
+					og: {
+						transform_ms: 1,
+						islands: 1,
+						hints: 0,
+						holes: 0,
+						seed_bytes: 0,
+						remote_seed_bytes: 0,
+						tail_bytes: 100,
+						fnm_bytes: 0,
+						ctx_bytes: 0,
+						seed_json: true
+					}
+				}
+			]
 		};
 		const a = analyze(prof);
 		const f = derive_findings(a, m as never, { net: [], mem: [] } as never);
 		const u = f.find((x) => x.code === 'kit-uneval')!;
 		// uneval 20 + stringify_string 30 under add_node: Kit's 50 ms; stringify 10 under ogygia: not Kit's
-		expect(u.message).toBe("Kit serialized this page's server load data: 50.0 ms per render (devalue.uneval). On a csr=false page nothing reads that copy — Kit builds it on every request and drops it.");
+		expect(u.message).toBe(
+			"Kit serialized this page's server load data: 50.0 ms per render (devalue.uneval). On a csr=false page nothing reads that copy — Kit builds it on every request and drops it."
+		);
 		expect(u.fix).toMatch(/^Only less load data helps/);
 		// the serialization finding counts only the rest (10 ms of 60: over the 10% bar)
 		const s = f.find((x) => x.code === 'serialization');
@@ -3084,13 +3926,25 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 			files: rows
 		});
 		// the cold render made no outbound call: the waiting is not the network, and the advice is the modules'
-		const none = derive_findings(a, meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 700, calls: 0 } }) as never, { net: [], mem: [] } as never).find((x) => x.code === 'cold-start')!;
-		expect(none.message).toContain('ms more waiting with no outbound call in that render: not the network');
+		const none = derive_findings(
+			a,
+			meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 700, calls: 0 } }) as never,
+			{ net: [], mem: [] } as never
+		).find((x) => x.code === 'cold-start')!;
+		expect(none.message).toContain(
+			'ms more waiting with no outbound call in that render: not the network'
+		);
 		expect(none.message).not.toContain('DNS');
 		expect(none.fix).toContain('Fewer and smaller server modules');
 		// calls made: the connections, counted
-		const some = derive_findings(a, meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 700, calls: 3 } }) as never, { net: [], mem: [] } as never).find((x) => x.code === 'cold-start')!;
-		expect(some.message).toContain('its 3 outbound calls opened new connections: DNS, TLS, empty pools');
+		const some = derive_findings(
+			a,
+			meta_page({ runs: [40, 42, 41], cold: { ...cold, ms: 700, calls: 3 } }) as never,
+			{ net: [], mem: [] } as never
+		).find((x) => x.code === 'cold-start')!;
+		expect(some.message).toContain(
+			'its 3 outbound calls opened new connections: DNS, TLS, empty pools'
+		);
 		expect(some.fix).toContain('reuse one HTTP agent');
 		// a warm-up no slower than the runs: no warning (a note at most)
 		const g = derive_findings(
@@ -3124,50 +3978,157 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		// (no visit to split it: the general words)
 		expect(lcp.message).toContain('assets, fonts, hydration.');
 		// the report's own visit splits it: the largest paint's download was most of the wait
-		const split = derive_findings(analyze(p), meta_page() as never, {
-			net: [],
-			mem: [],
-			vitals: { n: 2, ttfb: 120, fcp: 400, lcp: 2600, cls: 0.02, inp: null },
-			visit: {
-				at: 1,
-				nav: { res_start: 120 },
-				paints: { fcp: 400, lcp: 2600, lcp_url: 'https://a.test/img/hero.jpg?w=1' },
-				resources: [{ url: 'https://a.test/img/hero.jpg?w=1', type: 'img', start: 300, req_start: 310, end: 2500 }],
-				longtasks: [],
-				islands: [],
-				firsts: [],
-				shifts: []
-			}
-		} as never).find((f) => f.code === 'lcp-gap')!;
-		expect(split.message).toContain('most of it (2190 ms) downloading the largest paint, hero.jpg.');
+		const split = derive_findings(
+			analyze(p),
+			meta_page() as never,
+			{
+				net: [],
+				mem: [],
+				vitals: { n: 2, ttfb: 120, fcp: 400, lcp: 2600, cls: 0.02, inp: null },
+				visit: {
+					at: 1,
+					nav: { res_start: 120 },
+					paints: { fcp: 400, lcp: 2600, lcp_url: 'https://a.test/img/hero.jpg?w=1' },
+					resources: [
+						{
+							url: 'https://a.test/img/hero.jpg?w=1',
+							type: 'img',
+							start: 300,
+							req_start: 310,
+							end: 2500
+						}
+					],
+					longtasks: [],
+					islands: [],
+					firsts: [],
+					shifts: []
+				}
+			} as never
+		).find((f) => f.code === 'lcp-gap')!;
+		expect(split.message).toContain(
+			'most of it (2190 ms) downloading the largest paint, hero.jpg.'
+		);
 		// A PAGE OF MANY ELEMENTS from the HTML (no visit measured it); a visit's count leads instead
-		const strip = { total: 1, segments: [], by_kind: {}, shadow_bytes: 0, shadow_count: 0, elements: { total: 3634, islands: [{ fp: 'ffff000011112222', n: 3601 }] } };
+		const strip = {
+			total: 1,
+			segments: [],
+			by_kind: {},
+			shadow_bytes: 0,
+			shadow_count: 0,
+			elements: { total: 3634, islands: [{ fp: 'ffff000011112222', n: 3601 }] }
+		};
 		const og_meta = meta_page({
 			requests: [
-				{ ts: 0, internal: true, method: 'GET', path: '/p', route: '/p', status: 200, ms: 40, cpu_ms: 10, inflight: 0, net_ms: 0, net_count: 0, og: { transform_ms: 0.1, islands: 1, seed_bytes: 0, tail_bytes: 0, island_rows: [{ fp: 'ffff000011112222', entry: 'src/lib/DenseList.svelte', name: 'DenseList', module_url: '/_app/d.js', wake: 'load', props_bytes: 10, canonical_bytes: 10, json: true, culprit: null, refs: 0, ref_keys: [], hints: [], count: 1 }] } }
+				{
+					ts: 0,
+					internal: true,
+					method: 'GET',
+					path: '/p',
+					route: '/p',
+					status: 200,
+					ms: 40,
+					cpu_ms: 10,
+					inflight: 0,
+					net_ms: 0,
+					net_count: 0,
+					og: {
+						transform_ms: 0.1,
+						islands: 1,
+						seed_bytes: 0,
+						tail_bytes: 0,
+						island_rows: [
+							{
+								fp: 'ffff000011112222',
+								entry: 'src/lib/DenseList.svelte',
+								name: 'DenseList',
+								module_url: '/_app/d.js',
+								wake: 'load',
+								props_bytes: 10,
+								canonical_bytes: 10,
+								json: true,
+								culprit: null,
+								refs: 0,
+								ref_keys: [],
+								hints: [],
+								count: 1
+							}
+						]
+					}
+				}
 			]
 		});
-		const html_dom = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip } as never).find((f) => f.code === 'dom-large');
+		const html_dom = derive_findings(
+			analyze(p),
+			og_meta as never,
+			{ net: [], mem: [], strip } as never
+		).find((f) => f.code === 'dom-large');
 		expect(html_dom?.message).toBe(
 			'The HTML makes 3,634 elements, 3,601 of them inside DenseList: an island hydrates over every element of its own, so it pays for all of them as it wakes.'
 		);
-		const both = derive_findings(analyze(p), og_meta as never, {
-			net: [],
-			mem: [],
-			strip,
-			visit: { at: 1, nav: { res_start: 5 }, paints: {}, resources: [], longtasks: [], islands: [], firsts: [], shifts: [], dom: { nodes: 3640, depth: 7, deepest: 'b', widest: { at: 'ul.dense', children: 1200 }, islands: [] } }
-		} as never).filter((f) => f.code === 'dom-large');
+		const both = derive_findings(
+			analyze(p),
+			og_meta as never,
+			{
+				net: [],
+				mem: [],
+				strip,
+				visit: {
+					at: 1,
+					nav: { res_start: 5 },
+					paints: {},
+					resources: [],
+					longtasks: [],
+					islands: [],
+					firsts: [],
+					shifts: [],
+					dom: {
+						nodes: 3640,
+						depth: 7,
+						deepest: 'b',
+						widest: { at: 'ul.dense', children: 1200 },
+						islands: []
+					}
+				}
+			} as never
+		).filter((f) => f.code === 'dom-large');
 		expect(both.map((f) => f.message.slice(0, 30))).toEqual(['In the browser: The page has 3']);
 		// A PAGE ANSWERED no-store: kept out of the back/forward cache (the header the render answered)
-		const nostore = derive_findings(analyze(p), { ...og_meta, run_cache_control: 'private, no-store' } as never, { net: [], mem: [] } as never).find((f) => f.code === 'bfcache-no-store');
-		expect(nostore?.message).toContain('The page answers with Cache-Control: private, no-store: the browser keeps no page marked no-store in its back/forward cache');
-		expect(derive_findings(analyze(p), { ...og_meta, run_cache_control: 'private, no-cache' } as never, { net: [], mem: [] } as never).some((f) => f.code === 'bfcache-no-store')).toBe(false);
+		const nostore = derive_findings(
+			analyze(p),
+			{ ...og_meta, run_cache_control: 'private, no-store' } as never,
+			{ net: [], mem: [] } as never
+		).find((f) => f.code === 'bfcache-no-store');
+		expect(nostore?.message).toContain(
+			'The page answers with Cache-Control: private, no-store: the browser keeps no page marked no-store in its back/forward cache'
+		);
+		expect(
+			derive_findings(
+				analyze(p),
+				{ ...og_meta, run_cache_control: 'private, no-cache' } as never,
+				{ net: [], mem: [] } as never
+			).some((f) => f.code === 'bfcache-no-store')
+		).toBe(false);
 		// AN IMAGE WITH NO SIZE: a note, and a warning once a visit measured the page moving
 		const unsized = { ...strip, unsized_images: ['/dt-lcp/hero.svg?quick'] };
-		const note = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip: unsized } as never).find((f) => f.code === 'img-unsized');
+		const note = derive_findings(
+			analyze(p),
+			og_meta as never,
+			{ net: [], mem: [], strip: unsized } as never
+		).find((f) => f.code === 'img-unsized');
 		expect(note?.severity).toBe('info');
-		expect(note?.message).toBe('An image in the HTML (hero.svg) has no width and height: the browser cannot hold their room before the file arrives, so what is below moves when it does (unless CSS gives them a size).');
-		const moved = derive_findings(analyze(p), og_meta as never, { net: [], mem: [], strip: unsized, vitals: { n: 1, ttfb: 10, fcp: 20, lcp: 30, cls: 0.26, inp: null } } as never).find((f) => f.code === 'img-unsized');
+		expect(note?.message).toBe(
+			'An image in the HTML (hero.svg) has no width and height: the browser cannot hold their room before the file arrives, so what is below moves when it does (unless CSS gives them a size).'
+		);
+		const moved = derive_findings(
+			analyze(p),
+			og_meta as never,
+			{
+				net: [],
+				mem: [],
+				strip: unsized,
+				vitals: { n: 1, ttfb: 10, fcp: 20, lcp: 30, cls: 0.26, inp: null }
+			} as never
+		).find((f) => f.code === 'img-unsized');
 		expect(moved?.severity).toBe('warn');
 		expect(moved?.message).toContain('the browser measured the page moving (CLS 0.26)');
 		expect(split.fix).toContain('make it smaller');
@@ -3335,9 +4296,11 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		});
 		// let the window close and the report finish
 		await new Promise((r) => setTimeout(r, 700));
-		const dash = await (
+		const html = await (
 			await handle({ event: make_event('/__profiler'), resolve: async () => new Response('no') })
 		).text();
+		// the text as shown: HTML collapses whitespace, so a line break in the markup is a space
+		const dash = html.replace(/\s+/g, ' ');
 		expect(dash).toContain('Catch the slow one');
 		expect(dash).toContain('Caught 1 of 1');
 		expect(dash).toMatch(/caught \/slow\/one \(\d+ ms\)/);
@@ -3379,7 +4342,9 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		await old({ event: make_event('/arm'), resolve: async () => new Response('ok') });
 		profiler({ secret: 'prof-key' }); // the newer one (no sampler of its own)
 		await new Promise((r) => setTimeout(r, 2600)); // past two of the old one's cycles
-		const dash = await (await old({ event: make_event('/__profiler'), resolve: async () => new Response('no') })).text();
+		const dash = await (
+			await old({ event: make_event('/__profiler'), resolve: async () => new Response('no') })
+		).text();
 		// its first cycle found itself superseded: no window was ever taken
 		expect(dash).not.toMatch(/[1-9]\d* windows? so far/);
 	}, 15_000);
@@ -3528,7 +4493,11 @@ describe('paths to fix: hot functions grouped by the caller they share', () => {
 		expect(f.anchor).toMatch(/^fn:buildTree /);
 		// the same share of a render whose group is only a millisecond: a note, not a warning
 		const tiny = { ...a, busy_ms: 1.4, paths: a.paths.map((x) => ({ ...x, ms: 1 })) };
-		expect(derive_findings(tiny as never, meta as never, { net: [], mem: [] } as never).find((x) => x.code === 'path-group')?.severity).toBe('info');
+		expect(
+			derive_findings(tiny as never, meta as never, { net: [], mem: [] } as never).find(
+				(x) => x.code === 'path-group'
+			)?.severity
+		).toBe('info');
 		const j = report_json(a, meta as never, '/p', { net: [], mem: [] } as never);
 		expect(j.paths[0]).toMatchObject({
 			owner: { name: 'buildTree', line: 11 },
@@ -4848,13 +5817,20 @@ describe('compare + history', () => {
 		// what the recording's conditions say (a cold start, a heap earlier requests filled) is never
 		// "new" or "fixed": the same code profiled twice has it once and not the next time
 		const cold = compare_reports(
-			{ ...one('a'), findings: ['cold-start: The first render paid 40 ms…', 'n-plus-one: 12 calls…'] },
+			{
+				...one('a'),
+				findings: ['cold-start: The first render paid 40 ms…', 'n-plus-one: 12 calls…']
+			},
 			{ ...one('b'), findings: ['heap-filled-before: This profile started with 600 MB…'] }
 		);
 		expect(cold.findings).toEqual({ added: [], gone: ['n-plus-one: 12 calls…'] });
 		// a warning whose number sat by its cut in both (the loop's p99 48 → 53 ms) is one stall, not a
 		// new one; from 20 to 120 ms it is
-		const at = (id: string, p99: number, findings: string[]) => ({ ...one(id), meta: { ...(one(id).meta as object), loop_delay: { p99 } } as never, findings });
+		const at = (id: string, p99: number, findings: string[]) => ({
+			...one(id),
+			meta: { ...(one(id).meta as object), loop_delay: { p99 } } as never,
+			findings
+		});
 		const stall = 'loop-stall: The event loop stalled up to 53 ms (p99)';
 		expect(compare_reports(at('a', 48, []), at('b', 53, [stall])).findings.added).toEqual([]);
 		expect(compare_reports(at('a', 20, []), at('b', 120, [stall])).findings.added).toEqual([stall]);
@@ -5162,7 +6138,9 @@ describe('profiler handle', () => {
 		expect(doc_html).toContain('<meta name="ogygia-profiler-beacon" content="/__profiler/beacon">');
 		// …with the standalone beacon (for a page that never boots the ogygia runtime), before </head>
 		expect(doc_html).toContain('<script data-ogygia-beacon>');
-		expect(doc_html.indexOf('<script data-ogygia-beacon>')).toBeLessThan(doc_html.indexOf('</head>'));
+		expect(doc_html.indexOf('<script data-ogygia-beacon>')).toBeLessThan(
+			doc_html.indexOf('</head>')
+		);
 		const sub = await handle({
 			event: make_event('/some/data', { 'sec-fetch-dest': 'empty' }),
 			resolve: async (_e, opts) => new Response(String(opts?.transformPageChunk === undefined))
@@ -5251,7 +6229,9 @@ describe('profiler handle', () => {
 		);
 		expect(
 			json.findings.find((f: { code: string }) => f.code === 'client-hydrate').message
-		).toContain('The slowest, Widget, took 50.0 ms from wake to hydrated at the median, mostly loading its 31.0 ms of modules');
+		).toContain(
+			'The slowest, Widget, took 50.0 ms from wake to hydrated at the median, mostly loading its 31.0 ms of modules'
+		);
 	});
 
 	it('serializes recordings: a second profile while one is running renders un-profiled', async () => {
@@ -5947,7 +6927,8 @@ describe('paths: the owner is a named place', () => {
 describe('route_prerendered: the nearest `export const prerender` decides', () => {
 	const files: Record<string, string> = {
 		'routes/+layout.ts': 'export const prerender = false;',
-		'routes/docs/[...slug]/+page.server.ts': "import x from 'y';\nexport const prerender = true;\nexport const load = x;",
+		'routes/docs/[...slug]/+page.server.ts':
+			"import x from 'y';\nexport const prerender = true;\nexport const load = x;",
 		'routes/blog/+layout.ts': "export const prerender = 'auto';",
 		'routes/blog/[slug]/+page.ts': 'export const load = () => ({});',
 		'routes/app/+page.server.ts': 'export const load = () => ({});'
@@ -5962,10 +6943,27 @@ describe('route_prerendered: the nearest `export const prerender` decides', () =
 });
 
 describe('inline_threshold_tune: the inlineStyleThreshold that takes the small sheets off the paint', () => {
-	const sheet = (name: string, kb: number) => ({ url: `http://x/_app/immutable/assets/${name}.css`, kind: 'style', bytes: Math.round(kb * 1024) });
+	const sheet = (name: string, kb: number) => ({
+		url: `http://x/_app/immutable/assets/${name}.css`,
+		kind: 'style',
+		bytes: Math.round(kb * 1024)
+	});
 	it('the smallest build sheets first, each 8 KB or less, 24 KB in all; just over the largest, in whole KB', () => {
-		const blocking = [sheet('big', 17), sheet('route', 9), sheet('shell', 7), sheet('demo', 3), sheet('chrome', 2.5), sheet('header', 2), { url: 'https://cdn.example/x.css', kind: 'style', bytes: 1000 }, { url: 'http://x/legacy.js', kind: 'script', bytes: 900 }];
-		expect(inline_threshold_tune(blocking)).toEqual({ threshold: 8192, files: 4, bytes: Math.round(7 * 1024) + Math.round(3 * 1024) + Math.round(2.5 * 1024) + 2048 });
+		const blocking = [
+			sheet('big', 17),
+			sheet('route', 9),
+			sheet('shell', 7),
+			sheet('demo', 3),
+			sheet('chrome', 2.5),
+			sheet('header', 2),
+			{ url: 'https://cdn.example/x.css', kind: 'style', bytes: 1000 },
+			{ url: 'http://x/legacy.js', kind: 'script', bytes: 900 }
+		];
+		expect(inline_threshold_tune(blocking)).toEqual({
+			threshold: 8192,
+			files: 4,
+			bytes: Math.round(7 * 1024) + Math.round(3 * 1024) + Math.round(2.5 * 1024) + 2048
+		});
 	});
 	it('one small sheet, or none: nothing to tune', () => {
 		expect(inline_threshold_tune([sheet('big', 17), sheet('one', 2)])).toBeNull();
@@ -5974,13 +6972,30 @@ describe('inline_threshold_tune: the inlineStyleThreshold that takes the small s
 });
 
 describe('lake_saving: what making islands lakes saves', () => {
-	const row = (entry: string, files: string[], wake = 'load') => ({ entry, module_url: files[0], hints: files.slice(1), wake }) as never;
+	const row = (entry: string, files: string[], wake = 'load') =>
+		({ entry, module_url: files[0], hints: files.slice(1), wake }) as never;
 	const w = { '/a.js': 10, '/b.js': 20, '/rt.js': 100, '/c.js': 5 };
 	it('each chunk once; a chunk an awake island loads stays', () => {
 		// two inert islands share the runtime with each other, and with the awake one
-		expect(lake_saving([row('A', ['/a.js', '/rt.js']), row('B', ['/b.js', '/rt.js'])], [row('A', ['/a.js', '/rt.js']), row('B', ['/b.js', '/rt.js']), row('C', ['/c.js', '/rt.js'])], w)).toEqual({ loads: 130, saves: 30 });
+		expect(
+			lake_saving(
+				[row('A', ['/a.js', '/rt.js']), row('B', ['/b.js', '/rt.js'])],
+				[
+					row('A', ['/a.js', '/rt.js']),
+					row('B', ['/b.js', '/rt.js']),
+					row('C', ['/c.js', '/rt.js'])
+				],
+				w
+			)
+		).toEqual({ loads: 130, saves: 30 });
 		// alone on the page (the other one a lake already): the runtime goes too
-		expect(lake_saving([row('A', ['/a.js', '/rt.js'])], [row('A', ['/a.js', '/rt.js']), row('C', ['/c.js', '/rt.js'], 'none')], w)).toEqual({ loads: 110, saves: 110 });
+		expect(
+			lake_saving(
+				[row('A', ['/a.js', '/rt.js'])],
+				[row('A', ['/a.js', '/rt.js']), row('C', ['/c.js', '/rt.js'], 'none')],
+				w
+			)
+		).toEqual({ loads: 110, saves: 110 });
 		expect(lake_saving([row('A', ['/a.js'])], [], undefined)).toBeNull();
 	});
 });

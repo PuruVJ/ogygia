@@ -87,8 +87,8 @@
 {#if open && !capped}
 	<div class="share-panel">
 		<p class="hint">
-			Anyone with this link <b>and</b> the password can read the report. It's encrypted into the link —
-			nothing is stored on any server.
+			Anyone with this link <b>and</b> the password can read the report. It's encrypted into the link
+			— nothing is stored on any server.
 		</p>
 		<form class="share-form" onsubmit={generate}>
 			<input
@@ -98,7 +98,8 @@
 				autocomplete="new-password"
 				disabled={busy}
 			/>
-			<button type="submit" disabled={busy || !password}>{busy ? 'Encrypting…' : 'Generate'}</button>
+			<button type="submit" disabled={busy || !password}>{busy ? 'Encrypting…' : 'Generate'}</button
+			>
 		</form>
 		{#if err}<p class="share-err">{err}</p>{/if}
 		{#if url}
@@ -133,7 +134,9 @@
 		border: 1px solid var(--line);
 		background: var(--bg-sunken);
 		color: #9fb0c4;
-		font: 12px ui-monospace, monospace;
+		font:
+			12px ui-monospace,
+			monospace;
 	}
 	.share-out button {
 		padding: 8px 12px;

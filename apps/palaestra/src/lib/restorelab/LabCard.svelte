@@ -6,6 +6,9 @@
 	let n = $state(0);
 </script>
 
+<!-- The run of spaces in "some   text" is the fixture: the scoped render trims it, and
+     e2e/restore.spec.ts checks the restore puts it back exactly. Kept out of the formatter. -->
+<!-- prettier-ignore -->
 <demo-card class="own" data-lab-card>
 	<button data-lab-count onclick={() => n++}>count {n}</button>
 	some   text

@@ -17,7 +17,9 @@ interface SourceSlots {
 	recorder: ((tag: string) => void) | null;
 	observer: ((tag: string) => void) | null;
 }
-const slots: SourceSlots = ((globalThis as unknown as Record<symbol, SourceSlots>)[Symbol.for('ogygia.sources')] ??= {
+const slots: SourceSlots = ((globalThis as unknown as Record<symbol, SourceSlots>)[
+	Symbol.for('ogygia.sources')
+] ??= {
 	recorder: null,
 	observer: null
 });

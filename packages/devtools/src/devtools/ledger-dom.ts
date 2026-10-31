@@ -38,7 +38,14 @@ interface RuntimeParts {
 let parts: { src: string; read: RuntimeParts | null } | null = null;
 /** globals only the devtools' own code sets (the runtime sets none: it publishes `__ogygia_devtools`
  *  alone, from its own chunk, never a root) — a part carrying one is the devtools', not the page's */
-const DOCK_MARKS = ['__ogygia_session', '__ogygia_testing', '__ogygia_region_bytes', '__ogygia_region_names', '__ogygia_styles', '__ogygia_devtools_meta'];
+const DOCK_MARKS = [
+	'__ogygia_session',
+	'__ogygia_testing',
+	'__ogygia_region_bytes',
+	'__ogygia_region_names',
+	'__ogygia_styles',
+	'__ogygia_devtools_meta'
+];
 function runtime_parts(src: string): RuntimeParts | null {
 	if (parts?.src !== src) {
 		parts = { src, read: null };
@@ -76,7 +83,7 @@ async function read_parts(src: string): Promise<RuntimeParts> {
 			if (!docked && DOCK_MARKS.some((m) => body.includes(m))) docked = true;
 			for (const s of static_imports(body)) {
 				const u = abs_from(s, at);
-				if (u && !closure.has(u)) closure.add(u), queue.push(u);
+				if (u && !closure.has(u)) (closure.add(u), queue.push(u));
 			}
 		}
 		// (the dock: it reaches this file, or carries what only the dock sets — its entry loads its tabs,
@@ -100,7 +107,11 @@ export function page_ledger(): Ledger | null {
 	for (const s of document.querySelectorAll(`script[${ISLAND_GRAPH_ATTR}]`))
 		for (const [entry, hrefs] of decode_island_graph(s.textContent ?? '')) {
 			const key = abs(entry);
-			if (key && !graph.has(key)) graph.set(key, hrefs.map(abs).filter((x): x is string => !!x));
+			if (key && !graph.has(key))
+				graph.set(
+					key,
+					hrefs.map(abs).filter((x): x is string => !!x)
+				);
 		}
 	if (!graph.size) return null;
 	const sizes = new Map<string, { wire: number; raw: number }>();
@@ -111,7 +122,10 @@ export function page_ledger(): Ledger | null {
 		const wire = r.encodedBodySize || r.transferSize || r.decodedBodySize || 0;
 		sizes.set(r.name, { wire, raw: r.decodedBodySize || wire });
 	}
-	const islands = new Map<string, { entry: string; file?: string; name: string; kind: string; wake: string; count: number }>();
+	const islands = new Map<
+		string,
+		{ entry: string; file?: string; name: string; kind: string; wake: string; count: number }
+	>();
 	for (const r of all_regions()) {
 		const entry = abs(r.entry);
 		if (!entry) continue;
@@ -119,12 +133,24 @@ export function page_ledger(): Ledger | null {
 		// (its own file is its location, the one the browser loaded and sized)
 		const file = abs(r.src);
 		if (g) g.count++;
-		else islands.set(entry, { entry, ...(file ? { file } : {}), name: region_name(r.entry), kind: r.kind, wake: r.wake, count: 1 });
+		else
+			islands.set(entry, {
+				entry,
+				...(file ? { file } : {}),
+				name: region_name(r.entry),
+				kind: r.kind,
+				wake: r.wake,
+				count: 1
+			});
 	}
-	const runtime_src = abs(document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src'));
+	const runtime_src = abs(
+		document.querySelector('script[data-ogygia-runtime]')?.getAttribute('src')
+	);
 	const runtime = [
 		runtime_src,
-		...[...document.querySelectorAll('link[data-ogygia-runtime-dep]')].map((l) => abs(l.getAttribute('href')))
+		...[...document.querySelectorAll('link[data-ogygia-runtime-dep]')].map((l) =>
+			abs(l.getAttribute('href'))
+		)
 	].filter((x): x is string => !!x);
 	// …and its own parts the browser loaded (an island's file is the island's, whoever imports it)
 	const rp = runtime_src ? runtime_parts(runtime_src) : null;
@@ -133,19 +159,24 @@ export function page_ledger(): Ledger | null {
 		for (const list of graph.values()) for (const u of list) island_files.add(u);
 		for (const i of islands.values()) island_files.add(i.file ?? i.entry);
 		for (const [root, closure] of rp.roots)
-			if (sizes.has(root)) for (const u of closure) if (sizes.has(u) && !island_files.has(u) && !runtime.includes(u)) runtime.push(u);
+			if (sizes.has(root))
+				for (const u of closure)
+					if (sizes.has(u) && !island_files.has(u) && !runtime.includes(u)) runtime.push(u);
 	}
 	return byte_ledger([...islands.values()], graph, (u) => sizes.get(u) ?? null, runtime);
 }
 
 /** One island's line of the ledger (by its entry), and the islands it shares code with. */
-export function island_ledger(entry: string | null | undefined): { row: Ledger['rows'][number]; shares_with: string[] } | null {
+export function island_ledger(
+	entry: string | null | undefined
+): { row: Ledger['rows'][number]; shares_with: string[] } | null {
 	const l = page_ledger();
 	const key = abs(entry);
 	if (!l || !key) return null;
 	const row = l.rows.find((r) => r.entry === key);
 	if (!row) return null;
 	const with_ = new Set<string>();
-	for (const s of l.shared) if (s.users.includes(row.name)) for (const u of s.users) if (u !== row.name) with_.add(u);
+	for (const s of l.shared)
+		if (s.users.includes(row.name)) for (const u of s.users) if (u !== row.name) with_.add(u);
 	return { row, shares_with: [...with_] };
 }

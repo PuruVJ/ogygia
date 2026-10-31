@@ -30,7 +30,7 @@ Four remotes. Each is a plain async function that the page awaits:
 - **`search(q)`**: ranked hits from [search](/docs/content/search).
 
 ::: tip Prefer `meta` over `nav` for shells
-`nav` exists for custom chrome that wants only the tree. A shell wants the tree *and* the switcher *and* the site facts. `meta` is those three in one prerendered payload: one await, one cache entry.
+`nav` exists for custom chrome that wants only the tree. A shell wants the tree _and_ the switcher _and_ the site facts. `meta` is those three in one prerendered payload: one await, one cache entry.
 :::
 
 ## The body crosses as a ticket

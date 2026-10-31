@@ -10,7 +10,8 @@
 import type { Page } from '@playwright/test';
 import { test, check, stamp_document, document_stamp } from '@ogygia/tooling/e2e';
 
-const count = (page: Page, sel: string) => page.evaluate((s) => document.head.querySelectorAll(s).length, sel);
+const count = (page: Page, sel: string) =>
+	page.evaluate((s) => document.head.querySelectorAll(s).length, sel);
 const LD = 'script[type="application/ld+json"][data-head-island]';
 const ISLAND_META = 'meta[name="head-island"]';
 
@@ -20,14 +21,24 @@ async function woken(page: Page, path: string) {
 }
 
 test.describe('head ownership: island head content once, page tags never lost', () => {
-	test('after the wake the island’s head content is in the head once, and its title wins', async ({ page }) => {
+	test('after the wake the island’s head content is in the head once, and its title wins', async ({
+		page
+	}) => {
 		await page.goto('/head-island', { waitUntil: 'commit' });
 		await page.waitForSelector('[data-head-page="a"]');
 		// the server's copy is there before the wake (crawlers and first paint get it)
 		check('server copy present before the wake', (await count(page, LD)) >= 1);
 		await woken(page, '/head-island');
-		check('one JSON-LD block after the wake', (await count(page, LD)) === 1, String(await count(page, LD)));
-		check('one island meta after the wake', (await count(page, ISLAND_META)) === 1, String(await count(page, ISLAND_META)));
+		check(
+			'one JSON-LD block after the wake',
+			(await count(page, LD)) === 1,
+			String(await count(page, LD))
+		);
+		check(
+			'one island meta after the wake',
+			(await count(page, ISLAND_META)) === 1,
+			String(await count(page, ISLAND_META))
+		);
 		check('one title', (await count(page, 'title')) === 1, String(await count(page, 'title')));
 		// the surviving copy is the island's live one: its reactive title updates
 		await page.locator('[data-head-island-btn]').click();
@@ -35,18 +46,25 @@ test.describe('head ownership: island head content once, page tags never lost', 
 		check('the island’s reactive title updates', (await page.title()) === 'Head island 1');
 	});
 
-	test('navigating away from a head-owning island keeps the next page’s head tags', async ({ page }) => {
+	test('navigating away from a head-owning island keeps the next page’s head tags', async ({
+		page
+	}) => {
 		await woken(page, '/head-island');
 		const stamp = await stamp_document(page);
 		await page.locator('[data-to-b]').click();
 		await page.waitForSelector('[data-head-page="b"]');
 		await page.waitForTimeout(300);
 		check('it was a client-side navigation', (await document_stamp(page)) === stamp);
-		const description = await page.evaluate(() => document.head.querySelector('meta[name="description"]')?.getAttribute('content'));
+		const description = await page.evaluate(() =>
+			document.head.querySelector('meta[name="description"]')?.getAttribute('content')
+		);
 		check('B’s description is present', description === 'page B', String(description));
 		check('B’s canonical is present', (await count(page, 'link[rel="canonical"]')) === 1);
 		check('B’s og:title is present', (await count(page, 'meta[property="og:title"]')) === 1);
-		check('the island’s head content left with it', (await count(page, LD)) === 0 && (await count(page, ISLAND_META)) === 0);
+		check(
+			'the island’s head content left with it',
+			(await count(page, LD)) === 0 && (await count(page, ISLAND_META)) === 0
+		);
 		check('A’s description is gone', (await count(page, 'meta[name="description"]')) === 1);
 	});
 
@@ -56,8 +74,14 @@ test.describe('head ownership: island head content once, page tags never lost', 
 		await page.waitForSelector('[data-head-page="c"]');
 		await page.waitForTimeout(400);
 		check('one JSON-LD block on C', (await count(page, LD)) === 1, String(await count(page, LD)));
-		check('one island meta on C', (await count(page, ISLAND_META)) === 1, String(await count(page, ISLAND_META)));
-		const description = await page.evaluate(() => document.head.querySelector('meta[name="description"]')?.getAttribute('content'));
+		check(
+			'one island meta on C',
+			(await count(page, ISLAND_META)) === 1,
+			String(await count(page, ISLAND_META))
+		);
+		const description = await page.evaluate(() =>
+			document.head.querySelector('meta[name="description"]')?.getAttribute('content')
+		);
 		check('C’s description is present', description === 'page C', String(description));
 	});
 });

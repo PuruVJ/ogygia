@@ -15,5 +15,7 @@
 </script>
 
 {#each resolved as node, i (i)}
-	<Region of={node.of}>{#if node.children && node.children.length}<Self nodes={node.children} />{/if}</Region>
+	<Region of={node.of}
+		>{#if node.children && node.children.length}<Self nodes={node.children} />{/if}</Region
+	>
 {/each}

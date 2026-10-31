@@ -41,16 +41,16 @@ Tokens are declared on `:root` and consumed everywhere. Components never hard-co
 
 You rarely touch more than a handful. These are the ones worth knowing.
 
-| Token | Controls |
-| --- | --- |
-| `--og-bg` | The page background. |
-| `--og-bg-subtle` | Cards, code blocks, and inset panels. |
-| `--og-line` | Borders and dividers. |
-| `--og-text` | Body text color. |
-| `--og-text-muted` | Secondary text and captions. |
-| `--og-accent` | Links, active states, and focus rings. |
-| `--og-accent-hover` | The accent's hover shade. |
-| `--og-radius` | The default corner radius. |
+| Token               | Controls                               |
+| ------------------- | -------------------------------------- |
+| `--og-bg`           | The page background.                   |
+| `--og-bg-subtle`    | Cards, code blocks, and inset panels.  |
+| `--og-line`         | Borders and dividers.                  |
+| `--og-text`         | Body text color.                       |
+| `--og-text-muted`   | Secondary text and captions.           |
+| `--og-accent`       | Links, active states, and focus rings. |
+| `--og-accent-hover` | The accent's hover shade.              |
+| `--og-radius`       | The default corner radius.             |
 
 > **One accent to rule them all.** Most rebrands are a single line: change `--og-accent`. Links, buttons, active sidebar items, and focus outlines all read it, so they recolor together.
 

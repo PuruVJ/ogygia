@@ -26,7 +26,9 @@ const flags = process.argv.slice(2).filter((a) => a.startsWith('--'));
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const flag = (name) => flags.find((f) => f.startsWith(`--${name}=`))?.slice(name.length + 3);
 const serve = flags.includes('--serve');
-const pages = (flag('page') ?? (serve ? '/inferno,/hell,/latecomer,/purgatory,/limbo' : '/inferno')).split(',');
+const pages = (
+	flag('page') ?? (serve ? '/inferno,/hell,/latecomer,/purgatory,/limbo' : '/inferno')
+).split(',');
 const repeat = Math.max(1, Number(flag('repeat') ?? (serve ? 3 : 1)));
 const key = args[1] ?? 'hell';
 const PORT = 4187;
@@ -77,7 +79,13 @@ function key_of(page) {
 			if (/\bDECOY\b/.test(text) && !/for a DECOY|plus DECOYS/.test(text)) {
 				let end = i + 1;
 				while (end < lines.length && lines[end].trim() !== '') end++;
-				decoys.push({ rel, from: i + 2, to: end, growth: /DECOY-GROWTH/.test(text), note: text.trim().slice(0, 70) });
+				decoys.push({
+					rel,
+					from: i + 2,
+					to: end,
+					growth: /DECOY-GROWTH/.test(text),
+					note: text.trim().slice(0, 70)
+				});
 			}
 		});
 	}
@@ -87,9 +95,15 @@ function key_of(page) {
 /** One profile of `page`, checked: the kinds found and the decoys flagged. */
 async function check(page, k) {
 	const headers = { 'x-profiler-key': key };
-	const rec = await fetch(`${base}/__profiler/page?p=${page}&runs=3`, { headers, redirect: 'manual' });
+	const rec = await fetch(`${base}/__profiler/page?p=${page}&runs=3`, {
+		headers,
+		redirect: 'manual'
+	});
 	const id = rec.headers.get('location')?.split('/').pop();
-	if (!id) throw new Error('no report: is the preview running with OGYGIA_PROFILER_SECRET, built with the profiler on?');
+	if (!id)
+		throw new Error(
+			'no report: is the preview running with OGYGIA_PROFILER_SECRET, built with the profiler on?'
+		);
 	const report = await (await fetch(`${base}/__profiler/report/${id}.json`, { headers })).json();
 	const patterns = report.patterns ?? [];
 	// a planted kind counts only where it was planted: in one of the files its comments are in (a
@@ -100,11 +114,14 @@ async function check(page, k) {
 		const files = (k.expected.get(p.kind) ?? []).map((x) => x.slice(0, x.lastIndexOf(':')));
 		if (!files.length) return true;
 		// (a build without sourcemaps: its chunk line carries the source module it came from)
-		const at = (x) => files.some((f) => (x.path ?? x.file ?? '').endsWith(f) || (x.module ?? '').endsWith(f));
+		const at = (x) =>
+			files.some((f) => (x.path ?? x.file ?? '').endsWith(f) || (x.module ?? '').endsWith(f));
 		return (p.sites ?? []).some((s) => at(s) || (s.via ?? []).some(at));
 	};
 	const found = new Set(patterns.filter(on_file).map((p) => p.kind));
-	const elsewhere = patterns.filter((p) => !on_file(p)).map((p) => `${p.kind} at ${(p.sites ?? []).map((s) => `${s.file}:${s.line}`).join(', ')}`);
+	const elsewhere = patterns
+		.filter((p) => !on_file(p))
+		.map((p) => `${p.kind} at ${(p.sites ?? []).map((s) => `${s.file}:${s.line}`).join(', ')}`);
 	const flagged = [];
 	for (const d of k.decoys) {
 		for (const p of patterns) {
@@ -113,13 +130,17 @@ async function check(page, k) {
 				// the site's own line — or, for a chain through a helper, a line that called it (the helper's
 				// line is the site, the decoy's lines are `via`; other kinds on a shared helper, like its
 				// same answer, are true of every caller and not what a decoy's lines claim)
-				const inside = (p) => (p.path ?? p.file ?? '').endsWith(d.rel) && p.line >= d.from && p.line <= d.to;
+				const inside = (p) =>
+					(p.path ?? p.file ?? '').endsWith(d.rel) && p.line >= d.from && p.line <= d.to;
 				if (!inside(s) && !(p.kind === 'waits-in-a-row' && (s.via ?? []).some(inside))) continue;
 				if (d.growth && s.grows !== true) continue;
 				// ANSWER_KEY_DUMP=<dir>: keep the report that flagged it, to read why
 				if (process.env.ANSWER_KEY_DUMP) {
 					try {
-						writeFileSync(`${process.env.ANSWER_KEY_DUMP}/flagged-${id}.json`, JSON.stringify(report));
+						writeFileSync(
+							`${process.env.ANSWER_KEY_DUMP}/flagged-${id}.json`,
+							JSON.stringify(report)
+						);
 					} catch {
 						/* a dump is a convenience */
 					}
@@ -130,16 +151,34 @@ async function check(page, k) {
 			}
 		}
 	}
-	return { id, found, flagged, elsewhere, forecast: report.forecast?.after_ms, answers: report.forecast?.answers?.after_ms, cpu_after: report.forecast?.cpu_after_ms, now: report.forecast?.now_ms, partial: !!report.forecast?.partial };
+	return {
+		id,
+		found,
+		flagged,
+		elsewhere,
+		forecast: report.forecast?.after_ms,
+		answers: report.forecast?.answers?.after_ms,
+		cpu_after: report.forecast?.cpu_after_ms,
+		now: report.forecast?.now_ms,
+		partial: !!report.forecast?.partial
+	};
 }
 
 // THE FORECAST, HELD TO ACCOUNT: a page and its copy with the reported code fixes applied. The page's
 // forecast ("one render after every fix") must match what the fixed copy measures — and its second
 // figure ("keeping the services' answers too") what the copy measures keeping them (`cached`).
-const FIXED = { '/latecomer': { fixed: '/latecomer-fixed' }, '/inferno': { fixed: '/inferno-fixed', cached: '/inferno-fixed%3Fcache%3D1' }, '/hell': { fixed: '/hell-fixed' }, '/purgatory': { fixed: '/purgatory-fixed' } };
+const FIXED = {
+	'/latecomer': { fixed: '/latecomer-fixed' },
+	'/inferno': { fixed: '/inferno-fixed', cached: '/inferno-fixed%3Fcache%3D1' },
+	'/hell': { fixed: '/hell-fixed' },
+	'/purgatory': { fixed: '/purgatory-fixed' }
+};
 /** a forecast is right within a quarter of itself, 8 ms, or 5 % of the render it started from —
  *  whichever is widest (a few ms left of a 550 ms render is a 5 % question, not a 25 % one) */
-const close = (said, got, now) => said !== undefined && got !== undefined && Math.abs(got - said) <= Math.max(8, said * 0.25, (now ?? 0) * 0.05);
+const close = (said, got, now) =>
+	said !== undefined &&
+	got !== undefined &&
+	Math.abs(got - said) <= Math.max(8, said * 0.25, (now ?? 0) * 0.05);
 const median = (xs) => {
 	const s = [...xs].sort((a, b) => a - b);
 	return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
@@ -157,7 +196,10 @@ async function measure(page, fresh = async () => {}) {
 		// each on a fresh server: one profile renders the page several times, and a page that keeps
 		// memory alive slows the next profile on the same heap
 		await fresh();
-		const rec = await fetch(`${base}/__profiler/page?p=${page}&runs=3`, { headers, redirect: 'manual' });
+		const rec = await fetch(`${base}/__profiler/page?p=${page}&runs=3`, {
+			headers,
+			redirect: 'manual'
+		});
 		const id = rec.headers.get('location')?.split('/').pop();
 		const report = await (await fetch(`${base}/__profiler/report/${id}.json`, { headers })).json();
 		const runs = report.target?.runs ?? report.meta?.runs ?? [];
@@ -205,9 +247,13 @@ async function run_page(page, fresh = async () => {}) {
 		const ok = n >= need;
 		if (!ok && !small) failed++;
 		const tag = ok ? 'FOUND ' : small ? 'small ' : 'MISSED';
-		console.log(`  ${tag} ${String(n).padStart(2)}/${repeat}  ${kind.padEnd(20)} ${k.expected.get(kind).join(', ')}`);
+		console.log(
+			`  ${tag} ${String(n).padStart(2)}/${repeat}  ${kind.padEnd(20)} ${k.expected.get(kind).join(', ')}`
+		);
 	}
-	console.log(`  decoys: ${k.decoys.length}, ${flagged.length ? `FLAGGED ${flagged.length} time(s)` : 'all quiet in every run'}`);
+	console.log(
+		`  decoys: ${k.decoys.length}, ${flagged.length ? `FLAGGED ${flagged.length} time(s)` : 'all quiet in every run'}`
+	);
 	for (const f of [...new Set(flagged)]) console.log(`    FLAGGED ${f}`);
 	failed += flagged.length ? 1 : 0;
 	if (extra.size) console.log(`  also reported (not planted): ${[...extra].join(', ')}`);
@@ -227,15 +273,23 @@ async function run_page(page, fresh = async () => {}) {
 		const got = await measure(copy, fresh);
 		// a PARTIAL forecast (a build without sourcemaps sees fewer fixes) must only never promise more
 		// than the fixes give: the fixed copy at or under it
-		const ok = partial ? said !== undefined && got !== undefined && got <= said + Math.max(8, said * 0.25, (now ?? 0) * 0.05) : close(said, got, now);
-		console.log(`  ${ok ? 'FORECAST' : 'FORECAST OFF'} ${show(said)} ms ${what}${partial ? ' (partial: no sourcemaps, a ceiling)' : ''} · ${decodeURIComponent(copy)} measures ${show(got)} ms`);
+		const ok = partial
+			? said !== undefined &&
+				got !== undefined &&
+				got <= said + Math.max(8, said * 0.25, (now ?? 0) * 0.05)
+			: close(said, got, now);
+		console.log(
+			`  ${ok ? 'FORECAST' : 'FORECAST OFF'} ${show(said)} ms ${what}${partial ? ' (partial: no sourcemaps, a ceiling)' : ''} · ${decodeURIComponent(copy)} measures ${show(got)} ms`
+		);
 		if (!ok) failed++;
 		// the CPU after every fix (what a core's throughput rides on), against the copy's CPU
 		if (what === 'after every fix' && cpu_afters[0] !== undefined && measured_cpu !== undefined) {
 			// (looser than the render's: a fix's replacement code costs CPU of its own, on lines the
 			// original never had — /hell-fixed's one-pass renderer)
 			const c_ok = Math.abs(measured_cpu - cpu_afters[0]) <= Math.max(6, measured_cpu * 0.35);
-			console.log(`  ${c_ok ? 'CPU AFTER' : 'CPU AFTER OFF'} ${show(cpu_afters[0])} ms main-thread CPU · the copy's ${show(measured_cpu)} ms`);
+			console.log(
+				`  ${c_ok ? 'CPU AFTER' : 'CPU AFTER OFF'} ${show(cpu_afters[0])} ms main-thread CPU · the copy's ${show(measured_cpu)} ms`
+			);
 			if (!c_ok) failed++;
 		}
 	}
@@ -244,11 +298,23 @@ async function run_page(page, fresh = async () => {}) {
 
 /** A fresh preview on PORT, ready; returns a stopper. */
 async function start_preview() {
-	const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'], {
-		cwd: app,
-		env: { ...process.env, OGYGIA_PROFILER_SECRET: key, ORIGIN: base },
-		stdio: 'ignore'
-	});
+	const child = spawn(
+		process.execPath,
+		[
+			'node_modules/vite/bin/vite.js',
+			'preview',
+			'--host',
+			'127.0.0.1',
+			'--port',
+			String(PORT),
+			'--strictPort'
+		],
+		{
+			cwd: app,
+			env: { ...process.env, OGYGIA_PROFILER_SECRET: key, ORIGIN: base },
+			stdio: 'ignore'
+		}
+	);
 	for (let i = 0; i < 120; i++) {
 		try {
 			await fetch(base + '/');
@@ -262,10 +328,17 @@ async function start_preview() {
 }
 
 if (flags.includes('--build')) {
-	execSync('pnpm build', { cwd: fileURLToPath(new URL('../../packages/core', import.meta.url)), stdio: 'inherit' });
+	execSync('pnpm build', {
+		cwd: fileURLToPath(new URL('../../packages/core', import.meta.url)),
+		stdio: 'inherit'
+	});
 	// the DEFAULT build: with the profiler on, its server build writes hidden maps by itself.
 	// `--no-maps`: a build with none (an app that set `build.sourcemap: false`) — the fallback path
-	execSync('pnpm build', { cwd: app, stdio: 'inherit', env: { ...process.env, ...(flags.includes('--no-maps') ? { PROFILER_NO_SOURCEMAPS: '1' } : {}) } });
+	execSync('pnpm build', {
+		cwd: app,
+		stdio: 'inherit',
+		env: { ...process.env, ...(flags.includes('--no-maps') ? { PROFILER_NO_SOURCEMAPS: '1' } : {}) }
+	});
 }
 let failed = 0;
 for (const page of pages) {

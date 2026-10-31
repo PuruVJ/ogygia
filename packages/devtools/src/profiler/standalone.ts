@@ -29,7 +29,8 @@ export interface StandaloneOptions {
 const STYLESHEET_RE = /<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
 const MODULEPRELOAD_RE = /<link\b[^>]*\brel=["']modulepreload["'][^>]*>/gi;
 const HREF_RE = /\bhref=["']([^"']+)["']/i;
-const MODULE_SCRIPT_RE = /<script\b([^>]*\btype=["']module["'][^>]*)\bsrc=["']([^"']+)["']([^>]*)><\/script>/gi;
+const MODULE_SCRIPT_RE =
+	/<script\b([^>]*\btype=["']module["'][^>]*)\bsrc=["']([^"']+)["']([^>]*)><\/script>/gi;
 const ENTRY_ATTR_RE = /(<ogygia-region\b[^>]*\bentry=["'])([^"']+)(["'])/gi;
 /** a static or dynamic import of a RELATIVE specifier inside a built chunk — quoted, or a
  *  template literal with no interpolation (Vite emits `import(\`./chunks/x.js\`)`) */
@@ -58,7 +59,10 @@ export async function build_standalone(html: string, opts: StandaloneOptions): P
 			return null;
 		}
 		bytes += text.length;
-		if (bytes > max) throw new Error(`standalone report would exceed ${Math.round(max / 1048576)} MB of inlined assets`);
+		if (bytes > max)
+			throw new Error(
+				`standalone report would exceed ${Math.round(max / 1048576)} MB of inlined assets`
+			);
 		return text;
 	};
 
@@ -95,14 +99,23 @@ export async function build_standalone(html: string, opts: StandaloneOptions): P
 	}
 	for (const s of sheets) {
 		const css = await fetch_text(s.url);
-		html = html.replace(s.tag, css === null ? '' : `<style data-standalone="${s.url.pathname}">${css.replaceAll('</style', '<\\/style')}</style>`);
+		html = html.replace(
+			s.tag,
+			css === null
+				? ''
+				: `<style data-standalone="${s.url.pathname}">${css.replaceAll('</style', '<\\/style')}</style>`
+		);
 	}
 	// 2. modulepreload hints: nothing to preload from a file
 	html = html.replace(MODULEPRELOAD_RE, '');
 	// 3. module scripts with a src → inline modules (their imports go through the map)
 	const scripts: { tag: string; attrs: string; url: URL }[] = [];
 	for (const m of html.matchAll(MODULE_SCRIPT_RE)) {
-		scripts.push({ tag: m[0], attrs: (m[1] + ' ' + m[3]).replace(/\s+/g, ' ').trim(), url: new URL(m[2], base) });
+		scripts.push({
+			tag: m[0],
+			attrs: (m[1] + ' ' + m[3]).replace(/\s+/g, ' ').trim(),
+			url: new URL(m[2], base)
+		});
 	}
 	for (const s of scripts) {
 		const key = await add_chunk(s.url);
@@ -131,6 +144,9 @@ export async function build_standalone(html: string, opts: StandaloneOptions): P
 	const map = `<script type="importmap">${JSON.stringify({ imports }).replaceAll('</script', '<\\/script')}</script>`;
 	const note = `<!-- ogygia profiler · standalone report · ${Object.keys(imports).length} chunks inlined${missing.length ? ` · missing: ${missing.join(', ')}` : ''} -->`;
 	const at = html.search(/<script\b/i);
-	html = at === -1 ? html.replace(/<\/head>/i, `${map}</head>`) : html.slice(0, at) + map + html.slice(at);
+	html =
+		at === -1
+			? html.replace(/<\/head>/i, `${map}</head>`)
+			: html.slice(0, at) + map + html.slice(at);
 	return html.replace(/<\/head>/i, `<meta name="ogygia-standalone" content="1">${note}</head>`);
 }

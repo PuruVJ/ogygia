@@ -7,8 +7,14 @@ import { compare, props_diff } from '../src/insights/fp-drift.ts';
 
 describe('fp drift', () => {
 	it('names the prop that differs (JSON lane): a nested path, the two values', () => {
-		expect(props_diff('{"label":"a","price":{"at":1}}', '{"label":"a","price":{"at":2}}')).toEqual({ path: 'price.at', was: '1', now: '2' });
-		expect(props_diff('{"items":[{"id":"a"},{"id":"b"}]}', '{"items":[{"id":"a"},{"id":"c"}]}')).toEqual({ path: 'items[1].id', was: '"b"', now: '"c"' });
+		expect(props_diff('{"label":"a","price":{"at":1}}', '{"label":"a","price":{"at":2}}')).toEqual({
+			path: 'price.at',
+			was: '1',
+			now: '2'
+		});
+		expect(
+			props_diff('{"items":[{"id":"a"},{"id":"b"}]}', '{"items":[{"id":"a"},{"id":"c"}]}')
+		).toEqual({ path: 'items[1].id', was: '"b"', now: '"c"' });
 	});
 
 	it('ogygia’s own ids are left out: only they differ → no drift', () => {
@@ -16,14 +22,30 @@ describe('fp drift', () => {
 		const b = '{"cart":1,"ref":{"k":"store","i":"bfa88d49-b4a9-4469-baad-ffe787a5fa4d"}}';
 		expect(props_diff(a, b)).toBeNull();
 		// …and in a text that parses as neither lane, the same way
-		expect(props_diff('x("8abbcc0c-8898-4cb0-b37d-30c8d0c5d149")', 'x("bfa88d49-b4a9-4469-baad-ffe787a5fa4d")')).toBeNull();
+		expect(
+			props_diff(
+				'x("8abbcc0c-8898-4cb0-b37d-30c8d0c5d149")',
+				'x("bfa88d49-b4a9-4469-baad-ffe787a5fa4d")'
+			)
+		).toBeNull();
 		// an id beside a real change: the real change is named
-		expect(props_diff('{"n":1,"i":"8abbcc0c-8898-4cb0-b37d-30c8d0c5d149"}', '{"n":2,"i":"bfa88d49-b4a9-4469-baad-ffe787a5fa4d"}')).toEqual({ path: 'n', was: '1', now: '2' });
+		expect(
+			props_diff(
+				'{"n":1,"i":"8abbcc0c-8898-4cb0-b37d-30c8d0c5d149"}',
+				'{"n":2,"i":"bfa88d49-b4a9-4469-baad-ffe787a5fa4d"}'
+			)
+		).toEqual({ path: 'n', was: '1', now: '2' });
 	});
 
 	it('the devalue lane: the prop is named by its path in the props, never a slot of the flat table', () => {
-		const a = stringify({ cart: { count: 3, at: new Date(0) }, ref: { k: 'store', i: '8abbcc0c-8898-4cb0-b37d-30c8d0c5d149' } });
-		const b = stringify({ cart: { count: 5, at: new Date(0) }, ref: { k: 'store', i: 'bfa88d49-b4a9-4469-baad-ffe787a5fa4d' } });
+		const a = stringify({
+			cart: { count: 3, at: new Date(0) },
+			ref: { k: 'store', i: '8abbcc0c-8898-4cb0-b37d-30c8d0c5d149' }
+		});
+		const b = stringify({
+			cart: { count: 5, at: new Date(0) },
+			ref: { k: 'store', i: 'bfa88d49-b4a9-4469-baad-ffe787a5fa4d' }
+		});
 		expect(props_diff(a, b)).toEqual({ path: 'cart.count', was: '3', now: '5' });
 		// a custom type the comparer has no reviver for: kept as a value, and compared inside
 		const c = stringify({ x: new URL('http://a/1') }, { URL: (v) => v instanceof URL && v.href });
@@ -57,7 +79,9 @@ describe('fp drift', () => {
 			{ entry: '/A.js', fp: 'a3', props: '{"t":10}' },
 			{ entry: '/B.js', fp: 'b1', props: '{"x":1}' }
 		];
-		expect(compare(was, now)).toEqual([{ entry: '/A.js', fp_was: 'a2', fp_now: 'a3', path: 't', was: '9', now: '10' }]);
+		expect(compare(was, now)).toEqual([
+			{ entry: '/A.js', fp_was: 'a2', fp_now: 'a3', path: 't', was: '9', now: '10' }
+		]);
 		// a first load: nothing to compare
 		expect(compare([], now)).toEqual([]);
 	});

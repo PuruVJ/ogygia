@@ -66,7 +66,8 @@ export function decode_island_locations(text: string): Map<string, string> {
 		return out;
 	}
 	if (!wire || !wire.s || typeof wire.s !== 'object') return out;
-	for (const [entry, src] of Object.entries(wire.s)) if (typeof src === 'string') out.set(entry, src);
+	for (const [entry, src] of Object.entries(wire.s))
+		if (typeof src === 'string') out.set(entry, src);
 	return out;
 }
 

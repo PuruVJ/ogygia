@@ -13,5 +13,12 @@ import { subscribe, ensure, abandon } from './frame-store.ts';
 import { batch_times, join_batch, streamFrames } from './frame-nav.ts';
 
 export function install(): void {
-	slots.frames = { subscribe, ensure, abandon, stream: streamFrames, join: join_batch, batch_times };
+	slots.frames = {
+		subscribe,
+		ensure,
+		abandon,
+		stream: streamFrames,
+		join: join_batch,
+		batch_times
+	};
 }

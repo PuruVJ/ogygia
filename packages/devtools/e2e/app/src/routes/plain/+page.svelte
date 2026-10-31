@@ -23,8 +23,8 @@
 <hr />
 <h1 data-static-shell>Plain page (no view transitions)</h1>
 <p data-static-shell>
-	The global SPA router still handles these links; this page just skips the View Transitions API. The
-	island below hydrates as usual.
+	The global SPA router still handles these links; this page just skips the View Transitions API.
+	The island below hydrates as usual.
 </p>
 
 <Counter start={5} label="Plain-page counter" />

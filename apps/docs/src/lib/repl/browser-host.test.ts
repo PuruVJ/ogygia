@@ -7,8 +7,13 @@ import { createHash } from './browser-host.ts';
 let pass = 0;
 let fail = 0;
 const ok = (label: string, cond: unknown, detail = '') => {
-	if (cond) { pass++; console.log(`  ✓ ${label}`); }
-	else { fail++; console.log(`  ✗ ${label}${detail ? '  — ' + detail : ''}`); }
+	if (cond) {
+		pass++;
+		console.log(`  ✓ ${label}`);
+	} else {
+		fail++;
+		console.log(`  ✗ ${label}${detail ? '  — ' + detail : ''}`);
+	}
 };
 
 const nodeHex = (algo: string, s: string) => nodeCreateHash(algo).update(s, 'utf8').digest('hex');
@@ -40,9 +45,17 @@ for (const algo of ['md5', 'sha256']) {
 	let all = true;
 	let firstBad = '';
 	for (const s of fixed) {
-		if (ourHex(algo, s) !== nodeHex(algo, s)) { all = false; firstBad = JSON.stringify(s.slice(0, 30)); break; }
+		if (ourHex(algo, s) !== nodeHex(algo, s)) {
+			all = false;
+			firstBad = JSON.stringify(s.slice(0, 30));
+			break;
+		}
 	}
-	ok(`${algo}: ${fixed.length} fixed vectors match node:crypto`, all, firstBad && `first mismatch at ${firstBad}`);
+	ok(
+		`${algo}: ${fixed.length} fixed vectors match node:crypto`,
+		all,
+		firstBad && `first mismatch at ${firstBad}`
+	);
 }
 
 // Fuzz: random-length random-byte strings.
@@ -56,7 +69,11 @@ for (const algo of ['md5', 'sha256']) {
 	let bad = '';
 	for (let i = 0; i < 500; i++) {
 		const s = randStr(Math.floor(Math.random() * 300));
-		if (ourHex(algo, s) !== nodeHex(algo, s)) { all = false; bad = JSON.stringify(s.slice(0, 20)); break; }
+		if (ourHex(algo, s) !== nodeHex(algo, s)) {
+			all = false;
+			bad = JSON.stringify(s.slice(0, 20));
+			break;
+		}
 	}
 	ok(`${algo}: 500 random fuzz strings match node:crypto`, all, bad && `mismatch: ${bad}`);
 }
@@ -64,7 +81,10 @@ for (const algo of ['md5', 'sha256']) {
 // Chained update() must equal the concatenation.
 {
 	const chained = createHash('sha256').update('foo').update('bar').update('baz').digest('hex');
-	ok('chained update() == single update of concatenation', chained === nodeHex('sha256', 'foobarbaz'));
+	ok(
+		'chained update() == single update of concatenation',
+		chained === nodeHex('sha256', 'foobarbaz')
+	);
 }
 
 console.log(`\n${'─'.repeat(44)}`);

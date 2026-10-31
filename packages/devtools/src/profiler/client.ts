@@ -51,13 +51,15 @@ function beacon_mark(...args: MarkArgs): void {
 			retrying = false;
 			for (const w of waiting.splice(0)) later.beacon_mark(...w);
 		} else if (++tries < 40) setTimeout(retry, 250);
-		else (retrying = false), (waiting.length = 0);
+		else ((retrying = false), (waiting.length = 0));
 	};
 	setTimeout(retry, 250);
 }
 
-const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
-const is_thenable = (v: unknown): v is PromiseLike<unknown> => !!v && typeof (v as { then?: unknown }).then === 'function';
+const now = () =>
+	typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+const is_thenable = (v: unknown): v is PromiseLike<unknown> =>
+	!!v && typeof (v as { then?: unknown }).then === 'function';
 
 export interface MarkHandle {
 	/** close it; ending twice is a no-op */
@@ -66,7 +68,8 @@ export interface MarkHandle {
 
 function mark_impl<T>(name: string, work: (() => T) | PromiseLike<T>, attrs?: MarkAttrs): T {
 	const t0 = now();
-	const done = (error?: boolean) => beacon_mark(name, now() - t0, error ? { ...attrs, error: true } : attrs, t0);
+	const done = (error?: boolean) =>
+		beacon_mark(name, now() - t0, error ? { ...attrs, error: true } : attrs, t0);
 	let out: T;
 	try {
 		out = typeof work === 'function' ? (work as () => T)() : (work as T);
@@ -90,7 +93,12 @@ function mark_impl<T>(name: string, work: (() => T) | PromiseLike<T>, attrs?: Ma
 	return out;
 }
 
-function mark_event(name: string, type: string, target: EventTarget | null = typeof document !== 'undefined' ? document : null, opts: { from?: 'call' | 'navigation'; attrs?: MarkAttrs } = {}): Promise<void> {
+function mark_event(
+	name: string,
+	type: string,
+	target: EventTarget | null = typeof document !== 'undefined' ? document : null,
+	opts: { from?: 'call' | 'navigation'; attrs?: MarkAttrs } = {}
+): Promise<void> {
 	if (!target) return Promise.resolve();
 	const t0 = opts.from === 'navigation' ? 0 : now();
 	return new Promise<void>((resolve) => {
@@ -105,7 +113,11 @@ function mark_event(name: string, type: string, target: EventTarget | null = typ
 	});
 }
 
-function mark_start(name: string, attrs?: MarkAttrs, opts: { from?: 'call' | 'navigation' } = {}): MarkHandle {
+function mark_start(
+	name: string,
+	attrs?: MarkAttrs,
+	opts: { from?: 'call' | 'navigation' } = {}
+): MarkHandle {
 	// `from: 'navigation'`: measure from the page's start, for something that finished before the
 	// code marking it could run (a runtime that hydrated before an island woke)
 	const t0 = opts.from === 'navigation' ? 0 : now();

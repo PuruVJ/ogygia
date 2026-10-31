@@ -112,12 +112,18 @@ describe('runtime_first — before all of the page’s JavaScript, not first in 
 			runtime +
 			'<link rel="stylesheet" href="/a.css">';
 		expect(runtime_first(head, null)).toBe(
-			head_start + runtime + design_system + '<title>x</title>' + '<link rel="stylesheet" href="/a.css">'
+			head_start +
+				runtime +
+				design_system +
+				'<title>x</title>' +
+				'<link rel="stylesheet" href="/a.css">'
 		);
 	});
 
 	it('injects the tag there when the page has none (island-less page, router on)', () => {
-		expect(runtime_first(head_start + design_system, runtime)).toBe(head_start + runtime + design_system);
+		expect(runtime_first(head_start + design_system, runtime)).toBe(
+			head_start + runtime + design_system
+		);
 	});
 
 	it('keeps stylesheets and the LCP image preload AHEAD of it — only JavaScript comes after', () => {
@@ -142,9 +148,9 @@ describe('runtime_first — before all of the page’s JavaScript, not first in 
 			'<link rel="modulepreload" href="/c/a.js" data-ogygia-runtime-dep>' +
 			'<link rel="modulepreload" href="/c/b.js" data-ogygia-runtime-dep>';
 		const css = '<link rel="stylesheet" href="/a.css">';
-		expect(runtime_first(head_start + css + design_system + '<title>x</title>' + runtime + deps, null)).toBe(
-			head_start + css + runtime + deps + design_system + '<title>x</title>'
-		);
+		expect(
+			runtime_first(head_start + css + design_system + '<title>x</title>' + runtime + deps, null)
+		).toBe(head_start + css + runtime + deps + design_system + '<title>x</title>');
 		// already in place with its hints: untouched
 		const placed = head_start + css + runtime + deps + design_system;
 		expect(runtime_first(placed, null)).toBe(placed);

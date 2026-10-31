@@ -1,6 +1,7 @@
 # ogygia — status & remaining work
 
 ## Flicker fix (round 7) — DONE: remote-query SSR→client seeding (prod), graceful dev fallback
+
 - **Server capture** — `ogygiaHandle` now wraps `resolve(event, { transformPageChunk })`. On a
   csr=false page it reads Kit's INTERNAL request store (`try_get_request_store` from
   `@sveltejs/kit/internal/server`), walks `state.remote.implicit`, and for each RESOLVED regular
@@ -29,6 +30,7 @@
   mode-(a) now waits for stable presence instead of sampling one frame.
 
 ## Flicker fix (round 6) — DONE: CSS-in-head + Date/TZ; SPECCED: remote-query seeding
+
 - **Nested-route CSS-in-head — DONE.** Verified island `.island` CSS is inlined into the initial
   `<head>` on a deep route (`/dashboard/orders/5`); locked by a `verify/fetch-checks.ts` assertion.
 - **Date/TZ hydration-mismatch hunt — DONE (no accidental mismatches).** ResolvedGreeting/OrderDetail
@@ -65,11 +67,14 @@
     intentional PendingGreeting/LiveClock/Clock markers).
 
 ## Kit-driven runtime hashing — DONE (round 6)
+
 Source-content hash of the runtime's dist inputs, computed at plugin load; server + client compute
 the same filename independently (no forward handoff). Both modes serve hashed URLs. Verified.
 
 ## Toolchain note — TypeScript 7 (native/tsgo): PARTIAL, empirically verified 2026-08
+
 Adopted where the toolchain supports it; blocked in one leg (svelte-check), so we run a hybrid:
+
 - `tsc --noEmit` (lib `check` + verify `check`) → **works on typescript@7.0.2** (native). ✔
 - **tsdown** `.d.ts` emission → **works on typescript@7.0.2** (`Emit types with typescript@7.0.2`). ✔
 - **svelte-check@4.7.4 (svelte-language-tools) → INCOMPATIBLE with TS7.** Its `bin/ts-version-check.js`
@@ -79,9 +84,8 @@ Adopted where the toolchain supports it; blocked in one leg (svelte-check), so w
   TS6); the library + verify keep TS7. Revisit when svelte-language-tools ships first-class TS7
   (drop the playground pin and unify on 7). Do not force it — forcing breaks template type-checking.
 
-
-
 ## Round 5 (this round) — landed & verified
+
 - **Remote reuse — Plan A, DONE (no patch).** `__sveltekit/remote` now points at Kit's REAL
   `remote-functions/index.js`; the two router-coupled modules it imports (`client.js`,
   `state.svelte.js`) + `$app/paths/internal/client` are scope-aliased (only for importers under
@@ -99,6 +103,7 @@ Adopted where the toolchain supports it; blocked in one leg (svelte-check), so w
   **0 errors / 0 warnings** (playground svelte-check 369 files).
 
 ## Round 5b (this round) — landed & verified
+
 - **Unified `<o-region>` custom element** (replaces `<sk-island>`): axes as attributes — `entry`,
   `hydrate="load|idle|visible|<media>"` (presence = a hydrated boundary), `defer` + `endpoint`.
   Dropped `data-strategy`/`data-media`/`data-root-margin`. Runtime reads `getAttribute`; the
@@ -108,12 +113,13 @@ Adopted where the toolchain supports it; blocked in one leg (svelte-check), so w
   prod + dev.
 
 ## Remaining / next (documented precisely; ordered per coordinator's reorder + later mandates)
+
 0. **snake_case codebase-wide pass (dedicated commit).** All internal/private identifiers (locals,
    module-private fns, non-exported helpers, `#` fields) → snake_case in library src + verify;
    PUBLIC API stays camelCase (`skIslands`/`ogygia`, `ogygiaHandle`, option keys, dist .d.ts);
    classes/components PascalCase. Encode as `@typescript-eslint/naming-convention` in the check
    gate if eslint is added, else a CONTRIBUTING note. Type-check + suites after.
-0b. **`$app/state` runes shim.** Rename `shims/app-state.ts` → `app-state.svelte.ts`; back `page`
+   0b. **`$app/state` runes shim.** Rename `shims/app-state.ts` → `app-state.svelte.ts`; back `page`
    with `$state` (deep proxy over the snapshot) so `$derived`/`$effect` over `page.url/params/data`
    behave like Kit; `$app/stores` derives from the same source. Verify the built **dist** `.svelte.ts`
    compiles via the consumer svelte pipeline (not just src). Add a suite: island with `$derived`
@@ -143,9 +149,8 @@ Adopted where the toolchain supports it; blocked in one leg (svelte-check), so w
    the client build, or a pre-build source-content hash both bundles compute.
 6. **/plain full-nav links** (tiny). **Lakes** (`hydrate:'false'`) per DESIGN.md.
 
-
-
 ## Round 4 (this round) — landed & verified
+
 - **Scripts feature REMOVED entirely** (user decision). No `<script bundle>` extraction, no
   chunk emission, no SPA-swap re-execution / `data-rerun` / module-URL dedupe, no ambient attr
   type, no `scripts` suite. The library now touches ONLY region imports (`hydrate`/`defer`/`preset`)
@@ -161,16 +166,18 @@ Adopted where the toolchain supports it; blocked in one leg (svelte-check), so w
   - **Kit-driven mode (a csr=true route exists): NOT hashed — genuinely blocked.** Kit builds the
     SERVER bundle FIRST, then the client (kit `exports/vite/index.js`: "first, build server nodes …"
     then "create client build"). The server inlines the runtime `<script src>` at server-build time
-    and cannot learn a hash the *later* client build produces; a forward handoff is impossible. The
+    and cannot learn a hash the _later_ client build produces; a forward handoff is impossible. The
     only fixes are (a) the client build (2nd) rewrites the already-emitted server chunk + prerendered
     HTML to swap a placeholder → hashed name, or (b) a deterministic source-content hash both builds
     compute identically. Both are follow-ups; today Kit-driven keeps the stable fixed name.
   - `<script bundle>` chunk emission was deleted, so `sk-scripts/<hash>.js` is gone from the audit.
 
 ## Verified suites (10): fetch-checks, browser, dashboard, remote, mixed, server-islands, nested,
+
 ## presets, forms, prerender — all pass prod + dev; svelte-check 0/0.
 
 ## Remaining / next (documented precisely)
+
 - **Full remote-primitive reuse + `form()`** — see "Remote client" section. Current reuse is the
   wire codec only; the reactive cache + primitives remain ours because Kit's are coupled to
   `client.js` (the router). Next: scoped alias of `client.js`/`state.svelte.js` → lightweight shims
@@ -187,20 +194,19 @@ Adopted where the toolchain supports it; blocked in one leg (svelte-check), so w
 
 ---
 
-
 ## Landed & verified this round (build + dev, real browser, adapter-node prod)
 
 - **Server islands** (`import X from '…' with { defer: 'true' }`). Fallback snippet SSRs into the
   page; component is NOT rendered at page-SSR. `<sk-island data-strategy="server" data-endpoint>`
-  + a `<link rel="preload" as="fetch">` hint. Runtime fetches `<base>/_islands` (same-origin,
-  cookies) and swaps innerHTML; fallback stays on failure (dev-logged). HMAC-signed devalue props
-  (key from `OGYGIA_SECRET` or a per-build key baked into the SERVER bundle only). Endpoint =
-  `ogygiaHandle()` from `ogygia/hooks` (composes with `sequence()`), resolving island modules via a
-  server manifest (dev: ssrLoadModule of the fake `.svelte` path; build: generated import map).
-  Remote functions + `await` run during the deferred render; island CSS reaches the page via the
-  import graph; zero component JS ships on csr=false. Verified tamper→403, unknown id→404, cookie
-  personalization, preload reuse (one server render, no double-fetch), SPA-swap single-fetch,
-  all-csr=false standalone. Suite: `verify/server-islands.ts`.
+  - a `<link rel="preload" as="fetch">` hint. Runtime fetches `<base>/_islands` (same-origin,
+    cookies) and swaps innerHTML; fallback stays on failure (dev-logged). HMAC-signed devalue props
+    (key from `OGYGIA_SECRET` or a per-build key baked into the SERVER bundle only). Endpoint =
+    `ogygiaHandle()` from `ogygia/hooks` (composes with `sequence()`), resolving island modules via a
+    server manifest (dev: ssrLoadModule of the fake `.svelte` path; build: generated import map).
+    Remote functions + `await` run during the deferred render; island CSS reaches the page via the
+    import graph; zero component JS ships on csr=false. Verified tamper→403, unknown id→404, cookie
+    personalization, preload reuse (one server render, no double-fetch), SPA-swap single-fetch,
+    all-csr=false standalone. Suite: `verify/server-islands.ts`.
 - **tsdown library build**: `packages/sk-islands` builds to `./dist` (`.js` + `.d.ts`, `unbundle`,
   `platform: neutral`). Svelte-pipeline files ship as source (copied): `*.svelte`,
   `shims/remote-client.svelte.js` (runes), `ambient.d.ts`. `package.json` exports point at `dist`;
@@ -260,6 +266,7 @@ the scoped alias proves unworkable. Next step.
 ## NOT done — next up (documented, with notes)
 
 ### Remote `form()` inside islands (REQUIRED, not started)
+
 Blocked on the "full primitive reuse" above (Kit's `form.svelte.js` + `form-utils.js` field-proxy/
 issue-flattening depend on `client.js`). Once the scoped `client.js`/`state` shim lands, `form()`
 comes with it. Until then it throws `unsupported('form')`; use classic form actions.
@@ -277,6 +284,7 @@ be the documented gap. Acceptance: island remote form, no-JS + JS-enhanced, issu
 devalue field values.
 
 ### Lakes (`hydrate: 'false'`) — approved as the NEXT round
+
 Per DESIGN.md + coordinator: swap the lake import for a placeholder in the island's CLIENT module
 (no lake JS in any client chunk — add a build-output assertion), SSR renders it inline, wrap it in
 `<sk-lake>`, lift/re-insert its DOM around parent hydration, `restore: 'cache' | 'empty'`
@@ -284,6 +292,7 @@ Per DESIGN.md + coordinator: swap the lake import for a placeholder in the islan
 boundary rule). Currently `hydrate: 'false'` is a clean build error ("roadmap — see DESIGN.md").
 
 ## Standing caveats (unchanged)
+
 - Remote `command` (POST) needs a correct `ORIGIN` in production (Kit CSRF; dev skips it).
 - `$app/*` shims reach island-boundary imports; deep imports in shared components: use props or
   `ogygia/app`. `page.data` is snapshotted per island.

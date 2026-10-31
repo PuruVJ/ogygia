@@ -60,7 +60,10 @@ type Export = {
 	members: Array<{ text: string; doc: string }>;
 };
 
-function jsdoc_of(t: TS, node: import('typescript').Node): { doc: string; since?: string; deprecated?: string } {
+function jsdoc_of(
+	t: TS,
+	node: import('typescript').Node
+): { doc: string; since?: string; deprecated?: string } {
 	const jd = (node as { jsDoc?: Array<import('typescript').JSDoc> }).jsDoc;
 	const j = jd?.[jd.length - 1];
 	if (!j) return { doc: '' };
@@ -70,7 +73,8 @@ function jsdoc_of(t: TS, node: import('typescript').Node): { doc: string; since?
 	for (const tag of j.tags ?? []) {
 		const name = tag.tagName.text;
 		if (name === 'since') since = (t.getTextOfJSDocComment(tag.comment) ?? '').trim();
-		if (name === 'deprecated') deprecated = (t.getTextOfJSDocComment(tag.comment) ?? '').trim() || 'deprecated';
+		if (name === 'deprecated')
+			deprecated = (t.getTextOfJSDocComment(tag.comment) ?? '').trim() || 'deprecated';
 	}
 	return { doc, since, deprecated };
 }
@@ -88,7 +92,12 @@ function collect_exports(
 	all = false
 ): Export[] {
 	const out: Export[] = [];
-	const push = (node: import('typescript').Node, name: string, kind: Export['kind'], members: Export['members'] = []) => {
+	const push = (
+		node: import('typescript').Node,
+		name: string,
+		kind: Export['kind'],
+		members: Export['members'] = []
+	) => {
 		const meta = jsdoc_of(t, node);
 		out.push({ name, kind, members, text: sf.text.slice(node.getStart(sf), node.end), ...meta });
 	};
@@ -161,8 +170,16 @@ function sanitize_doc(doc: string): string {
 /** One export → its markdown section (svelte.dev's shape). */
 function render_export(e: Export): string {
 	const parts: string[] = [`## ${e.name}`, ''];
-	if (e.since) parts.push(`<blockquote class="since note">\n\nAvailable since ${e.since}\n\n</blockquote>`, '');
-	if (e.deprecated) parts.push(`<blockquote class="deprecated">\n\n${sanitize_doc(e.deprecated)}\n\n</blockquote>`, '');
+	if (e.since)
+		parts.push(
+			`<blockquote class="since note">\n\nAvailable since ${e.since}\n\n</blockquote>`,
+			''
+		);
+	if (e.deprecated)
+		parts.push(
+			`<blockquote class="deprecated">\n\n${sanitize_doc(e.deprecated)}\n\n</blockquote>`,
+			''
+		);
 	if (e.doc) parts.push(sanitize_doc(e.doc), '');
 
 	if ((e.kind === 'class' || e.kind === 'interface') && e.members.length) {
@@ -171,13 +188,28 @@ function render_export(e: Export): string {
 		parts.push('<div class="ts-block">', '', fence(header), '');
 		for (const m of e.members) {
 			parts.push('<div class="ts-block-property">', '', fence(m.text), '');
-			if (m.doc) parts.push('<div class="ts-block-property-details">', '', sanitize_doc(m.doc), '', '</div>', '');
+			if (m.doc)
+				parts.push(
+					'<div class="ts-block-property-details">',
+					'',
+					sanitize_doc(m.doc),
+					'',
+					'</div>',
+					''
+				);
 			parts.push('</div>', '');
 		}
 		parts.push('</div>', '');
 	} else if (e.kind === 'function' && e.members.length) {
 		// merged overloads
-		parts.push('<div class="ts-block">', '', fence([e.text, ...e.members.map((m) => m.text)].join('\n')), '', '</div>', '');
+		parts.push(
+			'<div class="ts-block">',
+			'',
+			fence([e.text, ...e.members.map((m) => m.text)].join('\n')),
+			'',
+			'</div>',
+			''
+		);
 	} else {
 		parts.push('<div class="ts-block">', '', fence(e.text), '', '</div>', '');
 	}
@@ -206,7 +238,8 @@ export async function render_module(module_id: string): Promise<string | null> {
 	if (!exports.length) return null;
 
 	const names = exports.map((e) => e.name).sort((a, b) => a.localeCompare(b));
-	const summary = '```js\nimport {\n\t' + names.join(',\n\t') + "\n} from '" + module_id + "';\n```";
+	const summary =
+		'```js\nimport {\n\t' + names.join(',\n\t') + "\n} from '" + module_id + "';\n```";
 	return [summary, '', ...exports.map(render_export)].join('\n');
 }
 
@@ -227,7 +260,12 @@ export async function render_types(directive: string): Promise<string | null> {
 		// ambient `declare global { namespace App { … } }` or top-level `declare namespace App`
 		let body: import('typescript').Node | null = null;
 		const visit = (node: import('typescript').Node) => {
-			if (t.isModuleDeclaration(node) && t.isIdentifier(node.name) && node.name.text === 'App' && node.body) {
+			if (
+				t.isModuleDeclaration(node) &&
+				t.isIdentifier(node.name) &&
+				node.name.text === 'App' &&
+				node.body
+			) {
 				body = node.body;
 			}
 			t.forEachChild(node, visit);
@@ -241,7 +279,12 @@ export async function render_types(directive: string): Promise<string | null> {
 	// pick one (or all) exported declarations of '@sveltejs/kit'
 	let mod: import('typescript').Node | null = null;
 	t.forEachChild(sf, (node) => {
-		if (t.isModuleDeclaration(node) && t.isStringLiteral(node.name) && node.name.text === '@sveltejs/kit' && node.body) {
+		if (
+			t.isModuleDeclaration(node) &&
+			t.isStringLiteral(node.name) &&
+			node.name.text === '@sveltejs/kit' &&
+			node.body
+		) {
 			mod = node.body;
 		}
 	});

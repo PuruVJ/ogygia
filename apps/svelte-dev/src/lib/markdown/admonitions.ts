@@ -45,7 +45,12 @@ function details(summary: string, children: Node[], cls?: string): Node {
 		tagName: 'details',
 		properties: cls ? { className: [cls] } : {},
 		children: [
-			{ type: 'element', tagName: 'summary', properties: {}, children: [{ type: 'text', value: summary }] },
+			{
+				type: 'element',
+				tagName: 'summary',
+				properties: {},
+				children: [{ type: 'text', value: summary }]
+			},
 			...children
 		]
 	};

@@ -2,11 +2,19 @@
 // they were built for, and DECOYS for every false alarm those rules once raised. The comment on each
 // says which slow pattern the profiler should name (or why it must stay quiet). Profile it:
 // /__profiler → "Profile one page" → /purgatory, or `pnpm profiler:answer-key`.
-import {
-	randomUUID
-} from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { BRANDS, PRODUCTS } from '$lib/inferno/data';
-import { allTags, catalogRows, flatten, initials, isSlug, priceCached, priceOf, sortByName, withDiscount } from '$lib/purgatory/helpers';
+import {
+	allTags,
+	catalogRows,
+	flatten,
+	initials,
+	isSlug,
+	priceCached,
+	priceOf,
+	sortByName,
+	withDiscount
+} from '$lib/purgatory/helpers';
 import type { PageServerLoad } from './$types';
 
 export const prerender = false;

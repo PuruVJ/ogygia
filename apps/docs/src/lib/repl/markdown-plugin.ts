@@ -35,7 +35,10 @@ const default_transformers = () => [diff_markers(), inline_markers()];
 function config_signature(md: ReplMarkdownConfig | null): string {
 	if (!md) return 'default';
 	const { code, ...rest } = md;
-	const names = code?.transformers?.map((t) => (t && typeof t === 'object' ? (t.name ?? '?') : '?')).join(',') ?? '';
+	const names =
+		code?.transformers
+			?.map((t) => (t && typeof t === 'object' ? (t.name ?? '?') : '?'))
+			.join(',') ?? '';
 	return JSON.stringify(rest) + '|' + names;
 }
 
@@ -60,7 +63,9 @@ export function content_preprocessor(): ReturnType<typeof ogygiaPreprocess> {
 /** Markdown → SVELTE SOURCE (mdsvex + shiki + admonitions + …), with only the REPL-incompatible `?raw`
  *  source-export stripped. Island `with { … }` dials are PRESERVED — the caller decides. */
 async function markup_to_svelte(content: string, filename: string): Promise<string> {
-	const out = (await content_preprocessor().markup?.({ content, filename })) as { code?: string } | undefined;
+	const out = (await content_preprocessor().markup?.({ content, filename })) as
+		| { code?: string }
+		| undefined;
 	return (out?.code ?? content).replace(OG_SOURCE_LINE, '');
 }
 

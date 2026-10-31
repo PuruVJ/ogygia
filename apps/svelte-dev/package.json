@@ -10,6 +10,20 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"test": "vitest run"
 	},
+	"dependencies": {
+		"@fontsource/atkinson-hyperlegible": "^5.2.5",
+		"@fontsource/dm-serif-display": "^5.2.5",
+		"@fontsource/eb-garamond": "^5.2.5",
+		"@fontsource/fira-mono": "^5.2.5",
+		"@fontsource/fira-sans": "^5.2.5",
+		"bits-ui": "catalog:",
+		"devalue": "catalog:",
+		"mdast-util-from-markdown": "catalog:",
+		"mdsvex": "catalog:",
+		"ogygia": "workspace:*",
+		"shiki": "catalog:",
+		"valibot": "catalog:"
+	},
 	"devDependencies": {
 		"@ogygia/content": "workspace:*",
 		"@shikijs/twoslash": "^4.5.0",
@@ -26,19 +40,5 @@
 		"vite": "catalog:",
 		"vite-imagetools": "^12.0.0",
 		"vitest": "catalog:"
-	},
-	"dependencies": {
-		"@fontsource/atkinson-hyperlegible": "^5.2.5",
-		"@fontsource/dm-serif-display": "^5.2.5",
-		"@fontsource/eb-garamond": "^5.2.5",
-		"@fontsource/fira-mono": "^5.2.5",
-		"@fontsource/fira-sans": "^5.2.5",
-		"bits-ui": "catalog:",
-		"devalue": "catalog:",
-		"mdast-util-from-markdown": "catalog:",
-		"mdsvex": "catalog:",
-		"ogygia": "workspace:*",
-		"shiki": "catalog:",
-		"valibot": "catalog:"
 	}
 }

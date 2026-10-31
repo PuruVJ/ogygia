@@ -3,7 +3,20 @@
 	"baseBranch": "main",
 	"access": "public",
 	"ignore": [],
-	"fixed": [["ogygia", "@ogygia/core", "@ogygia/flags", "@ogygia/freeze", "@ogygia/federation", "@ogygia/content", "@ogygia/devtools", "@ogygia/testing", "@ogygia/cli", "@ogygia/router"]],
+	"fixed": [
+		[
+			"ogygia",
+			"@ogygia/core",
+			"@ogygia/flags",
+			"@ogygia/freeze",
+			"@ogygia/federation",
+			"@ogygia/content",
+			"@ogygia/devtools",
+			"@ogygia/testing",
+			"@ogygia/cli",
+			"@ogygia/router"
+		]
+	],
 	"linked": [],
 	"format": "auto",
 	"updateInternalDependencies": "patch",

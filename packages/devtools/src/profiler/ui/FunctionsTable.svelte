@@ -52,7 +52,9 @@
 		bind:value={query}
 		aria-label="filter functions"
 	/>
-	<span class="hint">{filtered.length} of {rows.length} · click a row for its location and call stacks</span>
+	<span class="hint"
+		>{filtered.length} of {rows.length} · click a row for its location and call stacks</span
+	>
 </div>
 <table>
 	<thead>
@@ -60,21 +62,35 @@
 			<th>function</th>
 			<th>where</th>
 			<th><span class="sr-only">kind of code</span></th>
-			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')} {@attach pressable} aria-sort={s.aria('self_ms')}
-				>self ms<span class="arr">{s.arrow('self_ms')}</span></th
+			<th
+				class="num sort"
+				class:active={s.key === 'self_ms'}
+				onclick={() => s.click('self_ms')}
+				{@attach pressable}
+				aria-sort={s.aria('self_ms')}>self ms<span class="arr">{s.arrow('self_ms')}</span></th
 			>
-			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')} {@attach pressable} aria-sort={s.aria('total_ms')}
-				>total ms<span class="arr">{s.arrow('total_ms')}</span></th
+			<th
+				class="num sort"
+				class:active={s.key === 'total_ms'}
+				onclick={() => s.click('total_ms')}
+				{@attach pressable}
+				aria-sort={s.aria('total_ms')}>total ms<span class="arr">{s.arrow('total_ms')}</span></th
 			>
 			<th
 				class="num sort"
 				class:active={s.key === 'per'}
 				title="one call: its time per render ÷ its calls in one render"
-				onclick={() => s.click('per')} {@attach pressable} aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
+				onclick={() => s.click('per')}
+				{@attach pressable}
+				aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
 			>
 			{#if hasAlloc}
-				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')} {@attach pressable} aria-sort={s.aria('alloc')}
-					>alloc<span class="arr">{s.arrow('alloc')}</span></th
+				<th
+					class="num sort"
+					class:active={s.key === 'alloc'}
+					onclick={() => s.click('alloc')}
+					{@attach pressable}
+					aria-sort={s.aria('alloc')}>alloc<span class="arr">{s.arrow('alloc')}</span></th
 				>
 			{/if}
 		</tr>
@@ -90,7 +106,8 @@
 			>
 				<td class="fn">
 					<span class="caret">{open === row_key(f) ? '▾' : '▸'}</span>
-					{#if f.label}<b title="an anonymous function: its own first line">fn</b> <code class="fnlabel">{f.label}</code>{:else}<b>{f.name}</b>{/if}
+					{#if f.label}<b title="an anonymous function: its own first line">fn</b>
+						<code class="fnlabel">{f.label}</code>{:else}<b>{f.name}</b>{/if}
 					{#if f.count > 1}
 						<span class="hint" title="{f.count} calls in one render, {fmt_ms(f.per)} ms each"
 							>×{f.count}</span
@@ -105,7 +122,9 @@
 				<td
 					><span
 						class="chip"
-						style="background:{CATEGORY_COLOR[f.category]};color:{ink_on(CATEGORY_COLOR[f.category])}"
+						style="background:{CATEGORY_COLOR[f.category]};color:{ink_on(
+							CATEGORY_COLOR[f.category]
+						)}"
 						title={f.pkg ? `${CATEGORY_LABEL[f.category]} · ${f.pkg}` : CATEGORY_LABEL[f.category]}
 						>{f.pkg ?? CATEGORY_LABEL[f.category]}</span
 					></td

@@ -13,6 +13,10 @@
 
 <Shell {base}>
 	<h1>The whole site <small>every request, and where the time goes per route</small></h1>
-	<p class="hint"><a href={base}>← dashboard</a> · {rows.length} rows from this instance{ephemeral ? ' (ephemeral: seconds of memory — use a sink)' : ''}</p>
+	<p class="hint">
+		<a href={base}>← dashboard</a> · {rows.length} rows from this instance{ephemeral
+			? ' (ephemeral: seconds of memory — use a sink)'
+			: ''}
+	</p>
 	<SiteView {base} {rows} {from} {sink} {ephemeral} />
 </Shell>

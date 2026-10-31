@@ -2,7 +2,13 @@
 	"name": "@ogygia/tsdown-plugin-svelte",
 	"version": "1.0.1",
 	"description": "Ship Svelte components from a tsdown build: preprocessed, TypeScript-free markup, with .svelte.d.ts types",
-	"type": "module",
+	"keywords": [
+		"library",
+		"plugin",
+		"rolldown",
+		"svelte",
+		"tsdown"
+	],
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
 	"repository": {
@@ -10,14 +16,27 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/tsdown-plugin-svelte"
 	},
-	"keywords": ["tsdown", "rolldown", "svelte", "plugin", "library"],
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		}
 	},
-	"files": ["dist", "README.md", "LICENSE"],
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.mts",
+				"default": "./dist/index.mjs"
+			}
+		},
+		"access": "public"
+	},
 	"scripts": {
 		"build": "tsdown",
 		"test": "vitest run",
@@ -25,18 +44,6 @@
 	},
 	"dependencies": {
 		"magic-string": "^1.1.0"
-	},
-	"peerDependencies": {
-		"@sveltejs/vite-plugin-svelte": ">=5.0.0",
-		"svelte": "^5.40.0",
-		"svelte2tsx": ">=0.7.0",
-		"tsdown": ">=0.15.0",
-		"typescript": ">=5.0.0"
-	},
-	"peerDependenciesMeta": {
-		"@sveltejs/vite-plugin-svelte": { "optional": true },
-		"svelte2tsx": { "optional": true },
-		"typescript": { "optional": true }
 	},
 	"devDependencies": {
 		"@sveltejs/vite-plugin-svelte": "catalog:",
@@ -47,13 +54,22 @@
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
-	"publishConfig": {
-		"access": "public",
-		"exports": {
-			".": {
-				"types": "./dist/index.d.mts",
-				"default": "./dist/index.mjs"
-			}
+	"peerDependencies": {
+		"@sveltejs/vite-plugin-svelte": ">=5.0.0",
+		"svelte": "^5.40.0",
+		"svelte2tsx": ">=0.7.0",
+		"tsdown": ">=0.15.0",
+		"typescript": ">=5.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@sveltejs/vite-plugin-svelte": {
+			"optional": true
+		},
+		"svelte2tsx": {
+			"optional": true
+		},
+		"typescript": {
+			"optional": true
 		}
 	}
 }

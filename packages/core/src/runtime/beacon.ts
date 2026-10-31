@@ -76,7 +76,21 @@ interface BeaconApi {
 let self_api: BeaconApi | undefined;
 /** the page's owning copy when it is not this one, else null */
 function owner(): BeaconApi | null {
-	self_api ??= { beacon_mark, beacon_failed, beacon_hydrated, beacon_watch, beacon_record_cpu, beacon_page, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_hole_batch_missed, beacon_entry_fallback, beacon_hole_fetched, beacon_nav };
+	self_api ??= {
+		beacon_mark,
+		beacon_failed,
+		beacon_hydrated,
+		beacon_watch,
+		beacon_record_cpu,
+		beacon_page,
+		beacon_warning,
+		beacon_hole_failed,
+		beacon_hole_answered,
+		beacon_hole_batch_missed,
+		beacon_entry_fallback,
+		beacon_hole_fetched,
+		beacon_nav
+	};
 	const g = globalThis as Record<symbol, BeaconApi | undefined>;
 	const o = (g[BEACON_KEY] ??= self_api);
 	return o === self_api ? null : o;
@@ -85,13 +99,28 @@ function owner(): BeaconApi | null {
 // the global rather than bundling one of its own into the island that marks)
 if (typeof document !== 'undefined') owner();
 
-export function beacon_mark(name: string, ms: number, attrs?: Record<string, string | number | boolean>, t0?: number): void {
+export function beacon_mark(
+	name: string,
+	ms: number,
+	attrs?: Record<string, string | number | boolean>,
+	t0?: number
+): void {
 	const o = owner();
 	if (o) return o.beacon_mark(name, ms, attrs, t0);
 	if (!collecting() || !name) return;
 	if (visit_marks.length >= 400) return;
-	if (endpoint() && marks.length < 400) marks.push({ name: String(name).slice(0, 120), ms: Math.max(0, Math.round(ms * 100) / 100), ...(t0 !== undefined ? { t0: Math.round(t0 * 100) / 100 } : {}), ...(attrs ? { attrs } : {}) });
-	visit_marks.push({ name: String(name).slice(0, 120), ms: Math.max(0, Math.round(ms * 100) / 100), ...(t0 !== undefined ? { t0: Math.round(t0 * 100) / 100 } : {}) });
+	if (endpoint() && marks.length < 400)
+		marks.push({
+			name: String(name).slice(0, 120),
+			ms: Math.max(0, Math.round(ms * 100) / 100),
+			...(t0 !== undefined ? { t0: Math.round(t0 * 100) / 100 } : {}),
+			...(attrs ? { attrs } : {})
+		});
+	visit_marks.push({
+		name: String(name).slice(0, 120),
+		ms: Math.max(0, Math.round(ms * 100) / 100),
+		...(t0 !== undefined ? { t0: Math.round(t0 * 100) / 100 } : {})
+	});
 	schedule();
 }
 
@@ -169,7 +198,11 @@ function tag_attrs(tag: string): Map<string, string> {
 	let i = 1;
 	while (i < tag.length && tag[i] !== ' ' && tag[i] !== '>' && tag[i] !== '/') i++;
 	while (i < tag.length) {
-		while (i < tag.length && (tag[i] === ' ' || tag[i] === '\n' || tag[i] === '\t' || tag[i] === '/')) i++;
+		while (
+			i < tag.length &&
+			(tag[i] === ' ' || tag[i] === '\n' || tag[i] === '\t' || tag[i] === '/')
+		)
+			i++;
 		if (i >= tag.length || tag[i] === '>') break;
 		const start = i;
 		while (i < tag.length && tag[i] !== '=' && tag[i] !== ' ' && tag[i] !== '>') i++;
@@ -196,7 +229,8 @@ function tag_attrs(tag: string): Map<string, string> {
 /** The tag's name, lowercase (`<qds-button …>` → `qds-button`). */
 function tag_name(tag: string): string {
 	let i = 1;
-	while (i < tag.length && tag[i] !== ' ' && tag[i] !== '>' && tag[i] !== '/' && tag[i] !== '\n') i++;
+	while (i < tag.length && tag[i] !== ' ' && tag[i] !== '>' && tag[i] !== '/' && tag[i] !== '\n')
+		i++;
 	return tag.slice(1, i).toLowerCase();
 }
 
@@ -213,7 +247,8 @@ export function attr_changes(a: string, b: string): AttrChange[] | null {
 		const ti = a.indexOf('<', i);
 		const tj = b.indexOf('<', j);
 		// the text before the next tag must match
-		if (a.slice(i, ti === -1 ? a.length : ti) !== b.slice(j, tj === -1 ? b.length : tj)) return null;
+		if (a.slice(i, ti === -1 ? a.length : ti) !== b.slice(j, tj === -1 ? b.length : tj))
+			return null;
 		if (ti === -1 || tj === -1) return ti === tj ? out : null;
 		const ei = a.indexOf('>', ti);
 		const ej = b.indexOf('>', tj);
@@ -226,8 +261,11 @@ export function attr_changes(a: string, b: string): AttrChange[] | null {
 		if (tag !== tag_name(y) || x[1] === '/' || y[1] === '/') return null;
 		const xa = tag_attrs(x);
 		const ya = tag_attrs(y);
-		for (const [name, v] of xa) if (ya.get(name) !== v && out.length < 20) out.push({ tag, name, from: v, to: ya.has(name) ? ya.get(name)! : null });
-		for (const [name, v] of ya) if (!xa.has(name) && out.length < 20) out.push({ tag, name, from: null, to: v });
+		for (const [name, v] of xa)
+			if (ya.get(name) !== v && out.length < 20)
+				out.push({ tag, name, from: v, to: ya.has(name) ? ya.get(name)! : null });
+		for (const [name, v] of ya)
+			if (!xa.has(name) && out.length < 20) out.push({ tag, name, from: null, to: v });
 	}
 	return out;
 }
@@ -240,7 +278,11 @@ let visit_scripts = new Map<string, { ms: number; count: number }>();
 /** scripts that forced style and layout (5 ms or more), each with its window on the page's clock */
 let visit_forced: { start: number; end: number; ms: number; url: string; fn: string }[] = [];
 /** long frames (50 ms or more) that began while the page scrolled, with their two biggest scripts */
-let visit_scroll_jank: { start: number; ms: number; scripts: { url: string; fn: string; invoker: string; ms: number }[] }[] = [];
+let visit_scroll_jank: {
+	start: number;
+	ms: number;
+	scripts: { url: string; fn: string; invoker: string; ms: number }[];
+}[] = [];
 /** when the page scrolled lately (at most one stamp per 50 ms, the last 200): the long frames are
  *  delivered after the fact, so each is matched to the scrolls around its own start */
 let scroll_times: number[] = [];
@@ -267,14 +309,27 @@ let visit_interaction_span: { start: number; ps: number; pe: number; end: number
 interface Frame {
 	start: number;
 	end: number;
-	scripts: { url: string; fn: string; invoker: string; start: number; ms: number; forced?: number }[];
+	scripts: {
+		url: string;
+		fn: string;
+		invoker: string;
+		start: number;
+		ms: number;
+		forced?: number;
+	}[];
 }
 let visit_frames: Frame[] = [];
 const MAX_FRAMES = 40;
 /** Svelte's hydration warnings (dev): the server and the browser disagreed, Svelte kept the server's */
 let visit_warnings: { code: string; message: string; file?: string; fp?: string; t: number }[] = [];
 
-export function beacon_warning(w: { code: string; message: string; file?: string; fp?: string; t: number }): void {
+export function beacon_warning(w: {
+	code: string;
+	message: string;
+	file?: string;
+	fp?: string;
+	t: number;
+}): void {
 	const o = owner();
 	if (o) return o.beacon_warning(w);
 	if (!collecting()) return;
@@ -298,13 +353,24 @@ let visit_holes_failed: HoleFailed[] = [];
 export function beacon_hole_failed(h: HoleFailed): void {
 	const o = owner();
 	if (o) return o.beacon_hole_failed(h);
-	if (!collecting() || visit_holes_failed.length >= 30 || visit_holes_failed.some((x) => x.id === h.id)) return;
+	if (
+		!collecting() ||
+		visit_holes_failed.length >= 30 ||
+		visit_holes_failed.some((x) => x.id === h.id)
+	)
+		return;
 	visit_holes_failed.push(h);
 	if (early_visit_done) resend_soon();
 }
 const FONT_EXT = new Set(['woff', 'woff2', 'ttf', 'otf']);
 const IMG_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'svg']);
-const LINK_AS: Record<string, string> = { style: 'css', script: 'script', font: 'font', image: 'img', fetch: 'fetch' };
+const LINK_AS: Record<string, string> = {
+	style: 'css',
+	script: 'script',
+	font: 'font',
+	image: 'img',
+	fetch: 'fetch'
+};
 
 /**
  * A file's type, for the byte counts and the lanes: its extension first, then the `<link>` that
@@ -322,7 +388,8 @@ export function resource_type(ext: string, initiator: string, link_as?: string):
 	if (initiator === 'css') return 'css';
 	if (initiator === 'script') return 'script';
 	if (initiator === 'img') return 'img';
-	if (initiator === 'fetch' || initiator === 'xmlhttprequest' || initiator === 'beacon') return 'fetch';
+	if (initiator === 'fetch' || initiator === 'xmlhttprequest' || initiator === 'beacon')
+		return 'fetch';
 	return 'other';
 }
 
@@ -363,11 +430,31 @@ export interface HoleBatchMiss {
 let visit_hole_batches: HoleBatchMiss[] = [];
 
 /** The restorer's log (runtime/restore.ts `__og_restore_log`): its late and mismatched hosts. */
-function restore_log(): { restores?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[] } {
-	const log = (globalThis as { __og_restore_log?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[] }).__og_restore_log;
+function restore_log(): {
+	restores?: {
+		kind: 'late' | 'mismatch';
+		host: string;
+		t: number;
+		diff?: string;
+		island?: string;
+	}[];
+} {
+	const log = (
+		globalThis as {
+			__og_restore_log?: {
+				kind: 'late' | 'mismatch';
+				host: string;
+				t: number;
+				diff?: string;
+				island?: string;
+			}[];
+		}
+	).__og_restore_log;
 	return log?.length ? { restores: log.slice(0, 20) } : {};
 }
-export function beacon_hole_batch_missed(m: Omit<HoleBatchMiss, 'ids'> & { endpoints: string[] }): void {
+export function beacon_hole_batch_missed(
+	m: Omit<HoleBatchMiss, 'ids'> & { endpoints: string[] }
+): void {
 	const o = owner();
 	if (o) return o.beacon_hole_batch_missed?.(m);
 	if (!collecting() || visit_hole_batches.length >= 10) return;
@@ -440,8 +527,17 @@ let visit_entry_fallbacks: EntryFallback[] = [];
 export function beacon_entry_fallback(f: EntryFallback): void {
 	const o = owner();
 	if (o) return o.beacon_entry_fallback?.(f);
-	if (!collecting() || visit_entry_fallbacks.length >= 20 || visit_entry_fallbacks.some((x) => x.entry === f.entry)) return;
-	visit_entry_fallbacks.push({ entry: f.entry.slice(0, 300), src: f.src.slice(0, 300), recovered: f.recovered });
+	if (
+		!collecting() ||
+		visit_entry_fallbacks.length >= 20 ||
+		visit_entry_fallbacks.some((x) => x.entry === f.entry)
+	)
+		return;
+	visit_entry_fallbacks.push({
+		entry: f.entry.slice(0, 300),
+		src: f.src.slice(0, 300),
+		recovered: f.recovered
+	});
 	if (early_visit_done) resend_soon();
 }
 /** each hole URL (absolute) → how many times the runtime asked the network for it */
@@ -463,7 +559,11 @@ export function beacon_hole_fetched(endpoint: string): void {
 let holes_answered_els = new WeakSet<Element>();
 /** A hole's first answer landed: the profiler weighs how long its fallback held the first screen.
  *  The element is read (id, place) only while measuring. */
-export function beacon_hole_answered(el: Element, start: number, batch?: { left: number; at: number; size: number }): void {
+export function beacon_hole_answered(
+	el: Element,
+	start: number,
+	batch?: { left: number; at: number; size: number }
+): void {
 	const o = owner();
 	// (an older owning copy has no such entry: stay quiet)
 	if (o) return o.beacon_hole_answered?.(el, start, batch);
@@ -480,7 +580,12 @@ export function beacon_hole_answered(el: Element, start: number, batch?: { left:
 	const rect = el.getBoundingClientRect();
 	// a batched hole has no request of its own: the batch's departure, and its own part's landing
 	const times = batch
-		? { left: Math.round(batch.left), first: Math.round(batch.at), end: Math.round(batch.at), batch: batch.size }
+		? {
+				left: Math.round(batch.left),
+				first: Math.round(batch.at),
+				end: Math.round(batch.at),
+				batch: batch.size
+			}
 		: hole_request_times(el.getAttribute('endpoint') ?? '', performance.now());
 	visit_holes_answered.push({
 		id,
@@ -496,7 +601,17 @@ export function beacon_hole_answered(el: Element, start: number, batch?: { left:
 	if (early_visit_done) resend_soon();
 }
 let visit_marks: { name: string; ms: number; t0?: number }[] = [];
-let visit_paints: { fcp?: number; lcp?: number; lcp_fp?: string; lcp_url?: string; lcp_tag?: string; lcp_replaced?: true; lcp_lazy?: true; lcp_priority?: 'high' | 'low'; held?: { outcome: CriticalOutcome; resources: number; waited_ms: number } } = {};
+let visit_paints: {
+	fcp?: number;
+	lcp?: number;
+	lcp_fp?: string;
+	lcp_url?: string;
+	lcp_tag?: string;
+	lcp_replaced?: true;
+	lcp_lazy?: true;
+	lcp_priority?: 'high' | 'low';
+	held?: { outcome: CriticalOutcome; resources: number; waited_ms: number };
+} = {};
 /** the largest paint's element: still in the document when the visit is read, or replaced (an
  *  island that rendered it again put a new one in its place — the hero painted twice). Only while
  *  its island is still there: an in-app navigation away takes both, and replaces nothing */
@@ -530,11 +645,21 @@ function snapshot_of(fp: string, ssr: string, now: string, a: string, b: string)
 	// (from a tag's start, so the window reads as markup)
 	const lt = a.indexOf('<', from);
 	if (lt !== -1 && lt <= i) from = lt;
-	return { fp, ssr: a.slice(from, from + SNAPSHOT_CAP), hydrated: b.slice(from, from + SNAPSHOT_CAP), from };
+	return {
+		fp,
+		ssr: a.slice(from, from + SNAPSHOT_CAP),
+		hydrated: b.slice(from, from + SNAPSHOT_CAP),
+		from
+	};
 }
 
 const fp_of = (node: unknown): string | undefined => {
-	const el = node && (node as Node).nodeType === 1 ? (node as Element) : node && (node as Node).nodeType === 3 ? (node as Node).parentElement : null;
+	const el =
+		node && (node as Node).nodeType === 1
+			? (node as Element)
+			: node && (node as Node).nodeType === 3
+				? (node as Node).parentElement
+				: null;
 	return el?.closest?.(ISLAND_SEL)?.getAttribute('data-og-fp') ?? undefined;
 };
 /** What was clicked, told briefly: `button "Save"`, `a#home`, `input[name=q]`. No selector engine. */
@@ -544,10 +669,15 @@ function describe_target(node: Node | null | undefined): string {
 	const tag = el.tagName.toLowerCase();
 	const id = el.id ? `#${el.id.slice(0, 30)}` : '';
 	const name = el.getAttribute('name');
-	const label = el.getAttribute('aria-label') ?? (tag === 'input' || tag === 'select' || tag === 'textarea' ? '' : (el.textContent ?? '').trim().slice(0, 30));
+	const label =
+		el.getAttribute('aria-label') ??
+		(tag === 'input' || tag === 'select' || tag === 'textarea'
+			? ''
+			: (el.textContent ?? '').trim().slice(0, 30));
 	return `${tag}${id}${name ? `[name=${name.slice(0, 30)}]` : ''}${label ? ` "${label}"` : ''}`;
 }
-const rect_of = (r: DOMRectReadOnly | undefined): [number, number, number, number] | undefined => (r ? [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : undefined);
+const rect_of = (r: DOMRectReadOnly | undefined): [number, number, number, number] | undefined =>
+	r ? [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] : undefined;
 
 /** every resource entry the observer saw (the browser's own buffer stops at 250 by default) */
 let seen_resources: PerformanceResourceTiming[] = [];
@@ -560,7 +690,19 @@ const MAX_REFETCHED = 40;
 const UNCOMPRESSED_MIN = 4096;
 const MAX_UNCOMPRESSED = 10;
 /** extensions that compress well (text, and wasm), whatever fetched them */
-const TEXT_EXT = new Set(['js', 'mjs', 'css', 'html', 'htm', 'json', 'svg', 'txt', 'xml', 'map', 'wasm']);
+const TEXT_EXT = new Set([
+	'js',
+	'mjs',
+	'css',
+	'html',
+	'htm',
+	'json',
+	'svg',
+	'txt',
+	'xml',
+	'map',
+	'wasm'
+]);
 
 function observe_vitals(): void {
 	// (the page this document loaded as: its visit is filed there, whatever the router does later)
@@ -568,7 +710,9 @@ function observe_vitals(): void {
 	if (vitals || typeof PerformanceObserver === 'undefined') return;
 	const v: Vitals = (vitals = {});
 	try {
-		const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+		const nav = performance.getEntriesByType('navigation')[0] as
+			| PerformanceNavigationTiming
+			| undefined;
 		if (nav && nav.responseStart > 0) v.ttfb = r2(nav.responseStart);
 	} catch {
 		// no navigation timing
@@ -578,13 +722,18 @@ function observe_vitals(): void {
 			const po = new PerformanceObserver((list) => cb(list.getEntries()));
 			// (interactions: every one from 16 ms, the floor — the default 104 ms hides a page's INP
 			// until it is already bad)
-			po.observe({ type, buffered: true, ...(type === 'event' ? { durationThreshold: 16 } : {}) } as PerformanceObserverInit);
+			po.observe({
+				type,
+				buffered: true,
+				...(type === 'event' ? { durationThreshold: 16 } : {})
+			} as PerformanceObserverInit);
 		} catch {
 			// unsupported entry type
 		}
 	};
 	observe('paint', (entries) => {
-		for (const e of entries) if (e.name === 'first-contentful-paint') v.fcp = visit_paints.fcp = r2(e.startTime);
+		for (const e of entries)
+			if (e.name === 'first-contentful-paint') v.fcp = visit_paints.fcp = r2(e.startTime);
 	});
 	// EVERY FILE: the browser's resource buffer holds 250 entries and then drops the rest (a heavy
 	// page, any dev server): room for more, and an observer, which sees each entry either way
@@ -594,10 +743,14 @@ function observe_vitals(): void {
 		// unsupported
 	}
 	observe('resource', (entries) => {
-		for (const e of entries) if (seen_resources.length < MAX_SEEN_RESOURCES) seen_resources.push(e as PerformanceResourceTiming);
+		for (const e of entries)
+			if (seen_resources.length < MAX_SEEN_RESOURCES)
+				seen_resources.push(e as PerformanceResourceTiming);
 	});
 	observe('largest-contentful-paint', (entries) => {
-		const last = entries[entries.length - 1] as (PerformanceEntry & { element?: Element | null; url?: string }) | undefined;
+		const last = entries[entries.length - 1] as
+			| (PerformanceEntry & { element?: Element | null; url?: string })
+			| undefined;
 		if (!last) return;
 		v.lcp = visit_paints.lcp = r2(last.startTime);
 		const fp = fp_of(last.element);
@@ -622,14 +775,29 @@ function observe_vitals(): void {
 		// no entry-type list
 	}
 	observe('layout-shift', (entries) => {
-		for (const e of entries as (PerformanceEntry & { hadRecentInput?: boolean; value?: number; sources?: { node?: Node | null; previousRect?: DOMRectReadOnly; currentRect?: DOMRectReadOnly }[] })[]) {
+		for (const e of entries as (PerformanceEntry & {
+			hadRecentInput?: boolean;
+			value?: number;
+			sources?: {
+				node?: Node | null;
+				previousRect?: DOMRectReadOnly;
+				currentRect?: DOMRectReadOnly;
+			}[];
+		})[]) {
 			if (e.hadRecentInput || typeof e.value !== 'number') continue;
 			cls += e.value;
 			if (make_room(visit_shifts, 60, (s) => s.t)) {
 				const src = e.sources?.[0];
 				// (the element that moved, told briefly, for a shift outside any island: `p "Lorem…"`)
 				const tag = src?.node ? describe_target(src.node) : '';
-				visit_shifts.push({ t: r2(e.startTime), value: Math.round(e.value * 10000) / 10000, ...(src?.node ? { fp: fp_of(src.node) } : {}), ...(tag ? { tag } : {}), ...(src?.previousRect ? { from: rect_of(src.previousRect) } : {}), ...(src?.currentRect ? { to: rect_of(src.currentRect) } : {}) });
+				visit_shifts.push({
+					t: r2(e.startTime),
+					value: Math.round(e.value * 10000) / 10000,
+					...(src?.node ? { fp: fp_of(src.node) } : {}),
+					...(tag ? { tag } : {}),
+					...(src?.previousRect ? { from: rect_of(src.previousRect) } : {}),
+					...(src?.currentRect ? { to: rect_of(src.currentRect) } : {})
+				});
 			}
 		}
 		v.cls = Math.round(cls * 1000) / 1000;
@@ -637,7 +805,12 @@ function observe_vitals(): void {
 		if (early_visit_done) resend_soon();
 	});
 	observe('event', (entries) => {
-		for (const e of entries as (PerformanceEntry & { interactionId?: number; processingStart?: number; processingEnd?: number; target?: Node | null })[]) {
+		for (const e of entries as (PerformanceEntry & {
+			interactionId?: number;
+			processingStart?: number;
+			processingEnd?: number;
+			target?: Node | null;
+		})[]) {
 			if (!e.interactionId) continue;
 			const d = r2(e.duration);
 			// ONE INTERACTION IS SEVERAL ENTRIES (pointerdown, pointerup, click; keydown, keyup) of the
@@ -671,7 +844,9 @@ function observe_vitals(): void {
 				delay: r2(Math.max(0, span.ps - span.start)),
 				processing: r2(Math.max(0, span.pe - span.ps)),
 				presentation: r2(Math.max(0, span.end - span.pe)),
-				target: named ? describe_target(e.target) || visit_interaction?.target || '' : visit_interaction!.target,
+				target: named
+					? describe_target(e.target) || visit_interaction?.target || ''
+					: visit_interaction!.target,
 				...(fp ? { fp } : {})
 			};
 		}
@@ -679,14 +854,25 @@ function observe_vitals(): void {
 		if (visit_interaction) interaction_seen(visit_interaction);
 	});
 	observe('longtask', (entries) => {
-		for (const e of entries) if (make_room(visit_longtasks, 100, (l) => l.t)) visit_longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
+		for (const e of entries)
+			if (make_room(visit_longtasks, 100, (l) => l.t))
+				visit_longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
 	});
 	if (!supports('longtask')) watch_frame_gaps();
 	// WHICH SCRIPT held the main thread, from the page's start (buffered): the long animation frames
 	// name each script that ran in them — a third party's cost is measured even before the CPU
 	// sampler starts, and where the sampler cannot see into it
 	observe('long-animation-frame', (entries) => {
-		for (const e of entries as (PerformanceEntry & { scripts?: { sourceURL?: string; duration?: number; startTime?: number; invoker?: string; sourceFunctionName?: string; forcedStyleAndLayoutDuration?: number }[] })[]) {
+		for (const e of entries as (PerformanceEntry & {
+			scripts?: {
+				sourceURL?: string;
+				duration?: number;
+				startTime?: number;
+				invoker?: string;
+				sourceFunctionName?: string;
+				forcedStyleAndLayoutDuration?: number;
+			}[];
+		})[]) {
 			// the scripts that made the browser lay the page out mid-run (a read after a write), with
 			// when: an island's hydration runs inside the runtime's own task, so the report finds the
 			// island by its hydrate window, not by the script's file
@@ -697,7 +883,11 @@ function observe_vitals(): void {
 			// for the page to hide, the send most often lost. /dt-thrash's forced layout missed one
 			// profile of three so. The visit goes again, debounced and capped)
 			if (early_visit_done) resend_soon();
-			if (e.duration >= 50 && scrolled_near(e.startTime) && make_room(visit_scroll_jank, 20, (j) => j.start)) {
+			if (
+				e.duration >= 50 &&
+				scrolled_near(e.startTime) &&
+				make_room(visit_scroll_jank, 20, (j) => j.start)
+			) {
 				visit_scroll_jank.push({
 					start: r2(e.startTime),
 					ms: r2(e.duration),
@@ -705,13 +895,27 @@ function observe_vitals(): void {
 						.slice()
 						.sort((a, b) => (b.duration ?? 0) - (a.duration ?? 0))
 						.slice(0, 2)
-						.map((s) => ({ url: (s.sourceURL ?? '').slice(0, 300), fn: (s.sourceFunctionName ?? '').slice(0, 80), invoker: (s.invoker ?? '').slice(0, 120), ms: r2(s.duration ?? 0) }))
+						.map((s) => ({
+							url: (s.sourceURL ?? '').slice(0, 300),
+							fn: (s.sourceFunctionName ?? '').slice(0, 80),
+							invoker: (s.invoker ?? '').slice(0, 120),
+							ms: r2(s.duration ?? 0)
+						}))
 				});
 			}
 			for (const s of e.scripts ?? [])
-				if ((s.forcedStyleAndLayoutDuration ?? 0) >= 5 && make_room(visit_forced, 30, (f) => f.start)) {
+				if (
+					(s.forcedStyleAndLayoutDuration ?? 0) >= 5 &&
+					make_room(visit_forced, 30, (f) => f.start)
+				) {
 					const start = s.startTime ?? e.startTime;
-					visit_forced.push({ start: r2(start), end: r2(start + (s.duration ?? 0)), ms: r2(s.forcedStyleAndLayoutDuration ?? 0), url: (s.sourceURL ?? '').slice(0, 300), fn: (s.sourceFunctionName ?? '').slice(0, 80) });
+					visit_forced.push({
+						start: r2(start),
+						end: r2(start + (s.duration ?? 0)),
+						ms: r2(s.forcedStyleAndLayoutDuration ?? 0),
+						url: (s.sourceURL ?? '').slice(0, 300),
+						fn: (s.sourceFunctionName ?? '').slice(0, 80)
+					});
 				}
 			// each frame, kept briefly, with its scripts: what an interaction waited behind or ran
 			visit_frames.push({
@@ -724,7 +928,9 @@ function observe_vitals(): void {
 					start: r2(s.startTime ?? e.startTime),
 					ms: r2(s.duration ?? 0),
 					// (of it, the browser laying the page out because the script read sizes after a change)
-					...((s.forcedStyleAndLayoutDuration ?? 0) >= 1 ? { forced: r2(s.forcedStyleAndLayoutDuration!) } : {})
+					...((s.forcedStyleAndLayoutDuration ?? 0) >= 1
+						? { forced: r2(s.forcedStyleAndLayoutDuration!) }
+						: {})
 				}))
 			});
 			if (visit_frames.length > MAX_FRAMES) visit_frames.shift();
@@ -749,7 +955,8 @@ function observe_vitals(): void {
 		if (recent_inputs.length > 64) recent_inputs.shift();
 	};
 	try {
-		for (const type of ['pointerover', 'pointerdown', 'keydown', 'focusin'] as const) document.addEventListener(type, note_input(type), { capture: true, passive: true });
+		for (const type of ['pointerover', 'pointerdown', 'keydown', 'focusin'] as const)
+			document.addEventListener(type, note_input(type), { capture: true, passive: true });
 	} catch {
 		// no document
 	}
@@ -761,7 +968,8 @@ function observe_vitals(): void {
 		seen.add(fp);
 		// when the input HAPPENED (the event's own stamp), not when this handler got to run: a click
 		// that waited behind a long hydrate task still landed before the island was awake
-		const at = ev.timeStamp > 0 && ev.timeStamp <= performance.now() ? ev.timeStamp : performance.now();
+		const at =
+			ev.timeStamp > 0 && ev.timeStamp <= performance.now() ? ev.timeStamp : performance.now();
 		visit_firsts.push({ fp, t: r2(at), type });
 	};
 	try {
@@ -819,7 +1027,13 @@ function send(body: string, slim?: () => string): void {
 	if (!url) return;
 	const post = (b: string, keepalive: boolean) => {
 		try {
-			const settled = fetch(url, { method: 'POST', body: b, keepalive, credentials: 'same-origin', headers: { 'content-type': 'text/plain' } }).catch(() => {
+			const settled = fetch(url, {
+				method: 'POST',
+				body: b,
+				keepalive,
+				credentials: 'same-origin',
+				headers: { 'content-type': 'text/plain' }
+			}).catch(() => {
 				// best-effort: a dropped beacon is a missing measurement, never a page error
 			});
 			if (keepalive) hold_keepalive(b.length, settled);
@@ -833,13 +1047,18 @@ function send(body: string, slim?: () => string): void {
 		// the page is still here: an ordinary request has no size limit
 		// (a page leaving by a link or a reload still reads "visible" in its pagehide: the hide says so —
 		// an ordinary request then was cancelled with the page, the visit lost)
-		if (typeof document === 'undefined' || (!leaving && document.visibilityState === 'visible')) return post(body, false);
+		if (typeof document === 'undefined' || (!leaving && document.visibilityState === 'visible'))
+			return post(body, false);
 		const s = slim?.();
 		if (!s || s.length > room) return;
 		body = s;
 	}
 	try {
-		if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(url, body)) {
+		if (
+			typeof navigator !== 'undefined' &&
+			navigator.sendBeacon &&
+			navigator.sendBeacon(url, body)
+		) {
 			hold_keepalive(body.length);
 			return;
 		}
@@ -875,30 +1094,58 @@ function nav_phases(n: PerformanceNavigationTiming): { phases?: Record<string, n
 /** The slowest interaction with the scripts of the long frames it overlapped, each put in the phase
  *  it started in: `delay` (the input waited behind it), `handler` (it ran the interaction's
  *  handlers), `paint` (after them, before the next frame). The heaviest few. */
-function interaction_with_scripts(i: Interaction): Interaction & { scripts?: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; forced?: number }[] } {
+function interaction_with_scripts(i: Interaction): Interaction & {
+	scripts?: {
+		url: string;
+		fn: string;
+		invoker: string;
+		ms: number;
+		phase: 'delay' | 'handler' | 'paint';
+		forced?: number;
+	}[];
+} {
 	const end = i.t + i.ms;
 	const handlers_at = i.t + i.delay;
 	const paint_at = handlers_at + i.processing;
-	const out: { url: string; fn: string; invoker: string; ms: number; phase: 'delay' | 'handler' | 'paint'; forced?: number }[] = [];
+	const out: {
+		url: string;
+		fn: string;
+		invoker: string;
+		ms: number;
+		phase: 'delay' | 'handler' | 'paint';
+		forced?: number;
+	}[] = [];
 	for (const f of visit_frames) {
 		if (f.end < i.t || f.start > end) continue;
 		for (const s of f.scripts) {
 			// (a script that ended before the input landed is not in the way; one that runs through it is)
 			if (s.start + s.ms < i.t || s.start > end || !(s.ms > 0)) continue;
 			const phase = s.start < handlers_at ? 'delay' : s.start <= paint_at ? 'handler' : 'paint';
-			out.push({ url: s.url, fn: s.fn, invoker: s.invoker, ms: s.ms, phase, ...(s.forced ? { forced: s.forced } : {}) });
+			out.push({
+				url: s.url,
+				fn: s.fn,
+				invoker: s.invoker,
+				ms: s.ms,
+				phase,
+				...(s.forced ? { forced: s.forced } : {})
+			});
 		}
 	}
 	out.sort((a, b) => b.ms - a.ms);
 	return out.length ? { ...i, scripts: out.slice(0, 6) } : { ...i };
 }
 
-let faces_memo: { key: string; faces: { family: string; display: string; urls: string[] }[] } | null = null;
+let faces_memo: {
+	key: string;
+	faces: { family: string; display: string; urls: string[] }[];
+} | null = null;
 
 /** The `@font-face` rules behind the fonts this page fetched: each family, its `font-display`
  *  (`auto` when unset), and the fetched files its `src` names. What says whether a late font left
  *  its text invisible. A cross-origin sheet the browser will not let us read is left out. No regex. */
-function font_faces_of(fetched: ReadonlySet<string>): { family: string; display: string; urls: string[] }[] {
+function font_faces_of(
+	fetched: ReadonlySet<string>
+): { family: string; display: string; urls: string[] }[] {
 	if (!fetched.size) return [];
 	// (each send asks again: the sheets are walked only when the fonts fetched changed)
 	const key = [...fetched].join('\n');
@@ -922,7 +1169,13 @@ function font_faces_of(fetched: ReadonlySet<string>): { family: string; display:
 			while (at !== -1 && urls.length < 6) {
 				const end = src.indexOf(')', at);
 				if (end === -1) break;
-				const raw = src.slice(at + 4, end).trim().split('"').join('').split("'").join('');
+				const raw = src
+					.slice(at + 4, end)
+					.trim()
+					.split('"')
+					.join('')
+					.split("'")
+					.join('');
 				try {
 					const url = new URL(raw, sheet.href ?? location.href).href.slice(0, 500);
 					if (fetched.has(url)) urls.push(url);
@@ -932,7 +1185,14 @@ function font_faces_of(fetched: ReadonlySet<string>): { family: string; display:
 				at = src.indexOf('url(', end);
 			}
 			if (!urls.length) continue;
-			const family = style.getPropertyValue('font-family').trim().split('"').join('').split("'").join('').slice(0, 80);
+			const family = style
+				.getPropertyValue('font-family')
+				.trim()
+				.split('"')
+				.join('')
+				.split("'")
+				.join('')
+				.slice(0, 80);
 			out.push({ family, display: style.getPropertyValue('font-display').trim() || 'auto', urls });
 		}
 	}
@@ -944,7 +1204,14 @@ function font_faces_of(fetched: ReadonlySet<string>): { family: string; display:
  *  the bytes past what the box shows are bytes nobody sees. A hidden image (no box), a vector one,
  *  and one whose size the browser will not tell (cross-origin, no Timing-Allow-Origin) are left out.
  *  One layout read per send, at most 300 images. No regex. */
-function oversized_images(): { url: string; natural: [number, number]; shown: [number, number]; dpr: number; bytes: number; fp?: string }[] {
+function oversized_images(): {
+	url: string;
+	natural: [number, number];
+	shown: [number, number];
+	dpr: number;
+	bytes: number;
+	fp?: string;
+}[] {
 	const out: ReturnType<typeof oversized_images> = [];
 	const dpr = devicePixelRatio || 1;
 	const imgs = document.images;
@@ -960,11 +1227,20 @@ function oversized_images(): { url: string; natural: [number, number]; shown: [n
 		const h = img.clientHeight;
 		if (!w || !h) continue;
 		if (img.naturalWidth * img.naturalHeight < w * h * dpr * dpr * 4) continue;
-		const e = performance.getEntriesByName(url, 'resource')[0] as PerformanceResourceTiming | undefined;
+		const e = performance.getEntriesByName(url, 'resource')[0] as
+			| PerformanceResourceTiming
+			| undefined;
 		const bytes = e ? e.encodedBodySize || e.transferSize : 0;
 		if (bytes < 50_000) continue;
 		const fp = fp_of(img);
-		out.push({ url: url.slice(0, 500), natural: [img.naturalWidth, img.naturalHeight], shown: [w, h], dpr: r2(dpr), bytes, ...(fp ? { fp } : {}) });
+		out.push({
+			url: url.slice(0, 500),
+			natural: [img.naturalWidth, img.naturalHeight],
+			shown: [w, h],
+			dpr: r2(dpr),
+			bytes,
+			...(fp ? { fp } : {})
+		});
 	}
 	return out;
 }
@@ -976,7 +1252,9 @@ function oversized_images(): { url: string; natural: [number, number]; shown: [n
  *  (`imagesrcset`) and anything a cross-origin sheet might use are left out (it cannot be read).
  *  Asked once, after that moment; null before it. No regex. */
 let preloads_memo: { url: string; as: string; bytes: number }[] | null = null;
-function preloads_never_used(load_end: number): { url: string; as: string; bytes: number }[] | null {
+function preloads_never_used(
+	load_end: number
+): { url: string; as: string; bytes: number }[] | null {
 	if (preloads_memo) return preloads_memo;
 	if (!(load_end > 0) || performance.now() - load_end < 3000) return null;
 	const out: { url: string; as: string; bytes: number }[] = [];
@@ -1004,7 +1282,18 @@ function preloads_never_used(load_end: number): { url: string; as: string; bytes
 						const end = src.indexOf(')', at);
 						if (end === -1) break;
 						try {
-							faces.add(new URL(src.slice(at + 4, end).trim().split('"').join('').split("'").join(''), sheet.href ?? location.href).href);
+							faces.add(
+								new URL(
+									src
+										.slice(at + 4, end)
+										.trim()
+										.split('"')
+										.join('')
+										.split("'")
+										.join(''),
+									sheet.href ?? location.href
+								).href
+							);
 						} catch {
 							/* not a URL */
 						}
@@ -1017,16 +1306,28 @@ function preloads_never_used(load_end: number): { url: string; as: string; bytes
 	for (let i = 0; i < links.length && i < 30; i++) {
 		const l = links[i];
 		const as = l.getAttribute('as') ?? '';
-		if ((as !== 'image' && as !== 'font' && as !== 'style') || l.hasAttribute('imagesrcset')) continue;
+		if ((as !== 'image' && as !== 'font' && as !== 'style') || l.hasAttribute('imagesrcset'))
+			continue;
 		const url = l.href;
-		const e = performance.getEntriesByName(url, 'resource')[0] as PerformanceResourceTiming | undefined;
+		const e = performance.getEntriesByName(url, 'resource')[0] as
+			| PerformanceResourceTiming
+			| undefined;
 		if (!e) continue;
 		let used = false;
 		if (as === 'style') {
-			for (const s of document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]')) if (s.href === url) used = true;
+			for (const s of document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]'))
+				if (s.href === url) used = true;
 		} else if (as === 'image') {
-			for (const img of document.images) if (img.currentSrc === url || img.src === url || (img.srcset && img.srcset.includes(l.getAttribute('href') ?? url))) used = true;
-			if (!used) for (const s of document.querySelectorAll('source[srcset]')) if ((s.getAttribute('srcset') ?? '').includes(l.getAttribute('href') ?? url)) used = true;
+			for (const img of document.images)
+				if (
+					img.currentSrc === url ||
+					img.src === url ||
+					(img.srcset && img.srcset.includes(l.getAttribute('href') ?? url))
+				)
+					used = true;
+			if (!used)
+				for (const s of document.querySelectorAll('source[srcset]'))
+					if ((s.getAttribute('srcset') ?? '').includes(l.getAttribute('href') ?? url)) used = true;
 			if (!used) {
 				read_sheets();
 				const raw = l.getAttribute('href') ?? url;
@@ -1036,7 +1337,8 @@ function preloads_never_used(load_end: number): { url: string; as: string; bytes
 			read_sheets();
 			used = opaque || faces.has(url);
 		}
-		if (!used) out.push({ url: url.slice(0, 500), as, bytes: e.encodedBodySize || e.transferSize || 0 });
+		if (!used)
+			out.push({ url: url.slice(0, 500), as, bytes: e.encodedBodySize || e.transferSize || 0 });
 	}
 	preloads_memo = out;
 	return out;
@@ -1045,7 +1347,13 @@ function preloads_never_used(load_end: number): { url: string; as: string; bytes
 /** THE PAGE'S SIZE IN ELEMENTS, when it is big (1,500 or more): how many, the deepest nesting, the
  *  element with the most children, and the islands holding the most of them (an island hydrates
  *  over each of its own). One walk of the tree; asked again only when the count changed. */
-type DomShape = { nodes: number; depth: number; deepest: string; widest: { at: string; children: number }; islands: { fp: string; nodes: number }[] };
+type DomShape = {
+	nodes: number;
+	depth: number;
+	deepest: string;
+	widest: { at: string; children: number };
+	islands: { fp: string; nodes: number }[];
+};
 let dom_memo: { n: number; shape: DomShape | null } | null = null;
 function dom_shape(): DomShape | null {
 	const all = document.getElementsByTagName('*');
@@ -1053,7 +1361,8 @@ function dom_shape(): DomShape | null {
 	if (dom_memo?.n === n) return dom_memo.shape;
 	let shape: DomShape | null = null;
 	// (one walk is ~0.9 ms on 17,000 elements: past 60,000 the count alone says enough)
-	if (n >= 60_000) shape = { nodes: n, depth: 0, deepest: '', widest: { at: '', children: 0 }, islands: [] };
+	if (n >= 60_000)
+		shape = { nodes: n, depth: 0, deepest: '', widest: { at: '', children: 0 }, islands: [] };
 	else if (n >= 1500) {
 		// (`ul.results`: its id, else its first own class — not the scoping class Svelte adds)
 		const brief = (el: Element) => {
@@ -1075,9 +1384,9 @@ function dom_shape(): DomShape | null {
 		let el: Element | null = root;
 		let d = 1;
 		while (el) {
-			if (d > depth) (depth = d), (deepest = el);
+			if (d > depth) ((depth = d), (deepest = el));
 			const kids = el.childElementCount;
-			if (kids > widest_n) (widest_n = kids), (widest = el);
+			if (kids > widest_n) ((widest_n = kids), (widest = el));
 			const first: Element | null = el.firstElementChild;
 			if (first) {
 				el = first;
@@ -1096,7 +1405,13 @@ function dom_shape(): DomShape | null {
 			if (fp) islands.push({ fp, nodes: r.getElementsByTagName('*').length });
 		}
 		islands.sort((a, b) => b.nodes - a.nodes);
-		shape = { nodes: n, depth, deepest: brief(deepest), widest: { at: brief(widest), children: widest_n }, islands: islands.slice(0, 3) };
+		shape = {
+			nodes: n,
+			depth,
+			deepest: brief(deepest),
+			widest: { at: brief(widest), children: widest_n },
+			islands: islands.slice(0, 3)
+		};
 	}
 	dom_memo = { n, shape };
 	return shape;
@@ -1124,7 +1439,9 @@ function images_unsized(): string[] {
  *  than a screen and a half down the document, not `loading="lazy"`, its file 20 KB or more, and
  *  fetched before the page's load ended — its bytes competed with the first screen's files. A
  *  hidden image (no box) is left out. Positions are the document's (the scroll added back). */
-function images_eager_below(load_end: number): { url: string; top: number; bytes: number; fp?: string }[] {
+function images_eager_below(
+	load_end: number
+): { url: string; top: number; bytes: number; fp?: string }[] {
 	const out: { url: string; top: number; bytes: number; fp?: string }[] = [];
 	const fold = innerHeight * 1.5;
 	const imgs = document.images;
@@ -1137,7 +1454,9 @@ function images_eager_below(load_end: number): { url: string; top: number; bytes
 		if (!r.width || !r.height) continue;
 		const top = Math.round(r.top + scrollY);
 		if (top < fold) continue;
-		const e = performance.getEntriesByName(url, 'resource')[0] as PerformanceResourceTiming | undefined;
+		const e = performance.getEntriesByName(url, 'resource')[0] as
+			| PerformanceResourceTiming
+			| undefined;
 		if (!e || (load_end > 0 && e.startTime > load_end)) continue;
 		const bytes = e.encodedBodySize || e.transferSize || 0;
 		if (bytes < 20_000) continue;
@@ -1179,17 +1498,35 @@ function build_visit_now(): Record<string, unknown> | null {
 	// (and its crossorigin: what a double download's fix turns on)
 	const link_co = new Map<string, string | null>();
 	try {
-		for (const l of document.querySelectorAll<HTMLLinkElement>('link[href][as], link[rel="modulepreload"][href]')) {
+		for (const l of document.querySelectorAll<HTMLLinkElement>(
+			'link[href][as], link[rel="modulepreload"][href]'
+		)) {
 			link_as.set(l.href, l.getAttribute('as') ?? 'script');
 			link_co.set(l.href, l.getAttribute('crossorigin'));
 		}
 	} catch {
 		/* no document */
 	}
-	const preload_misses: { url: string; type: string; bytes: number; as: string; crossorigin: string | null; hole?: true }[] = [];
-	const type_of = (r: PerformanceResourceTiming): string => resource_type(ext_of(r.name), r.initiatorType, link_as.get(r.name));
+	const preload_misses: {
+		url: string;
+		type: string;
+		bytes: number;
+		as: string;
+		crossorigin: string | null;
+		hole?: true;
+	}[] = [];
+	const type_of = (r: PerformanceResourceTiming): string =>
+		resource_type(ext_of(r.name), r.initiatorType, link_as.get(r.name));
 	let resources: Record<string, unknown>[] = [];
-	const refetched: { url: string; how: 'revalidated' | 'downloaded'; bytes: number; ms: number; entry?: string; hole?: string; runtime?: true }[] = [];
+	const refetched: {
+		url: string;
+		how: 'revalidated' | 'downloaded';
+		bytes: number;
+		ms: number;
+		entry?: string;
+		hole?: string;
+		runtime?: true;
+	}[] = [];
 	// every file by type (the counts and bytes of ALL of them), next to the first 200 in detail
 	const totals = new Map<string, { type: string; count: number; transfer: number; size: number }>();
 	let all_n = 0;
@@ -1198,7 +1535,9 @@ function build_visit_now(): Record<string, unknown> | null {
 	const raw_seen = new Set<string>();
 	try {
 		// the observer's list (it saw past the browser's buffer), else the buffer
-		const listed = seen_resources.length ? seen_resources : (performance.getEntriesByType('resource') as PerformanceResourceTiming[]);
+		const listed = seen_resources.length
+			? seen_resources
+			: (performance.getEntriesByType('resource') as PerformanceResourceTiming[]);
 		// (not the profiler's requests, nor the devtools' own reads of the page's files)
 		const all = listed.filter((r) => !r.name.includes('/__profiler/') && !tool_made(r));
 		all_n = all.length;
@@ -1216,7 +1555,11 @@ function build_visit_now(): Record<string, unknown> | null {
 				r.decodedBodySize >= UNCOMPRESSED_MIN &&
 				r.encodedBodySize >= r.decodedBodySize &&
 				!raw_seen.has(r.name) &&
-				(type === 'script' || type === 'style' || TEXT_EXT.has(ext_of(r.name)) || r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest')
+				(type === 'script' ||
+					type === 'style' ||
+					TEXT_EXT.has(ext_of(r.name)) ||
+					r.initiatorType === 'fetch' ||
+					r.initiatorType === 'xmlhttprequest')
 			) {
 				raw_seen.add(r.name);
 				uncompressed.push({ url: r.name.slice(0, 500), type, bytes: r.decodedBodySize });
@@ -1233,11 +1576,21 @@ function build_visit_now(): Record<string, unknown> | null {
 		for (const [url, list] of by_url) {
 			if (list.length < 2 || preload_misses.length >= 20) continue;
 			const pre = list.find((r) => r.initiatorType === 'link');
-			const downloads = list.filter((r) => r !== pre && r.initiatorType !== 'link' && r.encodedBodySize > 0 && r.transferSize >= r.encodedBodySize);
+			const downloads = list.filter(
+				(r) =>
+					r !== pre &&
+					r.initiatorType !== 'link' &&
+					r.encodedBodySize > 0 &&
+					r.transferSize >= r.encodedBodySize
+			);
 			const again = downloads[0];
 			// (a preload the server answered with an error: what follows is a retry, not a miss —
 			// the failure is its own finding)
-			if (((pre as (PerformanceResourceTiming & { responseStatus?: number }) | undefined)?.responseStatus ?? 0) >= 400) continue;
+			if (
+				((pre as (PerformanceResourceTiming & { responseStatus?: number }) | undefined)
+					?.responseStatus ?? 0) >= 400
+			)
+				continue;
 			// (the runtime asked for a hole more often than the network served it: the preload WAS
 			// used, and the download is the runtime's own second ask — a hole fetched again after
 			// Kit rebuilt the page, a retry)
@@ -1269,22 +1622,36 @@ function build_visit_now(): Record<string, unknown> | null {
 			const src = el.getAttribute('src')!;
 			try {
 				const host = el.parentElement?.closest('ogygia-region[endpoint]');
-				const hole = host ? (new URL(host.getAttribute('endpoint')!, location.href).searchParams.get('id') ?? '') : '';
-				entry_of.set(new URL(src, document.baseURI).href, { entry: el.getAttribute('entry')!, ...(hole ? { hole: hole.slice(0, 40) } : {}) });
+				const hole = host
+					? (new URL(host.getAttribute('endpoint')!, location.href).searchParams.get('id') ?? '')
+					: '';
+				entry_of.set(new URL(src, document.baseURI).href, {
+					entry: el.getAttribute('entry')!,
+					...(hole ? { hole: hole.slice(0, 40) } : {})
+				});
 			} catch {
 				/* not a URL */
 			}
 		}
-		const runtime_src = (document.querySelector('script[data-ogygia-runtime]') as HTMLScriptElement | null)?.src ?? '';
+		const runtime_src =
+			(document.querySelector('script[data-ogygia-runtime]') as HTMLScriptElement | null)?.src ??
+			'';
 		const counted = new Set<string>();
 		for (const r of all) {
-			if (refetched.length >= MAX_REFETCHED || counted.has(r.name) || !r.name.startsWith(origin) || !r.name.includes('/immutable/')) continue;
+			if (
+				refetched.length >= MAX_REFETCHED ||
+				counted.has(r.name) ||
+				!r.name.startsWith(origin) ||
+				!r.name.includes('/immutable/')
+			)
+				continue;
 			const body = r.encodedBodySize;
 			if (!(r.transferSize > 0)) continue;
 			// Chrome reports a 304 as headers only (transfer ~300 B) with NO body (0: the body came from
 			// the cache); a browser that reports the cached body has a transfer under it. A full download
 			// has both, the transfer at least the body.
-			const how = body === 0 || r.transferSize < body ? 'revalidated' : reload ? 'downloaded' : null;
+			const how =
+				body === 0 || r.transferSize < body ? 'revalidated' : reload ? 'downloaded' : null;
 			if (!how) continue;
 			counted.add(r.name);
 			const island = entry_of.get(r.name);
@@ -1293,7 +1660,9 @@ function build_visit_now(): Record<string, unknown> | null {
 				how,
 				bytes: body,
 				ms: r2(r.duration),
-				...(island ? { entry: island.entry.slice(0, 300), ...(island.hole ? { hole: island.hole } : {}) } : {}),
+				...(island
+					? { entry: island.entry.slice(0, 300), ...(island.hole ? { hole: island.hole } : {}) }
+					: {}),
 				...(r.name === runtime_src ? { runtime: true } : {})
 			});
 		}
@@ -1303,7 +1672,9 @@ function build_visit_now(): Record<string, unknown> | null {
 		const keep = all.filter(blocking).slice(0, MAX_DETAIL_RESOURCES);
 		// …and the largest paint's own file, always (its timing splits the LCP: a late one — an image a
 		// script added after a dev server's 250 modules — fell past the cut)
-		const lcp_res = visit_paints.lcp_url ? all.find((r) => r.name === visit_paints.lcp_url) : undefined;
+		const lcp_res = visit_paints.lcp_url
+			? all.find((r) => r.name === visit_paints.lcp_url)
+			: undefined;
 		if (lcp_res && !keep.includes(lcp_res)) keep.push(lcp_res);
 		// …then everything that is not a script (the holes' answers, fetches, images, styles, fonts),
 		// then the scripts, each by when it started: a dev server's hundreds of modules pushed the holes'
@@ -1317,25 +1688,26 @@ function build_visit_now(): Record<string, unknown> | null {
 				keep.push(r);
 			}
 		keep.sort((a, b) => a.startTime - b.startTime);
-		resources = keep
-			.map((r) => ({
-				url: r.name.slice(0, 500),
-				type: type_of(r),
-				start: r2(r.startTime),
-				end: r2(r.responseEnd || r.startTime + r.duration),
-				...(r.requestStart ? { req_start: r2(r.requestStart) } : {}),
-				...(r.responseStart ? { res_start: r2(r.responseStart) } : {}),
-				...(r.transferSize ? { transfer: r.transferSize } : {}),
-				...(r.decodedBodySize ? { size: r.decodedBodySize } : {}),
-				...(blocking(r) ? { blocking: true } : {})
-			}));
+		resources = keep.map((r) => ({
+			url: r.name.slice(0, 500),
+			type: type_of(r),
+			start: r2(r.startTime),
+			end: r2(r.responseEnd || r.startTime + r.duration),
+			...(r.requestStart ? { req_start: r2(r.requestStart) } : {}),
+			...(r.responseStart ? { res_start: r2(r.responseStart) } : {}),
+			...(r.transferSize ? { transfer: r.transferSize } : {}),
+			...(r.decodedBodySize ? { size: r.decodedBodySize } : {}),
+			...(blocking(r) ? { blocking: true } : {})
+		}));
 	} catch {
 		resources = [];
 	}
 	// the @font-face rules behind the fonts it fetched (whether a late one hid its text)
 	let fonts: { family: string; display: string; urls: string[] }[] = [];
 	try {
-		fonts = font_faces_of(new Set(resources.filter((r) => r.type === 'font').map((r) => r.url as string)));
+		fonts = font_faces_of(
+			new Set(resources.filter((r) => r.type === 'font').map((r) => r.url as string))
+		);
 	} catch {
 		/* no stylesheets to read */
 	}
@@ -1361,7 +1733,9 @@ function build_visit_now(): Record<string, unknown> | null {
 		// those as unknown, never as a clean zero
 		...unsupported_types(),
 		nav: {
-			...(start_hidden ? { start_hidden: true } : { req_start: r2(nav.requestStart), res_start: r2(nav.responseStart) }),
+			...(start_hidden
+				? { start_hidden: true }
+				: { req_start: r2(nav.requestStart), res_start: r2(nav.responseStart) }),
 			...(nav.responseEnd > 0 ? { res_end: r2(nav.responseEnd) } : {}),
 			...(nav.domInteractive ? { dom_interactive: r2(nav.domInteractive) } : {}),
 			...(nav.domContentLoadedEventEnd ? { dcl: r2(nav.domContentLoadedEventEnd) } : {}),
@@ -1369,7 +1743,9 @@ function build_visit_now(): Record<string, unknown> | null {
 			...(nav.transferSize ? { transfer: nav.transferSize } : {}),
 			...(nav.decodedBodySize ? { size: nav.decodedBodySize } : {}),
 			// (the HTML came down as large as it is: sent without gzip or brotli)
-			...(nav.decodedBodySize >= UNCOMPRESSED_MIN && nav.encodedBodySize >= nav.decodedBodySize ? { raw: true } : {}),
+			...(nav.decodedBodySize >= UNCOMPRESSED_MIN && nav.encodedBodySize >= nav.decodedBodySize
+				? { raw: true }
+				: {}),
 			...(nav.nextHopProtocol ? { protocol: nav.nextHopProtocol } : {}),
 			// THE WAIT FOR THE FIRST BYTE, step by step: redirects, a service worker starting, the DNS
 			// lookup, the connection (and its TLS), then the request until the server's first byte —
@@ -1377,17 +1753,27 @@ function build_visit_now(): Record<string, unknown> | null {
 			...nav_phases(nav),
 			// the document's own Server-Timing (what the server says its time went to), the first few
 			...(nav.serverTiming?.length
-				? { server_timing: nav.serverTiming.slice(0, 8).map((s) => ({ name: s.name.slice(0, 40), ms: r2(s.duration), ...(s.description ? { desc: s.description.slice(0, 80) } : {}) })) }
+				? {
+						server_timing: nav.serverTiming.slice(0, 8).map((s) => ({
+							name: s.name.slice(0, 40),
+							ms: r2(s.duration),
+							...(s.description ? { desc: s.description.slice(0, 80) } : {})
+						}))
+					}
 				: {})
 		},
 		// (how long the load scheduler held ogygia's downloads for the page's critical resources)
 		paints: {
 			...visit_paints,
-			...(lcp_el && !lcp_el.isConnected && lcp_region?.isConnected ? { lcp_replaced: true as const } : {}),
+			...(lcp_el && !lcp_el.isConnected && lcp_region?.isConnected
+				? { lcp_replaced: true as const }
+				: {}),
 			...(critical_outcome() ? { held: critical_outcome()! } : {})
 		},
 		resources,
-		...(all_n > resources.length ? { resource_totals: [...totals.values()], resources_all: all_n } : {}),
+		...(all_n > resources.length
+			? { resource_totals: [...totals.values()], resources_all: all_n }
+			: {}),
 		...(preload_misses.length ? { preload_misses } : {}),
 		...(uncompressed.length ? { uncompressed } : {}),
 		...(fonts.length ? { font_faces: fonts } : {}),
@@ -1409,7 +1795,14 @@ function build_visit_now(): Record<string, unknown> | null {
 		firsts: visit_firsts,
 		shifts: visit_shifts,
 		...(visit_interaction ? { interaction: interaction_with_scripts(visit_interaction) } : {}),
-		...(visit_scripts.size ? { scripts: [...visit_scripts].map(([url, s]) => ({ url, ms: r2(s.ms), count: s.count })).sort((a, b) => b.ms - a.ms).slice(0, 50) } : {}),
+		...(visit_scripts.size
+			? {
+					scripts: [...visit_scripts]
+						.map(([url, s]) => ({ url, ms: r2(s.ms), count: s.count }))
+						.sort((a, b) => b.ms - a.ms)
+						.slice(0, 50)
+				}
+			: {}),
 		regions: visit_regions(),
 		...(visit_warnings.length ? { warnings: visit_warnings.slice() } : {}),
 		...(visit_holes_failed.length ? { holes_failed: visit_holes_failed.slice() } : {}),
@@ -1464,7 +1857,13 @@ function flush_visit(final: boolean): void {
 			const el = document.querySelector(`ogygia-region[data-og-fp="${s.fp}"]`);
 			if (el) {
 				// (a windowed snapshot: the same window of the markup without comments or runtime marks)
-				const html = s.from === undefined ? el.innerHTML : without_runtime_marks(without_comments(el.innerHTML)).slice(s.from, s.from + SNAPSHOT_CAP);
+				const html =
+					s.from === undefined
+						? el.innerHTML
+						: without_runtime_marks(without_comments(el.innerHTML)).slice(
+								s.from,
+								s.from + SNAPSHOT_CAP
+							);
 				if (html !== s.hydrated) s.final = html.slice(0, SNAPSHOT_CAP);
 			}
 		}
@@ -1474,9 +1873,20 @@ function flush_visit(final: boolean): void {
 	// and the server's own weighing hold the files — then the regions and islands)
 	send(JSON.stringify({ page: visit_page(), visit }), () => {
 		const no_files = JSON.stringify({ page: visit_page(), visit: { ...visit, resources: [] } });
-		return no_files.length <= keepalive_room() ? no_files : JSON.stringify({ page: visit_page(), visit: { ...visit, resources: [], regions: [], islands: [] } });
+		return no_files.length <= keepalive_room()
+			? no_files
+			: JSON.stringify({
+					page: visit_page(),
+					visit: { ...visit, resources: [], regions: [], islands: [] }
+				});
 	});
-	void store_visit({ key: `${visit_page()}|${visit.at}`, page: visit_page(), at: visit.at as number, visit, snapshots });
+	void store_visit({
+		key: `${visit_page()}|${visit.at}`,
+		page: visit_page(),
+		at: visit.at as number,
+		visit,
+		snapshots
+	});
 }
 
 // THE BROWSER STORE: the same IndexedDB the profiler UI reads (`ui/store.ts` — one schema, two
@@ -1489,8 +1899,10 @@ function open_db(): Promise<IDBDatabase | null> {
 			const req = indexedDB.open(DB_NAME, DB_VERSION);
 			req.onupgradeneeded = () => {
 				const db = req.result;
-				if (!db.objectStoreNames.contains('reports')) db.createObjectStore('reports', { keyPath: 'id' });
-				if (!db.objectStoreNames.contains('visits')) db.createObjectStore('visits', { keyPath: 'key' });
+				if (!db.objectStoreNames.contains('reports'))
+					db.createObjectStore('reports', { keyPath: 'id' });
+				if (!db.objectStoreNames.contains('visits'))
+					db.createObjectStore('visits', { keyPath: 'key' });
 			};
 			req.onsuccess = () => resolve(req.result);
 			req.onerror = () => resolve(null);
@@ -1500,7 +1912,13 @@ function open_db(): Promise<IDBDatabase | null> {
 		}
 	});
 }
-async function store_visit(rec: { key: string; page: string; at: number; visit: Record<string, unknown>; snapshots: { fp: string }[] }): Promise<void> {
+async function store_visit(rec: {
+	key: string;
+	page: string;
+	at: number;
+	visit: Record<string, unknown>;
+	snapshots: { fp: string }[];
+}): Promise<void> {
 	const db = await open_db();
 	if (!db) return;
 	try {
@@ -1533,7 +1951,8 @@ async function store_visit(rec: { key: string; page: string; at: number; visit: 
 						shifts: union(arr(ov.shifts), arr(nv.shifts), (s) => `${s.t}|${s.value}`),
 						longtasks: union(arr(ov.longtasks), arr(nv.longtasks), (l) => `${l.t}|${l.ms}`),
 						marks: union(arr(ov.marks), arr(nv.marks), (m) => `${m.name}|${m.t0 ?? ''}|${m.ms}`),
-						resources: arr(nv.resources).length >= arr(ov.resources).length ? nv.resources : ov.resources
+						resources:
+							arr(nv.resources).length >= arr(ov.resources).length ? nv.resources : ov.resources
 					},
 					snapshots: union(old.snapshots, rec.snapshots, (s) => s.fp)
 				};
@@ -1576,7 +1995,11 @@ let cpu_off: string | null = null;
 let cpu_started_at = 0;
 
 function make_profiler(): SelfProfiler | null {
-	const Ctor = (globalThis as { Profiler?: new (o: { sampleInterval: number; maxBufferSize: number }) => SelfProfiler }).Profiler;
+	const Ctor = (
+		globalThis as {
+			Profiler?: new (o: { sampleInterval: number; maxBufferSize: number }) => SelfProfiler;
+		}
+	).Profiler;
 	if (!Ctor) {
 		cpu_off = 'unsupported';
 		return null;
@@ -1609,7 +2032,12 @@ interface NavRec {
 /** …and the fetch split, from the page request's own timing: the wait for the server's first
  *  byte, the download and its bytes; `prefetched` when the request began before the click (the
  *  router's hover prefetch: the page was already on its way) */
-type NavOut = Omit<NavRec, 'href'> & { server?: number; download?: number; bytes?: number; prefetched?: true };
+type NavOut = Omit<NavRec, 'href'> & {
+	server?: number;
+	download?: number;
+	bytes?: number;
+	prefetched?: true;
+};
 let visit_navs: NavOut[] = [];
 export function beacon_nav(n: NavRec): void {
 	const o = owner();
@@ -1619,15 +2047,25 @@ export function beacon_nav(n: NavRec): void {
 	let split: Pick<NavOut, 'server' | 'download' | 'bytes' | 'prefetched'> = {};
 	try {
 		// the page request: the latest fetch of that address that was done by the time it arrived
-		const entries = n.href ? (performance.getEntriesByName(n.href) as PerformanceResourceTiming[]) : [];
+		const entries = n.href
+			? (performance.getEntriesByName(n.href) as PerformanceResourceTiming[])
+			: [];
 		let e: PerformanceResourceTiming | undefined;
-		for (const x of entries) if (x.initiatorType === 'fetch' && x.responseEnd <= n.fetched + 1 && (!e || x.startTime > e.startTime)) e = x;
+		for (const x of entries)
+			if (
+				x.initiatorType === 'fetch' &&
+				x.responseEnd <= n.fetched + 1 &&
+				(!e || x.startTime > e.startTime)
+			)
+				e = x;
 		if (e && e.responseStart > 0) {
 			const asked = e.requestStart > 0 ? e.requestStart : e.startTime;
 			split = {
 				server: r2(Math.max(0, e.responseStart - asked)),
 				download: r2(Math.max(0, e.responseEnd - e.responseStart)),
-				...(e.transferSize || e.encodedBodySize ? { bytes: e.transferSize || e.encodedBodySize } : {}),
+				...(e.transferSize || e.encodedBodySize
+					? { bytes: e.transferSize || e.encodedBodySize }
+					: {}),
 				...(e.startTime < n.t - 1 ? { prefetched: true as const } : {})
 			};
 		}
@@ -1638,7 +2076,16 @@ export function beacon_nav(n: NavRec): void {
 		first_nav_t = n.t;
 		snapshot_firsts = snapshots.length;
 	}
-	visit_navs.push({ from: n.from.slice(0, 300), to: n.to.slice(0, 300), type: (n.type || 'link').slice(0, 20), t: r2(n.t), fetched: r2(n.fetched), styled: r2(n.styled), swapped: r2(n.swapped), ...split });
+	visit_navs.push({
+		from: n.from.slice(0, 300),
+		to: n.to.slice(0, 300),
+		type: (n.type || 'link').slice(0, 20),
+		t: r2(n.t),
+		fetched: r2(n.fetched),
+		styled: r2(n.styled),
+		swapped: r2(n.swapped),
+		...split
+	});
 	resend_soon();
 }
 
@@ -1657,7 +2104,13 @@ export function beacon_failed(el: Element, message?: string, since?: number, tur
 const failed_spans = new Map<string, [number, number]>();
 const failed_turns = new Map<string, number>();
 
-const MEASURED_TYPES = ['layout-shift', 'longtask', 'event', 'largest-contentful-paint', 'long-animation-frame'];
+const MEASURED_TYPES = [
+	'layout-shift',
+	'longtask',
+	'event',
+	'largest-contentful-paint',
+	'long-animation-frame'
+];
 /** whether this browser can observe an entry type */
 function supports(type: string): boolean {
 	try {
@@ -1716,12 +2169,18 @@ function estimate_wake_shift(el: Element, fp: string, t: number): void {
 		if (moved) last = moved;
 	};
 	look(t);
-	if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => requestAnimationFrame(() => look(performance.now())));
+	if (typeof requestAnimationFrame !== 'undefined')
+		requestAnimationFrame(() => requestAnimationFrame(() => look(performance.now())));
 	setTimeout(() => look(performance.now()), BOX_LOOK_AGAIN_MS);
 }
 /** the island's box against `before`: a shift when its height changed with its bottom on the screen;
  *  the box it has now (the next look's `before`), or null when nothing moved */
-function box_shift(el: Element, fp: string, before: { top: number; height: number }, t: number): { top: number; height: number } | null {
+function box_shift(
+	el: Element,
+	fp: string,
+	before: { top: number; height: number },
+	t: number
+): { top: number; height: number } | null {
 	const after = box_of(el);
 	if (!after) return null;
 	const dh = after.bottom - after.top - before.height;
@@ -1736,7 +2195,10 @@ function box_shift(el: Element, fp: string, before: { top: number; height: numbe
 	// of its box on the screen × how far its content moved — what lies below it is another's shift)
 	const moved = Math.min(Math.abs(dh), vh);
 	const seen = Math.max(0, Math.min(vh, after.bottom) - Math.max(0, after.top));
-	const value = Math.round(((seen * Math.min(after.width, vw)) / (vh * vw)) * (moved / Math.max(vw, vh)) * 10000) / 10000;
+	const value =
+		Math.round(
+			((seen * Math.min(after.width, vw)) / (vh * vw)) * (moved / Math.max(vw, vh)) * 10000
+		) / 10000;
 	if (value < 0.0001 || !make_room(visit_shifts, 60, (s) => s.t)) return now;
 	const tag = describe_target(el);
 	visit_shifts.push({
@@ -1744,8 +2206,18 @@ function box_shift(el: Element, fp: string, before: { top: number; height: numbe
 		value,
 		fp,
 		...(tag ? { tag } : {}),
-		from: [Math.round(after.left), Math.round(before.top - scrollY), Math.round(after.width), Math.round(before.height)],
-		to: [Math.round(after.left), Math.round(after.top), Math.round(after.width), Math.round(after.bottom - after.top)]
+		from: [
+			Math.round(after.left),
+			Math.round(before.top - scrollY),
+			Math.round(after.width),
+			Math.round(before.height)
+		],
+		to: [
+			Math.round(after.left),
+			Math.round(after.top),
+			Math.round(after.width),
+			Math.round(after.bottom - after.top)
+		]
 	});
 	// (a shift after the early visit: sent again, as a layout shift's is)
 	if (early_visit_done) resend_soon();
@@ -1768,17 +2240,25 @@ const FRAMES_MAX_MS = 20_000;
  * not counted.
  */
 function watch_frame_gaps(): void {
-	if (longtasks_from_frames || typeof requestAnimationFrame === 'undefined' || typeof document === 'undefined') return;
+	if (
+		longtasks_from_frames ||
+		typeof requestAnimationFrame === 'undefined' ||
+		typeof document === 'undefined'
+	)
+		return;
 	longtasks_from_frames = true;
 	let last = 0;
 	const tick = (now: number) => {
 		if (document.visibilityState !== 'visible') last = 0;
 		else {
 			const late = last ? now - last - FRAME_MS : 0;
-			if (late > STALL_MS && make_room(visit_longtasks, 100, (l) => l.t)) visit_longtasks.push({ t: r2(last + FRAME_MS), ms: r2(late) });
+			if (late > STALL_MS && make_room(visit_longtasks, 100, (l) => l.t))
+				visit_longtasks.push({ t: r2(last + FRAME_MS), ms: r2(late) });
 			last = now;
 		}
-		const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+		const nav = performance.getEntriesByType('navigation')[0] as
+			| PerformanceNavigationTiming
+			| undefined;
 		const loaded = nav?.loadEventEnd || 0;
 		if (now >= FRAMES_MAX_MS || (loaded && now >= loaded + FRAMES_AFTER_LOAD_MS)) return;
 		requestAnimationFrame(tick);
@@ -1836,7 +2316,9 @@ function visit_regions(): Record<string, unknown>[] {
 				height: Math.round(box.height),
 				// (no box of its own nor a child's: it draws nothing on this screen — or, headless, it never
 				// draws: only `hidden` markers)
-				...(!box.height && !box.width ? { hidden: true, ...(is_headless(el) ? { headless: true } : {}) } : {})
+				...(!box.height && !box.width
+					? { hidden: true, ...(is_headless(el) ? { headless: true } : {}) }
+					: {})
 			});
 		}
 	} catch {
@@ -1862,7 +2344,9 @@ function start_cpu(): void {
 		// machine can be that slow — stopping now would sample the page without its hydration)
 		let waiting = false;
 		try {
-			for (const el of document.querySelectorAll('ogygia-region[data-og-fp]:not([data-hydrated]):not([wake]):not([render="defer"]), ogygia-region[data-og-fp][wake="load"]:not([data-hydrated])'))
+			for (const el of document.querySelectorAll(
+				'ogygia-region[data-og-fp]:not([data-hydrated]):not([wake]):not([render="defer"]), ogygia-region[data-og-fp][wake="load"]:not([data-hydrated])'
+			))
 				if (!failed_fps.has(el.getAttribute('data-og-fp') ?? '')) {
 					waiting = true;
 					break;
@@ -1870,7 +2354,8 @@ function start_cpu(): void {
 		} catch {
 			waiting = false;
 		}
-		if ((now - last < CPU_QUIET_MS || waiting) && now - cpu_started_at < CPU_WINDOW_MAX_MS) setTimeout(check, CPU_QUIET_MS);
+		if ((now - last < CPU_QUIET_MS || waiting) && now - cpu_started_at < CPU_WINDOW_MAX_MS)
+			setTimeout(check, CPU_QUIET_MS);
 		else void flush_cpu(false);
 	};
 	setTimeout(check, CPU_WINDOW_MS);
@@ -1887,7 +2372,11 @@ async function flush_cpu(hiding: boolean): Promise<void> {
 	} catch {
 		return;
 	}
-	if (DEVTOOLS && trace) cpu_kept = [{ trace, from: cpu_started_at, to: performance.now(), label: 'page load' }, ...cpu_kept.slice(0, 4)];
+	if (DEVTOOLS && trace)
+		cpu_kept = [
+			{ trace, from: cpu_started_at, to: performance.now(), label: 'page load' },
+			...cpu_kept.slice(0, 4)
+		];
 	// the load is sampled: now wait, sampling, for a slow interaction (never while hiding)
 	if (!hiding) start_interaction_cpu();
 	const url = endpoint();
@@ -1899,7 +2388,13 @@ async function flush_cpu(hiding: boolean): Promise<void> {
 	const keepalive = hiding && body.length <= keepalive_room();
 	if (hiding && !keepalive) return;
 	try {
-		const settled = fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
+		const settled = fetch(url, {
+			method: 'POST',
+			body,
+			credentials: 'same-origin',
+			headers: { 'content-type': 'text/plain' },
+			...(keepalive ? { keepalive: true } : {})
+		}).catch(() => {
 			// best effort
 		});
 		if (keepalive) hold_keepalive(body.length, settled);
@@ -1934,7 +2429,11 @@ function start_interaction_cpu(): void {
 function interaction_seen(i: Interaction): void {
 	if (!icpu || icpu_caught || i.ms < ICPU_SLOW_MS) return;
 	const handlers_at = i.t + i.delay;
-	icpu_caught = { t: i.t, wait: [i.t, handlers_at], handler: [handlers_at, handlers_at + i.processing] };
+	icpu_caught = {
+		t: i.t,
+		wait: [i.t, handlers_at],
+		handler: [handlers_at, handlers_at + i.processing]
+	};
 	if (icpu_timer) clearTimeout(icpu_timer);
 	// (a moment for the rest of its entries and its paint; the trace then holds all of it)
 	icpu_timer = setTimeout(() => void stop_interaction_cpu(false), 300);
@@ -1959,16 +2458,30 @@ async function stop_interaction_cpu(hiding: boolean): Promise<void> {
 	const i = visit_interaction;
 	if (i && i.t === caught.t) {
 		const handlers_at = i.t + i.delay;
-		caught = { t: i.t, wait: [i.t, handlers_at], handler: [handlers_at, handlers_at + i.processing] };
+		caught = {
+			t: i.t,
+			wait: [i.t, handlers_at],
+			handler: [handlers_at, handlers_at + i.processing]
+		};
 	}
-	if (DEVTOOLS) cpu_kept = [{ trace, from: caught.wait[0], to: caught.handler[1], label: 'interaction', spans: caught }, ...cpu_kept.slice(0, 4)];
+	if (DEVTOOLS)
+		cpu_kept = [
+			{ trace, from: caught.wait[0], to: caught.handler[1], label: 'interaction', spans: caught },
+			...cpu_kept.slice(0, 4)
+		];
 	const url = endpoint();
 	if (!url) return;
 	const body = JSON.stringify({ page: visit_page(), cpu: trace, interaction: caught });
 	const keepalive = hiding && body.length <= keepalive_room();
 	if (hiding && !keepalive) return;
 	try {
-		const settled = fetch(url, { method: 'POST', body, credentials: 'same-origin', headers: { 'content-type': 'text/plain' }, ...(keepalive ? { keepalive: true } : {}) }).catch(() => {
+		const settled = fetch(url, {
+			method: 'POST',
+			body,
+			credentials: 'same-origin',
+			headers: { 'content-type': 'text/plain' },
+			...(keepalive ? { keepalive: true } : {})
+		}).catch(() => {
 			// best effort
 		});
 		if (keepalive) hold_keepalive(body.length, settled);
@@ -1984,7 +2497,8 @@ const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS_
 
 // a BUILD with devtools on: measure only for a browser that turned devtools on (insights/switch.ts) —
 // every other visitor of a preview deploy pays nothing
-const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
+const DEVTOOLS_LAZY =
+	typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 let opted: boolean | undefined;
 function devtools_measures(): boolean {
 	if (!DEVTOOLS) return false;
@@ -2080,9 +2594,16 @@ function flush_now(): void {
  *  closed tab, a crash) would otherwise never send it. resend_soon waits 1.5 s itself. */
 function send_after_preload_check(): void {
 	try {
-		if (!document.querySelector('link[rel="preload"][as="image"]:not([imagesrcset]), link[rel="preload"][as="font"], link[rel="preload"][as="style"]')) return;
+		if (
+			!document.querySelector(
+				'link[rel="preload"][as="image"]:not([imagesrcset]), link[rel="preload"][as="font"], link[rel="preload"][as="style"]'
+			)
+		)
+			return;
 		if (document.readyState === 'complete') {
-			const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+			const nav = performance.getEntriesByType('navigation')[0] as
+				| PerformanceNavigationTiming
+				| undefined;
 			setTimeout(resend_soon, Math.max(0, 1700 - (performance.now() - (nav?.loadEventEnd ?? 0))));
 		} else addEventListener('load', () => setTimeout(resend_soon, 1700), { once: true });
 	} catch {
@@ -2113,10 +2634,15 @@ function schedule(): void {
 		listening = true;
 		observe_vitals();
 		start_cpu();
-		document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && on_hide());
+		document.addEventListener(
+			'visibilitychange',
+			() => document.visibilityState === 'hidden' && on_hide()
+		);
 		addEventListener('pagehide', on_hide);
 	}
-	const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+	const idle = (
+		globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }
+	).requestIdleCallback;
 	if (idle) idle(flush, { timeout: 2000 });
 	else setTimeout(flush, 1500);
 }
@@ -2127,7 +2653,14 @@ function schedule(): void {
  * the server sent (the runtime's own copy), compared with what the island shows now. No-op
  * without the tag.
  */
-export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_done: number, ssr_html?: string | null, t_turn?: number): void {
+export function beacon_hydrated(
+	el: Element,
+	t0: number,
+	t_loaded: number,
+	t_done: number,
+	ssr_html?: string | null,
+	t_turn?: number
+): void {
 	const o = owner();
 	if (o) return o.beacon_hydrated(el, t0, t_loaded, t_done, ssr_html, t_turn);
 	if (!collecting()) return;
@@ -2135,7 +2668,14 @@ export function beacon_hydrated(el: Element, t0: number, t_loaded: number, t_don
 	island_record(el, t0, t_loaded, t_done, ssr_html, t_turn);
 	charge('islands', c0);
 }
-function island_record(el: Element, t0: number, t_loaded: number, t_done: number, ssr_html?: string | null, t_turn?: number): void {
+function island_record(
+	el: Element,
+	t0: number,
+	t_loaded: number,
+	t_done: number,
+	ssr_html?: string | null,
+	t_turn?: number
+): void {
 	const fp = el.getAttribute('data-og-fp');
 	if (!fp) return;
 	const recovered = el.hasAttribute('data-og-recovered');
@@ -2231,7 +2771,12 @@ function island_record(el: Element, t0: number, t_loaded: number, t_done: number
 }
 
 /** the attributes the runtime itself sets, empty, on the regions inside an island's markup */
-const RUNTIME_MARKS = [' data-nested=""', ' data-hydrated=""', ' data-og-kept=""', ' data-revalidated=""'];
+const RUNTIME_MARKS = [
+	' data-nested=""',
+	' data-hydrated=""',
+	' data-og-kept=""',
+	' data-revalidated=""'
+];
 /** `html` without the runtime's own marks (string search, no regex: it runs per changed hydration) */
 export function without_runtime_marks(html: string): string {
 	for (const m of RUNTIME_MARKS) if (html.includes(m)) html = html.split(m).join('');
@@ -2339,7 +2884,11 @@ export function beacon_page(): BeaconPage | null {
 		...(island_boxes ? { shifts_from: 'boxes' as const } : {}),
 		marks: visit_marks.slice(),
 		snapshots: snapshots.slice(),
-		cpu: { state: cpu ? 'recording' : cpu_kept.length ? 'done' : 'off', off: cpu_off, traces: cpu_kept.slice() }
+		cpu: {
+			state: cpu ? 'recording' : cpu_kept.length ? 'done' : 'off',
+			off: cpu_off,
+			traces: cpu_kept.slice()
+		}
 	};
 }
 
@@ -2406,8 +2955,20 @@ export function _reset_beacon(): void {
 }
 
 /** @internal tests */
-export function _beacon_state(): { target: string | null | undefined; queued: number; marks: number; scheduled: boolean; snapshots: number } {
-	return { target, queued: queue.length, marks: marks.length, scheduled, snapshots: snapshots.length };
+export function _beacon_state(): {
+	target: string | null | undefined;
+	queued: number;
+	marks: number;
+	scheduled: boolean;
+	snapshots: number;
+} {
+	return {
+		target,
+		queued: queue.length,
+		marks: marks.length,
+		scheduled,
+		snapshots: snapshots.length
+	};
 }
 
 /** @internal tests: the size-aware send */
@@ -2427,4 +2988,10 @@ export function _beacon_send_leaving(body: string, slim?: () => string): void {
 // load came before it. The copy that owns the page watches as it loads, when the page is measured
 // (the profiler's tag, or the devtools); the meta tag is read here, not cached, so a page whose tag
 // comes later still finds it. (At the module's end: every binding the watch touches is set.)
-if (typeof document !== 'undefined' && owner() === null && (devtools_measures() || !!document.querySelector('meta[name="ogygia-profiler-beacon"]')) && !supports('longtask')) watch_frame_gaps();
+if (
+	typeof document !== 'undefined' &&
+	owner() === null &&
+	(devtools_measures() || !!document.querySelector('meta[name="ogygia-profiler-beacon"]')) &&
+	!supports('longtask')
+)
+	watch_frame_gaps();

@@ -19,9 +19,9 @@
 <main class="heavy">
 	<h1 data-static-shell>Heavy SSR page</h1>
 	<p data-static-shell>
-		Four expensive component families rendered inline on the server: a CPU prime sieve, an
-		800-row formatted table, an exponential recursive tree, and a regex-heavy text transform.
-		Every millisecond here is real SSR time the profiler can localize.
+		Four expensive component families rendered inline on the server: a CPU prime sieve, an 800-row
+		formatted table, an exponential recursive tree, and a regex-heavy text transform. Every
+		millisecond here is real SSR time the profiler can localize.
 	</p>
 
 	<section>

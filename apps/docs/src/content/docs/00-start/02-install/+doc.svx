@@ -172,8 +172,8 @@ You do **not** need a keepalive route. When Kit would skip its client build, the
 
 ## Do / don't
 
-| Do | Don't |
-| --- | --- |
-| Start with your most static route that has the most traffic. There, the removal of the Kit client gives the largest gain. | Do not set the full app to `csr = false` on day one. Convert route by route and measure. |
-| Register `ogygia()` **before** `sveltekit()`. Order matters, and the plugin sets `enforce: 'pre'`. | Do not add a placeholder `csr = true` page to keep an all-islands build alive. It is not necessary. |
-| Keep true app-like routes on `csr = true`. ogygia operates together with them. | Do not forget `ORIGIN` in production. Server-island and form POSTs need it. |
+| Do                                                                                                                        | Don't                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Start with your most static route that has the most traffic. There, the removal of the Kit client gives the largest gain. | Do not set the full app to `csr = false` on day one. Convert route by route and measure.            |
+| Register `ogygia()` **before** `sveltekit()`. Order matters, and the plugin sets `enforce: 'pre'`.                        | Do not add a placeholder `csr = true` page to keep an all-islands build alive. It is not necessary. |
+| Keep true app-like routes on `csr = true`. ogygia operates together with them.                                            | Do not forget `ORIGIN` in production. Server-island and form POSTs need it.                         |

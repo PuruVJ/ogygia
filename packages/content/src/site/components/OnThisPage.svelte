@@ -68,7 +68,8 @@
 			// Short page: nothing crossed the fold but the first heading is up in view → active.
 			if (!best && seen[0].top <= innerHeight * 0.4) best = seen[0].id;
 			// At the very bottom, the last section is what you're reading.
-			if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) best = seen[seen.length - 1].id;
+			if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4)
+				best = seen[seen.length - 1].id;
 			active = best;
 			// Slide the rail thumb to the active link's box. Drive this island's own list AND the
 			// mobile inline outline — a static `<details class="og-mtoc">` (Doc.svelte) with no
@@ -76,7 +77,8 @@
 			const move_thumb = (ul: HTMLElement | null, set_active: boolean) => {
 				if (!ul) return;
 				// The island's own list uses Svelte's `class:og-active`; only the static list needs this.
-				if (set_active) ul.querySelectorAll('.og-active').forEach((a) => a.classList.remove('og-active'));
+				if (set_active)
+					ul.querySelectorAll('.og-active').forEach((a) => a.classList.remove('og-active'));
 				const lnk = best ? ul.querySelector<HTMLElement>(`a[href="#${CSS.escape(best)}"]`) : null;
 				if (lnk) {
 					if (set_active) lnk.classList.add('og-active');
@@ -107,12 +109,22 @@
 {#if headings.length || title}
 	<nav class="og-toc" aria-label={label}>
 		<p class="og-toc-label">{label}</p>
-		<ul class="og-toc-list" {@attach spy} {@attach roving({ selector: '.og-toc-link', orientation: 'vertical' })}>
+		<ul
+			class="og-toc-list"
+			{@attach spy}
+			{@attach roving({ selector: '.og-toc-link', orientation: 'vertical' })}
+		>
 			{#if title}
 				<!-- The document top: a valid same-page link, but click just scrolls up (no nav). Active
 				     whenever no heading is. -->
 				<li class="og-toc-item og-toc-d2 og-toc-title">
-					<a class="og-toc-link" class:og-active={active === ''} href={top_href} onclick={to_top} aria-current={active === '' ? 'true' : undefined}>{title}</a>
+					<a
+						class="og-toc-link"
+						class:og-active={active === ''}
+						href={top_href}
+						onclick={to_top}
+						aria-current={active === '' ? 'true' : undefined}>{title}</a
+					>
 				</li>
 			{/if}
 			{#each headings as h (h.id)}

@@ -53,7 +53,7 @@ One option belongs to the macro itself, consumed at compile and never forwarded:
 loader: import.meta.og.loader.folder('../content/blog', { preset: 'plain' })
 ```
 
-Each opted-in file compiles as its own module *variant*. Thus another collection that globs the same file, under another preset or none, renders independently. The name must be literal (it selects config at build). An unknown name is a build error that lists the configured names.
+Each opted-in file compiles as its own module _variant_. Thus another collection that globs the same file, under another preset or none, renders independently. The name must be literal (it selects config at build). An unknown name is a build error that lists the configured names.
 
 ## Lazy by default
 

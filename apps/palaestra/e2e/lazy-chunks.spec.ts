@@ -46,8 +46,15 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 
 		await page.goto('/lazy-runtime', { waitUntil: 'networkidle' });
 		await page.waitForTimeout(400);
-		check('runtime booted (ogygia-region defined)', await page.evaluate(() => !!customElements.get('ogygia-region')));
-		check('boot: the runtime chunk was fetched', scripts.some((u) => RUNTIME_RE.test(u)), scripts.join('\n'));
+		check(
+			'runtime booted (ogygia-region defined)',
+			await page.evaluate(() => !!customElements.get('ogygia-region'))
+		);
+		check(
+			'boot: the runtime chunk was fetched',
+			scripts.some((u) => RUNTIME_RE.test(u)),
+			scripts.join('\n')
+		);
 		check(
 			'boot: no island hydrated (visible is below the fold, interaction is cold)',
 			(await page.locator('ogygia-region[data-hydrated]').count()) === 0
@@ -76,7 +83,9 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 		const runtime_src = await page.locator('script[data-ogygia-runtime]').getAttribute('src');
 		const runtime_url = new URL(runtime_src!, page.url()).href;
 		const runtime_code = await (await fetch(runtime_url)).text();
-		const static_imports = [...runtime_code.matchAll(STATIC_IMPORT_RE)].map((m) => new URL(m[1], runtime_url).href);
+		const static_imports = [...runtime_code.matchAll(STATIC_IMPORT_RE)].map(
+			(m) => new URL(m[1], runtime_url).href
+		);
 		const hinted = await page
 			.locator('link[rel="modulepreload"][data-ogygia-runtime-dep]')
 			.evaluateAll((links) => links.map((l) => (l as HTMLLinkElement).href));
@@ -92,13 +101,22 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 		);
 		// The palaestra has a `hooks.client` (apps/palaestra/src/hooks.client.ts), so this is the
 		// `h`-suffixed runtime name — the one that once went unrecognised and shipped with no preloads.
-		check('boot: the runtime is the client-hooks build (name ends in h)', CLIENT_HOOKS_RUNTIME_RE.test(runtime_url), runtime_url);
-		check('boot: the app’s client hooks ran (init)', await page.evaluate(() => (globalThis as Record<string, unknown>).__og_client_init === true));
+		check(
+			'boot: the runtime is the client-hooks build (name ends in h)',
+			CLIENT_HOOKS_RUNTIME_RE.test(runtime_url),
+			runtime_url
+		);
+		check(
+			'boot: the app’s client hooks ran (init)',
+			await page.evaluate(() => (globalThis as Record<string, unknown>).__og_client_init === true)
+		);
 		check('boot: the runtime’s preloads are not empty', hinted.length > 0, runtime_url);
 
 		// The first wake: click the interaction island → the hydrate core + the island's chunk.
 		await page.locator('[data-i-btn]').click();
-		await page.waitForSelector('ogygia-region[wake="interaction"][data-hydrated]', { timeout: 8000 });
+		await page.waitForSelector('ogygia-region[wake="interaction"][data-hydrated]', {
+			timeout: 8000
+		});
 		await page.waitForTimeout(300);
 		const after_wake = await bodies(scripts.slice(boot_scripts.length));
 		check(
@@ -118,9 +136,15 @@ test.describe('lazy runtime chunks: hydrate core on first wake, navigation on fi
 		const before_scroll = scripts.length;
 		await page.locator('[data-counter]').scrollIntoViewIfNeeded();
 		await page.waitForSelector('ogygia-region[wake="visible"][data-hydrated]', { timeout: 8000 });
-		check('visible island hydrated after scroll', (await page.locator('[data-counter] button').innerText()).includes('5'));
+		check(
+			'visible island hydrated after scroll',
+			(await page.locator('[data-counter] button').innerText()).includes('5')
+		);
 		const after_scroll = await bodies(scripts.slice(before_scroll));
-		check('scroll: the hydrate core was not fetched again', carrying(after_scroll, HYDRATE_CORE_MARKER).length === 0);
+		check(
+			'scroll: the hydrate core was not fetched again',
+			carrying(after_scroll, HYDRATE_CORE_MARKER).length === 0
+		);
 
 		// The first prefetch (hover on a preload-marked link) loads the navigation chunk.
 		const before_hover = scripts.length;

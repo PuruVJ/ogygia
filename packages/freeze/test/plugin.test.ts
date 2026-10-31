@@ -14,7 +14,9 @@ import { reset_for_tests } from '../src/registry.ts';
 
 /** the definition `definePlugin` put on the Vite plugin */
 const definition = (plugin: ReturnType<typeof freezePlugin>) =>
-	(plugin as unknown as Record<symbol, PluginDefinition<FreezeServerOptions>>)[Symbol.for('ogygia.plugin')];
+	(plugin as unknown as Record<symbol, PluginDefinition<FreezeServerOptions>>)[
+		Symbol.for('ogygia.plugin')
+	];
 
 // The server half reads Kit's `$app/env`; outside an app, nothing is building and this is no dev server.
 vi.mock('$app/env', () => ({ building: false, dev: false }));
@@ -56,7 +58,9 @@ describe('the server realm, started', () => {
 
 	it('an invalidation announces what it dropped through the shared `invalidated` hook', async () => {
 		const heard: (string[] | 'all')[] = [];
-		const leave = register_hooks({ invalidated: (tags: string[] | 'all') => void heard.push(tags) });
+		const leave = register_hooks({
+			invalidated: (tags: string[] | 'all') => void heard.push(tags)
+		});
 		try {
 			await freeze.invalidate('/x');
 			await freeze.invalidateWhere({ prefix: '/a/' });

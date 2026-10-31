@@ -13,7 +13,10 @@ describe('flags()', () => {
 	it('is named by its package and names its server realm, the module beside it', () => {
 		const plugin = flags();
 		expect(plugin.name).toBe('@ogygia/flags');
-		expect((plugin as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.plugin')]).toEqual({ name: '@ogygia/flags', server: new URL('../src/server.ts', import.meta.url).href });
+		expect((plugin as unknown as Record<symbol, unknown>)[Symbol.for('ogygia.plugin')]).toEqual({
+			name: '@ogygia/flags',
+			server: new URL('../src/server.ts', import.meta.url).href
+		});
 	});
 });
 
@@ -21,14 +24,20 @@ describe('the server realm', () => {
 	it('primes the source in `request` and drains exposures in `done`', async () => {
 		const sent: unknown[][] = [];
 		const gate = flag('plugin-test-gate');
-		decide({ source: () => ({ 'plugin-test-gate': true }), exposure: (b) => void sent.push(b), batch: { max: 100, ms: 60_000 } });
+		decide({
+			source: () => ({ 'plugin-test-gate': true }),
+			exposure: (b) => void sent.push(b),
+			batch: { max: 100, ms: 60_000 }
+		});
 		try {
 			const request = new Request('http://x/');
 			const c = ctx(request);
 			await server.request!(c);
 			expect(gate({ request, url: new URL(request.url) })).toBe(true);
 			server.done!(c);
-			expect(sent.flat().some((e) => (e as { name: string }).name === 'plugin-test-gate')).toBe(true);
+			expect(sent.flat().some((e) => (e as { name: string }).name === 'plugin-test-gate')).toBe(
+				true
+			);
 		} finally {
 			decide({ source: undefined, exposure: undefined });
 		}

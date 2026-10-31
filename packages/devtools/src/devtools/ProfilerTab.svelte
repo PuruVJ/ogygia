@@ -47,7 +47,9 @@
 		return running ? Math.max(0, (performance.now() - started) / 1000) : 0;
 	});
 	// a rough length for the next run, from the last one of this page (warm-up + the renders)
-	const estimate = $derived(prof ? Math.round(((prof.render_ms * (runs + 1)) / 1000 + 2) * 1.3) : null);
+	const estimate = $derived(
+		prof ? Math.round(((prof.render_ms * (runs + 1)) / 1000 + 2) * 1.3) : null
+	);
 
 	async function start() {
 		error = '';
@@ -64,15 +66,26 @@
 		}
 	}
 
-	const ms = (/** @type {number} */ n) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : n >= 10 ? Math.round(n) + ' ms' : n.toFixed(1) + ' ms');
-	const kb = (/** @type {number} */ n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
+	const ms = (/** @type {number} */ n) =>
+		n >= 1000
+			? (n / 1000).toFixed(2) + ' s'
+			: n >= 10
+				? Math.round(n) + ' ms'
+				: n.toFixed(1) + ' ms';
+	const kb = (/** @type {number} */ n) =>
+		n < 1024
+			? n + ' B'
+			: n < 1048576
+				? (n / 1024).toFixed(1) + ' KB'
+				: (n / 1048576).toFixed(2) + ' MB';
 	function el_of(/** @type {string | null} */ fp) {
 		return fp ? document.querySelector(`ogygia-region[data-og-fp="${fp}"]`) : null;
 	}
 	const on_page = $derived.by(() => {
 		tick;
 		const set = new Set();
-		for (const el of document.querySelectorAll('ogygia-region[data-og-fp]')) set.add(el.getAttribute('data-og-fp'));
+		for (const el of document.querySelectorAll('ogygia-region[data-og-fp]'))
+			set.add(el.getAttribute('data-og-fp'));
 		return set;
 	});
 	function short_url(/** @type {string} */ u) {
@@ -103,7 +116,9 @@
 	/** the islands on this page with these fingerprints (a browser finding's) */
 	function regions_of(fps) {
 		const want = new Set(fps);
-		return [...document.querySelectorAll('ogygia-region[data-og-fp]')].filter((el) => want.has(el.getAttribute('data-og-fp')));
+		return [...document.querySelectorAll('ogygia-region[data-og-fp]')].filter((el) =>
+			want.has(el.getAttribute('data-og-fp'))
+		);
 	}
 	function unshow() {
 		if (pinned) {
@@ -127,50 +142,98 @@
 			<label>path <input bind:value={path} spellcheck="false" /></label>
 			<label>renders <input class="n" type="number" min="1" max="50" bind:value={runs} /></label>
 			<button class="go" data-og-profile-run disabled={running} onclick={start}>
-				{running ? `Profiling… ${elapsed.toFixed(0)} s${estimate ? ` of ~${estimate} s` : ''}` : prof ? 'Profile again' : 'Profile this page'}
+				{running
+					? `Profiling… ${elapsed.toFixed(0)} s${estimate ? ` of ~${estimate} s` : ''}`
+					: prof
+						? 'Profile again'
+						: 'Profile this page'}
 			</button>
 			{#if prof?.links}
-				<a class="open" href={prof.links.html} target="_blank" rel="noopener" title="the full report, in a new tab">full report ↗</a>
+				<a
+					class="open"
+					href={prof.links.html}
+					target="_blank"
+					rel="noopener"
+					title="the full report, in a new tab">full report ↗</a
+				>
 			{/if}
 		</div>
-		{#if running}<div class="bar"><i style:width="{estimate ? Math.min(96, (elapsed / estimate) * 100) : 50}%"></i></div>{/if}
+		{#if running}<div class="bar">
+				<i style:width="{estimate ? Math.min(96, (elapsed / estimate) * 100) : 50}%"></i>
+			</div>{/if}
 		{#if error}<p class="err">{error}</p>{/if}
 
 		{#if !prof}
 			<p class="hint">
-				Renders <code>{path}</code> through your real server {runs}× and shows where the time went: components,
-				functions, allocations, and outbound calls. The answer lands right here, and each island's server cost joins
-				the island on the page.
+				Renders <code>{path}</code> through your real server {runs}× and shows where the time went:
+				components, functions, allocations, and outbound calls. The answer lands right here, and
+				each island's server cost joins the island on the page.
 			</p>
 		{:else}
 			<div class="head" data-og-profile-head>
 				{#if prof.score}
-					<div class="score {grade_class(prof.score.score)}" title="page score{prof.score.was ? ` (was ${prof.score.was.score})` : ''}">
-						<b>{prof.score.grade}</b><span>{prof.score.score}{#if prof.score.was && prof.score.was.score !== prof.score.score} <i class={prof.score.score > prof.score.was.score ? 'up' : 'down'}>{prof.score.score > prof.score.was.score ? '▲' : '▼'}{Math.abs(prof.score.score - prof.score.was.score)}</i>{/if}</span>
+					<div
+						class="score {grade_class(prof.score.score)}"
+						title="page score{prof.score.was ? ` (was ${prof.score.was.score})` : ''}"
+					>
+						<b>{prof.score.grade}</b><span
+							>{prof.score.score}{#if prof.score.was && prof.score.was.score !== prof.score.score}
+								<i class={prof.score.score > prof.score.was.score ? 'up' : 'down'}
+									>{prof.score.score > prof.score.was.score ? '▲' : '▼'}{Math.abs(
+										prof.score.score - prof.score.was.score
+									)}</i
+								>{/if}</span
+						>
 					</div>
 				{/if}
-				<div class="stat"><span class="k">server render</span><span class="v">{ms(prof.render_ms)}</span><span class="s">median of {prof.runs.length}</span></div>
+				<div class="stat">
+					<span class="k">server render</span><span class="v">{ms(prof.render_ms)}</span><span
+						class="s">median of {prof.runs.length}</span
+					>
+				</div>
 				{#if prof.forecast && prof.forecast.after_ms < prof.forecast.now_ms - 1}
-					<div class="stat"><span class="k">after the fixes</span><span class="v ok">{ms(prof.forecast.after_ms)}</span><span class="s">−{ms(prof.forecast.now_ms - prof.forecast.after_ms)}</span></div>
+					<div class="stat">
+						<span class="k">after the fixes</span><span class="v ok"
+							>{ms(prof.forecast.after_ms)}</span
+						><span class="s">−{ms(prof.forecast.now_ms - prof.forecast.after_ms)}</span>
+					</div>
 				{/if}
 				{#if prof.seed_bytes}
-					<div class="stat"><span class="k">page seed</span><span class="v">{kb(prof.seed_bytes)}</span></div>
+					<div class="stat">
+						<span class="k">page seed</span><span class="v">{kb(prof.seed_bytes)}</span>
+					</div>
 				{/if}
 				<span class="when">{new Date(prof.at).toLocaleTimeString()}</span>
 			</div>
 			{#if prof.score}
 				<div class="cats" data-og-profile-score>
 					{#each prof.score.categories as c (c.key)}
-						<span class="cat {grade_class(c.score)}" title="{c.value}{c.detail.length ? '\n' + c.detail.join('\n') : ''}">{c.label} <b>{c.score}</b>{#if c.lost >= 1}<i class="lost"> −{Math.round(c.lost)}</i>{/if}</span>
+						<span
+							class="cat {grade_class(c.score)}"
+							title="{c.value}{c.detail.length ? '\n' + c.detail.join('\n') : ''}"
+							>{c.label} <b>{c.score}</b>{#if c.lost >= 1}<i class="lost">
+									−{Math.round(c.lost)}</i
+								>{/if}</span
+						>
 					{/each}
 				</div>
 				{#if prof.score.missing.length}
-					<p class="hint">Left out of the score: {prof.score.missing.map((m) => m.label).join(', ')} — {prof.score.missing[0].why}.</p>
+					<p class="hint">
+						Left out of the score: {prof.score.missing.map((m) => m.label).join(', ')} — {prof.score
+							.missing[0].why}.
+					</p>
 				{/if}
 			{/if}
 
 			{#if prof.assets}
-				<h3>What the page loads <span class="muted">{kb(prof.assets.js)} JS at start · {kb(prof.assets.wire)} on the wire{prof.assets.lazy_js ? ` · ${kb(prof.assets.lazy_js)} on demand` : ''}</span></h3>
+				<h3>
+					What the page loads <span class="muted"
+						>{kb(prof.assets.js)} JS at start · {kb(prof.assets.wire)} on the wire{prof.assets
+							.lazy_js
+							? ` · ${kb(prof.assets.lazy_js)} on demand`
+							: ''}</span
+					>
+				</h3>
 				<table data-og-profile-assets>
 					<tbody>
 						{#each prof.assets.files as f, i (f.name + i)}
@@ -207,7 +270,11 @@
 				<h3>What the fixes save</h3>
 				<ul class="parts">
 					{#each prof.forecast.parts as p, i (p.kind + p.title + i)}
-						<li><span class="pm">−{ms(p.ms)}</span>{p.title}{#if p.wait}<span class="tag">waiting</span>{/if}</li>
+						<li>
+							<span class="pm">−{ms(p.ms)}</span>{p.title}{#if p.wait}<span class="tag"
+									>waiting</span
+								>{/if}
+						</li>
 					{/each}
 				</ul>
 			{/if}
@@ -217,14 +284,26 @@
 				<table data-og-profile-hot>
 					<tbody>
 						{#each prof.hot as f, i (f.name + i)}
-							<tr><td>{f.name}</td><td class="muted">{f.file ? f.file.slice(f.file.lastIndexOf('/') + 1) : ''}{f.line !== null ? `:${f.line}` : ''}</td><td class="muted">{f.kind}</td><td class="num">{ms(f.ms)}</td></tr>
+							<tr
+								><td>{f.name}</td><td class="muted"
+									>{f.file ? f.file.slice(f.file.lastIndexOf('/') + 1) : ''}{f.line !== null
+										? `:${f.line}`
+										: ''}</td
+								><td class="muted">{f.kind}</td><td class="num">{ms(f.ms)}</td></tr
+							>
 						{/each}
 					</tbody>
 				</table>
 			{/if}
 
 			{#if prof.findings.length}
-				<h3>Findings <span class="muted">{prof.findings.length > 12 ? `12 of ${prof.findings.length}, the rest in the full report` : prof.findings.length}</span></h3>
+				<h3>
+					Findings <span class="muted"
+						>{prof.findings.length > 12
+							? `12 of ${prof.findings.length}, the rest in the full report`
+							: prof.findings.length}</span
+					>
+				</h3>
 				<ul class="findings" data-og-profile-findings>
 					{#each prof.findings.slice(0, 12) as f, i (f.code + i)}
 						<li
@@ -244,7 +323,13 @@
 			{#if prof.islands.length}
 				<h3>Islands on the server <span class="muted">{prof.islands.length}</span></h3>
 				<table data-og-profile-islands>
-					<thead><tr><th>island</th><th class="num">render</th><th class="num">props</th><th class="num">browser</th><th></th></tr></thead>
+					<thead
+						><tr
+							><th>island</th><th class="num">render</th><th class="num">props</th><th class="num"
+								>browser</th
+							><th></th></tr
+						></thead
+					>
 					<tbody>
 						{#each prof.islands as i, k (i.fp ?? i.name + k)}
 							{@const here = i.fp !== null && on_page.has(i.fp)}
@@ -259,8 +344,18 @@
 							>
 								<td>{i.name}<span class="wake">{i.wake ?? ''}</span></td>
 								<td class="num">{i.ssr_ms !== null ? ms(i.ssr_ms) : '—'}</td>
-								<td class="num" title={i.culprit ? `not plain JSON: ${i.culprit}` : ''}>{i.props_bytes !== null ? kb(i.props_bytes) : '—'}{#if i.culprit}<span class="warn">*</span>{/if}</td>
-								<td class="num">{i.client_p50_ms !== null ? ms(i.client_p50_ms) : '—'}{#if i.recovered}<span class="warn"> recovered</span>{/if}</td>
+								<td class="num" title={i.culprit ? `not plain JSON: ${i.culprit}` : ''}
+									>{i.props_bytes !== null ? kb(i.props_bytes) : '—'}{#if i.culprit}<span
+											class="warn">*</span
+										>{/if}</td
+								>
+								<td class="num"
+									>{i.client_p50_ms !== null ? ms(i.client_p50_ms) : '—'}{#if i.recovered}<span
+											class="warn"
+										>
+											recovered</span
+										>{/if}</td
+								>
 								<td class="muted">{here ? '' : 'not on this page now'}</td>
 							</tr>
 						{/each}
@@ -271,21 +366,41 @@
 			{#if prof.components.length}
 				<h3>Heaviest components</h3>
 				<table>
-					<thead><tr><th>component</th><th class="num">own</th><th class="num">with children</th><th class="num">×</th></tr></thead>
+					<thead
+						><tr
+							><th>component</th><th class="num">own</th><th class="num">with children</th><th
+								class="num">×</th
+							></tr
+						></thead
+					>
 					<tbody>
 						{#each prof.components.slice(0, 8) as c, i (c.name + c.file + i)}
-							<tr><td title={c.file ?? ''}>{c.name}</td><td class="num">{ms(c.self_ms)}</td><td class="num">{ms(c.total_ms)}</td><td class="num">{c.instances ?? ''}</td></tr>
+							<tr
+								><td title={c.file ?? ''}>{c.name}</td><td class="num">{ms(c.self_ms)}</td><td
+									class="num">{ms(c.total_ms)}</td
+								><td class="num">{c.instances ?? ''}</td></tr
+							>
 						{/each}
 					</tbody>
 				</table>
 			{/if}
 
 			{#if prof.network && prof.network.count}
-				<h3>Outbound calls <span class="muted">{prof.network.count} · {ms(prof.network.total_ms)}{prof.network.sequential_ms ? ` · ${ms(prof.network.sequential_ms)} one after another` : ''}</span></h3>
+				<h3>
+					Outbound calls <span class="muted"
+						>{prof.network.count} · {ms(prof.network.total_ms)}{prof.network.sequential_ms
+							? ` · ${ms(prof.network.sequential_ms)} one after another`
+							: ''}</span
+					>
+				</h3>
 				<table>
 					<tbody>
 						{#each prof.network.calls.slice(0, 10) as c, k (c.url + k)}
-							<tr><td class="url" title={c.url}>{c.method} {short_url(c.url)}</td><td class="num">{c.status ?? ''}</td><td class="num">{ms(c.wait_ms)}</td></tr>
+							<tr
+								><td class="url" title={c.url}>{c.method} {short_url(c.url)}</td><td class="num"
+									>{c.status ?? ''}</td
+								><td class="num">{ms(c.wait_ms)}</td></tr
+							>
 						{/each}
 					</tbody>
 				</table>

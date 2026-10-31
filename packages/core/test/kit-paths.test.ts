@@ -22,7 +22,9 @@ describe('kit_asset', () => {
 			return '/base/' + f;
 		});
 		expect(kit_asset('/_app/immutable/x.js')).toBe('/base/_app/immutable/x.js');
-		expect(kit_asset('/@id/virtual:ogygia/island/a.js')).toBe('/base/@id/virtual:ogygia/island/a.js');
+		expect(kit_asset('/@id/virtual:ogygia/island/a.js')).toBe(
+			'/base/@id/virtual:ogygia/island/a.js'
+		);
 		expect(seen.every((f) => !f.startsWith('/'))).toBe(true);
 	});
 
@@ -30,7 +32,8 @@ describe('kit_asset', () => {
 		const seen: string[] = [];
 		const kit_asset = await with_kit((f) => {
 			seen.push(f);
-			if (!f.startsWith('/')) throw new Error('Cannot use `resolve(...)` with a non-absolute pathname');
+			if (!f.startsWith('/'))
+				throw new Error('Cannot use `resolve(...)` with a non-absolute pathname');
 			return '/base' + f;
 		});
 		expect(kit_asset('/_app/immutable/x.js')).toBe('/base/_app/immutable/x.js');
@@ -39,7 +42,7 @@ describe('kit_asset', () => {
 		expect(seen).toEqual(['_app/immutable/x.js', '/_app/immutable/x.js', '/_app/immutable/y.js']);
 	});
 
-	it("Kit 2 in a BUILD (no refusal: it returns the slash-less path page-relative) — still the slash", async () => {
+	it('Kit 2 in a BUILD (no refusal: it returns the slash-less path page-relative) — still the slash', async () => {
 		// REGRESSION (field report on 5c0e2c45): `asset('_uce_/immutable/x.js')` answered
 		// `_uce_/immutable/x.js` in production, which a page at /account/ resolved to /account/_uce_/…
 		const kit_asset = await with_kit((f) => '' + f);

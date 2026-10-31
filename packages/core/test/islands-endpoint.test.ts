@@ -7,13 +7,17 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 vi.mock('virtual:ogygia/secret', () => ({ buildKey: 'test-secret', buildHadSecret: false }));
 vi.mock('virtual:ogygia/session-cookie', () => ({ sessionCookie: null }));
 vi.mock('virtual:ogygia/region-ttl', () => ({ regionTtl: 3600, renewWindow: 691200 }));
-vi.mock('virtual:ogygia/server-manifest', () => ({ island_url: {}, island_render: { rnd123: 'c0ffee0c0ffe' } }));
+vi.mock('virtual:ogygia/server-manifest', () => ({
+	island_url: {},
+	island_render: { rnd123: 'c0ffee0c0ffe' }
+}));
 vi.mock('virtual:ogygia/sign', () => ({
 	sign: (_k: string, m: string) => 'sig' + m.length,
 	region_mac_message: (...parts: unknown[]) => parts.join('|')
 }));
 
-const { configure_islands_endpoint, islands_endpoint, DEFAULT_ISLANDS_ENDPOINT } = await import('../src/server/endpoint.ts');
+const { configure_islands_endpoint, islands_endpoint, DEFAULT_ISLANDS_ENDPOINT } =
+	await import('../src/server/endpoint.ts');
 const { mintServerIsland, makeRegionEndpoint } = await import('../src/server/region-endpoint.ts');
 const { renders_for_a_page } = await import('../src/server/render-page.ts');
 const { mpaSpeculationRules } = await import('../src/compiler/link/speculation.ts');
@@ -30,7 +34,9 @@ describe('the islands endpoint', () => {
 
 	it('handle({ endpoint }) moves every minted URL with the handler', () => {
 		configure_islands_endpoint('/_server/api/__ogygia__');
-		expect(mintServerIsland('abc123', { a: 1 })).toMatch(/^\/_server\/api\/__ogygia__\?id=abc123&props=/);
+		expect(mintServerIsland('abc123', { a: 1 })).toMatch(
+			/^\/_server\/api\/__ogygia__\?id=abc123&props=/
+		);
 		expect(makeRegionEndpoint('abc123', {})).toMatch(/^\/_server\/api\/__ogygia__\?id=abc123&/);
 		// a render on the new path is a hole render (it renders for a page); the old path is a page now
 		expect(renders_for_a_page(at('/_server/api/__ogygia__'))).toBe(true);
@@ -48,7 +54,17 @@ describe('the islands endpoint', () => {
 		expect(url).toMatch(/\?id=rnd123&r=c0ffee0c0ffe&props=/);
 		// (the mocked sign hashes the message by length: the render identity is part of it)
 		const sig = new URL(url, 'http://x').searchParams.get('sig');
-		expect(sig).toBe('sig' + ['rnd123', new URL(url, 'http://x').searchParams.get('exp'), 'W3t9XQ', '', '', 'c0ffee0c0ffe'].join('|').length);
+		expect(sig).toBe(
+			'sig' +
+				[
+					'rnd123',
+					new URL(url, 'http://x').searchParams.get('exp'),
+					'W3t9XQ',
+					'',
+					'',
+					'c0ffee0c0ffe'
+				].join('|').length
+		);
 	});
 
 	it('a region with no render identity mints as before (no `r`)', () => {
@@ -62,7 +78,9 @@ describe('the islands endpoint', () => {
 	});
 
 	it('MPA speculation rules leave out the endpoint the handle serves', () => {
-		expect(mpaSpeculationRules('/_server/api/__ogygia__')).toContain('"href_matches":"/_server/api/__ogygia__*"');
+		expect(mpaSpeculationRules('/_server/api/__ogygia__')).toContain(
+			'"href_matches":"/_server/api/__ogygia__*"'
+		);
 		expect(mpaSpeculationRules()).toContain('"href_matches":"/__ogygia__*"');
 	});
 });

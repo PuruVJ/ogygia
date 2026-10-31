@@ -23,21 +23,65 @@ function fuzz(n: number, pieces: string[], seed = 1): string[] {
 describe('regex replacements answer what the regex did', () => {
 	it('region_css_links', () => {
 		const re = /<link\b[^>]*data-ogygia-region-css[^>]*>/g;
-		for (const h of fuzz(4000, ['<link', '<linker', '<LINK', ' rel="stylesheet"', ' data-ogygia-region-css', ' data-ogygia-region-css="/x.css"', ' href="/a.css"', '>', 'x', '<style>', '<link data-ogygia-region-css href="/b.css">']))
+		for (const h of fuzz(4000, [
+			'<link',
+			'<linker',
+			'<LINK',
+			' rel="stylesheet"',
+			' data-ogygia-region-css',
+			' data-ogygia-region-css="/x.css"',
+			' href="/a.css"',
+			'>',
+			'x',
+			'<style>',
+			'<link data-ogygia-region-css href="/b.css">'
+		]))
 			expect(region_css_links(h)).toBe((h.match(re) || []).join(''));
 	});
 
 	it('escapes', () => {
-		for (const v of fuzz(4000, ['&', '"', '<', '>', "'", 'a', 'ü', '/_app/x.js', '?a=1&b=2', '&amp;'])) {
-			expect(escape_attr(v)).toBe(v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'));
-			expect(escape_text(v)).toBe(v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+		for (const v of fuzz(4000, [
+			'&',
+			'"',
+			'<',
+			'>',
+			"'",
+			'a',
+			'ü',
+			'/_app/x.js',
+			'?a=1&b=2',
+			'&amp;'
+		])) {
+			expect(escape_attr(v)).toBe(
+				v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+			);
+			expect(escape_text(v)).toBe(
+				v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+			);
 			expect(escape_amp_quot(v)).toBe(v.replace(/&/g, '&amp;').replace(/"/g, '&quot;'));
 			expect(escape_amp(v)).toBe(v.split('&').join('&amp;'));
 		}
 	});
 
 	it('capability gates', () => {
-		const inputs = ['', '0', '60', '1234567', '12345678', 'abc', '9x', '0123456789ab', 'deadbeef0000', '0123456789abc', 'DEADBEEF0000', '00000000000g', 'abcdefabcdef', '１２', 'a'.repeat(64), 'f'.repeat(63) + 'g'];
+		const inputs = [
+			'',
+			'0',
+			'60',
+			'1234567',
+			'12345678',
+			'abc',
+			'9x',
+			'0123456789ab',
+			'deadbeef0000',
+			'0123456789abc',
+			'DEADBEEF0000',
+			'00000000000g',
+			'abcdefabcdef',
+			'１２',
+			'a'.repeat(64),
+			'f'.repeat(63) + 'g'
+		];
 		for (const s of inputs) {
 			expect(is_region_id(s)).toBe(/^[0-9a-f]{12}$/.test(s));
 			expect(is_region_ttl(s)).toBe(/^(|[0-9]{1,7})$/.test(s));
@@ -61,7 +105,26 @@ describe('regex replacements answer what the regex did', () => {
 				return tag;
 			});
 		};
-		const pieces = ['<link', '<LINK', '<linker', ' rel="stylesheet"', " rel='modulepreload'", ' rel=modulepreload', ' href="/a.css"', " href='/a.css'", ' href="/b.js"', ' data-rel="stylesheet"', '>', 'x', ' ', '"', "'", '<LINK rel="stylesheet" href="/a.css">', '<link rel="stylesheet" href="/a.css">', '<link rel="modulepreload" href="/b.js">'];
+		const pieces = [
+			'<link',
+			'<LINK',
+			'<linker',
+			' rel="stylesheet"',
+			" rel='modulepreload'",
+			' rel=modulepreload',
+			' href="/a.css"',
+			" href='/a.css'",
+			' href="/b.js"',
+			' data-rel="stylesheet"',
+			'>',
+			'x',
+			' ',
+			'"',
+			"'",
+			'<LINK rel="stylesheet" href="/a.css">',
+			'<link rel="stylesheet" href="/a.css">',
+			'<link rel="modulepreload" href="/b.js">'
+		];
 		for (const h of fuzz(6000, pieces)) expect(dedupe_head_links(h)).toBe(ref(h));
 	});
 
@@ -78,10 +141,32 @@ describe('regex replacements answer what the regex did', () => {
 			}
 			return attrs;
 		};
-		const pieces = [' entry="./a.js"', " wake='none'", ' endpoint=/x', ' a', '=', ' = ', '"', "'", ' b="q>w"', ' C=D', ' e=\'f', ' data-x = "y z"', '   ', ' g=/', ' h= ', ' ', 'Ü=1', '>', '/'];
+		const pieces = [
+			' entry="./a.js"',
+			" wake='none'",
+			' endpoint=/x',
+			' a',
+			'=',
+			' = ',
+			'"',
+			"'",
+			' b="q>w"',
+			' C=D',
+			" e='f",
+			' data-x = "y z"',
+			'   ',
+			' g=/',
+			' h= ',
+			' ',
+			'Ü=1',
+			'>',
+			'/'
+		];
 		for (const inner of fuzz(6000, pieces, 7)) expect(parse_attr_string(inner)).toEqual(ref(inner));
 		// and through the scan, on a well-formed tag
-		const [span] = [...scanRegions('<ogygia-region entry="./a.js" WAKE=none data-x = "y z"></ogygia-region>')];
+		const [span] = [
+			...scanRegions('<ogygia-region entry="./a.js" WAKE=none data-x = "y z"></ogygia-region>')
+		];
 		expect(span.attrs).toEqual({ entry: './a.js', wake: 'none', 'data-x': 'y z' });
 	});
 });

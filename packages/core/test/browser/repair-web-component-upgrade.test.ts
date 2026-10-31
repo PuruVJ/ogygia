@@ -17,7 +17,9 @@ link_boot();
 // (not the innerHTML swap it uses when no morph feature shipped).
 install_morph();
 
-afterEach(() => { document.body.innerHTML = ''; });
+afterEach(() => {
+	document.body.innerHTML = '';
+});
 
 /** Live region built from `pristine`, then `mutate` simulates the web-component upgrade. */
 function region_from(pristine: string, mutate: (region: HTMLElement) => void): HTMLElement {
@@ -37,7 +39,8 @@ function want_of(pristine: string): Element {
 const drop_ws = (root: ParentNode) => {
 	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
 	const doomed: Node[] = [];
-	for (let n = walker.nextNode(); n; n = walker.nextNode()) if (!n.textContent?.trim()) doomed.push(n);
+	for (let n = walker.nextNode(); n; n = walker.nextNode())
+		if (!n.textContent?.trim()) doomed.push(n);
 	doomed.forEach((n) => n.remove());
 };
 

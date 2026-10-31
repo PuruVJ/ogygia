@@ -20,7 +20,7 @@ An island reads `$page.data`, and the rest of the page object of Kit, exactly as
 All of the page object crosses the boundary: `data`, `params`, `url`, `route`, `status`, `form`, and `error`. It is the same data that your `load` returns, treated as client-visible: the same contract as a `csr = true` Kit page.
 
 ::: tip When to use
-Use this when an island needs the own data of the page (the current user, the route params, a `form` action result), without a prop threaded down. For data that an island fetches *itself* (on demand, on a click), use a [remote function](/docs/data-state/remote-functions).
+Use this when an island needs the own data of the page (the current user, the route params, a `form` action result), without a prop threaded down. For data that an island fetches _itself_ (on demand, on a click), use a [remote function](/docs/data-state/remote-functions).
 :::
 
 ## Streaming promises

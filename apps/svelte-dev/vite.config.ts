@@ -9,7 +9,12 @@ import { inline_markers } from '@ogygia/content/markdown';
 import { expandTypes } from './src/lib/markdown/expand-types.ts';
 import { infostring, slash_meta } from '@ogygia/content/markdown';
 import { js_to_ts } from './src/lib/markdown/js-to-ts.ts';
-import { twoslash_banner, twoslash_ts, twoslash_svelte, twoslash_popup_markdown } from './src/lib/markdown/twoslash.ts';
+import {
+	twoslash_banner,
+	twoslash_ts,
+	twoslash_svelte,
+	twoslash_popup_markdown
+} from './src/lib/markdown/twoslash.ts';
 
 // svelte-dev — the svelte.dev stress test. Its docs come from the ACTUAL source repos via
 // `import.meta.og.loader.git()` (see src/lib/topics.ts). Everything svelte.dev-specific is a

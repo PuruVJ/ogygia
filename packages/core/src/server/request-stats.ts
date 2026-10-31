@@ -192,7 +192,9 @@ export interface BatchHoleStats extends HoleRequestStats {
  *  request), so each is handed on as it lands — to the profiler that asked, or nowhere. */
 let batch_listener: ((request: Request, s: BatchHoleStats) => void) | null = null;
 
-export function set_batch_hole_listener(fn: ((request: Request, s: BatchHoleStats) => void) | null): void {
+export function set_batch_hole_listener(
+	fn: ((request: Request, s: BatchHoleStats) => void) | null
+): void {
 	batch_listener = fn;
 }
 

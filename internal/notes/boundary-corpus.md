@@ -33,6 +33,7 @@ those are a single structural pattern. **Granularity first, serialization second
 Legend: gate = does it reach the wire · shape = transport kind · outcome.
 
 ### Group 1 — plain data (crosses free)
+
 - **C1 flag/string** `setContext('dir', 'rtl')`, boolean flags → devalue, byte-identical.
 - **C2 server object/array** page blocks, resolved links, layout-props maps → devalue.
 - **C3 DOM-derived string** `{firstComponentId: el.id}` — computed FROM the DOM but crosses
@@ -41,13 +42,15 @@ Legend: gate = does it reach the wire · shape = transport kind · outcome.
   identity dedupe (same object must not fork).
 
 ### Group 2 — same-island (must NOT serialize; native context)
+
 - **C5 DOM-ref stores + callbacks** a scroll container's `Readable<HTMLElement>` refs + arrow
   callbacks; provider and consumers share one subtree.
 - **C6 store holding a DOM node** carousel/gallery stores with an element field.
 - **C7 modal close callback** `setContext('closeModal', fn)` read by children of the modal.
-- *Test meaning:* if the seam ever serializes these, the island boundary was drawn wrong.
+- _Test meaning:_ if the seam ever serializes these, the island boundary was drawn wrong.
 
 ### Group 3 — stores spanning islands (auto-wire: seed + reunify)
+
 - **C8 the symbol-keyed writable family (41×)** `setContext(KEY, writable(v))` + consumer
   `readonly(hasContext(KEY) ? getContext(KEY) : writable(default))` → auto-wire, reunify by
   id; one mechanism clears all 41.
@@ -59,6 +62,7 @@ Legend: gate = does it reach the wire · shape = transport kind · outcome.
   sources), never freeze silently.
 
 ### Group 4 — mixed objects spanning islands
+
 - **C11 tabs context** `{store, id, onChange, variant}` destructured by children → usually
   same-island; if crossing: store auto-wires, `onChange` needs hoisting (`og.$`).
 - **C12 the mega-object** store + 5 async methods doing network calls + mutating a live web
@@ -68,6 +72,7 @@ Legend: gate = does it reach the wire · shape = transport kind · outcome.
   → store auto-wires; methods come from the getter MODULE on the client, never the wire.
 
 ### Group 5 — genuinely can't cross (locate + refuse)
+
 - **C14 DOM node in a crossing value** → refuse with context key + dot-path + "provide it
   from an island".
 - **C15 cyclic CLASS instance** (linked list with next/prev + prototype methods) → refuse
@@ -82,6 +87,7 @@ Legend: gate = does it reach the wire · shape = transport kind · outcome.
   store value → warn (meaningless across the wire).
 
 ### Group 6 — hazards islands expose (pre-existing)
+
 - **C19 module-level singletons** shared server-wide across requests → reunify must key
   per-request; flag the singleton pattern itself as an SSR-safety audit.
 - **C20 duplicate key, conditional identity** the same key set at layout AND page level with
@@ -91,18 +97,18 @@ Legend: gate = does it reach the wire · shape = transport kind · outcome.
 
 ## Mechanism map
 
-| Cases | Mechanism | Status |
-|---|---|---|
-| C1–C4 | devalue (+ id dedupe) | shipped (dedupe: store ids are per-instance WeakMap — done for stores) |
-| C5–C7 | granularity MARKER: `setContext(key, value, { islands: false })` | **shipped** — inference from `getContext` call-sites was REJECTED (import aliasing / wrapper modules make any scan under-inclusive; a missing island key is the fatal direction, so ogygia never guesses — default bridges, the marker opts out) |
-| C8, C9, C13 | store auto-wire (`OgygiaW`) + factory registry + reunify | **shipped** (`store-transport.ts`) |
-| C10 | classifier `warn` on derived-like | **shipped** (`boundary.ts`) |
-| C11, C12, D-callbacks | `import.meta.og.$` hoist / remote fns | runtime half **shipped** (`fn-transport.ts`: fn kind + `fn_handle` + `__register_fn`; captures rebind, store captures reunite); compiler hoist pass remains |
-| C14, C15 | classifier `refuse` with path | **shipped** |
-| C16 | secret-key sniff (policy) | **shipped** (sniff); allow/deny config later |
-| C17 | reunify-not-recreate | shipped for the client (live map); `clientInit` codec option later |
-| C19, C20 | scoped ids, per-request isolation | server `remember:false` shipped; singleton audit is app-side |
-| C21 | size warning | not built |
+| Cases                 | Mechanism                                                        | Status                                                                                                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C1–C4                 | devalue (+ id dedupe)                                            | shipped (dedupe: store ids are per-instance WeakMap — done for stores)                                                                                                                                                                           |
+| C5–C7                 | granularity MARKER: `setContext(key, value, { islands: false })` | **shipped** — inference from `getContext` call-sites was REJECTED (import aliasing / wrapper modules make any scan under-inclusive; a missing island key is the fatal direction, so ogygia never guesses — default bridges, the marker opts out) |
+| C8, C9, C13           | store auto-wire (`OgygiaW`) + factory registry + reunify         | **shipped** (`store-transport.ts`)                                                                                                                                                                                                               |
+| C10                   | classifier `warn` on derived-like                                | **shipped** (`boundary.ts`)                                                                                                                                                                                                                      |
+| C11, C12, D-callbacks | `import.meta.og.$` hoist / remote fns                            | runtime half **shipped** (`fn-transport.ts`: fn kind + `fn_handle` + `__register_fn`; captures rebind, store captures reunite); compiler hoist pass remains                                                                                      |
+| C14, C15              | classifier `refuse` with path                                    | **shipped**                                                                                                                                                                                                                                      |
+| C16                   | secret-key sniff (policy)                                        | **shipped** (sniff); allow/deny config later                                                                                                                                                                                                     |
+| C17                   | reunify-not-recreate                                             | shipped for the client (live map); `clientInit` codec option later                                                                                                                                                                               |
+| C19, C20              | scoped ids, per-request isolation                                | server `remember:false` shipped; singleton audit is app-side                                                                                                                                                                                     |
+| C21                   | size warning                                                     | not built                                                                                                                                                                                                                                        |
 
 ## Traps to keep honored (learned from the census)
 

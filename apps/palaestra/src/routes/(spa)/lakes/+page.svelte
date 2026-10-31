@@ -15,8 +15,8 @@
 
 <h2 data-static-shell>remount: swr</h2>
 <p data-static-shell>
-	Same lake via <code>preset: 'frozenSwr'</code> inside the island. Toggle off/on paints cached HTML
-	then fetches a fresh SSR of the lake from the region endpoint.
+	Same lake via <code>preset: 'frozenSwr'</code> inside the island. Toggle off/on paints cached HTML then
+	fetches a fresh SSR of the lake from the region endpoint.
 </p>
 <div data-swr-demo>
 	<LakeCounter swr />

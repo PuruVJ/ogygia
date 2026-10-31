@@ -37,13 +37,7 @@
 	<label>
 		key
 		<!-- svelte-ignore a11y_autofocus -->
-		<input
-			type="password"
-			bind:value={key}
-			autofocus
-			size="34"
-			autocomplete="current-password"
-		/>
+		<input type="password" bind:value={key} autofocus size="34" autocomplete="current-password" />
 	</label>
 	<button class="btn primary">Unlock</button>
 </form>

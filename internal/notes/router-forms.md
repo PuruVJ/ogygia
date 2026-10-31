@@ -1,7 +1,7 @@
 # Route value: Object form vs Builder form — exhaustive comparison
 
 Both forms give **fully typed `c.params`** (proven by tsc probes). The only form that
-provably *cannot* type params is the bare fluent `view(Doc).load(...)` with no wrapper —
+provably _cannot_ type params is the bare fluent `view(Doc).load(...)` with no wrapper —
 so it's out. What's left is a pure taste call between these two.
 
 Goal for both: **maximum SvelteKit fidelity** — a Kit dev should transfer 1:1.
@@ -14,7 +14,7 @@ Goal for both: **maximum SvelteKit fidelity** — a Kit dev should transfer 1:1.
 
 ```ts
 type RouteDef<P> =
-  | { page, load?, actions?, layout?, error?, guard?, ...pageOpts }   // +page.* 
+  | { page, load?, actions?, layout?, error?, guard?, ...pageOpts }   // +page.*
   | { layout, load?, error?, guard?, routes }                        // +layout.* + children
   | { GET?, POST?, PUT?, PATCH?, DELETE?, OPTIONS?, HEAD?, ...opts }  // +server.ts
   | ((c) => Answer)                                                   // quick handler / dynamic
@@ -38,11 +38,13 @@ interface R<P> {
 ## 1. The simplest page (bare `+page.svelte`)
 
 **Object**
+
 ```ts
 '/': { page: Home },
 ```
 
 **Builder**
+
 ```ts
 '/': (r) => r.page(Home),
 ```
@@ -52,11 +54,13 @@ interface R<P> {
 ## 2. Static page with fixed data
 
 **Object**
+
 ```ts
 '/pricing': { page: Pricing, load: () => ({ plans: PLANS }) },
 ```
 
 **Builder**
+
 ```ts
 '/pricing': (r) => r.page(Pricing).load(() => ({ plans: PLANS })),
 ```
@@ -66,6 +70,7 @@ interface R<P> {
 ## 3. Dynamic page — load reads a typed param
 
 **Object**
+
 ```ts
 '/docs/[slug]': {
   page: Doc,
@@ -74,6 +79,7 @@ interface R<P> {
 ```
 
 **Builder**
+
 ```ts
 '/docs/[slug]': (r) =>
   r.page(Doc).load((c) => ({ doc: getDoc(c.params.slug) })),   // c.params.slug: string
@@ -84,6 +90,7 @@ interface R<P> {
 ## 4. Load that redirects / errors (Kit's `redirect()` / `error()`)
 
 **Object**
+
 ```ts
 '/account': {
   page: Account,
@@ -97,6 +104,7 @@ interface R<P> {
 ```
 
 **Builder**
+
 ```ts
 '/account': (r) =>
   r.page(Account).load((c) => {
@@ -112,6 +120,7 @@ interface R<P> {
 ## 5. Page with a default form action (`+page.server.ts` `actions.default`)
 
 **Object**
+
 ```ts
 '/contact': {
   page: Contact,
@@ -120,6 +129,7 @@ interface R<P> {
 ```
 
 **Builder**
+
 ```ts
 '/contact': (r) =>
   r.page(Contact).action((c) => { saveMessage(c); return { ok: true }; }),
@@ -130,6 +140,7 @@ interface R<P> {
 ## 6. Page with named form actions (`?/login`, `?/register`)
 
 **Object**
+
 ```ts
 '/auth': {
   page: Auth,
@@ -141,6 +152,7 @@ interface R<P> {
 ```
 
 **Builder**
+
 ```ts
 '/auth': (r) =>
   r.page(Auth)
@@ -153,6 +165,7 @@ interface R<P> {
 ## 7. The full page — load + actions + reset + options together
 
 **Object**
+
 ```ts
 '/posts/[id]/edit': {
   page: EditPost,
@@ -167,6 +180,7 @@ interface R<P> {
 ```
 
 **Builder**
+
 ```ts
 '/posts/[id]/edit': (r) =>
   r.page(EditPost)
@@ -182,11 +196,13 @@ interface R<P> {
 ## 8. Layout reset — bare page (Kit's `+page@.svelte`)
 
 **Object**
+
 ```ts
 '/login': { page: Login, layout: false },   // no chrome at all
 ```
 
 **Builder**
+
 ```ts
 '/login': (r) => r.page(Login).layout(false),
 ```
@@ -196,17 +212,20 @@ interface R<P> {
 ## 9. Endpoint — single method (`+server.ts` `GET`)
 
 **Object**
+
 ```ts
 '/api/health': { GET: (c) => c.json({ ok: true }) },
 ```
 
 **Builder**
+
 ```ts
 '/api/health': (r) => r.GET((c) => c.json({ ok: true })),
 ```
 
 Or, for a one-liner endpoint, the bare handler is allowed in BOTH (a function value is
 always an endpoint; GET by default):
+
 ```ts
 '/api/health': (c) => c.json({ ok: true }),
 ```
@@ -216,6 +235,7 @@ always an endpoint; GET by default):
 ## 10. Endpoint — multi-method (`+server.ts` GET + POST + DELETE)
 
 **Object**
+
 ```ts
 '/api/items/[id]': {
   GET:    (c) => c.json(getItem(c.params.id)),
@@ -225,6 +245,7 @@ always an endpoint; GET by default):
 ```
 
 **Builder**
+
 ```ts
 '/api/items/[id]': (r) =>
   r.GET((c) => c.json(getItem(c.params.id)))
@@ -237,6 +258,7 @@ always an endpoint; GET by default):
 ## 11. Endpoint with schema-gated input (Standard Schema: Zod/Valibot)
 
 **Object**
+
 ```ts
 '/api/search': {
   GET: { schema: SearchQuery, handler: (c) => c.json(search(c.input)) },   // c.input typed
@@ -244,6 +266,7 @@ always an endpoint; GET by default):
 ```
 
 **Builder**
+
 ```ts
 '/api/search': (r) =>
   r.GET(SearchQuery, (c) => c.json(search(c.input))),   // overload: (schema, handler); c.input typed
@@ -258,6 +281,7 @@ always an endpoint; GET by default):
 ## 12. Layout layer — chrome + load + children (`+layout.svelte` + `+layout.ts`)
 
 **Object**
+
 ```ts
 '/docs': {
   layout: DocsLayout,
@@ -270,6 +294,7 @@ always an endpoint; GET by default):
 ```
 
 **Builder**
+
 ```ts
 '/docs': (r) =>
   r.layout(DocsLayout)
@@ -285,6 +310,7 @@ always an endpoint; GET by default):
 ## 13. Deeply nested layouts (app → docs → api-ref)
 
 **Object**
+
 ```ts
 {
   layout: AppShell,
@@ -308,6 +334,7 @@ always an endpoint; GET by default):
 ```
 
 **Builder**
+
 ```ts
 (r) => r.layout(AppShell)
   .load((c) => ({ user: c.locals?.user }))
@@ -333,6 +360,7 @@ always an endpoint; GET by default):
 ## 14. Error boundary (`+error.svelte`)
 
 **Object**
+
 ```ts
 '/docs': {
   layout: DocsLayout,
@@ -343,6 +371,7 @@ always an endpoint; GET by default):
 ```
 
 **Builder**
+
 ```ts
 '/docs': (r) =>
   r.layout(DocsLayout).error(DocsError).load(() => ({ nav })).routes({ … }),
@@ -353,6 +382,7 @@ always an endpoint; GET by default):
 ## 15. Guards — table-wide (whole subtree) and per-route
 
 **Object**
+
 ```ts
 // whole subtree: guard on the layer node
 '/admin': {
@@ -366,6 +396,7 @@ always an endpoint; GET by default):
 ```
 
 **Builder**
+
 ```ts
 '/admin': (r) =>
   r.layout(AdminShell).guard(requireAdmin).routes({
@@ -379,11 +410,13 @@ always an endpoint; GET by default):
 ## 16. Sub-router mount (a library owning a subtree, its own `base`)
 
 **Object**
+
 ```ts
 '/blog': mountBlog,     // mountBlog = routes({ … }) from elsewhere; a Router value is a route value
 ```
 
 **Builder**
+
 ```ts
 '/blog': (r) => r.mount(mountBlog),
 ```
@@ -395,6 +428,7 @@ always an endpoint; GET by default):
 Both use the bare handler; the handler returns a rendered view.
 
 **Object & Builder (identical — it's just a handler)**
+
 ```ts
 '/entry/[id]': (c) => {
   const e = getEntry(c.params.id);
@@ -404,7 +438,7 @@ Both use the bare handler; the handler returns a rendered view.
 },
 ```
 
-> `view(Comp, data)` here is the *render value* a handler returns (a held region), NOT the
+> `view(Comp, data)` here is the _render value_ a handler returns (a held region), NOT the
 > route-level page def. Same in both forms.
 
 ---
@@ -532,17 +566,17 @@ export const router = routes((r) =>
 
 ## Honest trade-offs
 
-| | Object form | Builder form |
-|---|---|---|
-| Kit transfer | **1:1** — keys literally are `+file` exports | close, but `.page()/.load()` is a new idiom |
-| Simple page | `{ page: Home }` | `(r) => r.page(Home)` |
-| Ceremony per route | none | a `(r) =>` wrapper on every non-handler route |
-| Schema endpoint | `{ GET: { schema, handler } }` (clunky) | `r.GET(schema, handler)` (clean) |
-| Deep nesting | plain braces, fewer tokens/level | `(r) =>` + `.routes()` per level |
-| Reads like | a config object / JSON | a fluent DSL |
-| Discoverability | keys via autocomplete on the object | methods via autocomplete on `r.` |
-| Extra keys later | just add a key | add a method |
-| Bare handler | supported (endpoints/dynamic) | supported (same) |
+|                    | Object form                                  | Builder form                                  |
+| ------------------ | -------------------------------------------- | --------------------------------------------- |
+| Kit transfer       | **1:1** — keys literally are `+file` exports | close, but `.page()/.load()` is a new idiom   |
+| Simple page        | `{ page: Home }`                             | `(r) => r.page(Home)`                         |
+| Ceremony per route | none                                         | a `(r) =>` wrapper on every non-handler route |
+| Schema endpoint    | `{ GET: { schema, handler } }` (clunky)      | `r.GET(schema, handler)` (clean)              |
+| Deep nesting       | plain braces, fewer tokens/level             | `(r) =>` + `.routes()` per level              |
+| Reads like         | a config object / JSON                       | a fluent DSL                                  |
+| Discoverability    | keys via autocomplete on the object          | methods via autocomplete on `r.`              |
+| Extra keys later   | just add a key                               | add a method                                  |
+| Bare handler       | supported (endpoints/dynamic)                | supported (same)                              |
 
 **My read:** the object form wins on your stated north star (maximum Kit, transferable,
 idiomatic) — every key is a Kit file export, zero new vocabulary, and it reads like the

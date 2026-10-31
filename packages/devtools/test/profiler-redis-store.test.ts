@@ -36,7 +36,8 @@ function fake(flavour: 'node' | 'io') {
 					...base,
 					async set(k: string, v: string, o?: { EX: number }) {
 						calls.push(o ? `set EX ${o.EX}` : 'set');
-						if (o !== undefined && typeof o !== 'object') throw new Error('node-redis takes an options object');
+						if (o !== undefined && typeof o !== 'object')
+							throw new Error('node-redis takes an options object');
 						kv.set(k, v);
 					},
 					async zAdd(k: string, m: { score: number; value: string }) {
@@ -83,7 +84,15 @@ function fake(flavour: 'node' | 'io') {
 	return { client, kv, z, calls };
 }
 
-const rec = (id: string, created: number) => ({ id, created, page: '/p', trigger: 'page', label: '/p', median: 10, dump: `{"id":"${id}"}` });
+const rec = (id: string, created: number) => ({
+	id,
+	created,
+	page: '/p',
+	trigger: 'page',
+	label: '/p',
+	median: 10,
+	dump: `{"id":"${id}"}`
+});
 
 describe('redis store', () => {
 	for (const flavour of ['node', 'io'] as const) {
@@ -94,7 +103,9 @@ describe('redis store', () => {
 			expect([...f.kv.keys()]).toEqual(['app1:report:a']);
 			expect([...f.z.keys()]).toEqual(['app1:reports']);
 			// one set, in the client's own form (no rejected first try)
-			expect(f.calls.filter((c) => c.startsWith('set'))).toEqual([flavour === 'node' ? 'set EX 60' : 'set EX 60']);
+			expect(f.calls.filter((c) => c.startsWith('set'))).toEqual([
+				flavour === 'node' ? 'set EX 60' : 'set EX 60'
+			]);
 			expect(await s.getReport('a')).toBe('{"id":"a"}');
 		});
 
@@ -115,7 +126,8 @@ describe('redis store', () => {
 			await s.prune!(2);
 			expect((await s.listReports()).map((r) => r.id)).toEqual(['r4', 'r3']);
 			expect(f.kv.has('og:report:r0')).toBe(false);
-			for (let i = 0; i < 30; i++) await s.putVisit!({ key: `/p\0${i}`, page: '/p', at: i, visit: '{}' });
+			for (let i = 0; i < 30; i++)
+				await s.putVisit!({ key: `/p\0${i}`, page: '/p', at: i, visit: '{}' });
 			expect(f.z.get('og:visit:z:/p')!.size).toBe(20);
 			expect((await s.listVisits!('/p', 3)).map((v) => v.at)).toEqual([29, 28, 27]);
 			expect(f.kv.has('og:visit:/p\u00000')).toBe(false);

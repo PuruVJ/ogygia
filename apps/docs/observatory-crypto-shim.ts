@@ -96,7 +96,8 @@ class Hash {
 	digest(enc: string): string {
 		if (this.#algo !== 'md5')
 			throw new Error(`[observatory] crypto shim only implements md5 (got '${this.#algo}')`);
-		if (enc !== 'hex') throw new Error(`[observatory] crypto shim only supports 'hex' (got '${enc}')`);
+		if (enc !== 'hex')
+			throw new Error(`[observatory] crypto shim only supports 'hex' (got '${enc}')`);
 		return md5_hex(this.#data);
 	}
 }

@@ -12,8 +12,12 @@
 <main class="inferno">
 	<h1>{data.count} results for “{data.term}”</h1>
 	<p class="hint">
-		{data.indexed} indexed · total {data.total.toFixed(2)} · {data.pages.length} pages · services {data.services.join(', ')} ·
-		{data.drained} jobs · manifest {data.manifest} chars · stock {data.stock.map((s) => s.stock).join(' ')}
+		{data.indexed} indexed · total {data.total.toFixed(2)} · {data.pages.length} pages · services {data.services.join(
+			', '
+		)} ·
+		{data.drained} jobs · manifest {data.manifest} chars · stock {data.stock
+			.map((s) => s.stock)
+			.join(' ')}
 	</p>
 	<div class="grid">
 		{#each data.results as p, i (p.id)}
@@ -31,7 +35,9 @@
 		max-width: 1200px;
 		margin: 0 auto;
 		padding: 16px;
-		font: 14px/1.4 system-ui, sans-serif;
+		font:
+			14px/1.4 system-ui,
+			sans-serif;
 	}
 	.grid {
 		display: grid;

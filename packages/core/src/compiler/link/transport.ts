@@ -5,8 +5,12 @@ import { OWN_SPECIFIER_SOURCE } from '../../own-package.ts';
  * map) for the client remote wire codec. Universal hooks are isomorphic, so this is client-safe.
  * Pure over the resolved absolute path to the app's universal hooks module (or null).
  */
-export function transport_module(universal_hooks: string | null, kit_codec: string | null = null): string {
-	if (!universal_hooks) return `export const transport = {};\nexport const encoders = {};\nexport const decoders = {};`;
+export function transport_module(
+	universal_hooks: string | null,
+	kit_codec: string | null = null
+): string {
+	if (!universal_hooks)
+		return `export const transport = {};\nexport const encoders = {};\nexport const decoders = {};`;
 	// THE app codec, built once: every ogygia reader (page seed, remote seed, Kit's remote functions
 	// through the client stub) takes `encoders`/`decoders` from here.
 	const src =
@@ -44,10 +48,15 @@ export function kit_transport_module(app_crosses_wire: boolean, transport_spec: 
 // wire — so scanning import CLAUSES is complete, not just conservative. Over-inclusion is the safe
 // direction anyway (an unused codec is bytes; a missed one breaks decode). Regexes are module-level.
 // (`ogygia` in an app; `@ogygia/core` in a plugin package's own modules)
-const OGYGIA_WIRE_NAMED = new RegExp(`import\\s+(?:type\\s+)?\\{([\\s\\S]*?)\\}\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`, 'g');
+const OGYGIA_WIRE_NAMED = new RegExp(
+	`import\\s+(?:type\\s+)?\\{([\\s\\S]*?)\\}\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`,
+	'g'
+);
 const WIRE_API = /\b(?:region|Region|site)\b/;
 const OGYGIA_CONTENT_IMPORT = /from\s*['"]@ogygia\/content(?:\/[a-z-]+)?['"]/;
-const OGYGIA_NS_IMPORT = new RegExp(`import\\s*\\*\\s*as\\s+(\\w+)\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`);
+const OGYGIA_NS_IMPORT = new RegExp(
+	`import\\s*\\*\\s*as\\s+(\\w+)\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`
+);
 const NS_WIRE_USAGE = /\b(\w+)\.(?:region|Region|site)\b/g;
 
 /** True when `src` produces a held region / transportable value that can cross Kit's `transport`. */
@@ -86,9 +95,12 @@ export function transportables_module(
 	if (ssr) {
 		const imports: string[] = [];
 		for (const abs of modules) imports.push(`import ${JSON.stringify(abs)};`);
-		return imports.join('\n') + '\nexport const wire_loaders = {};\nexport const wire_all = false;\n';
+		return (
+			imports.join('\n') + '\nexport const wire_loaders = {};\nexport const wire_all = false;\n'
+		);
 	}
 	const entries: string[] = [];
-	for (const abs of modules) entries.push(`${JSON.stringify(rel(abs))}: () => import(${JSON.stringify(abs)})`);
+	for (const abs of modules)
+		entries.push(`${JSON.stringify(rel(abs))}: () => import(${JSON.stringify(abs)})`);
 	return `export const wire_loaders = {${entries.join(', ')}};\nexport const wire_all = ${crosses_wire && entries.length > 0};\n`;
 }

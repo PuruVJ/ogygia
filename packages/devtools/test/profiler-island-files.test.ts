@@ -7,7 +7,11 @@ import { describe, it, expect } from 'vitest';
 import { island_files_diff } from '../src/profiler/compare.ts';
 
 const id = (n: string) => `/_app/immutable/og-region.${n}.js`;
-const row = (n: string, hash: string, name = n) => ({ entry: id(n), name, module_url: `/_app/immutable/og-region.${n}.${hash}.js` });
+const row = (n: string, hash: string, name = n) => ({
+	entry: id(n),
+	name,
+	module_url: `/_app/immutable/og-region.${n}.${hash}.js`
+});
 
 describe('island_files_diff', () => {
 	it('moved and kept, the moved files weighed from the second build', () => {
@@ -22,11 +26,19 @@ describe('island_files_diff', () => {
 
 	it('every island moved (three or more): the build’s names are not stable', () => {
 		const names = ['aaaaaaaaaaaa', 'bbbbbbbbbbbb', 'cccccccccccc'];
-		const d = island_files_diff(names.map((n) => row(n, 'Old11111')), names.map((n) => row(n, 'New22222')))!;
+		const d = island_files_diff(
+			names.map((n) => row(n, 'Old11111')),
+			names.map((n) => row(n, 'New22222'))
+		)!;
 		expect(d.all_moved).toBe(true);
 		expect(d.bytes).toBe(0);
 		// two moved of two is not enough to say it
-		expect(island_files_diff(names.slice(0, 2).map((n) => row(n, 'Old11111')), names.slice(0, 2).map((n) => row(n, 'New22222')))!.all_moved).toBe(false);
+		expect(
+			island_files_diff(
+				names.slice(0, 2).map((n) => row(n, 'Old11111')),
+				names.slice(0, 2).map((n) => row(n, 'New22222'))
+			)!.all_moved
+		).toBe(false);
 	});
 
 	it('a build from before content hashing (the file is the identity) never counts as moved', () => {
@@ -36,7 +48,14 @@ describe('island_files_diff', () => {
 	});
 
 	it('an island new in the second build, or copies of one island, count once or not at all', () => {
-		const d = island_files_diff([row('aaaaaaaaaaaa', 'Old11111')], [row('aaaaaaaaaaaa', 'New11111'), row('aaaaaaaaaaaa', 'New11111'), row('dddddddddddd', 'Fresh111')])!;
+		const d = island_files_diff(
+			[row('aaaaaaaaaaaa', 'Old11111')],
+			[
+				row('aaaaaaaaaaaa', 'New11111'),
+				row('aaaaaaaaaaaa', 'New11111'),
+				row('dddddddddddd', 'Fresh111')
+			]
+		)!;
 		expect(d.moved).toHaveLength(1);
 		expect(d.kept).toBe(0);
 	});

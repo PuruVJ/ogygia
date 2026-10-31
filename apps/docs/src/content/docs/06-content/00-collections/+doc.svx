@@ -16,18 +16,18 @@ related:
 You learn one API and use it in all locations. Define a collection one time with `content({ loader, schema })`. Point its `loader` at a glob of markdown files, at a REST API or CMS, or at a source that pushes over time. The read surface (`refs`, `get`) never changes.
 
 ::: tip When to use
-Use a collection when you have a *set of content* with typed frontmatter (docs, a blog, a changelog, product pages, a CMS feed), and you want a nav or index over the wire *and* full rendered bodies on the page.
+Use a collection when you have a _set of content_ with typed frontmatter (docs, a blog, a changelog, product pages, a CMS feed), and you want a nav or index over the wire _and_ full rendered bodies on the page.
 :::
 
 One rule controls the full surface: **the boundary picks the representation.** Stay on the server, and you get the full entry, with its body. Cross the wire, and you get plain data.
 
-| read | returns | where |
-| --- | --- | --- |
-| `get(id)` | `{ id, data, meta, body }`; the body is a held region | server only |
-| `list({ map })` | a mapped data array | over the wire |
-| `live.get` / `live.list` | mapped data, emitted again on each change | over the wire (live) |
+| read                     | returns                                               | where                |
+| ------------------------ | ----------------------------------------------------- | -------------------- |
+| `get(id)`                | `{ id, data, meta, body }`; the body is a held region | server only          |
+| `list({ map })`          | a mapped data array                                   | over the wire        |
+| `live.get` / `live.list` | mapped data, emitted again on each change             | over the wire (live) |
 
-For a *page assembled from typed blocks*, not a single markdown body, see [Blocks](/docs/content/blocks). It is a separate, block-level API.
+For a _page assembled from typed blocks_, not a single markdown body, see [Blocks](/docs/content/blocks). It is a separate, block-level API.
 
 ## Installing
 
@@ -73,7 +73,7 @@ export const docs = content({
 Define a collection outside a server module, and the build prints a warning that names the file. A client component that imports it would pull the full corpus into its bundle, silently, and frequently megabytes. Keep the definition server-side, and mint the wire crossing in a `.remote.ts`. That split is the full defense.
 :::
 
-The collection *handle* stays browser-safe by **type**: `docs.refs` and `docs.get` have no `$app/server` in their signatures. But the *module that defines it* is server-only, because of the glob. Import the types of the handle anywhere. Import the module only from the server.
+The collection _handle_ stays browser-safe by **type**: `docs.refs` and `docs.get` have no `$app/server` in their signatures. But the _module that defines it_ is server-only, because of the glob. Import the types of the handle anywhere. Import the module only from the server.
 
 The collection obeys `filter` on each read path: `refs`, `get`, `live`, the wire remotes, and prerender inputs. A draft is invisible in all locations, direct URL included. A per-remote filter can only narrow it more, never widen it.
 
@@ -153,7 +153,7 @@ export const docNav = withRemotes(docs).list({ map: (e) => ({ slug: e.id, title:
 
 ### Rendering an entry the client fetched
 
-`get()` is server-only. The body is a live component. Thus it stays in the SSR pass, and renders with `<Region of={entry.body} />` (above). Sometimes the client must render an entry that it fetched **over the wire**: an index, a live feed, a search result. Then map that entry to a held region of one of your own `with { region }` components, and return *that*. `<Region>` fetches and hydrates it: the one renderable that crosses the wire. See [Held regions](/docs/regions/held-regions).
+`get()` is server-only. The body is a live component. Thus it stays in the SSR pass, and renders with `<Region of={entry.body} />` (above). Sometimes the client must render an entry that it fetched **over the wire**: an index, a live feed, a search result. Then map that entry to a held region of one of your own `with { region }` components, and return _that_. `<Region>` fetches and hydrates it: the one renderable that crosses the wire. See [Held regions](/docs/regions/held-regions).
 
 ## Load markdown (`.svx` / `.md`)
 
@@ -211,12 +211,12 @@ That is how the live demos in these docs run inside the prose.
 
 A `loader` is not limited to a glob. Each object with `refs` / `get` is a source. Thus the same collection API covers a REST API or a CMS. All other parts (schema, `filter`, the wire remotes) are identical to a file-backed collection.
 
-| Source | Write |
-| --- | --- |
-| Static files in repo | the [`loader` macro](/docs/macros/loaders): `import.meta.og.loader.markdown` · `.folder` · `.json` · `.git` |
-| Blocks (CMS tree) | [`blocks(source, registry)`](/docs/content/blocks) with a [`regions()`](/docs/macros/regions) registry |
-| A REST API | a `{ refs, get }` source that fetches |
-| Something that **pushes** | add `live()` (a change signal) plus `live.list` / `live.get` |
+| Source                    | Write                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Static files in repo      | the [`loader` macro](/docs/macros/loaders): `import.meta.og.loader.markdown` · `.folder` · `.json` · `.git` |
+| Blocks (CMS tree)         | [`blocks(source, registry)`](/docs/content/blocks) with a [`regions()`](/docs/macros/regions) registry      |
+| A REST API                | a `{ refs, get }` source that fetches                                                                       |
+| Something that **pushes** | add `live()` (a change signal) plus `live.list` / `live.get`                                                |
 
 A source is two async methods. `refs()` lists the corpus as light metadata. `get(id)` fetches one full entry:
 
@@ -325,4 +325,4 @@ Below, a `query.live` yields a rendered [held region](/docs/regions/held-regions
 
 ---
 
-*A collection knows what exists. [`site()`](/docs/content/site) decides how it reads: nav, search, shell, and more.*
+_A collection knows what exists. [`site()`](/docs/content/site) decides how it reads: nav, search, shell, and more._

@@ -11,7 +11,12 @@ export type Block = {
 	title: string;
 	body: string;
 	tags: string[];
-	meta: { author: string; updated: string; weight: number; links: { href: string; label: string }[] };
+	meta: {
+		author: string;
+		updated: string;
+		weight: number;
+		links: { href: string; label: string }[];
+	};
 	rows: { sku: string; price: number; stock: number; desc: string }[];
 };
 
@@ -29,7 +34,10 @@ export function block(i: number): Block {
 			author: 'cms',
 			updated: '2026-09-10',
 			weight: i,
-			links: Array.from({ length: 8 }, (_, k) => ({ href: `/link/${i}/${k}`, label: `Link ${i} ${k}` }))
+			links: Array.from({ length: 8 }, (_, k) => ({
+				href: `/link/${i}/${k}`,
+				label: `Link ${i} ${k}`
+			}))
 		},
 		rows: Array.from({ length: 60 }, (_, r) => ({
 			sku: `SKU-${i}-${r}`,
@@ -47,8 +55,17 @@ export function page_tree() {
 
 // Header config: NOT part of page.data (mirrors the real header, whose props come from its own
 // server module), so it crosses as a full props payload, not a seed reference.
-export type MenuItem = { label: string; href: string; description: string; children: { label: string; href: string }[] };
-export type HeaderConfig = { locale: string; menus: { title: string; items: MenuItem[] }[]; countries: { code: string; name: string; href: string }[] };
+export type MenuItem = {
+	label: string;
+	href: string;
+	description: string;
+	children: { label: string; href: string }[];
+};
+export type HeaderConfig = {
+	locale: string;
+	menus: { title: string; items: MenuItem[] }[];
+	countries: { code: string; name: string; href: string }[];
+};
 
 const MENU_COUNT = 6;
 const MENU_ITEMS = 40;
@@ -61,8 +78,15 @@ export const header_config: HeaderConfig = {
 			label: `Item ${m}.${i}`,
 			href: `/menu/${m}/item/${i}`,
 			description: `${LOREM.slice(0, 100)} (${m}.${i})`,
-			children: Array.from({ length: 6 }, (_, c) => ({ label: `Child ${m}.${i}.${c}`, href: `/menu/${m}/item/${i}/child/${c}` }))
+			children: Array.from({ length: 6 }, (_, c) => ({
+				label: `Child ${m}.${i}.${c}`,
+				href: `/menu/${m}/item/${i}/child/${c}`
+			}))
 		}))
 	})),
-	countries: Array.from({ length: 120 }, (_, c) => ({ code: `C${c}`, name: `Country ${c}`, href: `/country/${c}` }))
+	countries: Array.from({ length: 120 }, (_, c) => ({
+		code: `C${c}`,
+		name: `Country ${c}`,
+		href: `/country/${c}`
+	}))
 };

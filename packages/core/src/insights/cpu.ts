@@ -16,7 +16,14 @@ export interface SelfProfileTrace {
 	stacks: { frameId: number; parentId?: number }[];
 }
 
-export type CodeKind = 'app' | 'ogygia' | 'svelte' | 'dependency' | 'page script' | 'browser' | 'devtools';
+export type CodeKind =
+	| 'app'
+	| 'ogygia'
+	| 'svelte'
+	| 'dependency'
+	| 'page script'
+	| 'browser'
+	| 'devtools';
 
 export interface CpuFn {
 	name: string;
@@ -62,13 +69,17 @@ export function clean_file(url: string, page_origin = ''): string {
 	// a workspace path: from the package or src folder on
 	for (const mark of ['/node_modules/.vite/deps/', '/node_modules/', '/packages/', '/src/']) {
 		const at = u.lastIndexOf(mark);
-		if (at !== -1) return mark === '/src/' ? u.slice(at + 1) : u.slice(at + (mark === '/packages/' ? 10 : mark.length));
+		if (at !== -1)
+			return mark === '/src/'
+				? u.slice(at + 1)
+				: u.slice(at + (mark === '/packages/' ? 10 : mark.length));
 	}
 	return u;
 }
 
 /** ogygia's own instruments: the devtools dock, the event layer, the analysis engine */
-const OWN_INSTRUMENT_RE = /\/(?:ogygia|@ogygia\/core|packages\/core)\/(?:src|dist)\/(?:devtools|events|insights)\//;
+const OWN_INSTRUMENT_RE =
+	/\/(?:ogygia|@ogygia\/core|packages\/core)\/(?:src|dist)\/(?:devtools|events|insights)\//;
 
 /** What kind of code a frame is, from its script URL (and name, for the browser's own). */
 export function kind_of(url: string, page_url: string): CodeKind {
@@ -82,7 +93,12 @@ export function kind_of(url: string, page_url: string): CodeKind {
 	if (path.includes('/svelte/src/') || path.includes('/node_modules/svelte/')) return 'svelte';
 	// the measuring itself: the dock (with the event layer and the analysis it runs) and the sampler's
 	// own start (kept apart, never a top function)
-	if (OWN_INSTRUMENT_RE.test(path) || path.endsWith('/runtime/beacon.ts') || path.endsWith('/runtime/beacon.js')) return 'devtools';
+	if (
+		OWN_INSTRUMENT_RE.test(path) ||
+		path.endsWith('/runtime/beacon.ts') ||
+		path.endsWith('/runtime/beacon.js')
+	)
+		return 'devtools';
 	if (
 		path.includes('/packages/ogygia/') ||
 		path.includes('/packages/core/') ||
@@ -98,12 +114,18 @@ export function kind_of(url: string, page_url: string): CodeKind {
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-export function analyze_cpu(trace: SelfProfileTrace, windows: IslandWindow[], longtasks: { t: number; ms: number }[], page_url: string): CpuSummary {
+export function analyze_cpu(
+	trace: SelfProfileTrace,
+	windows: IslandWindow[],
+	longtasks: { t: number; ms: number }[],
+	page_url: string
+): CpuSummary {
 	const { frames, resources, samples, stacks } = trace;
 	const origin = page_url ? new URL(page_url).origin : '';
 	// the interval: the median gap (a stall between samples is not all CPU)
 	const gaps: number[] = [];
-	for (let i = 1; i < samples.length; i++) gaps.push(samples[i].timestamp - samples[i - 1].timestamp);
+	for (let i = 1; i < samples.length; i++)
+		gaps.push(samples[i].timestamp - samples[i - 1].timestamp);
 	gaps.sort((a, b) => a - b);
 	const interval = gaps.length ? Math.max(1, gaps[gaps.length >> 1]) : 10;
 	const cap = interval * 3;
@@ -146,7 +168,11 @@ export function analyze_cpu(trace: SelfProfileTrace, windows: IslandWindow[], lo
 		}
 		// OTHER ORIGINS: the sample goes to the nearest frame with a script URL (a third-party script
 		// spending its time in the browser's own APIs — layout, the DOM — still pays for it)
-		for (let sid: number | undefined = s.stackId, guard = 0; sid !== undefined && guard < 512; guard++) {
+		for (
+			let sid: number | undefined = s.stackId, guard = 0;
+			sid !== undefined && guard < 512;
+			guard++
+		) {
 			const st: { frameId: number; parentId?: number } | undefined = stacks[sid];
 			if (!st) break;
 			const rid = frames[st.frameId]?.resourceId;
@@ -159,7 +185,11 @@ export function analyze_cpu(trace: SelfProfileTrace, windows: IslandWindow[], lo
 		}
 		// totals: each frame once per sample (recursion counts once)
 		const seen = new Set<number>();
-		for (let sid: number | undefined = s.stackId, guard = 0; sid !== undefined && guard < 512; guard++) {
+		for (
+			let sid: number | undefined = s.stackId, guard = 0;
+			sid !== undefined && guard < 512;
+			guard++
+		) {
 			const st: { frameId: number; parentId?: number } | undefined = stacks[sid];
 			if (!st) break;
 			if (!seen.has(st.frameId)) {
@@ -190,7 +220,9 @@ export function analyze_cpu(trace: SelfProfileTrace, windows: IslandWindow[], lo
 		// (an unnamed function in a component's file — an `$effect`, an inline handler — is that
 		// component's code, named so, as the profiler's analysis names it)
 		const path = url.split('?')[0];
-		const stem = path.endsWith('.svelte') ? path.slice(path.lastIndexOf('/') + 1, -'.svelte'.length) : '';
+		const stem = path.endsWith('.svelte')
+			? path.slice(path.lastIndexOf('/') + 1, -'.svelte'.length)
+			: '';
 		return {
 			name: f.name || stem || (url ? '(anonymous)' : '(browser)'),
 			file: url ? clean_file(url, origin) : '',
@@ -211,11 +243,18 @@ export function analyze_cpu(trace: SelfProfileTrace, windows: IslandWindow[], lo
 		if (win_ms[i] > 0) islands[w.fp] = { ms: round1(win_ms[i]), top: top(win_self[i], 3) };
 	});
 	return {
-		window_ms: samples.length ? round1(samples[samples.length - 1].timestamp - samples[0].timestamp) : 0,
+		window_ms: samples.length
+			? round1(samples[samples.length - 1].timestamp - samples[0].timestamp)
+			: 0,
 		busy_ms: round1(busy),
-		by_kind: [...kind_ms].map(([kind, ms]) => ({ kind, ms: round1(ms) })).sort((a, b) => b.ms - a.ms),
+		by_kind: [...kind_ms]
+			.map(([kind, ms]) => ({ kind, ms: round1(ms) }))
+			.sort((a, b) => b.ms - a.ms),
 		fns: top(new Map([...fn_self].filter(([fid]) => frame_kind(fid) !== 'devtools')), 25),
-		files: [...file_ms].map(([file, e]) => ({ file, kind: e.kind, ms: round1(e.ms) })).sort((a, b) => b.ms - a.ms).slice(0, 15),
+		files: [...file_ms]
+			.map(([file, e]) => ({ file, kind: e.kind, ms: round1(e.ms) }))
+			.sort((a, b) => b.ms - a.ms)
+			.slice(0, 15),
 		islands,
 		outside: { ms: round1(out_ms), top: top(out_self, 3) },
 		interval_ms: round1(interval),
@@ -233,12 +272,20 @@ function host_of(url: string): string {
 
 /** `name (file:line)` for a finding. */
 export function fn_label(f: CpuFn): string {
-	const where = f.file ? ` (${f.file.slice(f.file.lastIndexOf('/') + 1)}${f.line !== null ? `:${f.line}` : ''})` : '';
+	const where = f.file
+		? ` (${f.file.slice(f.file.lastIndexOf('/') + 1)}${f.line !== null ? `:${f.line}` : ''})`
+		: '';
 	return `${f.name}${where}`;
 }
 
 /** Is this a trace the analyzer can read. */
 export function is_trace(x: unknown): x is SelfProfileTrace {
 	const t = x as SelfProfileTrace | null;
-	return !!t && Array.isArray(t.frames) && Array.isArray(t.samples) && Array.isArray(t.stacks) && Array.isArray(t.resources);
+	return (
+		!!t &&
+		Array.isArray(t.frames) &&
+		Array.isArray(t.samples) &&
+		Array.isArray(t.stacks) &&
+		Array.isArray(t.resources)
+	);
 }

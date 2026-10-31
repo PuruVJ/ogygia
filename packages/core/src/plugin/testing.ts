@@ -42,7 +42,10 @@ export function startPlugin<Options = undefined, State = undefined>(
 	server: ServerPlugin<Options, State>,
 	{ name = 'test-plugin', options }: { name?: string; options?: Options } = {}
 ): StartedPlugin<Options, State> {
-	const [live] = start_plugins([{ name, options, server: server as ServerPlugin<unknown, unknown> }], TEST_SIGNER);
+	const [live] = start_plugins(
+		[{ name, options, server: server as ServerPlugin<unknown, unknown> }],
+		TEST_SIGNER
+	);
 	return {
 		app: live.app as ServerApp<Options>,
 		ctx(request, event = {}) {
@@ -55,7 +58,13 @@ export function startPlugin<Options = undefined, State = undefined>(
 				locals: {},
 				...event
 			} as unknown as RequestEvent;
-			const [ctx] = request_contexts([live], full, url.pathname, facts_of(request), async () => null);
+			const [ctx] = request_contexts(
+				[live],
+				full,
+				url.pathname,
+				facts_of(request),
+				async () => null
+			);
 			return ctx as RequestContext<Options, State>;
 		}
 	};

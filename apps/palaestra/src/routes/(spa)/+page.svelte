@@ -16,7 +16,7 @@
 	const date = new Date('2024-01-02T03:04:05.678Z');
 	const map = new Map([
 		['a', 1],
-		['b', 2],
+		['b', 2]
 	]);
 	const set = new Set([1, 2, 3]);
 	const big = 9007199254740993n;
@@ -24,7 +24,7 @@
 	const items = [
 		{ name: 'Alpha', score: 1 },
 		{ name: 'Bravo', score: 2 },
-		{ name: 'Charlie', score: 3 },
+		{ name: 'Charlie', score: 3 }
 	];
 </script>
 

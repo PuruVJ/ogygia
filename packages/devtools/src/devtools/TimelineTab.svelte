@@ -25,7 +25,14 @@
 		'nav.start': { c: '#ec4899', t: 'nav' },
 		'nav.finish': { c: '#ec4899', t: 'nav done' }
 	};
-	const LEGEND = ['wake.scheduled', 'wake.fired', 'region.hydrate.start', 'region.hydrate.done', 'interaction.replay', 'nav.start'];
+	const LEGEND = [
+		'wake.scheduled',
+		'wake.fired',
+		'region.hydrate.start',
+		'region.hydrate.done',
+		'interaction.replay',
+		'nav.start'
+	];
 	const LABEL_W = 118;
 
 	let wrapW = $state(560);
@@ -39,7 +46,12 @@
 		// (a navigation that never swapped the page — a full load held back, one overtaken — starts nothing)
 		const all = snapshot().filter((e) => e.realm === 'client' && MARK[e.name]);
 		const nav = last_nav();
-		const from = nav ? Math.max(0, all.findIndex((e) => e.t >= nav.t)) : 0;
+		const from = nav
+			? Math.max(
+					0,
+					all.findIndex((e) => e.t >= nav.t)
+				)
+			: 0;
 		const events = all.slice(from);
 		if (events.length === 0) return { events: [], lanes: [], span: 0 };
 
@@ -81,8 +93,7 @@
 				lane.first.get('wake.scheduled') ||
 				lane.first.get('wake.fired') ||
 				lane.first.get('region.hydrate.start');
-			const done =
-				lane.first.get('region.hydrate.done') || lane.first.get('region.hydrate.failed');
+			const done = lane.first.get('region.hydrate.done') || lane.first.get('region.hydrate.failed');
 			const bar = start
 				? {
 						left: x(start.t),
@@ -104,7 +115,9 @@
 	});
 </script>
 
-<h3>timeline — client wake / hydrate {model.events.length ? `(${model.events.length} events)` : ''}</h3>
+<h3>
+	timeline — client wake / hydrate {model.events.length ? `(${model.events.length} events)` : ''}
+</h3>
 
 {#if model.events.length === 0}
 	<div class="muted">no client events yet — interact with the page, then reopen.</div>
@@ -123,22 +136,35 @@
 							style:width="{lane.bar.width}px"
 						></div>
 					{/if}
-					{#each lane.dots as d}<div class="dot" title={d.title} style:left="{d.left}px" style:background={d.color}></div>{/each}
-					{#if lane.dur != null}<span class="dur" style:left="{(lane.bar?.left ?? 0) + (lane.bar?.width ?? 0)}px">{lane.dur < 10 ? lane.dur.toFixed(1) : Math.round(lane.dur)} ms</span>{/if}
+					{#each lane.dots as d}<div
+							class="dot"
+							title={d.title}
+							style:left="{d.left}px"
+							style:background={d.color}
+						></div>{/each}
+					{#if lane.dur != null}<span
+							class="dur"
+							style:left="{(lane.bar?.left ?? 0) + (lane.bar?.width ?? 0)}px"
+							>{lane.dur < 10 ? lane.dur.toFixed(1) : Math.round(lane.dur)} ms</span
+						>{/if}
 				</div>
 			</div>
 		{/each}
 		<div class="lane axis">
 			<div class="label" style:width="{LABEL_W}px"></div>
 			<div class="track" style:width="{trackW}px">
-				<span class="l">0 ms</span><span class="r">{model.span.toFixed(model.span < 100 ? 1 : 0)} ms total</span>
+				<span class="l">0 ms</span><span class="r"
+					>{model.span.toFixed(model.span < 100 ? 1 : 0)} ms total</span
+				>
 			</div>
 		</div>
 	</div>
 
 	<div class="legend">
 		{#each LEGEND as n}
-			<span class="li"><span class="dot inline" style:background={MARK[n].c}></span>{MARK[n].t}</span>
+			<span class="li"
+				><span class="dot inline" style:background={MARK[n].c}></span>{MARK[n].t}</span
+			>
 		{/each}
 	</div>
 {/if}

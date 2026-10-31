@@ -41,7 +41,9 @@ test('nested declarative shadow DOM attaches at every level', () => {
 });
 
 test('a closed shadowrootmode is honoured', () => {
-	const frag = parse_region_html('<x-c><template shadowrootmode="closed"><b>x</b></template></x-c>');
+	const frag = parse_region_html(
+		'<x-c><template shadowrootmode="closed"><b>x</b></template></x-c>'
+	);
 	const host = frag.querySelector('x-c') as Element & { shadowRoot: ShadowRoot | null };
 	// closed → not exposed via .shadowRoot, but the inert template must still be consumed
 	expect(host.querySelector('template[shadowrootmode]')).toBeNull();

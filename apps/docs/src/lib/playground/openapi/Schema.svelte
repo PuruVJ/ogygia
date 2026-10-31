@@ -8,12 +8,21 @@
 	import type { OASchema } from '../openapi';
 	import Self from './Schema.svelte';
 
-	let { schema, open = true, name }: { schema?: OASchema; open?: boolean; name?: string } = $props();
+	let {
+		schema,
+		open = true,
+		name
+	}: { schema?: OASchema; open?: boolean; name?: string } = $props();
 
 	const s = $derived(schema ?? {});
-	const type = $derived((s.type as string) ?? (s.$circular ? 'circular' : s.properties ? 'object' : s.name ? s.name : 'any'));
+	const type = $derived(
+		(s.type as string) ??
+			(s.$circular ? 'circular' : s.properties ? 'object' : s.name ? s.name : 'any')
+	);
 	const required = $derived(new Set((s.required as string[] | undefined) ?? []));
-	const fields = $derived(Object.entries((s.properties as Record<string, OASchema> | undefined) ?? {}));
+	const fields = $derived(
+		Object.entries((s.properties as Record<string, OASchema> | undefined) ?? {})
+	);
 	const enumVals = $derived(s.enum as unknown[] | undefined);
 	const items = $derived(s.items as OASchema | undefined);
 	// Toggle override, `null` until the user clicks — so `open` stays the default without capturing it
@@ -37,7 +46,9 @@
 					<li class="oa-prop">
 						<div class="oa-prop-head">
 							<code class="oa-prop-name">{key}</code>
-							<span class="oa-prop-type">{ps.name ?? ps.type ?? 'any'}{ps.format ? ` · ${ps.format}` : ''}</span>
+							<span class="oa-prop-type"
+								>{ps.name ?? ps.type ?? 'any'}{ps.format ? ` · ${ps.format}` : ''}</span
+							>
 							{#if required.has(key)}<span class="oa-required">required</span>{/if}
 						</div>
 						{#if ps.description}<p class="oa-prop-desc">{ps.description}</p>{/if}
@@ -61,11 +72,15 @@
 {:else if enumVals}
 	<div class="oa-enum">
 		<span class="oa-type">{type}</span>
-		<span class="oa-enum-vals">{#each enumVals as v, i (i)}<code>{JSON.stringify(v)}</code>{/each}</span>
+		<span class="oa-enum-vals"
+			>{#each enumVals as v, i (i)}<code>{JSON.stringify(v)}</code>{/each}</span
+		>
 	</div>
 {:else}
 	<span class="oa-type">{s.name ?? type}{s.format ? ` · ${s.format}` : ''}</span>
-	{#if s.example !== undefined}<span class="oa-example">e.g. <code>{JSON.stringify(s.example)}</code></span>{/if}
+	{#if s.example !== undefined}<span class="oa-example"
+			>e.g. <code>{JSON.stringify(s.example)}</code></span
+		>{/if}
 {/if}
 
 <style>

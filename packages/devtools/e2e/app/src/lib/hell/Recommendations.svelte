@@ -13,5 +13,7 @@
 
 <aside data-recs>
 	<h4>Recommended with {forProduct}</h4>
-	<ul>{#each recs.items as r (r)}<li>{r}</li>{/each}</ul>
+	<ul>
+		{#each recs.items as r (r)}<li>{r}</li>{/each}
+	</ul>
 </aside>

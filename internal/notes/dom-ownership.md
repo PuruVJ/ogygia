@@ -51,6 +51,7 @@ does not change with the caller.
 **R4 · ogygia's model of "what Svelte needs" is wrong in both directions.** `sequence_differs` says it
 reads "exactly what Svelte's walk reads" (`hydrate-core.ts:182`). Svelte's actual contract
 (svelte 5.56.8, file:line in the sweep):
+
 - the walk matches ELEMENTS BY POSITION ONLY; it never checks tags (template.js:66-70, 114-118);
 - it never descends a STATIC element (no dynamic content, literal attributes, not a custom element:
   `is_static_element`, fragment.js:141-185) — it only counts it as a sibling;
@@ -83,15 +84,15 @@ registry (677409fd), and lakes are the only boundary proven to survive a foreign
 
 ### 3.1 The owners (a closed set)
 
-| Owner | What | Truth | Example |
-|---|---|---|---|
-| `walk` | nodes Svelte's hydration walk binds by position | the server copy until hydrate; Svelte's references after | dynamic children of an island's elements |
-| `static` | render output Svelte never descends: static element subtrees, `{@html}` content, raw-snippet roots | whatever is there (nobody re-reads it) | a static footer list; the widget inside `{@html}` |
-| `foreign` | nodes another runtime owns: an app-declared kept subtree; children/attributes an upgraded custom element added that the server never sent | the live DOM, always | the widget's backdrop and pane |
-| `lake` | `wake="none"` content | the server bytes (ogygia lifts/restores them) | header lake |
-| `region` | a nested region boundary that runs on its own (deferred, adopted slot, foreign entry, already hydrated) | that region's own owner rules | a hole inside an island |
-| `page` | `<ogygia-slot>` content: host-page content the island adopts | the host page | slot children |
-| `runtime` | ogygia's own nodes | ogygia | announcer, region-css links, sidecars |
+| Owner     | What                                                                                                                                      | Truth                                                    | Example                                           |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------- |
+| `walk`    | nodes Svelte's hydration walk binds by position                                                                                           | the server copy until hydrate; Svelte's references after | dynamic children of an island's elements          |
+| `static`  | render output Svelte never descends: static element subtrees, `{@html}` content, raw-snippet roots                                        | whatever is there (nobody re-reads it)                   | a static footer list; the widget inside `{@html}` |
+| `foreign` | nodes another runtime owns: an app-declared kept subtree; children/attributes an upgraded custom element added that the server never sent | the live DOM, always                                     | the widget's backdrop and pane                    |
+| `lake`    | `wake="none"` content                                                                                                                     | the server bytes (ogygia lifts/restores them)            | header lake                                       |
+| `region`  | a nested region boundary that runs on its own (deferred, adopted slot, foreign entry, already hydrated)                                   | that region's own owner rules                            | a hole inside an island                           |
+| `page`    | `<ogygia-slot>` content: host-page content the island adopts                                                                              | the host page                                            | slot children                                     |
+| `runtime` | ogygia's own nodes                                                                                                                        | ogygia                                                   | announcer, region-css links, sidecars             |
 
 `walk` is the ONLY owner whose sequence ogygia must keep in the server's shape before hydration.
 Everything else is opaque to the repair: compared by tag and position only (the walk counts it as one
@@ -115,16 +116,16 @@ copy; the live morph has the incoming answer. Both pass it in.
 
 ### 3.3 The contract table (every writer × every owner)
 
-| Writer | walk | static | foreign | lake | region | page |
-|---|---|---|---|---|---|---|
-| pre-hydrate drift check | compare fully | tag + position only | ignore | lifted (as today) | tag + position only | tag + position only |
-| pre-hydrate repair | rebuild to the server sequence | leave | leave (see 3.4) | lifted | leave | leave |
-| live morph (hole, live, nav) | patch to the answer | patch to the answer | **leave** (keep) | its own revalidation | leave if running | leave |
-| morph ROOT | — | — | **no-op** | — | **no-op if hydrated** | — |
-| drift-watch | counts | ignores | ignores | ignores | ignores | ignores |
-| raw swaps (`swap_body`, first live tick, late templates) | route through the morph, or refuse on foreign/region | same | same | same | same | same |
-| attribute sync | Svelte's attrs | answer's attrs | foreign attrs kept | — | — | — |
-| class tokens | Svelte's tokens | answer's | foreign tokens kept | — | — | — |
+| Writer                                                   | walk                                                 | static              | foreign             | lake                 | region                | page                |
+| -------------------------------------------------------- | ---------------------------------------------------- | ------------------- | ------------------- | -------------------- | --------------------- | ------------------- |
+| pre-hydrate drift check                                  | compare fully                                        | tag + position only | ignore              | lifted (as today)    | tag + position only   | tag + position only |
+| pre-hydrate repair                                       | rebuild to the server sequence                       | leave               | leave (see 3.4)     | lifted               | leave                 | leave               |
+| live morph (hole, live, nav)                             | patch to the answer                                  | patch to the answer | **leave** (keep)    | its own revalidation | leave if running      | leave               |
+| morph ROOT                                               | —                                                    | —                   | **no-op**           | —                    | **no-op if hydrated** | —                   |
+| drift-watch                                              | counts                                               | ignores             | ignores             | ignores              | ignores               | ignores             |
+| raw swaps (`swap_body`, first live tick, late templates) | route through the morph, or refuse on foreign/region | same                | same                | same                 | same                  | same                |
+| attribute sync                                           | Svelte's attrs                                       | answer's attrs      | foreign attrs kept  | —                    | —                     | —                   |
+| class tokens                                             | Svelte's tokens                                      | answer's            | foreign tokens kept | —                    | —                     | —                   |
 
 What disappears: `preserve_self_owned`, the second morph contract, `keep_children`/`keep_extra` as
 separate concepts, the three upgraded-CE detections, and the depth-dependence of keep. The live morph
@@ -136,6 +137,7 @@ rules.
 If a widget inserts nodes into a position Svelte WILL walk (dynamic children of a custom element in
 the template), Svelte's positional walk breaks: no rule can keep both. The model makes the conflict
 explicit instead of silent:
+
 - the repair removes the foreign node (the walk needs the position) — today's behaviour, now a
   decision, not an accident;
 - it emits ONE devtools/console event, `ownership.conflict`, naming the element, the owner it
@@ -150,6 +152,7 @@ R4 and R6 share one fix: make the compiler say which elements Svelte does not wa
 runtime guessing after the fact.
 
 A server-leg transform over island component files stamps `data-og-opaque` on:
+
 - an element whose sole child is `{@html}` (controlled form);
 - an element with `bind:innerHTML` / `bind:textContent` / `bind:innerText` (Svelte owns it
   wholesale, by value);
@@ -288,6 +291,7 @@ owner, one table, both incidents fixed without a flag.
   the field report), morph body-attribute tests.
 
 Deliberately left (each reviewed):
+
 - Raw full swaps (`swap_body` fallback, the first live tick's `replaceChildren`, late templates):
   documented fallbacks / first renders where nothing live exists yet to own; `swap_body` now keeps a
   script's body attributes.
@@ -308,8 +312,8 @@ children (the panel now AFTER its closing block comment). The morph matched by p
 comment where the panel was, inserted the answer's panel, and kept the old one ("never remove a child
 a self-owned element gave itself"): two panels, the stale one painting over the real one.
 
-**The diagnosis.** §3.2 rule 6 said a child of an upgraded element is foreign *only if the server
-never sent it*. What shipped was the shortcut "every child of a self-owned element is kept", and the
+**The diagnosis.** §3.2 rule 6 said a child of an upgraded element is foreign _only if the server
+never sent it_. What shipped was the shortcut "every child of a self-owned element is kept", and the
 model answered one question per element (who writes inside it) while four writers answered other
 questions privately: `keep_children` and `drop_stale_regions` (who may remove a child), the
 upgraded-host attribute skip and `carry_address` (who writes an attribute), positional matching under a
@@ -317,12 +321,12 @@ self-owned parent (who orders the children).
 
 **The model, widened: one element, four facets.**
 
-| facet | `render` (the answer / server render: the morph speaks for it) | `element` (its own runtime / the browser) | `region` |
-|---|---|---|---|
-| content | walk / static / page | — | a hydrated region root |
-| attributes | default | an upgraded custom element's host | a region root, except its ADDRESS (`endpoint`): the render that minted it |
-| order of its children | default | a self-owned element (it relocates / wraps its light DOM) | — |
-| existence of a child | the render made it (provenance) | the element made it | — |
+| facet                 | `render` (the answer / server render: the morph speaks for it) | `element` (its own runtime / the browser)                 | `region`                                                                  |
+| --------------------- | -------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------- |
+| content               | walk / static / page                                           | —                                                         | a hydrated region root                                                    |
+| attributes            | default                                                        | an upgraded custom element's host                         | a region root, except its ADDRESS (`endpoint`): the render that minted it |
+| order of its children | default                                                        | a self-owned element (it relocates / wraps its light DOM) | —                                                                         |
+| existence of a child  | the render made it (provenance)                                | the element made it                                       | —                                                                         |
 
 **Provenance** (`render_made`): a registry ogygia fills wherever it places nodes under an
 element-ordered parent — a morph's claim or insertion, the restore putting Svelte's children back into

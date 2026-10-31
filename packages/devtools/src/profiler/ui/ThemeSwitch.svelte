@@ -45,7 +45,12 @@
 	}
 </script>
 
-<button class="theme" onclick={cycle} title="Theme: {mode} (click to change)" aria-label="theme: {mode}">
+<button
+	class="theme"
+	onclick={cycle}
+	title="Theme: {mode} (click to change)"
+	aria-label="theme: {mode}"
+>
 	<span class="ic" aria-hidden="true">{ICON[mode]}</span>
 	<span class="lbl">{mode}</span>
 </button>

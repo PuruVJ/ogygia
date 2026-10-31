@@ -111,7 +111,11 @@ export function pkg_of(file: string): string {
 
 /** the framework the app runs on: SvelteKit, Svelte, ogygia itself, Vite */
 export const is_framework_pkg = (p: string): boolean =>
-	p.startsWith('@sveltejs/') || p === 'svelte' || p.startsWith('ogygia') || p === '@ogygia/core' || p === 'vite';
+	p.startsWith('@sveltejs/') ||
+	p === 'svelte' ||
+	p.startsWith('ogygia') ||
+	p === '@ogygia/core' ||
+	p === 'vite';
 
 /** After `renders` more renders a leaking line holds about `renders` × what one render left; one
  *  filling a bounded cache holds its capacity's worth. At 80 % of `renders`× or more it grew with
@@ -123,7 +127,13 @@ export const grows_of = (grown: number, one: number, renders: number): boolean |
 	// the heap sample is statistical (a quarter either way at a megabyte a render), so the middle
 	// band is no verdict: a 4-entry cache over 6 renders (0.67) must never read as a leak
 	const ratio = grown / (one * renders);
-	return ratio >= 0.85 ? (renders >= LEAK_MIN_RENDERS ? true : undefined) : ratio <= 0.5 ? false : undefined;
+	return ratio >= 0.85
+		? renders >= LEAK_MIN_RENDERS
+			? true
+			: undefined
+		: ratio <= 0.5
+			? false
+			: undefined;
 };
 const GROWS_MIN_RENDERS = 5;
 /** A LEAK verdict needs 6 renders. The check is cut short on a tight time budget, and over 5 a
@@ -178,13 +188,32 @@ const LIB: ReadonlySet<FrameCategory> = new Set<FrameCategory>(['dependency', 'n
 const APP: ReadonlySet<FrameCategory> = new Set<FrameCategory>(['app', 'component']);
 
 /** words before a `(` that are not calls */
-const CONTROL: ReadonlySet<string> = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'await', 'function']);
+const CONTROL: ReadonlySet<string> = new Set([
+	'if',
+	'for',
+	'while',
+	'switch',
+	'catch',
+	'return',
+	'typeof',
+	'await',
+	'function'
+]);
 const ID_START = (s: string) => {
 	const c = s.charCodeAt(0);
 	return (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
 };
 /** the calls that run a regular expression */
-const REGEXP_METHODS = ['test', 'exec', 'match', 'matchAll', 'replace', 'replaceAll', 'split', 'search'];
+const REGEXP_METHODS = [
+	'test',
+	'exec',
+	'match',
+	'matchAll',
+	'replace',
+	'replaceAll',
+	'split',
+	'search'
+];
 
 /** A readable path: from `src/` when the path has one, the package-relative path inside
  *  `node_modules`, else the last three segments. */
@@ -446,7 +475,13 @@ export function build_ledger(input: LedgerInput): LedgerLine[] {
 			}
 			const total = found.reduce((s, x) => s + x.w, 0);
 			return total > 0
-				? found.map((x) => ({ path: x.path, file: x.file, line: x.line, ms: (ms * x.w) / total, fn: x.fn }))
+				? found.map((x) => ({
+						path: x.path,
+						file: x.file,
+						line: x.line,
+						ms: (ms * x.w) / total,
+						fn: x.fn
+					}))
 				: only_call(f, ms);
 		};
 		/** the one line of `f`'s body that calls anything, when there is exactly one (a loop that
@@ -461,7 +496,8 @@ export function build_ledger(input: LedgerInput): LedgerLine[] {
 				const t = tokens(body.lines[i]);
 				let calls = false;
 				for (let k = 0; k + 1 < t.length && !calls; k++)
-					calls = t[k + 1] === '(' && t[k - 1] !== 'function' && !CONTROL.has(t[k]) && ID_START(t[k]);
+					calls =
+						t[k + 1] === '(' && t[k - 1] !== 'function' && !CONTROL.has(t[k]) && ID_START(t[k]);
 				if (!calls) continue;
 				// the function's own header (`async function drainJobs(jobs)`) is not a call
 				if (i === 0 && t.includes('function')) continue;

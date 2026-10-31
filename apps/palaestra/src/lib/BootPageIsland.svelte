@@ -13,5 +13,5 @@
 	data-page-island
 	data-page-dir={dir ?? '(none)'}
 	data-page-sees-boot={bootStore.ready}
-	onclick={() => n++}
->page island {n} · dir={dir ?? '(none)'} · sawBoot={bootStore.ready}</button>
+	onclick={() => n++}>page island {n} · dir={dir ?? '(none)'} · sawBoot={bootStore.ready}</button
+>

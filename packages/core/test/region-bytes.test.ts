@@ -32,7 +32,9 @@ describe('island_subgraph_bytes', () => {
 	});
 
 	it('a barrel the island still imports whole: little code, many app modules behind it', () => {
-		const leaves = Array.from({ length: 8 }, (_, i) => mod(`/src/lib/ui/Part${i}.svelte`, 'p'.repeat(300)));
+		const leaves = Array.from({ length: 8 }, (_, i) =>
+			mod(`/src/lib/ui/Part${i}.svelte`, 'p'.repeat(300))
+		);
 		const barrel = mod('/src/lib/ui/index.ts', 'e'.repeat(8 * 60), leaves);
 		// a module with many imports AND real code of its own is a component, not a barrel
 		const busy = mod('/src/lib/Busy.svelte', 'b'.repeat(8 * 400), leaves.slice(0, 8));
@@ -44,27 +46,54 @@ describe('island_subgraph_bytes', () => {
 	});
 
 	it("its components' lines that draw differently in the browser, read from their sources on disk", () => {
-		const clock = { ...mod('/src/lib/Clock.svelte', 'compiled'), file: '/app/src/lib/Clock.svelte' };
+		const clock = {
+			...mod('/src/lib/Clock.svelte', 'compiled'),
+			file: '/app/src/lib/Clock.svelte'
+		};
 		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [clock]);
-		const src: Record<string, string> = { '/app/src/lib/Clock.svelte': "<script>\n\tconst where = typeof window === 'undefined' ? 'server' : 'browser';\n</script>\n<p>{where}</p>" };
+		const src: Record<string, string> = {
+			'/app/src/lib/Clock.svelte':
+				"<script>\n\tconst where = typeof window === 'undefined' ? 'server' : 'browser';\n</script>\n<p>{where}</p>"
+		};
 		expect(island_subgraph_bytes([entry], (f) => src[f]).abc123.hazards).toEqual([
-			{ file: 'src/lib/Clock.svelte', line: 2, code: "const where = typeof window === 'undefined' ? 'server' : 'browser';", kind: 'browser', reads: 'typeof window' }
+			{
+				file: 'src/lib/Clock.svelte',
+				line: 2,
+				code: "const where = typeof window === 'undefined' ? 'server' : 'browser';",
+				kind: 'browser',
+				reads: 'typeof window'
+			}
 		]);
 		// no reader: no reading
 		expect(island_subgraph_bytes([entry]).abc123.hazards).toBeUndefined();
 	});
 
 	it("a site-kit island (ogygia's content components): no app bytes, and still its lines", () => {
-		const sidebar = { ...mod('/@fs/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte', 'compiled'), file: '/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte' };
+		const sidebar = {
+			...mod('/@fs/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte', 'compiled'),
+			file: '/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte'
+		};
 		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [sidebar]);
-		const src: Record<string, string> = { '/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte': '<script>\n\tlet { site } = $props();\n\tconst tree = await site.nav();\n</script>' };
+		const src: Record<string, string> = {
+			'/repo/packages/ogygia/dist/content/site/components/Sidebar.svelte':
+				'<script>\n\tlet { site } = $props();\n\tconst tree = await site.nav();\n</script>'
+		};
 		const out = island_subgraph_bytes([entry], (f) => src[f]).abc123;
 		expect(out.bytes).toBe(0);
-		expect(out.hazards).toEqual([{ file: 'ogygia/content/site/components/Sidebar.svelte', line: 3, code: 'const tree = await site.nav();', kind: 'await' }]);
+		expect(out.hazards).toEqual([
+			{
+				file: 'ogygia/content/site/components/Sidebar.svelte',
+				line: 3,
+				code: 'const tree = await site.nav();',
+				kind: 'await'
+			}
+		]);
 	});
 
 	it('a small component composing many children is no barrel: it uses what it imports', () => {
-		const leaves = Array.from({ length: 7 }, (_, i) => mod(`/src/lib/demos/Demo${i}.svelte`, 'p'.repeat(300)));
+		const leaves = Array.from({ length: 7 }, (_, i) =>
+			mod(`/src/lib/demos/Demo${i}.svelte`, 'p'.repeat(300))
+		);
 		const hero = mod('/src/lib/demos/HeroDemo.svelte', 'h'.repeat(7 * 60), leaves);
 		const entry = mod('/@id/virtual:ogygia/island/abc123.js', 'glue', [hero]);
 		expect(island_subgraph_bytes([entry]).abc123.barrels).toBeUndefined();

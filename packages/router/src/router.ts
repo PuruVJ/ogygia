@@ -140,7 +140,10 @@ const HEAD_AS_GET = (m: string) => (m === 'HEAD' ? 'GET' : m);
 // emitter escapes; the wire is trusted federation, the law is unconditional).
 const LAST_SLASH_RE = /\/$/;
 
-export function routes<const T extends KeyedTable<T>>(typed: T, opts: RoutesOptions = {}): Router<T> {
+export function routes<const T extends KeyedTable<T>>(
+	typed: T,
+	opts: RoutesOptions = {}
+): Router<T> {
 	const table = typed as RouteTable;
 	const base = (opts.base ?? '').replace(LAST_SLASH_RE, '');
 	const slash = opts.slash ?? 'ignore';
@@ -190,17 +193,20 @@ export function routes<const T extends KeyedTable<T>>(typed: T, opts: RoutesOpti
 		}
 		return opts.freeze ?? null;
 	};
-	register_route_options(base + '|' + leaves.map((l) => l.pattern).join(','), (pathname, option) => {
-		let path = pathname;
-		if (base) {
-			if (path === base) path = '/';
-			else if (path.startsWith(base + '/')) path = path.slice(base.length);
-			else return undefined; // not under our base → not ours
+	register_route_options(
+		base + '|' + leaves.map((l) => l.pattern).join(','),
+		(pathname, option) => {
+			let path = pathname;
+			if (base) {
+				if (path === base) path = '/';
+				else if (path.startsWith(base + '/')) path = path.slice(base.length);
+				else return undefined; // not under our base → not ours
+			}
+			path = canonical_slash(path, slash) ?? path;
+			const hit = match_path(compiled, path);
+			return hit ? option_of(by_pattern.get(hit.pattern)!, option) : undefined;
 		}
-		path = canonical_slash(path, slash) ?? path;
-		const hit = match_path(compiled, path);
-		return hit ? option_of(by_pattern.get(hit.pattern)!, option) : undefined;
-	});
+	);
 
 	const href_fn = (pattern: string, params?: Record<string, string | number>) =>
 		base + fill(pattern, params ?? {});

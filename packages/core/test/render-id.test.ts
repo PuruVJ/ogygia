@@ -6,7 +6,10 @@
 // not. The server manifest maps each render identity to the entry that renders it.
 import { describe, it, expect } from 'vitest';
 import { renderId, regionIdentity, regionId } from '../src/compiler/region/identity.ts';
-import { server_islands_module, server_manifest_module } from '../src/compiler/link/server-manifest.ts';
+import {
+	server_islands_module,
+	server_manifest_module
+} from '../src/compiler/link/server-manifest.ts';
 
 const HOLE = 'src/lib/header/holes/MegaMenuHole.svelte';
 const mark = (options: Record<string, unknown>) => ({ strategy: 'server', options });
@@ -14,7 +17,10 @@ const mark = (options: Record<string, unknown>) => ({ strategy: 'server', option
 describe('renderId', () => {
 	it('is the component alone: schedule, preset settings and salt never change it', () => {
 		const a = regionIdentity(HOLE, mark({ when: 'load' }));
-		const b = regionIdentity(HOLE, mark({ when: 'idle', prefetch: 'idle', cacheTtlSec: 3600, margin: '200px' }));
+		const b = regionIdentity(
+			HOLE,
+			mark({ when: 'idle', prefetch: 'idle', cacheTtlSec: 3600, margin: '200px' })
+		);
 		// the wrapper ids differ (schedule, salt) …
 		expect(regionId(a)).not.toBe(regionId(b));
 		expect(regionId(a, 'salt-one')).not.toBe(regionId(a, 'salt-two'));
@@ -39,27 +45,60 @@ describe('the server manifest maps render identities', () => {
 	const program = (rows: Array<[iid: string, render?: string]>) =>
 		({
 			by_id: new Map(rows.map(([iid]) => [iid, `virtual:${iid}`])),
-			registry: new Map(rows.map(([iid, render]) => [`virtual:${iid}`, { server: true, componentPath: '/x/Hole.svelte', ...(render ? { renderId: render } : {}) }]))
+			registry: new Map(
+				rows.map(([iid, render]) => [
+					`virtual:${iid}`,
+					{ server: true, componentPath: '/x/Hole.svelte', ...(render ? { renderId: render } : {}) }
+				])
+			)
 		}) as never;
 
 	it('each id → its render identity; each render identity → one entry rendering it (the smallest id)', () => {
-		const src = server_manifest_module(true, program([['bbbbbbbbbbbb', 'r00000000001'], ['aaaaaaaaaaaa', 'r00000000001'], ['cccccccccccc', 'r00000000002']]), false, () => '', () => '');
+		const src = server_manifest_module(
+			true,
+			program([
+				['bbbbbbbbbbbb', 'r00000000001'],
+				['aaaaaaaaaaaa', 'r00000000001'],
+				['cccccccccccc', 'r00000000002']
+			]),
+			false,
+			() => '',
+			() => ''
+		);
 		expect(src).toContain('"bbbbbbbbbbbb": "r00000000001"');
 		expect(src).toContain('"aaaaaaaaaaaa": "r00000000001"');
-		expect(src).toMatch(/render_island = \{\n {2}"r00000000001": "aaaaaaaaaaaa",\n {2}"r00000000002": "cccccccccccc"\n\}/);
+		expect(src).toMatch(
+			/render_island = \{\n {2}"r00000000001": "aaaaaaaaaaaa",\n {2}"r00000000002": "cccccccccccc"\n\}/
+		);
 	});
 
 	it('the islands’ loaders live one dynamic import away (Kit links CSS one import deep)', () => {
 		const p = program([['aaaaaaaaaaaa', 'r00000000001']]);
-		const manifest = server_manifest_module(true, p, false, () => '', () => '');
-		expect(manifest).toContain(`export const load_islands = () => import("virtual:ogygia/server-islands");`);
+		const manifest = server_manifest_module(
+			true,
+			p,
+			false,
+			() => '',
+			() => ''
+		);
+		expect(manifest).toContain(
+			`export const load_islands = () => import("virtual:ogygia/server-islands");`
+		);
 		expect(manifest).not.toContain('import("virtual:aaaaaaaaaaaa")');
-		expect(server_islands_module(true, p)).toContain('"aaaaaaaaaaaa": () => import("virtual:aaaaaaaaaaaa")');
+		expect(server_islands_module(true, p)).toContain(
+			'"aaaaaaaaaaaa": () => import("virtual:aaaaaaaaaaaa")'
+		);
 		expect(server_islands_module(false, p)).toBe('export const islands = {\n\n};\n');
 	});
 
 	it('the browser leg carries none of it', () => {
-		const src = server_manifest_module(false, program([['aaaaaaaaaaaa', 'r00000000001']]), false, () => '', () => '');
+		const src = server_manifest_module(
+			false,
+			program([['aaaaaaaaaaaa', 'r00000000001']]),
+			false,
+			() => '',
+			() => ''
+		);
 		expect(src).toContain('export const island_render = {};');
 		expect(src).toContain('export const render_island = {};');
 	});

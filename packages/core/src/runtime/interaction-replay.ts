@@ -10,7 +10,8 @@ import { emit as dt_emit } from '../events/bus.ts';
 
 // Interaction's resolver, handed over through the registry — this lazy chunk never imports a boot
 // module (./slots.ts `BootLink`).
-const resolve_address = (region: Element, addr: number[]) => interaction_link().resolve_address(region, addr);
+const resolve_address = (region: Element, addr: number[]) =>
+	interaction_link().resolve_address(region, addr);
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;

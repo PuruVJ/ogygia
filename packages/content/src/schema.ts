@@ -1,6 +1,10 @@
 import type { SchemaLike } from './index.ts';
 
-export async function parseSchema(schema: SchemaLike | undefined, data: unknown, label: string): Promise<Record<string, unknown>> {
+export async function parseSchema(
+	schema: SchemaLike | undefined,
+	data: unknown,
+	label: string
+): Promise<Record<string, unknown>> {
 	if (!schema) return data as Record<string, unknown>;
 
 	if (schema['~standard']) {

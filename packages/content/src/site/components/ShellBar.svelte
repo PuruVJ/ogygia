@@ -91,12 +91,37 @@
 		<a class="og-cbar-brand" href={home || base || '/'}>{brand}</a>
 	{/snippet}
 	{#snippet actions()}
-		<button type="button" class="og-cbar-btn" data-ph-sheet-toggle aria-label={open && view === 'search' ? 'Close search' : 'Search'} aria-expanded={open && view === 'search'} onclick={() => (open && view === 'search' ? (open = false) : openSearch())}>
-			<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+		<button
+			type="button"
+			class="og-cbar-btn"
+			data-ph-sheet-toggle
+			aria-label={open && view === 'search' ? 'Close search' : 'Search'}
+			aria-expanded={open && view === 'search'}
+			onclick={() => (open && view === 'search' ? (open = false) : openSearch())}
+		>
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg
+			>
 		</button>
 		<ThemeToggle />
-		<button type="button" class="og-cbar-btn og-cbar-menu" data-ph-sheet-toggle aria-label={open && view === 'nav' ? 'Close menu' : 'Open menu'} aria-expanded={open && view === 'nav'} onclick={() => (open && view === 'nav' ? (open = false) : openMenu())}>
-			<span class="og-cbar-bars" class:og-open={open && view === 'nav'}><span></span><span></span><span></span></span>
+		<button
+			type="button"
+			class="og-cbar-btn og-cbar-menu"
+			data-ph-sheet-toggle
+			aria-label={open && view === 'nav' ? 'Close menu' : 'Open menu'}
+			aria-expanded={open && view === 'nav'}
+			onclick={() => (open && view === 'nav' ? (open = false) : openMenu())}
+		>
+			<span class="og-cbar-bars" class:og-open={open && view === 'nav'}
+				><span></span><span></span><span></span></span
+			>
 		</button>
 	{/snippet}
 </BottomBar>
@@ -106,7 +131,11 @@
 <Sheet bind:open label={view === 'search' ? 'Search' : 'Navigation'}>
 	<div class="og-sheet-swap" bind:this={swap_el}>
 		{#key view}
-			<div class="og-sheet-view" in:fade={{ duration: reduced() ? 0 : 160 }} out:fade={{ duration: reduced() ? 0 : 110 }}>
+			<div
+				class="og-sheet-view"
+				in:fade={{ duration: reduced() ? 0 : 160 }}
+				out:fade={{ duration: reduced() ? 0 : 110 }}
+			>
 				{#if view === 'search'}
 					<!-- The dedicated SEARCH view: just the inline brick — the input gets the surface. -->
 					<div class="og-sheet-scroll">

@@ -29,11 +29,11 @@ export const guides = content({
 
 The returned object is your query API. Every collection exposes the same handful of methods.
 
-| Method | Returns |
-| --- | --- |
-| `get(id)` | One compiled entry, or `undefined`. |
-| `all()` | Every entry, ordered by path. |
-| `tree()` | The nested sidebar structure. |
+| Method        | Returns                               |
+| ------------- | ------------------------------------- |
+| `get(id)`     | One compiled entry, or `undefined`.   |
+| `all()`       | Every entry, ordered by path.         |
+| `tree()`      | The nested sidebar structure.         |
 | `related(id)` | Entries named in the `related` field. |
 
 ## Sources

@@ -65,13 +65,20 @@ describe('analyze · what one walk says', () => {
 		['Map', { a: new Map() }],
 		['class instance', { a: new (class X {})() }],
 		['function', { a: () => 1 }],
-		['symbol-branded plain object (a held region, an og.$ fn descriptor)', { a: { [Symbol.for('ogygia.brand')]: true, x: 1 } }]
+		[
+			'symbol-branded plain object (a held region, an og.$ fn descriptor)',
+			{ a: { [Symbol.for('ogygia.brand')]: true, x: 1 } }
+		]
 	])('%s inside → neither JSON nor referenceable', (_, v) => {
 		expect(analyze(v)).toMatchObject({ json: false, ref: false });
 	});
 
 	it('a thenable anywhere flags the tree (and disqualifies both lanes)', () => {
-		expect(analyze({ a: [{ b: Promise.resolve(1) }] })).toMatchObject({ thenable: true, json: false, ref: false });
+		expect(analyze({ a: [{ b: Promise.resolve(1) }] })).toMatchObject({
+			thenable: true,
+			json: false,
+			ref: false
+		});
 	});
 
 	it('a cycle is neither lane and never loops', () => {
@@ -112,7 +119,9 @@ describe('plan_props_wire · lanes', () => {
 		class Opaque {
 			v = 1;
 		}
-		expect(() => plan_props_wire({ o: new Opaque() }, '/islands/x.js')).toThrow(/island "\/islands\/x.js": a captured prop/);
+		expect(() => plan_props_wire({ o: new Opaque() }, '/islands/x.js')).toThrow(
+			/island "\/islands\/x.js": a captured prop/
+		);
 	});
 });
 
@@ -125,7 +134,13 @@ describe('plan_props_wire · fingerprint input', () => {
 		// referenced or not, the wire text differs but the canonical (what data-og-fp hashes) does not
 		expect(w.wire(index_seed(data)).text).not.toBe(w.wire(null).text);
 		expect(fingerprint_of('/islands/x.js', '', w.canonical)).toBe(fp);
-		expect(fingerprint_of('/islands/x.js', '', plan_props_wire(structuredClone(props), '/islands/x.js').canonical)).toBe(fp);
+		expect(
+			fingerprint_of(
+				'/islands/x.js',
+				'',
+				plan_props_wire(structuredClone(props), '/islands/x.js').canonical
+			)
+		).toBe(fp);
 	});
 });
 
@@ -133,7 +148,11 @@ describe('plan_props_wire · seed references at wire time', () => {
 	const data = { catalog: { blocks: [block('one'), block('two')] }, greeting: 'hi' };
 
 	it('with the seed index: a seed node (identity or clone) crosses as a path, revives equal', () => {
-		const props = { block: data.catalog.blocks[0], twin: JSON.parse(JSON.stringify(data.catalog.blocks[1])), n: 7 };
+		const props = {
+			block: data.catalog.blocks[0],
+			twin: JSON.parse(JSON.stringify(data.catalog.blocks[1])),
+			n: 7
+		};
 		const w = plan_props_wire(props, '/islands/x.js');
 		expect(w.json).toBe(true); // plain props: JSON canonical …
 		const out = w.wire(index_seed(data));
@@ -162,7 +181,10 @@ describe('plan_props_wire · seed references at wire time', () => {
 	});
 
 	it('the profiler reads the wire: how many references, into which seed keys, and the devalue culprit', () => {
-		const w = plan_props_wire({ block: data.catalog.blocks[0], g: data.greeting, n: 1 }, '/islands/x.js');
+		const w = plan_props_wire(
+			{ block: data.catalog.blocks[0], g: data.greeting, n: 1 },
+			'/islands/x.js'
+		);
 		expect(w.refs).toEqual({ count: 0, keys: [] });
 		expect(w.culprit()).toBeNull(); // JSON lane: nothing to blame
 		w.wire(index_seed(data));
@@ -198,7 +220,9 @@ describe('live snippet entries', () => {
 	});
 
 	it('a JSON-lane payload never carries one (a live snippet is a function)', () => {
-		expect(plan_props_wire({ e: '/_app/immutable/og-region.abc123.js' }, '/x').live_entries).toEqual([]);
+		expect(
+			plan_props_wire({ e: '/_app/immutable/og-region.abc123.js' }, '/x').live_entries
+		).toEqual([]);
 	});
 });
 

@@ -37,13 +37,13 @@ today, an Amplify deploy tomorrow):
 
 1. **Measure** — `packages/ogygia/src/perf/measure.ts`. Given a base URL and a page list, produce a
    `PerfSnapshot`. Two modes:
-   - *in-process* (default): start the built adapter-node server in this process with the profiler
+   - _in-process_ (default): start the built adapter-node server in this process with the profiler
      enabled (`ogygia({ profiler: true })` in the app's vite config is NOT required — the runner
      mounts the profiler itself through the same `#ensure_profiler` seam, keyed by an env flag), then
      hit `/__profiler/page?p=<page>&runs=N&format=json` for each page. This is exactly the report
      the UI reads: `summary`, `components`, `hot_functions`, `timeline.phases`, `ogygia`. Zero new
      instrumentation.
-   - *remote* (Amplify, any deploy): the same `/page?format=json` call against a deployed preview
+   - _remote_ (Amplify, any deploy): the same `/page?format=json` call against a deployed preview
      URL with `x-profiler-key`. Needs the profiler enabled on that deploy (it already runs in prod
      behind the secret, and page mode already fits the serverless budget — see `serverless_work_budget_ms`).
      Same JSON, same snapshot, same compare; the runner only differs in where the server is.

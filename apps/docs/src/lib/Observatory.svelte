@@ -281,7 +281,7 @@ export default {
 <Prose>a server-only prose block</Prose>`,
 			'src/lib/Header.svelte': FILES_DEMO['Header.svelte'],
 			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
-			'src/lib/Prose.svelte': FILES_DEMO['Prose.svelte'],
+			'src/lib/Prose.svelte': FILES_DEMO['Prose.svelte']
 		},
 		'wake demo': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -303,13 +303,16 @@ export default {
 			'src/lib/Counter.svelte': FILES_WAKE['Counter.svelte'],
 			'src/lib/Menu.svelte': FILES_WAKE['Menu.svelte'],
 			'src/lib/Chart.svelte': FILES_WAKE['Chart.svelte'],
-			'src/lib/Prose.svelte': FILES_WAKE['Prose.svelte'],
+			'src/lib/Prose.svelte': FILES_WAKE['Prose.svelte']
 		},
-		'all strategies': { 'src/routes/+layout.ts': LAYOUT_CSR, 'src/routes/+page.svelte': ALL_STRATEGIES },
+		'all strategies': {
+			'src/routes/+layout.ts': LAYOUT_CSR,
+			'src/routes/+page.svelte': ALL_STRATEGIES
+		},
 		counter: {
 			'src/routes/+layout.ts': LAYOUT_CSR,
 			'src/routes/+page.svelte': `<scr${''}ipt>\n  import Counter from '$lib/Counter.svelte' with { wake: 'load' };\n</scr${''}ipt>\n\n<h1>Hello</h1>\n<Counter start={0} />`,
-			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte'],
+			'src/lib/Counter.svelte': FILES_DEMO['Counter.svelte']
 		},
 		'server island': {
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -620,9 +623,15 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				const map = w.files;
 				if (map && Object.keys(map).length) {
 					files = map;
-					active = w.active && w.active in map ? w.active : 'App.svelte' in map ? 'App.svelte' : Object.keys(map)[0];
+					active =
+						w.active && w.active in map
+							? w.active
+							: 'App.svelte' in map
+								? 'App.svelte'
+								: Object.keys(map)[0];
 				}
-				if (w.tab && ['preview', 'islands', 'bytes', 'wire', 'output'].includes(w.tab)) inspectorTab = w.tab as InspectorTab;
+				if (w.tab && ['preview', 'islands', 'bytes', 'wire', 'output'].includes(w.tab))
+					inspectorTab = w.tab as InspectorTab;
 				if (w.mode === 'live' || w.mode === 'xray' || w.mode === 'islands') previewMode = w.mode;
 				initial_cursor = Number(w.cursor) || 0;
 				cursor = initial_cursor;
@@ -633,7 +642,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				request_bundle();
 			});
 	}
-	let analysis = $state<Analysis>({ ok: true, islands: [], output: '', real: false, realIslands: null });
+	let analysis = $state<Analysis>({
+		ok: true,
+		islands: [],
+		output: '',
+		real: false,
+		realIslands: null
+	});
 	let busy = $state(false);
 	let shared = $state(false);
 
@@ -706,7 +721,8 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				// A lake is frozen: SSR DOM kept, no client module.
 				if (kind === 'lake') return '<ogygia-region wake="none">';
 				// A server island fetches its HTML later from a signed endpoint on its schedule.
-				if (kind === 'server hole') return `<ogygia-region render="defer" when="${wake || 'load'}">`;
+				if (kind === 'server hole')
+					return `<ogygia-region render="defer" when="${wake || 'load'}">`;
 				// A live region's baked HTML revalidates + morphs in place.
 				if (kind === 'live') return '<ogygia-region live>';
 				// island / preset → a hydrating shell that wakes on its schedule.
@@ -732,21 +748,37 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		// Test/dev seam: run the FULL compiler driver in the worker directly and get its three legs back
 		// (the plain analyze() below now folds these in for a `.svelte` entry; this stays for isolating the
 		// driver from the rest of the analyze pipeline).
-		(window as unknown as Record<string, unknown>).__OBS_DRIVETEST = (f?: FileMap, entry?: string) =>
+		(window as unknown as Record<string, unknown>).__OBS_DRIVETEST = (
+			f?: FileMap,
+			entry?: string
+		) =>
 			new Promise((resolve) => {
 				const id = --liveSeq;
 				drive_waiters.set(id, resolve);
-				worker?.postMessage({ id, type: 'drivetest', files: $state.snapshot(f ?? files), entry: entry ?? entryFile });
+				worker?.postMessage({
+					id,
+					type: 'drivetest',
+					files: $state.snapshot(f ?? files),
+					entry: entry ?? entryFile
+				});
 			});
 		// Test/dev seam: the last Analysis the worker returned — so a probe can assert the Output view's
 		// three legs are the COMPLETE (full-driver) transform (`driverComplete`, `import.meta.og.$` rewritten).
 		(window as unknown as Record<string, unknown>).__OBS_ANALYSIS = () => $state.snapshot(analysis);
 		// Test/dev seam: the DRIVER-sourced preview SSR (real <ogygia-region> HTML from the real transform).
-		(window as unknown as Record<string, unknown>).__OBS_DRIVERENDER = (f?: FileMap, entry?: string) =>
+		(window as unknown as Record<string, unknown>).__OBS_DRIVERENDER = (
+			f?: FileMap,
+			entry?: string
+		) =>
 			new Promise((resolve) => {
 				const id = --liveSeq;
 				drive_waiters.set(id, resolve);
-				worker?.postMessage({ id, type: 'driverender', files: $state.snapshot(f ?? files), entry: entry ?? entryFile });
+				worker?.postMessage({
+					id,
+					type: 'driverender',
+					files: $state.snapshot(f ?? files),
+					entry: entry ?? entryFile
+				});
 			});
 	}
 
@@ -790,22 +822,42 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		const kind = i.strategy.kind;
 		const lines: string[] = [];
 		if (kind === 'lake')
-			lines.push(`It's a lake: marked with { wake: 'none' }. A lake stays frozen server HTML inside its parent island and ships no client module of its own — the way to keep a heavy static subtree (prose, a chart) out of the island's bundle.`);
+			lines.push(
+				`It's a lake: marked with { wake: 'none' }. A lake stays frozen server HTML inside its parent island and ships no client module of its own — the way to keep a heavy static subtree (prose, a chart) out of the island's bundle.`
+			);
 		else if (kind === 'held (raw)')
-			lines.push(`It's a held region: marked with { region: 'raw' }. The server decides its HTML (a registry the transform can't see into), so zero JS crosses — the component's scoped CSS rides along with the response.`);
+			lines.push(
+				`It's a held region: marked with { region: 'raw' }. The server decides its HTML (a registry the transform can't see into), so zero JS crosses — the component's scoped CSS rides along with the response.`
+			);
 		else if (kind === 'server hole')
-			lines.push(`It's a server island: marked with { render: 'deferred' }. It renders on the server per request, and the client fetches its HTML from a signed endpoint ${hydrate_phrase(a.fetch as string | undefined)}. Request-specific but not interactive.`);
+			lines.push(
+				`It's a server island: marked with { render: 'deferred' }. It renders on the server per request, and the client fetches its HTML from a signed endpoint ${hydrate_phrase(a.fetch as string | undefined)}. Request-specific but not interactive.`
+			);
 		else if (kind === 'live')
-			lines.push(`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`);
+			lines.push(
+				`It's a live region: marked with { render: 'live' }. Its HTML is baked and revalidates in the background, streamed over an SSE channel — the DOM morphs in place.`
+			);
 		else if (kind === 'preset')
-			lines.push(`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ presets }) config.`);
-		else lines.push(`It's a client island: marked with { wake: '${wake ?? 'load'}' }, so it hydrates ${hydrate_phrase(wake)} — that's why it ships its own JS.`);
+			lines.push(
+				`It uses the '${String(a.preset)}' preset: marked with { preset: '${String(a.preset)}' }, a named bundle of dials from your ogygia({ presets }) config.`
+			);
+		else
+			lines.push(
+				`It's a client island: marked with { wake: '${wake ?? 'load'}' }, so it hydrates ${hydrate_phrase(wake)} — that's why it ships its own JS.`
+			);
 		if (s?.ships)
-			lines.push(`Ships ${fmt_bytes(s.bytes)} — its client entry plus the <Region> wrapper that mounts it. Only this subtree hydrates; the rest of the page stays server HTML.`);
-		else if (s) lines.push(`Ships zero JS — server HTML only. Nothing in this row hydrates on the client.`);
-		const w = analysis.rendered?.wire?.find((x) => x.name.split('/').pop() === i.component.split('/').pop());
+			lines.push(
+				`Ships ${fmt_bytes(s.bytes)} — its client entry plus the <Region> wrapper that mounts it. Only this subtree hydrates; the rest of the page stays server HTML.`
+			);
+		else if (s)
+			lines.push(`Ships zero JS — server HTML only. Nothing in this row hydrates on the client.`);
+		const w = analysis.rendered?.wire?.find(
+			(x) => x.name.split('/').pop() === i.component.split('/').pop()
+		);
 		if (w && !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'))
-			lines.push(`${fmt_bytes(w.bytes)} of props cross to it by value (devalue) — see the Wire tab. Props are copied, never shared by reference; functions can't cross, they become fn refs.`);
+			lines.push(
+				`${fmt_bytes(w.bytes)} of props cross to it by value (devalue) — see the Wire tab. Props are copied, never shared by reference; functions can't cross, they become fn refs.`
+			);
 		return lines;
 	}
 
@@ -821,7 +873,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			case 'region.hydrate.start':
 				return { icon: '↯', text: 'hydrating…', cls: 'ev-dim' };
 			case 'region.hydrate.done':
-				return { icon: '✓', text: `hydrated${e.ms != null ? ` · ${Math.round(e.ms)}ms` : ''}`, cls: 'ev-done' };
+				return {
+					icon: '✓',
+					text: `hydrated${e.ms != null ? ` · ${Math.round(e.ms)}ms` : ''}`,
+					cls: 'ev-done'
+				};
 			case 'region.hydrate.failed':
 				return { icon: '✗', text: 'hydrate failed', cls: 'ev-fail' };
 			default:
@@ -838,7 +894,9 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// fallback, a live region never ticks. The `islands` mode DOES (worker renders, main thread pushes
 	// ticks / serves the endpoint) — so when live mode holds one, we point the reader there.
 	const server_regions = $derived(
-		(analysis.islands ?? []).filter((i) => i.strategy.kind === 'server hole' || i.strategy.kind === 'live')
+		(analysis.islands ?? []).filter(
+			(i) => i.strategy.kind === 'server hole' || i.strategy.kind === 'live'
+		)
 	);
 
 	// csr switch: false → ogygia islands; true → the app compiled as a csr=true Kit route (islands
@@ -903,7 +961,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	const drive_waiters = new Map<number, (r: unknown) => void>(); // full-driver test seam replies
 
 	/** Ask the worker to render ONE component (with props) → HTML, for a live tick. */
-	function live_request(fileMap: FileMap, file: string, props: Record<string, unknown>): Promise<string> {
+	function live_request(
+		fileMap: FileMap,
+		file: string,
+		props: Record<string, unknown>
+	): Promise<string> {
 		const w = worker;
 		if (!w) return Promise.resolve('');
 		const id = --liveSeq; // negative ids: a separate space from the analyze counter
@@ -944,7 +1006,12 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		clearTimeout(bundle_timer);
 		bundle_timer = setTimeout(() => {
 			bundleWant = ++bundleSeq;
-			w.postMessage({ id: bundleWant, type: 'bundle', files: $state.snapshot(files), entry: entryFile });
+			w.postMessage({
+				id: bundleWant,
+				type: 'bundle',
+				files: $state.snapshot(files),
+				entry: entryFile
+			});
 		}, BUNDLE_DEBOUNCE_MS);
 	}
 	/** Persist the whole workspace + UI state into the URL hash (replaceState → no history spam). */
@@ -952,7 +1019,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		if (!hash_loaded) return;
 		clearTimeout(hash_timer);
 		hash_timer = setTimeout(() => {
-			encode_hash({ files: $state.snapshot(files), active, tab: inspectorTab, mode: previewMode, cursor })
+			encode_hash({
+				files: $state.snapshot(files),
+				active,
+				tab: inspectorTab,
+				mode: previewMode,
+				cursor
+			})
 				.then((h) => history.replaceState(null, '', h))
 				.catch(() => {
 					/* noop */
@@ -992,7 +1065,14 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		const token = ++ssr_fmt_token;
 		warm_prettier()
 			.then(({ format, plugins }) =>
-				format(cleaned, { parser: 'html', plugins, printWidth: 80, useTabs: true, htmlWhitespaceSensitivity: 'ignore', bracketSameLine: false })
+				format(cleaned, {
+					parser: 'html',
+					plugins,
+					printWidth: 80,
+					useTabs: true,
+					htmlWhitespaceSensitivity: 'ignore',
+					bracketSameLine: false
+				})
 			)
 			.then((pretty) => {
 				if (token === ssr_fmt_token && typeof pretty === 'string') ssr_source = pretty;
@@ -1007,11 +1087,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// leave a bare specifier the browser can't load at runtime. Called ONCE at init. Each guarded (a
 	// submodule may not exist in this svelte version → an empty stub, never a crash).
 	function load_svelte_runtime() {
-		import('svelte/internal/client')
-			.then((m) => (svelteClient = m))
-			.catch(() => {});
+		import('svelte/internal/client').then((m) => (svelteClient = m)).catch(() => {});
 		const add = (spec: string, load: Promise<unknown>) =>
-			load.then((m) => (svelteExtras = { ...svelteExtras, [spec]: m as Record<string, unknown> })).catch(() => {});
+			load
+				.then((m) => (svelteExtras = { ...svelteExtras, [spec]: m as Record<string, unknown> }))
+				.catch(() => {});
 		// @ts-expect-error internal svelte module, no published d.ts
 		add('svelte/internal/disclose-version', import('svelte/internal/disclose-version'));
 		// @ts-expect-error internal svelte module, no published d.ts
@@ -1044,7 +1124,19 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// Boot the worker (called ONCE from the init attachment). Replies flow through the callbacks.
 	function boot_worker(): Worker {
 		const w = new Worker(new URL('./observatory.worker.ts', import.meta.url), { type: 'module' });
-		w.onmessage = (e: MessageEvent<{ id: number; type?: string; result?: Analysis; html?: string; realDom?: NonNullable<Analysis['realDom']>; code?: string; packages?: string[]; missing?: string[]; error?: string }>) => {
+		w.onmessage = (
+			e: MessageEvent<{
+				id: number;
+				type?: string;
+				result?: Analysis;
+				html?: string;
+				realDom?: NonNullable<Analysis['realDom']>;
+				code?: string;
+				packages?: string[];
+				missing?: string[];
+				error?: string;
+			}>
+		) => {
 			if (e.data.type === 'live') {
 				liveWaiters.get(e.data.id)?.(e.data.html ?? '');
 				liveWaiters.delete(e.data.id);
@@ -1063,7 +1155,12 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			if (e.data.type === 'bundle') {
 				if (e.data.id !== bundleWant) return; // a stale bundle (a newer edit superseded it)
 				resolving = false;
-				previewBundle = { code: e.data.code, packages: e.data.packages, missing: e.data.missing, error: e.data.error };
+				previewBundle = {
+					code: e.data.code,
+					packages: e.data.packages,
+					missing: e.data.missing,
+					error: e.data.error
+				};
 				if (previewMode === 'live') remount_preview();
 				return;
 			}
@@ -1092,7 +1189,10 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// Mirrors the worker's pick so the tree can protect the same file from removal.
 	function entry_of(map: FileMap): string {
 		const keys = Object.keys(map);
-		return keys.find((k) => PAGE_SVELTE.test(k)) ?? (keys.includes('App.svelte') ? 'App.svelte' : keys[0]);
+		return (
+			keys.find((k) => PAGE_SVELTE.test(k)) ??
+			(keys.includes('App.svelte') ? 'App.svelte' : keys[0])
+		);
 	}
 	const entryFile = $derived(entry_of(files));
 
@@ -1104,9 +1204,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		const names = Object.keys(files);
 		const out: string[] = [];
 		if (names.some((n) => /\.server\.(ts|js)$/.test(n)))
-			out.push('Server load functions (a +page.server.ts / +layout.server.ts) run on the server — they don’t execute in the preview.');
+			out.push(
+				'Server load functions (a +page.server.ts / +layout.server.ts) run on the server — they don’t execute in the preview.'
+			);
 		if (names.some((n) => /\.remote\.(ts|js)$/.test(n)))
-			out.push('Remote functions (query / command / form) run on the server — they don’t execute in the preview.');
+			out.push(
+				'Remote functions (query / command / form) run on the server — they don’t execute in the preview.'
+			);
 		if (Object.values(files).some((s) => /from ['"]\$app\/server['"]/.test(s)))
 			out.push('$app/server is server-only — it doesn’t run in the preview.');
 		return out;
@@ -1135,7 +1239,12 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// ── THE REAL BUNDLE (live preview): the worker rolldown-bundles the workspace + jsdelivr CDN deps
 	// into ONE CJS module, keeping svelte external; we eval it here (providing the host's svelte) and
 	// mount its default export. This is what makes `import confetti from 'canvas-confetti'` actually run.
-	let previewBundle = $state<{ code?: string; packages?: string[]; missing?: string[]; error?: string } | null>(null);
+	let previewBundle = $state<{
+		code?: string;
+		packages?: string[];
+		missing?: string[];
+		error?: string;
+	} | null>(null);
 	let resolving = $state(false);
 	let bundleSeq = 0;
 	let bundleWant = 0;
@@ -1145,7 +1254,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 
 	// PREVIEW CONSOLE (svelte.dev-style): the eval'd bundle's `console` is a PARAM that shadows the global
 	// (see eval_cjs), so only the PREVIEW's console.* is captured here — the Observatory's own logs stay out.
-	type ConsoleEntry = { level: 'log' | 'info' | 'debug' | 'warn' | 'error'; text: string; count: number };
+	type ConsoleEntry = {
+		level: 'log' | 'info' | 'debug' | 'warn' | 'error';
+		text: string;
+		count: number;
+	};
 	let consoleLog = $state<ConsoleEntry[]>([]);
 	let consoleOpen = $state(false);
 	// O(1) flags for the header dots — recomputing `.some()` per log would be O(n²) under a logging flood.
@@ -1197,7 +1310,8 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		// ogygia runtime (external): content wrappers (TabGroup/Tab/…) → a children-rendering passthrough so
 		// the live mount shows their content instead of crashing on the island region bridge.
 		if (spec === 'ogygia/internal') return ogygia_internal_module;
-		if (spec === 'ogygia' || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) return ogygia_passthrough;
+		if (spec === 'ogygia' || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/'))
+			return ogygia_passthrough;
 		return {};
 	}
 	/** Eval a CJS module string with our svelte-providing require; returns its exports. The `console` param
@@ -1205,7 +1319,12 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	function eval_cjs(code: string): Record<string, unknown> {
 		const module = { exports: {} as Record<string, unknown> };
 		// eslint-disable-next-line no-new-func
-		new Function('require', 'module', 'exports', 'console', code)(bundle_require, module, module.exports, preview_console);
+		new Function('require', 'module', 'exports', 'console', code)(
+			bundle_require,
+			module,
+			module.exports,
+			preview_console
+		);
 		return module.exports;
 	}
 	// The isolated iframe (islands mode) talks to us over postMessage: it's ready (→ send the page),
@@ -1223,11 +1342,25 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				render_to_frame();
 			} else if (d.obsType === 'event') {
 				const ev = d.ev as { name?: string; fp?: string; t?: number; ms?: number; when?: string };
-				runtimeEvents = [...runtimeEvents, { name: ev.name ?? '', label: (d.label as string) || ev.fp || '', t: ev.t, ms: ev.ms, when: ev.when }].slice(-60);
+				runtimeEvents = [
+					...runtimeEvents,
+					{
+						name: ev.name ?? '',
+						label: (d.label as string) || ev.fp || '',
+						t: ev.t,
+						ms: ev.ms,
+						when: ev.when
+					}
+				].slice(-60);
 			} else if (d.obsType === 'navReq') {
 				void navigate_frame(String(d.entry || ''));
 			} else if (d.obsType === 'reconciled') {
-				navInfo = { to: currentPage.replace(/\.svelte$/, ''), kept: d.kept ?? [], mounted: d.mounted ?? [], removed: d.removed ?? [] };
+				navInfo = {
+					to: currentPage.replace(/\.svelte$/, ''),
+					kept: d.kept ?? [],
+					mounted: d.mounted ?? [],
+					removed: d.removed ?? []
+				};
 			}
 		};
 		window.addEventListener('message', onMsg);
@@ -1287,7 +1420,11 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 				const html = (window.__OBS_DEFER__ || {})[m[1]];
 				if (html != null) {
 					return new Promise((res) =>
-						setTimeout(() => res(new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })), 260)
+						setTimeout(
+							() =>
+								res(new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })),
+							260
+						)
 					);
 				}
 				return Promise.resolve(new Response('', { status: 404 }));
@@ -1297,7 +1434,9 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	}
 
 	// Nav (keep · nav): the reconcile decision of the last navigation, for the readout.
-	let navInfo = $state<{ to: string; kept: string[]; mounted: string[]; removed: string[] } | null>(null);
+	let navInfo = $state<{ to: string; kept: string[]; mounted: string[]; removed: string[] } | null>(
+		null
+	);
 	let currentPage = $state('App.svelte');
 
 	// ── ISOLATED IFRAME PREVIEW: "islands" mode renders in /observatory-frame — its OWN document +
@@ -1348,14 +1487,25 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		// $state.snapshot → plain objects (postMessage structured-clone can't take a reactive proxy).
 		if (csr) {
 			// csr=true: mount the WHOLE app as one hydration root — Kit steps in, no islands.
-			post_to_frame({ obsType: 'renderKit', modules: $state.snapshot(client.modules), entry: client.entry });
+			post_to_frame({
+				obsType: 'renderKit',
+				modules: $state.snapshot(client.modules),
+				entry: client.entry
+			});
 			return;
 		}
 		const xray = previewMode === 'xray';
 		const post_handbuilt = () => {
 			const rd = analysis.realDom;
 			if (!rd?.ok || !rd.html) return;
-			post_to_frame({ obsType: 'render', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray, bytes: lens_bytes() });
+			post_to_frame({
+				obsType: 'render',
+				html: rd.html,
+				modules: $state.snapshot(client.modules),
+				deferred: $state.snapshot(rd.deferred ?? {}),
+				xray,
+				bytes: lens_bytes()
+			});
 			arm_frame_live(rd);
 		};
 		// The DRIVER-sourced preview: the genuinely compiled app — the driver's real transform → real
@@ -1368,7 +1518,14 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			drive_waiters.set(id, (r) => {
 				const res = r as { ok?: boolean; html?: string; modules?: Record<string, string> };
 				if (res?.ok && typeof res.html === 'string') {
-					post_to_frame({ obsType: 'render', html: res.html, modules: res.modules ?? {}, deferred: {}, xray, bytes: lens_bytes() });
+					post_to_frame({
+						obsType: 'render',
+						html: res.html,
+						modules: res.modules ?? {},
+						deferred: {},
+						xray,
+						bytes: lens_bytes()
+					});
 				} else {
 					post_handbuilt();
 				}
@@ -1380,7 +1537,10 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	}
 
 	/** Ask the worker to render a nav TARGET page to real-island HTML. */
-	function page_request(fileMap: FileMap, entry: string): Promise<NonNullable<Analysis['realDom']> | null> {
+	function page_request(
+		fileMap: FileMap,
+		entry: string
+	): Promise<NonNullable<Analysis['realDom']> | null> {
 		const w = worker;
 		if (!w) return Promise.resolve(null);
 		const id = --liveSeq;
@@ -1395,24 +1555,52 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	async function navigate_frame(entry: string) {
 		const client = analysis.client;
 		if (!client || client.error || entry === currentPage) return;
-		const rd = await page_request(untrack(() => $state.snapshot(files)), entry);
+		const rd = await page_request(
+			untrack(() => $state.snapshot(files)),
+			entry
+		);
 		if (!rd?.ok || !rd.html) return;
 		currentPage = entry;
 		clear_frame_live();
-		post_to_frame({ obsType: 'nav', html: rd.html, modules: $state.snapshot(client.modules), deferred: $state.snapshot(rd.deferred ?? {}), xray: previewMode === 'xray', bytes: lens_bytes() });
+		post_to_frame({
+			obsType: 'nav',
+			html: rd.html,
+			modules: $state.snapshot(client.modules),
+			deferred: $state.snapshot(rd.deferred ?? {}),
+			xray: previewMode === 'xray',
+			bytes: lens_bytes()
+		});
 		arm_frame_live(rd);
 	}
 
 	function eval_client(code: string, req: Require): Linked {
 		const body = code
-			.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
-			.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
-			.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
-			.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
+			.replace(
+				/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const $1 = __require("$2");'
+			)
+			.replace(
+				/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;'
+			)
+			.replace(
+				/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const $1 = (__require("$2")).default;'
+			)
+			.replace(
+				/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const {$1} = __require("$2");'
+			)
 			.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
 			.replace(/export\s+default\s+/g, '__exports.default = ')
 			.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m: string, names: string) =>
-				names.split(',').map((n: string) => { const p = n.trim().split(/\s+as\s+/); return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`; }).join(' ')
+				names
+					.split(',')
+					.map((n: string) => {
+						const p = n.trim().split(/\s+as\s+/);
+						return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`;
+					})
+					.join(' ')
 			)
 			.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
 		const __exports: Linked = {};
@@ -1542,11 +1730,22 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		<div class="obs-bar-right">
 			<span class="status" data-obs-status>
 				<span class="busy" class:show={busy}>compiling…</span>
-				{#if analysis.ms != null && analysis.real}<span class="ms" title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span>{/if}
+				{#if analysis.ms != null && analysis.real}<span
+						class="ms"
+						title="transform + svelte compile">{analysis.ms.toFixed(1)} ms</span
+					>{/if}
 			</span>
 			<span class="csrswitch" data-obs-csr>
-				<button class:on={!csr} onclick={() => set_csr(false)} title="ogygia islands — only marked components ship JS">csr false</button>
-				<button class:on={csr} onclick={() => set_csr(true)} title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button>
+				<button
+					class:on={!csr}
+					onclick={() => set_csr(false)}
+					title="ogygia islands — only marked components ship JS">csr false</button
+				>
+				<button
+					class:on={csr}
+					onclick={() => set_csr(true)}
+					title="plain Kit — ogygia steps aside, the whole tree ships + hydrates">csr true</button
+				>
 			</span>
 			<button class="share" data-obs-share onclick={share}>{shared ? 'copied ✓' : 'share'}</button>
 		</div>
@@ -1555,14 +1754,27 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	<!-- Mobile: one pane at a time -->
 	<div class="obs-mobile-switch" role="tablist" aria-label="pane">
 		<button class:on={mobilePane === 'files'} onclick={() => (mobilePane = 'files')}>Files</button>
-		<button class:on={mobilePane === 'editor'} onclick={() => (mobilePane = 'editor')}>Editor</button>
-		<button class:on={mobilePane === 'result'} onclick={() => (mobilePane = 'result')}>Result</button>
+		<button class:on={mobilePane === 'editor'} onclick={() => (mobilePane = 'editor')}
+			>Editor</button
+		>
+		<button class:on={mobilePane === 'result'} onclick={() => (mobilePane = 'result')}
+			>Result</button
+		>
 	</div>
 
-	<div class="obs-main" data-pane={mobilePane} class:tree-collapsed={treeCollapsed} {...split.container}>
+	<div
+		class="obs-main"
+		data-pane={mobilePane}
+		class:tree-collapsed={treeCollapsed}
+		{...split.container}
+	>
 		<aside class="obs-tree-pane" class:collapsed={treeCollapsed} {...split.pane(0)}>
 			{#if treeCollapsed}
-				<button class="tree-reopen" title="show the file tree" onclick={() => (treeCollapsed = false)}>
+				<button
+					class="tree-reopen"
+					title="show the file tree"
+					onclick={() => (treeCollapsed = false)}
+				>
 					<span class="tr-arrow">»</span><span class="tr-label">files</span>
 				</button>
 			{:else}
@@ -1579,7 +1791,13 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			{/if}
 		</aside>
 
-		<div class="obs-gutter" {...split.gutter(0)} role="separator" aria-orientation="vertical" aria-label="resize file tree and editor"></div>
+		<div
+			class="obs-gutter"
+			{...split.gutter(0)}
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="resize file tree and editor"
+		></div>
 
 		<section class="obs-editor" {...split.pane(1)}>
 			<div class="obs-editor-head" data-obs-editor-head>
@@ -1594,504 +1812,765 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 					disabled={formatting}>{formatting ? '…' : 'Format'}</button
 				>
 			</div>
-			<CodeMirror doc={files[active]} docKey={active} oninput={(v) => { files[active] = v; request_all(); }} oncursor={(o) => { cursor = o; sync_hash(); }} initialCursor={initial_cursor} />
+			<CodeMirror
+				doc={files[active]}
+				docKey={active}
+				oninput={(v) => {
+					files[active] = v;
+					request_all();
+				}}
+				oncursor={(o) => {
+					cursor = o;
+					sync_hash();
+				}}
+				initialCursor={initial_cursor}
+			/>
 		</section>
 
-		<div class="obs-gutter" {...split.gutter(1)} role="separator" aria-orientation="vertical" aria-label="resize editor and inspector"></div>
+		<div
+			class="obs-gutter"
+			{...split.gutter(1)}
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="resize editor and inspector"
+		></div>
 
 		<section class="obs-inspector" {...split.pane(2)}>
 			<div class="obs-tabs" role="tablist" aria-label="inspector">
-				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => set_tab('output')}>Output</button>
-				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => set_tab('islands')}>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span>{/if}</button>
-				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => set_tab('bytes')}>Bytes</button>
-				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => set_tab('wire')}>Wire</button>
-				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => set_tab('preview')}>Preview</button>
+				<button role="tab" class:on={inspectorTab === 'output'} onclick={() => set_tab('output')}
+					>Output</button
+				>
+				<button role="tab" class:on={inspectorTab === 'islands'} onclick={() => set_tab('islands')}
+					>Regions{#if analysis.islands?.length}<span class="tcount">{analysis.islands.length}</span
+						>{/if}</button
+				>
+				<button role="tab" class:on={inspectorTab === 'bytes'} onclick={() => set_tab('bytes')}
+					>Bytes</button
+				>
+				<button role="tab" class:on={inspectorTab === 'wire'} onclick={() => set_tab('wire')}
+					>Wire</button
+				>
+				<button role="tab" class:on={inspectorTab === 'preview'} onclick={() => set_tab('preview')}
+					>Preview</button
+				>
 			</div>
 			<div class="obs-tabbody">
-			<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
-			{#if preview_limits.length}
-				<div class="config-notes server-note" data-obs-preview-limits>
-					<div class="cn-head">this runs on the server — not in the preview</div>
-					{#each preview_limits as msg, i (i)}
-						<div class="cn-row info" data-obs-preview-limit>
-							<span class="cn-ic">↯</span>
-							<span class="cn-body"><span class="cn-msg">{msg}</span></span>
+				<div class="tp" class:on={inspectorTab === 'preview'} data-tab="preview">
+					{#if preview_limits.length}
+						<div class="config-notes server-note" data-obs-preview-limits>
+							<div class="cn-head">this runs on the server — not in the preview</div>
+							{#each preview_limits as msg, i (i)}
+								<div class="cn-row info" data-obs-preview-limit>
+									<span class="cn-ic">↯</span>
+									<span class="cn-body"><span class="cn-msg">{msg}</span></span>
+								</div>
+							{/each}
+							<div class="cn-row info">
+								<span class="cn-ic">→</span>
+								<span class="cn-body"
+									><span class="cn-msg"
+										>The <b>Output</b>, <b>Regions</b> and <b>Bytes</b> tabs show how it compiles — that’s
+										the Observatory’s real diagnostic.</span
+									></span
+								>
+							</div>
 						</div>
-					{/each}
-					<div class="cn-row info">
-						<span class="cn-ic">→</span>
-						<span class="cn-body"><span class="cn-msg">The <b>Output</b>, <b>Regions</b> and <b>Bytes</b> tabs show how it compiles — that’s the Observatory’s real diagnostic.</span></span>
-					</div>
-				</div>
-			{/if}
-			{#if analysis.configNotes && analysis.configNotes.length}
-				<div class="config-notes" data-obs-config-notes>
-					<div class="cn-head">vite.config — what the preview can apply</div>
-					{#each analysis.configNotes as n, i (i)}
-						<div class="cn-row {n.level}" data-obs-config-note={n.level}>
-							<span class="cn-ic">{n.level === 'error' ? '✕' : n.level === 'warn' ? '!' : 'ℹ'}</span>
-							<span class="cn-body"><span class="cn-msg">{n.message}</span>{#if n.hint}<span class="cn-hint">{n.hint}</span>{/if}</span>
-						</div>
-					{/each}
-				</div>
-			{/if}
-			{#if analysis.rendered}
-				<div class="cap">
-					rendered
-					<span class="muted">· {previewMode === 'live' ? 'live, interactive — mounted in your browser' : previewMode === 'xray' ? 'x-ray — the real runtime, with the boundary lens overlaid' : 'islands — the real ogygia runtime hydrates each region'}</span>
-					{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
-						<span class="stubnote" title="components not provided in this single-file REPL render as placeholders">{analysis.rendered.stubs.length} stubbed</span>
 					{/if}
-					<span class="legs" data-obs-preview-mode>
-						<button class:on={previewMode === 'live'} onclick={() => set_mode('live')}>live</button>
-						<button class:on={previewMode === 'xray'} onclick={() => set_mode('xray')}>x-ray</button>
-						<button class:on={previewMode === 'islands'} onclick={() => set_mode('islands')} title="the page's real ogygia runtime hydrates the islands">islands</button>
-					</span>
-				</div>
-				{#if previewMode === 'live'}
-					<div class="cdndeps" data-obs-cdn>
-						{#if resolving}
-							<span class="resolving" data-obs-resolving><span class="spin"></span> resolving dependencies from jsdelivr…</span>
-						{:else}
-							{#if previewBundle?.packages?.length}
-								<span class="deps-ok" title="fetched from jsdelivr, bundled into the preview">📦 {previewBundle.packages.join(', ')}</span>
-							{/if}
-							{#if previewBundle?.missing?.length}
-								<span class="deps-missing" title="couldn't resolve — rendered as an inert stub">⚠ {previewBundle.missing.join(', ')}</span>
-							{/if}
-							{#if previewBundle?.error}
-								<span class="deps-err" data-obs-bundle-err title="the live bundle failed to build — the preview shows the last server render">✗ {previewBundle.error}</span>
-							{/if}
-						{/if}
-					</div>
-				{/if}
-				{#if previewMode === 'xray'}
-					<div class="lens-legend" data-obs-legend>
-						<span class="lk island">island · ships JS</span>
-						<span class="lk hole">server hole</span>
-						<span class="lk live">live</span>
-						<span class="lk shell">the rest · free server HTML</span>
-						<button class="replay" data-obs-replay title="re-render → islands re-hydrate on their schedule" onclick={() => render_to_frame()}>⟳ replay wakes</button>
-					</div>
-					<div class="wakehint muted">the <b>real runtime</b> — islands stay interactive. <b>load</b> woke now · <b>idle</b> soon · <b>visible</b> on scroll · <b>interaction</b> on click (dashed = still asleep).</div>
-				{/if}
-				{#if previewMode === 'live' && server_regions.length}
-					<div class="wakehint srvhint" data-obs-server-hint>
-						<b>{server_regions.map((i) => i.component.replace(/^.*\//, '').replace(/\.svelte$/, '')).join(', ')}</b>
-						render on the <b>server</b> ({server_regions.some((i) => i.strategy.kind === 'live') ? 'live' : 'deferred'}).
-						The in-page <b>live</b> mount can't drive them — a deferred hole never swaps, a live region never ticks.
-						<button class="tolink" onclick={() => set_mode('islands')}>switch to islands →</button>
-						to watch the real runtime fetch and revalidate them.
-					</div>
-				{/if}
-				{#if previewMode === 'islands'}
-					<div class="wakehint muted" data-obs-islands-hint>
-						the page's <b>real ogygia runtime</b> hydrated these — genuine <b>&lt;ogygia-region&gt;</b> shells,
-						blob-linked island chunks, lazy per schedule. Try <b>keep · nav</b> (bump the counter, then navigate —
-						its state survives the real reconcile) or <b>wake demo</b> (click Menu, scroll to Chart).
-					</div>
-				{/if}
-				{#if in_frame(previewMode) && navInfo}
-					<div class="navinfo" data-obs-navinfo>
-						<span class="ni-cap">reconcile → <b>{navInfo.to}</b></span>
-						{#if navInfo.kept.length}<span class="ni kept">kept {navInfo.kept.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
-						{#if navInfo.mounted.length}<span class="ni mounted">mounted {navInfo.mounted.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
-						{#if navInfo.removed.length}<span class="ni removed">removed {navInfo.removed.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span>{/if}
-					</div>
-				{/if}
-				{#if in_frame(previewMode) && runtimeEvents.length}
-					<div class="rtev" data-obs-runtime-events>
-						<div class="rtev-cap">runtime events <span class="muted">· live from the devtools bus (Rung 0) as the real runtime hydrates</span></div>
-						<div class="rtev-log">
-							{#each runtimeEvents as e, i (i)}
-								{@const f = fmt_event(e)}
-								<div class="rtev-row {f.cls}">
-									<span class="rtev-island mono">{e.label.replace(/\.svelte$/, '')}</span>
-									<span class="rtev-icon">{f.icon}</span>
-									<span class="rtev-text">{f.text}</span>
+					{#if analysis.configNotes && analysis.configNotes.length}
+						<div class="config-notes" data-obs-config-notes>
+							<div class="cn-head">vite.config — what the preview can apply</div>
+							{#each analysis.configNotes as n, i (i)}
+								<div class="cn-row {n.level}" data-obs-config-note={n.level}>
+									<span class="cn-ic"
+										>{n.level === 'error' ? '✕' : n.level === 'warn' ? '!' : 'ℹ'}</span
+									>
+									<span class="cn-body"
+										><span class="cn-msg">{n.message}</span>{#if n.hint}<span class="cn-hint"
+												>{n.hint}</span
+											>{/if}</span
+									>
 								</div>
 							{/each}
 						</div>
-					</div>
-				{/if}
-				<!-- islands + x-ray → the ISOLATED iframe (own runtime/svelte/document), x-ray adds the lens
-					 overlay there; live → the in-page whole-app mount. -->
-				{#if in_frame(previewMode)}
-					<iframe
-						class="preview frame"
-						{@attach frame_attach}
-						src="/observatory-frame"
-						title="isolated ogygia preview"
-						data-obs-frame
-					></iframe>
-				{:else}
-					<div class="preview og-canvas" {@attach preview_mount} data-obs-preview></div>
-					<!-- Console of the running preview (svelte.dev-style) — collapsible; auto-opens on warn/error. -->
-					<div class="obs-console" data-obs-console class:open={consoleOpen}>
-						<div
-							class="oc-head"
-							role="button"
-							tabindex="0"
-							onclick={() => (consoleOpen = !consoleOpen)}
-							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); consoleOpen = !consoleOpen; } }}
-						>
-							<span class="oc-tw">{consoleOpen ? '▾' : '▸'}</span>
-							<span class="oc-title">console</span>
-							{#if consoleLog.length}<span class="oc-n">{consoleLog.length}</span>{/if}
-							{#if consoleHasError}<span class="oc-dot error" title="errors"></span>{/if}
-							{#if consoleHasWarn}<span class="oc-dot warn" title="warnings"></span>{/if}
-							<span class="oc-spacer"></span>
-							{#if consoleLog.length}<button class="oc-clear" onclick={(e) => { e.stopPropagation(); clear_console(); }}>clear</button>{/if}
+					{/if}
+					{#if analysis.rendered}
+						<div class="cap">
+							rendered
+							<span class="muted"
+								>· {previewMode === 'live'
+									? 'live, interactive — mounted in your browser'
+									: previewMode === 'xray'
+										? 'x-ray — the real runtime, with the boundary lens overlaid'
+										: 'islands — the real ogygia runtime hydrates each region'}</span
+							>
+							{#if analysis.rendered.stubs && analysis.rendered.stubs.length}
+								<span
+									class="stubnote"
+									title="components not provided in this single-file REPL render as placeholders"
+									>{analysis.rendered.stubs.length} stubbed</span
+								>
+							{/if}
+							<span class="legs" data-obs-preview-mode>
+								<button class:on={previewMode === 'live'} onclick={() => set_mode('live')}
+									>live</button
+								>
+								<button class:on={previewMode === 'xray'} onclick={() => set_mode('xray')}
+									>x-ray</button
+								>
+								<button
+									class:on={previewMode === 'islands'}
+									onclick={() => set_mode('islands')}
+									title="the page's real ogygia runtime hydrates the islands">islands</button
+								>
+							</span>
 						</div>
-						{#if consoleOpen}
-							<div class="oc-body" data-obs-console-body>
-								{#if !consoleLog.length}
-									<div class="oc-empty">console.log / warn / error / info from the preview appears here</div>
+						{#if previewMode === 'live'}
+							<div class="cdndeps" data-obs-cdn>
+								{#if resolving}
+									<span class="resolving" data-obs-resolving
+										><span class="spin"></span> resolving dependencies from jsdelivr…</span
+									>
 								{:else}
-									{#each consoleLog as e, i (i)}
-										<div class="oc-row {e.level}" data-obs-console-row={e.level}>
-											{#if e.count > 1}<span class="oc-badge">{e.count}</span>{/if}
-											<span class="oc-lvl">{e.level}</span>
-											<span class="oc-text">{e.text}</span>
-										</div>
-									{/each}
+									{#if previewBundle?.packages?.length}
+										<span class="deps-ok" title="fetched from jsdelivr, bundled into the preview"
+											>📦 {previewBundle.packages.join(', ')}</span
+										>
+									{/if}
+									{#if previewBundle?.missing?.length}
+										<span class="deps-missing" title="couldn't resolve — rendered as an inert stub"
+											>⚠ {previewBundle.missing.join(', ')}</span
+										>
+									{/if}
+									{#if previewBundle?.error}
+										<span
+											class="deps-err"
+											data-obs-bundle-err
+											title="the live bundle failed to build — the preview shows the last server render"
+											>✗ {previewBundle.error}</span
+										>
+									{/if}
 								{/if}
 							</div>
 						{/if}
-					</div>
-				{/if}
-				{#if analysis.rendered.ok}
-					<details class="pipe">
-						<summary>rendered HTML source (SSR)</summary>
-						<div class="code-out" data-obs-html><CodeMirror doc={ssr_source} lang="html" readonly /></div>
-					</details>
-				{:else if !analysis.client || analysis.client.error}
-					<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
-				{/if}
-			{/if}
-			</div>
-
-			<div class="tp" class:on={inspectorTab === 'bytes'} data-tab="bytes">
-			{#if analysis.ledger && analysis.ledger.kitBytes > 0}
-				<div class="cap">
-					byte ledger <span class="muted">· island JS shipped vs plain Kit (csr=true)</span>
-					{#if saved_pct > 0}<span class="saved" data-obs-saved>−{saved_pct}% JS</span>{/if}
-				</div>
-				<div class="ledger" data-obs-ledger>
-					<div class="bars">
-						<div class="barrow">
-							<span class="blabel">ogygia</span>
-							<div class="btrack">
+						{#if previewMode === 'xray'}
+							<div class="lens-legend" data-obs-legend>
+								<span class="lk island">island · ships JS</span>
+								<span class="lk hole">server hole</span>
+								<span class="lk live">live</span>
+								<span class="lk shell">the rest · free server HTML</span>
+								<button
+									class="replay"
+									data-obs-replay
+									title="re-render → islands re-hydrate on their schedule"
+									onclick={() => render_to_frame()}>⟳ replay wakes</button
+								>
+							</div>
+							<div class="wakehint muted">
+								the <b>real runtime</b> — islands stay interactive. <b>load</b> woke now ·
+								<b>idle</b>
+								soon · <b>visible</b> on scroll · <b>interaction</b> on click (dashed = still asleep).
+							</div>
+						{/if}
+						{#if previewMode === 'live' && server_regions.length}
+							<div class="wakehint srvhint" data-obs-server-hint>
+								<b
+									>{server_regions
+										.map((i) => i.component.replace(/^.*\//, '').replace(/\.svelte$/, ''))
+										.join(', ')}</b
+								>
+								render on the <b>server</b> ({server_regions.some((i) => i.strategy.kind === 'live')
+									? 'live'
+									: 'deferred'}). The in-page <b>live</b> mount can't drive them — a deferred hole
+								never swaps, a live region never ticks.
+								<button class="tolink" onclick={() => set_mode('islands')}
+									>switch to islands →</button
+								>
+								to watch the real runtime fetch and revalidate them.
+							</div>
+						{/if}
+						{#if previewMode === 'islands'}
+							<div class="wakehint muted" data-obs-islands-hint>
+								the page's <b>real ogygia runtime</b> hydrated these — genuine
+								<b>&lt;ogygia-region&gt;</b>
+								shells, blob-linked island chunks, lazy per schedule. Try <b>keep · nav</b> (bump
+								the counter, then navigate — its state survives the real reconcile) or
+								<b>wake demo</b> (click Menu, scroll to Chart).
+							</div>
+						{/if}
+						{#if in_frame(previewMode) && navInfo}
+							<div class="navinfo" data-obs-navinfo>
+								<span class="ni-cap">reconcile → <b>{navInfo.to}</b></span>
+								{#if navInfo.kept.length}<span class="ni kept"
+										>kept {navInfo.kept.map((n) => n.replace(/\.svelte$/, '')).join(', ')}</span
+									>{/if}
+								{#if navInfo.mounted.length}<span class="ni mounted"
+										>mounted {navInfo.mounted
+											.map((n) => n.replace(/\.svelte$/, ''))
+											.join(', ')}</span
+									>{/if}
+								{#if navInfo.removed.length}<span class="ni removed"
+										>removed {navInfo.removed
+											.map((n) => n.replace(/\.svelte$/, ''))
+											.join(', ')}</span
+									>{/if}
+							</div>
+						{/if}
+						{#if in_frame(previewMode) && runtimeEvents.length}
+							<div class="rtev" data-obs-runtime-events>
+								<div class="rtev-cap">
+									runtime events <span class="muted"
+										>· live from the devtools bus (Rung 0) as the real runtime hydrates</span
+									>
+								</div>
+								<div class="rtev-log">
+									{#each runtimeEvents as e, i (i)}
+										{@const f = fmt_event(e)}
+										<div class="rtev-row {f.cls}">
+											<span class="rtev-island mono">{e.label.replace(/\.svelte$/, '')}</span>
+											<span class="rtev-icon">{f.icon}</span>
+											<span class="rtev-text">{f.text}</span>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+						<!-- islands + x-ray → the ISOLATED iframe (own runtime/svelte/document), x-ray adds the lens
+					 overlay there; live → the in-page whole-app mount. -->
+						{#if in_frame(previewMode)}
+							<iframe
+								class="preview frame"
+								{@attach frame_attach}
+								src="/observatory-frame"
+								title="isolated ogygia preview"
+								data-obs-frame
+							></iframe>
+						{:else}
+							<div class="preview og-canvas" {@attach preview_mount} data-obs-preview></div>
+							<!-- Console of the running preview (svelte.dev-style) — collapsible; auto-opens on warn/error. -->
+							<div class="obs-console" data-obs-console class:open={consoleOpen}>
 								<div
-									class="bfill og"
-									style:width="{Math.max(2, (100 * analysis.ledger.ogygiaBytes) / analysis.ledger.kitBytes)}%"
-								></div>
+									class="oc-head"
+									role="button"
+									tabindex="0"
+									onclick={() => (consoleOpen = !consoleOpen)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											consoleOpen = !consoleOpen;
+										}
+									}}
+								>
+									<span class="oc-tw">{consoleOpen ? '▾' : '▸'}</span>
+									<span class="oc-title">console</span>
+									{#if consoleLog.length}<span class="oc-n">{consoleLog.length}</span>{/if}
+									{#if consoleHasError}<span class="oc-dot error" title="errors"></span>{/if}
+									{#if consoleHasWarn}<span class="oc-dot warn" title="warnings"></span>{/if}
+									<span class="oc-spacer"></span>
+									{#if consoleLog.length}<button
+											class="oc-clear"
+											onclick={(e) => {
+												e.stopPropagation();
+												clear_console();
+											}}>clear</button
+										>{/if}
+								</div>
+								{#if consoleOpen}
+									<div class="oc-body" data-obs-console-body>
+										{#if !consoleLog.length}
+											<div class="oc-empty">
+												console.log / warn / error / info from the preview appears here
+											</div>
+										{:else}
+											{#each consoleLog as e, i (i)}
+												<div class="oc-row {e.level}" data-obs-console-row={e.level}>
+													{#if e.count > 1}<span class="oc-badge">{e.count}</span>{/if}
+													<span class="oc-lvl">{e.level}</span>
+													<span class="oc-text">{e.text}</span>
+												</div>
+											{/each}
+										{/if}
+									</div>
+								{/if}
 							</div>
-							<span class="bnum og" data-obs-og-bytes
-								>{fmt_bytes(analysis.ledger.ogygiaBytes)}
-								<span class="muted">· {analysis.ledger.ogygiaCount} island{analysis.ledger.ogygiaCount === 1 ? '' : 's'}</span></span
-							>
-						</div>
-						<div class="barrow">
-							<span class="blabel">plain Kit</span>
-							<div class="btrack">
-								<div class="bfill kit" style:width="100%"></div>
-							</div>
-							<span class="bnum kit" data-obs-kit-bytes
-								>{fmt_bytes(analysis.ledger.kitBytes)}
-								<span class="muted">· {analysis.ledger.kitCount} component{analysis.ledger.kitCount === 1 ? '' : 's'}</span></span
-							>
-						</div>
-					</div>
-					<table class="ltable">
-						<tbody>
-							{#each analysis.ledger.files as f (f.name)}
-								<tr class:ships={f.ships}>
-									<td class="lname mono">{f.name}</td>
-									<td class="lwhy muted">{f.why}</td>
-									<td class="lbytes">{f.ships ? fmt_bytes(f.bytes) : '0 B'}<span class="lraw muted"> / {fmt_bytes(f.bytes)}</span></td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-					{#if analysis.regions && analysis.regions.some((r) => r.clientBytes)}
-						{@const wiringBytes = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
-						{@const wiringCount = analysis.regions.filter((r) => r.clientBytes).length}
-						<div class="lwire">
-							<span class="ckind">island wiring</span>
-							<span class="muted"
-								>{fmt_bytes(wiringBytes)} of driver-generated client legs across {wiringCount} module{wiringCount ===
-								1
-									? ''
-									: 's'} — the real glue ogygia emits to wake your islands (measured, on top of the component JS above)</span
-							>
-						</div>
-					{/if}
-					<div class="lfoot muted">
-						uncompressed compiled JS · both share the svelte runtime (excluded) · ogygia adds its ~8&nbsp;KB
-						island runtime, plain Kit hydrates the whole tree
-					</div>
-				</div>
-			{/if}
-			</div>
-
-			<div class="tp" class:on={inspectorTab === 'wire'} data-tab="wire">
-			{#if analysis.codecs && (analysis.codecs.transportables.length || analysis.codecs.fns.length || analysis.codecs.marks.length)}
-				<div class="cap">codecs <span class="muted">· what crosses the boundary, by kind (the driver's real wire graph)</span></div>
-				<div class="codecs" data-obs-codecs>
-					{#if analysis.codecs.transportables.length}
-						<div class="crow">
-							<span class="ckind">transportable · {analysis.codecs.transportables.length}</span>
-							{#each analysis.codecs.transportables as t}<span class="mono ctag">{t}</span>{/each}
-						</div>
-						<div class="whyline">a class marked <span class="mono">static wire = import.meta.og.wire(…)</span> — it crosses as ONE live shared instance; every island holding it reunites into the same object.</div>
-					{/if}
-					{#if analysis.codecs.fns.length}
-						<div class="crow">
-							<span class="ckind">fn ref · {analysis.codecs.fns.length}</span>
-							{#each analysis.codecs.fns as f}<span class="mono ctag">{f}</span>{/each}
-						</div>
-						<div class="whyline">a function from <span class="mono">import.meta.og.$(…)</span> read into island markup — functions can't cross by value, so it's registered and crosses as a ref, rebuilt on the far side.</div>
-					{/if}
-					{#if analysis.codecs.marks.length}
-						<div class="crow">
-							<span class="ckind">runtime</span>
-							{#each analysis.codecs.marks as m}<span class="mono ctag">{m}</span>{/each}
-						</div>
-						<div class="whyline">the feature set folded into the sticky runtime chunk — the runtime ships only what this app's islands actually use.</div>
-					{/if}
-				</div>
-			{/if}
-			{#if analysis.manifests}
-				{@const mlist = [
-					{ name: 'transportables', src: analysis.manifests.transportables, desc: 'eager __register_transportable(tag, Cls) per class' },
-					{ name: 'transport', src: analysis.manifests.transport, desc: 'the devalue codec map + app transport hooks' },
-					{ name: 'fn-manifest', src: analysis.manifests.fnManifest, desc: 'import.meta.og.$ factory registrations (pre-hydration)' },
-					{ name: 'server-manifest', src: analysis.manifests.serverManifest, desc: 'region id → kind / endpoint' },
-					{ name: 'runtime-entry', src: analysis.manifests.runtimeEntry, desc: 'the feature-selected runtime the islands boot from' }
-				].filter((m) => m.src && m.src.trim())}
-				{#if mlist.length}
-					<div class="cap">manifests <span class="muted">· the real generated modules a build emits (emit())</span></div>
-					<div class="mods" data-obs-manifests>
-						{#each mlist as m (m.name)}
-							<details>
-								<summary><span class="mono">{m.name}</span> <span class="muted">{m.desc}</span></summary>
-								<div class="code-out"><FormattedCode doc={m.src} lang="js" /></div>
+						{/if}
+						{#if analysis.rendered.ok}
+							<details class="pipe">
+								<summary>rendered HTML source (SSR)</summary>
+								<div class="code-out" data-obs-html>
+									<CodeMirror doc={ssr_source} lang="html" readonly />
+								</div>
 							</details>
-						{/each}
-					</div>
-				{/if}
-			{/if}
-			{#if analysis.rendered?.wire && analysis.rendered.wire.length}
-				<div class="cap">
-					wire <span class="muted">· the props that cross to each island, by value (devalue)</span>
-					<span class="legs wiretoggle" data-obs-wire-toggle>
-						<button class:on={wireDecoded} onclick={() => (wireDecoded = true)} title="the props as JS values">decoded</button>
-						<button class:on={!wireDecoded} onclick={() => (wireDecoded = false)} title="the raw devalue bytes that actually cross">encoded</button>
-					</span>
+						{:else if !analysis.client || analysis.client.error}
+							<div class="err" data-obs-render-err>could not render: {analysis.rendered.error}</div>
+						{/if}
+					{/if}
 				</div>
-				<div class="wire" data-obs-wire>
-					{#each analysis.rendered.wire as w, i (w.name + i)}
-						<div class="wrow">
-							<div class="wtop">
-								<span class="wname mono">{w.name}</span>
-								{#if !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]')}<span class="wbytes muted">{w.bytes} B</span>{/if}
+
+				<div class="tp" class:on={inspectorTab === 'bytes'} data-tab="bytes">
+					{#if analysis.ledger && analysis.ledger.kitBytes > 0}
+						<div class="cap">
+							byte ledger <span class="muted">· island JS shipped vs plain Kit (csr=true)</span>
+							{#if saved_pct > 0}<span class="saved" data-obs-saved>−{saved_pct}% JS</span>{/if}
+						</div>
+						<div class="ledger" data-obs-ledger>
+							<div class="bars">
+								<div class="barrow">
+									<span class="blabel">ogygia</span>
+									<div class="btrack">
+										<div
+											class="bfill og"
+											style:width="{Math.max(
+												2,
+												(100 * analysis.ledger.ogygiaBytes) / analysis.ledger.kitBytes
+											)}%"
+										></div>
+									</div>
+									<span class="bnum og" data-obs-og-bytes
+										>{fmt_bytes(analysis.ledger.ogygiaBytes)}
+										<span class="muted"
+											>· {analysis.ledger.ogygiaCount} island{analysis.ledger.ogygiaCount === 1
+												? ''
+												: 's'}</span
+										></span
+									>
+								</div>
+								<div class="barrow">
+									<span class="blabel">plain Kit</span>
+									<div class="btrack">
+										<div class="bfill kit" style:width="100%"></div>
+									</div>
+									<span class="bnum kit" data-obs-kit-bytes
+										>{fmt_bytes(analysis.ledger.kitBytes)}
+										<span class="muted"
+											>· {analysis.ledger.kitCount} component{analysis.ledger.kitCount === 1
+												? ''
+												: 's'}</span
+										></span
+									>
+								</div>
 							</div>
-							{#if w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'}
-								<span class="muted wempty">no props cross — nothing to serialize</span>
-							{:else}
-								<div class="code-out"><CodeMirror doc={wire_display(w.payload)} lang="js" readonly /></div>
+							<table class="ltable">
+								<tbody>
+									{#each analysis.ledger.files as f (f.name)}
+										<tr class:ships={f.ships}>
+											<td class="lname mono">{f.name}</td>
+											<td class="lwhy muted">{f.why}</td>
+											<td class="lbytes"
+												>{f.ships ? fmt_bytes(f.bytes) : '0 B'}<span class="lraw muted">
+													/ {fmt_bytes(f.bytes)}</span
+												></td
+											>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+							{#if analysis.regions && analysis.regions.some((r) => r.clientBytes)}
+								{@const wiringBytes = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
+								{@const wiringCount = analysis.regions.filter((r) => r.clientBytes).length}
+								<div class="lwire">
+									<span class="ckind">island wiring</span>
+									<span class="muted"
+										>{fmt_bytes(wiringBytes)} of driver-generated client legs across {wiringCount} module{wiringCount ===
+										1
+											? ''
+											: 's'} — the real glue ogygia emits to wake your islands (measured, on top of the
+										component JS above)</span
+									>
+								</div>
+							{/if}
+							<div class="lfoot muted">
+								uncompressed compiled JS · both share the svelte runtime (excluded) · ogygia adds
+								its ~8&nbsp;KB island runtime, plain Kit hydrates the whole tree
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<div class="tp" class:on={inspectorTab === 'wire'} data-tab="wire">
+					{#if analysis.codecs && (analysis.codecs.transportables.length || analysis.codecs.fns.length || analysis.codecs.marks.length)}
+						<div class="cap">
+							codecs <span class="muted"
+								>· what crosses the boundary, by kind (the driver's real wire graph)</span
+							>
+						</div>
+						<div class="codecs" data-obs-codecs>
+							{#if analysis.codecs.transportables.length}
+								<div class="crow">
+									<span class="ckind">transportable · {analysis.codecs.transportables.length}</span>
+									{#each analysis.codecs.transportables as t}<span class="mono ctag">{t}</span
+										>{/each}
+								</div>
+								<div class="whyline">
+									a class marked <span class="mono">static wire = import.meta.og.wire(…)</span> — it crosses
+									as ONE live shared instance; every island holding it reunites into the same object.
+								</div>
+							{/if}
+							{#if analysis.codecs.fns.length}
+								<div class="crow">
+									<span class="ckind">fn ref · {analysis.codecs.fns.length}</span>
+									{#each analysis.codecs.fns as f}<span class="mono ctag">{f}</span>{/each}
+								</div>
+								<div class="whyline">
+									a function from <span class="mono">import.meta.og.$(…)</span> read into island markup
+									— functions can't cross by value, so it's registered and crosses as a ref, rebuilt on
+									the far side.
+								</div>
+							{/if}
+							{#if analysis.codecs.marks.length}
+								<div class="crow">
+									<span class="ckind">runtime</span>
+									{#each analysis.codecs.marks as m}<span class="mono ctag">{m}</span>{/each}
+								</div>
+								<div class="whyline">
+									the feature set folded into the sticky runtime chunk — the runtime ships only what
+									this app's islands actually use.
+								</div>
 							{/if}
 						</div>
-					{/each}
-				</div>
-			{/if}
-			</div>
-
-			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
-			{#if analysis.csr && analysis.regions}
-				{@const f_wiring = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
-				<div class="cap">csr=false → csr=true <span class="muted">· what the islands buy you (on csr=true, plain Kit hydrates the whole page)</span></div>
-				<div class="csr-collapse" data-obs-csr>
-					<div class="ccol">
-						<span class="chead">csr=false · islands</span>
-						<div>{analysis.regions.length} generated module{analysis.regions.length === 1 ? '' : 's'}</div>
-						<div>{analysis.codecs?.fns.length ?? 0} fn ref{(analysis.codecs?.fns.length ?? 0) === 1 ? '' : 's'}</div>
-						<div>{fmt_bytes(f_wiring)} island wiring</div>
-					</div>
-					<div class="carrow">→</div>
-					<div class="ccol">
-						<span class="chead">csr=true · plain Kit</span>
-						<div class:zero={analysis.csr.regions === 0}>{analysis.csr.regions} generated module{analysis.csr.regions === 1 ? '' : 's'}</div>
-						<div>{analysis.csr.fns} fn ref{analysis.csr.fns === 1 ? '' : 's'}</div>
-						<div class:zero={analysis.csr.wiringBytes === 0}>{fmt_bytes(analysis.csr.wiringBytes)} island wiring</div>
-					</div>
-				</div>
-				<div class="muted csr-note">
-					on csr=true ogygia stands aside — no island wrappers, no per-island hydration; Kit hydrates the
-					entire page as one tree. A page-level <span class="mono">import.meta.og.$</span> still transforms
-					(it isn't island-specific).
-				</div>
-			{/if}
-			<div class="cap">island map — {analysis.islands.length} marked {analysis.islands.length === 1 ? 'region' : 'regions'}</div>
-			{#if !analysis.ok}
-				<div class="err">parse error: {analysis.error}</div>
-			{:else if analysis.islands.length === 0}
-				<div class="muted pad">no marked imports — everything here is free server HTML.</div>
-			{:else}
-				<table data-obs-map>
-					<thead><tr><th>binding</th><th>component</th><th>strategy</th><th>ships</th><th>id</th></tr></thead>
-					<tbody>
-						{#each analysis.islands as i (i.id)}
-							{@const s = ship_info(i.component)}
-							<tr>
-								<td>{i.local}</td>
-								<td class="muted">{i.component.split('/').pop()}</td>
-								<td>
-									<span class="badge" style:--c={i.strategy.color}>{i.strategy.kind}</span>
-									<div class="detail muted">{i.strategy.detail}</div>
-									<details class="why">
-										<summary>why?</summary>
-										{#each why_island(i, s) as line}<div class="whyline">{line}</div>{/each}
-									</details>
-								</td>
-								<td class="ships" data-obs-ships>
-									{#if s?.ships}
-										<span class="ships-yes" title="client JS this island ships">{fmt_bytes(s.bytes)}</span>
-									{:else if s}
-										<span class="ships-no" title="ships no client module — server HTML only">0 · no JS</span>
-									{:else}
-										<span class="muted">–</span>
-									{/if}
-								</td>
-								<td class="muted" title={i.real ? 'real md5 region id' : 'placeholder id (transform not yet run)'}>{i.id}{#if i.real}<span class="realdot" title="real ogygia region id">●</span>{/if}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{/if}
-			</div>
-
-			<div class="tp" class:on={inspectorTab === 'output'} data-tab="output">
-			<div class="cap">
-				transformed host
-				{#if compareCsr}
-					<span class="real cmp-legend" data-obs-real
-						>the same source, both ways · <span class="dl-key del">− csr=false (ogygia)</span>
-						<span class="dl-key add">+ csr=true (plain Kit)</span></span
-					>
-				{:else if csr}
-					<span class="real csr-true" data-obs-real>csr=true · plain Kit — islands stripped to plain, Kit hydrates the whole tree</span>
-				{:else if analysis.real}
-					<span class="real" data-obs-real>real ogygia transform · {analysis.realIslands} islands</span>
-				{:else}
-					<span class="fallback" title={analysis.realError || ''}>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span>
-				{/if}
-				{#if !csr && !compareCsr && analysis.outputClient && analysis.outputClient !== analysis.output}
-					<span class="legs" data-obs-legs>
-						<button class:on={leg === 'ssr'} onclick={() => (leg = 'ssr')}>SSR leg</button>
-						<button class:on={leg === 'client'} onclick={() => (leg = 'client')}>client leg</button>
-					</span>
-				{/if}
-				{#if analysis.output && analysis.outputCsrTrue && analysis.outputCsrTrue !== analysis.output}
-					<button
-						class="cmp-btn"
-						class:on={compareCsr}
-						onclick={() => (compareCsr = !compareCsr)}
-						title="diff the csr=false (ogygia) transform against csr=true (plain Kit)"
-						data-obs-cmp-csr>⇄ compare csr</button
-					>
-				{/if}
-			</div>
-			{#if !everWarmed}
-				<div class="warming" data-obs-warming>warming the in-browser compiler (rolldown WASM)…</div>
-			{/if}
-			<div class="code-out" data-obs-output>
-				{#if csr_diff}
-					<div class="csr-diff" data-obs-csr-diff>
-						{#each csr_diff as d, i (i)}
-							<div class="dl {d.t}"><span class="dm">{d.t === 'add' ? '+' : d.t === 'del' ? '−' : ' '}</span><span class="dc">{d.s || ' '}</span></div>
-						{/each}
-					</div>
-				{:else}
-					<FormattedCode doc={shownOutput} lang="svelte" />
-				{/if}
-			</div>
-
-			{#if analysis.compiledServer}
-				<details class="pipe" data-obs-compiled>
-					<summary>svelte-compiled server JS <span class="muted">· source → transform → svelte compile</span></summary>
-					<div class="code-out"><FormattedCode doc={analysis.compiledServer} lang="js" /></div>
-				</details>
-			{/if}
-			</div>
-
-			<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
-			{#if analysis.regions && analysis.regions.length}
-				<div class="cap">generated modules <span class="muted">· the real registry the driver minted (id · role · kind)</span></div>
-				<div class="mods" data-obs-modules>
-					{#each analysis.regions as r (r.vpath)}
-						<details>
-							<summary>
-								<span class="mono">{r.component || r.role}</span>
-								<span class="mkind">{r.role}{r.kind ? ' · ' + r.kind : ''}</span>
-								{#if r.server}<span class="rbadge">server</span>{/if}
-								{#if r.portable}<span class="rbadge">portable</span>{/if}
-								{#if r.lakes.length}<span class="rbadge">{r.lakes.length} lake{r.lakes.length > 1 ? 's' : ''}</span>{/if}
-								{#if r.clientBytes}<span class="rbadge" title="real UTF-8 size of the generated client leg">{fmt_bytes(r.clientBytes)}</span>{/if}
-								<span class="muted mono">{r.id.slice(0, 12)}</span>
-							</summary>
-							<div class="mpath">{r.vpath}</div>
-							<div class="mpath muted">
-								{r.role === 'entry'
-									? 'client hydration entry — imports/re-exports the component; the wrapper mounts it'
-									: r.role === 'wrapper'
-										? 'SSR shell — mounts <Region> with the island entry, props, and CSS (the __component wiring)'
-										: 'held-region binding — leg-split: SSR signer descriptor vs client metadata'}
+					{/if}
+					{#if analysis.manifests}
+						{@const mlist = [
+							{
+								name: 'transportables',
+								src: analysis.manifests.transportables,
+								desc: 'eager __register_transportable(tag, Cls) per class'
+							},
+							{
+								name: 'transport',
+								src: analysis.manifests.transport,
+								desc: 'the devalue codec map + app transport hooks'
+							},
+							{
+								name: 'fn-manifest',
+								src: analysis.manifests.fnManifest,
+								desc: 'import.meta.og.$ factory registrations (pre-hydration)'
+							},
+							{
+								name: 'server-manifest',
+								src: analysis.manifests.serverManifest,
+								desc: 'region id → kind / endpoint'
+							},
+							{
+								name: 'runtime-entry',
+								src: analysis.manifests.runtimeEntry,
+								desc: 'the feature-selected runtime the islands boot from'
+							}
+						].filter((m) => m.src && m.src.trim())}
+						{#if mlist.length}
+							<div class="cap">
+								manifests <span class="muted"
+									>· the real generated modules a build emits (emit())</span
+								>
 							</div>
-							{#if r.ssrSource}
-								<div class="mpath muted">— SSR leg —</div>
-								<div class="code-out"><FormattedCode doc={r.ssrSource} lang="svelte" /></div>
-							{/if}
-							{#if r.clientSource}
-								<div class="mpath muted">— client leg —</div>
-								<div class="code-out"><FormattedCode doc={r.clientSource} lang="js" /></div>
-							{/if}
-							{#if r.source && !r.ssrSource && !r.clientSource}
-								<div class="code-out"><FormattedCode doc={r.source} lang="svelte" /></div>
-							{/if}
-							{#if !r.ssrSource && !r.clientSource && !r.source}
-								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
-							{/if}
-						</details>
-					{/each}
+							<div class="mods" data-obs-manifests>
+								{#each mlist as m (m.name)}
+									<details>
+										<summary
+											><span class="mono">{m.name}</span>
+											<span class="muted">{m.desc}</span></summary
+										>
+										<div class="code-out"><FormattedCode doc={m.src} lang="js" /></div>
+									</details>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+					{#if analysis.rendered?.wire && analysis.rendered.wire.length}
+						<div class="cap">
+							wire <span class="muted"
+								>· the props that cross to each island, by value (devalue)</span
+							>
+							<span class="legs wiretoggle" data-obs-wire-toggle>
+								<button
+									class:on={wireDecoded}
+									onclick={() => (wireDecoded = true)}
+									title="the props as JS values">decoded</button
+								>
+								<button
+									class:on={!wireDecoded}
+									onclick={() => (wireDecoded = false)}
+									title="the raw devalue bytes that actually cross">encoded</button
+								>
+							</span>
+						</div>
+						<div class="wire" data-obs-wire>
+							{#each analysis.rendered.wire as w, i (w.name + i)}
+								<div class="wrow">
+									<div class="wtop">
+										<span class="wname mono">{w.name}</span>
+										{#if !(w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]')}<span
+												class="wbytes muted">{w.bytes} B</span
+											>{/if}
+									</div>
+									{#if w.payload === '{}' || w.payload === '[{},[]]' || w.payload === '[{}]'}
+										<span class="muted wempty">no props cross — nothing to serialize</span>
+									{:else}
+										<div class="code-out">
+											<CodeMirror doc={wire_display(w.payload)} lang="js" readonly />
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
-			{:else if analysis.modules && analysis.modules.length}
-				<div class="cap">generated modules <span class="muted">· what each island compiles to</span></div>
-				<div class="mods" data-obs-modules>
-					{#each analysis.modules as m (m.id)}
-						<details>
-							<summary>
-								<span class="mono">{m.component}</span>
-								<span class="mkind">{m.kind}</span>
-								<span class="muted mono">{m.id.slice(0, 12)}</span>
-							</summary>
-							{#if m.wrapperSource}
-								<div class="mpath">{m.wrapperPath}</div>
-								<div class="code-out"><FormattedCode doc={m.wrapperSource} lang="svelte" /></div>
-							{/if}
-							{#if m.entrySource}
-								<div class="mpath">{m.entryPath}</div>
-								<div class="code-out"><FormattedCode doc={m.entrySource} lang="js" /></div>
-							{/if}
-							{#if !m.wrapperSource && !m.entrySource}
-								<div class="muted mpath">no standalone module (rendered inline / binding-only)</div>
-							{/if}
-						</details>
-					{/each}
+
+				<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
+					{#if analysis.csr && analysis.regions}
+						{@const f_wiring = analysis.regions.reduce((s, r) => s + r.clientBytes, 0)}
+						<div class="cap">
+							csr=false → csr=true <span class="muted"
+								>· what the islands buy you (on csr=true, plain Kit hydrates the whole page)</span
+							>
+						</div>
+						<div class="csr-collapse" data-obs-csr>
+							<div class="ccol">
+								<span class="chead">csr=false · islands</span>
+								<div>
+									{analysis.regions.length} generated module{analysis.regions.length === 1
+										? ''
+										: 's'}
+								</div>
+								<div>
+									{analysis.codecs?.fns.length ?? 0} fn ref{(analysis.codecs?.fns.length ?? 0) === 1
+										? ''
+										: 's'}
+								</div>
+								<div>{fmt_bytes(f_wiring)} island wiring</div>
+							</div>
+							<div class="carrow">→</div>
+							<div class="ccol">
+								<span class="chead">csr=true · plain Kit</span>
+								<div class:zero={analysis.csr.regions === 0}>
+									{analysis.csr.regions} generated module{analysis.csr.regions === 1 ? '' : 's'}
+								</div>
+								<div>{analysis.csr.fns} fn ref{analysis.csr.fns === 1 ? '' : 's'}</div>
+								<div class:zero={analysis.csr.wiringBytes === 0}>
+									{fmt_bytes(analysis.csr.wiringBytes)} island wiring
+								</div>
+							</div>
+						</div>
+						<div class="muted csr-note">
+							on csr=true ogygia stands aside — no island wrappers, no per-island hydration; Kit
+							hydrates the entire page as one tree. A page-level <span class="mono"
+								>import.meta.og.$</span
+							> still transforms (it isn't island-specific).
+						</div>
+					{/if}
+					<div class="cap">
+						island map — {analysis.islands.length} marked {analysis.islands.length === 1
+							? 'region'
+							: 'regions'}
+					</div>
+					{#if !analysis.ok}
+						<div class="err">parse error: {analysis.error}</div>
+					{:else if analysis.islands.length === 0}
+						<div class="muted pad">no marked imports — everything here is free server HTML.</div>
+					{:else}
+						<table data-obs-map>
+							<thead
+								><tr
+									><th>binding</th><th>component</th><th>strategy</th><th>ships</th><th>id</th></tr
+								></thead
+							>
+							<tbody>
+								{#each analysis.islands as i (i.id)}
+									{@const s = ship_info(i.component)}
+									<tr>
+										<td>{i.local}</td>
+										<td class="muted">{i.component.split('/').pop()}</td>
+										<td>
+											<span class="badge" style:--c={i.strategy.color}>{i.strategy.kind}</span>
+											<div class="detail muted">{i.strategy.detail}</div>
+											<details class="why">
+												<summary>why?</summary>
+												{#each why_island(i, s) as line}<div class="whyline">{line}</div>{/each}
+											</details>
+										</td>
+										<td class="ships" data-obs-ships>
+											{#if s?.ships}
+												<span class="ships-yes" title="client JS this island ships"
+													>{fmt_bytes(s.bytes)}</span
+												>
+											{:else if s}
+												<span class="ships-no" title="ships no client module — server HTML only"
+													>0 · no JS</span
+												>
+											{:else}
+												<span class="muted">–</span>
+											{/if}
+										</td>
+										<td
+											class="muted"
+											title={i.real
+												? 'real md5 region id'
+												: 'placeholder id (transform not yet run)'}
+											>{i.id}{#if i.real}<span class="realdot" title="real ogygia region id">●</span
+												>{/if}</td
+										>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					{/if}
 				</div>
-			{/if}
-			</div>
+
+				<div class="tp" class:on={inspectorTab === 'output'} data-tab="output">
+					<div class="cap">
+						transformed host
+						{#if compareCsr}
+							<span class="real cmp-legend" data-obs-real
+								>the same source, both ways · <span class="dl-key del">− csr=false (ogygia)</span>
+								<span class="dl-key add">+ csr=true (plain Kit)</span></span
+							>
+						{:else if csr}
+							<span class="real csr-true" data-obs-real
+								>csr=true · plain Kit — islands stripped to plain, Kit hydrates the whole tree</span
+							>
+						{:else if analysis.real}
+							<span class="real" data-obs-real
+								>real ogygia transform · {analysis.realIslands} islands</span
+							>
+						{:else}
+							<span class="fallback" title={analysis.realError || ''}
+								>mark-preview (real transform: {analysis.realError ? 'error' : 'n/a'})</span
+							>
+						{/if}
+						{#if !csr && !compareCsr && analysis.outputClient && analysis.outputClient !== analysis.output}
+							<span class="legs" data-obs-legs>
+								<button class:on={leg === 'ssr'} onclick={() => (leg = 'ssr')}>SSR leg</button>
+								<button class:on={leg === 'client'} onclick={() => (leg = 'client')}
+									>client leg</button
+								>
+							</span>
+						{/if}
+						{#if analysis.output && analysis.outputCsrTrue && analysis.outputCsrTrue !== analysis.output}
+							<button
+								class="cmp-btn"
+								class:on={compareCsr}
+								onclick={() => (compareCsr = !compareCsr)}
+								title="diff the csr=false (ogygia) transform against csr=true (plain Kit)"
+								data-obs-cmp-csr>⇄ compare csr</button
+							>
+						{/if}
+					</div>
+					{#if !everWarmed}
+						<div class="warming" data-obs-warming>
+							warming the in-browser compiler (rolldown WASM)…
+						</div>
+					{/if}
+					<div class="code-out" data-obs-output>
+						{#if csr_diff}
+							<div class="csr-diff" data-obs-csr-diff>
+								{#each csr_diff as d, i (i)}
+									<div class="dl {d.t}">
+										<span class="dm">{d.t === 'add' ? '+' : d.t === 'del' ? '−' : ' '}</span><span
+											class="dc">{d.s || ' '}</span
+										>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<FormattedCode doc={shownOutput} lang="svelte" />
+						{/if}
+					</div>
+
+					{#if analysis.compiledServer}
+						<details class="pipe" data-obs-compiled>
+							<summary
+								>svelte-compiled server JS <span class="muted"
+									>· source → transform → svelte compile</span
+								></summary
+							>
+							<div class="code-out"><FormattedCode doc={analysis.compiledServer} lang="js" /></div>
+						</details>
+					{/if}
+				</div>
+
+				<div class="tp" class:on={inspectorTab === 'islands'} data-tab="islands">
+					{#if analysis.regions && analysis.regions.length}
+						<div class="cap">
+							generated modules <span class="muted"
+								>· the real registry the driver minted (id · role · kind)</span
+							>
+						</div>
+						<div class="mods" data-obs-modules>
+							{#each analysis.regions as r (r.vpath)}
+								<details>
+									<summary>
+										<span class="mono">{r.component || r.role}</span>
+										<span class="mkind">{r.role}{r.kind ? ' · ' + r.kind : ''}</span>
+										{#if r.server}<span class="rbadge">server</span>{/if}
+										{#if r.portable}<span class="rbadge">portable</span>{/if}
+										{#if r.lakes.length}<span class="rbadge"
+												>{r.lakes.length} lake{r.lakes.length > 1 ? 's' : ''}</span
+											>{/if}
+										{#if r.clientBytes}<span
+												class="rbadge"
+												title="real UTF-8 size of the generated client leg"
+												>{fmt_bytes(r.clientBytes)}</span
+											>{/if}
+										<span class="muted mono">{r.id.slice(0, 12)}</span>
+									</summary>
+									<div class="mpath">{r.vpath}</div>
+									<div class="mpath muted">
+										{r.role === 'entry'
+											? 'client hydration entry — imports/re-exports the component; the wrapper mounts it'
+											: r.role === 'wrapper'
+												? 'SSR shell — mounts <Region> with the island entry, props, and CSS (the __component wiring)'
+												: 'held-region binding — leg-split: SSR signer descriptor vs client metadata'}
+									</div>
+									{#if r.ssrSource}
+										<div class="mpath muted">— SSR leg —</div>
+										<div class="code-out"><FormattedCode doc={r.ssrSource} lang="svelte" /></div>
+									{/if}
+									{#if r.clientSource}
+										<div class="mpath muted">— client leg —</div>
+										<div class="code-out"><FormattedCode doc={r.clientSource} lang="js" /></div>
+									{/if}
+									{#if r.source && !r.ssrSource && !r.clientSource}
+										<div class="code-out"><FormattedCode doc={r.source} lang="svelte" /></div>
+									{/if}
+									{#if !r.ssrSource && !r.clientSource && !r.source}
+										<div class="muted mpath">
+											no standalone module (rendered inline / binding-only)
+										</div>
+									{/if}
+								</details>
+							{/each}
+						</div>
+					{:else if analysis.modules && analysis.modules.length}
+						<div class="cap">
+							generated modules <span class="muted">· what each island compiles to</span>
+						</div>
+						<div class="mods" data-obs-modules>
+							{#each analysis.modules as m (m.id)}
+								<details>
+									<summary>
+										<span class="mono">{m.component}</span>
+										<span class="mkind">{m.kind}</span>
+										<span class="muted mono">{m.id.slice(0, 12)}</span>
+									</summary>
+									{#if m.wrapperSource}
+										<div class="mpath">{m.wrapperPath}</div>
+										<div class="code-out">
+											<FormattedCode doc={m.wrapperSource} lang="svelte" />
+										</div>
+									{/if}
+									{#if m.entrySource}
+										<div class="mpath">{m.entryPath}</div>
+										<div class="code-out"><FormattedCode doc={m.entrySource} lang="js" /></div>
+									{/if}
+									{#if !m.wrapperSource && !m.entrySource}
+										<div class="muted mpath">
+											no standalone module (rendered inline / binding-only)
+										</div>
+									{/if}
+								</details>
+							{/each}
+						</div>
+					{/if}
+				</div>
 			</div>
 		</section>
 	</div>
@@ -2722,7 +3201,10 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		border-radius: 4px;
 		background: rgba(20, 184, 166, 0.15);
 		color: #0d9488;
-		font: 11px ui-monospace, Menlo, monospace;
+		font:
+			11px ui-monospace,
+			Menlo,
+			monospace;
 	}
 	.preview :global(.obs-fallback) {
 		display: inline-block;

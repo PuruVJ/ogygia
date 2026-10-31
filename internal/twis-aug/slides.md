@@ -71,6 +71,7 @@ Before all of that, a very quick introduction.
 -->
 
 ---
+
 layout: center
 class: intro text-left
 ---
@@ -102,6 +103,7 @@ I wanted a third answer. That is the story of this talk, and it starts with the 
 -->
 
 ---
+
 layout: center
 class: text-left
 ---
@@ -145,6 +147,7 @@ That is the gap. I did not want to leave Kit, and I definitely did not want to m
 -->
 
 ---
+
 layout: center
 ---
 
@@ -502,6 +505,7 @@ Why make that distinction so carefully? Because a real application does more tha
 -->
 
 ---
+
 layout: section
 ---
 
@@ -764,6 +768,7 @@ Or at least, that was the whole story—until the same experiment made one more 
 -->
 
 ---
+
 layout: section
 class: content-reveal
 ---
@@ -854,6 +859,7 @@ It is not on npm yet. Consider this the teaser.
 -->
 
 ---
+
 layout: center
 class: text-left
 ---
@@ -890,6 +896,7 @@ I’ll leave these links up for a moment. Then I’d love to hear where this mod
 -->
 
 ---
+
 layout: center
 ---
 

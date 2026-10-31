@@ -104,7 +104,10 @@
 			border-radius: 5px 5px 0 0;
 			background: var(--lens, #14b8a6);
 			color: #04121a;
-			font: 700 10px/1.5 ui-monospace, Menlo, monospace;
+			font:
+				700 10px/1.5 ui-monospace,
+				Menlo,
+				monospace;
 			white-space: nowrap;
 		}
 		/* cold: hasn't hydrated yet (an interaction/visible island still asleep) — dashed + dimmed. */
@@ -126,7 +129,10 @@
 			border-radius: 5px 5px 0 0;
 			background: color-mix(in srgb, var(--obs-muted) 30%, transparent);
 			color: var(--obs-muted);
-			font: 10px/1.5 ui-monospace, Menlo, monospace;
+			font:
+				10px/1.5 ui-monospace,
+				Menlo,
+				monospace;
 			white-space: nowrap;
 		}
 		/* hot: hydrated — solid, lit, stamped with +Xms since render + the bytes it shipped. */
@@ -143,7 +149,10 @@
 			border-radius: 5px 5px 0 0;
 			background: color-mix(in srgb, var(--lens, #14b8a6) 25%, var(--obs-bg));
 			color: var(--lens, #14b8a6);
-			font: 10px/1.5 ui-monospace, Menlo, monospace;
+			font:
+				10px/1.5 ui-monospace,
+				Menlo,
+				monospace;
 			white-space: nowrap;
 		}
 	}

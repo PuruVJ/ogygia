@@ -332,7 +332,12 @@ export function regex_literals(code: string): string[] {
 	return out;
 }
 const ID_CHAR = (c: string | undefined) =>
-	!!c && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c === '_' || c === '$');
+	!!c &&
+	((c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') ||
+		c === '_' ||
+		c === '$');
 
 /** does this line call `name(` (plain or as a method), outside strings and comments? */
 export function calls_name(line: string, names: readonly string[]): boolean {

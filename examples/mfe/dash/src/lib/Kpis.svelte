@@ -5,7 +5,10 @@
 	import AddToCart from './AddToCart.svelte' with { wake: 'load' };
 	import Ticker from './Ticker.svelte' with { wake: 'visible' };
 
-	let { org, viewer = null }: {
+	let {
+		org,
+		viewer = null
+	}: {
 		org: string;
 		viewer?: { sub?: string; roles?: string[] } | null;
 	} = $props();

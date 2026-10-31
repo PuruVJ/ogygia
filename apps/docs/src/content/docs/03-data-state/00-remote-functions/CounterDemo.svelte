@@ -31,7 +31,9 @@
 		<button type="button" onclick={() => run(bump)} disabled={busy}>+1 on the server</button>
 		<button type="button" class="ghost" onclick={() => run(reset)} disabled={busy}>Reset</button>
 	</div>
-	<p class="widget-meta">Every click is a real round-trip. Open this page in two tabs — the count is shared.</p>
+	<p class="widget-meta">
+		Every click is a real round-trip. Open this page in two tabs — the count is shared.
+	</p>
 </div>
 
 <style>

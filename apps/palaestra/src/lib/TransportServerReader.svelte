@@ -7,6 +7,10 @@
 	let { counter, label = 'srv' }: { counter: SharedCounter; label?: string } = $props();
 </script>
 
-<div class="island" data-transport-srv={label} data-is-instance={typeof counter?.inc === 'function'}>
+<div
+	class="island"
+	data-transport-srv={label}
+	data-is-instance={typeof counter?.inc === 'function'}
+>
 	count = <strong data-ts-count>{counter?.count ?? -1}</strong>
 </div>

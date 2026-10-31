@@ -14,7 +14,7 @@ It runs on the **server**: it matches the request, runs the load cascade, and re
 All that a Kit user knows carries over: `+layout.svelte` loads, the data cascade, `page.data`, `+error.svelte`, form actions, `redirect`/`error`, `$app/state`, `$app/navigation`. The one difference: each concept is an **imported function**, not a magic filename.
 
 ::: tip When to use
-Use it when your routes are *computed*: a CMS whose paths come from a database, a tool whose pages are generated, a package that ships its own routes. Or when you want the full route table, its loaders, and its components in one place, not scattered across `+page.svelte` / `+page.server.ts` / `+server.ts`. For a few ordinary pages, the file routes of Kit are simpler. This is not a replacement that you must adopt.
+Use it when your routes are _computed_: a CMS whose paths come from a database, a tool whose pages are generated, a package that ships its own routes. Or when you want the full route table, its loaders, and its components in one place, not scattered across `+page.svelte` / `+page.server.ts` / `+server.ts`. For a few ordinary pages, the file routes of Kit are simpler. This is not a replacement that you must adopt.
 :::
 
 ## Installing
@@ -92,7 +92,7 @@ A page is a Svelte component plus its `+page.server.ts`-shaped server object:
 
 The second argument mirrors `+page.server.ts` exactly: `load`, `actions`, plus the input schemas `params` and `search` (see [Typed input](#typed-input)). It is always an object. Write a bare `page(Home)` when there is nothing to declare.
 
-A routed page is **inert**: it renders as `csr = false` server HTML, with zero JavaScript. Interactivity comes from marked island imports *inside* the component (`with { wake }`), exactly as in all other parts of ogygia. See [Pages carry region dials](#pages-carry-region-dials) to wake or defer the page itself.
+A routed page is **inert**: it renders as `csr = false` server HTML, with zero JavaScript. Interactivity comes from marked island imports _inside_ the component (`with { wake }`), exactly as in all other parts of ogygia. See [Pages carry region dials](#pages-carry-region-dials) to wake or defer the page itself.
 
 ## Layouts
 
@@ -140,7 +140,7 @@ routes(
 
 ### Breaking out of a layout
 
-Kit resets a page to a named ancestor with `+page@name.svelte` (or `+page@.svelte` for the root). Here it is **placement**: you put the route in the table, wrapped by exactly the layouts that you want. More explicit: the reset point *is* the structure, not a filename annotation.
+Kit resets a page to a named ancestor with `+page@name.svelte` (or `+page@.svelte` for the root). Here it is **placement**: you put the route in the table, wrapped by exactly the layouts that you want. More explicit: the reset point _is_ the structure, not a filename annotation.
 
 ```ts
 routes(
@@ -154,11 +154,11 @@ routes(
 );
 ```
 
-| Kit | @ogygia/router |
-| --- | --- |
-| `+layout-foo.svelte` (a named layout) | `layout('foo', Foo)` |
-| `+page@foo.svelte` (reset to `foo`) | place the route inside `foo(…)` but outside the inner wraps |
-| `+page@.svelte` (reset to root) | place the route outside all wraps |
+| Kit                                   | @ogygia/router                                              |
+| ------------------------------------- | ----------------------------------------------------------- |
+| `+layout-foo.svelte` (a named layout) | `layout('foo', Foo)`                                        |
+| `+page@foo.svelte` (reset to `foo`)   | place the route inside `foo(…)` but outside the inner wraps |
+| `+page@.svelte` (reset to root)       | place the route outside all wraps                           |
 
 ## Loads and the data cascade
 
@@ -205,7 +205,7 @@ const admin = layout('admin', AdminShell, {
 });
 ```
 
-This is the `await parent()` of Kit, generalized and typed. Sequencing exists exactly where a real data dependency exists, and in no other place. Waterfall *and* waste are both structurally impossible.
+This is the `await parent()` of Kit, generalized and typed. Sequencing exists exactly where a real data dependency exists, and in no other place. Waterfall _and_ waste are both structurally impossible.
 
 ## Form actions
 
@@ -268,18 +268,18 @@ Write `satisfies`, not a type annotation (`const readPost: Handler<…>`). An an
 
 Each load, action, and handler receives `c`: the request surface of Kit:
 
-| `c` member | what |
-| --- | --- |
-| `c.params` | path params, typed from the pattern (or the output of the `params` schema) |
-| `c.search` | query params: `Record<string, string>`, or the typed output of the `search` schema |
-| `c.input` | the validated JSON body of a `POST`/`PUT`/`PATCH` body schema |
-| `c.url` / `c.request` / `c.route.id` | the request |
-| `c.cookies` / `c.locals` / `c.platform` / `c.setHeaders` / `c.getClientAddress` | Kit `RequestEvent` pass-throughs (present when mounted in Kit) |
-| `c.fetch` | the cookie-forwarding fetch of Kit; same-origin requests resolve in-process |
-| `c.json()` / `c.redirect()` / `c.text()` | Response shortcuts |
-| `c.href('/docs/[slug]', { slug })` | a rename-safe URL to a route in this table |
-| `c.state` | a per-request scratch bag (a guard writes, a handler reads) |
-| `c.visitor` | THE identity, resolved one time, lazily (below) |
+| `c` member                                                                      | what                                                                               |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `c.params`                                                                      | path params, typed from the pattern (or the output of the `params` schema)         |
+| `c.search`                                                                      | query params: `Record<string, string>`, or the typed output of the `search` schema |
+| `c.input`                                                                       | the validated JSON body of a `POST`/`PUT`/`PATCH` body schema                      |
+| `c.url` / `c.request` / `c.route.id`                                            | the request                                                                        |
+| `c.cookies` / `c.locals` / `c.platform` / `c.setHeaders` / `c.getClientAddress` | Kit `RequestEvent` pass-throughs (present when mounted in Kit)                     |
+| `c.fetch`                                                                       | the cookie-forwarding fetch of Kit; same-origin requests resolve in-process        |
+| `c.json()` / `c.redirect()` / `c.text()`                                        | Response shortcuts                                                                 |
+| `c.href('/docs/[slug]', { slug })`                                              | a rename-safe URL to a route in this table                                         |
+| `c.state`                                                                       | a per-request scratch bag (a guard writes, a handler reads)                        |
+| `c.visitor`                                                                     | THE identity, resolved one time, lazily (below)                                    |
 
 ### One identity: `c.visitor`
 
@@ -346,7 +346,7 @@ export type App = typeof router.$infer;
 It is computed from the **loads and schemas**, never from component types. Thus there is no cycle and no codegen. Layout keys use the group spelling of Kit (`(app)`). Path keys always start with `/`. Thus the two never collide. Duplicate layout names are a build error.
 
 ::: tip No `$types`, no cast
-This replaces the generated `./$types` of Kit. The component declaration `App['/path']` *is* the check: props are defined as the type of the route. Change the return of a load, and the component squiggles: exactly the flow of Kit, with zero generated files.
+This replaces the generated `./$types` of Kit. The component declaration `App['/path']` _is_ the check: props are defined as the type of the route. Change the return of a load, and the component squiggles: exactly the flow of Kit, with zero generated files.
 :::
 
 ## Typed API client
@@ -395,7 +395,7 @@ Each set fills the pattern into the `entries()` crawl list of the router. A dyna
 
 ## Streamed pages: yield regions
 
-"The next state of a slot is a region" already powers [live regions](/docs/regions/held-regions). The same vocabulary operates on the **initial response**. A page slot can be an async generator. The first yield renders, and the page **flushes immediately**. Each later yield rides down the *same* response, and swaps into place as it arrives. One connection, closed when the generator ends.
+"The next state of a slot is a region" already powers [live regions](/docs/regions/held-regions). The same vocabulary operates on the **initial response**. A page slot can be an async generator. The first yield renders, and the page **flushes immediately**. Each later yield rides down the _same_ response, and swaps into place as it arrives. One connection, closed when the generator ends.
 
 ```ts
 '/report': page(async function* (c, data) {
@@ -411,7 +411,7 @@ Each set fills the pattern into the `entries()` crawl list of the router. A dyna
 - Streamed responses carry `Cache-Control: no-transform`. A compressing intermediary buffers while it gzips, which would collapse the early flush into one late paint. When your CDN compresses regardless, exempt these routes (or accept buffered delivery there).
 - A component that you yield from a server-only module needs a mark (`with { region: 'raw' }`, or a wake). A plain import has no client leg. Thus its region cannot bake. A mistake here fails loudly, into the error card of the slot.
 
-**Streamed load data** needs no generator at all. Give a *promise of a region* from the load to a `<Region of={…}>`, and the region resolves down the initial response: a placeholder in the flushed document, the baked region as a completion-order chunk, and the islands inside wake on adoption. Put as many such holes on one page as you want. Each fails into its own error card.
+**Streamed load data** needs no generator at all. Give a _promise of a region_ from the load to a `<Region of={…}>`, and the region resolves down the initial response: a placeholder in the flushed document, the baked region as a completion-order chunk, and the islands inside wake on adoption. Put as many such holes on one page as you want. Each fails into its own error card.
 
 ```ts
 '/report': page(Report, {
@@ -481,26 +481,26 @@ routes(table, {
 });
 ```
 
-The table-wide `load` is the root `+layout.server.ts` load of Kit, without a component. It runs before each route (pages *and* endpoints). It throws `redirect`/`error` to gate. Its data merges into each page. It is the place for auth, when there is no shared shell to hang it on.
+The table-wide `load` is the root `+layout.server.ts` load of Kit, without a component. It runs before each route (pages _and_ endpoints). It throws `redirect`/`error` to gate. Its data merges into each page. It is the place for auth, when there is no shared shell to hang it on.
 
 ## Kit ↔ @ogygia/router
 
-| SvelteKit | @ogygia/router |
-| --- | --- |
-| `src/routes/` tree | one `routes({ … })` table |
-| `+page.svelte` | first arg of `page()` |
-| `+page.server.ts` (`load`, `actions`) | second arg of `page()` |
-| `+layout.svelte` + its load | `layout(name, Component, { load })` |
-| `+error.svelte` | `{ error: Component }` on `layout()` / `routes()` |
-| `+layout@` / `+page@` reset | placement (put the route outside the wrap) |
-| `(group)` folder | the layout name in `App['(name)']` |
-| `+server.ts` | an `{ GET, POST, … }` object |
-| `await parent()` | read the merged `data`; in a load, `await sharedLoad(c)` |
-| `page.data` | the leaf page's merged `data` |
-| `depends` + `invalidate` / `invalidateAll` | `invalidateAll()` (re-runs the branch's loads) |
-| `throw redirect()` / `error()` | same names, from `@ogygia/router` |
-| `./$types` (`PageData`, …) | `App['/path']` — no codegen |
-| `$app/state`, `$app/navigation` | work unchanged on router pages |
+| SvelteKit                                  | @ogygia/router                                           |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `src/routes/` tree                         | one `routes({ … })` table                                |
+| `+page.svelte`                             | first arg of `page()`                                    |
+| `+page.server.ts` (`load`, `actions`)      | second arg of `page()`                                   |
+| `+layout.svelte` + its load                | `layout(name, Component, { load })`                      |
+| `+error.svelte`                            | `{ error: Component }` on `layout()` / `routes()`        |
+| `+layout@` / `+page@` reset                | placement (put the route outside the wrap)               |
+| `(group)` folder                           | the layout name in `App['(name)']`                       |
+| `+server.ts`                               | an `{ GET, POST, … }` object                             |
+| `await parent()`                           | read the merged `data`; in a load, `await sharedLoad(c)` |
+| `page.data`                                | the leaf page's merged `data`                            |
+| `depends` + `invalidate` / `invalidateAll` | `invalidateAll()` (re-runs the branch's loads)           |
+| `throw redirect()` / `error()`             | same names, from `@ogygia/router`                        |
+| `./$types` (`PageData`, …)                 | `App['/path']` — no codegen                              |
+| `$app/state`, `$app/navigation`            | work unchanged on router pages                           |
 
 ::: warning Two routers, one app
 This page is the **server** router: the route table. The [SPA router](/docs/app/spa-router) is separate: it intercepts link clicks, and navigates on the client. They compose, and each operates without the other.

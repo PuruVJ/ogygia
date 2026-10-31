@@ -12,7 +12,10 @@
 	function editor(node: HTMLElement) {
 		const view = new EditorView({
 			parent: node,
-			state: EditorState.create({ doc, extensions: [lineNumbers(), keymap.of(defaultKeymap), javascript(), html()] })
+			state: EditorState.create({
+				doc,
+				extensions: [lineNumbers(), keymap.of(defaultKeymap), javascript(), html()]
+			})
 		});
 		return () => view.destroy();
 	}

@@ -623,7 +623,9 @@ a.og-search-hit[data-selected] {
 /* press interaction: the whole control scales down and springs back */
 .og-body .og-code-controls,
 .og-body .og-code-actions :where(a, button) {
-	transition: scale 0.2s var(--quint-out), border-color 0.15s;
+	transition:
+		scale 0.2s var(--quint-out),
+		border-color 0.15s;
 }
 .og-body .og-code-controls:active,
 .og-body .og-code-actions :where(a, button):active {

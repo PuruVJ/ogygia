@@ -10,7 +10,14 @@ const runs = [
 	{ start: 400, end: 500 }
 ];
 const site = (line: number) => ({ fn: 'f', file: '/app/+page.server.ts', line, column: 3 });
-const timer = (start: number, line: number, more: Partial<IoOp> = {}): IoOp => ({ type: 'Timeout', start, ms: 1, open: true, caller_site: site(line), ...more });
+const timer = (start: number, line: number, more: Partial<IoOp> = {}): IoOp => ({
+	type: 'Timeout',
+	start,
+	ms: 1,
+	open: true,
+	caller_site: site(line),
+	...more
+});
 
 test('the same line left open in every run: marked; one started once, a short or unref’d timeout: not', () => {
 	const ops = [
@@ -25,7 +32,9 @@ test('the same line left open in every run: marked; one started once, a short or
 		...[15, 215, 415].map((t) => timer(t, 35, { repeat: 1000, open: undefined }))
 	];
 	mark_left_each_run(ops, runs);
-	expect([...new Set(ops.filter((o) => o.left_each_run).map((o) => o.caller_site!.line))]).toEqual([9, 15]);
+	expect([...new Set(ops.filter((o) => o.left_each_run).map((o) => o.caller_site!.line))]).toEqual([
+		9, 15
+	]);
 });
 
 test('one render proves nothing', () => {

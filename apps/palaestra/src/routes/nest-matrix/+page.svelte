@@ -20,9 +20,15 @@
 	import SnipLake from '$lib/SnipLake.svelte' with { wake: 'none' };
 	import Bumper from '$lib/Bumper.svelte' with { wake: 'visible' };
 	import MxLakeHole from '$lib/mx/MxLakeHole.svelte' with { render: 'deferred' };
-	import MxLakeHoleWake from '$lib/mx/MxLakeHoleWake.svelte' with { render: 'deferred', fetch: 'load' };
+	import MxLakeHoleWake from '$lib/mx/MxLakeHoleWake.svelte' with {
+		render: 'deferred',
+		fetch: 'load'
+	};
 	import MxIslandHole from '$lib/mx/MxIslandHole.svelte' with { render: 'deferred' };
-	import MxIslandHoleWake from '$lib/mx/MxIslandHoleWake.svelte' with { render: 'deferred', fetch: 'load' };
+	import MxIslandHoleWake from '$lib/mx/MxIslandHoleWake.svelte' with {
+		render: 'deferred',
+		fetch: 'load'
+	};
 	import MxCtxRead from '$lib/mx/MxCtxRead.svelte';
 	import MxMounted from '$lib/mx/MxMounted.svelte';
 	import MxCtxLake from '$lib/mx/MxCtxLake.svelte' with { wake: 'none' };
@@ -36,7 +42,10 @@
 
 <!-- template-root snippets, shared by live snippets below: a parameter, an import, a host value -->
 {#snippet banner(position: 'top' | 'middle')}
-	<p data-banner={position}>banner {position} <Bumper start={base_start + (position === 'top' ? 1 : 2)} /></p>
+	<p data-banner={position}>
+		banner {position}
+		<Bumper start={base_start + (position === 'top' ? 1 : 2)} />
+	</p>
 {/snippet}
 {#snippet banner_hole(position: 'top' | 'middle')}
 	<MxIslandHole start={base_start + (position === 'top' ? 10 : 20)}>
@@ -119,7 +128,8 @@
 {#if show('snippet-mixed')}
 	<div data-case="snippet-mixed">
 		<SnipApp>
-			{#snippet blocks()}<SnipLake start={145} /><p>direct <Bumper start={146} /></p>{/snippet}
+			{#snippet blocks()}<SnipLake start={145} />
+				<p>direct <Bumper start={146} /></p>{/snippet}
 		</SnipApp>
 	</div>
 {/if}
@@ -183,8 +193,12 @@
 
 {#if show('hole-lake')}<div data-case="hole-lake"><MxLakeHole start={170} /></div>{/if}
 
-{#if show('hole-wake-lake')}<div data-case="hole-wake-lake"><MxLakeHoleWake start={180} /></div>{/if}
+{#if show('hole-wake-lake')}<div data-case="hole-wake-lake">
+		<MxLakeHoleWake start={180} />
+	</div>{/if}
 
 {#if show('hole-island')}<div data-case="hole-island"><MxIslandHole start={190} /></div>{/if}
 
-{#if show('hole-wake-island')}<div data-case="hole-wake-island"><MxIslandHoleWake start={200} /></div>{/if}
+{#if show('hole-wake-island')}<div data-case="hole-wake-island">
+		<MxIslandHoleWake start={200} />
+	</div>{/if}

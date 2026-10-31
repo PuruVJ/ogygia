@@ -102,8 +102,11 @@ function drain_background(): void {
 }
 
 function post_background(fn: () => void): void {
-	const s = (globalThis as { scheduler?: { postTask?: (cb: () => void, o?: { priority?: string }) => unknown } })
-		.scheduler;
+	const s = (
+		globalThis as {
+			scheduler?: { postTask?: (cb: () => void, o?: { priority?: string }) => unknown };
+		}
+	).scheduler;
 	if (s && typeof s.postTask === 'function') {
 		try {
 			s.postTask(fn, { priority: 'background' });
@@ -135,7 +138,8 @@ export function after_document_painted(): Promise<void> {
 	return (document_painted ??= new Promise<void>((resolve) => {
 		if (typeof document === 'undefined') return resolve();
 		const painted = () => {
-			if (document.visibilityState === 'hidden' || typeof requestAnimationFrame !== 'function') setTimeout(resolve, 0);
+			if (document.visibilityState === 'hidden' || typeof requestAnimationFrame !== 'function')
+				setTimeout(resolve, 0);
 			else requestAnimationFrame(() => setTimeout(resolve, 0)); // the task after the frame
 		};
 		if (dom_content_loaded()) return painted();
@@ -155,9 +159,8 @@ export function after_document_painted(): Promise<void> {
 function dom_content_loaded(): boolean {
 	if (document.readyState === 'complete') return true;
 	if (document.readyState === 'loading') return false;
-	const nav = (typeof performance !== 'undefined' && performance.getEntriesByType?.('navigation')[0]) as
-		| PerformanceNavigationTiming
-		| undefined;
+	const nav = (typeof performance !== 'undefined' &&
+		performance.getEntriesByType?.('navigation')[0]) as PerformanceNavigationTiming | undefined;
 	return !!nav && nav.domContentLoadedEventEnd > 0;
 }
 

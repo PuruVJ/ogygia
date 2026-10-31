@@ -22,7 +22,14 @@
 	const ctx = get_shell_context();
 
 	function is_bare(h: string): boolean {
-		return !!h && !URL_SCHEME_RE.test(h) && !h.startsWith('/') && !h.startsWith('#') && !h.startsWith('.') && !h.startsWith('//');
+		return (
+			!!h &&
+			!URL_SCHEME_RE.test(h) &&
+			!h.startsWith('/') &&
+			!h.startsWith('#') &&
+			!h.startsWith('.') &&
+			!h.startsWith('//')
+		);
 	}
 
 	async function resolve(h: string): Promise<string> {

@@ -21,7 +21,17 @@ export interface AssetRef {
 	/** the browser must have it before the first paint (a head stylesheet, a classic sync script) */
 	blocking: boolean;
 	/** how the document asks for it (`island`: the runtime loads it to wake an island) */
-	via: 'script' | 'modulepreload' | 'preload' | 'stylesheet' | 'inline-import' | 'img' | 'static-import' | 'island' | 'route-node' | 'runtime-phase';
+	via:
+		| 'script'
+		| 'modulepreload'
+		| 'preload'
+		| 'stylesheet'
+		| 'inline-import'
+		| 'img'
+		| 'static-import'
+		| 'island'
+		| 'route-node'
+		| 'runtime-phase';
 	/** loads later, on demand (an island that wakes when visible / on interaction), not at start */
 	lazy?: boolean;
 	/** the ogygia runtime's own script (`data-ogygia-runtime`): the parts it loads itself are its own */
@@ -85,7 +95,14 @@ export function tag_attrs(tag: string): Map<string, string> {
 		while (i < tag.length && (is_space(tag.charCodeAt(i)) || tag[i] === '/')) i++;
 		if (i >= tag.length || tag[i] === '>') break;
 		const ns = i;
-		while (i < tag.length && !is_space(tag.charCodeAt(i)) && tag[i] !== '=' && tag[i] !== '>' && tag[i] !== '/') i++;
+		while (
+			i < tag.length &&
+			!is_space(tag.charCodeAt(i)) &&
+			tag[i] !== '=' &&
+			tag[i] !== '>' &&
+			tag[i] !== '/'
+		)
+			i++;
 		const name = tag.slice(ns, i).toLowerCase();
 		while (i < tag.length && is_space(tag.charCodeAt(i))) i++;
 		let value = '';
@@ -182,7 +199,11 @@ export function static_imports(code: string): string[] {
 		if (end === -1 || end - i > 400) return;
 		const spec = code.slice(i + 1, end);
 		const e = ext_of(spec);
-		if ((spec.startsWith('./') || spec.startsWith('../') || spec.startsWith('/')) && (e === 'js' || e === 'mjs')) out.add(spec);
+		if (
+			(spec.startsWith('./') || spec.startsWith('../') || spec.startsWith('/')) &&
+			(e === 'js' || e === 'mjs')
+		)
+			out.add(spec);
 	};
 	for (const word of ['from', 'import']) {
 		let at = code.indexOf(word);
@@ -191,7 +212,8 @@ export function static_imports(code: string): string[] {
 			// a whole word: not `xfrom`, not `.import`
 			const ok = !(is_ident(before) || before === 46);
 			const next = code[at + word.length];
-			if (ok && next !== '(' && next !== undefined && !is_ident(code.charCodeAt(at + word.length))) grab(at + word.length);
+			if (ok && next !== '(' && next !== undefined && !is_ident(code.charCodeAt(at + word.length)))
+				grab(at + word.length);
 			at = code.indexOf(word, at + word.length);
 		}
 	}
@@ -199,7 +221,9 @@ export function static_imports(code: string): string[] {
 }
 
 function is_ident(c: number): boolean {
-	return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
+	return (
+		(c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36
+	);
 }
 
 /**
@@ -224,13 +248,29 @@ export function kit_node_ids(script: string): number[] {
 
 /** Every file the document asks for at start, in document order, deduped by URL (the first,
  *  strongest ask wins: a blocking stylesheet stays blocking). Inline script/style bytes counted. */
-export function scan_assets(html: string): { refs: AssetRef[]; inline: { script: number; style: number }; kit_nodes: number[] } {
+export function scan_assets(html: string): {
+	refs: AssetRef[];
+	inline: { script: number; style: number };
+	kit_nodes: number[];
+} {
 	const refs: AssetRef[] = [];
 	const seen = new Set<string>();
-	const add = (url: string | undefined, kind: AssetKind, via: AssetRef['via'], blocking: boolean) => {
+	const add = (
+		url: string | undefined,
+		kind: AssetKind,
+		via: AssetRef['via'],
+		blocking: boolean
+	) => {
 		if (!url) return;
 		const u = url.trim();
-		if (!u || u.startsWith('data:') || u.startsWith('blob:') || u.startsWith('#') || u.startsWith('javascript:')) return;
+		if (
+			!u ||
+			u.startsWith('data:') ||
+			u.startsWith('blob:') ||
+			u.startsWith('#') ||
+			u.startsWith('javascript:')
+		)
+			return;
 		if (seen.has(u)) return;
 		seen.add(u);
 		refs.push({ url: u, kind, blocking, via });
@@ -261,18 +301,28 @@ export function scan_assets(html: string): { refs: AssetRef[]; inline: { script:
 			const end = html.indexOf('</script', close);
 			const body = end === -1 ? '' : html.slice(close + 1, end);
 			const type = (a.get('type') ?? '').toLowerCase();
-			const is_js = type === '' || type === 'module' || type === 'text/javascript' || type === 'application/javascript';
+			const is_js =
+				type === '' ||
+				type === 'module' ||
+				type === 'text/javascript' ||
+				type === 'application/javascript';
 			if (a.has('src')) {
 				if (is_js) {
 					const n = refs.length;
-					add(a.get('src'), 'script', 'script', type !== 'module' && !a.has('async') && !a.has('defer') && in_head);
+					add(
+						a.get('src'),
+						'script',
+						'script',
+						type !== 'module' && !a.has('async') && !a.has('defer') && in_head
+					);
 					if (refs.length > n && a.has('data-ogygia-runtime')) refs[n].runtime = true;
 				}
 			} else if (is_js) {
 				inline.script += body.length;
 				for (const spec of dynamic_imports(body)) add(spec, 'script', 'inline-import', false);
 				if (!kit_nodes.length) kit_nodes = kit_node_ids(body);
-				if (type === 'module') for (const spec of static_imports(body)) add(spec, 'script', 'inline-import', false);
+				if (type === 'module')
+					for (const spec of static_imports(body)) add(spec, 'script', 'inline-import', false);
 			}
 			i = end === -1 ? -1 : html.indexOf('<', end + 8);
 			continue;
@@ -290,14 +340,17 @@ export function scan_assets(html: string): { refs: AssetRef[]; inline: { script:
 			if (rel.includes('stylesheet')) {
 				const media = (a.get('media') ?? '').toLowerCase();
 				// a print / non-matching media sheet does not block; `disabled` loads nothing
-				if (!a.has('disabled')) add(href, 'style', 'stylesheet', media === '' || media === 'all' || media === 'screen');
+				if (!a.has('disabled'))
+					add(href, 'style', 'stylesheet', media === '' || media === 'all' || media === 'screen');
 			} else if (rel.includes('modulepreload')) add(href, 'script', 'modulepreload', false);
-			else if (rel.includes('preload')) add(href, kind_of(href ?? '', (a.get('as') ?? '').toLowerCase()), 'preload', false);
+			else if (rel.includes('preload'))
+				add(href, kind_of(href ?? '', (a.get('as') ?? '').toLowerCase()), 'preload', false);
 			else if (rel.includes('icon')) add(href, 'image', 'img', false);
 		} else if (name === 'img') {
 			const a = tag_attrs(tag);
 			// a lazy image loads when it nears the viewport, not at start
-			if ((a.get('loading') ?? '').toLowerCase() !== 'lazy') add(a.get('src'), 'image', 'img', false);
+			if ((a.get('loading') ?? '').toLowerCase() !== 'lazy')
+				add(a.get('src'), 'image', 'img', false);
 		}
 		i = html.indexOf('<', close + 1);
 	}
@@ -398,7 +451,11 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 	};
 	let at = 0;
 	const worker = async () => {
-		while (at < queue.length && Date.now() < deadline && assets.length + missed.length < max_files) {
+		while (
+			at < queue.length &&
+			Date.now() < deadline &&
+			assets.length + missed.length < max_files
+		) {
 			const r = queue[at++];
 			let w = opts.cache.get(r.url);
 			if (w === undefined) {
@@ -417,27 +474,66 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 				continue;
 			}
 			const contains = r.kind === 'script' || r.kind === 'style' ? opts.contents_of?.(r.url) : null;
-			assets.push({ ...r, bytes: w.bytes, wire: w.wire, ...(contains?.length ? { contains } : {}), ...(w.vary ? { vary: w.vary } : {}) });
+			assets.push({
+				...r,
+				bytes: w.bytes,
+				wire: w.wire,
+				...(contains?.length ? { contains } : {}),
+				...(w.vary ? { vary: w.vary } : {})
+			});
 			// a module's imports load with it: lazy with a lazy parent
-			if (r.kind === 'script' && w.imports) for (const spec of w.imports) push({ url: spec, kind: 'script', blocking: false, via: 'static-import', ...(r.lazy ? { lazy: true } : {}), ...(r.phase ? { phase: true } : {}) });
+			if (r.kind === 'script' && w.imports)
+				for (const spec of w.imports)
+					push({
+						url: spec,
+						kind: 'script',
+						blocking: false,
+						via: 'static-import',
+						...(r.lazy ? { lazy: true } : {}),
+						...(r.phase ? { phase: true } : {})
+					});
 			// the ogygia runtime's on-demand parts (hydration and the rest, loaded as islands wake): its
 			// own, on demand — the visit tells which loaded at start, and they read as the runtime's,
 			// never as code "other scripts fetched"
-			if (r.runtime && w.dynamic) for (const spec of w.dynamic) push({ url: spec, kind: 'script', blocking: false, via: 'runtime-phase', lazy: true, phase: true });
+			if (r.runtime && w.dynamic)
+				for (const spec of w.dynamic)
+					push({
+						url: spec,
+						kind: 'script',
+						blocking: false,
+						via: 'runtime-phase',
+						lazy: true,
+						phase: true
+					});
 			// the route nodes this page starts with (and only those: app.js imports every route's)
 			if (node_marks.length && w.dynamic)
-				for (const spec of w.dynamic) if (node_marks.some((m) => spec.includes(m))) push({ url: spec, kind: 'script', blocking: false, via: 'route-node' });
+				for (const spec of w.dynamic)
+					if (node_marks.some((m) => spec.includes(m)))
+						push({ url: spec, kind: 'script', blocking: false, via: 'route-node' });
 		}
 	};
 	// workers pick up imports as they are found: keep going while the queue grows
 	while (at < queue.length && Date.now() < deadline && assets.length + missed.length < max_files) {
 		await Promise.all(Array.from({ length: Math.min(6, queue.length - at) }, worker));
 	}
-	for (let k = at; k < queue.length; k++) miss(queue[k].url, assets.length + missed.length >= max_files ? 'file cap' : 'budget');
+	for (let k = at; k < queue.length; k++)
+		miss(queue[k].url, assets.length + missed.length >= max_files ? 'file cap' : 'budget');
 
 	const html_bytes = byte_length(opts.html);
 	const html_wire = opts.gzip ? opts.gzip(new TextEncoder().encode(opts.html)) : html_bytes;
-	const t = { js: 0, js_wire: 0, css: 0, css_wire: 0, font: 0, image: 0, wire: html_wire, lazy_js: 0, blocking: 0, blocking_count: 0, js_files: 0 };
+	const t = {
+		js: 0,
+		js_wire: 0,
+		css: 0,
+		css_wire: 0,
+		font: 0,
+		image: 0,
+		wire: html_wire,
+		lazy_js: 0,
+		blocking: 0,
+		blocking_count: 0,
+		js_files: 0
+	};
 	for (const a of assets) {
 		if (a.lazy) {
 			if (a.kind === 'script') t.lazy_js += a.bytes;
@@ -459,9 +555,22 @@ export async function weigh_assets(opts: WeighOptions): Promise<PageAssets> {
 		}
 	}
 	// the build's unscoped-fallback markers: in the document's inline <style>s, then in each sheet
-	const unscoped: (UnscopedStyles & { in: string })[] = find_unscoped(inline_style_text(opts.html)).map((u) => ({ ...u, in: 'the document' }));
-	for (const a of assets) if (a.kind === 'style') for (const u of opts.cache.get(a.url)?.unscoped ?? []) if (!unscoped.some((x) => x.file === u.file)) unscoped.push({ ...u, in: a.url });
-	return { assets: assets.sort((x, y) => y.bytes - x.bytes), missed, ...(missed_why.length ? { missed_why } : {}), ...(unscoped.length ? { unscoped } : {}), html: { bytes: html_bytes, wire: html_wire }, inline, totals: t };
+	const unscoped: (UnscopedStyles & { in: string })[] = find_unscoped(
+		inline_style_text(opts.html)
+	).map((u) => ({ ...u, in: 'the document' }));
+	for (const a of assets)
+		if (a.kind === 'style')
+			for (const u of opts.cache.get(a.url)?.unscoped ?? [])
+				if (!unscoped.some((x) => x.file === u.file)) unscoped.push({ ...u, in: a.url });
+	return {
+		assets: assets.sort((x, y) => y.bytes - x.bytes),
+		missed,
+		...(missed_why.length ? { missed_why } : {}),
+		...(unscoped.length ? { unscoped } : {}),
+		html: { bytes: html_bytes, wire: html_wire },
+		inline,
+		totals: t
+	};
 }
 
 /** The text of every inline `<style>` in the document (only there is a marker the build's: a page
@@ -519,7 +628,8 @@ export interface WeighedLike {
 
 export function assets_diff(a: WeighedLike, b: WeighedLike): AssetsDiff {
 	type W = WeighedLike['assets'][number];
-	const key = (x: W) => (x.contains?.length ? 'c:' + [...x.contains].sort().join('|') : 'u:' + x.url);
+	const key = (x: W) =>
+		x.contains?.length ? 'c:' + [...x.contains].sort().join('|') : 'u:' + x.url;
 	const scripts = (p: WeighedLike) => {
 		const m = new Map<string, W>();
 		for (const x of p.assets) if (x.kind === 'script') m.set(key(x), x);
@@ -532,7 +642,13 @@ export function assets_diff(a: WeighedLike, b: WeighedLike): AssetsDiff {
 		const path = q === -1 ? x.url : x.url.slice(0, q);
 		return path.slice(path.lastIndexOf('/') + 1);
 	};
-	const change = (x: W, av: number, bv: number): AssetChange => ({ name: name(x), ...(x.contains?.length ? { contains: x.contains.slice(0, 4) } : {}), a: av, b: bv, ...(x.lazy ? { lazy: true } : {}) });
+	const change = (x: W, av: number, bv: number): AssetChange => ({
+		name: name(x),
+		...(x.contains?.length ? { contains: x.contains.slice(0, 4) } : {}),
+		a: av,
+		b: bv,
+		...(x.lazy ? { lazy: true } : {})
+	});
 	const added: AssetChange[] = [];
 	const removed: AssetChange[] = [];
 	const grew: AssetChange[] = [];
@@ -548,10 +664,13 @@ export function assets_diff(a: WeighedLike, b: WeighedLike): AssetsDiff {
 		if (x.bytes - was.bytes >= MIN_CHANGE) grew.push(change(x, was.bytes, x.bytes));
 		else if (was.bytes - x.bytes >= MIN_CHANGE) shrank.push(change(x, was.bytes, x.bytes));
 		// the same file changing WHEN it loads: what a changed island wake does (weight the same)
-		if (!!was.lazy !== !!x.lazy && x.bytes >= MIN_CHANGE) (x.lazy ? to_later : to_start).push(change(x, was.bytes, x.bytes));
+		if (!!was.lazy !== !!x.lazy && x.bytes >= MIN_CHANGE)
+			(x.lazy ? to_later : to_start).push(change(x, was.bytes, x.bytes));
 	}
-	for (const [k, x] of A) if (!B.has(k) && x.bytes >= MIN_CHANGE) removed.push(change(x, x.bytes, 0));
-	const by = (s: AssetChange[]) => s.sort((p, q) => Math.abs(q.b - q.a) - Math.abs(p.b - p.a)).slice(0, 5);
+	for (const [k, x] of A)
+		if (!B.has(k) && x.bytes >= MIN_CHANGE) removed.push(change(x, x.bytes, 0));
+	const by = (s: AssetChange[]) =>
+		s.sort((p, q) => Math.abs(q.b - q.a) - Math.abs(p.b - p.a)).slice(0, 5);
 	const big = (s: AssetChange[]) => s.sort((p, q) => q.b - p.b).slice(0, 5);
 	return {
 		js: { a: a.totals.js, b: b.totals.js },
@@ -587,7 +706,13 @@ export interface RuntimeScripts {
  */
 export function runtime_scripts(
 	assets: readonly { url: string }[],
-	resources: readonly { url: string; type: string; start: number; size?: number; transfer?: number }[],
+	resources: readonly {
+		url: string;
+		type: string;
+		start: number;
+		size?: number;
+		transfer?: number;
+	}[],
 	origin: string,
 	until: number
 ): RuntimeScripts | null {
@@ -599,7 +724,14 @@ export function runtime_scripts(
 	let entries = 0;
 	const seen = new Set<string>();
 	for (const r of resources) {
-		if (r.type !== 'script' || r.start > until || named.has(r.url) || seen.has(r.url) || r.url.includes('/__profiler/')) continue;
+		if (
+			r.type !== 'script' ||
+			r.start > until ||
+			named.has(r.url) ||
+			seen.has(r.url) ||
+			r.url.includes('/__profiler/')
+		)
+			continue;
 		seen.add(r.url);
 		const size = r.size ?? 0;
 		files++;
@@ -610,9 +742,18 @@ export function runtime_scripts(
 		g.files++;
 		g.bytes += size;
 		by.set(who, g);
-		if (who === 'this app' && r.url.slice(r.url.lastIndexOf('/') + 1).startsWith('og-region.')) entries++;
+		if (who === 'this app' && r.url.slice(r.url.lastIndexOf('/') + 1).startsWith('og-region.'))
+			entries++;
 	}
-	return files ? { files, bytes, wire, by: [...by.values()].sort((a, b) => b.bytes - a.bytes), ...(entries ? { island_entries: entries } : {}) } : null;
+	return files
+		? {
+				files,
+				bytes,
+				wire,
+				by: [...by.values()].sort((a, b) => b.bytes - a.bytes),
+				...(entries ? { island_entries: entries } : {})
+			}
+		: null;
 }
 
 /** `this app`, a CDN package (`@scope/name` after `/npm/`), or the host. */
@@ -652,7 +793,12 @@ function byte_length(s: string): number {
 /** Why a file could not be weighed. */
 type Miss = { miss: string };
 
-async function weigh_one(r: AssetRef, opts: WeighOptions, deadline: number, origin: string): Promise<Weight | Miss> {
+async function weigh_one(
+	r: AssetRef,
+	opts: WeighOptions,
+	deadline: number,
+	origin: string
+): Promise<Weight | Miss> {
 	const left = deadline - Date.now();
 	if (left < 100) return { miss: 'budget' };
 	try {
@@ -666,7 +812,12 @@ async function weigh_one(r: AssetRef, opts: WeighOptions, deadline: number, orig
 		const len = Number(res.headers.get('content-length'));
 		const buf = new Uint8Array(await res.arrayBuffer());
 		// the body is decoded by fetch; a compressed response's content-length is its wire size
-		const wire = enc && Number.isFinite(len) && len > 0 ? len : opts.gzip && buf.byteLength > 256 ? opts.gzip(buf) : buf.byteLength;
+		const wire =
+			enc && Number.isFinite(len) && len > 0
+				? len
+				: opts.gzip && buf.byteLength > 256
+					? opts.gzip(buf)
+					: buf.byteLength;
 		const w: Weight = { bytes: buf.byteLength, wire };
 		if (r.kind === 'script') {
 			const code = new TextDecoder().decode(buf);

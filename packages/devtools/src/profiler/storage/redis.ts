@@ -14,7 +14,12 @@
  * last day of recordings. The index sets drop an expired report's id the next time they are read or
  * pruned, so they do not grow with every report that expired.
  */
-import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.ts';
+import type {
+	ProfilerStore,
+	ProfilerRecord,
+	ProfilerSummary,
+	ProfilerVisitRecord
+} from './index.ts';
 
 /** The subset of a Redis client this store uses — node-redis and ioredis both satisfy it (their
  *  method names differ in case, and a few calls take options objects on one and arguments on the
@@ -51,7 +56,9 @@ async function resolve(client: RedisLike | string): Promise<RedisLike> {
 	const nodeRedis = 'redis';
 	const ioRedis = 'ioredis';
 	try {
-		const { createClient } = (await import(nodeRedis)) as { createClient: (o: { url: string }) => RedisLike };
+		const { createClient } = (await import(nodeRedis)) as {
+			createClient: (o: { url: string }) => RedisLike;
+		};
 		const c = createClient({ url: client });
 		await c.connect?.();
 		return c;
@@ -62,7 +69,10 @@ async function resolve(client: RedisLike | string): Promise<RedisLike> {
 	return new mod.default(client);
 }
 
-export function redisStore(client: RedisLike | string, opts: { ttlSeconds?: number; prefix?: string } = {}): ProfilerStore {
+export function redisStore(
+	client: RedisLike | string,
+	opts: { ttlSeconds?: number; prefix?: string } = {}
+): ProfilerStore {
 	const ttl = opts.ttlSeconds;
 	const prefix = opts.prefix ?? 'og:';
 	const R = `${prefix}report:`;
@@ -73,7 +83,8 @@ export function redisStore(client: RedisLike | string, opts: { ttlSeconds?: numb
 	const need = async (): Promise<RedisLike> => (c ??= await resolve(client));
 	// THE FLAVOUR, read once from the client's own methods: node-redis has `zAdd`, ioredis `zadd`.
 	// (Trying one form and falling back on the error cost ioredis a round trip on every write.)
-	const node = (r: RedisLike): NodeRedis | null => (typeof (r as unknown as NodeRedis).zAdd === 'function' ? (r as unknown as NodeRedis) : null);
+	const node = (r: RedisLike): NodeRedis | null =>
+		typeof (r as unknown as NodeRedis).zAdd === 'function' ? (r as unknown as NodeRedis) : null;
 	const setStr = async (r: RedisLike, key: string, val: string) => {
 		const n = node(r);
 		if (!ttl) await r.set(key, val);
@@ -89,7 +100,13 @@ export function redisStore(client: RedisLike | string, opts: { ttlSeconds?: numb
 		const n = node(r);
 		return n ? n.zRem(key, members) : r.zrem!(key, ...members);
 	};
-	const zrange = (r: RedisLike, key: string, a: number, b: number, rev = false): Promise<string[]> => {
+	const zrange = (
+		r: RedisLike,
+		key: string,
+		a: number,
+		b: number,
+		rev = false
+	): Promise<string[]> => {
 		const n = node(r);
 		if (n) return rev ? n.zRange(key, a, b, { REV: true }) : n.zRange(key, a, b);
 		return rev ? r.zrange!(key, a, b, 'REV') : r.zrange!(key, a, b);
@@ -112,7 +129,14 @@ export function redisStore(client: RedisLike | string, opts: { ttlSeconds?: numb
 		},
 		async putReport(rec: ProfilerRecord) {
 			const r = await need();
-			const summary: ProfilerSummary = { id: rec.id, created: rec.created, page: rec.page, trigger: rec.trigger, label: rec.label, median: rec.median };
+			const summary: ProfilerSummary = {
+				id: rec.id,
+				created: rec.created,
+				page: rec.page,
+				trigger: rec.trigger,
+				label: rec.label,
+				median: rec.median
+			};
 			await setStr(r, R + rec.id, JSON.stringify({ summary, dump: rec.dump }));
 			await zadd(r, RZ, rec.created, rec.id);
 			// the store's own cap, whatever the host prunes to: one ZCARD, a trim only past it
@@ -159,7 +183,8 @@ export function redisStore(client: RedisLike | string, opts: { ttlSeconds?: numb
 			const r = await need();
 			await setStr(r, V + rec.key, JSON.stringify(rec));
 			await zadd(r, VZ(rec.page), rec.at, rec.key);
-			if ((await zcard(r, VZ(rec.page))) > MAX_VISITS_PER_PAGE) await trim(r, VZ(rec.page), V, MAX_VISITS_PER_PAGE);
+			if ((await zcard(r, VZ(rec.page))) > MAX_VISITS_PER_PAGE)
+				await trim(r, VZ(rec.page), V, MAX_VISITS_PER_PAGE);
 		},
 		async listVisits(page: string, limit = 10): Promise<ProfilerVisitRecord[]> {
 			const r = await need();
@@ -182,7 +207,9 @@ export function redisStore(client: RedisLike | string, opts: { ttlSeconds?: numb
 			return out;
 		},
 		async close() {
-			await (c as unknown as { quit?: () => Promise<void>; disconnect?: () => void })?.quit?.().catch(() => {});
+			await (c as unknown as { quit?: () => Promise<void>; disconnect?: () => void })
+				?.quit?.()
+				.catch(() => {});
 			c = null;
 		}
 	};

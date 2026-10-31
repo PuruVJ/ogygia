@@ -19,7 +19,9 @@
 	void BlockUnused;
 </script>
 
-<h1 data-static-shell>head budget — one registry block of six, one direct island, one unused mark</h1>
+<h1 data-static-shell>
+	head budget — one registry block of six, one direct island, one unused mark
+</h1>
 
 <svelte:component this={Chosen} label="chosen block a" />
 

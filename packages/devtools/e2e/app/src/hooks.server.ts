@@ -48,7 +48,9 @@ const auth_wall: Handle = async ({ event, resolve }) => {
 // `?front`: held IN FRONT of ogygia.handle() — before the profiler's handler takes the request (like
 // a proxy or an auth hop); `?inside`: held after it — inside the handler, outside the render.
 const gap_wait = (event: Parameters<Handle>[0]['event'], mode: string) =>
-	event.url.pathname === '/dt-gap' && event.url.searchParams.has(mode) && !event.request.headers.get('x-og-profiler-internal')
+	event.url.pathname === '/dt-gap' &&
+	event.url.searchParams.has(mode) &&
+	!event.request.headers.get('x-og-profiler-internal')
 		? new Promise((ok) => setTimeout(ok, 900))
 		: null;
 const gap_front: Handle = async ({ event, resolve }) => {
@@ -65,7 +67,8 @@ const gap_inside: Handle = async ({ event, resolve }) => {
 // visitor, but no shared cache keeps an answer that sets a cookie: the profiler's same-document
 // advice must say so before it says "cache it".
 const stamp_cookie: Handle = async ({ event, resolve }) => {
-	if (event.url.pathname === '/dt-cookie') event.cookies.set('og-visitor', crypto.randomUUID(), { path: '/' });
+	if (event.url.pathname === '/dt-cookie')
+		event.cookies.set('og-visitor', crypto.randomUUID(), { path: '/' });
 	return resolve(event);
 };
 
@@ -79,7 +82,9 @@ export const handle = sequence(
 	auth_wall,
 	gap_front,
 	// (the restore lab: a scoped web-component render as the app's transform, OGYGIA_RESTORE_LAB=1)
-	ogygiaHandle(process.env.OGYGIA_RESTORE_LAB ? { transform: (html: string) => scoped_render(html) } : {}),
+	ogygiaHandle(
+		process.env.OGYGIA_RESTORE_LAB ? { transform: (html: string) => scoped_render(html) } : {}
+	),
 	gap_inside,
 	corrupt_detector_region
 );

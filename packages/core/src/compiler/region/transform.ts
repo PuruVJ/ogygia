@@ -505,7 +505,12 @@ function clean_import_text(source: string, node: SvelteNode) {
 function region_keys_on_dynamic_import(node: SvelteNode, import_keys: ImportKeys) {
 	const opts = node.options;
 	if (!opts || opts.type !== 'ObjectExpression') return [];
-	const claimed = new Set([import_keys.wake, import_keys.fetch, import_keys.render, import_keys.preset]);
+	const claimed = new Set([
+		import_keys.wake,
+		import_keys.fetch,
+		import_keys.render,
+		import_keys.preset
+	]);
 	const found: string[] = [];
 	for (const prop of opts.properties) {
 		if (prop.type !== 'Property' || prop.computed) continue;
@@ -1196,7 +1201,9 @@ class FileCompilation {
 			throw fail(
 				`${said} sets \`${import_keys.fetch}: '${fetch_val}'\` without \`${import_keys.render}: 'deferred'\` — \`${import_keys.fetch}\` is a hole's timing. ` +
 					`Write \`${import_keys.render}: 'deferred', ${import_keys.fetch}: '${fetch_val}'\` for a hole` +
-					(render_mode == null ? `, or \`${import_keys.wake}: '${fetch_val}'\` for an island.` : '.')
+					(render_mode == null
+						? `, or \`${import_keys.wake}: '${fetch_val}'\` for an island.`
+						: '.')
 			);
 		}
 		if (render_mode === 'deferred') {
@@ -2412,7 +2419,9 @@ class FileCompilation {
 			// (template-root snippets are hoisted: their order in the synth does not matter)
 			const carried_src = carried.map((n) => source.slice(n.start, n.end)).join('\n');
 			const hash = createHash('md5')
-				.update(`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}\0${carried_src}`)
+				.update(
+					`${markup}\0${captures.join(',')}\0${cleaned_imports.join('\n')}\0${params_src}\0${carried_src}`
+				)
 				.digest('hex')
 				.slice(0, 12);
 			// host identity via #component_identity: a declared-package host keys `<pkg>/<rel>`
@@ -2434,7 +2443,9 @@ class FileCompilation {
 				const wrapped = body.some((n: SvelteNode) => n.type === 'ConstTag');
 				const template =
 					(carried_src ? carried_src + '\n' : '') +
-					(wrapped ? `{#snippet __og_body()}\n${markup}\n{/snippet}\n{@render __og_body()}` : markup);
+					(wrapped
+						? `{#snippet __og_body()}\n${markup}\n{/snippet}\n{@render __og_body()}`
+						: markup);
 				const synth =
 					`<script${lang}>\n` +
 					`\timport 'virtual:ogygia/transportables-eager';\n` +
@@ -2913,7 +2924,8 @@ class TsRegionCompilation {
 			// spelling to write; anything else is a mismatched marker set.
 			const bad_combo =
 				(has_region && attrs.size > 1) ||
-				(has_render && [...attrs.keys()].some((k) => k !== renderKey && k !== wakeKey && k !== fetchKey)) ||
+				(has_render &&
+					[...attrs.keys()].some((k) => k !== renderKey && k !== wakeKey && k !== fetchKey)) ||
 				(!has_render && has_wake && attrs.size > 1);
 			if (bad_combo) {
 				throw new Error(

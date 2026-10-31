@@ -17,7 +17,10 @@ const trace = {
 	stacks: [{ frameId: 0 }, { frameId: 1 }],
 	samples: Array.from({ length: 101 }, (_, i) => {
 		const t = i * 10;
-		return { timestamp: t, ...(t >= 100 && t < 220 ? { stackId: 0 } : t >= 500 && t < 700 ? { stackId: 1 } : {}) };
+		return {
+			timestamp: t,
+			...(t >= 100 && t < 220 ? { stackId: 0 } : t >= 500 && t < 700 ? { stackId: 1 } : {})
+		};
 	})
 };
 
@@ -31,8 +34,22 @@ const visit = parse_visit('/lab', {
 		{ t: 500, ms: 200 }
 	],
 	islands: [
-		{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Heavy.svelte', t0: 40, loaded: 90, turn: 100, done: 220 },
-		{ fp: 'bbbbbbbb22222222', entry: '/src/lib/Quick.svelte', t0: 40, loaded: 90, turn: 230, done: 235 }
+		{
+			fp: 'aaaaaaaa11111111',
+			entry: '/src/lib/Heavy.svelte',
+			t0: 40,
+			loaded: 90,
+			turn: 100,
+			done: 220
+		},
+		{
+			fp: 'bbbbbbbb22222222',
+			entry: '/src/lib/Quick.svelte',
+			t0: 40,
+			loaded: 90,
+			turn: 230,
+			done: 235
+		}
 	],
 	firsts: [],
 	shifts: []
@@ -50,7 +67,9 @@ test('each island window and the long tasks outside them, by name', () => {
 
 	const rows = [{ fp: 'aaaaaaaa11111111', entry: '/src/lib/Heavy.svelte', name: 'Heavy' }];
 	const found = browser_findings(browser_page_report(visit, rows, w));
-	expect(found.find((f) => f.code === 'long-hydrate')?.message).toContain('mostly render_rows (Heavy.svelte:11)');
+	expect(found.find((f) => f.code === 'long-hydrate')?.message).toContain(
+		'mostly render_rows (Heavy.svelte:11)'
+	);
 	expect(found.find((f) => f.code === 'long-tasks')?.message).toContain('mostly tick (page:16)');
 });
 

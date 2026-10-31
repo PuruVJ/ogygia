@@ -43,7 +43,8 @@
 
 	function state_of(r) {
 		// (a nested island rides the island around it: awake with it, never on its own)
-		if (r.kind === 'island' && r.rides) return r.hydrated ? 'rides its parent' : 'cold (with its parent)';
+		if (r.kind === 'island' && r.rides)
+			return r.hydrated ? 'rides its parent' : 'cold (with its parent)';
 		if (r.kind === 'island') return r.hydrated ? 'hydrated' : 'cold';
 		return r.hydrated ? 'filled' : 'pending';
 	}
@@ -58,10 +59,21 @@
 </div>
 
 <div class="controls">
-	<button class="btn" data-og-overlay-toggle class:on={overlay} onclick={() => (overlay = !overlay)}>
+	<button
+		class="btn"
+		data-og-overlay-toggle
+		class:on={overlay}
+		onclick={() => (overlay = !overlay)}
+	>
 		<span class="eye"></span>{overlay ? 'hide overlay' : 'show overlay'}
 	</button>
-	<button class="btn pick" data-og-pick class:on={picking} onclick={toggle_pick} title="then click an island on the page">
+	<button
+		class="btn pick"
+		data-og-pick
+		class:on={picking}
+		onclick={toggle_pick}
+		title="then click an island on the page"
+	>
 		<span class="target"></span>{picking ? 'click an island…' : 'pick on page'}
 	</button>
 	<span class="legend">
@@ -69,7 +81,11 @@
 		<span class="sw og-lake"></span>{summary.lake}
 		<span class="sw og-hole"></span>{summary.hole}
 	</span>
-	{#if summary.js > 0}<span class="tot">{kb(summary.js)} JS{#if summary.cold}<span class="muted"> · {summary.cold} cold</span>{/if}</span>{/if}
+	{#if summary.js > 0}<span class="tot"
+			>{kb(summary.js)} JS{#if summary.cold}<span class="muted">
+					· {summary.cold} cold</span
+				>{/if}</span
+		>{/if}
 </div>
 
 <table>
@@ -83,11 +99,20 @@
 				class:cold={r.kind === 'island' && !r.hydrated}
 				onmouseenter={() => (focus = r.el)}
 				onmouseleave={() => (focus = null)}
-				onclick={() => { selected = r.el; picking = false; }}
+				onclick={() => {
+					selected = r.el;
+					picking = false;
+				}}
 				title="inspect this region"
 			>
 				<!-- the name is a button: Tab reaches the row, Enter opens it (the press bubbles to the row) -->
-				<td><span class="dot og-{r.kind}"></span><button class="nm rowbtn" onfocus={() => (focus = r.el)} onblur={() => (focus = null)}>{name}</button></td>
+				<td
+					><span class="dot og-{r.kind}"></span><button
+						class="nm rowbtn"
+						onfocus={() => (focus = r.el)}
+						onblur={() => (focus = null)}>{name}</button
+					></td
+				>
 				<td>{r.kind === 'island' ? r.wake : r.kind}</td>
 				<td class="mono">
 					{#if r.kind !== 'island'}<span class="muted">0 B</span>

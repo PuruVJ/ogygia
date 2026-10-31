@@ -43,7 +43,10 @@ function parse_record(doc: Document): Map<string, HoleFacts> | null {
 		if (!entry || typeof entry.endpoint !== 'string' || !entry.endpoint) continue;
 		map.set(identity, {
 			endpoint: entry.endpoint,
-			sidecar: typeof entry.sidecar === 'string' && entry.sidecar ? sidecar_element(doc, entry.sidecar) : null
+			sidecar:
+				typeof entry.sidecar === 'string' && entry.sidecar
+					? sidecar_element(doc, entry.sidecar)
+					: null
 		});
 	}
 	return map;

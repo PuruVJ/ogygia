@@ -20,14 +20,23 @@
 import { hydrate, unmount, type Component } from 'svelte';
 import NestedProvider from './NestedProvider.svelte';
 
-export function og_entry_hydrate(component: Component<Record<string, unknown>>, target: Element, props: Record<string, unknown>, options?: { recover?: boolean }): unknown {
+export function og_entry_hydrate(
+	component: Component<Record<string, unknown>>,
+	target: Element,
+	props: Record<string, unknown>,
+	options?: { recover?: boolean }
+): unknown {
 	const first = target.firstChild;
 	if (!(first && first.nodeType === 8 && (first as Comment).data === '[')) {
 		target.insertBefore(document.createComment('['), target.firstChild);
 		target.appendChild(document.createComment(']'));
 	}
 	const recovery = options && options.recover === false ? { recover: false } : {};
-	return hydrate(NestedProvider as unknown as Component<Record<string, unknown>>, { target, props: { component, props }, ...recovery });
+	return hydrate(NestedProvider as unknown as Component<Record<string, unknown>>, {
+		target,
+		props: { component, props },
+		...recovery
+	});
 }
 
 export function og_entry_unmount(app: Record<string, unknown>): unknown {

@@ -6,4 +6,6 @@
 	let n = $state(start);
 </script>
 
-<button class="island" data-bumper onclick={() => (n += 1)}>bump <span data-bumper-n>{n}</span></button>
+<button class="island" data-bumper onclick={() => (n += 1)}
+	>bump <span data-bumper-n>{n}</span></button
+>

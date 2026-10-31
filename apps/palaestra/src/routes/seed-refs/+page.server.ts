@@ -11,7 +11,12 @@ export type Block = {
 	title: string;
 	body: string;
 	tags: string[];
-	meta: { author: string; updated: string; weight: number; links: { href: string; label: string }[] };
+	meta: {
+		author: string;
+		updated: string;
+		weight: number;
+		links: { href: string; label: string }[];
+	};
 };
 
 function block(i: number): Block {

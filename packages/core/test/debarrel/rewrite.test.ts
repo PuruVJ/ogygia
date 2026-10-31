@@ -22,14 +22,20 @@ const base = () => ({
 
 describe('rewrite — output shapes', () => {
 	it('named imports go to their leaves, one import per leaf, local names unchanged; the barrel import disappears', async () => {
-		f = fixture({ ...base(), 'src/app.ts': `import { a, bee as B, Button, Card } from '$lib';\nconsole.log(a, B, Button, Card);` });
+		f = fixture({
+			...base(),
+			'src/app.ts': `import { a, bee as B, Button, Card } from '$lib';\nconsole.log(a, B, Button, Card);`
+		});
 		expect(await f.rewrite('src/app.ts')).toBe(
 			`import { a, b as B } from ${q(f, 'lib/a.ts')};\nimport Button from ${q(f, 'lib/Button.svelte')};\nimport Card from ${q(f, 'lib/Card.svelte')};\nconsole.log(a, B, Button, Card);`
 		);
 	});
 
 	it('import attributes ride onto every leaf import', async () => {
-		f = fixture({ ...base(), 'src/app.ts': `import { Button, Card } from '$lib' with { type: 'component' };` });
+		f = fixture({
+			...base(),
+			'src/app.ts': `import { Button, Card } from '$lib' with { type: 'component' };`
+		});
 		expect(await f.rewrite('src/app.ts')).toBe(
 			`import Button from ${q(f, 'lib/Button.svelte')} with { type: 'component' };\nimport Card from ${q(f, 'lib/Card.svelte')} with { type: 'component' };`
 		);
@@ -40,7 +46,8 @@ describe('rewrite — output shapes', () => {
 			...base(),
 			'src/app.ts': `import { Button } from '$lib' with { wake: 'visible' };\nimport { Card } from '$lib';\nimport { a } from '$lib' with { render: 'deferred', fetch: 'load' };`
 		});
-		const skip = (decl: { attribute_keys: string[] }) => decl.attribute_keys.some((k) => k === 'wake' || k === 'render');
+		const skip = (decl: { attribute_keys: string[] }) =>
+			decl.attribute_keys.some((k) => k === 'wake' || k === 'render');
 		expect(await f.rewrite('src/app.ts', undefined, { skip })).toBe(
 			`import { Button } from '$lib' with { wake: 'visible' };\nimport Card from ${q(f, 'lib/Card.svelte')};\nimport { a } from '$lib' with { render: 'deferred', fetch: 'load' };`
 		);
@@ -58,7 +65,9 @@ describe('rewrite — output shapes', () => {
 		f.write('lib/mixed.ts', 'export const v = 1; export type V = 1;');
 		f.write('lib/index.ts', `export { v, type V } from './mixed';`);
 		f.write('src/mixed.ts', `import { v, type V } from '$lib';`);
-		expect(await f.rewrite('src/mixed.ts')).toBe(`import { v, type V } from ${q(f, 'lib/mixed.ts')};`);
+		expect(await f.rewrite('src/mixed.ts')).toBe(
+			`import { v, type V } from ${q(f, 'lib/mixed.ts')};`
+		);
 	});
 
 	it('a namespace re-export becomes `import * as`', async () => {
@@ -72,7 +81,9 @@ describe('rewrite — output shapes', () => {
 			'lib/index.ts': `export { default } from './d';\nexport { default as D2 } from './d';`,
 			'src/app.ts': `import { default as X, D2 } from '$lib';`
 		});
-		expect(await f.rewrite('src/app.ts')).toBe(`import X from ${q(f, 'lib/d.ts')};\nimport D2 from ${q(f, 'lib/d.ts')};`);
+		expect(await f.rewrite('src/app.ts')).toBe(
+			`import X from ${q(f, 'lib/d.ts')};\nimport D2 from ${q(f, 'lib/d.ts')};`
+		);
 	});
 
 	it('a default import of the barrel is rewritten only when the barrel re-exports its default', async () => {
@@ -121,7 +132,9 @@ describe('rewrite — output shapes', () => {
 		expect(await f.rewrite('src/side.ts', forced)).toBeNull();
 		expect(await f.rewrite('src/dyn.ts', forced)).toBeNull();
 		f.write('src/def.ts', `import D, { l } from '$lib';`);
-		expect(await f.rewrite('src/def.ts', forced)).toBe(`import { l } from ${q(f, 'lib/leaf.ts')};\nimport D from '$lib';`);
+		expect(await f.rewrite('src/def.ts', forced)).toBe(
+			`import { l } from ${q(f, 'lib/leaf.ts')};\nimport D from '$lib';`
+		);
 	});
 
 	it('two imports of the same barrel in one file are both rewritten; other imports are left byte-identical', async () => {
@@ -141,12 +154,15 @@ describe('rewrite — output shapes', () => {
 			'lib/inner/index.ts': `export { l } from '../leaf';`,
 			'lib/index.ts': `import { l } from './inner';\nexport { l };`
 		});
-		expect(await f.rewrite('lib/index.ts')).toBe(`import { l } from ${q(f, 'lib/leaf.ts')};\nexport { l };`);
+		expect(await f.rewrite('lib/index.ts')).toBe(
+			`import { l } from ${q(f, 'lib/leaf.ts')};\nexport { l };`
+		);
 	});
 
 	it('cursed spellings: no semicolons, no spaces, comments and newlines inside the braces, unicode, string export names on both sides', async () => {
 		f = fixture({
-			'lib/a.ts': 'export const a = 1; export const ünï = 2; export const k = 3; const s = 4; export { s as "str-name" };',
+			'lib/a.ts':
+				'export const a = 1; export const ünï = 2; export const k = 3; const s = 4; export { s as "str-name" };',
 			'lib/index.ts': `export { a, ünï } from './a';\nexport { k as "kebab-name" } from './a';\nexport { "str-name" as viaString } from './a';`,
 			'src/app.ts': `import{a}from"$lib"\nimport {\n  /* leading */ ünï, // trailing\n} from '$lib'\nimport { "kebab-name" as kebab, viaString } from '$lib';\nconst z = 1`
 		});
@@ -156,28 +172,47 @@ describe('rewrite — output shapes', () => {
 	});
 
 	it('a leaf path with a quote in it is escaped in the emitted import', async () => {
-		f = fixture({ "lib/it's/a.ts": 'export const a = 1;', 'lib/index.ts': `export { a } from "./it's/a";`, 'src/app.ts': `import { a } from '$lib';` });
-		expect(await f.rewrite('src/app.ts')).toBe(`import { a } from '${f.id("lib/it's/a.ts").replace("'", "\\'")}';`);
+		f = fixture({
+			"lib/it's/a.ts": 'export const a = 1;',
+			'lib/index.ts': `export { a } from "./it's/a";`,
+			'src/app.ts': `import { a } from '$lib';`
+		});
+		expect(await f.rewrite('src/app.ts')).toBe(
+			`import { a } from '${f.id("lib/it's/a.ts").replace("'", "\\'")}';`
+		);
 	});
 
 	it('returns null (no work) for a file that imports no barrel, and for a syntax error', async () => {
-		f = fixture({ 'src/plain.ts': `import fs from 'node:fs'; export const x = 1;`, 'src/broken.ts': `import { from 'x'` });
+		f = fixture({
+			'src/plain.ts': `import fs from 'node:fs'; export const x = 1;`,
+			'src/broken.ts': `import { from 'x'`
+		});
 		expect(await f.rewrite('src/plain.ts')).toBeNull();
 		expect(await f.rewrite('src/broken.ts')).toBeNull();
 	});
 
 	it('a barrel imported through two different specifiers (alias and relative) is the same barrel', async () => {
-		f = fixture({ ...base(), 'src/app.ts': `import { a } from '$lib';\nimport { bee } from '../lib/index';` });
-		expect(await f.rewrite('src/app.ts')).toBe(`import { a } from ${q(f, 'lib/a.ts')};\nimport { b as bee } from ${q(f, 'lib/a.ts')};`);
+		f = fixture({
+			...base(),
+			'src/app.ts': `import { a } from '$lib';\nimport { bee } from '../lib/index';`
+		});
+		expect(await f.rewrite('src/app.ts')).toBe(
+			`import { a } from ${q(f, 'lib/a.ts')};\nimport { b as bee } from ${q(f, 'lib/a.ts')};`
+		);
 	});
 
 	it('emits a high-resolution sourcemap that still maps the untouched tail of the file', async () => {
-		f = fixture({ ...base(), 'src/app.ts': `import { a } from '$lib';\n\nexport const tail = a + 1;` });
+		f = fixture({
+			...base(),
+			'src/app.ts': `import { a } from '$lib';\n\nexport const tail = a + 1;`
+		});
 		const i = f.index();
 		const importer = f.id('src/app.ts');
 		const r = (await rewrite_module(f.read('src/app.ts'), importer, f.lookup(i, importer)))!;
 		expect(r.map.mappings.length).toBeGreaterThan(0);
 		expect(r.code.endsWith('export const tail = a + 1;')).toBe(true);
-		expect(r.moves).toEqual([{ barrel: f.id('lib/index.ts'), names: ['a'], leaves: [f.id('lib/a.ts')] }]);
+		expect(r.moves).toEqual([
+			{ barrel: f.id('lib/index.ts'), names: ['a'], leaves: [f.id('lib/a.ts')] }
+		]);
 	});
 });

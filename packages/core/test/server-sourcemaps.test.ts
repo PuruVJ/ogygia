@@ -29,9 +29,16 @@ describe('server_sourcemaps_plugin', () => {
 			fs.writeFileSync(path.join(client, f + '.map'), '{}');
 		}
 		const bundle = { '_app/immutable/a.js': {}, '_app/immutable/chunks/b.js': {} };
-		(p.writeBundle as unknown as { handler: (o: { dir: string }, b: object) => void }).handler({ dir: client }, bundle);
-		const left = ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'].filter((f) => fs.existsSync(path.join(client, f)));
-		const stashed = ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'].filter((f) => fs.existsSync(path.join(out, 'ogygia-client-maps', f)));
+		(p.writeBundle as unknown as { handler: (o: { dir: string }, b: object) => void }).handler(
+			{ dir: client },
+			bundle
+		);
+		const left = ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'].filter((f) =>
+			fs.existsSync(path.join(client, f))
+		);
+		const stashed = ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'].filter((f) =>
+			fs.existsSync(path.join(out, 'ogygia-client-maps', f))
+		);
 		return { left, stashed };
 	};
 
@@ -42,8 +49,13 @@ describe('server_sourcemaps_plugin', () => {
 		});
 		// Kit copies the server's setting into the client build (a fresh plugin instance): the maps are
 		// made (for the profiler's module) and none is left in the output to be served
-		expect(handler(true)({ build: { ssr: false, sourcemap: 'hidden' } }, { command: 'build' })).toBeUndefined();
-		expect(client_write({ build: { ssr: false, sourcemap: 'hidden' } })).toEqual({ left: [], stashed: ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'] });
+		expect(
+			handler(true)({ build: { ssr: false, sourcemap: 'hidden' } }, { command: 'build' })
+		).toBeUndefined();
+		expect(client_write({ build: { ssr: false, sourcemap: 'hidden' } })).toEqual({
+			left: [],
+			stashed: ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map']
+		});
 	});
 
 	it("two apps built in one process: one app's hidden maps are not taken from the other", () => {
@@ -55,8 +67,13 @@ describe('server_sourcemaps_plugin', () => {
 			command: 'build'
 		});
 		// B's own maps stay where B's build wrote them; A's move off the output
-		expect(client_write({ root: '/b', build: { ssr: false, sourcemap: 'hidden' } })).toEqual({ left: ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'], stashed: [] });
-		expect(client_write({ root: '/a', build: { ssr: false, sourcemap: 'hidden' } }).left).toEqual([]);
+		expect(client_write({ root: '/b', build: { ssr: false, sourcemap: 'hidden' } })).toEqual({
+			left: ['_app/immutable/a.js.map', '_app/immutable/chunks/b.js.map'],
+			stashed: []
+		});
+		expect(client_write({ root: '/a', build: { ssr: false, sourcemap: 'hidden' } }).left).toEqual(
+			[]
+		);
 	});
 
 	it("the app's own choice wins; no profiler, no dev server: nothing", () => {

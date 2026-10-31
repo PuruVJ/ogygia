@@ -24,8 +24,8 @@
 <hr />
 <h1 data-static-shell>Transportable live object</h1>
 <p data-static-shell>
-	One <code>new SharedCounter('demo', 5)</code> made on the server, passed to two islands as a
-	prop. Server-seeded (renders 5, no flicker), then live across both islands.
+	One <code>new SharedCounter('demo', 5)</code> made on the server, passed to two islands as a prop. Server-seeded
+	(renders 5, no flicker), then live across both islands.
 </p>
 
 <TransportWriter {counter} {probe} />
@@ -36,8 +36,8 @@
 	The same counter handed to a <code>defer</code> server island (endpoint-rendered) and a
 	<code>defer</code>+<code>hydrate</code> client island. Both must decode the live object.
 </p>
-<div data-transport-server-wrap><TransportServer counter={counter} label="server" /></div>
-<div data-transport-dh-wrap><TransportDeferHydrate counter={counter} label="defer-hydrate" /></div>
+<div data-transport-server-wrap><TransportServer {counter} label="server" /></div>
+<div data-transport-dh-wrap><TransportDeferHydrate {counter} label="defer-hydrate" /></div>
 
 <h2 data-static-shell>Class in a component's &lt;script module&gt;</h2>
 <WidgetStore {store} />

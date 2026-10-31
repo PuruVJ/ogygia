@@ -16,12 +16,7 @@ const mint_site = (
 ) => siteRaw({ outline: outlineArg, ...opts });
 import { remarkLinks } from '../src/markdown/remark-links.ts';
 import { rehypeOverrides, SLOT_TAG } from '../src/markdown/rehype-overrides.ts';
-import {
-	build_docs,
-	orama_engine,
-	split_sections,
-	strip_prose
-} from '../src/site/search.ts';
+import { build_docs, orama_engine, split_sections, strip_prose } from '../src/site/search.ts';
 
 type Meta = { headings: Heading[] };
 

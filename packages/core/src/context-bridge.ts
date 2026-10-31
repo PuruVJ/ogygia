@@ -186,7 +186,9 @@ function page_ctx(): Record<string, unknown> | undefined {
 		page_ctx_reset = true;
 		document.addEventListener('og:after-swap', () => (page_ctx_cache = null));
 	}
-	return (page_ctx_cache ??= { value: parse_ctx(document.querySelector(`script[${PAGE_CTX_MARKER}]`)?.textContent) }).value;
+	return (page_ctx_cache ??= {
+		value: parse_ctx(document.querySelector(`script[${PAGE_CTX_MARKER}]`)?.textContent)
+	}).value;
 }
 
 /** A typed context handle: callable to make a `<Provide>` entry, `.get()` to read (typed). */

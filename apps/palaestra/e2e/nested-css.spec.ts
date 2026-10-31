@@ -26,7 +26,10 @@ test.describe('NESTED ISLAND CSS: an inner island links its own sheet', () => {
 		const res = await fetch(url);
 		const html = await res.text();
 		check('/nested-css returns 200', res.status === 200);
-		check('the outer island SSR-rendered both inner islands', html.includes('data-nc-inner') && html.includes('data-nc-registry'));
+		check(
+			'the outer island SSR-rendered both inner islands',
+			html.includes('data-nc-inner') && html.includes('data-nc-registry')
+		);
 		let css = '';
 		for (const tag of html.match(STYLESHEET_LINK_G) ?? []) {
 			const href = tag.match(HREF_RE)?.[1];
@@ -45,8 +48,14 @@ test.describe('NESTED ISLAND CSS: an inner island links its own sheet', () => {
 				.locator(sel)
 				.evaluate((el) => getComputedStyle(el).outlineColor)
 				.catch(() => '');
-		check('outer island still asleep', (await page.locator('ogygia-region[data-hydrated]').count()) === 0);
+		check(
+			'outer island still asleep',
+			(await page.locator('ogygia-region[data-hydrated]').count()) === 0
+		);
 		check('direct inner island styled', (await outline('[data-nc-inner]')) === 'rgb(9, 176, 84)');
-		check('registry inner island styled', (await outline('[data-nc-registry]')) === 'rgb(9, 176, 84)');
+		check(
+			'registry inner island styled',
+			(await outline('[data-nc-registry]')) === 'rgb(9, 176, 84)'
+		);
 	});
 });

@@ -9,7 +9,14 @@ const graph = new Map([
 	[u('b.js'), [u('shared.js')]],
 	[u('c.js'), [u('shared.js'), u('c-dep.js')]]
 ]);
-const sizes: Record<string, number> = { 'a.js': 1000, 'shared.js': 5000, 'big-a.js': 40_000, 'rt.js': 9000, 'b.js': 800, 'run.js': 20_000 };
+const sizes: Record<string, number> = {
+	'a.js': 1000,
+	'shared.js': 5000,
+	'big-a.js': 40_000,
+	'rt.js': 9000,
+	'b.js': 800,
+	'run.js': 20_000
+};
 const size = (url: string) => {
 	const f = url.slice(url.lastIndexOf('/') + 1);
 	return f in sizes ? { wire: sizes[f], raw: sizes[f] * 3 } : null;
@@ -29,7 +36,12 @@ test('each file once, what only each island needs, the shared files with their u
 	const c = l.rows.find((r) => r.name === 'C')!;
 	expect(c).toMatchObject({ files: 3, cold: 2, wire: 5000, unique: 0 }); // asleep: its entry and dep not loaded
 	// the page: a, shared, big-a, b, c (cold), c-dep (cold), run, rt — each once
-	expect(l.page).toEqual({ files: 8, wire: 1000 + 5000 + 40_000 + 800 + 20_000 + 9000, raw: (1000 + 5000 + 40_000 + 800 + 20_000 + 9000) * 3, cold: 2 });
+	expect(l.page).toEqual({
+		files: 8,
+		wire: 1000 + 5000 + 40_000 + 800 + 20_000 + 9000,
+		raw: (1000 + 5000 + 40_000 + 800 + 20_000 + 9000) * 3,
+		cold: 2
+	});
 	expect(l.runtime).toEqual({ files: 2, wire: 29_000 });
 	expect(l.shared).toEqual([{ url: u('shared.js'), wire: 5000, users: ['A', 'B', 'C'] }]);
 });
@@ -38,7 +50,9 @@ test("an island's id from a dev entry and from a built one (the names key the ba
 	const { island_id } = await import('../src/devtools/regions.ts');
 	expect(island_id('/@id/__x00__virtual:ogygia/island/415a42fa7fbd.js')).toBe('415a42fa7fbd');
 	expect(island_id('./_app/immutable/og-region.24fa20edb0cb.js')).toBe('24fa20edb0cb');
-	expect(island_id('https://cdn.example/_app/immutable/og-region.24fa20edb0cb.js?v=1')).toBe('24fa20edb0cb');
+	expect(island_id('https://cdn.example/_app/immutable/og-region.24fa20edb0cb.js?v=1')).toBe(
+		'24fa20edb0cb'
+	);
 });
 
 test('two copies of an island are one row (their files once)', () => {

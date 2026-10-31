@@ -12,7 +12,10 @@ type WithStatus = PerformanceResourceTiming & { renderBlockingStatus?: string };
 
 /** whether this browser says per file what blocked the paint */
 function status_known(): boolean {
-	return typeof PerformanceResourceTiming !== 'undefined' && 'renderBlockingStatus' in PerformanceResourceTiming.prototype;
+	return (
+		typeof PerformanceResourceTiming !== 'undefined' &&
+		'renderBlockingStatus' in PerformanceResourceTiming.prototype
+	);
 }
 
 /** the URLs the head makes blocking, or null where the browser says it itself */
@@ -38,6 +41,8 @@ function head_blockers(): Set<string> | null {
 export function paint_blocker(): (r: PerformanceResourceTiming) => boolean {
 	const head = head_blockers();
 	if (!head) return (r) => (r as WithStatus).renderBlockingStatus === 'blocking';
-	const parsed = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.domInteractive || Infinity;
+	const parsed =
+		(performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
+			?.domInteractive || Infinity;
 	return (r) => head.has(r.name) && r.startTime < parsed;
 }

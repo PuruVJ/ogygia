@@ -2,16 +2,29 @@
 	"name": "@ogygia/content",
 	"version": "0.10.2",
 	"description": "Content for ogygia: collections, markdown with Shiki, docs and blog shells, search, and the content macros",
-	"type": "module",
+	"keywords": [
+		"content",
+		"docs",
+		"markdown",
+		"mdsvex",
+		"ogygia",
+		"shiki",
+		"sveltekit"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/content"
 	},
-	"keywords": ["ogygia", "sveltekit", "content", "markdown", "mdsvex", "shiki", "docs"],
+	"files": [
+		"dist",
+		"ambient.d.ts",
+		"README.md"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -48,42 +61,7 @@
 			"types": "./ambient.d.ts"
 		}
 	},
-	"files": ["dist", "ambient.d.ts", "README.md"],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
-		"test": "vitest run",
-		"e2e": "playwright test"
-	},
-	"dependencies": {
-		"@orama/orama": "^3.1.18",
-		"bits-ui": "catalog:",
-		"mdsvex": "catalog:"
-	},
-	"peerDependencies": {
-		"@sveltejs/kit": "catalog:peers",
-		"@ogygia/core": "workspace:^",
-		"shiki": "catalog:peers",
-		"svelte": "catalog:peers",
-		"vite": "catalog:peers"
-	},
-	"devDependencies": {
-		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "catalog:",
-		"@sveltejs/kit": "catalog:",
-		"@sveltejs/vite-plugin-svelte": "catalog:",
-		"@ogygia/core": "workspace:*",
-		"@types/node": "catalog:",
-		"shiki": "catalog:",
-		"svelte": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"valibot": "catalog:",
-		"vite": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
@@ -119,6 +97,40 @@
 			"./types": {
 				"types": "./ambient.d.ts"
 			}
-		}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
+	},
+	"dependencies": {
+		"@orama/orama": "^3.1.18",
+		"bits-ui": "catalog:",
+		"mdsvex": "catalog:"
+	},
+	"devDependencies": {
+		"@ogygia/core": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
+		"shiki": "catalog:",
+		"svelte": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"valibot": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^",
+		"@sveltejs/kit": "catalog:peers",
+		"shiki": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
 	}
 }

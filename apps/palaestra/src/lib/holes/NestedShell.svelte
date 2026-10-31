@@ -5,4 +5,6 @@
 	let { panel }: { panel?: Snippet } = $props();
 </script>
 
-<div data-nested-shell>{#if panel}{@render panel()}{/if}</div>
+<div data-nested-shell>
+	{#if panel}{@render panel()}{/if}
+</div>

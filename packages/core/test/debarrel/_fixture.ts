@@ -18,7 +18,11 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { BarrelIndex, type Host } from '../../src/compiler/debarrel/barrel.ts';
-import { rewrite_module, type Lookup, type RewritePolicy } from '../../src/compiler/debarrel/rewrite.ts';
+import {
+	rewrite_module,
+	type Lookup,
+	type RewritePolicy
+} from '../../src/compiler/debarrel/rewrite.ts';
 import { rewrite_svelte } from '../../src/compiler/debarrel/svelte.ts';
 
 export type HostOverrides = Partial<Host> & { packages?: string[] };
@@ -37,12 +41,27 @@ export interface Fixture {
 	dispose(): void;
 }
 
-const EXTS = ['', '.ts', '.js', '.mts', '.mjs', '.svelte', '.svelte.ts', '.svelte.js', '.json', '/index.ts', '/index.js'];
+const EXTS = [
+	'',
+	'.ts',
+	'.js',
+	'.mts',
+	'.mjs',
+	'.svelte',
+	'.svelte.ts',
+	'.svelte.js',
+	'.json',
+	'/index.ts',
+	'/index.js'
+];
 const BACKSLASH_G = /\\/g;
 
 export function fixture(files: Record<string, string>): Fixture {
 	// realpath: macOS's tmpdir is a symlink (`/var` → `/private/var`) and the bundler reports real ids
-	const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'debarrel-'))).replace(BACKSLASH_G, '/');
+	const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'debarrel-'))).replace(
+		BACKSLASH_G,
+		'/'
+	);
 	const id = (rel: string) => path.posix.join(root, rel);
 	const write = (rel: string, content: string) => {
 		const abs = id(rel);
@@ -72,7 +91,11 @@ export function fixture(files: Record<string, string>): Fixture {
 		const dir = path.posix.join(root, 'node_modules', name);
 		const pkg_json = path.posix.join(dir, 'package.json');
 		if (!existsSync(pkg_json)) return null;
-		const pkg = JSON.parse(readFileSync(pkg_json, 'utf8')) as { exports?: unknown; main?: string; module?: string };
+		const pkg = JSON.parse(readFileSync(pkg_json, 'utf8')) as {
+			exports?: unknown;
+			main?: string;
+			module?: string;
+		};
 		const pick = (v: unknown): string | null => {
 			if (typeof v === 'string') return v;
 			if (v && typeof v === 'object') {
@@ -101,9 +124,11 @@ export function fixture(files: Record<string, string>): Fixture {
 				}
 			},
 			resolve: async (spec, importer) => {
-				if (spec.startsWith('$lib/')) return resolve_file(path.posix.join(root, 'lib', spec.slice(5)));
+				if (spec.startsWith('$lib/'))
+					return resolve_file(path.posix.join(root, 'lib', spec.slice(5)));
 				if (spec === '$lib') return resolve_file(path.posix.join(root, 'lib'));
-				if (spec.startsWith('.')) return resolve_file(path.posix.join(path.posix.dirname(importer), spec));
+				if (spec.startsWith('.'))
+					return resolve_file(path.posix.join(path.posix.dirname(importer), spec));
 				if (spec.startsWith('/')) return resolve_file(spec);
 				if (spec.startsWith('virtual:')) return spec;
 				return resolve_package(spec);
@@ -126,11 +151,13 @@ export function fixture(files: Record<string, string>): Fixture {
 		hosts.set(i, h);
 		return i;
 	};
-	const lookup = (index: BarrelIndex, importer: string): Lookup => async (spec) => {
-		const resolved = await hosts.get(index)!.resolve(spec, importer);
-		if (!resolved) return null;
-		return index.map(resolved, spec);
-	};
+	const lookup =
+		(index: BarrelIndex, importer: string): Lookup =>
+		async (spec) => {
+			const resolved = await hosts.get(index)!.resolve(spec, importer);
+			if (!resolved) return null;
+			return index.map(resolved, spec);
+		};
 
 	return {
 		root,

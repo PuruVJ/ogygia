@@ -7,7 +7,7 @@ related:
   - regions/held-regions
 ---
 
-A **server island** is a hole in the page. Its HTML comes from the server *after* the first load. The page ships a placeholder. The real HTML swaps in on a schedule. No JS hydrates it. It is server HTML that arrives late.
+A **server island** is a hole in the page. Its HTML comes from the server _after_ the first load. The page ships a placeholder. The real HTML swaps in on a schedule. No JS hydrates it. It is server HTML that arrives late.
 
 ::: tip When to use
 Use a server island when a part of the page is **request-specific but not interactive**: a personal greeting, a "you have 3 unread" count, a slow upstream that must not block first paint. It needs no client JS. Thus it costs less than a client island. If a part of it must be interactive, nest a client island inside it (see below). If you can prerender it, you do not need to defer it.
@@ -25,7 +25,7 @@ Mark the import with `render: 'deferred'`:
 
 `Greeting` renders on the server, signed on each request. Its HTML fills the hole. Use this tool when a hole depends on the request (cookies, headers, a slow upstream) but needs no interactivity.
 
-The demo below is a real server island on this page. Its timestamp is set when the HTML of the island arrives, *after* the page loads. It is not set at page render. That shows the HTML came from the server later.
+The demo below is a real server island on this page. Its timestamp is set when the HTML of the island arrives, _after_ the page loads. It is not set at page render. That shows the HTML came from the server later.
 
 <script>
   import ServerGreeting from './ServerGreeting.svelte' with { render: 'deferred' };
@@ -46,7 +46,7 @@ To see the round-trip, click **Fetch again**. The hole goes back to its fallback
 
 ## When it fetches: the `fetch` schedule
 
-A deferred region fetches on the `fetch` schedule. The timing words are the same as for an island. `render: 'deferred'` alone fetches on load. Add `fetch` to make the *fetch itself* later. A hole below the fold does not cost a request until you scroll to it:
+A deferred region fetches on the `fetch` schedule. The timing words are the same as for an island. `render: 'deferred'` alone fetches on load. Add `fetch` to make the _fetch itself_ later. A hole below the fold does not cost a request until you scroll to it:
 
 ```svelte
 <script>
@@ -56,13 +56,13 @@ A deferred region fetches on the `fetch` schedule. The timing words are the same
 
 `fetch` decides when the HTML arrives. `wake` decides when an island's JS runs. A hole has no JS, so it takes `fetch`, not `wake`. The old `render: 'deferred'` + `wake` pairing fails the build, with a message that names the `fetch` to write.
 
-| `fetch` | HTML arrives |
-| --- | --- |
-| `load` (default) | immediately |
-| `idle` | when the browser is idle |
-| `visible` | when scrolled into view |
-| `interaction` | on the first hover, focus, touch or key inside the region — an **on-demand** hole |
-| `'(max-width: 600px)'` | when the media query matches |
+| `fetch`                | HTML arrives                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `load` (default)       | immediately                                                                       |
+| `idle`                 | when the browser is idle                                                          |
+| `visible`              | when scrolled into view                                                           |
+| `interaction`          | on the first hover, focus, touch or key inside the region — an **on-demand** hole |
+| `'(max-width: 600px)'` | when the media query matches                                                      |
 
 An on-demand hole is for content that is large, server-rendered, and only needed once the visitor reaches for it: the L3/L4 levels of a mega menu, a filter panel, a details drawer. The fallback is what the page shows meanwhile — for a menu, the L1/L2 levels. The trigger is the first hover, focus, or touch inside the region (`pointerover`, which fires on hover — before any click — and bubbles up from whatever child the pointer moves over, so it works even though the hole's wrapper has no box of its own). So the HTML is usually there before the visitor opens anything, and it is **morphed** in rather than swapped: a menu that is already open stays open, and focus stays where it is.
 
@@ -116,7 +116,7 @@ Now that hole is served with `Cache-Control: private, max-age=3600`. The `maxAge
 
 ## Adding interactivity: nest an island
 
-A deferred region is **content only**. It never ships JS. When a part of the fetched HTML must be interactive, put a normal `wake` island *inside* the component of the server island. The hole delivers the content. The island inside turns on the buttons:
+A deferred region is **content only**. It never ships JS. When a part of the fetched HTML must be interactive, put a normal `wake` island _inside_ the component of the server island. The hole delivers the content. The island inside turns on the buttons:
 
 ```svelte title=Cart.svelte
 <!-- the server island (personalized, fetched) -->
@@ -153,7 +153,7 @@ Call it during setup, before the first `await`. It reads Svelte context, which i
 
 ## When the fallback is already right: keepFallback()
 
-Often the `ogygiaFallback` *is* the common case. An actions slot shows the login button to everyone who is not logged in; the hole exists for the visitors who are. Rendering the same markup again for every anonymous visitor, and swapping it over itself, is waste. Call `keepFallback()` from `'ogygia'` and the hole ends with no content: the endpoint answers `204`, the runtime keeps the fallback the page rendered and marks the region done. No bytes, no swap, no flash. The fallback belongs to the page, not to the server island: a `wake` island inside it is a full region that wakes on its own, so a kept fallback stays interactive (the login dropdown inside an anonymous actions slot).
+Often the `ogygiaFallback` _is_ the common case. An actions slot shows the login button to everyone who is not logged in; the hole exists for the visitors who are. Rendering the same markup again for every anonymous visitor, and swapping it over itself, is waste. Call `keepFallback()` from `'ogygia'` and the hole ends with no content: the endpoint answers `204`, the runtime keeps the fallback the page rendered and marks the region done. No bytes, no swap, no flash. The fallback belongs to the page, not to the server island: a `wake` island inside it is a full region that wakes on its own, so a kept fallback stays interactive (the login dropdown inside an anonymous actions slot).
 
 ```svelte title=AccountMenu.svelte
 <script lang="ts">
@@ -172,9 +172,8 @@ Call it as soon as you know, before any work the hole would otherwise do. It thr
 
 - **Do** give a server island an `ogygiaFallback`. Then the placeholder is not an empty gap while the HTML loads.
 - **Do** use server islands when a page has several holes. Each hole fills on load. A SPA navigation sends all holes in one request, with no waterfall and no config. See [SPA router](/docs/app/spa-router#single-flight).
-- **Don't** use a server island for interactive UI. That is a [client island](/docs/regions/client-islands). For content that is personal *and* interactive, nest a `wake` island inside the server island.
+- **Don't** use a server island for interactive UI. That is a [client island](/docs/regions/client-islands). For content that is personal _and_ interactive, nest a `wake` island inside the server island.
 - **Do** know that `render: 'deferred'` ships no JS. The fetched HTML is inert until an island inside it wakes.
-
 
 <style>
   .doc-demo {

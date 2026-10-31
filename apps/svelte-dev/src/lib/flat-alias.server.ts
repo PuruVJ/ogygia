@@ -31,7 +31,10 @@ async function build(): Promise<Map<string, string | typeof AMBIGUOUS>> {
 		const key = `${topic}\0${leaf}`;
 		const prev = map.get(key);
 		if (prev !== undefined && prev !== slug) {
-			if (prev !== AMBIGUOUS) console.warn(`[svelte-dev] leaf '${leaf}' is ambiguous in '${topic}' — flat links to it are dropped`);
+			if (prev !== AMBIGUOUS)
+				console.warn(
+					`[svelte-dev] leaf '${leaf}' is ambiguous in '${topic}' — flat links to it are dropped`
+				);
 			map.set(key, AMBIGUOUS);
 			continue;
 		}

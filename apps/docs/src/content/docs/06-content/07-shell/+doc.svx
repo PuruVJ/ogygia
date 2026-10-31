@@ -15,7 +15,7 @@ Use `DocsShell` when you want a docs layout that operates in one import, and `Bl
 
 ## One frame, two shells
 
-**`Frame`** is the headless composition: a sidebar and main, with each region overridable. Pass a component to *replace* a region, `false`/`null` to *remove* it, nothing for the default. It imports no CSS, and makes no design decisions:
+**`Frame`** is the headless composition: a sidebar and main, with each region overridable. Pass a component to _replace_ a region, `false`/`null` to _remove_ it, nothing for the default. It imports no CSS, and makes no design decisions:
 
 ```svelte
 <script>
@@ -70,8 +70,8 @@ Both accept `{site}` directly (the simple path, csr=false layouts), or `{meta}` 
 
 The shells ship **structure + `.og-*` hooks, and import no CSS**. For the stock look, import the two stylesheets one time, in your root layout. For your own look, do not, and style the `.og-*` classes yourself. You pay only for the CSS that you ask for.
 
-- **`theme.css`** is the *design language*: the token palette (`--og-*`) and element styles shared by each shell.
-- **`shell.css`** is the *layout* of the shells: header, sidebar, grid, mobile chrome.
+- **`theme.css`** is the _design language_: the token palette (`--og-*`) and element styles shared by each shell.
+- **`shell.css`** is the _layout_ of the shells: header, sidebar, grid, mobile chrome.
 
 They are separate imports. Thus you can keep the tokens and swap the layout, or keep the layout and repaint with your own tokens. Each rule lives in `@layer ogygia`. Thus **each unlayered rule that you write wins**. No specificity fights, no `!important`:
 

@@ -118,65 +118,65 @@ interface ImportMeta {
  * types (`/// <reference types="@ogygia/content/types" />`) merge its macros into this interface.
  */
 interface ImportMetaOg {
-		/**
-		 * The transportable mark — `static wire = import.meta.og.wire({ encode, decode })` on a
-		 * class lets its instances cross island boundaries as props. A compile construct: the
-		 * plugin CONSUMES the member and mints the symbol key (`static [Symbol.for('ogygia.wire')]
-		 * = codec`), so the key never exists in source. STRICT: that member shape is the only
-		 * legal position — any other use is a build error. ONE contract, always explicit:
-		 * `{ encode, decode }` (+ optional `id`/`merge` for session continuity — see
-		 * `TransportCodec` in `ogygia`).
-		 */
-		wire<T = unknown, D = unknown>(
-			codec: import('@ogygia/core').TransportCodec<T, D>
-		): import('@ogygia/core').TransportCodec<T, D>;
-		/**
-		 * Run `fn` at BUILD, serialize its result, and inline it as a constant — "run at build, ship
-		 * the answer." `fn` may use this module's IMPORTS and literals and `await` freely, but must be
-		 * self-contained (no closing over the module's other locals). Its result must be
-		 * devalue-serializable (JSON + Date/Map/Set/RegExp/BigInt) — a function, Promise, or class
-		 * instance in the result is a build error. At runtime there is no function and no work, even in
-		 * client code.
-		 */
-		bake<T>(fn: () => T | Promise<T>): T;
-		/**
-		 * Brand a value as TRANSPORTABLE so it crosses an island boundary LIVE — most often a closure
-		 * (the wire's fn kind: the plugin hoists it to a self-contained factory, its captured locals
-		 * becoming bound params), but also a store or an `og.wire` class instance the drop-in
-		 * `setContext`/`og_derived` should carry live rather than freeze. Returns the SAME value (and
-		 * type) — at the call site it reads as identity; the transform does the branding/hoisting. A
-		 * branded closure must be self-contained (only its own captured locals + module imports, no
-		 * `$app/*`).
-		 */
-		$<T>(value: T): T;
-		/**
-		 * Mark an imported component as a region — the macro alternative to `import X from '…' with
-		 * { … }`, and the escape hatch for BARRELS. The import-attribute form only reaches a DEFAULT
-		 * import of one file; `asRegion` marks ANY imported component, including a NAMED export from a
-		 * barrel (`import { Header } from '@design/system'`). It is a transparent escape hatch: the
-		 * `options` accept EXACTLY what an import attribute accepts — no more, no less — and the output
-		 * is identical, only importing the component by its export name. Every mode works: a placed
-		 * island (`wake`), a deferred/live server hole (`render`), a lake (`wake: 'none'`), a held
-		 * region (`region: 'raw'`), or a named `preset`.
-		 *
-		 * `component` must be a bare identifier bound to a top-level import, and the call must be a
-		 * TOP-LEVEL `const Name = import.meta.og.asRegion(Comp, …)` in the instance `<script>`. Returns
-		 * a component with the SAME props. Compile construct — rewritten to a hoisted binding import;
-		 * there is no runtime `asRegion`.
-		 */
-		asRegion<C>(
-			component: C,
-			options: {
-				/** hydrate schedule (placed island / lake at `'none'`); the fetch schedule for `render`. */
-				wake?: 'load' | 'idle' | 'visible' | 'interaction' | 'none' | (string & {});
-				/** delivery mode: a static island (default), or a `'deferred'` / `'live'` server hole. */
-				render?: 'static' | 'deferred' | 'live';
-				/** a held region handed to `region()` — must be the ONLY option (`'raw'`). */
-				region?: 'raw';
-				/** a named preset from `ogygia({ presets })` — must be the ONLY option. */
-				preset?: string;
-				/** keep the live island (DOM + state) across SPA navigations. */
-				keep?: string;
-			}
-		): C;
+	/**
+	 * The transportable mark — `static wire = import.meta.og.wire({ encode, decode })` on a
+	 * class lets its instances cross island boundaries as props. A compile construct: the
+	 * plugin CONSUMES the member and mints the symbol key (`static [Symbol.for('ogygia.wire')]
+	 * = codec`), so the key never exists in source. STRICT: that member shape is the only
+	 * legal position — any other use is a build error. ONE contract, always explicit:
+	 * `{ encode, decode }` (+ optional `id`/`merge` for session continuity — see
+	 * `TransportCodec` in `ogygia`).
+	 */
+	wire<T = unknown, D = unknown>(
+		codec: import('@ogygia/core').TransportCodec<T, D>
+	): import('@ogygia/core').TransportCodec<T, D>;
+	/**
+	 * Run `fn` at BUILD, serialize its result, and inline it as a constant — "run at build, ship
+	 * the answer." `fn` may use this module's IMPORTS and literals and `await` freely, but must be
+	 * self-contained (no closing over the module's other locals). Its result must be
+	 * devalue-serializable (JSON + Date/Map/Set/RegExp/BigInt) — a function, Promise, or class
+	 * instance in the result is a build error. At runtime there is no function and no work, even in
+	 * client code.
+	 */
+	bake<T>(fn: () => T | Promise<T>): T;
+	/**
+	 * Brand a value as TRANSPORTABLE so it crosses an island boundary LIVE — most often a closure
+	 * (the wire's fn kind: the plugin hoists it to a self-contained factory, its captured locals
+	 * becoming bound params), but also a store or an `og.wire` class instance the drop-in
+	 * `setContext`/`og_derived` should carry live rather than freeze. Returns the SAME value (and
+	 * type) — at the call site it reads as identity; the transform does the branding/hoisting. A
+	 * branded closure must be self-contained (only its own captured locals + module imports, no
+	 * `$app/*`).
+	 */
+	$<T>(value: T): T;
+	/**
+	 * Mark an imported component as a region — the macro alternative to `import X from '…' with
+	 * { … }`, and the escape hatch for BARRELS. The import-attribute form only reaches a DEFAULT
+	 * import of one file; `asRegion` marks ANY imported component, including a NAMED export from a
+	 * barrel (`import { Header } from '@design/system'`). It is a transparent escape hatch: the
+	 * `options` accept EXACTLY what an import attribute accepts — no more, no less — and the output
+	 * is identical, only importing the component by its export name. Every mode works: a placed
+	 * island (`wake`), a deferred/live server hole (`render`), a lake (`wake: 'none'`), a held
+	 * region (`region: 'raw'`), or a named `preset`.
+	 *
+	 * `component` must be a bare identifier bound to a top-level import, and the call must be a
+	 * TOP-LEVEL `const Name = import.meta.og.asRegion(Comp, …)` in the instance `<script>`. Returns
+	 * a component with the SAME props. Compile construct — rewritten to a hoisted binding import;
+	 * there is no runtime `asRegion`.
+	 */
+	asRegion<C>(
+		component: C,
+		options: {
+			/** hydrate schedule (placed island / lake at `'none'`); the fetch schedule for `render`. */
+			wake?: 'load' | 'idle' | 'visible' | 'interaction' | 'none' | (string & {});
+			/** delivery mode: a static island (default), or a `'deferred'` / `'live'` server hole. */
+			render?: 'static' | 'deferred' | 'live';
+			/** a held region handed to `region()` — must be the ONLY option (`'raw'`). */
+			region?: 'raw';
+			/** a named preset from `ogygia({ presets })` — must be the ONLY option. */
+			preset?: string;
+			/** keep the live island (DOM + state) across SPA navigations. */
+			keep?: string;
+		}
+	): C;
 }

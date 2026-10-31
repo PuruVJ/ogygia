@@ -22,7 +22,7 @@ describe('island_entry_source — the foreign-hydrate contract', () => {
 	});
 
 	it('the helper forwards recover:false to svelte, nothing otherwise, and re-checks the envelope every call', () => {
-		expect(helper).toContain("options && options.recover === false ? { recover: false } : {}");
+		expect(helper).toContain('options && options.recover === false ? { recover: false } : {}');
 		expect(helper).toContain("first.nodeType === 8 && (first as Comment).data === '['");
 		expect(helper).not.toContain('__og_env');
 	});

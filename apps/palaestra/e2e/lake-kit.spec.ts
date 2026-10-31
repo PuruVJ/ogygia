@@ -19,11 +19,13 @@ const MARKER = 'LAKE_CHROME_CODE_MARKER_5c1e';
 const LAKE_RE = /<ogygia-region entry="[^"]+" wake="none" remount="cache">/;
 const LAKE_STATIC_RE = /data-lake-static/;
 // The header island inside the lake as a REAL region (its shell precedes its markup), not inline.
-const HEADER_REGION_RE = /<ogygia-region entry="[^"]+" wake="load"[^>]*>[^<]*(?:<!--[^>]*-->)*<header data-chrome-header/;
+const HEADER_REGION_RE =
+	/<ogygia-region entry="[^"]+" wake="load"[^>]*>[^<]*(?:<!--[^>]*-->)*<header data-chrome-header/;
 const HOLE_RE = /<ogygia-region entry="[^"]*" render="defer"/;
 // The Kept hole's fallback holds a `wake: 'interaction'` island — it must be emitted as its own
 // region INSIDE the hole's shell (a fallback belongs to the page, not to the server island).
-const KEPT_FALLBACK_REGION_RE = /render="defer"[^>]*>(?:<!--[^>]*-->)*<ogygia-region entry="[^"]+" wake="interaction"[^>]*>(?:<!--[^>]*-->)*<button data-kept-btn/;
+const KEPT_FALLBACK_REGION_RE =
+	/render="defer"[^>]*>(?:<!--[^>]*-->)*<ogygia-region entry="[^"]+" wake="interaction"[^>]*>(?:<!--[^>]*-->)*<button data-kept-btn/;
 const HYDRATION_MISMATCH_RE = /hydration_mismatch/;
 // The in-lake Counter's props sidecar (tail form, keyed by the region fingerprint), carrying start=7.
 const PROPS_SIDECAR_RE = /<script type="application\/ogygia-props"[^>]*>[^<]*"start"[^<]*7/;
@@ -62,7 +64,10 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 			'exactly one frozen region (one element to adopt)',
 			(html.match(/wake="none"/g) ?? []).length === 1
 		);
-		check('header island inside the lake is a REAL region (not inlined)', HEADER_REGION_RE.test(html));
+		check(
+			'header island inside the lake is a REAL region (not inlined)',
+			HEADER_REGION_RE.test(html)
+		);
 		check('greeting hole inside the lake is a real deferred region', HOLE_RE.test(html));
 		check(
 			'island inside a hole’s ogygiaFallback is a REAL region (was flattened inline before)',
@@ -100,16 +105,29 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 				.locator('[data-lake-static]')
 				.evaluate((el) => getComputedStyle(el).letterSpacing)) === '7px'
 		);
-		check('lake SURVIVED Kit hydration (did not vanish)', (await page.locator('[data-lake-static]').count()) === 1);
-		check('still exactly one frozen region', (await page.locator('ogygia-region[wake="none"]').count()) === 1);
+		check(
+			'lake SURVIVED Kit hydration (did not vanish)',
+			(await page.locator('[data-lake-static]').count()) === 1
+		);
+		check(
+			'still exactly one frozen region',
+			(await page.locator('ogygia-region[wake="none"]').count()) === 1
+		);
 		check(
 			'no hydration mismatch',
 			!warns.some((w) => HYDRATION_MISMATCH_RE.test(w)),
-			warns.filter((w) => HYDRATION_MISMATCH_RE.test(w)).slice(0, 1).join('; ')
+			warns
+				.filter((w) => HYDRATION_MISMATCH_RE.test(w))
+				.slice(0, 1)
+				.join('; ')
 		);
 		check(
 			'header island inside the lake hydrated on the RUNTIME',
-			(await page.locator('ogygia-region[wake="none"] ogygia-region[wake="load"][data-hydrated]:has([data-chrome-header])').count()) === 1
+			(await page
+				.locator(
+					'ogygia-region[wake="none"] ogygia-region[wake="load"][data-hydrated]:has([data-chrome-header])'
+				)
+				.count()) === 1
 		);
 		check(
 			'nothing inside the lake was left to Kit',
@@ -121,21 +139,39 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		// An island WITH PROPS inside the lake: its sidecar rides the document tail, which must still
 		// ship on a csr=true page (skipped with the seeds once → `undefined` props → dead island).
 		const pbtn = page.locator('[data-lake-props-island] [data-counter] button');
-		check('props island inside the lake hydrated with its SSR props (start=7)', (await pbtn.textContent())!.includes('count is 7'));
+		check(
+			'props island inside the lake hydrated with its SSR props (start=7)',
+			(await pbtn.textContent())!.includes('count is 7')
+		);
 		await pbtn.click();
-		check('props island inside the lake interactive (7 → 8)', (await pbtn.textContent())!.includes('count is 8'));
-		check('greeting hole fetched and swapped in', (await page.locator('[data-server-greeting]').count()) === 1);
+		check(
+			'props island inside the lake interactive (7 → 8)',
+			(await pbtn.textContent())!.includes('count is 8')
+		);
+		check(
+			'greeting hole fetched and swapped in',
+			(await page.locator('[data-server-greeting]').count()) === 1
+		);
 		check('hole fallback gone', (await page.locator('[data-lake-fallback]').count()) === 0);
 		// The kept hole answered keepFallback(): its fallback stands, and the interaction island INSIDE
 		// that fallback must still be a live region — one click hydrates it and replays (k:1).
-		check('kept hole marked kept', (await page.locator('ogygia-region[data-og-kept]').count()) === 1);
+		check(
+			'kept hole marked kept',
+			(await page.locator('ogygia-region[data-og-kept]').count()) === 1
+		);
 		const keptBtn = page.locator('[data-kept-btn]');
 		await keptBtn.click();
 		await sleep(300); // interaction wake: chunk load + replay one frame after hydration
-		check('island inside the KEPT fallback woke on interaction', (await keptBtn.textContent())!.includes('k:1'));
+		check(
+			'island inside the KEPT fallback woke on interaction',
+			(await keptBtn.textContent())!.includes('k:1')
+		);
 		const kbtn = page.locator('[data-kit-btn]');
 		await kbtn.click();
-		check('Kit’s own client is alive next to the lake', (await kbtn.textContent())!.includes('kit:1'));
+		check(
+			'Kit’s own client is alive next to the lake',
+			(await kbtn.textContent())!.includes('kit:1')
+		);
 		check('no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	});
 
@@ -144,7 +180,10 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		baseURL
 	}) => {
 		const html = await (await fetch(baseURL + '/lake-kit/')).text();
-		check('csr=false: shell lake renders bare (no frozen region element)', !/wake="none"/.test(html));
+		check(
+			'csr=false: shell lake renders bare (no frozen region element)',
+			!/wake="none"/.test(html)
+		);
 		check('csr=false: lake HTML present', LAKE_STATIC_RE.test(html));
 		const errs: string[] = [];
 		page.on('pageerror', (e) => errs.push(e.message));
@@ -163,12 +202,21 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		const hbtn = page.locator('[data-chrome-header] button');
 		await hbtn.click();
 		check('csr=false: header island interactive', (await hbtn.textContent())!.includes('h:1'));
-		check('csr=false: greeting hole filled', (await page.locator('[data-server-greeting]').count()) === 1);
-		check('csr=false: kept hole marked kept', (await page.locator('ogygia-region[data-og-kept]').count()) === 1);
+		check(
+			'csr=false: greeting hole filled',
+			(await page.locator('[data-server-greeting]').count()) === 1
+		);
+		check(
+			'csr=false: kept hole marked kept',
+			(await page.locator('ogygia-region[data-og-kept]').count()) === 1
+		);
 		const keptBtn = page.locator('[data-kept-btn]');
 		await keptBtn.click();
 		await sleep(300);
-		check('csr=false: island inside the KEPT fallback woke', (await keptBtn.textContent())!.includes('k:1'));
+		check(
+			'csr=false: island inside the KEPT fallback woke',
+			(await keptBtn.textContent())!.includes('k:1')
+		);
 		check('csr=false: no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 	});
 
@@ -176,7 +224,11 @@ test.describe('lake under Kit hydration — csr=true page under a lake-chrome la
 		test.skip(!existsSync(client_dir), 'no prod build output — run against a preview/prod build');
 		const client_hits = grep_dir(client_dir);
 		const server_hits = grep_dir(server_dir);
-		check('lake code in NO client chunk (Kit’s bundle included)', client_hits === 0, `${client_hits} chunk(s)`);
+		check(
+			'lake code in NO client chunk (Kit’s bundle included)',
+			client_hits === 0,
+			`${client_hits} chunk(s)`
+		);
 		check('lake code IS in the server build', server_hits >= 1, `${server_hits} file(s)`);
 	});
 });

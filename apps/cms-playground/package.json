@@ -9,6 +9,13 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 	},
+	"dependencies": {
+		"bits-ui": "catalog:",
+		"devalue": "catalog:",
+		"mdsvex": "catalog:",
+		"ogygia": "workspace:*",
+		"valibot": "catalog:"
+	},
 	"devDependencies": {
 		"@ogygia/content": "workspace:*",
 		"@sveltejs/adapter-node": "catalog:",
@@ -18,12 +25,5 @@
 		"svelte-check": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"
-	},
-	"dependencies": {
-		"bits-ui": "catalog:",
-		"devalue": "catalog:",
-		"mdsvex": "catalog:",
-		"ogygia": "workspace:*",
-		"valibot": "catalog:"
 	}
 }

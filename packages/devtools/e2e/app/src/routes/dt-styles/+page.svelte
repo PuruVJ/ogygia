@@ -13,5 +13,7 @@
 </svelte:head>
 
 <h1>styles lab</h1>
-<p class="row">This paragraph never asked for a yellow background: an unscoped <code>.row</code> gave it one.</p>
+<p class="row">
+	This paragraph never asked for a yellow background: an unscoped <code>.row</code> gave it one.
+</p>
 <Healthy />

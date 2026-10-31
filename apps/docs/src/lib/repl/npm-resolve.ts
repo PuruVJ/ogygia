@@ -104,7 +104,8 @@ export function resolve_exports(
 	conditions: readonly string[] = BROWSER_CONDITIONS
 ): string | null {
 	if (exports == null) return null;
-	const key = subpath === '.' || subpath === '' ? '.' : './' + subpath.replace(LEADING_DOTSLASH, '');
+	const key =
+		subpath === '.' || subpath === '' ? '.' : './' + subpath.replace(LEADING_DOTSLASH, '');
 	// String / array shorthand → the root target.
 	if (typeof exports === 'string' || Array.isArray(exports)) {
 		return key === '.' ? resolve_conditions(exports, conditions) : null;
@@ -178,7 +179,10 @@ export function resolve_entry(
 		// packages ship files outside their exports map).
 	}
 	if (has_sub) {
-		return apply_browser_map(pkg.browser as BrowserField, './' + subpath).replace(LEADING_DOTSLASH, '');
+		return apply_browser_map(pkg.browser as BrowserField, './' + subpath).replace(
+			LEADING_DOTSLASH,
+			''
+		);
 	}
 	// A malformed package.json can put a non-string where an entry path belongs (`main: {}`, `svelte: 42`)
 	// — only accept string fields, else fall through toward `index.js`.
@@ -190,7 +194,11 @@ export function resolve_entry(
 	const browser = pkg.browser as BrowserField;
 	if (typeof browser === 'string') return browser.replace(LEADING_DOTSLASH, '');
 	const module_field = str(pkg.module);
-	if (module_field) return apply_browser_map(browser, module_field).replace(LEADING_DOTSLASH, '') || module_field.replace(LEADING_DOTSLASH, '');
+	if (module_field)
+		return (
+			apply_browser_map(browser, module_field).replace(LEADING_DOTSLASH, '') ||
+			module_field.replace(LEADING_DOTSLASH, '')
+		);
 	const main = str(pkg.main) || 'index.js';
 	const mapped = apply_browser_map(browser, main.startsWith('./') ? main : './' + main);
 	return mapped.replace(LEADING_DOTSLASH, '');

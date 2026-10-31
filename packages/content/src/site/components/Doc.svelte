@@ -121,7 +121,9 @@
 	{#if toc}
 		<!-- Always present (not gated on headings): the outline starts with the page TITLE, so even a
 		     heading-less page keeps the rail — consistent chrome page to page (svelte.dev's model). -->
-		<aside class="og-aside" aria-label="On this page"><OnThisPage {title} headings={view.headings} /></aside>
+		<aside class="og-aside" aria-label="On this page">
+			<OnThisPage {title} headings={view.headings} />
+		</aside>
 	{/if}
 </div>
 

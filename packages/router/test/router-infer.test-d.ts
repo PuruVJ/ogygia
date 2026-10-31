@@ -38,7 +38,8 @@ type App = typeof app.$infer;
 import { GET, POST, api, when, type Handler } from '../src/index.ts';
 
 /** exact type equality: assignable both ways, and not `any` */
-type Equal<A, B> = (<X>() => X extends A ? 1 : 2) extends <X>() => X extends B ? 1 : 2 ? true : false;
+type Equal<A, B> =
+	(<X>() => X extends A ? 1 : 2) extends <X>() => X extends B ? 1 : 2 ? true : false;
 const expect_type = <T extends true>(_: T): void => {};
 
 const Body: StandardSchemaV1<{ title: string }> = NumId as never;
@@ -48,7 +49,10 @@ const Body: StandardSchemaV1<{ title: string }> = NumId as never;
 const admin = layout('admin', C);
 const deep = layout('deep', C);
 // a handler written OUTSIDE the table: `satisfies` checks it against its route, return type kept
-const outside = ((c) => ({ id: c.params.id, outside: true as const })) satisfies Handler<'/out/[id]'>;
+const outside = ((c) => ({
+	id: c.params.id,
+	outside: true as const
+})) satisfies Handler<'/out/[id]'>;
 const typedApp = routes({
 	'/posts/[id]': { GET: (c) => ({ id: c.params.id, title: 'x' as string }) },
 	'/wrapped/[id]': { GET: GET((c) => ({ wrapped: c.params.id })) },
@@ -56,7 +60,9 @@ const typedApp = routes({
 	'/posts/[id]/edit': { PUT: POST(Body, (c) => ({ id: c.params.id, title: c.input.title })) },
 	...admin({
 		'/admin/[user]': { GET: (c) => ({ user: c.params.user }) },
-		...deep({ '/admin/[user]/[tab]': { GET: GET((c) => ({ tab: c.params.tab, user: c.params.user })) } })
+		...deep({
+			'/admin/[user]/[tab]': { GET: GET((c) => ({ tab: c.params.tab, user: c.params.user })) }
+		})
 	}),
 	'/gated/[id]': when(() => true, { GET: (c) => ({ gated: c.params.id }) }),
 	'/out/[id]': { GET: outside },

@@ -8,7 +8,8 @@ const g = globalThis as Record<string, unknown>;
 beforeEach(() => {
 	vi.useFakeTimers();
 	g.document = {
-		querySelector: (s: string) => (s.includes('ogygia-profiler-beacon') ? { getAttribute: () => '/__profiler/beacon' } : null),
+		querySelector: (s: string) =>
+			s.includes('ogygia-profiler-beacon') ? { getAttribute: () => '/__profiler/beacon' } : null,
 		querySelectorAll: () => [],
 		addEventListener: () => {},
 		visibilityState: 'visible',
@@ -22,13 +23,26 @@ afterEach(() => {
 	delete g.addEventListener;
 });
 
-const island = (fp: string) => ({ getAttribute: (n: string) => (n === 'data-og-fp' ? fp : n === 'entry' ? 'x.js' : null), hasAttribute: () => false, innerHTML: '' }) as unknown as Element;
+const island = (fp: string) =>
+	({
+		getAttribute: (n: string) => (n === 'data-og-fp' ? fp : n === 'entry' ? 'x.js' : null),
+		hasAttribute: () => false,
+		innerHTML: ''
+	}) as unknown as Element;
 
 test('the page in view gets room; the first page keeps all of its own', async () => {
 	const b = await import('../src/runtime/beacon.ts');
 	b._reset_beacon();
 	for (let i = 0; i < 10; i++) b.beacon_hydrated(island(`first${i}`), 1, 2, 3);
-	b.beacon_nav({ from: '/a', to: '/b', type: 'link', t: 100, fetched: 110, styled: 120, swapped: 130 });
+	b.beacon_nav({
+		from: '/a',
+		to: '/b',
+		type: 'link',
+		t: 100,
+		fetched: 110,
+		styled: 120,
+		swapped: 130
+	});
 	for (let i = 0; i < 390; i++) b.beacon_hydrated(island(`busy${i}`), 200, 201, 202);
 	// full (400): the next page's island still lands, in place of the oldest later one
 	b.beacon_hydrated(island('now'), 500, 501, 502);

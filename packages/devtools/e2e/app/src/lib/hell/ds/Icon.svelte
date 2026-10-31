@@ -11,9 +11,13 @@
 		flag: 'M4 22V4h12l-1 4 1 4H4',
 		filter: 'M3 4h18l-7 9v6l-4 2v-8z',
 		// PATTERN table-per-call
-		...Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`icon-${i}`, `M${i} ${i}h${i}v${i}z`]))
+		...Object.fromEntries(
+			Array.from({ length: 60 }, (_, i) => [`icon-${i}`, `M${i} ${i}h${i}v${i}z`])
+		)
 	};
 	const d = ICONS[name] ?? ICONS.file;
 </script>
 
-<svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><path {d} fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
+<svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"
+	><path {d} fill="none" stroke="currentColor" stroke-width="1.5" /></svg
+>

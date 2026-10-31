@@ -29,12 +29,23 @@ afterEach(() => {
 
 describe('join_batch', () => {
 	it('two holes in one task: one POST, and each fetch joins it', async () => {
-		const { posts } = stub_batch((calls) =>
-			calls.map((c) => build_parcel(new URL(c, location.href).searchParams.get('sig')!, `<p>${c.slice(-1)}</p>`)).join('') + done_parcel()
+		const { posts } = stub_batch(
+			(calls) =>
+				calls
+					.map((c) =>
+						build_parcel(
+							new URL(c, location.href).searchParams.get('sig')!,
+							`<p>${c.slice(-1)}</p>`
+						)
+					)
+					.join('') + done_parcel()
 		);
 		const own = vi.fn(async () => 'own');
 		await Promise.all([join_batch(ep('s1')), join_batch(ep('s2'))]);
-		const [a, b] = await Promise.all([ensure(frameAddress(ep('s1')), own), ensure(frameAddress(ep('s2')), own)]);
+		const [a, b] = await Promise.all([
+			ensure(frameAddress(ep('s1')), own),
+			ensure(frameAddress(ep('s2')), own)
+		]);
 		expect(posts).toEqual([[ep('s1'), ep('s2')]]);
 		expect(own).not.toHaveBeenCalled();
 		expect([a, b]).toEqual(['<p>1</p>', '<p>2</p>']);

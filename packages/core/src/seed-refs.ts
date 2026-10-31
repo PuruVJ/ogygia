@@ -372,7 +372,13 @@ export function json_culprit(value: unknown, max_depth = 64): string | null {
 			case 'boolean':
 				return null;
 			case 'number':
-				return Number.isFinite(v) ? (Object.is(v, -0) ? '-0' : null) : Number.isNaN(v) ? 'NaN' : 'Infinity';
+				return Number.isFinite(v)
+					? Object.is(v, -0)
+						? '-0'
+						: null
+					: Number.isNaN(v)
+						? 'NaN'
+						: 'Infinity';
 			case 'undefined':
 				return 'undefined';
 			case 'bigint':
@@ -392,9 +398,11 @@ export function json_culprit(value: unknown, max_depth = 64): string | null {
 		if (v instanceof Date) return `${path || '(root)'} (Date)`;
 		if (v instanceof Map) return `${path || '(root)'} (Map)`;
 		if (v instanceof Set) return `${path || '(root)'} (Set)`;
-		if (typeof (v as { then?: unknown }).then === 'function') return `${path || '(root)'} (Promise)`;
+		if (typeof (v as { then?: unknown }).then === 'function')
+			return `${path || '(root)'} (Promise)`;
 		if (!is_plain(v)) {
-			const name = (Object.getPrototypeOf(v) as { constructor?: { name?: string } } | null)?.constructor?.name;
+			const name = (Object.getPrototypeOf(v) as { constructor?: { name?: string } } | null)
+				?.constructor?.name;
 			return `${path || '(root)'} (class ${name || 'instance'})`;
 		}
 		if (seen.has(v)) return `${path || '(root)'} (cycle)`;

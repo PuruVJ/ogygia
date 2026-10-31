@@ -47,6 +47,15 @@ export function toProductVM(input: Product): ProductVM {
 	return vm;
 }
 
-export function toDocVM(d: { title: string; href: string; bytes: number }): ProductVM['docs'][number] {
-	return { title: d.title, href: d.href, kb: Math.round(d.bytes / 1024), icon: d.href.endsWith('.pdf') ? 'pdf' : 'file' };
+export function toDocVM(d: {
+	title: string;
+	href: string;
+	bytes: number;
+}): ProductVM['docs'][number] {
+	return {
+		title: d.title,
+		href: d.href,
+		kb: Math.round(d.bytes / 1024),
+		icon: d.href.endsWith('.pdf') ? 'pdf' : 'file'
+	};
 }

@@ -41,13 +41,17 @@ test('a hole moved while its fetch is in flight keeps that fetch, and fills once
 		const region = document.querySelector('ogygia-region')!;
 		// the relocation, as such an element does it at its upgrade: into its shadow root, then back
 		// out into its light DOM — two moves, one task
-		const shadow = (document.querySelector('[data-host]') as HTMLElement).attachShadow({ mode: 'open' });
+		const shadow = (document.querySelector('[data-host]') as HTMLElement).attachShadow({
+			mode: 'open'
+		});
 		shadow.append(region);
 		document.querySelector('[data-to]')!.append(region);
 		await new Promise((r) => setTimeout(r, 50));
 		expect(net.calls[0].signal?.aborted, 'the move did not abort the request').toBe(false);
 		net.release();
-		await expect.poll(() => region.querySelector('[data-testid="served"]'), { timeout: 10_000 }).not.toBeNull();
+		await expect
+			.poll(() => region.querySelector('[data-testid="served"]'), { timeout: 10_000 })
+			.not.toBeNull();
 		await new Promise((r) => setTimeout(r, 100));
 		expect(net.calls.length, 'one request').toBe(1);
 	} finally {

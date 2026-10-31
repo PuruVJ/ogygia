@@ -4,5 +4,6 @@
 	import DynIsland from '$lib/DynIsland.svelte' with { wake: 'load' };
 	let { children } = $props();
 </script>
+
 <div data-mixed-sub-layout><DynIsland /></div>
 {@render children()}

@@ -63,7 +63,10 @@ test('a byte-identical answer moves no node (nothing re-upgrades, nothing flicke
 test('what the element made itself is kept; a render child the render stopped producing goes', () => {
 	const host = mount(`<eo-relocating><aside data-promo>promo</aside>${panel(1)}</eo-relocating>`);
 	// a first answer still renders the aside: from here on it is known render output
-	morph_children(root, nodes(`<eo-relocating><aside data-promo>promo</aside>${panel(1)}</eo-relocating>`));
+	morph_children(
+		root,
+		nodes(`<eo-relocating><aside data-promo>promo</aside>${panel(1)}</eo-relocating>`)
+	);
 	expect(render_made(host.querySelector('aside')!, new Set())).toBe(true);
 	// the next answer drops it (a different tag from anything it renders here)
 	morph_children(root, nodes(`<eo-relocating>${panel(2)}</eo-relocating>`));
@@ -73,27 +76,44 @@ test('what the element made itself is kept; a render child the render stopped pr
 });
 
 test('unmarked, a leftover of a tag the render still produces is the render’s; of another tag, the element’s', () => {
-	const host = mount(`<eo-relocating><section class="panel">a</section><section class="panel">b</section><em data-x>x</em></eo-relocating>`);
-	morph_children(root, nodes(`<eo-relocating><section class="panel">one</section></eo-relocating>`));
+	const host = mount(
+		`<eo-relocating><section class="panel">a</section><section class="panel">b</section><em data-x>x</em></eo-relocating>`
+	);
+	morph_children(
+		root,
+		nodes(`<eo-relocating><section class="panel">one</section></eo-relocating>`)
+	);
 	expect(host.querySelectorAll('section.panel').length).toBe(1);
 	expect(host.querySelector('section.panel')!.textContent).toBe('one');
 	expect(host.querySelector('[data-x]')).not.toBeNull(); // never rendered by this answer: not claimed as the render's
 	// …until ogygia knows it placed it (a restore, an earlier morph): then the render may take it away
 	mark_render_made(host.querySelector('[data-x]')!);
-	morph_children(root, nodes(`<eo-relocating><section class="panel">one</section></eo-relocating>`));
+	morph_children(
+		root,
+		nodes(`<eo-relocating><section class="panel">one</section></eo-relocating>`)
+	);
 	expect(host.querySelector('[data-x]')).toBeNull();
 });
 
 test('a stale region under an element is the render’s: removed (the old drop rule, now provenance)', () => {
-	const host = mount(`<eo-relocating><ogygia-region data-old-hole></ogygia-region>${panel(1)}</eo-relocating>`);
+	const host = mount(
+		`<eo-relocating><ogygia-region data-old-hole></ogygia-region>${panel(1)}</eo-relocating>`
+	);
 	morph_children(root, nodes(`<eo-relocating>${panel(1)}</eo-relocating>`));
 	expect(host.querySelector('[data-old-hole]')).toBeNull();
 	expect(host.querySelector(':scope > [data-own]')).not.toBeNull();
 });
 
 test('a region that has not woken gets its re-minted address (its other attributes are the runtime’s)', () => {
-	mount('<div><ogygia-region render="defer" endpoint="/__ogygia__?id=a&props=1" data-nested></ogygia-region></div>');
-	morph_children(root, nodes('<div><ogygia-region render="defer" endpoint="/__ogygia__?id=a&props=2"></ogygia-region></div>'));
+	mount(
+		'<div><ogygia-region render="defer" endpoint="/__ogygia__?id=a&props=1" data-nested></ogygia-region></div>'
+	);
+	morph_children(
+		root,
+		nodes(
+			'<div><ogygia-region render="defer" endpoint="/__ogygia__?id=a&props=2"></ogygia-region></div>'
+		)
+	);
 	const hole = root.querySelector('ogygia-region')!;
 	expect(hole.getAttribute('endpoint')).toBe('/__ogygia__?id=a&props=2');
 	expect(hole.hasAttribute('data-nested')).toBe(true);

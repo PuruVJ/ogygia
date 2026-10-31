@@ -2,17 +2,27 @@
 	"name": "@ogygia/federation",
 	"version": "0.10.2",
 	"description": "Fragment federation for ogygia: apps share pages and widgets as signed region values, with cross-app thaw",
-	"type": "module",
-	"sideEffects": false,
+	"keywords": [
+		"federation",
+		"fragments",
+		"microfrontends",
+		"ogygia",
+		"sveltekit"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/federation"
 	},
-	"keywords": ["ogygia", "sveltekit", "microfrontends", "federation", "fragments"],
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"sideEffects": false,
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -23,34 +33,7 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
-		"test": "vitest run",
-		"e2e": "playwright test"
-	},
-	"peerDependencies": {
-		"@ogygia/router": "workspace:^",
-		"@ogygia/core": "workspace:^",
-		"vite": "catalog:peers"
-	},
-	"devDependencies": {
-		"@ogygia/flags": "workspace:*",
-		"@ogygia/freeze": "workspace:*",
-		"@ogygia/router": "workspace:*",
-		"@ogygia/tooling": "workspace:*",
-		"@playwright/test": "catalog:",
-		"@sveltejs/kit": "catalog:",
-		"@ogygia/core": "workspace:*",
-		"@types/node": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"vite": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
@@ -60,6 +43,32 @@
 				"types": "./dist/vite.d.ts",
 				"default": "./dist/vite.js"
 			}
-		}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
+	},
+	"devDependencies": {
+		"@ogygia/core": "workspace:*",
+		"@ogygia/flags": "workspace:*",
+		"@ogygia/freeze": "workspace:*",
+		"@ogygia/router": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^",
+		"@ogygia/router": "workspace:^",
+		"vite": "catalog:peers"
 	}
 }

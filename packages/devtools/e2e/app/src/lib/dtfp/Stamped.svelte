@@ -5,4 +5,6 @@
 	let on = $state(false);
 </script>
 
-<button data-stamped onclick={() => (on = !on)}>{label} ({on ? 'on' : 'off'}, rendered {stamp})</button>
+<button data-stamped onclick={() => (on = !on)}
+	>{label} ({on ? 'on' : 'off'}, rendered {stamp})</button
+>

@@ -15,7 +15,13 @@
  * The switch's cookie also starts the rest, for that browser only: the server writes its event
  * side-channel and the page is measured from the start (runtime/beacon.ts).
  */
-import { devtools_switched_on, switch_in_url, testing_lean, without_switch, write_switch } from '@ogygia/core/insights';
+import {
+	devtools_switched_on,
+	switch_in_url,
+	testing_lean,
+	without_switch,
+	write_switch
+} from '@ogygia/core/insights';
 import { TESTING_ENGINE_VERSION } from '@ogygia/core/insights';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -56,7 +62,8 @@ function mount_launcher(opts?: { csr_true?: boolean }): void {
 	// a session the page before was recording (a full page load mid-session) goes on here — the
 	// recorder loads only then (the key: session.ts SAVED_KEY)
 	try {
-		if (sessionStorage.getItem('ogygia:devtools:session')) void import('./session.ts').then((m) => m.resume_session_if_any());
+		if (sessionStorage.getItem('ogygia:devtools:session'))
+			void import('./session.ts').then((m) => m.resume_session_if_any());
 	} catch {
 		// no storage
 	}
@@ -85,7 +92,11 @@ function mount_launcher(opts?: { csr_true?: boolean }): void {
 		void import('./ui-app.ts').then((m) => {
 			button?.remove();
 			if (on_key) removeEventListener('keydown', on_key);
-			m.mount_app(root, { csr_true, start_open: want_open, ...(LAZY ? { hide: devtools_off } : {}) });
+			m.mount_app(root, {
+				csr_true,
+				start_open: want_open,
+				...(LAZY ? { hide: devtools_off } : {})
+			});
 		});
 	};
 	button = document.createElement('button');
@@ -122,7 +133,9 @@ function mount_launcher(opts?: { csr_true?: boolean }): void {
 
 function after_load_idle(fn: () => void): void {
 	const idle = () => {
-		const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+		const ric = (
+			globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }
+		).requestIdleCallback;
 		if (ric) ric(fn, { timeout: 3000 });
 		else setTimeout(fn, 1000);
 	};
@@ -168,7 +181,8 @@ function install_testing_api(): void {
 	window.__ogygia_testing = {
 		version: TESTING_ENGINE_VERSION,
 		page: async (cpu_fns) => (await engine()).page_json(cpu_fns),
-		hydration: async (key_attr, ignore) => (await engine()).hydration_json(key_attr, ignore as never),
+		hydration: async (key_attr, ignore) =>
+			(await engine()).hydration_json(key_attr, ignore as never),
 		record_start: async () => (await engine()).record_start(),
 		record_stop: async (blocked) => (await engine()).record_stop(blocked),
 		settled: async (quiet, timeout) => (await engine()).settled(quiet, timeout)
@@ -221,7 +235,9 @@ declare global {
 }
 function install_console_api(): void {
 	const say = (on: boolean) =>
-		on ? 'ogygia devtools: on in this browser (stays on; ogygia.devtools.off() to hide it)' : 'ogygia devtools: off in this browser';
+		on
+			? 'ogygia devtools: on in this browser (stays on; ogygia.devtools.off() to hide it)'
+			: 'ogygia devtools: off in this browser';
 	const g = (window.ogygia ??= {});
 	if (g.devtools) return;
 	g.devtools = {

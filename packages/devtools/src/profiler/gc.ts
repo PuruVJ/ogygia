@@ -11,7 +11,15 @@
  * allocator gets the pause time it is responsible for, and the report can say "this 40 ms of GC
  * is toProductVM's structuredClone in ProductCard", which no table of allocators can. Pure.
  */
-import { categorize, clean_url, component_name_from_file, strip_bundler_suffix, with_script_url, type FrameCategory, type HeapNode } from './analyze.ts';
+import {
+	categorize,
+	clean_url,
+	component_name_from_file,
+	strip_bundler_suffix,
+	with_script_url,
+	type FrameCategory,
+	type HeapNode
+} from './analyze.ts';
 
 export interface GcEvent {
 	/** ms on the profile's clock (from the window's start) */
@@ -154,13 +162,20 @@ export function heap_sites(head: HeapNode, dict: Record<string, AllocSite>): Map
 	const short = (url: string) => clean_url(url).split('/').slice(-2).join('/');
 	// `caller`: the nearest frame ABOVE that is the app's own code (a builtin like `replace` or
 	// `map` allocates on behalf of the app line that called it — that line is the useful name)
-	const visit = (node: HeapNode, parent_hash: number, app_above: { name: string; url: string; line: number } | undefined): void => {
+	const visit = (
+		node: HeapNode,
+		parent_hash: number,
+		app_above: { name: string; url: string; line: number } | undefined
+	): void => {
 		const f = with_script_url(node.callFrame);
 		const cat = categorize(f);
 		let name = f.functionName || '(anonymous)';
 		let is_comp = cat.category === 'component';
 		if (is_comp) name = strip_bundler_suffix(name);
-		else if ((!f.functionName || f.functionName === '(anonymous)') && cat.category !== 'dependency') {
+		else if (
+			(!f.functionName || f.functionName === '(anonymous)') &&
+			cat.category !== 'dependency'
+		) {
 			const derived = component_name_from_file(clean_url(f.url));
 			if (derived) {
 				name = derived;
@@ -181,10 +196,20 @@ export function heap_sites(head: HeapNode, dict: Record<string, AllocSite>): Map
 					line: f.lineNumber + 1,
 					category,
 					component: stack[stack.length - 1] ?? null,
-					...(app_above ? { caller: `${app_above.name} (${short(app_above.url)}:${app_above.line})`, caller_name: app_above.name, caller_url: app_above.url, caller_line: app_above.line } : {})
+					...(app_above
+						? {
+								caller: `${app_above.name} (${short(app_above.url)}:${app_above.line})`,
+								caller_name: app_above.name,
+								caller_url: app_above.url,
+								caller_line: app_above.line
+							}
+						: {})
 				};
 		}
-		const own = (category === 'app' || category === 'component' || category === 'dependency') && f.url ? { name, url: f.url, line: f.lineNumber + 1 } : app_above;
+		const own =
+			(category === 'app' || category === 'component' || category === 'dependency') && f.url
+				? { name, url: f.url, line: f.lineNumber + 1 }
+				: app_above;
 		for (const ch of node.children ?? []) visit(ch, h, own);
 		if (is_comp) stack.pop();
 	};
@@ -193,7 +218,10 @@ export function heap_sites(head: HeapNode, dict: Record<string, AllocSite>): Map
 }
 
 /** What was allocated between two reads: per site, the growth of its cumulative bytes. */
-export function slice_delta(prev: Map<string, number>, cur: Map<string, number>): Record<string, number> {
+export function slice_delta(
+	prev: Map<string, number>,
+	cur: Map<string, number>
+): Record<string, number> {
 	const out: Record<string, number> = {};
 	for (const [k, v] of cur) {
 		const d = v - (prev.get(k) ?? 0);
@@ -248,7 +276,10 @@ export function attribute_gc(input: {
 	const first_key: Record<string, string> = {};
 	// bytes allocated over a stretch [from, to]: each read charged by how much of it the stretch
 	// covers (a read is the resolution; a pause inside it gets that share of the read's bytes)
-	const between = (from: number, to: number): { app: Record<string, number>; profiler_bytes: number } => {
+	const between = (
+		from: number,
+		to: number
+	): { app: Record<string, number>; profiler_bytes: number } => {
 		const acc: Record<string, number> = {};
 		let profiler_bytes = 0;
 		for (const s of slices) {
@@ -290,7 +321,8 @@ export function attribute_gc(input: {
 		const { app: cause, profiler_bytes } = between(from, e.t);
 		const allocated = Object.values(cause).reduce((a, b) => a + b, 0);
 		// the profiler's share of what filled the heap before this pause is its share of the pause
-		const overhead_share = allocated + profiler_bytes > 0 ? profiler_bytes / (allocated + profiler_bytes) : 0;
+		const overhead_share =
+			allocated + profiler_bytes > 0 ? profiler_bytes / (allocated + profiler_bytes) : 0;
 		const ms_app = e.ms * (1 - overhead_share);
 		measured_total += e.ms;
 		overhead_total += e.ms - ms_app;
@@ -302,21 +334,58 @@ export function attribute_gc(input: {
 					.slice(0, 5)
 					.map(([id, bytes]) => {
 						const d = dict[first_key[id]];
-						return { key: first_key[id], name: d?.name ?? id, component: d?.component ?? null, bytes: Math.round(bytes), share: allocated ? r2(bytes / allocated) : 0 };
+						return {
+							key: first_key[id],
+							name: d?.name ?? id,
+							component: d?.component ?? null,
+							bytes: Math.round(bytes),
+							share: allocated ? r2(bytes / allocated) : 0
+						};
 					});
-		for (const [key, bytes] of Object.entries(cause)) gc_ms_by_key[key] = (gc_ms_by_key[key] ?? 0) + (allocated ? (bytes / allocated) * ms_app : 0);
-		for (const t of top.slice(0, 3)) top3_by_key[ident_of(t.key)] = (top3_by_key[ident_of(t.key)] ?? 0) + 1;
+		for (const [key, bytes] of Object.entries(cause))
+			gc_ms_by_key[key] = (gc_ms_by_key[key] ?? 0) + (allocated ? (bytes / allocated) * ms_app : 0);
+		for (const t of top.slice(0, 3))
+			top3_by_key[ident_of(t.key)] = (top3_by_key[ident_of(t.key)] ?? 0) + 1;
 		const since_ms = r1(e.t - from);
 		const run = running_at(e.t);
 		const about = single ? '≈' : '';
 		let why: string;
-		if (forced) why = 'forced (something asked for a collection: the inspector, a gc() call, a low-memory signal)';
-		else if (!allocated) why = e.kind === 'major' ? 'the old space was full; nothing sampled was allocated since the last major pause (the pressure came from before the window)' : 'nothing sampled was allocated since the last pause (an allocation the sampler missed, or pressure from before the window)';
-		else if (e.kind === 'minor') why = `the young space filled: ${about}${mb(allocated)} MB allocated in the ${since_ms} ms since the last pause`;
-		else if (e.kind === 'major') why = `the old space grew: ${about}${mb(allocated)} MB allocated since the last major pause, and what survived the minor ones was promoted into it`;
-		else if (e.kind === 'incremental') why = `an incremental marking step of a major collection (${about}${mb(allocated)} MB allocated since the last pause)`;
+		if (forced)
+			why =
+				'forced (something asked for a collection: the inspector, a gc() call, a low-memory signal)';
+		else if (!allocated)
+			why =
+				e.kind === 'major'
+					? 'the old space was full; nothing sampled was allocated since the last major pause (the pressure came from before the window)'
+					: 'nothing sampled was allocated since the last pause (an allocation the sampler missed, or pressure from before the window)';
+		else if (e.kind === 'minor')
+			why = `the young space filled: ${about}${mb(allocated)} MB allocated in the ${since_ms} ms since the last pause`;
+		else if (e.kind === 'major')
+			why = `the old space grew: ${about}${mb(allocated)} MB allocated since the last major pause, and what survived the minor ones was promoted into it`;
+		else if (e.kind === 'incremental')
+			why = `an incremental marking step of a major collection (${about}${mb(allocated)} MB allocated since the last pause)`;
 		else why = `a weak-callback pass (${about}${mb(allocated)} MB allocated since the last pause)`;
-		pauses.push({ t: r1(e.t), ms: r2(ms_app), ms_measured: r2(e.ms), kind: e.kind, forced, since_ms, allocated: Math.round(allocated), ...(single ? { estimated: true } : {}), why, top, ...(run ? { running: { label: run.label, category: run.category, ...(run.file ? { file: run.file } : {}) } } : {}) });
+		pauses.push({
+			t: r1(e.t),
+			ms: r2(ms_app),
+			ms_measured: r2(e.ms),
+			kind: e.kind,
+			forced,
+			since_ms,
+			allocated: Math.round(allocated),
+			...(single ? { estimated: true } : {}),
+			why,
+			top,
+			...(run
+				? {
+						running: {
+							label: run.label,
+							category: run.category,
+							...(run.file ? { file: run.file } : {})
+						}
+					}
+				: {})
+		});
 		last_any = e.t;
 		if (e.kind === 'major') last_major = e.t;
 	}
@@ -351,7 +420,9 @@ export function attribute_gc(input: {
 		c.gc_ms += gc_ms_by_key[id] ?? 0;
 		comp.set(name, c);
 	}
-	const slice_ms = slices.length ? r1(slices.reduce((a, s) => a + (s.t1 - s.t0), 0) / slices.length) : 0;
+	const slice_ms = slices.length
+		? r1(slices.reduce((a, s) => a + (s.t1 - s.t0), 0) / slices.length)
+		: 0;
 	return {
 		summary: {
 			count: events.length,
@@ -364,13 +435,16 @@ export function attribute_gc(input: {
 			incremental: events.filter((e) => e.kind === 'incremental').length,
 			weak: events.filter((e) => e.kind === 'weak').length,
 			allocated_mb: mb(total_bytes),
-			alloc_rate_mb_s: input.window_ms > 0 ? r1((total_bytes / 1048576) / (input.window_ms / 1000)) : 0,
+			alloc_rate_mb_s:
+				input.window_ms > 0 ? r1(total_bytes / 1048576 / (input.window_ms / 1000)) : 0,
 			...(input.retained_mb !== undefined ? { retained_mb: input.retained_mb } : {}),
 			slices: slices.length,
 			slice_ms
 		},
 		pauses,
 		makers,
-		components: [...comp.entries()].map(([name, c]) => ({ name, allocated: c.allocated, gc_ms: r2(c.gc_ms) })).sort((a, b) => b.gc_ms - a.gc_ms || b.allocated - a.allocated)
+		components: [...comp.entries()]
+			.map(([name, c]) => ({ name, allocated: c.allocated, gc_ms: r2(c.gc_ms) }))
+			.sort((a, b) => b.gc_ms - a.gc_ms || b.allocated - a.allocated)
 	};
 }

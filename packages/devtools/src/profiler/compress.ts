@@ -1,5 +1,5 @@
 /** a text answer at least this big goes out gzipped (see `gzip_large`) */
-export const GZIP_OVER_BYTES: number =256 * 1024;
+export const GZIP_OVER_BYTES: number = 256 * 1024;
 
 /**
  * A big profiler answer (a report page is MBs of island props; the run page's `keep` answer carries
@@ -9,7 +9,8 @@ export const GZIP_OVER_BYTES: number =256 * 1024;
  * fetch (Kit hands that Response back as it is, and the standalone export reads it as text).
  */
 export async function gzip_large(req: Request, res: Response): Promise<Response> {
-	if (!res.body || res.headers.has('content-encoding') || req.headers.get('x-og-profiler-internal')) return res;
+	if (!res.body || res.headers.has('content-encoding') || req.headers.get('x-og-profiler-internal'))
+		return res;
 	if (!(req.headers.get('accept-encoding') ?? '').includes('gzip')) return res;
 	const type = res.headers.get('content-type') ?? '';
 	if (!type.startsWith('text/') && !type.includes('json')) return res;
@@ -17,10 +18,15 @@ export async function gzip_large(req: Request, res: Response): Promise<Response>
 	if (known && known < GZIP_OVER_BYTES) return res;
 	const body = new Uint8Array(await res.arrayBuffer());
 	const headers = new Headers(res.headers);
-	if (body.byteLength < GZIP_OVER_BYTES) return new Response(body, { status: res.status, statusText: res.statusText, headers });
+	if (body.byteLength < GZIP_OVER_BYTES)
+		return new Response(body, { status: res.status, statusText: res.statusText, headers });
 	const { gzip } = await import('node:zlib');
 	const zipped = await new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) =>
-		gzip(body, { level: 6 }, (err, out) => (err ? reject(err) : resolve(new Uint8Array(out.buffer as ArrayBuffer, out.byteOffset, out.byteLength))))
+		gzip(body, { level: 6 }, (err, out) =>
+			err
+				? reject(err)
+				: resolve(new Uint8Array(out.buffer as ArrayBuffer, out.byteOffset, out.byteLength))
+		)
 	);
 	headers.set('content-encoding', 'gzip');
 	headers.set('content-length', String(zipped.byteLength));

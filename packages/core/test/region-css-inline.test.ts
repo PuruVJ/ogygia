@@ -50,10 +50,15 @@ describe('region_css_tag', () => {
 		);
 	});
 
-	it("a dev module href (not .css) is a modulepreload, never a stylesheet link to JS", () => {
+	it('a dev module href (not .css) is a modulepreload, never a stylesheet link to JS', () => {
 		// the dev server's islandCss hands the island's module URL: fetched as CSS it was an empty sheet
 		// and a MIME error per island in strict engines; the runtime imports it for its styles
-		expect(region_css_tag('./@id/virtual:ogygia/island/abc123.js', './@id/virtual:ogygia/island/abc123.js')).toBe(
+		expect(
+			region_css_tag(
+				'./@id/virtual:ogygia/island/abc123.js',
+				'./@id/virtual:ogygia/island/abc123.js'
+			)
+		).toBe(
 			'<link rel="modulepreload" href="./@id/virtual:ogygia/island/abc123.js" data-ogygia-region-css>'
 		);
 		expect(region_css_tag('/a/b.css?v=2', '/a/b.css?v=2')).toContain('rel="stylesheet"');
@@ -61,27 +66,43 @@ describe('region_css_tag', () => {
 
 	it('attribute-escapes the identity href in both shapes', () => {
 		set_inline_css({ '/a.css': '.a{}' });
-		expect(region_css_tag('/a.css', '/a.css?v="1"&x=<')).toContain('data-ogygia-region-css="/a.css?v=&quot;1&quot;&amp;x=&lt;"');
-		expect(region_css_tag('/b.css', '/b.css?v="1"&x=<')).toContain('href="/b.css?v=&quot;1&quot;&amp;x=&lt;"');
+		expect(region_css_tag('/a.css', '/a.css?v="1"&x=<')).toContain(
+			'data-ogygia-region-css="/a.css?v=&quot;1&quot;&amp;x=&lt;"'
+		);
+		expect(region_css_tag('/b.css', '/b.css?v="1"&x=<')).toContain(
+			'href="/b.css?v=&quot;1&quot;&amp;x=&lt;"'
+		);
 	});
 });
 
 describe('Region.svelte × inline region css', () => {
-	const island = () => ({ __mode: 'island', __entry: ENTRY, __component: Tiny, __props: { n: 1 }, load: true });
+	const island = () => ({
+		__mode: 'island',
+		__entry: ENTRY,
+		__component: Tiny,
+		__props: { n: 1 },
+		load: true
+	});
 
 	it('an island whose sheet the build kept emits <style>; its other sheet stays a <link>', () => {
 		set_island_css({ [ENTRY]: [TINY_CSS, BIG_CSS] });
 		set_inline_css({ [TINY_CSS]: '.t{color:red}' });
 		const out = in_request(() => render(region, { props: island() }));
-		expect(out.head).toContain('<style data-ogygia-region-css="/islands/tiny.css">.t{color:red}</style>');
-		expect(out.head).toContain('<link rel="stylesheet" href="/islands/big.css" data-ogygia-region-css>');
+		expect(out.head).toContain(
+			'<style data-ogygia-region-css="/islands/tiny.css">.t{color:red}</style>'
+		);
+		expect(out.head).toContain(
+			'<link rel="stylesheet" href="/islands/big.css" data-ogygia-region-css>'
+		);
 		expect(out.head).not.toContain('href="/islands/tiny.css"');
 	});
 
 	it('nothing kept (no threshold, pre-inline handoff): the links it always emitted', () => {
 		set_island_css({ [ENTRY]: [TINY_CSS] });
 		const out = in_request(() => render(region, { props: island() }));
-		expect(out.head).toContain('<link rel="stylesheet" href="/islands/tiny.css" data-ogygia-region-css>');
+		expect(out.head).toContain(
+			'<link rel="stylesheet" href="/islands/tiny.css" data-ogygia-region-css>'
+		);
 		expect(out.head).not.toContain('<style data-ogygia-region-css');
 	});
 });

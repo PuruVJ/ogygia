@@ -15,7 +15,10 @@ const PATH_SEP = /[/\\]/;
  * Fingerprint of a region mark for dedupe. Same component path + same key → one wrapper/entry.
  * @param mark
  */
-export function strategyKey(mark: { strategy: string; options?: Record<string, unknown> | null }): string {
+export function strategyKey(mark: {
+	strategy: string;
+	options?: Record<string, unknown> | null;
+}): string {
 	const o = mark.options || {};
 	if (mark.strategy === 'server') {
 		let k = `defer:${o.when ?? 'load'}`;
@@ -86,7 +89,9 @@ export function regionIdentity(
  */
 export function renderId(identityOrPath: string): string {
 	const nul = identityOrPath.indexOf('\0');
-	const component = (nul === -1 ? identityOrPath : identityOrPath.slice(0, nul)).split(PATH_SEP).join('/');
+	const component = (nul === -1 ? identityOrPath : identityOrPath.slice(0, nul))
+		.split(PATH_SEP)
+		.join('/');
 	return createHash('md5').update(`render\0${component}`).digest('hex').slice(0, 12);
 }
 

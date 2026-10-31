@@ -6,7 +6,11 @@ import { readFlags } from '$lib/latecomer/flags';
 
 export const prerender = false;
 
-async function get(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function get(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/hell/api/${name}?ms=${ms}`);
 	return res.json();
 }
@@ -24,7 +28,11 @@ export const load: PageServerLoad = async ({ url, fetch }) => {
 	const price = await (await fetch(`${origin}/hell/api/live?ms=20`)).json();
 
 	// PATTERN batch-straggler: three calls started together, one ~6× slower than the rest
-	const [nav, crumbs, recs] = await Promise.all([get(origin, 'nav', 10), get(origin, 'crumbs', 12), get(origin, 'recs-slow', 80)]);
+	const [nav, crumbs, recs] = await Promise.all([
+		get(origin, 'nav', 10),
+		get(origin, 'crumbs', 12),
+		get(origin, 'recs-slow', 80)
+	]);
 
 	return { title: 'Latecomer', reviews, price, nav, crumbs, recs };
 };

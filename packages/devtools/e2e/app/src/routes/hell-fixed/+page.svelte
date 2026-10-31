@@ -7,7 +7,9 @@
 	import ProductCard from '$lib/hell-fixed/ProductCard.svelte' with { wake: 'visible' };
 	import Recommendations from '$lib/hell-fixed/Recommendations.svelte' with { render: 'deferred' };
 	// the same hole with a render cache: the profiler's hole economics (hits vs misses)
-	import CachedRecommendations from '$lib/hell-fixed/Recommendations.svelte' with { preset: 'cachedRecs' };
+	import CachedRecommendations from '$lib/hell-fixed/Recommendations.svelte' with {
+		preset: 'cachedRecs'
+	};
 	import FooterLake from '$lib/hell-fixed/FooterLake.svelte' with { wake: 'none' };
 	import FacetBar from '$lib/hell-fixed/FacetBar.svelte';
 	import { header_config, countries, footer_columns } from '$lib/hell-fixed/data';
@@ -36,8 +38,8 @@
 <main data-hell>
 	<h1>{data.catalog.title}</h1>
 	<p data-static-shell>
-		{data.catalog.products.length} products · taxonomy {tree.count} nodes, depth {tree.depth} · session {data.session.ms} ms ·
-		db {data.db.rows} rows · manifest {data.manifest} chars · {data.greeting}
+		{data.catalog.products.length} products · taxonomy {tree.count} nodes, depth {tree.depth} · session
+		{data.session.ms} ms · db {data.db.rows} rows · manifest {data.manifest} chars · {data.greeting}
 	</p>
 	<PriceTicker />
 	<FacetBar {products} query="compact din breaker family 3" />
@@ -52,12 +54,18 @@
 		{#snippet ogygiaFallback()}<aside data-recs-fallback>loading recommendations…</aside>{/snippet}
 	</Recommendations>
 	<CachedRecommendations forProduct="P1">
-		{#snippet ogygiaFallback()}<aside data-recs-fallback>loading cached recommendations…</aside>{/snippet}
+		{#snippet ogygiaFallback()}<aside data-recs-fallback>
+				loading cached recommendations…
+			</aside>{/snippet}
 	</CachedRecommendations>
 </main>
 
 <FooterLake columns={footer} />
 
 <style>
-	.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; }
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+		gap: 8px;
+	}
 </style>

@@ -9,15 +9,38 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as devalue from 'devalue';
 import type { RequestEvent } from '@sveltejs/kit';
-import { data_url_of, look_up_page, PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from '../src/server/page-facts.ts';
-import { configure_render_page, page_url_of, prepare_render_page, render_page, renders_for_a_page } from '../src/server/render-page.ts';
+import {
+	data_url_of,
+	look_up_page,
+	PAGE_FACTS_HEADER,
+	PAGE_FACTS_ROUTE_HEADER
+} from '../src/server/page-facts.ts';
+import {
+	configure_render_page,
+	page_url_of,
+	prepare_render_page,
+	render_page,
+	renders_for_a_page
+} from '../src/server/render-page.ts';
 import { configure_islands_endpoint } from '../src/server/endpoint.ts';
 
 /** Kit's data answer: one `data` line (each node devalue-flattened), then a `chunk` line per promise. */
 function kit_data(nodes: (Record<string, unknown> | null)[], chunks: string[] = []): string {
 	const line = JSON.stringify({
 		type: 'data',
-		nodes: nodes.map((d) => (d === null ? null : { type: 'data', data: JSON.parse(devalue.stringify(d, { Promise: (v: unknown) => (v instanceof Promise ? 1 : undefined) })), uses: {} }))
+		nodes: nodes.map((d) =>
+			d === null
+				? null
+				: {
+						type: 'data',
+						data: JSON.parse(
+							devalue.stringify(d, {
+								Promise: (v: unknown) => (v instanceof Promise ? 1 : undefined)
+							})
+						),
+						uses: {}
+					}
+		)
 	});
 	return [line, ...chunks].join('\n') + '\n';
 }
@@ -25,7 +48,12 @@ function kit_data(nodes: (Record<string, unknown> | null)[], chunks: string[] = 
 const answer = (body: string, headers: Record<string, string> = {}, status = 200) =>
 	new Response(body, { status, headers: { 'content-type': 'text/sveltekit-data', ...headers } });
 
-function event_of(o: { url: string; referer?: string; remote?: boolean; fetch?: RequestEvent['fetch'] }): RequestEvent {
+function event_of(o: {
+	url: string;
+	referer?: string;
+	remote?: boolean;
+	fetch?: RequestEvent['fetch'];
+}): RequestEvent {
 	const headers = new Headers(o.referer ? { referer: o.referer } : {});
 	return {
 		url: new URL(o.url),
@@ -45,10 +73,18 @@ beforeEach(() => {
 
 describe('data_url_of: the URL Kit’s client asks for a page’s data', () => {
 	it('suffixes the path, keeps the search, marks a trailing slash', () => {
-		expect(data_url_of(new URL('https://a.test/us/en/work?x=1#h'))).toBe('https://a.test/us/en/work/__data.json?x=1');
-		expect(data_url_of(new URL('https://a.test/us/en/'))).toBe('https://a.test/us/en/__data.json?x-sveltekit-trailing-slash=1');
-		expect(data_url_of(new URL('https://a.test/'))).toBe('https://a.test/__data.json?x-sveltekit-trailing-slash=1');
-		expect(data_url_of(new URL('https://a.test/page.html'))).toBe('https://a.test/page.html__data.json');
+		expect(data_url_of(new URL('https://a.test/us/en/work?x=1#h'))).toBe(
+			'https://a.test/us/en/work/__data.json?x=1'
+		);
+		expect(data_url_of(new URL('https://a.test/us/en/'))).toBe(
+			'https://a.test/us/en/__data.json?x-sveltekit-trailing-slash=1'
+		);
+		expect(data_url_of(new URL('https://a.test/'))).toBe(
+			'https://a.test/__data.json?x-sveltekit-trailing-slash=1'
+		);
+		expect(data_url_of(new URL('https://a.test/page.html'))).toBe(
+			'https://a.test/page.html__data.json'
+		);
 	});
 });
 
@@ -60,22 +96,36 @@ describe('look_up_page: Kit’s data answer, decoded like its client does', () =
 			async (_u, init) => {
 				asked = init;
 				return answer(kit_data([{ signedIn: true, locale: 'fr' }, { slug: 'alpha' }]), {
-					[PAGE_FACTS_ROUTE_HEADER]: encodeURIComponent(JSON.stringify({ id: '/p/[slug]', params: { slug: 'alpha' } }))
+					[PAGE_FACTS_ROUTE_HEADER]: encodeURIComponent(
+						JSON.stringify({ id: '/p/[slug]', params: { slug: 'alpha' } })
+					)
 				});
 			},
 			{}
 		);
 		expect(new Headers(asked?.headers).get(PAGE_FACTS_HEADER)).toBe('1');
-		expect(facts).toEqual({ url: new URL('https://a.test/p/alpha'), route: { id: '/p/[slug]' }, params: { slug: 'alpha' }, data: { signedIn: true, locale: 'fr', slug: 'alpha' } });
+		expect(facts).toEqual({
+			url: new URL('https://a.test/p/alpha'),
+			route: { id: '/p/[slug]' },
+			params: { slug: 'alpha' },
+			data: { signedIn: true, locale: 'fr', slug: 'alpha' }
+		});
 	});
 
 	it('decodes the app’s transport types', async () => {
 		class Money {
 			constructor(public cents: number) {}
 		}
-		const flat = JSON.parse(devalue.stringify({ price: new Money(250) }, { Money: (v: unknown) => v instanceof Money && v.cents }));
+		const flat = JSON.parse(
+			devalue.stringify(
+				{ price: new Money(250) },
+				{ Money: (v: unknown) => v instanceof Money && v.cents }
+			)
+		);
 		const body = JSON.stringify({ type: 'data', nodes: [{ type: 'data', data: flat }] }) + '\n';
-		const facts = await look_up_page(new URL('https://a.test/x'), async () => answer(body), { Money: (c) => new Money(c as number) });
+		const facts = await look_up_page(new URL('https://a.test/x'), async () => answer(body), {
+			Money: (c) => new Money(c as number)
+		});
 		expect('data' in facts && (facts.data.price as Money).cents).toBe(250);
 	});
 
@@ -92,21 +142,44 @@ describe('look_up_page: Kit’s data answer, decoded like its client does', () =
 		// a node whose `slow` key is a Promise (devalue's reducer form: ["Promise", <its id>], id 1)
 		const flat = [{ slow: 1, n: 2 }, ['Promise', 3], 7, 1];
 		push(JSON.stringify({ type: 'data', nodes: [{ type: 'data', data: flat }] }) + '\n');
-		const facts = await look_up_page(new URL('https://a.test/x'), async () => new Response(stream), {});
+		const facts = await look_up_page(
+			new URL('https://a.test/x'),
+			async () => new Response(stream),
+			{}
+		);
 		expect('data' in facts).toBe(true);
 		const data = (facts as { data: { slow: Promise<unknown>; n: number } }).data;
 		expect(data.n).toBe(7);
-		push(JSON.stringify({ type: 'chunk', id: 1, data: JSON.parse(devalue.stringify('later')) }) + '\n');
+		push(
+			JSON.stringify({ type: 'chunk', id: 1, data: JSON.parse(devalue.stringify('later')) }) + '\n'
+		);
 		close();
 		await expect(data.slow).resolves.toBe('later');
 	});
 
 	it('a redirect, an error node, a failed request: a reason, never a guess', async () => {
 		const at = new URL('https://a.test/x');
-		expect(await look_up_page(at, async () => answer(JSON.stringify({ type: 'redirect', location: '/login' }) + '\n'), {})).toEqual({ miss: 'a load redirected to /login' });
-		expect(await look_up_page(at, async () => answer(JSON.stringify({ type: 'data', nodes: [{ type: 'error', error: {} }] }) + '\n'), {})).toEqual({ miss: 'a load threw' });
-		expect(await look_up_page(at, async () => answer('nope', {}, 500), {})).toEqual({ miss: 'the data request answered 500' });
-		expect(await look_up_page(at, async () => answer('<!doctype html>'), {})).toEqual({ miss: 'the answer is not Kit data' });
+		expect(
+			await look_up_page(
+				at,
+				async () => answer(JSON.stringify({ type: 'redirect', location: '/login' }) + '\n'),
+				{}
+			)
+		).toEqual({ miss: 'a load redirected to /login' });
+		expect(
+			await look_up_page(
+				at,
+				async () =>
+					answer(JSON.stringify({ type: 'data', nodes: [{ type: 'error', error: {} }] }) + '\n'),
+				{}
+			)
+		).toEqual({ miss: 'a load threw' });
+		expect(await look_up_page(at, async () => answer('nope', {}, 500), {})).toEqual({
+			miss: 'the data request answered 500'
+		});
+		expect(await look_up_page(at, async () => answer('<!doctype html>'), {})).toEqual({
+			miss: 'the answer is not Kit data'
+		});
 	});
 });
 
@@ -132,7 +205,11 @@ describe('render_page: one model, three venues', () => {
 			remote: true,
 			fetch: (async () => {
 				calls++;
-				return answer(kit_data([{ signedIn: true }]), { [PAGE_FACTS_ROUTE_HEADER]: encodeURIComponent(JSON.stringify({ id: '/p/[slug]', params: { slug: 'alpha' } })) });
+				return answer(kit_data([{ signedIn: true }]), {
+					[PAGE_FACTS_ROUTE_HEADER]: encodeURIComponent(
+						JSON.stringify({ id: '/p/[slug]', params: { slug: 'alpha' } })
+					)
+				});
 			}) as RequestEvent['fetch']
 		});
 		// a bag-like snapshot in this request changes nothing: the venue is the request's kind
@@ -172,13 +249,21 @@ describe('render_page: one model, three venues', () => {
 			calls++;
 			return answer(kit_data([{ x: 1 }]));
 		}) as RequestEvent['fetch'];
-		const hole = event_of({ url: 'https://a.test/__ogygia__?id=1', referer: 'https://a.test/p', fetch });
+		const hole = event_of({
+			url: 'https://a.test/__ogygia__?id=1',
+			referer: 'https://a.test/p',
+			fetch
+		});
 		await prepare_render_page(hole, undefined, false);
 		await prepare_render_page(hole, undefined, null);
 		expect(calls).toBe(0);
 		await prepare_render_page(hole, undefined, true);
 		expect(calls).toBe(1);
-		const foreign = event_of({ url: 'https://a.test/__ogygia__?id=1', referer: 'https://evil.test/p', fetch });
+		const foreign = event_of({
+			url: 'https://a.test/__ogygia__?id=1',
+			referer: 'https://evil.test/p',
+			fetch
+		});
 		await prepare_render_page(foreign, undefined, true);
 		expect(calls).toBe(1);
 		expect(render_page(undefined, foreign)!.url?.href).toBe('https://a.test/__ogygia__?id=1');

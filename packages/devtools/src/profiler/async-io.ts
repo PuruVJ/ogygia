@@ -87,8 +87,19 @@ const PROMISE_SAMPLE_EVERY = 256;
 function nearest_own_or_dep_site(): CallerSite | undefined {
 	for (const site of call_sites(nearest_own_or_dep_site)) {
 		const file = file_of(site);
-		if (!file || file.startsWith('node:') || file.includes('node:internal') || is_profiler_file(file)) continue;
-		return { fn: site.getFunctionName() || '(anonymous)', file, line: site.getLineNumber() ?? 0, column: site.getColumnNumber() ?? 0 };
+		if (
+			!file ||
+			file.startsWith('node:') ||
+			file.includes('node:internal') ||
+			is_profiler_file(file)
+		)
+			continue;
+		return {
+			fn: site.getFunctionName() || '(anonymous)',
+			file,
+			line: site.getLineNumber() ?? 0,
+			column: site.getColumnNumber() ?? 0
+		};
 	}
 	return undefined;
 }
@@ -110,7 +121,17 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 		return null; // no async_hooks (edge) — the fetch patch and wall/CPU split still work
 	}
 
-	const open = new Map<number, { t: number; type: string; site?: CallerSite; repeat?: number; delay?: number; timer?: { hasRef?: () => boolean } }>();
+	const open = new Map<
+		number,
+		{
+			t: number;
+			type: string;
+			site?: CallerSite;
+			repeat?: number;
+			delay?: number;
+			timer?: { hasRef?: () => boolean };
+		}
+	>();
 	const ops: IoOp[] = [];
 
 	let promise_count = 0;
@@ -133,14 +154,22 @@ export async function record_async_io(): Promise<IoRecorder | null> {
 				return;
 			}
 			if (open.size >= MAX || !TRACK.has(type)) return;
-			const s: { t: number; type: string; site?: CallerSite; repeat?: number; delay?: number; timer?: { hasRef?: () => boolean } } = { t: performance.now(), type, site: nearest_app_site() };
+			const s: {
+				t: number;
+				type: string;
+				site?: CallerSite;
+				repeat?: number;
+				delay?: number;
+				timer?: { hasRef?: () => boolean };
+			} = { t: performance.now(), type, site: nearest_app_site() };
 			if (type === 'Timeout') {
 				// (Node's Timeout keeps its period on `_repeat` — null for a one-shot — and its delay on
 				// `_idleTimeout`: long-standing fields, read defensively. The timer itself is held only
 				// while it is open: whether it was unref'd is asked at the window's end)
 				const r = resource as { _repeat?: unknown; _idleTimeout?: unknown; hasRef?: () => boolean };
 				if (typeof r._repeat === 'number' && r._repeat > 0) s.repeat = r._repeat;
-				else if (typeof r._idleTimeout === 'number' && r._idleTimeout >= 0) s.delay = r._idleTimeout;
+				else if (typeof r._idleTimeout === 'number' && r._idleTimeout >= 0)
+					s.delay = r._idleTimeout;
 				s.timer = r;
 			}
 			open.set(asyncId, s);
@@ -208,7 +237,10 @@ export async function record_async_io(): Promise<IoRecorder | null> {
  * per render (a cache's single refresh timer, started on the first request, is one in all). Marked
  * on the ops themselves (`left_each_run`), so the run kept for the waterfall carries it.
  */
-export function mark_left_each_run(ops: IoOp[], windows: Array<{ start: number; end: number }>): void {
+export function mark_left_each_run(
+	ops: IoOp[],
+	windows: Array<{ start: number; end: number }>
+): void {
 	if (windows.length < 2) return;
 	const by_site = new Map<string, { runs: Set<number>; ops: IoOp[] }>();
 	for (const o of ops) {
@@ -225,7 +257,8 @@ export function mark_left_each_run(ops: IoOp[], windows: Array<{ start: number; 
 		g.ops.push(o);
 		by_site.set(k, g);
 	}
-	for (const g of by_site.values()) if (g.runs.size === windows.length) for (const o of g.ops) o.left_each_run = true;
+	for (const g of by_site.values())
+		if (g.runs.size === windows.length) for (const o of g.ops) o.left_each_run = true;
 }
 
 /** A friendly bucket for a resource type, for the report. */

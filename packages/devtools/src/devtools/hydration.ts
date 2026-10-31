@@ -10,7 +10,14 @@ import { html_diff, type HtmlDiff } from '@ogygia/core/insights';
 import type { HydrationStatus } from '@ogygia/core/insights';
 
 export type { HydrationStatus } from '@ogygia/core/insights';
-export const STATUS_RANK: Record<HydrationStatus, number> = { failed: 0, recovered: 1, healed: 2, changed: 3, asleep: 4, clean: 5 };
+export const STATUS_RANK: Record<HydrationStatus, number> = {
+	failed: 0,
+	recovered: 1,
+	healed: 2,
+	changed: 3,
+	asleep: 4,
+	clean: 5
+};
 
 export interface IslandHydration {
 	fp: string;
@@ -32,7 +39,8 @@ export function hydration_rows(): { rows: IslandHydration[]; measured: boolean }
 		} else if (e.name === 'region.hydrate.recovered') {
 			if (e.fp) why.set(e.fp, { status: 'recovered', reason: e.reason ?? '' });
 		} else if (e.name === 'region.hydrate.healed') {
-			if (e.fp && why.get(e.fp)?.status !== 'recovered') why.set(e.fp, { status: 'healed', reason: e.reason ?? '' });
+			if (e.fp && why.get(e.fp)?.status !== 'recovered')
+				why.set(e.fp, { status: 'healed', reason: e.reason ?? '' });
 		} else if (e.name === 'region.hydrate.done') {
 			if (e.fp && why.get(e.fp)?.status === 'failed') why.delete(e.fp);
 		}
@@ -45,19 +53,36 @@ export function hydration_rows(): { rows: IslandHydration[]; measured: boolean }
 		if (r.kind !== 'island' || !r.fp) continue;
 		const w = why.get(r.fp);
 		const attr = r.el.getAttribute('data-og-recovered');
-		const status: HydrationStatus = w?.status ?? (attr !== null ? 'recovered' : changed.has(r.fp) ? 'changed' : r.hydrated ? 'clean' : 'asleep');
+		const status: HydrationStatus =
+			w?.status ??
+			(attr !== null
+				? 'recovered'
+				: changed.has(r.fp)
+					? 'changed'
+					: r.hydrated
+						? 'clean'
+						: 'asleep');
 		const s = snaps.get(r.fp);
 		rows.push({
 			fp: r.fp,
 			name: region_name(r.entry),
 			wake: r.wake,
 			status,
-			reason: w?.reason || attr || (r.rides ? `rides ${region_name(r.rides.getAttribute('entry'))}, the island around it (it wakes with it, not on its own)` : ''),
+			reason:
+				w?.reason ||
+				attr ||
+				(r.rides
+					? `rides ${region_name(r.rides.getAttribute('entry'))}, the island around it (it wakes with it, not on its own)`
+					: ''),
 			el: r.el,
-			snap: s ? { ssr: s.ssr, hydrated: s.hydrated, ...(s.from !== undefined ? { from: s.from } : {}) } : null
+			snap: s
+				? { ssr: s.ssr, hydrated: s.hydrated, ...(s.from !== undefined ? { from: s.from } : {}) }
+				: null
 		});
 	}
-	rows.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.name.localeCompare(b.name));
+	rows.sort(
+		(a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.name.localeCompare(b.name)
+	);
 	return { rows, measured: !!page };
 }
 

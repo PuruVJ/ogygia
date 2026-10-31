@@ -48,7 +48,8 @@ interface EmitContext {
 /** the path of `abs` inside `dir`, with forward slashes */
 const rel_to = (dir: string, abs: string) => relative(dir, abs).split('\\').join('/');
 
-const RELATIVE_TS_SPECIFIER = /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?)\.ts\2/g;
+const RELATIVE_TS_SPECIFIER =
+	/(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?)\.ts\2/g;
 
 /** A shipped component sits beside the BUILT modules: its relative `./x.ts` imports (static, dynamic,
  *  or a JSDoc `import('./x.ts')` type) name `./x.js`, the way tsdown rewrites the `.ts` sources. */
@@ -101,7 +102,10 @@ export function svelte(options: SvelteOptions = {}) {
 			if (existsSync(base))
 				writeFileSync(
 					scratch,
-					JSON.stringify({ extends: './' + rel_to(root, base), compilerOptions: { isolatedDeclarations: false } })
+					JSON.stringify({
+						extends: './' + rel_to(root, base),
+						compilerOptions: { isolatedDeclarations: false }
+					})
 				);
 			try {
 				await emitDts({

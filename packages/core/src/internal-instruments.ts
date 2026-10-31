@@ -26,4 +26,9 @@ export { REGION_RENDER_CONCURRENCY } from './runtime/concurrency.ts';
 export { tool_fetch, tool_made } from './tool-fetches.ts';
 export { PAGE_DEFER_KEY, PAGE_DEFER_GLOBAL, PAGE_DEFER_REGISTRY_KEY } from './page-defer.ts';
 export { ISLAND_GRAPH_ATTR, decode_island_graph } from './island-graph.ts';
-export { find_unscoped, unscoped_finding, unscoped_marker, type UnscopedStyles } from './unscoped-css.ts';
+export {
+	find_unscoped,
+	unscoped_finding,
+	unscoped_marker,
+	type UnscopedStyles
+} from './unscoped-css.ts';

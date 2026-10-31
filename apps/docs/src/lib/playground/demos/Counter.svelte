@@ -34,7 +34,9 @@
 		font-size: 1.1rem;
 		font-weight: 600;
 		cursor: pointer;
-		transition: transform 120ms ease, background 120ms ease;
+		transition:
+			transform 120ms ease,
+			background 120ms ease;
 	}
 	button:hover {
 		background: var(--og-accent, #0d9488);

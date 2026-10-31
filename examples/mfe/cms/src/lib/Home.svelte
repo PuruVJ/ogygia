@@ -2,7 +2,9 @@
 	// The `page.data` gotcha, kept on the home page on purpose: standalone this island reads the
 	// cms page; mounted in the shell it reads the SHELL's (dev warns). See PageDataProbe.svelte.
 	import PageDataProbe from './PageDataProbe.svelte' with { wake: 'load' };
-	let { data }: {
+	let {
+		data
+	}: {
 		data: {
 			posts: { id: string; title: string }[];
 			base: string;

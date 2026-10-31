@@ -38,10 +38,14 @@ import { emit as dt_emit } from '../events/bus.ts';
 const KitBoot = { document_has: (doc: ParentNode) => boot_link().KitBoot.document_has(doc) };
 const regions_in_shadow = () => boot_link().regions_in_shadow();
 const session = () => boot_link().runtime_session;
-const is_warmed_module = (entry: string, base?: string) => boot_link().is_warmed_module(entry, base);
-const warm_island_module = (entry: string, base?: string) => boot_link().warm_island_module(entry, base);
-const note_entry_location = (entry: string, src: string | null, base?: string) => boot_link().note_entry_location(entry, src, base);
-const register_island_graph = (text: string, base: string) => boot_link().register_island_graph(text, base);
+const is_warmed_module = (entry: string, base?: string) =>
+	boot_link().is_warmed_module(entry, base);
+const warm_island_module = (entry: string, base?: string) =>
+	boot_link().warm_island_module(entry, base);
+const note_entry_location = (entry: string, src: string | null, base?: string) =>
+	boot_link().note_entry_location(entry, src, base);
+const register_island_graph = (text: string, base: string) =>
+	boot_link().register_island_graph(text, base);
 const yield_task = () => boot_link().yield_task();
 const document_key = (url: URL) => router_link().document_key(url);
 const jump_to_hash = (hash: string) => router_link().jump_to_hash(hash);
@@ -177,7 +181,8 @@ export function tag_attr(attrs: string, name: string): string | null {
 }
 /** The island graph scripts in our own SSR output (island-graph.ts; the JSON is `<`-escaped, so
  *  its text never holds a `<`). */
-const ISLAND_GRAPH_SCRIPT_G = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/g;
+const ISLAND_GRAPH_SCRIPT_G =
+	/<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/g;
 
 /** Stable-ish head node identity without serializing full outerHTML when possible. */
 export function head_node_key(node: Element): string {
@@ -397,7 +402,11 @@ function install_remote_mutation_cache_bust() {
 }
 install_remote_mutation_cache_bust();
 
-export function fetch_page(href: string, signal?: AbortSignal, purpose: NavPurpose = 'nav'): Promise<string | null> {
+export function fetch_page(
+	href: string,
+	signal?: AbortSignal,
+	purpose: NavPurpose = 'nav'
+): Promise<string | null> {
 	// Warm cache hit (a prefetched page, or an in-flight prefetch): serving it is instant, so
 	// even an abortable navigation uses it — there is nothing to abort on a resolved cache hit
 	// or a shared prefetch promise. Without this, a click after a hover-prefetch would re-fetch
@@ -493,7 +502,8 @@ function warm_modules(href: string, html: string) {
 	// The page's island graph first, so each warm below preloads its island's whole graph with it.
 	ISLAND_GRAPH_SCRIPT_G.lastIndex = 0;
 	let g: RegExpExecArray | null;
-	while ((g = ISLAND_GRAPH_SCRIPT_G.exec(html))) register_island_graph(g[1], new URL(href, location.href).href);
+	while ((g = ISLAND_GRAPH_SCRIPT_G.exec(html)))
+		register_island_graph(g[1], new URL(href, location.href).href);
 	// Each region's identity, and its location beside it (the file the warm then fetches)
 	REGION_OPEN_TAG_G.lastIndex = 0; // shared `g` regex — start each scan at 0
 	let m: RegExpExecArray | null;
@@ -789,7 +799,16 @@ export async function navigate(
 	r.nav_target = null; // applied — a later same-address click is a refresh, not a duplicate
 	// (the profiler's browser half, through the boot's link — this lazy chunk imports no boot
 	// module; a no-op without the profiler's tag or devtools)
-	boot_link().beacon_nav({ from: from.pathname + from.search, to: dest.pathname + dest.search, type, t: nav_t0, fetched: nav_fetched, styled: nav_styled, swapped: performance.now(), href: url.href });
+	boot_link().beacon_nav({
+		from: from.pathname + from.search,
+		to: dest.pathname + dest.search,
+		type,
+		t: nav_t0,
+		fetched: nav_fetched,
+		styled: nav_styled,
+		swapped: performance.now(),
+		href: url.href
+	});
 	if (DEVTOOLS)
 		dt_emit({
 			domain: 'nav',

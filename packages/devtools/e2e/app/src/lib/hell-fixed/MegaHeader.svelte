@@ -16,7 +16,13 @@
 	const menus = buildMenus(config.menus, config.locale, (s) => slugger.slug(s)).map((m) => ({
 		...m,
 		promoTitle: t('menu.promo', { title: m.promo.title }),
-		ld: jsonLd({ id: m.slug ?? m.title, name: m.title, price: 0, currency: 'EUR', specs: m.columns }),
+		ld: jsonLd({
+			id: m.slug ?? m.title,
+			name: m.title,
+			price: 0,
+			currency: 'EUR',
+			specs: m.columns
+		}),
 		track: track('menu.render', { title: m.title, columns: m.columns.length })
 	}));
 </script>
@@ -24,7 +30,9 @@
 <header data-mega-header>
 	<div class="utility">
 		{#each config.utility as u (u.href)}<a href={u.href}>{u.label}</a>{/each}
-		<span>{config.brand} · {config.locale} · updated {config.updated.toISOString().slice(0, 10)}</span>
+		<span
+			>{config.brand} · {config.locale} · updated {config.updated.toISOString().slice(0, 10)}</span
+		>
 	</div>
 	<nav>
 		{#each menus as m, i (m.title)}
@@ -38,19 +46,36 @@
 					<h4>{col.title}</h4>
 					<ul>
 						{#each col.links as l (l.href)}
-							<li><a href={l.href} data-slug={l.slug} title={l.text}>{l.label}</a>{#if l.badge}<Badge label={l.badge} tone="new" />{/if}<small>{l.description}</small></li>
+							<li>
+								<a href={l.href} data-slug={l.slug} title={l.text}>{l.label}</a>{#if l.badge}<Badge
+										label={l.badge}
+										tone="new"
+									/>{/if}<small>{l.description}</small>
+							</li>
 						{/each}
 					</ul>
 				</div>
 			{/each}
-			<aside data-track={m.track}><h5>{m.promoTitle}</h5><p>{m.promo.body}</p></aside>
+			<aside data-track={m.track}>
+				<h5>{m.promoTitle}</h5>
+				<p>{m.promo.body}</p>
+			</aside>
 		</div>
 	{/each}
 </header>
 
 <style>
-	header { border-bottom: 1px solid #ddd; }
-	.panel[hidden] { display: none; }
-	.col ul { columns: 2; }
-	small { display: block; color: #666; }
+	header {
+		border-bottom: 1px solid #ddd;
+	}
+	.panel[hidden] {
+		display: none;
+	}
+	.col ul {
+		columns: 2;
+	}
+	small {
+		display: block;
+		color: #666;
+	}
 </style>

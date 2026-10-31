@@ -73,7 +73,9 @@ export function content(options: ContentOptions = {}): [OgygiaPlugin, ...VitePlu
 		name: '@ogygia/content',
 		build(b) {
 			root = b.root;
-			for (const { name, handler } of snippet_macros(() => bridge.markdownConfig as MarkdownOptions | null))
+			for (const { name, handler } of snippet_macros(
+				() => bridge.markdownConfig as MarkdownOptions | null
+			))
 				b.macro(name, handler);
 			b.macro('loader', (code, m) => {
 				if (!JS_MODULE_RE.test(m.id)) {
@@ -91,7 +93,9 @@ export function content(options: ContentOptions = {}): [OgygiaPlugin, ...VitePlu
 				for (const spec of specs) materialize(spec, { root: m.root });
 				return rewritten;
 			});
-			b.macro('regions', (code, m) => (JS_MODULE_RE.test(m.id) ? rewrite_regions(code, m.id) : code));
+			b.macro('regions', (code, m) =>
+				JS_MODULE_RE.test(m.id) ? rewrite_regions(code, m.id) : code
+			);
 			if (markdown) {
 				const islands = b.markup({
 					extensions: exts,
@@ -171,12 +175,18 @@ function validate_presets(presets: Record<string, unknown>, has_markdown: boolea
 		);
 	for (const [name, bag] of Object.entries(presets)) {
 		if (!IDENT_NAME_RE.test(name))
-			throw new Error(`[ogygia/content] presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`);
+			throw new Error(
+				`[ogygia/content] presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`
+			);
 		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0)
-			throw new Error(`[ogygia/content] presets.${name} is empty — a preset with nothing is a mistake.`);
+			throw new Error(
+				`[ogygia/content] presets.${name} is empty — a preset with nothing is a mistake.`
+			);
 		for (const k of Object.keys(bag))
 			if (k !== 'markdown')
-				throw new Error(`[ogygia/content] presets.${name}: unknown key \`${k}\`. A content preset takes \`markdown\`.`);
+				throw new Error(
+					`[ogygia/content] presets.${name}: unknown key \`${k}\`. A content preset takes \`markdown\`.`
+				);
 	}
 }
 

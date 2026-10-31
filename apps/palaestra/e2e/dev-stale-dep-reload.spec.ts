@@ -25,7 +25,16 @@ test.describe('dev: a stale-dep entry-fetch failure recovers the tab', () => {
 	test.beforeAll(async () => {
 		srv = await spawn_server({
 			cmd: 'pnpm',
-			args: ['--dir', palaestra, 'dev', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+			args: [
+				'--dir',
+				palaestra,
+				'dev',
+				'--port',
+				String(PORT),
+				'--strictPort',
+				'--host',
+				'127.0.0.1'
+			],
 			cwd: repo,
 			url: `${base}/interaction`,
 			timeout_ms: 120_000
@@ -34,7 +43,9 @@ test.describe('dev: a stale-dep entry-fetch failure recovers the tab', () => {
 
 	test.afterAll(() => srv?.kill());
 
-	test('the watchdog reloads once when the entry serves but its import fails, then stops', async ({ page }) => {
+	test('the watchdog reloads once when the entry serves but its import fails, then stops', async ({
+		page
+	}) => {
 		test.setTimeout(120_000);
 		// Count loads across reloads.
 		await page.addInitScript(() => {

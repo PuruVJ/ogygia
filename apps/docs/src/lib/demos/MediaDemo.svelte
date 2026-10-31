@@ -6,12 +6,7 @@
 	let { code }: { code: import('ogygia').RegionValue } = $props();
 </script>
 
-<DemoBlock
-	title="wake: media"
-	{code}
-	onLabel="live"
-	offLabel="static"
->
+<DemoBlock title="wake: media" {code} onLabel="live" offLabel="static">
 	{#snippet live()}
 		<MediaLive />
 	{/snippet}

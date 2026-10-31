@@ -14,7 +14,13 @@
 	$effect(() => {
 		const els = [...document.querySelectorAll<HTMLElement>('.part, .app-main h2')];
 		entries = els.map((el) => {
-			if (el.classList.contains('part')) return { n: el.querySelector('.part-n')?.textContent ?? '', t: el.querySelector('.part-t')?.textContent ?? '', el, level: 0 as const };
+			if (el.classList.contains('part'))
+				return {
+					n: el.querySelector('.part-n')?.textContent ?? '',
+					t: el.querySelector('.part-t')?.textContent ?? '',
+					el,
+					level: 0 as const
+				};
 			// an h2's own text, minus the trailing "(hint …)" the sections carry
 			const t = (el.childNodes[0]?.textContent ?? el.textContent ?? '').trim();
 			return { n: '', t, el, level: 1 as const };
@@ -44,7 +50,12 @@
 		<ul>
 			{#each entries as e, i (i)}
 				<li>
-					<button class:on={i === active} class:part={e.level === 0} class:sub={e.level === 1} onclick={() => jump(e)}>
+					<button
+						class:on={i === active}
+						class:part={e.level === 0}
+						class:sub={e.level === 1}
+						onclick={() => jump(e)}
+					>
 						{#if e.n}<span class="n">{e.n}</span>{/if}{e.t}
 					</button>
 				</li>

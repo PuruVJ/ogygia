@@ -7,8 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { localizeMarks, mark, settle, transformMarkup } from '../src/server/reversible.ts';
 import { fake_scoped } from './fixtures/fake-scoped-render.ts';
 
-const island = (inner: string) => `<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
-const doc = (body: string) => `<!doctype html><html><head><title>t</title></head><body>${body}</body></html>`;
+const island = (inner: string) =>
+	`<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
+const doc = (body: string) =>
+	`<!doctype html><html><head><title>t</title></head><body>${body}</body></html>`;
 /** a csr=false document with one island */
 const page = (inner: string) => doc(island(inner));
 
@@ -25,12 +27,17 @@ describe('mark', () => {
 		// a server-owned host around an island: planned (adopting it would reach into the island)
 		expect(m.html).toContain('<demo-card og-h="1" id="lake-host">');
 		// in the island: planned, each child tagged — elements by attribute, text and comments by comment
-		expect(m.html).toContain('<demo-card og-h="2" class="own"><!--og-c 2.0 c--><!--[--><!--og-c 2.1 t--> Sign in <i og-c="2.2">ok</i><!--og-c 2.3 c--><!--]-->');
+		expect(m.html).toContain(
+			'<demo-card og-h="2" class="own"><!--og-c 2.0 c--><!--[--><!--og-c 2.1 t--> Sign in <i og-c="2.2">ok</i><!--og-c 2.3 c--><!--]-->'
+		);
 		expect(m.record.hosts.get(2)!.children.get(1)!.text).toBe(' Sign in ');
 	});
 
 	it('a document the router fetched is an answer: every host planned, as in a region answer', () => {
-		const html = doc(`<demo-card class="shell"><p>server</p></demo-card>` + island(`<demo-card class="own"><i>ok</i></demo-card>`));
+		const html = doc(
+			`<demo-card class="shell"><p>server</p></demo-card>` +
+				island(`<demo-card class="own"><i>ok</i></demo-card>`)
+		);
 		// loaded as a document, the server-owned host is left to its own runtime
 		expect(mark(html, 'document', false)!.html).toContain('<demo-card og-u="0" class="shell">');
 		// fetched by the router, it meets a live host its runtime already unpacked: planned, restorable
@@ -42,24 +49,45 @@ describe('mark', () => {
 
 	it('a baked live region is opaque like a lake: on a Kit-hydrated document its hosts get no plan, its islands keep theirs', () => {
 		const baked = (inner: string) => `<ogygia-region live data-og-baked>${inner}</ogygia-region>`;
-		const m = mark(doc(baked(`<demo-card hidden><p>x</p></demo-card>` + island(`<demo-card class="own"><i>ok</i></demo-card>`))), 'document', true)!;
+		const m = mark(
+			doc(
+				baked(
+					`<demo-card hidden><p>x</p></demo-card>` +
+						island(`<demo-card class="own"><i>ok</i></demo-card>`)
+				)
+			),
+			'document',
+			true
+		)!;
 		// nothing hydrates the baked region's own markup: restoring it to Svelte's render would undo the
 		// transform (a server-added `hidden` lost before the element's runtime set it again)
 		expect(m.html).toContain('<demo-card og-u="0" hidden>');
 		// an island inside it is still Svelte's: planned
 		expect(m.html).toContain('<demo-card og-h="1" class="own">');
 		// the same for a lake, the shape it now shares
-		expect(mark(doc(`<ogygia-region wake="none"><demo-card><p>x</p></demo-card></ogygia-region>`), 'document', true)!.html).toContain('og-u="0"');
+		expect(
+			mark(
+				doc(`<ogygia-region wake="none"><demo-card><p>x</p></demo-card></ogygia-region>`),
+				'document',
+				true
+			)!.html
+		).toContain('og-u="0"');
 	});
 
 	it('a Kit-hydrated document is Svelte-owned throughout its body; a region answer plans every host', () => {
-		expect(mark(doc('<demo-card><p>x</p></demo-card>'), 'document', true)!.html).toContain('og-h="0"');
+		expect(mark(doc('<demo-card><p>x</p></demo-card>'), 'document', true)!.html).toContain(
+			'og-h="0"'
+		);
 		expect(mark('<demo-card><p>x</p></demo-card>', 'region', false)!.html).toContain('og-h="0"');
 		expect(mark('<p>no custom elements</p>', 'region', false)).toBeNull();
 	});
 
 	it('marks text a trimmer could change, deeper inside a planned host’s children — never the first text of a <pre>', () => {
-		const m = mark('<demo-card><p> a <b>b</b>c</p><pre>\n keep</pre></demo-card>', 'region', false)!;
+		const m = mark(
+			'<demo-card><p> a <b>b</b>c</p><pre>\n keep</pre></demo-card>',
+			'region',
+			false
+		)!;
 		expect(m.html).toContain('<p og-c="0.0"><!--og-t 0.0--> a <b>b</b>c</p>');
 		expect(m.html).toContain('<pre og-c="0.1">\n keep</pre>');
 	});
@@ -82,13 +110,17 @@ describe('settle', () => {
 	});
 
 	it('a host without a plan loses every mark: left exactly as the transform wrote it', async () => {
-		const html = doc('<demo-card class="shell"><p>server</p></demo-card><demo-skip><p> keep </p></demo-skip>');
+		const html = doc(
+			'<demo-card class="shell"><p>server</p></demo-card><demo-skip><p> keep </p></demo-skip>'
+		);
 		const s = await transformMarkup(html, fake_scoped, { kind: 'document' });
 		expect(s.planned).toBe(0);
 		// (the fake stamps its c-id on the children it saw tagged; everything of ogygia's is gone)
 		expect(s.html).toBe(fake_scoped(html).split('<p>server').join('<p c-id="0.1">server'));
 		// an og-h host the transform skipped (no og-shadow): untouched, marks gone
-		const r = await transformMarkup('<demo-skip class="x"><p> keep </p></demo-skip>', (h) => h, { kind: 'region' });
+		const r = await transformMarkup('<demo-skip class="x"><p> keep </p></demo-skip>', (h) => h, {
+			kind: 'region'
+		});
 		expect(r.html).toBe('<demo-skip class="x"><p> keep </p></demo-skip>');
 	});
 
@@ -97,10 +129,16 @@ describe('settle', () => {
 		const html = page('<a href="/card"><demo-link>Go</demo-link></a>');
 		const s = await transformMarkup(html, fake_scoped, { kind: 'document' });
 		expect(s.stand_ins).toBe(1);
-		expect(s.html).toContain('<og-as class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#" tag="a">');
+		expect(s.html).toContain(
+			'<og-as class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#" tag="a">'
+		);
 		expect(s.html).toContain('</slot></og-as></demo-link></a>');
 		// the page's own misnesting (neither side made by the render) is left alone
-		const own = await transformMarkup(doc('<a href="/1"><span><a href="/2">x</a></span></a><demo-card><p>y</p></demo-card>'), fake_scoped, { kind: 'document' });
+		const own = await transformMarkup(
+			doc('<a href="/1"><span><a href="/2">x</a></span></a><demo-card><p>y</p></demo-card>'),
+			fake_scoped,
+			{ kind: 'document' }
+		);
 		expect(own.stand_ins).toBe(0);
 	});
 
@@ -143,7 +181,9 @@ describe('settle', () => {
 
 	it('a tagged child that is a host ogygia won’t restore keeps the attributes its runtime adopts it by', async () => {
 		// a server-owned host around an island (planned) with a plain server-owned host among its children
-		const html = doc(`<demo-card class="shell"><demo-skip data-x="1">nav</demo-skip><ogygia-region wake="none">${island('<b>i</b>')}</ogygia-region></demo-card>`);
+		const html = doc(
+			`<demo-card class="shell"><demo-skip data-x="1">nav</demo-skip><ogygia-region wake="none">${island('<b>i</b>')}</ogygia-region></demo-card>`
+		);
 		const adopt = (h: string) => fake_scoped(h).split('<demo-skip').join('<demo-skip s-id="4"');
 		const s = await transformMarkup(html, adopt, { kind: 'document' });
 		const at = s.html.indexOf('<demo-skip');
@@ -161,9 +201,12 @@ describe('settle', () => {
 
 describe('localizeMarks', () => {
 	it('renumbers a block’s marks from 0 for a cache key, and puts the document’s ids back after', () => {
-		const block = '<demo-card og-h="41" class="x"><!--og-c 41.0 t--> a <demo-card og-h="42" og-c="41.1">b</demo-card><!--og-t 41.3--> </demo-card>';
+		const block =
+			'<demo-card og-h="41" class="x"><!--og-c 41.0 t--> a <demo-card og-h="42" og-c="41.1">b</demo-card><!--og-t 41.3--> </demo-card>';
 		const local = localizeMarks(block);
-		expect(local.html).toBe('<demo-card og-h="0" class="x"><!--og-c 0.0 t--> a <demo-card og-h="1" og-c="0.1">b</demo-card><!--og-t 0.3--> </demo-card>');
+		expect(local.html).toBe(
+			'<demo-card og-h="0" class="x"><!--og-c 0.0 t--> a <demo-card og-h="1" og-c="0.1">b</demo-card><!--og-t 0.3--> </demo-card>'
+		);
 		const rendered = local.html.replace('class="x"', 'class="x sc-h" og-shadow="k"');
 		expect(local.back(rendered)).toBe(block.replace('class="x"', 'class="x sc-h" og-shadow="k"'));
 	});

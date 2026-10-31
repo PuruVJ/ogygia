@@ -34,6 +34,10 @@
 </section>
 
 <style>
-	.exp { margin: 1.5rem 0; }
-	.ph { opacity: 0.6; }
+	.exp {
+		margin: 1.5rem 0;
+	}
+	.ph {
+		opacity: 0.6;
+	}
 </style>

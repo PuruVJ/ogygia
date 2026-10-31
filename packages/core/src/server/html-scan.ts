@@ -14,8 +14,15 @@ export function is_space(c: number): boolean {
 	if (c <= 32) return c === 32 || (c >= 9 && c <= 13);
 	if (c < 160) return false;
 	return (
-		c === 160 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 ||
-		c === 0x202f || c === 0x205f || c === 0x3000 || c === 0xfeff
+		c === 160 ||
+		c === 0x1680 ||
+		(c >= 0x2000 && c <= 0x200a) ||
+		c === 0x2028 ||
+		c === 0x2029 ||
+		c === 0x202f ||
+		c === 0x205f ||
+		c === 0x3000 ||
+		c === 0xfeff
 	);
 }
 

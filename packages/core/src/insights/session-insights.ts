@@ -8,7 +8,11 @@
 import { analyze_cpu, fn_label, is_trace, type CpuSummary } from './cpu.ts';
 import type { SessionData } from './session-data.ts';
 
-export type Ref = { kind: 'interaction'; i: number } | { kind: 'click'; i: number } | { kind: 'shift'; i: number } | { kind: 'island'; fp: string };
+export type Ref =
+	| { kind: 'interaction'; i: number }
+	| { kind: 'click'; i: number }
+	| { kind: 'shift'; i: number }
+	| { kind: 'island'; fp: string };
 
 export interface SessionFinding {
 	code: string;
@@ -26,7 +30,14 @@ export interface IslandSession {
 	/** its interactions over 100 ms */
 	slow: { target: string; duration: number; processing: number }[];
 	/** requests that started within 3 s after a click on it, with the server's split */
-	requests: { url: string; ms: number; server_ms: number | null; net_ms: number | null; up: string | null; status: number | null }[];
+	requests: {
+		url: string;
+		ms: number;
+		server_ms: number | null;
+		net_ms: number | null;
+		up: string | null;
+		status: number | null;
+	}[];
 	mutations: number;
 }
 
@@ -51,7 +62,15 @@ export function session_timeline(s: SessionData, names: (fp: string) => string):
 	const z = s.from;
 	const cap = <T>(xs: T[]) => xs.slice(0, 300);
 	const input: TimelineItem[] = [];
-	s.clicks.forEach((c, i) => input.push({ t0: c.t - z, t1: c.t - z, label: `click ${c.target}`, tone: 'info', ref: { kind: 'click', i } }));
+	s.clicks.forEach((c, i) =>
+		input.push({
+			t0: c.t - z,
+			t1: c.t - z,
+			label: `click ${c.target}`,
+			tone: 'info',
+			ref: { kind: 'click', i }
+		})
+	);
 	const seen = new Set<number>();
 	s.interactions.forEach((x, i) => {
 		if (!x.id || seen.has(x.id)) return;
@@ -64,7 +83,12 @@ export function session_timeline(s: SessionData, names: (fp: string) => string):
 			ref: { kind: 'interaction', i }
 		});
 	});
-	const main: TimelineItem[] = s.longtasks.map((t) => ({ t0: t.t - z, t1: t.t - z + t.ms, label: `long task ${Math.round(t.ms)} ms`, tone: t.ms >= 200 ? 'bad' : 'warn' }));
+	const main: TimelineItem[] = s.longtasks.map((t) => ({
+		t0: t.t - z,
+		t1: t.t - z + t.ms,
+		label: `long task ${Math.round(t.ms)} ms`,
+		tone: t.ms >= 200 ? 'bad' : 'warn'
+	}));
 	const net: TimelineItem[] = s.requests.map((r) => {
 		const ssr = r.server?.find((x) => x.name === 'ssr')?.ms;
 		const up = r.server?.find((x) => x.name === 'net')?.ms ?? 0;
@@ -84,18 +108,49 @@ export function session_timeline(s: SessionData, names: (fp: string) => string):
 	});
 	const islands: TimelineItem[] = [];
 	// the documents the session crossed (a full page load mid-session)
-	for (const p of (s.pages ?? []).slice(1)) islands.push({ t0: p.t - z, t1: p.t - z, label: `page load: ${p.url}`, tone: 'info' });
+	for (const p of (s.pages ?? []).slice(1))
+		islands.push({ t0: p.t - z, t1: p.t - z, label: `page load: ${p.url}`, tone: 'info' });
 	const hyd = new Map<string, number>();
 	for (const e of s.events) if (e.name === 'region.hydrate.done' && e.fp) hyd.set(e.fp, e.t);
 	for (const e of s.events) {
 		const fp = (e as { fp?: string }).fp;
 		if (e.name === 'wake.fired' && fp)
-			islands.push({ t0: e.t - z, t1: (hyd.get(fp) ?? e.t) - z, label: `${names(fp)} woke (${(e as { when?: string }).when ?? ''})`, tone: 'ok', ref: { kind: 'island', fp } });
-		else if (e.name === 'region.hydrate.failed' && fp) islands.push({ t0: e.t - z, t1: e.t - z, label: `${names(fp)} failed to hydrate`, tone: 'bad', ref: { kind: 'island', fp } });
-		else if (e.name === 'nav.finish') islands.push({ t0: e.t - e.ms - z, t1: e.t - z, label: `navigation to ${e.to} — ${Math.round(e.ms)} ms`, tone: e.ms >= 500 ? 'warn' : 'info' });
+			islands.push({
+				t0: e.t - z,
+				t1: (hyd.get(fp) ?? e.t) - z,
+				label: `${names(fp)} woke (${(e as { when?: string }).when ?? ''})`,
+				tone: 'ok',
+				ref: { kind: 'island', fp }
+			});
+		else if (e.name === 'region.hydrate.failed' && fp)
+			islands.push({
+				t0: e.t - z,
+				t1: e.t - z,
+				label: `${names(fp)} failed to hydrate`,
+				tone: 'bad',
+				ref: { kind: 'island', fp }
+			});
+		else if (e.name === 'nav.finish')
+			islands.push({
+				t0: e.t - e.ms - z,
+				t1: e.t - z,
+				label: `navigation to ${e.to} — ${Math.round(e.ms)} ms`,
+				tone: e.ms >= 500 ? 'warn' : 'info'
+			});
 	}
-	const layout: TimelineItem[] = s.shifts.map((x, i) => ({ t0: x.t - z, t1: x.t - z, label: `layout shift ${x.value}${x.input ? ' (after input)' : ''}${x.fp ? ` in ${names(x.fp)}` : ''}`, tone: x.input ? 'info' : x.value >= 0.05 ? 'bad' : 'warn', ref: { kind: 'shift', i } }));
-	const errors: TimelineItem[] = s.errors.map((e) => ({ t0: e.t - z, t1: e.t - z, label: e.message, tone: 'bad' }));
+	const layout: TimelineItem[] = s.shifts.map((x, i) => ({
+		t0: x.t - z,
+		t1: x.t - z,
+		label: `layout shift ${x.value}${x.input ? ' (after input)' : ''}${x.fp ? ` in ${names(x.fp)}` : ''}`,
+		tone: x.input ? 'info' : x.value >= 0.05 ? 'bad' : 'warn',
+		ref: { kind: 'shift', i }
+	}));
+	const errors: TimelineItem[] = s.errors.map((e) => ({
+		t0: e.t - z,
+		t1: e.t - z,
+		label: e.message,
+		tone: 'bad'
+	}));
 	return (
 		[
 			{ key: 'input', label: 'input', items: cap(input) },
@@ -111,24 +166,62 @@ export function session_timeline(s: SessionData, names: (fp: string) => string):
 export interface SessionReport {
 	duration_ms: number;
 	/** `shifts` and `cls`: the layout moving with no input (the shifts the session's CLS counts) */
-	counts: { interactions: number; slow: number; longtasks: number; longtask_ms: number; requests: number; request_bytes: number; errors: number; shifts: number; cls: number; mutations: number; pages: number };
+	counts: {
+		interactions: number;
+		slow: number;
+		longtasks: number;
+		longtask_ms: number;
+		requests: number;
+		request_bytes: number;
+		errors: number;
+		shifts: number;
+		cls: number;
+		mutations: number;
+		pages: number;
+	};
 	findings: SessionFinding[];
 	/** the slowest interactions, for the timeline */
-	interactions: { i: number; t: number; name: string; duration: number; target: string; fp: string | null }[];
+	interactions: {
+		i: number;
+		t: number;
+		name: string;
+		duration: number;
+		target: string;
+		fp: string | null;
+	}[];
 	/** each island's part: clicks, slow interactions, the requests its clicks caused (server split) */
 	by_island: Record<string, IslandSession>;
 	/** the slowest requests, with the server's own split when it sent one */
-	requests: { url: string; ms: number; status: number | null; server_ms: number | null; cpu_ms: number | null; net_ms: number | null; up: string | null }[];
+	requests: {
+		url: string;
+		ms: number;
+		status: number | null;
+		server_ms: number | null;
+		cpu_ms: number | null;
+		net_ms: number | null;
+		up: string | null;
+	}[];
 	/** every request that answered an error status (`type`: the browser's initiator type) */
 	failed: { url: string; status: number; type: string; t: number }[];
 	/** the slowest interaction on each element the session touched, however quick (0: a click the
 	 *  browser did not time, under its 16 ms floor) */
-	by_element: { target: string; duration: number; processing: number; t: number; fp: string | null }[];
+	by_element: {
+		target: string;
+		duration: number;
+		processing: number;
+		t: number;
+		fp: string | null;
+	}[];
 	cpu: CpuSummary | null;
 }
 
 const ms = (n: number) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : Math.round(n) + ' ms');
-const kb = (n: number) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+const kb = (n: number) =>
+	n < 1024
+		? n + ' B'
+		: n < 1048576
+			? (n / 1024).toFixed(1) + ' KB'
+			: (n / 1048576).toFixed(1) + ' MB';
 const path_of = (u: string) => {
 	try {
 		const x = new URL(u);
@@ -151,7 +244,11 @@ function same_origin_get(url: string, page_url: string): boolean {
 const SLOW = 200;
 const SLUGGISH = 100;
 
-export function analyze_session(s: SessionData, names: (fp: string) => string, page_url: string): SessionReport {
+export function analyze_session(
+	s: SessionData,
+	names: (fp: string) => string,
+	page_url: string
+): SessionReport {
 	const findings: SessionFinding[] = [];
 	const name_of = (fp: string | null) => (fp ? names(fp) : 'the page');
 
@@ -165,15 +262,28 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 		longest.set(x.id, Math.max(longest.get(x.id) ?? 0, x.duration));
 		const prev = by_id.get(x.id);
 		const p = prev === undefined ? null : s.interactions[prev];
-		if (!p || x.processing > p.processing || (x.processing === p.processing && x.duration > p.duration)) by_id.set(x.id, i);
+		if (
+			!p ||
+			x.processing > p.processing ||
+			(x.processing === p.processing && x.duration > p.duration)
+		)
+			by_id.set(x.id, i);
 	});
-	for (const [id, i] of by_id) s.interactions[i] = { ...s.interactions[i], duration: longest.get(id) ?? s.interactions[i].duration };
+	for (const [id, i] of by_id)
+		s.interactions[i] = {
+			...s.interactions[i],
+			duration: longest.get(id) ?? s.interactions[i].duration
+		};
 	const chosen = [...by_id.values()];
 
 	// the CPU trace, with each chosen interaction as a window (its top functions), long tasks outside
 	let cpu: CpuSummary | null = null;
 	if (is_trace(s.cpu)) {
-		const windows = chosen.map((i) => ({ fp: 'ix:' + i, from: s.interactions[i].t, to: s.interactions[i].t + s.interactions[i].duration }));
+		const windows = chosen.map((i) => ({
+			fp: 'ix:' + i,
+			from: s.interactions[i].t,
+			to: s.interactions[i].t + s.interactions[i].duration
+		}));
 		cpu = analyze_cpu(s.cpu, windows, s.longtasks, page_url);
 	}
 	const why = (i: number) => {
@@ -181,15 +291,26 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 		if (f && f.self_ms >= 5) return `; mostly ${fn_label(f)}`;
 		// no sampler: the long animation frame over it names the script
 		const x = s.interactions[i];
-		const frame = s.frames.find((fr) => fr.t <= x.t + x.duration && fr.t + fr.ms >= x.t && fr.scripts.length);
+		const frame = s.frames.find(
+			(fr) => fr.t <= x.t + x.duration && fr.t + fr.ms >= x.t && fr.scripts.length
+		);
 		const sc = frame?.scripts.slice().sort((a, b) => b.ms - a.ms)[0];
-		return sc && sc.ms >= 5 ? `; mostly ${sc.invoker || sc.fn || 'a script'}${sc.source ? ` (${path_of(sc.source).split('/').pop()})` : ''}` : '';
+		return sc && sc.ms >= 5
+			? `; mostly ${sc.invoker || sc.fn || 'a script'}${sc.source ? ` (${path_of(sc.source).split('/').pop()})` : ''}`
+			: '';
 	};
 
-	const slow = chosen.filter((i) => s.interactions[i].duration >= SLUGGISH).sort((a, b) => s.interactions[b].duration - s.interactions[a].duration);
+	const slow = chosen
+		.filter((i) => s.interactions[i].duration >= SLUGGISH)
+		.sort((a, b) => s.interactions[b].duration - s.interactions[a].duration);
 	for (const i of slow.slice(0, 5)) {
 		const x = s.interactions[i];
-		const part = x.processing >= x.input_delay && x.processing >= x.presentation ? 'processing' : x.input_delay >= x.presentation ? 'input' : 'paint';
+		const part =
+			x.processing >= x.input_delay && x.processing >= x.presentation
+				? 'processing'
+				: x.input_delay >= x.presentation
+					? 'input'
+					: 'paint';
 		findings.push({
 			code: 'slow-interaction',
 			severity: x.duration >= SLOW ? 'warn' : 'info',
@@ -208,7 +329,8 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 	const rage: number[] = [];
 	for (let a = 0; a < s.clicks.length; a++) {
 		let n = 1;
-		for (let b = a + 1; b < s.clicks.length && s.clicks[b].t - s.clicks[a].t < 1000; b++) if (s.clicks[b].target === s.clicks[a].target) n++;
+		for (let b = a + 1; b < s.clicks.length && s.clicks[b].t - s.clicks[a].t < 1000; b++)
+			if (s.clicks[b].target === s.clicks[a].target) n++;
 		if (n >= 3 && !rage.some((r) => s.clicks[r].target === s.clicks[a].target)) rage.push(a);
 	}
 	for (const i of rage)
@@ -240,7 +362,9 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 			return;
 		}
 		const until = c.t + 500;
-		const others = new Set(s.clicks.filter((o, j) => j !== i && o.t >= c.t && o.t <= until && o.fp).map((o) => o.fp));
+		const others = new Set(
+			s.clicks.filter((o, j) => j !== i && o.t >= c.t && o.t <= until && o.fp).map((o) => o.fp)
+		);
 		const changed = s.mut_log.some((m) => m.t >= c.t && m.t <= until && !others.has(m.fp));
 		const asked = s.requests.some((r) => r.t >= c.t && r.t <= until) && !others.size;
 		if (!changed && !asked && !navs.some((t) => t >= c.t && t <= until)) dead.push(i);
@@ -251,7 +375,10 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 			severity: 'info',
 			message: `${late.length} click${late.length === 1 ? '' : 's'} got no visible answer for a while: ${late
 				.slice(0, 3)
-				.map(({ i, after }) => `${s.clicks[i].target}${s.clicks[i].fp ? ` in ${name_of(s.clicks[i].fp)}` : ''} (${ms(after)})`)
+				.map(
+					({ i, after }) =>
+						`${s.clicks[i].target}${s.clicks[i].fp ? ` in ${name_of(s.clicks[i].fp)}` : ''} (${ms(after)})`
+				)
 				.join(', ')}.`,
 			fix: 'Show a reaction at once — a pressed or loading state — and then the result.',
 			refs: late.slice(0, 6).map(({ i }) => ({ kind: 'click' as const, i }))
@@ -296,7 +423,10 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 		findings.push({
 			code: 'failed-requests',
 			severity: 'warn',
-			message: `${failed.length} request${failed.length === 1 ? '' : 's'} failed: ${failed.slice(0, 3).map((r) => `${r.status} ${path_of(r.url)}`).join(', ')}.`,
+			message: `${failed.length} request${failed.length === 1 ? '' : 's'} failed: ${failed
+				.slice(0, 3)
+				.map((r) => `${r.status} ${path_of(r.url)}`)
+				.join(', ')}.`,
 			refs: []
 		});
 	const slow_req = s.requests.filter((r) => r.ms >= 1000).sort((a, b) => b.ms - a.ms);
@@ -304,24 +434,35 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 		findings.push({
 			code: 'slow-requests',
 			severity: 'info',
-			message: `${slow_req.length} request${slow_req.length === 1 ? '' : 's'} took over a second: ${slow_req.slice(0, 3).map((r) => `${path_of(r.url)} ${ms(r.ms)}`).join(', ')}.`,
+			message: `${slow_req.length} request${slow_req.length === 1 ? '' : 's'} took over a second: ${slow_req
+				.slice(0, 3)
+				.map((r) => `${path_of(r.url)} ${ms(r.ms)}`)
+				.join(', ')}.`,
 			refs: []
 		});
 	const by_url = new Map<string, number>();
-	for (const r of s.requests) if (r.type === 'fetch' || r.type === 'xmlhttprequest') by_url.set(path_of(r.url), (by_url.get(path_of(r.url)) ?? 0) + 1);
+	for (const r of s.requests)
+		if (r.type === 'fetch' || r.type === 'xmlhttprequest')
+			by_url.set(path_of(r.url), (by_url.get(path_of(r.url)) ?? 0) + 1);
 	const repeated = [...by_url].filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]);
 	if (repeated.length)
 		findings.push({
 			code: 'repeated-requests',
 			severity: 'info',
-			message: `The same request went out again and again: ${repeated.slice(0, 3).map(([u, n]) => `${u} ×${n}`).join(', ')}.`,
+			message: `The same request went out again and again: ${repeated
+				.slice(0, 3)
+				.map(([u, n]) => `${u} ×${n}`)
+				.join(', ')}.`,
 			fix: 'Cache the answer, or share one request between the parts that ask.',
 			refs: []
 		});
 
 	// ── the server's side of each request (its Server-Timing): render, CPU, the upstream it waited on ──
-	const st = (r: (typeof s.requests)[number], name: string) => r.server?.find((x) => x.name === name);
-	const served = s.requests.filter((r) => st(r, 'ssr')).sort((a, b) => (st(b, 'ssr')?.ms ?? 0) - (st(a, 'ssr')?.ms ?? 0));
+	const st = (r: (typeof s.requests)[number], name: string) =>
+		r.server?.find((x) => x.name === name);
+	const served = s.requests
+		.filter((r) => st(r, 'ssr'))
+		.sort((a, b) => (st(b, 'ssr')?.ms ?? 0) - (st(a, 'ssr')?.ms ?? 0));
 	for (const r of served.slice(0, 3)) {
 		const ssr = st(r, 'ssr')!.ms;
 		if (ssr < 200) break;
@@ -334,9 +475,14 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 			message:
 				`${path_of(r.url)} took ${ms(r.ms)}: ${ms(ssr)} on the server` +
 				(cpu_ms !== undefined ? ` (${ms(cpu_ms)} of CPU)` : '') +
-				(net ? `, ${ms(net.ms)} of it waiting on ${net.desc.split('(')[1]?.split(')')[0] ?? 'several'} outbound call${net.desc.includes('(1)') ? '' : 's'}${up ? ` — the slowest ${up.desc} ${ms(up.ms)}` : ''}` : '') +
+				(net
+					? `, ${ms(net.ms)} of it waiting on ${net.desc.split('(')[1]?.split(')')[0] ?? 'several'} outbound call${net.desc.includes('(1)') ? '' : 's'}${up ? ` — the slowest ${up.desc} ${ms(up.ms)}` : ''}`
+					: '') +
 				`, ${ms(Math.max(0, r.ms - ssr))} on the network.`,
-			fix: net && net.ms >= ssr * 0.5 ? 'The server mostly waited: start the calls together, cache the answer, or move the call out of this request.' : 'Profile it on the server (the button) to see where its time went.',
+			fix:
+				net && net.ms >= ssr * 0.5
+					? 'The server mostly waited: start the calls together, cache the answer, or move the call out of this request.'
+					: 'Profile it on the server (the button) to see where its time went.',
 			refs: (() => {
 				// the click that caused it, when one came just before
 				const c = s.clicks.filter((x) => x.t <= r.t && r.t - x.t <= 3000).at(-1);
@@ -349,16 +495,25 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 	// ── per island: its clicks, its slow interactions, the requests its clicks caused (with the
 	// server's split) — the island detail's "in the last session" ──
 	const by_island: Record<string, IslandSession> = {};
-	const slot = (fp: string) => (by_island[fp] ??= { clicks: 0, slow: [], requests: [], mutations: 0 });
+	const slot = (fp: string) =>
+		(by_island[fp] ??= { clicks: 0, slow: [], requests: [], mutations: 0 });
 	for (const c of s.clicks) if (c.fp) slot(c.fp).clicks++;
 	for (const i of chosen) {
 		const x = s.interactions[i];
-		if (x.fp && x.duration >= SLUGGISH) slot(x.fp).slow.push({ target: x.target, duration: x.duration, processing: x.processing });
+		if (x.fp && x.duration >= SLUGGISH)
+			slot(x.fp).slow.push({ target: x.target, duration: x.duration, processing: x.processing });
 	}
 	for (const r of s.requests) {
 		const c = s.clicks.filter((x) => x.t <= r.t && r.t - x.t <= 3000).at(-1);
 		if (!c?.fp) continue;
-		slot(c.fp).requests.push({ url: path_of(r.url), ms: r.ms, server_ms: st(r, 'ssr')?.ms ?? null, net_ms: st(r, 'net')?.ms ?? null, up: st(r, 'up1') ? `${st(r, 'up1')!.desc} ${ms(st(r, 'up1')!.ms)}` : null, status: r.status });
+		slot(c.fp).requests.push({
+			url: path_of(r.url),
+			ms: r.ms,
+			server_ms: st(r, 'ssr')?.ms ?? null,
+			net_ms: st(r, 'net')?.ms ?? null,
+			up: st(r, 'up1') ? `${st(r, 'up1')!.desc} ${ms(st(r, 'up1')!.ms)}` : null,
+			status: r.status
+		});
 	}
 	for (const m of s.mutations) if (m.fp && by_island[m.fp]) by_island[m.fp].mutations = m.count;
 
@@ -367,37 +522,78 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 	if (woke.length) {
 		const done = new Map<string, number>();
 		for (const e of s.events) if (e.name === 'region.hydrate.done' && e.fp) done.set(e.fp, e.ms);
-		const list = woke.map((e) => ((e as { fp?: string }).fp ? `${name_of((e as { fp?: string }).fp!)}${done.has((e as { fp?: string }).fp!) ? ` (${ms(done.get((e as { fp?: string }).fp!)!)})` : ''}` : 'an island'));
+		const list = woke.map((e) =>
+			(e as { fp?: string }).fp
+				? `${name_of((e as { fp?: string }).fp!)}${done.has((e as { fp?: string }).fp!) ? ` (${ms(done.get((e as { fp?: string }).fp!)!)})` : ''}`
+				: 'an island'
+		);
 		findings.push({
 			code: 'islands-woke',
 			severity: 'info',
 			message: `${woke.length} island${woke.length === 1 ? '' : 's'} woke during the session: ${[...new Set(list)].slice(0, 5).join(', ')}.`,
-			refs: woke.filter((e) => (e as { fp?: string }).fp).slice(0, 6).map((e) => ({ kind: 'island' as const, fp: (e as { fp?: string }).fp! }))
+			refs: woke
+				.filter((e) => (e as { fp?: string }).fp)
+				.slice(0, 6)
+				.map((e) => ({ kind: 'island' as const, fp: (e as { fp?: string }).fp! }))
 		});
 	}
 	for (const e of s.events) {
 		if (e.name === 'region.hydrate.failed')
-			findings.push({ code: 'hydrate-failed', severity: 'error', message: `${name_of(e.fp ?? null)} failed to hydrate: ${e.message.split('\n')[0].slice(0, 160)}.`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
+			findings.push({
+				code: 'hydrate-failed',
+				severity: 'error',
+				message: `${name_of(e.fp ?? null)} failed to hydrate: ${e.message.split('\n')[0].slice(0, 160)}.`,
+				refs: e.fp ? [{ kind: 'island', fp: e.fp }] : []
+			});
 		else if (e.name === 'region.hydrate.recovered')
-			findings.push({ code: 'hydrate-recovered', severity: 'error', message: `${name_of(e.fp ?? null)} threw away its server HTML and rendered again${e.reason ? `: ${e.reason}` : ''}.`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
+			findings.push({
+				code: 'hydrate-recovered',
+				severity: 'error',
+				message: `${name_of(e.fp ?? null)} threw away its server HTML and rendered again${e.reason ? `: ${e.reason}` : ''}.`,
+				refs: e.fp ? [{ kind: 'island', fp: e.fp }] : []
+			});
 		else if (e.name === 'region.hydrate.healed')
-			findings.push({ code: 'hydrate-healed', severity: 'warn', message: `${name_of(e.fp ?? null)}'s markup was changed by another script before it woke; the runtime put the server markup back${e.reason ? ` (${e.reason})` : ''}.`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
+			findings.push({
+				code: 'hydrate-healed',
+				severity: 'warn',
+				message: `${name_of(e.fp ?? null)}'s markup was changed by another script before it woke; the runtime put the server markup back${e.reason ? ` (${e.reason})` : ''}.`,
+				refs: e.fp ? [{ kind: 'island', fp: e.fp }] : []
+			});
 		else if (e.name === 'region.hydrate.conflict')
-			findings.push({ code: 'hydrate-conflict', severity: 'warn', message: `${name_of(e.fp ?? null)}: ${e.reason ?? 'a web component and Svelte wanted the same nodes'}`, refs: e.fp ? [{ kind: 'island', fp: e.fp }] : [] });
+			findings.push({
+				code: 'hydrate-conflict',
+				severity: 'warn',
+				message: `${name_of(e.fp ?? null)}: ${e.reason ?? 'a web component and Svelte wanted the same nodes'}`,
+				refs: e.fp ? [{ kind: 'island', fp: e.fp }] : []
+			});
 		else if (e.name === 'load.critical' && e.outcome === 'cap')
-			findings.push({ code: 'critical-cap', severity: 'warn', message: `The page's critical resource${e.resources === 1 ? '' : 's'} (marked fetchpriority="high") took longer than ${e.waited_ms} ms; ogygia stopped holding its downloads back and let them start.`, refs: [] });
+			findings.push({
+				code: 'critical-cap',
+				severity: 'warn',
+				message: `The page's critical resource${e.resources === 1 ? '' : 's'} (marked fetchpriority="high") took longer than ${e.waited_ms} ms; ogygia stopped holding its downloads back and let them start.`,
+				refs: []
+			});
 	}
 	// What the load scheduler held back for the page's critical resources (runtime/load-scheduler.ts).
-	const held = s.events.filter((e) => e.name === 'load.started' && e.class !== 'user' && e.waited_ms > 0);
+	const held = s.events.filter(
+		(e) => e.name === 'load.started' && e.class !== 'user' && e.waited_ms > 0
+	);
 	if (held.length) {
 		const most = Math.max(...held.map((e) => (e.name === 'load.started' ? e.waited_ms : 0)));
-		findings.push({ code: 'loads-held', severity: 'info', message: `ogygia held ${held.length} download${held.length === 1 ? '' : 's'} back (up to ${most} ms) so the page's critical resources and the visible islands went first.`, refs: [] });
+		findings.push({
+			code: 'loads-held',
+			severity: 'info',
+			message: `ogygia held ${held.length} download${held.length === 1 ? '' : 's'} back (up to ${most} ms) so the page's critical resources and the visible islands went first.`,
+			refs: []
+		});
 	}
 
 	// ── errors ── (ogygia's own log of a failed island is the hydrate-failed finding above, with its
 	// name: not counted again; each message by its first line — a component stack follows it)
 	const failed_here = s.events.some((e) => e.name === 'region.hydrate.failed');
-	const errors = failed_here ? s.errors.filter((e) => !e.message.startsWith('console.error: [ogygia] hydration failed')) : s.errors;
+	const errors = failed_here
+		? s.errors.filter((e) => !e.message.startsWith('console.error: [ogygia] hydration failed'))
+		: s.errors;
 	if (errors.length)
 		findings.push({
 			code: 'errors',
@@ -458,7 +654,14 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 		},
 		findings,
 		interactions: chosen
-			.map((i) => ({ i, t: s.interactions[i].t, name: s.interactions[i].name, duration: s.interactions[i].duration, target: s.interactions[i].target, fp: s.interactions[i].fp }))
+			.map((i) => ({
+				i,
+				t: s.interactions[i].t,
+				name: s.interactions[i].name,
+				duration: s.interactions[i].duration,
+				target: s.interactions[i].target,
+				fp: s.interactions[i].fp
+			}))
 			.sort((a, b) => b.duration - a.duration)
 			.slice(0, 12),
 		by_island,
@@ -484,14 +687,31 @@ export function analyze_session(s: SessionData, names: (fp: string) => string, p
 		// the slowest interaction on EACH element, however quick: a comparison can tell "fast" from
 		// "never touched" (the list above keeps only the slowest)
 		by_element: Object.values(
-			s.interactions.reduce<Record<string, { target: string; duration: number; processing: number; t: number; fp: string | null }>>(
+			s.interactions.reduce<
+				Record<
+					string,
+					{ target: string; duration: number; processing: number; t: number; fp: string | null }
+				>
+			>(
 				(acc, x) => {
 					const cur = acc[x.target];
-					if (!cur || x.duration > cur.duration) acc[x.target] = { target: x.target, duration: x.duration, processing: x.processing, t: x.t, fp: x.fp };
+					if (!cur || x.duration > cur.duration)
+						acc[x.target] = {
+							target: x.target,
+							duration: x.duration,
+							processing: x.processing,
+							t: x.t,
+							fp: x.fp
+						};
 					return acc;
 				},
 				// (a click the browser did not time — under 16 ms, its floor — counts as touched, at 0)
-				Object.fromEntries(s.clicks.map((c) => [c.target, { target: c.target, duration: 0, processing: 0, t: c.t, fp: c.fp }]))
+				Object.fromEntries(
+					s.clicks.map((c) => [
+						c.target,
+						{ target: c.target, duration: 0, processing: 0, t: c.t, fp: c.fp }
+					])
+				)
 			)
 		).sort((a, b) => b.duration - a.duration),
 		cpu

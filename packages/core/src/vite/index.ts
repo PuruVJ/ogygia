@@ -46,13 +46,14 @@ export type {
 } from './plugin-api.ts';
 export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.ts';
 export type { OgygiaPreset, OgygiaRateLimit, OgygiaOptions } from './options.ts';
-import { find_plugins, resolve_plugins, type PluginDefinition, type ResolvedPlugins } from './plugin-api.ts';
-import type { ServerRealm } from '../compiler/link/caps.ts';
 import {
-	assert_no_legacy_options,
-	validate_region_presets,
-	resolve_options
-} from './options.ts';
+	find_plugins,
+	resolve_plugins,
+	type PluginDefinition,
+	type ResolvedPlugins
+} from './plugin-api.ts';
+import type { ServerRealm } from '../compiler/link/caps.ts';
+import { assert_no_legacy_options, validate_region_presets, resolve_options } from './options.ts';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
@@ -174,7 +175,11 @@ const STYLE_BEARING_FILE_RE = /\.(svelte|css|scss|sass|less|styl)$/;
 /** The bundler's resolver as the CSS walk's (compiler/fouc-css.ts `collectFoucCssReachable`): what
  *  the build resolves, the walk reaches — a package's `exports`, a workspace link, an alias. */
 function bundler_resolve(ctx: {
-	resolve(source: string, importer?: string, o?: { skipSelf?: boolean }): Promise<{ id: string; external?: boolean | string } | null>;
+	resolve(
+		source: string,
+		importer?: string,
+		o?: { skipSelf?: boolean }
+	): Promise<{ id: string; external?: boolean | string } | null>;
 }): (spec: string, importer: string) => Promise<string | null> {
 	return async (spec, importer) => {
 		try {
@@ -297,7 +302,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	 *  environment `buildStart` saw stands in for a hook the bundler calls without one. */
 	let last_leg_server: boolean | null = null;
 	const server_leg_of = (ctx: unknown): boolean => {
-		const env = (ctx as { environment?: { name?: string; config?: { consumer?: string } } } | null)?.environment;
+		const env = (ctx as { environment?: { name?: string; config?: { consumer?: string } } } | null)
+			?.environment;
 		if (env) return env.name === 'ssr' || env.config?.consumer === 'server';
 		return last_leg_server ?? is_ssr;
 	};
@@ -436,7 +442,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						env.command === 'serve',
 						(source, filename) => compiler.transform_content_island(source, filename)
 					);
-					({ servers: server_plugins, clients: client_plugins, route_options, foreign_hydrate, macros, markup } = resolved);
+					({
+						servers: server_plugins,
+						clients: client_plugins,
+						route_options,
+						foreign_hydrate,
+						macros,
+						markup
+					} = resolved);
 					measure = resolved.measure;
 					devtools_effective = resolved.events !== false;
 					devtools_lazy = resolved.events !== false && resolved.events.lazy;
@@ -548,7 +561,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// one of those, silently. Kit always resolves from the app.
 						resolve: { dedupe: ['@sveltejs/kit'] },
 						ssr: { noExternal: ['esm-env', ...OWN_PACKAGE_NAMES, ...declared_pkg_names] },
-						optimizeDeps: { exclude: [...OWN_PACKAGE_NAMES, ...declared_pkg_names], include: dev_island_deps },
+						optimizeDeps: {
+							exclude: [...OWN_PACKAGE_NAMES, ...declared_pkg_names],
+							include: dev_island_deps
+						},
 						// CONTINUITY config → compile-time constants the client runtime reads (typeof-guarded,
 						// so a plain node import of dist/ without these defined falls back to defaults).
 						define: {
@@ -748,7 +764,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						// a plugin's own pages (`b.files()`: the profiler UI) render from its handle only — never
 						// crawled as app entries
 						const posix = real_posix(abs);
-						const pattern = plugin_file_roots.some((r) => posix.startsWith(r)) ? null : scan_entry_pattern(abs);
+						const pattern = plugin_file_roots.some((r) => posix.startsWith(r))
+							? null
+							: scan_entry_pattern(abs);
 						if (pattern !== null && !have.has(pattern)) {
 							have.add(pattern);
 							entries.push(pattern);
@@ -763,7 +781,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// configResolved, which the client environment runs again AFTER the server leg wrote it.
 				const server_leg = server_leg_of(this);
 				last_leg_server = server_leg;
-				if (is_build && server_leg) fs.rmSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), { force: true });
+				if (is_build && server_leg)
+					fs.rmSync(ssr_hosts_handoff_path(kit_dirs(root).out_dir), { force: true });
 				// CLIENT build (Kit-driven): emit the runtime chunk. Kit builds the SERVER bundle FIRST,
 				// then the client, so the server can't learn a hash the LATER client build produces — a
 				// forward handoff is impossible. Instead the filename is a deterministic SOURCE-content
@@ -836,7 +855,13 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					const walk_resolve = bundler_resolve(this);
 					for (const abs of compiler.router_css_roots()) {
 						const parts: string[] = [];
-						for (const e of await collectFoucCssReachable(abs, { root, libDir, readFile, alias: resolve_alias, resolve: walk_resolve })) {
+						for (const e of await collectFoucCssReachable(abs, {
+							root,
+							libDir,
+							readFile,
+							alias: resolve_alias,
+							resolve: walk_resolve
+						})) {
 							if (e.kind === 'scoped') {
 								const src = readFile(e.abs);
 								if (src == null) continue;
@@ -1322,7 +1347,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				type Info = { name?: string };
 				type Names = string | ((info: Info) => string) | undefined;
 				const ours = (fallback: Names, dflt: string) => (info: Info) =>
-					compiler.entry_file_pattern(info.name) ?? (typeof fallback === 'function' ? fallback(info) : (fallback ?? dflt));
+					compiler.entry_file_pattern(info.name) ??
+					(typeof fallback === 'function' ? fallback(info) : (fallback ?? dflt));
 				return {
 					...output,
 					entryFileNames: ours(output.entryFileNames as Names, '[name].js'),
@@ -1541,7 +1567,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 								if (name) found.push({ name, fanout });
 							}
 						}
-						if (found.length) barrels['/' + (chunk.fileName || key)] = found.sort((a, b) => b.fanout - a.fanout).slice(0, 3);
+						if (found.length)
+							barrels['/' + (chunk.fileName || key)] = found
+								.sort((a, b) => b.fanout - a.fanout)
+								.slice(0, 3);
 					}
 				}
 				const json = JSON.stringify({

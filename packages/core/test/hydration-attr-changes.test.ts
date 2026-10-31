@@ -7,8 +7,10 @@ import { apply_attr_rules } from '../src/insights/attr-rules.ts';
 
 describe('attr_changes', () => {
 	it('each attribute a custom element set, added, removed or changed', () => {
-		const ssr = '<div class="bar"><qds-icon-button aria-label="Country" icon="globe"></qds-icon-button> <a href="/x">Go</a></div>';
-		const now = '<div class="bar"><qds-icon-button icon="globe" tabindex="0" aria-describedby="qds-tooltip-2"></qds-icon-button> <a href="/x" style="">Go</a></div>';
+		const ssr =
+			'<div class="bar"><qds-icon-button aria-label="Country" icon="globe"></qds-icon-button> <a href="/x">Go</a></div>';
+		const now =
+			'<div class="bar"><qds-icon-button icon="globe" tabindex="0" aria-describedby="qds-tooltip-2"></qds-icon-button> <a href="/x" style="">Go</a></div>';
 		expect(attr_changes(ssr, now)).toEqual([
 			{ tag: 'qds-icon-button', name: 'aria-label', from: 'Country', to: null },
 			{ tag: 'qds-icon-button', name: 'tabindex', from: null, to: '0' },
@@ -29,7 +31,9 @@ describe('attr_changes', () => {
 		expect(attr_changes('<p class="a">x</p>', '<p class="b">y</p>')).toBe(null);
 	});
 	it('the same attributes in another order: attributes only, nothing to name', () => {
-		expect(attr_changes('<a href="/x" class="c">x</a>', '<a class="c" href="/x">x</a>')).toEqual([]);
+		expect(attr_changes('<a href="/x" class="c">x</a>', '<a class="c" href="/x">x</a>')).toEqual(
+			[]
+		);
 	});
 });
 
@@ -48,7 +52,10 @@ describe('apply_attr_rules', () => {
 		expect(left).toEqual([{ tag: 'img', name: 'width', from: 'NaN', to: '0' }]);
 	});
 	it('a removed attribute is matched by its old value', () => {
-		const { ignored } = apply_attr_rules([{ tag: 'x', name: 'aria-label', from: 'Country', to: null }], [{ name: 'aria-label', value: 'Country' }]);
+		const { ignored } = apply_attr_rules(
+			[{ tag: 'x', name: 'aria-label', from: 'Country', to: null }],
+			[{ name: 'aria-label', value: 'Country' }]
+		);
 		expect(ignored).toHaveLength(1);
 	});
 	it('no rules: nothing ignored', () => {

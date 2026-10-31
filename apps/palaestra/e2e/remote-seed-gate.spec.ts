@@ -38,29 +38,110 @@ interface Row {
 
 const rows: Row[] = [
 	{ path: '/remote-seed-gate', seed: false, has: [], html: ['Lake, resolved on the server:'] },
-	{ path: '/remote-seed-gate/reader', seed: true, has: ['/getGreeting/', 'reader', 'lake'], html: ['Lake, resolved on the server:', 'Hello, reader!'] },
+	{
+		path: '/remote-seed-gate/reader',
+		seed: true,
+		has: ['/getGreeting/', 'reader', 'lake'],
+		html: ['Lake, resolved on the server:', 'Hello, reader!']
+	},
 	{ path: '/remote-seed-gate/page-script', seed: false, has: [], html: ['page: Hello, page!'] },
-	{ path: '/remote-seed-gate/page-script-reader', seed: true, has: ['/getGreeting/', 'page', 'reader'], html: ['page: Hello, page!', 'Hello, reader!'] },
-	{ path: '/remote-seed-gate/layout-script', seed: false, has: [], html: ['layout: Hello, layout!'] },
-	{ path: '/remote-seed-gate/layout-script/reader', seed: true, has: ['/getGreeting/', 'layout', 'reader'], html: ['layout: Hello, layout!', 'Hello, reader!'] },
-	{ path: '/remote-seed-gate/island-in-lake', seed: true, has: ['/getGreeting/', 'lake', 'in-lake'], html: ['lake: Hello, lake!', 'Hello, in-lake!'] },
-	{ path: '/remote-seed-gate/island-in-lake-silent', seed: false, has: [], html: ['lake: Hello, lake!', 'silent island in the lake'] },
+	{
+		path: '/remote-seed-gate/page-script-reader',
+		seed: true,
+		has: ['/getGreeting/', 'page', 'reader'],
+		html: ['page: Hello, page!', 'Hello, reader!']
+	},
+	{
+		path: '/remote-seed-gate/layout-script',
+		seed: false,
+		has: [],
+		html: ['layout: Hello, layout!']
+	},
+	{
+		path: '/remote-seed-gate/layout-script/reader',
+		seed: true,
+		has: ['/getGreeting/', 'layout', 'reader'],
+		html: ['layout: Hello, layout!', 'Hello, reader!']
+	},
+	{
+		path: '/remote-seed-gate/island-in-lake',
+		seed: true,
+		has: ['/getGreeting/', 'lake', 'in-lake'],
+		html: ['lake: Hello, lake!', 'Hello, in-lake!']
+	},
+	{
+		path: '/remote-seed-gate/island-in-lake-silent',
+		seed: false,
+		has: [],
+		html: ['lake: Hello, lake!', 'silent island in the lake']
+	},
 	// the reader is only reachable through `await import()` — still this island's call
-	{ path: '/remote-seed-gate/dynamic', seed: true, has: ['/getGreeting/', 'lake'], html: ['Lake, resolved on the server:'] },
+	{
+		path: '/remote-seed-gate/dynamic',
+		seed: true,
+		has: ['/getGreeting/', 'lake'],
+		html: ['Lake, resolved on the server:']
+	},
 	// per MODULE: the island imports `second.remote` only
-	{ path: '/remote-seed-gate/two-modules', seed: true, has: ['/second/', 'island', 'page'], lacks: ['/getGreeting/'], html: ['Hello, page! / page', 'second: island'] },
-	{ path: '/remote-seed-gate/prerender', seed: false, has: [], html: ['manifesto: islands, not hydration'] },
-	{ path: '/remote-seed-gate/prerender-reader', seed: true, has: ['/getManifesto/'], html: ['manifesto: islands, not hydration', 'manifesto (island): islands, not hydration'] },
-	{ path: '/remote-seed-gate/hole-fallback', seed: false, has: [], html: ['Lake, resolved on the server:'] },
+	{
+		path: '/remote-seed-gate/two-modules',
+		seed: true,
+		has: ['/second/', 'island', 'page'],
+		lacks: ['/getGreeting/'],
+		html: ['Hello, page! / page', 'second: island']
+	},
+	{
+		path: '/remote-seed-gate/prerender',
+		seed: false,
+		has: [],
+		html: ['manifesto: islands, not hydration']
+	},
+	{
+		path: '/remote-seed-gate/prerender-reader',
+		seed: true,
+		has: ['/getManifesto/'],
+		html: ['manifesto: islands, not hydration', 'manifesto (island): islands, not hydration']
+	},
+	{
+		path: '/remote-seed-gate/hole-fallback',
+		seed: false,
+		has: [],
+		html: ['Lake, resolved on the server:']
+	},
 	// a promise `of` → fail-open: everything seeds, the lake's call included
 	// a promise `of` at page level: fail-open for BOTH seeds (the page seed ships too — documented)
 	// (the palaestra runs Svelte's async mode: the promise is awaited in the render — the result is in
 	// the page, not its placeholder: PromiseRegionAwait.svelte)
-	{ path: '/remote-seed-gate/held', seed: true, has: ['/getGreeting/', 'lake'], html: ['Lake, resolved on the server:', 'Result: gate'], own_hydrate_test: true },
+	{
+		path: '/remote-seed-gate/held',
+		seed: true,
+		has: ['/getGreeting/', 'lake'],
+		html: ['Lake, resolved on the server:', 'Result: gate'],
+		own_hydrate_test: true
+	},
 	// the pending island's own call is pending at SSR (omitted, it fetches) — the lake's still seeds
-	{ path: '/remote-seed-gate/pending', seed: true, has: ['/getGreeting/', 'lake'], lacks: ['pending'], html: ['Lake, resolved on the server:'], fetches: 1 },
-	{ path: '/remote-seed-gate/many', seed: true, has: ['/getGreeting/', 'lake', ...Array.from({ length: 20 }, (_, i) => `r${i}`)], html: ['Hello, r19!'], hydrated: 40 },
-	{ path: '/remote-seed-gate/many-silent', seed: false, has: [], html: ['Lake, resolved on the server:'], hydrated: 60 }
+	{
+		path: '/remote-seed-gate/pending',
+		seed: true,
+		has: ['/getGreeting/', 'lake'],
+		lacks: ['pending'],
+		html: ['Lake, resolved on the server:'],
+		fetches: 1
+	},
+	{
+		path: '/remote-seed-gate/many',
+		seed: true,
+		has: ['/getGreeting/', 'lake', ...Array.from({ length: 20 }, (_, i) => `r${i}`)],
+		html: ['Hello, r19!'],
+		hydrated: 40
+	},
+	{
+		path: '/remote-seed-gate/many-silent',
+		seed: false,
+		has: [],
+		html: ['Lake, resolved on the server:'],
+		hydrated: 60
+	}
 ];
 
 test.describe('REMOTE SEED GATE: the remote seed ships only for remotes an island can call', () => {
@@ -77,10 +158,18 @@ test.describe('REMOTE SEED GATE: the remote seed ships only for remotes an islan
 			} else {
 				check(`${row.path}: seed present`, !!m);
 				for (const s of row.has) check(`${row.path}: seed carries "${s}"`, !!m && m[1].includes(s));
-				for (const s of row.lacks ?? []) check(`${row.path}: seed lacks "${s}"`, !!m && !m[1].includes(s), m?.[1].slice(0, 160) ?? '');
+				for (const s of row.lacks ?? [])
+					check(
+						`${row.path}: seed lacks "${s}"`,
+						!!m && !m[1].includes(s),
+						m?.[1].slice(0, 160) ?? ''
+					);
 			}
 			if (row.own_hydrate_test) return;
-			check(`${row.path}: no page seed (nothing reads $page)`, !html.includes('application/ogygia-page'));
+			check(
+				`${row.path}: no page seed (nothing reads $page)`,
+				!html.includes('application/ogygia-page')
+			);
 
 			// hydrate: every island wakes, nothing fetches a remote unless the row says so
 			const fetches: string[] = [];
@@ -94,42 +183,78 @@ test.describe('REMOTE SEED GATE: the remote seed ships only for remotes an islan
 			await sleep(300);
 			const regions = (html.match(REGION_RE) ?? []).length;
 			const hydrated = await page.locator('ogygia-region[data-hydrated]').count();
-			if (row.hydrated !== undefined) check(`${row.path}: ${row.hydrated} islands hydrated`, hydrated === row.hydrated, `${hydrated} of ${regions} regions`);
-			else check(`${row.path}: at least one island hydrated`, hydrated >= 1, `${hydrated} of ${regions} regions`);
-			check(`${row.path}: ${row.fetches ?? 0} remote fetch(es) on hydrate`, fetches.length === (row.fetches ?? 0), fetches.join(' | '));
+			if (row.hydrated !== undefined)
+				check(
+					`${row.path}: ${row.hydrated} islands hydrated`,
+					hydrated === row.hydrated,
+					`${hydrated} of ${regions} regions`
+				);
+			else
+				check(
+					`${row.path}: at least one island hydrated`,
+					hydrated >= 1,
+					`${hydrated} of ${regions} regions`
+				);
+			check(
+				`${row.path}: ${row.fetches ?? 0} remote fetch(es) on hydrate`,
+				fetches.length === (row.fetches ?? 0),
+				fetches.join(' | ')
+			);
 			check(`${row.path}: no page errors`, errors.length === 0, errors.join(' | '));
 		});
 	}
 
-	test('the dynamic-import reader still resolves after the click (the seed carried the lake call, the callee fetches its own)', async ({ page }) => {
+	test('the dynamic-import reader still resolves after the click (the seed carried the lake call, the callee fetches its own)', async ({
+		page
+	}) => {
 		await page.goto('/remote-seed-gate/dynamic', { waitUntil: 'networkidle' });
 		await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 8000 });
 		await page.click('[data-lazy-btn]');
 		await page.waitForSelector('[data-lazy-callee]', { timeout: 8000 });
-		check('callee rendered its greeting', (await page.locator('[data-lazy-callee]').innerText()).includes('Hello, lazy!'));
+		check(
+			'callee rendered its greeting',
+			(await page.locator('[data-lazy-callee]').innerText()).includes('Hello, lazy!')
+		);
 	});
 
-	test('the held promise row: the page loads clean, the lake is HTML, both seeds are the fail-open ones', async ({ baseURL, page }) => {
+	test('the held promise row: the page loads clean, the lake is HTML, both seeds are the fail-open ones', async ({
+		baseURL,
+		page
+	}) => {
 		// A page-level promise `of` on a Kit page is awaited in the render (async mode) — never a LATE
 		// slot, which only the streamed-router path fills — and the row exists for the seeds' fail-open.
 		const html = await (await fetch(baseURL + '/remote-seed-gate/held')).text();
-		check('page seed ships (fail-open: the promise’s module is unknown at SSR)', html.includes('application/ogygia-page'));
+		check(
+			'page seed ships (fail-open: the promise’s module is unknown at SSR)',
+			html.includes('application/ogygia-page')
+		);
 		check('no late slot on a Kit page (nothing would fill it)', !html.includes('og-late-slot'));
 		check('the placeholder is not what was served', !html.includes('data-held-placeholder'));
 		const errors: string[] = [];
 		page.on('pageerror', (e) => errors.push(e.message));
 		await page.goto('/remote-seed-gate/held', { waitUntil: 'networkidle' });
-		check('lake text intact', (await page.locator('[data-lake-greeting]').innerText()).includes('Hello, lake!'));
+		check(
+			'lake text intact',
+			(await page.locator('[data-lake-greeting]').innerText()).includes('Hello, lake!')
+		);
 		check('no page errors', errors.length === 0, errors.join(' | '));
 	});
 
-	test('the hole renders on the endpoint and swaps in; the page never seeded its call', async ({ page }) => {
+	test('the hole renders on the endpoint and swaps in; the page never seeded its call', async ({
+		page
+	}) => {
 		await page.goto('/remote-seed-gate/hole-fallback', { waitUntil: 'networkidle' });
 		await page.waitForSelector('[data-gate-hole]', { timeout: 8000 });
-		check('hole swapped in with its endpoint render', (await page.locator('[data-gate-hole]').innerText()).includes('hole: Hello, hole!'));
+		check(
+			'hole swapped in with its endpoint render',
+			(await page.locator('[data-gate-hole]').innerText()).includes('hole: Hello, hole!')
+		);
 	});
 
-	test('csr=true twin: Kit inlines the query itself, ogygia emits no remote seed, the page works', async ({ baseURL, page }) => {
+	test('csr=true twin: Kit inlines the query itself, ogygia emits no remote seed, the page works', async ({
+		baseURL,
+		page
+	}) => {
 		const html = await (await fetch(baseURL + '/remote-seed-gate/kit')).text();
 		check('/kit: lake rendered', html.includes('Lake, resolved on the server:'));
 		check('/kit: no application/ogygia-remote seed', !REMOTE_SEED_RE.test(html));
@@ -138,8 +263,14 @@ test.describe('REMOTE SEED GATE: the remote seed ships only for remotes an islan
 		page.on('pageerror', (e) => errors.push(e.message));
 		await page.goto('/remote-seed-gate/kit', { waitUntil: 'networkidle' });
 		await page.click('[data-counter] button');
-		check('/kit: island interactive after Kit hydration', (await page.locator('[data-counter] button').innerText()).includes('count is 1'));
-		check('/kit: lake text intact after Kit hydration', (await page.locator('[data-lake-greeting]').innerText()).includes('Hello, lake!'));
+		check(
+			'/kit: island interactive after Kit hydration',
+			(await page.locator('[data-counter] button').innerText()).includes('count is 1')
+		);
+		check(
+			'/kit: lake text intact after Kit hydration',
+			(await page.locator('[data-lake-greeting]').innerText()).includes('Hello, lake!')
+		);
 		check('/kit: no page errors', errors.length === 0, errors.join(' | '));
 	});
 });

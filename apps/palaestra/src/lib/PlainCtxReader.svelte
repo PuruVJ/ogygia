@@ -13,5 +13,5 @@
 	class="island"
 	data-plain-reader
 	data-plain-greeting={greeting ?? ''}
-	data-plain-count={counter?.count ?? -1}
->{greeting ?? '(none)'} · {counter?.count ?? -1}</span>
+	data-plain-count={counter?.count ?? -1}>{greeting ?? '(none)'} · {counter?.count ?? -1}</span
+>

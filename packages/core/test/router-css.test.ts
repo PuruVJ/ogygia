@@ -80,7 +80,12 @@ describe('router_css_module — the generated virtual', () => {
 
 	it('emits an inert module for zero roots', async () => {
 		expect(
-			await router_css_module([], { root: ROOT, lib_dir: LIB, is_dev: false, read_file: () => null })
+			await router_css_module([], {
+				root: ROOT,
+				lib_dir: LIB,
+				is_dev: false,
+				read_file: () => null
+			})
 		).toBe('export {};\n');
 	});
 

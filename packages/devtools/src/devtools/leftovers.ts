@@ -59,7 +59,10 @@ export interface Leftover {
 
 const intervals = new Map<unknown, LeftoverReg>();
 const listeners = new Map<unknown, (LeftoverReg & { on: EventTarget })[]>();
-const islands = new Map<string, { urls: string[]; first: number; gone?: number; els: Map<Element, number> }>();
+const islands = new Map<
+	string,
+	{ urls: string[]; first: number; gone?: number; els: Map<Element, number> }
+>();
 let own_file = '';
 let installed = false;
 
@@ -111,7 +114,8 @@ function callers(n = 2): string[] {
 
 // a BUILD with devtools on: only a browser that turned devtools on is watched (switch.ts, as the
 // beacon's measuring) — every other visitor of a preview deploy keeps the browser's own functions
-const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
+const DEVTOOLS_LAZY =
+	typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 
 /** Watch intervals and the global listeners. Once per page; a no-op off the browser. */
 export function watch_leftovers(): void {
@@ -122,11 +126,21 @@ export function watch_leftovers(): void {
 	installed = true;
 	own_file = stack_files(new Error().stack ?? '')[0] ?? '';
 	// (typed as the browser has them: the Node timer types merge into `window`'s)
-	const set_interval = window.setInterval as unknown as (this: Window, fn: unknown, ms?: number, ...a: unknown[]) => number;
+	const set_interval = window.setInterval as unknown as (
+		this: Window,
+		fn: unknown,
+		ms?: number,
+		...a: unknown[]
+	) => number;
 	const clear_interval = window.clearInterval as unknown as (this: Window, id?: unknown) => void;
 	window.setInterval = function (this: unknown, fn: unknown, ms?: number, ...args: unknown[]) {
 		if (typeof fn !== 'function') return set_interval.call(window, fn, ms, ...args);
-		const reg: LeftoverReg = { kind: 'interval', frames: callers(), t: performance.now(), fires: 0 };
+		const reg: LeftoverReg = {
+			kind: 'interval',
+			frames: callers(),
+			t: performance.now(),
+			fires: 0
+		};
 		const id = set_interval.call(
 			window,
 			function (this: unknown, ...a: unknown[]) {
@@ -149,20 +163,32 @@ export function watch_leftovers(): void {
 	const remove = proto.removeEventListener;
 	// (a bare `addEventListener(…)` — strict code, no receiver — reaches here with no `this`: the
 	// browser runs it on the window, and so is it counted)
-	proto.addEventListener = function (this: EventTarget | undefined, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | AddEventListenerOptions) {
+	proto.addEventListener = function (
+		this: EventTarget | undefined,
+		type: string,
+		fn: EventListenerOrEventListenerObject | null,
+		opts?: boolean | AddEventListenerOptions
+	) {
 		const on: EventTarget = this ?? window;
 		if ((on === window || on === document) && fn) {
 			const o = typeof opts === 'object' && opts ? opts : null;
 			// (a `once` listener takes itself back; an aborted signal takes it back)
-			if (!o?.once && !o?.signal?.aborted) note_listener(on, type, fn, o ? !!o.capture : !!opts, o?.signal);
+			if (!o?.once && !o?.signal?.aborted)
+				note_listener(on, type, fn, o ? !!o.capture : !!opts, o?.signal);
 		}
 		if (fn && SCROLL_TYPES.has(type)) note_scroll_listener(on, type, fn, opts);
 		if (fn && type === 'unload' && on === window) note_unload_listener(fn);
 		return add.call(on, type, fn, opts);
 	};
-	proto.removeEventListener = function (this: EventTarget | undefined, type: string, fn: EventListenerOrEventListenerObject | null, opts?: boolean | EventListenerOptions) {
+	proto.removeEventListener = function (
+		this: EventTarget | undefined,
+		type: string,
+		fn: EventListenerOrEventListenerObject | null,
+		opts?: boolean | EventListenerOptions
+	) {
 		const on: EventTarget = this ?? window;
-		if ((on === window || on === document) && fn) forget_listener(on, type, fn, typeof opts === 'object' && opts ? !!opts.capture : !!opts);
+		if ((on === window || on === document) && fn)
+			forget_listener(on, type, fn, typeof opts === 'object' && opts ? !!opts.capture : !!opts);
 		if (fn && SCROLL_TYPES.has(type)) forget_scroll_listener(on, type, fn);
 		if (fn && type === 'unload' && on === window) {
 			const i = unload_regs.findIndex((r) => r.fn === fn);
@@ -177,7 +203,12 @@ export function watch_leftovers(): void {
 // `<body>` the browser treats them as passive unless `passive: false` is asked for; anywhere else
 // they block unless `passive: true` is ──
 
-const SCROLL_TYPES: ReadonlySet<string> = new Set(['wheel', 'mousewheel', 'touchstart', 'touchmove']);
+const SCROLL_TYPES: ReadonlySet<string> = new Set([
+	'wheel',
+	'mousewheel',
+	'touchstart',
+	'touchmove'
+]);
 
 export interface ScrollReg {
 	type: string;
@@ -189,9 +220,15 @@ export interface ScrollReg {
 }
 const scroll_regs: (ScrollReg & { target: EventTarget; fn: unknown })[] = [];
 
-function note_scroll_listener(on: EventTarget, type: string, fn: unknown, opts?: boolean | AddEventListenerOptions) {
+function note_scroll_listener(
+	on: EventTarget,
+	type: string,
+	fn: unknown,
+	opts?: boolean | AddEventListenerOptions
+) {
 	const passive = typeof opts === 'object' && opts ? opts.passive : undefined;
-	const root = on === window || on === document || on === document.documentElement || on === document.body;
+	const root =
+		on === window || on === document || on === document.documentElement || on === document.body;
 	if (passive === true || (root && passive !== false) || scroll_regs.length >= 40) return;
 	if (scroll_regs.some((r) => r.target === on && r.type === type && r.fn === fn)) return;
 	let desc = on === window ? 'window' : on === document ? 'document' : '';
@@ -208,7 +245,14 @@ function note_scroll_listener(on: EventTarget, type: string, fn: unknown, opts?:
 	// none at all: code the browser injected — an extension, a test driver — not the page's to fix)
 	const frames = callers(6);
 	if (!frames.length) return;
-	scroll_regs.push({ type, on: desc || 'an element', forced: passive === false, frames, target: on, fn });
+	scroll_regs.push({
+		type,
+		on: desc || 'an element',
+		forced: passive === false,
+		frames,
+		target: on,
+		fn
+	});
 }
 
 function forget_scroll_listener(on: EventTarget, type: string, fn: unknown) {
@@ -231,17 +275,28 @@ function note_unload_listener(fn: unknown) {
 
 /** The window `unload` listeners still attached, as scroll registrations (the same owner rule). */
 export function unload_listeners(): ScrollReg[] {
-	return unload_regs.map((r) => ({ type: 'unload', on: 'window', forced: false, frames: r.frames }));
+	return unload_regs.map((r) => ({
+		type: 'unload',
+		on: 'window',
+		forced: false,
+		frames: r.frames
+	}));
 }
 
 /** The scroll-holding listeners still attached (an element's, while it is in the page). */
 export function scroll_listeners(): ScrollReg[] {
-	return scroll_regs.filter((r) => !(r.target instanceof Element) || r.target.isConnected).map(({ target: _t, fn: _f, ...r }) => r);
+	return scroll_regs
+		.filter((r) => !(r.target instanceof Element) || r.target.isConnected)
+		.map(({ target: _t, fn: _f, ...r }) => r);
 }
 
 /** Each one's owner, the island whose file is the nearest of its callers (as owned_leftovers
  *  decides), else the first caller's file. PURE. */
-export function owned_scroll_listeners(regs: ScrollReg[], isls: LeftoverIsland[], name_of: (entry: string) => string): { owner: string; type: string; on: string; forced: boolean }[] {
+export function owned_scroll_listeners(
+	regs: ScrollReg[],
+	isls: LeftoverIsland[],
+	name_of: (entry: string) => string
+): { owner: string; type: string; on: string; forced: boolean }[] {
 	const stem = (url: string) => {
 		const file = url.slice(url.lastIndexOf('/') + 1);
 		const dot = file.indexOf('.');
@@ -251,7 +306,9 @@ export function owned_scroll_listeners(regs: ScrollReg[], isls: LeftoverIsland[]
 	return regs.map((r) => {
 		let owner = '';
 		for (const f of r.frames) {
-			const hit = named.find((i) => i.urls.includes(f)) ?? (f.endsWith('.svelte') ? named.find((i) => i.name === stem(f)) : undefined);
+			const hit =
+				named.find((i) => i.urls.includes(f)) ??
+				(f.endsWith('.svelte') ? named.find((i) => i.name === stem(f)) : undefined);
 			if (hit) {
 				owner = hit.name;
 				break;
@@ -265,12 +322,27 @@ export function owned_scroll_listeners(regs: ScrollReg[], isls: LeftoverIsland[]
 	});
 }
 
-function note_listener(on: EventTarget, type: string, fn: unknown, capture: boolean, signal?: AbortSignal) {
+function note_listener(
+	on: EventTarget,
+	type: string,
+	fn: unknown,
+	capture: boolean,
+	signal?: AbortSignal
+) {
 	const list = listeners.get(fn) ?? [];
 	// (the same listener twice is one listener, as the browser counts it)
 	if (list.some((r) => r.on === on && r.type === type && r.capture === capture)) return;
 	const frames = callers();
-	list.push({ kind: 'listener', on, target: on === window ? 'window' : 'document', type, capture, frames, t: performance.now(), fires: 0 });
+	list.push({
+		kind: 'listener',
+		on,
+		target: on === window ? 'window' : 'document',
+		type,
+		capture,
+		frames,
+		t: performance.now(),
+		fires: 0
+	});
 	listeners.set(fn, list);
 	signal?.addEventListener('abort', () => forget_listener(on, type, fn, capture), { once: true });
 }
@@ -306,7 +378,13 @@ export function leftover_state(): { regs: LeftoverReg[]; islands: LeftoverIsland
 	for (const [entry, isl] of islands) {
 		const live: number[] = [];
 		for (const [el, t] of isl.els) if (el.isConnected) live.push(t);
-		out.push({ entry, urls: isl.urls, live, first: isl.first, ...(isl.gone !== undefined ? { gone: isl.gone } : {}) });
+		out.push({
+			entry,
+			urls: isl.urls,
+			live,
+			first: isl.first,
+			...(isl.gone !== undefined ? { gone: isl.gone } : {})
+		});
 	}
 	return { regs, islands: out };
 }
@@ -317,7 +395,12 @@ export function leftover_state(): { regs: LeftoverReg[]; islands: LeftoverIsland
  * component's own `.svelte` file, named as the island is). Left behind: an instance of that island
  * was alive before it was made, and every instance alive now started after it.
  */
-export function owned_leftovers(regs: LeftoverReg[], isls: LeftoverIsland[], name_of: (entry: string) => string, now: number): Leftover[] {
+export function owned_leftovers(
+	regs: LeftoverReg[],
+	isls: LeftoverIsland[],
+	name_of: (entry: string) => string,
+	now: number
+): Leftover[] {
 	const named = isls.map((i) => ({ ...i, name: name_of(i.entry) }));
 	const stem = (url: string) => {
 		const file = url.slice(url.lastIndexOf('/') + 1);
@@ -334,14 +417,22 @@ export function owned_leftovers(regs: LeftoverReg[], isls: LeftoverIsland[], nam
 		}
 		if (!owners.length) continue;
 		// made while an instance was alive, and no instance alive now was there to make it
-		if (!owners.some((i) => i.first <= r.t) || owners.some((i) => i.live.some((t) => t <= r.t))) continue;
+		if (!owners.some((i) => i.first <= r.t) || owners.some((i) => i.live.some((t) => t <= r.t)))
+			continue;
 		if (!owners.some((i) => i.gone !== undefined && i.gone >= r.t)) continue;
 		const name = owners[0].name;
-		const l = by_name.get(name) ?? { name, entry: owners[0].entry, intervals: 0, listeners: [], fires: 0 };
+		const l = by_name.get(name) ?? {
+			name,
+			entry: owners[0].entry,
+			intervals: 0,
+			listeners: [],
+			fires: 0
+		};
 		if (r.kind === 'interval') {
 			l.intervals++;
 			l.fires += r.fires;
-			if (r.last !== undefined) l.last_ago = Math.min(l.last_ago ?? Infinity, Math.round(now - r.last));
+			if (r.last !== undefined)
+				l.last_ago = Math.min(l.last_ago ?? Infinity, Math.round(now - r.last));
 		} else l.listeners.push(`${r.target} '${r.type}'`);
 		by_name.set(name, l);
 	}

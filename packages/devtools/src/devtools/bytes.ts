@@ -71,7 +71,9 @@ export function byte_ledger(
 	const users = new Map<string, Set<string>>();
 	for (const i of islands) {
 		if (files_of.has(i.entry)) continue;
-		const list = [...new Set([i.file ?? i.entry, ...(graph.get(i.entry) ?? [])])].filter((u) => !runtime_set.has(u));
+		const list = [...new Set([i.file ?? i.entry, ...(graph.get(i.entry) ?? [])])].filter(
+			(u) => !runtime_set.has(u)
+		);
 		files_of.set(i.entry, list);
 		for (const u of list) (users.get(u) ?? users.set(u, new Set()).get(u)!).add(i.entry);
 	}
@@ -96,7 +98,19 @@ export function byte_ledger(
 			if ((users.get(u)?.size ?? 0) > 1) shared += s.wire;
 			else unique += s.wire;
 		}
-		rows.push({ entry: i.entry, name: i.name, kind: i.kind, wake: i.wake, count: i.count, files: list.length, wire, unique, shared, cold, urls: list });
+		rows.push({
+			entry: i.entry,
+			name: i.name,
+			kind: i.kind,
+			wake: i.wake,
+			count: i.count,
+			files: list.length,
+			wire,
+			unique,
+			shared,
+			cold,
+			urls: list
+		});
 	}
 	rows.sort((a, b) => b.unique - a.unique || b.wire - a.wire);
 
@@ -116,7 +130,11 @@ export function byte_ledger(
 	for (const u of runtime) runtime_wire += size(u)?.wire ?? 0;
 	const shared = [...users]
 		.filter(([, who]) => who.size > 1)
-		.map(([url, who]) => ({ url, wire: size(url)?.wire ?? 0, users: [...who].map((e) => name_of.get(e) ?? e) }))
+		.map(([url, who]) => ({
+			url,
+			wire: size(url)?.wire ?? 0,
+			users: [...who].map((e) => name_of.get(e) ?? e)
+		}))
 		.filter((s) => s.wire > 0)
 		.sort((a, b) => b.wire - a.wire);
 	return {

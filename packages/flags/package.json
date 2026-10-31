@@ -2,16 +2,26 @@
 	"name": "@ogygia/flags",
 	"version": "0.10.2",
 	"description": "Feature flags and A/B tests for ogygia: one flag() primitive, decided server-side, zero JS",
-	"type": "module",
+	"keywords": [
+		"ab-testing",
+		"feature-flags",
+		"ogygia",
+		"openfeature",
+		"sveltekit"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/flags"
 	},
-	"keywords": ["ogygia", "sveltekit", "feature-flags", "ab-testing", "openfeature"],
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -26,27 +36,7 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && vitest run",
-		"test": "vitest run"
-	},
-	"dependencies": {
-		"esm-env": "catalog:"
-	},
-	"peerDependencies": {
-		"@ogygia/core": "workspace:^"
-	},
-	"devDependencies": {
-		"@ogygia/tooling": "workspace:*",
-		"@ogygia/core": "workspace:*",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
@@ -60,6 +50,25 @@
 				"types": "./dist/vite.d.ts",
 				"default": "./dist/vite.js"
 			}
-		}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && vitest run",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"esm-env": "catalog:"
+	},
+	"devDependencies": {
+		"@ogygia/core": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^"
 	}
 }

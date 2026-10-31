@@ -10,7 +10,7 @@ related:
 A version is not a second site. A locale is not a second site. They are **coordinates** on the same outline. `dimensions()` wraps N outlines (one per coordinate) into a single `Outline` that `site()` consumes. The coordinate is parsed off the front of the slug.
 
 ::: tip When to use
-Use dimensions when the *same page* exists in several editions: `v1` / `v2` docs, `en` / `de` locales, a stable/next channel. When your versions are truly different content, they are only different collections. Dimensions is for one structure, read at several coordinates.
+Use dimensions when the _same page_ exists in several editions: `v1` / `v2` docs, `en` / `de` locales, a stable/next channel. When your versions are truly different content, they are only different collections. Dimensions is for one structure, read at several coordinates.
 :::
 
 ## An axis over collections
@@ -72,11 +72,11 @@ A missing translation is the common failure mode for versioned-docs sites. Dimen
 {/if}
 ```
 
-Fallback is **per axis, opt-in** (`fallback: true` on the axis). A locale usually wants it. A version usually does not: missing in `v1` most frequently means *did not exist yet*, and that should 404.
+Fallback is **per axis, opt-in** (`fallback: true` on the axis). A locale usually wants it. A version usually does not: missing in `v1` most frequently means _did not exist yet_, and that should 404.
 
 ## The switcher
 
-`docs.switcher(slug)` returns the version/locale picker for the coordinate in `slug`, with hrefs baked. It is a serializable value (one `SwitcherAxis` per axis) that the `<Switcher>` component renders as a dropdown. It stays on the *same page* across a switch. It lands on the equivalent of that page in the chosen coordinate (or the default, by the fallback rule).
+`docs.switcher(slug)` returns the version/locale picker for the coordinate in `slug`, with hrefs baked. It is a serializable value (one `SwitcherAxis` per axis) that the `<Switcher>` component renders as a dropdown. It stays on the _same page_ across a switch. It lands on the equivalent of that page in the chosen coordinate (or the default, by the fallback rule).
 
 You rarely call it directly. `docs.meta(slug)` bundles `{ nav, switcher, data }` in one call, and `<DocsShell {meta}>` renders the switcher automatically when it is non-null.
 
@@ -84,7 +84,7 @@ You rarely call it directly. `docs.meta(slug)` bundles `{ nav, switcher, data }`
 
 - **`nav(slug)`**: pass the slug, so that the tree reflects that coordinate. The [remote](/docs/content/remotes) threads it through. A bare coordinate prefix like `'v1/'` operates too.
 - **`docs.entries()`**: bakes the **union** across the matrix. Thus a page that exists in only one coordinate still prerenders there.
-- **search**: indexes only the canonical addresses of the *default* coordinate. Thus fallback pages under other coordinates do not show as duplicate hits.
+- **search**: indexes only the canonical addresses of the _default_ coordinate. Thus fallback pages under other coordinates do not show as duplicate hits.
 
 ## Coordinate as data
 

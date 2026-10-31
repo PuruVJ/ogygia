@@ -18,7 +18,8 @@
 </script>
 
 <section class="island" data-card-shell>
-	<button data-card-toggle onclick={() => (open = !open)}>{title} ({open ? 'open' : 'shut'})</button>
+	<button data-card-toggle onclick={() => (open = !open)}>{title} ({open ? 'open' : 'shut'})</button
+	>
 	{@render header?.()}
 	{#if open}
 		<div data-card-body>{@render children?.()}</div>

@@ -4,13 +4,21 @@
 	// scan per call) and tracks itself.
 	import { t } from './i18n';
 	import { track } from './track';
-	let { specs, prices }: { specs: { label: string; text: string }[]; prices: { qty: number; unit: string; total: string; sym: string }[] } = $props();
+	let {
+		specs,
+		prices
+	}: {
+		specs: { label: string; text: string }[];
+		prices: { qty: number; unit: string; total: string; sym: string }[];
+	} = $props();
 	track('product.specs', { rows: specs.length + prices.length });
 </script>
 
 <table data-specs>
 	<tbody>
-		{#each specs as s (s.label)}<tr><th>{t('spec.label', { label: s.label })}</th><td>{s.text}</td></tr>{/each}
+		{#each specs as s (s.label)}<tr
+				><th>{t('spec.label', { label: s.label })}</th><td>{s.text}</td></tr
+			>{/each}
 	</tbody>
 </table>
 <table data-prices>

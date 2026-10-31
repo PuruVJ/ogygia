@@ -297,8 +297,16 @@ async function drive(page: Page, base: string, errors: string[]) {
 	const rt = src ? new URL(src, base + '/').pathname : undefined;
 	check('runtime script referenced in HTML', !!rt, rt || 'none');
 	if (rt) {
-		check('runtime script is its content-hashed location, not the stable name', RUNTIME_LOCATION_RE.test(rt), rt);
-		check('runtime script serves 200 (the 404 regression)', (await status(new URL(src!, base + '/').href)) === 200, rt);
+		check(
+			'runtime script is its content-hashed location, not the stable name',
+			RUNTIME_LOCATION_RE.test(rt),
+			rt
+		);
+		check(
+			'runtime script serves 200 (the 404 regression)',
+			(await status(new URL(src!, base + '/').href)) === 200,
+			rt
+		);
 	}
 
 	await page.goto(base + '/', { waitUntil: 'load', timeout: 15000 });

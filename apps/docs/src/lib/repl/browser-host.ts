@@ -53,7 +53,14 @@ function sha256_hex(msg: Uint8Array): string {
 			const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
 			w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
 		}
-		let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+		let a = h[0],
+			b = h[1],
+			c = h[2],
+			d = h[3],
+			e = h[4],
+			f = h[5],
+			g = h[6],
+			hh = h[7];
 		for (let i = 0; i < 64; i++) {
 			const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
 			const ch = (e & f) ^ (~e & g);
@@ -61,10 +68,23 @@ function sha256_hex(msg: Uint8Array): string {
 			const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
 			const maj = (a & b) ^ (a & c) ^ (b & c);
 			const t2 = (S0 + maj) >>> 0;
-			hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+			hh = g;
+			g = f;
+			f = e;
+			e = (d + t1) >>> 0;
+			d = c;
+			c = b;
+			b = a;
+			a = (t1 + t2) >>> 0;
 		}
-		h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0; h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
-		h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0; h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+		h[0] = (h[0] + a) >>> 0;
+		h[1] = (h[1] + b) >>> 0;
+		h[2] = (h[2] + c) >>> 0;
+		h[3] = (h[3] + d) >>> 0;
+		h[4] = (h[4] + e) >>> 0;
+		h[5] = (h[5] + f) >>> 0;
+		h[6] = (h[6] + g) >>> 0;
+		h[7] = (h[7] + hh) >>> 0;
 	}
 	let out = '';
 	for (let i = 0; i < 8; i++) out += h[i].toString(16).padStart(8, '0');
@@ -73,10 +93,9 @@ function sha256_hex(msg: Uint8Array): string {
 
 // ── MD5 (RFC 1321) over bytes → lowercase hex ────────────────────────────────────────────────────
 const MD5_S = [
-	7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
-	5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
-	4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-	6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+	7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14,
+	20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6,
+	10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
 ];
 // T[i] = floor(abs(sin(i+1)) * 2^32) — the RFC 1321 constants (hardcoded to avoid any sin() drift).
 const MD5_T = new Uint32Array([
@@ -104,22 +123,42 @@ function md5_hex(msg: Uint8Array): string {
 	dv.setUint32(total - 8, bit_len >>> 0, true); // md5 length is little-endian
 	dv.setUint32(total - 4, Math.floor(bit_len / 0x100000000), true);
 
-	let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+	let a0 = 0x67452301,
+		b0 = 0xefcdab89,
+		c0 = 0x98badcfe,
+		d0 = 0x10325476;
 	const x = new Uint32Array(16);
 	for (let off = 0; off < total; off += 64) {
 		for (let i = 0; i < 16; i++) x[i] = dv.getUint32(off + i * 4, true);
-		let A = a0, B = b0, C = c0, D = d0;
+		let A = a0,
+			B = b0,
+			C = c0,
+			D = d0;
 		for (let i = 0; i < 64; i++) {
 			let F: number, g: number;
-			if (i < 16) { F = (B & C) | (~B & D); g = i; }
-			else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) & 15; }
-			else if (i < 48) { F = B ^ C ^ D; g = (3 * i + 5) & 15; }
-			else { F = C ^ (B | ~D); g = (7 * i) & 15; }
+			if (i < 16) {
+				F = (B & C) | (~B & D);
+				g = i;
+			} else if (i < 32) {
+				F = (D & B) | (~D & C);
+				g = (5 * i + 1) & 15;
+			} else if (i < 48) {
+				F = B ^ C ^ D;
+				g = (3 * i + 5) & 15;
+			} else {
+				F = C ^ (B | ~D);
+				g = (7 * i) & 15;
+			}
 			F = (F + A + MD5_T[i] + x[g]) >>> 0;
-			A = D; D = C; C = B;
+			A = D;
+			D = C;
+			C = B;
 			B = (B + rotl(F, MD5_S[i])) >>> 0;
 		}
-		a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+		a0 = (a0 + A) >>> 0;
+		b0 = (b0 + B) >>> 0;
+		c0 = (c0 + C) >>> 0;
+		d0 = (d0 + D) >>> 0;
 	}
 	const le = (n: number): string => {
 		let s = '';
@@ -153,8 +192,15 @@ function throwing_fs(): HostFs {
 		throw new Error('[observatory] host.fs is unavailable in the browser (BuildCache is disabled)');
 	};
 	return {
-		readFileSync: nope, existsSync: () => false, readdirSync: nope, statSync: nope,
-		globSync: () => [], writeFileSync: () => {}, mkdirSync: nope, rmSync: () => {}, renameSync: nope
+		readFileSync: nope,
+		existsSync: () => false,
+		readdirSync: nope,
+		statSync: nope,
+		globSync: () => [],
+		writeFileSync: () => {},
+		mkdirSync: nope,
+		rmSync: () => {},
+		renameSync: nope
 	};
 }
 
@@ -173,7 +219,12 @@ export function make_browser_host(): CompilerHost {
  *  (`src/...`). Read-only; writes are no-ops (the driver never writes on the analyze path). `get_files`
  *  is read live, so re-running the driver after an edit sees the new files without re-installing. */
 export function make_repl_host(get_files: () => Record<string, string>): CompilerHost {
-	const key = (p: string) => p.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^repl\/?/, '').replace(/\/+$/, '');
+	const key = (p: string) =>
+		p
+			.replace(/\\/g, '/')
+			.replace(/^\/+/, '')
+			.replace(/^repl\/?/, '')
+			.replace(/\/+$/, '');
 	const is_dir = (files: Record<string, string>, k: string) =>
 		k === '' || Object.keys(files).some((f) => f.startsWith(k + '/'));
 	const fs = {
@@ -199,7 +250,11 @@ export function make_repl_host(get_files: () => Record<string, string>): Compile
 			}
 			return [...names].map((name) =>
 				opts?.withFileTypes
-					? { name, isFile: () => files[prefix + name] != null, isDirectory: () => files[prefix + name] == null }
+					? {
+							name,
+							isFile: () => files[prefix + name] != null,
+							isDirectory: () => files[prefix + name] == null
+						}
 					: name
 			);
 		},
@@ -209,7 +264,12 @@ export function make_repl_host(get_files: () => Record<string, string>): Compile
 			const file = files[k];
 			const dir = file == null && k !== '' && is_dir(files, k);
 			if (file == null && !dir) throw new Error('ENOENT: ' + p);
-			return { isFile: () => file != null, isDirectory: () => dir, size: file != null ? file.length : 0, mtimeMs: 0 };
+			return {
+				isFile: () => file != null,
+				isDirectory: () => dir,
+				size: file != null ? file.length : 0,
+				mtimeMs: 0
+			};
 		},
 		globSync: () => [],
 		writeFileSync: () => {},

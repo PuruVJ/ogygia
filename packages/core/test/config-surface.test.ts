@@ -31,11 +31,15 @@ describe('legacy option renames — errors with the new spelling, never silent a
 		);
 	});
 	it('rejects devtools and profiler (now the @ogygia/devtools plugin)', () => {
-		expect(() => ogygia({ devtools: true } as never)).toThrow(/list `devtools\(\)`.*beside `ogygia\(\)`/);
+		expect(() => ogygia({ devtools: true } as never)).toThrow(
+			/list `devtools\(\)`.*beside `ogygia\(\)`/
+		);
 		expect(() => ogygia({ profiler: true } as never)).toThrow(/devtools\(\{ profiler/);
 	});
 	it('rejects plugins (they are Vite plugins listed beside ogygia())', () => {
-		expect(() => ogygia({ plugins: [] } as never)).toThrow(/plugins: \[ogygia\(\), flags\(\), sveltekit\(\)\]/);
+		expect(() => ogygia({ plugins: [] } as never)).toThrow(
+			/plugins: \[ogygia\(\), flags\(\), sveltekit\(\)\]/
+		);
 	});
 });
 
@@ -87,7 +91,7 @@ describe('presets — config-time validation', () => {
 			})
 		).not.toThrow();
 	});
-	it('takes `fetch`, a deferred hole\'s timing (0.10.0 rejected it: no deferred preset could be written)', () => {
+	it("takes `fetch`, a deferred hole's timing (0.10.0 rejected it: no deferred preset could be written)", () => {
 		expect(() =>
 			ogygia({
 				presets: {

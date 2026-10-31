@@ -93,7 +93,8 @@ export const FEATURES: Record<FeatureId, FeatureDef> = {
 		// before it landed — a foreign web component upgraded it, or the fallback itself hydrated — and
 		// #apply must MORPH that live node, not replace it (a plain swap re-creates a menu open right
 		// now; core.ts #apply). The frames feature already tracks `defer` for the same streamed HTML.
-		detect: (m) => m.live === true || m.morph === true || m.router === true || (m.defer || []).length > 0
+		detect: (m) =>
+			m.live === true || m.morph === true || m.router === true || (m.defer || []).length > 0
 	},
 	live: {
 		module: 'live.js',
@@ -182,7 +183,8 @@ export function resolveFeatures(marks: RuntimeMarks): FeatureId[] {
 
 const to_alias = (id: string) => id.replace(HYPHEN, '_');
 // Absolute filesystem paths — Vite/Rolldown resolve these; `file://` URLs do not.
-const runtime_path = (runtimeDir: string, mod: string) => `${runtimeDir}/${mod}`.replace(BACKSLASH, '/');
+const runtime_path = (runtimeDir: string, mod: string) =>
+	`${runtimeDir}/${mod}`.replace(BACKSLASH, '/');
 
 /** The selected features of one {@link FeaturePhase}, in FEATURE_ORDER. */
 export function phaseFeatures(marks: RuntimeMarks, phase: FeaturePhase): FeatureId[] {
@@ -204,13 +206,21 @@ export function generateRuntimeEntrySource(
 	lines.push(`/** generated ogygia runtime — features: ${features.join(', ') || '(core only)'} */`);
 	lines.push(`import { boot } from ${JSON.stringify(runtime_path(runtimeDir, 'core.js'))};`);
 	for (const id of features) {
-		lines.push(`import * as ${to_alias(id)} from ${JSON.stringify(runtime_path(runtimeDir, FEATURES[id].module))};`);
+		lines.push(
+			`import * as ${to_alias(id)} from ${JSON.stringify(runtime_path(runtimeDir, FEATURES[id].module))};`
+		);
 	}
-	clientPlugins.forEach((spec, i) => lines.push(`import __og_client_${i} from ${JSON.stringify(spec)};`));
+	clientPlugins.forEach((spec, i) =>
+		lines.push(`import __og_client_${i} from ${JSON.stringify(spec)};`)
+	);
 	lines.push('');
 	lines.push('boot([');
 	for (const id of features) lines.push(`  ${to_alias(id)}.install,`);
-	lines.push(clientPlugins.length ? `], [${clientPlugins.map((_, i) => `__og_client_${i}`).join(', ')}]);` : ']);');
+	lines.push(
+		clientPlugins.length
+			? `], [${clientPlugins.map((_, i) => `__og_client_${i}`).join(', ')}]);`
+			: ']);'
+	);
 	// Side effects only: the entry boots and exports nothing (no consumer ever read an export).
 	return { code: lines.join('\n') + '\n', features };
 }
@@ -232,7 +242,9 @@ export function generateHydrateFeaturesSource(
 	const lines: string[] = [];
 	lines.push(`/** generated ogygia hydrate-phase features: ${features.join(', ') || '(none)'} */`);
 	for (const id of features) {
-		lines.push(`import * as ${to_alias(id)} from ${JSON.stringify(runtime_path(runtimeDir, FEATURES[id].module))};`);
+		lines.push(
+			`import * as ${to_alias(id)} from ${JSON.stringify(runtime_path(runtimeDir, FEATURES[id].module))};`
+		);
 	}
 	lines.push('export function install() {');
 	for (const id of features) lines.push(`  ${to_alias(id)}.install();`);

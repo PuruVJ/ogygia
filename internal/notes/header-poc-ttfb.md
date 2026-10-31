@@ -2,11 +2,11 @@
 
 Measured on the deployed POC (`amp3`) vs the ogygia baseline (`amp2`), same page, `curl` from here.
 
-| | baseline | header POC |
-| --- | --- | --- |
-| GET TTFB (3 rounds) | 3.4 / 4.2 s | 6.4 / 8.0 / 8.9 s |
-| HEAD TTFB (3 rounds) | 2.5 / 2.9 s | 2.1 / 2.6 / 3.7 s |
-| GET − HEAD ≈ the app's post-render HTML middleware | ~1 s | **~4 s** |
+|                                                    | baseline    | header POC        |
+| -------------------------------------------------- | ----------- | ----------------- |
+| GET TTFB (3 rounds)                                | 3.4 / 4.2 s | 6.4 / 8.0 / 8.9 s |
+| HEAD TTFB (3 rounds)                               | 2.5 / 2.9 s | 2.1 / 2.6 / 3.7 s |
+| GET − HEAD ≈ the app's post-render HTML middleware | ~1 s        | **~4 s**          |
 
 `HEAD` skips exactly one thing in the app: `addDynamicHtmlAttributesUnlessHead`
 (`hooks.server.ts`) — the post-render transform that extracts every `<qds-*>…</qds-*>` block and
@@ -53,19 +53,20 @@ Node 20, 11.4 s under the profiler (sampling inflates CPU ~1.5×; the same reque
 unprofiled). CPU busy 98 % of the window (compute-bound), 6.6 s CPU + 4.8 s waiting; 180 outbound
 calls; GC 1.3 s; event-loop stall p99 2.4 s.
 
-| rank | what | evidence (profiled) | owner |
-| --- | --- | --- | --- |
-| 1 | **Stencil QDS hydrate in the post-render middleware** | `serializeNodeToHtml` 3.84 s total (`streamToHtml` 3.0 s self, MockDoc parse loop 0.5 s, `escapeString`, `getNamedItem`…) = 36 % of busy; runs per request because the header block's bytes change per request (cache miss) | app (cache key) + ogygia (stable URLs, done) |
-| 2 | **Builder `<Content>` SSR** | `Content_variants` 1.9 s total (`traverse` 1.2 s, `serializeIncludingFunctions` 0.3 s); the POC adds the country-selector panel to what the page already renders | app |
-| 3 | **GC** | 1.3 s, 45 pauses, max 56 ms — the allocation of 1 and 2 | follows 1 and 2 |
-| 4 | **Mega-menu feed fetches fired on the server by the as-is `MegaMenu` fallback** | `product-menu-items` 2.26 s + a self-call to `/_server/api/pes-mega-menu` 2.2 s that FAILS (status 0) — from `MegaMenu.svelte`'s `searchpath` store subscription running during SSR; the hole already primes these feeds (`primeMegaMenuFeeds`), so on the page this is pure waste | app (header port) |
-| 5 | **Cache reads through a Lambda proxy** | 141 invocations, ~200 ms each, 28 s combined (mostly overlapped) — the floor under the loads on both deploys | app / infra |
-| 6 | **Icons fetched during hydrate** | 30 failed relative `/icons/*.svg` fetches + 4 `data:` URL fetches (1.5 s) inside the QDS hydrate | app (middleware) |
-| 7 | ogygia | ~250 ms of 10.5 s busy (2.4 %): devalue 164 ms, late-region registry 39 ms; Kit's ETag hash 60 ms. This build predates the server perf commits on `passage`. | ogygia (done) |
+| rank | what                                                                            | evidence (profiled)                                                                                                                                                                                                                                                                | owner                                        |
+| ---- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 1    | **Stencil QDS hydrate in the post-render middleware**                           | `serializeNodeToHtml` 3.84 s total (`streamToHtml` 3.0 s self, MockDoc parse loop 0.5 s, `escapeString`, `getNamedItem`…) = 36 % of busy; runs per request because the header block's bytes change per request (cache miss)                                                        | app (cache key) + ogygia (stable URLs, done) |
+| 2    | **Builder `<Content>` SSR**                                                     | `Content_variants` 1.9 s total (`traverse` 1.2 s, `serializeIncludingFunctions` 0.3 s); the POC adds the country-selector panel to what the page already renders                                                                                                                   | app                                          |
+| 3    | **GC**                                                                          | 1.3 s, 45 pauses, max 56 ms — the allocation of 1 and 2                                                                                                                                                                                                                            | follows 1 and 2                              |
+| 4    | **Mega-menu feed fetches fired on the server by the as-is `MegaMenu` fallback** | `product-menu-items` 2.26 s + a self-call to `/_server/api/pes-mega-menu` 2.2 s that FAILS (status 0) — from `MegaMenu.svelte`'s `searchpath` store subscription running during SSR; the hole already primes these feeds (`primeMegaMenuFeeds`), so on the page this is pure waste | app (header port)                            |
+| 5    | **Cache reads through a Lambda proxy**                                          | 141 invocations, ~200 ms each, 28 s combined (mostly overlapped) — the floor under the loads on both deploys                                                                                                                                                                       | app / infra                                  |
+| 6    | **Icons fetched during hydrate**                                                | 30 failed relative `/icons/*.svg` fetches + 4 `data:` URL fetches (1.5 s) inside the QDS hydrate                                                                                                                                                                                   | app (middleware)                             |
+| 7    | ogygia                                                                          | ~250 ms of 10.5 s busy (2.4 %): devalue 164 ms, late-region registry 39 ms; Kit's ETag hash 60 ms. This build predates the server perf commits on `passage`.                                                                                                                       | ogygia (done)                                |
 
 ## Fixes
 
 ogygia (done on `passage`):
+
 1. **Window-aligned capability expiry** (`server/endpoint.ts` `capability_expiry`): every render of
    the same hole in the same half-TTL window mints the same `exp` → same signature → same URL. The
    header block becomes byte-identical across requests and the app's cache hits again. Validity
@@ -74,13 +75,9 @@ ogygia (done on `passage`):
    every page differ from its previous render; now the same page mints the same ids (endpoint
    renders are prefixed by their region id so a spliced hole never collides).
 
-App (header port owner):
-3. Redis-cache `country_selector_entry` like `header_options` (or make the panel a `deferred`
-   hole so the Builder call leaves the TTFB path).
-4. Keep the mega-menu fallback markup OUT of the `<qds-web-header>` element the middleware
-   hydrates as one block: a 738 KB block is a 738 KB Stencil hydrate on every miss. Even with a
-   stable key, a per-instance miss (cold Lambda, eviction) pays it in full.
-5. Longer term: key the QDS render cache on a normalized block (strip `<ogygia-region …>`
-   attributes) and re-insert the live tags, so hole URLs can rotate without defeating the cache.
-6. Redeploy on `passage` HEAD (this deploy is `pkg.pr.new/ogygia@3094f98`, before today's server
-   perf commits: +28 → +12–17 ms per request, JSON lane, one document pass).
+App (header port owner): 3. Redis-cache `country_selector_entry` like `header_options` (or make the panel a `deferred`
+hole so the Builder call leaves the TTFB path). 4. Keep the mega-menu fallback markup OUT of the `<qds-web-header>` element the middleware
+hydrates as one block: a 738 KB block is a 738 KB Stencil hydrate on every miss. Even with a
+stable key, a per-instance miss (cold Lambda, eviction) pays it in full. 5. Longer term: key the QDS render cache on a normalized block (strip `<ogygia-region …>`
+attributes) and re-insert the live tags, so hole URLs can rotate without defeating the cache. 6. Redeploy on `passage` HEAD (this deploy is `pkg.pr.new/ogygia@3094f98`, before today's server
+perf commits: +28 → +12–17 ms per request, JSON lane, one document pass).

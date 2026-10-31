@@ -31,18 +31,48 @@ test.describe('deferred hole → snippets → nested islands via relative import
 		};
 
 		// 1. control — direct placement
-		await click_counts('[data-nested-direct]', '[data-nested-inner]', '[data-nested-inner-n]', 'direct');
+		await click_counts(
+			'[data-nested-direct]',
+			'[data-nested-inner]',
+			'[data-nested-inner-n]',
+			'direct'
+		);
 		// 2. `../` island in a 0-arg snippet at a plain site (the reported shape)
-		await click_counts('[data-nested-in-snippet]', '[data-nested-inner]', '[data-nested-inner-n]', 'snippet ../');
+		await click_counts(
+			'[data-nested-in-snippet]',
+			'[data-nested-inner]',
+			'[data-nested-inner-n]',
+			'snippet ../'
+		);
 		// 3. `./` sibling island in the same snippet
-		await click_counts('[data-nested-in-snippet]', '[data-nested-sibling]', '[data-nested-sibling-n]', 'snippet ./');
+		await click_counts(
+			'[data-nested-in-snippet]',
+			'[data-nested-sibling]',
+			'[data-nested-sibling-n]',
+			'snippet ./'
+		);
 		// 6. plain relative helper captured into the snippet (resolve_id's rebase — the control)
 		await expect(page.locator('[data-nested-helper]')).toHaveText('HELPER');
 		// 4. parameterized snippet at an island site — both rows carry a live island
-		await click_counts('[data-nested-row="1"]', '[data-nested-inner]', '[data-nested-inner-n]', 'island-site row 1');
-		await click_counts('[data-nested-row="2"]', '[data-nested-inner]', '[data-nested-inner-n]', 'island-site row 2');
+		await click_counts(
+			'[data-nested-row="1"]',
+			'[data-nested-inner]',
+			'[data-nested-inner-n]',
+			'island-site row 1'
+		);
+		await click_counts(
+			'[data-nested-row="2"]',
+			'[data-nested-inner]',
+			'[data-nested-inner-n]',
+			'island-site row 2'
+		);
 		// 5. snippet nested in a snippet
-		await click_counts('[data-nested-deep]', '[data-nested-inner]', '[data-nested-inner-n]', 'nested snippet');
+		await click_counts(
+			'[data-nested-deep]',
+			'[data-nested-inner]',
+			'[data-nested-inner-n]',
+			'nested snippet'
+		);
 
 		check('no console / page errors', errs.length === 0, errs.join('\n'));
 	});

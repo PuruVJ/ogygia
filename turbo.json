@@ -21,7 +21,16 @@
 			"outputs": [],
 			"cache": true,
 			"env": ["E2E_NO_BUILD"],
-			"passThroughEnv": ["OGYGIA_*", "CI", "PLAYWRIGHT_*", "PW_*", "DEBUG", "HOME", "TMPDIR", "BUN_INSTALL"]
+			"passThroughEnv": [
+				"OGYGIA_*",
+				"CI",
+				"PLAYWRIGHT_*",
+				"PW_*",
+				"DEBUG",
+				"HOME",
+				"TMPDIR",
+				"BUN_INSTALL"
+			]
 		},
 		"fixture": {
 			"dependsOn": ["^build"],

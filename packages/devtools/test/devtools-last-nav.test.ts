@@ -12,7 +12,20 @@ import type { DevtoolsEvent } from '@ogygia/core/events';
 
 let seq = 0;
 const ev = (name: 'nav.start' | 'nav.finish', t: number, to: string) =>
-	({ domain: 'nav', name, to, from: '/', type: 'link', ms: 1, reconciled: true, vt: false, v: 1, seq: seq++, t, realm: 'client' }) as unknown as DevtoolsEvent;
+	({
+		domain: 'nav',
+		name,
+		to,
+		from: '/',
+		type: 'link',
+		ms: 1,
+		reconciled: true,
+		vt: false,
+		v: 1,
+		seq: seq++,
+		t,
+		realm: 'client'
+	}) as unknown as DevtoolsEvent;
 
 beforeEach(() => {
 	clear();
@@ -27,7 +40,11 @@ describe('last_nav', () => {
 	it('one that started and never finished changes nothing', () => {
 		ingest([ev('nav.start', 100, '/login')]);
 		expect(last_nav()).toBe(null);
-		ingest([ev('nav.start', 100, '/b'), ev('nav.finish', 180, '/b'), ev('nav.start', 900, '/login')]);
+		ingest([
+			ev('nav.start', 100, '/b'),
+			ev('nav.finish', 180, '/b'),
+			ev('nav.start', 900, '/login')
+		]);
 		expect(last_nav()).toEqual({ to: '/b', t: 100 });
 	});
 	it('an overtaken navigation is not the page: the one that finished is', () => {

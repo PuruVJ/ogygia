@@ -190,7 +190,6 @@ describe('scanner fallback — when the AST bails on an unparseable tail', () =>
 		const out = rewrite_wire(src, '/x.ts', MARKUP);
 		expect(typeof out).toBe('string'); // no raw throw
 	});
-
 });
 
 describe('wire — demented shapes that must FAIL LOUDLY', () => {

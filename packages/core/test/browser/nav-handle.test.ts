@@ -24,10 +24,14 @@ test('boot without the router publishes the MPA handle; the router feature repla
 	const res = await (mpa.preloadData as (u: string) => Promise<{ type: string }>)('/next-page');
 	expect(res.type).toBe('loaded');
 	if (HTMLScriptElement.supports?.('speculationrules')) {
-		expect(document.head.querySelector('script[data-ogygia-speculate-hint]')?.textContent).toContain('/next-page');
+		expect(
+			document.head.querySelector('script[data-ogygia-speculate-hint]')?.textContent
+		).toContain('/next-page');
 	}
 	// goto keeps the router's contract: same-origin only unless `external`.
-	expect(() => (mpa.goto as (u: string) => void)('https://elsewhere.example/x')).toThrow(/same-origin/);
+	expect(() => (mpa.goto as (u: string) => void)('https://elsewhere.example/x')).toThrow(
+		/same-origin/
+	);
 
 	// The router feature installs: its SPA API becomes the handle.
 	router.install();

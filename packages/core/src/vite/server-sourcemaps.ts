@@ -69,7 +69,8 @@ export function server_sourcemaps_plugin(measuring: () => boolean): Plugin {
 				// (a chunk's map is written beside it, and not always listed in the bundle: each file's
 				// `<file>.map` is looked for, and any listed `.map` too)
 				const maps = new Set<string>();
-				for (const file of Object.keys(bundle)) maps.add(file.endsWith('.map') ? file : file + '.map');
+				for (const file of Object.keys(bundle))
+					maps.add(file.endsWith('.map') ? file : file + '.map');
 				for (const file of maps) {
 					const from = path.join(options.dir, file);
 					if (!fs.existsSync(from)) continue;

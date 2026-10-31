@@ -27,8 +27,13 @@ export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
  *  so this waits for it instead of reading the counter the instant the island is marked. */
 export async function replayed_once(page: Page): Promise<boolean> {
 	return page
-		.waitForFunction(() => document.querySelector('[data-i-count]')?.textContent === '1', null, { timeout: 2000 })
-		.then(() => true, () => false);
+		.waitForFunction(() => document.querySelector('[data-i-count]')?.textContent === '1', null, {
+			timeout: 2000
+		})
+		.then(
+			() => true,
+			() => false
+		);
 }
 
 /** Every island graph script in a page's HTML, merged: entry → the chunks its code needs
@@ -37,7 +42,12 @@ export function island_graph(html: string): Map<string, string[]> {
 	const out = new Map<string, string[]>();
 	for (const m of html.matchAll(ISLAND_GRAPH_SCRIPT_G_RE)) {
 		const wire = JSON.parse(m[1]) as { h: string[]; e: Record<string, number[]> };
-		for (const [entry, ids] of Object.entries(wire.e)) if (!out.has(entry)) out.set(entry, ids.map((i) => wire.h[i]));
+		for (const [entry, ids] of Object.entries(wire.e))
+			if (!out.has(entry))
+				out.set(
+					entry,
+					ids.map((i) => wire.h[i])
+				);
 	}
 	return out;
 }

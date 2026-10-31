@@ -25,7 +25,9 @@ interface RoutesSlot {
 	/** route id (group-stripped) → option → declared value, for every Kit page route */
 	pages: Map<string, Record<string, boolean>>;
 }
-const slot: RoutesSlot = ((globalThis as Record<symbol, RoutesSlot | undefined>)[Symbol.for('ogygia.route-options.v1')] ??= {
+const slot: RoutesSlot = ((globalThis as Record<symbol, RoutesSlot | undefined>)[
+	Symbol.for('ogygia.route-options.v1')
+] ??= {
 	routers: new Map(),
 	pages: new Map()
 });
@@ -59,7 +61,11 @@ function strip_route_groups(id: string): string {
 
 /** This request's declared value for `option`, or `undefined` (use the plugin's default). A null
  *  `routeId` is never normalized to `/` — that would be a different route. */
-export function route_option(option: string, route_id: string | null | undefined, pathname: string): boolean | undefined {
+export function route_option(
+	option: string,
+	route_id: string | null | undefined,
+	pathname: string
+): boolean | undefined {
 	for (const matcher of slot.routers.values()) {
 		const v = matcher(pathname, option);
 		if (v !== undefined) return v ?? undefined;

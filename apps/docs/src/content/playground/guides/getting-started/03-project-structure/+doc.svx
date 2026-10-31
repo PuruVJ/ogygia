@@ -47,15 +47,15 @@ my-docs/
 
 ## What each folder is for
 
-| Path | Role |
-| --- | --- |
-| `src/content/config.ts` | Declares your collections and their schemas. |
-| `src/content/<collection>/` | Source files for one collection. |
-| `+doc.svx` | The page body. One per folder. |
-| `+meta.json` | Optional. Sets the display label for a group. |
-| `src/lib/demos/` | Reusable islands imported by many pages. |
-| `src/routes/[...slug]/` | The catch-all route that renders any doc. |
-| `src/app.css` | Global styles and the `--ph-*` design tokens. |
+| Path                        | Role                                          |
+| --------------------------- | --------------------------------------------- |
+| `src/content/config.ts`     | Declares your collections and their schemas.  |
+| `src/content/<collection>/` | Source files for one collection.              |
+| `+doc.svx`                  | The page body. One per folder.                |
+| `+meta.json`                | Optional. Sets the display label for a group. |
+| `src/lib/demos/`            | Reusable islands imported by many pages.      |
+| `src/routes/[...slug]/`     | The catch-all route that renders any doc.     |
+| `src/app.css`               | Global styles and the `--ph-*` design tokens. |
 
 ## File conventions
 

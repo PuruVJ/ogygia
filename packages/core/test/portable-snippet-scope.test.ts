@@ -28,14 +28,20 @@ const ctx = {
 
 type Island = { source?: string; portable?: boolean };
 const synths = (host: string) =>
-	((transformHost(host, '/app/src/routes/+page.svelte', { ...ctx, ssr: true })?.islands ?? []) as Island[])
+	(
+		(transformHost(host, '/app/src/routes/+page.svelte', { ...ctx, ssr: true })?.islands ??
+			[]) as Island[]
+	)
 		.filter((i) => i.portable)
 		.map((i) => i.source!);
 
 /** The synth compiles on its own: every name it reads is declared in it (Svelte reports the rest). */
 const compiles = (synth: string) => {
 	const r = compile(synth, { generate: 'server', filename: 'synth.svelte' });
-	return r.warnings.filter((w) => w.code === 'export_let_unused' || w.message.includes('not defined')).length === 0;
+	return (
+		r.warnings.filter((w) => w.code === 'export_let_unused' || w.message.includes('not defined'))
+			.length === 0
+	);
 };
 
 describe('portable snippet — every name its body reads reaches the synth', () => {

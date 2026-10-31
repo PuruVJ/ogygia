@@ -4,4 +4,6 @@
 	let i = $state(0);
 </script>
 
-<button data-dt="dup-pick" onclick={() => (i = (i + 1) % CATALOG.length)}>pick: {CATALOG[i].title}</button>
+<button data-dt="dup-pick" onclick={() => (i = (i + 1) % CATALOG.length)}
+	>pick: {CATALOG[i].title}</button
+>

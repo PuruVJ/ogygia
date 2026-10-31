@@ -18,6 +18,10 @@
 </script>
 
 <nav class="og-bottombar" aria-label={label}>
-	<div class="og-bottombar-lead">{#if lead}{@render lead()}{/if}</div>
-	<div class="og-bottombar-actions">{#if actions}{@render actions()}{/if}</div>
+	<div class="og-bottombar-lead">
+		{#if lead}{@render lead()}{/if}
+	</div>
+	<div class="og-bottombar-actions">
+		{#if actions}{@render actions()}{/if}
+	</div>
 </nav>

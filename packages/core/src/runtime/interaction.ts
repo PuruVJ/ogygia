@@ -189,7 +189,11 @@ function wake(a: Armed, e: Event): void {
 	const { region, queued } = a;
 	// While waking (and before), clicks are canceled + queued: their activation happens once,
 	// on the replay, when the island's handlers exist. Everything else passes through natively.
-	if (e.type === 'click' && e.target instanceof Element && !opens_elsewhere(e as MouseEvent, e.target)) {
+	if (
+		e.type === 'click' &&
+		e.target instanceof Element &&
+		!opens_elsewhere(e as MouseEvent, e.target)
+	) {
 		const addr = element_address(region, e.target);
 		if (addr) {
 			const me = e as MouseEvent;

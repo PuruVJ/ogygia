@@ -86,21 +86,33 @@
 <h3>byte ledger — JavaScript per island</h3>
 {#if exact}
 	<div class="note" data-og-ledger-exact>
-		Every file each island needs, from the page's island graph, weighed by the browser (over the wire).
-		<b>only it</b> is what that island alone needs: what removing it would save. <b>shared</b> it shares with
-		other islands. The page total counts each file once.
+		Every file each island needs, from the page's island graph, weighed by the browser (over the
+		wire).
+		<b>only it</b> is what that island alone needs: what removing it would save. <b>shared</b> it shares
+		with other islands. The page total counts each file once.
 	</div>
 	<table>
 		<thead>
-			<tr><th>island</th><th>kind</th><th>files</th><th>loaded</th><th>only it</th><th>shared</th></tr>
+			<tr
+				><th>island</th><th>kind</th><th>files</th><th>loaded</th><th>only it</th><th>shared</th
+				></tr
+			>
 		</thead>
 		<tbody>
 			{#each exact.rows as row (row.entry)}
 				<tr>
-					<td title={row.entry}><span class="nm">{row.name}</span>{#if row.count > 1}<span class="muted"> ×{row.count}</span>{/if}</td>
+					<td title={row.entry}
+						><span class="nm">{row.name}</span>{#if row.count > 1}<span class="muted">
+								×{row.count}</span
+							>{/if}</td
+					>
 					<td>{row.kind}{row.kind === 'island' ? ' · ' + row.wake : ''}</td>
-					<td>{row.files}{#if row.cold}<span class="muted"> · {row.cold} cold</span>{/if}</td>
-					<td>{#if row.files > row.cold}{kb(row.wire)}{:else}<span class="muted">cold</span>{/if}</td>
+					<td
+						>{row.files}{#if row.cold}<span class="muted"> · {row.cold} cold</span>{/if}</td
+					>
+					<td
+						>{#if row.files > row.cold}{kb(row.wire)}{:else}<span class="muted">cold</span>{/if}</td
+					>
 					<td><span class="strong">{kb(row.unique)}</span></td>
 					<td class="muted">{kb(row.shared)}</td>
 				</tr>
@@ -118,7 +130,11 @@
 			<tr>
 				<td>page</td>
 				<td class="muted">each file once</td>
-				<td>{exact.page.files}{#if exact.page.cold}<span class="muted"> · {exact.page.cold} cold</span>{/if}</td>
+				<td
+					>{exact.page.files}{#if exact.page.cold}<span class="muted">
+							· {exact.page.cold} cold</span
+						>{/if}</td
+				>
 				<td>{kb(exact.page.wire)}</td>
 				<td colspan="2" class="muted">{kb(exact.page.raw)} decoded</td>
 			</tr>
@@ -132,7 +148,11 @@
 					<tr>
 						<td title={s.url}>{basename(s.url)}</td>
 						<td>{kb(s.wire)}</td>
-						<td class="muted">{s.users.length > 4 ? `${s.users.slice(0, 3).join(', ')} and ${s.users.length - 3} more` : s.users.join(', ')}</td>
+						<td class="muted"
+							>{s.users.length > 4
+								? `${s.users.slice(0, 3).join(', ')} and ${s.users.length - 3} more`
+								: s.users.join(', ')}</td
+						>
 					</tr>
 				{/each}
 			</tbody>
@@ -142,9 +162,9 @@
 		<!-- the last profile of this page: modules the build shipped twice, both copies loaded here -->
 		<h3 class="sub">loaded twice</h3>
 		<div class="note" data-og-ledger-twice>
-			One module reached by two paths (a package's source and its build, or two of its versions) ships as
-			two copies, and this page loads both: {kb(twice.reduce((s, d) => s + d.extra, 0))} of code its browser
-			downloads, parses and runs a second time. From the last profile.
+			One module reached by two paths (a package's source and its build, or two of its versions)
+			ships as two copies, and this page loads both: {kb(twice.reduce((s, d) => s + d.extra, 0))} of code
+			its browser downloads, parses and runs a second time. From the last profile.
 		</div>
 		<table>
 			<tbody>
@@ -152,58 +172,68 @@
 					<tr>
 						<td>{d.name}</td>
 						<td>{kb(d.extra)}</td>
-						<td class="muted">{d.copies.map((c) => `${basename(c.file)}${c.from ? ` (${c.from})` : ''}`).join(' · ')}</td>
+						<td class="muted"
+							>{d.copies
+								.map((c) => `${basename(c.file)}${c.from ? ` (${c.from})` : ''}`)
+								.join(' · ')}</td
+						>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
 	{/if}
 {:else}
-<div class="note">
-	Each <b>+deps</b> figure is that island's <b>whole bundle</b> — the component plus every shared function
-	and utility it imports. Shared code is therefore counted in <em>every</em> island that uses it, so the
-	figures overlap and the page total over-counts code that actually ships once.{#if IS_DEV}
-		Dev estimate: sizes are unbundled/unminified — build + preview for shipped numbers.{/if} A cold island
-	(not yet woken) shows <b>—</b> until it loads.
-</div>
+	<div class="note">
+		Each <b>+deps</b> figure is that island's <b>whole bundle</b> — the component plus every shared
+		function and utility it imports. Shared code is therefore counted in <em>every</em> island that
+		uses it, so the figures overlap and the page total over-counts code that actually ships once.{#if IS_DEV}
+			Dev estimate: sizes are unbundled/unminified — build + preview for shipped numbers.{/if} A cold
+		island (not yet woken) shows <b>—</b> until it loads.
+	</div>
 
-<table>
-	<thead>
-		<tr><th>island</th><th>kind</th><th>wrapper</th><th>+deps</th></tr>
-	</thead>
-	<tbody>
-		{#each model.rows as row (row.entry)}
+	<table>
+		<thead>
+			<tr><th>island</th><th>kind</th><th>wrapper</th><th>+deps</th></tr>
+		</thead>
+		<tbody>
+			{#each model.rows as row (row.entry)}
+				<tr>
+					<td title={row.entry}>
+						<span class="nm">{row.name}</span>{#if row.count > 1}<span class="muted">
+								×{row.count}</span
+							>{/if}
+					</td>
+					<td>{row.kind}{row.kind === 'island' ? ' · ' + row.wake : ''}</td>
+					<td
+						>{#if row.loaded}{kb(row.wire)}{:else}<span class="muted">cold</span>{/if}</td
+					>
+					<td>
+						{#if row.transitive}
+							<span class="strong">{kb(row.transitive)}</span><span class="muted">
+								· {row.modules} mod</span
+							>
+						{:else}<span class="muted">—</span>{/if}
+					</td>
+				</tr>
+			{:else}
+				<tr><td colspan="4" class="muted">no island chunks on this page</td></tr>
+			{/each}
+			{#if model.runtime}
+				<tr>
+					<td>ogygia runtime</td>
+					<td class="muted">shared</td>
+					<td>{model.runtime.loaded ? kb(model.runtime.wire) : '—'}</td>
+					<td class="muted">—</td>
+				</tr>
+			{/if}
+		</tbody>
+		<tfoot>
 			<tr>
-				<td title={row.entry}>
-					<span class="nm">{row.name}</span>{#if row.count > 1}<span class="muted"> ×{row.count}</span>{/if}
-				</td>
-				<td>{row.kind}{row.kind === 'island' ? ' · ' + row.wake : ''}</td>
-				<td>{#if row.loaded}{kb(row.wire)}{:else}<span class="muted">cold</span>{/if}</td>
-				<td>
-					{#if row.transitive}
-						<span class="strong">{kb(row.transitive)}</span><span class="muted"> · {row.modules} mod</span>
-					{:else}<span class="muted">—</span>{/if}
-				</td>
+				<td>page total</td><td class="muted">unique · +deps</td>
+				<td>{kb(model.totalWire)}</td><td>{kb(model.totalTransitive)}</td>
 			</tr>
-		{:else}
-			<tr><td colspan="4" class="muted">no island chunks on this page</td></tr>
-		{/each}
-		{#if model.runtime}
-			<tr>
-				<td>ogygia runtime</td>
-				<td class="muted">shared</td>
-				<td>{model.runtime.loaded ? kb(model.runtime.wire) : '—'}</td>
-				<td class="muted">—</td>
-			</tr>
-		{/if}
-	</tbody>
-	<tfoot>
-		<tr>
-			<td>page total</td><td class="muted">unique · +deps</td>
-			<td>{kb(model.totalWire)}</td><td>{kb(model.totalTransitive)}</td>
-		</tr>
-	</tfoot>
-</table>
+		</tfoot>
+	</table>
 {/if}
 
 <style>

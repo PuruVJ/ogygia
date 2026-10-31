@@ -44,8 +44,10 @@ const FILES: Record<string, string> = {
 	'package.json': '{ "name": "installed-app", "private": true, "type": "module" }\n',
 	'svelte.config.js': 'export default { kit: {} };\n',
 	// (devtools on, the way an app turns it on in dev: its dock's packages must be found up front)
-	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia(), devtools(), sveltekit()] };\n",
-	'src/app.html': '<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',
+	'vite.config.js':
+		"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia(), devtools(), sveltekit()] };\n",
+	'src/app.html':
+		'<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',
 	'src/routes/+page.ts': 'export const csr = false;\n',
 	// an island with a snippet prop (its children: they cross as a wired value) …
 	'src/lib/Card.svelte': `<script lang="ts">
@@ -84,17 +86,48 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		const nm = path.join(app, 'node_modules');
 		const unpack = (from: string, to: string) => {
 			fs.mkdirSync(to, { recursive: true });
-			const tgz = execFileSync('pnpm', ['pack', '--pack-destination', app], { cwd: from, encoding: 'utf8' }).trim().split('\n').at(-1)!;
-			execFileSync('tar', ['-xzf', path.isAbsolute(tgz) ? tgz : path.join(app, path.basename(tgz)), '-C', to, '--strip-components=1']);
+			const tgz = execFileSync('pnpm', ['pack', '--pack-destination', app], {
+				cwd: from,
+				encoding: 'utf8'
+			})
+				.trim()
+				.split('\n')
+				.at(-1)!;
+			execFileSync('tar', [
+				'-xzf',
+				path.isAbsolute(tgz) ? tgz : path.join(app, path.basename(tgz)),
+				'-C',
+				to,
+				'--strip-components=1'
+			]);
 		};
 		unpack(pkg, path.join(nm, 'ogygia'));
 		unpack(core, path.join(nm, '@ogygia', 'core'));
 		unpack(path.join(repo, 'packages', 'devtools'), path.join(nm, '@ogygia', 'devtools'));
-		for (const dep of ['svelte', '@sveltejs', 'vite', 'devalue', 'esm-env', 'estree-walker', 'magic-string', 'rolldown', 'tinyglobby', '@neodrag'])
+		for (const dep of [
+			'svelte',
+			'@sveltejs',
+			'vite',
+			'devalue',
+			'esm-env',
+			'estree-walker',
+			'magic-string',
+			'rolldown',
+			'tinyglobby',
+			'@neodrag'
+		])
 			fs.symlinkSync(real(dep), path.join(nm, dep));
 		srv = await spawn_server({
 			cmd: process.execPath,
-			args: [path.join(nm, 'vite', 'bin', 'vite.js'), 'dev', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+			args: [
+				path.join(nm, 'vite', 'bin', 'vite.js'),
+				'dev',
+				'--port',
+				String(PORT),
+				'--strictPort',
+				'--host',
+				'127.0.0.1'
+			],
 			cwd: app,
 			url: `${base}/`,
 			timeout_ms: 120_000
@@ -115,14 +148,33 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		await page.waitForTimeout(2500);
 		errors.length = 0;
 		await page.goto(`${base}/`, { waitUntil: 'load' });
-		await page.waitForFunction(() => document.querySelectorAll('ogygia-region[data-og-hydrated], ogygia-region[hydrated]').length >= 2, null, { timeout: 15_000 }).catch(() => {});
+		await page
+			.waitForFunction(
+				() =>
+					document.querySelectorAll('ogygia-region[data-og-hydrated], ogygia-region[hydrated]')
+						.length >= 2,
+				null,
+				{ timeout: 15_000 }
+			)
+			.catch(() => {});
 		await page.waitForTimeout(800);
 		await page.click('[data-bump]');
 		await page.click('[data-plain]');
-		check('the snippet-prop island woke (its click works)', (await page.textContent('[data-bump]'))?.trim() === 'bump 1', (await page.textContent('[data-bump]')) ?? '');
-		check('its children are the page’s', (await page.locator('[data-card] [data-kid]').count()) === 1);
+		check(
+			'the snippet-prop island woke (its click works)',
+			(await page.textContent('[data-bump]'))?.trim() === 'bump 1',
+			(await page.textContent('[data-bump]')) ?? ''
+		);
+		check(
+			'its children are the page’s',
+			(await page.locator('[data-card] [data-kid]').count()) === 1
+		);
 		check('the plain island woke', (await page.textContent('[data-plain]'))?.trim() === 'plain 1');
-		check('no hydration error', !errors.some((e) => e.includes('hydration failed') || e.includes('wired prop')), errors.slice(0, 2).join(' | '));
+		check(
+			'no hydration error',
+			!errors.some((e) => e.includes('hydration failed') || e.includes('wired prop')),
+			errors.slice(0, 2).join(' | ')
+		);
 
 		// ONE COPY: every ogygia module the browser loaded is ogygia's own file, each once — none
 		// from the dep optimizer's bundle (where a second copy of its state would live)
@@ -136,23 +188,52 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 			})
 		);
 		// (ogygia's files: the `ogygia` package's and the `@ogygia/core` it re-exports)
-		const own = loaded.filter((p) => p.includes('/node_modules/ogygia/') || p.includes('/node_modules/@ogygia/core/'));
-		check('the page loads ogygia’s runtime and its slots from ogygia’s own files', own.some((p) => p.endsWith('/runtime/slots.js')) && own.some((p) => p.endsWith('/runtime/hydrate-core.js')), own.length + ' files');
-		check('each ogygia file once', new Set(own).size === own.length, own.filter((p, i) => own.indexOf(p) !== i).join(', '));
-		const meta = await (await fetch(`${base}/node_modules/.vite/deps/_metadata.json`)).json().catch(() => null);
+		const own = loaded.filter(
+			(p) => p.includes('/node_modules/ogygia/') || p.includes('/node_modules/@ogygia/core/')
+		);
+		check(
+			'the page loads ogygia’s runtime and its slots from ogygia’s own files',
+			own.some((p) => p.endsWith('/runtime/slots.js')) &&
+				own.some((p) => p.endsWith('/runtime/hydrate-core.js')),
+			own.length + ' files'
+		);
+		check(
+			'each ogygia file once',
+			new Set(own).size === own.length,
+			own.filter((p, i) => own.indexOf(p) !== i).join(', ')
+		);
+		const meta = await (
+			await fetch(`${base}/node_modules/.vite/deps/_metadata.json`)
+		)
+			.json()
+			.catch(() => null);
 		const bundled = Object.entries((meta?.optimized ?? {}) as Record<string, { src?: string }>)
 			.filter(
 				([id, m]) =>
-					['ogygia', '@ogygia/core'].some((n) => id === n || id.startsWith(n + '/') || id.endsWith(' > ' + n)) ||
+					['ogygia', '@ogygia/core'].some(
+						(n) => id === n || id.startsWith(n + '/') || id.endsWith(' > ' + n)
+					) ||
 					(m.src ?? '').includes('/node_modules/ogygia/') ||
 					(m.src ?? '').includes('/node_modules/@ogygia/core/')
 			)
 			.map(([id]) => id);
-		check('the dep optimizer bundled no part of ogygia', !!meta && bundled.length === 0, bundled.join(', '));
-		check('…while it still bundles ogygia’s dependencies, shared with the app', !!meta && 'svelte' in (meta.optimized ?? {}), Object.keys(meta?.optimized ?? {}).slice(0, 6).join(', '));
+		check(
+			'the dep optimizer bundled no part of ogygia',
+			!!meta && bundled.length === 0,
+			bundled.join(', ')
+		);
+		check(
+			'…while it still bundles ogygia’s dependencies, shared with the app',
+			!!meta && 'svelte' in (meta.optimized ?? {}),
+			Object.keys(meta?.optimized ?? {})
+				.slice(0, 6)
+				.join(', ')
+		);
 	});
 
-	test('opening the devtools dock on a cold server finds nothing late: no re-optimize, no reload', async ({ page }) => {
+	test('opening the devtools dock on a cold server finds nothing late: no re-optimize, no reload', async ({
+		page
+	}) => {
 		// (the first test settled the page; from here on, the log must stay quiet)
 		const from = srv!.logs.join('').length;
 		let navs = 0;
@@ -161,21 +242,54 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		await page.waitForTimeout(1500);
 		const loaded = navs;
 		await page.click('[data-og-panel-toggle]');
-		const open = await page.locator('[data-og-win]').waitFor({ timeout: 20_000 }).then(() => true).catch(() => false);
+		const open = await page
+			.locator('[data-og-win]')
+			.waitFor({ timeout: 20_000 })
+			.then(() => true)
+			.catch(() => false);
 		for (const t of await page.locator('[data-og-tab]').all()) await t.click().catch(() => {});
 		await page.waitForTimeout(3000);
-		const late = srv!.logs.join('').slice(from).split('\n').filter((l) => l.includes('optimized dependencies changed') || l.includes('new dependencies optimized') || l.includes('dependency optimized') || l.includes('dependencies optimized'));
-		check('the dock opened, and stayed open', open && (await page.locator('[data-og-win]').count()) === 1);
-		check('no page reload after the dock was opened', navs === loaded, `${navs - loaded} reload(s)`);
-		check('no dependency found late (each one re-optimizes and reloads the page)', late.length === 0, late.slice(0, 3).join(' | '));
+		const late = srv!.logs
+			.join('')
+			.slice(from)
+			.split('\n')
+			.filter(
+				(l) =>
+					l.includes('optimized dependencies changed') ||
+					l.includes('new dependencies optimized') ||
+					l.includes('dependency optimized') ||
+					l.includes('dependencies optimized')
+			);
+		check(
+			'the dock opened, and stayed open',
+			open && (await page.locator('[data-og-win]').count()) === 1
+		);
+		check(
+			'no page reload after the dock was opened',
+			navs === loaded,
+			`${navs - loaded} reload(s)`
+		);
+		check(
+			'no dependency found late (each one re-optimizes and reloads the page)',
+			late.length === 0,
+			late.slice(0, 3).join(' | ')
+		);
 	});
 
-	test("the devtools name it when it happens anyway: an app pre-bundling ogygia's boot runs two copies", async ({ page }) => {
+	test("the devtools name it when it happens anyway: an app pre-bundling ogygia's boot runs two copies", async ({
+		page
+	}) => {
 		test.setTimeout(180_000);
 		const read = () =>
 			page.evaluate(() => {
-				const v = (window as unknown as { __ogygia_page?: () => { report: { findings: { code: string; message: string }[] } } }).__ogygia_page?.();
-				return (v?.report.findings ?? []).filter((f) => f.code === 'dev-two-copies').map((f) => f.message);
+				const v = (
+					window as unknown as {
+						__ogygia_page?: () => { report: { findings: { code: string; message: string }[] } };
+					}
+				).__ogygia_page?.();
+				return (v?.report.findings ?? [])
+					.filter((f) => f.code === 'dev-two-copies')
+					.map((f) => f.message);
 			});
 		// one copy (the fix): quiet
 		await page.goto(`${base}/`, { waitUntil: 'load' });
@@ -198,6 +312,10 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 			await page.waitForTimeout(1000);
 			said = await read();
 		}
-		check('two copies: the devtools name ogygia, pre-bundled and raw', said.some((m) => m.startsWith('ogygia loads twice on the dev server')), said.join(' | ') || 'no finding');
+		check(
+			'two copies: the devtools name ogygia, pre-bundled and raw',
+			said.some((m) => m.startsWith('ogygia loads twice on the dev server')),
+			said.join(' | ') || 'no finding'
+		);
 	});
 });

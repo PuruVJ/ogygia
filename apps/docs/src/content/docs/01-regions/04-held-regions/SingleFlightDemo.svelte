@@ -33,8 +33,12 @@
 			<span class="widget-meta" data-badge-pending>connecting…</span>
 		{/if}
 	</div>
-	<button type="button" class="badge-bump" onclick={bump} disabled={busy}>bump (one round trip)</button>
-	<p class="widget-meta">The command mutates and returns the region in the same response — no second fetch.</p>
+	<button type="button" class="badge-bump" onclick={bump} disabled={busy}
+		>bump (one round trip)</button
+	>
+	<p class="widget-meta">
+		The command mutates and returns the region in the same response — no second fetch.
+	</p>
 </div>
 
 <style>

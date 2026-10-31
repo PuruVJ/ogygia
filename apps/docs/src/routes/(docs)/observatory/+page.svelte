@@ -19,7 +19,10 @@
 
 <svelte:head>
 	<title>Observatory · ogygia</title>
-	<meta name="description" content="The ogygia compiler, running live in your browser — edit a component and watch it become islands." />
+	<meta
+		name="description"
+		content="The ogygia compiler, running live in your browser — edit a component and watch it become islands."
+	/>
 	{@html noFlash}
 </svelte:head>
 

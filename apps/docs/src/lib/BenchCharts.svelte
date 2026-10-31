@@ -43,35 +43,70 @@
 	const x = (w: number) => P.l + ((w - xMin) / (xMax - xMin)) * (W - P.l - P.r);
 	const y = (v: number) => H - P.b - (v / yMax) * (H - P.t - P.b);
 	const line = (f: Fw) =>
-		f.rows.map((r, i) => `${i ? 'L' : 'M'}${x(r.words).toFixed(1)},${y(kb(r.jsRaw)).toFixed(1)}`).join(' ');
+		f.rows
+			.map((r, i) => `${i ? 'L' : 'M'}${x(r.words).toFixed(1)},${y(kb(r.jsRaw)).toFixed(1)}`)
+			.join(' ');
 	const yTicks = Array.from({ length: 5 }, (_, i) => Math.round((yMax / 4) * i));
 
 	// ── metric bars ──
 	const metrics = [
-		{ key: 'jsBr', label: 'Client JS (brotli)', unit: 'KB', get: (f: Fw) => kb(f.rows[0].jsBr), lowerBetter: true },
-		{ key: 'score', label: 'Lighthouse score', unit: '', get: (f: Fw) => f.avg.score, lowerBetter: false, max: 100 },
-		{ key: 'lcp', label: 'LCP (avg)', unit: 's', get: (f: Fw) => f.avg.lcp / 1000, lowerBetter: true },
+		{
+			key: 'jsBr',
+			label: 'Client JS (brotli)',
+			unit: 'KB',
+			get: (f: Fw) => kb(f.rows[0].jsBr),
+			lowerBetter: true
+		},
+		{
+			key: 'score',
+			label: 'Lighthouse score',
+			unit: '',
+			get: (f: Fw) => f.avg.score,
+			lowerBetter: false,
+			max: 100
+		},
+		{
+			key: 'lcp',
+			label: 'LCP (avg)',
+			unit: 's',
+			get: (f: Fw) => f.avg.lcp / 1000,
+			lowerBetter: true
+		},
 		{ key: 'cls', label: 'CLS (avg)', unit: '', get: (f: Fw) => f.avg.cls, lowerBetter: true },
-		{ key: 'evalMs', label: 'JS eval (median)', unit: 'ms', get: (f: Fw) => median(f.rows.map((r) => r.evalMs)), lowerBetter: true }
+		{
+			key: 'evalMs',
+			label: 'JS eval (median)',
+			unit: 'ms',
+			get: (f: Fw) => median(f.rows.map((r) => r.evalMs)),
+			lowerBetter: true
+		}
 	];
 	function median(a: number[]) {
 		const s = [...a].sort((x, y) => x - y);
 		return s[Math.floor(s.length / 2)];
 	}
-	const fmt = (v: number, u: string) => (u === 's' ? v.toFixed(1) : u === '' ? (v < 1 ? v.toFixed(3) : Math.round(v)) : Math.round(v)) + (u ? ' ' + u : '');
+	const fmt = (v: number, u: string) =>
+		(u === 's' ? v.toFixed(1) : u === '' ? (v < 1 ? v.toFixed(3) : Math.round(v)) : Math.round(v)) +
+		(u ? ' ' + u : '');
 </script>
 
 <div class="bench">
 	<figure class="growth">
-		<figcaption>Client JavaScript as the post grows longer — islands stay flat; whole-page hydration climbs.</figcaption>
+		<figcaption>
+			Client JavaScript as the post grows longer — islands stay flat; whole-page hydration climbs.
+		</figcaption>
 		<svg viewBox="0 0 {W} {H}" role="img" aria-label="JS payload vs post length">
 			{#each yTicks as t}
 				<line class="grid" x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} />
 				<text class="axis" x={P.l - 8} y={y(t) + 4} text-anchor="end">{t}</text>
 			{/each}
-			<text class="axis unit" x={14} y={P.t} transform="rotate(-90 14 {H / 2})">JS KB (uncompressed)</text>
+			<text class="axis unit" x={14} y={P.t} transform="rotate(-90 14 {H / 2})"
+				>JS KB (uncompressed)</text
+			>
 			{#each posts as p}
-				<text class="axis" x={x(p.words)} y={H - P.b + 18} text-anchor="middle">{Math.round(p.words / 1000)}k</text>
+				<text class="axis" x={x(p.words)} y={H - P.b + 18} text-anchor="middle"
+					>{Math.round(p.words / 1000)}k</text
+				>
 			{/each}
 			<text class="axis" x={(P.l + W - P.r) / 2} y={H - 6} text-anchor="middle">words in post</text>
 			{#each frameworks as f}
@@ -79,7 +114,9 @@
 				{#each f.rows as r}
 					<circle cx={x(r.words)} cy={y(kb(r.jsRaw))} r="3.5" fill={color(f.id)} />
 				{/each}
-				<text class="lbl" x={W - P.r + 6} y={y(kb(f.rows.at(-1)!.jsRaw)) + 4} fill={color(f.id)}>{f.id}</text>
+				<text class="lbl" x={W - P.r + 6} y={y(kb(f.rows.at(-1)!.jsRaw)) + 4} fill={color(f.id)}
+					>{f.id}</text
+				>
 			{/each}
 		</svg>
 	</figure>
@@ -93,7 +130,9 @@
 				{#each vals as { id, v }}
 					<div class="row">
 						<span class="name" style="color:{color(id)}">{id}</span>
-						<div class="track"><div class="fill" style="width:{(v / max) * 100}%;background:{color(id)}"></div></div>
+						<div class="track">
+							<div class="fill" style="width:{(v / max) * 100}%;background:{color(id)}"></div>
+						</div>
 						<span class="val">{fmt(v, m.unit)}</span>
 					</div>
 				{/each}
@@ -101,8 +140,11 @@
 		{/each}
 	</div>
 	<p class="src">
-		Mobile Lighthouse, simulated throttling. Sizes are brotli/raw of all JS the page loads. Method ported from
-		<a href="https://github.com/khromov/interactive-blogs-benchmark">khromov/interactive-blogs-benchmark</a>. Reproduce: <code>pnpm run e2e</code> is separate; see <code>bench/</code>.
+		Mobile Lighthouse, simulated throttling. Sizes are brotli/raw of all JS the page loads. Method
+		ported from
+		<a href="https://github.com/khromov/interactive-blogs-benchmark"
+			>khromov/interactive-blogs-benchmark</a
+		>. Reproduce: <code>pnpm run e2e</code> is separate; see <code>bench/</code>.
 	</p>
 </div>
 

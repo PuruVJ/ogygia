@@ -8,7 +8,7 @@ related:
 ---
 
 ::: tip When to use
-Each island is its own hydration root. Thus a value passed between islands crosses a **serialization** boundary, not a reference. This page covers the two ways to share in that condition. **Sharing state** gives one live object to specific islands as a prop. **Context** provides a value to a full subtree, and each island below can read it. For state *inside* one island, a plain `$state` is sufficient. For app-wide state, a plain module-level `$state` already shares across islands, with no setup. The tools here are for an instance that is **born on the server** and must reach other islands.
+Each island is its own hydration root. Thus a value passed between islands crosses a **serialization** boundary, not a reference. This page covers the two ways to share in that condition. **Sharing state** gives one live object to specific islands as a prop. **Context** provides a value to a full subtree, and each island below can read it. For state _inside_ one island, a plain `$state` is sufficient. For app-wide state, a plain module-level `$state` already shares across islands, with no setup. The tools here are for an instance that is **born on the server** and must reach other islands.
 :::
 
 ## Sharing state
@@ -75,7 +75,7 @@ The browser remembers decoded instances. The **server never does**. Each request
 
 To pass one object to two known islands, use a prop. But sometimes a value must reach **many islands spread down a subtree**: a cart shared by a header badge and a page-body button, a theme, a current user. To thread it through each prop is noise. Provide it one time. Each island below reads it with plain `getContext`.
 
-Svelte's own `getContext` / `setContext` operate down a **component tree**. Islands break that tree. A `setContext` above an island never reaches inside it on the client. ogygia bridges the **same `getContext('key')`** across the split, through the thing that *does* continue: the **DOM**. There are two ways to provide: a drop-in `setContext`, or `<Provide>`. What can cross, how stores stay live across islands, and how to pass **functions** is the contract of the boundary. See **[The Boundary](/docs/data-state/boundary)**.
+Svelte's own `getContext` / `setContext` operate down a **component tree**. Islands break that tree. A `setContext` above an island never reaches inside it on the client. ogygia bridges the **same `getContext('key')`** across the split, through the thing that _does_ continue: the **DOM**. There are two ways to provide: a drop-in `setContext`, or `<Provide>`. What can cross, how stores stay live across islands, and how to pass **functions** is the contract of the boundary. See **[The Boundary](/docs/data-state/boundary)**.
 
 ### Drop-in `setContext`
 
@@ -123,7 +123,7 @@ export const theme = createContext<'light' | 'dark'>('theme', 'light');   // has
 </Provide>
 ```
 
-There is no `.set()`. `<Provide>` *is* the provider, because it must wrap a subtree. To change the value, mutate the live object that you provided. Each reader sees it.
+There is no `.set()`. `<Provide>` _is_ the provider, because it must wrap a subtree. To change the value, mutate the live object that you provided. Each reader sees it.
 
 ### Read it
 
@@ -141,7 +141,7 @@ An island under the provider reads it during setup. Use the typed handle or plai
 <span>{cart?.count ?? 0}</span>
 ```
 
-Read during the setup of the island, exactly like Svelte's `getContext`. Keep the reference. For a wired value, it *is* the one live instance, shared and reactive across each island that read it.
+Read during the setup of the island, exactly like Svelte's `getContext`. Keep the reference. For a wired value, it _is_ the one live instance, shared and reactive across each island that read it.
 
 `getContext` is re-exported from `ogygia` only for symmetry. It **is** Svelte's own function, unchanged. ogygia seeds the context of each island at hydrate. Thus a plain read already sees bridged values. Import it from the location that reads best. `import { setContext, getContext } from 'ogygia'` keeps the pair together.
 
@@ -211,7 +211,7 @@ Ambient and on by default: an island form that you filled part of continues thro
 ## Constraints
 
 - A **wire codec** needs a **top-level `export class`** in your app source. The build tags it by module path plus name. No default exports, and no class expressions. A **context** needs an explicit string `key` — `createContext('key')`, or the string you pass to `setContext` / `<Provide>` — that the provider and each reader share.
-- A receiving island must import a wire **class** as a value (not `import type`) only if it constructs one. To only *receive* it (as a prop or through context), nothing extra is necessary. The build registers the codec automatically.
+- A receiving island must import a wire **class** as a value (not `import type`) only if it constructs one. To only _receive_ it (as a prop or through context), nothing extra is necessary. The build registers the codec automatically.
 - A default `decode` that calls `new Cls()` needs a constructor with zero arguments. In other cases, write `decode` yourself (as above).
 - Read context during island **setup**, like `getContext`. A later call (in an event handler) has no island in hydration to anchor the read. Thus read one time and keep the reference.
 - A provider must sit **above** the consuming islands: `<Provide>` above them in the DOM, or a drop-in `setContext` anywhere on the page (the flat page root). No provider above → the default, or `undefined`.

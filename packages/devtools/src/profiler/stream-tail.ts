@@ -28,7 +28,11 @@ export interface StreamTail {
 /** a pause between chunks shorter than this is the server writing, not waiting */
 const MIN_PAUSE_MS = 100;
 
-export function stream_tail(html: string, strip: ByteStrip, chunks: { end: number; t: number }[]): StreamTail | null {
+export function stream_tail(
+	html: string,
+	strip: ByteStrip,
+	chunks: { end: number; t: number }[]
+): StreamTail | null {
 	if (chunks.length < 2) return null;
 	let split = -1;
 	let pause = 0;
@@ -46,17 +50,23 @@ export function stream_tail(html: string, strip: ByteStrip, chunks: { end: numbe
 	const keys: StreamTail['keys'] = [];
 	const call = `${PAGE_DEFER_GLOBAL}(`;
 	const resolves: { start: number; end: number }[] = [];
-	for (let at = html.indexOf(call, early_end); at !== -1; at = html.indexOf(call, at + call.length)) {
+	for (
+		let at = html.indexOf(call, early_end);
+		at !== -1;
+		at = html.indexOf(call, at + call.length)
+	) {
 		let n = 0;
 		let j = at + call.length;
 		let digits = 0;
-		for (; j < html.length && html.charCodeAt(j) >= 48 && html.charCodeAt(j) <= 57; j++, digits++) n = n * 10 + (html.charCodeAt(j) - 48);
+		for (; j < html.length && html.charCodeAt(j) >= 48 && html.charCodeAt(j) <= 57; j++, digits++)
+			n = n * 10 + (html.charCodeAt(j) - 48);
 		if (!digits) continue;
 		keys.push({ key: names.get(n) ?? null, id: n, left_ms: left_at(at, chunks) ?? last.t });
 		resolves.push({ start: at, end: html.indexOf('</script', at) });
 	}
 	// (a segment that is one of those resolve scripts is counted as its key, not again as a script)
-	const in_resolve = (s: { start: number; end: number }) => resolves.some((r) => s.start <= r.start && r.end <= s.end);
+	const in_resolve = (s: { start: number; end: number }) =>
+		resolves.some((r) => s.start <= r.start && r.end <= s.end);
 	const other = new Map<string, { kind: StripKind; label?: string; bytes: number }>();
 	for (const s of strip.segments) {
 		const from = Math.max(s.start, early_end);

@@ -6,7 +6,7 @@
 	import BlockCard from '$lib/seed-refs/BlockCard.svelte' with { wake: 'load' };
 	import PageGreeting from '$lib/seed-refs/PageGreeting.svelte' with { wake: 'load' };
 	let { data } = $props();
-	const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
+	const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 </script>
 
 <h1 data-static-shell>{data.catalog.title}</h1>

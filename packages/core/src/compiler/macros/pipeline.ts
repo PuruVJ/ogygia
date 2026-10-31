@@ -25,7 +25,10 @@ import type { Profiler } from '../driver.ts';
 /** A plugin's `import.meta.og.<name>` macro (registered with `b.macro`). */
 export interface PluginMacro {
 	name: string;
-	handler: (code: string, m: { id: string; rel: string; root: string; markupExts: readonly string[] }) => string | Promise<string>;
+	handler: (
+		code: string,
+		m: { id: string; rel: string; root: string; markupExts: readonly string[] }
+	) => string | Promise<string>;
 }
 
 // ── regexes
@@ -126,7 +129,12 @@ export async function run_module_macros(
 		for (const macro of ctx.macros) {
 			if (!out.includes('import.meta.og.' + macro.name)) continue;
 			rel ??= path.relative(ctx.root, id.split('?')[0]).split(path.sep).join('/');
-			const rewritten = await macro.handler(out, { id: id.split('?')[0], rel, root: ctx.root, markupExts: CONSTRUCT_MARKUP_EXTS });
+			const rewritten = await macro.handler(out, {
+				id: id.split('?')[0],
+				rel,
+				root: ctx.root,
+				markupExts: CONSTRUCT_MARKUP_EXTS
+			});
 			if (rewritten !== out) {
 				out = rewritten;
 				touched = true;

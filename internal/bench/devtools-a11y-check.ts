@@ -11,7 +11,18 @@ const base = process.argv[2] ?? 'http://127.0.0.1:4183';
 const require = createRequire(new URL('../../package.json', import.meta.url));
 const { chromium } = require('playwright');
 const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-const TABS = ['lens', 'page', 'record', 'hydration', 'bytes', 'wire', 'hub', 'nav', 'timeline', 'profiler'];
+const TABS = [
+	'lens',
+	'page',
+	'record',
+	'hydration',
+	'bytes',
+	'wire',
+	'hub',
+	'nav',
+	'timeline',
+	'profiler'
+];
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
@@ -28,8 +39,16 @@ for (const t of TABS) {
 	await page.click(`[data-og-tab="${t}"]`);
 	await page.waitForTimeout(500);
 	const v = await page.evaluate(async () => {
-		const r = await window.axe.run({ include: [['[data-ogygia-devtools-host]']] }, { resultTypes: ['violations'] });
-		return r.violations.map((x) => ({ id: x.id, help: x.help, n: x.nodes.length, sample: x.nodes[0]?.html.slice(0, 100) ?? '' }));
+		const r = await window.axe.run(
+			{ include: [['[data-ogygia-devtools-host]']] },
+			{ resultTypes: ['violations'] }
+		);
+		return r.violations.map((x) => ({
+			id: x.id,
+			help: x.help,
+			n: x.nodes.length,
+			sample: x.nodes[0]?.html.slice(0, 100) ?? ''
+		}));
 	});
 	for (const x of v) violations.set(x.id, { ...x, tab: t });
 	const c = await page.evaluate(() => {
@@ -37,14 +56,19 @@ for (const t of TABS) {
 		const parse = (s) => {
 			const open = s.indexOf('(');
 			if (open === -1) return null;
-			const parts = s.slice(open + 1, s.indexOf(')')).split(/[ ,/]+/).filter(Boolean).map(Number);
+			const parts = s
+				.slice(open + 1, s.indexOf(')'))
+				.split(/[ ,/]+/)
+				.filter(Boolean)
+				.map(Number);
 			return [parts[0], parts[1], parts[2], parts[3] ?? 1];
 		};
 		const lum = ([r, g, b]) => {
 			const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 			return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
 		};
-		const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1);
+		const over = (top, under) =>
+			[0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1);
 		const bg_of = (el) => {
 			const layers = [];
 			for (let n = el; n; n = n.parentElement || (n.getRootNode()?.host ?? null)) {
@@ -74,7 +98,12 @@ for (const t of TABS) {
 			const ratio = (Math.max(lum(fg), lum(bg)) + 0.05) / (Math.min(lum(fg), lum(bg)) + 0.05);
 			const size = parseFloat(cs.fontSize);
 			const large = size >= 24 || (Number(cs.fontWeight) >= 700 && size >= 18.66);
-			if (ratio < (large ? 3 : 4.5)) out.push({ key: `${cs.color} on ${bg.slice(0, 3).map(Math.round).join(',')}`, ratio: Math.round(ratio * 100) / 100, text: n.textContent.trim().slice(0, 30) });
+			if (ratio < (large ? 3 : 4.5))
+				out.push({
+					key: `${cs.color} on ${bg.slice(0, 3).map(Math.round).join(',')}`,
+					ratio: Math.round(ratio * 100) / 100,
+					text: n.textContent.trim().slice(0, 30)
+				});
 		}
 		return out;
 	});
@@ -87,8 +116,14 @@ for (const t of TABS) {
 		for (const e of root.querySelectorAll('*')) {
 			if (getComputedStyle(e).cursor !== 'pointer' || !e.getClientRects().length) continue;
 			if (e.parentElement && getComputedStyle(e.parentElement).cursor === 'pointer') continue;
-			const reach = e.matches('button, a[href], input, select, textarea, summary') || e.tabIndex >= 0 || !!e.querySelector('button, a[href], input, select, summary, [tabindex="0"]');
-			if (!reach) out.push(`${e.tagName.toLowerCase()} "${(e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30)}"`);
+			const reach =
+				e.matches('button, a[href], input, select, textarea, summary') ||
+				e.tabIndex >= 0 ||
+				!!e.querySelector('button, a[href], input, select, summary, [tabindex="0"]');
+			if (!reach)
+				out.push(
+					`${e.tagName.toLowerCase()} "${(e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30)}"`
+				);
 		}
 		return out;
 	});
@@ -105,8 +140,11 @@ await browser.close();
 
 for (const [id, x] of violations) console.log(`✗ axe ${id} (${x.tab}) — ${x.help}: ${x.sample}`);
 for (const [k, x] of low) console.log(`✗ contrast ${x.ratio}:1 — ${k} "${x.text}" (${x.tab})`);
-for (const [m, t] of keyboard) console.log(`✗ keyboard: ${m} (${t}) takes a mouse press but Tab never reaches it`);
+for (const [m, t] of keyboard)
+	console.log(`✗ keyboard: ${m} (${t}) takes a mouse press but Tab never reaches it`);
 if (!card_by_key) console.log('✗ keyboard: Enter on a Lens row did not open its island card');
 const ok = !violations.size && !low.size && !keyboard.size && card_by_key;
-console.log(ok ? `✓ the dock passes axe, contrast and the keyboard on all ${TABS.length} tabs` : 'FAILED');
+console.log(
+	ok ? `✓ the dock passes axe, contrast and the keyboard on all ${TABS.length} tabs` : 'FAILED'
+);
 process.exit(ok ? 0 : 1);

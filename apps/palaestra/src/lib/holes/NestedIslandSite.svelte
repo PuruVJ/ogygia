@@ -6,5 +6,7 @@
 </script>
 
 <ul data-nested-island-site>
-	{#each [1, 2] as n (n)}<li>{#if item}{@render item(n)}{/if}</li>{/each}
+	{#each [1, 2] as n (n)}<li>
+			{#if item}{@render item(n)}{/if}
+		</li>{/each}
 </ul>

@@ -13,6 +13,8 @@
 
 <svelte:head>{@html define_widget}</svelte:head>
 
-<h1 data-static-shell>dom ownership — a widget reworks its own light DOM before the island wakes</h1>
+<h1 data-static-shell>
+	dom ownership — a widget reworks its own light DOM before the island wakes
+</h1>
 
 <Search />

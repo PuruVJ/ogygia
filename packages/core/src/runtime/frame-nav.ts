@@ -28,7 +28,9 @@ let batch_seq = 0;
 const batched = new Map<string, { left: number; at: number; size: number }>();
 
 /** How the batch that carried `endpoint` timed it, or undefined (it rode no batch). */
-export function batch_times(endpoint: string): { left: number; at: number; size: number } | undefined {
+export function batch_times(
+	endpoint: string
+): { left: number; at: number; size: number } | undefined {
 	return batched.get(endpoint);
 }
 
@@ -62,7 +64,8 @@ export function read_parcel(buf: string, from: number): Parcel | null {
 	}
 	let i = quote + LEN.length;
 	let len = 0;
-	for (let c = buf.charCodeAt(i); c >= 48 && c <= 57; c = buf.charCodeAt(++i)) len = len * 10 + (c - 48);
+	for (let c = buf.charCodeAt(i); c >= 48 && c <= 57; c = buf.charCodeAt(++i))
+		len = len * 10 + (c - 48);
 	if (i + 2 > buf.length) return null;
 	if (!buf.startsWith('">', i)) return read_parcel(buf, slot_at);
 	const start = i + 2;
@@ -82,7 +85,10 @@ function sigOf(endpoint: string): string | null {
  * the first URL). Frames apply as they land; the promise resolves when
  * the response ends.
  */
-export async function streamFrames(endpoints: string[], kind: 'page' | 'nav' = 'nav'): Promise<void> {
+export async function streamFrames(
+	endpoints: string[],
+	kind: 'page' | 'nav' = 'nav'
+): Promise<void> {
 	if (!endpoints.length) return;
 	const first = endpoints[0];
 	const q = first.indexOf('?');
@@ -106,7 +112,14 @@ export async function streamFrames(endpoints: string[], kind: 'page' | 'nav' = '
 		}
 	}
 	const batch = DEVTOOLS ? ++batch_seq : 0;
-	if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.batch.sent', batch, kind, endpoints: endpoints.slice() });
+	if (DEVTOOLS)
+		dt_emit({
+			domain: 'runtime',
+			name: 'region.batch.sent',
+			batch,
+			kind,
+			endpoints: endpoints.slice()
+		});
 	const left = BEACON ? performance.now() : 0;
 	let delivered = 0;
 	let status = 0;
@@ -156,7 +169,13 @@ export async function streamFrames(endpoints: string[], kind: 'page' | 'nav' = '
 					}
 					write({ a, v: ticket(a), html: p.html });
 					delivered++;
-					if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.batch.part', batch, endpoint: endpoint_of!.get(p.slot)! });
+					if (DEVTOOLS)
+						dt_emit({
+							domain: 'runtime',
+							name: 'region.batch.part',
+							batch,
+							endpoint: endpoint_of!.get(p.slot)!
+						});
 				}
 			}
 			if (consumed) buffer = buffer.slice(consumed);
@@ -222,18 +241,25 @@ export function join_batch(endpoint: string): Promise<void> {
 				// would render it twice. Compared as resolved URLs: the page pins a region's endpoint
 				// root-absolute while the link keeps the text it was rendered with (relative, under a base).
 				const hinted = new Set<string>();
-				for (const l of document.querySelectorAll<HTMLLinkElement>('link[rel="preload"][as="fetch"]'))
+				for (const l of document.querySelectorAll<HTMLLinkElement>(
+					'link[rel="preload"][as="fetch"]'
+				))
 					if (l.href) hinted.add(l.href);
 				for (const e of list) {
 					const a = frameAddress(e);
-					if (seen.has(a) || (hinted.size && hinted.has(new URL(e, document.baseURI).href)) || !is_idle(a))
+					if (
+						seen.has(a) ||
+						(hinted.size && hinted.has(new URL(e, document.baseURI).href)) ||
+						!is_idle(a)
+					)
 						continue;
 					seen.add(a);
 					fresh.push(e);
 				}
 				// (reserve happens synchronously inside streamFrames, before this resolves)
 				if (fresh.length >= 2)
-					for (let i = 0; i < fresh.length; i += MAX_BATCH) void streamFrames(fresh.slice(i, i + MAX_BATCH), 'page');
+					for (let i = 0; i < fresh.length; i += MAX_BATCH)
+						void streamFrames(fresh.slice(i, i + MAX_BATCH), 'page');
 				resolve();
 			})
 		);

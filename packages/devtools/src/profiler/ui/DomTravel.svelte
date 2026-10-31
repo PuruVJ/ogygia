@@ -9,7 +9,11 @@
 	import { latest_visit, type StoredVisit } from './store.ts';
 	import type { Visit } from '../visit.ts';
 
-	let { page, names = {}, visit = null }: { page: string; names?: Record<string, string>; visit?: Visit | null } = $props();
+	let {
+		page,
+		names = {},
+		visit = null
+	}: { page: string; names?: Record<string, string>; visit?: Visit | null } = $props();
 
 	let rec = $state<StoredVisit | null>(null);
 	let looked = $state(false);
@@ -19,11 +23,19 @@
 	const v = $derived((rec?.visit as Visit | undefined) ?? visit);
 	const boxes = $derived(v ? shift_boxes(v.shifts, v.viewport) : []);
 	const cls_total = $derived(boxes.reduce((s, b) => s + b.value, 0));
-	const name = (fp: string | undefined) => (fp ? (names[fp] ?? fp.slice(0, 8)) : 'outside any island');
+	const name = (fp: string | undefined) =>
+		fp ? (names[fp] ?? fp.slice(0, 8)) : 'outside any island';
 	let picked = $state<string | null>(null);
 	let moment = $state<'hydrated' | 'final'>('hydrated');
 	const snap = $derived(rec?.snapshots.find((s) => s.fp === picked) ?? rec?.snapshots[0] ?? null);
-	const diff = $derived<HtmlDiff | null>(snap ? html_diff(snap.ssr, moment === 'final' && snap.final !== undefined ? snap.final : snap.hydrated) : null);
+	const diff = $derived<HtmlDiff | null>(
+		snap
+			? html_diff(
+					snap.ssr,
+					moment === 'final' && snap.final !== undefined ? snap.final : snap.hydrated
+				)
+			: null
+	);
 	const VW = 240;
 	const vh = $derived(v?.viewport ? Math.round((VW * v.viewport[1]) / v.viewport[0]) : 160);
 </script>
@@ -31,21 +43,54 @@
 {#if v && (boxes.length || rec?.snapshots.length)}
 	<div class="travel">
 		<div class="map">
-			<h3 class="sub-h">Layout shifts <span class="hint">{cls_total.toFixed(3)} CLS in this visit, where and whose</span></h3>
-			<svg viewBox="0 0 {VW} {vh}" width={VW} height={vh} class="viewport" role="img" aria-label="layout shifts on the viewport">
+			<h3 class="sub-h">
+				Layout shifts <span class="hint"
+					>{cls_total.toFixed(3)} CLS in this visit, where and whose</span
+				>
+			</h3>
+			<svg
+				viewBox="0 0 {VW} {vh}"
+				width={VW}
+				height={vh}
+				class="viewport"
+				role="img"
+				aria-label="layout shifts on the viewport"
+			>
 				<rect x="0" y="0" width={VW} height={vh} class="vp" />
 				{#each boxes as b, i (i)}
-					<rect x={b.fx * VW} y={b.fy * vh} width={Math.max(b.w * VW, 2)} height={Math.max(b.h * vh, 2)} class="from" />
-					<rect x={b.x * VW} y={b.y * vh} width={Math.max(b.w * VW, 2)} height={Math.max(b.h * vh, 2)} class="to" style="opacity:{0.35 + Math.min(0.6, b.value * 3)}">
+					<rect
+						x={b.fx * VW}
+						y={b.fy * vh}
+						width={Math.max(b.w * VW, 2)}
+						height={Math.max(b.h * vh, 2)}
+						class="from"
+					/>
+					<rect
+						x={b.x * VW}
+						y={b.y * vh}
+						width={Math.max(b.w * VW, 2)}
+						height={Math.max(b.h * vh, 2)}
+						class="to"
+						style="opacity:{0.35 + Math.min(0.6, b.value * 3)}"
+					>
 						<title>{name(b.fp)} · {b.value.toFixed(3)} at {Math.round(b.t)} ms</title>
 					</rect>
-					<line x1={b.fx * VW + (b.w * VW) / 2} y1={b.fy * vh + (b.h * vh) / 2} x2={b.x * VW + (b.w * VW) / 2} y2={b.y * vh + (b.h * vh) / 2} class="arrow" />
+					<line
+						x1={b.fx * VW + (b.w * VW) / 2}
+						y1={b.fy * vh + (b.h * vh) / 2}
+						x2={b.x * VW + (b.w * VW) / 2}
+						y2={b.y * vh + (b.h * vh) / 2}
+						class="arrow"
+					/>
 				{/each}
 			</svg>
 			{#if boxes.length}
 				<ul class="shifts">
 					{#each boxes.slice(0, 8) as b, i (i)}
-						<li><b>{name(b.fp)}</b> {b.value.toFixed(3)} <span class="hint">at {Math.round(b.t)} ms</span></li>
+						<li>
+							<b>{name(b.fp)}</b>
+							{b.value.toFixed(3)} <span class="hint">at {Math.round(b.t)} ms</span>
+						</li>
 					{/each}
 				</ul>
 			{:else}
@@ -53,19 +98,38 @@
 			{/if}
 		</div>
 		<div class="diff">
-			<h3 class="sub-h">Markup, then and now <span class="hint">{rec?.snapshots.length ?? 0} island{(rec?.snapshots.length ?? 0) === 1 ? '' : 's'} changed between the server and the browser</span></h3>
+			<h3 class="sub-h">
+				Markup, then and now <span class="hint"
+					>{rec?.snapshots.length ?? 0} island{(rec?.snapshots.length ?? 0) === 1 ? '' : 's'} changed
+					between the server and the browser</span
+				>
+			</h3>
 			{#if rec?.snapshots.length}
 				<p class="pick">
 					{#each rec.snapshots as s (s.fp)}
-						<button class:on={snap?.fp === s.fp} onclick={() => (picked = s.fp)}>{name(s.fp)}</button>
+						<button class:on={snap?.fp === s.fp} onclick={() => (picked = s.fp)}
+							>{name(s.fp)}</button
+						>
 					{/each}
 					<span class="hint">· server →</span>
-					<button class:on={moment === 'hydrated'} onclick={() => (moment = 'hydrated')}>hydrated</button>
-					{#if snap?.final !== undefined}<button class:on={moment === 'final'} onclick={() => (moment = 'final')}>when the page left</button>{/if}
+					<button class:on={moment === 'hydrated'} onclick={() => (moment = 'hydrated')}
+						>hydrated</button
+					>
+					{#if snap?.final !== undefined}<button
+							class:on={moment === 'final'}
+							onclick={() => (moment = 'final')}>when the page left</button
+						>{/if}
 				</p>
 				{#if diff}
-					<p class="hint">{diff.removed.toLocaleString()} chars gone, {diff.added.toLocaleString()} added, {Math.round(diff.same_ratio * 100)}% of the tokens unchanged{diff.truncated ? ' (too large to diff token by token: shown as one removal and one addition)' : ''}.</p>
-					<pre class="d">{#each diff.ops as op, i (i)}<span class={op.kind}>{op.text}</span>{/each}</pre>
+					<p class="hint">
+						{diff.removed.toLocaleString()} chars gone, {diff.added.toLocaleString()} added, {Math.round(
+							diff.same_ratio * 100
+						)}% of the tokens unchanged{diff.truncated
+							? ' (too large to diff token by token: shown as one removal and one addition)'
+							: ''}.
+					</p>
+					<pre class="d">{#each diff.ops as op, i (i)}<span class={op.kind}>{op.text}</span
+							>{/each}</pre>
 				{/if}
 			{:else}
 				<p class="hint">Every island's markup after hydration matched what the server sent.</p>
@@ -73,7 +137,10 @@
 		</div>
 	</div>
 {:else if looked}
-	<p class="hint">No visit of <code>{page}</code> kept in this browser. Open the page once while logged in to the profiler; the beacon stores the islands' markup before and after hydration and the layout shifts here.</p>
+	<p class="hint">
+		No visit of <code>{page}</code> kept in this browser. Open the page once while logged in to the profiler;
+		the beacon stores the islands' markup before and after hydration and the layout shifts here.
+	</p>
 {:else}
 	<p class="hint">Reading this browser's visit…</p>
 {/if}

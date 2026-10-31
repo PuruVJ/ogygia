@@ -12,20 +12,30 @@
 	import { pressable } from './press.ts';
 	import { row_id, follow_hash } from './row-anchor.svelte.ts';
 
-	let { rows, hasJs, hasClient }: { rows: IslandRow[]; hasJs: boolean; hasClient: boolean } = $props();
+	let { rows, hasJs, hasClient }: { rows: IslandRow[]; hasJs: boolean; hasClient: boolean } =
+		$props();
 
 	let query = $state('');
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		if (!q) return rows;
-		return rows.filter((r) => r.name.toLowerCase().includes(q) || r.entry.toLowerCase().includes(q) || r.wake.includes(q));
+		return rows.filter(
+			(r) =>
+				r.name.toLowerCase().includes(q) || r.entry.toLowerCase().includes(q) || r.wake.includes(q)
+		);
 	});
 	const s = sortable(() => filtered, 'props_bytes');
 	let open = $state<string | null>(null);
 	const max_props = Math.max(...rows.map((r) => r.props_bytes), 1);
 	const max_js = Math.max(...rows.map((r) => r.js_bytes ?? 0), 1);
 	const cols = $derived(9 + (hasJs ? 1 : 0) + (hasClient ? 1 : 0));
-	const WAKE_COLOR: Record<string, string> = { load: '#e8734a', idle: '#d9a03d', visible: '#5b8fd6', interaction: '#7ee787', none: '#7d8590' };
+	const WAKE_COLOR: Record<string, string> = {
+		load: '#e8734a',
+		idle: '#d9a03d',
+		visible: '#5b8fd6',
+		interaction: '#7ee787',
+		none: '#7d8590'
+	};
 	const wake_color = (w: string) => WAKE_COLOR[w] ?? '#b48ead';
 	const marks_text = (r: IslandRow) => {
 		const i = r.interactivity;
@@ -59,48 +69,135 @@
 </script>
 
 <div class="tools">
-	<input type="search" placeholder="filter islands…" bind:value={query} aria-label="filter islands" />
-	<span class="hint">{filtered.length} of {rows.length} · click a row for its modules, seed keys and advice</span>
+	<input
+		type="search"
+		placeholder="filter islands…"
+		bind:value={query}
+		aria-label="filter islands"
+	/>
+	<span class="hint"
+		>{filtered.length} of {rows.length} · click a row for its modules, seed keys and advice</span
+	>
 </div>
 <table>
 	<thead>
 		<tr>
 			<th>island</th>
-			<th class="num sort" class:active={s.key === 'copies'} onclick={() => s.click('copies')} {@attach pressable} aria-sort={s.aria('copies')}>copies<span class="arr">{s.arrow('copies')}</span></th>
+			<th
+				class="num sort"
+				class:active={s.key === 'copies'}
+				onclick={() => s.click('copies')}
+				{@attach pressable}
+				aria-sort={s.aria('copies')}>copies<span class="arr">{s.arrow('copies')}</span></th
+			>
 			<th>wake</th>
-			<th class="num sort" class:active={s.key === 'ssr_ms'} title="the component's server render time, per render" onclick={() => s.click('ssr_ms')} {@attach pressable} aria-sort={s.aria('ssr_ms')}>SSR ms<span class="arr">{s.arrow('ssr_ms')}</span></th>
-			<th class="num sort" class:active={s.key === 'props_bytes'} title="the props sidecar as shipped (one per fingerprint)" onclick={() => s.click('props_bytes')} {@attach pressable} aria-sort={s.aria('props_bytes')}>props<span class="arr">{s.arrow('props_bytes')}</span></th>
+			<th
+				class="num sort"
+				class:active={s.key === 'ssr_ms'}
+				title="the component's server render time, per render"
+				onclick={() => s.click('ssr_ms')}
+				{@attach pressable}
+				aria-sort={s.aria('ssr_ms')}>SSR ms<span class="arr">{s.arrow('ssr_ms')}</span></th
+			>
+			<th
+				class="num sort"
+				class:active={s.key === 'props_bytes'}
+				title="the props sidecar as shipped (one per fingerprint)"
+				onclick={() => s.click('props_bytes')}
+				{@attach pressable}
+				aria-sort={s.aria('props_bytes')}>props<span class="arr">{s.arrow('props_bytes')}</span></th
+			>
 			<th title="JSON parses on the fast lane; devalue when a leaf needs it">lane</th>
-			<th class="num sort" class:active={s.key === 'refs'} title="props that point into page.data instead of shipping again" onclick={() => s.click('refs')} {@attach pressable} aria-sort={s.aria('refs')}>seed refs<span class="arr">{s.arrow('refs')}</span></th>
-			{#if hasJs}<th class="num sort" class:active={s.key === 'js_sort'} title="the island's module and its chunks, shared code included; '· only it' is the part no other island needs" onclick={() => s.click('js_sort')} {@attach pressable} aria-sort={s.aria('js_sort')}>JS<span class="arr">{s.arrow('js_sort')}</span></th>{/if}
+			<th
+				class="num sort"
+				class:active={s.key === 'refs'}
+				title="props that point into page.data instead of shipping again"
+				onclick={() => s.click('refs')}
+				{@attach pressable}
+				aria-sort={s.aria('refs')}>seed refs<span class="arr">{s.arrow('refs')}</span></th
+			>
+			{#if hasJs}<th
+					class="num sort"
+					class:active={s.key === 'js_sort'}
+					title="the island's module and its chunks, shared code included; '· only it' is the part no other island needs"
+					onclick={() => s.click('js_sort')}
+					{@attach pressable}
+					aria-sort={s.aria('js_sort')}>JS<span class="arr">{s.arrow('js_sort')}</span></th
+				>{/if}
 			<th title="what the build found in the island's components">interactivity</th>
-			{#if hasClient}<th class="num sort" class:active={s.key === 'client_ms'} title="wake → hydrated in the browser, p50 (the runtime's beacon)" onclick={() => s.click('client_ms')} {@attach pressable} aria-sort={s.aria('client_ms')}>hydrate ms<span class="arr">{s.arrow('client_ms')}</span></th>{/if}
+			{#if hasClient}<th
+					class="num sort"
+					class:active={s.key === 'client_ms'}
+					title="wake → hydrated in the browser, p50 (the runtime's beacon)"
+					onclick={() => s.click('client_ms')}
+					{@attach pressable}
+					aria-sort={s.aria('client_ms')}
+					>hydrate ms<span class="arr">{s.arrow('client_ms')}</span></th
+				>{/if}
 			<th><span class="sr-only">details</span></th>
 		</tr>
 	</thead>
 	<tbody>
 		{#each s.sorted as r (r.fp)}
-			<tr class="row" id={first_fp.get(r.name) === r.fp ? row_id('island', r.name) : undefined} class:open={open === r.fp} class:flag={!!r.advice} onclick={() => (open = open === r.fp ? null : r.fp)} {@attach pressable}>
+			<tr
+				class="row"
+				id={first_fp.get(r.name) === r.fp ? row_id('island', r.name) : undefined}
+				class:open={open === r.fp}
+				class:flag={!!r.advice}
+				onclick={() => (open = open === r.fp ? null : r.fp)}
+				{@attach pressable}
+			>
 				<td class="fn"><span class="caret">{open === r.fp ? '▾' : '▸'}</span><b>{r.name}</b></td>
 				<td class="num">{r.copies > 1 ? `×${r.copies}` : '1'}</td>
-				<td><span class="chip" style="background:{wake_color(r.wake)};color:{ink_on(wake_color(r.wake))}">{r.wake}</span></td>
+				<td
+					><span
+						class="chip"
+						style="background:{wake_color(r.wake)};color:{ink_on(wake_color(r.wake))}"
+						>{r.wake}</span
+					></td
+				>
 				<td class="num">{r.ssr_ms === null ? '—' : fmt_ms(r.ssr_ms)}</td>
 				<td class="num bar-cell">
 					<div class="bar" style="width:{Math.max(2, (r.props_bytes / max_props) * 100)}%"></div>
 					<b>{fmt_bytes(r.props_bytes)}</b>
 				</td>
-				<td>{#if r.json}<span class="lane json">json</span>{:else}<span class="lane dev" title={r.culprit ?? ''}>devalue</span>{/if}</td>
+				<td
+					>{#if r.json}<span class="lane json">json</span>{:else}<span
+							class="lane dev"
+							title={r.culprit ?? ''}>devalue</span
+						>{/if}</td
+				>
 				<td class="num">{r.refs ? `${r.refs} → ${r.ref_keys.join(', ')}` : '—'}</td>
 				{#if hasJs}
 					<td class="num bar-cell">
-						{#if r.js_bytes !== null}<div class="bar js" style="width:{Math.max(2, (r.js_bytes / max_js) * 100)}%"></div><b>{fmt_bytes(r.js_bytes)}</b>{#if r.js_only !== null}<span class="only" title="what no other island on the page needs: what dropping or deferring it saves"> · {fmt_bytes(r.js_only)} only it</span>{/if}{:else}—{/if}
+						{#if r.js_bytes !== null}<div
+								class="bar js"
+								style="width:{Math.max(2, (r.js_bytes / max_js) * 100)}%"
+							></div>
+							<b>{fmt_bytes(r.js_bytes)}</b>{#if r.js_only !== null}<span
+									class="only"
+									title="what no other island on the page needs: what dropping or deferring it saves"
+								>
+									· {fmt_bytes(r.js_only)} only it</span
+								>{/if}{:else}—{/if}
 					</td>
 				{/if}
 				<td class="marks" class:inert={r.marks === 0}>{marks_text(r)}</td>
 				{#if hasClient}
-					<td class="num">{#if r.client}{fmt_ms(r.client.p50_ms)}<span class="hint"> ({r.client.n})</span>{#if r.client.recovered}<span class="lane dev" title="hydrations that discarded the server DOM and re-rendered"> re-rendered ×{r.client.recovered}</span>{/if}{:else}—{/if}</td>
+					<td class="num"
+						>{#if r.client}{fmt_ms(r.client.p50_ms)}<span class="hint">
+								({r.client.n})</span
+							>{#if r.client.recovered}<span
+									class="lane dev"
+									title="hydrations that discarded the server DOM and re-rendered"
+								>
+									re-rendered ×{r.client.recovered}</span
+								>{/if}{:else}—{/if}</td
+					>
 				{/if}
-				<td class="flagcell">{#if r.advice}<span class="dotflag" title={r.advice}>!</span>{/if}</td>
+				<td class="flagcell"
+					>{#if r.advice}<span class="dotflag" title={r.advice}>!</span>{/if}</td
+				>
 			</tr>
 			{#if open === r.fp}
 				<tr class="details">
@@ -111,29 +208,66 @@
 								<div class="k">entry</div>
 								<code class="mono">{r.entry}</code>
 								<div class="k">fingerprint{r.variants > 1 ? 's' : ''}</div>
-								<code class="mono">{r.fp}{#if r.variants > 1} <span class="hint">and {r.variants - 1} more (each copy has its own props)</span>{/if}</code>
+								<code class="mono"
+									>{r.fp}{#if r.variants > 1}
+										<span class="hint">and {r.variants - 1} more (each copy has its own props)</span
+										>{/if}</code
+								>
 								<div class="k">props</div>
-								<div>{fmt_bytes(r.props_bytes)} on the wire{#if r.variants > 1} over {r.variants} sidecars, {fmt_bytes(Math.round(r.props_bytes / r.variants))} each{/if}{#if r.canonical_bytes !== r.props_bytes} · {fmt_bytes(r.canonical_bytes)} before seed references{/if}{#if r.copies > 1 && r.variants === 1} · shared by {r.copies} copies{/if}</div>
-								{#if r.culprit}<div class="k">devalue because of</div><code class="mono warn">{r.culprit}</code>{/if}
-								{#if r.ref_keys.length}<div class="k">points into page.data</div><div>{r.ref_keys.join(', ')}</div>{/if}
+								<div>
+									{fmt_bytes(r.props_bytes)} on the wire{#if r.variants > 1}
+										over {r.variants} sidecars, {fmt_bytes(Math.round(r.props_bytes / r.variants))} each{/if}{#if r.canonical_bytes !== r.props_bytes}
+										· {fmt_bytes(r.canonical_bytes)} before seed references{/if}{#if r.copies > 1 && r.variants === 1}
+										· shared by {r.copies} copies{/if}
+								</div>
+								{#if r.culprit}<div class="k">devalue because of</div>
+									<code class="mono warn">{r.culprit}</code>{/if}
+								{#if r.ref_keys.length}<div class="k">points into page.data</div>
+									<div>{r.ref_keys.join(', ')}</div>{/if}
 								{#if r.client}
 									<div class="k">in the browser</div>
-									<div>{r.client.n} hydration{r.client.n === 1 ? '' : 's'} seen · p50 {fmt_ms(r.client.p50_ms)} ms, max {fmt_ms(r.client.max_ms)} ms · module load p50 {fmt_ms(r.client.load_p50_ms)} ms{#if r.client.recovered} · <span class="warn">{r.client.recovered} re-rendered after a hydration mismatch</span>{/if}</div>
-										{#if r.client.recovered && r.client.reason}<div class="k">why it was recovered</div><div class="warn">{r.client.reason}</div>{/if}
+									<div>
+										{r.client.n} hydration{r.client.n === 1 ? '' : 's'} seen · p50 {fmt_ms(
+											r.client.p50_ms
+										)} ms, max {fmt_ms(r.client.max_ms)} ms · module load p50 {fmt_ms(
+											r.client.load_p50_ms
+										)} ms{#if r.client.recovered}
+											· <span class="warn"
+												>{r.client.recovered} re-rendered after a hydration mismatch</span
+											>{/if}
+									</div>
+									{#if r.client.recovered && r.client.reason}<div class="k">
+											why it was recovered
+										</div>
+										<div class="warn">{r.client.reason}</div>{/if}
 								{/if}
 							</div>
 							<div>
-								<div class="k">what the browser downloads to wake it{#if r.js_bytes !== null} · {fmt_bytes(r.js_bytes)} in all{/if}</div>
+								<div class="k">
+									what the browser downloads to wake it{#if r.js_bytes !== null}
+										· {fmt_bytes(r.js_bytes)} in all{/if}
+								</div>
 								<p class="explain">
-									Every JavaScript file this island needs before it can run: its own code (marked <b>this island</b>) plus the
-									shared files it imports — the Svelte runtime, ogygia's hydrate core, shared components, libraries. The
-									bundler names shared files by hash. The total is what one visitor pays in JS for this island; the biggest
-									file is where to look when that is too much.
+									Every JavaScript file this island needs before it can run: its own code (marked <b
+										>this island</b
+									>) plus the shared files it imports — the Svelte runtime, ogygia's hydrate core,
+									shared components, libraries. The bundler names shared files by hash. The total is
+									what one visitor pays in JS for this island; the biggest file is where to look
+									when that is too much.
 								</p>
 								{#each r.modules as m (m.url)}
 									<div class="mod">
-										{#if m.bytes !== null}<div class="bar js" style="width:{Math.max(1, (m.bytes / Math.max(r.modules[0].bytes ?? 1, 1)) * 100)}%"></div>{/if}
-										<span class="mono">{m.url.replace(/^.*\/_app\/immutable\//, '')}{#if m.own} <span class="own">this island</span>{/if}</span>
+										{#if m.bytes !== null}<div
+												class="bar js"
+												style="width:{Math.max(
+													1,
+													(m.bytes / Math.max(r.modules[0].bytes ?? 1, 1)) * 100
+												)}%"
+											></div>{/if}
+										<span class="mono"
+											>{m.url.replace(/^.*\/_app\/immutable\//, '')}{#if m.own}
+												<span class="own">this island</span>{/if}</span
+										>
 										<span class="num">{m.bytes === null ? '' : fmt_bytes(m.bytes)}</span>
 									</div>
 									{#if m.inside?.length}

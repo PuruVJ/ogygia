@@ -132,7 +132,9 @@ export interface BuildContext {
 const OGYGIA_VITE_PLUGIN = 'ogygia';
 
 /** A plugin, as the Vite plugin the app lists beside `ogygia()`. */
-export function definePlugin<Options = undefined>(definition: PluginDefinition<Options>): OgygiaPlugin<Options> {
+export function definePlugin<Options = undefined>(
+	definition: PluginDefinition<Options>
+): OgygiaPlugin<Options> {
 	return {
 		name: definition.name,
 		[PLUGIN]: definition,
@@ -162,7 +164,9 @@ export async function find_plugins(list: unknown): Promise<PluginDefinition[]> {
 			return;
 		}
 		if (typeof value === 'function')
-			throw new Error('[ogygia] a function is listed in vite.config `plugins` — call the factory: `flags()`, not `flags`.');
+			throw new Error(
+				'[ogygia] a function is listed in vite.config `plugins` — call the factory: `flags()`, not `flags`.'
+			);
 		const plugin = value as { name?: unknown; [PLUGIN]?: { name?: unknown } } | null;
 		const name = typeof plugin?.name === 'string' ? plugin.name : '';
 		const definition = plugin?.[PLUGIN];
@@ -217,7 +221,14 @@ function order(plugins: readonly PluginDefinition[]): PluginDefinition[] {
 
 const ROUTE_OPTION_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
 /** Kit's own page options: a plugin may never claim one. */
-const KIT_ROUTE_OPTIONS = new Set(['csr', 'ssr', 'prerender', 'trailingSlash', 'config', 'entries']);
+const KIT_ROUTE_OPTIONS = new Set([
+	'csr',
+	'ssr',
+	'prerender',
+	'trailingSlash',
+	'config',
+	'entries'
+]);
 
 /**
  * Config-time shape check of the definitions found: each named once, its realms locations, its
@@ -227,18 +238,28 @@ export function check_plugins(plugins: readonly unknown[]): PluginDefinition[] {
 	const seen = new Set<string>();
 	for (const p of plugins) {
 		const plugin = p as Partial<PluginDefinition> | null;
-		if (!plugin || typeof plugin !== 'object' || typeof plugin.name !== 'string' || plugin.name === '')
+		if (
+			!plugin ||
+			typeof plugin !== 'object' ||
+			typeof plugin.name !== 'string' ||
+			plugin.name === ''
+		)
 			throw new Error('[ogygia] a plugin definition needs a `name` (its package name).');
-		if (seen.has(plugin.name)) throw new Error(`[ogygia] plugin \`${plugin.name}\` is listed twice.`);
+		if (seen.has(plugin.name))
+			throw new Error(`[ogygia] plugin \`${plugin.name}\` is listed twice.`);
 		seen.add(plugin.name);
 		for (const realm of ['server', 'client'] as const)
 			if (plugin[realm] !== undefined && typeof plugin[realm] !== 'string')
-				throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`${realm}\` is a module location — \`import.meta.resolve('./${realm}.ts')\`.`);
+				throw new Error(
+					`[ogygia] plugin \`${plugin.name}\`: \`${realm}\` is a module location — \`import.meta.resolve('./${realm}.ts')\`.`
+				);
 		if (plugin.options !== undefined) {
 			try {
 				JSON.stringify(plugin.options);
 			} catch {
-				throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`options\` must be plain JSON (configure live objects in hooks.server.ts).`);
+				throw new Error(
+					`[ogygia] plugin \`${plugin.name}\`: \`options\` must be plain JSON (configure live objects in hooks.server.ts).`
+				);
 			}
 		}
 	}
@@ -252,7 +273,9 @@ function realm_path(plugin: PluginDefinition, realm: 'server' | 'client'): strin
 	if (where === undefined) return null;
 	const abs = where.startsWith('file:') ? fileURLToPath(where) : where;
 	if (!path.isAbsolute(abs) || !fs.existsSync(abs))
-		throw new Error(`[ogygia] plugin \`${plugin.name}\`: its \`${realm}\` realm \`${where}\` is not a file — resolve it next to the factory: \`import.meta.resolve('./${realm}.ts')\`.`);
+		throw new Error(
+			`[ogygia] plugin \`${plugin.name}\`: its \`${realm}\` realm \`${where}\` is not a file — resolve it next to the factory: \`import.meta.resolve('./${realm}.ts')\`.`
+		);
 	return abs.split(path.sep).join('/');
 }
 
@@ -295,9 +318,12 @@ export function resolve_plugins(
 	const macro_owner = new Map<string, string>();
 	for (const plugin of ordered) {
 		if (!package_resolves(req, plugin.name))
-			throw new Error(`[ogygia] plugin \`${plugin.name}\`: no package by that name resolves from ${root} — its name must be its package name.`);
+			throw new Error(
+				`[ogygia] plugin \`${plugin.name}\`: no package by that name resolves from ${root} — its name must be its package name.`
+			);
 		const server = realm_path(plugin, 'server');
-		if (server) out.servers.push({ name: plugin.name, module: server, options: plugin.options ?? {} });
+		if (server)
+			out.servers.push({ name: plugin.name, module: server, options: plugin.options ?? {} });
 		const client = realm_path(plugin, 'client');
 		if (client) out.clients.push(client);
 		plugin.build?.({
@@ -305,10 +331,14 @@ export function resolve_plugins(
 			dev,
 			routeOption(name) {
 				if (!ROUTE_OPTION_NAME_RE.test(name) || KIT_ROUTE_OPTIONS.has(name))
-					throw new Error(`[ogygia] plugin \`${plugin.name}\`: route option \`${name}\` must be a camelCase identifier Kit does not own.`);
+					throw new Error(
+						`[ogygia] plugin \`${plugin.name}\`: route option \`${name}\` must be a camelCase identifier Kit does not own.`
+					);
 				const owner = option_owner.get(name);
 				if (owner && owner !== plugin.name)
-					throw new Error(`[ogygia] route option \`${name}\` is claimed by both \`${owner}\` and \`${plugin.name}\`.`);
+					throw new Error(
+						`[ogygia] route option \`${name}\` is claimed by both \`${owner}\` and \`${plugin.name}\`.`
+					);
 				if (!owner) {
 					option_owner.set(name, plugin.name);
 					out.route_options.push(name);
@@ -319,10 +349,14 @@ export function resolve_plugins(
 			},
 			macro(name, handler) {
 				if (!MACRO_NAME_RE.test(name) || CORE_MACROS.has(name))
-					throw new Error(`[ogygia] plugin \`${plugin.name}\`: macro \`import.meta.og.${name}\` must be a camelCase name core does not own.`);
+					throw new Error(
+						`[ogygia] plugin \`${plugin.name}\`: macro \`import.meta.og.${name}\` must be a camelCase name core does not own.`
+					);
 				const owner = macro_owner.get(name);
 				if (owner)
-					throw new Error(`[ogygia] macro \`import.meta.og.${name}\` is claimed by both \`${owner}\` and \`${plugin.name}\`.`);
+					throw new Error(
+						`[ogygia] macro \`import.meta.og.${name}\` is claimed by both \`${owner}\` and \`${plugin.name}\`.`
+					);
 				macro_owner.set(name, plugin.name);
 				out.macros.push({ name, handler });
 			},
@@ -339,14 +373,21 @@ export function resolve_plugins(
 				out.measure = true;
 			},
 			files(scan) {
-				out.files.push({ name: plugin.name, root: scan.root, dirs: scan.dirs ?? [], files: scan.files ?? [] });
+				out.files.push({
+					name: plugin.name,
+					root: scan.root,
+					dirs: scan.dirs ?? [],
+					files: scan.files ?? []
+				});
 			},
 			pageModules(modules) {
 				for (const spec of modules.importers ?? [])
 					if (!out.page_modules.importers.includes(spec)) out.page_modules.importers.push(spec);
 				for (const file of modules.files ?? []) {
 					if (!path.isAbsolute(file))
-						throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`pageModules({ files })\` takes absolute paths (got \`${file}\`).`);
+						throw new Error(
+							`[ogygia] plugin \`${plugin.name}\`: \`pageModules({ files })\` takes absolute paths (got \`${file}\`).`
+						);
 					if (!out.page_modules.files.includes(file)) out.page_modules.files.push(file);
 				}
 			}

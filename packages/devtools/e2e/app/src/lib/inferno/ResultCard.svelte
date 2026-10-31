@@ -9,10 +9,18 @@
 	let { p, rank }: { p: ProductView; rank: number } = $props();
 
 	// PATTERN table-per-call: a fixed icon table rebuilt for every card (belongs in <script module>)
-	const ICONS = Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`i${i}`, `M${i} ${i}l${i % 7} ${i % 11}z`]));
+	const ICONS = Object.fromEntries(
+		Array.from({ length: 400 }, (_, i) => [`i${i}`, `M${i} ${i}l${i % 7} ${i % 11}z`])
+	);
 
 	// PATTERN sort-per-call: all 400 brands sorted again on every card, to show the first three
-	const nearby = [...BRANDS].sort((a, b) => (a.country === p.brand?.country ? 0 : 1) - (b.country === p.brand?.country ? 0 : 1) || a.id - b.id).slice(0, 3);
+	const nearby = [...BRANDS]
+		.sort(
+			(a, b) =>
+				(a.country === p.brand?.country ? 0 : 1) - (b.country === p.brand?.country ? 0 : 1) ||
+				a.id - b.id
+		)
+		.slice(0, 3);
 	const top = [...p.reviews].sort((a, b) => b.stars - a.stars).slice(0, 2);
 
 	const price = formatMoney(p.price, p.currency);
@@ -29,7 +37,11 @@
 <article class="card">
 	<svg viewBox="0 0 24 24" width="16" height="16"><path d={ICONS[`i${rank % 400}`]} /></svg>
 	<h3>{p.name}</h3>
-	<p class="meta">{brand?.name ?? '—'} · {label} · updated {updated} · newest review {new Date(newest).toISOString().slice(0, 10)}</p>
+	<p class="meta">
+		{brand?.name ?? '—'} · {label} · updated {updated} · newest review {new Date(newest)
+			.toISOString()
+			.slice(0, 10)}
+	</p>
 	<p class="price">{price} <small>{pct(avg / 5)} liked it</small></p>
 	<ul>
 		{#each top as r, i (i)}<li>{'★'.repeat(r.stars)} {r.body}</li>{/each}
@@ -42,7 +54,9 @@
 		border: 1px solid #ddd;
 		border-radius: 8px;
 		padding: 10px 12px;
-		font: 14px/1.4 system-ui, sans-serif;
+		font:
+			14px/1.4 system-ui,
+			sans-serif;
 	}
 	h3 {
 		margin: 0 0 4px;

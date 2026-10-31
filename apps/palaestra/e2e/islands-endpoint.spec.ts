@@ -18,7 +18,15 @@ test.beforeAll(async () => {
 	// (the suite's webServer already built the palaestra: serve that build with the moved endpoint)
 	srv = await spawn_server({
 		cmd: process.execPath,
-		args: ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+		args: [
+			'node_modules/vite/bin/vite.js',
+			'preview',
+			'--port',
+			String(PORT),
+			'--strictPort',
+			'--host',
+			'127.0.0.1'
+		],
 		cwd: palaestra,
 		env: { OGYGIA_ENDPOINT: ENDPOINT, ORIGIN: base },
 		url: `${base}/lake-kit/`,
@@ -28,7 +36,9 @@ test.beforeAll(async () => {
 test.afterAll(() => srv?.kill());
 
 for (const path of ['/lake-kit/', '/lake-kit/kit/']) {
-	test(`${path}: every hole is minted on the moved endpoint and answers there`, async ({ page }) => {
+	test(`${path}: every hole is minted on the moved endpoint and answers there`, async ({
+		page
+	}) => {
 		const asked: string[] = [];
 		page.on('request', (r) => {
 			const p = new URL(r.url()).pathname;
@@ -41,7 +51,9 @@ for (const path of ['/lake-kit/', '/lake-kit/kit/']) {
 		await expect(page.locator('[data-server-greeting]')).toHaveCount(1);
 		await expect(page.locator('[data-lake-fallback]')).toHaveCount(0);
 		const endpoints = await page.evaluate(() =>
-			[...document.querySelectorAll('ogygia-region[endpoint]')].map((r) => new URL(r.getAttribute('endpoint')!, location.href).pathname)
+			[...document.querySelectorAll('ogygia-region[endpoint]')].map(
+				(r) => new URL(r.getAttribute('endpoint')!, location.href).pathname
+			)
 		);
 		expect(endpoints.length).toBeGreaterThan(0);
 		expect(endpoints.filter((p) => p !== '/_server/api/__ogygia__')).toEqual([]);
@@ -54,7 +66,9 @@ for (const path of ['/lake-kit/', '/lake-kit/kit/']) {
 	});
 }
 
-test('the default path is no longer the handler: an unsigned request there is not ogygia’s', async ({ request }) => {
+test('the default path is no longer the handler: an unsigned request there is not ogygia’s', async ({
+	request
+}) => {
 	const res = await request.get(`${base}/__ogygia__?id=x&sig=y`);
 	expect(res.status()).toBe(404);
 	// the moved path is: an unsigned probe gets ogygia’s own refusal

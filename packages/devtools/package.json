@@ -2,16 +2,26 @@
 	"name": "@ogygia/devtools",
 	"version": "0.10.2",
 	"description": "Devtools for ogygia: the in-page dock, and the SSR profiler with its report, client marks and storage adapters",
-	"type": "module",
+	"keywords": [
+		"devtools",
+		"ogygia",
+		"performance",
+		"profiler",
+		"sveltekit"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/devtools"
 	},
-	"keywords": ["ogygia", "sveltekit", "devtools", "profiler", "performance"],
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/devtools/index.d.ts",
@@ -51,46 +61,7 @@
 			"default": "./src/profiler/storage/postgres.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p . && tsc -p e2e && vitest run",
-		"test": "vitest run",
-		"e2e": "playwright test"
-	},
-	"dependencies": {
-		"@neodrag/svelte": "catalog:",
-		"devalue": "catalog:"
-	},
-	"peerDependencies": {
-		"@ogygia/router": "workspace:^",
-		"@sveltejs/kit": "catalog:peers",
-		"@ogygia/core": "workspace:^",
-		"svelte": "catalog:peers",
-		"vite": "catalog:peers"
-	},
-	"peerDependenciesMeta": {
-		"@ogygia/router": {
-			"optional": true
-		}
-	},
-	"devDependencies": {
-		"@ogygia/router": "workspace:*",
-		"@ogygia/tooling": "workspace:*",
-		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@playwright/test": "catalog:",
-		"@sveltejs/kit": "catalog:",
-		"@sveltejs/vite-plugin-svelte": "catalog:",
-		"@types/node": "catalog:",
-		"@ogygia/core": "workspace:*",
-		"svelte": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"vite": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/devtools/index.d.ts",
@@ -129,6 +100,44 @@
 				"types": "./dist/profiler/storage/postgres.d.ts",
 				"default": "./dist/profiler/storage/postgres.js"
 			}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
+	},
+	"dependencies": {
+		"@neodrag/svelte": "catalog:",
+		"devalue": "catalog:"
+	},
+	"devDependencies": {
+		"@ogygia/core": "workspace:*",
+		"@ogygia/router": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@ogygia/tsdown-plugin-svelte": "workspace:*",
+		"@playwright/test": "catalog:",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
+		"svelte": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^",
+		"@ogygia/router": "workspace:^",
+		"@sveltejs/kit": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
+	},
+	"peerDependenciesMeta": {
+		"@ogygia/router": {
+			"optional": true
 		}
 	}
 }

@@ -59,7 +59,7 @@ GET /__profiler/page?p=/slow/page&runs=6&format=json&key=<secret>
 
 ## Serverless and edge
 
-The live dashboard wants a long-lived Node server: the V8 inspector, and memory that continues between requests. Serverless Node platforms (Lambda, Amplify) can *record*. The inspector runs in-process. But the report lives in memory, on an instance that can be gone before you open it. True edge runtimes (Workers) have no inspector. There, nothing records beyond the always-on request log.
+The live dashboard wants a long-lived Node server: the V8 inspector, and memory that continues between requests. Serverless Node platforms (Lambda, Amplify) can _record_. The inspector runs in-process. But the report lives in memory, on an instance that can be gone before you open it. True edge runtimes (Workers) have no inspector. There, nothing records beyond the always-on request log.
 
 For the serverless case, take the report with you. Each report downloads as a **self-contained JSON dump**: everything necessary to render it, with no inspector to read it back:
 
@@ -99,6 +99,7 @@ The report header shows **sourcemapped** when it operated.
 ## On the dev server
 
 `vite dev` works too, with the same findings. Vite runs each server module as transformed code built from a string, which hides where things came from in four ways, and the profiler handles each:
+
 - **Lines.** A profile's lines are the transformed code's. The maps back to your source live in Vite's module graph, not in `.map` files, and the ogygia plugin hands them to the profiler.
 - **Callers.** A stack frame of such code has no file name, only its `sourceURL`. The profiler reads that.
 - **Call counts.** Coverage names such a script `/app/x.ts`, while the CPU profile says `file:///app/x.ts`, so the counts are matched by script id.
@@ -153,7 +154,7 @@ Built to stay cheap: the coarse interval, no per-request context (the request is
 
 `sample: { every: 60, window: 2000 }` takes one 2 s coarse sample every minute and folds it into a rolling **hot functions** table on the dashboard, over the last hour of windows. Accuracy from volume: a function that is hot across sixty windows is hot in real traffic, whatever a single recording of a single page shows. Same cost profile as the trap (they share the recorder and take turns). Off on serverless.
 
-**Serverless hosts (Amplify, Lambda).** Those hosts hand console variables to the *build* only.
+**Serverless hosts (Amplify, Lambda).** Those hosts hand console variables to the _build_ only.
 The running function does not see them. So pass the secret through the vite config, as above,
 and keep the option unconditional. A guard like `devtools({ profiler: env.SECRET && { secret } })` turns the
 whole profiler off when the variable is missing at build time. Then `/__profiler` falls through

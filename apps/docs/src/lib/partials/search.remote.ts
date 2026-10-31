@@ -12,10 +12,25 @@ import { region } from 'ogygia';
 import * as v from 'valibot';
 
 const DB: Record<string, { name: string; tagline: string; lang: string; stars: number }> = {
-	svelte: { name: 'Svelte', tagline: 'Cybernetically enhanced web apps.', lang: 'TS', stars: 79000 },
-	kit: { name: 'SvelteKit', tagline: 'The fastest way to build Svelte apps.', lang: 'TS', stars: 19000 },
+	svelte: {
+		name: 'Svelte',
+		tagline: 'Cybernetically enhanced web apps.',
+		lang: 'TS',
+		stars: 79000
+	},
+	kit: {
+		name: 'SvelteKit',
+		tagline: 'The fastest way to build Svelte apps.',
+		lang: 'TS',
+		stars: 19000
+	},
 	vite: { name: 'Vite', tagline: 'Next generation frontend tooling.', lang: 'TS', stars: 68000 },
-	ogygia: { name: 'ogygia', tagline: 'Astro-style SSR islands for SvelteKit.', lang: 'TS', stars: 1 }
+	ogygia: {
+		name: 'ogygia',
+		tagline: 'Astro-style SSR islands for SvelteKit.',
+		lang: 'TS',
+		stars: 1
+	}
 };
 
 export const search = query(v.string(), async (raw) => {

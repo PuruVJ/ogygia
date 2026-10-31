@@ -174,8 +174,7 @@ const EXPORT_DECL_G =
 	/^\s*export\s+(?:async\s+)?(?:const|let|var|function\*?|class|enum|abstract\s+class)\s+([A-Za-z_$][\w$]*)/gm;
 const EXPORT_LIST_G = /^\s*export\s*\{([^}]*)\}/gm;
 const EXPORT_DEFAULT_RE = /^\s*export\s+default\b/m;
-const IMPORT_FROM_G =
-	/import\s+(?:type\s+)?([^'";]*?)\s*from\s*(['"])([^'"]+)\2/g;
+const IMPORT_FROM_G = /import\s+(?:type\s+)?([^'";]*?)\s*from\s*(['"])([^'"]+)\2/g;
 const IMPORT_SIDE_EFFECT_RE = /^\s*$/;
 const AS_RE = /\s+as\s+/;
 const WS_G = /\s+/g;

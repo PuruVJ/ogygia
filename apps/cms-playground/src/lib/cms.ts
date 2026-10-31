@@ -53,14 +53,22 @@ const cms_pages: RawSource<unknown> = {
 			fetch(`${CMS}/pages`).then((r) => r.json() as Promise<CmsRow[]>),
 			categories_once()
 		]);
-		return rows.map((row) => ({ id: row.id, value: { blocks: [], meta: frontmatter(row) }, order: order_of(row, cats) }));
+		return rows.map((row) => ({
+			id: row.id,
+			value: { blocks: [], meta: frontmatter(row) },
+			order: order_of(row, cats)
+		}));
 	},
 	// One full document — the only fetch that pulls a body.
 	async get(id): Promise<RawRecord<unknown> | null> {
 		const res = await fetch(`${CMS}/pages/${id}`);
 		if (!res.ok) return null;
 		const [row, cats] = [(await res.json()) as CmsRow, await categories_once()];
-		return { id, value: { blocks: row.body ?? [], meta: frontmatter(row) }, order: order_of(row, cats) };
+		return {
+			id,
+			value: { blocks: row.body ?? [], meta: frontmatter(row) },
+			order: order_of(row, cats)
+		};
 	},
 	// Section labels straight from the CMS's own category API — no fake meta collection.
 	async groups() {
@@ -79,11 +87,17 @@ export const docs = content({
 
 /** Preview context from the URL (`?preview=secret`) — universal-load-safe (no cookies API there).
  *  Exported so the page component derives the SAME context it renders under as the load guard used. */
-export const preview_ctx = (url: URL) => ({ preview: url.searchParams.get('preview') === 'secret' });
+export const preview_ctx = (url: URL) => ({
+	preview: url.searchParams.get('preview') === 'secret'
+});
 
 export const cms = site({
 	outline: docs,
-	data: { title: 'CMS Playground', description: 'An ogygia site sourced entirely from a REST CMS.', origin: 'http://localhost:5281' },
+	data: {
+		title: 'CMS Playground',
+		description: 'An ogygia site sourced entirely from a REST CMS.',
+		origin: 'http://localhost:5281'
+	},
 	prevNext: 'graph',
 	// Preview mode: `?preview=secret` flips draft visibility. The loader stays request-blind; only the
 	// filter sees ctx, and the weave memoizes one tree per distinct context (public vs preview).

@@ -53,7 +53,8 @@ export function server_manifest_module(
 		// request by it (neither URL carries the name: both are keyed by the id)
 		const file = reg.componentPath ?? '';
 		const base = file.slice(file.lastIndexOf('/') + 1);
-		if (base.endsWith('.svelte')) names.push(`  ${JSON.stringify(iid)}: ${JSON.stringify(base.slice(0, -7))}`);
+		if (base.endsWith('.svelte'))
+			names.push(`  ${JSON.stringify(iid)}: ${JSON.stringify(base.slice(0, -7))}`);
 		// id → the URL `islandCss()` is keyed by, so the handle can ship a server-picked hole's
 		// CSS with its response (a page that never imported the component still styles it). In a
 		// build that's the hashed client chunk (→ handoff CSS assets); in dev it's the entry's

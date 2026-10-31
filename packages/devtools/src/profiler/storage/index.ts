@@ -132,7 +132,14 @@ export function memoryStore(cap = 50): ProfilerStore {
 
 /** Pull the summary columns off a record for storing them alongside the dump. */
 export function recordColumns(rec: ProfilerRecord): ProfilerSummary {
-	return { id: rec.id, created: rec.created, page: rec.page, trigger: rec.trigger, label: rec.label, median: rec.median };
+	return {
+		id: rec.id,
+		created: rec.created,
+		page: rec.page,
+		trigger: rec.trigger,
+		label: rec.label,
+		median: rec.median
+	};
 }
 
 // ── the runtime seam ────────────────────────────────────────────────────────────────────────────

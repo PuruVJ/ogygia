@@ -27,7 +27,8 @@
 		{#if view.data.description}<p class="standfirst">{view.data.description}</p>{/if}
 		{#if view.data.author}
 			<p class="byline">
-				{#if view.data.authorURL}<a href={view.data.authorURL}>{view.data.author}</a>{:else}{view.data.author}{/if}
+				{#if view.data.authorURL}<a href={view.data.authorURL}>{view.data.author}</a>{:else}{view
+						.data.author}{/if}
 			</p>
 		{/if}
 	</header>

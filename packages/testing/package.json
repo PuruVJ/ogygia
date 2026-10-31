@@ -2,55 +2,65 @@
 	"name": "@ogygia/testing",
 	"version": "0.10.2",
 	"description": "Testing for ogygia: the devtools and the profiler as test primitives, for Playwright or any runner and page driver",
-	"type": "module",
+	"keywords": [
+		"ogygia",
+		"performance",
+		"playwright",
+		"sveltekit",
+		"testing",
+		"web-vitals"
+	],
+	"homepage": "https://ogygia.puruvj.dev",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
-	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/testing"
 	},
-	"keywords": ["ogygia", "sveltekit", "testing", "playwright", "performance", "web-vitals"],
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./src/index.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
+	"publishConfig": {
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		},
+		"access": "public"
+	},
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
 		"test": "vitest run",
 		"e2e": "playwright test"
 	},
-	"peerDependencies": {
-		"@playwright/test": "catalog:peers",
-		"@ogygia/core": "workspace:^"
-	},
-	"peerDependenciesMeta": {
-		"@playwright/test": {
-			"optional": true
-		}
-	},
 	"devDependencies": {
+		"@ogygia/core": "workspace:*",
 		"@ogygia/devtools": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
 		"@playwright/test": "catalog:",
-		"@ogygia/core": "workspace:*",
 		"@types/node": "catalog:",
 		"tsdown": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "catalog:"
 	},
-	"publishConfig": {
-		"access": "public",
-		"exports": {
-			".": {
-				"types": "./dist/index.d.ts",
-				"default": "./dist/index.js"
-			}
+	"peerDependencies": {
+		"@ogygia/core": "workspace:^",
+		"@playwright/test": "catalog:peers"
+	},
+	"peerDependenciesMeta": {
+		"@playwright/test": {
+			"optional": true
 		}
 	}
 }

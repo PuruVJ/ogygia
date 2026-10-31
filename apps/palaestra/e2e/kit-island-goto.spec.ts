@@ -15,20 +15,31 @@ async function click_probe(page: import('@playwright/test').Page, path: string) 
 		(window as unknown as { __og_marker: number }).__og_marker = 1;
 	});
 	await page.locator('[data-goto-probe]').click();
-	await page.waitForFunction(() => location.search === '?probe=1', null, { timeout: 10_000 }).catch(() => {});
-	const marker = await page.evaluate(() => (window as unknown as { __og_marker?: number }).__og_marker);
+	await page
+		.waitForFunction(() => location.search === '?probe=1', null, { timeout: 10_000 })
+		.catch(() => {});
+	const marker = await page.evaluate(
+		() => (window as unknown as { __og_marker?: number }).__og_marker
+	);
 	return { url: page.url(), client_side: marker === 1 };
 }
 
-test('csr=true page: an island’s goto() goes through Kit’s router (no reload)', async ({ page }) => {
+test('csr=true page: an island’s goto() goes through Kit’s router (no reload)', async ({
+	page
+}) => {
 	const r = await click_probe(page, '/kit');
 	check('navigated to ?probe=1', r.url.endsWith('/kit?probe=1'), r.url);
 	check('client-side: the page was NOT reloaded', r.client_side);
 	// Kit's own page state moved with it: the island reads it through the thread
-	check('the island sees Kit’s new page.url', (await page.locator('[data-goto-probe-search]').textContent()) === '?probe=1');
+	check(
+		'the island sees Kit’s new page.url',
+		(await page.locator('[data-goto-probe-search]').textContent()) === '?probe=1'
+	);
 });
 
-test('csr=false page: an island’s goto() goes through the ogygia router (no reload)', async ({ page }) => {
+test('csr=false page: an island’s goto() goes through the ogygia router (no reload)', async ({
+	page
+}) => {
 	const r = await click_probe(page, '/shared-page-module');
 	check('navigated to ?probe=1', r.url.endsWith('/shared-page-module?probe=1'), r.url);
 	check('client-side: the page was NOT reloaded', r.client_side);

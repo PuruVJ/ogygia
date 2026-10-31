@@ -70,7 +70,10 @@ test('an on-demand hole is not warmed by a pointer that merely RESTS where its c
 	try {
 		bootDev();
 		await new Promise((r) => setTimeout(r, 200));
-		expect(trusted_overs, `trusted pointerover inside the region on: ${trusted_overs.join(', ')}`).toHaveLength(0);
+		expect(
+			trusted_overs,
+			`trusted pointerover inside the region on: ${trusted_overs.join(', ')}`
+		).toHaveLength(0);
 		expect(calls, `fetched with no hover: ${calls.join(' | ')}`).toHaveLength(0);
 	} finally {
 		document.removeEventListener('pointerover', on_over, true);
@@ -256,21 +259,33 @@ test('a hole morph leaves an upgraded host’s attributes alone (keeps its popov
 	const pop = document.getElementById('p') as HTMLElement;
 	try {
 		bootDev();
-		expect(pop.getAttribute('popover'), 'the element gave itself popover at upgrade').toBe('manual');
+		expect(pop.getAttribute('popover'), 'the element gave itself popover at upgrade').toBe(
+			'manual'
+		);
 		pop.showPopover();
 		expect(pop.matches(':popover-open')).toBe(true);
 		region.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
 		await expect.poll(() => region.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		expect(calls).toHaveLength(1);
 		expect(document.getElementById('p')).toBe(pop); // morphed in place
-		expect(pop.getAttribute('popover'), 'the morph kept the attribute the element gave itself').toBe('manual');
+		expect(
+			pop.getAttribute('popover'),
+			'the morph kept the attribute the element gave itself'
+		).toBe('manual');
 		expect(pop.matches(':popover-open'), 'the popover fell out of the top layer').toBe(true);
 		// The render's OWN host attributes are NOT re-asserted onto an upgraded element (they are the
 		// runtime's now — re-asserting stale markers is what duplicated a live host).
-		expect(pop.hasAttribute('data-x'), 'the render does not add host attributes to an upgraded element').toBe(false);
+		expect(
+			pop.hasAttribute('data-x'),
+			'the render does not add host attributes to an upgraded element'
+		).toBe(false);
 		expect(document.getElementById('list'), 'but its children still morph in').not.toBeNull();
 	} finally {
-		try { pop.hidePopover(); } catch { /* already hidden */ }
+		try {
+			pop.hidePopover();
+		} catch {
+			/* already hidden */
+		}
 		window.fetch = real_fetch;
 	}
 });
@@ -285,10 +300,13 @@ test('an on-demand hole with prefetch="idle" warms at idle, keeps its fallback, 
 	const real_fetch = window.fetch;
 	window.fetch = async (input) => {
 		calls.push(String(input));
-		const res = new Response('<ul data-testid="menu"><li id="l1">Products<ul><li data-testid="l3">Drives</li></ul></li></ul>', {
-			status: 200,
-			headers: { 'content-type': 'text/html' }
-		});
+		const res = new Response(
+			'<ul data-testid="menu"><li id="l1">Products<ul><li data-testid="l3">Drives</li></ul></li></ul>',
+			{
+				status: 200,
+				headers: { 'content-type': 'text/html' }
+			}
+		);
 		Object.defineProperty(res, 'url', { value: location.origin + PREFETCH_ENDPOINT });
 		return res;
 	};
@@ -320,9 +338,12 @@ test('an on-demand hole with prefetch="idle" warms at idle, keeps its fallback, 
 // back is that handler's PAGE, not the fragment. Swapped in, it put a site's account page — its
 // scripts, its skeletons, a second header — into every hole of the header for signed-in visitors.
 // Refused: the fallback stands, no retry (the rule is deterministic), DEV names the culprit.
-const REFUSED_REDIRECT_ENDPOINT = '/__ogygia__?id=cafebabe0101&props=W3t9XQ&exp=9999999999&sig=stub';
-const REFUSED_DOCUMENT_ENDPOINT = '/__ogygia__?id=cafebabe0102&props=W3t9XQ&exp=9999999999&sig=stub';
-const ACCOUNT_PAGE = '<!DOCTYPE html>\n<html><head><meta name="ogygia-csr" content="true"></head><body><div class="skeleton">…</div><script>window.__sveltekit_x = {}</script></body></html>';
+const REFUSED_REDIRECT_ENDPOINT =
+	'/__ogygia__?id=cafebabe0101&props=W3t9XQ&exp=9999999999&sig=stub';
+const REFUSED_DOCUMENT_ENDPOINT =
+	'/__ogygia__?id=cafebabe0102&props=W3t9XQ&exp=9999999999&sig=stub';
+const ACCOUNT_PAGE =
+	'<!DOCTYPE html>\n<html><head><meta name="ogygia-csr" content="true"></head><body><div class="skeleton">…</div><script>window.__sveltekit_x = {}</script></body></html>';
 
 test('a hole answer that was REDIRECTED is refused: the fallback stands, no retry', async () => {
 	document.body.innerHTML =
@@ -333,7 +354,10 @@ test('a hole answer that was REDIRECTED is refused: the fallback stands, no retr
 	const real_fetch = window.fetch;
 	window.fetch = async (input) => {
 		calls.push(String(input));
-		const res = new Response('<p data-testid="served">not the region</p>', { status: 200, headers: { 'content-type': 'text/html' } });
+		const res = new Response('<p data-testid="served">not the region</p>', {
+			status: 200,
+			headers: { 'content-type': 'text/html' }
+		});
 		Object.defineProperty(res, 'url', { value: location.origin + '/account/' });
 		Object.defineProperty(res, 'redirected', { value: true });
 		return res;
@@ -359,7 +383,10 @@ test('a hole answer that is a WHOLE DOCUMENT is refused: nothing of it enters th
 	const real_fetch = window.fetch;
 	window.fetch = async (input) => {
 		calls.push(String(input));
-		const res = new Response(ACCOUNT_PAGE, { status: 200, headers: { 'content-type': 'text/html' } });
+		const res = new Response(ACCOUNT_PAGE, {
+			status: 200,
+			headers: { 'content-type': 'text/html' }
+		});
 		Object.defineProperty(res, 'url', { value: location.origin + REFUSED_DOCUMENT_ENDPOINT });
 		return res;
 	};

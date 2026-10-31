@@ -138,16 +138,30 @@
 		{#each list as node (node.kind === 'link' ? `L${node.href}` : node.kind === 'group' ? `G${node.label}` : node.slug)}
 			{#if node.kind === 'group'}
 				<li class="og-nav-group">
-					<span class="og-nav-label" style="view-transition-name: {vt_name('phg', node.label)}">{node.label}{#if node.badge}<span class="og-badge">{node.badge}</span>{/if}</span>
+					<span class="og-nav-label" style="view-transition-name: {vt_name('phg', node.label)}"
+						>{node.label}{#if node.badge}<span class="og-badge">{node.badge}</span>{/if}</span
+					>
 					{@render items(node.items)}
 				</li>
 			{:else if node.kind === 'link'}
-				<li><a class="og-nav-link og-nav-external" style="view-transition-name: {vt_name('phx', node.href)}" href={node.href}>{node.label}</a></li>
+				<li>
+					<a
+						class="og-nav-link og-nav-external"
+						style="view-transition-name: {vt_name('phx', node.href)}"
+						href={node.href}>{node.label}</a
+					>
+				</li>
 			{:else if item}
 				<li>{@render item(node, path === node.href)}</li>
 			{:else}
 				<li>
-					<a class="og-nav-link" class:og-active={path === node.href} aria-current={path === node.href ? 'page' : undefined} href={node.href} style="view-transition-name: {vt_name('phl', node.href)}">
+					<a
+						class="og-nav-link"
+						class:og-active={path === node.href}
+						aria-current={path === node.href ? 'page' : undefined}
+						href={node.href}
+						style="view-transition-name: {vt_name('phl', node.href)}"
+					>
 						<!-- The gliding highlight box: only the ACTIVE row carries it, and it holds
 						     `view-transition-name: og-nav-active` (in CSS), so the page cross-fade's View
 						     Transition slides it from the old active row to the new one. It sits BEHIND the

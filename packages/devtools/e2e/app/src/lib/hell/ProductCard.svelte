@@ -26,16 +26,26 @@
 <article data-product={vm.id} data-track={observer.summary()}>
 	<header>
 		<h3>{vm.title}</h3>
-		{#each vm.tags as tag (tag)}<Badge label={tag} tone={tag === 'din' ? 'info' : 'neutral'} />{/each}
+		{#each vm.tags as tag (tag)}<Badge
+				label={tag}
+				tone={tag === 'din' ? 'info' : 'neutral'}
+			/>{/each}
 		<!-- the design system's web components: rendered on the server by its hydrate package, given
 		     behaviour in the browser by its CDN script -->
-		<ion-chip color={vm.stock > 20 ? 'success' : 'warning'}>{vm.stock > 20 ? 'in stock' : 'low stock'}</ion-chip>
+		<ion-chip color={vm.stock > 20 ? 'success' : 'warning'}
+			>{vm.stock > 20 ? 'in stock' : 'low stock'}</ion-chip
+		>
 		<ion-badge color="primary">{vm.sku}</ion-badge>
 		<Rating value={vm.rating} />
 	</header>
 	<p class="summary">{@html vm.summaryHtml}</p>
 	<div class="desc">{@html vm.descriptionHtml}</div>
-	<p class="price"><b>{t('price.from', { price: formatPrice(vm.price, vm.currency) })}</b> · {t('product.in_stock', { n: vm.stock })}</p>
+	<p class="price">
+		<b>{t('price.from', { price: formatPrice(vm.price, vm.currency) })}</b> · {t(
+			'product.in_stock',
+			{ n: vm.stock }
+		)}
+	</p>
 	<SpecTable specs={vm.specs} prices={vm.prices} />
 	<h4>{t('product.docs')}</h4>
 	<ul class="docs">
@@ -49,7 +59,19 @@
 </article>
 
 <style>
-	article { border: 1px solid #ddd; padding: 12px; }
-	.desc { max-height: 6em; overflow: hidden; }
-	.docs { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; padding: 0; }
+	article {
+		border: 1px solid #ddd;
+		padding: 12px;
+	}
+	.desc {
+		max-height: 6em;
+		overflow: hidden;
+	}
+	.docs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		list-style: none;
+		padding: 0;
+	}
 </style>

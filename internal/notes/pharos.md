@@ -14,7 +14,7 @@ demos work inside the prose natively.
 Design stance (the agent-era reframe): VitePress optimizes for a human typing a one-liner. We
 optimize for **legibility and ceiling-less power** — agents write the wiring, humans read it. So
 verbose, explicit composition is fine, even preferred. The VitePress-style "init and go" experience
-is a *template* (`npx ogygia pharos init`), not library magic. The library's only job is getting
+is a _template_ (`npx ogygia pharos init`), not library magic. The library's only job is getting
 the primitives right.
 
 ## The primitive map
@@ -47,7 +47,7 @@ case, kept as sugar.
 
 - i18n = locale dimension: outlines weaving locale corpora. Versioning = version dimension:
   outlines weaving version corpora. Neither is a plugin; both are instances of the weave. (Later.)
-- API reference autogen, git changelogs, CMS content: all just *sources* minting collections
+- API reference autogen, git changelogs, CMS content: all just _sources_ minting collections
   (`defineSource`). Pharos never knows where entries came from.
 - `+meta.json` directory metadata is itself a collection (json format), fed to the outline.
 - Draft mode is the collection `filter`. Filtered entries vanish from every layer for free.
@@ -337,6 +337,7 @@ Strategic: enable an ECOSYSTEM of ogygia-hinted component libraries (Calypso is 
 that owns interactive chrome via `import CalypsoBar with { wake }`). Found while building Calypso:
 a `wake:'load'` island declared INSIDE a library component didn't hydrate in production (dev worked;
 prod 404'd `ogygia-island.<hash>.js`). Root cause, in `packages/ogygia/src/vite/index.ts`:
+
 - The client leg emits deterministic island chunks (`fileName: islandChunkFileName(iid)`) ONLY in a
   `buildStart` loop over islands found by `prescan()`, which walks the APP's `src`. Lib hosts live
   outside app `src` → not prescanned → not emitted; Rolldown then content-hashed the entry to a
@@ -344,6 +345,7 @@ prod 404'd `ogygia-island.<hash>.js`). Root cause, in `packages/ogygia/src/vite/
 - Also the transform hook SKIPPED all `/node_modules/*.svelte` outright.
 
 Fix (two parts, verified: prod island hydrates + all 33 e2e still green):
+
 - **Part A — ecosystem gate:** the transform hook now processes a `node_modules` `.svelte` IF it
   carries an ogygia hint (`has_island_hint`: cheap regex for `with { wake|render|region|preset }`),
   so libs opt in without taxing every lib file.
@@ -424,19 +426,22 @@ clicks 5 → 6. Calypso's `actions` now cross into the mobile sheet footer alive
 
 Calypso's current styling is explicitly bad (user: "styling wise so bad"). When we do the design
 system, the bar is how ALIVE Fumadocs feels, not VitePress flatness. Concretely:
+
 - Clerk-style TOC: scroll progress as a moving thumb on the rail (motion tied to reading position).
 - Micro-transitions everywhere: animated sidebar collapse, hover glow, springy search dialog.
 - Code blocks as instruments: copy, framework/pm tabs with SITE-WIDE tab memory, annotations.
 - Depth: gradients, layered surfaces, real shadows — air, not paper.
 - Search dialog as a first-class scene.
-Philosophical kinship: Fumadocs is the only surveyed framework treating conventions as config knobs
-(suffix vs dir, prefix vs bare) — same kit-not-monolith soul as pharos.
-Our angle: these are scroll/state behaviors on csr=false pages — `script()` inline serializer +
-tiny islands can match the aliveness at a fraction of the JS. That's the flex.
+  Philosophical kinship: Fumadocs is the only surveyed framework treating conventions as config knobs
+  (suffix vs dir, prefix vs bare) — same kit-not-monolith soul as pharos.
+  Our angle: these are scroll/state behaviors on csr=false pages — `script()` inline serializer +
+  tiny islands can match the aliveness at a fraction of the JS. That's the flex.
 
 ## Design-system overhaul plan (loop task, user 2026-08-13: "extremely great, consistent, lively, beautiful")
+
 Scope = the LANGUAGE (theme.css tokens + `.ph-*` voice), NOT apps/docs, NOT Calypso (Calypso is one
 FORM composing the blocks). Baseline gaps vs the Fumadocs north star:
+
 - Color is thin (accent + bg/text/line). Need: neutral scale, accent scale, semantic layers, real
   dark mode with layered surfaces + subtle gradients (depth, not flat paper).
 - No motion system — hovers are instant. Need micro-transitions everywhere (150–250ms, reduced-motion safe).
@@ -444,11 +449,12 @@ FORM composing the blocks). Baseline gaps vs the Fumadocs north star:
 - Single radius, one shadow. Need radius scale + elevation/shadow scale.
 - TOC is a flat list → clerk-style scroll thumb on the rail.
 - Focus states are border-only → proper focus rings.
-Method (needs eyes): build a KITCHEN-SINK route rendering every brick (sidebar/toc/doc/code/search/
-pager/suggested/theme-toggle/sheet), rewrite theme.css token system + brick refinements + motion,
-then screenshot light AND dark via playwright and iterate until genuinely beautiful.
+  Method (needs eyes): build a KITCHEN-SINK route rendering every brick (sidebar/toc/doc/code/search/
+  pager/suggested/theme-toggle/sheet), rewrite theme.css token system + brick refinements + motion,
+  then screenshot light AND dark via playwright and iterate until genuinely beautiful.
 
 ## Loop working-state (2026-08-13 overnight autonomous run)
+
 - Dev server for design iteration: pharos-playground `pnpm dev` (port 5274). Real page to screenshot:
   `http://localhost:5274/intro/welcome` (root `/` also works). Screenshot light+dark via playwright
   (colorScheme), Read the PNG, iterate. VERIFY IN BROWSER AFTER EVERY STEP (user directive).

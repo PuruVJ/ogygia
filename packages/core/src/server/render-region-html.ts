@@ -18,7 +18,11 @@ const REGION_CSS_ATTR = 'data-ogygia-region-css';
 /** context.ts's LAKE key (`isInLake`), by its global name — context.ts reaches virtual modules. */
 const LAKE_SUBTREE_KEY = Symbol.for('ogygia.lake-subtree');
 
-export async function render_region_html(component: Component<Record<string, unknown>>, module_url: string, props: Record<string, unknown>): Promise<string> {
+export async function render_region_html(
+	component: Component<Record<string, unknown>>,
+	module_url: string,
+	props: Record<string, unknown>
+): Promise<string> {
 	await kit_page_ready();
 	// (its HTML reaches the page opaque to Kit — fetched, or morphed in — so it renders as a lake's
 	// inside: its islands emit real regions the runtime wakes, as region.ts's inline render does)
@@ -26,6 +30,7 @@ export async function render_region_html(component: Component<Record<string, unk
 	context.set(LAKE_SUBTREE_KEY, true);
 	const r = await render(component, { props, context });
 	let own = '';
-	for (const href of islandCss(module_url)) own += '<link rel="stylesheet" href="' + href + '" ' + REGION_CSS_ATTR + '>';
+	for (const href of islandCss(module_url))
+		own += '<link rel="stylesheet" href="' + href + '" ' + REGION_CSS_ATTR + '>';
 	return own + region_css_tags(r.head) + r.body + kit_page_facts_tail();
 }

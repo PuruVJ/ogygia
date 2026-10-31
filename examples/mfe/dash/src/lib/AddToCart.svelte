@@ -9,5 +9,12 @@
 </button>
 
 <style>
-	button { background: #16a34a; color: white; border: 0; border-radius: 6px; padding: 0.5rem 1rem; cursor: pointer; }
+	button {
+		background: #16a34a;
+		color: white;
+		border: 0;
+		border-radius: 6px;
+		padding: 0.5rem 1rem;
+		cursor: pointer;
+	}
 </style>

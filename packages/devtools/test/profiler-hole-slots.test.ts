@@ -3,8 +3,27 @@ import { hole_slots } from '../src/profiler/hole-slots.ts';
 import type { RequestEntry } from '../src/profiler/report.ts';
 
 const req = (ms: number, hole?: RequestEntry['hole'], og?: RequestEntry['og']): RequestEntry =>
-	({ ts: 0, method: 'GET', path: '/x', route: null, status: 200, ms, cpu_ms: 0, inflight: 0, net_ms: 0, net_count: 0, ...(hole ? { hole } : {}), ...(og ? { og } : {}) }) as RequestEntry;
-const hole = (id: string, queue_ms?: number, cache: 'hit' | 'miss' | 'none' = 'none') => ({ kind: 'hole' as const, id, cache, ttl: 0, ...(queue_ms !== undefined ? { queue_ms } : {}) });
+	({
+		ts: 0,
+		method: 'GET',
+		path: '/x',
+		route: null,
+		status: 200,
+		ms,
+		cpu_ms: 0,
+		inflight: 0,
+		net_ms: 0,
+		net_count: 0,
+		...(hole ? { hole } : {}),
+		...(og ? { og } : {})
+	}) as RequestEntry;
+const hole = (id: string, queue_ms?: number, cache: 'hit' | 'miss' | 'none' = 'none') => ({
+	kind: 'hole' as const,
+	id,
+	cache,
+	ttl: 0,
+	...(queue_ms !== undefined ? { queue_ms } : {})
+});
 
 describe('hole_slots', () => {
 	it('no hole requests: nothing to say', () => {
@@ -12,7 +31,19 @@ describe('hole_slots', () => {
 	});
 
 	it('names who held the slots the queued holes waited for, render counted without the wait', () => {
-		const page = req(40, undefined, { hole_rows: [{ id: 'slow', name: 'SlowHole', props: '{"n":1}', when: 'load', hydrate: null, ttl: 0, count: 1 }] } as never);
+		const page = req(40, undefined, {
+			hole_rows: [
+				{
+					id: 'slow',
+					name: 'SlowHole',
+					props: '{"n":1}',
+					when: 'load',
+					hydrate: null,
+					ttl: 0,
+					count: 1
+				}
+			]
+		} as never);
 		const ring = [
 			page,
 			req(900, hole('slow', 0)),
@@ -36,7 +67,9 @@ describe('hole_slots', () => {
 		expect(quick.hits).toBe(1);
 		expect(quick.render_ms).toBe(30);
 		expect(s.summary).toContain('1 of 6 hole renders waited for a render slot, 880 ms on average');
-		expect(s.summary).toContain('held mostly by SlowHole {"n":1} (99% of slot time, 900 ms a render)');
+		expect(s.summary).toContain(
+			'held mostly by SlowHole {"n":1} (99% of slot time, 900 ms a render)'
+		);
 		expect(s.summary).toContain('renders 4 holes at a time');
 	});
 
@@ -52,8 +85,19 @@ describe('hole_slots', () => {
 	});
 
 	it('several copies of one hole (different props): the component alone', () => {
-		const rows = [1, 2].map((n) => ({ id: 'q', name: 'QueueHole', props: `{"n":${n}}`, when: 'load', hydrate: null, ttl: 0, count: 1 }));
-		const s = hole_slots([req(40, undefined, { hole_rows: rows } as never), req(900, hole('q', 0))])!;
+		const rows = [1, 2].map((n) => ({
+			id: 'q',
+			name: 'QueueHole',
+			props: `{"n":${n}}`,
+			when: 'load',
+			hydrate: null,
+			ttl: 0,
+			count: 1
+		}));
+		const s = hole_slots([
+			req(40, undefined, { hole_rows: rows } as never),
+			req(900, hole('q', 0))
+		])!;
 		expect(s.rows[0].name).toBe('QueueHole');
 	});
 

@@ -16,24 +16,48 @@
 	type Require = (spec: string) => Linked;
 
 	const origin = typeof location !== 'undefined' ? location.origin : '*';
-	const post = (msg: Record<string, unknown>) => window.parent?.postMessage({ __obs: true, ...msg }, origin);
+	const post = (msg: Record<string, unknown>) =>
+		window.parent?.postMessage({ __obs: true, ...msg }, origin);
 
 	/** ESM→CJS eval of a svelte-compiled CLIENT module, linking bare + relative specifiers via `req`. */
 	function eval_client(code: string, req: Require, sc: Linked): Linked {
 		const body = code
-			.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
-			.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;')
-			.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
-			.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const {$1} = __require("$2");')
+			.replace(
+				/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const $1 = __require("$2");'
+			)
+			.replace(
+				/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const __m_$1 = __require("$3"); const $1 = __m_$1.default; const {$2} = __m_$1;'
+			)
+			.replace(
+				/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const $1 = (__require("$2")).default;'
+			)
+			.replace(
+				/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+				'const {$1} = __require("$2");'
+			)
 			.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
 			.replace(/export\s+default\s+/g, '__exports.default = ')
 			.replace(/export\s*\{([^}]+)\}\s*;?/g, (_m: string, names: string) =>
-				names.split(',').map((n: string) => { const p = n.trim().split(/\s+as\s+/); return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`; }).join(' ')
+				names
+					.split(',')
+					.map((n: string) => {
+						const p = n.trim().split(/\s+as\s+/);
+						return `__exports[${JSON.stringify((p[1] || p[0]).trim())}] = ${p[0].trim()};`;
+					})
+					.join(' ')
 			)
 			.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
 		const __exports: Linked = {};
 		// eslint-disable-next-line no-new-func
-		new Function('__require', '__exports', '__sc', body.replace(/__require\("svelte\/internal\/client"\)/g, '__sc'))(req, __exports, sc);
+		new Function(
+			'__require',
+			'__exports',
+			'__sc',
+			body.replace(/__require\("svelte\/internal\/client"\)/g, '__sc')
+		)(req, __exports, sc);
 		return __exports;
 	}
 
@@ -76,7 +100,11 @@
 			const Comp = eval_client(modules[file], require, sc).default;
 			const key = 'k' + Math.random().toString(36).slice(2);
 			store[key] = Comp;
-			const blob = URL.createObjectURL(new Blob([`export default window.__OBS_ISLANDS__[${JSON.stringify(key)}]`], { type: 'text/javascript' }));
+			const blob = URL.createObjectURL(
+				new Blob([`export default window.__OBS_ISLANDS__[${JSON.stringify(key)}]`], {
+					type: 'text/javascript'
+				})
+			);
 			blobs.push(blob);
 			region.setAttribute('entry', blob);
 		}
@@ -130,11 +158,21 @@
 			(window as Any).__OBS_DEFER__ = {};
 			const orig = window.fetch.bind(window);
 			window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
-				const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+				const url =
+					typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 				const m = /\/__obs_defer\/([^/?#]+)/.exec(url);
 				if (m) {
 					const dhtml = ((window as Any).__OBS_DEFER__ || {})[m[1]];
-					if (dhtml != null) return new Promise((res) => setTimeout(() => res(new Response(dhtml, { status: 200, headers: { 'content-type': 'text/html' } })), 260));
+					if (dhtml != null)
+						return new Promise((res) =>
+							setTimeout(
+								() =>
+									res(
+										new Response(dhtml, { status: 200, headers: { 'content-type': 'text/html' } })
+									),
+								260
+							)
+						);
 					return Promise.resolve(new Response('', { status: 404 }));
 				}
 				return orig(input, init);
@@ -175,7 +213,11 @@
 			post({ obsType: 'navReq', entry: link.getAttribute('data-obs-nav') || '' });
 		};
 		app().addEventListener('click', onNavClick);
-		woke_obs.observe(app(), { attributes: true, attributeFilter: ['data-hydrated'], subtree: true });
+		woke_obs.observe(app(), {
+			attributes: true,
+			attributeFilter: ['data-hydrated'],
+			subtree: true
+		});
 
 		const unmount_kit = () => {
 			if (mountedApp) {
@@ -218,7 +260,11 @@
 			const App = eval_client(modules[entry], require, svelteClient).default;
 			if (typeof App === 'function') mountedApp = mount(App as Any, { target: el });
 		}
-		function render(html: string, modules: Record<string, string>, deferred: Record<string, string>) {
+		function render(
+			html: string,
+			modules: Record<string, string>,
+			deferred: Record<string, string>
+		) {
 			if (!svelteClient) return;
 			unmount_kit();
 			(window as Any).__OBS_DEFER__ = deferred || {};
@@ -236,21 +282,38 @@
 			for (const node of el.querySelectorAll('ogygia-region[live][data-og-fp]')) {
 				const fp = node.getAttribute('data-og-fp')!;
 				liveNodes.set(fp, node as Element & { applyLive?: (d: unknown) => void });
-				(node as Any).applyLive?.({ id: fp, module: '', props: {}, html: node.innerHTML, url: '/__obs_live/' + fp });
+				(node as Any).applyLive?.({
+					id: fp,
+					module: '',
+					props: {},
+					html: node.innerHTML,
+					url: '/__obs_live/' + fp
+				});
 			}
 		}
 		function nav(html: string, modules: Record<string, string>, deferred: Record<string, string>) {
 			if (!svelteClient || !reconcileMod.reconcile_body) return render(html, modules, deferred);
-			(window as Any).__OBS_DEFER__ = { ...((window as Any).__OBS_DEFER__ || {}), ...(deferred || {}) };
+			(window as Any).__OBS_DEFER__ = {
+				...((window as Any).__OBS_DEFER__ || {}),
+				...(deferred || {})
+			};
 			const { container } = link_page_dom(html, modules, svelteClient);
 			for (const r of container.querySelectorAll('ogygia-region[data-og-fp]')) {
 				const fp = r.getAttribute('data-og-fp');
 				if (fp) fpNames[fp] = r.getAttribute('data-name') || fp;
 			}
 			const el = app();
-			const liveNames = [...el.querySelectorAll('ogygia-region[data-name]')].map((r) => r.getAttribute('data-name') || '');
-			const nextNames = [...container.querySelectorAll('ogygia-region[data-name]')].map((r) => r.getAttribute('data-name') || '');
-			const keepNames = new Set([...el.querySelectorAll('ogygia-region[data-ogygia-keep]')].map((r) => r.getAttribute('data-name') || ''));
+			const liveNames = [...el.querySelectorAll('ogygia-region[data-name]')].map(
+				(r) => r.getAttribute('data-name') || ''
+			);
+			const nextNames = [...container.querySelectorAll('ogygia-region[data-name]')].map(
+				(r) => r.getAttribute('data-name') || ''
+			);
+			const keepNames = new Set(
+				[...el.querySelectorAll('ogygia-region[data-ogygia-keep]')].map(
+					(r) => r.getAttribute('data-name') || ''
+				)
+			);
 			renderT0 = performance.now();
 			reconcileMod.reconcile_body(el, container, reconcileMod.morph_children);
 			apply_lens(); // re-stamp bytes on the reconciled DOM (kept regions keep their +Xms)
@@ -286,7 +349,14 @@
 			} else if (d.obsType === 'theme') apply_theme(); // parent set og-theme; re-read + apply
 			else if (d.obsType === 'liveTick') {
 				const node = liveNodes.get(d.fp);
-				if (node && d.html) (node as Any).applyLive?.({ id: d.fp, module: '', props: {}, html: d.html, url: '/__obs_live/' + d.fp });
+				if (node && d.html)
+					(node as Any).applyLive?.({
+						id: d.fp,
+						module: '',
+						props: {},
+						html: d.html,
+						url: '/__obs_live/' + d.fp
+					});
 			}
 		};
 		window.addEventListener('message', onMsg);
@@ -294,7 +364,10 @@
 		Promise.all([import('svelte/internal/client'), import('ogygia/internal/reconcile')])
 			.then(([sc, om]) => {
 				svelteClient = sc as Linked;
-				reconcileMod = { reconcile_body: (om as Any).reconcile_body, morph_children: (om as Any).morph_children };
+				reconcileMod = {
+					reconcile_body: (om as Any).reconcile_body,
+					morph_children: (om as Any).morph_children
+				};
 				post({ obsType: 'ready' }); // tell the parent to send the first render
 			})
 			.catch((err) => post({ obsType: 'error', message: String(err) }));

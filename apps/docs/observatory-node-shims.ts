@@ -27,7 +27,13 @@ const URL_STUB = '\0observatory:url-stub';
 const EMPTY_STUB = '\0observatory:empty-stub';
 // node builtins that ONLY the transform graph needs and we shim precisely; anything else node:* that
 // leaks into the client (e.g. from a dep's dead branch) gets an inert empty module so it never throws.
-const KNOWN_EMPTY = new Set(['node:child_process', 'node:os', 'node:worker_threads', 'node:tty', 'node:util']);
+const KNOWN_EMPTY = new Set([
+	'node:child_process',
+	'node:os',
+	'node:worker_threads',
+	'node:tty',
+	'node:util'
+]);
 
 export function observatoryNodeShims(): Plugin {
 	return {

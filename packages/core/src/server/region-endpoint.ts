@@ -85,7 +85,6 @@ export function known_region_fps(): ReadonlySet<string> {
 	return set;
 }
 
-
 /**
  * Shared minting core for signed region capabilities — the ONE source of truth for the
  * `/__ogygia__?id&props&exp&sig` URL, its MAC message, TTL policy, and session sealing. Both held regions

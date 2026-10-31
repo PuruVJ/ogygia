@@ -13,7 +13,11 @@
  * islands scrolled into view: each woke 62–84 ms late, with nothing ahead of it).
  */
 type Callback = (intersecting: boolean) => void;
-type Shared = { io: IntersectionObserver; callbacks: WeakMap<Element, Set<Callback>>; last: WeakMap<Element, boolean> };
+type Shared = {
+	io: IntersectionObserver;
+	callbacks: WeakMap<Element, Set<Callback>>;
+	last: WeakMap<Element, boolean>;
+};
 
 const observers = new Map<string, Shared>();
 

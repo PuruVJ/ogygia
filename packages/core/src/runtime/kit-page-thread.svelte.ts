@@ -100,11 +100,21 @@ function await_bridge(cb: (bridge: Bridge) => void): void {
 	const settle = (v: unknown) => {
 		value = v;
 		// Back to a plain data property: the accessor was only ever a one-shot latch.
-		Object.defineProperty(g, KIT_PAGE_KEY, { value: v, writable: true, configurable: true, enumerable: true });
+		Object.defineProperty(g, KIT_PAGE_KEY, {
+			value: v,
+			writable: true,
+			configurable: true,
+			enumerable: true
+		});
 		cb(v as Bridge);
 	};
 	try {
-		Object.defineProperty(g, KIT_PAGE_KEY, { configurable: true, enumerable: true, get: () => value, set: settle });
+		Object.defineProperty(g, KIT_PAGE_KEY, {
+			configurable: true,
+			enumerable: true,
+			get: () => value,
+			set: settle
+		});
 	} catch {
 		// A global that refuses accessors (a sealed sandbox): the same contract, observed on a timer.
 		const tick = () => (g[KIT_PAGE_KEY] != null ? settle(g[KIT_PAGE_KEY]) : setTimeout(tick, 50));

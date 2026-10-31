@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { compile } from 'svelte/compiler';
 import { async_twin_redirect, svelte_async_enabled, ASYNC_TWINS } from '../src/vite/late-island.ts';
 
-const read = (f: string) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8');
+const read = (f: string) =>
+	readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8');
 
 describe('async twins', () => {
 	it('Region imports each plain one, by the path the plugin redirects', () => {
@@ -23,7 +24,9 @@ describe('async twins', () => {
 			const plain = plain_import.slice(2);
 			for (const generate of ['client', 'server'] as const) {
 				expect(() => compile(read(plain), { filename: plain, generate })).not.toThrow();
-				expect(() => compile(read(twin), { filename: twin, generate, experimental: { async: true } })).not.toThrow();
+				expect(() =>
+					compile(read(twin), { filename: twin, generate, experimental: { async: true } })
+				).not.toThrow();
 			}
 			expect(() => compile(read(twin), { filename: twin, generate: 'client' })).toThrow();
 		}
@@ -31,8 +34,12 @@ describe('async twins', () => {
 
 	it('the redirect: only Region’s twin imports, to the awaiting file beside that copy of Region', () => {
 		const regions = new Set(['/pkg/src/Region.svelte', '/pkg/dist/Region.svelte']);
-		expect(async_twin_redirect('./LateIsland.svelte', '/pkg/src/Region.svelte', regions)).toBe('/pkg/src/LateIslandAwait.svelte');
-		expect(async_twin_redirect('./PromiseRegion.svelte', '/pkg/dist/Region.svelte', regions)).toBe('/pkg/dist/PromiseRegionAwait.svelte');
+		expect(async_twin_redirect('./LateIsland.svelte', '/pkg/src/Region.svelte', regions)).toBe(
+			'/pkg/src/LateIslandAwait.svelte'
+		);
+		expect(async_twin_redirect('./PromiseRegion.svelte', '/pkg/dist/Region.svelte', regions)).toBe(
+			'/pkg/dist/PromiseRegionAwait.svelte'
+		);
 		// another importer of a file by the same name, another import, no importer: untouched
 		expect(async_twin_redirect('./LateIsland.svelte', '/app/src/Thing.svelte', regions)).toBeNull();
 		expect(async_twin_redirect('./Other.svelte', '/pkg/src/Region.svelte', regions)).toBeNull();
@@ -40,7 +47,15 @@ describe('async twins', () => {
 	});
 
 	it('async mode is read off vite-plugin-svelte’s resolved options', () => {
-		const vps = (async?: boolean) => [{ name: 'other' }, { name: 'vite-plugin-svelte:config', api: { options: { compilerOptions: async === undefined ? {} : { experimental: { async } } } } }];
+		const vps = (async?: boolean) => [
+			{ name: 'other' },
+			{
+				name: 'vite-plugin-svelte:config',
+				api: {
+					options: { compilerOptions: async === undefined ? {} : { experimental: { async } } }
+				}
+			}
+		];
 		expect(svelte_async_enabled(vps(true))).toBe(true);
 		expect(svelte_async_enabled(vps(false))).toBe(false);
 		expect(svelte_async_enabled(vps())).toBe(false);

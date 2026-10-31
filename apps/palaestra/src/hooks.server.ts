@@ -63,7 +63,11 @@ const auth_wall: Handle = async ({ event, resolve }) => {
 // answers the default path any more.
 const moved_endpoint = process.env.OGYGIA_ENDPOINT;
 const proxy_front: Handle = async ({ event, resolve }) => {
-	if (moved_endpoint && event.url.pathname.endsWith('/__ogygia__') && !event.url.pathname.endsWith(moved_endpoint))
+	if (
+		moved_endpoint &&
+		event.url.pathname.endsWith('/__ogygia__') &&
+		!event.url.pathname.endsWith(moved_endpoint)
+	)
 		return new Response('not forwarded', { status: 404 });
 	return resolve(event);
 };

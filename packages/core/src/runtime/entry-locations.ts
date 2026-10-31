@@ -43,7 +43,11 @@ function absolute(url: string, base?: string): string {
 }
 
 /** Remember where an entry is served from. `base`: the document the pair was read from. */
-export function note_entry_location(entry: string | null | undefined, src: string | null | undefined, base?: string): void {
+export function note_entry_location(
+	entry: string | null | undefined,
+	src: string | null | undefined,
+	base?: string
+): void {
 	if (!entry || !src || src === entry) return;
 	locations.set(absolute(entry, base), absolute(src, base));
 }
@@ -105,7 +109,10 @@ function fresh_identity_url(entry: string, base?: string): string | null {
  * the location failing, once, the identity fetched fresh — so an island on a page that outlived its
  * build still wakes, on the current code. No location known → the error stands.
  */
-export function import_entry<T>(entry: string, url: string = entry_location(entry) ?? entry): Promise<T> {
+export function import_entry<T>(
+	entry: string,
+	url: string = entry_location(entry) ?? entry
+): Promise<T> {
 	const loaded = import(/* @vite-ignore */ url) as Promise<T>;
 	const fresh = fresh_identity_url(entry);
 	if (!fresh) return loaded;

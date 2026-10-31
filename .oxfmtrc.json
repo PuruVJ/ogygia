@@ -1,13 +1,28 @@
 {
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
 	"useTabs": true,
 	"singleQuote": true,
 	"printWidth": 100,
 	"trailingComma": "none",
+	"svelte": true,
+	"associations": [{ "files": ["**/*.svx"], "language": "markdown" }],
+	"overrides": [
+		{
+			"files": ["**/*.md", "**/*.svx", "**/*.mdx"],
+			"options": { "embeddedLanguageFormatting": "off" }
+		}
+	],
 	"ignorePatterns": [
 		"**/dist/**",
 		"**/build/**",
 		"**/.svelte-kit/**",
+		"**/.vercel/**",
 		"svelte/**",
-		"kit/**"
+		"kit/**",
+		"pnpm-lock.yaml",
+		"**/CHANGELOG.md",
+		"internal/bench/results/**",
+		"apps/docs/src/lib/bench/results.json",
+		"apps/palaestra/e2e/bundle-size.snapshot.json"
 	]
 }

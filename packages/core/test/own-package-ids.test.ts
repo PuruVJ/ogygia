@@ -6,7 +6,12 @@
 // in `optimizeDeps.exclude`, the scanner could not resolve `./Shell.svelte` inside it, and the whole
 // scan failed (nothing pre-bundled).
 import { describe, test, expect } from 'vitest';
-import { id_dir, scan_entry_pattern, PKG_ROOT_ID, OGYGIA_REGION_MODULES } from '../dist/vite/paths.js';
+import {
+	id_dir,
+	scan_entry_pattern,
+	PKG_ROOT_ID,
+	OGYGIA_REGION_MODULES
+} from '../dist/vite/paths.js';
 
 describe('own-package ids', () => {
 	test('a Windows root is the forward-slash prefix of the ids inside it', () => {
@@ -18,7 +23,9 @@ describe('own-package ids', () => {
 	test('one trailing slash, with or without one given; a sibling package is not inside', () => {
 		expect(id_dir('/x/node_modules/ogygia')).toBe('/x/node_modules/ogygia/');
 		expect(id_dir('/x/node_modules/ogygia/')).toBe('/x/node_modules/ogygia/');
-		expect('/x/node_modules/ogygia-extra/index.js'.startsWith(id_dir('/x/node_modules/ogygia'))).toBe(false);
+		expect(
+			'/x/node_modules/ogygia-extra/index.js'.startsWith(id_dir('/x/node_modules/ogygia'))
+		).toBe(false);
 	});
 
 	test('the package root and its precomputed module ids are posix, slash-terminated', () => {
@@ -32,10 +39,17 @@ describe('dep-scan entries', () => {
 	test("ogygia's own islands are never an entry — on either separator", () => {
 		expect(scan_entry_pattern(PKG_ROOT_ID + 'dist/profiler/ui/Compare.svelte')).toBeNull();
 		const win_root = id_dir('C:\\dev\\node_modules\\ogygia');
-		expect(scan_entry_pattern('C:\\dev\\node_modules\\ogygia\\dist\\profiler\\ui\\Sidebar.svelte', win_root)).toBeNull();
+		expect(
+			scan_entry_pattern(
+				'C:\\dev\\node_modules\\ogygia\\dist\\profiler\\ui\\Sidebar.svelte',
+				win_root
+			)
+		).toBeNull();
 	});
 
-	test("an app island is, posix and glob-escaped", () => {
-		expect(scan_entry_pattern('C:\\app\\src\\routes\\(shop)\\[id]\\Card.svelte', '/og/')).toBe('C:/app/src/routes/\\(shop\\)/\\[id\\]/Card.svelte');
+	test('an app island is, posix and glob-escaped', () => {
+		expect(scan_entry_pattern('C:\\app\\src\\routes\\(shop)\\[id]\\Card.svelte', '/og/')).toBe(
+			'C:/app/src/routes/\\(shop\\)/\\[id\\]/Card.svelte'
+		);
 	});
 });

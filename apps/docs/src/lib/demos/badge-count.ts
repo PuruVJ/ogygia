@@ -4,4 +4,5 @@
 const g = globalThis as unknown as { __ogygia_docs_badge__?: number };
 g.__ogygia_docs_badge__ ??= 0;
 export const readBadgeCount = () => g.__ogygia_docs_badge__ as number;
-export const bumpBadgeCount = () => (g.__ogygia_docs_badge__ = (g.__ogygia_docs_badge__ as number) + 1);
+export const bumpBadgeCount = () =>
+	(g.__ogygia_docs_badge__ = (g.__ogygia_docs_badge__ as number) + 1);

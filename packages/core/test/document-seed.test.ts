@@ -14,19 +14,35 @@ const SEED_RE = /<script type="application\/ogygia-page" data-ogygia-page([^>]*)
 describe('document() page seed', () => {
 	it('JSON lane: a plain pageState goes out as JSON and parses back', async () => {
 		const res = await document(region(Tiny as never, { n: 1 } as never), {
-			pageState: { url: { href: 'http://x/a?q=<b>' }, params: { id: '1' }, route: { id: '/a' }, status: 200, data: { site: 'ACME' } }
+			pageState: {
+				url: { href: 'http://x/a?q=<b>' },
+				params: { id: '1' },
+				route: { id: '/a' },
+				status: 200,
+				data: { site: 'ACME' }
+			}
 		});
 		const html = await res.text();
 		const m = SEED_RE.exec(html);
 		expect(m, 'the seed script is in the head').not.toBeNull();
 		expect(m![1]).toContain('data-og-format="json"');
 		expect(m![2]).not.toContain('[object');
-		expect(JSON.parse(m![2])).toMatchObject({ url: 'http://x/a?q=<b>', params: { id: '1' }, data: { site: 'ACME' } });
+		expect(JSON.parse(m![2])).toMatchObject({
+			url: 'http://x/a?q=<b>',
+			params: { id: '1' },
+			data: { site: 'ACME' }
+		});
 	});
 
 	it('devalue lane: a Date in the data keeps devalue, no format attribute', async () => {
 		const res = await document(region(Tiny as never, { n: 1 } as never), {
-			pageState: { url: { href: 'http://x/a' }, params: {}, route: { id: '/a' }, status: 200, data: { at: new Date(9) } }
+			pageState: {
+				url: { href: 'http://x/a' },
+				params: {},
+				route: { id: '/a' },
+				status: 200,
+				data: { at: new Date(9) }
+			}
 		});
 		const m = SEED_RE.exec(await res.text())!;
 		expect(m[1]).not.toContain('data-og-format');

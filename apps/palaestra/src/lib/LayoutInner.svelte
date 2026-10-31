@@ -33,7 +33,12 @@
 	});
 </script>
 
-<div data-layout-inner data-dir={currentDir} data-mounted={mounted} data-boot-ready={bootStore.ready}>
+<div
+	data-layout-inner
+	data-dir={currentDir}
+	data-mounted={mounted}
+	data-boot-ready={bootStore.ready}
+>
 	<header data-chrome>Header · dir={currentDir} · app={data?.appName}</header>
 	{@render children?.()}
 	<footer data-chrome>Footer</footer>

@@ -51,14 +51,18 @@ const catalogs = new Map();
 			continue;
 		}
 		const indent = section === '' ? 2 : 4;
-		const entry = section !== null && new RegExp(`^ {${indent}}('[^']+'|"[^"]+"|[^\\s:#]+):\\s*(.+?)\\s*$`).exec(line);
+		const entry =
+			section !== null &&
+			new RegExp(`^ {${indent}}('[^']+'|"[^"]+"|[^\\s:#]+):\\s*(.+?)\\s*$`).exec(line);
 		if (!entry || entry[2].startsWith('#')) continue;
 		if (!catalogs.has(section)) catalogs.set(section, new Map());
 		catalogs.get(section).set(unquote(entry[1]), unquote(entry[2]));
 	}
 }
 const real_range = (name, spec) =>
-	spec?.startsWith('catalog:') ? (catalogs.get(spec.slice('catalog:'.length))?.get(name) ?? spec) : spec;
+	spec?.startsWith('catalog:')
+		? (catalogs.get(spec.slice('catalog:'.length))?.get(name) ?? spec)
+		: spec;
 
 // ── the published packages ──
 const published = fs
@@ -67,7 +71,9 @@ const published = fs
 	.filter((file) => fs.existsSync(file))
 	.map((file) => JSON.parse(fs.readFileSync(file, 'utf8')))
 	.filter((pkg) => !pkg.private)
-	.sort((a, b) => (a.name === 'ogygia' ? -1 : b.name === 'ogygia' ? 1 : a.name.localeCompare(b.name)));
+	.sort((a, b) =>
+		a.name === 'ogygia' ? -1 : b.name === 'ogygia' ? 1 : a.name.localeCompare(b.name)
+	);
 
 const audit = json_of(['audit', '--json']);
 
@@ -78,7 +84,8 @@ function index(name, node) {
 	const key = node.path ?? `${name}@${node.version}`;
 	let n = nodes.get(key);
 	if (!n) nodes.set(key, (n = { name, version: node.version, children: new Set() }));
-	for (const [child, sub] of Object.entries(node.dependencies ?? {})) n.children.add(index(child, sub));
+	for (const [child, sub] of Object.entries(node.dependencies ?? {}))
+		n.children.add(index(child, sub));
 	return key;
 }
 
@@ -87,7 +94,11 @@ const reached = new Map();
 for (const pkg of published) {
 	const [tree] = json_of(['list', '--filter', pkg.name, '--json', '--depth', 'Infinity']);
 	const kind_of = (name) =>
-		pkg.peerDependencies?.[name] !== undefined ? 'peer' : pkg.dependencies?.[name] !== undefined ? 'dependency' : 'dev';
+		pkg.peerDependencies?.[name] !== undefined
+			? 'peer'
+			: pkg.dependencies?.[name] !== undefined
+				? 'dependency'
+				: 'dev';
 	for (const group of ['dependencies', 'devDependencies', 'optionalDependencies']) {
 		for (const [name, node] of Object.entries(tree?.[group] ?? {})) {
 			// a sibling workspace package (`workspace:`) is audited as itself, not through this one
@@ -100,10 +111,15 @@ for (const pkg of published) {
 				const n = nodes.get(key);
 				// one of the package's own peers, met deeper (a dependency's peer: bits-ui › runed › Kit)
 				// is the app's copy, and so is everything below it
-				const kind = parent_kind === 'dependency' && pkg.peerDependencies?.[n.name] !== undefined ? 'peer' : parent_kind;
+				const kind =
+					parent_kind === 'dependency' && pkg.peerDependencies?.[n.name] !== undefined
+						? 'peer'
+						: parent_kind;
 				const id = `${n.name}@${n.version}`;
 				if (!reached.has(id)) reached.set(id, []);
-				reached.get(id).push({ pkg, kind, route: route.length ? `via ${route.join(' › ')}` : 'direct' });
+				reached
+					.get(id)
+					.push({ pkg, kind, route: route.length ? `via ${route.join(' › ')}` : 'direct' });
 				for (const child of n.children) {
 					if (seen.has(child)) continue;
 					seen.add(child);
@@ -131,7 +147,9 @@ for (const n of nodes.values()) {
  *  a space in a range is AND, so `<range> <patched part>` matches only versions in both. */
 function range_reaches_patch(name, range, patched) {
 	for (const part of patched.split('||')) {
-		const r = spawnSync('npm', ['view', `${name}@${range} ${part.trim()}`, 'version', '--json'], { encoding: 'utf8' });
+		const r = spawnSync('npm', ['view', `${name}@${range} ${part.trim()}`, 'version', '--json'], {
+			encoding: 'utf8'
+		});
 		if (r.status === 0 && r.stdout.trim() !== '') return true;
 	}
 	return false;
@@ -154,7 +172,13 @@ for (const a of Object.values(audit.advisories ?? {})) {
 		if (!row)
 			kind_rows.set(
 				a.module_name,
-				(row = { name: a.module_name, advisories: new Map(), installed: new Set(), routes: new Set(), direct_in: new Set() })
+				(row = {
+					name: a.module_name,
+					advisories: new Map(),
+					installed: new Set(),
+					routes: new Set(),
+					direct_in: new Set()
+				})
 			);
 		row.advisories.set(a.url, a);
 		row.routes.add(`${w.pkg.name}: ${w.route}`);
@@ -164,7 +188,8 @@ for (const a of Object.values(audit.advisories ?? {})) {
 }
 
 const rank = (s) => SEVERITY.indexOf(s);
-const worst = (row) => [...row.advisories.values()].map((a) => a.severity).sort((x, y) => rank(x) - rank(y))[0];
+const worst = (row) =>
+	[...row.advisories.values()].map((a) => a.severity).sort((x, y) => rank(x) - rank(y))[0];
 let failing = 0;
 
 /** a direct dependency: does each package's range reach a fix for every one of its advisories? */
@@ -172,30 +197,44 @@ function range_note(row) {
 	const notes = [];
 	for (const pkg of row.direct_in) {
 		const range = real_range(row.name, pkg.dependencies[row.name]);
-		const stuck = [...row.advisories.values()].filter((a) => !range_reaches_patch(row.name, range, a.patched_versions));
+		const stuck = [...row.advisories.values()].filter(
+			(a) => !range_reaches_patch(row.name, range, a.patched_versions)
+		);
 		if (stuck.length === 0) {
-			notes.push(`\`${pkg.name}\` allows \`${range}\`, which includes every fix: a fresh install gets them; only this repository's lockfile is behind`);
+			notes.push(
+				`\`${pkg.name}\` allows \`${range}\`, which includes every fix: a fresh install gets them; only this repository's lockfile is behind`
+			);
 			continue;
 		}
 		if (stuck.some((a) => a.severity === 'critical' || a.severity === 'high')) failing++;
-		notes.push(`**\`${pkg.name}\`'s range \`${range}\` does not reach a fixed version for ${stuck.length} of these**`);
+		notes.push(
+			`**\`${pkg.name}\`'s range \`${range}\` does not reach a fixed version for ${stuck.length} of these**`
+		);
 	}
 	return notes.join('; ');
 }
 
 const cell = (s) => String(s).replaceAll('|', '\\|');
 function table(kind) {
-	const list = [...groups[kind].values()].sort((x, y) => rank(worst(x)) - rank(worst(y)) || x.name.localeCompare(y.name));
+	const list = [...groups[kind].values()].sort(
+		(x, y) => rank(worst(x)) - rank(worst(y)) || x.name.localeCompare(y.name)
+	);
 	if (list.length === 0) return '_None._\n';
-	let out = '| Package | Severity | Advisories | Locked here | How it arrives | Notes |\n|---|---|---|---|---|---|\n';
+	let out =
+		'| Package | Severity | Advisories | Locked here | How it arrives | Notes |\n|---|---|---|---|---|---|\n';
 	for (const row of list) {
 		const advisories = [...row.advisories.values()]
 			.sort((x, y) => rank(x.severity) - rank(y.severity))
-			.map((a) => `${a.severity}: [${cell(a.title)}](${a.url}) (fixed in \`${cell(a.patched_versions)}\`)`)
+			.map(
+				(a) =>
+					`${a.severity}: [${cell(a.title)}](${a.url}) (fixed in \`${cell(a.patched_versions)}\`)`
+			)
 			.join('<br>');
 		const routes = [...row.routes].sort((x, y) => x.length - y.length);
 		const notes = [
-			shared.has(row.name) ? 'also a dependency of Svelte / SvelteKit: every Svelte app has it' : '',
+			shared.has(row.name)
+				? 'also a dependency of Svelte / SvelteKit: every Svelte app has it'
+				: '',
 			kind === 'dependency' && row.direct_in.size ? range_note(row) : ''
 		].filter(Boolean);
 		out += `| \`${row.name}\` | ${worst(row)} | ${advisories} | ${[...row.installed].join(', ')} | ${cell(routes.slice(0, 4).join('<br>'))}${routes.length > 4 ? `<br>(+${routes.length - 4} more)` : ''} | ${cell(notes.join('; '))} |\n`;
@@ -209,6 +248,7 @@ md += `Covers ${names}. Checked against the npm advisory database (\`pnpm audit\
 md += `### Dependencies (installed with a package)\n\n${table('dependency')}\n`;
 md += `### Peer dependencies (installed and updated by the app)\n\n${table('peer')}\n`;
 md += `<details><summary>Dev dependencies: this repository's tooling, never installed by an app (${groups.dev.size} ${groups.dev.size === 1 ? 'package' : 'packages'})</summary>\n\n${table('dev')}\n</details>\n\n`;
-if (elsewhere) md += `${elsewhere} more ${elsewhere === 1 ? 'advisory is' : 'advisories are'} only in this repository's demo apps and internal tools, which are not part of any published package.\n`;
+if (elsewhere)
+	md += `${elsewhere} more ${elsewhere === 1 ? 'advisory is' : 'advisories are'} only in this repository's demo apps and internal tools, which are not part of any published package.\n`;
 process.stdout.write(md);
 process.exit(failing ? 1 : 0);

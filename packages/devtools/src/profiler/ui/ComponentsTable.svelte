@@ -17,8 +17,14 @@
 		maxTotal,
 		base = '',
 		dev = false
-	}: { rows: Row[]; busy: number; hasAlloc: boolean; maxTotal: number; base?: string; dev?: boolean } =
-		$props();
+	}: {
+		rows: Row[];
+		busy: number;
+		hasAlloc: boolean;
+		maxTotal: number;
+		base?: string;
+		dev?: boolean;
+	} = $props();
 
 	let query = $state('');
 	const filtered = $derived.by(() => {
@@ -37,7 +43,9 @@
 	const hasParent = rows.some((r) => !!r.parent);
 	// page mode: the spread across runs (min / median / max), a cold first run marked
 	const hasRuns = rows.some((r) => (r.runs_ms?.length ?? 0) > 1);
-	const cols = $derived(7 + (hasAlloc ? 1 : 0) + (hasSplit ? 1 : 0) + (hasParent ? 1 : 0) + (hasRuns ? 1 : 0));
+	const cols = $derived(
+		7 + (hasAlloc ? 1 : 0) + (hasSplit ? 1 : 0) + (hasParent ? 1 : 0) + (hasRuns ? 1 : 0)
+	);
 	const own = (r: Row) => (r.markup_ms ?? 0) + (r.logic_ms ?? 0);
 	const spread = (r: Row) => {
 		const xs = r.runs_ms ?? [];
@@ -45,7 +53,15 @@
 		const s = [...xs].sort((a, b) => a - b);
 		const rest = xs.slice(1);
 		const rest_med = [...rest].sort((a, b) => a - b)[Math.floor(rest.length / 2)];
-		return { min: s[0], med: s[Math.floor(s.length / 2)], max: s[s.length - 1], cold: xs[0] >= 5 && xs[0] >= rest_med * 2.5 && xs[0] === s[s.length - 1], flaky: s[s.length - 1] >= s[Math.floor(s.length / 2)] * 3 && s[s.length - 1] - s[Math.floor(s.length / 2)] >= 10 };
+		return {
+			min: s[0],
+			med: s[Math.floor(s.length / 2)],
+			max: s[s.length - 1],
+			cold: xs[0] >= 5 && xs[0] >= rest_med * 2.5 && xs[0] === s[s.length - 1],
+			flaky:
+				s[s.length - 1] >= s[Math.floor(s.length / 2)] * 3 &&
+				s[s.length - 1] - s[Math.floor(s.length / 2)] >= 10
+		};
 	};
 	// a finding's `#comp=<name>` link opens + scrolls to its row
 	$effect(() =>
@@ -61,8 +77,15 @@
 </script>
 
 <div class="tools">
-	<input type="search" placeholder="filter components…" bind:value={query} aria-label="filter components" />
-	<span class="hint">{filtered.length} of {rows.length} · click a row for its location and call stacks</span>
+	<input
+		type="search"
+		placeholder="filter components…"
+		bind:value={query}
+		aria-label="filter components"
+	/>
+	<span class="hint"
+		>{filtered.length} of {rows.length} · click a row for its location and call stacks</span
+	>
 </div>
 <table>
 	<thead>
@@ -70,27 +93,54 @@
 			<th>component</th>
 			<th>file</th>
 			<th>self / total</th>
-			<th class="num sort" class:active={s.key === 'self_ms'} onclick={() => s.click('self_ms')} {@attach pressable} aria-sort={s.aria('self_ms')}
-				>self ms<span class="arr">{s.arrow('self_ms')}</span></th
+			<th
+				class="num sort"
+				class:active={s.key === 'self_ms'}
+				onclick={() => s.click('self_ms')}
+				{@attach pressable}
+				aria-sort={s.aria('self_ms')}>self ms<span class="arr">{s.arrow('self_ms')}</span></th
 			>
-			<th class="num sort" class:active={s.key === 'total_ms'} onclick={() => s.click('total_ms')} {@attach pressable} aria-sort={s.aria('total_ms')}
-				>total ms<span class="arr">{s.arrow('total_ms')}</span></th
+			<th
+				class="num sort"
+				class:active={s.key === 'total_ms'}
+				onclick={() => s.click('total_ms')}
+				{@attach pressable}
+				aria-sort={s.aria('total_ms')}>total ms<span class="arr">{s.arrow('total_ms')}</span></th
 			>
 			<th
 				class="num sort"
 				class:active={s.key === 'per'}
 				title="one render of it: its time per page render ÷ how many times it rendered in one"
-				onclick={() => s.click('per')} {@attach pressable} aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
+				onclick={() => s.click('per')}
+				{@attach pressable}
+				aria-sort={s.aria('per')}>per call<span class="arr">{s.arrow('per')}</span></th
 			>
 			<th class="num">% of busy</th>
 			{#if hasSplit}
-				<th class="sort" class:active={s.key === 'markup_ms'} title="its own time split: Svelte writing the template (markup) vs its script and what it calls (logic); nested components in neither" onclick={() => s.click('markup_ms')} {@attach pressable} aria-sort={s.aria('markup_ms')}>markup / logic<span class="arr">{s.arrow('markup_ms')}</span></th>
+				<th
+					class="sort"
+					class:active={s.key === 'markup_ms'}
+					title="its own time split: Svelte writing the template (markup) vs its script and what it calls (logic); nested components in neither"
+					onclick={() => s.click('markup_ms')}
+					{@attach pressable}
+					aria-sort={s.aria('markup_ms')}
+					>markup / logic<span class="arr">{s.arrow('markup_ms')}</span></th
+				>
 			{/if}
-			{#if hasParent}<th title="the component that rendered most of it — the {'{#each}'} owner of a row">under</th>{/if}
-			{#if hasRuns}<th title="its time in each render, min · median · max — a cold first run or a flaky one is marked">per run</th>{/if}
+			{#if hasParent}<th
+					title="the component that rendered most of it — the {'{#each}'} owner of a row">under</th
+				>{/if}
+			{#if hasRuns}<th
+					title="its time in each render, min · median · max — a cold first run or a flaky one is marked"
+					>per run</th
+				>{/if}
 			{#if hasAlloc}
-				<th class="num sort" class:active={s.key === 'alloc'} onclick={() => s.click('alloc')} {@attach pressable} aria-sort={s.aria('alloc')}
-					>alloc<span class="arr">{s.arrow('alloc')}</span></th
+				<th
+					class="num sort"
+					class:active={s.key === 'alloc'}
+					onclick={() => s.click('alloc')}
+					{@attach pressable}
+					aria-sort={s.aria('alloc')}>alloc<span class="arr">{s.arrow('alloc')}</span></th
 				>
 			{/if}
 		</tr>
@@ -125,9 +175,9 @@
 						<div class="tot" style="width:{((f.total_ms / maxTotal) * 100).toFixed(1)}%"></div>
 						<div
 							class="slf"
-							style="width:{((f.self_ms / maxTotal) * 100).toFixed(
-								1
-							)}%;background:{CATEGORY_COLOR[f.category]}"
+							style="width:{((f.self_ms / maxTotal) * 100).toFixed(1)}%;background:{CATEGORY_COLOR[
+								f.category
+							]}"
 						></div>
 					</div>
 				</td>
@@ -138,7 +188,10 @@
 				{#if hasSplit}
 					<td class="split2">
 						{#if own(f) > 0}
-							<div class="ml" title="markup {fmt_ms(f.markup_ms ?? 0)} ms · logic {fmt_ms(f.logic_ms ?? 0)} ms">
+							<div
+								class="ml"
+								title="markup {fmt_ms(f.markup_ms ?? 0)} ms · logic {fmt_ms(f.logic_ms ?? 0)} ms"
+							>
 								<div class="m" style="width:{((f.markup_ms ?? 0) / own(f)) * 100}%"></div>
 								<div class="l" style="width:{((f.logic_ms ?? 0) / own(f)) * 100}%"></div>
 							</div>
@@ -149,10 +202,15 @@
 				{#if hasParent}<td class="file">{f.parent ?? '—'}</td>{/if}
 				{#if hasRuns}
 					{@const sp = spread(f)}
-					<td class="num runs" title={(f.runs_ms ?? []).map((x, i) => `run ${i + 1}: ${fmt_ms(x)} ms`).join('\n')}>
+					<td
+						class="num runs"
+						title={(f.runs_ms ?? []).map((x, i) => `run ${i + 1}: ${fmt_ms(x)} ms`).join('\n')}
+					>
 						{#if sp}
 							{fmt_ms(sp.min)} · <b>{fmt_ms(sp.med)}</b> · {fmt_ms(sp.max)}
-							{#if sp.cold}<span class="tag cold">cold 1st</span>{:else if sp.flaky}<span class="tag flaky">varies</span>{/if}
+							{#if sp.cold}<span class="tag cold">cold 1st</span>{:else if sp.flaky}<span
+									class="tag flaky">varies</span
+								>{/if}
 						{:else}—{/if}
 					</td>
 				{/if}

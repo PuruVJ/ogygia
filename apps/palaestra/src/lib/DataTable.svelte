@@ -19,7 +19,8 @@
 </script>
 
 <div class="island" data-datatable>
-	<strong>client-sorted table</strong> (sort: {sortKey} {asc ? '↑' : '↓'})
+	<strong>client-sorted table</strong> (sort: {sortKey}
+	{asc ? '↑' : '↓'})
 	<table>
 		<thead>
 			<tr>

@@ -17,7 +17,8 @@ export function drop_dead_kit_resolves(response: Response): Response {
 		new TransformStream<Uint8Array, Uint8Array>({
 			transform(chunk, controller) {
 				let starts = chunk.length >= SCRIPT_BYTES.length;
-				for (let i = 0; starts && i < SCRIPT_BYTES.length; i++) if (chunk[i] !== SCRIPT_BYTES[i]) starts = false;
+				for (let i = 0; starts && i < SCRIPT_BYTES.length; i++)
+					if (chunk[i] !== SCRIPT_BYTES[i]) starts = false;
 				if (starts && chunk.length < 1 << 20) {
 					const text = decoder.decode(chunk);
 					if (text.includes('__sveltekit_') && text.includes('.resolve(')) return; // dead here
@@ -26,5 +27,9 @@ export function drop_dead_kit_resolves(response: Response): Response {
 			}
 		})
 	);
-	return new Response(out, { status: response.status, statusText: response.statusText, headers: new Headers(response.headers) });
+	return new Response(out, {
+		status: response.status,
+		statusText: response.statusText,
+		headers: new Headers(response.headers)
+	});
 }

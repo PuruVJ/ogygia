@@ -10,7 +10,19 @@
 	import { fmt_ms, fmt_bytes } from './format.ts';
 	import { row_href } from './row-anchor.svelte.ts';
 
-	let { lines, patterns = [], shown = 8, renders = 1, fns }: { lines: LedgerLine[]; patterns?: Pattern[]; shown?: number; renders?: number; fns?: string[] } = $props();
+	let {
+		lines,
+		patterns = [],
+		shown = 8,
+		renders = 1,
+		fns
+	}: {
+		lines: LedgerLine[];
+		patterns?: Pattern[];
+		shown?: number;
+		renders?: number;
+		fns?: string[];
+	} = $props();
 	// a line links to its function's row only when the functions table has that row
 	const known = $derived(fns ? new Set(fns) : null);
 	const linkable = (fn: string | undefined): fn is string => !!fn && (!known || known.has(fn));
@@ -35,11 +47,17 @@
 		<div class="head">
 			<span class="bar" style="width:{Math.max(3, (l.score / max_score) * 100)}%"></span>
 			{#if linkable(l.fn)}
-				<a class="loc" href={row_href('fn:' + l.fn)} title={l.path + ':' + l.line}>{l.file}:{l.line}</a>
+				<a class="loc" href={row_href('fn:' + l.fn)} title={l.path + ':' + l.line}
+					>{l.file}:{l.line}</a
+				>
 			{:else}
 				<span class="loc" title={l.path + ':' + l.line}>{l.file}:{l.line}</span>
 			{/if}
-			{#if l.module}<span class="who" title="the build has no sourcemap: the line number is the built chunk's">in {l.module}</span>{/if}
+			{#if l.module}<span
+					class="who"
+					title="the build has no sourcemap: the line number is the built chunk's"
+					>in {l.module}</span
+				>{/if}
 			{#if l.who.length}<span class="who">{l.who.join(' · ')}</span>{/if}
 			{#if pattern_at.get(l.path + ':' + l.line)}
 				{@const p = pattern_at.get(l.path + ':' + l.line)!}
@@ -50,16 +68,42 @@
 		<div class="costs">
 			{#if l.cpu_ms > 0}<span class="c cpu"><b>{fmt_ms(per(l.cpu_ms))} ms</b> CPU</span>{/if}
 			{#if l.lib_ms > 0}
-				<span class="c lib" title={(l.libs ?? []).map((x) => `${x.name}${x.pkg ? ' (' + x.pkg + ')' : ''}: ${fmt_ms(per(x.ms))} ms${x.shared ? `, split over ${x.shared} lines that call it` : ''}`).join('\n')}>
-					<b>{fmt_ms(per(l.lib_ms))} ms</b> inside {(l.libs ?? []).map((x) => x.name).slice(0, 2).join(', ') || 'libraries'}
+				<span
+					class="c lib"
+					title={(l.libs ?? [])
+						.map(
+							(x) =>
+								`${x.name}${x.pkg ? ' (' + x.pkg + ')' : ''}: ${fmt_ms(per(x.ms))} ms${x.shared ? `, split over ${x.shared} lines that call it` : ''}`
+						)
+						.join('\n')}
+				>
+					<b>{fmt_ms(per(l.lib_ms))} ms</b> inside {(l.libs ?? [])
+						.map((x) => x.name)
+						.slice(0, 2)
+						.join(', ') || 'libraries'}
 				</span>
 			{/if}
-			{#if l.alloc_bytes > 0}<span class="c alloc"><b>{fmt_bytes(per(l.alloc_bytes))}</b> made</span>{/if}
+			{#if l.alloc_bytes > 0}<span class="c alloc"><b>{fmt_bytes(per(l.alloc_bytes))}</b> made</span
+				>{/if}
 			{#if l.gc_ms > 0}<span class="c gc"><b>{fmt_ms(per(l.gc_ms))} ms</b> cleanup</span>{/if}
-			{#if l.retained_bytes > 0}<span class="c kept"><b>{fmt_bytes(l.retained_bytes)}</b> kept</span>{/if}
-			{#if l.mem_via}<span class="c" title="Made inside this package, which the line calls, after an await (no line of yours was running): charged to the line that calls it">memory: inside {l.mem_via}</span>{/if}
-			{#if l.merged}<span class="c" title="V8 merged {l.merged.callee} into its caller and charged its time to line {l.merged.from}. Its share was moved back here, split by a render profiled with that merging turned off.">time moved from line {l.merged.from}</span>{/if}
-			{#if l.mem_in_fn}<span class="c" title="Memory is measured per function, not per line. This function's memory is shown on its busiest line.">memory: whole function</span>{/if}
+			{#if l.retained_bytes > 0}<span class="c kept"><b>{fmt_bytes(l.retained_bytes)}</b> kept</span
+				>{/if}
+			{#if l.mem_via}<span
+					class="c"
+					title="Made inside this package, which the line calls, after an await (no line of yours was running): charged to the line that calls it"
+					>memory: inside {l.mem_via}</span
+				>{/if}
+			{#if l.merged}<span
+					class="c"
+					title="V8 merged {l.merged.callee} into its caller and charged its time to line {l.merged
+						.from}. Its share was moved back here, split by a render profiled with that merging turned off."
+					>time moved from line {l.merged.from}</span
+				>{/if}
+			{#if l.mem_in_fn}<span
+					class="c"
+					title="Memory is measured per function, not per line. This function's memory is shown on its busiest line."
+					>memory: whole function</span
+				>{/if}
 		</div>
 	</li>
 {/snippet}

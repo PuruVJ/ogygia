@@ -30,7 +30,10 @@ type Probe = { cls: number; tops: Set<number>; style_writes: number };
 async function probe(action: () => Promise<void> | void): Promise<Probe> {
 	let cls = 0;
 	const po = new PerformanceObserver((list) => {
-		for (const e of list.getEntries() as unknown as Array<{ value: number; hadRecentInput: boolean }>)
+		for (const e of list.getEntries() as unknown as Array<{
+			value: number;
+			hadRecentInput: boolean;
+		}>)
 			if (!e.hadRecentInput) cls += e.value;
 	});
 	po.observe({ type: 'layout-shift' });
@@ -59,7 +62,8 @@ async function probe(action: () => Promise<void> | void): Promise<Probe> {
 
 async function hydrate(): Promise<void> {
 	bootDev();
-	for (let i = 0; i < 200 && !document.querySelector(`${REGION}[data-hydrated]`); i++) await frames(1);
+	for (let i = 0; i < 200 && !document.querySelector(`${REGION}[data-hydrated]`); i++)
+		await frames(1);
 	expect(document.querySelector(`${REGION}[data-hydrated]`), 'the island hydrated').not.toBeNull();
 }
 
@@ -73,7 +77,8 @@ const LAYOUTS: Array<{ name: string; style: string; page: (island: string) => st
 	{
 		name: 'inline flow (text around the region)',
 		style: 'ogygia-region p{min-height:200px;margin:0}',
-		page: (i) => `<div style="width:800px">lead text ${i} tail text<footer style="height:80px">below</footer></div>`
+		page: (i) =>
+			`<div style="width:800px">lead text ${i} tail text<footer style="height:80px">below</footer></div>`
 	},
 	{
 		name: 'percentage-sized hero (its containing block matters)',
@@ -84,7 +89,8 @@ const LAYOUTS: Array<{ name: string; style: string; page: (island: string) => st
 ];
 
 test('control: the layout-shift observer reports a real shift', async () => {
-	document.body.innerHTML = '<div style="width:800px"><p id="t" style="height:300px;margin:0">x</p></div>';
+	document.body.innerHTML =
+		'<div style="width:800px"><p id="t" style="height:300px;margin:0">x</p></div>';
 	await frames(3);
 	const { cls } = await probe(() => {
 		const d = document.createElement('div');
@@ -101,7 +107,9 @@ for (const layout of LAYOUTS) {
 		const before = Math.round(document.querySelector(`${REGION} p`)!.getBoundingClientRect().top);
 		const { cls, tops, style_writes } = await probe(hydrate);
 		expect(cls, 'no layout shift').toBe(0);
-		expect([...tops], 'the content is present, at the same place, in every painted frame').toEqual([before]);
+		expect([...tops], 'the content is present, at the same place, in every painted frame').toEqual([
+			before
+		]);
 		expect(style_writes, "the runtime never touches the region's box").toBe(0);
 	});
 }

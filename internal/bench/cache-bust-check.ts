@@ -64,13 +64,21 @@ function build(version, name = version) {
 	});
 	const out = path.join(tmp, name);
 	fs.cpSync(path.join(app, 'build'), out, { recursive: true });
-	const handoff = JSON.parse(fs.readFileSync(path.join(app, '.svelte-kit/og-region-deps.json'), 'utf8'));
+	const handoff = JSON.parse(
+		fs.readFileSync(path.join(app, '.svelte-kit/og-region-deps.json'), 'utf8')
+	);
 	return { dir: out, entries: handoff.entries ?? {} };
 }
 
 async function serve(dir, port = PORT) {
 	const child = spawn(process.execPath, [dir], {
-		env: { ...process.env, PORT: String(port), ORIGIN: BASE, OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef', OGYGIA_PROFILER_SECRET: PROFILER_KEY },
+		env: {
+			...process.env,
+			PORT: String(port),
+			ORIGIN: BASE,
+			OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef',
+			OGYGIA_PROFILER_SECRET: PROFILER_KEY
+		},
 		stdio: 'ignore'
 	});
 	for (let i = 0; i < 60; i++) {
@@ -91,15 +99,31 @@ const stop = async (child) => {
 /** Which build each probe on /dt-cache ran (`data-ran`), once every island and the hole woke. */
 async function ran(page) {
 	await page
-		.waitForFunction(() => ['probe', 'twin', 'steady', 'hole'].every((p) => document.querySelector(`[data-probe="${p}"][data-ran]`)), null, { timeout: 8000 })
+		.waitForFunction(
+			() =>
+				['probe', 'twin', 'steady', 'hole'].every((p) =>
+					document.querySelector(`[data-probe="${p}"][data-ran]`)
+				),
+			null,
+			{ timeout: 8000 }
+		)
 		.catch(() => {});
-	return page.evaluate(() => Object.fromEntries(['probe', 'twin', 'steady', 'hole'].map((p) => [p, document.querySelector(`[data-probe="${p}"]`)?.getAttribute('data-ran') ?? null])));
+	return page.evaluate(() =>
+		Object.fromEntries(
+			['probe', 'twin', 'steady', 'hole'].map((p) => [
+				p,
+				document.querySelector(`[data-probe="${p}"]`)?.getAttribute('data-ran') ?? null
+			])
+		)
+	);
 }
 
 /** A page whose document is `html` (a cache's copy) while everything else comes from the server. */
 async function page_with_document(context, html) {
 	const page = await context.newPage();
-	await page.route(BASE + '/dt-cache', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: html }));
+	await page.route(BASE + '/dt-cache', (route) =>
+		route.fulfill({ status: 200, contentType: 'text/html', body: html })
+	);
 	return page;
 }
 
@@ -128,9 +152,26 @@ try {
 			}
 		};
 		walk(path.join(two.dir, 'client'));
-		check('no source map in the served client output', maps.length === 0, maps.slice(0, 3).join(', '));
-		check('…and the stash they passed through is gone', !fs.existsSync(path.join(app, '.svelte-kit', 'ogygia-client-maps')));
-		const js = fs.readFileSync(path.join(two.dir, 'client', two.entries[Object.keys(two.entries).find((k) => k.includes('og-runtime'))].replace(/^\//, '')), 'utf8');
+		check(
+			'no source map in the served client output',
+			maps.length === 0,
+			maps.slice(0, 3).join(', ')
+		);
+		check(
+			'…and the stash they passed through is gone',
+			!fs.existsSync(path.join(app, '.svelte-kit', 'ogygia-client-maps'))
+		);
+		const js = fs.readFileSync(
+			path.join(
+				two.dir,
+				'client',
+				two.entries[Object.keys(two.entries).find((k) => k.includes('og-runtime'))].replace(
+					/^\//,
+					''
+				)
+			),
+			'utf8'
+		);
 		check('…and no chunk points at one', !js.includes('sourceMappingURL'));
 	}
 	// the same source again: nothing may move (a name that changes with no change costs every cache)
@@ -139,7 +180,11 @@ try {
 
 	// ── names: only what changed moved ───────────────────────────────────────────────────────────
 	const ids = identity(one.entries);
-	check('both builds name the same entries (identities are stable)', JSON.stringify(ids) === JSON.stringify(identity(two.entries)), `${ids.length}`);
+	check(
+		'both builds name the same entries (identities are stable)',
+		JSON.stringify(ids) === JSON.stringify(identity(two.entries)),
+		`${ids.length}`
+	);
 	const moved = ids.filter((k) => one.entries[k] !== two.entries[k]);
 	const html1 = await (async () => {
 		const s = await serve(one.dir);
@@ -150,26 +195,52 @@ try {
 		}
 	})();
 	// the page's islands in order: Probe, ProbeTwin, Steady (identities as the handoff keys them)
-	const island_ids = [...html1.matchAll(/<ogygia-region entry="([^"]+)"/g)].map((m) => m[1].replace(/^\.\//, '/'));
+	const island_ids = [...html1.matchAll(/<ogygia-region entry="([^"]+)"/g)].map((m) =>
+		m[1].replace(/^\.\//, '/')
+	);
 	const [probe_id, twin_id, steady_id] = island_ids;
 	const runtime_id = ids.find((k) => k.includes('og-runtime'));
-	check('the islands on the changed module moved (Probe, ProbeTwin)', moved.includes(probe_id) && moved.includes(twin_id), `${moved.length} moved in all (every importer of the chunk that holds it)`);
-	check('the untouched island kept its name (its cache stays good)', !!steady_id && !moved.includes(steady_id));
-	check('the runtime kept its name', !!runtime_id && one.entries[runtime_id] === two.entries[runtime_id], runtime_id ? two.entries[runtime_id] : 'no runtime');
+	check(
+		'the islands on the changed module moved (Probe, ProbeTwin)',
+		moved.includes(probe_id) && moved.includes(twin_id),
+		`${moved.length} moved in all (every importer of the chunk that holds it)`
+	);
+	check(
+		'the untouched island kept its name (its cache stays good)',
+		!!steady_id && !moved.includes(steady_id)
+	);
+	check(
+		'the runtime kept its name',
+		!!runtime_id && one.entries[runtime_id] === two.entries[runtime_id],
+		runtime_id ? two.entries[runtime_id] : 'no runtime'
+	);
 	const drift = ids.filter((k) => two.entries[k] !== again.entries[k]);
-	check('the same source built again moves no name', drift.length === 0, drift.slice(0, 3).join(', '));
+	check(
+		'the same source built again moves no name',
+		drift.length === 0,
+		drift.slice(0, 3).join(', ')
+	);
 	// a location: its stable name plus a content hash (`og-region.<iid>.<hash>.js`), never the name itself
 	const readable = ([identity, location]) =>
 		location !== identity &&
 		/\.[\w-]{8}\.js$/.test(location) &&
 		// an island keeps its whole stable name as the prefix; the runtime its `og-runtime.` part
-		(identity.includes('/og-runtime.') ? /\/og-runtime[.-]/.test(location) : location.startsWith(identity.slice(0, -'.js'.length) + '.'));
+		(identity.includes('/og-runtime.')
+			? /\/og-runtime[.-]/.test(location)
+			: location.startsWith(identity.slice(0, -'.js'.length) + '.'));
 	check(
 		'every location is its stable name plus a content hash, never the name itself',
 		Object.entries(two.entries).every(readable),
 		`${two.entries[ids.find((k) => k.includes('og-region'))]}`
 	);
-	const shim = fs.readFileSync(path.join(two.dir, 'client', ids.find((k) => k.includes('og-region'))), 'utf8');
+	const shim = fs.readFileSync(
+		path.join(
+			two.dir,
+			'client',
+			ids.find((k) => k.includes('og-region'))
+		),
+		'utf8'
+	);
 	const shim_id = ids.find((k) => k.includes('og-region'));
 	const shim_to = `./${two.entries[shim_id].split('/').pop()}`;
 	check(
@@ -179,7 +250,9 @@ try {
 	);
 
 	const browser_dir = path.join(tmp, 'profile');
-	const context = await chromium.launchPersistentContext(browser_dir, { viewport: { width: 1280, height: 900 } });
+	const context = await chromium.launchPersistentContext(browser_dir, {
+		viewport: { width: 1280, height: 900 }
+	});
 	const errors = [];
 	context.on('page', (p) => p.on('pageerror', (e) => errors.push(e.message)));
 
@@ -189,18 +262,39 @@ try {
 	page.on('pageerror', (e) => errors.push(e.message));
 	await page.goto(BASE + '/dt-cache', { waitUntil: 'load' });
 	const before = await ran(page);
-	check('build 1 runs build 1', before.probe === 'v1' && before.twin === 'v1' && before.hole === 'v1' && before.steady === 'steady', JSON.stringify(before));
+	check(
+		'build 1 runs build 1',
+		before.probe === 'v1' &&
+			before.twin === 'v1' &&
+			before.hole === 'v1' &&
+			before.steady === 'steady',
+		JSON.stringify(before)
+	);
 	// poison: put build 1's STABLE-name file for every island into the immutable cache
-	await page.evaluate(async (urls) => Promise.all(urls.map((u) => fetch(u).then((r) => r.text()))), island_ids.map((i) => BASE + i));
+	await page.evaluate(
+		async (urls) => Promise.all(urls.map((u) => fetch(u).then((r) => r.text()))),
+		island_ids.map((i) => BASE + i)
+	);
 	await stop(server);
 
 	server = await serve(two.dir);
 	const stable_hits = [];
-	page.on('request', (r) => /og-region\.[0-9a-f]{12}\.js/.test(r.url()) && stable_hits.push(r.url()));
+	page.on(
+		'request',
+		(r) => /og-region\.[0-9a-f]{12}\.js/.test(r.url()) && stable_hits.push(r.url())
+	);
 	await page.reload({ waitUntil: 'load' });
 	const after = await ran(page);
-	check('deploy: after a normal reload every island runs build 2', after.probe === 'v2' && after.twin === 'v2' && after.hole === 'v2' && after.steady === 'steady', JSON.stringify(after));
-	check('poisoned: build 2 never asks for a stable name (the stale copy is never used)', stable_hits.length === 0, `${stable_hits.length} requests`);
+	check(
+		'deploy: after a normal reload every island runs build 2',
+		after.probe === 'v2' && after.twin === 'v2' && after.hole === 'v2' && after.steady === 'steady',
+		JSON.stringify(after)
+	);
+	check(
+		'poisoned: build 2 never asks for a stable name (the stale copy is never used)',
+		stable_hits.length === 0,
+		`${stable_hits.length} requests`
+	);
 	// CONTROL — the cache is real: the same browser, asked by the STABLE names (the scheme before
 	// hashing), gets build 1's copies back from its immutable cache — the reported bug, reproduced.
 	// If this ran build 2, the checks above would prove nothing.
@@ -209,12 +303,19 @@ try {
 	{
 		const html2_live = await (await fetch(BASE + '/dt-cache')).text();
 		await stop(server);
-		fs.writeFileSync(path.join(two.dir, 'client/og-control.html'), strip_locations(html2_live, runtime_id, two.entries[runtime_id]));
+		fs.writeFileSync(
+			path.join(two.dir, 'client/og-control.html'),
+			strip_locations(html2_live, runtime_id, two.entries[runtime_id])
+		);
 		server = await serve(two.dir);
 		const control = await context.newPage();
 		await control.goto(BASE + '/og-control.html', { waitUntil: 'load' });
 		const c = await ran(control);
-		check('control: by stable names, the kept cache serves build 1 (the bug this fixes)', c.probe !== 'v2' && c.twin !== 'v2', JSON.stringify(c));
+		check(
+			'control: by stable names, the kept cache serves build 1 (the bug this fixes)',
+			c.probe !== 'v2' && c.twin !== 'v2',
+			JSON.stringify(c)
+		);
 		await control.close();
 		fs.rmSync(path.join(two.dir, 'client/og-control.html'));
 	}
@@ -223,25 +324,43 @@ try {
 	await stop(server);
 	const merged = path.join(tmp, 'merged');
 	fs.cpSync(two.dir, merged, { recursive: true });
-	fs.cpSync(path.join(one.dir, 'client/_app/immutable'), path.join(merged, 'client/_app/immutable'), { recursive: true, force: false, errorOnExist: false });
+	fs.cpSync(
+		path.join(one.dir, 'client/_app/immutable'),
+		path.join(merged, 'client/_app/immutable'),
+		{ recursive: true, force: false, errorOnExist: false }
+	);
 	server = await serve(merged);
 	const kept = await page_with_document(context, html1);
 	await kept.goto(BASE + '/dt-cache', { waitUntil: 'load' });
 	const k = await ran(kept);
-	check('stale-kept: a cached build-1 page runs build 1 throughout (the live hole answers from build 2)', k.probe === 'v1' && k.twin === 'v1' && k.steady === 'steady' && k.hole === 'v2', JSON.stringify(k));
+	check(
+		'stale-kept: a cached build-1 page runs build 1 throughout (the live hole answers from build 2)',
+		k.probe === 'v1' && k.twin === 'v1' && k.steady === 'steady' && k.hole === 'v2',
+		JSON.stringify(k)
+	);
 	await kept.close();
 	await stop(server);
 
 	// ── stale HTML, build 1's files gone ────────────────────────────────────────────────────────
 	server = await serve(two.dir);
-	const gone_ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-gone'), { viewport: { width: 1280, height: 900 } });
+	const gone_ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-gone'), {
+		viewport: { width: 1280, height: 900 }
+	});
 	const gone_errors = [];
 	const gone = await page_with_document(gone_ctx, html1);
 	gone.on('pageerror', (e) => gone_errors.push(e.message));
 	await gone.goto(BASE + '/dt-cache', { waitUntil: 'load' });
 	const g = await ran(gone);
-	check('stale-gone: each island falls back to its stable name, fresh, and runs build 2 (none left dead)', g.probe === 'v2' && g.twin === 'v2' && g.steady === 'steady' && g.hole === 'v2', JSON.stringify(g));
-	check('stale-gone: no uncaught error on the page', gone_errors.length === 0, gone_errors.slice(0, 2).join(' | '));
+	check(
+		'stale-gone: each island falls back to its stable name, fresh, and runs build 2 (none left dead)',
+		g.probe === 'v2' && g.twin === 'v2' && g.steady === 'steady' && g.hole === 'v2',
+		JSON.stringify(g)
+	);
+	check(
+		'stale-gone: no uncaught error on the page',
+		gone_errors.length === 0,
+		gone_errors.slice(0, 2).join(' | ')
+	);
 	await gone_ctx.close();
 
 	// ── the profiler: two profiles of one build keep every island's file ────────────────────────
@@ -249,11 +368,21 @@ try {
 	// visitor; within one build, nothing may read as changed)
 	{
 		const profile = async () =>
-			(await fetch(`${BASE}/__profiler/page?p=/dt-cache&runs=1&format=json`, { headers: { 'x-profiler-key': PROFILER_KEY } })).json().catch(() => null);
+			(
+				await fetch(`${BASE}/__profiler/page?p=/dt-cache&runs=1&format=json`, {
+					headers: { 'x-profiler-key': PROFILER_KEY }
+				})
+			)
+				.json()
+				.catch(() => null);
 		await profile();
 		const second = await profile();
 		const isl = second?.since?.islands;
-		check('profiler: a second profile of one build keeps every island file (none changed)', !!isl && isl.moved.length === 0 && isl.kept >= 3 && !isl.all_moved, JSON.stringify(isl ?? second?.since ?? second?.error ?? null).slice(0, 200));
+		check(
+			'profiler: a second profile of one build keeps every island file (none changed)',
+			!!isl && isl.moved.length === 0 && isl.kept >= 3 && !isl.all_moved,
+			JSON.stringify(isl ?? second?.since ?? second?.error ?? null).slice(0, 200)
+		);
 	}
 
 	// ── refetched: a host that does not let the browser keep the content-named files ────────────
@@ -269,26 +398,37 @@ try {
 		server = await serve(two.dir, INNER);
 		const through = (rewrite) =>
 			http.createServer((req, res) => {
-				const up = http.request({ host: '127.0.0.1', port: INNER, path: req.url, method: req.method, headers: req.headers }, (r) => {
-					const headers = { ...r.headers };
-					if (rewrite && req.url.startsWith('/_app/immutable/')) {
-						headers['cache-control'] = rewrite;
-						// (`no-store`: a host that also drops the validators — nothing to revalidate with)
-						if (rewrite === 'no-store') {
-							delete headers.etag;
-							delete headers['last-modified'];
+				const up = http.request(
+					{
+						host: '127.0.0.1',
+						port: INNER,
+						path: req.url,
+						method: req.method,
+						headers: req.headers
+					},
+					(r) => {
+						const headers = { ...r.headers };
+						if (rewrite && req.url.startsWith('/_app/immutable/')) {
+							headers['cache-control'] = rewrite;
+							// (`no-store`: a host that also drops the validators — nothing to revalidate with)
+							if (rewrite === 'no-store') {
+								delete headers.etag;
+								delete headers['last-modified'];
+							}
 						}
+						res.writeHead(r.statusCode ?? 502, headers);
+						r.pipe(res);
 					}
-					res.writeHead(r.statusCode ?? 502, headers);
-					r.pipe(res);
-				});
+				);
 				up.on('error', () => res.writeHead(502).end());
 				req.pipe(up);
 			});
 		const visit = async (rewrite, dir) => {
 			const proxy = through(rewrite);
 			await new Promise((ok) => proxy.listen(PORT, '127.0.0.1', ok));
-			const ctx = await chromium.launchPersistentContext(path.join(tmp, dir), { viewport: { width: 1280, height: 900 } });
+			const ctx = await chromium.launchPersistentContext(path.join(tmp, dir), {
+				viewport: { width: 1280, height: 900 }
+			});
 			// the profiler's own browser, logged in: the server adds its beacon to the page, and takes
 			// the beacon's posts (the session; the flag follows it)
 			await ctx.addCookies([
@@ -302,7 +442,11 @@ try {
 			await ran(p);
 			// (past the report's second of clock slack: else the warm-up visit reads as the report's own)
 			await p.waitForTimeout(1600);
-			const rec = await fetch(`${BASE}/__profiler/page?p=/dt-cache&runs=1&format=json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+			const rec = await fetch(`${BASE}/__profiler/page?p=/dt-cache&runs=1&format=json`, {
+				headers: { 'x-profiler-key': PROFILER_KEY }
+			})
+				.then((r) => r.json())
+				.catch(() => null);
 			const id = rec?.id ?? rec?.report?.id ?? null;
 			// (a link, the return a visitor makes; with `no-store`, a reload: the browser had every
 			// file a moment ago)
@@ -329,7 +473,11 @@ try {
 			let report = null;
 			for (let i = 0; i < 10 && id && !finding; i++) {
 				await new Promise((ok) => setTimeout(ok, 700));
-				report = await fetch(`${BASE}/__profiler/report/${id}.json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+				report = await fetch(`${BASE}/__profiler/report/${id}.json`, {
+					headers: { 'x-profiler-key': PROFILER_KEY }
+				})
+					.then((r) => r.json())
+					.catch(() => null);
 				finding = report?.findings?.find((f) => f.code === 'files-fetched-again')?.message ?? null;
 			}
 			await ctx.close();
@@ -353,18 +501,36 @@ try {
 		// the shape the beacon reads), and no island is left as a file name
 		check(
 			'refetched: the profiler report counts every file the browser revalidated, islands by name',
-			planted.seen.revalidated >= 4 && !!planted.finding && planted.finding.includes(`${planted.seen.revalidated} were revalidated with the server (`) && !planted.finding.includes('og-region.'),
-			JSON.stringify({ seen: planted.seen, id: planted.id, finding: planted.finding?.slice(0, 260) ?? null })
+			planted.seen.revalidated >= 4 &&
+				!!planted.finding &&
+				planted.finding.includes(
+					`${planted.seen.revalidated} were revalidated with the server (`
+				) &&
+				!planted.finding.includes('og-region.'),
+			JSON.stringify({
+				seen: planted.seen,
+				id: planted.id,
+				finding: planted.finding?.slice(0, 260) ?? null
+			})
 		);
 		// a host that sends `no-store` and no validators: on a reload every file comes down whole
 		const stored = await visit('no-store', 'profile-refetch-store');
 		check(
 			'refetched: `no-store` — on a reload the report counts every file that came down again, with its bytes',
-			stored.seen.downloaded >= 4 && stored.seen.revalidated === 0 && !!stored.finding && stored.finding.includes(`${stored.seen.downloaded} came down again on this reload (`) && stored.finding.includes('KB)') && !stored.finding.includes('og-region.'),
+			stored.seen.downloaded >= 4 &&
+				stored.seen.revalidated === 0 &&
+				!!stored.finding &&
+				stored.finding.includes(`${stored.seen.downloaded} came down again on this reload (`) &&
+				stored.finding.includes('KB)') &&
+				!stored.finding.includes('og-region.'),
 			JSON.stringify({ seen: stored.seen, finding: stored.finding?.slice(0, 260) ?? null })
 		);
 		const clean = await visit(null, 'profile-refetch-clean');
-		check('refetched: served as built (immutable), the same return visit is quiet', !!clean.id && clean.has_visit && !clean.finding && clean.not_modified === 0, JSON.stringify(clean));
+		check(
+			'refetched: served as built (immutable), the same return visit is quiet',
+			!!clean.id && clean.has_visit && !clean.finding && clean.not_modified === 0,
+			JSON.stringify(clean)
+		);
 		await stop(server);
 		server = await serve(two.dir);
 	}
@@ -374,12 +540,18 @@ try {
 	// then waits, sampling, for a slow interaction. A click after the load trace is out: the trace
 	// reaches the report, and a frame it cannot name (a build's minified chunk) is never quoted.
 	{
-		const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-inp'), { viewport: { width: 1280, height: 900 } });
+		const ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-inp'), {
+			viewport: { width: 1280, height: 900 }
+		});
 		await ctx.addCookies([
 			{ name: 'og_profiler', value: PROFILER_KEY, url: BASE },
 			{ name: 'og_profiler_beacon', value: '1', url: BASE }
 		]);
-		const rec = await fetch(`${BASE}/__profiler/page?p=/dt-inp&runs=1&format=json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+		const rec = await fetch(`${BASE}/__profiler/page?p=/dt-inp&runs=1&format=json`, {
+			headers: { 'x-profiler-key': PROFILER_KEY }
+		})
+			.then((r) => r.json())
+			.catch(() => null);
 		const p = await ctx.newPage();
 		await p.goto(BASE + '/dt-inp', { waitUntil: 'load' });
 		// past the load trace (8 s, or longer while islands still wake): the interaction sampler runs
@@ -391,35 +563,67 @@ try {
 		let m = null;
 		for (let i = 0; i < 10 && rec?.id && !m?.includes('sampled'); i++) {
 			await new Promise((ok) => setTimeout(ok, 700));
-			const j = await fetch(`${BASE}/__profiler/report/${rec.id}.json`, { headers: { 'x-profiler-key': PROFILER_KEY } }).then((r) => r.json()).catch(() => null);
+			const j = await fetch(`${BASE}/__profiler/report/${rec.id}.json`, {
+				headers: { 'x-profiler-key': PROFILER_KEY }
+			})
+				.then((r) => r.json())
+				.catch(() => null);
 			m = j?.findings?.find((f) => f.code === 'slow-interaction')?.message ?? null;
 		}
 		await ctx.close();
 		// (the build's browser maps ride in the server's profiler module, never in the served output:
 		// the minified frame is named by its source function and line)
-		check('inp: in a build, the report names the handler’s function by its source line', !!m && m.includes("(mostly SlowSave's save (SlowSave.svelte:5), ") && m.includes('ms sampled'), m ?? `no finding (report ${rec?.id ?? 'none'})`);
+		check(
+			'inp: in a build, the report names the handler’s function by its source line',
+			!!m &&
+				m.includes("(mostly SlowSave's save (SlowSave.svelte:5), ") &&
+				m.includes('ms sampled'),
+			m ?? `no finding (report ${rec?.id ?? 'none'})`
+		);
 	}
 
 	// ── a page from before content hashing ──────────────────────────────────────────────────────
 	const html2 = await (await fetch(BASE + '/dt-cache')).text();
 	const runtime_loc = two.entries[runtime_id];
 	const pre_hash = strip_locations(html2, runtime_id, runtime_loc);
-	check('pre-hash: the rewritten page carries no location', !/<ogygia-region[^>]* src="/.test(pre_hash) && !pre_hash.includes(runtime_loc));
-	const old_ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-old'), { viewport: { width: 1280, height: 900 } });
+	check(
+		'pre-hash: the rewritten page carries no location',
+		!/<ogygia-region[^>]* src="/.test(pre_hash) && !pre_hash.includes(runtime_loc)
+	);
+	const old_ctx = await chromium.launchPersistentContext(path.join(tmp, 'profile-old'), {
+		viewport: { width: 1280, height: 900 }
+	});
 	const old_errors = [];
 	const old = await page_with_document(old_ctx, pre_hash);
 	old.on('pageerror', (e) => old_errors.push(e.message));
 	const shim_loads = [];
-	old.on('response', (r) => (/og-region\.[0-9a-f]{12}\.js/.test(r.url()) || r.url().includes('og-runtime.')) && shim_loads.push(r.status()));
+	old.on(
+		'response',
+		(r) =>
+			(/og-region\.[0-9a-f]{12}\.js/.test(r.url()) || r.url().includes('og-runtime.')) &&
+			shim_loads.push(r.status())
+	);
 	await old.goto(BASE + '/dt-cache', { waitUntil: 'load' });
 	const o = await ran(old);
-	check('pre-hash: the stable-name shims carry it to build 2', o.probe === 'v2' && o.twin === 'v2' && o.steady === 'steady', JSON.stringify(o));
-	check('pre-hash: its runtime and islands loaded through the shims, all 200', shim_loads.length >= 4 && shim_loads.every((s) => s === 200), shim_loads.join(','));
+	check(
+		'pre-hash: the stable-name shims carry it to build 2',
+		o.probe === 'v2' && o.twin === 'v2' && o.steady === 'steady',
+		JSON.stringify(o)
+	);
+	check(
+		'pre-hash: its runtime and islands loaded through the shims, all 200',
+		shim_loads.length >= 4 && shim_loads.every((s) => s === 200),
+		shim_loads.join(',')
+	);
 	check('pre-hash: no uncaught error', old_errors.length === 0, old_errors.slice(0, 2).join(' | '));
 	await old_ctx.close();
 	await stop(server);
 
-	check('no uncaught error on the kept-cache pages', errors.length === 0, errors.slice(0, 2).join(' | '));
+	check(
+		'no uncaught error on the kept-cache pages',
+		errors.length === 0,
+		errors.slice(0, 2).join(' | ')
+	);
 	await context.close();
 } finally {
 	fs.writeFileSync(version_file, original_version);

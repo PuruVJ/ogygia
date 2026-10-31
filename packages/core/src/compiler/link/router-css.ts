@@ -170,7 +170,9 @@ export async function router_css_module(
 	// page at another depth). The raw handoff href is the claim key, so a held region linking the
 	// same sheet dedupes against us.
 	lines.push(`import { islandCss } from 'virtual:ogygia/island-deps';`);
-	lines.push(`const base = typeof __SVELTEKIT_PATHS_BASE__ !== 'undefined' ? __SVELTEKIT_PATHS_BASE__ : '';`);
+	lines.push(
+		`const base = typeof __SVELTEKIT_PATHS_BASE__ !== 'undefined' ? __SVELTEKIT_PATHS_BASE__ : '';`
+	);
 	for (let i = 0; i < roots.length; i++) {
 		const abs = roots[i];
 		const key = router_css_key(opts.root, abs);

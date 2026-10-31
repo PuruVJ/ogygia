@@ -27,10 +27,7 @@ const prerenderedFile = fileURLToPath(
 	new URL('../.svelte-kit/output/prerendered/pages/static.html', import.meta.url)
 );
 const lakeFile = fileURLToPath(
-	new URL(
-		'../.svelte-kit/output/prerendered/pages/static-lake.html',
-		import.meta.url
-	)
+	new URL('../.svelte-kit/output/prerendered/pages/static-lake.html', import.meta.url)
 );
 
 // The SSR document is fetched once: the fetch checks read it, and the on-disk legs need its

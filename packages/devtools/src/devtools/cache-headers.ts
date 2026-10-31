@@ -42,7 +42,8 @@ export function content_named_files(doc: Document = document): { url: string; na
 	const abs = (u: string) => new URL(u, doc.baseURI).href;
 	for (const r of all_regions()) {
 		const src = r.el.getAttribute('src');
-		if (src && r.entry && src !== r.entry && !out.has(abs(src))) out.set(abs(src), region_name(r.entry));
+		if (src && r.entry && src !== r.entry && !out.has(abs(src)))
+			out.set(abs(src), region_name(r.entry));
 	}
 	const rt = doc.querySelector('script[data-ogygia-runtime]')?.getAttribute('src');
 	if (rt && !out.has(abs(rt))) out.set(abs(rt), 'the runtime');
@@ -53,7 +54,8 @@ export function content_named_files(doc: Document = document): { url: string; na
 export async function probe_cache(doc: Document = document, limit = 40): Promise<CacheProbe[]> {
 	const sizes = new Map<string, number>();
 	// (the page's loads: an earlier probe's HEAD has no body to size)
-	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[]) if (!tool_made(r)) sizes.set(r.name, r.decodedBodySize || 0);
+	for (const r of performance.getEntriesByType('resource') as PerformanceResourceTiming[])
+		if (!tool_made(r)) sizes.set(r.name, r.decodedBodySize || 0);
 	const files = content_named_files(doc).slice(0, limit);
 	return Promise.all(
 		files.map(async ({ url, name }) => {
@@ -79,7 +81,10 @@ export function cache_findings(probes: readonly CacheProbe[]): StylesFinding[] {
 	const seen = [...new Set(short.map((p) => p.cache_control ?? 'no cache-control'))].slice(0, 3);
 	// the heaviest first: the names that fit are the files a return visit pays most for
 	const names = [...new Set([...short].sort((a, b) => b.bytes - a.bytes).map((p) => p.name))];
-	const list = names.length > 4 ? `${names.slice(0, 4).join(', ')} and ${names.length - 4} more` : names.join(', ');
+	const list =
+		names.length > 4
+			? `${names.slice(0, 4).join(', ')} and ${names.length - 4} more`
+			: names.join(', ');
 	return [
 		{
 			code: 'island-files-uncached',

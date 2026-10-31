@@ -23,7 +23,11 @@ export interface UnscopedStyles {
 }
 
 /** The finding both devtools and the profiler raise, in the same words. */
-export function unscoped_finding(list: readonly UnscopedStyles[]): { code: 'css-unscoped'; message: string; fix: string } {
+export function unscoped_finding(list: readonly UnscopedStyles[]): {
+	code: 'css-unscoped';
+	message: string;
+	fix: string;
+} {
 	const names = list.slice(0, 4).map((u) => (u.why ? `${u.file} (${u.why})` : u.file));
 	const one = list.length === 1;
 	return {
@@ -46,7 +50,10 @@ export function find_unscoped(css: string): UnscopedStyles[] {
 		if (end === -1) break;
 		const body = css.slice(at + UNSCOPED_MARK.length, end).trim();
 		const bar = body.indexOf(' | ');
-		const u = bar === -1 ? { file: body, why: '' } : { file: body.slice(0, bar), why: body.slice(bar + 3).trim() };
+		const u =
+			bar === -1
+				? { file: body, why: '' }
+				: { file: body.slice(0, bar), why: body.slice(bar + 3).trim() };
 		if (!seen.has(u.file)) {
 			seen.add(u.file);
 			out.push(u);

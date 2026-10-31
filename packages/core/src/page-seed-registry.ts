@@ -65,7 +65,9 @@ export function set_page_recorder(fn: Recorder | null): void {
  *  `page.data` keys (`'all'` or a set; `null` until one asks). Undefined outside a request the
  *  handle owns (no reader installed, or no bag). The server router's document reads it after its
  *  render, so a router page seeds like a Kit page: only when an island reads it, only what is read. */
-type AskReader = () => { wanted: boolean; keys: import('./server/seed-shape.ts').SeedKeys | null } | undefined;
+type AskReader = () =>
+	| { wanted: boolean; keys: import('./server/seed-shape.ts').SeedKeys | null }
+	| undefined;
 let ask_reader: AskReader | null = null;
 
 /** Server (`hooks.ts`) installs the reader beside the recorder. */

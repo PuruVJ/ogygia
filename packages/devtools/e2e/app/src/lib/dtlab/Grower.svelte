@@ -9,6 +9,10 @@
 </script>
 
 <div data-dt="grower">
-	{#if open}<div style="height: 220px; background: #eef2ff">a banner that appears after waking</div>{/if}
-	<p style="margin: 0; padding: 20px 0; font-size: 22px">content that gets pushed down when the banner appears</p>
+	{#if open}<div style="height: 220px; background: #eef2ff">
+			a banner that appears after waking
+		</div>{/if}
+	<p style="margin: 0; padding: 20px 0; font-size: 22px">
+		content that gets pushed down when the banner appears
+	</p>
 </div>

@@ -15,14 +15,14 @@ Read this page when you put a third-party widget (a web component, a vendor embe
 
 ## The owners
 
-| Owner | What it is | What ogygia does with it |
-|---|---|---|
-| **Svelte's walk** | the parts of the island's markup Svelte's hydration binds by position | before the wake, puts it back to the server's shape if another script changed it |
-| **Static** | markup Svelte never reads again: `{@html}` content, `bind:innerHTML`, a custom element whose children are static | leaves it alone before the wake; a hole answer or a live tick still updates it |
-| **The page (yours)** | an element you marked `data-ogygia-keep` | never touches it: not before the wake, not on a hole answer, not on a navigation |
-| **A web component** | children and attributes a custom element added itself | kept on a hole answer, a live tick and a navigation |
-| **Lake** | `wake: 'none'` content | the server's HTML, lifted out of the way while the island hydrates |
-| **Slot** | host-page content an island adopts | never repaired: Svelte adopts it whole |
+| Owner                | What it is                                                                                                       | What ogygia does with it                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Svelte's walk**    | the parts of the island's markup Svelte's hydration binds by position                                            | before the wake, puts it back to the server's shape if another script changed it |
+| **Static**           | markup Svelte never reads again: `{@html}` content, `bind:innerHTML`, a custom element whose children are static | leaves it alone before the wake; a hole answer or a live tick still updates it   |
+| **The page (yours)** | an element you marked `data-ogygia-keep`                                                                         | never touches it: not before the wake, not on a hole answer, not on a navigation |
+| **A web component**  | children and attributes a custom element added itself                                                            | kept on a hole answer, a live tick and a navigation                              |
+| **Lake**             | `wake: 'none'` content                                                                                           | the server's HTML, lifted out of the way while the island hydrates               |
+| **Slot**             | host-page content an island adopts                                                                               | never repaired: Svelte adopts it whole                                           |
 
 You do not mark static markup yourself. The compiler finds `{@html}`, `bind:innerHTML` and custom elements with static children, and stamps them in the server HTML (`data-og-opaque`).
 

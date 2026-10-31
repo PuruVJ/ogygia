@@ -8,7 +8,7 @@
 
 <demo-card class="own" data-lab-card>
 	<button data-lab-count onclick={() => n++}>count {n}</button>
-	some   text
+	some text
 </demo-card>
 <p data-lab-p>Buy <demo-card data-lab-inline>now</demo-card></p>
 <a href="/restore-lab#card" data-lab-link><demo-link>Go</demo-link></a>

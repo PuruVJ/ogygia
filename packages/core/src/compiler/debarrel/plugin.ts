@@ -54,7 +54,10 @@ export interface DebarrelInternal {
 	skip_locals?: (code: string) => ReadonlySet<string>;
 }
 
-export function debarrel(options: DebarrelOptions | true = {}, internal: DebarrelInternal = {}): Plugin {
+export function debarrel(
+	options: DebarrelOptions | true = {},
+	internal: DebarrelInternal = {}
+): Plugin {
 	const o = normalize_options(options);
 	const skip_keys = new Set(internal.skip_attribute_keys ?? []);
 	const policy_for = (code: string): RewritePolicy => {
@@ -214,7 +217,8 @@ export function debarrel(options: DebarrelOptions | true = {}, internal: Debarre
 		// The report, once per build leg (Kit builds client then server; each gets its own). Dev
 		// prints nothing here — `debug` narrates rewrites as they happen.
 		closeBundle() {
-			if (o.report && command === 'build') log(format_report(report, root, o.report === 'all' ? Infinity : 8));
+			if (o.report && command === 'build')
+				log(format_report(report, root, o.report === 'all' ? Infinity : 8));
 			report = fresh_report();
 		}
 	};
@@ -228,19 +232,28 @@ const n = (v: number) => v.toLocaleString('en-US');
 
 /** The build-time report: totals, time spent in the pass, and the barrels by names moved — the
  *  `limit` biggest and a count of the rest (`Infinity` for every one). */
-export function format_report(r: ReturnType<typeof debarrel_report_shape>, root: string, limit: number): string {
+export function format_report(
+	r: ReturnType<typeof debarrel_report_shape>,
+	root: string,
+	limit: number
+): string {
 	const span_s = ((r.last_ms - r.first_ms) / 1000).toFixed(2);
 	// components the parser could not read keep their barrels: said in every report, named
 	const skipped = r.skipped?.size
 		? [
-				`  ${n(r.skipped.size)} component${r.skipped.size === 1 ? '' : 's'} skipped (could not be parsed; their imports stay on their barrels): ${[...r.skipped]
+				`  ${n(r.skipped.size)} component${r.skipped.size === 1 ? '' : 's'} skipped (could not be parsed; their imports stay on their barrels): ${[
+					...r.skipped
+				]
 					.slice(0, limit)
 					.map((id) => short(id, root))
 					.join(', ')}${r.skipped.size > limit ? ` and ${n(r.skipped.size - limit)} more` : ''}`
 			]
 		: [];
 	if (r.importers === 0)
-		return [`[ogygia] barrels: ${n(r.files)} files scanned, no barrel imports to rewrite (${span_s} s)`, ...skipped].join('\n');
+		return [
+			`[ogygia] barrels: ${n(r.files)} files scanned, no barrel imports to rewrite (${span_s} s)`,
+			...skipped
+		].join('\n');
 	const head =
 		`[ogygia] barrels: ${n(r.importers)} of ${n(r.files)} files rewritten — ${n(r.imports)} barrel imports → leaves ` +
 		`(${n(r.names)} names), ${n(r.barrels.size)} barrels bypassed, ${span_s} s first to last transform`;
@@ -252,7 +265,10 @@ export function format_report(r: ReturnType<typeof debarrel_report_shape>, root:
 			`  ${n(b.names).padStart(width)} names  ${short(id, root)}  ← ${n(b.importers.size)} importer${b.importers.size === 1 ? '' : 's'}`
 	);
 	const rest = sorted.length - top.length;
-	if (rest > 0) rows.push(`  … and ${n(rest)} more barrel${rest === 1 ? '' : 's'} (\`barrels: { report: 'all' }\` lists every one)`);
+	if (rest > 0)
+		rows.push(
+			`  … and ${n(rest)} more barrel${rest === 1 ? '' : 's'} (\`barrels: { report: 'all' }\` lists every one)`
+		);
 	return [head, ...rows, ...skipped].join('\n');
 }
 

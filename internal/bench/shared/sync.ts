@@ -98,7 +98,7 @@ for (const id of POSTS) {
 		if (kind === 'ogygia') {
 			writeFileSync(
 				join(dir, '+page.ts'),
-				"export const csr = false;\nexport const prerender = true;\n"
+				'export const csr = false;\nexport const prerender = true;\n'
 			);
 		}
 	}

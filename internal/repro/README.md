@@ -8,9 +8,9 @@ measure LAYOUT (host height + a sibling's `top`, frame-by-frame) instead of just
 axis that differs from a plain component:
 
 - async component (top-level `await`) — **clean** (sibling delta 0px)
-- + `position: fixed` content (host has 0 flow height at rest, like the sidebar) — **clean**
-- + an inline custom-element host (`<repro-region>`, default `display:inline` like `<ogygia-region>`) — **clean**
-- + microtask-resolved `await` (mirrors a SEEDED remote, not a timer) — **clean**
+- - `position: fixed` content (host has 0 flow height at rest, like the sidebar) — **clean**
+- - an inline custom-element host (`<repro-region>`, default `display:inline` like `<ogygia-region>`) — **clean**
+- - microtask-resolved `await` (mirrors a SEEDED remote, not a timer) — **clean**
 
 So ogygia's hydration envelope (`[`/`]` comments + Wrapper→App + inline custom-element host) does NOT
 reflow. Combined with the deploy check that `docNav`/`docsPageSnippets` do NOT re-fetch on hydrate
@@ -78,6 +78,7 @@ npm run dev            # http://localhost:5199, DevTools console open
 ```
 
 Variations tried, all of which preserve the class:
+
 - `await Promise.resolve(...)` (one microtask)
 - `await new Promise(r => setTimeout(r, 50))` (a real task delay)
 - hydrating through the wrapper + `[`…`]` envelope (the island pattern)

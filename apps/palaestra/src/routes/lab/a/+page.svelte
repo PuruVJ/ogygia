@@ -6,7 +6,7 @@
 
 <h1 data-lab-page>Page A</h1>
 <p>
-	This heading and the counter below are page-specific, so the delta re-renders them on nav. The blue
-	persistent island in the layout above is kept. That contrast IS the server-delta protocol.
+	This heading and the counter below are page-specific, so the delta re-renders them on nav. The
+	blue persistent island in the layout above is kept. That contrast IS the server-delta protocol.
 </p>
 <Counter start={1} label="page-A-counter" />

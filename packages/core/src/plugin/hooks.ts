@@ -27,7 +27,9 @@ export interface ServerHooks {
 type AnyFn = (...args: unknown[]) => unknown;
 type Impl = Record<string, unknown>;
 
-const implementations: Impl[] = ((globalThis as Record<symbol, Impl[] | undefined>)[Symbol.for('ogygia.server-hooks.v1')] ??= []);
+const implementations: Impl[] = ((globalThis as Record<symbol, Impl[] | undefined>)[
+	Symbol.for('ogygia.server-hooks.v1')
+] ??= []);
 
 /** Core only: a set of hook implementations joins (a plugin's server half, or core's own). Keyed by
  *  identity; returns the leave. */
@@ -40,9 +42,13 @@ export function register_hooks(impl: object): () => void {
 	};
 }
 
-export type Notify = { [K in keyof ServerHooks]: (...args: Parameters<ServerHooks[K]>) => Promise<void> };
+export type Notify = {
+	[K in keyof ServerHooks]: (...args: Parameters<ServerHooks[K]>) => Promise<void>;
+};
 export type Ask = {
-	[K in keyof ServerHooks]: (...args: Parameters<ServerHooks[K]>) => Promise<Awaited<ReturnType<ServerHooks[K]>> | undefined>;
+	[K in keyof ServerHooks]: (
+		...args: Parameters<ServerHooks[K]>
+	) => Promise<Awaited<ReturnType<ServerHooks[K]>> | undefined>;
 };
 
 /** Every implementation of the named hook runs; a failing one is logged, never thrown. */

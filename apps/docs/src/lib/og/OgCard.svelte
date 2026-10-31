@@ -18,14 +18,30 @@
 <div class="card">
 	<div class="rule"></div>
 	<div class="palm-bg">
-		<svg width="600" height="600" viewBox="0 0 32 32" fill="none" stroke="#6fe3b0" stroke-width="1.4" stroke-linecap="round">{@html palm}</svg>
+		<svg
+			width="600"
+			height="600"
+			viewBox="0 0 32 32"
+			fill="none"
+			stroke="#6fe3b0"
+			stroke-width="1.4"
+			stroke-linecap="round">{@html palm}</svg
+		>
 	</div>
 
 	{#if home}
 		<!-- home: the brand IS the hero -->
 		<div class="hero">
 			<div class="hero-lockup">
-				<svg width="104" height="104" viewBox="0 0 32 32" fill="none" stroke="#6fe3b0" stroke-width="2.1" stroke-linecap="round">{@html palm}</svg>
+				<svg
+					width="104"
+					height="104"
+					viewBox="0 0 32 32"
+					fill="none"
+					stroke="#6fe3b0"
+					stroke-width="2.1"
+					stroke-linecap="round">{@html palm}</svg
+				>
 				<span class="hero-word">ogygia</span>
 			</div>
 			<span class="hero-tag">SSR islands for SvelteKit</span>
@@ -36,7 +52,15 @@
 		</div>
 	{:else}
 		<div class="brand">
-			<svg width="46" height="46" viewBox="0 0 32 32" fill="none" stroke="#6fe3b0" stroke-width="2.25" stroke-linecap="round">{@html palm}</svg>
+			<svg
+				width="46"
+				height="46"
+				viewBox="0 0 32 32"
+				fill="none"
+				stroke="#6fe3b0"
+				stroke-width="2.25"
+				stroke-linecap="round">{@html palm}</svg
+			>
 			<span class="brand-word">ogygia</span>
 		</div>
 
@@ -64,7 +88,11 @@
 		justify-content: space-between;
 		padding: 70px 76px;
 		background: #060907;
-		background-image: radial-gradient(1000px 500px at 100% 0%, rgba(111, 227, 176, 0.13), rgba(6, 9, 7, 0) 60%);
+		background-image: radial-gradient(
+			1000px 500px at 100% 0%,
+			rgba(111, 227, 176, 0.13),
+			rgba(6, 9, 7, 0) 60%
+		);
 		overflow: hidden;
 		font-family: 'Newsreader';
 	}

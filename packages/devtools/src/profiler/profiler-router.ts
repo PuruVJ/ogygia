@@ -194,19 +194,36 @@ export function build_profiler_router(d: ProfilerDeps): Router<{
 	readonly '/beacon': { readonly POST: CtxFn<Promise<Response>> };
 	readonly '/window/start': { readonly POST: CtxFn<Promise<Response>> };
 	readonly '/window/stop': { readonly POST: CtxFn<Promise<Response>> };
-	readonly '/login': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['login_props']>, { default: CtxFn<Promise<Response>> }>;
+	readonly '/login': ProfilerPage<
+		(c: Ctx) => ReturnType<ProfilerDeps['login_props']>,
+		{ default: CtxFn<Promise<Response>> }
+	>;
 	readonly '/logout': { readonly GET: CtxFn<Response> };
 	readonly '/view': ProfilerPage<() => { base: string }, { default: CtxFn<Promise<Response>> }>;
 	readonly '/reports.json': { readonly GET: CtxFn<Promise<Response>> };
 	readonly '/report/[id]': ProfilerPage<
 		(c: Ctx) => Promise<
-			| { report: Awaited<ReturnType<ProfilerDeps['report_view']>>; base: string; login: null; exists: boolean }
+			| {
+					report: Awaited<ReturnType<ProfilerDeps['report_view']>>;
+					base: string;
+					login: null;
+					exists: boolean;
+			  }
 			| { report: null; base: string; login: string | null; exists: boolean }
 		>
 	>;
-	readonly '/report/[id].json': { readonly GET: CtxFn<Promise<Response>>; readonly POST: CtxFn<Promise<Response>> };
-	readonly '/report/[id].html': { readonly GET: CtxFn<Promise<Response>>; readonly POST: CtxFn<Promise<Response>> };
-	readonly '/report/[id].dump': { readonly GET: CtxFn<Promise<Response>>; readonly POST: CtxFn<Promise<Response>> };
+	readonly '/report/[id].json': {
+		readonly GET: CtxFn<Promise<Response>>;
+		readonly POST: CtxFn<Promise<Response>>;
+	};
+	readonly '/report/[id].html': {
+		readonly GET: CtxFn<Promise<Response>>;
+		readonly POST: CtxFn<Promise<Response>>;
+	};
+	readonly '/report/[id].dump': {
+		readonly GET: CtxFn<Promise<Response>>;
+		readonly POST: CtxFn<Promise<Response>>;
+	};
 	readonly '/report/[id].ogp': { readonly POST: CtxFn<Promise<Response>> };
 	readonly '/report/[id]/raw': { readonly GET: CtxFn<Promise<Response>> };
 	readonly '/compare/[a]/[b]': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['compare']>>;

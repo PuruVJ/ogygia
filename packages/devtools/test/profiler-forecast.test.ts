@@ -34,8 +34,12 @@ describe('forecast_of', () => {
 		const f = forecast_of(
 			[100],
 			[
-				pat({ kind: 'formatter-per-call', title: 'A formatter per call', save_ms: 30 }, [['lib/a.ts', 3]]),
-				pat({ kind: 'formatter-per-call', title: 'A formatter per call', save_ms: 20 }, [['lib/b.ts', 9]]),
+				pat({ kind: 'formatter-per-call', title: 'A formatter per call', save_ms: 30 }, [
+					['lib/a.ts', 3]
+				]),
+				pat({ kind: 'formatter-per-call', title: 'A formatter per call', save_ms: 20 }, [
+					['lib/b.ts', 9]
+				]),
 				pat({ kind: 'date-parse', title: 'Dates parsed per item', save_ms: 10 }, [['lib/c.ts', 1]])
 			],
 			undefined
@@ -121,7 +125,10 @@ describe('forecast_of', () => {
 		const f = forecast_of([100], pats, undefined, { answers_runs: [52, 48, 50] })!;
 		// the lines alone: 100 − 40 − 10 = 50; the page served the answers rendered in 50 (median)
 		expect(f.after_ms).toBe(65);
-		expect(f.answers).toMatchObject({ after_ms: 40, measured: { ms: 50, renders: 3, model_ms: 50 } });
+		expect(f.answers).toMatchObject({
+			after_ms: 40,
+			measured: { ms: 50, renders: 3, model_ms: 50 }
+		});
 		// no measured renders: the estimate, as before
 		expect(forecast_of([100], pats, undefined)!.answers).toMatchObject({ after_ms: 50 });
 		expect(forecast_of([100], pats, undefined)!.answers?.measured).toBeUndefined();

@@ -403,7 +403,9 @@
 	border-radius: var(--r-md, 12px);
 	background: var(--bg-sunken);
 	text-decoration: none;
-	transition: border-color 0.15s ease, transform 0.15s ease;
+	transition:
+		border-color 0.15s ease,
+		transform 0.15s ease;
 }
 
 .og-suggested-card:hover {
@@ -443,7 +445,9 @@
 	border-radius: var(--r-md, 12px);
 	background: var(--bg-sunken);
 	text-decoration: none;
-	transition: border-color 0.15s ease, transform 0.15s ease;
+	transition:
+		border-color 0.15s ease,
+		transform 0.15s ease;
 }
 
 .og-pager-prev {

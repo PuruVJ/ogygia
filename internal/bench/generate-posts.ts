@@ -59,5 +59,7 @@ const POSTS = [
 for (const [name, words] of POSTS) {
 	const md = post(words);
 	writeFileSync(join(OUT, `${name}.md`), md);
-	console.log(`  ${name}.md — ${md.split(/\s+/).length.toLocaleString()} words, ${md.length.toLocaleString()} chars`);
+	console.log(
+		`  ${name}.md — ${md.split(/\s+/).length.toLocaleString()} words, ${md.length.toLocaleString()} chars`
+	);
 }

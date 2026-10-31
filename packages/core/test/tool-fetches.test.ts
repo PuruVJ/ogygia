@@ -1,10 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { tool_fetch, tool_made } from '../src/tool-fetches.ts';
 
-const entry = (name: string, startTime: number, initiatorType = 'fetch') => ({ name, startTime, initiatorType }) as PerformanceResourceTiming;
+const entry = (name: string, startTime: number, initiatorType = 'fetch') =>
+	({ name, startTime, initiatorType }) as PerformanceResourceTiming;
 
 describe("the tools' own requests", () => {
-	const real = { fetch: globalThis.fetch, location: (globalThis as { location?: unknown }).location, now: globalThis.performance.now };
+	const real = {
+		fetch: globalThis.fetch,
+		location: (globalThis as { location?: unknown }).location,
+		now: globalThis.performance.now
+	};
 	let now = 0;
 	beforeEach(() => {
 		delete (globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.tool-fetches')];

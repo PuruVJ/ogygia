@@ -262,10 +262,12 @@ describe('audit fixes — head_node_key', () => {
 		// for — the same sheet on the next document is one node, never stacked by content length.
 		const inlined = {
 			tagName: 'STYLE',
-			getAttribute: (n: string) => (n === 'data-ogygia-region-css' ? '/_app/immutable/assets/Tiny.css' : null),
+			getAttribute: (n: string) =>
+				n === 'data-ogygia-region-css' ? '/_app/immutable/assets/Tiny.css' : null,
 			hasAttribute: (n: string) => n === 'data-ogygia-region-css',
 			textContent: '.a{color:red}',
-			outerHTML: '<style data-ogygia-region-css="/_app/immutable/assets/Tiny.css">.a{color:red}</style>'
+			outerHTML:
+				'<style data-ogygia-region-css="/_app/immutable/assets/Tiny.css">.a{color:red}</style>'
 		} as unknown as Element;
 		expect(head_node_key(inlined)).toBe('STYLE:og-css:/_app/immutable/assets/Tiny.css');
 

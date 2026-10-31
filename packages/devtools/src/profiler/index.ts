@@ -88,10 +88,21 @@ import {
 import { load_lane_of } from './timeline.ts';
 import { parse_visit, merge_visits, type Visit } from './visit.ts';
 import { hole_slots } from './hole-slots.ts';
-import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.ts';
+import {
+	client_windows,
+	interaction_windows,
+	type ClientWindows,
+	type InteractionCpu
+} from './client-windows.ts';
 import { byte_strip, type ByteStrip } from './byte-strip.ts';
 import { stream_tail } from './stream-tail.ts';
-import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from '@ogygia/core/insights';
+import {
+	weigh_assets,
+	assets_diff,
+	type PageAssets,
+	type Weight,
+	type AssetRef
+} from '@ogygia/core/insights';
 import { BEACON_STANDALONE_TAG } from './beacon-standalone.ts';
 import { build_river, load_return_keys, seed_key_bytes, type River } from './river.ts';
 import { SinkBuffer, type SinkRow } from './sink.ts';
@@ -206,7 +217,13 @@ async function read_timed(
 	text += dec.decode();
 	return { text, chunks };
 }
-import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.ts';
+import {
+	compare_reports,
+	island_files_diff,
+	page_history,
+	vitals_moved,
+	type Since
+} from './compare.ts';
 import { engine_of, vital_parts, type PageInput } from '@ogygia/core/insights';
 import { label_call, phase_of_frame } from './timeline.ts';
 import { gzip_large } from './compress.ts';
@@ -218,7 +235,15 @@ import {
 	set_request_stats_detail,
 	type BatchHoleStats
 } from '@ogygia/core/internal/server';
-import { chunkBarrels, chunkContents, chunkDuplicates, chunkHeavy, islandHazards, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
+import {
+	chunkBarrels,
+	chunkContents,
+	chunkDuplicates,
+	chunkHeavy,
+	islandHazards,
+	islandPageKeys,
+	islandPageWhy
+} from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.ts';
 import { register_profiler_file } from './frames.ts';
 
@@ -911,7 +936,10 @@ class Profiler {
 	readonly #trap: ProfilerOptions['trap'] | null;
 	readonly #client_cpu: boolean;
 	/** the browser's CPU profile of hydration, per page path (the profiler user's latest visit) */
-	readonly #client_cpus = new Map<string, { analysis: Analysis; at: number; sample_ms: number; windows?: ClientWindows }>();
+	readonly #client_cpus = new Map<
+		string,
+		{ analysis: Analysis; at: number; sample_ms: number; windows?: ClientWindows }
+	>();
 	/** per page, the slowest interaction's CPU (its wait and its handlers), the latest trace */
 	readonly #interaction_cpus = new Map<string, InteractionCpu & { at: number }>();
 	/** the beacon's visits per page (the browser's picture of a page load), a few kept each */
@@ -1804,9 +1832,9 @@ class Profiler {
 				: undefined;
 			// ...and the browser's modules, by the URL path the dev server served them at
 			const dev_client_map = this.dev
-				? ((globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.profiler.dev-client-maps')] as
-						| ((url: string) => string | undefined)
-						| undefined)
+				? ((globalThis as Record<symbol, unknown>)[
+						Symbol.for('ogygia.profiler.dev-client-maps')
+					] as ((url: string) => string | undefined) | undefined)
 				: undefined;
 			return sourcemap_resolver(
 				(p) => {
@@ -1936,8 +1964,7 @@ class Profiler {
 			// (the FULL resolved path too: the short one drops `node_modules/` — Kit's
 			// `exports/internal/event.js`, bundled into an adapter's own chunks, maps back there)
 			// (only `node_modules/` there: an app folder named `runtime/server` is still the app's)
-			if (FRAMEWORK_SOURCE_RE.test(file) || (m && NODE_MODULES_RE.test(m.source)))
-				return undefined;
+			if (FRAMEWORK_SOURCE_RE.test(file) || (m && NODE_MODULES_RE.test(m.source))) return undefined;
 			last_at = { path: m ? m.source : site.file, line };
 			return name ? `${name} (${file}:${line})` : `${file}:${line}`;
 		};
@@ -2197,7 +2224,9 @@ class Profiler {
 		// through the app (a built app's hashed assets; dev URLs are unbundled and say nothing).
 		let weights: Record<string, number> | undefined;
 		let contents: Record<string, string[]> | undefined;
-		let heavy: Record<string, { total: number; top: { name: string; bytes: number }[] }> | undefined;
+		let heavy:
+			| Record<string, { total: number; top: { name: string; bytes: number }[] }>
+			| undefined;
 		let barrels: Record<string, { name: string; fanout: number }[]> | undefined;
 		let hazards: Record<string, IslandHazard[]> | undefined;
 		if (fetch_url && !this.dev) {
@@ -2227,11 +2256,14 @@ class Profiler {
 				for (const r of island_rows_of(meta)) {
 					if (hazards?.[r.entry]) continue;
 					const files = new Set<string>();
-					for (const u of [r.module_url, ...r.hints]) for (const f of contents[u] ?? []) if (f.endsWith('.svelte') && f.startsWith('src/')) files.add(f);
+					for (const u of [r.module_url, ...r.hints])
+						for (const f of contents[u] ?? [])
+							if (f.endsWith('.svelte') && f.startsWith('src/')) files.add(f);
 					const found: IslandHazard[] = [];
 					for (const f of files) {
 						const src = read(f.slice(4)) ?? read(f);
-						if (src) for (const h of hydration_hazards(src).slice(0, 3)) found.push({ file: f, ...h });
+						if (src)
+							for (const h of hydration_hazards(src).slice(0, 3)) found.push({ file: f, ...h });
 					}
 					if (found.length) (hazards ??= {})[r.entry] = found.slice(0, 5);
 				}
@@ -2417,7 +2449,10 @@ class Profiler {
 		// into a plain object) keep only the last of several, and with the beacon flag last, the
 		// session was the one lost ("logged in, but no og_profiler arrived"). The flag follows on the
 		// next response (#flag_cookie).
-		res.headers.append('set-cookie', this.#session_cookie(this.#cookie_token(createHash), ctx.event!));
+		res.headers.append(
+			'set-cookie',
+			this.#session_cookie(this.#cookie_token(createHash), ctx.event!)
+		);
 		return res;
 	}
 
@@ -3141,11 +3176,21 @@ class Profiler {
 			// names no file), else the page's own file the timeline or the lineage saw
 			// (the timed renders are the profiler's own, internal requests: by the page's path)
 			const reqs = s.meta.requests ?? [];
-			const route = s.meta.run_route ?? (reqs.find((r) => r.route && r.path.split('?')[0] === s.meta.page?.split('?')[0]) ?? reqs.find((r) => r.route))?.route;
+			const route =
+				s.meta.run_route ??
+				(
+					reqs.find((r) => r.route && r.path.split('?')[0] === s.meta.page?.split('?')[0]) ??
+					reqs.find((r) => r.route)
+				)?.route;
 			const leaf =
-				[...new Set((s.analysis.timeline?.lanes ?? []).map((l) => l.file))].find((f) => f.includes('+page')) ??
-				(s.lineage?.components ?? []).find((c) => c.file.endsWith('+page.svelte'))?.file;
-			const dir = route ? `routes${route === '/' ? '' : route}` : leaf ? leaf.slice(0, leaf.lastIndexOf('/')) : '';
+				[...new Set((s.analysis.timeline?.lanes ?? []).map((l) => l.file))].find((f) =>
+					f.includes('+page')
+				) ?? (s.lineage?.components ?? []).find((c) => c.file.endsWith('+page.svelte'))?.file;
+			const dir = route
+				? `routes${route === '/' ? '' : route}`
+				: leaf
+					? leaf.slice(0, leaf.lastIndexOf('/'))
+					: '';
 			if (s.meta.run_static || (dir && route_prerendered(read, dir))) s.meta.prerendered = true;
 		}
 		const near =
@@ -3208,7 +3253,10 @@ class Profiler {
 				const render_ms = runs[Math.floor(runs.length / 2)];
 				// (what the response says that keeps every shared cache out: the header advice waits on it)
 				const cc = s.meta.run_cache_control;
-				const shut = cc?.toLowerCase().split(',').some((d) => d.trim() === 'private' || d.trim() === 'no-store');
+				const shut = cc
+					?.toLowerCase()
+					.split(',')
+					.some((d) => d.trim() === 'private' || d.trim() === 'no-store');
 				if (s.meta.same_document)
 					patterns.push(
 						same_document_pattern({
@@ -3217,7 +3265,12 @@ class Profiler {
 							bytes: s.meta.run_bytes ?? 0,
 							...(code ? { code } : {}),
 							...(s.meta.run_sets_cookie || shut
-								? { blocked: { ...(s.meta.run_sets_cookie ? { cookie: true } : {}), ...(shut ? { cache_control: cc } : {}) } }
+								? {
+										blocked: {
+											...(s.meta.run_sets_cookie ? { cookie: true } : {}),
+											...(shut ? { cache_control: cc } : {})
+										}
+									}
 								: {})
 						})
 					);
@@ -3367,7 +3420,8 @@ class Profiler {
 		if (route)
 			for (let i = patterns.length - 1; i >= 0; i--) {
 				const sites = patterns[i].sites;
-				if (sites.length && sites.every((x) => another_routes_file(route, x.path || x.file))) patterns.splice(i, 1);
+				if (sites.length && sites.every((x) => another_routes_file(route, x.path || x.file)))
+					patterns.splice(i, 1);
 			}
 		// SYNC I/O TOO QUICK TO SAMPLE: a *Sync call V8 counted in the render, found in the route's
 		// own files (its page, the layouts above it, the hooks) — when the samples saw none
@@ -3378,7 +3432,8 @@ class Profiler {
 				const dirs = route_folders(route);
 				const rels: string[] = [];
 				const add = (dir: string, names: string[]) => {
-					for (const n of names) for (const ext of ['.ts', '.js']) rels.push(`routes/${dir ? dir + '/' : ''}${n}${ext}`);
+					for (const n of names)
+						for (const ext of ['.ts', '.js']) rels.push(`routes/${dir ? dir + '/' : ''}${n}${ext}`);
 				};
 				for (const d of dirs.above('src')) add(d, ['+layout.server', '+layout']);
 				add(dirs.own('src'), ['+page.server', '+page']);
@@ -4176,7 +4231,12 @@ class Profiler {
 	// A WINDOW YOU START AND STOP — the server side of a test's (or the devtools Record tab's) actions:
 	// the CPU sampled across every request those actions made, their outbound calls, the requests
 	// themselves. One at a time (it holds the recorder); capped so a forgotten stop cannot hold it.
-	#window: { id: string; stop: () => void; done: Promise<WindowCapture>; timer: ReturnType<typeof setTimeout> } | null = null;
+	#window: {
+		id: string;
+		stop: () => void;
+		done: Promise<WindowCapture>;
+		timer: ReturnType<typeof setTimeout>;
+	} | null = null;
 
 	// A WINDOW ACROSS INSTANCES (a serverless deployment: start, the session's requests and stop can
 	// each land on another instance). Start answers an id, signed with the profiler's secret so any
@@ -4186,7 +4246,10 @@ class Profiler {
 	// instance, gathers them. The CPU profile stays the starting instance's: sampling is per process.
 	async #window_sign(nonce: string): Promise<string> {
 		const { createHmac } = await import('node:crypto');
-		return createHmac('sha256', this.secret || 'ogygia-dev-window').update('window:' + nonce).digest('hex').slice(0, 20);
+		return createHmac('sha256', this.secret || 'ogygia-dev-window')
+			.update('window:' + nonce)
+			.digest('hex')
+			.slice(0, 20);
 	}
 
 	/** A window id from a request, when its signature holds; else null. */
@@ -4204,16 +4267,45 @@ class Profiler {
 		if (!this.#store?.putVisit || entry.internal) return;
 		const id = await this.#window_id_of(request);
 		if (!id) return;
-		const rec = { method: entry.method, path: entry.path, route: entry.route ?? null, ms: entry.ms, status: entry.status ?? null, cpu_ms: entry.cpu_ms, net_ms: entry.net_ms ?? null, net_count: entry.net_count ?? 0, at: Date.now(), instance: this.#instance_id };
+		const rec = {
+			method: entry.method,
+			path: entry.path,
+			route: entry.route ?? null,
+			ms: entry.ms,
+			status: entry.status ?? null,
+			cpu_ms: entry.cpu_ms,
+			net_ms: entry.net_ms ?? null,
+			net_count: entry.net_count ?? 0,
+			at: Date.now(),
+			instance: this.#instance_id
+		};
 		try {
-			await this.#store.putVisit({ key: `${WINDOW_PAGE_PREFIX}${id}\0${rec.at}\0${Math.random().toString(36).slice(2, 8)}`, page: WINDOW_PAGE_PREFIX + id, at: rec.at, visit: JSON.stringify(rec) });
+			await this.#store.putVisit({
+				key: `${WINDOW_PAGE_PREFIX}${id}\0${rec.at}\0${Math.random().toString(36).slice(2, 8)}`,
+				page: WINDOW_PAGE_PREFIX + id,
+				at: rec.at,
+				visit: JSON.stringify(rec)
+			});
 		} catch {
 			// the store is down: this request is missing from the window, nothing else breaks
 		}
 	}
 
 	/** The requests every instance wrote for a window. */
-	async #window_requests(id: string): Promise<{ method: string; path: string; route: string | null; ms: number; status: number | null; cpu_ms: number; net_ms: number | null; net_count: number; at: number; instance: string }[]> {
+	async #window_requests(id: string): Promise<
+		{
+			method: string;
+			path: string;
+			route: string | null;
+			ms: number;
+			status: number | null;
+			cpu_ms: number;
+			net_ms: number | null;
+			net_count: number;
+			at: number;
+			instance: string;
+		}[]
+	> {
 		if (!this.#store?.listVisits) return [];
 		try {
 			const rows = await this.#store.listVisits(WINDOW_PAGE_PREFIX + id, 2000);
@@ -4228,7 +4320,14 @@ class Profiler {
 
 	async #window_start(ctx: RouteCtx): Promise<Response> {
 		const busy = (message: string) =>
-			new Response(JSON.stringify({ busy: true, message }), { status: 409, headers: { 'content-type': 'application/json; charset=utf-8', 'retry-after': '2', 'cache-control': 'no-store' } });
+			new Response(JSON.stringify({ busy: true, message }), {
+				status: 409,
+				headers: {
+					'content-type': 'application/json; charset=utf-8',
+					'retry-after': '2',
+					'cache-control': 'no-store'
+				}
+			});
 		if (this.#window) return busy('A window is already recording: stop it first.');
 		// a BACKGROUND window (the trap, the always-on sampler) holding the recorder is short: wait
 		// for it (as a page profile does); another page profile is the real conflict
@@ -4236,12 +4335,14 @@ class Profiler {
 			this.#page_waiting++;
 			try {
 				const until = Date.now() + PAGE_WAITS_FOR_BACKGROUND_MS;
-				while (this.#recorder_busy && this.#trap_running && Date.now() < until) await new Promise((r) => setTimeout(r, 50));
+				while (this.#recorder_busy && this.#trap_running && Date.now() < until)
+					await new Promise((r) => setTimeout(r, 50));
 			} finally {
 				this.#page_waiting--;
 			}
 		}
-		if (!this.#try_acquire_recorder()) return busy('Another recording holds the recorder. Try again in a moment.');
+		if (!this.#try_acquire_recorder())
+			return busy('Another recording holds the recorder. Try again in a moment.');
 		this.#recording_since = Date.now();
 		this.#trap_running = true; // a background window: no per-request attribution context
 		this.#ensure_net?.();
@@ -4258,12 +4359,20 @@ class Profiler {
 			});
 		}, WINDOW_MAX_MS);
 		timer.unref?.();
-		const done = this.#capture_window(Math.min(this.sample_interval, 1000), () => stopped, { light: true });
+		const done = this.#capture_window(Math.min(this.sample_interval, 1000), () => stopped, {
+			light: true
+		});
 		// a capture that fails to start frees the recorder at once
 		done.catch(() => this.#window_release());
 		this.#window = { id, stop, done, timer };
 		// `shared`: the requests of other instances reach this window (a store with visit rows)
-		return ctx.json({ ok: true, id, header: WINDOW_HEADER, shared: !!(this.#store?.putVisit && this.#store.listVisits), max_ms: WINDOW_MAX_MS });
+		return ctx.json({
+			ok: true,
+			id,
+			header: WINDOW_HEADER,
+			shared: !!(this.#store?.putVisit && this.#store.listVisits),
+			max_ms: WINDOW_MAX_MS
+		});
 	}
 
 	#window_release(): void {
@@ -4295,10 +4404,17 @@ class Profiler {
 					links: { html: '', json: '' },
 					summary: { busy_ms: busy },
 					cpu: 'the instance that started the window sampled it; this one only gathered the requests',
-					window: { ms: reqs.length ? reqs[reqs.length - 1].at - reqs[0].at : 0, requests: reqs, instances: new Set(reqs.map((r) => r.instance)).size }
+					window: {
+						ms: reqs.length ? reqs[reqs.length - 1].at - reqs[0].at : 0,
+						requests: reqs,
+						instances: new Set(reqs.map((r) => r.instance)).size
+					}
 				});
 			}
-			return ctx.json({ error: 'No window is recording (start one with POST /window/start).' }, { status: 400 });
+			return ctx.json(
+				{ error: 'No window is recording (start one with POST /window/start).' },
+				{ status: 400 }
+			);
 		}
 		w.stop();
 		let cap: WindowCapture;
@@ -4306,27 +4422,63 @@ class Profiler {
 			cap = await w.done;
 		} catch (e) {
 			this.#window_release();
-			return ctx.json({ error: `The window failed: ${e instanceof Error ? e.message : String(e)}` }, { status: 500 });
+			return ctx.json(
+				{ error: `The window failed: ${e instanceof Error ? e.message : String(e)}` },
+				{ status: 500 }
+			);
 		}
 		// the requests the window saw (not the profiler's own)
 		const own = `${this.base}/`;
 		// this instance's requests over the window (all of them: the server-side calls a tagged request
 		// made carry no tag), and the other instances' tagged ones from the store
 		const shared = await this.#window_requests(w.id);
-		const others = shared.filter((e) => e.instance !== this.#instance_id && !e.path.startsWith(own) && e.path !== this.base);
+		const others = shared.filter(
+			(e) => e.instance !== this.#instance_id && !e.path.startsWith(own) && e.path !== this.base
+		);
 		const requests = [
 			...this.#ring
-				.filter((e) => !e.internal && e.ts >= cap.t0 && e.ts <= cap.t1 && !e.path.startsWith(own) && e.path !== this.base)
-				.map((e) => ({ method: e.method, path: e.path, route: e.route ?? null, ms: round2(e.ms), status: e.status ?? null, cpu_ms: e.cpu_ms, instance: this.#instance_id })),
+				.filter(
+					(e) =>
+						!e.internal &&
+						e.ts >= cap.t0 &&
+						e.ts <= cap.t1 &&
+						!e.path.startsWith(own) &&
+						e.path !== this.base
+				)
+				.map((e) => ({
+					method: e.method,
+					path: e.path,
+					route: e.route ?? null,
+					ms: round2(e.ms),
+					status: e.status ?? null,
+					cpu_ms: e.cpu_ms,
+					instance: this.#instance_id
+				})),
 			...others
 		];
 		try {
 			const id = await this.#finish_report(cap, {
 				trigger: 'window',
-				...(requests[0] ? { request: { method: requests[0].method, path: requests[0].path, route: requests[0].route, ms: requests[0].ms } } : {})
+				...(requests[0]
+					? {
+							request: {
+								method: requests[0].method,
+								path: requests[0].path,
+								route: requests[0].route,
+								ms: requests[0].ms
+							}
+						}
+					: {})
 			});
 			const s = this.#reports.get(id)!;
-			return ctx.json({ ...report_json(s.analysis, s.meta, this.base, this.#report_extras(s)), window: { ms: round2(cap.t1 - cap.t0), requests, ...(shared.length ? { instances: new Set(requests.map((r) => r.instance)).size } : {}) } });
+			return ctx.json({
+				...report_json(s.analysis, s.meta, this.base, this.#report_extras(s)),
+				window: {
+					ms: round2(cap.t1 - cap.t0),
+					requests,
+					...(shared.length ? { instances: new Set(requests.map((r) => r.instance)).size } : {})
+				}
+			});
 		} finally {
 			this.#window_release();
 		}
@@ -4412,7 +4564,11 @@ class Profiler {
 			} catch {
 				heap_now = null;
 			}
-			if (heap_now && heap_now.heap_size_limit > 0 && heap_now.used_heap_size / heap_now.heap_size_limit >= HEAP_START)
+			if (
+				heap_now &&
+				heap_now.heap_size_limit > 0 &&
+				heap_now.used_heap_size / heap_now.heap_size_limit >= HEAP_START
+			)
 				return error(
 					503,
 					`The server's heap is ${Math.round((heap_now.used_heap_size / heap_now.heap_size_limit) * 100)}% full (${Math.round(heap_now.used_heap_size / 1048576)} of ${Math.round(heap_now.heap_size_limit / 1048576)} MB): profiling now could run it out of memory and end the process. Something keeps what each render makes (the last profile's Kept per render names the line). Restart the server, then profile once.`
@@ -4444,7 +4600,14 @@ class Profiler {
 						// navigation (the document ships, then a script per settle); any other fetch gets them
 						// settled on the server first — another render than a visitor's, and one chunk, so the
 						// byte strip never showed what held the document open
-						headers: { 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document', accept: 'text/html', ...(replay?.headers ?? {}), ...extra, 'x-og-profiler-internal': '1' }
+						headers: {
+							'sec-fetch-mode': 'navigate',
+							'sec-fetch-dest': 'document',
+							accept: 'text/html',
+							...(replay?.headers ?? {}),
+							...extra,
+							'x-og-profiler-internal': '1'
+						}
 					}),
 					ms,
 					'render timed out (the page or one of its upstream calls did not return in time)'
@@ -4563,7 +4726,13 @@ class Profiler {
 			const heap_skipped: string[] = [];
 			const heap_guard = () => {
 				const s = v8_stats?.();
-				return s ? { used_mb: Math.round(s.used_heap_size / 1048576), limit_mb: Math.round(s.heap_size_limit / 1048576), skipped: heap_skipped } : undefined;
+				return s
+					? {
+							used_mb: Math.round(s.used_heap_size / 1048576),
+							limit_mb: Math.round(s.heap_size_limit / 1048576),
+							skipped: heap_skipped
+						}
+					: undefined;
 			};
 			// the timed renders keep what each GET answered: the keep-the-answers renders are served it
 			this.#kept?.keep(true);
@@ -4605,12 +4774,17 @@ class Profiler {
 							// server: a recording holds the site-wide attribution open, so it never runs longer)
 							const serverless = Number.isFinite(budget_deadline) && deadline === budget_deadline;
 							const limit_ms = serverless ? work_budget : RECORDING_HARD_CAP_MS;
-							const budget_label = limit_ms >= 1000 ? `${Math.round(limit_ms / 1000)} s` : `${Math.round(limit_ms)} ms`;
+							const budget_label =
+								limit_ms >= 1000
+									? `${Math.round(limit_ms / 1000)} s`
+									: `${Math.round(limit_ms)} ms`;
 							// (an extra render for a clean one is not a render asked for: no note)
 							if (i < runs)
 								budget_note =
 									`Ran ${i} of ${runs} renders — trimmed to fit the ` +
-									(serverless ? `${budget_label} serverless budget` : `${budget_label} limit on one recording`) +
+									(serverless
+										? `${budget_label} serverless budget`
+										: `${budget_label} limit on one recording`) +
 									` (the page renders in ~${Math.round(warmup_ms ?? 0)} ms). Fewer runs, same accuracy per run.`;
 							break;
 						}
@@ -4684,7 +4858,8 @@ class Profiler {
 				(e) =>
 					!e.internal &&
 					e.pt !== undefined &&
-					(e.path === target_path || (!own_calls.has(e.path.split('?')[0]) && !e.path.startsWith(this.base)))
+					(e.path === target_path ||
+						(!own_calls.has(e.path.split('?')[0]) && !e.path.startsWith(this.base)))
 			);
 			const mixed_at = run_windows.map((w) =>
 				outside.some((e) => e.pt! < w.end && (e.ms > 0 ? e.pt! + e.ms : Infinity) > w.start)
@@ -4766,7 +4941,9 @@ class Profiler {
 			// the cold render's per-file cost (the warm figures come from the main analysis at report time)
 			let cold: ReportMeta['cold'];
 			mem_mark('after the answer renders');
-			const cold_route = this.#ring.find((e) => e.internal && e.path === target_path && e.route)?.route;
+			const cold_route = this.#ring.find(
+				(e) => e.internal && e.path === target_path && e.route
+			)?.route;
 			if (cold_cap && warmup_ms !== undefined) {
 				try {
 					// one "run" spanning the cold render: its CPU by owner, grouped as the drill-down groups
@@ -4781,7 +4958,13 @@ class Profiler {
 						await this.#make_resolver(),
 						undefined,
 						// (the route too: another page's request in the cold window is set aside like a warm run's)
-						{ perf_start: cold_cap.perf_start, window: whole, calls: [], runs: [whole], ...(cold_route ? { route: cold_route } : {}) },
+						{
+							perf_start: cold_cap.perf_start,
+							window: whole,
+							calls: [],
+							runs: [whole],
+							...(cold_route ? { route: cold_route } : {})
+						},
 						undefined,
 						this.#module_hint
 					);
@@ -4825,7 +5008,8 @@ class Profiler {
 			// its render plus the full collection after it, and the coverage render still to come
 			// (not past HEAP_EXTRAS of the heap: the heap sampler's read itself needs room)
 			const heap_ok = heap_fill() < HEAP_EXTRAS;
-			if (gc_attr && this.want_heap && !heap_ok) heap_skipped.push('the render that measures what a render keeps');
+			if (gc_attr && this.want_heap && !heap_ok)
+				heap_skipped.push('the render that measures what a render keeps');
 			if (
 				gc_attr &&
 				this.want_heap &&
@@ -4855,9 +5039,14 @@ class Profiler {
 				const room = deadline - Date.now() - coverage_reserve() - 1500;
 				// (and by the heap's room: each render keeps what the retention render measured)
 				const s = v8_stats?.();
-				const heap_n = s ? Math.floor((s.heap_size_limit * HEAP_STOP - s.used_heap_size) / retained.total_bytes) : Infinity;
+				const heap_n = s
+					? Math.floor((s.heap_size_limit * HEAP_STOP - s.used_heap_size) / retained.total_bytes)
+					: Infinity;
 				const n = Math.min(6, Math.floor(room / each), heap_n);
-				if (heap_n < 3) heap_skipped.push('the growth check (a few more renders, to tell a leak from a cache filling)');
+				if (heap_n < 3)
+					heap_skipped.push(
+						'the growth check (a few more renders, to tell a leak from a cache filling)'
+					);
 				if (n >= 3) {
 					try {
 						growth = await this.#growth_check(
@@ -4879,7 +5068,8 @@ class Profiler {
 					? await this.#count_calls(async () => {
 							await fetch_render(target).then((r) => r.text());
 						}, true)
-					: (heap_skipped.push('the call-count render (the ×N counts)'), { counts: {} as Record<string, number> });
+					: (heap_skipped.push('the call-count render (the ×N counts)'),
+						{ counts: {} as Record<string, number> });
 			cap.call_counts = counted.counts;
 			mem_mark('after the coverage render');
 			// the app's own fetch answers a hashed asset on adapter-node (it reads the file); a
@@ -4913,7 +5103,9 @@ class Profiler {
 							}
 						: {}),
 					// the heap this instance may grow to before it dies (a leak's runway is measured in it)
-					heap_limit_mb: Math.round((await import('node:v8')).getHeapStatistics().heap_size_limit / 1048576),
+					heap_limit_mb: Math.round(
+						(await import('node:v8')).getHeapStatistics().heap_size_limit / 1048576
+					),
 					// the instance this ran on: how long it took to take its first request (its cold start
 					// on Lambda), Node's own share of that, its age and how many requests it served before
 					instance: {
@@ -4934,14 +5126,14 @@ class Profiler {
 					// own files say — a prerendered route — without a source map
 					// — and none at all (a 200 the app's handle never saw): the page was served as the file the
 					// build wrote, before the app (a prerendered page in a server that serves its files first)
-					...((() => {
+					...(() => {
 						const path = target.split('?')[0];
 						for (let k = this.#ring.length - 1; k >= 0; k--) {
 							const e = this.#ring[k];
 							if (e.path === path) return e.route ? { run_route: e.route } : {};
 						}
 						return run_status === 200 && !this.dev ? { run_static: true as const } : {};
-					})()),
+					})(),
 					budget_note,
 					...(heap_skipped.length ? { heap_guard: heap_guard() } : {}),
 					runs: run_ms,
@@ -4990,13 +5182,23 @@ class Profiler {
 				// THE PAGE'S WEIGHT: every file the document loads at start (whatever built it) and
 				// the islands' modules, weighed through the app — the score's JS / weight / blocking.
 				// A dev server serves modules one by one: its graph says nothing about a build.
-				if (this.dev) s.assets_missing = 'the dev server serves modules one by one, so its JS says nothing about a build: profile a build (preview or deploy) to weigh the page';
+				if (this.dev)
+					s.assets_missing =
+						'the dev server serves modules one by one, so its JS says nothing about a build: profile a build (preview or deploy) to weigh the page';
 				else {
 					try {
 						const extra: AssetRef[] = [];
 						for (const r of island_rows_of(s.meta)) {
 							const lazy = r.wake !== 'load' && r.wake !== 'idle';
-							for (const u of [r.module_url, ...r.hints]) if (u) extra.push({ url: u, kind: 'script', blocking: false, via: 'island', ...(lazy ? { lazy: true } : {}) });
+							for (const u of [r.module_url, ...r.hints])
+								if (u)
+									extra.push({
+										url: u,
+										kind: 'script',
+										blocking: false,
+										via: 'island',
+										...(lazy ? { lazy: true } : {})
+									});
 						}
 						const { gzipSync } = await import('node:zlib');
 						s.assets = await weigh_assets({
@@ -5299,7 +5501,12 @@ class Profiler {
 				const sa = page_score_of(P.meta, this.#report_extras(P));
 				const sb = page_score_of(stored.meta, this.#report_extras(stored));
 				const moved = sb.categories
-					.map((c) => ({ key: c.key, label: c.label, b: c.score, a: sa.categories.find((x) => x.key === c.key)?.score ?? NaN }))
+					.map((c) => ({
+						key: c.key,
+						label: c.label,
+						b: c.score,
+						a: sa.categories.find((x) => x.key === c.key)?.score ?? NaN
+					}))
 					.filter((m) => Number.isFinite(m.a) && Math.abs(m.b - m.a) >= 3)
 					.sort((x, y) => Math.abs(y.b - y.a) - Math.abs(x.b - x.a))
 					.slice(0, 3);
@@ -5312,7 +5519,15 @@ class Profiler {
 			try {
 				if (P.assets && stored.assets) {
 					const d = assets_diff(P.assets, stored.assets);
-					if (d.added.length || d.removed.length || d.grew.length || d.shrank.length || d.to_start.length || d.to_later.length) assets = d;
+					if (
+						d.added.length ||
+						d.removed.length ||
+						d.grew.length ||
+						d.shrank.length ||
+						d.to_start.length ||
+						d.to_later.length
+					)
+						assets = d;
 				}
 			} catch {
 				assets = undefined;
@@ -5328,7 +5543,10 @@ class Profiler {
 					const names = new Map(island_rows_of(s.meta).map((r) => [r.fp, r.name]));
 					return derive_findings(s.analysis, s.meta, e)
 						.filter((f) => f.fps)
-						.map((f) => `${f.code}${f.fps!.length ? ` (${[...new Set(f.fps!.map((fp) => names.get(fp) ?? fp.slice(0, 6)))].sort().join(', ')})` : ''}`);
+						.map(
+							(f) =>
+								`${f.code}${f.fps!.length ? ` (${[...new Set(f.fps!.map((fp) => names.get(fp) ?? fp.slice(0, 6)))].sort().join(', ')})` : ''}`
+						);
 				};
 				const was = bf(P);
 				const now = bf(stored);
@@ -5346,8 +5564,23 @@ class Profiler {
 				const va = this.#report_extras(P).visit;
 				const vb = this.#report_extras(stored).visit;
 				if (va && vb) {
-					const input = (v: Visit): PageInput => ({ vitals: v.vitals ?? {}, visit: { nav: v.nav, paints: v.paints, resources: v.resources, interaction: v.interaction, font_faces: v.font_faces }, islands: [], firsts: [], shifts: [], longtasks: [] });
-					const moved = vitals_moved(va.vitals ?? {}, vb.vitals ?? {}, (side, key) => vital_parts(input(side === 'a' ? va : vb), key));
+					const input = (v: Visit): PageInput => ({
+						vitals: v.vitals ?? {},
+						visit: {
+							nav: v.nav,
+							paints: v.paints,
+							resources: v.resources,
+							interaction: v.interaction,
+							font_faces: v.font_faces
+						},
+						islands: [],
+						firsts: [],
+						shifts: [],
+						longtasks: []
+					});
+					const moved = vitals_moved(va.vitals ?? {}, vb.vitals ?? {}, (side, key) =>
+						vital_parts(input(side === 'a' ? va : vb), key)
+					);
 					if (moved.length) vitals = moved;
 				}
 			} catch {
@@ -5356,7 +5589,12 @@ class Profiler {
 			// which islands changed file between the two builds: what a returning visitor downloads again
 			let islands: Since['islands'];
 			try {
-				islands = island_files_diff(island_rows_of(P.meta), island_rows_of(stored.meta), (u) => stored.weights?.[u]) ?? undefined;
+				islands =
+					island_files_diff(
+						island_rows_of(P.meta),
+						island_rows_of(stored.meta),
+						(u) => stored.weights?.[u]
+					) ?? undefined;
 			} catch {
 				islands = undefined;
 			}
@@ -5573,22 +5811,53 @@ class Profiler {
 		// wait for a render slot taken out: the beacon's Server-Timing tells that part apart)
 		const answered = new Set((visit?.holes_answered ?? []).map((h) => h.id));
 		const hole_requests = answered.size
-			? this.#ring.filter((e) => e.hole && answered.has(e.hole.id) && e.ts >= visit!.at - 1000 && e.ts <= visit!.at + 60_000).map((e) => ({ id: e.hole!.id, ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)), ...(e.hole!.name ? { name: e.hole!.name } : {}), ...(e.hole!.p ? { p: e.hole!.p } : {}) }))
+			? this.#ring
+					.filter(
+						(e) =>
+							e.hole &&
+							answered.has(e.hole.id) &&
+							e.ts >= visit!.at - 1000 &&
+							e.ts <= visit!.at + 60_000
+					)
+					.map((e) => ({
+						id: e.hole!.id,
+						ms: Math.max(0, e.ms - (e.hole!.queue_ms ?? 0)),
+						...(e.hole!.name ? { name: e.hole!.name } : {}),
+						...(e.hole!.p ? { p: e.hole!.p } : {})
+					}))
 			: [];
 		// THE VISIT'S NAVIGATIONS, SERVER SIDE: each in-app navigation fetched a page, and that request
 		// is in the log — what the server did with the wait the browser saw (its CPU, its outbound
 		// calls, the rest). Matched by path, the latest one that started between a prefetch's reach
 		// (10 s before the click) and the page's arrival, on the one epoch clock
-		const nav_requests = (visit?.navs ?? []).map((n) => {
-			const lo = visit!.at + n.t - 10_000;
-			const hi = visit!.at + n.fetched + 50;
-			let hit: RequestEntry | undefined;
-			for (const e of this.#ring) {
-				if (e.internal || e.method !== 'GET' || e.path + (e.search ?? '') !== n.to || e.ts < lo || e.ts > hi) continue;
-				if (!hit || e.ts > hit.ts) hit = e;
-			}
-			return hit ? { t: n.t, ms: Math.round(hit.ms), cpu_ms: Math.round(hit.cpu_ms), net_ms: Math.round(hit.net_ms), net_count: hit.net_count, ...(hit.inflight ? { inflight: hit.inflight } : {}) } : null;
-		}).filter((x): x is NonNullable<typeof x> => !!x);
+		const nav_requests = (visit?.navs ?? [])
+			.map((n) => {
+				const lo = visit!.at + n.t - 10_000;
+				const hi = visit!.at + n.fetched + 50;
+				let hit: RequestEntry | undefined;
+				for (const e of this.#ring) {
+					if (
+						e.internal ||
+						e.method !== 'GET' ||
+						e.path + (e.search ?? '') !== n.to ||
+						e.ts < lo ||
+						e.ts > hi
+					)
+						continue;
+					if (!hit || e.ts > hit.ts) hit = e;
+				}
+				return hit
+					? {
+							t: n.t,
+							ms: Math.round(hit.ms),
+							cpu_ms: Math.round(hit.cpu_ms),
+							net_ms: Math.round(hit.net_ms),
+							net_count: hit.net_count,
+							...(hit.inflight ? { inflight: hit.inflight } : {})
+						}
+					: null;
+			})
+			.filter((x): x is NonNullable<typeof x> => !!x);
 		// THE VISIT'S OWN DOCUMENT REQUEST, SERVER SIDE: the log's entry for the page request this visit
 		// made (its path, started within the visit's first byte) — how long the server's handler held it
 		// beside the browser's wait for the first byte, so a gap between the render and TTFB is told
@@ -5604,21 +5873,28 @@ class Profiler {
 		}
 		// THE VISIT'S SLOWEST INTERACTION, SAMPLED: the page's latest interaction trace, when it is this
 		// visit's (the same interaction start, on the page clock)
-		const icpu = stored.interaction_cpu ?? (browser_page ? this.#interaction_cpus.get(browser_page) : undefined);
-		const interaction_cpu = icpu && visit?.interaction && Math.abs(icpu.t - visit.interaction.t) < 2 ? icpu : undefined;
+		const icpu =
+			stored.interaction_cpu ??
+			(browser_page ? this.#interaction_cpus.get(browser_page) : undefined);
+		const interaction_cpu =
+			icpu && visit?.interaction && Math.abs(icpu.t - visit.interaction.t) < 2 ? icpu : undefined;
 		// THE OTHER KIND OF SCREEN: the latest kept visit on a phone when this one was wide (or the other
 		// way): the islands below its first screen, or hidden on it, are another list
 		const narrow = (v: Visit) => (v.viewport?.[0] ?? 0) < NARROW_SCREEN_PX;
 		const other_screen_visit =
 			visit?.viewport && browser_page
-				? (this.#visits.get(browser_page) ?? []).filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit)).at(-1)
+				? (this.#visits.get(browser_page) ?? [])
+						.filter((v) => v !== visit && v.viewport && narrow(v) !== narrow(visit))
+						.at(-1)
 				: undefined;
 		// THE OTHER ENGINE: the latest kept visit from another browser engine (Safari beside Chrome):
 		// what one engine shows, another may never (a preload refetched, a font holding the first paint)
 		const engine = engine_of(visit?.ua);
 		const other_engine_visit =
 			engine && browser_page
-				? (this.#visits.get(browser_page) ?? []).filter((v) => v !== visit && engine_of(v.ua) && engine_of(v.ua) !== engine).at(-1)
+				? (this.#visits.get(browser_page) ?? [])
+						.filter((v) => v !== visit && engine_of(v.ua) && engine_of(v.ua) !== engine)
+						.at(-1)
 				: undefined;
 		// (the modules the build shipped twice: the report names the ones this page loads both copies of)
 		const dupes = chunkDuplicates();
@@ -5721,7 +5997,8 @@ class Profiler {
 		// (by its entry too: an island whose props change every render — a live object passed in — has
 		// another fingerprint in every page view, never the profiled render's own; its entry is its own)
 		const by_entry = new Map<string, BeaconAgg>();
-		for (const b of this.#beacons.values()) if (b.entry && b.ms.length) by_entry.set(entry_path(b.entry), b);
+		for (const b of this.#beacons.values())
+			if (b.entry && b.ms.length) by_entry.set(entry_path(b.entry), b);
 		for (const r of island_rows_of(stored.meta)) {
 			const b = this.#beacons.get(r.fp) ?? by_entry.get(entry_path(r.entry));
 			if (!b || !b.ms.length) continue;
@@ -5856,26 +6133,47 @@ class Profiler {
 		if (interaction) {
 			if (this.#interaction_cpus.size >= 50 && !this.#interaction_cpus.has(page))
 				this.#interaction_cpus.delete(this.#interaction_cpus.keys().next().value!);
-			this.#interaction_cpus.set(page, { ...interaction_windows(profile, interaction, run), at: Date.now() });
+			this.#interaction_cpus.set(page, {
+				...interaction_windows(profile, interaction, run),
+				at: Date.now()
+			});
 			return true;
 		}
 		const analysis = run(profile);
 		// CUT BY ISLAND: the same load's visit (the trace goes out 8–20 s after the page started, the
 		// visit before it) gives each island's hydrate window — what ran inside it, by name
 		const visit = this.#visits.get(page)?.at(-1);
-		const windows = visit && Date.now() - visit.at < 120_000 ? client_windows(profile, visit, run) : undefined;
+		const windows =
+			visit && Date.now() - visit.at < 120_000 ? client_windows(profile, visit, run) : undefined;
 		// a slow interaction DURING the load (the load trace holds it; the interaction sampler starts
 		// only once this trace is out): its spans are cut from this trace
 		const i = visit && Date.now() - visit.at < 120_000 ? visit.interaction : undefined;
-		if (i && i.ms >= 200 && i.t * 1000 >= profile.startTime && (i.t + i.ms) * 1000 <= profile.endTime) {
+		if (
+			i &&
+			i.ms >= 200 &&
+			i.t * 1000 >= profile.startTime &&
+			(i.t + i.ms) * 1000 <= profile.endTime
+		) {
 			const at = i.t + i.delay;
 			if (this.#interaction_cpus.size >= 50 && !this.#interaction_cpus.has(page))
 				this.#interaction_cpus.delete(this.#interaction_cpus.keys().next().value!);
-			this.#interaction_cpus.set(page, { ...interaction_windows(profile, { t: i.t, wait: [i.t, at], handler: [at, at + i.processing] }, run), at: Date.now() });
+			this.#interaction_cpus.set(page, {
+				...interaction_windows(
+					profile,
+					{ t: i.t, wait: [i.t, at], handler: [at, at + i.processing] },
+					run
+				),
+				at: Date.now()
+			});
 		}
 		if (this.#client_cpus.size >= 50 && !this.#client_cpus.has(page))
 			this.#client_cpus.delete(this.#client_cpus.keys().next().value!);
-		this.#client_cpus.set(page, { analysis, at: Date.now(), sample_ms: analysis.duration_ms, ...(windows ? { windows } : {}) });
+		this.#client_cpus.set(page, {
+			analysis,
+			at: Date.now(),
+			sample_ms: analysis.duration_ms,
+			...(windows ? { windows } : {})
+		});
 		return true;
 	}
 
@@ -5905,9 +6203,15 @@ class Profiler {
 		// the vitals ride on their own message (on hide) AND inside every visit (early and final),
 		// tagged with the visit's start so the later copy replaces the earlier: a browser that never
 		// got to send the hide message (a tab closed hard) still reports what it measured
-		const vitals = (body as { vitals?: unknown })?.vitals ?? (visit_body && typeof visit_body === 'object' ? visit_body.vitals : undefined);
-		const vitals_at_raw = Number((body as { at?: unknown })?.at ?? (visit_body && typeof visit_body === 'object' ? visit_body.at : undefined));
-		const vitals_at = Number.isFinite(vitals_at_raw) && vitals_at_raw > 0 ? Math.round(vitals_at_raw) : undefined;
+		const vitals =
+			(body as { vitals?: unknown })?.vitals ??
+			(visit_body && typeof visit_body === 'object' ? visit_body.vitals : undefined);
+		const vitals_at_raw = Number(
+			(body as { at?: unknown })?.at ??
+				(visit_body && typeof visit_body === 'object' ? visit_body.at : undefined)
+		);
+		const vitals_at =
+			Number.isFinite(vitals_at_raw) && vitals_at_raw > 0 ? Math.round(vitals_at_raw) : undefined;
 		const marks = (body as { marks?: unknown })?.marks;
 		const cpu = (body as { cpu?: unknown })?.cpu;
 		const page = (body as { page?: unknown })?.page;
@@ -5947,12 +6251,21 @@ class Profiler {
 			this.#client_cpu
 		) {
 			// (an interaction's trace carries its spans: two numbers each, on the page's clock)
-			const it = (body as { interaction?: { t?: unknown; wait?: unknown; handler?: unknown } })?.interaction;
+			const it = (body as { interaction?: { t?: unknown; wait?: unknown; handler?: unknown } })
+				?.interaction;
 			const pair = (v: unknown): [number, number] | null =>
-				Array.isArray(v) && v.length === 2 && v.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n < 3_600_000) && v[1] >= v[0] ? [v[0], v[1]] : null;
+				Array.isArray(v) &&
+				v.length === 2 &&
+				v.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0 && n < 3_600_000) &&
+				v[1] >= v[0]
+					? [v[0], v[1]]
+					: null;
 			const wait = pair(it?.wait);
 			const handler = pair(it?.handler);
-			const spans = it && typeof it.t === 'number' && Number.isFinite(it.t) && wait && handler ? { t: it.t, wait, handler } : undefined;
+			const spans =
+				it && typeof it.t === 'number' && Number.isFinite(it.t) && wait && handler
+					? { t: it.t, wait, handler }
+					: undefined;
 			if (it && !spans) return new Response(null, { status: 400 });
 			if (!(await this.#ingest_client_cpu(page, cpu, ctx.url.origin, spans)))
 				return new Response(null, { status: 400 });
@@ -6266,7 +6579,10 @@ class Profiler {
 					try {
 						const c = process.cpuUsage(cpu0);
 						// (process-wide: a request running beside others reads their CPU too)
-						res.headers.append('Server-Timing', `cpu;desc="process CPU while it ran";dur=${((c.user + c.system) / 1000).toFixed(1)}`);
+						res.headers.append(
+							'Server-Timing',
+							`cpu;desc="process CPU while it ran";dur=${((c.user + c.system) / 1000).toFixed(1)}`
+						);
 					} catch {
 						// no cpuUsage on this runtime
 					}
@@ -6278,7 +6594,9 @@ class Profiler {
 						);
 						// the slowest outbound calls by name (`up1`…`up3`): the browser shows which upstream a
 						// slow request waited on (no query strings: they can carry tokens)
-						const top = [...ctx.net].sort((x, y) => y.ms + (y.body_ms ?? 0) - (x.ms + (x.body_ms ?? 0))).slice(0, 3);
+						const top = [...ctx.net]
+							.sort((x, y) => y.ms + (y.body_ms ?? 0) - (x.ms + (x.body_ms ?? 0)))
+							.slice(0, 3);
 						top.forEach((x, i) => {
 							// host + path only, relative or absolute (a query can carry a token)
 							let where = x.url.split('?')[0].split('#')[0];
@@ -6288,8 +6606,16 @@ class Profiler {
 							} catch {
 								// keep the stripped string
 							}
-							const desc = `${x.method ?? 'GET'} ${where}`.slice(0, 120).split('"').join("'").split('\\').join('/');
-							res.headers.append('Server-Timing', `up${i + 1};desc="${desc}";dur=${(Math.max(x.ms, 0) + (x.body_ms ?? 0)).toFixed(1)}`);
+							const desc = `${x.method ?? 'GET'} ${where}`
+								.slice(0, 120)
+								.split('"')
+								.join("'")
+								.split('\\')
+								.join('/');
+							res.headers.append(
+								'Server-Timing',
+								`up${i + 1};desc="${desc}";dur=${(Math.max(x.ms, 0) + (x.body_ms ?? 0)).toFixed(1)}`
+							);
 						});
 					}
 					// NESTED TRACE: a profiler upstream of us is recording and asked — answer with our
@@ -6609,9 +6935,18 @@ function round2(n: number): number {
 const REPORT_IDENTITY = ['schema', 'version', 'engine', 'kind', 'id', 'created', 'target', 'links'];
 
 /** `report` with only the top-level keys in `fields` (comma-separated) and its identity; whole when unset. */
-export function pick_fields(report: Record<string, unknown>, fields: string | null): Record<string, unknown> {
+export function pick_fields(
+	report: Record<string, unknown>,
+	fields: string | null
+): Record<string, unknown> {
 	if (!fields) return report;
-	const want = new Set([...REPORT_IDENTITY, ...fields.split(',').map((f) => f.trim()).filter(Boolean)]);
+	const want = new Set([
+		...REPORT_IDENTITY,
+		...fields
+			.split(',')
+			.map((f) => f.trim())
+			.filter(Boolean)
+	]);
 	const out: Record<string, unknown> = {};
 	for (const k in report) if (want.has(k)) out[k] = report[k];
 	return out;
@@ -6627,11 +6962,20 @@ export function pick_fields(report: Record<string, unknown>, fields: string | nu
  * files first (`+page.server`, `+page`), then each layout up the tree. `true` and `'auto'` prerender;
  * `false` (or none found) does not. String search over the files (no regex, no parse).
  */
-export function route_prerendered(read: (file: string) => string | undefined, dir: string): boolean {
+export function route_prerendered(
+	read: (file: string) => string | undefined,
+	dir: string
+): boolean {
 	let at = dir;
 	let first = true;
 	while (at) {
-		const names = [...(first ? ['+page.server.ts', '+page.server.js', '+page.ts', '+page.js'] : []), '+layout.server.ts', '+layout.server.js', '+layout.ts', '+layout.js'];
+		const names = [
+			...(first ? ['+page.server.ts', '+page.server.js', '+page.ts', '+page.js'] : []),
+			'+layout.server.ts',
+			'+layout.server.js',
+			'+layout.ts',
+			'+layout.js'
+		];
 		for (const n of names) {
 			const src = read(`${at}/${n}`);
 			if (!src) continue;

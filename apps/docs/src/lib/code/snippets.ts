@@ -12,7 +12,7 @@ export const heroCode = import.meta.og.code(
 </script>
 
 <Counter />`,
-	'svelte',
+	'svelte'
 );
 
 // HeroDemo is an ISLAND: an inline region carries a live component and can't devalue-cross
@@ -27,7 +27,7 @@ export const loadCode = import.meta.og.code(
 </script>
 
 <Panel />`,
-	'svelte',
+	'svelte'
 );
 
 export const visibleCode = import.meta.og.code(
@@ -38,7 +38,7 @@ export const visibleCode = import.meta.og.code(
 </script>
 
 <Chart />`,
-	'svelte',
+	'svelte'
 );
 
 export const lakeCode = import.meta.og.code(
@@ -50,7 +50,7 @@ export const lakeCode = import.meta.og.code(
 </script>
 
 <Snapshot value={42} />`,
-	'svelte',
+	'svelte'
 );
 
 export const serverCode = import.meta.og.code(
@@ -65,7 +65,7 @@ export const serverCode = import.meta.og.code(
     <p>loading…</p>
   {/snippet}
 </Greeting>`,
-	'svelte',
+	'svelte'
 );
 
 export const fragmentCode = import.meta.og.code(
@@ -85,7 +85,7 @@ export const fragmentCode = import.meta.og.code(
 {#if result}
   <Region of={result} />
 {/if}`,
-	'svelte',
+	'svelte'
 );
 
 export const livePartialCode = import.meta.og.code(
@@ -101,7 +101,7 @@ export const liveTick = query.live(async function* () {
 
 // the island just paints the latest tick — static partials morph in place
 <Region of={liveTick().current} />`,
-	'ts',
+	'ts'
 );
 
 export const sharedObjectCode = import.meta.og.code(
@@ -123,7 +123,7 @@ const cart = new Cart();
 <CartCount {cart} />   <!-- reads cart.count -->
 <AddButton {cart} />   <!-- calls cart.add() -->
 // click Add → the count island repaints. One live object, two islands.`,
-	'ts',
+	'ts'
 );
 
 export const contentCollectionCode = import.meta.og.code(
@@ -139,7 +139,7 @@ export const docs = content({
 export const docNav = withRemotes(docs).list({
   map: (e) => ({ slug: e.id, title: e.data.title })
 });`,
-	'ts',
+	'ts'
 );
 
 export const contentMarkdownCode = import.meta.og.code(
@@ -154,7 +154,7 @@ Shiki-highlighted fences, heading ids, and a TOC in \`meta.headings\` —
 and a live island, right in the copy:
 
 <Chart {data} />`,
-	'svelte',
+	'svelte'
 );
 
 export const contentJsonCode = import.meta.og.code(
@@ -168,7 +168,7 @@ export const authors = content({
 });
 
 const ada = await authors.get('ada'); // fully typed { name, bio }`,
-	'ts',
+	'ts'
 );
 
 export const contentCustomCode = import.meta.og.code(
@@ -184,7 +184,7 @@ export const press = content({
 
 // pushes? add live() — a change signal; the feed re-emits on every change.
 export const feed = withRemotes(press).live.list({ map: (e) => e.data });`,
-	'ts',
+	'ts'
 );
 
 export const siteCode = import.meta.og.code(
@@ -201,7 +201,7 @@ export const docs = site({
   prevNext: 'graph',      // "keep reading" follows real links
   checks: [links()]       // a broken link fails the build
 });`,
-	'ts',
+	'ts'
 );
 
 export const dimensionsCode = import.meta.og.code(
@@ -222,7 +222,7 @@ export const docs = site({
 // /docs/routing        → v2 · en   (defaults serve bare)
 // /docs/de/routing     → v2 · de
 // /docs/v1/de/routing  → v1 · de`,
-	'ts',
+	'ts'
 );
 
 export const composeCode = import.meta.og.code(
@@ -241,5 +241,5 @@ export const composeCode = import.meta.og.code(
 
 <!-- absent = built-in · snippet = yours · null = removed.
      Or drop to <Frame> and build the shell from the same bricks. -->`,
-	'svelte',
+	'svelte'
 );
