@@ -225,7 +225,7 @@ export function build_profiler_router(d: ProfilerDeps): Router<{
 			'/status.json': { GET: (c) => c.json(d.status(c)) },
 			// the browser's hydration timings (runtime/beacon.ts) — behind the guard like everything else
 			'/beacon': { POST: (c) => d.beacon(c) },
-			// a window you start and stop around what a test does (ogygia/testing, the Record tab)
+			// a window you start and stop around what a test does (@ogygia/testing, the Record tab)
 			'/window/start': { POST: (c) => d.window_start(c) },
 			'/window/stop': { POST: (c) => d.window_stop(c) },
 			'/login': page(V.Login, {

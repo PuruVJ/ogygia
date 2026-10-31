@@ -6,7 +6,7 @@ related:
   - profiler/overview
 ---
 
-`ogygia/testing` turns the devtools and the profiler into primitives for your own tests. Your tests click through the app as they always do. ogygia measures what happened, and your test asserts on it.
+`@ogygia/testing` turns the devtools and the profiler into primitives for your own tests. Your tests click through the app as they always do. ogygia measures what happened, and your test asserts on it.
 
 - `page()`: the page load as the browser measured it. Vitals, each island's wake, and the findings of the [Page tab](/docs/devtools/overview#the-page-tab).
 - `hydration()`: each island's hydration status, with the difference for a changed one (the [Hydration tab](/docs/devtools/overview#the-hydration-tab)).
@@ -19,7 +19,7 @@ ogygia does not import Playwright. You hand it your own `test` and `expect`:
 
 ```ts title=tests/fixtures.ts
 import { test as base, expect as baseExpect } from '@playwright/test';
-import { withOgygia } from 'ogygia/testing';
+import { withOgygia } from '@ogygia/testing';
 
 export const { test, expect } = withOgygia(base, baseExpect);
 ```
@@ -155,7 +155,7 @@ Budget lines, by report:
 Every report a test takes is attached to its result as `ogygia.json`. Playwright's HTML reporter shows it, and the JSON reporter carries it. Two helpers turn two runs (a base branch and a head branch) into a PR comment:
 
 ```ts title=scripts/ogygia-comment.ts
-import { compare, toMarkdown } from 'ogygia/testing';
+import { compare, toMarkdown } from '@ogygia/testing';
 
 // each run: the parsed `ogygia.json` attachments ({ test, reports }[])
 const diff = compare(baseRun, headRun);
@@ -185,7 +185,7 @@ Three runs a side is a good start, for the pages whose first pass shows a candid
 
 ```ts
 import { expect } from 'vitest';
-import { createOgygia, ogygiaMatchers } from 'ogygia/testing';
+import { createOgygia, ogygiaMatchers } from '@ogygia/testing';
 
 expect.extend(ogygiaMatchers);
 const ogygia = createOgygia({ evaluate: (fn, arg) => page.evaluate(fn, arg) });
@@ -194,7 +194,7 @@ const ogygia = createOgygia({ evaluate: (fn, arg) => page.evaluate(fn, arg) });
 Holding Playwright pages yourself (two browser contexts in one test, say a preview and a baseline) without the fixture? `playwrightDriver(page)` is the driver the fixture builds, `blockNavigation` included, and `turnOnDevtools(page, baseURL)` sets the cookie. `onNavigationHeld` is called as each load is held back, so you can note which step of your script was running:
 
 ```ts
-import { createOgygia, playwrightDriver, turnOnDevtools } from 'ogygia/testing';
+import { createOgygia, playwrightDriver, turnOnDevtools } from '@ogygia/testing';
 
 await turnOnDevtools(previewPage, previewURL);
 const preview = createOgygia(playwrightDriver(previewPage, { baseURL: previewURL, onNavigationHeld: (n) => log(step, n.url) }));

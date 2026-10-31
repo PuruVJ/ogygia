@@ -1,5 +1,5 @@
 /**
- * `ogygia/testing` — the devtools and the profiler as test primitives, for any runner and any page
+ * `@ogygia/testing` — the devtools and the profiler as test primitives, for any runner and any page
  * driver. Your integration tests do what they do; ogygia measures it:
  *
  *  - `page()` — the page load as the browser measured it: vitals, each island's wake, the findings
@@ -12,7 +12,7 @@
  *
  * ```ts
  * import { test as base, expect as baseExpect } from '@playwright/test';
- * import { withOgygia } from 'ogygia/testing';
+ * import { withOgygia } from '@ogygia/testing';
  * export const { test, expect } = withOgygia(base, baseExpect);
  *
  * test('checkout stays fast', async ({ page, ogygia }) => {
@@ -33,15 +33,10 @@
  * Needs a server with the devtools plugin (`plugins: [devtools()]`: the dev server, or a preview build: measuring
  * starts for a browser that turned devtools on — the `og_devtools=on` cookie, which `withOgygia` sets
  * for `baseURL`, or without one for the origin of the first page the test opens).
- * `profile()` needs `ogygia({ profiler: true })` (and its key on a build).
+ * `profile()` needs the devtools plugin's profiler, `devtools({ profiler })` (and its key on a build).
  */
-import type { PageFinding, RatedVital, IslandRow } from '../insights/page-insights.ts';
-import type { SessionReport } from '../insights/session-insights.ts';
-import type { HydrationStatus } from '../insights/hydration-status.ts';
-import type { HtmlDiff } from '../insights/html-diff.ts';
-import { assets_diff } from '../insights/page-assets.ts';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN } from '../insights/switch.ts';
-import { TESTING_ENGINE_VERSION } from '../insights/testing-version.ts';
+import type { PageFinding, RatedVital, IslandRow, SessionReport, HydrationStatus, HtmlDiff } from 'ogygia/insights';
+import { assets_diff, DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN, TESTING_ENGINE_VERSION } from 'ogygia/insights';
 import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 
 // ── the reports (plain JSON, as the page hands them over) ──
@@ -223,7 +218,7 @@ const warned_engines = new Set<string>();
 export interface Ogygia {
 	page(): Promise<OgygiaPageReport>;
 	hydration(): Promise<OgygiaHydrationReport>;
-	/** `server: true` also records the server over the same stretch (needs `ogygia({ profiler: true })`).
+	/** `server: true` also records the server over the same stretch (needs `devtools({ profiler })`, the devtools plugin's profiler).
 	 *  `blockNavigation: true` holds back any document load the actions cause (a reload, a link), so the
 	 *  page and the recording stay, and lists each in `navigations` (needs a driver that can: Playwright's) */
 	record(actions: () => Promise<unknown>, opts?: { server?: boolean; blockNavigation?: boolean }): Promise<OgygiaSessionReport>;
@@ -270,7 +265,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			if (warned_engines.has(key)) return out.r;
 			warned_engines.add(key);
 			console.warn(
-				`[ogygia/testing] the page${at ? ` at ${at}` : ''} runs an older testing engine (version ${out.v}, this package expects ${TESTING_ENGINE_VERSION}): ` +
+				`[@ogygia/testing] the page${at ? ` at ${at}` : ''} runs an older testing engine (version ${out.v}, this package expects ${TESTING_ENGINE_VERSION}): ` +
 					'its reports lack instance keys, finding names, counts.cls and what started each navigation. Filled in where the test side knows (navigations).'
 			);
 		}

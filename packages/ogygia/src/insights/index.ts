@@ -1,6 +1,6 @@
 /**
  * `ogygia/insights` — the analysis engine shared by the devtools dock, the profiler's report and
- * `ogygia/testing`: pure functions from what the browser measured (a page visit, a recorded session)
+ * `@ogygia/testing`: pure functions from what the browser measured (a page visit, a recorded session)
  * to findings, plus the switch cookies and the testing engine's version they agree on.
  */
 export {

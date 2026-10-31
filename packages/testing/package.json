@@ -1,0 +1,54 @@
+{
+	"name": "@ogygia/testing",
+	"private": true,
+	"version": "0.10.2",
+	"description": "Testing for ogygia: the devtools and the profiler as test primitives, for Playwright or any runner and page driver",
+	"type": "module",
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
+		"directory": "packages/testing"
+	},
+	"keywords": ["ogygia", "sveltekit", "testing", "playwright", "performance", "web-vitals"],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./src/index.ts"
+		}
+	},
+	"files": ["dist", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && vitest run",
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"@playwright/test": "^1.62.0",
+		"ogygia": "workspace:^"
+	},
+	"peerDependenciesMeta": {
+		"@playwright/test": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "1.62.1",
+		"ogygia": "workspace:*",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		}
+	}
+}
