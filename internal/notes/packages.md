@@ -492,6 +492,14 @@ by the docs Observatory. Keep as core subpaths.
    depends on every plugin (any plugin change rebuilds it → everything reruns) — real scoping needs a
    small fixture app per package (federation: examples/mfe, freeze: repro-freeze exist; content and
    devtools have none). After the split, its own round.
+   DONE (user: "if you're out of things to do, solve the scoped e2e thing"), by OWNERSHIP rather than
+   turbo tasks: e2e/scope.ts maps each plugin package to its specs (+ fixture apps → their specs);
+   e2e/affected.ts diffs against a base (merge base with origin/next by default) and runs a plugin's
+   specs + its dependents' + a SMOKE set (every plugin's server half runs on every playground request),
+   nothing for docs/notes/unit tests, EVERYTHING for core/tooling/playground/harness/lockfile/root
+   config. `pnpm test:e2e:affected [--base ref] [--dry]`; CI runs it on pull requests, the full suite on
+   pushes to main/next. Rules unit-tested by `node --test e2e/scope.test.ts` (in `check:verify`). Per-
+   package fixture apps (true isolation) remain a later refinement.
 7. Event-layer export name: `ogygia/events` (recommended; added in R7 step 1) vs keeping
    `ogygia/devtools` (currently an alias) vs folding into `ogygia/insights`.
 

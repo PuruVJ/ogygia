@@ -2,7 +2,7 @@ name: e2e
 
 on:
   push:
-    branches: [main]
+    branches: [main, next]
   pull_request:
   workflow_dispatch:
 
@@ -12,6 +12,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+        with:
+          # a pull request runs only the specs its changes can break (e2e/affected.ts diffs against the
+          # base branch, so it needs the history)
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -55,8 +59,16 @@ jobs:
       # Playwright test runner (playwright.config.ts): globalSetup builds lib + playground, webServer
       # serves it, every spec under e2e/ runs (playground suites, self-booting fixture suites, the
       # adapters matrix). `pnpm run check` above already ran the Vitest browser-mode island tests.
-      - name: Run the full e2e suite (verify + adapters, node + bun)
-        run: pnpm run e2e
+      # A pull request: only the specs its changes can break (e2e/scope.ts: a plugin's own specs, its
+      # dependents' and a smoke set; anything core-wide runs everything). A push to main/next, or a
+      # manual run: the whole suite.
+      - name: Run the e2e suite (verify + adapters, node + bun)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pnpm run test:e2e:affected --base "origin/${{ github.base_ref }}"
+          else
+            pnpm run e2e
+          fi
         env:
           OGYGIA_E2E_WRANGLER: '1'
           # Stable CI-only signing key so the warn-path probe's production build is silent (locally
