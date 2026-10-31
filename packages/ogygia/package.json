@@ -9,11 +9,11 @@
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/ogygia"
 	},
 	"bugs": {
-		"url": "https://github.com/PuruVJ/ogygia/issues"
+		"url": "https://github.com/ogygiajs/ogygia/issues"
 	},
 	"license": "MIT",
 	"exports": {

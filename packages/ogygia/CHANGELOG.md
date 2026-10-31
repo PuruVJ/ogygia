@@ -12,27 +12,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Patch Changes
 
-- [#62](https://github.com/PuruVJ/ogygia/pull/62) [`79cdb65`](https://github.com/PuruVJ/ogygia/commit/79cdb65579eb53ed142f81d24ba0f787c1fefb72) Thanks [@PuruVJ](https://github.com/PuruVJ)! - A `regions.presets` entry takes `fetch` (a deferred hole's timing): 0.10.0 rejected the key, so no deferred preset with a timing could be written.
+- [#62](https://github.com/ogygiajs/ogygia/pull/62) [`79cdb65`](https://github.com/ogygiajs/ogygia/commit/79cdb65579eb53ed142f81d24ba0f787c1fefb72) Thanks [@PuruVJ](https://github.com/PuruVJ)! - A `regions.presets` entry takes `fetch` (a deferred hole's timing): 0.10.0 rejected the key, so no deferred preset with a timing could be written.
 
 ## 0.10.0
 
 ### Minor Changes
 
-- [#33](https://github.com/PuruVJ/ogygia/pull/33) [`0884b9a`](https://github.com/PuruVJ/ogygia/commit/0884b9a2fab903bec15df9df0e83ead50b7ba0c9) Thanks [@PuruVJ](https://github.com/PuruVJ)! - **Breaking:** a `render: 'deferred'` hole's timing is the new `fetch` key (`with { render: 'deferred', fetch: 'visible' }`); pairing it with `wake` fails the build with the line to write, and `wake` now only means when an island's JS runs.
+- [#33](https://github.com/ogygiajs/ogygia/pull/33) [`0884b9a`](https://github.com/ogygiajs/ogygia/commit/0884b9a2fab903bec15df9df0e83ead50b7ba0c9) Thanks [@PuruVJ](https://github.com/PuruVJ)! - **Breaking:** a `render: 'deferred'` hole's timing is the new `fetch` key (`with { render: 'deferred', fetch: 'visible' }`); pairing it with `wake` fails the build with the line to write, and `wake` now only means when an island's JS runs.
 
 ## 0.9.0
 
 ### Minor Changes
 
-- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - Raised minimums to the versions ogygia is tested on: `svelte` ^5.56.8, `playwright` and `@playwright/test` ^1.62.0 (for `ogygia/testing`), and the `magic-string` dependency ^1.4.5.
+- [#51](https://github.com/ogygiajs/ogygia/pull/51) [`7efab98`](https://github.com/ogygiajs/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - Raised minimums to the versions ogygia is tested on: `svelte` ^5.56.8, `playwright` and `@playwright/test` ^1.62.0 (for `ogygia/testing`), and the `magic-string` dependency ^1.4.5.
 
-- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - SvelteKit 3 support, alongside SvelteKit 2: builds no longer fail on `refreshAll` ([#37](https://github.com/PuruVJ/ogygia/issues/37)), islands on csr=true pages get Kit's page, the `$page` store no longer uses the removed `$app/stores`, custom-type remote arguments encode on csr=false pages, and a remote form in an island on a csr=true page no longer reloads the page.
+- [#51](https://github.com/ogygiajs/ogygia/pull/51) [`7efab98`](https://github.com/ogygiajs/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - SvelteKit 3 support, alongside SvelteKit 2: builds no longer fail on `refreshAll` ([#37](https://github.com/ogygiajs/ogygia/issues/37)), islands on csr=true pages get Kit's page, the `$page` store no longer uses the removed `$app/stores`, custom-type remote arguments encode on csr=false pages, and a remote form in an island on a csr=true page no longer reloads the page.
 
-- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - The `vite` peer is `^8.2.4`: Vite 8, from the first version past its published advisories. SvelteKit 2 and SvelteKit 3 both run on it.
+- [#51](https://github.com/ogygiajs/ogygia/pull/51) [`7efab98`](https://github.com/ogygiajs/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - The `vite` peer is `^8.2.4`: Vite 8, from the first version past its published advisories. SvelteKit 2 and SvelteKit 3 both run on it.
 
 ### Patch Changes
 
-- [#51](https://github.com/PuruVJ/ogygia/pull/51) [`7efab98`](https://github.com/PuruVJ/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - `devalue` is required at `^5.9.3`, the first version with the fixes for its published advisories.
+- [#51](https://github.com/ogygiajs/ogygia/pull/51) [`7efab98`](https://github.com/ogygiajs/ogygia/commit/7efab9801fce299bdba61145517f25ebbd0e6384) Thanks [@PuruVJ](https://github.com/PuruVJ)! - `devalue` is required at `^5.9.3`, the first version with the fixes for its published advisories.
 
 ## 0.8.8 - 2026-10-30
 
