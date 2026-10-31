@@ -10,7 +10,8 @@
  * `$page.data.key`, and the destructurings `const { a, b: c } = data` / `= page.data`.
  */
 
-const is_ident_start = (c: number) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c === 95 || c === 36;
+const is_ident_start = (c: number) =>
+	(c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c === 95 || c === 36;
 const is_ident = (c: number) => is_ident_start(c) || (c >= 48 && c <= 57);
 const is_space = (c: number) => c === 32 || c === 9 || c === 10 || c === 13;
 
@@ -98,7 +99,10 @@ export function data_reads(source: string, names: readonly string[] = ['data']):
 
 /** The 1-based line of the first place the source takes the data WHOLE (`const d = $page.data`,
  *  `fn(data)`, `...data`), or null when it only reads named keys. Same scan as `data_reads`. */
-export function whole_read_line(source: string, names: readonly string[] = ['data']): number | null {
+export function whole_read_line(
+	source: string,
+	names: readonly string[] = ['data']
+): number | null {
 	const src = blank_comments(source);
 	const at = { pos: -1 };
 	const seen = new Set<string>();
@@ -110,7 +114,8 @@ export function whole_read_line(source: string, names: readonly string[] = ['dat
 	}
 	if (at.pos < 0) return null;
 	let line = 1;
-	for (let i = source.indexOf('\n'); i !== -1 && i < at.pos; i = source.indexOf('\n', i + 1)) line++;
+	for (let i = source.indexOf('\n'); i !== -1 && i < at.pos; i = source.indexOf('\n', i + 1))
+		line++;
 	return line;
 }
 
@@ -186,7 +191,13 @@ export function blank_comments(src: string): string {
 }
 
 /** one name's occurrences; returns true when the object was used whole somewhere */
-function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>, whole_at?: { pos: number }): boolean {
+function scan(
+	src: string,
+	name: string,
+	bare_ok: boolean,
+	keys: Set<string>,
+	whole_at?: { pos: number }
+): boolean {
 	let whole = false;
 	// every `whole = true` below also remembers WHERE, the first time: the line to point at
 	const mark = (pos: number) => {
@@ -203,8 +214,13 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>, wh
 		if (j > 0 && is_ident(src.charCodeAt(j - 1))) continue;
 		if (i < n && is_ident(src.charCodeAt(i))) continue;
 		// a spread (`...data`): every key may be read
-		if (j >= 3 && src.charCodeAt(j - 1) === 46 && src.charCodeAt(j - 2) === 46 && src.charCodeAt(j - 3) === 46) {
-			if (bare_ok) (whole = true), mark(j);
+		if (
+			j >= 3 &&
+			src.charCodeAt(j - 1) === 46 &&
+			src.charCodeAt(j - 2) === 46 &&
+			src.charCodeAt(j - 3) === 46
+		) {
+			if (bare_ok) ((whole = true), mark(j));
 			continue;
 		}
 		// whose: bare (a data prop name), or `page.data` / `$page.data`
@@ -229,7 +245,7 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>, wh
 			if (quote === 39 || quote === 34 || quote === 96) {
 				const close = src.indexOf(src[q], q + 1);
 				if (close > q) keys.add(src.slice(q + 1, close));
-			} else (whole = true), mark(j);
+			} else ((whole = true), mark(j));
 			continue;
 		}
 		// `= data` after a destructuring pattern: walk back over `=` and spaces to the `}`
@@ -262,7 +278,13 @@ function scan(src: string, name: string, bare_ok: boolean, keys: Set<string>, wh
 		}
 		// the object itself, handed on whole — passed to a call (`fn(data)`), returned, put in
 		// an array, defaulted (`data ?? {}`) — every key may be read past this point
-		if (c === 41 /* ) */ || c === 93 /* ] */ || c === 63 /* ? */ || c === 124 /* | */ || c === 38 /* & */) {
+		if (
+			c === 41 /* ) */ ||
+			c === 93 /* ] */ ||
+			c === 63 /* ? */ ||
+			c === 124 /* | */ ||
+			c === 38 /* & */
+		) {
 			whole = true;
 			mark(j);
 			continue;
@@ -361,7 +383,13 @@ export interface Lineage {
 
 export interface LineageInput {
 	/** every component of the page with its reads (server components scanned; islands from the build) */
-	components: { name: string; file: string; island: boolean; reads: string[] | null; whole_line?: number }[];
+	components: {
+		name: string;
+		file: string;
+		island: boolean;
+		reads: string[] | null;
+		whole_line?: number;
+	}[];
 	/** the loads and the keys they return, plus the waiting each did */
 	lanes: { file: string; keys: string[] | null; wait_ms?: number }[];
 	/** bytes per key in the seed */
@@ -398,14 +426,36 @@ export function build_lineage(input: LineageInput): Lineage | undefined {
 	if (!keys.size) return undefined;
 	const blind = components.filter((c) => c.reads === null);
 	const whole_readers = components.filter((c) => c.whole);
-	if (blind.length) notes.push(`${blind.length} component${blind.length > 1 ? 's' : ''} read the data in a way the scan could not name (${blind.map((c) => c.name).slice(0, 3).join(', ')}${blind.length > 3 ? '…' : ''}): their keys are unknown, so no key is called unread.`);
-	if (whole_readers.length) notes.push(`${whole_readers.map((c) => c.name).slice(0, 3).join(', ')} take${whole_readers.length > 1 ? '' : 's'} the whole data object: every key may be read there.`);
-	if (!any_lane) notes.push('No load returned keys the profiler could read from its source: the keys come from the seed and the readers alone.');
+	if (blind.length)
+		notes.push(
+			`${blind.length} component${blind.length > 1 ? 's' : ''} read the data in a way the scan could not name (${blind
+				.map((c) => c.name)
+				.slice(0, 3)
+				.join(
+					', '
+				)}${blind.length > 3 ? '…' : ''}): their keys are unknown, so no key is called unread.`
+		);
+	if (whole_readers.length)
+		notes.push(
+			`${whole_readers
+				.map((c) => c.name)
+				.slice(0, 3)
+				.join(
+					', '
+				)} take${whole_readers.length > 1 ? '' : 's'} the whole data object: every key may be read there.`
+		);
+	if (!any_lane)
+		notes.push(
+			'No load returned keys the profiler could read from its source: the keys come from the seed and the readers alone.'
+		);
 	const rows: LineageKey[] = [];
 	for (const key of keys) {
 		// the readers that NAME the key; a whole-object reader may read it, and says so in the row
 		const named = components.filter((c) => c.reads?.includes(key));
-		const readers = [...named, ...whole_readers.filter((w) => !named.includes(w))].map((c) => ({ name: c.name, island: c.island }));
+		const readers = [...named, ...whole_readers.filter((w) => !named.includes(w))].map((c) => ({
+			name: c.name,
+			island: c.island
+		}));
 		const shipped = input.seed[key] ?? 0;
 		let verdict: KeyVerdict;
 		if (named.some((c) => c.island)) verdict = 'island';
@@ -414,10 +464,23 @@ export function build_lineage(input: LineageInput): Lineage | undefined {
 		else if (named.length) verdict = shipped > 0 ? 'server-only' : 'server';
 		else if (blind.length || whole_readers.length) verdict = 'unknown';
 		else verdict = 'unread';
-		rows.push({ key, from: from.get(key) ?? null, shipped_bytes: shipped, readers, verdict, load_wait_ms: wait.get(key) ?? null });
+		rows.push({
+			key,
+			from: from.get(key) ?? null,
+			shipped_bytes: shipped,
+			readers,
+			verdict,
+			load_wait_ms: wait.get(key) ?? null
+		});
 	}
-	rows.sort((a, b) => b.shipped_bytes - a.shipped_bytes || (b.load_wait_ms ?? 0) - (a.load_wait_ms ?? 0));
-	const unread = rows.filter((r) => r.verdict === 'unread').sort((a, b) => (b.load_wait_ms ?? 0) - (a.load_wait_ms ?? 0));
-	const server_only = rows.filter((r) => r.verdict === 'server-only').sort((a, b) => b.shipped_bytes - a.shipped_bytes);
+	rows.sort(
+		(a, b) => b.shipped_bytes - a.shipped_bytes || (b.load_wait_ms ?? 0) - (a.load_wait_ms ?? 0)
+	);
+	const unread = rows
+		.filter((r) => r.verdict === 'unread')
+		.sort((a, b) => (b.load_wait_ms ?? 0) - (a.load_wait_ms ?? 0));
+	const server_only = rows
+		.filter((r) => r.verdict === 'server-only')
+		.sort((a, b) => b.shipped_bytes - a.shipped_bytes);
 	return { keys: rows, components, unread, server_only, notes };
 }

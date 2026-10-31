@@ -34,6 +34,7 @@
 	});
 </script>
 
-{#if awaited}<Region of={awaited} {placeholder} {children} />{:else if late_slot}<og-late-slot data-og-slot={late_slot} style="display:contents"
-		>{@render placeholder?.()}</og-late-slot
+{#if awaited}<Region of={awaited} {placeholder} {children} />{:else if late_slot}<og-late-slot
+		data-og-slot={late_slot}
+		style="display:contents">{@render placeholder?.()}</og-late-slot
 	>{:else}{@render placeholder?.()}{/if}

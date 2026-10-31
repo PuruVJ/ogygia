@@ -65,11 +65,16 @@ function parse(text: string, file: string): Lines | null {
 	let end = text.indexOf('\n', at);
 	if (end === -1) end = text.length;
 	try {
-		const map = JSON.parse(atob(text.slice(at + MARK.length, end).trim())) as { mappings?: unknown; sources?: unknown };
+		const map = JSON.parse(atob(text.slice(at + MARK.length, end).trim())) as {
+			mappings?: unknown;
+			sources?: unknown;
+		};
 		if (typeof map.mappings !== 'string' || !Array.isArray(map.sources)) return null;
 		// the source that is this file (by its name), else the first
 		const base = file.slice(file.lastIndexOf('/') + 1);
-		const own = (map.sources as unknown[]).findIndex((s) => typeof s === 'string' && s.slice(s.lastIndexOf('/') + 1) === base);
+		const own = (map.sources as unknown[]).findIndex(
+			(s) => typeof s === 'string' && s.slice(s.lastIndexOf('/') + 1) === base
+		);
 		return lines_of_map(map.mappings, own === -1 ? 0 : own);
 	} catch {
 		return null;
@@ -100,7 +105,9 @@ export function source_line(file: string, line: number | null): number | null | 
  * Functions with the source's lines: each mapped where the file's map says, else its line dropped
  * (a served line is not the source's). `mapped`: every app function among them has its source line.
  */
-export function with_source_lines<F extends { file: string; line: number | null }>(fns: readonly F[]): { fns: F[]; mapped: boolean } {
+export function with_source_lines<F extends { file: string; line: number | null }>(
+	fns: readonly F[]
+): { fns: F[]; mapped: boolean } {
 	let mapped = true;
 	const out = fns.map((f) => {
 		const l = source_line(f.file, f.line);

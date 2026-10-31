@@ -38,7 +38,9 @@ interface FactsSlot {
 	/** core (hooks.ts): the Request of the code running now, through Kit's request store */
 	current: (() => Request | undefined) | null;
 }
-const slot: FactsSlot = ((globalThis as Record<symbol, FactsSlot | undefined>)[Symbol.for('ogygia.facts.v2')] ??= {
+const slot: FactsSlot = ((globalThis as Record<symbol, FactsSlot | undefined>)[
+	Symbol.for('ogygia.facts.v2')
+] ??= {
 	by_request: new WeakMap(),
 	current: null
 });
@@ -49,7 +51,15 @@ export function facts_of(request: Request): RequestFacts {
 	if (!facts)
 		slot.by_request.set(
 			request,
-			(facts = { storable: false, perVisitor: null, streamed: false, private: false, answerForm: false, sources: null, assignments: {} })
+			(facts = {
+				storable: false,
+				perVisitor: null,
+				streamed: false,
+				private: false,
+				answerForm: false,
+				sources: null,
+				assignments: {}
+			})
 		);
 	return facts;
 }

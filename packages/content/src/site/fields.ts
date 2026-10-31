@@ -87,11 +87,14 @@ const post_only: FieldSchema<PostFields> = schema<PostFields>('ogygia-content/po
 
 /** Extra fields a changelog entry carries beyond a page. */
 export type ChangeFields = { version: string; date: string };
-const change_only: FieldSchema<ChangeFields> = schema<ChangeFields>('ogygia-content/change', (d) => {
-	if (!is_str(d.version) || !d.version) throw new Error('a changelog entry needs a `version`');
-	if (!is_str(d.date) || !d.date) throw new Error('a changelog entry needs a `date`');
-	return { version: d.version, date: d.date };
-});
+const change_only: FieldSchema<ChangeFields> = schema<ChangeFields>(
+	'ogygia-content/change',
+	(d) => {
+		if (!is_str(d.version) || !d.version) throw new Error('a changelog entry needs a `version`');
+		if (!is_str(d.date) || !d.date) throw new Error('a changelog entry needs a `date`');
+		return { version: d.version, date: d.date };
+	}
+);
 
 /**
  * The blessed schema family. `page` is the universal base; `post` / `change` are pre-layered genre

@@ -100,7 +100,10 @@ export type ServerPlugin<Options = undefined, State = undefined> = Partial<Serve
 	 * document, after ogygia's own. Most plugins want the stages below instead; this is for what must
 	 * wrap everything (a profiler timing the render, serving its own UI).
 	 */
-	handle?(ctx: HandleContext<Options>, next: (options?: ResolveOptions) => Promise<Response>): MaybePromise<Response>;
+	handle?(
+		ctx: HandleContext<Options>,
+		next: (options?: ResolveOptions) => Promise<Response>
+	): MaybePromise<Response>;
 	/** FIRST — every request, before anything else in the handle (above the page / hole split).
 	 *  A Response answers it. */
 	request?(ctx: RequestContext<Options, State>): MaybePromise<void | Response>;
@@ -147,7 +150,11 @@ export { take_late_regions as takeLateRegions } from '../late-region-registry.ts
 export type { LateRegion } from '../late-region-registry.ts';
 /** The late wire: `lateSlot(id, html)` is the swappable slot, `lateChunk(id, html)` one later state
  *  for it, `LATE_BOOT_SCRIPT` the inline head script that swaps chunks in as the document parses. */
-export { late_slot as lateSlot, late_chunk as lateChunk, LATE_BOOT_SCRIPT } from '../server/late-wire.ts';
+export {
+	late_slot as lateSlot,
+	late_chunk as lateChunk,
+	LATE_BOOT_SCRIPT
+} from '../server/late-wire.ts';
 
 import { REGION_BRAND } from '../region-brand.ts';
 import type { DeferredRegion } from '../region.ts';

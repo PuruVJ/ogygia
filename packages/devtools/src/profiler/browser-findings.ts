@@ -9,7 +9,14 @@
  * Findings the report already makes its own way are left to it: a recovery (hydration-mismatch),
  * an island that never woke (never-hydrated), the vitals, the render-blocking files.
  */
-import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '@ogygia/core/insights';
+import {
+	analyze_page,
+	browser_of,
+	type HeldOpen,
+	type PageInput,
+	type PageReport,
+	type RegionFact
+} from '@ogygia/core/insights';
 import type { CodeKind, CpuFn, CpuSummary } from '@ogygia/core/insights';
 import type { FrameCategory } from './analyze.ts';
 import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.ts';
@@ -18,7 +25,15 @@ import type { Visit } from './visit.ts';
 /** codes the report makes from its own data (render-blocking only when it weighed the page's files:
  *  the report.ts caller drops the browser's then — on a dev server it weighs nothing, and the
  *  browser's timing of the blocking file is all there is) */
-const SKIP = new Set(['recovered', 'never-woke', 'vital-ttfb', 'vital-fcp', 'vital-lcp', 'vital-cls', 'vital-inp']);
+const SKIP = new Set([
+	'recovered',
+	'never-woke',
+	'vital-ttfb',
+	'vital-fcp',
+	'vital-lcp',
+	'vital-cls',
+	'vital-inp'
+]);
 
 export interface BrowserFinding {
 	severity: 'info' | 'warn';
@@ -43,14 +58,38 @@ function name_from_entry(entry: string): string {
 	return base.endsWith('.svelte') ? base.slice(0, -7) : base || entry;
 }
 
-const kind_of = (c: FrameCategory): CodeKind => (c === 'component' || c === 'app' ? 'app' : c === 'dependency' ? 'dependency' : c === 'svelte' ? 'svelte' : 'browser');
-const as_fn = (f: WindowFn): CpuFn => ({ name: f.name, file: f.file, line: f.line, kind: kind_of(f.category), self_ms: f.self_ms, total_ms: f.total_ms });
+const kind_of = (c: FrameCategory): CodeKind =>
+	c === 'component' || c === 'app'
+		? 'app'
+		: c === 'dependency'
+			? 'dependency'
+			: c === 'svelte'
+				? 'svelte'
+				: 'browser';
+const as_fn = (f: WindowFn): CpuFn => ({
+	name: f.name,
+	file: f.file,
+	line: f.line,
+	kind: kind_of(f.category),
+	self_ms: f.self_ms,
+	total_ms: f.total_ms
+});
 
 /** The browser's CPU cut by island, in the shape the Page tab's analysis quotes from. */
 function cpu_summary(w: ClientWindows): CpuSummary {
 	const islands: CpuSummary['islands'] = {};
-	for (const [fp, v] of Object.entries(w.islands)) islands[fp] = { ms: v.ms, top: v.top.map(as_fn) };
-	return { window_ms: 0, busy_ms: 0, by_kind: [], fns: [], files: [], islands, outside: { ms: w.outside.ms, top: w.outside.top.map(as_fn) }, interval_ms: 0 };
+	for (const [fp, v] of Object.entries(w.islands))
+		islands[fp] = { ms: v.ms, top: v.top.map(as_fn) };
+	return {
+		window_ms: 0,
+		busy_ms: 0,
+		by_kind: [],
+		fns: [],
+		files: [],
+		islands,
+		outside: { ms: w.outside.ms, top: w.outside.top.map(as_fn) },
+		interval_ms: 0
+	};
 }
 
 /** The Page tab's report of one visit. `rows`: the profiled render's islands (fp, entry, name);
@@ -73,7 +112,32 @@ export function browser_page_report(
 	held_open?: HeldOpen
 ): PageReport | null {
 	// (a page of holes only has neither, and a hole that kept its fallback is still worth saying)
-	if (!visit.regions?.length && !visit.islands.length && !visit.holes_failed?.length && !visit.holes_answered?.length && !visit.hole_batches?.length && !visit.restores?.length && !visit.preload_misses?.length && !visit.entry_fallbacks?.length && !visit.refetched?.length && !visit.navs?.length && !visit.shifts?.length && !visit.interaction && !visit.paints?.lcp && !visit.dom && !visit.images_oversized?.length && !visit.font_faces?.length && !visit.preloads_unused?.length && !visit.images_eager_below?.length && !visit.forced_layout?.length && !visit.images_unsized?.length && !visit.scroll_jank?.length && !visit.uncompressed?.length && !visit.nav.raw) return null;
+	if (
+		!visit.regions?.length &&
+		!visit.islands.length &&
+		!visit.holes_failed?.length &&
+		!visit.holes_answered?.length &&
+		!visit.hole_batches?.length &&
+		!visit.restores?.length &&
+		!visit.preload_misses?.length &&
+		!visit.entry_fallbacks?.length &&
+		!visit.refetched?.length &&
+		!visit.navs?.length &&
+		!visit.shifts?.length &&
+		!visit.interaction &&
+		!visit.paints?.lcp &&
+		!visit.dom &&
+		!visit.images_oversized?.length &&
+		!visit.font_faces?.length &&
+		!visit.preloads_unused?.length &&
+		!visit.images_eager_below?.length &&
+		!visit.forced_layout?.length &&
+		!visit.images_unsized?.length &&
+		!visit.scroll_jank?.length &&
+		!visit.uncompressed?.length &&
+		!visit.nav.raw
+	)
+		return null;
 	const by_fp = new Map(rows.map((r) => [r.fp, r.name]));
 	const by_entry = new Map(rows.map((r) => [r.entry, r.name]));
 	// …and by the identity's FILE (unique per island), for an entry as the page wrote it — relative to
@@ -84,24 +148,57 @@ export function browser_page_report(
 		return p.slice(p.lastIndexOf('/') + 1);
 	};
 	const by_file = new Map(rows.map((r) => [file_of(r.entry), r.name]));
-	const named = (entry: string) => by_entry.get(entry) ?? by_file.get(file_of(entry)) ?? name_from_entry(entry);
+	const named = (entry: string) =>
+		by_entry.get(entry) ?? by_file.get(file_of(entry)) ?? name_from_entry(entry);
 	// (by its fingerprint, else by its island's file: the same component with other props — the
 	// visited page's query changed them — has another fingerprint, never another file)
-	const name_of = (fp: string, entry?: string) => by_fp.get(fp) ?? (entry ? named(entry) : fp.slice(0, 8));
+	const name_of = (fp: string, entry?: string) =>
+		by_fp.get(fp) ?? (entry ? named(entry) : fp.slice(0, 8));
 	const regions: RegionFact[] = (visit.regions ?? []).map((r) => {
 		const kind = r.defer ? 'hole' : r.wake === 'none' ? 'lake' : 'island';
 		// (its own bytes by fingerprint, else by entry: another copy's props, the same files)
-		const own = kind === 'island' ? (rows.find((x) => x.fp === r.fp) ?? (r.entry ? rows.find((x) => x.entry === r.entry) : undefined))?.own_bytes : undefined;
-		return { fp: r.fp, name: name_of(r.fp, r.entry), kind, wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'), hydrated: !!r.hydrated, top: r.top, height: r.height, ...(own ? { own_bytes: own } : {}), ...(kind === 'island' && r.hidden ? { hidden: true as const, ...(r.headless ? { headless: true as const } : {}) } : {}) };
+		const own =
+			kind === 'island'
+				? (
+						rows.find((x) => x.fp === r.fp) ??
+						(r.entry ? rows.find((x) => x.entry === r.entry) : undefined)
+					)?.own_bytes
+				: undefined;
+		return {
+			fp: r.fp,
+			name: name_of(r.fp, r.entry),
+			kind,
+			wake: r.wake || (kind === 'hole' ? 'fetch' : 'load'),
+			hydrated: !!r.hydrated,
+			top: r.top,
+			height: r.height,
+			...(own ? { own_bytes: own } : {}),
+			...(kind === 'island' && r.hidden
+				? { hidden: true as const, ...(r.headless ? { headless: true as const } : {}) }
+				: {})
+		};
 	});
 	// an island that woke but is not in the regions list (an older beacon): named all the same
 	const known = new Set(regions.map((r) => r.fp));
 	for (const i of visit.islands)
 		if (!known.has(i.fp)) {
 			known.add(i.fp);
-			regions.push({ fp: i.fp, name: name_of(i.fp, i.entry), kind: 'island', wake: rows.find((r) => r.fp === i.fp) ? 'load' : '', hydrated: true });
+			regions.push({
+				fp: i.fp,
+				name: name_of(i.fp, i.entry),
+				kind: 'island',
+				wake: rows.find((r) => r.fp === i.fp) ? 'load' : '',
+				hydrated: true
+			});
 		}
-	const failures = (visit.regions ?? []).filter((r) => r.failed !== undefined).map((r) => ({ fp: r.fp, message: r.failed || 'it threw', ...(r.failed_span ? { span: r.failed_span } : {}), ...(r.failed_turn !== undefined ? { turn: r.failed_turn } : {}) }));
+	const failures = (visit.regions ?? [])
+		.filter((r) => r.failed !== undefined)
+		.map((r) => ({
+			fp: r.fp,
+			message: r.failed || 'it threw',
+			...(r.failed_span ? { span: r.failed_span } : {}),
+			...(r.failed_turn !== undefined ? { turn: r.failed_turn } : {})
+		}));
 	const span = (s: InteractionCpu['wait']) => (s ? { ms: s.ms, top: s.top.map(as_fn) } : null);
 	const browser = browser_of(visit.ua);
 	const input: PageInput = {
@@ -109,13 +206,25 @@ export function browser_page_report(
 		...(browser ? { browser } : {}),
 		...(visit.dock_open_at !== undefined ? { dock_open_at: visit.dock_open_at } : {}),
 		...(held_open ? { held_open } : {}),
-		...(interaction_cpu ? { interaction_cpu: { t: interaction_cpu.t, mapped: interaction_cpu.mapped === true, wait: span(interaction_cpu.wait), handler: span(interaction_cpu.handler) } } : {}),
+		...(interaction_cpu
+			? {
+					interaction_cpu: {
+						t: interaction_cpu.t,
+						mapped: interaction_cpu.mapped === true,
+						wait: span(interaction_cpu.wait),
+						handler: span(interaction_cpu.handler)
+					}
+				}
+			: {}),
 		vitals: visit.vitals ?? {},
 		visit: {
 			// (a start the browser hid: no request or first byte for the analysis to read — the
 			// devtools get the beacon's nav the same way, without them)
 			// (its end hidden too, a dev server: the stand-in is 0 — not an end either)
-			nav: visit.nav.start_hidden ? (({ req_start: _q, res_start: _s, res_end, ...rest }) => (res_end > 0 ? { ...rest, res_end } : rest))(visit.nav) : visit.nav,
+			nav: visit.nav.start_hidden
+				? (({ req_start: _q, res_start: _s, res_end, ...rest }) =>
+						res_end > 0 ? { ...rest, res_end } : rest)(visit.nav)
+				: visit.nav,
 			paints: visit.paints,
 			resources: visit.resources,
 			resource_totals: visit.resource_totals,
@@ -169,7 +278,12 @@ export function browser_page_report(
 						refetched: visit.refetched.map((f) => {
 							if (!f.entry) return f;
 							const own = by_entry.get(f.entry) ?? by_file.get(file_of(f.entry));
-							return { ...f, name: own ?? (f.hole && hole_name ? `the island in ${hole_name(f.hole)}` : named(f.entry)) };
+							return {
+								...f,
+								name:
+									own ??
+									(f.hole && hole_name ? `the island in ${hole_name(f.hole)}` : named(f.entry))
+							};
 						})
 					}
 				: {}),
@@ -209,7 +323,9 @@ export function browser_page_report(
 							shown_at,
 							...(server_ms !== undefined ? { server_ms } : {}),
 							...(h.queue !== undefined ? { server_queue_ms: h.queue } : {}),
-							...(h.left !== undefined ? { left_at: h.left, first_at: h.first, end_at: h.end } : {}),
+							...(h.left !== undefined
+								? { left_at: h.left, first_at: h.first, end_at: h.end }
+								: {}),
 							...(h.batch !== undefined ? { batch_size: h.batch } : {})
 						};
 					})
@@ -233,7 +349,17 @@ export function browser_page_report(
 	};
 	const cpu = windows ? cpu_summary(windows) : null;
 	const by_host = third?.by_host ? Object.fromEntries(third.by_host) : undefined;
-	return analyze_page(input, regions, failures, Infinity, cpu ? { ...cpu, by_host } : by_host ? { ...cpu_summary({ islands: {}, outside: { ms: 0, top: [] } }), by_host } : null);
+	return analyze_page(
+		input,
+		regions,
+		failures,
+		Infinity,
+		cpu
+			? { ...cpu, by_host }
+			: by_host
+				? { ...cpu_summary({ islands: {}, outside: { ms: 0, top: [] } }), by_host }
+				: null
+	);
 }
 
 /** The report's share of them: the codes it does not already make, severities in its two levels. */

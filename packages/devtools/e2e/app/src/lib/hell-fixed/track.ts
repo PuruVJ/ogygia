@@ -5,7 +5,13 @@ const layer: { name: string; hash: number; at: string; size: number }[] = [];
 const MAX = 5000;
 
 function buildPayload(name: string, props: Record<string, unknown>): string {
-	return JSON.stringify({ event: name, at: new Date().toISOString(), page: 'hell', props, session: { id: 'anon', seq: layer.length } });
+	return JSON.stringify({
+		event: name,
+		at: new Date().toISOString(),
+		page: 'hell',
+		props,
+		session: { id: 'anon', seq: layer.length }
+	});
 }
 
 function hashPayload(s: string): number {
@@ -20,7 +26,8 @@ function hashPayload(s: string): number {
 export function track(name: string, props: Record<string, unknown> = {}): string {
 	const payload = buildPayload(name, props);
 	const hash = hashPayload(payload);
-	if (layer.length < MAX) layer.push({ name, hash, at: new Date().toISOString(), size: payload.length });
+	if (layer.length < MAX)
+		layer.push({ name, hash, at: new Date().toISOString(), size: payload.length });
 	return hash.toString(16);
 }
 

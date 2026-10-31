@@ -13,7 +13,10 @@ const PASSES: [RegExp, string][] = [
 ];
 
 function escapeEntities(s: string): string {
-	return s.replace(/&(?!(?:amp|lt|gt|quot|nbsp);)/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+	return s
+		.replace(/&(?!(?:amp|lt|gt|quot|nbsp);)/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;');
 }
 
 function inline(paragraph: string): string {

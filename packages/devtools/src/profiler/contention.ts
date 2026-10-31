@@ -34,7 +34,14 @@ export interface Contention {
 	/** the heaviest overlaps, at most 40 (count with `counts`, not this list) */
 	requests: ContendingRequest[];
 	/** every overlapping request tallied by kind, before the list was cut (absent on older reports) */
-	counts?: { self: number; self_ms: number; self_paths: string[]; self_remote?: number; other: number; hole: number };
+	counts?: {
+		self: number;
+		self_ms: number;
+		self_paths: string[];
+		self_remote?: number;
+		other: number;
+		hole: number;
+	};
 	/** the sum of the overlaps (a wall-time measure: two requests over one ms count twice) */
 	overlap_ms: number;
 	/** the upper bound on CPU the window lost to them, summed */
@@ -104,11 +111,18 @@ export function contention(input: ContentionInput): Contention | undefined {
 			cpu_max_ms: round2(cpu_max),
 			// (a hole the handle answered carries its stats; a refused one only its path — the configured
 			// endpoint, matched by suffix as the handle matches it, under any base)
-			kind: e.hole || e.path.endsWith(islands_endpoint()) ? 'hole' : input.self_paths?.has(e.path) ? 'self' : 'other',
+			kind:
+				e.hole || e.path.endsWith(islands_endpoint())
+					? 'hole'
+					: input.self_paths?.has(e.path)
+						? 'self'
+						: 'other',
 			...(e.remote ? { remote: true as const } : {})
 		});
 	}
-	const inflight = (input.own ?? []).filter((e) => e.internal && typeof e.inflight === 'number').map((e) => e.inflight);
+	const inflight = (input.own ?? [])
+		.filter((e) => e.internal && typeof e.inflight === 'number')
+		.map((e) => e.inflight);
 	// union length of the busy intervals over the windows' total length
 	busy.sort((a, b) => a[0] - b[0]);
 	let union = 0;
@@ -140,7 +154,11 @@ export function contention(input: ContentionInput): Contention | undefined {
 		overlap_ms: round2(overlap_total),
 		cpu_max_ms: round2(cpu_total),
 		inflight_at_start: inflight,
-		per_window: per_window.map((p) => ({ n: p.n, overlap_ms: round2(p.overlap_ms), cpu_max_ms: round2(p.cpu_max_ms) })),
+		per_window: per_window.map((p) => ({
+			n: p.n,
+			overlap_ms: round2(p.overlap_ms),
+			cpu_max_ms: round2(p.cpu_max_ms)
+		})),
 		busy_share: round2(Math.min(1, union / total_len))
 	};
 }

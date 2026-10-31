@@ -35,7 +35,11 @@ export default defineConfig({
 		// DOCK is on with OGYGIA_DEVTOOLS=1 (the dev-server specs set it).
 		devtools({
 			dock: !!process.env.OGYGIA_DEVTOOLS,
-			profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true }
+			profiler: {
+				trap: { over: 400, keep: 3 },
+				sample: { every: 20, window: 1000 },
+				serverTiming: true
+			}
 		}),
 		sveltekit()
 	]

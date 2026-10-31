@@ -47,7 +47,11 @@ test.describe('SPA navigation into a server redirect', () => {
 
 		// The rendered content is the destination page (Orders heading), not a blank/source page.
 		const h1 = (
-			(await page.locator('h1').first().textContent().catch(() => '')) || ''
+			(await page
+				.locator('h1')
+				.first()
+				.textContent()
+				.catch(() => '')) || ''
 		).trim();
 		check('destination content is rendered (Orders heading)', /orders/i.test(h1), h1);
 

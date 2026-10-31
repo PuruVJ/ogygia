@@ -192,11 +192,13 @@ function preflight(): Preflight {
 function addOgygiaDep(pf: Preflight, markdown: boolean): void {
 	const wanted = markdown ? ['ogygia', '@ogygia/content'] : ['ogygia'];
 	const missing = wanted.filter((name) => !pf.pkg.dependencies?.[name]);
-	const cli_missing = !pf.pkg.devDependencies?.['@ogygia/cli'] && !pf.pkg.dependencies?.['@ogygia/cli'];
+	const cli_missing =
+		!pf.pkg.devDependencies?.['@ogygia/cli'] && !pf.pkg.dependencies?.['@ogygia/cli'];
 	if (missing.length || cli_missing) {
 		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}) };
 		for (const name of missing) pf.pkg.dependencies[name] = `^${version}`;
-		if (cli_missing) pf.pkg.devDependencies = { ...(pf.pkg.devDependencies ?? {}), '@ogygia/cli': `^${version}` };
+		if (cli_missing)
+			pf.pkg.devDependencies = { ...(pf.pkg.devDependencies ?? {}), '@ogygia/cli': `^${version}` };
 		const indent = JSON_INDENT_RE.exec(pf.pkgRaw)?.[1] ?? '\t';
 		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
 	}
@@ -219,7 +221,10 @@ const svFileApi = {
 function wireSvelteConfig(asyncCompiler: boolean): void {
 	svelteConfig.edit({ sv: svFileApi, cwd }, ({ ast, js, property, override }) => {
 		js.imports.addNamed(ast, { from: '@sveltejs/vite-plugin-svelte', imports: ['vitePreprocess'] });
-		js.imports.addNamed(ast, { from: '@ogygia/content/vite', imports: ['preprocess', 'extensions'] });
+		js.imports.addNamed(ast, {
+			from: '@ogygia/content/vite',
+			imports: ['preprocess', 'extensions']
+		});
 
 		// extensions — create `extensions()` if absent; if an array is already there, spread ours in.
 		const extFallback = js.common.parseExpression('extensions()');
@@ -274,7 +279,8 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 		viteConfig,
 		transforms.script(({ ast, js }) => {
 			js.imports.addNamed(ast, { from: 'ogygia/vite', imports: ['ogygia'] });
-			if (markdown) js.imports.addNamed(ast, { from: '@ogygia/content/vite', imports: ['content'] });
+			if (markdown)
+				js.imports.addNamed(ast, { from: '@ogygia/content/vite', imports: ['content'] });
 			// prepended in reverse: the list reads `ogygia(), content(…), …`
 			if (markdown) js.vite.addPlugin(ast, { code: 'content({ markdown: {} })', mode: 'prepend' });
 			js.vite.addPlugin(ast, { code: 'ogygia()', mode: 'prepend' });
@@ -921,7 +927,14 @@ if (command === 'fragments') {
 } else if (command === 'perf' || command === 'bisect') {
 	// `./perf/cli.js` is a sibling in dist (library-built), loaded on demand like mcp
 	import(new URL('./perf/cli.js', import.meta.url).href)
-		.then((m) => (m as { runPerf: (a: string[]) => Promise<number>; runBisect: (a: string[]) => Promise<number> })[command === 'perf' ? 'runPerf' : 'runBisect'](argv.slice(1)))
+		.then((m) =>
+			(
+				m as {
+					runPerf: (a: string[]) => Promise<number>;
+					runBisect: (a: string[]) => Promise<number>;
+				}
+			)[command === 'perf' ? 'runPerf' : 'runBisect'](argv.slice(1))
+		)
 		.then((code) => process.exit(code))
 		.catch((err) => die(err?.message ?? String(err)));
 } else if (command === 'keys') {

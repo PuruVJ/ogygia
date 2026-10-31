@@ -21,28 +21,28 @@
 
 <div class="wf">
 	<div class="wf-track">
-	{#each rows as r}
-		<div class="wf-row">
-			<button
-				type="button"
-				class="wf-bar"
-				class:err={r.err}
-				class:sel={selected === r.call}
-				style="left:{r.left}%;width:{r.width}%"
-				title={r.title}
-				onclick={() => (selected = r.call)}
-			>
-				{#if r.bodyPct > 5}<span class="body" style="width:{r.bodyPct}%"></span>{/if}
-				{#if r.sizeLabel}<span class="wf-size">{r.sizeLabel}</span>{/if}
-			</button>
-			<span
-				class="wf-label"
-				style={r.rightAnchored
-					? `right:calc(${(100 - r.left).toFixed(1)}% + 6px)`
-					: `left:calc(${(r.left + r.width).toFixed(1)}% + 6px)`}>{r.label}</span
-			>
-		</div>
-	{/each}
+		{#each rows as r}
+			<div class="wf-row">
+				<button
+					type="button"
+					class="wf-bar"
+					class:err={r.err}
+					class:sel={selected === r.call}
+					style="left:{r.left}%;width:{r.width}%"
+					title={r.title}
+					onclick={() => (selected = r.call)}
+				>
+					{#if r.bodyPct > 5}<span class="body" style="width:{r.bodyPct}%"></span>{/if}
+					{#if r.sizeLabel}<span class="wf-size">{r.sizeLabel}</span>{/if}
+				</button>
+				<span
+					class="wf-label"
+					style={r.rightAnchored
+						? `right:calc(${(100 - r.left).toFixed(1)}% + 6px)`
+						: `left:calc(${(r.left + r.width).toFixed(1)}% + 6px)`}>{r.label}</span
+				>
+			</div>
+		{/each}
 	</div>
 </div>
 
@@ -52,75 +52,107 @@
 	     and blocked seeing the waterfall). Close with ✕ or Escape; click another bar to switch. -->
 	<div class="wf-drawer" role="dialog" aria-label="Request detail">
 		<div class="wf-drawer-head">
-				<span class="rm">{c.method}</span>
-				<span class="ru" title={c.url}>{c.url}</span>
-				<span class="rs" class:warn={c.error}>{c.error ? 'ERR' : c.status || '—'}</span>
-				<button type="button" class="wf-close" aria-label="Close" onclick={() => (selected = null)}
-					>✕</button
-				>
-			</div>
-			<div class="wf-drawer-body">
-				<dl>
-					<dt>Size</dt>
-					<dd>
-						{#if c.bytes != null}<b>{fmt_bytes(c.bytes)}</b> decoded{/if}{#if c.transfer_bytes != null && c.transfer_bytes !== c.bytes}{#if c.bytes != null},
-							{/if}{fmt_bytes(c.transfer_bytes)} on the wire{#if c.encoding}
-								<span class="dim">({c.encoding})</span>{/if}{/if}{#if c.bytes == null && c.transfer_bytes == null}—{/if}
-					</dd>
-					<dt>Timing</dt>
-					<dd>
-						{fmt_ms(c.ms)} to headers{#if c.body_ms} · {fmt_ms(c.body_ms)} reading the body{/if}
-					</dd>
-					<dt>Response</dt>
-					<dd>
-						{c.error ? 'error' : c.status || '—'}{#if c.type} · {c.type}{/if}{#if c.error} · {c.error}{/if}
-					</dd>
-					{#if c.route ?? c.path}<dt>Triggered by</dt>
-						<dd class="brk">{c.route ?? c.path}</dd>{/if}
-					{#if c.caller}<dt>Caller</dt>
-						<dd class="brk">{c.caller}</dd>{/if}
-					{#if c.callers && c.callers.length > 1}<dt>Call path</dt>
-						<dd class="brk">{#each c.callers as k, i (i)}{#if i > 0}<span class="dim"> ← </span>{/if}{k}{/each}</dd>{/if}
-					{#if c.timings?.length}
-						{@const theirs = c.timings.reduce((a, t) => a + t.ms, 0)}
-						<dt>Their side</dt>
-						<dd>
-							{#each c.timings as t, i (t.name + '\0' + i)}<span class="st"><b>{t.desc ?? t.name}</b> {fmt_ms(t.ms)} ms</span>{/each}
-							{#if theirs > 0}<span class="dim">— {fmt_ms(theirs)} ms measured on their side, {fmt_ms(Math.max(0, c.ms - theirs))} ms network + framework (from their Server-Timing)</span>{/if}
-						</dd>
-					{/if}
-					{#if c.trace}
-						{@const t = c.trace}
-						{@const rest = Math.max(0, t.ms - t.cpu_ms - t.wait_ms)}
-						<dt>Inside the upstream</dt>
-						<dd>
-							<span class="st"><b>{fmt_ms(t.ms)} ms</b> on their profiler's clock{#if t.route} · route <code>{t.route}</code>{/if}</span>
-							<span class="trace-bar" title="{fmt_ms(t.cpu_ms)} ms CPU · {fmt_ms(t.wait_ms)} ms waiting on {t.calls} call{t.calls === 1 ? '' : 's'} · {fmt_ms(rest)} ms other">
-								<i class="tb-cpu" style="width:{(t.cpu_ms / Math.max(t.ms, 0.01)) * 100}%"></i><i class="tb-wait" style="width:{(t.wait_ms / Math.max(t.ms, 0.01)) * 100}%"></i><i class="tb-rest" style="width:{(rest / Math.max(t.ms, 0.01)) * 100}%"></i>
-							</span>
-							<span class="dim">{fmt_ms(t.cpu_ms)} ms CPU · {fmt_ms(t.wait_ms)} ms waiting on {t.calls} call{t.calls === 1 ? '' : 's'} · {fmt_ms(rest)} ms other · {fmt_ms(Math.max(0, c.ms - t.ms))} ms network between us</span>
-							{#if t.top?.length}
-								<span class="dim">their own calls: {#each t.top as u, i (i)}{#if i > 0}, {/if}{u.url.replace(/^https?:\/\/[^/]+/, '')} {fmt_ms(u.ms)} ms{/each}</span>
-							{/if}
-							{#if t.profiler}<span class="dim">their profiler: <code>{t.profiler}</code></span>{/if}
-						</dd>
-					{/if}
-				</dl>
-
-				<h4>URL</h4>
-				<pre class="wf-url">{c.url}</pre>
-
-				{#if c.headers && Object.keys(c.headers).length}
-					<h4>Response headers</h4>
-					<dl class="hdrs">
-						{#each Object.entries(c.headers) as [k, v]}
-							<dt>{k}</dt>
-							<dd class="brk">{v}</dd>
-						{/each}
-					</dl>
-				{/if}
-			</div>
+			<span class="rm">{c.method}</span>
+			<span class="ru" title={c.url}>{c.url}</span>
+			<span class="rs" class:warn={c.error}>{c.error ? 'ERR' : c.status || '—'}</span>
+			<button type="button" class="wf-close" aria-label="Close" onclick={() => (selected = null)}
+				>✕</button
+			>
 		</div>
+		<div class="wf-drawer-body">
+			<dl>
+				<dt>Size</dt>
+				<dd>
+					{#if c.bytes != null}<b>{fmt_bytes(c.bytes)}</b> decoded{/if}{#if c.transfer_bytes != null && c.transfer_bytes !== c.bytes}{#if c.bytes != null},
+						{/if}{fmt_bytes(c.transfer_bytes)} on the wire{#if c.encoding}
+							<span class="dim">({c.encoding})</span
+							>{/if}{/if}{#if c.bytes == null && c.transfer_bytes == null}—{/if}
+				</dd>
+				<dt>Timing</dt>
+				<dd>
+					{fmt_ms(c.ms)} to headers{#if c.body_ms}
+						· {fmt_ms(c.body_ms)} reading the body{/if}
+				</dd>
+				<dt>Response</dt>
+				<dd>
+					{c.error ? 'error' : c.status || '—'}{#if c.type}
+						· {c.type}{/if}{#if c.error}
+						· {c.error}{/if}
+				</dd>
+				{#if c.route ?? c.path}<dt>Triggered by</dt>
+					<dd class="brk">{c.route ?? c.path}</dd>{/if}
+				{#if c.caller}<dt>Caller</dt>
+					<dd class="brk">{c.caller}</dd>{/if}
+				{#if c.callers && c.callers.length > 1}<dt>Call path</dt>
+					<dd class="brk">
+						{#each c.callers as k, i (i)}{#if i > 0}<span class="dim"> ← </span>{/if}{k}{/each}
+					</dd>{/if}
+				{#if c.timings?.length}
+					{@const theirs = c.timings.reduce((a, t) => a + t.ms, 0)}
+					<dt>Their side</dt>
+					<dd>
+						{#each c.timings as t, i (t.name + '\0' + i)}<span class="st"
+								><b>{t.desc ?? t.name}</b> {fmt_ms(t.ms)} ms</span
+							>{/each}
+						{#if theirs > 0}<span class="dim"
+								>— {fmt_ms(theirs)} ms measured on their side, {fmt_ms(Math.max(0, c.ms - theirs))} ms
+								network + framework (from their Server-Timing)</span
+							>{/if}
+					</dd>
+				{/if}
+				{#if c.trace}
+					{@const t = c.trace}
+					{@const rest = Math.max(0, t.ms - t.cpu_ms - t.wait_ms)}
+					<dt>Inside the upstream</dt>
+					<dd>
+						<span class="st"
+							><b>{fmt_ms(t.ms)} ms</b> on their profiler's clock{#if t.route}
+								· route <code>{t.route}</code>{/if}</span
+						>
+						<span
+							class="trace-bar"
+							title="{fmt_ms(t.cpu_ms)} ms CPU · {fmt_ms(
+								t.wait_ms
+							)} ms waiting on {t.calls} call{t.calls === 1 ? '' : 's'} · {fmt_ms(rest)} ms other"
+						>
+							<i class="tb-cpu" style="width:{(t.cpu_ms / Math.max(t.ms, 0.01)) * 100}%"></i><i
+								class="tb-wait"
+								style="width:{(t.wait_ms / Math.max(t.ms, 0.01)) * 100}%"
+							></i><i class="tb-rest" style="width:{(rest / Math.max(t.ms, 0.01)) * 100}%"></i>
+						</span>
+						<span class="dim"
+							>{fmt_ms(t.cpu_ms)} ms CPU · {fmt_ms(t.wait_ms)} ms waiting on {t.calls} call{t.calls ===
+							1
+								? ''
+								: 's'} · {fmt_ms(rest)} ms other · {fmt_ms(Math.max(0, c.ms - t.ms))} ms network between
+							us</span
+						>
+						{#if t.top?.length}
+							<span class="dim"
+								>their own calls: {#each t.top as u, i (i)}{#if i > 0},
+									{/if}{u.url.replace(/^https?:\/\/[^/]+/, '')}
+									{fmt_ms(u.ms)} ms{/each}</span
+							>
+						{/if}
+						{#if t.profiler}<span class="dim">their profiler: <code>{t.profiler}</code></span>{/if}
+					</dd>
+				{/if}
+			</dl>
+
+			<h4>URL</h4>
+			<pre class="wf-url">{c.url}</pre>
+
+			{#if c.headers && Object.keys(c.headers).length}
+				<h4>Response headers</h4>
+				<dl class="hdrs">
+					{#each Object.entries(c.headers) as [k, v]}
+						<dt>{k}</dt>
+						<dd class="brk">{v}</dd>
+					{/each}
+				</dl>
+			{/if}
+		</div>
+	</div>
 {/if}
 
 <style>
@@ -181,7 +213,9 @@
 		height: 100%;
 		display: flex;
 		align-items: center;
-		font: 10px ui-monospace, monospace;
+		font:
+			10px ui-monospace,
+			monospace;
 		/* on the blue bar: the theme's ink for its accent fills (4.5:1 in both themes) */
 		color: var(--text-on-accent);
 		font-variant-numeric: tabular-nums;
@@ -191,7 +225,9 @@
 	}
 	.wf-label {
 		position: absolute;
-		font: 11px ui-monospace, monospace;
+		font:
+			11px ui-monospace,
+			monospace;
 		color: var(--text-dim);
 		top: 4px;
 		white-space: nowrap;
@@ -304,7 +340,9 @@
 		background: var(--bg-sunken);
 		border: 1px solid #1c222c;
 		border-radius: 6px;
-		font: 12px ui-monospace, monospace;
+		font:
+			12px ui-monospace,
+			monospace;
 		color: var(--text-dim);
 		word-break: break-all;
 		white-space: pre-wrap;

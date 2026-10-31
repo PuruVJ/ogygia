@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { sourcemap_resolver, type FrameStat } from '../src/profiler/analyze.ts';
-import { build_ledger, confirmed, grows_between, grows_of, is_app_path, short_source } from '../src/profiler/ledger.ts';
+import {
+	build_ledger,
+	confirmed,
+	grows_between,
+	grows_of,
+	is_app_path,
+	short_source
+} from '../src/profiler/ledger.ts';
 import type { GcMaker } from '../src/profiler/gc.ts';
 import type { RetainedSite } from '../src/profiler/insights.ts';
 
@@ -422,11 +429,16 @@ describe('line ledger', () => {
 		expect(at(8)).toBeUndefined();
 	});
 
-	it("a library entry V8 inlined away: the inlining-off render says which app line entered the package", () => {
+	it('a library entry V8 inlined away: the inlining-off render says which app line entered the package', () => {
 		const page = '/app/src/routes/+page.server.ts';
 		const cat = '/app/src/lib/catalog.ts';
 		const files: Record<string, string[]> = {
-			[page]: ['export async function load() {', '\tconst ok = validateAll(rows);', '\treturn { ok };', '}'],
+			[page]: [
+				'export async function load() {',
+				'\tconst ok = validateAll(rows);',
+				'\treturn { ok };',
+				'}'
+			],
 			[cat]: [
 				"import * as v from 'valibot';",
 				'export function validateAll(rows) {',
@@ -445,7 +457,17 @@ describe('line ledger', () => {
 				path: page,
 				line: 1,
 				lines: [{ line: 2, ms: 2 }],
-				callees: [{ key: 'run', name: '~run', category: 'dependency', pkg: 'valibot', file: 'valibot/dist/index.mjs:1', ms: 20, share: 0.9 }]
+				callees: [
+					{
+						key: 'run',
+						name: '~run',
+						category: 'dependency',
+						pkg: 'valibot',
+						file: 'valibot/dist/index.mjs:1',
+						ms: 20,
+						share: 0.9
+					}
+				]
 			})
 		];
 		// inlining off: load → validateAll → (anonymous) → safeParse
@@ -456,7 +478,16 @@ describe('line ledger', () => {
 				path: page,
 				line: 1,
 				total_ms: 40,
-				callees: [{ key: 'u-va', name: 'validateAll', category: 'app', file: 'src/lib/catalog.ts:2', ms: 39, share: 0.97 }]
+				callees: [
+					{
+						key: 'u-va',
+						name: 'validateAll',
+						category: 'app',
+						file: 'src/lib/catalog.ts:2',
+						ms: 39,
+						share: 0.97
+					}
+				]
 			}),
 			fn({
 				key: 'u-va',
@@ -464,16 +495,36 @@ describe('line ledger', () => {
 				path: cat,
 				line: 2,
 				total_ms: 39,
-				callees: [{ key: 'u-sp', name: 'safeParse', category: 'dependency', pkg: 'valibot', file: 'valibot/dist/index.mjs:9', ms: 38, share: 0.97 }]
+				callees: [
+					{
+						key: 'u-sp',
+						name: 'safeParse',
+						category: 'dependency',
+						pkg: 'valibot',
+						file: 'valibot/dist/index.mjs:9',
+						ms: 38,
+						share: 0.97
+					}
+				]
 			})
 		];
-		const ledger = build_ledger({ functions, uninlined, source, code: (p, l) => source(p, l, l)?.lines[0] });
+		const ledger = build_ledger({
+			functions,
+			uninlined,
+			source,
+			code: (p, l) => source(p, l, l)?.lines[0]
+		});
 		const row = ledger.find((l) => l.path === cat && l.line === 3)!;
 		expect(row).toMatchObject({ lib_ms: 20, libs: [{ name: '~run', pkg: 'valibot', ms: 20 }] });
 		// without that render: load's one calling line (the call that led there), not a guess among many
 		const blind = build_ledger({ functions, source, code: (p, l) => source(p, l, l)?.lines[0] });
 		expect(blind.filter((l) => l.lib_ms > 0).map((l) => [l.path, l.line])).toEqual([[page, 2]]);
-		files[page] = ['export async function load() {', '\tconst ok = validateAll(rows);', '\treturn { ok: log(ok) };', '}'];
+		files[page] = [
+			'export async function load() {',
+			'\tconst ok = validateAll(rows);',
+			'\treturn { ok: log(ok) };',
+			'}'
+		];
 		const two = build_ledger({ functions, source, code: (p, l) => source(p, l, l)?.lines[0] });
 		expect(two.some((l) => l.lib_ms > 0)).toBe(false);
 	});

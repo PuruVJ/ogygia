@@ -83,9 +83,14 @@ test.describe('pure csr=true app: direct interactive <Region> degrades to Kit, n
 			// runtime's stable URL as a plain string rides Region's shared code and loads nothing)
 			const runtime_names = runtimeChunks.map((f) => path.basename(f));
 			const imports_runtime = (code: string) =>
-				runtime_names.some((n) => ['"./', '"../', '`./', '`../', "'./", "'../"].some((q) => code.includes(q + n)));
+				runtime_names.some((n) =>
+					['"./', '"../', '`./', '`../', "'./", "'../"].some((q) => code.includes(q + n))
+				);
 			const referencing = files.filter(
-				(f) => f.endsWith('.js') && !OG_RUNTIME_CHUNK_RE.test(f) && imports_runtime(fs.readFileSync(path.join(clientImmutable, f), 'utf8'))
+				(f) =>
+					f.endsWith('.js') &&
+					!OG_RUNTIME_CHUNK_RE.test(f) &&
+					imports_runtime(fs.readFileSync(path.join(clientImmutable, f), 'utf8'))
 			);
 			check(
 				'build: nothing the app ships references an ogygia runtime (pure csr=true → ogygia ships nothing)',
@@ -148,7 +153,11 @@ test.describe('pure csr=true app: direct interactive <Region> degrades to Kit, n
 			dom.runtimeScript === false,
 			`runtime=${dom.runtimeScript}`
 		);
-		check('run: the page requests no ogygia runtime file at all', runtime_requests.length === 0, runtime_requests[0] ?? '');
+		check(
+			'run: the page requests no ogygia runtime file at all',
+			runtime_requests.length === 0,
+			runtime_requests[0] ?? ''
+		);
 		check(
 			'run: no runtime 404 (the pure-csr wart is gone)',
 			runtime404.length === 0,

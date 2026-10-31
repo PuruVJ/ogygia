@@ -12,7 +12,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { PROFILER_MAPS_PLACEHOLDER, PROFILER_MAPS_GZ_PREFIX as GZ_PREFIX } from '../compiler/ids.ts';
+import {
+	PROFILER_MAPS_PLACEHOLDER,
+	PROFILER_MAPS_GZ_PREFIX as GZ_PREFIX
+} from '../compiler/ids.ts';
 import { build_module_map } from './module-map.ts';
 import { client_maps_stash } from './server-sourcemaps.ts';
 
@@ -182,7 +185,12 @@ function maps_app_code(raw: string, chunk_dir: string, src: string): boolean {
 	try {
 		const map = JSON.parse(raw) as { sources?: unknown; sourceRoot?: unknown };
 		const root = typeof map.sourceRoot === 'string' ? map.sourceRoot : '';
-		return Array.isArray(map.sources) && map.sources.some((s) => typeof s === 'string' && path.resolve(chunk_dir, root + s).startsWith(src));
+		return (
+			Array.isArray(map.sources) &&
+			map.sources.some(
+				(s) => typeof s === 'string' && path.resolve(chunk_dir, root + s).startsWith(src)
+			)
+		);
 	} catch {
 		return false;
 	}

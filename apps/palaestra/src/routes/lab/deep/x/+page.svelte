@@ -9,7 +9,10 @@
 <div class="shell">
 	<div class="body">
 		<p>Page-X only: some prose, a table, whatever. This column re-renders on nav.</p>
-		<ul><li>x-item-1</li><li>x-item-2</li></ul>
+		<ul>
+			<li>x-item-1</li>
+			<li>x-item-2</li>
+		</ul>
 	</div>
 	<div class="rail">
 		<div class="slot">
@@ -21,7 +24,17 @@
 </div>
 
 <style>
-	.shell { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
-	.rail { border-left: 1px solid #e2e8f0; padding-left: 16px; }
-	.deeper { padding: 8px; border-left: 3px solid #cbd5e1; }
+	.shell {
+		display: grid;
+		grid-template-columns: 1fr 320px;
+		gap: 20px;
+	}
+	.rail {
+		border-left: 1px solid #e2e8f0;
+		padding-left: 16px;
+	}
+	.deeper {
+		padding: 8px;
+		border-left: 3px solid #cbd5e1;
+	}
 </style>

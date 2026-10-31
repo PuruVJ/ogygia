@@ -5,8 +5,19 @@ import { hazard_fix, hazard_words } from '../src/profiler/report.ts';
 describe('the report says them', () => {
 	it('each line by file and line, with what it does; the fix per kind', () => {
 		const lines = [
-			{ file: 'src/lib/Clock.svelte', line: 3, code: "const where = typeof window === 'undefined' ? 'server' : 'browser';", kind: 'browser' as const, reads: 'typeof window' },
-			{ file: 'src/lib/Nav.svelte', line: 9, code: 'const tree = await nav();', kind: 'await' as const }
+			{
+				file: 'src/lib/Clock.svelte',
+				line: 3,
+				code: "const where = typeof window === 'undefined' ? 'server' : 'browser';",
+				kind: 'browser' as const,
+				reads: 'typeof window'
+			},
+			{
+				file: 'src/lib/Nav.svelte',
+				line: 9,
+				code: 'const tree = await nav();',
+				kind: 'await' as const
+			}
 		];
 		expect(hazard_words(lines)).toBe(
 			"In its own code, the likeliest: Clock.svelte:3 (`const where = typeof window === 'undefined' ? 'server' : 'browser';`) reads typeof window while rendering, a value the server does not have; Nav.svelte:9 (`const tree = await nav();`) awaits at the top of its script: the browser runs it again, and another answer draws another tree."
@@ -31,14 +42,34 @@ describe('hydration_hazards: the lines that draw differently in the browser', ()
 		].join('\n');
 		expect(hydration_hazards(src)).toEqual([
 			{ line: 4, code: 'const fetched = nav ? [] : await site.nav();', kind: 'await' },
-			{ line: 5, code: "const top_href = $derived(typeof window !== 'undefined' ? window.location.pathname : '/');", kind: 'browser', reads: 'typeof window' },
+			{
+				line: 5,
+				code: "const top_href = $derived(typeof window !== 'undefined' ? window.location.pathname : '/');",
+				kind: 'browser',
+				reads: 'typeof window'
+			},
 			{ line: 8, code: '<p>Built {Date.now()}</p>', kind: 'browser', reads: 'Date.now(' }
 		]);
 	});
 
 	it('a top-level `if (typeof window …)` is a guard: a lead, marked, not a prediction', () => {
-		const src = ['<script>', "\tif (typeof window !== 'undefined') {", '\t\twork();', '\t}', '</script>', '<p>same</p>'].join('\n');
-		expect(hydration_hazards(src)).toEqual([{ line: 2, code: "if (typeof window !== 'undefined') {", kind: 'browser', reads: 'typeof window', guard: true }]);
+		const src = [
+			'<script>',
+			"\tif (typeof window !== 'undefined') {",
+			'\t\twork();',
+			'\t}',
+			'</script>',
+			'<p>same</p>'
+		].join('\n');
+		expect(hydration_hazards(src)).toEqual([
+			{
+				line: 2,
+				code: "if (typeof window !== 'undefined') {",
+				kind: 'browser',
+				reads: 'typeof window',
+				guard: true
+			}
+		]);
 	});
 
 	it('what runs after the wake is never one: callbacks, effects, handlers, the module script', () => {

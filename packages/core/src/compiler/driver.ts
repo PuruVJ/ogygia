@@ -48,7 +48,11 @@ import {
 	appendSvelteModuleRegistrations,
 	appendTransportRegistrations
 } from './content/transportables.ts';
-import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT, FOREIGN_HYDRATE_MARK } from './region/emit.ts';
+import {
+	rewrite_lake_import_to_placeholder,
+	APP_SHIM_IMPORT,
+	FOREIGN_HYDRATE_MARK
+} from './region/emit.ts';
 import { island_deps_module } from './link/island-deps.ts';
 import { island_shim_source, runtime_shim_source } from './link/entry-shim.ts';
 import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.ts';
@@ -71,7 +75,12 @@ import {
 	kit_transport_module,
 	source_crosses_wire
 } from './link/transport.ts';
-import { server_manifest_module, server_islands_module, server_island_ids, PAGE_DATA_READS_TOKEN } from './link/server-manifest.ts';
+import {
+	server_manifest_module,
+	server_islands_module,
+	server_island_ids,
+	PAGE_DATA_READS_TOKEN
+} from './link/server-manifest.ts';
 import { manifest_module } from './link/manifest.ts';
 import { dev_hmr_client_source } from './dev/dev-hmr.ts';
 import { same_module_path, island_vpaths_affected_by_file } from './dev/hmr.ts';
@@ -269,7 +278,9 @@ function dev_runtime_of(runtime_dir: string): { dir: string; ts: boolean } | nul
 function client_plugins_boot(ctx: CompileCtx): { imports: string; list: string } {
 	if (!ctx.client_plugins.length) return { imports: '', list: '' };
 	return {
-		imports: ctx.client_plugins.map((spec, i) => `import __og_client_${i} from ${JSON.stringify(spec)};\n`).join(''),
+		imports: ctx.client_plugins
+			.map((spec, i) => `import __og_client_${i} from ${JSON.stringify(spec)};\n`)
+			.join(''),
 		list: `[${ctx.client_plugins.map((_, i) => `__og_client_${i}`).join(', ')}]`
 	};
 }
@@ -421,7 +432,11 @@ export class Compiler {
 		return cur;
 	}
 
-	transform(source: string, id: string, opts: { ssr?: boolean; linkVirtual?: boolean } = {}): unknown {
+	transform(
+		source: string,
+		id: string,
+		opts: { ssr?: boolean; linkVirtual?: boolean } = {}
+	): unknown {
 		const ctx = this.#ctx!;
 		const { prof, P, outHash } = this.profiler;
 		const ssr = opts.ssr !== false;
@@ -950,7 +965,11 @@ export class Compiler {
 			// server finds that name in the build handoff. The stable name is a shim (`entry_shims`).
 			// (named with its features: `og-runtime-<features>.<hash>.js` says which runtime it is)
 			const feat = this.#ctx!.runtime_features(this.program.runtime_feature_hash);
-			this.runtime_entry_ref = emitFile({ type: 'chunk', id: V_RUNTIME_ENTRY, name: RUNTIME_ENTRY_NAME + (feat ? '-' + feat : '') });
+			this.runtime_entry_ref = emitFile({
+				type: 'chunk',
+				id: V_RUNTIME_ENTRY,
+				name: RUNTIME_ENTRY_NAME + (feat ? '-' + feat : '')
+			});
 		}
 		const { region_kinds, by_id, emitted_island_chunks, registry } = this.program;
 		let skipped = 0;
@@ -1008,7 +1027,10 @@ export class Compiler {
 	 *  the bundle's end: `entry_shims`). */
 	emit_island_entry(emitFile: EmitChunk, rid: string, virtualPath: string): void {
 		this.program.emitted_island_chunks.add(rid);
-		this.island_entry_refs.set(rid, emitFile({ type: 'chunk', id: virtualPath, name: ISLAND_ENTRY_NAME_PREFIX + rid }));
+		this.island_entry_refs.set(
+			rid,
+			emitFile({ type: 'chunk', id: virtualPath, name: ISLAND_ENTRY_NAME_PREFIX + rid })
+		);
 	}
 
 	/**
@@ -1042,7 +1064,10 @@ export class Compiler {
 		}
 		if (this.runtime_entry_ref) {
 			const fileName = this.runtime_chunk_filename();
-			out.push({ fileName, source: runtime_shim_source(fileName, get_file_name(this.runtime_entry_ref)) });
+			out.push({
+				fileName,
+				source: runtime_shim_source(fileName, get_file_name(this.runtime_entry_ref))
+			});
 		}
 		return out;
 	}
@@ -1111,7 +1136,11 @@ export class Compiler {
 		if (id === RESOLVED(V_RUNTIME_ENTRY)) {
 			// Ensure every host was walked (marks complete) before selecting features.
 			this.prescan();
-			const { code } = generateRuntimeEntrySource(program.runtime_marks, ctx.runtime_dir, ctx.client_plugins);
+			const { code } = generateRuntimeEntrySource(
+				program.runtime_marks,
+				ctx.runtime_dir,
+				ctx.client_plugins
+			);
 			const ch = client_hooks_boot(ctx);
 			return ch.imports + code + ch.call;
 		}
@@ -1934,7 +1963,9 @@ export class Compiler {
 	 */
 	patch_page_data_reads(
 		code: string,
-		graph: (id: string) => { importedIds: readonly string[]; dynamicallyImportedIds: readonly string[] } | null,
+		graph: (
+			id: string
+		) => { importedIds: readonly string[]; dynamicallyImportedIds: readonly string[] } | null,
 		module_ids: () => Iterable<string>
 	): { code: string; map: null } | null {
 		const at = code.indexOf(PAGE_DATA_READS_TOKEN);
@@ -1959,8 +1990,10 @@ export class Compiler {
 				if (reads_itself(id)) return true;
 				const info = graph(id);
 				if (!info) continue;
-				for (const next of info.importedIds) if (!seen.has(next)) seen.add(next), queue.push(next);
-				for (const next of info.dynamicallyImportedIds) if (!seen.has(next)) seen.add(next), queue.push(next);
+				for (const next of info.importedIds)
+					if (!seen.has(next)) (seen.add(next), queue.push(next));
+				for (const next of info.dynamicallyImportedIds)
+					if (!seen.has(next)) (seen.add(next), queue.push(next));
 			}
 			for (const id of seen) proven_clean.add(id);
 			return false;
@@ -1978,7 +2011,10 @@ export class Compiler {
 		// JSON is ids and booleans only — its one special character is `"`)
 		const json = JSON.stringify(out);
 		const literal = code[at - 1] === '"' ? json.split('"').join('\\"') : json;
-		return { code: code.slice(0, at) + literal + code.slice(at + PAGE_DATA_READS_TOKEN.length), map: null };
+		return {
+			code: code.slice(0, at) + literal + code.slice(at + PAGE_DATA_READS_TOKEN.length),
+			map: null
+		};
 	}
 
 	/** True when `file` is a registered island HOST (a component that declares islands). */

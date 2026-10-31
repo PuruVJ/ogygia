@@ -167,7 +167,10 @@ function stripJsdoc(text: string): string {
 
 export async function extractModule(moduleId: string): Promise<ApiModule> {
 	const entry = dtsPathFor(moduleId);
-	if (!entry) throw new Error(`[api-ref] no types entry for '${moduleId}' in ${packageNameOf(moduleId)}'s export map.`);
+	if (!entry)
+		throw new Error(
+			`[api-ref] no types entry for '${moduleId}' in ${packageNameOf(moduleId)}'s export map.`
+		);
 	const key = distStamp();
 	const hit = memo.get(moduleId);
 	if (hit && hit.key === key) return hit.mod;
@@ -206,9 +209,9 @@ export async function extractModule(moduleId: string): Promise<ApiModule> {
 						: ts.isTypeAliasDeclaration(decl)
 							? 'type'
 							: ts.isVariableDeclaration(decl)
-								? typeof checker.getTypeOfSymbolAtLocation(symbol, decl).getCallSignatures?.()?.length ===
-											'number' &&
-									  checker.getTypeOfSymbolAtLocation(symbol, decl).getCallSignatures().length > 0
+								? typeof checker.getTypeOfSymbolAtLocation(symbol, decl).getCallSignatures?.()
+										?.length === 'number' &&
+									checker.getTypeOfSymbolAtLocation(symbol, decl).getCallSignatures().length > 0
 									? 'function'
 									: 'const'
 								: 'other';

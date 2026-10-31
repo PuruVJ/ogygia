@@ -25,9 +25,7 @@ export function load_embedded_maps(): Promise<EmbeddedMaps | null> {
 			let raw = (m as { default?: unknown }).default;
 			if (typeof raw === 'string' && raw.startsWith(GZ_PREFIX)) {
 				const zlib = await import('node:zlib');
-				raw = zlib
-					.gunzipSync(Buffer.from(raw.slice(GZ_PREFIX.length), 'base64'))
-					.toString('utf8');
+				raw = zlib.gunzipSync(Buffer.from(raw.slice(GZ_PREFIX.length), 'base64')).toString('utf8');
 			}
 			// the placeholder (a build that did not fill it) and null alike: nothing
 			if (typeof raw !== 'string' || !raw.startsWith('{')) return null;
@@ -156,7 +154,9 @@ function source_index(): Map<string, string> | undefined {
 				continue;
 			}
 			// (a browser chunk's sources are relative to the client output: `client/…` under output/)
-			const dir = (key.startsWith('client/') ? VIRTUAL_OUTPUT : VIRTUAL_SERVER) + key.slice(0, key.lastIndexOf('/') + 1);
+			const dir =
+				(key.startsWith('client/') ? VIRTUAL_OUTPUT : VIRTUAL_SERVER) +
+				key.slice(0, key.lastIndexOf('/') + 1);
 			const list = map.sources ?? [];
 			for (let i = 0; i < list.length; i++) {
 				const text = map.sourcesContent?.[i];

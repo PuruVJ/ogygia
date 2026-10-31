@@ -556,19 +556,31 @@ describe('swap_body (outerSync fallback)', () => {
 	test('removes a body attribute the previous page’s server sent and the incoming page dropped', () => {
 		const live = el('<body class="x"></body>');
 		// page A's server sends data-stale…
-		swap_body(live as unknown as HTMLElement, el('<body class="y" data-stale="1"></body>') as unknown as HTMLElement);
+		swap_body(
+			live as unknown as HTMLElement,
+			el('<body class="y" data-stale="1"></body>') as unknown as HTMLElement
+		);
 		expect(live.getAttribute('data-stale')).toBe('1');
 		// …page B's doesn't: it goes
-		swap_body(live as unknown as HTMLElement, el('<body class="z"></body>') as unknown as HTMLElement);
+		swap_body(
+			live as unknown as HTMLElement,
+			el('<body class="z"></body>') as unknown as HTMLElement
+		);
 		expect(live.getAttribute('class')).toBe('z');
 		expect(live.hasAttribute('data-stale')).toBe(false);
 	});
 
 	test('keeps a body attribute a script on the page set (the server never sent it)', () => {
 		const live = el('<body class="x"></body>');
-		swap_body(live as unknown as HTMLElement, el('<body class="y"></body>') as unknown as HTMLElement);
+		swap_body(
+			live as unknown as HTMLElement,
+			el('<body class="y"></body>') as unknown as HTMLElement
+		);
 		live.setAttribute('data-scroll-lock', ''); // a modal library, between navigations
-		swap_body(live as unknown as HTMLElement, el('<body class="z"></body>') as unknown as HTMLElement);
+		swap_body(
+			live as unknown as HTMLElement,
+			el('<body class="z"></body>') as unknown as HTMLElement
+		);
 		expect(live.hasAttribute('data-scroll-lock')).toBe(true);
 		expect(live.getAttribute('class')).toBe('z');
 	});
@@ -611,7 +623,10 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		);
 		const host = parent.firstChild as DomElement & { shadowRoot?: object };
 		host.shadowRoot = {}; // upgraded (DSD-hydrated)
-		morph_children(parent, frag('<x-widget id="c" data-rt-id="5938" class="rt-scope-a1" aria-label="Region"></x-widget>'));
+		morph_children(
+			parent,
+			frag('<x-widget id="c" data-rt-id="5938" class="rt-scope-a1" aria-label="Region"></x-widget>')
+		);
 		expect(parent.firstChild).toBe(host); // same live host
 		expect(host.getAttribute('data-rt-id')).toBe('5860'); // the runtime's id — NOT overwritten by the render's 5938
 		expect(host.getAttribute('class')).toBe('rt-scope-a1 hydrated'); // scope class + hydrated flag intact
@@ -621,16 +636,27 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		// a site nav (an upgraded custom element) holds a hole; the next page writes the same hole with
 		// another key (its endpoint written at another depth, or its exp rolled over). The self-owned
 		// parent keeps its own children — the old region beside the new one drew the nav twice.
-		const parent = el('<div><x-nav><span data-own="1">its own</span><ogygia-region data-key="a" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav></div>');
+		const parent = el(
+			'<div><x-nav><span data-own="1">its own</span><ogygia-region data-key="a" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav></div>'
+		);
 		const nav = upgraded(parent);
-		morph_children(parent, frag('<x-nav><span data-own="1">its own</span><ogygia-region data-key="b" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav>'));
+		morph_children(
+			parent,
+			frag(
+				'<x-nav><span data-own="1">its own</span><ogygia-region data-key="b" data-og-hole="h"><ul id="mega-menu-l1-0"></ul></ogygia-region></x-nav>'
+			)
+		);
 		expect(parent.firstChild).toBe(nav);
-		const regions = nav.children.filter((c) => (c as DomElement).localName === 'ogygia-region') as DomElement[];
+		const regions = nav.children.filter(
+			(c) => (c as DomElement).localName === 'ogygia-region'
+		) as DomElement[];
 		expect(regions.length).toBe(1);
 		expect(regions[0].getAttribute('data-key')).toBe('b');
 		expect(nav.innerHTML.split('mega-menu-l1-0').length - 1).toBe(1);
 		// …and an element it gave itself after the render's children stays
-		const kept = el('<div><x-nav><ogygia-region data-key="a"></ogygia-region><i data-own="2"></i></x-nav></div>');
+		const kept = el(
+			'<div><x-nav><ogygia-region data-key="a"></ogygia-region><i data-own="2"></i></x-nav></div>'
+		);
 		const nav2 = upgraded(kept);
 		morph_children(kept, frag('<x-nav><ogygia-region data-key="a"></ogygia-region></x-nav>'));
 		expect(nav2.innerHTML).toContain('data-own="2"');
@@ -655,7 +681,9 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 	});
 
 	test('<details open> likewise; a plain sibling still loses its stale attribute', () => {
-		const parent = el('<div><details open><summary>s</summary></details><a data-stale="1">x</a></div>');
+		const parent = el(
+			'<div><details open><summary>s</summary></details><a data-stale="1">x</a></div>'
+		);
 		const details = parent.firstChild as DomElement;
 		morph_children(parent, frag('<details><summary>s</summary></details><a>x</a>'));
 		expect(details.hasAttribute('open')).toBe(true);
@@ -688,7 +716,10 @@ describe('self-owned attributes (upgraded custom elements, dialog/details)', () 
 		const slot = dd.firstChild;
 
 		// The woken hole brings the expensive panel INTO the dropdown.
-		morph_children(parent, frag('<x-dropdown id="d"><section data-panel>Content</section></x-dropdown>'));
+		morph_children(
+			parent,
+			frag('<x-dropdown id="d"><section data-panel>Content</section></x-dropdown>')
+		);
 
 		expect(parent.firstChild).toBe(dd);
 		expect(dd.contains(slot)).toBe(true); // the element's own child kept

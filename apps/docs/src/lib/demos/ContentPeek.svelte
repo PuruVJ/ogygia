@@ -16,7 +16,9 @@
 	const tree: any = await nav();
 	const leaves = tree.flatMap((n: any) =>
 		n.kind === 'group'
-			? n.items.filter((i: any) => i.kind === 'leaf').map((l: any) => ({ section: n.label, title: l.title, href: l.href }))
+			? n.items
+					.filter((i: any) => i.kind === 'leaf')
+					.map((l: any) => ({ section: n.label, title: l.title, href: l.href }))
 			: []
 	);
 	const shown = leaves.slice(0, 6);
@@ -32,7 +34,9 @@
 			</li>
 		{/each}
 	</ul>
-	<p class="widget-meta">{count} pages · one <code>content()</code> collection · fetched over the wire</p>
+	<p class="widget-meta">
+		{count} pages · one <code>content()</code> collection · fetched over the wire
+	</p>
 </div>
 
 <style>

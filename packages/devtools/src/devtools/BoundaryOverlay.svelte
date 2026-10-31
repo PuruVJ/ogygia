@@ -66,7 +66,12 @@
 		return all_regions()
 			.map((r) => {
 				const t = r.kind === 'island' ? region_transitive(r.entry) : null;
-				return { info: r, name: region_name(r.entry), js: t ? t.bytes : null, rect: r.el.getBoundingClientRect() };
+				return {
+					info: r,
+					name: region_name(r.entry),
+					js: t ? t.bytes : null,
+					rect: r.el.getBoundingClientRect()
+				};
 			})
 			.filter((b) => b.rect.width > 0 || b.rect.height > 0);
 	});
@@ -181,19 +186,25 @@
 			<div class="rows">
 				{#if tip.js != null}
 					<div class="row">
-						<span class="k">js + deps</span><span>{kb(tip.js)}<span class="mut"> · {tip.mods} mod</span></span>
+						<span class="k">js + deps</span><span
+							>{kb(tip.js)}<span class="mut"> · {tip.mods} mod</span></span
+						>
 					</div>
 				{/if}
 				{#if tip.props != null}
 					<div class="row"><span class="k">props</span><span>{tip.props} B</span></div>
 				{/if}
 				{#if tip.ms != null}
-					<div class="row"><span class="k">hydrated in</span><span>{tip.ms.toFixed(1)} ms</span></div>
+					<div class="row">
+						<span class="k">hydrated in</span><span>{tip.ms.toFixed(1)} ms</span>
+					</div>
 				{/if}
 				<div class="row">
 					<span class="k">server-rendered</span><span>{tip.serverRendered ? 'yes' : 'no'}</span>
 				</div>
-				{#if tip.fp}<div class="row"><span class="k">fp</span><span class="mono">{tip.fp}</span></div>{/if}
+				{#if tip.fp}<div class="row">
+						<span class="k">fp</span><span class="mono">{tip.fp}</span>
+					</div>{/if}
 			</div>
 		</div>
 	{/if}
@@ -205,7 +216,11 @@
 		inset: 0;
 		pointer-events: none;
 		z-index: 2147483000;
-		font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+		font:
+			11px/1.4 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 	}
 	.box {
 		position: absolute;
@@ -316,7 +331,11 @@
 		color: #e2e8f0;
 		border: 1px solid rgba(148, 163, 184, 0.3);
 		box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-		font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+		font:
+			11px/1.5 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 	}
 	.tip .head {
 		display: flex;

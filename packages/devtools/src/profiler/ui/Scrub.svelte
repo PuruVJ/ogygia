@@ -10,7 +10,8 @@
 	import { density, range_hot, stack_at, type RangeSummary, type StackAt } from '../stacks.ts';
 	import { fmt_ms, CATEGORY_COLOR } from './format.ts';
 
-	let { stacks, marks = [] }: { stacks: StackIndex; marks?: { t: number; label: string }[] } = $props();
+	let { stacks, marks = [] }: { stacks: StackIndex; marks?: { t: number; label: string }[] } =
+		$props();
 
 	const W = 960;
 	const H = 72;
@@ -27,10 +28,16 @@
 	let drag = $state<{ from: number; moved: boolean } | null>(null);
 	let view = $state<'self' | 'total' | 'components'>('self');
 
-	const range = $derived<RangeSummary>(sel ? range_hot(stacks, sel.t0, sel.t1) : range_hot(stacks, 0, stacks.window_ms));
+	const range = $derived<RangeSummary>(
+		sel ? range_hot(stacks, sel.t0, sel.t1) : range_hot(stacks, 0, stacks.window_ms)
+	);
 	const at = $derived<StackAt | null>(cursor === null ? null : stack_at(stacks, cursor));
-	const rows = $derived(view === 'self' ? range.self : view === 'total' ? range.total : range.components);
-	const row_max = $derived(Math.max(...rows.map((r) => (view === 'self' ? r.self_ms : r.total_ms)), 0.001));
+	const rows = $derived(
+		view === 'self' ? range.self : view === 'total' ? range.total : range.components
+	);
+	const row_max = $derived(
+		Math.max(...rows.map((r) => (view === 'self' ? r.self_ms : r.total_ms)), 0.001)
+	);
 
 	function svg_x(e: PointerEvent, el: SVGSVGElement): number {
 		const r = el.getBoundingClientRect();
@@ -62,35 +69,72 @@
 		cursor = null;
 		if (drag) up();
 	}
-	const category_of = (r: { category: string }) => CATEGORY_COLOR[r.category as keyof typeof CATEGORY_COLOR] ?? '#6b7280';
+	const category_of = (r: { category: string }) =>
+		CATEGORY_COLOR[r.category as keyof typeof CATEGORY_COLOR] ?? '#6b7280';
 </script>
 
 <div class="scrub">
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<svg viewBox="0 0 {W} {H + 18}" class="strip" onpointerdown={down} onpointermove={move} onpointerup={up} onpointerleave={leave} role="img" aria-label="CPU density over the render; drag to select a range">
+	<svg
+		viewBox="0 0 {W} {H + 18}"
+		class="strip"
+		onpointerdown={down}
+		onpointermove={move}
+		onpointerup={up}
+		onpointerleave={leave}
+		role="img"
+		aria-label="CPU density over the render; drag to select a range"
+	>
 		{#each bins as b, i (i)}
-			<rect x={(i / BINS) * W} y={H - (b / max_bin) * H} width={W / BINS + 0.3} height={(b / max_bin) * H} fill="#6f8378" opacity="0.5" />
-			<rect x={(i / BINS) * W} y={H - (comp_bins[i] / max_bin) * H} width={W / BINS + 0.3} height={(comp_bins[i] / max_bin) * H} fill="#6fe3b0" opacity="0.85" />
+			<rect
+				x={(i / BINS) * W}
+				y={H - (b / max_bin) * H}
+				width={W / BINS + 0.3}
+				height={(b / max_bin) * H}
+				fill="#6f8378"
+				opacity="0.5"
+			/>
+			<rect
+				x={(i / BINS) * W}
+				y={H - (comp_bins[i] / max_bin) * H}
+				width={W / BINS + 0.3}
+				height={(comp_bins[i] / max_bin) * H}
+				fill="#6fe3b0"
+				opacity="0.85"
+			/>
 		{/each}
 		{#each marks as m, k (k)}
 			<line x1={x_of(m.t)} x2={x_of(m.t)} y1="0" y2={H} stroke="#d29922" stroke-dasharray="3 3">
 				<title>{m.label} at {fmt_ms(m.t)} ms</title>
 			</line>
-			{#if k < 3}<text x={x_of(m.t) + 3} y={H + 13} font-size="10" fill="#d29922">{m.label}</text>{/if}
+			{#if k < 3}<text x={x_of(m.t) + 3} y={H + 13} font-size="10" fill="#d29922">{m.label}</text
+				>{/if}
 		{/each}
 		{#if sel}
-			<rect x={x_of(sel.t0)} y="0" width={Math.max(1, x_of(sel.t1) - x_of(sel.t0))} height={H} fill="#6fe3b0" opacity="0.16" stroke="#6fe3b0" />
+			<rect
+				x={x_of(sel.t0)}
+				y="0"
+				width={Math.max(1, x_of(sel.t1) - x_of(sel.t0))}
+				height={H}
+				fill="#6fe3b0"
+				opacity="0.16"
+				stroke="#6fe3b0"
+			/>
 		{/if}
 		{#if cursor !== null}
 			<line x1={x_of(cursor)} x2={x_of(cursor)} y1="0" y2={H} stroke="#e6eee9" stroke-width="1" />
 		{/if}
 		<text x="2" y={H + 13} font-size="10" fill="#6f8378">0</text>
-		<text x={W - 2} y={H + 13} font-size="10" fill="#6f8378" text-anchor="end">{fmt_ms(stacks.window_ms)} ms</text>
+		<text x={W - 2} y={H + 13} font-size="10" fill="#6f8378" text-anchor="end"
+			>{fmt_ms(stacks.window_ms)} ms</text
+		>
 	</svg>
 	<div class="scrub-bar">
 		<span class="hint">
 			{#if sel}
-				<b>{fmt_ms(sel.t0)}–{fmt_ms(sel.t1)} ms</b> · {fmt_ms(range.cpu_ms)} ms CPU, {fmt_ms(range.idle_ms)} ms idle
+				<b>{fmt_ms(sel.t0)}–{fmt_ms(sel.t1)} ms</b> · {fmt_ms(range.cpu_ms)} ms CPU, {fmt_ms(
+					range.idle_ms
+				)} ms idle
 				<button class="lnk" onclick={() => (sel = null)}>whole render</button>
 			{:else}
 				whole render · {fmt_ms(range.cpu_ms)} ms CPU · drag on the strip to slice it
@@ -100,18 +144,50 @@
 		<span class="views">
 			<button class:on={view === 'self'} onclick={() => (view = 'self')}>self</button>
 			<button class:on={view === 'total'} onclick={() => (view = 'total')}>owners</button>
-			<button class:on={view === 'components'} onclick={() => (view = 'components')}>components</button>
+			<button class:on={view === 'components'} onclick={() => (view = 'components')}
+				>components</button
+			>
 		</span>
 	</div>
 	<div class="cols">
 		<table>
-			<thead><tr><th>{view === 'total' ? 'on the stack' : view === 'components' ? 'component' : 'running'}</th><th class="num">{view === 'self' ? 'self ms' : 'total ms'}</th><th class="num">of range</th></tr></thead>
+			<thead
+				><tr
+					><th
+						>{view === 'total'
+							? 'on the stack'
+							: view === 'components'
+								? 'component'
+								: 'running'}</th
+					><th class="num">{view === 'self' ? 'self ms' : 'total ms'}</th><th class="num"
+						>of range</th
+					></tr
+				></thead
+			>
 			<tbody>
 				{#each rows.slice(0, 16) as r, k (k)}
 					<tr>
-						<td class="fn"><i class="dot" style="background:{category_of(r)}"></i>{r.name}{#if r.file}<span class="hint"> {r.file}</span>{/if}</td>
+						<td class="fn"
+							><i class="dot" style="background:{category_of(r)}"></i>{r.name}{#if r.file}<span
+									class="hint"
+								>
+									{r.file}</span
+								>{/if}</td
+						>
 						<td class="num">{fmt_ms(view === 'self' ? r.self_ms : r.total_ms)}</td>
-						<td class="num"><div class="mini"><div style="width:{(((view === 'self' ? r.self_ms : r.total_ms) / row_max) * 100).toFixed(0)}%;background:{category_of(r)}"></div></div>{range.cpu_ms > 0 ? (((view === 'self' ? r.self_ms : r.total_ms) / range.cpu_ms) * 100).toFixed(0) : 0}%</td>
+						<td class="num"
+							><div class="mini">
+								<div
+									style="width:{(
+										((view === 'self' ? r.self_ms : r.total_ms) / row_max) *
+										100
+									).toFixed(0)}%;background:{category_of(r)}"
+								></div>
+							</div>
+							{range.cpu_ms > 0
+								? (((view === 'self' ? r.self_ms : r.total_ms) / range.cpu_ms) * 100).toFixed(0)
+								: 0}%</td
+						>
 					</tr>
 				{:else}
 					<tr><td colspan="3" class="hint">no CPU sample in this range</td></tr>
@@ -129,7 +205,13 @@
 			{#if at}
 				<ol>
 					{#each at.frames as f, i (i)}
-						<li><i class="dot" style="background:{category_of(f)}"></i>{f.name}{#if f.file}<span class="hint"> {f.file}</span>{/if}</li>
+						<li>
+							<i class="dot" style="background:{category_of(f)}"></i>{f.name}{#if f.file}<span
+									class="hint"
+								>
+									{f.file}</span
+								>{/if}
+						</li>
 					{:else}
 						<li class="hint">idle</li>
 					{/each}

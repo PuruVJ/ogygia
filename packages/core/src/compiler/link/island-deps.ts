@@ -146,14 +146,24 @@ export function collectIslandDepModulepreloads(
 	const hazards_of = (id: string): IslandHazard[] => {
 		if (!read_source) return [];
 		const clean = norm(id.split('?')[0]);
-		if (!clean.endsWith('.svelte') || (OWN_OR_DEP_RE.test(clean) && !SITE_KIT_RE.test(clean))) return [];
+		if (!clean.endsWith('.svelte') || (OWN_OR_DEP_RE.test(clean) && !SITE_KIT_RE.test(clean)))
+			return [];
 		const hit = hazards_cache.get(clean);
 		if (hit) return hit;
 		const src = read_source(clean);
 		const at_src = clean.lastIndexOf('/src/');
 		const kit = SITE_KIT_RE.test(clean);
-		const file = kit ? `ogygia/${clean.slice(clean.lastIndexOf('/content/') + 1)}` : at_src !== -1 ? clean.slice(at_src + 1) : clean.split('/').slice(-2).join('/');
-		const out = src === null ? [] : hydration_hazards(src).slice(0, 3).map((h) => ({ file, ...h }));
+		const file = kit
+			? `ogygia/${clean.slice(clean.lastIndexOf('/content/') + 1)}`
+			: at_src !== -1
+				? clean.slice(at_src + 1)
+				: clean.split('/').slice(-2).join('/');
+		const out =
+			src === null
+				? []
+				: hydration_hazards(src)
+						.slice(0, 3)
+						.map((h) => ({ file, ...h }));
 		hazards_cache.set(clean, out);
 		return out;
 	};
@@ -252,7 +262,13 @@ export function collectIslandDepModulepreloads(
 
 	// each island entry's identity (the key of every map), by its emitted file
 	const identity_of = (fileName: string): string | null =>
-		entries ? (entries.islands.get(fileName) ?? null) : ISLAND_FACADE_RE.test(fileName) ? (fileName.startsWith('/') ? fileName : '/' + fileName) : null;
+		entries
+			? (entries.islands.get(fileName) ?? null)
+			: ISLAND_FACADE_RE.test(fileName)
+				? fileName.startsWith('/')
+					? fileName
+					: '/' + fileName
+				: null;
 	for (const [key, chunk] of Object.entries(bundle)) {
 		if (chunk.type !== 'chunk') continue;
 		const fileName = chunk.fileName || key;
@@ -341,7 +357,9 @@ export function collectIslandDepModulepreloads(
 		const chunk = bundle[runtime_key];
 		if (chunk && chunk.type === 'chunk') {
 			// (keyed by the runtime's identity, like an island's)
-			js[entries?.runtime ?? '/' + runtime_key] = [...new Set(walk(runtime_key, new Set([runtime_key]), []))];
+			js[entries?.runtime ?? '/' + runtime_key] = [
+				...new Set(walk(runtime_key, new Set([runtime_key]), []))
+			];
 		}
 	}
 	// WHAT IS INSIDE each chunk an island pulls (the profiler's Islands table): the bundler names
@@ -354,7 +372,8 @@ export function collectIslandDepModulepreloads(
 		const chunk = bundle[s];
 		const ids = chunk?.moduleIds ?? [];
 		// (the bundler's rendered length per module: the heaviest named first)
-		const mods = (chunk as { modules?: Record<string, { renderedLength?: number }> } | undefined)?.modules;
+		const mods = (chunk as { modules?: Record<string, { renderedLength?: number }> } | undefined)
+			?.modules;
 		const size_of = mods ? (id: string) => mods[id]?.renderedLength ?? 0 : undefined;
 		if (ids.length) contents[url] = summarize_chunk_contents(ids, 6, 5, size_of);
 		if (ids.length && size_of) {
@@ -380,7 +399,11 @@ export function collectIslandDepModulepreloads(
 			.filter(([, c]) => c.type === 'chunk')
 			.map(([key, c]) => {
 				const mods = (c as { modules?: Record<string, { renderedLength?: number }> }).modules;
-				return { file: c.fileName || key, ids: c.moduleIds ?? [], ...(mods ? { size_of: (id: string) => mods[id]?.renderedLength ?? 0 } : {}) };
+				return {
+					file: c.fileName || key,
+					ids: c.moduleIds ?? [],
+					...(mods ? { size_of: (id: string) => mods[id]?.renderedLength ?? 0 } : {})
+				};
 			})
 	);
 	return { js, css, page, page_keys, remotes, interactivity, hazards, contents, heavy, dupes };
@@ -414,9 +437,11 @@ export function module_origin(id: string): string | undefined {
 	let top = '';
 	for (const t of ['/src/', '/dist/', '/esm/', '/build/']) {
 		const i = p.lastIndexOf(t);
-		if (i > at) (at = i), (top = t);
+		if (i > at) ((at = i), (top = t));
 	}
-	return at === -1 ? undefined : `${p.slice(p.lastIndexOf('/', at - 1) + 1, at)}${top.slice(0, -1)}`;
+	return at === -1
+		? undefined
+		: `${p.slice(p.lastIndexOf('/', at - 1) + 1, at)}${top.slice(0, -1)}`;
 }
 
 /** A module id as the file of its package, the build-or-source folder and the extension left out:
@@ -441,15 +466,19 @@ export function module_key(id: string): string | null {
 		pkg = p.slice(p.lastIndexOf('/', at - 1) + 1, at);
 		rest = p.slice(at + 1);
 	}
-	for (const top of ['src/', 'dist/', 'esm/', 'build/']) if (rest.startsWith(top)) rest = rest.slice(top.length);
-	for (const ext of ['.mjs', '.cjs', '.mts', '.ts', '.js']) if (rest.endsWith(ext)) rest = rest.slice(0, -ext.length);
+	for (const top of ['src/', 'dist/', 'esm/', 'build/'])
+		if (rest.startsWith(top)) rest = rest.slice(top.length);
+	for (const ext of ['.mjs', '.cjs', '.mts', '.ts', '.js'])
+		if (rest.endsWith(ext)) rest = rest.slice(0, -ext.length);
 	return pkg && rest ? `${pkg}/${rest}` : null;
 }
 
 /** Every module the build shipped more than once: one key, two or more ids (a single id is in one
  *  chunk only). The heaviest first, copies of 512 bytes or more, at most 50.
  *  @internal exported for the tests */
-export function duplicate_modules(chunks: readonly { file: string; ids: readonly string[]; size_of?: (id: string) => number }[]): DuplicateModule[] {
+export function duplicate_modules(
+	chunks: readonly { file: string; ids: readonly string[]; size_of?: (id: string) => number }[]
+): DuplicateModule[] {
 	const by = new Map<string, Map<string, { file: string; bytes: number }>>();
 	for (const c of chunks)
 		for (const id of c.ids) {
@@ -458,7 +487,11 @@ export function duplicate_modules(chunks: readonly { file: string; ids: readonly
 			const ids = by.get(key) ?? by.set(key, new Map()).get(key)!;
 			if (!ids.has(id)) {
 				const from = module_origin(id);
-				ids.set(id, { file: c.file.startsWith('/') ? c.file : '/' + c.file, bytes: c.size_of?.(id) ?? 0, ...(from ? { from } : {}) });
+				ids.set(id, {
+					file: c.file.startsWith('/') ? c.file : '/' + c.file,
+					bytes: c.size_of?.(id) ?? 0,
+					...(from ? { from } : {})
+				});
 			}
 		}
 	const out: DuplicateModule[] = [];
@@ -482,7 +515,10 @@ export interface ChunkHeavy {
 /** A chunk's modules as readable names (the same names `contents` uses) with their rendered bytes,
  *  heaviest first, the five heaviest; a package's modules summed under its name.
  *  @internal exported for the tests */
-export function chunk_module_bytes(module_ids: readonly string[], size_of: (id: string) => number): ChunkHeavy {
+export function chunk_module_bytes(
+	module_ids: readonly string[],
+	size_of: (id: string) => number
+): ChunkHeavy {
 	const by = new Map<string, number>();
 	let total = 0;
 	for (const raw of module_ids) {
@@ -508,7 +544,12 @@ const SRC_IN_PATH_RE = /\/src\/(.+)$/;
  * `src/`), then the packages, the framework runtimes named plainly. Capped; the tail is "+N more".
  * @internal exported for the tests
  */
-export function summarize_chunk_contents(module_ids: readonly string[], max_files = 6, max_pkgs = 5, size_of?: (id: string) => number): string[] {
+export function summarize_chunk_contents(
+	module_ids: readonly string[],
+	max_files = 6,
+	max_pkgs = 5,
+	size_of?: (id: string) => number
+): string[] {
 	const files: string[] = [];
 	const pkgs: string[] = [];
 	// the rendered bytes behind each listed name (a package sums its modules): with the bundler's
@@ -520,7 +561,8 @@ export function summarize_chunk_contents(module_ids: readonly string[], max_file
 		if (!list.includes(v)) list.push(v);
 		if (size_of) bytes.set(v, (bytes.get(v) ?? 0) + (size_of(raw) || 0));
 	};
-	const ordered = (list: string[]) => (size_of ? [...list].sort((a, b) => (bytes.get(b) ?? 0) - (bytes.get(a) ?? 0)) : list);
+	const ordered = (list: string[]) =>
+		size_of ? [...list].sort((a, b) => (bytes.get(b) ?? 0) - (bytes.get(a) ?? 0)) : list;
 	for (const raw of module_ids) {
 		if (!raw || raw.startsWith('\0') || raw.startsWith('virtual:')) continue;
 		const id = raw.split('\\').join('/').split('?')[0];
@@ -540,7 +582,10 @@ export function summarize_chunk_contents(module_ids: readonly string[], max_file
 		}
 	}
 	const out = [...ordered(files).slice(0, max_files), ...ordered(pkgs).slice(0, max_pkgs)];
-	const more = files.length - Math.min(files.length, max_files) + (pkgs.length - Math.min(pkgs.length, max_pkgs));
+	const more =
+		files.length -
+		Math.min(files.length, max_files) +
+		(pkgs.length - Math.min(pkgs.length, max_pkgs));
 	if (more > 0) out.push(`+${more} more`);
 	return out;
 }
@@ -590,7 +635,10 @@ export function interactivity_facts(src: string): IslandInteractivityFacts {
 	};
 }
 
-function merge_facts(a: IslandInteractivityFacts | undefined, b: IslandInteractivityFacts): IslandInteractivityFacts {
+function merge_facts(
+	a: IslandInteractivityFacts | undefined,
+	b: IslandInteractivityFacts
+): IslandInteractivityFacts {
 	if (!a) return { ...b };
 	return {
 		handlers: a.handlers + b.handlers,

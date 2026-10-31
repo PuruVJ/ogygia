@@ -25,7 +25,13 @@
 import { escape_attr, escape_script_text } from './escape.ts';
 
 /** A JSON value (what `args` and the data payloads carry). */
-export type ScriptJson = string | number | boolean | null | ScriptJson[] | { [key: string]: ScriptJson | undefined };
+export type ScriptJson =
+	| string
+	| number
+	| boolean
+	| null
+	| ScriptJson[]
+	| { [key: string]: ScriptJson | undefined };
 
 /** The attributes every kind of inline script may carry. `true` renders a bare attribute;
  *  `false` / `null` / `undefined` leave it out. */
@@ -39,13 +45,27 @@ export interface ScriptAttrs {
 }
 
 type NoPayload = { json?: never; ld?: never; importmap?: never; speculation?: never };
-type NoRun = { run?: never; args?: never; type?: never; async?: never; nomodule?: never; imports?: never };
+type NoRun = {
+	run?: never;
+	args?: never;
+	type?: never;
+	async?: never;
+	nomodule?: never;
+	imports?: never;
+};
 
 /** What survives the JSON trip unchanged. A `Date` would arrive as a string, a `Map` / `Set` as
  *  `{}`, a function or class method not at all — those are `never`, so TypeScript refuses them. */
 export type JsonSafe<T> = T extends string | number | boolean | null | undefined
 	? T
-	: T extends bigint | symbol | ((...a: never[]) => unknown) | Date | RegExp | Map<unknown, unknown> | Set<unknown>
+	: T extends
+				| bigint
+				| symbol
+				| ((...a: never[]) => unknown)
+				| Date
+				| RegExp
+				| Map<unknown, unknown>
+				| Set<unknown>
 		? never
 		: { [K in keyof T]: JsonSafe<T[K]> };
 
@@ -98,7 +118,10 @@ export type ScriptImports<I extends Record<string, string>> = { readonly [K in k
  * SSR transform turns it into `__vite_ssr_dynamic_import__`, which the browser does not have). `run`
  * gets the namespaces as ONE object first, then `args`.
  */
-export type ModuleImportsScript<I extends Record<string, string>, A extends unknown[]> = ScriptAttrs &
+export type ModuleImportsScript<
+	I extends Record<string, string>,
+	A extends unknown[]
+> = ScriptAttrs &
 	NoPayload & {
 		/** Name → URL of each module to import (an absolute or root-relative URL, or a specifier the
 		 *  page's import map resolves). */
@@ -110,15 +133,21 @@ export type ModuleImportsScript<I extends Record<string, string>, A extends unkn
 	} & RunArgs<A>;
 
 /** `<script type="application/json">` — data for code on the page to read (`JSON.parse(el.textContent)`). */
-export type JsonScript = ScriptAttrs & NoRun & { json: ScriptJson; ld?: never; importmap?: never; speculation?: never };
+export type JsonScript = ScriptAttrs &
+	NoRun & { json: ScriptJson; ld?: never; importmap?: never; speculation?: never };
 
 /** `<script type="application/ld+json">` — structured data for search engines. */
-export type LdScript = ScriptAttrs & NoRun & { ld: ScriptJson; json?: never; importmap?: never; speculation?: never };
+export type LdScript = ScriptAttrs &
+	NoRun & { ld: ScriptJson; json?: never; importmap?: never; speculation?: never };
 
 /** `<script type="importmap">` — bare specifiers for the page's module scripts. */
 export type ImportMapScript = ScriptAttrs &
 	NoRun & {
-		importmap: { imports?: Record<string, string>; scopes?: Record<string, Record<string, string>>; integrity?: Record<string, string> };
+		importmap: {
+			imports?: Record<string, string>;
+			scopes?: Record<string, Record<string, string>>;
+			integrity?: Record<string, string>;
+		};
 		json?: never;
 		ld?: never;
 		speculation?: never;
@@ -127,7 +156,9 @@ export type ImportMapScript = ScriptAttrs &
 /** `<script type="speculationrules">` — the pages the browser may prefetch or prerender. */
 export type SpeculationScript = ScriptAttrs &
 	NoRun & {
-		speculation: { prefetch?: ScriptJson[]; prerender?: ScriptJson[] } & { [key: string]: ScriptJson | undefined };
+		speculation: { prefetch?: ScriptJson[]; prerender?: ScriptJson[] } & {
+			[key: string]: ScriptJson | undefined;
+		};
 		json?: never;
 		ld?: never;
 		importmap?: never;
@@ -143,7 +174,16 @@ export type ScriptOptions<A extends unknown[] = unknown[]> =
 	| SpeculationScript;
 
 /** The payload and option keys — everything else in the object is an attribute. */
-const RESERVED = new Set(['run', 'args', 'imports', 'json', 'ld', 'importmap', 'speculation', 'type']);
+const RESERVED = new Set([
+	'run',
+	'args',
+	'imports',
+	'json',
+	'ld',
+	'importmap',
+	'speculation',
+	'type'
+]);
 
 /**
  * An inline `<script>` tag. Pass a function and its args (shortcut for `{ run: fn, args }`) or one
@@ -151,19 +191,33 @@ const RESERVED = new Set(['run', 'args', 'imports', 'json', 'ld', 'importmap', '
  * the module doc. Throws on an object with no payload or more than one, and on an attribute name
  * that is not one.
  */
-export function script<A extends unknown[]>(run: (...args: A) => unknown, ...args: ScriptArgs<A>): string;
+export function script<A extends unknown[]>(
+	run: (...args: A) => unknown,
+	...args: ScriptArgs<A>
+): string;
 export function script<A extends unknown[]>(options: ClassicScript<A> | ModuleScript<A>): string;
 // (`A = []`: a `run` that takes only the modules leaves nothing to infer `A` from)
-export function script<I extends Record<string, string>, A extends unknown[] = []>(options: ModuleImportsScript<I, A>): string;
-export function script(options: JsonScript | LdScript | ImportMapScript | SpeculationScript): string;
-export function script(input: ((...args: never[]) => unknown) | object, ...rest: unknown[]): string {
-	const o = (typeof input === 'function' ? { run: input, args: rest } : input) as Record<string, unknown>;
+export function script<I extends Record<string, string>, A extends unknown[] = []>(
+	options: ModuleImportsScript<I, A>
+): string;
+export function script(
+	options: JsonScript | LdScript | ImportMapScript | SpeculationScript
+): string;
+export function script(
+	input: ((...args: never[]) => unknown) | object,
+	...rest: unknown[]
+): string {
+	const o = (typeof input === 'function' ? { run: input, args: rest } : input) as Record<
+		string,
+		unknown
+	>;
 	let type: string | null = null;
 	let body: string;
 	let kinds = 0;
 	if (o.run !== undefined) {
 		kinds++;
-		if (typeof o.run !== 'function') throw new TypeError('[ogygia] script(): `run` must be a function');
+		if (typeof o.run !== 'function')
+			throw new TypeError('[ogygia] script(): `run` must be a function');
 		const module = o.type === 'module';
 		if (module) type = 'module';
 		const args = (o.args as unknown[] | undefined) ?? [];
@@ -177,13 +231,17 @@ export function script(input: ((...args: never[]) => unknown) | object, ...rest:
 		// `imports`: static `import * as` lines first, the namespaces handed to `run` as one object
 		let lines = '';
 		if (o.imports !== undefined) {
-			if (!module) throw new TypeError('[ogygia] script(): `imports` needs `type: \'module\'` (a static import only works in a module)');
+			if (!module)
+				throw new TypeError(
+					"[ogygia] script(): `imports` needs `type: 'module'` (a static import only works in a module)"
+				);
 			let mods = '';
 			let n = 0;
 			const imports = o.imports as Record<string, unknown>;
 			for (const name in imports) {
 				const url = imports[name];
-				if (typeof url !== 'string' || !url) throw new TypeError(`[ogygia] script(): \`imports.${name}\` must be a URL string`);
+				if (typeof url !== 'string' || !url)
+					throw new TypeError(`[ogygia] script(): \`imports.${name}\` must be a URL string`);
 				lines += `import * as __og_m${n} from ${escape_script_text(JSON.stringify(url))};`;
 				mods += (n ? ',' : '') + `${escape_script_text(JSON.stringify(name))}:__og_m${n}`;
 				n++;
@@ -207,7 +265,8 @@ export function script(input: ((...args: never[]) => unknown) | object, ...rest:
 		kinds++;
 		type = kind;
 		const json = JSON.stringify(o[key]);
-		if (json === undefined) throw new TypeError(`[ogygia] script(): \`${key}\` must be JSON-serializable`);
+		if (json === undefined)
+			throw new TypeError(`[ogygia] script(): \`${key}\` must be JSON-serializable`);
 		body = escape_script_text(json);
 	}
 	if (kinds !== 1)
@@ -219,7 +278,8 @@ export function script(input: ((...args: never[]) => unknown) | object, ...rest:
 		if (RESERVED.has(key)) continue;
 		const v = o[key];
 		if (v === undefined || v === null || v === false) continue;
-		if (!is_attr_name(key)) throw new TypeError(`[ogygia] script(): \`${key}\` is not an attribute name`);
+		if (!is_attr_name(key))
+			throw new TypeError(`[ogygia] script(): \`${key}\` is not an attribute name`);
 		attrs += v === true ? ' ' + key : ` ${key}="${escape_attr(String(v))}"`;
 	}
 	return `<script${attrs}>${body}</script>`;
@@ -249,7 +309,10 @@ function close_safe(code: string): string {
 		if (code.startsWith('!--', i + 1)) {
 			out += code.slice(last, i) + '\\x3C';
 			last = i + 1;
-		} else if (code.charCodeAt(i + 1) === 47 /* / */ && code.slice(i + 2, i + 8).toLowerCase() === 'script') {
+		} else if (
+			code.charCodeAt(i + 1) === 47 /* / */ &&
+			code.slice(i + 2, i + 8).toLowerCase() === 'script'
+		) {
 			out += code.slice(last, i + 1) + '\\';
 			last = i + 1;
 		}
@@ -272,7 +335,9 @@ function fn_source(fn: { toString(): string }): string {
 		if (src.startsWith('=>', j)) return src; // `async => …`: a parameter named async
 		if (src.charCodeAt(j) === 40 /* ( */) {
 			// `async (…) => …` (arrow) or `async(…) {…}` (a method named async)
-			return src.startsWith('=>', skip_ws(src, after_parens(src, j))) ? src : `Object.values({${src}})[0]`;
+			return src.startsWith('=>', skip_ws(src, after_parens(src, j)))
+				? src
+				: `Object.values({${src}})[0]`;
 		}
 		if (j === 5) return `Object.values({${src}})[0]`; // `asyncX(…) {…}`: a method
 		i = j;
@@ -293,7 +358,14 @@ function is_ws(c: number): boolean {
 }
 
 function is_ident(c: number): boolean {
-	return (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95 || c === 36 || c > 127;
+	return (
+		(c >= 97 && c <= 122) ||
+		(c >= 65 && c <= 90) ||
+		(c >= 48 && c <= 57) ||
+		c === 95 ||
+		c === 36 ||
+		c > 127
+	);
 }
 
 function skip_ws(s: string, i: number): number {

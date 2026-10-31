@@ -27,12 +27,12 @@ Three posts of increasing length exercise the growth curve. Content is **synthet
 
 ## Frameworks
 
-| id          | approach                        | tooling            |
-| ----------- | ------------------------------- | ------------------ |
-| `ogygia`    | Svelte 5 islands (this repo)    | SvelteKit, latest  |
-| `sveltekit` | Svelte 5 whole-page hydration   | SvelteKit, latest  |
-| `astro`     | Preact islands                  | Astro, latest      |
-| `mochi`     | Svelte 5 islands ([mochi.fast]) | Mochi, latest      |
+| id          | approach                        | tooling           |
+| ----------- | ------------------------------- | ----------------- |
+| `ogygia`    | Svelte 5 islands (this repo)    | SvelteKit, latest |
+| `sveltekit` | Svelte 5 whole-page hydration   | SvelteKit, latest |
+| `astro`     | Preact islands                  | Astro, latest     |
+| `mochi`     | Svelte 5 islands ([mochi.fast]) | Mochi, latest     |
 
 [mochi.fast]: https://mochi.fast/
 
@@ -61,24 +61,24 @@ Framework apps are **not** pnpm workspace members — each has its own install.
 Numbers are only half the story — what you can actually build matters too. Two comparisons: the
 framework a Svelte user is likely on today (SvelteKit), and the closest islands peer (Mochi).
 
-### vs SvelteKit — islands *on top of* Kit
+### vs SvelteKit — islands _on top of_ Kit
 
 ogygia is a SvelteKit plugin, so you keep everything Kit gives you and add islands. The difference is
 what ships to the browser.
 
-| Capability | SvelteKit (whole-page hydration) | ogygia (islands) |
-| --- | :---: | :---: |
-| SSR / prerender | ✅ | ✅ |
-| Runs on SvelteKit | ✅ | ✅ |
-| Ships JS for the whole page | ✅ (hydrates everything) | ❌ — only components you mark |
-| Client JS grows with post length | ✅ | ❌ **flat** |
-| Per-component wake timing (`load`/`idle`/`visible`/`interaction`/`media`) | ❌ | ✅ |
-| Server islands (defer render to an endpoint) | ✅ | ✅ |
-| Remote functions | ✅ | ✅ (uses Kit's) |
-| SPA router | ✅ | ✅ (opt-in `<Router/>`) |
-| `$app/state` + `$app/navigation` inside components | ✅ | ✅ (inside islands) |
-| Form actions / progressive enhancement | ✅ | ✅ |
-| Markdown content collections | ➖ (add mdsvex yourself) | ✅ built-in |
+| Capability                                                                | SvelteKit (whole-page hydration) |       ogygia (islands)        |
+| ------------------------------------------------------------------------- | :------------------------------: | :---------------------------: |
+| SSR / prerender                                                           |                ✅                |              ✅               |
+| Runs on SvelteKit                                                         |                ✅                |              ✅               |
+| Ships JS for the whole page                                               |     ✅ (hydrates everything)     | ❌ — only components you mark |
+| Client JS grows with post length                                          |                ✅                |          ❌ **flat**          |
+| Per-component wake timing (`load`/`idle`/`visible`/`interaction`/`media`) |                ❌                |              ✅               |
+| Server islands (defer render to an endpoint)                              |                ✅                |              ✅               |
+| Remote functions                                                          |                ✅                |        ✅ (uses Kit's)        |
+| SPA router                                                                |                ✅                |    ✅ (opt-in `<Router/>`)    |
+| `$app/state` + `$app/navigation` inside components                        |                ✅                |      ✅ (inside islands)      |
+| Form actions / progressive enhancement                                    |                ✅                |              ✅               |
+| Markdown content collections                                              |     ➖ (add mdsvex yourself)     |          ✅ built-in          |
 
 ### vs Mochi — islands head-to-head
 
@@ -86,20 +86,20 @@ Both are Svelte 5 islands. ogygia trades a little more baseline runtime for a mu
 surface (server islands, held/live/frozen regions, Kit integration). Mochi is leaner and simpler.
 Mochi's column reflects the version measured in this benchmark; `?` = not verified.
 
-| Capability | Mochi | ogygia |
-| --- | :---: | :---: |
-| Svelte 5 islands | ✅ | ✅ |
-| Markdown (mdsvex) | ✅ | ✅ |
-| Built on SvelteKit (Kit ecosystem, adapters, hooks) | ❌ (own framework) | ✅ |
-| Multiple wake strategies (idle / visible / interaction / media) | ? | ✅ |
-| Server islands (defer render) | ? | ✅ |
-| Held regions — `region()` values you place like data | ❌ | ✅ |
-| Frozen regions (lakes) | ❌ | ✅ |
-| Live / streaming regions | ? | ✅ |
-| Transportable (devalue-encoded) island props | ? | ✅ |
-| SPA router | ? | ✅ |
-| Kit remote functions | ❌ | ✅ |
-| Runtime JS (this benchmark, brotli) | leaner | ~a few KB more, flat |
+| Capability                                                      |       Mochi        |        ogygia        |
+| --------------------------------------------------------------- | :----------------: | :------------------: |
+| Svelte 5 islands                                                |         ✅         |          ✅          |
+| Markdown (mdsvex)                                               |         ✅         |          ✅          |
+| Built on SvelteKit (Kit ecosystem, adapters, hooks)             | ❌ (own framework) |          ✅          |
+| Multiple wake strategies (idle / visible / interaction / media) |         ?          |          ✅          |
+| Server islands (defer render)                                   |         ?          |          ✅          |
+| Held regions — `region()` values you place like data            |         ❌         |          ✅          |
+| Frozen regions (lakes)                                          |         ❌         |          ✅          |
+| Live / streaming regions                                        |         ?          |          ✅          |
+| Transportable (devalue-encoded) island props                    |         ?          |          ✅          |
+| SPA router                                                      |         ?          |          ✅          |
+| Kit remote functions                                            |         ❌         |          ✅          |
+| Runtime JS (this benchmark, brotli)                             |       leaner       | ~a few KB more, flat |
 
 > Honesty note: ogygia's runtime is larger than Mochi's — that's the cost of the extra surface. See
 > the size table above for the current numbers; we track it in `bundle-size.snapshot.json` so it can

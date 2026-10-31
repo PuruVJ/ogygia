@@ -18,7 +18,11 @@ import { region as make_region } from '../src/region.ts';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 
-let records: Array<{ snap: unknown; seed: import("../src/server/seed-shape.ts").SeedAsk; remotes: readonly string[] | null }>;
+let records: Array<{
+	snap: unknown;
+	seed: import('../src/server/seed-shape.ts').SeedAsk;
+	remotes: readonly string[] | null;
+}>;
 beforeEach(() => {
 	records = [];
 	set_page_recorder((snap, seed, remotes) => records.push({ snap, seed, remotes }));
@@ -52,7 +56,7 @@ describe('page snapshot recording', () => {
 	it('an island whose closure reads $page → snapshot recorded AND the seed asked for', () => {
 		set_reads_page(true);
 		void render(region, { props: island() }).body;
-		expect(seeds()).toEqual(["all"]);
+		expect(seeds()).toEqual(['all']);
 		expect(records[0].snap).toMatchObject({ status: 200 });
 		expect(records[0].snap).toHaveProperty('data');
 	});
@@ -71,7 +75,7 @@ describe('page snapshot recording', () => {
 		expect(seeds()).toEqual([false, false]);
 		set_reads_page(true);
 		void render(region, { props: island({ load: undefined, visible: true }) }).body;
-		expect(seeds()).toEqual([false, false, "all"]);
+		expect(seeds()).toEqual([false, false, 'all']);
 	});
 
 	it('a server island that hydrates follows its client module; a static hole never asks', () => {
@@ -80,7 +84,7 @@ describe('page snapshot recording', () => {
 		void render(region, { props: hole({ __hydrate: 'load', __module: '/islands/hole.js' }) }).body;
 		set_reads_page(false);
 		void render(region, { props: hole({ __hydrate: 'load', __module: '/islands/hole.js' }) }).body;
-		expect(seeds()).toEqual([false, "all", false]);
+		expect(seeds()).toEqual([false, 'all', false]);
 	});
 
 	it('a lake and a plain inline held region never ask (no client at all)', () => {
@@ -107,7 +111,7 @@ describe('page snapshot recording', () => {
 	it('a promise `of` (module unknown until it resolves) asks — fail-open', () => {
 		set_reads_page(false);
 		void render(region, { props: { of: new Promise(() => {}), placeholder: undefined } }).body;
-		expect(seeds()).toEqual(["all"]);
+		expect(seeds()).toEqual(['all']);
 	});
 });
 

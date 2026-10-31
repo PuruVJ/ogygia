@@ -15,20 +15,30 @@ describe('analyze_imports', () => {
 		const code = `import d, { a, b as c, type T } from './x';\nimport * as ns from './y';\nimport './side';\nimport type { U } from './u';`;
 		const decls = analyze_imports(code, TS)!;
 		expect(decls).toHaveLength(4);
-		expect(code.slice(decls[0].start, decls[0].end)).toBe(`import d, { a, b as c, type T } from './x';`);
+		expect(code.slice(decls[0].start, decls[0].end)).toBe(
+			`import d, { a, b as c, type T } from './x';`
+		);
 		expect(decls[0].specs).toEqual([
 			{ kind: 'default', imported: 'default', local: 'd', type_only: false },
 			{ kind: 'named', imported: 'a', local: 'a', type_only: false },
 			{ kind: 'named', imported: 'b', local: 'c', type_only: false },
 			{ kind: 'named', imported: 'T', local: 'T', type_only: true }
 		]);
-		expect(decls[1].specs[0]).toEqual({ kind: 'namespace', imported: '*', local: 'ns', type_only: false });
+		expect(decls[1].specs[0]).toEqual({
+			kind: 'namespace',
+			imported: '*',
+			local: 'ns',
+			type_only: false
+		});
 		expect(decls[2]).toMatchObject({ side_effect: true, specs: [] });
 		expect(decls[3]).toMatchObject({ type_only: true, source: './u' });
 	});
 
 	it('keeps the verbatim import-attributes clause (with / assert) and its keys, semicolon or not', () => {
-		const a = analyze_imports(`import { X } from './b' with { wake: 'visible', margin: "200px" };`, TS)![0];
+		const a = analyze_imports(
+			`import { X } from './b' with { wake: 'visible', margin: "200px" };`,
+			TS
+		)![0];
 		expect(a.attributes).toBe(` with { wake: 'visible', margin: "200px" }`);
 		expect(a.attribute_keys).toEqual(['wake', 'margin']);
 		const b = analyze_imports(`import { X } from './b' with { wake: 'load' }\nconst y = 1`, TS)![0];
@@ -49,11 +59,18 @@ describe('analyze_imports', () => {
 		expect(decls.map((d) => d.source)).toEqual(['./x', './y', './u', './q']);
 		expect(decls[1].specs.map((s) => s.local)).toEqual(['b', 'd']);
 		expect(decls[2].specs[0].local).toBe('ünïcode');
-		expect(decls[3].specs[0]).toEqual({ kind: 'named', imported: 'default', local: 'Q', type_only: false });
+		expect(decls[3].specs[0]).toEqual({
+			kind: 'named',
+			imported: 'default',
+			local: 'Q',
+			type_only: false
+		});
 	});
 
 	it('ignores dynamic imports and require calls (not declarations)', () => {
-		expect(analyze_imports(`const m = await import('./x'); const r = require('./y');`, JS)).toEqual([]);
+		expect(analyze_imports(`const m = await import('./x'); const r = require('./y');`, JS)).toEqual(
+			[]
+		);
 	});
 
 	it('returns null on a syntax error (the real compiler reports it)', () => {
@@ -71,7 +88,13 @@ describe('analyze_exports — shape + purity', () => {
 		expect(s.exports).toEqual([
 			{ kind: 'reexport', exported: 'a', imported: 'a', source: './ab', type_only: false },
 			{ kind: 'reexport', exported: 'c', imported: 'b', source: './ab', type_only: false },
-			{ kind: 'reexport', exported: 'Button', imported: 'default', source: './Button.svelte', type_only: false },
+			{
+				kind: 'reexport',
+				exported: 'Button',
+				imported: 'default',
+				source: './Button.svelte',
+				type_only: false
+			},
 			{ kind: 'star', source: './all', type_only: false },
 			{ kind: 'star_ns', exported: 'ns', source: './ns' },
 			{ kind: 'reexport', exported: 'T', imported: 'T', source: './t', type_only: true },
@@ -89,14 +112,28 @@ describe('analyze_exports — shape + purity', () => {
 			{ kind: 'reexport', exported: 'y', imported: 'a', source: './a', type_only: false },
 			{ kind: 'reexport', exported: 'd', imported: 'default', source: './d', type_only: false },
 			{ kind: 'star_ns', exported: 'n', source: './n' },
-			{ kind: 'reexport', exported: 'default', imported: 'default', source: './d', type_only: false }
+			{
+				kind: 'reexport',
+				exported: 'default',
+				imported: 'default',
+				source: './d',
+				type_only: false
+			}
 		]);
 	});
 
 	it('type declarations do not make a module impure; enums do', () => {
-		expect(analyze_exports(`export type A = 1;\ninterface I {}\nexport interface J {}\nexport { x } from './x';`, TS)!.pure).toBe(true);
+		expect(
+			analyze_exports(
+				`export type A = 1;\ninterface I {}\nexport interface J {}\nexport { x } from './x';`,
+				TS
+			)!.pure
+		).toBe(true);
 		expect(analyze_exports(`export enum E { A }\nexport { x } from './x';`, TS)!.pure).toBe(false);
-		expect(analyze_exports(`declare module 'x' { export const y: 1 }\nexport { x } from './x';`, TS)!.pure).toBe(true);
+		expect(
+			analyze_exports(`declare module 'x' { export const y: 1 }\nexport { x } from './x';`, TS)!
+				.pure
+		).toBe(true);
 	});
 
 	it.each([
@@ -127,7 +164,10 @@ describe('analyze_exports — shape + purity', () => {
 
 	it('an empty module and a comments-only module are pure with no exports', () => {
 		expect(analyze_exports('', TS)).toMatchObject({ pure: true, exports: [] });
-		expect(analyze_exports('// nothing\n/* here */', TS)).toMatchObject({ pure: true, exports: [] });
+		expect(analyze_exports('// nothing\n/* here */', TS)).toMatchObject({
+			pure: true,
+			exports: []
+		});
 	});
 
 	it('a syntax error is null, not a shape', () => {

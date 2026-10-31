@@ -12,4 +12,3 @@ import { guides } from './collections.server';
  *  labels as data), "keep reading" from the content graph, and the link audit — a broken in-prose
  *  link fails the BUILD (prerender) and errors in dev on page open. */
 export const docs = site({ outline: guides, prevNext: 'graph', checks: [links()] });
-

@@ -11,9 +11,7 @@
 <div class="ppr-frame">
 	<div class="ppr-frame-bar">
 		<span class="ppr-frame-url">/demo/ppr <em>· prerendered static file</em></span>
-		<button type="button" class="ppr-frame-reload" onclick={() => (n += 1)}>
-			Reload ↻
-		</button>
+		<button type="button" class="ppr-frame-reload" onclick={() => (n += 1)}> Reload ↻ </button>
 	</div>
 	{#key n}
 		<iframe class="ppr-frame-view" title="Partial prerendering demo" src="/demo/ppr"></iframe>

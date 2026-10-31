@@ -20,7 +20,7 @@ sentence:
 `og.$` wraps a value at the exact place where it goes to a boundary. What it does depends on
 what you give it:
 
-### A function — it crosses *alive*
+### A function — it crosses _alive_
 
 ```svelte
 <script>
@@ -67,22 +67,22 @@ line. A store passes, and will auto-wire. Plain data passes. A live DOM node or 
 instance without a codec **throws at that line**, with the path inside the value that caused
 it. The value itself returns untouched. There is no wrapper to unlearn.
 
-You never *need* `og.$` for values that cross on their own (see the table below). But the mark
+You never _need_ `og.$` for values that cross on their own (see the table below). But the mark
 is the recommended style. The next reader sees exactly where the page splits, and mistakes
 surface at the mark, not at serialize time.
 
 ## What crosses, and how
 
-| You pass | How it travels | Needs a mark? |
-| --- | --- | --- |
-| plain data, `Map`/`Set`/`Date` | serialized (devalue) | no |
-| a **store** (`subscribe`-shaped) | value crosses; islands **join to ONE live instance** — `set` in island A repaints island B | no — automatic |
-| a **factory store** (custom methods) | value crosses; methods **rebuilt from the factory** on the other side | usually no — provable factories auto-brand; assert with `og.store` (below) in other cases |
-| a **class instance** | through its own codec: [`import.meta.og.wire`](/docs/macros/wire) | one time, on the class |
-| a **function** | hoisted code plus bound captures (`og.$`) | yes — `og.$` |
-| a **snippet** | freezes to HTML, or crosses live (`{#snippet}`) | no |
-| a component / UI | it is a [region](/docs/regions/held-regions) — a different noun by intent | `region()` / `<Region>` |
-| a DOM node, a bare callback in an object, a secret | **refused**, with the path and a fix | — |
+| You pass                                           | How it travels                                                                             | Needs a mark?                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| plain data, `Map`/`Set`/`Date`                     | serialized (devalue)                                                                       | no                                                                                        |
+| a **store** (`subscribe`-shaped)                   | value crosses; islands **join to ONE live instance** — `set` in island A repaints island B | no — automatic                                                                            |
+| a **factory store** (custom methods)               | value crosses; methods **rebuilt from the factory** on the other side                      | usually no — provable factories auto-brand; assert with `og.store` (below) in other cases |
+| a **class instance**                               | through its own codec: [`import.meta.og.wire`](/docs/macros/wire)                          | one time, on the class                                                                    |
+| a **function**                                     | hoisted code plus bound captures (`og.$`)                                                  | yes — `og.$`                                                                              |
+| a **snippet**                                      | freezes to HTML, or crosses live (`{#snippet}`)                                            | no                                                                                        |
+| a component / UI                                   | it is a [region](/docs/regions/held-regions) — a different noun by intent                  | `region()` / `<Region>`                                                                   |
+| a DOM node, a bare callback in an object, a secret | **refused**, with the path and a fix                                                       | —                                                                                         |
 
 ## Stores: automatic, shared, live
 

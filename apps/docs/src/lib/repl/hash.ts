@@ -10,7 +10,13 @@
 // TextEncoder, CompressionStream, Blob, Response) exists there too.
 
 export type FileMap = Record<string, string>;
-export type Workspace = { files: FileMap; active?: string; tab?: string; mode?: string; cursor?: number };
+export type Workspace = {
+	files: FileMap;
+	active?: string;
+	tab?: string;
+	mode?: string;
+	cursor?: number;
+};
 
 export const b64url_encode = (bytes: Uint8Array): string => {
 	let bin = '';
@@ -51,7 +57,9 @@ export async function encode_hash(w: Workspace): Promise<string> {
 	);
 	if (typeof CompressionStream === 'undefined') return '#' + b64url_encode(bytes);
 	const gz = new Uint8Array(
-		await new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()
+		await new Response(
+			new Blob([bytes as BlobPart]).stream().pipeThrough(new CompressionStream('gzip'))
+		).arrayBuffer()
 	);
 	return '#' + b64url_encode(gz);
 }
@@ -65,7 +73,9 @@ export async function decode_hash(hash: string): Promise<Workspace | null> {
 			const map = s.startsWith('code=')
 				? JSON.parse(
 						await new Response(
-							new Blob([b64url_decode(s.slice(5)) as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))
+							new Blob([b64url_decode(s.slice(5)) as BlobPart])
+								.stream()
+								.pipeThrough(new DecompressionStream('gzip'))
 						).text()
 					)
 				: JSON.parse(decodeURIComponent(s.slice(6)));
@@ -75,7 +85,9 @@ export async function decode_hash(hash: string): Promise<Workspace | null> {
 		const raw = b64url_decode(s);
 		const json =
 			raw[0] === 0x1f && raw[1] === 0x8b && typeof DecompressionStream !== 'undefined'
-				? await new Response(new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
+				? await new Response(
+						new Blob([raw as BlobPart]).stream().pipeThrough(new DecompressionStream('gzip'))
+					).text()
 				: new TextDecoder().decode(raw);
 		const obj = JSON.parse(json);
 		if (!obj || typeof obj !== 'object') return null;

@@ -3,4 +3,8 @@
 import { suite } from '@ogygia/tooling/e2e/config.ts';
 import { fileURLToPath } from 'node:url';
 
-export default suite({ port: 3053, serve: fileURLToPath(new URL('./e2e/app', import.meta.url)), ready: '/content-css' });
+export default suite({
+	port: 3053,
+	serve: fileURLToPath(new URL('./e2e/app', import.meta.url)),
+	ready: '/content-css'
+});

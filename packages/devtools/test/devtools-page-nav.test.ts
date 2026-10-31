@@ -25,15 +25,20 @@ const page: BeaconPage = {
 
 describe('since_nav', () => {
 	const input = since_nav(page, 2000);
-	it('keeps only this page\'s events, shifted to the navigation', () => {
+	it("keeps only this page's events, shifted to the navigation", () => {
 		expect(input.islands.map((i) => i.fp)).toEqual(['new']);
 		expect(input.islands[0]).toMatchObject({ t0: 100, loaded: 120, turn: 121, done: 200 });
 		expect(input.firsts).toEqual([]);
 		expect(input.shifts).toEqual([{ t: 205, value: 0.05, fp: 'new' }]);
 		expect(input.longtasks).toEqual([{ t: 121, ms: 79 }]);
 	});
-	it('no finding leans on the first page\'s paints or vitals', () => {
-		const r = analyze_page(input, [{ fp: 'new', name: 'New', kind: 'island', wake: 'load', hydrated: true, top: 10 }], [], 5000);
+	it("no finding leans on the first page's paints or vitals", () => {
+		const r = analyze_page(
+			input,
+			[{ fp: 'new', name: 'New', kind: 'island', wake: 'load', hydrated: true, top: 10 }],
+			[],
+			5000
+		);
 		const codes = r.findings.map((f) => f.code);
 		expect(codes).not.toContain('vital-lcp');
 		expect(codes).not.toContain('late-interactive');

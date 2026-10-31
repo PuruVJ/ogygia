@@ -72,7 +72,12 @@ function seconds(raw: string): number | null {
  * window-aligned expiry still covers the whole cache life), capped at prerender-grade; else
  * `ttl`. A session-bound hole is never extended — its document is the visitor's own.
  */
-export function mint_ttl_sec(o: { stored: boolean; session: string; shared: number; region_ttl: number }): number {
+export function mint_ttl_sec(o: {
+	stored: boolean;
+	session: string;
+	shared: number;
+	region_ttl: number;
+}): number {
 	if (o.stored) return PRERENDER_REGION_TTL_SEC;
 	if (o.session !== '' || o.shared <= 0) return o.region_ttl;
 	return Math.min(PRERENDER_REGION_TTL_SEC, Math.max(o.region_ttl, 2 * o.shared));
@@ -80,7 +85,11 @@ export function mint_ttl_sec(o: { stored: boolean; session: string; shared: numb
 
 /** A renewable expiry: an integer that HAS passed, by at most `window` seconds (the app's
  *  `maxPageAge`; `0` renews nothing). */
-export function renewable_expiry(exp_raw: string, now_sec: number, window: number = RENEW_WINDOW_SEC): boolean {
+export function renewable_expiry(
+	exp_raw: string,
+	now_sec: number,
+	window: number = RENEW_WINDOW_SEC
+): boolean {
 	if (window <= 0 || exp_raw === '' || exp_raw.length > 12) return false;
 	for (let i = 0; i < exp_raw.length; i++) {
 		const c = exp_raw.charCodeAt(i);

@@ -372,16 +372,22 @@ const verb_entry = (handler: (c: Ctx) => unknown, bodySchema?: StandardSchemaV1)
 /** `GET(handler)` — a verb wrapper for a GET slot (no body, so no schema). Inside a table its
  *  `c.params` are the key's; a bare `{ GET: (c) => … }` is the same thing — the wrapper exists for
  *  symmetry with the body verbs. */
-export function GET<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P> {
+export function GET<P = LooseParams, R = unknown>(
+	handler: (c: Ctx<P>) => R
+): VerbEntry<Awaited<R>, undefined, P> {
 	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>, undefined, P>;
 }
 /** `DELETE(handler)` — a verb wrapper for a DELETE slot (no body schema). */
-export function DELETE<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P> {
+export function DELETE<P = LooseParams, R = unknown>(
+	handler: (c: Ctx<P>) => R
+): VerbEntry<Awaited<R>, undefined, P> {
 	return verb_entry(handler as (c: Ctx) => unknown) as VerbEntry<Awaited<R>, undefined, P>;
 }
 /** `POST(handler)` / `POST(bodySchema, handler)` — a POST slot. The schema validates the JSON body
  *  into `c.input` (400 on failure), like a `command` RF's typed argument. */
-export function POST<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P>;
+export function POST<P = LooseParams, R = unknown>(
+	handler: (c: Ctx<P>) => R
+): VerbEntry<Awaited<R>, undefined, P>;
 export function POST<Sch extends StandardSchemaV1, P = LooseParams, R = unknown>(
 	schema: Sch,
 	handler: (c: Ctx<P, Record<string, string>, InferOutput<Sch>>) => R
@@ -390,7 +396,9 @@ export function POST(a: unknown, b?: unknown): VerbEntry {
 	return body_verb(a, b);
 }
 /** `PUT(handler)` / `PUT(bodySchema, handler)`. */
-export function PUT<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P>;
+export function PUT<P = LooseParams, R = unknown>(
+	handler: (c: Ctx<P>) => R
+): VerbEntry<Awaited<R>, undefined, P>;
 export function PUT<Sch extends StandardSchemaV1, P = LooseParams, R = unknown>(
 	schema: Sch,
 	handler: (c: Ctx<P, Record<string, string>, InferOutput<Sch>>) => R
@@ -399,7 +407,9 @@ export function PUT(a: unknown, b?: unknown): VerbEntry {
 	return body_verb(a, b);
 }
 /** `PATCH(handler)` / `PATCH(bodySchema, handler)`. */
-export function PATCH<P = LooseParams, R = unknown>(handler: (c: Ctx<P>) => R): VerbEntry<Awaited<R>, undefined, P>;
+export function PATCH<P = LooseParams, R = unknown>(
+	handler: (c: Ctx<P>) => R
+): VerbEntry<Awaited<R>, undefined, P>;
 export function PATCH<Sch extends StandardSchemaV1, P = LooseParams, R = unknown>(
 	schema: Sch,
 	handler: (c: Ctx<P, Record<string, string>, InferOutput<Sch>>) => R

@@ -9,7 +9,13 @@
 </script>
 
 <div class="search-demo">
-	<form class="search-demo-form" onsubmit={(e) => { e.preventDefault(); query = q; }}>
+	<form
+		class="search-demo-form"
+		onsubmit={(e) => {
+			e.preventDefault();
+			query = q;
+		}}
+	>
 		<input
 			class="search-demo-input"
 			bind:value={q}
@@ -31,10 +37,38 @@
 </div>
 
 <style>
-	.search-demo { display: grid; gap: 1rem; }
-	.search-demo-form { display: flex; gap: 0.5rem; }
-	.search-demo-input { flex: 1; padding: 0.55rem 0.8rem; border-radius: 8px; border: 1px solid var(--doc-border, #3a3a3a); background: none; color: inherit; font: inherit; }
-	.search-demo-btn { padding: 0.55rem 1rem; border-radius: 8px; border: 1px solid currentColor; background: none; color: inherit; cursor: pointer; font: inherit; }
-	.search-demo-btn:disabled { opacity: 0.6; cursor: default; }
-	.search-demo-hint { margin: 0; opacity: 0.6; }
+	.search-demo {
+		display: grid;
+		gap: 1rem;
+	}
+	.search-demo-form {
+		display: flex;
+		gap: 0.5rem;
+	}
+	.search-demo-input {
+		flex: 1;
+		padding: 0.55rem 0.8rem;
+		border-radius: 8px;
+		border: 1px solid var(--doc-border, #3a3a3a);
+		background: none;
+		color: inherit;
+		font: inherit;
+	}
+	.search-demo-btn {
+		padding: 0.55rem 1rem;
+		border-radius: 8px;
+		border: 1px solid currentColor;
+		background: none;
+		color: inherit;
+		cursor: pointer;
+		font: inherit;
+	}
+	.search-demo-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.search-demo-hint {
+		margin: 0;
+		opacity: 0.6;
+	}
 </style>

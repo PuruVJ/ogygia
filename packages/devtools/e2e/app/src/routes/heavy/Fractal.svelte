@@ -4,8 +4,11 @@
 	// A recursive component: branches `fanout` ways until `depth` hits 0, so node count grows
 	// exponentially (fanout^depth). Deep, wide call stacks — the profiler's flame graph shows
 	// `Fractal` calling `Fractal` many levels down, and the component's total time balloons.
-	let { depth = 6, fanout = 3, path = '0' }: { depth?: number; fanout?: number; path?: string } =
-		$props();
+	let {
+		depth = 6,
+		fanout = 3,
+		path = '0'
+	}: { depth?: number; fanout?: number; path?: string } = $props();
 
 	// a little per-node string work so leaves aren't free
 	const hue = (path.length * 47) % 360;

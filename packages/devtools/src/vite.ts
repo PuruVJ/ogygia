@@ -37,7 +37,9 @@ const posix = (p: string) => p.split(path.sep).join('/');
 /** the server half's dynamic import of the profiler (src `.ts` or built `.js`) */
 const PROFILER_IMPORT_RE = /import\((['"])\.\/profiler\/index\.(ts|js)\1\)/;
 
-export function devtools(options: DevtoolsOptions = {}): [OgygiaPlugin<DevtoolsServerOptions>, VitePlugin] {
+export function devtools(
+	options: DevtoolsOptions = {}
+): [OgygiaPlugin<DevtoolsServerOptions>, VitePlugin] {
 	const dock = options.dock !== false;
 	const profiler: ProfilerOptions | null = options.profiler
 		? options.profiler === true
@@ -55,7 +57,10 @@ export function devtools(options: DevtoolsOptions = {}): [OgygiaPlugin<DevtoolsS
 				b.measure();
 				// the profiler UI: real islands, rendered only from its handle (no app file marks them), and
 				// its server router — a page module, whose page components' scoped styles ride router-css
-				const profiler_router = path.join(PKG_ROOT, FROM_SRC ? 'src/profiler/profiler-router.ts' : 'dist/profiler/profiler-router.js');
+				const profiler_router = path.join(
+					PKG_ROOT,
+					FROM_SRC ? 'src/profiler/profiler-router.ts' : 'dist/profiler/profiler-router.js'
+				);
 				b.files({
 					root: PKG_ROOT,
 					dirs: [path.join(PKG_ROOT, FROM_SRC ? 'src/profiler/ui' : 'dist/profiler/ui')],
@@ -72,7 +77,10 @@ export function devtools(options: DevtoolsOptions = {}): [OgygiaPlugin<DevtoolsS
  *  the dev CSS-crawl guard on its server half. */
 function devtools_vite(dock: boolean, profiler: ProfilerOptions | null): VitePlugin {
 	// the server half, as the ids Vite hands the transform hook (either copy)
-	const server_ids = new Set([posix(path.join(PKG_ROOT, 'src/server.ts')), posix(path.join(PKG_ROOT, 'dist/server.js'))]);
+	const server_ids = new Set([
+		posix(path.join(PKG_ROOT, 'src/server.ts')),
+		posix(path.join(PKG_ROOT, 'dist/server.js'))
+	]);
 	let dev = false;
 	return {
 		name: 'ogygia:devtools',
@@ -100,7 +108,12 @@ function devtools_vite(dock: boolean, profiler: ProfilerOptions | null): VitePlu
 			// resolve them bare): found late in dev, each re-optimized and reloaded the page
 			const out: UserConfig = {};
 			if (dock && env.command === 'serve')
-				out.optimizeDeps = { include: ['@ogygia/devtools > @neodrag/svelte', '@ogygia/devtools > @neodrag/svelte/resize'] };
+				out.optimizeDeps = {
+					include: [
+						'@ogygia/devtools > @neodrag/svelte',
+						'@ogygia/devtools > @neodrag/svelte/resize'
+					]
+				};
 			// the profiler is built on the server router, which ships `.svelte`: server-inlined like a listed
 			// plugin even when the app does not list `router()` itself
 			if (profiler) out.ssr = { noExternal: ['@ogygia/router'] };

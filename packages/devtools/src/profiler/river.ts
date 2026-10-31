@@ -61,7 +61,20 @@ export function build_river(input: RiverInput): River {
 	};
 	// loads
 	const lane_ids = new Map<string, string>();
-	for (const l of input.lanes) lane_ids.set(l.file, node({ id: `load:${l.file}`, col: 1, label: l.file, value: 0, kind: 'load', detail: l.keys ? `returns ${l.keys.join(', ')}` : 'returns keys the profiler could not read from its source' }));
+	for (const l of input.lanes)
+		lane_ids.set(
+			l.file,
+			node({
+				id: `load:${l.file}`,
+				col: 1,
+				label: l.file,
+				value: 0,
+				kind: 'load',
+				detail: l.keys
+					? `returns ${l.keys.join(', ')}`
+					: 'returns keys the profiler could not read from its source'
+			})
+		);
 	// calls → loads (grouped by lane + label so a loop of 8 identical calls is one band)
 	const grouped = new Map<string, { lane: string | null; label: string; ms: number; n: number }>();
 	for (const c of input.calls) {
@@ -74,10 +87,24 @@ export function build_river(input: RiverInput): River {
 	}
 	let other_lane: string | null = null;
 	for (const [k, g] of grouped) {
-		const id = node({ id: `call:${k}`, col: 0, label: g.n > 1 ? `${g.label} ×${g.n}` : g.label, value: g.ms, kind: 'call', detail: `${Math.round(g.ms)} ms waiting${g.n > 1 ? ` over ${g.n} calls` : ''}` });
+		const id = node({
+			id: `call:${k}`,
+			col: 0,
+			label: g.n > 1 ? `${g.label} ×${g.n}` : g.label,
+			value: g.ms,
+			kind: 'call',
+			detail: `${Math.round(g.ms)} ms waiting${g.n > 1 ? ` over ${g.n} calls` : ''}`
+		});
 		let to = g.lane ? lane_ids.get(g.lane) : undefined;
 		if (!to) {
-			other_lane ??= node({ id: 'load:?', col: 1, label: 'outside a load', value: 0, kind: 'unknown', detail: 'a call made outside any load function (a hook, a component)' });
+			other_lane ??= node({
+				id: 'load:?',
+				col: 1,
+				label: 'outside a load',
+				value: 0,
+				kind: 'unknown',
+				detail: 'a call made outside any load function (a hook, a component)'
+			});
 			to = other_lane;
 		}
 		links.push({ from: id, to, value: g.ms, unit: 'ms' });
@@ -87,7 +114,21 @@ export function build_river(input: RiverInput): River {
 	const key_ids = new Map<string, string>();
 	const key_node = (key: string) => {
 		let id = key_ids.get(key);
-		if (!id) key_ids.set(key, (id = node({ id: `key:${key}`, col: 2, label: key, value: input.seed[key] ?? 0, kind: 'key', detail: input.seed[key] !== undefined ? `${Math.round(input.seed[key] / 1024 * 10) / 10} KB in the seed` : 'not in the seed (no island reads it, or it never shipped)' })));
+		if (!id)
+			key_ids.set(
+				key,
+				(id = node({
+					id: `key:${key}`,
+					col: 2,
+					label: key,
+					value: input.seed[key] ?? 0,
+					kind: 'key',
+					detail:
+						input.seed[key] !== undefined
+							? `${Math.round((input.seed[key] / 1024) * 10) / 10} KB in the seed`
+							: 'not in the seed (no island reads it, or it never shipped)'
+				}))
+			);
 		return id;
 	};
 	const claimed = new Set<string>();
@@ -96,21 +137,45 @@ export function build_river(input: RiverInput): River {
 		if (l.keys) {
 			for (const k of l.keys) {
 				claimed.add(k);
-				links.push({ from, to: key_node(k), value: Math.max(input.seed[k] ?? 0, 1), unit: 'bytes' });
+				links.push({
+					from,
+					to: key_node(k),
+					value: Math.max(input.seed[k] ?? 0, 1),
+					unit: 'bytes'
+				});
 			}
 		}
 	}
 	// keys the seed carries that no load claimed (a load whose source could not be read, a layout above)
 	const unclaimed = Object.keys(input.seed).filter((k) => !claimed.has(k));
 	if (unclaimed.length) {
-		const from = input.lanes.find((l) => l.keys === null) ? lane_ids.get(input.lanes.find((l) => l.keys === null)!.file)! : node({ id: 'load:above', col: 1, label: 'a load outside the window', value: 0, kind: 'unknown', detail: 'a layout load that ran earlier, or one whose source the profiler could not read' });
-		for (const k of unclaimed) links.push({ from, to: key_node(k), value: Math.max(input.seed[k] ?? 0, 1), unit: 'bytes' });
+		const from = input.lanes.find((l) => l.keys === null)
+			? lane_ids.get(input.lanes.find((l) => l.keys === null)!.file)!
+			: node({
+					id: 'load:above',
+					col: 1,
+					label: 'a load outside the window',
+					value: 0,
+					kind: 'unknown',
+					detail: 'a layout load that ran earlier, or one whose source the profiler could not read'
+				});
+		for (const k of unclaimed)
+			links.push({ from, to: key_node(k), value: Math.max(input.seed[k] ?? 0, 1), unit: 'bytes' });
 	}
 	// keys → islands
 	const named = input.islands.some((i) => i.keys && i.keys.length);
 	const read = new Set<string>();
 	for (const i of input.islands) {
-		const id = node({ id: `island:${i.name}`, col: 3, label: i.name, value: 0, kind: 'island', detail: i.keys ? `reads ${i.keys.length ? i.keys.join(', ') : 'nothing from page.data'}` : 'reads page.data through a helper the build could not follow: the whole seed ships for it' });
+		const id = node({
+			id: `island:${i.name}`,
+			col: 3,
+			label: i.name,
+			value: 0,
+			kind: 'island',
+			detail: i.keys
+				? `reads ${i.keys.length ? i.keys.join(', ') : 'nothing from page.data'}`
+				: 'reads page.data through a helper the build could not follow: the whole seed ships for it'
+		});
 		const keys = i.keys ?? Object.keys(input.seed);
 		for (const k of keys) {
 			if (input.seed[k] === undefined && !key_ids.has(k)) continue;
@@ -120,9 +185,23 @@ export function build_river(input: RiverInput): River {
 			nodes.find((n) => n.id === id)!.value += bytes;
 		}
 	}
-	const waste = named ? Object.entries(input.seed).filter(([k]) => !read.has(k)).map(([key, bytes]) => ({ key, bytes })).sort((a, b) => b.bytes - a.bytes) : [];
-	if (waste.length) notes.push(`${waste.length} key${waste.length === 1 ? '' : 's'} in the seed that no island reads: ${waste.slice(0, 4).map((w) => `${w.key} (${Math.round(w.bytes / 1024 * 10) / 10} KB)`).join(', ')}.`);
-	if (!named && input.islands.length) notes.push('No island names the keys it reads, so every key ships to every island. Read page.data keys directly in the island (or pass them as props) and the seed shrinks to what is used.');
+	const waste = named
+		? Object.entries(input.seed)
+				.filter(([k]) => !read.has(k))
+				.map(([key, bytes]) => ({ key, bytes }))
+				.sort((a, b) => b.bytes - a.bytes)
+		: [];
+	if (waste.length)
+		notes.push(
+			`${waste.length} key${waste.length === 1 ? '' : 's'} in the seed that no island reads: ${waste
+				.slice(0, 4)
+				.map((w) => `${w.key} (${Math.round((w.bytes / 1024) * 10) / 10} KB)`)
+				.join(', ')}.`
+		);
+	if (!named && input.islands.length)
+		notes.push(
+			'No island names the keys it reads, so every key ships to every island. Read page.data keys directly in the island (or pass them as props) and the seed shrinks to what is used.'
+		);
 	return { nodes, links, waste, notes };
 }
 
@@ -167,7 +246,12 @@ export function load_return_keys(source: string): string[] | null {
 		while (i < body.length) {
 			const ch = body[i];
 			// a key where one is expected (quoted keys included) — before the string skip below
-			if (depth === 1 && expect_key && !/\s/.test(ch) && !(ch === '/' && (body[i + 1] === '/' || body[i + 1] === '*'))) {
+			if (
+				depth === 1 &&
+				expect_key &&
+				!/\s/.test(ch) &&
+				!(ch === '/' && (body[i + 1] === '/' || body[i + 1] === '*'))
+			) {
 				if (body.startsWith('...', i)) {
 					unknown = true;
 					expect_key = false;
@@ -228,11 +312,26 @@ export function load_return_keys(source: string): string[] | null {
 export function seed_key_bytes(seed_json: string): Record<string, number> {
 	try {
 		const data = JSON.parse(seed_json) as unknown;
-		if (Array.isArray(data) && data.length && data[0] && typeof data[0] === 'object' && !Array.isArray(data[0])) return devalue_key_bytes(data);
-		const obj = (data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : null) ?? null;
+		if (
+			Array.isArray(data) &&
+			data.length &&
+			data[0] &&
+			typeof data[0] === 'object' &&
+			!Array.isArray(data[0])
+		)
+			return devalue_key_bytes(data);
+		const obj =
+			(data && typeof data === 'object' && !Array.isArray(data)
+				? (data as Record<string, unknown>)
+				: null) ?? null;
 		if (!obj) return {};
 		// the seed may wrap page.data: { data: {...} } or { page: { data } } — unwrap the common shapes
-		const inner = (obj.data && typeof obj.data === 'object' ? (obj.data as Record<string, unknown>) : null) ?? ((obj.page as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined) ?? obj;
+		const inner =
+			(obj.data && typeof obj.data === 'object' ? (obj.data as Record<string, unknown>) : null) ??
+			((obj.page as Record<string, unknown> | undefined)?.data as
+				| Record<string, unknown>
+				| undefined) ??
+			obj;
 		const out: Record<string, number> = {};
 		for (const [k, v] of Object.entries(inner)) out[k] = JSON.stringify(v)?.length ?? 0;
 		return out;
@@ -249,16 +348,22 @@ const DEVALUE_CONTAINERS = new Set(['Map', 'Set', 'Object', 'Array']);
 function devalue_key_bytes(nodes: unknown[]): Record<string, number> {
 	const root = nodes[0] as Record<string, unknown>;
 	const data_ix = typeof root.data === 'number' ? root.data : undefined;
-	const data = data_ix !== undefined && data_ix >= 0 ? (nodes[data_ix] as Record<string, unknown>) : root;
+	const data =
+		data_ix !== undefined && data_ix >= 0 ? (nodes[data_ix] as Record<string, unknown>) : root;
 	if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
 	const size = nodes.map((n) => JSON.stringify(n)?.length ?? 0);
 	const refs = (n: unknown): number[] => {
 		if (Array.isArray(n)) {
 			if (typeof n[0] === 'string' && !DEVALUE_CONTAINERS.has(n[0])) return [];
 			const items = typeof n[0] === 'string' ? n.slice(1) : n;
-			return items.filter((x): x is number => typeof x === 'number' && x >= 0 && Number.isInteger(x));
+			return items.filter(
+				(x): x is number => typeof x === 'number' && x >= 0 && Number.isInteger(x)
+			);
 		}
-		if (n && typeof n === 'object') return Object.values(n as Record<string, unknown>).filter((x): x is number => typeof x === 'number' && x >= 0 && Number.isInteger(x));
+		if (n && typeof n === 'object')
+			return Object.values(n as Record<string, unknown>).filter(
+				(x): x is number => typeof x === 'number' && x >= 0 && Number.isInteger(x)
+			);
 		return [];
 	};
 	const out: Record<string, number> = {};

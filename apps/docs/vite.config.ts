@@ -10,7 +10,11 @@ import wasm from 'vite-plugin-wasm';
 import { observatoryNodeShims } from './observatory-node-shims';
 import { load_ogygia_themes } from './src/lib/code/shiki-themes.ts';
 import { remarkChangelog } from './src/lib/remark-changelog.ts';
-import { expandApi, expandApiCacheKey, expandApiDependencies } from './src/lib/api-ref/expand-api.ts';
+import {
+	expandApi,
+	expandApiCacheKey,
+	expandApiDependencies
+} from './src/lib/api-ref/expand-api.ts';
 
 const require = createRequire(import.meta.url);
 
@@ -27,7 +31,11 @@ const RB_UTILS_BROWSER = require
 // The WASM uses SharedArrayBuffer (WASI worker-threads) → needs cross-origin isolation. Scoped to the
 // Observatory routes ONLY, so the rest of the docs site (cross-origin embeds etc.) is never constrained.
 const crossOriginIsolation = (): Plugin => {
-	const headers = (_req: unknown, res: { setHeader(k: string, v: string): void }, next: () => void) => {
+	const headers = (
+		_req: unknown,
+		res: { setHeader(k: string, v: string): void },
+		next: () => void
+	) => {
 		// App-wide in DEV: the isolated document AND its worker script + WASM chunk (served from /src or
 		// /@id, not /observatory) all need require-corp, or the worker is ERR_BLOCKED_BY_RESPONSE. The docs
 		// site is all same-origin (verified — same-origin iframes/fonts/OG), so app-wide isolation is safe
@@ -131,8 +139,8 @@ export default defineConfig(({ command }) => ({
 			visible: { margin: '120px' },
 			presets: {
 				demo: { wake: 'visible', margin: '200px' },
-				frozenSwr: { render: 'live', wake: 'load' },
-			},
+				frozenSwr: { render: 'live', wake: 'load' }
+			}
 		}),
 		// The devtools dock (launcher + Lens/Bytes/Wire/Nav/Timeline) — dev only, so the built docs
 		// site never ships the instrument graph — and the SSR profiler, always: UI at /__profiler
@@ -158,9 +166,9 @@ export default defineConfig(({ command }) => ({
 						enforce: 'pre',
 						plugin: expandApi,
 						cache_key: expandApiCacheKey,
-						dependencies: expandApiDependencies,
-					},
-				],
+						dependencies: expandApiDependencies
+					}
+				]
 			},
 			// The /playground sub-app's markdown variant: its collections name this preset on their
 			// loader macros. Depth-2 merge means unstated keys INHERIT the docs base above — and the
@@ -177,11 +185,11 @@ export default defineConfig(({ command }) => ({
 						defaultColor: 'light-dark()',
 						wrapperClass: 'code-only',
 						code: {},
-						remark: [],
-					},
-				},
-			},
+						remark: []
+					}
+				}
+			}
 		}),
-		sveltekit(),
-	],
+		sveltekit()
+	]
 }));

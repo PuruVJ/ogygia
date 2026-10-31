@@ -1,16 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, another_routes_file, route_dirs, route_file_of, type CpuProfile } from '../src/profiler/analyze.ts';
+import {
+	analyze,
+	another_routes_file,
+	route_dirs,
+	route_file_of,
+	type CpuProfile
+} from '../src/profiler/analyze.ts';
 
 // The sampler hears the whole process: another visitor's page answered while the profiled one
 // rendered must not read as the profiled page's code.
 
-const frame = (functionName: string, url = '', lineNumber = 0) => ({ functionName, url, lineNumber, columnNumber: 0 });
+const frame = (functionName: string, url = '', lineNumber = 0) => ({
+	functionName,
+	url,
+	lineNumber,
+	columnNumber: 0
+});
 
 describe('route files', () => {
 	it('a page or layout file, by its folder, in source or built form', () => {
-		expect(route_file_of('/app/src/routes/latecomer/+page.server.ts')).toEqual({ dir: 'latecomer', page: true, form: 'src' });
-		expect(route_file_of('/app/src/routes/+layout.svelte')).toEqual({ dir: '', page: false, form: 'src' });
-		expect(route_file_of('/app/.svelte-kit/output/server/entries/pages/p/_id_/_page.svelte.js')).toEqual({ dir: 'p/_id_', page: true, form: 'built' });
+		expect(route_file_of('/app/src/routes/latecomer/+page.server.ts')).toEqual({
+			dir: 'latecomer',
+			page: true,
+			form: 'src'
+		});
+		expect(route_file_of('/app/src/routes/+layout.svelte')).toEqual({
+			dir: '',
+			page: false,
+			form: 'src'
+		});
+		expect(
+			route_file_of('/app/.svelte-kit/output/server/entries/pages/p/_id_/_page.svelte.js')
+		).toEqual({ dir: 'p/_id_', page: true, form: 'built' });
 		expect(route_file_of('/app/src/routes/api/+server.ts')).toBeUndefined();
 		expect(route_file_of('/app/src/lib/helpers.ts')).toBeUndefined();
 	});
@@ -39,7 +60,11 @@ describe('another visitor on the same page', () => {
 			endTime: 20_000,
 			nodes: [
 				{ id: 1, callFrame: frame('(root)'), children: [2] },
-				{ id: 2, callFrame: frame('load', 'file:///app/src/routes/p/+page.server.ts', 5), positionTicks: [{ line: 6, ticks: 4 }] }
+				{
+					id: 2,
+					callFrame: frame('load', 'file:///app/src/routes/p/+page.server.ts', 5),
+					positionTicks: [{ line: 6, ticks: 4 }]
+				}
 			],
 			samples: [2, 2, 2, 2],
 			timeDeltas: [5000, 5000, 5000, 5000]
@@ -68,7 +93,11 @@ describe('another request in the window', () => {
 				// ours
 				{ id: 2, callFrame: frame('load', 'file:///app/src/routes/latecomer/+page.server.ts', 5) },
 				// another page's load, and a shared helper it calls
-				{ id: 3, callFrame: frame('load', 'file:///app/src/routes/purgatory/+page.server.ts', 18), children: [4] },
+				{
+					id: 3,
+					callFrame: frame('load', 'file:///app/src/routes/purgatory/+page.server.ts', 18),
+					children: [4]
+				},
 				{ id: 4, callFrame: frame('priceOf', 'file:///app/src/lib/helpers.ts', 6) },
 				// the root layout: shared by both, stays
 				{ id: 5, callFrame: frame('_layout', 'file:///app/src/routes/+layout.svelte', 0) },
@@ -84,14 +113,20 @@ describe('another request in the window', () => {
 			calls: [],
 			route: '/latecomer'
 		});
-		const names = a.functions.filter((f) => f.category === 'app' || f.category === 'component').map((f) => f.url);
+		const names = a.functions
+			.filter((f) => f.category === 'app' || f.category === 'component')
+			.map((f) => f.url);
 		expect(names.some((u) => u.includes('purgatory'))).toBe(false);
 		expect(names.some((u) => u.includes('helpers.ts'))).toBe(false);
 		expect(names.some((u) => u.includes('latecomer'))).toBe(true);
 		expect(names.some((u) => u.includes('format.ts'))).toBe(true);
 		expect(a.other_requests_ms).toBe(15);
 		// without the route: as before, everything counts
-		const b = analyze(prof, undefined, undefined, { perf_start: 0, window: { start: 0, end: 40 }, calls: [] });
+		const b = analyze(prof, undefined, undefined, {
+			perf_start: 0,
+			window: { start: 0, end: 40 },
+			calls: []
+		});
 		expect(b.functions.some((f) => f.url.includes('purgatory'))).toBe(true);
 		expect(b.other_requests_ms).toBeUndefined();
 	});

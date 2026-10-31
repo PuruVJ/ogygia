@@ -4,7 +4,11 @@
 	"private": true,
 	"type": "module",
 	"ogygia": {
-		"files": ["./src/widgets", "./src/pages/**/*.svelte", "./src/routes.ts"]
+		"files": [
+			"./src/widgets",
+			"./src/pages/**/*.svelte",
+			"./src/routes.ts"
+		]
 	},
 	"exports": {
 		"./routes": "./src/routes.ts",

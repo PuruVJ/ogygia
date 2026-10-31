@@ -43,11 +43,13 @@
 	onMount(() => {
 		if (query) return; // custom backend — no worker
 		client = search_handle({ base, ...(endpoint ? { endpoint } : {}), limit });
-		client.ready.then(() => (ready = true)).catch((e) => {
-			error = e instanceof Error ? e.message : String(e);
-			// eslint-disable-next-line no-console
-			console.error('[ogygia/content] search index unavailable —', error);
-		});
+		client.ready
+			.then(() => (ready = true))
+			.catch((e) => {
+				error = e instanceof Error ? e.message : String(e);
+				// eslint-disable-next-line no-console
+				console.error('[ogygia/content] search index unavailable —', error);
+			});
 		return () => client?.destroy();
 	});
 
@@ -83,8 +85,22 @@
 
 {#snippet field()}
 	<div class="og-search-field" {@attach searchField}>
-		<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-		<Command.Input bind:value={q} class="og-search-scene-input" {placeholder} aria-label={placeholder} />
+		<svg
+			width="17"
+			height="17"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="2"
+			stroke-linecap="round"
+			aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg
+		>
+		<Command.Input
+			bind:value={q}
+			class="og-search-scene-input"
+			{placeholder}
+			aria-label={placeholder}
+		/>
 		<kbd class="og-search-kbd">Esc</kbd>
 	</div>
 {/snippet}
@@ -104,16 +120,22 @@
 				{#each results as hit (hit.href)}
 					<Command.LinkItem href={hit.href} value={hit.href} class="og-search-hit">
 						<span class="og-search-hit-title"
-							>{hit.title}{#if hit.heading}<span class="og-search-hit-heading"> › {hit.heading}</span>{/if}</span
+							>{hit.title}{#if hit.heading}<span class="og-search-hit-heading">
+									› {hit.heading}</span
+								>{/if}</span
 						>
 						{#if hit.excerpt}<span class="og-search-hit-excerpt">{@html hit.excerpt}</span>{/if}
 						<span class="og-search-hit-section">{hit.section}</span>
 					</Command.LinkItem>
 				{/each}
 			{:else if q.trim() && ready}
-				<Command.Item disabled value="__empty" class="og-search-empty">No results for “{q}”</Command.Item>
+				<Command.Item disabled value="__empty" class="og-search-empty"
+					>No results for “{q}”</Command.Item
+				>
 			{:else}
-				<Command.Item disabled value="__hint" class="og-search-hint">Type to search the docs…</Command.Item>
+				<Command.Item disabled value="__hint" class="og-search-hint"
+					>Type to search the docs…</Command.Item
+				>
 			{/if}
 		</Command.Viewport>
 	</Command.List>

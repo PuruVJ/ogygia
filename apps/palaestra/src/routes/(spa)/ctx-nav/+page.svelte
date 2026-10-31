@@ -13,7 +13,7 @@
 
 <h1 data-static-shell>Context after SPA nav</h1>
 
-<Provide values={[ roomCtx(counter) ]}>
+<Provide values={[roomCtx(counter)]}>
 	<CtxWriter />
 	<CtxReader label="nav" />
 </Provide>

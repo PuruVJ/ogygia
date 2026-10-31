@@ -26,7 +26,14 @@
 	// (by element: two copies of one island with the same props share a fingerprint)
 	let open_el = $state(/** @type {Element | null} */ (null));
 
-	const LABEL = { failed: 'failed', recovered: 'recovered', healed: 'healed', changed: 'markup changed', asleep: 'asleep', clean: 'clean' };
+	const LABEL = {
+		failed: 'failed',
+		recovered: 'recovered',
+		healed: 'healed',
+		changed: 'markup changed',
+		asleep: 'asleep',
+		clean: 'clean'
+	};
 
 	const model = $derived.by(() => {
 		tick;
@@ -45,14 +52,19 @@
 </script>
 
 <div class="hy" data-og-hydration>
-	<div class="cap">hydration <span class="muted">· did each island wake from its server markup</span></div>
+	<div class="cap">
+		hydration <span class="muted">· did each island wake from its server markup</span>
+	</div>
 	<div class="counts">
 		{#each Object.keys(RANK) as s (s)}
 			{#if model.counts[s]}<span class="badge {s}">{LABEL[s]} {model.counts[s]}</span>{/if}
 		{/each}
 	</div>
 	{#if !model.measured}
-		<p class="muted">The browser's before/after markup needs a measured page load (in a build: open devtools, then reload).</p>
+		<p class="muted">
+			The browser's before/after markup needs a measured page load (in a build: open devtools, then
+			reload).
+		</p>
 	{/if}
 
 	<table>
@@ -68,20 +80,40 @@
 				>
 					<td><span class="badge {r.status}">{LABEL[r.status]}</span></td>
 					<!-- the name is a button: Tab reaches the row, Enter presses it (the press bubbles to the row) -->
-					<td class="nm"><button class="rowbtn" onfocus={() => highlight([r.el], `${r.name} — ${LABEL[r.status]}`)} onblur={() => clear_highlight()}>{r.name}</button><span class="muted"> {r.wake}</span></td>
-					<td class="why" title={r.reason}>{r.reason}{#if r.snap && r.status !== 'clean'}<span class="muted"> · click for the difference</span>{/if}</td>
+					<td class="nm"
+						><button
+							class="rowbtn"
+							onfocus={() => highlight([r.el], `${r.name} — ${LABEL[r.status]}`)}
+							onblur={() => clear_highlight()}>{r.name}</button
+						><span class="muted"> {r.wake}</span></td
+					>
+					<td class="why" title={r.reason}
+						>{r.reason}{#if r.snap && r.status !== 'clean'}<span class="muted">
+								· click for the difference</span
+							>{/if}</td
+					>
 				</tr>
 				{#if open_el === r.el && diff}
 					<tr class="diffrow">
 						<td colspan="3">
-							<p class="muted">server markup against the browser's first render: <b class="del">−{diff.removed}</b> <b class="add">+{diff.added}</b> pieces{diff.partial ? ' (too many changes: only where they start)' : ''}</p>
-							{#if r.snap?.from !== undefined}<p class="muted" data-og-hyd-window>A big island: this is the part around its first change, about {Math.round(r.snap.from / 1024)} KB into its markup — later changes are not shown.</p>{/if}
+							<p class="muted">
+								server markup against the browser's first render: <b class="del">−{diff.removed}</b>
+								<b class="add">+{diff.added}</b>
+								pieces{diff.partial ? ' (too many changes: only where they start)' : ''}
+							</p>
+							{#if r.snap?.from !== undefined}<p class="muted" data-og-hyd-window>
+									A big island: this is the part around its first change, about {Math.round(
+										r.snap.from / 1024
+									)} KB into its markup — later changes are not shown.
+								</p>{/if}
 							{#each diff.hunks as h, i (i)}
 								<div class="hunk">
 									{#each h.ops as o, k (k)}<span class={o.op}>{o.text}</span>{/each}
 								</div>
 							{/each}
-							{#if !diff.hunks.length}<p class="muted">No visible difference (only Svelte's markers moved).</p>{/if}
+							{#if !diff.hunks.length}<p class="muted">
+									No visible difference (only Svelte's markers moved).
+								</p>{/if}
 						</td>
 					</tr>
 				{/if}

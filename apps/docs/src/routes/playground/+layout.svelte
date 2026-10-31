@@ -19,7 +19,17 @@
 	import kalliope from '@ogygia/content/themes/kalliope.css?url';
 	import nephele from '@ogygia/content/themes/nephele.css?url';
 	import ThemePicker from '$lib/playground/ThemePicker.svelte' with { wake: 'load' };
-	const themes = { thalassa, stock, alexandria, pyros, zephyros, selas, daidalos, kalliope, nephele };
+	const themes = {
+		thalassa,
+		stock,
+		alexandria,
+		pyros,
+		zephyros,
+		selas,
+		daidalos,
+		kalliope,
+		nephele
+	};
 	// Self-hosted variable fonts — the theme references Inter / JetBrains Mono; point its tokens at the
 	// `@fontsource-variable` family names below.
 	import '@fontsource-variable/inter';
@@ -44,9 +54,18 @@
 <!-- body-level preload lives in the DOCS sub-app's chrome; this sub-app opts its own tree in -->
 <div data-sveltekit-preload-data="hover" style="display: contents">
 	{#if isBlog}
-		<BlogShell base="/playground/blog" title="ogygia blog" links={[{ text: 'Playground', href: '/playground' }, { text: 'Docs', href: '/docs' }]}>
+		<BlogShell
+			base="/playground/blog"
+			title="ogygia blog"
+			links={[
+				{ text: 'Playground', href: '/playground' },
+				{ text: 'Docs', href: '/docs' }
+			]}
+		>
 			{#snippet actions()}
-				<a class="pg-gh" href="https://github.com/ogygiajs/ogygia" target="_blank" rel="noreferrer">GitHub ↗</a>
+				<a class="pg-gh" href="https://github.com/ogygiajs/ogygia" target="_blank" rel="noreferrer"
+					>GitHub ↗</a
+				>
 			{/snippet}
 			{@render children()}
 		</BlogShell>

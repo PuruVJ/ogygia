@@ -10,7 +10,7 @@ related:
 	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 </script>
 
-A live component is an island once it has woken. This page goes past *how to declare one* and into *how it actually works*: where the hydration boundary sits, what crosses it, and why the prose around a live component never re-runs.
+A live component is an island once it has woken. This page goes past _how to declare one_ and into _how it actually works_: where the hydration boundary sits, what crosses it, and why the prose around a live component never re-runs.
 
 ## The island model, up close
 
@@ -64,11 +64,11 @@ This is what makes the model cheap. A page with twenty paragraphs and one counte
 
 Only two things travel from server to a client island:
 
-| Crosses | Does not cross |
-| --- | --- |
-| The rendered HTML (initial markup) | The surrounding prose's reactivity |
-| Serializable props you pass in | Server-only imports and secrets |
-| Seeded query results (for live data) | The rest of the page bundle |
+| Crosses                              | Does not cross                     |
+| ------------------------------------ | ---------------------------------- |
+| The rendered HTML (initial markup)   | The surrounding prose's reactivity |
+| Serializable props you pass in       | Server-only imports and secrets    |
+| Seeded query results (for live data) | The rest of the page bundle        |
 
 Props must be serializable because they are embedded in the page and read back during hydration. Pass numbers, strings, and plain objects — not functions or class instances.
 
@@ -95,7 +95,7 @@ Each island's state is its own. Two Counters on the same page do not share a cou
 
 ## When to reach for a live component
 
-Use a live component when the page needs to *respond* to the user in the browser: toggling, filtering, dragging, counting, playing. Keep everything else static.
+Use a live component when the page needs to _respond_ to the user in the browser: toggling, filtering, dragging, counting, playing. Keep everything else static.
 
 1. Does it need to change after paint in response to input? Make it a live island.
 2. Does it only need per-request server data with no interaction? Use a server island.

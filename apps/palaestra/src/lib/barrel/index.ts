@@ -24,5 +24,4 @@ export type BrandTheme = (typeof brandConfig)['theme'];
 
 // A big unique constant that nothing imports — the tree-shaking canary. Built from a repeated token
 // so it is impossible to miss in a chunk grep, and impossible to collide with real code.
-export const HUGE_UNUSED_CANARY =
-	'ogygia_barrel_huge_unused_canary_' + 'Z9'.repeat(20000);
+export const HUGE_UNUSED_CANARY = 'ogygia_barrel_huge_unused_canary_' + 'Z9'.repeat(20000);

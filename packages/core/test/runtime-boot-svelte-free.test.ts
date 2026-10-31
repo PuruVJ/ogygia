@@ -174,7 +174,10 @@ describe('the compiler splits features into two static phases', () => {
 	it('the hydrate-phase module imports exactly the hydrate features the marks select', () => {
 		const used = generateHydrateFeaturesSource(EVERYTHING, '/rt');
 		expect(used.features.sort()).toEqual(['context', 'live', 'remote-seeds', 'wire']);
-		const plain = generateHydrateFeaturesSource({ complete: true, hydrate: ['load'], remoteSeeds: false }, '/rt');
+		const plain = generateHydrateFeaturesSource(
+			{ complete: true, hydrate: ['load'], remoteSeeds: false },
+			'/rt'
+		);
 		expect(plain.features).toEqual([]); // a plain app ships none of them
 		expect(plain.code).toContain('export function install()');
 	});
@@ -191,7 +194,8 @@ describe('island-side modules reach the runtime only through its handles', () =>
 	for (const f of static_files(path.join(RUNTIME, 'core.ts'))) boot.set(...f);
 	for (const [, def] of Object.entries(FEATURES)) {
 		if ((def.phase ?? 'boot') !== 'boot') continue;
-		for (const f of static_files(resolve(path.join(RUNTIME, 'x.ts'), `./${def.module}`)!)) boot.set(...f);
+		for (const f of static_files(resolve(path.join(RUNTIME, 'x.ts'), `./${def.module}`)!))
+			boot.set(...f);
 	}
 	// The modules island code is aliased to or imports directly (vite/paths.ts APP_SHIMS + the
 	// kit-remote client stub, and the public `ogygia/app`).
@@ -205,7 +209,9 @@ describe('island-side modules reach the runtime only through its handles', () =>
 	for (const rel of ISLAND_SIDE) {
 		it(`${rel} imports no boot module`, () => {
 			const reached = static_files(path.join(SRC, rel));
-			const into_boot = [...reached].filter(([f]) => boot.has(f)).map(([, chain]) => chain.join(' > '));
+			const into_boot = [...reached]
+				.filter(([f]) => boot.has(f))
+				.map(([, chain]) => chain.join(' > '));
 			expect(into_boot).toEqual([]);
 		});
 	}

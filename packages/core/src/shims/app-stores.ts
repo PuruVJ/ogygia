@@ -5,7 +5,12 @@
 // island store is never seeded there); the snapshot is read fresh per subscription — a static
 // read, the same accepted trade-off as the shim's own url fallback (see e2e/split-brain.ts).
 import { toStore, type Unsubscriber } from 'svelte/store';
-import { page_state, subscribe_page, warn_foreign_page_read, type PageSnapshot } from './page-store.svelte.ts';
+import {
+	page_state,
+	subscribe_page,
+	warn_foreign_page_read,
+	type PageSnapshot
+} from './page-store.svelte.ts';
 import { kit_bridge } from './kit-bridge.ts';
 
 function snapshot(): PageSnapshot {
@@ -69,4 +74,8 @@ export const updated = {
 };
 
 /** Kit's `getStores()` (Kit 3 removed it; an island importing it still builds, and reads these). */
-export const getStores = (): { page: typeof page; navigating: typeof navigating; updated: typeof updated } => ({ page, navigating, updated });
+export const getStores = (): {
+	page: typeof page;
+	navigating: typeof navigating;
+	updated: typeof updated;
+} => ({ page, navigating, updated });

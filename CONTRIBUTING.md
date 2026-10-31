@@ -9,12 +9,12 @@ ship a `naming-convention` rule (verified against oxlint 1.77 — the rule does 
 no-explicit-any`, error) for `.ts`; the `scripts/no-any.mjs` script still covers `.svelte`
 (oxlint doesn't parse Svelte).
 
-| kind | case | examples |
-| ---- | ---- | -------- |
-| **Public API** — package exports, option keys, hook names | `camelCase` | `ogygia`, `ogygiaHandle`, `OgygiaRouter`, option keys `visible` / `presets` / `importKeys` / `margin` / `hydrate` / `defer` / `rateLimit` / `sessionCookie` / `regionTtl` / `endpoint` / `viewTransitions` |
-| **Classes & Svelte components** | `PascalCase` | `Island`, `ServerIsland`, `NestedProvider`, `LakePlaceholder`, `LakeBoundary`, `LakeRegion`, `OgygiaBoundary`, `OgygiaRouter`, the runtime custom-element class |
-| **Internals** — locals, module-private functions, non-exported helpers, `#` private fields | `snake_case` | `run_transform`, `merge_head`, `#on_visible`, `hashed_runtime_url`, `collect_pattern_names` |
-| **Module-level constants** | `SCREAMING_SNAKE_CASE` | `ISLAND_DIR`, `RUNTIME_ENTRY`, `APP_SHIMS` |
+| kind                                                                                       | case                   | examples                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Public API** — package exports, option keys, hook names                                  | `camelCase`            | `ogygia`, `ogygiaHandle`, `OgygiaRouter`, option keys `visible` / `presets` / `importKeys` / `margin` / `hydrate` / `defer` / `rateLimit` / `sessionCookie` / `regionTtl` / `endpoint` / `viewTransitions` |
+| **Classes & Svelte components**                                                            | `PascalCase`           | `Island`, `ServerIsland`, `NestedProvider`, `LakePlaceholder`, `LakeBoundary`, `LakeRegion`, `OgygiaBoundary`, `OgygiaRouter`, the runtime custom-element class                                            |
+| **Internals** — locals, module-private functions, non-exported helpers, `#` private fields | `snake_case`           | `run_transform`, `merge_head`, `#on_visible`, `hashed_runtime_url`, `collect_pattern_names`                                                                                                                |
+| **Module-level constants**                                                                 | `SCREAMING_SNAKE_CASE` | `ISLAND_DIR`, `RUNTIME_ENTRY`, `APP_SHIMS`                                                                                                                                                                 |
 
 ### Deliberate exceptions (do not "fix" these to snake_case)
 

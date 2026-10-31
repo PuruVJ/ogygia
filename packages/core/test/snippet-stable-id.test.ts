@@ -18,14 +18,18 @@ describe('snippet ref ids', () => {
 	it('two renders (two fresh snippet functions) of the same slot / static / plain live snippet mint the same id', () => {
 		expect(id_of(slot_pointer('og1a-1'))).toBe(id_of(slot_pointer('og1a-1')));
 		expect(id_of(slot_pointer('og1a-1'))).toBe('slot:og1a-1');
-		expect(id_of(branded({ m: 'static', h: '<p>a</p>' }))).toBe(id_of(branded({ m: 'static', h: '<p>a</p>' })));
+		expect(id_of(branded({ m: 'static', h: '<p>a</p>' }))).toBe(
+			id_of(branded({ m: 'static', h: '<p>a</p>' }))
+		);
 		const live = () => branded({ m: 'live', e: '/e.js', p: { title: 'Card', tags: ['a'], n: 2 } });
 		expect(id_of(live())).toBe(id_of(live()));
 	});
 
 	it('different content, different ids', () => {
 		expect(id_of(slot_pointer('og1'))).not.toBe(id_of(slot_pointer('og2')));
-		expect(id_of(branded({ m: 'static', h: '<p>a</p>' }))).not.toBe(id_of(branded({ m: 'static', h: '<p>b</p>' })));
+		expect(id_of(branded({ m: 'static', h: '<p>a</p>' }))).not.toBe(
+			id_of(branded({ m: 'static', h: '<p>b</p>' }))
+		);
 	});
 
 	it('a live snippet whose props JSON cannot tell apart (a Map, a Date, a class) keeps a random id', () => {

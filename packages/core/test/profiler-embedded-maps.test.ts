@@ -4,7 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fill_profiler_maps } from '../src/vite/profiler-maps.ts';
-import { PROFILER_MAPS_PLACEHOLDER, PROFILER_MAPS_GZ_PREFIX as GZ_PREFIX } from '../src/compiler/ids.ts';
+import {
+	PROFILER_MAPS_PLACEHOLDER,
+	PROFILER_MAPS_GZ_PREFIX as GZ_PREFIX
+} from '../src/compiler/ids.ts';
 import {
 	embedded_files,
 	embedded_key,
@@ -111,15 +114,40 @@ describe('fill_profiler_maps', () => {
 		fs.mkdirSync(path.join(dir, 'chunks'), { recursive: true });
 		fs.mkdirSync(path.join(stash, 'chunks'), { recursive: true });
 		// an island's chunk (the app's code, 5 folders below the root) and a runtime-only chunk
-		fs.writeFileSync(path.join(stash, 'og-region.a1.Hh12.js.map'), JSON.stringify({ version: 3, sources: ['../../../../../src/lib/Save.svelte'], sourcesContent: ['<script>function save() {}</script>'], names: ['save'], mappings: 'AAAAA' }));
-		fs.writeFileSync(path.join(stash, 'chunks/rt.js.map'), JSON.stringify({ version: 3, sources: ['../../../../../../node_modules/svelte/src/x.js'], mappings: 'AAAA' }));
+		fs.writeFileSync(
+			path.join(stash, 'og-region.a1.Hh12.js.map'),
+			JSON.stringify({
+				version: 3,
+				sources: ['../../../../../src/lib/Save.svelte'],
+				sourcesContent: ['<script>function save() {}</script>'],
+				names: ['save'],
+				mappings: 'AAAAA'
+			})
+		);
+		fs.writeFileSync(
+			path.join(stash, 'chunks/rt.js.map'),
+			JSON.stringify({
+				version: 3,
+				sources: ['../../../../../../node_modules/svelte/src/x.js'],
+				mappings: 'AAAA'
+			})
+		);
 		const maps_code = `var maps = "${PROFILER_MAPS_PLACEHOLDER}";\nexport { maps as default };\n`;
 		fs.writeFileSync(path.join(dir, 'chunks/profiler-maps.js'), maps_code);
-		const bundle = { 'chunks/profiler-maps.js': { type: 'chunk', fileName: 'chunks/profiler-maps.js', code: maps_code, modules: {} } };
+		const bundle = {
+			'chunks/profiler-maps.js': {
+				type: 'chunk',
+				fileName: 'chunks/profiler-maps.js',
+				code: maps_code,
+				modules: {}
+			}
+		};
 		expect(fill_profiler_maps(dir, bundle, root)).toBe(true);
 		const out = fs.readFileSync(path.join(dir, 'chunks/profiler-maps.js'), 'utf8');
 		const literal: string = JSON.parse(out.slice(out.indexOf('= ') + 2, out.indexOf(';\n')));
-		const payload = JSON.parse(zlib.gunzipSync(Buffer.from(literal.slice(GZ_PREFIX.length), 'base64')).toString('utf8'));
+		const payload = JSON.parse(
+			zlib.gunzipSync(Buffer.from(literal.slice(GZ_PREFIX.length), 'base64')).toString('utf8')
+		);
 		const island = payload.maps['client/_app/immutable/og-region.a1.Hh12.js'];
 		expect(island).toBeDefined();
 		expect(JSON.parse(island).sourcesContent).toEqual(['<script>function save() {}</script>']);
@@ -142,11 +170,21 @@ describe('embedded_key', () => {
 	});
 	it('a browser chunk: the same key from a local copy of the client output or from its URL', () => {
 		const key = 'client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js';
-		expect(embedded_key('/srv/app/build/client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js')).toBe(key);
-		expect(embedded_key('/app/.svelte-kit/output/client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js')).toBe(key);
-		expect(embedded_key('https://site.test/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js?v=2')).toBe(key);
+		expect(
+			embedded_key('/srv/app/build/client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js')
+		).toBe(key);
+		expect(
+			embedded_key(
+				'/app/.svelte-kit/output/client/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js'
+			)
+		).toBe(key);
+		expect(
+			embedded_key('https://site.test/_app/immutable/og-region.0788ed45be5e.BwceK2yv.js?v=2')
+		).toBe(key);
 		// a custom app dir, a nested chunk
-		expect(embedded_key('https://site.test/base/assets/immutable/chunks/Ab12.js')).toBe('client/assets/immutable/chunks/Ab12.js');
+		expect(embedded_key('https://site.test/base/assets/immutable/chunks/Ab12.js')).toBe(
+			'client/assets/immutable/chunks/Ab12.js'
+		);
 		// not a content-named browser file
 		expect(embedded_key('https://site.test/favicon.png')).toBeUndefined();
 	});
@@ -230,10 +268,20 @@ describe('a chunk with no map', () => {
 		// a line the build changed: from the nearest matched line above it
 		expect(r.text_nearby('/app/.svelte-kit/output/server/chunks/a.js', 6, 2)).toBe(7);
 		// a package's module at the line: named by its path, with no line
-		expect(at(1)).toEqual({ source: '/app/node_modules/kit/src/runtime/fetch.js', line: 0, column: 0 });
+		expect(at(1)).toEqual({
+			source: '/app/node_modules/kit/src/runtime/fetch.js',
+			line: 0,
+			column: 0
+		});
 		expect(at(2)).toBeUndefined();
 		// no hook: as before, the chunk's own line
-		expect(sourcemap_resolver((p) => files[p]).resolve('/app/.svelte-kit/output/server/chunks/a.js', 3, 0)).toBeUndefined();
+		expect(
+			sourcemap_resolver((p) => files[p]).resolve(
+				'/app/.svelte-kit/output/server/chunks/a.js',
+				3,
+				0
+			)
+		).toBeUndefined();
 	});
 });
 

@@ -18,7 +18,10 @@ describe('merge_seed_ask', () => {
 describe('shape_page_data', () => {
 	const data = { _locale: 'fr-FR', big: 'x'.repeat(1000), user: { name: 'p' }, nested: { a: 1 } };
 	it('picks the asked keys, keeps value identity, leaves absent keys absent', () => {
-		const out = shape_page_data(data, new Set(['_locale', 'user', 'missing'])) as Record<string, unknown>;
+		const out = shape_page_data(data, new Set(['_locale', 'user', 'missing'])) as Record<
+			string,
+			unknown
+		>;
 		expect(Object.keys(out).sort()).toEqual(['_locale', 'user']);
 		expect(out.user).toBe(data.user); // same node: a props sidecar referencing it still resolves
 		expect('big' in out).toBe(false);

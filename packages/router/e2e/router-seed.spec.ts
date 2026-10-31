@@ -3,10 +3,14 @@
 // page: the profiler's report page carried its whole 2.9 MB report, read by nobody.)
 import { test, expect } from '@playwright/test';
 
-const seed_of = (html: string) => html.match(/<script type="application\/ogygia-page"[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? null;
+const seed_of = (html: string) =>
+	html.match(/<script type="application\/ogygia-page"[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? null;
 
 test.describe('server router page seed', () => {
-	test('an island that reads page.data gets it, shaped to the key it reads', async ({ page, request }) => {
+	test('an island that reads page.data gets it, shaped to the key it reads', async ({
+		page,
+		request
+	}) => {
 		const html = await (await request.get('/rtr/reader')).text();
 		const seed = seed_of(html);
 		expect(seed, 'the reader island needs the seed').not.toBeNull();

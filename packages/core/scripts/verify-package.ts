@@ -32,7 +32,9 @@ const tarballs = [];
  */
 function unpack(dir, into) {
 	note(`▸ npm pack ${path.relative(process.cwd(), dir) || '.'} …`);
-	const tarball = execFileSync('npm', ['pack', '--silent', '--pack-destination', os.tmpdir()], { cwd: dir })
+	const tarball = execFileSync('npm', ['pack', '--silent', '--pack-destination', os.tmpdir()], {
+		cwd: dir
+	})
 		.toString()
 		.trim()
 		.split('\n')
@@ -59,7 +61,8 @@ function unpack(dir, into) {
 	fs.mkdirSync(nm, { recursive: true });
 	const link = (rel) => {
 		const target = path.join(own_nm, rel);
-		if (fs.existsSync(target) && !fs.existsSync(path.join(nm, rel))) fs.symlinkSync(fs.realpathSync(target), path.join(nm, rel), 'dir');
+		if (fs.existsSync(target) && !fs.existsSync(path.join(nm, rel)))
+			fs.symlinkSync(fs.realpathSync(target), path.join(nm, rel), 'dir');
 	};
 	for (const entry of fs.existsSync(own_nm) ? fs.readdirSync(own_nm) : []) {
 		if (entry.startsWith('.')) continue;
@@ -71,7 +74,8 @@ function unpack(dir, into) {
 		for (const child of fs.readdirSync(path.join(own_nm, entry)))
 			if (!workspace.includes(`${entry}/${child}`)) link(path.join(entry, child));
 	}
-	for (const name of workspace) unpack(fs.realpathSync(path.join(own_nm, name)), path.join(nm, name));
+	for (const name of workspace)
+		unpack(fs.realpathSync(path.join(own_nm, name)), path.join(nm, name));
 	return manifest;
 }
 
@@ -86,7 +90,8 @@ const targets_of = (v) =>
 // virtual modules (exist only inside a Kit build), `virtual:` is a Vite virtual, and a `.svelte`
 // import needs the Svelte compiler/loader (component subpaths aren't bare-Node importable). Reaching
 // such a boundary PROVES the module's own graph loaded intact up to it.
-const EXPECTED = /Cannot find package '\$app|Cannot find package '\$env|virtual:|Unknown file extension "\.svelte"/;
+const EXPECTED =
+	/Cannot find package '\$app|Cannot find package '\$env|virtual:|Unknown file extension "\.svelte"/;
 
 for (const [subpath, val] of Object.entries(exports)) {
 	if (subpath === './package.json') continue;
@@ -153,7 +158,12 @@ const type_subpaths = Object.entries(exports).filter(([sp, val]) => {
 });
 const ambient_subpaths = Object.entries(exports).filter(([sp, val]) => {
 	const conds = targets_of(val);
-	return sp !== './package.json' && !('default' in conds) && !('svelte' in conds) && typeof conds.types === 'string';
+	return (
+		sp !== './package.json' &&
+		!('default' in conds) &&
+		!('svelte' in conds) &&
+		typeof conds.types === 'string'
+	);
 });
 // A namespace type-import that FAILS to resolve is a compile error (TS2307/2306); one that resolves
 // is silent (unused type-only imports aren't flagged). So the imports alone are the assertion. A
@@ -161,7 +171,9 @@ const ambient_subpaths = Object.entries(exports).filter(([sp, val]) => {
 const consumer =
 	ambient_subpaths.map(([sp]) => `/// <reference types="${name}${sp.slice(1)}" />`).join('\n') +
 	'\n' +
-	type_subpaths.map(([sp], i) => `import type * as _${i} from '${name}${sp.slice(1)}';`).join('\n') +
+	type_subpaths
+		.map(([sp], i) => `import type * as _${i} from '${name}${sp.slice(1)}';`)
+		.join('\n') +
 	'\n';
 fs.writeFileSync(path.join(root, 'consumer.ts'), consumer);
 fs.writeFileSync(
@@ -179,16 +191,26 @@ fs.writeFileSync(
 	})
 );
 try {
-	execFileSync('node', [path.join(pkg_root, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.verify.json'], {
-		cwd: root,
-		stdio: 'pipe'
-	});
-	note(`  typechecked ${type_subpaths.length} subpaths' declarations, ${ambient_subpaths.length} ambient reference(s)`);
+	execFileSync(
+		'node',
+		[path.join(pkg_root, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.verify.json'],
+		{
+			cwd: root,
+			stdio: 'pipe'
+		}
+	);
+	note(
+		`  typechecked ${type_subpaths.length} subpaths' declarations, ${ambient_subpaths.length} ambient reference(s)`
+	);
 } catch (e) {
 	const out = (e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '');
 	// Only OUR subpaths' resolution matters; ignore peer-type noise (svelte/kit ambient) if any.
-	const ours = out.split('\n').filter((l) => l.includes(name) || /error TS2307|error TS2688|Cannot find module/.test(l));
-	fail.push(`consumer types do not resolve:\n    ${(ours.length ? ours : out.split('\n')).slice(0, 6).join('\n    ')}`);
+	const ours = out
+		.split('\n')
+		.filter((l) => l.includes(name) || /error TS2307|error TS2688|Cannot find module/.test(l));
+	fail.push(
+		`consumer types do not resolve:\n    ${(ours.length ? ours : out.split('\n')).slice(0, 6).join('\n    ')}`
+	);
 }
 
 fs.rmSync(work, { recursive: true, force: true });

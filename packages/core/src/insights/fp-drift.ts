@@ -66,7 +66,10 @@ export function compare(was: Kept[], now: Kept[]): FpDrift[] {
 /** Where two props texts differ: the first differing path when both parse as JSON, else the text
  *  around the first differing character — ogygia's own ids (a store's, a class instance's: random
  *  per render by design) left out. `null` when those ids are all that differs. */
-export function props_diff(a: string, b: string): { path?: string; was?: string; now?: string } | null {
+export function props_diff(
+	a: string,
+	b: string
+): { path?: string; was?: string; now?: string } | null {
 	if (a === b) return null;
 	try {
 		return first_path(revive(JSON.parse(a)), revive(JSON.parse(b)), '');
@@ -94,7 +97,12 @@ function revive(parsed: unknown): unknown {
 const keep_typed = (type: string) => (value: unknown) => ({ [`<${type}>`]: value });
 /** A revivers table that has every type (devalue asks `Object.hasOwn`, then calls it). */
 const ANY_REVIVER = new Proxy({} as Record<string, (v: unknown) => unknown>, {
-	getOwnPropertyDescriptor: (_, k) => ({ value: keep_typed(String(k)), configurable: true, enumerable: true, writable: false }),
+	getOwnPropertyDescriptor: (_, k) => ({
+		value: keep_typed(String(k)),
+		configurable: true,
+		enumerable: true,
+		writable: false
+	}),
 	get: (_, k) => keep_typed(String(k))
 });
 
@@ -123,14 +131,24 @@ function mask_ids(s: string): string {
 	return last === 0 ? s : out + s.slice(last);
 }
 
-function first_path(a: unknown, b: unknown, path: string): { path: string; was: string; now: string } | null {
+function first_path(
+	a: unknown,
+	b: unknown,
+	path: string
+): { path: string; was: string; now: string } | null {
 	if (a === b) return null;
 	if (is_mint_id(a) && is_mint_id(b)) return null;
 	const clip = (v: unknown) => {
 		const s = JSON.stringify(v) ?? String(v);
 		return s.length > 60 ? s.slice(0, 60) + '…' : s;
 	};
-	if (a && b && typeof a === 'object' && typeof b === 'object' && Array.isArray(a) === Array.isArray(b)) {
+	if (
+		a &&
+		b &&
+		typeof a === 'object' &&
+		typeof b === 'object' &&
+		Array.isArray(a) === Array.isArray(b)
+	) {
 		if (Array.isArray(a)) {
 			const bb = b as unknown[];
 			for (let i = 0; i < Math.max(a.length, bb.length); i++) {
@@ -141,7 +159,11 @@ function first_path(a: unknown, b: unknown, path: string): { path: string; was: 
 		}
 		const keys = new Set([...Object.keys(a as object), ...Object.keys(b as object)]);
 		for (const k of keys) {
-			const d = first_path((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], path ? `${path}.${k}` : k);
+			const d = first_path(
+				(a as Record<string, unknown>)[k],
+				(b as Record<string, unknown>)[k],
+				path ? `${path}.${k}` : k
+			);
 			if (d) return d;
 		}
 		return null;

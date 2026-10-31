@@ -5,7 +5,7 @@
 ## The idea
 
 Today `r.page(Comp)` renders the page as a **static** region: server HTML in the document, no
-page-level JS, and islands *inside* the page wake as their own separate roots. That's ogygia's
+page-level JS, and islands _inside_ the page wake as their own separate roots. That's ogygia's
 csr=false default.
 
 Letting a page carry the region dials (`render` × `wake` × `region:'raw'`) turns "csr" from Kit's
@@ -28,29 +28,29 @@ single hydration root.
 
 ### `render: static` — page HTML lives in the SSR document
 
-| `wake` | The page behaves as | csr meaning |
-|---|---|---|
-| *(unmarked)* | server HTML; inner islands hydrate on their own | **csr=false**, partial hydration — the default |
-| `load` | whole page is one island, hydrates immediately | **csr=true** (SSR + full hydrate) |
-| `idle` | static, then the whole page hydrates when the browser idles | csr=true, deferred TTI |
-| `interaction` | zero page JS until the first pointer/key/focus, then hydrates (gesture replayed) | csr=true *on first touch* — mostly-static pages |
-| `(media)` | hydrates only if the query matches (desktop yes, mobile no) | csr per viewport |
-| `visible` | hydrates when scrolled in — for a whole page ≈ `load` unless below the fold | more useful on sub-regions than whole pages |
-| `none` (lake) | frozen — no page JS **and** inner islands are frozen too | **hard csr=false**, guaranteed zero JS |
+| `wake`        | The page behaves as                                                              | csr meaning                                     |
+| ------------- | -------------------------------------------------------------------------------- | ----------------------------------------------- |
+| _(unmarked)_  | server HTML; inner islands hydrate on their own                                  | **csr=false**, partial hydration — the default  |
+| `load`        | whole page is one island, hydrates immediately                                   | **csr=true** (SSR + full hydrate)               |
+| `idle`        | static, then the whole page hydrates when the browser idles                      | csr=true, deferred TTI                          |
+| `interaction` | zero page JS until the first pointer/key/focus, then hydrates (gesture replayed) | csr=true _on first touch_ — mostly-static pages |
+| `(media)`     | hydrates only if the query matches (desktop yes, mobile no)                      | csr per viewport                                |
+| `visible`     | hydrates when scrolled in — for a whole page ≈ `load` unless below the fold      | more useful on sub-regions than whole pages     |
+| `none` (lake) | frozen — no page JS **and** inner islands are frozen too                         | **hard csr=false**, guaranteed zero JS          |
 
 ### `render: deferred` — page body fetched from the signed endpoint after the shell
 
-| `fetch` | The page behaves as |
-|---|---|
-| `load` | static shell instant (CDN-cacheable), per-visitor body fetched + hydrated → **PPR at the page level** |
-| `visible` / `idle` | heavy / below-the-fold body fetched lazily |
+| `fetch`            | The page behaves as                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| `load`             | static shell instant (CDN-cacheable), per-visitor body fetched + hydrated → **PPR at the page level** |
+| `visible` / `idle` | heavy / below-the-fold body fetched lazily                                                            |
 
 ### `render: live` — page body baked, revalidates over SSE
 
-| `wake` | The page behaves as |
-|---|---|
-| `load` | the whole page updates in place as server data changes — a live dashboard/feed, no navigation |
-| `none` + `raw` | live morph-in-place with **zero client JS** (raw HTML swaps) |
+| `wake`         | The page behaves as                                                                           |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| `load`         | the whole page updates in place as server data changes — a live dashboard/feed, no navigation |
+| `none` + `raw` | live morph-in-place with **zero client JS** (raw HTML swaps)                                  |
 
 ### `region: 'raw'` (modifier)
 
@@ -69,15 +69,15 @@ Kit gives you `csr: true | false`. Page-level dials give the same axis, plus:
 …chosen per page. And it's all the island mechanism you already have, so a "csr=true page" is just
 "the whole page is one island" — no exception to the architecture, no Kit csr=true.
 
-| You want | Dial |
-|---|---|
-| classic csr=false (shell static, islands hydrate) | *(unmarked)* — the default |
-| hard csr=false (zero JS, nothing wakes) | `wake: 'none'` or `region: 'raw'` |
-| csr=true (whole page interactive) | `wake: 'load'` |
-| csr=true but cheap TTI | `wake: 'idle' \| 'interaction'` |
-| csr per viewport | `wake: '(min-width: 900px)'` |
-| PPR (static shell, dynamic body) | `render: 'deferred'` |
-| live page (SSE updates) | `render: 'live'` |
+| You want                                          | Dial                              |
+| ------------------------------------------------- | --------------------------------- |
+| classic csr=false (shell static, islands hydrate) | _(unmarked)_ — the default        |
+| hard csr=false (zero JS, nothing wakes)           | `wake: 'none'` or `region: 'raw'` |
+| csr=true (whole page interactive)                 | `wake: 'load'`                    |
+| csr=true but cheap TTI                            | `wake: 'idle' \| 'interaction'`   |
+| csr per viewport                                  | `wake: '(min-width: 900px)'`      |
+| PPR (static shell, dynamic body)                  | `render: 'deferred'`              |
+| live page (SSE updates)                           | `render: 'live'`                  |
 
 ## Caveats that matter
 

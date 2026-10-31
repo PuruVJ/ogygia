@@ -21,5 +21,15 @@ import type { ClientPlugin } from '../plugin/client.ts';
 /** Boot the kitchen-sink runtime (all boot-phase features) with the plugins' browser halves.
  *  Idempotent via {@link ./core.js boot}. */
 export function bootDev(client_plugins: readonly ClientPlugin[] = []): void {
-	boot([frames.install, lakes.install, morph.install, interaction.install, forms.install, router.install], client_plugins);
+	boot(
+		[
+			frames.install,
+			lakes.install,
+			morph.install,
+			interaction.install,
+			forms.install,
+			router.install
+		],
+		client_plugins
+	);
 }

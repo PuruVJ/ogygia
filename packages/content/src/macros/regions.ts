@@ -19,7 +19,12 @@
  * Detection is AST-precise (the shared `import.meta.og.*` scanner); a marker in a comment or string
  * is never a call. Node-only (filesystem glob). Server-only by nature — a block registry drives SSR.
  */
-import { fs, path, find_og_calls, split_first_string } from '@ogygia/core/internal/compiler-browser';
+import {
+	fs,
+	path,
+	find_og_calls,
+	split_first_string
+} from '@ogygia/core/internal/compiler-browser';
 
 // ── regexes
 const FILE_EXT_RE = /\.[^.]+$/;

@@ -10,14 +10,24 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/tsdown-plugin-svelte"
 	},
-	"keywords": ["tsdown", "rolldown", "svelte", "plugin", "library"],
+	"keywords": [
+		"tsdown",
+		"rolldown",
+		"svelte",
+		"plugin",
+		"library"
+	],
 	"exports": {
 		".": {
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
 		}
 	},
-	"files": ["dist", "README.md", "LICENSE"],
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"test": "vitest run",
@@ -34,9 +44,15 @@
 		"typescript": ">=5.0.0"
 	},
 	"peerDependenciesMeta": {
-		"@sveltejs/vite-plugin-svelte": { "optional": true },
-		"svelte2tsx": { "optional": true },
-		"typescript": { "optional": true }
+		"@sveltejs/vite-plugin-svelte": {
+			"optional": true
+		},
+		"svelte2tsx": {
+			"optional": true
+		},
+		"typescript": {
+			"optional": true
+		}
 	},
 	"devDependencies": {
 		"@sveltejs/vite-plugin-svelte": "catalog:",

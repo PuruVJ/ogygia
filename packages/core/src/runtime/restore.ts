@@ -30,12 +30,21 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		__og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[];
 		__og_init?: ShadowRoot[];
 		__og_class_watch?: { mo: MutationObserver; hosts: Set<Element> };
-		__og_restore_log?: { kind: 'late' | 'mismatch'; host: string; t: number; diff?: string; island?: string }[];
+		__og_restore_log?: {
+			kind: 'late' | 'mismatch';
+			host: string;
+			t: number;
+			diff?: string;
+			island?: string;
+		}[];
 		__og_rendered?: WeakSet<Node>;
 	};
 	const sheets = (W.__og_sheets ??= new Map());
 	// (a DOM without `CSS.escape` — jsdom — gets a quote-safe escape for the attribute selectors)
-	const esc = (s: string) => (typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : s.split('\\').join('\\\\').split('"').join('\\"'));
+	const esc = (s: string) =>
+		typeof CSS !== 'undefined' && CSS.escape
+			? CSS.escape(s)
+			: s.split('\\').join('\\\\').split('"').join('\\"');
 	// A constructed sheet can only be adopted by a root in the document that made it: a root made in
 	// an answer's inert fragment (or an incoming page's parsed document) adopts once its host is in
 	// the page — `restore_adopt()`, called right after the insertion, in the same task.
@@ -52,7 +61,8 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	 * host equals Svelte's alone. One observer for all of them; a host leaves the watch at that
 	 * write, and the observer goes when the last one has.
 	 */
-	const watch_classes = live && document.querySelector('meta[name="ogygia-csr"][content="true"]') !== null;
+	const watch_classes =
+		live && document.querySelector('meta[name="ogygia-csr"][content="true"]') !== null;
 	const watch = (el: Element) => {
 		let w = W.__og_class_watch;
 		if (!w) {
@@ -63,12 +73,14 @@ export function restore(root: Document | DocumentFragment | Element): number {
 					if (!hosts.has(host)) continue;
 					// this record's NEW value: the next record's old value for the same host, else the current one
 					let now: string | null | undefined;
-					for (let j = i + 1; j < records.length && now === undefined; j++) if (records[j].target === host) now = records[j].oldValue;
+					for (let j = i + 1; j < records.length && now === undefined; j++)
+						if (records[j].target === host) now = records[j].oldValue;
 					if (now === undefined) now = host.getAttribute('class');
 					if ((now ?? '') !== host.__og_svelte_class) continue;
 					hosts.delete(host);
 					const own = new Set((now ?? '').split(' '));
-					for (const t of (records[i].oldValue ?? '').split(' ')) if (t && !own.has(t)) host.classList.add(t);
+					for (const t of (records[i].oldValue ?? '').split(' '))
+						if (t && !own.has(t)) host.classList.add(t);
 				}
 				if (hosts.size === 0) {
 					mo.disconnect();
@@ -95,7 +107,8 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		if (have) return have;
 		const sel = `template[data-og-head="${esc(key)}"]`;
 		// (an incoming page carries its sheets in its own head until the swap)
-		const tpl = ((doc !== document && doc.head?.querySelector(sel)) || head.querySelector(sel)) as HTMLTemplateElement | null;
+		const tpl = ((doc !== document && doc.head?.querySelector(sel)) ||
+			head.querySelector(sel)) as HTMLTemplateElement | null;
 		if (!tpl) return null;
 		const css = tpl.content.textContent ?? '';
 		let sheet: CSSStyleSheet | null = null;
@@ -118,7 +131,9 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	 *  (runtime/host-classes.ts). Unless the render kept `class` as its own (`og-keep`). */
 	const reset = (el: Element) => {
 		const r = el.getAttribute('og-r');
-		const custom = el.localName.indexOf('-') !== -1 && (' ' + (el.getAttribute('og-keep') ?? '') + ' ').indexOf(' class ') === -1;
+		const custom =
+			el.localName.indexOf('-') !== -1 &&
+			(' ' + (el.getAttribute('og-keep') ?? '') + ' ').indexOf(' class ') === -1;
 		let svelte_class: string | null | undefined;
 		if (r) {
 			try {
@@ -142,7 +157,8 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		}
 		// (no class in the diff: the render left it as Svelte's)
 		if (custom) {
-			(el as Element & { __og_svelte_class?: string }).__og_svelte_class = svelte_class === undefined ? (el.getAttribute('class') ?? '') : (svelte_class ?? '');
+			(el as Element & { __og_svelte_class?: string }).__og_svelte_class =
+				svelte_class === undefined ? (el.getAttribute('class') ?? '') : (svelte_class ?? '');
 			if (watch_classes) watch(el);
 		}
 		el.removeAttribute('og-r');
@@ -175,7 +191,8 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	const comments = (under: Node, prefix: string): Comment[] => {
 		const out: Comment[] = [];
 		const walk = doc.createTreeWalker(under, 128 /* SHOW_COMMENT */);
-		for (let n = walk.nextNode(); n; n = walk.nextNode()) if ((n as Comment).data.startsWith(prefix)) out.push(n as Comment);
+		for (let n = walk.nextNode(); n; n = walk.nextNode())
+			if ((n as Comment).data.startsWith(prefix)) out.push(n as Comment);
 		return out;
 	};
 
@@ -184,7 +201,8 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		for (let x = list.length - 1; x >= 0; x--) {
 			const as = list[x];
 			const real = doc.createElement(as.getAttribute('tag') || 'span');
-			for (const a of Array.from(as.attributes)) if (a.name !== 'tag') real.setAttribute(a.name, a.value);
+			for (const a of Array.from(as.attributes))
+				if (a.name !== 'tag') real.setAttribute(a.name, a.value);
 			while (as.firstChild) real.appendChild(as.firstChild);
 			as.replaceWith(real);
 		}
@@ -193,7 +211,9 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	// dev: each planned host's original children (the server sends them only in dev), to compare each
 	// restored host against — the transform is judged on what hydration will actually see
 	let check: Record<string, string> | null = null;
-	const check_el = (root as ParentNode).querySelector('script[type="application/ogygia-restore-check"]');
+	const check_el = (root as ParentNode).querySelector(
+		'script[type="application/ogygia-restore-check"]'
+	);
 	if (check_el) {
 		try {
 			check = JSON.parse(check_el.textContent || '{}');
@@ -211,10 +231,13 @@ export function restore(root: Document | DocumentFragment | Element): number {
 			const x = a[i];
 			const y = b[i];
 			const here = `${path} > [${i}]`;
-			if (!x || !y) return `${here}: Svelte has ${x ? describe(x) : 'nothing'}, the restored markup has ${y ? describe(y) : 'nothing'}`;
-			if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName) return `${here}: Svelte has ${describe(x)}, the restored markup has ${describe(y)}`;
+			if (!x || !y)
+				return `${here}: Svelte has ${x ? describe(x) : 'nothing'}, the restored markup has ${y ? describe(y) : 'nothing'}`;
+			if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName)
+				return `${here}: Svelte has ${describe(x)}, the restored markup has ${describe(y)}`;
 			if (x.nodeType === 3 || x.nodeType === 8) {
-				if ((x as CharacterData).data !== (y as CharacterData).data) return `${here}: Svelte has ${describe(x)}, the restored markup has ${describe(y)}`;
+				if ((x as CharacterData).data !== (y as CharacterData).data)
+					return `${here}: Svelte has ${describe(x)}, the restored markup has ${describe(y)}`;
 				continue;
 			}
 			if (x.nodeType !== 1) continue;
@@ -225,11 +248,18 @@ export function restore(root: Document | DocumentFragment | Element): number {
 			// be there. A plain element compares exactly.
 			const custom = ex.localName.indexOf('-') !== -1;
 			for (const attr of Array.from(ex.attributes)) {
-				if (custom && attr.name === 'class' ? within(attr.value, ey.getAttribute('class')) : norm(attr.name, attr.value) === norm(attr.name, ey.getAttribute(attr.name))) continue;
+				if (
+					custom && attr.name === 'class'
+						? within(attr.value, ey.getAttribute('class'))
+						: norm(attr.name, attr.value) === norm(attr.name, ey.getAttribute(attr.name))
+				)
+					continue;
 				return `${here} <${ex.localName}>: Svelte has ${attr.name}="${attr.value}", the restored markup has ${ey.hasAttribute(attr.name) ? `"${ey.getAttribute(attr.name)}"` : 'none'}`;
 			}
 			if (!custom)
-				for (const attr of Array.from(ey.attributes)) if (!ex.hasAttribute(attr.name) && norm(attr.name, attr.value) !== null) return `${here} <${ex.localName}>: the restored markup adds ${attr.name}="${attr.value}"`;
+				for (const attr of Array.from(ey.attributes))
+					if (!ex.hasAttribute(attr.name) && norm(attr.name, attr.value) !== null)
+						return `${here} <${ex.localName}>: the restored markup adds ${attr.name}="${attr.value}"`;
 			const deeper = differ(x, y, `${here} <${ex.localName}>`);
 			if (deeper) return deeper;
 		}
@@ -239,14 +269,20 @@ export function restore(root: Document | DocumentFragment | Element): number {
 	 *  as its declarations, an empty value as absent (Svelte's hydration reads neither; a render's
 	 *  serializer rewrites both). */
 	const norm = (name: string, value: string | null): string | null => {
-		if (value === null || value.trim() === '') return name === 'class' || name === 'style' ? null : value;
+		if (value === null || value.trim() === '')
+			return name === 'class' || name === 'style' ? null : value;
 		if (name === 'class') return value.split(/\s+/).filter(Boolean).sort().join(' ');
 		if (name === 'style')
 			return value
 				.split(';')
 				.map((d) => {
 					const c = d.indexOf(':');
-					return c === -1 ? d.trim() : `${d.slice(0, c).trim().toLowerCase()}:${d.slice(c + 1).trim().replace(/\s+/g, ' ')}`;
+					return c === -1
+						? d.trim()
+						: `${d.slice(0, c).trim().toLowerCase()}:${d
+								.slice(c + 1)
+								.trim()
+								.replace(/\s+/g, ' ')}`;
 				})
 				.filter(Boolean)
 				.join(';');
@@ -259,7 +295,11 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		return true;
 	};
 	const describe = (n: Node): string =>
-		n.nodeType === 3 ? `the text ${JSON.stringify((n as Text).data)}` : n.nodeType === 8 ? `the comment <!--${(n as Comment).data}-->` : `<${(n as Element).localName}>`;
+		n.nodeType === 3
+			? `the text ${JSON.stringify((n as Text).data)}`
+			: n.nodeType === 8
+				? `the comment <!--${(n as Comment).data}-->`
+				: `<${(n as Element).localName}>`;
 	const verify = (host: Element, k: string) => {
 		const want = check?.[k];
 		if (want === undefined) return;
@@ -268,7 +308,12 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		const diff = differ(tpl.content, host, `<${host.localName}>`);
 		if (!diff) return;
 		console.error(`[ogygia] the transform broke hydration markup: ${diff}`);
-		host.dispatchEvent(new CustomEvent('ogygia:restore-mismatch', { bubbles: true, detail: { host: host.localName, diff } }));
+		host.dispatchEvent(
+			new CustomEvent('ogygia:restore-mismatch', {
+				bubbles: true,
+				detail: { host: host.localName, diff }
+			})
+		);
 		log('mismatch', host, diff);
 	};
 
@@ -278,7 +323,13 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		const list = (W.__og_restore_log ??= []);
 		if (list.length >= 50) return;
 		const island = host.closest('ogygia-region')?.getAttribute('data-og-fp') ?? undefined;
-		list.push({ kind, host: host.localName, t: Math.round(performance.now()), ...(diff ? { diff: diff.slice(0, 300) } : {}), ...(island ? { island } : {}) });
+		list.push({
+			kind,
+			host: host.localName,
+			t: Math.round(performance.now()),
+			...(diff ? { diff: diff.slice(0, 300) } : {}),
+			...(island ? { island } : {})
+		});
 	};
 
 	// 1. stand-ins first: a Svelte child can be one (a block in the tree's `<p>`), and the children are
@@ -304,7 +355,9 @@ export function restore(root: Document | DocumentFragment | Element): number {
 		const keys = (host.getAttribute('og-shadow') ?? '').split(' ').filter(Boolean);
 		if (host.shadowRoot) {
 			// upgraded before the restore reached it: leave it as served, say so
-			host.dispatchEvent(new CustomEvent('ogygia:restore-late', { bubbles: true, detail: { host: k } }));
+			host.dispatchEvent(
+				new CustomEvent('ogygia:restore-late', { bubbles: true, detail: { host: k } })
+			);
 			log('late', host);
 			continue;
 		}
@@ -390,11 +443,21 @@ export function restore(root: Document | DocumentFragment | Element): number {
  *  sheet into it throws — which stopped every root after it from getting its sheets. A fragment root
  *  still out after 30 s never goes in (a morph took a copy of it, the hole left): dropped. */
 export function restore_adopt(): void {
-	const W = window as unknown as { __og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[]; __og_init?: ShadowRoot[] };
+	const W = window as unknown as {
+		__og_adopt?: { shadow: ShadowRoot; sheets: CSSStyleSheet[] }[];
+		__og_init?: ShadowRoot[];
+	};
 	const now = performance.now();
-	const waiting = (root: ShadowRoot & { __og_out?: number }) => now - (root.__og_out ??= now) < 30_000;
+	const waiting = (root: ShadowRoot & { __og_out?: number }) =>
+		now - (root.__og_out ??= now) < 30_000;
 	const where = (root: ShadowRoot): 'page' | 'later' | 'gone' =>
-		root.host.isConnected ? (root.host.ownerDocument === document ? 'page' : 'gone') : waiting(root) ? 'later' : 'gone';
+		root.host.isConnected
+			? root.host.ownerDocument === document
+				? 'page'
+				: 'gone'
+			: waiting(root)
+				? 'later'
+				: 'gone';
 	// first: roots attached outside the page get the page's registry, so what is inside them upgrades
 	// (a browser without scoped registries never nulls it, and has no `initialize`)
 	const bare = W.__og_init;
@@ -404,7 +467,11 @@ export function restore_adopt(): void {
 		for (const root of bare) {
 			const at = where(root);
 			if (at === 'later') left.push(root);
-			else if (at === 'page' && (root as ShadowRoot & { customElementRegistry?: unknown }).customElementRegistry === null) ce.initialize?.(root);
+			else if (
+				at === 'page' &&
+				(root as ShadowRoot & { customElementRegistry?: unknown }).customElementRegistry === null
+			)
+				ce.initialize?.(root);
 		}
 		W.__og_init = left;
 	}

@@ -177,9 +177,9 @@ test.describe('transform-level: region syntax + presets + errors', () => {
 		// --- lakes (wake: 'none') — portable lake wrapper ---
 		{
 			const r = run(wrap(`import Lake from './Lake.svelte' with { wake: 'none' };`, '<Lake />'));
-			const lake = (r?.islands as Array<{ kind?: string; wrapperSource?: string; lakes?: string[] }> | undefined)?.find(
-				(i) => i.kind === 'lake'
-			);
+			const lake = (
+				r?.islands as Array<{ kind?: string; wrapperSource?: string; lakes?: string[] }> | undefined
+			)?.find((i) => i.kind === 'lake');
 			check(
 				'lake binding -> LakeRegion wrapper source',
 				!!lake?.wrapperSource && LAKE_WRAPPER_RE.test(lake.wrapperSource)

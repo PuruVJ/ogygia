@@ -19,7 +19,9 @@ import { capability_expired, renewal_url } from '../src/runtime/region-endpoint-
 
 describe('shared_cache_lifetime: how long shared caches may serve the document', () => {
 	it('s-maxage + stale-while-revalidate (the field header: 8 days)', () => {
-		expect(shared_cache_lifetime('public, s-maxage=604800, stale-while-revalidate=86400')).toBe(691200);
+		expect(shared_cache_lifetime('public, s-maxage=604800, stale-while-revalidate=86400')).toBe(
+			691200
+		);
 	});
 	it('s-maxage wins over max-age for shared caches', () => {
 		expect(shared_cache_lifetime('max-age=60, s-maxage=3600')).toBe(3600);
@@ -50,7 +52,9 @@ describe('shared_cache_lifetime: how long shared caches may serve the document',
 describe('mint_ttl_sec: the capability lifetime a hole is signed for', () => {
 	const region_ttl = 3600;
 	it('a stored page (prerender / freeze) is prerender-grade, whatever else', () => {
-		expect(mint_ttl_sec({ stored: true, session: 'abc', shared: 0, region_ttl })).toBe(PRERENDER_REGION_TTL_SEC);
+		expect(mint_ttl_sec({ stored: true, session: 'abc', shared: 0, region_ttl })).toBe(
+			PRERENDER_REGION_TTL_SEC
+		);
 	});
 	it('an anonymous hole on a shared-cached document: twice the cache life', () => {
 		const ttl = mint_ttl_sec({ stored: false, session: '', shared: 691200, region_ttl });
@@ -61,10 +65,14 @@ describe('mint_ttl_sec: the capability lifetime a hole is signed for', () => {
 	});
 	it('never shorter than regions.ttl, never longer than prerender-grade', () => {
 		expect(mint_ttl_sec({ stored: false, session: '', shared: 60, region_ttl })).toBe(region_ttl);
-		expect(mint_ttl_sec({ stored: false, session: '', shared: 1e10, region_ttl })).toBe(PRERENDER_REGION_TTL_SEC);
+		expect(mint_ttl_sec({ stored: false, session: '', shared: 1e10, region_ttl })).toBe(
+			PRERENDER_REGION_TTL_SEC
+		);
 	});
 	it('a session-bound hole is never extended (its document is the visitor’s own)', () => {
-		expect(mint_ttl_sec({ stored: false, session: 'sess', shared: 691200, region_ttl })).toBe(region_ttl);
+		expect(mint_ttl_sec({ stored: false, session: 'sess', shared: 691200, region_ttl })).toBe(
+			region_ttl
+		);
 	});
 	it('no shared-cache life (or unknown): regions.ttl, unchanged', () => {
 		expect(mint_ttl_sec({ stored: false, session: '', shared: 0, region_ttl })).toBe(region_ttl);
@@ -86,7 +94,8 @@ describe('renewable_expiry: the renewal gate’s time rule', () => {
 		expect(renewable_expiry(String(now - 9 * 24 * 3600), now)).toBe(false);
 	});
 	it('only a plain integer (no sign, fraction, exponent or padding)', () => {
-		for (const bad of ['', '-1', '1.5', '1e9', ' 1', '0x10', '9'.repeat(13)]) expect(renewable_expiry(bad, now)).toBe(false);
+		for (const bad of ['', '-1', '1.5', '1e9', ' 1', '0x10', '9'.repeat(13)])
+			expect(renewable_expiry(bad, now)).toBe(false);
 	});
 	it('the app’s window (regions.renewWindow): 30 days renews a 9-day-old capability, not a 31-day one', () => {
 		const month = 30 * 24 * 3600;
@@ -109,9 +118,9 @@ describe('the per-request seam', () => {
 		expect(document_shared_lifetime(null)).toBe(0);
 	});
 	it('lives on ONE globalThis slot, so every copy of the module shares it', () => {
-		const slot = (globalThis as unknown as Record<symbol, { by_request: WeakMap<Request, number> }>)[
-			Symbol.for('ogygia.shared-cache')
-		];
+		const slot = (
+			globalThis as unknown as Record<symbol, { by_request: WeakMap<Request, number> }>
+		)[Symbol.for('ogygia.shared-cache')];
 		const r = new Request('http://x/r');
 		slot.by_request.set(r, 42); // what another evaluation of the module would write
 		expect(document_shared_lifetime(r)).toBe(42);

@@ -48,8 +48,11 @@ async function flatten_plugins(option: PluginOption): Promise<{ name?: string; a
 
 /** Kit's options off its setup plugin: Kit 3's at the top of its config, Kit 2's under `kit`. */
 async function kit_options_from_plugins(plugins: PluginOption): Promise<KitOptions | null> {
-	const setup = (await flatten_plugins(plugins)).find((p) => p.name === 'vite-plugin-sveltekit-setup');
-	const options = (setup?.api as { options?: KitOptions & { kit?: KitOptions } } | undefined)?.options;
+	const setup = (await flatten_plugins(plugins)).find(
+		(p) => p.name === 'vite-plugin-sveltekit-setup'
+	);
+	const options = (setup?.api as { options?: KitOptions & { kit?: KitOptions } } | undefined)
+		?.options;
 	if (!options) return null;
 	return options.kit ?? options;
 }
@@ -72,7 +75,8 @@ async function kit_options_from_file(root: string): Promise<KitOptions | null> {
 /** Resolve `{ routes_dir, out_dir }` for `root` from its Kit config (defaults when absent or
  *  unreadable) and cache it for the compiler. `plugins`: the Vite config's plugin list. */
 export async function load_kit_dirs(root: string, plugins?: PluginOption): Promise<KitDirs> {
-	const kit: KitOptions = (await kit_options_from_plugins(plugins)) ?? (await kit_options_from_file(root)) ?? {};
+	const kit: KitOptions =
+		(await kit_options_from_plugins(plugins)) ?? (await kit_options_from_file(root)) ?? {};
 	const dirs: KitDirs = {
 		routes_dir: path.resolve(root, kit.files?.routes ?? DEFAULT_KIT_DIRS.routes),
 		out_dir: path.resolve(root, kit.outDir ?? DEFAULT_KIT_DIRS.out)

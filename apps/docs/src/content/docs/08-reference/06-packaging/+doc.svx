@@ -67,9 +67,9 @@ Declare the paths that carry them, in your own `package.json`:
 }
 ```
 
-The field operates like the `"files"` of npm: a bare directory includes all under it, globs are fine, and each path must stay inside the package. That is the full authoring surface. The consumer configures **nothing**. Their ogygia plugin reads the declarations of their direct dependencies, and gives your paths full app-source treatment. They are scanned and compiled like the own `src/` of the app (`.svelte` *and* `.ts`; thus the marked imports of a shipped route table operate). They are kept un-external on the server, and kept out of the dev prebundle.
+The field operates like the `"files"` of npm: a bare directory includes all under it, globs are fine, and each path must stay inside the package. That is the full authoring surface. The consumer configures **nothing**. Their ogygia plugin reads the declarations of their direct dependencies, and gives your paths full app-source treatment. They are scanned and compiled like the own `src/` of the app (`.svelte` _and_ `.ts`; thus the marked imports of a shipped route table operate). They are kept un-external on the server, and kept out of the dev prebundle.
 
-Only declared packages are scanned, and only their declared paths. There is no blind `node_modules` walk. A dependency that uses marks *without* a declaration gets a loud build warning, not silently dead islands.
+Only declared packages are scanned, and only their declared paths. There is no blind `node_modules` walk. A dependency that uses marks _without_ a declaration gets a loud build warning, not silently dead islands.
 
 Rules for declared paths:
 
@@ -100,7 +100,7 @@ All above is for packages that ship plain components. The moment a package impor
 
 **ogygia can never be bundled into a library. It is an external, in the same category as `$app/*`.** The `ogygia` entry points resolve through virtual modules that exist only inside the Vite pipeline of the final app. And the runtime keeps module-level registries that must be a singleton per app. A lib-mode build must leave the import specifier intact. (An `ogygia.files` package that ships raw source satisfies this by construction: the specifiers reach the consumer untouched. The rule bites when a build step **bundles**.)
 
-This propagates further than people expect in a monorepo. When your lib builds **bundle** workspace dependencies (Vite lib mode does, by default), then a single `import { setContext } from 'ogygia'` in one shared package surfaces in the bundle graph of *each* package that depends on it. Each of those builds now needs `'ogygia'` in its `external` list too, although none of them import ogygia themselves. Two ways to hold this:
+This propagates further than people expect in a monorepo. When your lib builds **bundle** workspace dependencies (Vite lib mode does, by default), then a single `import { setContext } from 'ogygia'` in one shared package surfaces in the bundle graph of _each_ package that depends on it. Each of those builds now needs `'ogygia'` in its `external` list too, although none of them import ogygia themselves. Two ways to hold this:
 
 - **Enumerate**: add `'ogygia'` next to your existing `$app`/`$env` externals, in the config of each affected package. Correct, but repetitive.
 - **Externalize all bare imports** (the library-build convention). That covers ogygia, `$app/*`, `$env/*`, and all else at the same time:

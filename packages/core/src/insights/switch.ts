@@ -67,14 +67,22 @@ export function lean_in(cookies: string): boolean {
 /** Lean testing in this browser: the cookie, or the URL param (false off the browser). */
 export function testing_lean(): boolean {
 	try {
-		return lean_in(document.cookie) || new URL(location.href).searchParams.get(TESTING_PARAM) === TESTING_LEAN;
+		return (
+			lean_in(document.cookie) ||
+			new URL(location.href).searchParams.get(TESTING_PARAM) === TESTING_LEAN
+		);
 	} catch {
 		return false;
 	}
 }
 
 /** The `Set-Cookie`-shaped attributes the switch is written with (browser and server alike). */
-export const SWITCH_COOKIE_OPTIONS: { path: string; maxAge: number; sameSite: 'lax'; httpOnly: boolean } = { path: '/', maxAge: MAX_AGE, sameSite: 'lax' as const, httpOnly: false };
+export const SWITCH_COOKIE_OPTIONS: {
+	path: string;
+	maxAge: number;
+	sameSite: 'lax';
+	httpOnly: boolean;
+} = { path: '/', maxAge: MAX_AGE, sameSite: 'lax' as const, httpOnly: false };
 
 /** Is it on in this browser (false off the browser, or with cookies blocked). */
 export function devtools_switched_on(): boolean {

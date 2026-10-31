@@ -9,5 +9,12 @@
 {#snippet fallback()}<p data-hole-fallback>loading</p>{/snippet}
 
 <div data-shell>
-	<Region __mode="server" __entry="hole-kit" __component={Counter} __props={{ start: 1 }} __defer="load" ogygiaFallback={fallback} />
+	<Region
+		__mode="server"
+		__entry="hole-kit"
+		__component={Counter}
+		__props={{ start: 1 }}
+		__defer="load"
+		ogygiaFallback={fallback}
+	/>
 </div>

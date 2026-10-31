@@ -10,7 +10,7 @@ related:
 `markdown()` compiles `.svx` / `.md` with an opinionated dialect on top of CommonMark: admonition containers, markdown-native tabs, a fence pipeline with pluggable stages. Authors write **zero imports**. When a page uses a tab group, the compiler injects the components into the module scope of that page. All content on this page is rendered by the dialect that it documents.
 
 ::: tip When to use
-This page is for people who *write* content. To wire `markdown()` into your app, see [Content collections](/docs/content/collections). For the `code()` macro, which renders snippets from components, see [code](/docs/macros/code).
+This page is for people who _write_ content. To wire `markdown()` into your app, see [Content collections](/docs/content/collections). For the `code()` macro, which renders snippets from components, see [code](/docs/macros/code).
 :::
 
 ## Containers
@@ -103,7 +103,7 @@ There are two dialects for "change this code" prose, shipped as fence-pipeline t
 +++ let { count } = $props();
 ```
 
-**Inline**: `+++added+++` / `---removed---` wraps a span *inside* a line. This is the dialect of svelte.dev, and it composes with twoslash:
+**Inline**: `+++added+++` / `---removed---` wraps a span _inside_ a line. This is the dialect of svelte.dev, and it composes with twoslash:
 
 ````md
 ```js

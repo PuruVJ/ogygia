@@ -116,26 +116,26 @@ How it stays acyclic (v1's `$infer` needed a hand-written prop-erasure cast to e
 
 ## The Kit ↔ v2 dictionary
 
-| Kit | v2 | Notes |
-| --- | --- | --- |
-| `src/routes/` tree | one `routes({...})` table | same `[param]` / `[...rest]` / `[[opt]]` grammar, same specificity sort |
-| `+page.svelte` | first arg of `page()` | a plain Svelte component; props typed via `App['/path']` |
-| `+page.server.ts` | second arg of `page()` | ALWAYS an object: `{ load?, actions? }` — the file, as an object |
-| `+layout.svelte` (+ load) | `layout(name, Component, { load?, error? })` | wraps a sub-table; component takes `{ data, children }` typed `App['(name)']` |
-| `await parent()` | components: just read the merged `data`; loads: `await parent_load(c)` | typed, memoized; sequences only where you await |
-| `page.data` | ≡ the leaf page's merged `data` | see the data law |
-| `+error.svelte` | `{ error: Component }` on `layout()` / `routes()` | nearest boundary; renders inside surviving chrome |
-| `+layout@` reset | placement | put the route outside the wrap |
-| `(group)` | the layout NAME (`App['(name)']`) + which table you spread into | Kit's paren spelling kept on purpose |
-| `+server.ts` | `get(fn)` / `.post(fn)` entries | same table — the table is the sitemap |
-| form actions / `form` prop | `actions:` beside `load` | `?/name` kept; `fail()` → typed `form` |
-| `throw redirect()` / `error()` | same names, from `'ogygia/router'` | loads, actions, handlers |
-| `./$types` | `App['/path']` | one exported type map; no codegen |
-| `$app/state` `page` | works | SSR: `document()` establishes page context; client: seed + shims (shipped) |
-| `$app/navigation` | works | goto / beforeNavigate / afterNavigate / preloadData ride ogygia's SPA router |
-| `depends` + `invalidate` | `invalidateAll()` re-runs the branch's loads + refreshes the seed | targeted `invalidate(load)`: see Open |
-| `entries` / prerender | derived `app.entries` / `app.prerender` | the MOUNT re-exports them (see Ownership) |
-| `<svelte:head>` | unchanged | components own their head; `document()` hoists (shipped) |
+| Kit                            | v2                                                                     | Notes                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/routes/` tree             | one `routes({...})` table                                              | same `[param]` / `[...rest]` / `[[opt]]` grammar, same specificity sort       |
+| `+page.svelte`                 | first arg of `page()`                                                  | a plain Svelte component; props typed via `App['/path']`                      |
+| `+page.server.ts`              | second arg of `page()`                                                 | ALWAYS an object: `{ load?, actions? }` — the file, as an object              |
+| `+layout.svelte` (+ load)      | `layout(name, Component, { load?, error? })`                           | wraps a sub-table; component takes `{ data, children }` typed `App['(name)']` |
+| `await parent()`               | components: just read the merged `data`; loads: `await parent_load(c)` | typed, memoized; sequences only where you await                               |
+| `page.data`                    | ≡ the leaf page's merged `data`                                        | see the data law                                                              |
+| `+error.svelte`                | `{ error: Component }` on `layout()` / `routes()`                      | nearest boundary; renders inside surviving chrome                             |
+| `+layout@` reset               | placement                                                              | put the route outside the wrap                                                |
+| `(group)`                      | the layout NAME (`App['(name)']`) + which table you spread into        | Kit's paren spelling kept on purpose                                          |
+| `+server.ts`                   | `get(fn)` / `.post(fn)` entries                                        | same table — the table is the sitemap                                         |
+| form actions / `form` prop     | `actions:` beside `load`                                               | `?/name` kept; `fail()` → typed `form`                                        |
+| `throw redirect()` / `error()` | same names, from `'ogygia/router'`                                     | loads, actions, handlers                                                      |
+| `./$types`                     | `App['/path']`                                                         | one exported type map; no codegen                                             |
+| `$app/state` `page`            | works                                                                  | SSR: `document()` establishes page context; client: seed + shims (shipped)    |
+| `$app/navigation`              | works                                                                  | goto / beforeNavigate / afterNavigate / preloadData ride ogygia's SPA router  |
+| `depends` + `invalidate`       | `invalidateAll()` re-runs the branch's loads + refreshes the seed      | targeted `invalidate(load)`: see Open                                         |
+| `entries` / prerender          | derived `app.entries` / `app.prerender`                                | the MOUNT re-exports them (see Ownership)                                     |
+| `<svelte:head>`                | unchanged                                                              | components own their head; `document()` hoists (shipped)                      |
 
 ## Loads — the whole data story
 
@@ -160,7 +160,7 @@ already ran concurrently; types mirror it exactly (see Typing).
 
 `page.data` (the `$app/state` observable) IS the leaf page's merged `data` — one merge, one
 truth, identical to Kit. Ad-hoc props passed without a load never enter `data` or `page.data`:
-*the data is what the loads loaded.* Inside LOAD LOGIC, sharing stays explicit — `await
+_the data is what the loads loaded._ Inside LOAD LOGIC, sharing stays explicit — `await
 session_load(c)` when a load needs the value; components never need it, they read the merge.
 Typing posture matches Kit: precise merged types at the component prop, loose augmentable global
 at `page.data`.
@@ -204,24 +204,24 @@ Universal loads need no home — csr=false deletes the reason they exist.
 
 ## Kit surface coverage audit (from @sveltejs/kit 2.70 types + docs)
 
-| Kit surface | v2 | Status |
-| --- | --- | --- |
-| `+page.svelte` `data` / `form` props, `<svelte:head>` | `App['/path']` props; head hoisting shipped | covered |
-| `+page.svelte` `snapshot` | nearest concepts: form-continuity + `keep` | parked |
-| `+page.ts` universal `load` | one load kind (server-run) — client re-runs don't exist | n/a by architecture |
-| `ssr` / `csr` options | fixed by the host page | n/a |
-| `prerender` / `entries` | derived; catchall mount re-exports | covered (bucket B) |
-| `trailingSlash` | `slash:` option | covered |
-| adapter `config` | mount-level, one per subtree | n/a (bucket B) |
-| `+page.server.ts` `load` / `actions` | the core / `page()` second arg | covered |
-| `fail()` | same name → `form` | covered |
-| ctx: `params`/`url`/`route.id`/`request`/`cookies` | on `c` | covered |
-| ctx: `locals`/`platform`/`getClientAddress`/`tracing`/`setHeaders` | pass-through / Response-owned | covered |
-| ctx: `fetch` | `c.fetch = event.fetch` (cookie-forwarding is server-side already) | covered |
-| ctx: `parent` / `depends` / `invalidate` | `await load(c)` / fn-is-the-key / `invalidateAll()` | covered (better) |
-| ctx: `untrack`, `isDataRequest`, `isSubRequest`, `isRemoteRequest` | exist only because Kit's client re-runs loads | n/a |
-| streaming (nested promises in `data`) | deferred regions; promise-streaming needs its own pass | parked |
-| `throw redirect()`/`error()`, `isHttpError` etc. | same names from `'ogygia/router'` | covered |
+| Kit surface                                                        | v2                                                                 | Status              |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------- |
+| `+page.svelte` `data` / `form` props, `<svelte:head>`              | `App['/path']` props; head hoisting shipped                        | covered             |
+| `+page.svelte` `snapshot`                                          | nearest concepts: form-continuity + `keep`                         | parked              |
+| `+page.ts` universal `load`                                        | one load kind (server-run) — client re-runs don't exist            | n/a by architecture |
+| `ssr` / `csr` options                                              | fixed by the host page                                             | n/a                 |
+| `prerender` / `entries`                                            | derived; catchall mount re-exports                                 | covered (bucket B)  |
+| `trailingSlash`                                                    | `slash:` option                                                    | covered             |
+| adapter `config`                                                   | mount-level, one per subtree                                       | n/a (bucket B)      |
+| `+page.server.ts` `load` / `actions`                               | the core / `page()` second arg                                     | covered             |
+| `fail()`                                                           | same name → `form`                                                 | covered             |
+| ctx: `params`/`url`/`route.id`/`request`/`cookies`                 | on `c`                                                             | covered             |
+| ctx: `locals`/`platform`/`getClientAddress`/`tracing`/`setHeaders` | pass-through / Response-owned                                      | covered             |
+| ctx: `fetch`                                                       | `c.fetch = event.fetch` (cookie-forwarding is server-side already) | covered             |
+| ctx: `parent` / `depends` / `invalidate`                           | `await load(c)` / fn-is-the-key / `invalidateAll()`                | covered (better)    |
+| ctx: `untrack`, `isDataRequest`, `isSubRequest`, `isRemoteRequest` | exist only because Kit's client re-runs loads                      | n/a                 |
+| streaming (nested promises in `data`)                              | deferred regions; promise-streaming needs its own pass             | parked              |
+| `throw redirect()`/`error()`, `isHttpError` etc.                   | same names from `'ogygia/router'`                                  | covered             |
 
 Reading: everything `+page.server.ts` expresses is ours at full fidelity; `+page.ts` page-options
 are mostly the mount's business; Kit-client behaviors either map onto the SPA router or stopped

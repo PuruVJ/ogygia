@@ -8,9 +8,21 @@ import { beacon_page, hole_request_times, is_headless } from '@ogygia/core/inter
 import { tool_fetch } from '@ogygia/core/internal/instruments';
 import { snapshot } from '@ogygia/core/events';
 import { page_ledger } from './ledger-dom.ts';
-import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.ts';
+import {
+	all_regions,
+	region_name,
+	region_names,
+	region_props_sidecar,
+	region_transitive
+} from './regions.ts';
 import { fp_compare, type FpDrift, type KeptIsland } from '@ogygia/core/insights';
-import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.ts';
+import {
+	leftover_state,
+	owned_leftovers,
+	owned_scroll_listeners,
+	scroll_listeners,
+	unload_listeners
+} from './leftovers.ts';
 
 const FPS_KEY = 'ogygia:devtools:fps';
 /** props text kept per island (a longer one is compared by its fingerprint alone) */
@@ -29,7 +41,11 @@ function fp_drift(nav = 0): FpDrift[] {
 	for (const r of all_regions()) {
 		if (r.kind !== 'island' || !r.entry || !r.fp || r.rides) continue;
 		const text = region_props_sidecar(r.el);
-		now.push({ entry: r.entry, fp: r.fp, ...(text !== null && text.length <= FPS_PROPS_CAP ? { props: text } : {}) });
+		now.push({
+			entry: r.entry,
+			fp: r.fp,
+			...(text !== null && text.length <= FPS_PROPS_CAP ? { props: text } : {})
+		});
 	}
 	let store: Record<string, KeptIsland[]> = {};
 	try {
@@ -49,7 +65,28 @@ function fp_drift(nav = 0): FpDrift[] {
 	fps_memo = { at, drift };
 	return drift;
 }
-import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from '@ogygia/core/insights';
+import {
+	analyze_page,
+	browser_of,
+	defer_keys,
+	prebundled_names,
+	dev_compile_ms,
+	vital_parts,
+	type HeldOpen,
+	type PartedVital,
+	type VitalPart,
+	type Failure,
+	type HoleBatch,
+	type HoleFailure,
+	type RestoreEvent,
+	type HoleWait,
+	type InteractionCpuInput,
+	type IslandCode,
+	type PageInput,
+	type PageReport,
+	type RegionFact,
+	type ServerProfileBrief
+} from '@ogygia/core/insights';
 import { profile_for } from './profile-store.ts';
 import type { BeaconPage } from '@ogygia/core/internal/instruments';
 import { analyze_cpu, is_trace, type CpuSummary } from '@ogygia/core/insights';
@@ -156,7 +193,8 @@ function shown_under_media(el: Element): string | null {
 			hider = c;
 			break;
 		}
-	for (let up: Element | null = el; !hider && up && up !== document.body; up = up.parentElement) if (none(up)) hider = up;
+	for (let up: Element | null = el; !hider && up && up !== document.body; up = up.parentElement)
+		if (none(up)) hider = up;
 	if (!hider) return null;
 	const target = hider;
 	const matches = (sel: string) => {
@@ -248,7 +286,7 @@ function first_child_top(el: Element): number {
  *  and an earlier one only while its region is still on the page and still not awake (a kept
  *  island). Every visit to a page with a broken island failed it again: without this, the tab listed
  *  one failure per visit, by fingerprint, on pages that do not have the island at all. */
-export function failures(since: number =last_nav()?.t ?? -Infinity): Failure[] {
+export function failures(since: number = last_nav()?.t ?? -Infinity): Failure[] {
 	const out: Failure[] = [];
 	const ok = new Set<string>();
 	const seen = new Set<string>();
@@ -260,7 +298,16 @@ export function failures(since: number =last_nav()?.t ?? -Infinity): Failure[] {
 		else if (e.name === 'region.hydrate.failed' && !(e.fp && ok.has(e.fp))) {
 			const key = e.fp ?? e.message;
 			if (seen.has(key)) continue;
-			if (e.t < since && !(e.fp && document.querySelector(`ogygia-region[data-og-fp="${CSS.escape(e.fp)}"]:not([data-hydrated])`))) continue;
+			if (
+				e.t < since &&
+				!(
+					e.fp &&
+					document.querySelector(
+						`ogygia-region[data-og-fp="${CSS.escape(e.fp)}"]:not([data-hydrated])`
+					)
+				)
+			)
+				continue;
 			seen.add(key);
 			// its wake (the start event before it): the span it was loading, holding the others' turns
 			let start: number | undefined;
@@ -293,7 +340,14 @@ function island_code(): IslandCode[] {
 		seen.add(r.entry);
 		const t = region_transitive(r.entry);
 		if (!t?.top?.length && !t?.barrels?.length && !t?.hazards?.length) continue;
-		out.push({ fp: r.fp ?? undefined, name: region_name(r.entry), bytes: t.bytes, top: t.top ?? [], barrels: t.barrels ?? [], ...(t.hazards?.length ? { hazards: t.hazards } : {}) });
+		out.push({
+			fp: r.fp ?? undefined,
+			name: region_name(r.entry),
+			bytes: t.bytes,
+			top: t.top ?? [],
+			barrels: t.barrels ?? [],
+			...(t.hazards?.length ? { hazards: t.hazards } : {})
+		});
 	}
 	return out;
 }
@@ -309,7 +363,9 @@ export function hole_waits(since: number = last_nav()?.t ?? -Infinity, fcp = 0):
 		const key = e.endpoint ?? e.entry ?? '';
 		if (seen.has(key)) continue;
 		seen.add(key);
-		const el = e.endpoint ? document.querySelector(`ogygia-region[endpoint="${CSS.escape(e.endpoint)}"]`) : null;
+		const el = e.endpoint
+			? document.querySelector(`ogygia-region[endpoint="${CSS.escape(e.endpoint)}"]`)
+			: null;
 		let id = '';
 		try {
 			id = e.endpoint ? (new URL(e.endpoint, location.href).searchParams.get('id') ?? '') : '';
@@ -324,7 +380,11 @@ export function hole_waits(since: number = last_nav()?.t ?? -Infinity, fcp = 0):
 		// its request as the browser timed it: splits the wait into before it left, and the server. A
 		// batched hole has no request of its own: the batch's start, and its own part's landing
 		const part = e.endpoint ? batched.get(e.endpoint) : undefined;
-		const times = part ? { left: part.left, first: part.at, end: part.at } : e.endpoint ? hole_request_times(e.endpoint, e.t) : null;
+		const times = part
+			? { left: part.left, first: part.at, end: part.at }
+			: e.endpoint
+				? hole_request_times(e.endpoint, e.t)
+				: null;
 		out.push({
 			name: (id && region_names()[id]) || (e.entry ? region_name(e.entry) : 'a hole'),
 			wait_ms: Math.max(0, Math.round(e.t - start)),
@@ -332,8 +392,12 @@ export function hole_waits(since: number = last_nav()?.t ?? -Infinity, fcp = 0):
 			...(e.endpoint ? { endpoint: e.endpoint } : {}),
 			shown_at: Math.round(start),
 			...(times ? { left_at: times.left, first_at: times.first, end_at: times.end } : {}),
-			...(times && 'render' in times && times.render !== undefined ? { server_ms: times.render } : {}),
-			...(times && 'queue' in times && times.queue !== undefined ? { server_queue_ms: times.queue } : {}),
+			...(times && 'render' in times && times.render !== undefined
+				? { server_ms: times.render }
+				: {}),
+			...(times && 'queue' in times && times.queue !== undefined
+				? { server_queue_ms: times.queue }
+				: {}),
 			...(part ? { batch_size: part.size } : {})
 		});
 	}
@@ -363,7 +427,10 @@ function batch_request_start(endpoint: string, sent: number): number {
 	try {
 		const u = new URL(endpoint, location.href);
 		let best: PerformanceResourceTiming | undefined;
-		for (const r of performance.getEntriesByName(u.origin + u.pathname, 'resource') as PerformanceResourceTiming[])
+		for (const r of performance.getEntriesByName(
+			u.origin + u.pathname,
+			'resource'
+		) as PerformanceResourceTiming[])
 			if (r.startTime >= sent - 5 && (!best || r.startTime < best.startTime)) best = r;
 		if (best) return best.requestStart || best.startTime;
 	} catch {
@@ -373,7 +440,7 @@ function batch_request_start(endpoint: string, sent: number): number {
 }
 
 /** Batch requests that carried fewer holes than they were sent for (since `since`). */
-export function hole_batches(since: number =last_nav()?.t ?? -Infinity): HoleBatch[] {
+export function hole_batches(since: number = last_nav()?.t ?? -Infinity): HoleBatch[] {
 	const out: HoleBatch[] = [];
 	const sent = new Map<number, string[]>();
 	for (const e of snapshot()) {
@@ -389,7 +456,14 @@ export function hole_batches(since: number =last_nav()?.t ?? -Infinity): HoleBat
 				}
 				return (id && region_names()[id]) || 'a hole';
 			});
-			out.push({ sent: e.sent, delivered: e.delivered, status: e.status, ...(e.refused ? { refused: e.refused } : {}), ...(e.final_url ? { final_url: e.final_url } : {}), names });
+			out.push({
+				sent: e.sent,
+				delivered: e.delivered,
+				status: e.status,
+				...(e.refused ? { refused: e.refused } : {}),
+				...(e.final_url ? { final_url: e.final_url } : {}),
+				names
+			});
 		}
 	}
 	return out;
@@ -397,7 +471,7 @@ export function hole_batches(since: number =last_nav()?.t ?? -Infinity): HoleBat
 
 /** Holes whose answer never came: the last failure of each (no retry after it), unless an answer
  *  arrived since. In a build the runtime says nothing and the page just keeps the fallback. */
-export function hole_failures(since: number =last_nav()?.t ?? -Infinity): HoleFailure[] {
+export function hole_failures(since: number = last_nav()?.t ?? -Infinity): HoleFailure[] {
 	const out: HoleFailure[] = [];
 	const answered = new Set<string>();
 	const seen = new Set<string>();
@@ -410,7 +484,11 @@ export function hole_failures(since: number =last_nav()?.t ?? -Infinity): HoleFa
 		else if (e.final && !answered.has(key) && !seen.has(key) && e.t >= since) {
 			seen.add(key);
 			// a hole has no entry: its endpoint names the component (`?id=<island id>`)
-			const el = e.endpoint ? document.querySelector(`ogygia-region[endpoint="${CSS.escape(e.endpoint)}"]`) : e.entry ? document.querySelector(`ogygia-region[entry="${CSS.escape(e.entry)}"]`) : null;
+			const el = e.endpoint
+				? document.querySelector(`ogygia-region[endpoint="${CSS.escape(e.endpoint)}"]`)
+				: e.entry
+					? document.querySelector(`ogygia-region[entry="${CSS.escape(e.entry)}"]`)
+					: null;
 			let id = '';
 			try {
 				id = e.endpoint ? (new URL(e.endpoint, location.href).searchParams.get('id') ?? '') : '';
@@ -441,7 +519,11 @@ export function cpu_of(page: BeaconPage, trace: unknown): CpuSummary | null {
 	const hit = cpu_memo.get(trace);
 	if (hit && hit.n === n) return hit.out;
 	// (to the end of each island's effects: Svelte runs them right after `hydrate()`)
-	const windows = page.islands.map((i) => ({ fp: i.fp, from: i.turn ?? i.loaded, to: Math.max(i.done, i.fx ?? 0) }));
+	const windows = page.islands.map((i) => ({
+		fp: i.fp,
+		from: i.turn ?? i.loaded,
+		to: Math.max(i.done, i.fx ?? 0)
+	}));
 	const out = analyze_cpu(trace, windows, page.longtasks, location.href);
 	cpu_memo.set(trace, { n, out });
 	return out;
@@ -451,11 +533,19 @@ export function cpu_of(page: BeaconPage, trace: unknown): CpuSummary | null {
 /** This document's streamed promises, each by its `page.data` key (the seed) and when its resolve
  *  arrived (the inline bootstrap's stamp): what held the document open. Null: nothing streamed. */
 export function held_open(): HeldOpen | null {
-	const reg = (globalThis as unknown as Record<symbol, { t?: Record<number, number> } | undefined>)[PAGE_DEFER_REGISTRY_KEY];
+	const reg = (globalThis as unknown as Record<symbol, { t?: Record<number, number> } | undefined>)[
+		PAGE_DEFER_REGISTRY_KEY
+	];
 	const t = reg?.t;
 	if (!t) return null;
-	const names = defer_keys(document.querySelector(PAGE_SEED_SELECTOR)?.textContent ?? '', PAGE_DEFER_KEY);
-	const keys = Object.entries(t).map(([id, at]) => ({ key: names.get(Number(id)) ?? null, at: Math.round(at) }));
+	const names = defer_keys(
+		document.querySelector(PAGE_SEED_SELECTOR)?.textContent ?? '',
+		PAGE_DEFER_KEY
+	);
+	const keys = Object.entries(t).map(([id, at]) => ({
+		key: names.get(Number(id)) ?? null,
+		at: Math.round(at)
+	}));
 	return keys.length ? { side: 'browser', keys: keys.sort((a, b) => a.at - b.at) } : null;
 }
 
@@ -480,8 +570,12 @@ export function last_nav(): { to: string; t: number } | null {
 	// router's own address moves are not one — it pushes the new address before it fetches, so a
 	// navigation it then hands to the browser (held back by a test) leaves a move behind with no swap
 	const path = (to: string) => to.split('?')[0];
-	const starts = ev.filter((e) => e.name === 'nav.start' && e.realm === 'client').map((e) => ({ t: e.t, path: path((e as { to: string }).to) }));
-	const moved = url_moves.filter((m) => !starts.some((s) => s.t <= m.t && s.path === path(m.to))).at(-1);
+	const starts = ev
+		.filter((e) => e.name === 'nav.start' && e.realm === 'client')
+		.map((e) => ({ t: e.t, path: path((e as { to: string }).to) }));
+	const moved = url_moves
+		.filter((m) => !starts.some((s) => s.t <= m.t && s.path === path(m.to)))
+		.at(-1);
 	if (moved && (!own || moved.t > own.t)) return moved;
 	return own;
 }
@@ -514,9 +608,13 @@ function watch_url(): void {
  * vitals stay the document's (a soft navigation paints nothing new the browser reports).
  */
 export function since_nav(page: BeaconPage, t: number): PageInput {
-	const shift = <T extends { t: number }>(xs: T[]) => xs.filter((x) => x.t >= t).map((x) => ({ ...x, t: x.t - t }));
+	const shift = <T extends { t: number }>(xs: T[]) =>
+		xs.filter((x) => x.t >= t).map((x) => ({ ...x, t: x.t - t }));
 	const visit = page.visit as PageInput['visit'] | null;
-	const interaction = visit?.interaction && visit.interaction.t >= t ? { ...visit.interaction, t: visit.interaction.t - t } : undefined;
+	const interaction =
+		visit?.interaction && visit.interaction.t >= t
+			? { ...visit.interaction, t: visit.interaction.t - t }
+			: undefined;
 	return {
 		// (the vitals are the first page's: no finding about this page may lean on them)
 		vitals: {},
@@ -541,13 +639,34 @@ export function since_nav(page: BeaconPage, t: number): PageInput {
 					// the slowest interaction, when it happened on this page
 					interaction,
 					// the forced layouts of this page's time, on its clock like the islands
-					forced_layout: (visit.forced_layout ?? []).filter((f) => f.start >= t).map((f) => ({ ...f, start: f.start - t, end: f.end - t })),
-					scroll_jank: (visit.scroll_jank ?? []).filter((j) => j.start >= t).map((j) => ({ ...j, start: j.start - t })),
+					forced_layout: (visit.forced_layout ?? [])
+						.filter((f) => f.start >= t)
+						.map((f) => ({ ...f, start: f.start - t, end: f.end - t })),
+					scroll_jank: (visit.scroll_jank ?? [])
+						.filter((j) => j.start >= t)
+						.map((j) => ({ ...j, start: j.start - t })),
 					// (this page's navigation, on its clock like the islands: the one that brought it here)
-					navs: ((page.visit as PageInput['visit'])?.navs ?? []).filter((n) => n.t >= t - 1).map((n) => ({ ...n, t: n.t - t, fetched: n.fetched - t, styled: n.styled - t, swapped: n.swapped - t }))
+					navs: ((page.visit as PageInput['visit'])?.navs ?? [])
+						.filter((n) => n.t >= t - 1)
+						.map((n) => ({
+							...n,
+							t: n.t - t,
+							fetched: n.fetched - t,
+							styled: n.styled - t,
+							swapped: n.swapped - t
+						}))
 				}
 			: null,
-		islands: page.islands.filter((i) => i.t0 >= t).map((i) => ({ ...i, t0: i.t0 - t, loaded: i.loaded - t, done: i.done - t, ...(i.turn !== undefined ? { turn: i.turn - t } : {}), ...(i.fx !== undefined ? { fx: i.fx - t } : {}) })),
+		islands: page.islands
+			.filter((i) => i.t0 >= t)
+			.map((i) => ({
+				...i,
+				t0: i.t0 - t,
+				loaded: i.loaded - t,
+				done: i.done - t,
+				...(i.turn !== undefined ? { turn: i.turn - t } : {}),
+				...(i.fx !== undefined ? { fx: i.fx - t } : {})
+			})),
 		firsts: shift(page.firsts),
 		shifts: shift(page.shifts),
 		longtasks: shift(page.longtasks),
@@ -601,11 +720,15 @@ export function unmeasured(cpu_off?: string | null): string[] {
 	}
 	const out: string[] = [];
 	// (a wake that moved the layout is estimated instead, from each island's box before and after)
-	if (!types.includes('layout-shift')) out.push("layout shifts (CLS; a hydration that moved the layout is estimated from the island's box)");
+	if (!types.includes('layout-shift'))
+		out.push(
+			"layout shifts (CLS; a hydration that moved the layout is estimated from the island's box)"
+		);
 	if (!types.includes('largest-contentful-paint')) out.push('the largest paint (LCP)');
 	if (!types.includes('event')) out.push('interaction timing (INP, slow interactions)');
 	// (the beacon estimates the stalls from frames drawn late instead: said so)
-	if (!types.includes('longtask')) out.push('long tasks (the stalls are estimated from frames drawn late)');
+	if (!types.includes('longtask'))
+		out.push('long tasks (the stalls are estimated from frames drawn late)');
 	if (!types.includes('long-animation-frame')) out.push('which script held a frame');
 	if (cpu_off === 'unsupported') out.push('the main-thread CPU (the JS sampler)');
 	return out;
@@ -619,7 +742,9 @@ function interaction_cpu_of(page: BeaconPage): InteractionCpuInput | null {
 	// load trace, which holds it
 	let kept = page.cpu.traces.find((t) => t.label === 'interaction' && t.spans);
 	if (!kept) {
-		const i = page.visit?.interaction as { t: number; ms: number; delay: number; processing: number } | undefined;
+		const i = page.visit?.interaction as
+			| { t: number; ms: number; delay: number; processing: number }
+			| undefined;
 		const load = page.cpu.traces.find((t) => t.label === 'page load');
 		if (!i || i.ms < 200 || !load || i.t < load.from || i.t + i.ms > load.to) return null;
 		const at = i.t + i.delay;
@@ -635,7 +760,11 @@ function interaction_cpu_of(page: BeaconPage): InteractionCpuInput | null {
 		...(handler[1] - handler[0] >= MIN ? [{ fp: 'handler', from: handler[0], to: handler[1] }] : [])
 	];
 	const s = analyze_cpu(kept.trace, windows, [], location.href);
-	const out: InteractionCpuInput = { t, wait: s.islands.wait ?? null, handler: s.islands.handler ?? null };
+	const out: InteractionCpuInput = {
+		t,
+		wait: s.islands.wait ?? null,
+		handler: s.islands.handler ?? null
+	};
 	icpu_memo.set(kept.trace as object, out);
 	return interaction_lines(out);
 }
@@ -657,8 +786,14 @@ function interaction_lines(i: InteractionCpuInput): InteractionCpuInput {
 export function summary_lines(s: CpuSummary | null): CpuSummary | null {
 	if (!s) return s;
 	const islands: CpuSummary['islands'] = {};
-	for (const [fp, v] of Object.entries(s.islands)) islands[fp] = { ...v, top: with_source_lines(v.top).fns };
-	return { ...s, fns: with_source_lines(s.fns).fns, islands, outside: { ...s.outside, top: with_source_lines(s.outside.top).fns } };
+	for (const [fp, v] of Object.entries(s.islands))
+		islands[fp] = { ...v, top: with_source_lines(v.top).fns };
+	return {
+		...s,
+		fns: with_source_lines(s.fns).fns,
+		islands,
+		outside: { ...s.outside, top: with_source_lines(s.outside.top).fns }
+	};
 }
 
 /** THE PROFILER'S LAST RUN OF A PAGE, in brief: from the dock's profile store (the Profiler tab's
@@ -681,11 +816,22 @@ function server_brief(path: string): ServerProfileBrief | undefined {
 	const comp = [...p.components].sort((a, b) => b.self_ms - a.self_ms)[0];
 	// (the page's own Cache-Control, which only the server side sees: no-store keeps it out of the
 	// back/forward cache)
-	const no_store = p.cache_control && p.cache_control.toLowerCase().split(',').some((d) => d.trim() === 'no-store') ? p.cache_control : undefined;
+	const no_store =
+		p.cache_control &&
+		p.cache_control
+			.toLowerCase()
+			.split(',')
+			.some((d) => d.trim() === 'no-store')
+			? p.cache_control
+			: undefined;
 	return {
 		ago_min: Math.max(0, (Date.now() - p.at) / 60_000),
 		render_ms: p.render_ms,
-		top: said ? trim(said) : comp ? `${comp.name} (${Math.round(comp.self_ms)} ms of its own)` : null,
+		top: said
+			? trim(said)
+			: comp
+				? `${comp.name} (${Math.round(comp.self_ms)} ms of its own)`
+				: null,
 		calls: p.network?.count ?? 0,
 		calls_ms: p.network?.total_ms ?? 0,
 		...(no_store ? { no_store } : {}),
@@ -698,9 +844,16 @@ function server_brief(path: string): ServerProfileBrief | undefined {
  *  the browser's reasons (`notRestoredReasons`, where it gives them), the first 6. */
 function not_restored_reasons(): string[] {
 	try {
-		const n = performance.getEntriesByType('navigation')[0] as (PerformanceNavigationTiming & { notRestoredReasons?: { reasons?: { reason?: string }[] | null } | null }) | undefined;
+		const n = performance.getEntriesByType('navigation')[0] as
+			| (PerformanceNavigationTiming & {
+					notRestoredReasons?: { reasons?: { reason?: string }[] | null } | null;
+			  })
+			| undefined;
 		if (!n || n.type !== 'back_forward') return [];
-		return (n.notRestoredReasons?.reasons ?? []).map((r) => String(r?.reason ?? '')).filter(Boolean).slice(0, 6);
+		return (n.notRestoredReasons?.reasons ?? [])
+			.map((r) => String(r?.reason ?? ''))
+			.filter(Boolean)
+			.slice(0, 6);
 	} catch {
 		return [];
 	}
@@ -716,13 +869,15 @@ function island_of_file(url: string): { island?: string } {
 	if (!file) return {};
 	for (const r of all_regions()) {
 		const src = r.el.getAttribute('src');
-		if (r.entry && ((src && base(src) === file) || base(r.entry) === file)) return { island: region_name(r.entry) };
+		if (r.entry && ((src && base(src) === file) || base(r.entry) === file))
+			return { island: region_name(r.entry) };
 	}
 	// (the dev server serves the component's own `.svelte` file, and an island's entry there is a
 	// virtual id: by the component's name, as the island is named)
 	if (file.endsWith('.svelte')) {
 		const stem = file.slice(0, -'.svelte'.length);
-		for (const r of all_regions()) if (r.kind === 'island' && r.entry && region_name(r.entry) === stem) return { island: stem };
+		for (const r of all_regions())
+			if (r.kind === 'island' && r.entry && region_name(r.entry) === stem) return { island: stem };
 	}
 	return {};
 }
@@ -748,14 +903,36 @@ export function read_page(): PageView | null {
 	});
 	// (an island whose own file was gone, named as every tab names it)
 	const fallbacks = base.visit?.entry_fallbacks?.map((f) => ({ ...f, name: region_name(f.entry) }));
-	const refetched = base.visit?.refetched?.map((f) => (f.entry ? { ...f, name: region_name(f.entry) } : f));
+	const refetched = base.visit?.refetched?.map((f) =>
+		f.entry ? { ...f, name: region_name(f.entry) } : f
+	);
 	// the slowest interaction's scripts, named by the island whose file each is (its location, or its
 	// identity) — a built chunk name tells the reader nothing
-	const interaction = base.visit?.interaction ? { ...base.visit.interaction, scripts: base.visit.interaction.scripts?.map((s) => ({ ...s, ...island_of_file(s.url) })) } : undefined;
+	const interaction = base.visit?.interaction
+		? {
+				...base.visit.interaction,
+				scripts: base.visit.interaction.scripts?.map((s) => ({ ...s, ...island_of_file(s.url) }))
+			}
+		: undefined;
 	// …and the scripts the page's scroll waited on, the same way (a build's handler is a minified name)
-	const scroll_jank = base.visit?.scroll_jank?.map((j) => ({ ...j, scripts: j.scripts.map((s) => ({ ...s, ...island_of_file(s.url) })) }));
+	const scroll_jank = base.visit?.scroll_jank?.map((j) => ({
+		...j,
+		scripts: j.scripts.map((s) => ({ ...s, ...island_of_file(s.url) }))
+	}));
 	const with_visit: PageInput = base.visit
-		? { ...base, visit: { ...base.visit, origin: location.origin, in_page, ...(preload_misses ? { preload_misses } : {}), ...(fallbacks ? { entry_fallbacks: fallbacks } : {}), ...(refetched ? { refetched } : {}), ...(interaction ? { interaction } : {}), ...(scroll_jank ? { scroll_jank } : {}) } }
+		? {
+				...base,
+				visit: {
+					...base.visit,
+					origin: location.origin,
+					in_page,
+					...(preload_misses ? { preload_misses } : {}),
+					...(fallbacks ? { entry_fallbacks: fallbacks } : {}),
+					...(refetched ? { refetched } : {}),
+					...(interaction ? { interaction } : {}),
+					...(scroll_jank ? { scroll_jank } : {})
+				}
+			}
 		: base;
 	const holes = hole_failures();
 	const code = island_code();
@@ -763,20 +940,34 @@ export function read_page(): PageView | null {
 	const waits = hole_waits(nav?.t ?? -Infinity, nav ? 0 : (with_visit.visit?.paints?.fcp ?? 0));
 	const batches = hole_batches(nav?.t ?? -Infinity);
 	// (the restorer ran while the page parsed, before this dock: its log, since the last navigation)
-	const restores = ((window as { __og_restore_log?: RestoreEvent[] }).__og_restore_log ?? []).filter((e) => e.t >= (nav?.t ?? -Infinity));
+	const restores = (
+		(window as { __og_restore_log?: RestoreEvent[] }).__og_restore_log ?? []
+	).filter((e) => e.t >= (nav?.t ?? -Infinity));
 	// (against this tab's last load of the same page; an in-app navigation counts as a load of its page)
-	const drift = fp_drift(nav ? Math.round(nav.t) : 0).map((d) => ({ name: region_name(d.entry), fp: d.fp_now, ...(d.path ? { path: d.path } : {}), ...(d.was !== undefined ? { was: d.was, now: d.now } : {}) }));
+	const drift = fp_drift(nav ? Math.round(nav.t) : 0).map((d) => ({
+		name: region_name(d.entry),
+		fp: d.fp_now,
+		...(d.path ? { path: d.path } : {}),
+		...(d.was !== undefined ? { was: d.was, now: d.now } : {})
+	}));
 	const icpu = interaction_cpu_of(page);
 	// (whole tab: what an island of any earlier page left running is still running on this one)
 	const { regs, islands: seen } = leftover_state();
-	const leftovers = owned_leftovers(regs, seen, region_name, performance.now()).map(({ entry: _, ...l }) => l);
+	const leftovers = owned_leftovers(regs, seen, region_name, performance.now()).map(
+		({ entry: _, ...l }) => l
+	);
 	// (the listeners holding scrolling, still attached, by the island that added each)
 	const scroll_blockers = owned_scroll_listeners(scroll_listeners(), seen, region_name);
 	// (what keeps the page out of the back/forward cache: its unload listeners, by owner, and — when
 	// this load came from Back or Forward and was not restored — the browser's own reasons)
-	const unload_owners = [...new Set(owned_scroll_listeners(unload_listeners(), seen, region_name).map((o) => o.owner))];
+	const unload_owners = [
+		...new Set(owned_scroll_listeners(unload_listeners(), seen, region_name).map((o) => o.owner))
+	];
 	const not_restored = nav ? [] : not_restored_reasons();
-	const bfcache = unload_owners.length || not_restored.length ? { unload: unload_owners, ...(not_restored.length ? { not_restored } : {}) } : null;
+	const bfcache =
+		unload_owners.length || not_restored.length
+			? { unload: unload_owners, ...(not_restored.length ? { not_restored } : {}) }
+			: null;
 	// the profiler's last runs (the Profiler tab's): of this page, and of each page it navigated to
 	const server_profiles: Record<string, ServerProfileBrief> = {};
 	for (const n of with_visit.visit?.navs ?? []) {
@@ -787,15 +978,57 @@ export function read_page(): PageView | null {
 	const server_profile = server_brief(nav ? nav.to.split('?')[0] : location.pathname);
 	// (the document's own streamed promises: after an in-app navigation they are the page before's)
 	const held = nav ? null : held_open();
-	const input: PageInput = { ...with_visit, ...(held ? { held_open: held } : {}), empty_slots: empty_slots(), ...(holes.length ? { hole_failures: holes } : {}), ...(code.length ? { island_code: code } : {}), ...(waits.length ? { hole_waits: waits } : {}), ...(batches.length ? { hole_batches: batches } : {}), ...(restores.length ? { restore_events: restores } : {}), ...(drift.length ? { fp_drift: drift } : {}), ...(leftovers.length ? { leftovers } : {}), ...(scroll_blockers.length ? { scroll_blockers } : {}), ...(bfcache ? { bfcache } : {}),...(icpu ? { interaction_cpu: icpu } : {}), server_profiles, ...(server_profile ? { server_profile } : {}), ...(import.meta.env.DEV ? { dev: true } : {}), ...(typeof navigator !== 'undefined' && browser_of(navigator.userAgent) ? { browser: browser_of(navigator.userAgent)! } : {}), ...(() => {
-		// (the dock open as the document loaded: only the document's own paints, never after a navigation)
-		const at = (globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.dock-open-at')];
-		return typeof at === 'number' && !last_nav() ? { dock_open_at: at } : {};
-	})(), ...(() => {
-		const pre = import.meta.env.DEV ? prebundled_packages((with_visit.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url)) : null;
-		return pre?.length ? { prebundled: pre } : {};
-	})() };
-	const view: PageView = { page, regions, cpu, nav, unmeasured: unmeasured(page.cpu.off), since: null, ...(waits.length ? { holes: waits } : {}), ...(holes.length ? { holes_failed: holes } : {}), report: analyze_page(input, regions, failures(), nav ? performance.now() - nav.t : performance.now(), cpu) };
+	const input: PageInput = {
+		...with_visit,
+		...(held ? { held_open: held } : {}),
+		empty_slots: empty_slots(),
+		...(holes.length ? { hole_failures: holes } : {}),
+		...(code.length ? { island_code: code } : {}),
+		...(waits.length ? { hole_waits: waits } : {}),
+		...(batches.length ? { hole_batches: batches } : {}),
+		...(restores.length ? { restore_events: restores } : {}),
+		...(drift.length ? { fp_drift: drift } : {}),
+		...(leftovers.length ? { leftovers } : {}),
+		...(scroll_blockers.length ? { scroll_blockers } : {}),
+		...(bfcache ? { bfcache } : {}),
+		...(icpu ? { interaction_cpu: icpu } : {}),
+		server_profiles,
+		...(server_profile ? { server_profile } : {}),
+		...(import.meta.env.DEV ? { dev: true } : {}),
+		...(typeof navigator !== 'undefined' && browser_of(navigator.userAgent)
+			? { browser: browser_of(navigator.userAgent)! }
+			: {}),
+		...(() => {
+			// (the dock open as the document loaded: only the document's own paints, never after a navigation)
+			const at = (globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.dock-open-at')];
+			return typeof at === 'number' && !last_nav() ? { dock_open_at: at } : {};
+		})(),
+		...(() => {
+			const pre = import.meta.env.DEV
+				? prebundled_packages(
+						(with_visit.visit?.resources ?? []).filter((r) => r.type === 'script').map((r) => r.url)
+					)
+				: null;
+			return pre?.length ? { prebundled: pre } : {};
+		})()
+	};
+	const view: PageView = {
+		page,
+		regions,
+		cpu,
+		nav,
+		unmeasured: unmeasured(page.cpu.off),
+		since: null,
+		...(waits.length ? { holes: waits } : {}),
+		...(holes.length ? { holes_failed: holes } : {}),
+		report: analyze_page(
+			input,
+			regions,
+			failures(),
+			nav ? performance.now() - nav.t : performance.now(),
+			cpu
+		)
+	};
 	if (nav) {
 		// awake here, and no wake since the navigation: the router reused it from the page before
 		const woke = new Set(input.islands.map((i) => i.fp));
@@ -803,7 +1036,14 @@ export function read_page(): PageView | null {
 		// twin Tally, read as the router swapped the page, keyed the dock's list twice and threw)
 		const seen = new Set<string>();
 		view.kept = regions
-			.filter((r) => r.kind === 'island' && r.hydrated && !woke.has(r.fp) && !seen.has(r.fp) && !!seen.add(r.fp))
+			.filter(
+				(r) =>
+					r.kind === 'island' &&
+					r.hydrated &&
+					!woke.has(r.fp) &&
+					!seen.has(r.fp) &&
+					!!seen.add(r.fp)
+			)
 			.map((r) => ({ fp: r.fp, name: r.name }));
 	}
 	// (the first page of this document only: after an in-app navigation the vitals are not this page's)
@@ -826,9 +1066,15 @@ declare global {
 		/** the Record tab's last session report (tests read what the tab shows) */
 		__ogygia_session?: import('@ogygia/core/insights').SessionReport;
 		/** the Page tab's styles check, run fresh (tests read what the tab shows) */
-		__ogygia_styles?: () => Promise<{ report: import('./styles.ts').StylesReport; findings: import('./styles.ts').StylesFinding[] }>;
+		__ogygia_styles?: () => Promise<{
+			report: import('./styles.ts').StylesReport;
+			findings: import('./styles.ts').StylesFinding[];
+		}>;
 		/** the Page tab's cache check (how the host caches the content-named files), run fresh */
-		__ogygia_cache?: () => Promise<{ probes: import('./cache-headers.ts').CacheProbe[]; findings: import('./styles.ts').StylesFinding[] }>;
+		__ogygia_cache?: () => Promise<{
+			probes: import('./cache-headers.ts').CacheProbe[];
+			findings: import('./styles.ts').StylesFinding[];
+		}>;
 	}
 }
 
@@ -854,7 +1100,8 @@ export function install_page_hook(): void {
 		addEventListener('pagehide', () => {
 			try {
 				const v = read_page();
-				if (v && !v.nav) sessionStorage.setItem(LOAD_KEY + location.pathname, JSON.stringify(snapshot_of(v)));
+				if (v && !v.nav)
+					sessionStorage.setItem(LOAD_KEY + location.pathname, JSON.stringify(snapshot_of(v)));
 			} catch {
 				// no storage
 			}
@@ -884,16 +1131,41 @@ function snapshot_of(v: PageView): LoadSnapshot {
 		path: location.pathname,
 		at: Date.now(),
 		// (`dev`: the dev server's own doing — never "new" or "fixed" on the next load)
-		findings: v.report.findings.map((f) => ({ code: f.code, names: f.fps.map((fp) => name.get(fp) ?? fp), ...(f.dev_compile ? { dev: true as const } : {}) })),
+		findings: v.report.findings.map((f) => ({
+			code: f.code,
+			names: f.fps.map((fp) => name.get(fp) ?? fp),
+			...(f.dev_compile ? { dev: true as const } : {})
+		})),
 		islands: v.report.rows.map((r) => {
 			// (on the dev server, the part of its load that was the server compiling its files)
-			const compile_ms = Math.round(dev_compile_ms({ dev: import.meta.env.DEV ? true : undefined, visit: v.page.visit as PageInput['visit'] }, r));
-			return { name: r.name, load_ms: r.load_ms, hydrate_ms: r.hydrate_ms, ...(compile_ms ? { compile_ms } : {}) };
+			const compile_ms = Math.round(
+				dev_compile_ms(
+					{
+						dev: import.meta.env.DEV ? true : undefined,
+						visit: v.page.visit as PageInput['visit']
+					},
+					r
+				)
+			);
+			return {
+				name: r.name,
+				load_ms: r.load_ms,
+				hydrate_ms: r.hydrate_ms,
+				...(compile_ms ? { compile_ms } : {})
+			};
 		}),
 		vitals: v.report.vitals.map((x) => ({ key: x.key, value: x.value })),
 		...(v.parts ? { parts: v.parts } : {}),
 		// (the page compiling on its request: the first byte's own note, not a dev-CSS shift's)
-		...(v.report.findings.some((f) => f.dev_compile && (f.code === 'slow-ttfb' || f.code === 'vital-ttfb')) ? { page_compiled: true as const } : {}),
-		...(v.report.findings.some((f) => f.dev_compile && (f.code === 'shift-cause' || f.code === 'vital-cls')) ? { cls_dev: true as const } : {})
+		...(v.report.findings.some(
+			(f) => f.dev_compile && (f.code === 'slow-ttfb' || f.code === 'vital-ttfb')
+		)
+			? { page_compiled: true as const }
+			: {}),
+		...(v.report.findings.some(
+			(f) => f.dev_compile && (f.code === 'shift-cause' || f.code === 'vital-cls')
+		)
+			? { cls_dev: true as const }
+			: {})
 	};
 }

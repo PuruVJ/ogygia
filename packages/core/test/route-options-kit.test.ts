@@ -42,8 +42,11 @@ function routes(files: Record<string, string>): string {
 }
 
 /** The value the freeze plugin acts on: the declared one, else its config `default`. */
-const effective = (options: Record<string, Record<string, boolean>>, id: string, fallback: boolean) =>
-	options[id]?.freeze ?? fallback;
+const effective = (
+	options: Record<string, Record<string, boolean>>,
+	id: string,
+	fallback: boolean
+) => options[id]?.freeze ?? fallback;
 
 describe('read_route_option — export shapes', () => {
 	it('reads true / false / undefined, and ignores a commented-out declaration', () => {

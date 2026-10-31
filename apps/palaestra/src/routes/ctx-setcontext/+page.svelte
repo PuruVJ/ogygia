@@ -10,7 +10,9 @@
 <hr />
 <h1 data-static-shell>Drop-in setContext bridge</h1>
 
-<p>A csr=false layout calls <code>setContext</code> (imported from ogygia). These islands read it:</p>
+<p>
+	A csr=false layout calls <code>setContext</code> (imported from ogygia). These islands read it:
+</p>
 
 <SetCtxReader label="load" />
 <SetCtxWriter />

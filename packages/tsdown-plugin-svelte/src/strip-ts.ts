@@ -33,10 +33,18 @@ interface Root {
 }
 
 const is_node = (v: unknown): v is Span =>
-	!!v && typeof v === 'object' && typeof (v as Span).start === 'number' && typeof (v as Span).end === 'number';
+	!!v &&
+	typeof v === 'object' &&
+	typeof (v as Span).start === 'number' &&
+	typeof (v as Span).end === 'number';
 
 /** keys that hold a type, never a value: cut the whole span and do not look inside */
-const TYPE_KEYS: ReadonlySet<string> = new Set(['typeAnnotation', 'typeArguments', 'typeParameters', 'returnType']);
+const TYPE_KEYS: ReadonlySet<string> = new Set([
+	'typeAnnotation',
+	'typeArguments',
+	'typeParameters',
+	'returnType'
+]);
 
 /** the static text of an attribute value (`lang="ts"` → `ts`), or undefined */
 function attr_text(a: Attr): string | undefined {
@@ -47,7 +55,8 @@ function attr_text(a: Attr): string | undefined {
 }
 
 /** true when the source has a `<script lang="ts">`: a cheap check before paying for a parse */
-const has_ts_script = (source: string) => source.includes('lang="ts"') || source.includes("lang='ts'");
+const has_ts_script = (source: string) =>
+	source.includes('lang="ts"') || source.includes("lang='ts'");
 
 export function strip_markup_ts(source: string, filename?: string): string {
 	if (!has_ts_script(source)) return source;
@@ -64,7 +73,11 @@ export function strip_markup_ts(source: string, filename?: string): string {
 		}
 		const n = v as Span;
 		// `x as T`, `x satisfies T`, `x!`: keep the expression, drop the rest of the node
-		if (n.type === 'TSAsExpression' || n.type === 'TSSatisfiesExpression' || n.type === 'TSNonNullExpression') {
+		if (
+			n.type === 'TSAsExpression' ||
+			n.type === 'TSSatisfiesExpression' ||
+			n.type === 'TSNonNullExpression'
+		) {
 			const inner = n.expression as Span;
 			if (inner.end < n.end) s.remove(inner.end, n.end);
 			visit(inner);
@@ -95,7 +108,11 @@ export function strip_markup_ts(source: string, filename?: string): string {
 		for (const a of script?.attributes ?? []) {
 			if (a.name !== 'lang' || attr_text(a) !== 'ts') continue;
 			let from = a.start;
-			while (from > 0 && (source[from - 1] === ' ' || source[from - 1] === '\t' || source[from - 1] === '\n')) from--;
+			while (
+				from > 0 &&
+				(source[from - 1] === ' ' || source[from - 1] === '\t' || source[from - 1] === '\n')
+			)
+				from--;
 			s.remove(from, a.end);
 		}
 	}

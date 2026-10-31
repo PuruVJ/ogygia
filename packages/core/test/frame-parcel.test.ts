@@ -38,7 +38,11 @@ describe('read_parcel', () => {
 		for (let cut = 0; cut <= buf.length; cut++) {
 			const first = read_all(buf.slice(0, cut));
 			const second = read_all(first.rest + buf.slice(cut));
-			expect([...first.out, ...second.out].map((p) => p.slot)).toEqual(['A', 'B', '__ogygia_done__']);
+			expect([...first.out, ...second.out].map((p) => p.slot)).toEqual([
+				'A',
+				'B',
+				'__ogygia_done__'
+			]);
 		}
 	});
 

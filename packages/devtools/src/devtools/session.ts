@@ -33,7 +33,8 @@ export type {
 	SessionShift
 } from '@ogygia/core/insights';
 
-const CLICKABLE = 'a[href],button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="option"],[onclick],[tabindex]:not([tabindex="-1"])';
+const CLICKABLE =
+	'a[href],button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="option"],[onclick],[tabindex]:not([tabindex="-1"])';
 /** What a visitor takes for a control: one in its ancestry, or a pointer cursor where they clicked. */
 function looks_clickable(el: Element): boolean {
 	if (el.closest(CLICKABLE)) return true;
@@ -58,7 +59,8 @@ const SAVED_KEY = 'ogygia:devtools:session';
 
 /** Shift every time in a part by `d` ms (another document's clock onto this one's). */
 function shift_part(s: SessionData, d: number): SessionData {
-	const t = <T extends { t: number }>(xs: T[]) => xs.map((x) => ({ ...x, t: Math.round((x.t + d) * 10) / 10 }));
+	const t = <T extends { t: number }>(xs: T[]) =>
+		xs.map((x) => ({ ...x, t: Math.round((x.t + d) * 10) / 10 }));
 	return {
 		...s,
 		from: s.from + d,
@@ -81,13 +83,15 @@ function shift_part(s: SessionData, d: number): SessionData {
 function merge_parts(parts: SavedPart[], current: SessionData): SessionData {
 	const here = performance.timeOrigin;
 	const all = [...parts.map((p) => shift_part(p.data, p.origin - here)), current];
-	const cat = <K extends keyof SessionData>(k: K) => all.flatMap((p) => p[k] as unknown as unknown[]) as unknown as SessionData[K];
+	const cat = <K extends keyof SessionData>(k: K) =>
+		all.flatMap((p) => p[k] as unknown as unknown[]) as unknown as SessionData[K];
 	const muts = new Map<string, { fp: string | null; count: number; el: WeakRef<Element> | null }>();
-	for (const p of all) for (const m of p.mutations) {
-		const k = m.fp ?? '';
-		const prev = muts.get(k);
-		muts.set(k, { fp: m.fp, count: (prev?.count ?? 0) + m.count, el: m.el ?? prev?.el ?? null });
-	}
+	for (const p of all)
+		for (const m of p.mutations) {
+			const k = m.fp ?? '';
+			const prev = muts.get(k);
+			muts.set(k, { fp: m.fp, count: (prev?.count ?? 0) + m.count, el: m.el ?? prev?.el ?? null });
+		}
 	return {
 		...current,
 		from: all[0].from,
@@ -145,7 +149,14 @@ export function describe_el(el: Element | null | undefined): string {
 	if (!el) return '(unknown)';
 	let s = el.localName;
 	if (el.id) s += '#' + el.id;
-	const cls = typeof el.className === 'string' ? el.className.trim().split(' ').filter((c) => c && !c.startsWith('svelte-')).slice(0, 2) : [];
+	const cls =
+		typeof el.className === 'string'
+			? el.className
+					.trim()
+					.split(' ')
+					.filter((c) => c && !c.startsWith('svelte-'))
+					.slice(0, 2)
+			: [];
 	if (cls.length) s += '.' + cls.join('.');
 	const text = (el.textContent ?? '').trim().slice(0, 24);
 	return text ? `${s} "${text}${(el.textContent ?? '').trim().length > 24 ? '…' : ''}"` : s;
@@ -200,7 +211,11 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		if (e.name === 'nav.start') note_names();
 	});
 	const observers: { po: PerformanceObserver; cb: (entries: PerformanceEntryList) => void }[] = [];
-	const watch = (type: string, cb: (entries: PerformanceEntryList) => void, extra: Record<string, unknown> = {}) => {
+	const watch = (
+		type: string,
+		cb: (entries: PerformanceEntryList) => void,
+		extra: Record<string, unknown> = {}
+	) => {
 		try {
 			const po = new PerformanceObserver((l) => cb(l.getEntries()));
 			po.observe({ type, ...extra } as PerformanceObserverInit);
@@ -234,21 +249,40 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		{ durationThreshold: 16 }
 	);
 	watch('longtask', (es) => {
-		for (const e of es) if (e.startTime >= from && longtasks.length < 2000) longtasks.push({ t: r1(e.startTime), ms: r1(e.duration) });
+		for (const e of es)
+			if (e.startTime >= from && longtasks.length < 2000)
+				longtasks.push({ t: r1(e.startTime), ms: r1(e.duration) });
 	});
 	watch('long-animation-frame', (es) => {
-		for (const e of es as (PerformanceEntry & { blockingDuration?: number; scripts?: { sourceURL?: string; sourceFunctionName?: string; invoker?: string; duration?: number }[] })[]) {
+		for (const e of es as (PerformanceEntry & {
+			blockingDuration?: number;
+			scripts?: {
+				sourceURL?: string;
+				sourceFunctionName?: string;
+				invoker?: string;
+				duration?: number;
+			}[];
+		})[]) {
 			if (e.startTime < from || frames.length >= 1000) continue;
 			frames.push({
 				t: r1(e.startTime),
 				ms: r1(e.duration),
 				blocking: r1(e.blockingDuration ?? 0),
-				scripts: (e.scripts ?? []).slice(0, 8).map((s) => ({ source: s.sourceURL ?? '', fn: s.sourceFunctionName ?? '', invoker: s.invoker ?? '', ms: r1(s.duration ?? 0) }))
+				scripts: (e.scripts ?? []).slice(0, 8).map((s) => ({
+					source: s.sourceURL ?? '',
+					fn: s.sourceFunctionName ?? '',
+					invoker: s.invoker ?? '',
+					ms: r1(s.duration ?? 0)
+				}))
 			});
 		}
 	});
 	watch('layout-shift', (es) => {
-		for (const e of es as (PerformanceEntry & { value?: number; hadRecentInput?: boolean; sources?: { node?: Node | null }[] })[]) {
+		for (const e of es as (PerformanceEntry & {
+			value?: number;
+			hadRecentInput?: boolean;
+			sources?: { node?: Node | null }[];
+		})[]) {
 			if (e.startTime < from || shifts.length >= 500) continue;
 			const node = e.sources?.[0]?.node ?? null;
 			const el = node && node.nodeType === 1 ? (node as Element) : (node?.parentElement ?? null);
@@ -283,7 +317,13 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		if (clicks.length >= 2000) return;
 		const el = e.target instanceof Element ? e.target : null;
 		if (el?.closest('[data-ogygia-devtools-host]')) return;
-		clicks.push({ t: r1(e.timeStamp), target: describe_el(el), fp: island_of(el)?.getAttribute('data-og-fp') ?? null, el: el ? new WeakRef(el) : null, ...(el && looks_clickable(el) ? { clickable: true as const } : {}) });
+		clicks.push({
+			t: r1(e.timeStamp),
+			target: describe_el(el),
+			fp: island_of(el)?.getAttribute('data-og-fp') ?? null,
+			el: el ? new WeakRef(el) : null,
+			...(el && looks_clickable(el) ? { clickable: true as const } : {})
+		});
 	};
 	addEventListener('click', on_click, { capture: true, passive: true });
 	// EVERY NAVIGATION as it starts, with what started it: the link or form the browser names, else the
@@ -294,13 +334,21 @@ export function start_session(prior?: SavedPart[]): Recorder {
 	const on_input = (e: Event) => {
 		const el = e.target instanceof Element ? e.target : null;
 		if (!el || el.closest('[data-ogygia-devtools-host]')) return;
-		handling = { target: describe_el(el), fp: island_of(el)?.getAttribute('data-og-fp') ?? null, until: performance.now() + 50 };
+		handling = {
+			target: describe_el(el),
+			fp: island_of(el)?.getAttribute('data-og-fp') ?? null,
+			until: performance.now() + 50
+		};
 	};
 	const INPUTS = ['click', 'submit', 'keydown', 'change'] as const;
 	for (const type of INPUTS) addEventListener(type, on_input, { capture: true, passive: true });
 	const navigation = (globalThis as { navigation?: EventTarget }).navigation;
 	const on_navigate = (e: Event) => {
-		const n = e as Event & { destination?: { url: string }; sourceElement?: Element | null; navigationType?: string };
+		const n = e as Event & {
+			destination?: { url: string };
+			sourceElement?: Element | null;
+			navigationType?: string;
+		};
 		if (!n.destination || navs.length >= 200) return;
 		const now = performance.now();
 		const by = n.sourceElement ?? null;
@@ -318,7 +366,13 @@ export function start_session(prior?: SavedPart[]): Recorder {
 	const requests: SessionRequest[] = [];
 	watch('resource', (es) => {
 		for (const r of es as (PerformanceResourceTiming & { responseStatus?: number })[]) {
-			if (r.startTime < from || requests.length >= 2000 || r.name.includes('/__profiler/') || r.name.includes('/__ogygia_devtools')) continue;
+			if (
+				r.startTime < from ||
+				requests.length >= 2000 ||
+				r.name.includes('/__profiler/') ||
+				r.name.includes('/__ogygia_devtools')
+			)
+				continue;
 			const st: readonly PerformanceServerTiming[] = r.serverTiming ?? [];
 			requests.push({
 				url: r.name,
@@ -326,29 +380,68 @@ export function start_session(prior?: SavedPart[]): Recorder {
 				t: r1(r.startTime),
 				ms: r1(r.duration),
 				bytes: r.transferSize || r.decodedBodySize || 0,
-				status: typeof r.responseStatus === 'number' && r.responseStatus > 0 ? r.responseStatus : null,
-				...(st.length ? { server: st.slice(0, 8).map((x) => ({ name: x.name, ms: r1(x.duration), desc: x.description })) } : {})
+				status:
+					typeof r.responseStatus === 'number' && r.responseStatus > 0 ? r.responseStatus : null,
+				...(st.length
+					? {
+							server: st
+								.slice(0, 8)
+								.map((x) => ({ name: x.name, ms: r1(x.duration), desc: x.description }))
+						}
+					: {})
 			});
 		}
 	});
 	try {
-		mo.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+		mo.observe(document.body, {
+			subtree: true,
+			childList: true,
+			characterData: true,
+			attributes: true
+		});
 	} catch {
 		// no body
 	}
-	const on_error = (e: ErrorEvent) => errors.length < 200 && errors.push({ t: r1(performance.now()), message: String(e.message || e.error || 'error').slice(0, 300) });
-	const on_rej = (e: PromiseRejectionEvent) => errors.length < 200 && errors.push({ t: r1(performance.now()), message: 'unhandled rejection: ' + String((e.reason as { message?: string })?.message ?? e.reason).slice(0, 280) });
+	const on_error = (e: ErrorEvent) =>
+		errors.length < 200 &&
+		errors.push({
+			t: r1(performance.now()),
+			message: String(e.message || e.error || 'error').slice(0, 300)
+		});
+	const on_rej = (e: PromiseRejectionEvent) =>
+		errors.length < 200 &&
+		errors.push({
+			t: r1(performance.now()),
+			message:
+				'unhandled rejection: ' +
+				String((e.reason as { message?: string })?.message ?? e.reason).slice(0, 280)
+		});
 	addEventListener('error', on_error);
 	addEventListener('unhandledrejection', on_rej);
 	const console_error = console.error;
 	console.error = (...args: unknown[]) => {
-		if (errors.length < 200) errors.push({ t: r1(performance.now()), message: 'console.error: ' + args.map((a) => (a instanceof Error ? a.message : String(a))).join(' ').slice(0, 280) });
+		if (errors.length < 200)
+			errors.push({
+				t: r1(performance.now()),
+				message:
+					'console.error: ' +
+					args
+						.map((a) => (a instanceof Error ? a.message : String(a)))
+						.join(' ')
+						.slice(0, 280)
+			});
 		console_error.apply(console, args);
 	};
 	// the main thread, sampled
 	let prof: { stop(): Promise<unknown> } | null = null;
 	let cpu_off: string | null = null;
-	const Ctor = (globalThis as { Profiler?: new (o: { sampleInterval: number; maxBufferSize: number }) => { stop(): Promise<unknown> } }).Profiler;
+	const Ctor = (
+		globalThis as {
+			Profiler?: new (o: { sampleInterval: number; maxBufferSize: number }) => {
+				stop(): Promise<unknown>;
+			};
+		}
+	).Profiler;
 	if (!Ctor) cpu_off = 'unsupported';
 	else
 		try {
@@ -356,7 +449,8 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		} catch {
 			cpu_off = 'no-policy';
 		}
-	const heap0 = (performance as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null;
+	const heap0 =
+		(performance as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null;
 
 	/** stop watching (the entries still queued count too) */
 	const detach = () => {
@@ -381,7 +475,8 @@ export function start_session(prior?: SavedPart[]): Recorder {
 	};
 	/** this document's part of the session */
 	const collect = (cpu: unknown): SessionData => {
-		const heap1 = (performance as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null;
+		const heap1 =
+			(performance as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize ?? null;
 		return {
 			from,
 			to: performance.now(),
@@ -390,7 +485,13 @@ export function start_session(prior?: SavedPart[]): Recorder {
 			frames,
 			shifts,
 			requests,
-			mutations: [...muts].map(([el, count]) => ({ fp: el?.getAttribute('data-og-fp') ?? null, count, el: el ? new WeakRef(el) : null })).sort((a, b) => b.count - a.count),
+			mutations: [...muts]
+				.map(([el, count]) => ({
+					fp: el?.getAttribute('data-og-fp') ?? null,
+					count,
+					el: el ? new WeakRef(el) : null
+				}))
+				.sort((a, b) => b.count - a.count),
 			mut_log,
 			clicks,
 			errors,
@@ -411,9 +512,17 @@ export function start_session(prior?: SavedPart[]): Recorder {
 		detach();
 		active = null;
 		const strip = (s: SessionData): SessionData =>
-			JSON.parse(JSON.stringify({ ...s, cpu: null }, (k, v) => (k === 'el' ? null : v))) as SessionData;
+			JSON.parse(
+				JSON.stringify({ ...s, cpu: null }, (k, v) => (k === 'el' ? null : v))
+			) as SessionData;
 		try {
-			sessionStorage.setItem(SAVED_KEY, JSON.stringify([...(prior ?? []), { origin: performance.timeOrigin, data: strip(collect(null)) }]));
+			sessionStorage.setItem(
+				SAVED_KEY,
+				JSON.stringify([
+					...(prior ?? []),
+					{ origin: performance.timeOrigin, data: strip(collect(null)) }
+				])
+			);
 		} catch {
 			// no storage: the session ends with this page
 		}

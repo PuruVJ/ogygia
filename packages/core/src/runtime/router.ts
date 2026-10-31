@@ -93,7 +93,6 @@ export type BeforeNavigateCallback = (nav: BeforeNavigation) => void;
 /** Callback registered with {@link afterNavigate}. */
 export type AfterNavigateCallback = (nav: AfterNavigation) => void;
 
-
 // In this router a page's "code" is delivered by the HTML body swap (+ island chunks fetched on
 // connect), so BOTH `data-sveltekit-preload-data` and `-code` warm the SAME page-HTML cache. We
 // honour Kit's value grammar + nearest-ancestor inheritance: 'eager' | 'viewport' | 'hover' | 'tap'
@@ -113,7 +112,6 @@ const PRELOAD_MARKED_ANCHORS =
 	'[data-sveltekit-preload-data] a[href], [data-sveltekit-preload-code] a[href], ' +
 	'a[href][data-sveltekit-preload-data], a[href][data-sveltekit-preload-code]';
 
-
 /** Does the page hold an element the fragment points at? `#top` and an empty `#` mean "the top",
  *  which the browser handles. A fragment that matches nothing is an app-managed one (a table row
  *  keyed by the hash): the browser would scroll to the top for it, so the router takes it over. */
@@ -127,7 +125,11 @@ function hash_target_exists(hash: string): boolean {
 		/* keep raw */
 	}
 	if (raw === 'top' || dec === 'top') return true;
-	return !!(document.getElementById(dec) || document.getElementById(raw) || document.getElementsByName(dec).length);
+	return !!(
+		document.getElementById(dec) ||
+		document.getElementById(raw) ||
+		document.getElementsByName(dec).length
+	);
 }
 
 /** Same document = pathname + search. Hash is not part of document identity. */
@@ -289,7 +291,11 @@ export class SpaRouter {
 		return loaded_nav?.page_cache_size() ?? 0;
 	}
 
-	fetch_page(href: string, signal?: AbortSignal, purpose?: 'nav' | 'prefetch' | 'history'): Promise<string | null> {
+	fetch_page(
+		href: string,
+		signal?: AbortSignal,
+		purpose?: 'nav' | 'prefetch' | 'history'
+	): Promise<string | null> {
 		return nav().then((n) => n.fetch_page(href, signal, purpose));
 	}
 
@@ -344,7 +350,10 @@ export class SpaRouter {
 		return n.navigate(this, url, from, opts);
 	}
 
-	goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}): Promise<void> {
+	goto(
+		url: string | URL,
+		opts: { replaceState?: boolean; external?: boolean } = {}
+	): Promise<void> {
 		const target = new URL(url, location.href);
 		if (target.protocol !== 'http:' && target.protocol !== 'https:') {
 			throw new Error('[ogygia] goto() only supports http(s) URLs');
@@ -433,7 +442,9 @@ export class SpaRouter {
 						event.preventDefault();
 						if (location.hash !== url.hash) {
 							push_state(history.state || {}, url.href);
-							window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL: location.href, newURL: url.href }));
+							window.dispatchEvent(
+								new HashChangeEvent('hashchange', { oldURL: location.href, newURL: url.href })
+							);
 						}
 					}
 					return;
@@ -676,7 +687,9 @@ export function invalidate(): Promise<void> {
  * the browser owns navigation — is the MPA navigation handle's Speculation Rules hint, not this
  * module: ./nav-handle.ts. This module only loads with the router feature.)
  */
-export function preloadData(url: string | URL): Promise<{ type: string; status: number; data: {} }> {
+export function preloadData(
+	url: string | URL
+): Promise<{ type: string; status: number; data: {} }> {
 	return spa.preloadData(url);
 }
 

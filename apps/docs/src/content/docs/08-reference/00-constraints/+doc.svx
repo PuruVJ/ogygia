@@ -43,10 +43,10 @@ A value that you read from the host into island markup is a serialized snapshot,
 
 ogygia stops the mistake for you in two ways:
 
-| Guard | When | What |
-| --- | --- | --- |
+| Guard       | When    | What                                                     |
+| ----------- | ------- | -------------------------------------------------------- |
 | Build error | compile | captured-variable writes in island markup fail the build |
-| Dev proxy | runtime | a deep proxy throws on mutation (dev only) |
+| Dev proxy   | runtime | a deep proxy throws on mutation (dev only)               |
 
 Pass data as props. Own mutable state inside the island.
 
@@ -96,10 +96,10 @@ When a subtree needs interactivity, it is an island. When it does not, it is a [
 
 Decide up front:
 
-| Need | Boundary |
-| --- | --- |
-| Interactive | island |
-| Static but heavy | [lake](/docs/regions/lakes) |
+| Need                   | Boundary                                      |
+| ---------------------- | --------------------------------------------- |
+| Interactive            | island                                        |
+| Static but heavy       | [lake](/docs/regions/lakes)                   |
 | Request-dependent HTML | [server island](/docs/regions/server-islands) |
 
 To retrofit the boundary later is the costly path.

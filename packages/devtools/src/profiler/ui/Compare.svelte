@@ -14,7 +14,9 @@
 	const { base, cmp, a, b } = $derived(data);
 </script>
 
-<svelte:head><title>compare — {cmp ? `${cmp.a.label} vs ${cmp.b.label}` : `${a} vs ${b}`}</title></svelte:head>
+<svelte:head
+	><title>compare — {cmp ? `${cmp.a.label} vs ${cmp.b.label}` : `${a} vs ${b}`}</title></svelte:head
+>
 
 <Shell {base}>
 	{#if cmp}

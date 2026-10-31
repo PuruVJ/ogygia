@@ -7,8 +7,21 @@
 import type { Analysis, FrameCategory, GroupStat } from '../analyze.ts';
 import type { NetCall, UpstreamTrace } from '../net.ts';
 import type { IoOp } from '../async-io.ts';
-import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.ts';
-import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.ts';
+import type {
+	ClientIslandStat,
+	MemSample,
+	ReportExtras,
+	ReportMeta,
+	RequestEntry
+} from '../report.ts';
+import {
+	group_islands,
+	hole_economics,
+	island_js_bytes,
+	island_js_unique,
+	island_name,
+	island_rows_of
+} from '../report.ts';
 import { hazard_words } from '@ogygia/core/insights';
 import type { HoleStat, IslandStat, SeedKeyStat } from '@ogygia/core/internal/server';
 import { io_kind } from '../async-io.ts';
@@ -64,12 +77,26 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 		const comp = by_name.get(name);
 		const cl = client.get(r.entry) ?? null;
 		const modules = [...new Set([r.module_url, ...r.hints].filter(Boolean))]
-			.map((url) => ({ url, bytes: extras.weights?.[url] ?? null, inside: extras.contents?.[url] ?? null, own: url === r.module_url }))
+			.map((url) => ({
+				url,
+				bytes: extras.weights?.[url] ?? null,
+				inside: extras.contents?.[url] ?? null,
+				own: url === r.module_url
+			}))
 			.sort((x, y) => (y.bytes ?? -1) - (x.bytes ?? -1));
 		const js_bytes = island_js_bytes(r, extras.weights);
 		const js_only = only?.get(r.entry) ?? null;
 		const i = r.interactivity;
-		const marks = i ? i.handlers + i.state + i.effects + i.binds + i.actions + (i.remotes ?? 0) + (i.awaits ?? 0) + (i.shared ?? 0) : -1;
+		const marks = i
+			? i.handlers +
+				i.state +
+				i.effects +
+				i.binds +
+				i.actions +
+				(i.remotes ?? 0) +
+				(i.awaits ?? 0) +
+				(i.shared ?? 0)
+			: -1;
 		// its own lines that draw differently in the browser (the build's scan, or the report's reading)
 		const lines = extras.hazards?.[r.entry] ?? [];
 		const render_read = lines.find((h) => h.kind === 'browser' && !h.guard);
@@ -80,19 +107,25 @@ export function island_rows(a: Analysis, meta: ReportMeta, extras: ReportExtras)
 			advice =
 				`${cl.recovered} of ${cl.n} hydrations threw the server DOM away and re-rendered: the markup the browser found was not what the server sent. It paid for the render twice and flashed.` +
 				(cl.reason ? ` Why: ${cl.reason}.` : '') +
-				(lines.length ? ` ${hazard_words(lines)}` : ' Look for a post-SSR pass, or a script that edits it before the wake.');
+				(lines.length
+					? ` ${hazard_words(lines)}`
+					: ' Look for a post-SSR pass, or a script that edits it before the wake.');
 		else if (render_read)
 			advice = `Its own code reads ${render_read.reads ?? 'a browser-only value'} while rendering (${render_read.file.split('/').pop()}:${render_read.line}): the browser draws it differently, so its markup changes as it wakes. Read it after the wake ($effect, onMount), or pass it in as a prop.`;
-		else if (marks === 0 && r.wake !== 'none') advice = "No handlers, state, effects, binds, actions, remote functions, awaits or shared state in its components: ship it as a lake (wake: 'none') and the JS never loads.";
+		else if (marks === 0 && r.wake !== 'none')
+			advice =
+				"No handlers, state, effects, binds, actions, remote functions, awaits or shared state in its components: ship it as a lake (wake: 'none') and the JS never loads.";
 		else if (r.count >= 10 && (r.wake === 'load' || r.wake === 'idle' || r.wake === 'visible'))
 			advice = `${r.count} copies each wake on ${r.wake}${(r.variants ?? 1) > 1 ? ` with ${r.variants} different props sidecars` : ''}: one island around the list hydrates once, or wake: 'interaction' pays only when touched.`;
-		else if (!r.json && r.culprit) advice = `Its props use devalue because of ${r.culprit}: a string or number there puts them on the JSON lane.`;
+		else if (!r.json && r.culprit)
+			advice = `Its props use devalue because of ${r.culprit}: a string or number there puts them on the JSON lane.`;
 		else if (js_bytes !== null && js_bytes >= 150 * 1024)
 			advice =
 				js_only !== null && js_only < js_bytes * 0.3
 					? `${fmt_bytes(js_bytes)} of JS to wake it, but only ${fmt_bytes(js_only)} is its own: the rest is shared with other islands and loads anyway. Deferring it saves little; slim the shared code instead.`
 					: `${fmt_bytes(js_bytes)} of JS for one island${js_only !== null ? ` (${fmt_bytes(js_only)} of it only this island needs)` : ''}: the heaviest module below is the import to move server-side or behind a dynamic import.`;
-		else if (cl && cl.load_p50_ms >= cl.p50_ms * 0.6 && cl.p50_ms >= 50) advice = `In the browser most of its ${cl.p50_ms.toFixed(0)} ms is module load: an earlier preload or a smaller closure helps more than faster code.`;
+		else if (cl && cl.load_p50_ms >= cl.p50_ms * 0.6 && cl.p50_ms >= 50)
+			advice = `In the browser most of its ${cl.p50_ms.toFixed(0)} ms is module load: an earlier preload or a smaller closure helps more than faster code.`;
 		return {
 			name,
 			entry: r.entry,
@@ -127,7 +160,9 @@ export interface SeedRow extends SeedKeyStat {
 }
 
 /** The seed explainer's rows: every top-level page.data key, biggest first, with why it ships. */
-export function seed_rows(meta: ReportMeta): { rows: SeedRow[]; whole_by: string[]; total: number } | null {
+export function seed_rows(
+	meta: ReportMeta
+): { rows: SeedRow[]; whole_by: string[]; total: number } | null {
 	const og = meta.requests.find((r) => r.og?.seed)?.og;
 	if (!og?.seed) return null;
 	const total = og.seed.keys.reduce((s, k) => s + k.bytes, 0) || 1;
@@ -472,7 +507,8 @@ export interface RequestRow {
 	max_ms: number;
 }
 
-const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0);
+const med = (xs: number[]) =>
+	xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0;
 
 /**
  * The "requests during the window" rows. Page mode renders the same page N times, so the log
@@ -482,7 +518,11 @@ const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.fl
  */
 export function request_rows(requests: RequestEntry[], fold: boolean): RequestRow[] {
 	const tags_of = (e: RequestEntry) =>
-		e.tags ? Object.entries(e.tags).map(([k, v]) => `${k}=${v}`).join(' ') : '';
+		e.tags
+			? Object.entries(e.tags)
+					.map(([k, v]) => `${k}=${v}`)
+					.join(' ')
+			: '';
 	if (!fold) {
 		return requests.map((e) => ({
 			method: e.method,

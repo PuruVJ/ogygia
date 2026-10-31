@@ -41,7 +41,9 @@ test.describe('overlapping SPA navigations / stale-swap guards', () => {
 	// REGRESSION (CI, a slow runner): back pressed while the next page was still loading. The router
 	// knows the page on screen only once a swap commits, so the back looked "same document" and did
 	// nothing — and the load still in flight then swapped in under the old page's address.
-	test('back while the next page loads: the load never lands, URL and DOM stay on the page', async ({ page }) => {
+	test('back while the next page loads: the load never lands, URL and DOM stay on the page', async ({
+		page
+	}) => {
 		await page.goto('/about', { waitUntil: 'load' });
 		await page.waitForSelector('meta[name="ogygia-router"]', { state: 'attached' });
 		const about_h1 = (await page.locator('h1').first().textContent())?.trim();

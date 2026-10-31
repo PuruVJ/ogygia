@@ -25,12 +25,12 @@ The remainder of the page does not change. Only `Counter` gets JS, and only on t
 
 ## The schedules
 
-`wake` takes a timing word. The word says *when* the JS of the island runs:
+`wake` takes a timing word. The word says _when_ the JS of the island runs:
 
-| Value | JS runs |
-| --- | --- |
-| `load` | immediately |
-| `visible` | when scrolled into view |
+| Value         | JS runs                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| `load`        | immediately                                                                                       |
+| `visible`     | when scrolled into view                                                                           |
 | `interaction` | on the first pointer, key, or focus inside it. The click that wakes it replays. Typed text stays. |
 
 There are two more values (`idle` and CSS media queries). There is also margin tuning for `visible`, and there are rules for nested regions. The full schedule reference is in [Timing & nesting](/docs/regions/timing-nesting).
@@ -127,11 +127,11 @@ A header badge that shows a cart. It hydrates on `load`, so it is live immediate
 <CartBadge count={items.length} />
 ```
 
-A *different* "Add to cart" island can update this badge. The two share one live object. See [Shared state](/docs/data-state/state-context#sharing-state).
+A _different_ "Add to cart" island can update this badge. The two share one live object. See [Shared state](/docs/data-state/state-context#sharing-state).
 
 ## The boot island: run code, not UI
 
-On a `csr = false` page, the script of `+page.svelte` / `+layout.svelte` never runs in the browser. Top-level `onMount`, `$effect`, listeners, telemetry, and store hydration are all inert. See [Constraints](/docs/reference/constraints). An island is the *only* place where client code runs. Thus, when you must *run code* and not render UI, make an island that renders nothing. That is a **boot island**: a component with no markup, whose only job is its `$effect`.
+On a `csr = false` page, the script of `+page.svelte` / `+layout.svelte` never runs in the browser. Top-level `onMount`, `$effect`, listeners, telemetry, and store hydration are all inert. See [Constraints](/docs/reference/constraints). An island is the _only_ place where client code runs. Thus, when you must _run code_ and not render UI, make an island that renders nothing. That is a **boot island**: a component with no markup, whose only job is its `$effect`.
 
 ```svelte title=Telemetry.svelte
 <script>
@@ -155,7 +155,7 @@ On a `csr = false` page, the script of `+page.svelte` / `+layout.svelte` never r
 ```
 
 - **Values are props.** The page script is inert. Thus, give the island what it needs as serializable props (`dsn={data.dsn}`). This is the same boundary rule as for each island.
-- **Lifecycle follows the schedule.** A page-level boot island runs its `$effect` again on each navigation, because the page remounts. A layout-level boot island usually must *continue* across navigation. It must not restart a socket on each route. Add `keep`, and its live self moves onto the new page. It does not remount:
+- **Lifecycle follows the schedule.** A page-level boot island runs its `$effect` again on each navigation, because the page remounts. A layout-level boot island usually must _continue_ across navigation. It must not restart a socket on each route. Add `keep`, and its live self moves onto the new page. It does not remount:
 
 ```svelte
 import Telemetry from '$lib/Telemetry.svelte' with { wake: 'load', keep: 'telemetry' };
@@ -173,11 +173,10 @@ ogygia keeps each island's server markup from the moment it connects. On wake it
 
 ## Do / don't
 
-| Do | Don't |
-| --- | --- |
+| Do                                                                                     | Don't                                                                                                                                   |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Set `wake: 'visible'` on all islands below the fold. This performance gain has no cost | Do not pass callbacks or class instances as props. They do not operate. Move the logic inside, or use a remote function or shared state |
-| Keep islands small, with one purpose. A smaller island ships less JS | Do not wrap the full page in one island. That is `csr = true` with more steps |
-
+| Keep islands small, with one purpose. A smaller island ships less JS                   | Do not wrap the full page in one island. That is `csr = true` with more steps                                                           |
 
 <style>
   .doc-demo-row {

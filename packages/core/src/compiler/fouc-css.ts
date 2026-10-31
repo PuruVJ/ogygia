@@ -130,7 +130,10 @@ export function resolveFoucImportSpec(
  * @param entryAbs absolute path to the island entry `.svelte`
  * @param opts
  */
-export async function buildFoucCssModuleSource(entryAbs: string, opts: CssReachOptions): Promise<string> {
+export async function buildFoucCssModuleSource(
+	entryAbs: string,
+	opts: CssReachOptions
+): Promise<string> {
 	const entries = await collectFoucCssReachable(entryAbs, opts);
 	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
 	const imports: string[] = [];
@@ -257,7 +260,10 @@ export async function collectFoucCssReachable(
 		}
 	};
 
-	const follow = async (decls: ReadonlyArray<{ source: string; names: Set<string> }>, importer: string) => {
+	const follow = async (
+		decls: ReadonlyArray<{ source: string; names: Set<string> }>,
+		importer: string
+	) => {
 		for (const d of decls) {
 			const resolved = await resolve(d.source, importer);
 			if (resolved) await visit(resolved, d.names, d.source);
@@ -303,7 +309,13 @@ export async function collectFoucCssReachable(
 				.filter((d) => !d.type_only)
 				.map((d) => ({
 					source: d.source,
-					names: new Set(d.side_effect ? [] : d.specs.filter((s) => !s.type_only).map((s) => (s.kind === 'namespace' ? ALL : s.imported)))
+					names: new Set(
+						d.side_effect
+							? []
+							: d.specs
+									.filter((s) => !s.type_only)
+									.map((s) => (s.kind === 'namespace' ? ALL : s.imported))
+					)
 				})),
 			abs
 		);
@@ -421,7 +433,10 @@ function extractRawStyleBodies(source: string) {
  */
 /** A component's static imports: each specifier with the names it takes (`*` for a namespace;
  *  none for a bare `import 'x'`). Type-only imports are left out: they bring nothing at runtime. */
-export function listStaticImports(source: string, filename: string): Array<{ source: string; names: Set<string> }> {
+export function listStaticImports(
+	source: string,
+	filename: string
+): Array<{ source: string; names: Set<string> }> {
 	const out: Array<{ source: string; names: Set<string> }> = [];
 	try {
 		// (blanked styles: a raw SCSS `<style>` threw here and dropped to the regex fallback)
@@ -436,7 +451,11 @@ export function listStaticImports(source: string, filename: string): Array<{ sou
 					const decl = node as {
 						source?: { value?: unknown };
 						importKind?: string;
-						specifiers?: Array<{ type: string; importKind?: string; imported?: { name?: string; value?: string } }>;
+						specifiers?: Array<{
+							type: string;
+							importKind?: string;
+							imported?: { name?: string; value?: string };
+						}>;
 					};
 					const src = decl.source?.value;
 					if (typeof src !== 'string' || decl.importKind === 'type') return;

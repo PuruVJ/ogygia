@@ -120,9 +120,9 @@ pnpm dev
 
 ## Where to go next
 
-| You want to | Read |
-| --- | --- |
-| Understand the folder layout | [project structure](project-structure) |
-| Make parts of the page interactive | [islands](../concepts/islands) |
-| Add tabs, callouts, and code tabs | [tabs & code](../guides/tabs-and-code) |
-| Style the whole thing | [theming](../guides/theming) |
+| You want to                        | Read                                   |
+| ---------------------------------- | -------------------------------------- |
+| Understand the folder layout       | [project structure](project-structure) |
+| Make parts of the page interactive | [islands](../concepts/islands)         |
+| Add tabs, callouts, and code tabs  | [tabs & code](../guides/tabs-and-code) |
+| Style the whole thing              | [theming](../guides/theming)           |

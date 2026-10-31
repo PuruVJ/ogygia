@@ -19,7 +19,10 @@
 	<ol>
 		<li>Click the <b>clicks</b> button a few times (say to 4).</li>
 		<li>Note the <b>hydrated at</b> time and <b>times mounted: 1</b>.</li>
-		<li>Now click <a href="/lab/a" data-lab-a>Page A</a> and <a href="/lab/b" data-lab-b>Page B</a> back and forth.</li>
+		<li>
+			Now click <a href="/lab/a" data-lab-a>Page A</a> and <a href="/lab/b" data-lab-b>Page B</a> back
+			and forth.
+		</li>
 	</ol>
 	<p class="verdict">
 		✅ <b>PASS:</b> clicks stay at 4, hydrated-time unchanged, mounts still 1, and only the page
@@ -38,8 +41,8 @@
 	</p>
 	<p class="verdict">
 		✅ <b>PASS:</b> you briefly see the dashed “loading…” fallback, then a purple greeting with a
-		server timestamp appears. Network shows an <code>/_islands</code> request. No component JS in the
-		page bundle.<br />
+		server timestamp appears. Network shows an <code>/_islands</code> request. No component JS in
+		the page bundle.<br />
 		❌ <b>FAIL:</b> the fallback never resolves, or a console/hydration error appears.
 	</p>
 </section>
@@ -47,26 +50,39 @@
 <section>
 	<h2>3 · Cross-island serialization (one live object, many islands)</h2>
 	<p>
-		<a href="/lab/wire">Serialization →</a> provides ONE transportable class instance
-		(<code>import.meta.og.wire</code>) to the page. Three separate island bundles read it from
-		context — the encoded object is revived to the <b>same live instance</b> in every island.
+		<a href="/lab/wire">Serialization →</a> provides ONE transportable class instance (<code
+			>import.meta.og.wire</code
+		>) to the page. Three separate island bundles read it from context — the encoded object is
+		revived to the <b>same live instance</b> in every island.
 	</p>
 	<p class="verdict">
 		✅ <b>PASS:</b> click <b>inc</b> in the writer and BOTH readers' count + double update instantly
 		(same heap). Each island shows <code>is-instance: true</code>.<br />
-		❌ <b>FAIL:</b> a reader stays at −1 / <code>is-instance: false</code>, or only one island updates.
+		❌ <b>FAIL:</b> a reader stays at −1 / <code>is-instance: false</code>, or only one island
+		updates.
 	</p>
 </section>
 
 <section class="more">
 	<h2>Already-built fixtures worth a look</h2>
 	<ul>
-		<li><a href="/delta/a">/delta/a</a> ⇄ <a href="/delta/b">/delta/b</a> — the minimal server-delta pair (e2e-backed).</li>
-		<li><a href="/live-partial">/live-partial</a> — <code>query.live</code> pushing rendered HTML each tick over Kit's SSE.</li>
+		<li>
+			<a href="/delta/a">/delta/a</a> ⇄ <a href="/delta/b">/delta/b</a> — the minimal server-delta pair
+			(e2e-backed).
+		</li>
+		<li>
+			<a href="/live-partial">/live-partial</a> — <code>query.live</code> pushing rendered HTML each tick
+			over Kit's SSE.
+		</li>
 		<li><a href="/server">/server</a> — a single deferred server island with a fallback.</li>
 		<li><a href="/context">/context</a> — the full cross-island context + transportable matrix.</li>
-		<li><a href="/dollar-fn">/dollar-fn</a> — a function (<code>import.meta.og.$</code>) crossing the boundary.</li>
-		<li><a href="/portable">/portable</a> — one island import used as tag, dynamic component, and each-list.</li>
+		<li>
+			<a href="/dollar-fn">/dollar-fn</a> — a function (<code>import.meta.og.$</code>) crossing the
+			boundary.
+		</li>
+		<li>
+			<a href="/portable">/portable</a> — one island import used as tag, dynamic component, and each-list.
+		</li>
 	</ul>
 </section>
 

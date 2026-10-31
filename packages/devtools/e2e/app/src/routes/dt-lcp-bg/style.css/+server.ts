@@ -4,7 +4,10 @@
 // shapes, is too little detail per pixel for the browser to count as the largest paint.)
 export const GET = async () => {
 	await new Promise((ok) => setTimeout(ok, 2600));
-	return new Response('.dt-lcp-bg-hero { width: 1000px; height: 480px; background: url(/dt-img/right.png) center / cover no-repeat; }\n', {
-		headers: { 'content-type': 'text/css', 'cache-control': 'no-store' }
-	});
+	return new Response(
+		'.dt-lcp-bg-hero { width: 1000px; height: 480px; background: url(/dt-img/right.png) center / cover no-repeat; }\n',
+		{
+			headers: { 'content-type': 'text/css', 'cache-control': 'no-store' }
+		}
+	);
 };

@@ -23,7 +23,14 @@ const MODULEPRELOAD_LINK_G = /<link\b[^>]*rel="modulepreload"[^>]*>/g;
 const INLINE_STYLE_G = /<style\b[^>]*>([^<]*)<\/style>/g;
 const HREF_RE = /href="([^"]+)"/;
 const RENDERED = ['hbtoken-a', 'hbtoken-direct'];
-const UNRENDERED = ['hbtoken-b', 'hbtoken-c', 'hbtoken-d', 'hbtoken-e', 'hbtoken-f', 'hbtoken-unused'];
+const UNRENDERED = [
+	'hbtoken-b',
+	'hbtoken-c',
+	'hbtoken-d',
+	'hbtoken-e',
+	'hbtoken-f',
+	'hbtoken-unused'
+];
 // PLAIN registry imports (no `with`) — a direct import, a plain barrel's name, a re-export the page
 // uses. Their CSS reaches a csr=false page only through the page node's client graph, so it must be
 // there. (The graph decides for plain imports: a plain import the registry USES is linked whether it
@@ -62,7 +69,9 @@ test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => 
 		check('/head-budget returns 200', res.status === 200);
 		check('/head-budget ships NO Kit bootstrap (csr=false)', !KIT_MARKER_RE.test(html));
 		const sheets = (html.match(STYLESHEET_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
-		const preloads = (html.match(MODULEPRELOAD_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
+		const preloads = (html.match(MODULEPRELOAD_LINK_G) ?? []).map(
+			(t) => t.match(HREF_RE)?.[1] ?? ''
+		);
 		check(
 			`stylesheet links within budget (${sheets.length} ≤ ${MAX_STYLESHEETS})`,
 			sheets.length <= MAX_STYLESHEETS,
@@ -79,14 +88,28 @@ test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => 
 		for (const tok of RENDERED)
 			check(`rendered island CSS is linked (${tok})`, has(tok), `sheets: ${sheets.join(', ')}`);
 		for (const tok of UNRENDERED)
-			check(`unrendered mark CSS is NOT linked (${tok})`, !has(tok), `sheets: ${sheets.join(', ')}`);
+			check(
+				`unrendered mark CSS is NOT linked (${tok})`,
+				!has(tok),
+				`sheets: ${sheets.join(', ')}`
+			);
 		for (const tok of PLAIN)
-			check(`plain registry import CSS reaches the page (${tok})`, has(tok), `sheets: ${sheets.join(', ')}`);
+			check(
+				`plain registry import CSS reaches the page (${tok})`,
+				has(tok),
+				`sheets: ${sheets.join(', ')}`
+			);
 		// No duplicate hrefs either (a sheet linked by Kit AND by the region channel).
-		check('no stylesheet href linked twice', new Set(sheets).size === sheets.length, sheets.join('\n'));
+		check(
+			'no stylesheet href linked twice',
+			new Set(sheets).size === sheets.length,
+			sheets.join('\n')
+		);
 	});
 
-	test('SSR: a registry behind a plain helper module gets the same treatment', async ({ baseURL }) => {
+	test('SSR: a registry behind a plain helper module gets the same treatment', async ({
+		baseURL
+	}) => {
 		const res = await fetch(baseURL + '/head-budget/via-factory');
 		const html = await res.text();
 		check('/head-budget/via-factory returns 200', res.status === 200);
@@ -96,7 +119,10 @@ test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => 
 		for (const tok of ['hbtoken-b', 'hbtoken-c', 'hbtoken-d', 'hbtoken-e', 'hbtoken-f'])
 			check(`unrendered mark CSS is NOT linked behind the helper (${tok})`, !has_token(css, tok));
 		for (const tok of PLAIN_VIA_FACTORY)
-			check(`plain registry import CSS reaches the page behind the helper (${tok})`, has_token(css, tok));
+			check(
+				`plain registry import CSS reaches the page behind the helper (${tok})`,
+				has_token(css, tok)
+			);
 	});
 
 	test('browser: plain registry blocks are styled from first paint', async ({ page }) => {
@@ -119,8 +145,14 @@ test.describe('HEAD BUDGET: a csr=false page links only what it renders', () => 
 				.evaluate((el) => getComputedStyle(el).outlineColor)
 				.catch(() => '');
 		check('direct island styled', (await outline('[data-hb-direct]')) === 'rgb(9, 176, 84)');
-		check('chosen registry block styled', (await outline('[data-hb-block="a"]')) === 'rgb(9, 176, 84)');
-		check('only block a rendered from the registry', (await page.locator('[data-hb-block]').count()) === 1);
+		check(
+			'chosen registry block styled',
+			(await outline('[data-hb-block="a"]')) === 'rgb(9, 176, 84)'
+		);
+		check(
+			'only block a rendered from the registry',
+			(await page.locator('[data-hb-block]').count()) === 1
+		);
 		// A `wake: 'load'` island does not replay a click made before it hydrates (only `interaction`
 		// islands capture one), and the server-rendered button is clickable at once — so wait for the
 		// wake, or the click races it (this failed ~2 in 5 on a fast machine, before any change).

@@ -55,9 +55,9 @@ describe('context_string_keys — follows the getContext/setContext import bindi
 	const svelteReads = (src: string) => context_string_keys(src, 'svelte').reads;
 
 	it('counts a getContext read imported from svelte', () => {
-		expect(reads(`import { getContext } from 'svelte';\nconst x = getContext('headingContext');`)).toEqual(
-			['headingContext']
-		);
+		expect(
+			reads(`import { getContext } from 'svelte';\nconst x = getContext('headingContext');`)
+		).toEqual(['headingContext']);
 	});
 
 	it('counts a getContext read imported from ogygia', () => {
@@ -100,7 +100,9 @@ describe('context_string_keys — follows the getContext/setContext import bindi
 	});
 
 	it('ignores the word in a comment or string (no import → no parse-time binding)', () => {
-		expect(reads(`// getContext('faux') in a comment\nconst s = "getContext('also')";`)).toEqual([]);
+		expect(reads(`// getContext('faux') in a comment\nconst s = "getContext('also')";`)).toEqual(
+			[]
+		);
 		expect(sets(`// getContext('faux') in a comment\nconst s = "getContext('also')";`)).toEqual([]);
 	});
 
@@ -111,9 +113,12 @@ describe('context_string_keys — follows the getContext/setContext import bindi
 	});
 
 	it('unparseable source is a clean empty (no throw, no false warning)', () => {
-		expect(context_string_keys(`import { getContext } from 'svelte';\nthis is not valid js (((`, 'script')).toEqual(
-			{ reads: [], sets: [] }
-		);
+		expect(
+			context_string_keys(
+				`import { getContext } from 'svelte';\nthis is not valid js (((`,
+				'script'
+			)
+		).toEqual({ reads: [], sets: [] });
 	});
 });
 

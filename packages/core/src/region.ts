@@ -346,9 +346,12 @@ export function prebaked_region(
  * awaited by the language, so the HTML travels automatically — LiveView over the channel you already
  * have. A held region you *don't* await renders inline where it lands (first paint, same SSR pass).
  */
-export const region: typeof make_region & { snippet: typeof region_snippet } = Object.assign(make_region, {
-	snippet: region_snippet
-});
+export const region: typeof make_region & { snippet: typeof region_snippet } = Object.assign(
+	make_region,
+	{
+		snippet: region_snippet
+	}
+);
 
 /**
  * A pure-HTML region — what `import.meta.og.code()` / `.md()` inline. The html is baked at build

@@ -16,7 +16,9 @@ const ENV_SECRET_RE = /^OGYGIA_SECRET=(.+)$/m;
 const ENV_FILE = new URL('../.env', import.meta.url);
 const SECRET = (
 	process.env.OGYGIA_SECRET ??
-	(fs.existsSync(ENV_FILE) ? (fs.readFileSync(ENV_FILE, 'utf8').match(ENV_SECRET_RE)?.[1] ?? '') : '')
+	(fs.existsSync(ENV_FILE)
+		? (fs.readFileSync(ENV_FILE, 'utf8').match(ENV_SECRET_RE)?.[1] ?? '')
+		: '')
 ).trim();
 /** a region id no build of this app minted */
 const OTHER_BUILD_ID = 'a1b2c3d4e5f6';
@@ -34,7 +36,13 @@ function minted_as(endpoint: string, id: string, r: string): string {
 	p.set('id', id);
 	if (r) p.set('r', r);
 	else p.delete('r');
-	p.set('sig', sign(SECRET, region_mac_message(id, p.get('exp') ?? '', p.get('props') ?? '', '', p.get('ttl') ?? '', r)));
+	p.set(
+		'sig',
+		sign(
+			SECRET,
+			region_mac_message(id, p.get('exp') ?? '', p.get('props') ?? '', '', p.get('ttl') ?? '', r)
+		)
+	);
 	return u.href;
 }
 
@@ -61,11 +69,22 @@ test.describe('a hole capability names what it renders', () => {
 		check('control: its own capability renders (200)', own.status === 200, String(own.status));
 
 		const other = await answer(minted_as(live, OTHER_BUILD_ID, r));
-		check('an id this build does not have, same component → 200', other.status === 200, `${other.status} ${other.deny}`);
-		check('…with the same answer', other.body === own.body && own.body.includes('data-server-greeting'));
+		check(
+			'an id this build does not have, same component → 200',
+			other.status === 200,
+			`${other.status} ${other.deny}`
+		);
+		check(
+			'…with the same answer',
+			other.body === own.body && own.body.includes('data-server-greeting')
+		);
 
 		const v1_own = await answer(minted_as(live, new URL(live).searchParams.get('id')!, ''));
-		check('a capability minted before render ids (v1), its id still here → 200', v1_own.status === 200, `${v1_own.status} ${v1_own.deny}`);
+		check(
+			'a capability minted before render ids (v1), its id still here → 200',
+			v1_own.status === 200,
+			`${v1_own.status} ${v1_own.deny}`
+		);
 	});
 
 	test('nothing else is answered', async ({ baseURL }) => {
@@ -73,24 +92,44 @@ test.describe('a hole capability names what it renders', () => {
 		const r = new URL(live).searchParams.get('r') ?? '';
 
 		const v1_other = await answer(minted_as(live, OTHER_BUILD_ID, ''));
-		check('v1 with an id this build does not have → 403 unknown-id', v1_other.status === 403 && v1_other.deny === 'unknown-id', `${v1_other.status} ${v1_other.deny}`);
+		check(
+			'v1 with an id this build does not have → 403 unknown-id',
+			v1_other.status === 403 && v1_other.deny === 'unknown-id',
+			`${v1_other.status} ${v1_other.deny}`
+		);
 
 		const gone = await answer(minted_as(live, OTHER_BUILD_ID, 'b0b0b0b0b0b0'));
-		check('a component this build does not render → 403 unknown-id', gone.status === 403 && gone.deny === 'unknown-id', `${gone.status} ${gone.deny}`);
+		check(
+			'a component this build does not render → 403 unknown-id',
+			gone.status === 403 && gone.deny === 'unknown-id',
+			`${gone.status} ${gone.deny}`
+		);
 
 		const stripped = new URL(minted_as(live, OTHER_BUILD_ID, r));
 		stripped.searchParams.delete('r');
 		const s = await answer(stripped.href);
-		check('stripping r from a signed capability → 403 sig', s.status === 403 && s.deny === 'sig', `${s.status} ${s.deny}`);
+		check(
+			'stripping r from a signed capability → 403 sig',
+			s.status === 403 && s.deny === 'sig',
+			`${s.status} ${s.deny}`
+		);
 
 		const swapped = new URL(minted_as(live, OTHER_BUILD_ID, r));
 		swapped.searchParams.set('r', 'b0b0b0b0b0b0');
 		const w = await answer(swapped.href);
-		check('re-pointing r at another component → 403 sig', w.status === 403 && w.deny === 'sig', `${w.status} ${w.deny}`);
+		check(
+			're-pointing r at another component → 403 sig',
+			w.status === 403 && w.deny === 'sig',
+			`${w.status} ${w.deny}`
+		);
 
 		const bad = new URL(live);
 		bad.searchParams.set('r', 'not-a-render-id');
 		const b = await answer(bad.href);
-		check('a malformed r → 403 shape', b.status === 403 && b.deny === 'shape', `${b.status} ${b.deny}`);
+		check(
+			'a malformed r → 403 shape',
+			b.status === 403 && b.deny === 'shape',
+			`${b.status} ${b.deny}`
+		);
 	});
 });

@@ -5,4 +5,5 @@
 	const m = getManifesto();
 	const MARK = 'standalone-remote-probe-marker';
 </script>
+
 <p data-x title={MARK}>{s.current} {m.current}</p>

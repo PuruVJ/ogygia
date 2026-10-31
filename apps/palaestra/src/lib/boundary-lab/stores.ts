@@ -4,7 +4,13 @@ import { writable, derived, get } from 'svelte/store';
 /** AUTO-BRANDED (provable factory): methods REBUILT on the island side — `bump()` works there. */
 export const createTally = (seed = 0) => {
 	const { subscribe, set, update } = writable(seed);
-	return { subscribe, set, update, bump: () => update((n) => n + 1), read: () => get({ subscribe }) };
+	return {
+		subscribe,
+		set,
+		update,
+		bump: () => update((n) => n + 1),
+		read: () => get({ subscribe })
+	};
 };
 
 /** Plain writable: crosses automatically; all islands share ONE live instance. */
@@ -20,6 +26,9 @@ export const doubledOf = (src: { subscribe: (fn: (v: number) => void) => () => v
  *  the island side (the classifier warns naming it). */
 export function makeUnprovable(seed: string) {
 	const inner = writable(seed);
-	const grafted = Object.assign({ subscribe: inner.subscribe, set: inner.set }, { shout: () => get(inner).toUpperCase() });
+	const grafted = Object.assign(
+		{ subscribe: inner.subscribe, set: inner.set },
+		{ shout: () => get(inner).toUpperCase() }
+	);
 	return grafted;
 }

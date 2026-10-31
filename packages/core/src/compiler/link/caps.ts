@@ -19,7 +19,11 @@ import {
  * `OGYGIA_SECRET` when the host sets it — read then, so an env a host fills after module eval still
  * counts — else this build's key.
  */
-export function secret_module(ssr: boolean, build_secret: string, build_had_secret: boolean): string {
+export function secret_module(
+	ssr: boolean,
+	build_secret: string,
+	build_had_secret: boolean
+): string {
 	if (!ssr) return `export const buildKey = '';\nexport const buildHadSecret = false;`;
 	return `export const buildKey = ${JSON.stringify(build_secret)};\nexport const buildHadSecret = ${build_had_secret};`;
 }
@@ -64,7 +68,10 @@ export function server_plugins_module(ssr: boolean, realms: readonly ServerRealm
 	if (!ssr || realms.length === 0) return `export const plugins = [];`;
 	const imports = realms.map((r, i) => `import p${i} from ${JSON.stringify(r.module)};`).join('\n');
 	const list = realms
-		.map((r, i) => `{ name: ${JSON.stringify(r.name)}, options: ${JSON.stringify(r.options)}, server: p${i} }`)
+		.map(
+			(r, i) =>
+				`{ name: ${JSON.stringify(r.name)}, options: ${JSON.stringify(r.options)}, server: p${i} }`
+		)
 		.join(',\n\t');
 	return `${imports}\nexport const plugins = [\n\t${list}\n];`;
 }
@@ -72,7 +79,11 @@ export function server_plugins_module(ssr: boolean, realms: readonly ServerRealm
 /** `virtual:ogygia/route-options` — SERVER only: every Kit page route id → the plugin route options
  *  it declares (`export const <name>`, cascaded like csr; undeclared options absent). Empty on the
  *  client, and when no plugin declares an option: the route list never ships to the browser. */
-export function route_options_module(ssr: boolean, routesDir: string, names: readonly string[]): string {
+export function route_options_module(
+	ssr: boolean,
+	routesDir: string,
+	names: readonly string[]
+): string {
 	if (!ssr || names.length === 0) return `export const route_options = {};`;
 	return `export const route_options = ${JSON.stringify(page_route_options(routesDir, names))};`;
 }

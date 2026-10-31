@@ -4,6 +4,10 @@
 	let count = $state(0);
 </script>
 
-<button data-hl-counter data-locale={(page.data as { locale?: string }).locale ?? ''} onclick={() => count++}>
+<button
+	data-hl-counter
+	data-locale={(page.data as { locale?: string }).locale ?? ''}
+	onclick={() => count++}
+>
 	{(page.data as { locale?: string }).locale ?? '-'} · {count}
 </button>

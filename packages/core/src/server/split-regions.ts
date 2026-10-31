@@ -467,7 +467,10 @@ function merge_marks(region: LiftedRegion, marks: Record<string, string>): strin
 	const gt = region.openTag.lastIndexOf('>');
 	if (gt === -1) return region.outerHtml; // defensive: not a well-formed opening tag
 
-	let head = region.openTag.slice(0, gt).replace(TRAILING_SELF_CLOSE_RE, '').replace(TRAILING_WS_RE, '');
+	let head = region.openTag
+		.slice(0, gt)
+		.replace(TRAILING_SELF_CLOSE_RE, '')
+		.replace(TRAILING_WS_RE, '');
 	const additions: string[] = [];
 	let changed = false;
 

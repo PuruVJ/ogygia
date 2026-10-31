@@ -31,10 +31,20 @@ describe('cached_long: does this cache-control keep the file long enough', () =>
 });
 
 describe('cache_findings', () => {
-	const probe = (name: string, cache_control: string | null, bytes = 2048) => ({ url: `https://a.test/_app/immutable/${name}.Hh12Kk34.js`, name, cache_control, bytes });
+	const probe = (name: string, cache_control: string | null, bytes = 2048) => ({
+		url: `https://a.test/_app/immutable/${name}.Hh12Kk34.js`,
+		name,
+		cache_control,
+		bytes
+	});
 
 	it('files not cached long: named, with the header seen, the bytes, and the fix', () => {
-		const f = cache_findings([probe('Probe', 'no-cache'), probe('Twin', 'no-cache', 1024), probe('Steady', 'public, max-age=31536000, immutable'), probe('the runtime', 'no-cache', 10240)]);
+		const f = cache_findings([
+			probe('Probe', 'no-cache'),
+			probe('Twin', 'no-cache', 1024),
+			probe('Steady', 'public, max-age=31536000, immutable'),
+			probe('the runtime', 'no-cache', 10240)
+		]);
 		expect(f).toHaveLength(1);
 		expect(f[0].code).toBe('island-files-uncached');
 		expect(f[0].severity).toBe('warn');
@@ -47,7 +57,13 @@ describe('cache_findings', () => {
 		expect(f[0].fix).toContain('public, max-age=31536000, immutable');
 	});
 	it('many files: the heaviest four are named, the rest counted', () => {
-		const f = cache_findings([probe('Small', 'no-cache', 100), probe('Big', 'no-cache', 90_000), probe('Tiny', 'no-cache', 10), probe('Mid', 'no-cache', 5000), probe('the runtime', 'no-cache', 20_000)]);
+		const f = cache_findings([
+			probe('Small', 'no-cache', 100),
+			probe('Big', 'no-cache', 90_000),
+			probe('Tiny', 'no-cache', 10),
+			probe('Mid', 'no-cache', 5000),
+			probe('the runtime', 'no-cache', 20_000)
+		]);
 		expect(f[0].message).toContain('Big, the runtime, Mid, Small and 1 more');
 		expect(f[0].message).not.toContain('Tiny');
 	});

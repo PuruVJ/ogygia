@@ -5,4 +5,7 @@
 </script>
 
 <NavChrome />
-<main><h1 data-nav-page="a">nav a</h1><a href="/restore-lab/nav-b" data-nav-go>to b</a></main>
+<main>
+	<h1 data-nav-page="a">nav a</h1>
+	<a href="/restore-lab/nav-b" data-nav-go>to b</a>
+</main>

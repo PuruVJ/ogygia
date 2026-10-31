@@ -12,7 +12,7 @@ A [collection](/docs/content/collections) answers **what exists**: a set of type
 You give it collections and an arrangement. It mints small, data-returning, browser-safe functions that the routes and the shell consume. The corpus itself never crosses the wire.
 
 ::: tip When to use
-Use `site()` when a collection must become a *site*: a sidebar, "keep reading", a search box, `llms.txt`, versioned or localized docs. When you only need a list and a body on one page, `content()` alone is sufficient. The site layer is what turns a corpus into something that you navigate.
+Use `site()` when a collection must become a _site_: a sidebar, "keep reading", a search box, `llms.txt`, versioned or localized docs. When you only need a list and a body on one page, `content()` alone is sufficient. The site layer is what turns a corpus into something that you navigate.
 :::
 
 ## From zero
@@ -57,24 +57,24 @@ export const docs = site({
 That is the full configuration for this site. `docs` is a `folder()` collection. Thus its `NN-` filename prefixes already encode the order, and its `+meta.json` sidecars name the sections. The outline reads that structure as **data**, and builds the tree with nothing more to say. Point it at several collections, or a `pick()` selection, or explicit groups when you want to arrange by hand. That is the [outline](/docs/content/outline).
 
 ::: warning Collections belong in a server module
-The loader of a collection is an *eager glob*: the full compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`). Then Kit mechanically makes sure that no client module can import it. Thus the corpus can never leak into a browser bundle. Define one in a different location, and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
+The loader of a collection is an _eager glob_: the full compiled corpus. Define it in a `.server.ts` / `.remote.ts` file (or under `src/lib/server/`). Then Kit mechanically makes sure that no client module can import it. Thus the corpus can never leak into a browser bundle. Define one in a different location, and ogygia **warns** you at build time. See [Content collections](/docs/content/collections).
 :::
 
 ## What site() returns
 
 The minted site (name it what it is: `docs`, `blog`) is a set of read functions. Each returns plain data. None pulls the corpus into the browser:
 
-| function | returns | used by |
-| --- | --- | --- |
-| `docs.nav()` | the sidebar tree, hrefs resolved | the shell / a nav remote |
-| `docs.meta()` | `{ nav, switcher, data }` in one call | `<DocsShell {meta}>` |
-| `docs.page(slug)` | the view of one page: data, headings, body, prev/next | the page component |
-| `docs.search(q)` | ranked hits | a search remote / the worker |
-| `docs.switcher(slug)` | the version/locale picker (dimensioned sites) | `<Switcher>` |
-| `docs.emit.*` | GET handlers: sitemap, llms.txt, RSS, raw markdown, search index | `+server.ts` routes |
-| `docs.check()` | check findings, as data | vitest / CI |
-| `docs.entries()` | each leaf slug + declared old addresses | prerender `entries` |
-| `docs.load` | the 404 guard + alias 308s + per-page checks | the route's `load` |
+| function              | returns                                                          | used by                      |
+| --------------------- | ---------------------------------------------------------------- | ---------------------------- |
+| `docs.nav()`          | the sidebar tree, hrefs resolved                                 | the shell / a nav remote     |
+| `docs.meta()`         | `{ nav, switcher, data }` in one call                            | `<DocsShell {meta}>`         |
+| `docs.page(slug)`     | the view of one page: data, headings, body, prev/next            | the page component           |
+| `docs.search(q)`      | ranked hits                                                      | a search remote / the worker |
+| `docs.switcher(slug)` | the version/locale picker (dimensioned sites)                    | `<Switcher>`                 |
+| `docs.emit.*`         | GET handlers: sitemap, llms.txt, RSS, raw markdown, search index | `+server.ts` routes          |
+| `docs.check()`        | check findings, as data                                          | vitest / CI                  |
+| `docs.entries()`      | each leaf slug + declared old addresses                          | prerender `entries`          |
+| `docs.load`           | the 404 guard + alias 308s + per-page checks                     | the route's `load`           |
 
 They are data. Thus **where** they run is your call. Prerender the nav, or fetch it per request. Query search on the server, or ship the static index to a client worker. The [remotes](/docs/content/remotes) helper mints the common wire surface for you.
 
@@ -144,18 +144,18 @@ The empty context `{}` is the public, prerendered projection. A context-gated si
 ::: details The full options bag
 Each `site()` key, at a glance. `outline` is the only required one.
 
-| key | what it does |
-| --- | --- |
-| `outline` | a collection, an `outline([...])` spec, or `dimensions()`: the arrangement |
-| `data` | `{ title, description, origin }`: site facts; emissions default from here |
-| `base` | default mount prefix for each read; a per-call `{ base }` overrides |
-| `prevNext` | `'order'` (default) or `'graph'`: how "keep reading" is chosen |
-| `trail` | `'site'` (default) or `'group'`: whether prev/next crosses section boundaries |
-| `checks` | `[links(), ...yours]`: corpus invariants; see [Checks](/docs/content/checks) |
+| key          | what it does                                                                           |
+| ------------ | -------------------------------------------------------------------------------------- |
+| `outline`    | a collection, an `outline([...])` spec, or `dimensions()`: the arrangement             |
+| `data`       | `{ title, description, origin }`: site facts; emissions default from here              |
+| `base`       | default mount prefix for each read; a per-call `{ base }` overrides                    |
+| `prevNext`   | `'order'` (default) or `'graph'`: how "keep reading" is chosen                         |
+| `trail`      | `'site'` (default) or `'group'`: whether prev/next crosses section boundaries          |
+| `checks`     | `[links(), ...yours]`: corpus invariants; see [Checks](/docs/content/checks)           |
 | `components` | markdown element overrides, as real component values; see [Shell](/docs/content/shell) |
-| `context` | derive `{ preview, roles, … }` from the request; threads into collection filters |
-| `search` | `{ engine }`: swap the search engine; see [Search](/docs/content/search) |
-| `redirects` | old addresses per entry (the default reads `data.redirect_from`): baked 308 stubs |
+| `context`    | derive `{ preview, roles, … }` from the request; threads into collection filters       |
+| `search`     | `{ engine }`: swap the search engine; see [Search](/docs/content/search)               |
+| `redirects`  | old addresses per entry (the default reads `data.redirect_from`): baked 308 stubs      |
 :::
 
 ## The map
@@ -175,5 +175,4 @@ The site layer is one surface with a few clear parts. Each has its own page:
 - **Do** keep `site()` and its collections in a server module, and mint the wire in a `.remote.ts`. That split is what keeps the corpus out of client bundles.
 - **Do** let filename conventions carry structure (`NN-` order, `+meta.json` labels). The outline reads them as data. You write no arrangement config for the common case.
 - **Don't** pass the bodies of a collection over the wire yourself. Let `docs.page()` bake the body into a region ticket. That is the only representation that is meant to cross.
-- **Don't** use the site layer to render one standalone page. That is `content()` plus `<Region>`. The site layer is the *site* around many pages.
-
+- **Don't** use the site layer to render one standalone page. That is `content()` plus `<Region>`. The site layer is the _site_ around many pages.

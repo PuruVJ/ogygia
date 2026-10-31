@@ -10,7 +10,11 @@ async function queryDatabase(ms: number): Promise<{ rows: number }> {
 }
 
 // A slow upstream call. Uses global fetch so the profiler's network patch attributes it here.
-async function callService(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function callService(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	const res = await fetch(`${origin}/slow-io/api?name=${name}&ms=${ms}`);
 	return res.json();
 }

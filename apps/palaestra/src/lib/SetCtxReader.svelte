@@ -19,4 +19,6 @@
 	data-setctx-app={appName ?? ''}
 	data-setctx-count={room?.count ?? -1}
 	data-setctx-live={room ? 'true' : 'false'}
->boot={boot?.theme ?? '(none)'}/{boot?.user ?? '(none)'} · app={appName ?? '(none)'} · count={room?.count ?? -1}</span>
+	>boot={boot?.theme ?? '(none)'}/{boot?.user ?? '(none)'} · app={appName ?? '(none)'} · count={room?.count ??
+		-1}</span
+>

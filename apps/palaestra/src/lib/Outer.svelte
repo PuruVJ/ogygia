@@ -14,7 +14,9 @@
 </script>
 
 <div class="island" data-outer>
-	<button data-outer-btn onclick={() => (m += 1)}>outer {title}: <span data-outer-m>{m}</span></button>
+	<button data-outer-btn onclick={() => (m += 1)}
+		>outer {title}: <span data-outer-m>{m}</span></button
+	>
 	<Inner label="child" />
 	<div data-nested-server><Greeting salutation="Hey" /></div>
 	<div data-nested-defer-hydrate>

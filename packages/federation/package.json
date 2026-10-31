@@ -12,7 +12,13 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/federation"
 	},
-	"keywords": ["ogygia", "sveltekit", "microfrontends", "federation", "fragments"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"microfrontends",
+		"federation",
+		"fragments"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -23,7 +29,10 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",

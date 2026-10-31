@@ -60,10 +60,11 @@ export function expandTypes() {
 
 		// Replace back-to-front so earlier indices stay valid.
 		for (const job of jobs.reverse()) {
-			const md =
-				job.kind === 'MODULE' ? await render_module(job.arg) : await render_types(job.arg);
+			const md = job.kind === 'MODULE' ? await render_module(job.arg) : await render_types(job.arg);
 			if (md == null) {
-				console.warn(`[svelte-dev] type-docs: nothing generated for "> ${job.kind}: ${job.arg}" — leaving the directive out`);
+				console.warn(
+					`[svelte-dev] type-docs: nothing generated for "> ${job.kind}: ${job.arg}" — leaving the directive out`
+				);
 				job.parent.children!.splice(job.index, 1);
 				continue;
 			}

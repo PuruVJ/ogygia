@@ -73,18 +73,30 @@ function script_kind(attrs: string): { kind: StripKind; label?: string } {
 	if (/application\/ogygia-remote/.test(attrs)) return { kind: 'remote-seed' };
 	const type = /\btype\s*=\s*["']?([^"'\s>]+)/i.exec(attrs)?.[1];
 	const src = /\bsrc\s*=\s*["']?([^"'\s>]+)/i.exec(attrs)?.[1];
-	return { kind: 'script', label: src ? `src ${src.split('/').pop()}` : type ? `type ${type}` : 'inline' };
+	return {
+		kind: 'script',
+		label: src ? `src ${src.split('/').pop()}` : type ? `type ${type}` : 'inline'
+	};
 }
 
 export function byte_strip(html: string): ByteStrip {
 	const spans: StripSegment[] = [];
 	let m: RegExpExecArray | null;
 	SCRIPT_RE.lastIndex = 0;
-	while ((m = SCRIPT_RE.exec(html))) spans.push({ ...script_kind(m[1]), start: m.index, end: m.index + m[0].length });
+	while ((m = SCRIPT_RE.exec(html)))
+		spans.push({ ...script_kind(m[1]), start: m.index, end: m.index + m[0].length });
 	STYLE_RE.lastIndex = 0;
-	while ((m = STYLE_RE.exec(html))) spans.push({ kind: 'style', start: m.index, end: m.index + m[0].length });
+	while ((m = STYLE_RE.exec(html)))
+		spans.push({ kind: 'style', start: m.index, end: m.index + m[0].length });
 	LINK_RE.lastIndex = 0;
-	while ((m = LINK_RE.exec(html))) if (REL_STYLESHEET_RE.test(m[0])) spans.push({ kind: 'css-link', start: m.index, end: m.index + m[0].length, label: /\bhref\s*=\s*["']?([^"'\s>]+)/i.exec(m[0])?.[1]?.split('/').pop() });
+	while ((m = LINK_RE.exec(html)))
+		if (REL_STYLESHEET_RE.test(m[0]))
+			spans.push({
+				kind: 'css-link',
+				start: m.index,
+				end: m.index + m[0].length,
+				label: /\bhref\s*=\s*["']?([^"'\s>]+)/i.exec(m[0])?.[1]?.split('/').pop()
+			});
 	let shadow_bytes = 0;
 	let shadow_count = 0;
 	TEMPLATE_RE.lastIndex = 0;
@@ -97,8 +109,20 @@ export function byte_strip(html: string): ByteStrip {
 	try {
 		for (const r of scanRegions(html)) {
 			if (r.depth !== 0) continue;
-			const kind: StripKind = r.kind === 'island' ? 'island' : r.kind === 'lake' ? 'lake' : r.kind === 'hole' ? 'hole' : 'markup';
-			spans.push({ kind, start: r.start, end: r.end, label: r.attrs[FP_ATTR] ?? r.attrs.entry ?? r.attrs.name });
+			const kind: StripKind =
+				r.kind === 'island'
+					? 'island'
+					: r.kind === 'lake'
+						? 'lake'
+						: r.kind === 'hole'
+							? 'hole'
+							: 'markup';
+			spans.push({
+				kind,
+				start: r.start,
+				end: r.end,
+				label: r.attrs[FP_ATTR] ?? r.attrs.entry ?? r.attrs.name
+			});
 		}
 	} catch {
 		/* a scanner that throws on a broken document leaves the strip to the regexes */
@@ -129,10 +153,20 @@ export function byte_strip(html: string): ByteStrip {
 	if (shadow_bytes) by_kind.shadow = shadow_bytes;
 	// the elements the markup makes, the whole document's and each island's (what the browser counts)
 	const lower = html.toLowerCase();
-	const islands = out.filter((s) => s.kind === 'island' && s.label).map((s) => ({ fp: s.label!, n: count_elements(lower, s.start, s.end) }));
+	const islands = out
+		.filter((s) => s.kind === 'island' && s.label)
+		.map((s) => ({ fp: s.label!, n: count_elements(lower, s.start, s.end) }));
 	islands.sort((a, b) => b.n - a.n);
 	const unsized = unsized_images(lower, html);
-	return { total: html.length, segments: out, by_kind, shadow_bytes, shadow_count, elements: { total: count_elements(lower, 0, lower.length), islands: islands.slice(0, 3) }, ...(unsized.length ? { unsized_images: unsized } : {}) };
+	return {
+		total: html.length,
+		segments: out,
+		by_kind,
+		shadow_bytes,
+		shadow_count,
+		elements: { total: count_elements(lower, 0, lower.length), islands: islands.slice(0, 3) },
+		...(unsized.length ? { unsized_images: unsized } : {})
+	};
 }
 
 /** Raw-text elements: their contents are text, not elements. A `<template>`'s contents (a
@@ -141,7 +175,12 @@ const OPAQUE = ['script', 'style', 'textarea', 'title', 'template', 'noscript'];
 
 /** Every opening tag markup makes from `start` to `end`, once: its name and where its `<` is,
  *  skipping comments and the contents of raw-text elements and templates. `html` lowercased. No regex. */
-function walk_tags(html: string, start: number, end: number, on_tag: (tag: string, at: number) => void): void {
+function walk_tags(
+	html: string,
+	start: number,
+	end: number,
+	on_tag: (tag: string, at: number) => void
+): void {
 	let i = html.indexOf('<', start);
 	while (i !== -1 && i < end) {
 		const c = html.charCodeAt(i + 1);
@@ -193,7 +232,11 @@ export function unsized_images(lower: string, raw: string): string[] {
 				const before = attrs.charCodeAt(k - 1);
 				const after = attrs.charCodeAt(k + name.length);
 				// (a whole attribute name: `data-width=` is not `width=`)
-				if ((k === 0 || before === 32 || before === 9 || before === 10 || before === 13) && (after === 61 || after === 32 || after === 62 || Number.isNaN(after))) return true;
+				if (
+					(k === 0 || before === 32 || before === 9 || before === 10 || before === 13) &&
+					(after === 61 || after === 32 || after === 62 || Number.isNaN(after))
+				)
+					return true;
 				k = attrs.indexOf(name, k + 1);
 			}
 			return false;
@@ -214,7 +257,12 @@ export function unsized_images(lower: string, raw: string): string[] {
 
 /** A segment's arrival at the browser, given the document's download span from navigation timing:
  *  bytes are assumed to arrive at a steady rate between the first byte and the last. */
-export function arrival_ms(s: { start: number; end: number }, total: number, res_start: number, res_end: number): { first: number; last: number } {
+export function arrival_ms(
+	s: { start: number; end: number },
+	total: number,
+	res_start: number,
+	res_end: number
+): { first: number; last: number } {
 	if (total <= 0 || res_end <= res_start) return { first: res_start, last: res_start };
 	const per = (res_end - res_start) / total;
 	return { first: res_start + s.start * per, last: res_start + s.end * per };

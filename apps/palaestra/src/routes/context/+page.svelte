@@ -28,7 +28,7 @@
 <hr />
 <h1 data-static-shell>Cross-island context matrix</h1>
 
-<Provide values={[ roomCtx(counter), { greeting: "hi-from-provide" } ]}>
+<Provide values={[roomCtx(counter), { greeting: 'hi-from-provide' }]}>
 	<section data-live-share>
 		<h2 data-static-shell>Live share across strategies</h2>
 		<!-- One writer, readers hydrating on load / idle / visible / defer — all reunite to one live
@@ -59,7 +59,7 @@
 	<section data-shadow>
 		<h2 data-static-shell>Nested provider (nearest wins)</h2>
 		<CtxReader label="outer-scope" />
-		<Provide values={[ roomCtx(inner) ]}>
+		<Provide values={[roomCtx(inner)]}>
 			<CtxReader label="inner-scope" />
 		</Provide>
 	</section>
@@ -67,7 +67,7 @@
 	<!-- Plain-value context: provided 'dark' here; a reader OUTSIDE this provider gets the default -->
 	<section data-theme>
 		<h2 data-static-shell>Plain value + default</h2>
-		<Provide values={[ themeCtx('dark') ]}>
+		<Provide values={[themeCtx('dark')]}>
 			<ThemeReader label="provided" />
 		</Provide>
 		<ThemeReader label="defaulted" />

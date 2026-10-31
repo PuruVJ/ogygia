@@ -25,7 +25,11 @@ export interface DocDiffGroup {
 
 /** The lines of a component's markup that give `attr` a value from code on one of `tags`
  *  (`<a … data-track={id}>`): plain text search, the attribute's name as written. */
-export function attr_sites(src: string, attr: string, tags: readonly string[]): { line: number; code: string }[] {
+export function attr_sites(
+	src: string,
+	attr: string,
+	tags: readonly string[]
+): { line: number; code: string }[] {
 	const out: { line: number; code: string }[] = [];
 	const lines = src.split('\n');
 	for (let i = 0; i < lines.length; i++) {
@@ -45,14 +49,18 @@ export function attr_sites(src: string, attr: string, tags: readonly string[]): 
 			let o = l.indexOf(`<${t}`);
 			while (o !== -1 && o < at) {
 				const next = l[o + t.length + 1];
-				if (next === undefined || next === ' ' || next === '>' || next === '/' || next === '\t') return true;
+				if (next === undefined || next === ' ' || next === '>' || next === '/' || next === '\t')
+					return true;
 				o = l.indexOf(`<${t}`, o + 1);
 			}
 			return false;
 		});
 		// another tag opened on the line: not this one; no tag opened: a multi-line tag's attribute line
 		if (!opens.length && l.slice(0, at).includes('<')) continue;
-		out.push({ line: i + 1, code: l.trim().length > 140 ? l.trim().slice(0, 139) + '…' : l.trim() });
+		out.push({
+			line: i + 1,
+			code: l.trim().length > 140 ? l.trim().slice(0, 139) + '…' : l.trim()
+		});
 	}
 	return out;
 }
@@ -87,7 +95,15 @@ function parse(piece: string): { tag: string; attrs: Map<string, string>; text: 
 	let i = 1;
 	if (piece[i] === '/') i++;
 	let j = i;
-	while (j < piece.length && piece[j] !== ' ' && piece[j] !== '>' && piece[j] !== '/' && piece[j] !== '\n' && piece[j] !== '\t') j++;
+	while (
+		j < piece.length &&
+		piece[j] !== ' ' &&
+		piece[j] !== '>' &&
+		piece[j] !== '/' &&
+		piece[j] !== '\n' &&
+		piece[j] !== '\t'
+	)
+		j++;
 	const tag = piece.slice(i, j).toLowerCase();
 	const close = piece.indexOf('>', j);
 	const head = close === -1 ? piece.slice(j) : piece.slice(j, close);
@@ -95,7 +111,8 @@ function parse(piece: string): { tag: string; attrs: Map<string, string>; text: 
 	let k = 0;
 	while (k < head.length) {
 		let eq = head.indexOf('=', k);
-		while (eq !== -1 && head[eq + 1] !== '"' && head[eq + 1] !== "'") eq = head.indexOf('=', eq + 1);
+		while (eq !== -1 && head[eq + 1] !== '"' && head[eq + 1] !== "'")
+			eq = head.indexOf('=', eq + 1);
 		if (eq === -1) break;
 		const q = head[eq + 1];
 		let s = eq - 1;
@@ -115,7 +132,12 @@ const clip = (s: string) => (s.length > 60 ? s.slice(0, 59) + '…' : s);
  * The two documents' differences, grouped. `island_of(entry)` names an island by its entry URL (the
  * report's island rows). Undefined when they are the same, or differ too much to line up.
  */
-export function doc_diff(a: string, b: string, island_of: (entry: string) => string | undefined = () => undefined, max_groups = 8): DocDiff | undefined {
+export function doc_diff(
+	a: string,
+	b: string,
+	island_of: (entry: string) => string | undefined = () => undefined,
+	max_groups = 8
+): DocDiff | undefined {
 	if (a === b) return undefined;
 	const pa = pieces(a);
 	const pb = pieces(b);
@@ -182,24 +204,43 @@ export function doc_diff(a: string, b: string, island_of: (entry: string) => str
 		if (!x || !y) {
 			const only = parse(x || y);
 			const verb = x ? 'dropped' : 'added';
-			add(`${verb}\0${only.tag}`, { what: `<${only.tag}> ${verb} in the later render`, tag: only.tag, a: clip(x.slice(0, 60)), b: clip(y.slice(0, 60)) });
+			add(`${verb}\0${only.tag}`, {
+				what: `<${only.tag}> ${verb} in the later render`,
+				tag: only.tag,
+				a: clip(x.slice(0, 60)),
+				b: clip(y.slice(0, 60))
+			});
 			continue;
 		}
 		// comment markers (`<!--r.439-->`, a renderer numbering its nodes): one group, whatever the number
 		if (y.startsWith('<!--')) {
 			const end = y.indexOf('-->');
-			add('comment', { what: 'comment markers (<!--…-->)', tag: 'comment', a: clip(x.slice(0, x.indexOf('-->') + 3)), b: clip(end === -1 ? y : y.slice(0, end + 3)) });
+			add('comment', {
+				what: 'comment markers (<!--…-->)',
+				tag: 'comment',
+				a: clip(x.slice(0, x.indexOf('-->') + 3)),
+				b: clip(end === -1 ? y : y.slice(0, end + 3))
+			});
 			continue;
 		}
 		const py = parse(y);
 		const px = parse(x);
 		// an island: its region tag (a new fingerprint) and its props script change together
 		if (py.tag === 'ogygia-region' || (py.tag === 'script' && py.attrs.has('data-ogygia-props'))) {
-			const entry = py.tag === 'ogygia-region' ? py.attrs.get('entry') : entry_of_fp.get(py.attrs.get('data-ogygia-props') ?? '');
+			const entry =
+				py.tag === 'ogygia-region'
+					? py.attrs.get('entry')
+					: entry_of_fp.get(py.attrs.get('data-ogygia-props') ?? '');
 			const name = (entry && island_of(entry)) || 'an';
 			// one place per island, not two (the region and its props are the same change)
 			if (py.tag === 'script') continue;
-			add(`island\0${name}`, { what: `the ${name} island's props`, tag: py.tag, island: name, a: clip(px.attrs.get('data-og-fp') ?? ''), b: clip(py.attrs.get('data-og-fp') ?? '') });
+			add(`island\0${name}`, {
+				what: `the ${name} island's props`,
+				tag: py.tag,
+				island: name,
+				a: clip(px.attrs.get('data-og-fp') ?? ''),
+				b: clip(py.attrs.get('data-og-fp') ?? '')
+			});
 			continue;
 		}
 		// changed or added in the later render, and dropped from it
@@ -211,17 +252,31 @@ export function doc_diff(a: string, b: string, island_of: (entry: string) => str
 				const key = `attr\0${attr}`;
 				const g = groups.get(key);
 				if (g && !g.tag.split(', ').includes(py.tag)) g.tag += `, ${py.tag}`;
-				add(key, { what: '', tag: py.tag, attr, a: clip(px.attrs.get(attr) ?? ''), b: clip(py.attrs.get(attr) ?? '') });
+				add(key, {
+					what: '',
+					tag: py.tag,
+					attr,
+					a: clip(px.attrs.get(attr) ?? ''),
+					b: clip(py.attrs.get(attr) ?? '')
+				});
 			}
 		} else {
-			add(`text\0${py.tag}`, { what: `text in <${py.tag}>`, tag: py.tag, a: clip(px.text.trim()), b: clip(py.text.trim()) });
+			add(`text\0${py.tag}`, {
+				what: `text in <${py.tag}>`,
+				tag: py.tag,
+				a: clip(px.text.trim()),
+				b: clip(py.text.trim())
+			});
 		}
 	}
 	// an attribute group names its tags (the first few)
 	for (const g of groups.values()) {
 		if (!g.attr) continue;
 		const tags = g.tag.split(', ');
-		g.what = `${g.attr} on ${tags.slice(0, 3).map((t) => `<${t}>`).join(', ')}${tags.length > 3 ? ` and ${tags.length - 3} more` : ''}`;
+		g.what = `${g.attr} on ${tags
+			.slice(0, 3)
+			.map((t) => `<${t}>`)
+			.join(', ')}${tags.length > 3 ? ` and ${tags.length - 3} more` : ''}`;
 	}
 	return {
 		tokens: pb.length,

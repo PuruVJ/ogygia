@@ -10,7 +10,11 @@
 	 * Renders nothing; the work rides an attachment so it has the mounted node to scope from.
 	 */
 	function localize(anchor: HTMLElement) {
-		const fmt = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+		const fmt = new Intl.DateTimeFormat(undefined, {
+			year: 'numeric',
+			month: 'long',
+			day: 'numeric'
+		});
 		const root = anchor.closest('.og-doc') ?? document;
 		for (const t of root.querySelectorAll('time.release-date[datetime]')) {
 			const d = new Date((t.getAttribute('datetime') ?? '') + 'T00:00:00');

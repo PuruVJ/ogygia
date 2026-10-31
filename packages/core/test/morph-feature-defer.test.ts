@@ -7,7 +7,8 @@
 import { describe, expect, it } from 'vitest';
 import { resolveFeatures, type RuntimeMarks } from '../src/compiler/link/runtime-entry.ts';
 
-const marks = (m: Partial<RuntimeMarks>): RuntimeMarks => ({ complete: true, ...m }) as RuntimeMarks;
+const marks = (m: Partial<RuntimeMarks>): RuntimeMarks =>
+	({ complete: true, ...m }) as RuntimeMarks;
 
 describe('morph feature — deferred holes', () => {
 	it('a deferred hole selects morph (so #apply can keep a live fallback)', () => {

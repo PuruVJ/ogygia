@@ -15,5 +15,6 @@
 		<Region of={facts.current} />
 	{/if}
 	<button data-pc-refresh onclick={() => facts.refresh()}>refresh</button>
-	<button data-pc-switch onclick={async () => (swapped = await switchLocale('fr'))}>français</button>
+	<button data-pc-switch onclick={async () => (swapped = await switchLocale('fr'))}>français</button
+	>
 </div>

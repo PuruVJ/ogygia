@@ -22,7 +22,9 @@
 	// An absolute path (a dev server, a sourcemapped build on the same machine) opens in the editor.
 	const editor_href = $derived(
 		f.path && is_abs(f.path)
-			? 'vscode://file/' + f.path + (f.line > 0 ? ':' + f.line + (f.col > 0 ? ':' + f.col : '') : '')
+			? 'vscode://file/' +
+					f.path +
+					(f.line > 0 ? ':' + f.line + (f.col > 0 ? ':' + f.col : '') : '')
 			: ''
 	);
 	const stacks = $derived(f.stacks ?? []);
@@ -95,7 +97,13 @@
 				<span class="k">inside it</span>
 				<ul>
 					{#if f.self_ms > 0 && f.total_ms > 0}
-						<li><i style="width:{Math.max(2, (f.self_ms / f.total_ms) * 80)}px"></i><b>its own lines</b><span class="dim">{fmt_ms(f.self_ms)} ms · {Math.round((f.self_ms / f.total_ms) * 100)}%</span></li>
+						<li>
+							<i style="width:{Math.max(2, (f.self_ms / f.total_ms) * 80)}px"></i><b
+								>its own lines</b
+							><span class="dim"
+								>{fmt_ms(f.self_ms)} ms · {Math.round((f.self_ms / f.total_ms) * 100)}%</span
+							>
+						</li>
 					{/if}
 					{#each f.callees as c (c.key)}
 						<li class:faint={c.category !== 'app' && c.category !== 'component'}>
@@ -109,7 +117,15 @@
 			</div>
 		{/if}
 		{#if peek}
-			<pre class="peek">{#each peek.lines as ln, i (i)}<span class="ln" class:hot={peek.start + i === peek.line} style={heat.has(peek.start + i) ? `background:rgba(232,115,74,${(0.12 + 0.5 * (heat.get(peek.start + i) ?? 0)).toFixed(2)})` : ''}><span class="no">{peek.start + i}</span><span class="lms">{heat.has(peek.start + i) ? fmt_ms(ms_at(peek.start + i)) : ''}</span>{ln}
+			<pre class="peek">{#each peek.lines as ln, i (i)}<span
+						class="ln"
+						class:hot={peek.start + i === peek.line}
+						style={heat.has(peek.start + i)
+							? `background:rgba(232,115,74,${(0.12 + 0.5 * (heat.get(peek.start + i) ?? 0)).toFixed(2)})`
+							: ''}
+						><span class="no">{peek.start + i}</span><span class="lms"
+							>{heat.has(peek.start + i) ? fmt_ms(ms_at(peek.start + i)) : ''}</span
+						>{ln}
 </span>{/each}</pre>
 		{/if}
 		{#if stacks.length}
@@ -131,7 +147,9 @@
 				{/each}
 			</div>
 		{:else}
-			<p class="hint">No call stacks recorded for this row (an older report, or a frame with no callers).</p>
+			<p class="hint">
+				No call stacks recorded for this row (an older report, or a frame with no callers).
+			</p>
 		{/if}
 	</td>
 </tr>

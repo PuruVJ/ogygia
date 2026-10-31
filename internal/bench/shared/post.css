@@ -15,7 +15,13 @@
 }
 body {
 	margin: 0;
-	font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+	font-family:
+		ui-sans-serif,
+		system-ui,
+		-apple-system,
+		Segoe UI,
+		Roboto,
+		sans-serif;
 	color: var(--fg);
 	line-height: 1.7;
 }

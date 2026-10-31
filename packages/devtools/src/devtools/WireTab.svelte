@@ -30,7 +30,9 @@
 <h3>wire inspector — what the server shipped to this page</h3>
 
 {#if model.renders.length === 0 && model.seeds.length === 0 && model.caps.length === 0}
-	<div class="muted">no server crossings recorded — needs a devtools build (the handle's side-channel feeds this).</div>
+	<div class="muted">
+		no server crossings recorded — needs a devtools build (the handle's side-channel feeds this).
+	</div>
 {:else}
 	<div class="sec">islands · props payload</div>
 	<table>
@@ -72,7 +74,11 @@
 			<thead><tr><th>id</th><th>ttl</th></tr></thead>
 			<tbody>
 				{#each model.caps as c (c.seq)}
-					<tr><td title={c.id}>{short_chunk(c.id) || c.id}</td><td>{c.ttl ? c.ttl + ' s' : 'no-store'}</td></tr>
+					<tr
+						><td title={c.id}>{short_chunk(c.id) || c.id}</td><td
+							>{c.ttl ? c.ttl + ' s' : 'no-store'}</td
+						></tr
+					>
 				{/each}
 			</tbody>
 		</table>
@@ -80,7 +86,10 @@
 
 	<div class="total">
 		<span>data across the wire</span>
-		<span>{kb(model.total)} <span class="muted">({model.propsBytes} B props + {model.seedBytes} B seeds)</span></span>
+		<span
+			>{kb(model.total)}
+			<span class="muted">({model.propsBytes} B props + {model.seedBytes} B seeds)</span></span
+		>
 	</div>
 {/if}
 

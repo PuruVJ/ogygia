@@ -55,7 +55,9 @@ describe('@type on variable statements', () => {
 	});
 
 	it('appends the type import after an existing import', () => {
-		const out = ts_of(`import { writable } from 'svelte/store';\n\n/** @type {import('./x').T} */\nlet v;`);
+		const out = ts_of(
+			`import { writable } from 'svelte/store';\n\n/** @type {import('./x').T} */\nlet v;`
+		);
 		const import_order = out!.indexOf(`from 'svelte/store'`) < out!.indexOf(`import type { T }`);
 		expect(import_order).toBe(true);
 	});
@@ -75,7 +77,9 @@ describe('@type on function declarations', () => {
 	});
 
 	it('preserves async on the arrow', () => {
-		const out = ts_of(`/** @type {import('./x').Fn} */\nexport async function go() {\n\treturn 1;\n}`);
+		const out = ts_of(
+			`/** @type {import('./x').Fn} */\nexport async function go() {\n\treturn 1;\n}`
+		);
 		expect(out).toContain(`export const go: Fn = async () => {`);
 	});
 
@@ -97,7 +101,9 @@ describe('@satisfies', () => {
 	});
 
 	it('wraps a function declaration in parens with satisfies', () => {
-		const out = ts_of(`/** @satisfies {import('./x').Fn} */\nexport function go() {\n\treturn 1;\n}`);
+		const out = ts_of(
+			`/** @satisfies {import('./x').Fn} */\nexport function go() {\n\treturn 1;\n}`
+		);
 		expect(out).toContain(`export const go = (() => {`);
 		expect(out!.trimEnd().endsWith(`}) satisfies Fn;`)).toBe(true);
 	});
@@ -159,7 +165,9 @@ describe('@type casts', () => {
 
 describe('JSDoc comment handling', () => {
 	it('keeps the comment text when a block has prose + a tag', () => {
-		const out = ts_of(`/**\n * Greets the user.\n * @param {string} name\n */\nfunction greet(name) {}`);
+		const out = ts_of(
+			`/**\n * Greets the user.\n * @param {string} name\n */\nfunction greet(name) {}`
+		);
 		expect(out).toContain('Greets the user.');
 		expect(out).not.toContain('@param');
 		expect(out).toContain(`function greet(name: string) {}`);

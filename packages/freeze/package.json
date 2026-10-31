@@ -13,7 +13,13 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/freeze"
 	},
-	"keywords": ["ogygia", "sveltekit", "cache", "cdn", "esi"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"cache",
+		"cdn",
+		"esi"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -24,7 +30,10 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",

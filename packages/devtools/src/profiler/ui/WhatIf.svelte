@@ -6,7 +6,11 @@
 	import { fmt_ms } from './format.ts';
 
 	type Part = { title: string; kind: string; ms: number; wait: boolean; with?: string[] };
-	let { parts, now_ms, caps }: { parts: Part[]; now_ms: number; caps?: { wait?: number; cpu?: number } } = $props();
+	let {
+		parts,
+		now_ms,
+		caps
+	}: { parts: Part[]; now_ms: number; caps?: { wait?: number; cpu?: number } } = $props();
 
 	// all ticked at first: the forecast's own number
 	// svelte-ignore state_referenced_locally
@@ -18,9 +22,13 @@
 
 <div class="whatif">
 	<p class="sum">
-		With the <b>{picked.length}</b> fix{picked.length === 1 ? '' : 'es'} ticked: about <b>{fmt_ms(result.after)} ms</b> a render
+		With the <b>{picked.length}</b> fix{picked.length === 1 ? '' : 'es'} ticked: about
+		<b>{fmt_ms(result.after)} ms</b>
+		a render
 		<span class="hint">(from {fmt_ms(now_ms)} ms, −{pct}%)</span>
-		{#if result.clamped}<span class="hint">· they claim more than the render used: held at what it used</span>{/if}
+		{#if result.clamped}<span class="hint"
+				>· they claim more than the render used: held at what it used</span
+			>{/if}
 	</p>
 	<ul>
 		{#each parts as p, i}
@@ -28,7 +36,9 @@
 				<label>
 					<input type="checkbox" bind:checked={on[i]} />
 					<span class="t">{p.title}</span>
-					<span class="ms">{p.wait ? 'waiting' : p.kind === 'unread-work' ? 'deleted' : 'CPU'} ~{fmt_ms(p.ms)} ms</span>
+					<span class="ms"
+						>{p.wait ? 'waiting' : p.kind === 'unread-work' ? 'deleted' : 'CPU'} ~{fmt_ms(p.ms)} ms</span
+					>
 				</label>
 				{#if p.with?.length}<span class="hint covers">also covers {p.with.join('; ')}</span>{/if}
 			</li>

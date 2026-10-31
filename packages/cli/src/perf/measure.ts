@@ -47,9 +47,17 @@ export interface ReportLike {
 	node?: string;
 	target?: { runs?: number[] | null; page?: string | null };
 	summary?: { busy_ms?: number };
-	timeline?: { wait_ms?: number; phases?: { label?: string; phase?: string; cpu_ms?: number; wait_ms?: number }[] } | null;
+	timeline?: {
+		wait_ms?: number;
+		phases?: { label?: string; phase?: string; cpu_ms?: number; wait_ms?: number }[];
+	} | null;
 	cold?: { ms?: number; files?: { extra_ms: number }[] } | null;
-	ogygia?: { seed_bytes?: number; tail_bytes?: number; islands?: number; island_rows?: { js_bytes?: number | null; modules?: string[] }[] } | null;
+	ogygia?: {
+		seed_bytes?: number;
+		tail_bytes?: number;
+		islands?: number;
+		island_rows?: { js_bytes?: number | null; modules?: string[] }[];
+	} | null;
 	components?: { name: string; self_ms: number; total_ms: number }[];
 	hot_functions?: { name: string; file: string; self_ms: number }[];
 	paths?: { owner: { name: string }; ms: number; functions: unknown[] }[];
@@ -57,7 +65,8 @@ export interface ReportLike {
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
-const median = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0);
+const median = (xs: number[]) =>
+	xs.length ? [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] : 0;
 
 /** One report → one page's snapshot. */
 export function snapshot_page(page: string, report: ReportLike): PageSnapshot {
@@ -77,7 +86,8 @@ export function snapshot_page(page: string, report: ReportLike): PageSnapshot {
 		for (const m of mods) seen.add(m);
 	}
 	const phases: Record<string, number> = {};
-	for (const ph of report.timeline?.phases ?? []) phases[ph.phase ?? ph.label ?? 'other'] = r1((ph.cpu_ms ?? 0) + (ph.wait_ms ?? 0));
+	for (const ph of report.timeline?.phases ?? [])
+		phases[ph.phase ?? ph.label ?? 'other'] = r1((ph.cpu_ms ?? 0) + (ph.wait_ms ?? 0));
 	return {
 		page,
 		render_p50: r1(p50),
@@ -94,8 +104,12 @@ export function snapshot_page(page: string, report: ReportLike): PageSnapshot {
 			.sort((a, b) => b.self_ms - a.self_ms)
 			.slice(0, 15)
 			.map((c) => ({ name: c.name, self_ms: r1(c.self_ms), total_ms: r1(c.total_ms) })),
-		functions: (report.hot_functions ?? []).slice(0, 15).map((f) => ({ name: f.name, file: f.file, self_ms: r1(f.self_ms) })),
-		paths: (report.paths ?? []).slice(0, 5).map((p) => ({ owner: p.owner.name, ms: r1(p.ms), fns: p.functions.length })),
+		functions: (report.hot_functions ?? [])
+			.slice(0, 15)
+			.map((f) => ({ name: f.name, file: f.file, self_ms: r1(f.self_ms) })),
+		paths: (report.paths ?? [])
+			.slice(0, 5)
+			.map((p) => ({ owner: p.owner.name, ms: r1(p.ms), fns: p.functions.length })),
 		warnings: (report.findings ?? []).filter((f) => f.severity === 'warn').map((f) => f.code),
 		phases
 	};
@@ -133,19 +147,36 @@ export async function measure(opts: MeasureOptions): Promise<PerfSnapshot> {
 		const timer = setTimeout(() => ctrl.abort(), opts.timeout_ms ?? 120_000);
 		let res: Response;
 		try {
-			res = await f(url, { headers: { accept: 'application/json', ...(opts.key ? { 'x-profiler-key': opts.key } : {}) }, redirect: 'follow', signal: ctrl.signal });
+			res = await f(url, {
+				headers: {
+					accept: 'application/json',
+					...(opts.key ? { 'x-profiler-key': opts.key } : {})
+				},
+				redirect: 'follow',
+				signal: ctrl.signal
+			});
 		} catch (e) {
-			throw new Error(`${page}: the profiler did not answer (${e instanceof Error ? e.message : String(e)})`);
+			throw new Error(
+				`${page}: the profiler did not answer (${e instanceof Error ? e.message : String(e)})`
+			);
 		} finally {
 			clearTimeout(timer);
 		}
-		if (res.status === 409) throw new Error(`${page}: the profiler is busy on that server (another recording is running)`);
-		if (!res.ok) throw new Error(`${page}: the profiler answered ${res.status}${res.status === 401 || res.status === 302 || res.status === 303 ? ' — is the key right (x-profiler-key)?' : ''}`);
+		if (res.status === 409)
+			throw new Error(
+				`${page}: the profiler is busy on that server (another recording is running)`
+			);
+		if (!res.ok)
+			throw new Error(
+				`${page}: the profiler answered ${res.status}${res.status === 401 || res.status === 302 || res.status === 303 ? ' — is the key right (x-profiler-key)?' : ''}`
+			);
 		let report: ReportLike;
 		try {
 			report = (await res.json()) as ReportLike;
 		} catch {
-			throw new Error(`${page}: the profiler's answer was not JSON — is ${base} the profiler's path?`);
+			throw new Error(
+				`${page}: the profiler's answer was not JSON — is ${base} the profiler's path?`
+			);
 		}
 		if (!node && report.node) node = report.node;
 		const snap = snapshot_page(page, report);

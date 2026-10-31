@@ -17,10 +17,10 @@ The split itself is the smart part and it works. `vite/runtime-entry.ts` reads b
 (does this app use lakes? forms? router? streaming? …) and generates a per-app entry that imports
 **only** the features in use, then boots them. Result today:
 
-| app | runtime chunk (gzip) | why |
-| --- | --- | --- |
-| docs | ~5.9 KB | fewer features |
-| playground | ~8.6 KB | continuity + streaming + everything |
+| app        | runtime chunk (gzip) | why                                 |
+| ---------- | -------------------- | ----------------------------------- |
+| docs       | ~5.9 KB              | fewer features                      |
+| playground | ~8.6 KB              | continuity + streaming + everything |
 
 `core.ts` never statically imports a feature impl, so unused features tree-shake away. **Keep all of
 this** — the codegen, the marks, the core-is-feature-agnostic rule.
@@ -30,20 +30,20 @@ this** — the codegen, the marks, the core-is-feature-agnostic rule.
 A feature needs to hand some functions to `core` (and to `router`). Today there are **three
 different ways** it does that, chosen inconsistently:
 
-| mechanism | who registers this way | shape |
-| --- | --- | --- |
-| **`spa-bridge.ts`** | lakes, forms, persist | typed module-global `let x_ops` + `set_x_ops()`, no-op defaults |
-| **`host.ts`** | wire, remote-seeds, speculate, interaction, stream, morph, live, persist | **stringly-typed** `api.provide('name', …)` / `api.service('name')` / `api.arm('name')` |
-| **`router.ts` setters** | router lifecycle | a *third* set of `set_after_body_swap/connected/soft_invalidate()` |
+| mechanism               | who registers this way                                                   | shape                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| **`spa-bridge.ts`**     | lakes, forms, persist                                                    | typed module-global `let x_ops` + `set_x_ops()`, no-op defaults                         |
+| **`host.ts`**           | wire, remote-seeds, speculate, interaction, stream, morph, live, persist | **stringly-typed** `api.provide('name', …)` / `api.service('name')` / `api.arm('name')` |
+| **`router.ts` setters** | router lifecycle                                                         | a _third_ set of `set_after_body_swap/connected/soft_invalidate()`                      |
 
 On top of that:
 
-- **`persist` registers through two of them** — `set_persist_ops(...)` (spa-bridge) *and*
+- **`persist` registers through two of them** — `set_persist_ops(...)` (spa-bridge) _and_
   `api.provide('persist', …)` + `api.provide('liveHost', …)` (host).
 - **`live` and `persist` both provide `liveHost`** — a silent last-writer-wins duplicate.
 - **`api.provide('kitBootstrap', …)` is dead** — nobody reads it (features import
   `document_has_kit_bootstrap` from `kit-boot.js` directly).
-- **`spaLifecycle` is provided by core then consumed by router** to re-inject core's *own* exported
+- **`spaLifecycle` is provided by core then consumed by router** to re-inject core's _own_ exported
   functions (`prepare_spa_document` / `finish_spa_document` / `apply_soft_invalidate_doc`) back into
   router via its setters — a round trip that exists only because of the indirection.
 - **Every feature is two files**: a `features/<name>.ts` wrapper whose whole job is to forward a
@@ -151,28 +151,30 @@ break tree-shaking). `document_has_kit_bootstrap` is already imported straight f
 
 ## File-by-file change
 
-| file | change |
-| --- | --- |
-| `host.ts` | **delete** (service locator gone) |
-| `spa-bridge.ts` | **becomes** `slots.ts` — every feature slot, typed, defaults |
-| `features/*.ts` (11) | **delete** — merged into the impls |
-| `lakes.ts`, `morph.ts`, `form-continuity.ts`, `persist.ts`, `interaction.ts`, `speculate.ts`, `stream-slots.ts`, `live-transport.ts`(wire), `remote-cache/client-stub`(remote-seeds), `LiveHost.svelte`(live) | each gains `export function install()` that fills its slot |
-| `router.ts` | drop `set_after_body_*`; import lifecycle from core; add `install()` filling nothing but starting the router |
-| `core.ts` | replace `get_api()/service/arm/provide` with `slots.*`; drop the `api`/`HostApi` singleton; `boot(installers)` |
-| `full.ts` / `index.ts` | import impls instead of `features/*`; pass `install` fns |
-| `vite/runtime-entry.ts` | `FEATURES[id].module` points at the impl (`lakes.js` not `features/lakes.js`); emit `boot([…install])` |
+| file                                                                                                                                                                                                          | change                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `host.ts`                                                                                                                                                                                                     | **delete** (service locator gone)                                                                              |
+| `spa-bridge.ts`                                                                                                                                                                                               | **becomes** `slots.ts` — every feature slot, typed, defaults                                                   |
+| `features/*.ts` (11)                                                                                                                                                                                          | **delete** — merged into the impls                                                                             |
+| `lakes.ts`, `morph.ts`, `form-continuity.ts`, `persist.ts`, `interaction.ts`, `speculate.ts`, `stream-slots.ts`, `live-transport.ts`(wire), `remote-cache/client-stub`(remote-seeds), `LiveHost.svelte`(live) | each gains `export function install()` that fills its slot                                                     |
+| `router.ts`                                                                                                                                                                                                   | drop `set_after_body_*`; import lifecycle from core; add `install()` filling nothing but starting the router   |
+| `core.ts`                                                                                                                                                                                                     | replace `get_api()/service/arm/provide` with `slots.*`; drop the `api`/`HostApi` singleton; `boot(installers)` |
+| `full.ts` / `index.ts`                                                                                                                                                                                        | import impls instead of `features/*`; pass `install` fns                                                       |
+| `vite/runtime-entry.ts`                                                                                                                                                                                       | `FEATURES[id].module` points at the impl (`lakes.js` not `features/lakes.js`); emit `boot([…install])`         |
 
 Net: **−12 files** (`host.ts` + 11 wrappers), one seam, zero stringly keys.
 
 ## Tradeoffs
 
 **Pros**
+
 - One mechanism instead of three; every hand-off is typed and checked.
 - Half the runtime files; no wrapper/impl bounce.
 - Same split, same-or-smaller bundle (we delete `host.ts`'s Map machinery and the wrapper modules).
 - Cross-registration, the `liveHost` dup, the dead `kitBootstrap`, and the `spaLifecycle` round-trip all disappear.
 
 **Cons / risks**
+
 - Large diff: touches `core.ts`, every feature, `router.ts`, `full.ts`, `index.ts`, `runtime-entry.ts`.
   Mitigated by the green net — migrate one feature at a time, run `pnpm test:e2e` (28) + unit (218) after each.
 - Install **order** is load-bearing (stream→CE, morph→live). It stays explicit in `FEATURE_ORDER`;
@@ -181,9 +183,10 @@ Net: **−12 files** (`host.ts` + 11 wrappers), one seam, zero stringly keys.
   already the norm for the browser runtime; it is the one-instance-per-tab boot singleton.
 
 **Alternatives considered**
-- *Typed generic `HostApi`* (keep the locator, add generics): still a service locator, still string
+
+- _Typed generic `HostApi`_ (keep the locator, add generics): still a service locator, still string
   keys at every call site. The slot object is simpler and already proven by spa-bridge. Rejected.
-- *Collapse to a monolith* (no split): loses the size win — docs would jump ~5.9 → ~8.6 KB gzip.
+- _Collapse to a monolith_ (no split): loses the size win — docs would jump ~5.9 → ~8.6 KB gzip.
   Rejected (you picked "keep the split").
 
 ## Decisions I need from you
@@ -192,7 +195,7 @@ Net: **−12 files** (`host.ts` + 11 wrappers), one seam, zero stringly keys.
 2. **Install convention**: keep `export function install()` per feature (my pick), or have each
    feature `export const slot` and let `boot` assign — slightly less code, but loses per-feature
    setup logic (stream.start guard, forms/speculate config gates), so I lean `install()`.
-3. Anything you want to *add* while it's open (e.g. a dev warning when a mark selected a feature the
+3. Anything you want to _add_ while it's open (e.g. a dev warning when a mark selected a feature the
    app never actually uses), or keep it a pure like-for-like refactor?
 
 No code until you're happy with the shape.

@@ -3,7 +3,8 @@ import { render_profile as render } from '../src/mcp.ts';
 // the profiler's report reading, as `ogygia mcp` loads it from an app with the devtools plugin
 import * as reading from '../../devtools/src/report.ts';
 
-const render_profile = (origin: string, report: Parameters<typeof render>[1]) => render(origin, report, reading);
+const render_profile = (origin: string, report: Parameters<typeof render>[1]) =>
+	render(origin, report, reading);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The MCP digest of a profile is what an agent reads to fix the code: the slow patterns (with the

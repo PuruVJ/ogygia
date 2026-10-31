@@ -11,7 +11,15 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/content"
 	},
-	"keywords": ["ogygia", "sveltekit", "content", "markdown", "mdsvex", "shiki", "docs"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"content",
+		"markdown",
+		"mdsvex",
+		"shiki",
+		"docs"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -48,7 +56,11 @@
 			"types": "./ambient.d.ts"
 		}
 	},
-	"files": ["dist", "ambient.d.ts", "README.md"],
+	"files": [
+		"dist",
+		"ambient.d.ts",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",

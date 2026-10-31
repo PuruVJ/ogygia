@@ -35,9 +35,32 @@
  * for `baseURL`, or without one for the origin of the first page the test opens).
  * `profile()` needs the devtools plugin's profiler, `devtools({ profiler })` (and its key on a build).
  */
-import type { PageFinding, RatedVital, IslandRow, SessionReport, HydrationStatus, HtmlDiff } from '@ogygia/core/insights';
-import { assets_diff, DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN, TESTING_ENGINE_VERSION } from '@ogygia/core/insights';
-import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
+import type {
+	PageFinding,
+	RatedVital,
+	IslandRow,
+	SessionReport,
+	HydrationStatus,
+	HtmlDiff
+} from '@ogygia/core/insights';
+import {
+	assets_diff,
+	DEVTOOLS_COOKIE,
+	DEVTOOLS_ON,
+	TESTING_COOKIE,
+	TESTING_LEAN,
+	TESTING_ENGINE_VERSION
+} from '@ogygia/core/insights';
+import type {
+	TestType,
+	Expect,
+	Page,
+	Route,
+	PlaywrightTestArgs,
+	PlaywrightTestOptions,
+	PlaywrightWorkerArgs,
+	PlaywrightWorkerOptions
+} from '@playwright/test';
 
 // ── the reports (plain JSON, as the page hands them over) ──
 
@@ -59,7 +82,11 @@ export interface OgygiaPageReport {
 	blocking: { url: string; ms: number; bytes: number }[];
 	bytes: { type: string; count: number; transfer: number; size: number }[];
 	longtask_ms: number;
-	cpu: { busy_ms: number; by_kind: { kind: string; ms: number }[]; fns: { name: string; file: string; line: number | null; self_ms: number; total_ms: number }[] } | null;
+	cpu: {
+		busy_ms: number;
+		by_kind: { kind: string; ms: number }[];
+		fns: { name: string; file: string; line: number | null; self_ms: number; total_ms: number }[];
+	} | null;
 	/** what the test's browser cannot measure (WebKit: layout shifts, long tasks, interaction timing,
 	 *  the CPU sampler): findings that need them cannot appear, whatever the page does */
 	unmeasured: string[];
@@ -117,7 +144,13 @@ export type OgygiaSessionReport = Omit<SessionReport, 'findings' | 'counts'> & {
 	 *  what started it — its link or form, or the input being handled when it began; `approx` when that
 	 *  could not be seen (no Navigation API in this browser, or an engine before version 2: then only
 	 *  `url` and `t`) and `after` is the last input before it */
-	navigations: { url: string; t: number | null; after: string | null; island: string | null; approx: boolean }[];
+	navigations: {
+		url: string;
+		t: number | null;
+		after: string | null;
+		island: string | null;
+		approx: boolean;
+	}[];
 	timeline: unknown[];
 	/** what the test's browser cannot measure (see OgygiaPageReport) */
 	unmeasured: string[];
@@ -131,7 +164,16 @@ export type OgygiaSessionReport = Omit<SessionReport, 'findings' | 'counts'> & {
 				error?: undefined;
 				window: {
 					ms: number;
-					requests: { method: string; path: string; route: string | null; ms: number; status: number | null; cpu_ms?: number; net_ms?: number | null; instance?: string }[];
+					requests: {
+						method: string;
+						path: string;
+						route: string | null;
+						ms: number;
+						status: number | null;
+						cpu_ms?: number;
+						net_ms?: number | null;
+						instance?: string;
+					}[];
 					instances?: number;
 				};
 		  })
@@ -146,7 +188,12 @@ export interface OgygiaProfileReport {
 	engine?: { version: number };
 	id: string;
 	target: { page: string; runs: number[] };
-	score: { score: number; grade: string; categories: { key: string; label: string; score: number; value: string; lost?: number }[]; missing: { key: string; label: string; why: string }[] } | null;
+	score: {
+		score: number;
+		grade: string;
+		categories: { key: string; label: string; score: number; value: string; lost?: number }[];
+		missing: { key: string; label: string; why: string }[];
+	} | null;
 	forecast: { now_ms: number; after_ms: number } | null;
 	findings: { severity: string; code: string; message: string; fix?: string }[];
 	/** the page's weight (a build), or `{ missing }` why it was not weighed (a dev server) */
@@ -160,7 +207,11 @@ export interface OgygiaProfileReport {
 	[key: string]: unknown;
 }
 
-export type OgygiaReport = OgygiaPageReport | OgygiaHydrationReport | OgygiaSessionReport | OgygiaProfileReport;
+export type OgygiaReport =
+	| OgygiaPageReport
+	| OgygiaHydrationReport
+	| OgygiaSessionReport
+	| OgygiaProfileReport;
 
 // ── the driver: whatever runs your browser ──
 
@@ -210,7 +261,8 @@ export interface OgygiaOptions {
 }
 
 /** A pattern as it crosses into the page: a RegExp as its source and flags. */
-const wire_pat = (p: string | RegExp | undefined) => (p instanceof RegExp ? { re: p.source, flags: p.flags } : p);
+const wire_pat = (p: string | RegExp | undefined) =>
+	p instanceof RegExp ? { re: p.source, flags: p.flags } : p;
 
 /** "Older engine" said once per site and version for the whole process (a CI run opens hundreds of pages). */
 const warned_engines = new Set<string>();
@@ -221,7 +273,10 @@ export interface Ogygia {
 	/** `server: true` also records the server over the same stretch (needs `devtools({ profiler })`, the devtools plugin's profiler).
 	 *  `blockNavigation: true` holds back any document load the actions cause (a reload, a link), so the
 	 *  page and the recording stay, and lists each in `navigations` (needs a driver that can: Playwright's) */
-	record(actions: () => Promise<unknown>, opts?: { server?: boolean; blockNavigation?: boolean }): Promise<OgygiaSessionReport>;
+	record(
+		actions: () => Promise<unknown>,
+		opts?: { server?: boolean; blockNavigation?: boolean }
+	): Promise<OgygiaSessionReport>;
 	/** `fields`: only these top-level sections of the report (with what names it — schema, engine, id,
 	 *  target, links), e.g. `['requests', 'network', 'findings', 'assets', 'summary']`: a full report is
 	 *  hundreds of KB, mostly `stacks`, `hot_functions` and `drill` */
@@ -245,19 +300,31 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 	let engine: OgygiaEngine = { version: TESTING_ENGINE_VERSION };
 	const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
 		const until = Date.now() + (options.timeout ?? 15_000);
-		while (!(await driver.evaluate(() => !!(window as { __ogygia_testing?: unknown }).__ogygia_testing, null))) {
+		while (
+			!(await driver.evaluate(
+				() => !!(window as { __ogygia_testing?: unknown }).__ogygia_testing,
+				null
+			))
+		) {
 			if (Date.now() > until) throw new Error(NOT_THERE);
 			await wait(100);
 		}
 		const out = (await driver.evaluate(
 			async ([n, a]: readonly [string, unknown[]]) => {
-				const t = (window as unknown as { __ogygia_testing: Record<string, (...x: unknown[]) => Promise<unknown>> & { version?: number } }).__ogygia_testing;
+				const t = (
+					window as unknown as {
+						__ogygia_testing: Record<string, (...x: unknown[]) => Promise<unknown>> & {
+							version?: number;
+						};
+					}
+				).__ogygia_testing;
 				return { v: t.version ?? 1, r: await t[n](...a) };
 			},
 			[name, args] as const
 		)) as { v: number; r: T };
 		// (an engine from 3 on names itself, lean or not, in its reports)
-		const own = out.r && typeof out.r === 'object' ? (out.r as { engine?: OgygiaEngine }).engine : undefined;
+		const own =
+			out.r && typeof out.r === 'object' ? (out.r as { engine?: OgygiaEngine }).engine : undefined;
 		engine = own ?? { version: out.v };
 		if (out.v < TESTING_ENGINE_VERSION) {
 			const at = await driver.evaluate(() => location.origin, null).catch(() => '');
@@ -296,19 +363,33 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 		async page() {
 			await call('settled', 300, 10_000);
 			const r = await call<Omit<OgygiaPageReport, 'kind'> | null>('page', options.cpuFunctions);
-			if (!r) throw new Error('the page load was not measured: in a build, devtools must be on in the browser (the `og_devtools=on` cookie, or `?og-devtools=on`) before the page loads');
+			if (!r)
+				throw new Error(
+					'the page load was not measured: in a build, devtools must be on in the browser (the `og_devtools=on` cookie, or `?og-devtools=on`) before the page loads'
+				);
 			return keep({ kind: 'page', ...r, engine });
 		},
 		async hydration() {
 			await call('settled', 300, 10_000);
-			const ignore = (options.ignoreAttributes ?? []).map((r) => ({ tag: wire_pat(r.tag), name: wire_pat(r.name), value: wire_pat(r.value) }));
-			const r = await call<Omit<OgygiaHydrationReport, 'kind' | 'engine'>>('hydration', options.islandKey, ignore);
+			const ignore = (options.ignoreAttributes ?? []).map((r) => ({
+				tag: wire_pat(r.tag),
+				name: wire_pat(r.name),
+				value: wire_pat(r.value)
+			}));
+			const r = await call<Omit<OgygiaHydrationReport, 'kind' | 'engine'>>(
+				'hydration',
+				options.islandKey,
+				ignore
+			);
 			return keep({ kind: 'hydration', ...r, engine });
 		},
 		async record(actions, ropts) {
 			await call('settled', 300, 10_000);
 			const b = options.profilerBase ?? '/__profiler';
-			const headers = { accept: 'application/json', ...(options.profilerKey ? { 'x-profiler-key': options.profilerKey } : {}) };
+			const headers = {
+				accept: 'application/json',
+				...(options.profilerKey ? { 'x-profiler-key': options.profilerKey } : {})
+			};
 			// the server window first (a 409: another recording holds the recorder — wait for it). A window
 			// that cannot start leaves the session whole, with `server: { error }`
 			let window_id: { header: string; id: string } | null = null;
@@ -330,10 +411,13 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 				}
 				// each request of the session carries the window's id, so every instance of a serverless
 				// deployment attributes it (the profiler gathers them from its store at stop)
-				if (window_id && driver.tagRequests) untag = await driver.tagRequests(window_id.header, window_id.id);
+				if (window_id && driver.tagRequests)
+					untag = await driver.tagRequests(window_id.header, window_id.id);
 			}
 			if (ropts?.blockNavigation && !driver.blockNavigation)
-				throw new Error('record(…, { blockNavigation: true }) needs a driver with `blockNavigation()` (withOgygia’s Playwright driver has one)');
+				throw new Error(
+					'record(…, { blockNavigation: true }) needs a driver with `blockNavigation()` (withOgygia’s Playwright driver has one)'
+				);
 			const blocker = ropts?.blockNavigation ? await driver.blockNavigation!() : null;
 			await call('record_start');
 			let failed = false;
@@ -359,19 +443,29 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			let server: OgygiaSessionReport['server'];
 			if (untag) await untag().catch(() => {});
 			if (ropts?.server && !server_error) {
-				const s = await post(`${b}/window/stop`, { ...headers, ...(window_id ? { [window_id.header]: window_id.id } : {}) });
+				const s = await post(`${b}/window/stop`, {
+					...headers,
+					...(window_id ? { [window_id.header]: window_id.id } : {})
+				});
 				if (s.status === 200) {
 					const json = JSON.parse(s.body) as Record<string, unknown>;
-					server = { ...json, mode: json.kind, kind: 'profile' } as unknown as OgygiaSessionReport['server'];
+					server = {
+						...json,
+						mode: json.kind,
+						kind: 'profile'
+					} as unknown as OgygiaSessionReport['server'];
 				} else server_error = `the profiler's window failed (${s.status}): ${s.body.slice(0, 200)}`;
 			}
-			if (server_error) server = { error: server_error } as unknown as OgygiaSessionReport['server'];
+			if (server_error)
+				server = { error: server_error } as unknown as OgygiaSessionReport['server'];
 			if (!r) {
 				const now = await driver.evaluate(() => location.href, null).catch(() => null);
 				throw new Error(
 					'the recording was lost: the page went to another document while it ran' +
 						(now ? ` (it is now at ${now})` : '') +
-						(stop_error !== undefined ? ', and that document has no ogygia testing API to finish it' : '') +
+						(stop_error !== undefined
+							? ', and that document has no ogygia testing API to finish it'
+							: '') +
 						(failed ? '. The actions failed too: see `cause`' : '') +
 						'. To keep the page, record with `{ blockNavigation: true }`.',
 					{ cause: failed ? failure : stop_error }
@@ -380,21 +474,44 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			if (failed) throw failure;
 			// an older site's engine ignores what it is handed: fill in what the test side knows
 			const old = r as Partial<OgygiaSessionReport> & Omit<OgygiaSessionReport, 'kind'>;
-			const navigations = old.navigations ?? blocked.map((n) => ({ url: n.url, t: n.t, after: null, island: null, approx: true }));
+			const navigations =
+				old.navigations ??
+				blocked.map((n) => ({ url: n.url, t: n.t, after: null, island: null, approx: true }));
 			const findings = old.findings.map((f) => ({ ...f, names: f.names ?? [] }));
 			if (!old.navigations)
 				for (const n of navigations)
-					findings.push({ code: 'navigation-blocked', severity: 'warn', message: `The page tried to load another document (${n.url}); it was blocked, so the recording kept going.`, refs: [], names: [] });
-			return keep({ kind: 'session', ...r, findings, navigations, engine, ...(server ? { server } : {}) });
+					findings.push({
+						code: 'navigation-blocked',
+						severity: 'warn',
+						message: `The page tried to load another document (${n.url}); it was blocked, so the recording kept going.`,
+						refs: [],
+						names: []
+					});
+			return keep({
+				kind: 'session',
+				...r,
+				findings,
+				navigations,
+				engine,
+				...(server ? { server } : {})
+			});
 		},
 		async profile(path, opts) {
 			const b = options.profilerBase ?? '/__profiler';
-			const fields = opts?.fields?.length ? `&fields=${encodeURIComponent(opts.fields.join(','))}` : '';
-			const res = await get(`${b}/page?p=${encodeURIComponent(path)}&runs=${opts?.runs ?? 3}&format=json${fields}`, {
-				accept: 'application/json',
-				...(options.profilerKey ? { 'x-profiler-key': options.profilerKey } : {})
-			});
-			if (res.status !== 200) throw new Error(`the profiler answered ${res.status} for ${path}: ${res.body.slice(0, 200)}`);
+			const fields = opts?.fields?.length
+				? `&fields=${encodeURIComponent(opts.fields.join(','))}`
+				: '';
+			const res = await get(
+				`${b}/page?p=${encodeURIComponent(path)}&runs=${opts?.runs ?? 3}&format=json${fields}`,
+				{
+					accept: 'application/json',
+					...(options.profilerKey ? { 'x-profiler-key': options.profilerKey } : {})
+				}
+			);
+			if (res.status !== 200)
+				throw new Error(
+					`the profiler answered ${res.status} for ${path}: ${res.body.slice(0, 200)}`
+				);
 			// (the profiler's JSON carries its own `kind` — the recording mode — so ours goes last)
 			const json = JSON.parse(res.body) as Omit<OgygiaProfileReport, 'kind'> & { kind?: string };
 			return keep({ ...json, mode: json.kind, kind: 'profile' } as unknown as OgygiaProfileReport);
@@ -425,7 +542,10 @@ export interface HeldNavigation {
  * test, a custom fixture): `createOgygia(playwrightDriver(page, { baseURL }))`. `onNavigationHeld` is
  * called as each document load is held back, so you can note what your script was doing then.
  */
-export function playwrightDriver(page: Page, opts: { baseURL?: string; onNavigationHeld?: (nav: HeldNavigation) => void } = {}): OgygiaDriver {
+export function playwrightDriver(
+	page: Page,
+	opts: { baseURL?: string; onNavigationHeld?: (nav: HeldNavigation) => void } = {}
+): OgygiaDriver {
 	return {
 		evaluate: (fn, arg) => page.evaluate(fn, arg),
 		wait: (ms) => page.waitForTimeout(ms),
@@ -470,7 +590,10 @@ export function playwrightDriver(page: Page, opts: { baseURL?: string; onNavigat
 		async post(url, headers) {
 			// (an Origin header: a SvelteKit app refuses a cross-site POST without one)
 			const origin = opts.baseURL ? new URL(opts.baseURL).origin : undefined;
-			const r = await page.request.post(url, { headers: { ...headers, ...(origin ? { origin } : {}) }, timeout: 120_000 });
+			const r = await page.request.post(url, {
+				headers: { ...headers, ...(origin ? { origin } : {}) },
+				timeout: 120_000
+			});
 			return { status: r.status(), body: await r.text() };
 		}
 	};
@@ -481,9 +604,16 @@ export function playwrightDriver(page: Page, opts: { baseURL?: string; onNavigat
  * `og_devtools=on` cookie): for `baseURL`, or with none for the origin of the first page it opens, on
  * that very request (Playwright's route handlers run newest first, so the test's own still run after).
  */
-export async function turnOnDevtools(page: Page, baseURL?: string, opts: { lean?: boolean } = {}): Promise<void> {
+export async function turnOnDevtools(
+	page: Page,
+	baseURL?: string,
+	opts: { lean?: boolean } = {}
+): Promise<void> {
 	// `lean`: lean testing too (insights/switch.ts) — the testing API and nothing else of devtools
-	const pairs = [{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON }, ...(opts.lean ? [{ name: TESTING_COOKIE, value: TESTING_LEAN }] : [])];
+	const pairs = [
+		{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON },
+		...(opts.lean ? [{ name: TESTING_COOKIE, value: TESTING_LEAN }] : [])
+	];
 	const cookie = pairs.map((p) => `${p.name}=${p.value}`).join('; ');
 	if (baseURL) {
 		await page.context().addCookies(pairs.map((p) => ({ ...p, url: baseURL })));
@@ -491,11 +621,18 @@ export async function turnOnDevtools(page: Page, baseURL?: string, opts: { lean?
 	}
 	const first = async (route: Route) => {
 		const req = route.request();
-		if (!req.isNavigationRequest() || req.frame() !== page.mainFrame() || !(req.url().startsWith('http:') || req.url().startsWith('https:'))) return route.fallback();
+		if (
+			!req.isNavigationRequest() ||
+			req.frame() !== page.mainFrame() ||
+			!(req.url().startsWith('http:') || req.url().startsWith('https:'))
+		)
+			return route.fallback();
 		await page.unroute('**/*', first);
 		await page.context().addCookies(pairs.map((p) => ({ ...p, url: new URL(req.url()).origin })));
 		const headers = await req.allHeaders();
-		await route.fallback({ headers: { ...headers, cookie: headers.cookie ? `${headers.cookie}; ${cookie}` : cookie } });
+		await route.fallback({
+			headers: { ...headers, cookie: headers.cookie ? `${headers.cookie}; ${cookie}` : cookie }
+		});
 	};
 	await page.route('**/*', first);
 }
@@ -504,12 +641,21 @@ export async function turnOnDevtools(page: Page, baseURL?: string, opts: { lean?
  * Your Playwright `test` with an `ogygia` fixture, and your `expect` with ogygia's matchers.
  * Options per project: `use: { ogygiaOptions: { profilerKey, attach: false } }`.
  */
-export function withOgygia<TA extends PlaywrightTestArgs & PlaywrightTestOptions, WA extends PlaywrightWorkerArgs & PlaywrightWorkerOptions>(
+export function withOgygia<
+	TA extends PlaywrightTestArgs & PlaywrightTestOptions,
+	WA extends PlaywrightWorkerArgs & PlaywrightWorkerOptions
+>(
 	test: TestType<TA, WA>,
 	expect: Expect
-): { test: TestType<TA & { ogygia: Ogygia; ogygiaOptions: OgygiaTestOptions }, WA>; expect: Expect } {
+): {
+	test: TestType<TA & { ogygia: Ogygia; ogygiaOptions: OgygiaTestOptions }, WA>;
+	expect: Expect;
+} {
 	// (extended on Playwright's own base shape: its fixture types do not resolve through a generic)
-	const base = test as unknown as TestType<PlaywrightTestArgs & PlaywrightTestOptions, PlaywrightWorkerArgs & PlaywrightWorkerOptions>;
+	const base = test as unknown as TestType<
+		PlaywrightTestArgs & PlaywrightTestOptions,
+		PlaywrightWorkerArgs & PlaywrightWorkerOptions
+	>;
 	const extended = base.extend<{ ogygia: Ogygia; ogygiaOptions: OgygiaTestOptions }>({
 		ogygiaOptions: [{}, { option: true }],
 		ogygia: async ({ page, baseURL, ogygiaOptions }, use, testInfo) => {
@@ -518,12 +664,26 @@ export function withOgygia<TA extends PlaywrightTestArgs & PlaywrightTestOptions
 			await use(o);
 			if (ogygiaOptions.attach !== false && o.reports.length)
 				await testInfo.attach('ogygia.json', {
-					body: JSON.stringify({ test: testInfo.titlePath.join(' › '), status: testInfo.status, reports: o.reports.map(forAttachment) }, null, 1),
+					body: JSON.stringify(
+						{
+							test: testInfo.titlePath.join(' › '),
+							status: testInfo.status,
+							reports: o.reports.map(forAttachment)
+						},
+						null,
+						1
+					),
 					contentType: 'application/json'
 				});
 		}
 	});
-	return { test: extended as unknown as TestType<TA & { ogygia: Ogygia; ogygiaOptions: OgygiaTestOptions }, WA>, expect: expect.extend(ogygiaMatchers) as unknown as Expect };
+	return {
+		test: extended as unknown as TestType<
+			TA & { ogygia: Ogygia; ogygiaOptions: OgygiaTestOptions },
+			WA
+		>,
+		expect: expect.extend(ogygiaMatchers) as unknown as Expect
+	};
 }
 
 /** A report as kept for a comparison (a profile's full JSON is large). */
@@ -535,13 +695,20 @@ export function forAttachment(r: OgygiaReport): unknown {
 		score: p.score,
 		forecast: p.forecast,
 		findings: p.findings,
-		assets: p.assets ? { totals: p.assets.totals, missing: p.assets.missing, ...(p.assets.files ? { files: p.assets.files } : {}) } : null,
+		assets: p.assets
+			? {
+					totals: p.assets.totals,
+					missing: p.assets.missing,
+					...(p.assets.files ? { files: p.assets.files } : {})
+				}
+			: null,
 		links: p.links,
 		...((p as { window?: unknown }).window ? { window: (p as { window?: unknown }).window } : {}),
 		hot_functions: ((p as { hot_functions?: unknown[] }).hot_functions ?? []).slice(0, 10)
 	});
 	if (r.kind === 'profile') return slim_profile(r);
-	if (r.kind === 'session' && r.server) return { ...r, server: 'error' in r.server ? r.server : slim_profile(r.server) };
+	if (r.kind === 'session' && r.server)
+		return { ...r, server: 'error' in r.server ? r.server : slim_profile(r.server) };
 	return r;
 }
 
@@ -579,13 +746,28 @@ function median(xs: number[]): number {
 }
 
 /** Each line of a budget against a report: `{ key, measured, limit, ok }`. */
-export function checkBudget(r: OgygiaReport, b: Budget): { key: string; measured: number | null; limit: number; ok: boolean }[] {
+export function checkBudget(
+	r: OgygiaReport,
+	b: Budget
+): { key: string; measured: number | null; limit: number; ok: boolean }[] {
 	const out: { key: string; measured: number | null; limit: number; ok: boolean }[] = [];
 	const le = (key: string, v: number | null | undefined, limit: number | undefined) => {
-		if (limit !== undefined) out.push({ key, measured: v ?? null, limit, ok: v !== undefined && v !== null && v <= limit });
+		if (limit !== undefined)
+			out.push({
+				key,
+				measured: v ?? null,
+				limit,
+				ok: v !== undefined && v !== null && v <= limit
+			});
 	};
 	const ge = (key: string, v: number | null | undefined, limit: number | undefined) => {
-		if (limit !== undefined) out.push({ key, measured: v ?? null, limit, ok: v !== undefined && v !== null && v >= limit });
+		if (limit !== undefined)
+			out.push({
+				key,
+				measured: v ?? null,
+				limit,
+				ok: v !== undefined && v !== null && v >= limit
+			});
 	};
 	if (r.kind === 'page') {
 		const vit = (k: string) => r.vitals.find((x) => x.key === k)?.value;
@@ -595,15 +777,31 @@ export function checkBudget(r: OgygiaReport, b: Budget): { key: string; measured
 		le('inp', vit('inp'), b.inp);
 		le('ttfb', vit('ttfb'), b.ttfb);
 		le('longTaskMs', r.longtask_ms, b.longTaskMs);
-		le('islandWakeMs', r.islands.length ? Math.max(...r.islands.map((i) => i.done - i.t0)) : 0, b.islandWakeMs);
+		le(
+			'islandWakeMs',
+			r.islands.length ? Math.max(...r.islands.map((i) => i.done - i.t0)) : 0,
+			b.islandWakeMs
+		);
 	} else if (r.kind === 'session') {
-		le('maxInteractionMs', r.interactions.length ? Math.max(...r.interactions.map((i) => i.duration)) : 0, b.maxInteractionMs);
+		le(
+			'maxInteractionMs',
+			r.interactions.length ? Math.max(...r.interactions.map((i) => i.duration)) : 0,
+			b.maxInteractionMs
+		);
 		le('slowInteractions', r.counts.slow, b.slowInteractions);
 		le('errors', r.counts.errors, b.errors);
 		le('cls', r.counts.cls, b.cls);
 		le('longTaskMs', r.counts.longtask_ms, b.longTaskMs);
-		le('failedRequests', r.requests.filter((q) => q.status !== null && q.status >= 400).length, b.failedRequests);
-		le('serverBusyMs', (r.server as { summary?: { busy_ms?: number } } | undefined)?.summary?.busy_ms, b.serverBusyMs);
+		le(
+			'failedRequests',
+			r.requests.filter((q) => q.status !== null && q.status >= 400).length,
+			b.failedRequests
+		);
+		le(
+			'serverBusyMs',
+			(r.server as { summary?: { busy_ms?: number } } | undefined)?.summary?.busy_ms,
+			b.serverBusyMs
+		);
 	} else if (r.kind === 'profile') {
 		ge('score', r.score?.score, b.score);
 		le('renderMs', r.target?.runs?.length ? median(r.target.runs) : null, b.renderMs);
@@ -622,9 +820,16 @@ export interface MatcherResult {
 /** `expect.extend(ogygiaMatchers)` — Playwright, Vitest and Jest all take this shape. */
 export const ogygiaMatchers = {
 	/** No finding at or above `severity` (default: any), except the codes in `ignore`. */
-	toHaveNoFindings(received: OgygiaReport, opts: { severity?: Severity; ignore?: string[] } = {}): MatcherResult {
+	toHaveNoFindings(
+		received: OgygiaReport,
+		opts: { severity?: Severity; ignore?: string[] } = {}
+	): MatcherResult {
 		const min = SEV[opts.severity ?? 'info'];
-		const list = ('findings' in received ? (received.findings as { code: string; severity: string; message: string }[]) : []).filter(
+		const list = (
+			'findings' in received
+				? (received.findings as { code: string; severity: string; message: string }[])
+				: []
+		).filter(
 			(f) => (SEV[f.severity as Severity] ?? 0) >= min && !(opts.ignore ?? []).includes(f.code)
 		);
 		const pass = list.length === 0;
@@ -634,7 +839,8 @@ export const ogygiaMatchers = {
 			message: () =>
 				pass
 					? 'expected ogygia findings, found none'
-					: `expected no ogygia findings${opts.severity ? ` at ${opts.severity} or above` : ''}, found ${list.length}:\n` + list.map((f) => `  - [${f.severity}] ${f.code}: ${f.message}`).join('\n')
+					: `expected no ogygia findings${opts.severity ? ` at ${opts.severity} or above` : ''}, found ${list.length}:\n` +
+						list.map((f) => `  - [${f.severity}] ${f.code}: ${f.message}`).join('\n')
 		};
 	},
 	/** Every line of the budget met (see {@link Budget}: page, session and profile lines). */
@@ -645,20 +851,35 @@ export const ogygiaMatchers = {
 			name: 'toMeetBudget',
 			message: () =>
 				bad.length
-					? `ogygia budget missed (${received.kind}):\n` + bad.map((l) => `  - ${l.key}: ${l.measured ?? 'not measured'} (budget ${l.limit})`).join('\n')
+					? `ogygia budget missed (${received.kind}):\n` +
+						bad
+							.map((l) => `  - ${l.key}: ${l.measured ?? 'not measured'} (budget ${l.limit})`)
+							.join('\n')
 					: 'expected the ogygia budget to be missed, it was met'
 		};
 	},
 	/** No island failed, recovered, or changed its markup on hydration (`allow` some statuses;
 	 *  `allowAttributeChanges`: a change only in attributes passes; `allowInput`: a change in an island
 	 *  that input landed on while it hydrated passes). */
-	toHydrateCleanly(received: OgygiaReport, opts: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean } = {}): MatcherResult {
-		if (received.kind !== 'hydration') return { pass: false, name: 'toHydrateCleanly', message: () => 'toHydrateCleanly takes the report of ogygia.hydration()' };
+	toHydrateCleanly(
+		received: OgygiaReport,
+		opts: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean } = {}
+	): MatcherResult {
+		if (received.kind !== 'hydration')
+			return {
+				pass: false,
+				name: 'toHydrateCleanly',
+				message: () => 'toHydrateCleanly takes the report of ogygia.hydration()'
+			};
 		const allow = new Set<HydrationStatus>(['clean', 'asleep', ...(opts.allow ?? [])]);
 		const bad = received.islands.filter(
 			(i) =>
 				!allow.has(i.status) &&
-				!(i.status === 'changed' && ((opts.allowAttributeChanges && i.attributesOnly) || (opts.allowInput && i.inputDuringHydration)))
+				!(
+					i.status === 'changed' &&
+					((opts.allowAttributeChanges && i.attributesOnly) ||
+						(opts.allowInput && i.inputDuringHydration))
+				)
 		);
 		return {
 			pass: bad.length === 0,
@@ -687,7 +908,11 @@ declare global {
 		interface Matchers<R> {
 			toHaveNoFindings(opts?: { severity?: Severity; ignore?: string[] }): R;
 			toMeetBudget(budget: Budget): R;
-			toHydrateCleanly(opts?: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean }): R;
+			toHydrateCleanly(opts?: {
+				allow?: HydrationStatus[];
+				allowAttributeChanges?: boolean;
+				allowInput?: boolean;
+			}): R;
 		}
 	}
 }
@@ -725,7 +950,10 @@ const GOOD_HYDRATION = new Set(['clean', 'asleep']);
 
 /** Islands whose hydration got worse / better between two reports: by instance key, or (reports from
  *  before keys) by how many islands of each name ended in each status. */
-function hydration_moves(base: OgygiaHydrationReport, head: OgygiaHydrationReport): { broke: string[]; fixed: string[] } {
+function hydration_moves(
+	base: OgygiaHydrationReport,
+	head: OgygiaHydrationReport
+): { broke: string[]; fixed: string[] } {
 	const broke: string[] = [];
 	const fixed: string[] = [];
 	if (base.islands.every((i) => i.key) && head.islands.every((i) => i.key)) {
@@ -733,17 +961,21 @@ function hydration_moves(base: OgygiaHydrationReport, head: OgygiaHydrationRepor
 		const h = new Map(head.islands.map((i) => [i.key, i.status]));
 		for (const [key, hs] of h) {
 			const bs = b.get(key);
-			if (!GOOD_HYDRATION.has(hs) && (bs === undefined || GOOD_HYDRATION.has(bs))) broke.push(`${key}: ${bs ?? 'new'} → ${hs}`);
+			if (!GOOD_HYDRATION.has(hs) && (bs === undefined || GOOD_HYDRATION.has(bs)))
+				broke.push(`${key}: ${bs ?? 'new'} → ${hs}`);
 		}
 		for (const [key, bs] of b) {
 			const hs = h.get(key);
-			if (!GOOD_HYDRATION.has(bs) && (hs === undefined || GOOD_HYDRATION.has(hs))) fixed.push(`${key}: ${bs} → ${hs ?? 'gone'}`);
+			if (!GOOD_HYDRATION.has(bs) && (hs === undefined || GOOD_HYDRATION.has(hs)))
+				fixed.push(`${key}: ${bs} → ${hs ?? 'gone'}`);
 		}
 		return { broke, fixed };
 	}
 	const tally = (r: OgygiaHydrationReport) => {
 		const m = new Map<string, number>();
-		for (const i of r.islands) if (!GOOD_HYDRATION.has(i.status)) m.set(`${i.name}: ${i.status}`, (m.get(`${i.name}: ${i.status}`) ?? 0) + 1);
+		for (const i of r.islands)
+			if (!GOOD_HYDRATION.has(i.status))
+				m.set(`${i.name}: ${i.status}`, (m.get(`${i.name}: ${i.status}`) ?? 0) + 1);
 		return m;
 	};
 	const b = tally(base);
@@ -755,9 +987,12 @@ function hydration_moves(base: OgygiaHydrationReport, head: OgygiaHydrationRepor
 
 /** One test's reports from one side: a single run (`reports`, an `ogygia.json` body) or several runs of it
  *  (`runs`) — see {@link compare}. */
-export type CompareInput = { test: string; reports: OgygiaReport[] } | { test: string; runs: OgygiaReport[][] };
+export type CompareInput =
+	| { test: string; reports: OgygiaReport[] }
+	| { test: string; runs: OgygiaReport[][] };
 
-const runs_of = (t: CompareInput | undefined): OgygiaReport[][] => (!t ? [] : 'runs' in t ? t.runs : [t.reports]);
+const runs_of = (t: CompareInput | undefined): OgygiaReport[][] =>
+	!t ? [] : 'runs' in t ? t.runs : [t.reports];
 
 /** The `nth` report of `kind` in each run that has one. */
 const slot = (runs: OgygiaReport[][], kind: OgygiaReport['kind'], nth: number): OgygiaReport[] =>
@@ -768,14 +1003,19 @@ function finding_lines(reports: OgygiaReport[], skip: Set<string>): Map<string, 
 	const out = new Map<string, string>();
 	for (const r of reports)
 		for (const f of ('findings' in r ? r.findings : []) as { code: string; message: string }[])
-			if (!skip.has(f.code) && !out.has(f.code)) out.set(f.code, `${f.code}: ${f.message.slice(0, 140)}`);
+			if (!skip.has(f.code) && !out.has(f.code))
+				out.set(f.code, `${f.code}: ${f.message.slice(0, 140)}`);
 	return out;
 }
 
 /** How many of the runs carry a finding of each code. */
 function finding_counts(reports: OgygiaReport[]): Map<string, number> {
 	const out = new Map<string, number>();
-	for (const r of reports) for (const code of new Set((('findings' in r ? r.findings : []) as { code: string }[]).map((f) => f.code))) out.set(code, (out.get(code) ?? 0) + 1);
+	for (const r of reports)
+		for (const code of new Set(
+			(('findings' in r ? r.findings : []) as { code: string }[]).map((f) => f.code)
+		))
+			out.set(code, (out.get(code) ?? 0) + 1);
 	return out;
 }
 
@@ -784,17 +1024,24 @@ function finding_counts(reports: OgygiaReport[]): Map<string, number> {
 function hydration_consensus(reports: OgygiaHydrationReport[]): OgygiaHydrationReport {
 	if (reports.length === 1) return reports[0];
 	if (reports.every((r) => r.islands.every((i) => i.key))) {
-		const by = new Map<string, { island: OgygiaHydrationReport['islands'][number]; votes: Map<string, number> }>();
+		const by = new Map<
+			string,
+			{ island: OgygiaHydrationReport['islands'][number]; votes: Map<string, number> }
+		>();
 		for (const r of reports)
 			for (const i of r.islands) {
 				const e = by.get(i.key!) ?? { island: i, votes: new Map() };
 				e.votes.set(i.status, (e.votes.get(i.status) ?? 0) + 1);
 				by.set(i.key!, e);
 			}
-		const islands = [...by.values()].map(({ island, votes }) => ({ ...island, status: [...votes].sort((a, b) => b[1] - a[1])[0][0] as HydrationStatus }));
+		const islands = [...by.values()].map(({ island, votes }) => ({
+			...island,
+			status: [...votes].sort((a, b) => b[1] - a[1])[0][0] as HydrationStatus
+		}));
 		return { ...reports[0], islands };
 	}
-	const bad = (r: OgygiaHydrationReport) => r.islands.filter((i) => !GOOD_HYDRATION.has(i.status)).length;
+	const bad = (r: OgygiaHydrationReport) =>
+		r.islands.filter((i) => !GOOD_HYDRATION.has(i.status)).length;
 	return [...reports].sort((a, b) => bad(a) - bad(b))[reports.length >> 1];
 }
 
@@ -814,7 +1061,11 @@ const SESSION_LISTED = new Set(['navigation-blocked']);
  *   session happened to take.
  * One run a side is the same rules on a single sample.
  */
-export function compare(baseRun: CompareInput[], headRun: CompareInput[], opts: CompareOptions = {}): RunDiff[] {
+export function compare(
+	baseRun: CompareInput[],
+	headRun: CompareInput[],
+	opts: CompareOptions = {}
+): RunDiff[] {
 	const noise = { ...NOISE, ...opts.noise };
 	const out: RunDiff[] = [];
 	for (const h of headRun) {
@@ -831,16 +1082,22 @@ export function compare(baseRun: CompareInput[], headRun: CompareInput[], opts: 
 			// findings: a session's when in every head run and no base run; a load's by majority
 			const hc = finding_counts(hs);
 			const bc = finding_counts(bs);
-			const present = (c: Map<string, number>, n: number, code: string) => (session ? (c.get(code) ?? 0) === n && n > 0 : (c.get(code) ?? 0) * 2 > n);
-			const absent = (c: Map<string, number>, n: number, code: string) => (session ? !c.get(code) : !((c.get(code) ?? 0) * 2 > n));
+			const present = (c: Map<string, number>, n: number, code: string) =>
+				session ? (c.get(code) ?? 0) === n && n > 0 : (c.get(code) ?? 0) * 2 > n;
+			const absent = (c: Map<string, number>, n: number, code: string) =>
+				session ? !c.get(code) : !((c.get(code) ?? 0) * 2 > n);
 			const hl = finding_lines(hs, skip);
 			const bl = finding_lines(bs, skip);
 			const d: RunDiff = {
 				test: h.test,
 				kind,
 				findings: {
-					added: [...hl].filter(([code]) => present(hc, hs.length, code) && absent(bc, bs.length, code)).map(([, t]) => t),
-					fixed: [...bl].filter(([code]) => present(bc, bs.length, code) && absent(hc, hs.length, code)).map(([, t]) => t)
+					added: [...hl]
+						.filter(([code]) => present(hc, hs.length, code) && absent(bc, bs.length, code))
+						.map(([, t]) => t),
+					fixed: [...bl]
+						.filter(([code]) => present(bc, bs.length, code) && absent(hc, hs.length, code))
+						.map(([, t]) => t)
 				}
 			};
 			if (!bs.length) {
@@ -848,11 +1105,17 @@ export function compare(baseRun: CompareInput[], headRun: CompareInput[], opts: 
 				return;
 			}
 			if (kind === 'hydration') {
-				const m = hydration_moves(hydration_consensus(bs as OgygiaHydrationReport[]), hydration_consensus(hs as OgygiaHydrationReport[]));
+				const m = hydration_moves(
+					hydration_consensus(bs as OgygiaHydrationReport[]),
+					hydration_consensus(hs as OgygiaHydrationReport[])
+				);
 				if (m.broke.length || m.fixed.length) d.hydration = m;
 			}
 			if (session) {
-				const value = (r: OgygiaReport, key: SessionMoveKey) => (key === 'navigations' ? ((r as OgygiaSessionReport).navigations ?? []).length : (r as OgygiaSessionReport).counts[key]);
+				const value = (r: OgygiaReport, key: SessionMoveKey) =>
+					key === 'navigations'
+						? ((r as OgygiaSessionReport).navigations ?? []).length
+						: (r as OgygiaSessionReport).counts[key];
 				const moved: NonNullable<RunDiff['session']> = [];
 				for (const key of ['errors', 'shifts', 'slow', 'navigations', 'cls'] as const) {
 					const hv = hs.map((r) => value(r, key));
@@ -863,33 +1126,44 @@ export function compare(baseRun: CompareInput[], headRun: CompareInput[], opts: 
 					const bn = bv as number[];
 					const apart = Math.min(...hn) > Math.max(...bn) || Math.max(...hn) < Math.min(...bn);
 					const [hm, bm] = [median(hn), median(bn)];
-					if (apart && (key !== 'cls' || Math.abs(hm - bm) >= noise.cls)) moved.push({ key, base: bm, head: hm });
+					if (apart && (key !== 'cls' || Math.abs(hm - bm) >= noise.cls))
+						moved.push({ key, base: bm, head: hm });
 				}
 				if (moved.length) d.session = moved;
 			}
 			if (kind === 'page') {
 				const moved: { key: string; base: number; head: number }[] = [];
 				for (const key of ['lcp', 'fcp', 'ttfb', 'inp', 'cls'] as const) {
-					const pick = (rs: OgygiaReport[]) => rs.map((r) => (r as OgygiaPageReport).vitals.find((v) => v.key === key)?.value).filter((v): v is number => typeof v === 'number');
+					const pick = (rs: OgygiaReport[]) =>
+						rs
+							.map((r) => (r as OgygiaPageReport).vitals.find((v) => v.key === key)?.value)
+							.filter((v): v is number => typeof v === 'number');
 					const hv = pick(hs);
 					const bv = pick(bs);
 					if (!hv.length || !bv.length) continue;
 					const [hm, bm] = [median(hv), median(bv)];
 					const delta = Math.abs(hm - bm);
-					if (key === 'cls' ? delta >= noise.cls : delta >= noise[key] && delta >= bm * 0.1) moved.push({ key, base: bm, head: hm });
+					if (key === 'cls' ? delta >= noise.cls : delta >= noise[key] && delta >= bm * 0.1)
+						moved.push({ key, base: bm, head: hm });
 				}
 				if (moved.length) d.vitals = moved;
 			}
 			if (kind === 'profile') {
 				const hp = hs as OgygiaProfileReport[];
 				const bp = bs as OgygiaProfileReport[];
-				const scores = (ps: OgygiaProfileReport[]) => ps.map((p) => p.score?.score).filter((v): v is number => typeof v === 'number');
-				if (scores(hp).length && scores(bp).length) d.score = { base: median(scores(bp)), head: median(scores(hp)) };
-				const renders = (ps: OgygiaProfileReport[]) => ps.filter((p) => p.target?.runs?.length).map((p) => median(p.target.runs));
-				if (renders(hp).length && renders(bp).length) d.renderMs = { base: median(renders(bp)), head: median(renders(hp)) };
+				const scores = (ps: OgygiaProfileReport[]) =>
+					ps.map((p) => p.score?.score).filter((v): v is number => typeof v === 'number');
+				if (scores(hp).length && scores(bp).length)
+					d.score = { base: median(scores(bp)), head: median(scores(hp)) };
+				const renders = (ps: OgygiaProfileReport[]) =>
+					ps.filter((p) => p.target?.runs?.length).map((p) => median(p.target.runs));
+				if (renders(hp).length && renders(bp).length)
+					d.renderMs = { base: median(renders(bp)), head: median(renders(hp)) };
 				// the files behind a JS move: the runs with the median JS each side
 				const mid = (ps: OgygiaProfileReport[]) => {
-					const w = ps.filter((p) => p.assets?.totals).sort((a, b) => a.assets!.totals!.js - b.assets!.totals!.js);
+					const w = ps
+						.filter((p) => p.assets?.totals)
+						.sort((a, b) => a.assets!.totals!.js - b.assets!.totals!.js);
 					return w[w.length >> 1];
 				};
 				const br = mid(bp);
@@ -897,18 +1171,26 @@ export function compare(baseRun: CompareInput[], headRun: CompareInput[], opts: 
 				const ba = br?.assets;
 				const ha = hr?.assets;
 				if (ba?.totals && ha?.totals && ba.files && ha.files) {
-					const diff = assets_diff({ assets: ba.files, totals: ba.totals }, { assets: ha.files, totals: ha.totals });
+					const diff = assets_diff(
+						{ assets: ba.files, totals: ba.totals },
+						{ assets: ha.files, totals: ha.totals }
+					);
 					const kb = (n: number) => `${Math.round(n / 1024)} KB`;
-					const what = (c: { name: string; contains?: string[] }) => (c.contains?.length ? c.contains.slice(0, 2).join(', ') : c.name);
+					const what = (c: { name: string; contains?: string[] }) =>
+						c.contains?.length ? c.contains.slice(0, 2).join(', ') : c.name;
 					d.js = {
 						base: ba.totals.js,
 						head: ha.totals.js,
 						changes: [
-							...diff.added.map((c) => `new ${what(c)} ${kb(c.b)}${c.lazy ? ' (loads later)' : ''}`),
+							...diff.added.map(
+								(c) => `new ${what(c)} ${kb(c.b)}${c.lazy ? ' (loads later)' : ''}`
+							),
 							...diff.grew.map((c) => `grew ${what(c)} ${kb(c.a)} → ${kb(c.b)}`),
 							...diff.shrank.map((c) => `shrank ${what(c)} ${kb(c.a)} → ${kb(c.b)}`),
 							...diff.removed.map((c) => `gone ${what(c)} ${kb(c.a)}`),
-							...diff.to_start.map((c) => `now at start ${what(c)} ${kb(c.b)} (loaded later before)`),
+							...diff.to_start.map(
+								(c) => `now at start ${what(c)} ${kb(c.b)} (loaded later before)`
+							),
 							...diff.to_later.map((c) => `now loads later ${what(c)} ${kb(c.b)}`)
 						]
 					};
@@ -937,12 +1219,24 @@ export function toMarkdown(diffs: RunDiff[]): string {
 	const out = ['**ogygia**: what changed', ''];
 	for (const d of moved) {
 		out.push(`- **${d.test}** (${d.kind})`);
-		if (d.score && d.score.base !== d.score.head) out.push(`  - score ${d.score.base} → ${d.score.head}`);
-		if (d.renderMs && Math.abs(d.renderMs.head - d.renderMs.base) >= 5) out.push(`  - server render ${Math.round(d.renderMs.base)} → ${Math.round(d.renderMs.head)} ms`);
+		if (d.score && d.score.base !== d.score.head)
+			out.push(`  - score ${d.score.base} → ${d.score.head}`);
+		if (d.renderMs && Math.abs(d.renderMs.head - d.renderMs.base) >= 5)
+			out.push(
+				`  - server render ${Math.round(d.renderMs.base)} → ${Math.round(d.renderMs.head)} ms`
+			);
 		if (d.js && (d.js.changes.length || Math.abs(d.js.head - d.js.base) >= 5 * 1024))
-			out.push(`  - JS at start ${Math.round(d.js.base / 1024)} → ${Math.round(d.js.head / 1024)} KB${d.js.changes.length ? `: ${d.js.changes.join('; ')}` : ''}`);
-		for (const v of d.vitals ?? []) out.push(`  - ${v.key.toUpperCase()} ${v.key === 'cls' ? v.base : Math.round(v.base) + ' ms'} → ${v.key === 'cls' ? v.head : Math.round(v.head) + ' ms'}`);
-		for (const s of d.session ?? []) out.push(`  - ${s.key === 'cls' ? 'session CLS' : s.key === 'slow' ? 'slow interactions' : s.key === 'navigations' ? 'blocked navigations' : s.key} ${s.base} → ${s.head}`);
+			out.push(
+				`  - JS at start ${Math.round(d.js.base / 1024)} → ${Math.round(d.js.head / 1024)} KB${d.js.changes.length ? `: ${d.js.changes.join('; ')}` : ''}`
+			);
+		for (const v of d.vitals ?? [])
+			out.push(
+				`  - ${v.key.toUpperCase()} ${v.key === 'cls' ? v.base : Math.round(v.base) + ' ms'} → ${v.key === 'cls' ? v.head : Math.round(v.head) + ' ms'}`
+			);
+		for (const s of d.session ?? [])
+			out.push(
+				`  - ${s.key === 'cls' ? 'session CLS' : s.key === 'slow' ? 'slow interactions' : s.key === 'navigations' ? 'blocked navigations' : s.key} ${s.base} → ${s.head}`
+			);
 		for (const h of d.hydration?.broke ?? []) out.push(`  - hydration broke: ${h}`);
 		for (const h of d.hydration?.fixed ?? []) out.push(`  - hydration fixed: ${h}`);
 		for (const f of d.findings.added) out.push(`  - new: ${f}`);

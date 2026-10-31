@@ -26,25 +26,73 @@ const codes = (r: ReturnType<typeof analyze_session>) => r.findings.map((f) => f
 
 describe('analyze_session', () => {
 	it("a failed island is one finding (hydrate-failed), not also ogygia's own console log of it", () => {
-		const failed = { name: 'region.hydrate.failed', fp: 'a', message: 'boom\n\tin X.svelte', seq: 1, t: 10, v: 1, realm: 'client', domain: 'runtime' } as unknown as SessionData['events'][number];
-		const log = { t: 11, message: 'console.error: [ogygia] hydration failed for x.js boom\n\tin <unknown>\n\tin X.svelte' };
+		const failed = {
+			name: 'region.hydrate.failed',
+			fp: 'a',
+			message: 'boom\n\tin X.svelte',
+			seq: 1,
+			t: 10,
+			v: 1,
+			realm: 'client',
+			domain: 'runtime'
+		} as unknown as SessionData['events'][number];
+		const log = {
+			t: 11,
+			message:
+				'console.error: [ogygia] hydration failed for x.js boom\n\tin <unknown>\n\tin X.svelte'
+		};
 		const own = { t: 12, message: 'TypeError: nope\n    at f (a.js:1)' };
 		const r = analyze_session(base({ events: [failed], errors: [log, own] }), names, 'http://x/x');
-		expect(r.findings.find((f) => f.code === 'hydrate-failed')?.message).toContain('Slow failed to hydrate: boom');
+		expect(r.findings.find((f) => f.code === 'hydrate-failed')?.message).toContain(
+			'Slow failed to hydrate: boom'
+		);
 		// the page's own error stays, by its first line; ogygia's log of the failure is not repeated
 		expect(r.findings.find((f) => f.code === 'errors')?.message).toBe('1 error: TypeError: nope.');
 		// with only the log (no failure event in the session), the log is an error like any other
-		expect(codes(analyze_session(base({ errors: [log] }), names, 'http://x/x'))).toContain('errors');
+		expect(codes(analyze_session(base({ errors: [log] }), names, 'http://x/x'))).toContain(
+			'errors'
+		);
 	});
 
 	it('an interaction: its length is the longest event, its split the event that ran the handlers', () => {
 		const r = analyze_session(
 			base({
 				interactions: [
-					{ t: 100, name: 'pointerdown', duration: 260, input_delay: 0, processing: 1, presentation: 259, id: 7, target: 'button "slow"', fp: 'a', el: null },
-					{ t: 102, name: 'click', duration: 255, input_delay: 1, processing: 250, presentation: 4, id: 7, target: 'button "slow"', fp: 'a', el: null }
+					{
+						t: 100,
+						name: 'pointerdown',
+						duration: 260,
+						input_delay: 0,
+						processing: 1,
+						presentation: 259,
+						id: 7,
+						target: 'button "slow"',
+						fp: 'a',
+						el: null
+					},
+					{
+						t: 102,
+						name: 'click',
+						duration: 255,
+						input_delay: 1,
+						processing: 250,
+						presentation: 4,
+						id: 7,
+						target: 'button "slow"',
+						fp: 'a',
+						el: null
+					}
 				],
-				frames: [{ t: 100, ms: 260, blocking: 210, scripts: [{ source: 'http://x/src/Slow.svelte', fn: 'spin', invoker: 'BUTTON.onclick', ms: 250 }] }]
+				frames: [
+					{
+						t: 100,
+						ms: 260,
+						blocking: 210,
+						scripts: [
+							{ source: 'http://x/src/Slow.svelte', fn: 'spin', invoker: 'BUTTON.onclick', ms: 250 }
+						]
+					}
+				]
 			}),
 			names,
 			'http://x/p'
@@ -81,7 +129,9 @@ describe('analyze_session', () => {
 		expect(codes(r)).toEqual(expect.arrayContaining(['rage-click', 'dead-click', 'late-feedback']));
 		expect(r.findings.find((f) => f.code === 'dead-click')!.message).toContain('"dead"');
 		expect(r.findings.find((f) => f.code === 'dead-click')!.message).not.toContain('"late"');
-		expect(r.findings.find((f) => f.code === 'dead-click')!.message).toMatch(/^1 click changed nothing/);
+		expect(r.findings.find((f) => f.code === 'dead-click')!.message).toMatch(
+			/^1 click changed nothing/
+		);
 		expect(r.findings.find((f) => f.code === 'late-feedback')!.message).toContain('900 ms');
 	});
 
@@ -102,9 +152,30 @@ describe('analyze_session', () => {
 	});
 
 	it('requests: failed, slow, repeated', () => {
-		const req = (url: string, ms = 20, status: number | null = 200) => ({ url, type: 'fetch', t: 10, ms, bytes: 100, status });
-		const r = analyze_session(base({ requests: [req('http://x/api/a'), req('http://x/api/a'), req('http://x/api/a'), req('http://x/missing', 5, 404), req('http://x/slow', 1500)] }), names, 'http://x/p');
-		expect(codes(r)).toEqual(expect.arrayContaining(['failed-requests', 'slow-requests', 'repeated-requests']));
+		const req = (url: string, ms = 20, status: number | null = 200) => ({
+			url,
+			type: 'fetch',
+			t: 10,
+			ms,
+			bytes: 100,
+			status
+		});
+		const r = analyze_session(
+			base({
+				requests: [
+					req('http://x/api/a'),
+					req('http://x/api/a'),
+					req('http://x/api/a'),
+					req('http://x/missing', 5, 404),
+					req('http://x/slow', 1500)
+				]
+			}),
+			names,
+			'http://x/p'
+		);
+		expect(codes(r)).toEqual(
+			expect.arrayContaining(['failed-requests', 'slow-requests', 'repeated-requests'])
+		);
 		expect(r.findings.find((f) => f.code === 'repeated-requests')!.message).toContain('/api/a ×3');
 	});
 
@@ -125,7 +196,9 @@ describe('analyze_session', () => {
 		// the same number as data, for a test to compare without reading the message
 		expect(r.counts).toMatchObject({ shifts: 1, cls: 0.05 });
 		expect(shift.message).toContain('in Churn');
-		expect(r.findings.find((f) => f.code === 'dom-churn')!.message).toContain('Churn changed the DOM 800 times');
+		expect(r.findings.find((f) => f.code === 'dom-churn')!.message).toContain(
+			'Churn changed the DOM 800 times'
+		);
 	});
 
 	it('every failed request, and the slowest interaction on each element however quick', () => {
@@ -137,8 +210,30 @@ describe('analyze_session', () => {
 					{ url: 'http://x/img.png', type: 'img', t: 30, ms: 5, bytes: 0, status: 404 }
 				],
 				interactions: [
-					{ t: 100, name: 'click', duration: 40, input_delay: 1, processing: 30, presentation: 9, id: 1, target: 'button#buy', fp: 'a', el: null },
-					{ t: 200, name: 'click', duration: 90, input_delay: 1, processing: 80, presentation: 9, id: 2, target: 'button#buy', fp: 'a', el: null }
+					{
+						t: 100,
+						name: 'click',
+						duration: 40,
+						input_delay: 1,
+						processing: 30,
+						presentation: 9,
+						id: 1,
+						target: 'button#buy',
+						fp: 'a',
+						el: null
+					},
+					{
+						t: 200,
+						name: 'click',
+						duration: 90,
+						input_delay: 1,
+						processing: 80,
+						presentation: 9,
+						id: 2,
+						target: 'button#buy',
+						fp: 'a',
+						el: null
+					}
 				],
 				clicks: [
 					{ t: 100, target: 'button#buy', fp: 'a', el: null },
@@ -196,9 +291,35 @@ describe('analyze_session', () => {
 				from: 1000,
 				to: 3000,
 				clicks: [{ t: 1100, target: 'button "x"', fp: 'a', el: null }],
-				interactions: [{ t: 1100, name: 'click', duration: 260, input_delay: 1, processing: 250, presentation: 9, id: 3, target: 'button "x"', fp: 'a', el: null }],
+				interactions: [
+					{
+						t: 1100,
+						name: 'click',
+						duration: 260,
+						input_delay: 1,
+						processing: 250,
+						presentation: 9,
+						id: 3,
+						target: 'button "x"',
+						fp: 'a',
+						el: null
+					}
+				],
 				longtasks: [{ t: 1105, ms: 250 }],
-				requests: [{ url: 'http://x/api/y', type: 'fetch', t: 1400, ms: 460, bytes: 10, status: 200, server: [{ name: 'ssr', ms: 455, desc: '' }, { name: 'net', ms: 450, desc: 'outbound (1)' }] }]
+				requests: [
+					{
+						url: 'http://x/api/y',
+						type: 'fetch',
+						t: 1400,
+						ms: 460,
+						bytes: 10,
+						status: 200,
+						server: [
+							{ name: 'ssr', ms: 455, desc: '' },
+							{ name: 'net', ms: 450, desc: 'outbound (1)' }
+						]
+					}
+				]
 			}),
 			names
 		);

@@ -34,8 +34,14 @@ test('mark: a function, a promise, a failing one, an event and a handle — one 
 	const t = with_tag();
 	try {
 		expect(mark('sync', () => 42, { kind: 'sync' })).toBe(42);
-		await expect(mark('async', new Promise((r) => setTimeout(() => r('ok'), 20)))).resolves.toBe('ok');
-		await expect(mark('fails', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+		await expect(mark('async', new Promise((r) => setTimeout(() => r('ok'), 20)))).resolves.toBe(
+			'ok'
+		);
+		await expect(
+			mark('fails', async () => {
+				throw new Error('boom');
+			})
+		).rejects.toThrow('boom');
 		const ready = mark.event('ready', 'widget-ready');
 		document.dispatchEvent(new Event('widget-ready'));
 		await ready;
@@ -45,10 +51,23 @@ test('mark: a function, a promise, a failing one, an event and a handle — one 
 		mark.start('since-nav', undefined, { from: 'navigation' }).end();
 		// (an idle browser may have flushed part of the queue already — read every body sent)
 		dispatchEvent(new Event('pagehide'));
-		const bodies = t.sent.map((b) => JSON.parse(b) as { page: string; marks?: { name: string; ms: number; attrs?: Record<string, unknown> }[] });
+		const bodies = t.sent.map(
+			(b) =>
+				JSON.parse(b) as {
+					page: string;
+					marks?: { name: string; ms: number; attrs?: Record<string, unknown> }[];
+				}
+		);
 		const marks = bodies.flatMap((b) => b.marks ?? []);
 		expect(bodies.every((b) => b.page === location.pathname)).toBe(true);
-		expect(marks.map((m) => m.name)).toEqual(['sync', 'async', 'fails', 'ready', 'manual', 'since-nav']);
+		expect(marks.map((m) => m.name)).toEqual([
+			'sync',
+			'async',
+			'fails',
+			'ready',
+			'manual',
+			'since-nav'
+		]);
 		expect(marks[0].attrs).toEqual({ kind: 'sync' });
 		expect(marks[1].ms).toBeGreaterThanOrEqual(15);
 		expect(marks[2].attrs).toEqual({ error: true });
@@ -64,7 +83,10 @@ test('mark without the beacon tag: runs the work, queues nothing', async () => {
 	_reset_beacon();
 	const sent: string[] = [];
 	const orig = navigator.sendBeacon;
-	navigator.sendBeacon = ((_u: string, b: string) => (sent.push(b), true)) as typeof navigator.sendBeacon;
+	navigator.sendBeacon = ((_u: string, b: string) => (
+		sent.push(b),
+		true
+	)) as typeof navigator.sendBeacon;
 	try {
 		expect(mark('x', () => 'y')).toBe('y');
 		expect(_beacon_state().marks).toBe(0);

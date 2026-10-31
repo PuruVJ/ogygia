@@ -18,7 +18,7 @@ libraries want to mount pages under a base path without owning the consumer's `s
 ## Why
 
 ogygia has one primitive — the region — and one way to turn it into a page: `document()`. What's
-missing is the thing in between: *given a URL, which page?* Today every consumer of `document()`
+missing is the thing in between: _given a URL, which page?_ Today every consumer of `document()`
 writes that by hand (the profiler's if-chain is the canonical scar). Kit's filesystem router can't
 serve this need: a library cannot inject files into the consumer's `src/routes`, and dynamic route
 sets (CMS trees, generated docs, admin panels) don't want to be files at all.
@@ -27,7 +27,7 @@ The router is **not** a replacement for Kit's router. It's the programmatic comp
 value, defined in an ordinary module, mounted wherever a request can be answered.
 
 **The remote-functions inversion (refinement 4):** we live in an RF world. A page is a query that
-returns a view; a route is *giving that query a URL*. The router is not where logic lives — it is
+returns a view; a route is _giving that query a URL_. The router is not where logic lives — it is
 where addresses are minted. Everything below follows from that.
 
 ## Design laws
@@ -40,7 +40,7 @@ where addresses are minted. Everything below follows from that.
    inline handler, or a remote function. The region stays the internal currency (the router builds
    one and hands it to `document()`), but the word "region" never appears in a route table.
 4. **Route pages are inert.** A routed component renders as server HTML with zero JS — exactly a
-   `csr=false` Kit page. Interactivity comes from marked imports *inside* the page component
+   `csr=false` Kit page. Interactivity comes from marked imports _inside_ the page component
    (`with { wake }`), same as everywhere else in ogygia. There is no "wake this route" knob: dials
    live on imports, never on routes. (Routing a component that was itself imported with a wake mark
    is allowed — the mark means what it always means — but dev warns: mark the interactive parts
@@ -90,7 +90,7 @@ export const GET = ({ request }) => app.fetch(request);
 ```
 
 That's the whole beginner surface. `app.handle` falls through to the rest of the app when nothing
-matches (a router that answers *some* URLs must be a good citizen for the others). `app.fetch`
+matches (a router that answers _some_ URLs must be a good citizen for the others). `app.fetch`
 returns `null` on no-match so a catchall can 404 its own way.
 
 Three more things arrive the moment you need them (refinements 7–8):
@@ -110,22 +110,22 @@ app.href('/docs/[slug]', { slug: 'intro' }); // typed links — domain = the GET
 
 ### What a route value can be
 
-| Value | Meaning | Freshness (law 7) |
-| --- | --- | --- |
+| Value                     | Meaning                                                                                                                            | Freshness (law 7)                                |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | `view(Component, props?)` | A page — inert HTML, islands inside wake. Static pages are `view(Home)` (never a bare component: that would break `ctx` inference) | prerenderable (a static value, takes no request) |
-| `(c) => …` | Inline handler; `c.params` typed from the pattern key, zero annotation | request-time (it reads the request) |
-| remote `prerender(...)` | The function IS the page; params validated by its schema | baked; instances = the RF's own `inputs` |
-| remote `query(...)` | Same, per-request | request-time |
-| remote `query.live(...)` | Same, and the page morphs as the query yields | live (SSE) — parking lot, scenario candidate |
-| another `routes(...)` | Sub-router mounted under this prefix; patterns + types flow through | each inner route keeps its own declaration |
+| `(c) => …`                | Inline handler; `c.params` typed from the pattern key, zero annotation                                                             | request-time (it reads the request)              |
+| remote `prerender(...)`   | The function IS the page; params validated by its schema                                                                           | baked; instances = the RF's own `inputs`         |
+| remote `query(...)`       | Same, per-request                                                                                                                  | request-time                                     |
+| remote `query.live(...)`  | Same, and the page morphs as the query yields                                                                                      | live (SSE) — parking lot, scenario candidate     |
+| another `routes(...)`     | Sub-router mounted under this prefix; patterns + types flow through                                                                | each inner route keeps its own declaration       |
 
 ### What a handler / bound RF returns
 
-| Return | Meaning |
-| --- | --- |
+| Return                          | Meaning                                                                                                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `view(Component, props, opts?)` | The page: rendered through `document()` — inert HTML, islands wake, CSS hoisted. `props` type-checked against the component. `opts`: `title`, `status`, `headers`, `cache` |
-| `Response` | Sent as-is (JSON endpoints, redirects, files) |
-| `null` / `undefined` | Not mine — fall through to the next match / the rest of the app |
+| `Response`                      | Sent as-is (JSON endpoints, redirects, files)                                                                                                                              |
+| `null` / `undefined`            | Not mine — fall through to the next match / the rest of the app                                                                                                            |
 
 ```ts
 '/docs/[slug]': async ({ params }) => {
@@ -210,6 +210,7 @@ Kit's grammar, exactly — zero new syntax to learn:
   in-process route cache dies with every Lambda instance anyway.
 
 **Laws that fall out:**
+
 - Prerendering is a property of the **catchall mount** — Kit's build crawler can only see routes
   served from a route file. A hooks-mounted router is always dynamic (documented; dev warns if a
   hooks-mounted table contains prerender-flavored bindings).
@@ -342,7 +343,7 @@ app — node_modules can't ship one. The profiler is therefore the flagship hand
 
 - Same slot, three value kinds (`Component` | handler | RF binding). Migrating a route = swapping
   its value. The table never restructures.
-- The one capability refinement 4 accidentally made RF-only — prerendering a *dynamic* route — gets
+- The one capability refinement 4 accidentally made RF-only — prerendering a _dynamic_ route — gets
   a value-level fallback that stays inside law 7: `baked(handler, { inputs })`, the `prerender`
   flavor's exact semantics with no experimental flag. ("Baked" is already ogygia's word for
   built-at-build-time. Name tentative.) When RFs land for the user, `baked(...)` → `prerender()` RF
@@ -404,7 +405,7 @@ What the dogfood forced into the design (each promoted from the parking lot):
 - **`base`**: patterns are base-relative; the mount strips it. Required for any library.
 - **`miss`**: with `base` set, the router owns its whole subtree — unmatched paths under base
   render `miss` (default: a plain 404) instead of falling through to the consumer's app. Without
-  `base`, `null` keeps meaning "not mine, fall through". A *specific* not-found (the profiler's
+  `base`, `null` keeps meaning "not mine, fall through". A _specific_ not-found (the profiler's
   "report expired") is just a handler returning `view(…, { status: 404 })` — no feature needed.
 - **Per-entry verb values** (`get(h).post(h2)` — see refinement 8) and **thrown redirect/error** (above).
 - Auth deliberately did NOT become router API: it's one wrapper at the seam. The non-goal held.
@@ -417,7 +418,7 @@ What the dogfood forced into the design (each promoted from the parking lot):
 - `command` / `form` bindings: progressive-enhancement POST — scenario pass needed
   (same-URL GET+POST pairs, redirect-after-post).
 - Streaming responses / regions that suspend.
-- Shared chrome (layout components) without a layout DSL. (Sub-router *mounting* is settled —
+- Shared chrome (layout components) without a layout DSL. (Sub-router _mounting_ is settled —
   `'/api': api` as a record value, refinement 7 — but nested LAYOUTS are a separate question.)
 - **Typed search params** (TanStack's `validateSearch` is the best-in-class): a schema for
   `url.searchParams` per record entry, typed into `ctx`. The RF binding already gets this from its
@@ -456,8 +457,8 @@ After: 9/10 / 9/10 (the doc must note 'ignore' serves two URLs for one page — 
 
 **Scenario.** Not a traffic fringe — an adoption one. The draft's `'/': () => region(Home, {})`
 makes the router's entry ramp teach an internal concept before the first page renders. The user's
-call: *people should just import components; route pages must be inert; interactivity is marked
-imports inside them.*
+call: _people should just import components; route pages must be inert; interactivity is marked
+imports inside them._
 
 **Test.** The old surface forced `region()` + an arrow even for a static home page. 5/10 ease.
 
@@ -471,7 +472,7 @@ After: 9/10 / 10/10.
 
 ### 3 · Prerendering routes that aren't files (2026-08-24)
 
-**Scenario.** Kit's build crawler prerenders by rendering route *files* and following links. A
+**Scenario.** Kit's build crawler prerenders by rendering route _files_ and following links. A
 programmatic router's routes don't exist as files, and a `/docs/[slug]` tree behind `app.fetch` is
 invisible to the crawler. Bonus subtlety: one router usually holds BOTH prerenderable routes and
 per-request ones (`/search`), so all-or-nothing `prerender = true` on the mount is wrong.
@@ -493,7 +494,7 @@ any of it? (It did: the prerender block, raw-string params, an eventual method D
 knows (`inputs`); params were unvalidated strings; POST routes had no story. 6/10 — worked, but
 carried a second source of truth, and two-sources-of-truth is how designs rot.
 
-**Expansion.** The inversion: *a page is a query that returns a view; a route gives it a URL.*
+**Expansion.** The inversion: _a page is a query that returns a view; a route gives it a URL._
 Remote functions become a third route-value kind, type-checked pattern-params-against-input-schema.
 The prerender block is **deleted** — law 7 replaces it: the route's value IS its freshness
 declaration (bare component = provably static → auto-prerendered; handler = dynamic by
@@ -589,6 +590,7 @@ second time). 21 router tests + the full suite green; every profiler route verif
 `DELETE /view → 405 allow: GET, POST` (the honest-405 the string-key design never could give).
 
 **What reality forced.**
+
 - **Component vs handler is undecidable by type.** Both are functions, so a bare `Component` and an
   inline `(ctx) => …` sit in the same union and TS won't contextually type `ctx` — an inline table
   handler needs `({ params }: Ctx) => …` today (verb-wrapper + RF handlers infer fine). At RUNTIME
@@ -675,13 +677,13 @@ params); per-route guards run post-match (params available) — the one wart, do
 `get()`/`view()` alike). Cost to the 80%: zero (no `guard` = nothing runs).
 
 **Design finding (guards vs the seam):** guards are a PRE-check. The seam (`sequence`, the handle) is
-where response *transforms* live. They're complementary — and refinement 14 shows the profiler's auth
+where response _transforms_ live. They're complementary — and refinement 14 shows the profiler's auth
 belonged entirely on the guard side once one URL smell was removed. After: 9/10 / 9/10.
 
 ### 14 · Remove `?key=`, auth becomes a guard (2026-08-25, user: "?key should've been removed — move it to a guard")
 
-**Scenario.** Refinement 13 claimed the profiler couldn't migrate to a guard because it *seated a
-cookie on the response* when you arrived with `?key=<secret>` — a post-effect. But the user pointed at
+**Scenario.** Refinement 13 claimed the profiler couldn't migrate to a guard because it _seated a
+cookie on the response_ when you arrived with `?key=<secret>` — a post-effect. But the user pointed at
 the real problem: a secret in a URL is a smell (logged, cached, shared, in Referer). Drop `?key=`
 entirely and the post-effect vanishes with it — auth turns into a pure pre-check.
 

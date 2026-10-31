@@ -28,7 +28,11 @@ const BUILT = 4196;
 /** run to completion; resolves { code, out } */
 function run(cmd, args, opts = {}) {
 	return new Promise((ok) => {
-		const child = spawn(cmd, args, { cwd: opts.cwd ?? repo, env: { ...process.env, ...opts.env }, stdio: ['ignore', 'pipe', 'pipe'] });
+		const child = spawn(cmd, args, {
+			cwd: opts.cwd ?? repo,
+			env: { ...process.env, ...opts.env },
+			stdio: ['ignore', 'pipe', 'pipe']
+		});
 		let out = '';
 		child.stdout.on('data', (d) => (out += d));
 		child.stderr.on('data', (d) => (out += d));
@@ -38,13 +42,18 @@ function run(cmd, args, opts = {}) {
 
 /** a long-lived server; resolves its handle once `probe` answers */
 async function serve(args, env, port, probe) {
-	const child = spawn(process.execPath, args, { cwd: app, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+	const child = spawn(process.execPath, args, {
+		cwd: app,
+		env: { ...process.env, ...env },
+		stdio: ['ignore', 'pipe', 'pipe']
+	});
 	let out = '';
 	child.stdout.on('data', (d) => (out += d));
 	child.stderr.on('data', (d) => (out += d));
 	for (let i = 0; i < 180; i++) {
 		try {
-			if ((await fetch(`http://127.0.0.1:${port}${probe}`)).ok) return { stop: () => child.kill('SIGKILL'), log: () => out };
+			if ((await fetch(`http://127.0.0.1:${port}${probe}`)).ok)
+				return { stop: () => child.kill('SIGKILL'), log: () => out };
 		} catch {
 			// not up yet
 		}
@@ -59,8 +68,15 @@ async function key(name, cmd, args, opts) {
 	const t = Date.now();
 	const { code, out } = await run(cmd, args, opts);
 	writeFileSync(join(logs, `${name}.log`), out);
-	const bad = out.split('\n').filter((l) => l.startsWith('✗') || l.includes('FAILED') || l.includes('Error:'));
-	results.push({ name, ok: code === 0, s: Math.round((Date.now() - t) / 1000), bad: bad.slice(0, 6) });
+	const bad = out
+		.split('\n')
+		.filter((l) => l.startsWith('✗') || l.includes('FAILED') || l.includes('Error:'));
+	results.push({
+		name,
+		ok: code === 0,
+		s: Math.round((Date.now() - t) / 1000),
+		bad: bad.slice(0, 6)
+	});
 	console.log(`${code === 0 ? '✓' : '✗'} ${name} (${Math.round((Date.now() - t) / 1000)} s)`);
 }
 
@@ -71,15 +87,42 @@ const build = async (env) => {
 
 // 1 · the dev-server keys (devtools on)
 {
-	const dev = await serve(['node_modules/vite/bin/vite.js', 'dev', '--port', String(DEV), '--host', '127.0.0.1', '--strictPort'], { OGYGIA_DEVTOOLS: '1', ORIGIN: `http://127.0.0.1:${DEV}` }, DEV, '/dt-lab');
+	const dev = await serve(
+		[
+			'node_modules/vite/bin/vite.js',
+			'dev',
+			'--port',
+			String(DEV),
+			'--host',
+			'127.0.0.1',
+			'--strictPort'
+		],
+		{ OGYGIA_DEVTOOLS: '1', ORIGIN: `http://127.0.0.1:${DEV}` },
+		DEV,
+		'/dt-lab'
+	);
 	// warm every lab page (the first visit after a start re-optimizes deps and reloads)
-	for (const p of ['/dt-lab', '/dt-session', '/dt-third', '/dt-nest', '/dt-styles', '/dt-many']) await fetch(`http://127.0.0.1:${DEV}${p}`).catch(() => {});
+	for (const p of ['/dt-lab', '/dt-session', '/dt-third', '/dt-nest', '/dt-styles', '/dt-many'])
+		await fetch(`http://127.0.0.1:${DEV}${p}`).catch(() => {});
 	await new Promise((r) => setTimeout(r, 3000));
 	try {
-		await key('devtools page + profiler report + third parties + styles', process.execPath, ['internal/bench/devtools-answer-key.ts', `http://127.0.0.1:${DEV}`, '--repeat=3']);
-		await key('devtools record session', process.execPath, ['internal/bench/devtools-session-key.ts', `http://127.0.0.1:${DEV}`]);
-		await key('devtools accessibility (axe + contrast)', process.execPath, ['internal/bench/devtools-a11y-check.ts', `http://127.0.0.1:${DEV}`]);
-		await key('devtools: every press does something', process.execPath, ['internal/bench/devtools-click-check.ts', `http://127.0.0.1:${DEV}`]);
+		await key('devtools page + profiler report + third parties + styles', process.execPath, [
+			'internal/bench/devtools-answer-key.ts',
+			`http://127.0.0.1:${DEV}`,
+			'--repeat=3'
+		]);
+		await key('devtools record session', process.execPath, [
+			'internal/bench/devtools-session-key.ts',
+			`http://127.0.0.1:${DEV}`
+		]);
+		await key('devtools accessibility (axe + contrast)', process.execPath, [
+			'internal/bench/devtools-a11y-check.ts',
+			`http://127.0.0.1:${DEV}`
+		]);
+		await key('devtools: every press does something', process.execPath, [
+			'internal/bench/devtools-click-check.ts',
+			`http://127.0.0.1:${DEV}`
+		]);
 	} finally {
 		dev.stop();
 	}
@@ -88,13 +131,31 @@ const build = async (env) => {
 if (!quick) {
 	// 1b · island files across deploys: three real builds, a browser that keeps its immutable cache
 	// (it builds and serves on its own; the steps below rebuild after it)
-	await key('island files across deploys (the cache check)', process.execPath, ['internal/bench/cache-bust-check.ts']);
+	await key('island files across deploys (the cache check)', process.execPath, [
+		'internal/bench/cache-bust-check.ts'
+	]);
 	// 2 · devtools in a build
 	await build({ OGYGIA_DEVTOOLS: '1' });
 	{
-		const pv = await serve(['node_modules/vite/bin/vite.js', 'preview', '--port', String(BUILT), '--host', '127.0.0.1', '--strictPort'], { ORIGIN: `http://127.0.0.1:${BUILT}` }, BUILT, '/dt-lab');
+		const pv = await serve(
+			[
+				'node_modules/vite/bin/vite.js',
+				'preview',
+				'--port',
+				String(BUILT),
+				'--host',
+				'127.0.0.1',
+				'--strictPort'
+			],
+			{ ORIGIN: `http://127.0.0.1:${BUILT}` },
+			BUILT,
+			'/dt-lab'
+		);
 		try {
-			await key('devtools in a build', process.execPath, ['internal/bench/devtools-build-check.ts', `http://127.0.0.1:${BUILT}`]);
+			await key('devtools in a build', process.execPath, [
+				'internal/bench/devtools-build-check.ts',
+				`http://127.0.0.1:${BUILT}`
+			]);
 		} finally {
 			pv.stop();
 		}
@@ -102,18 +163,58 @@ if (!quick) {
 	// 3 · the profiler on a plain build (and the lab left built without the dock)
 	await build({});
 	{
-		const pv = await serve(['node_modules/vite/bin/vite.js', 'preview', '--port', String(BUILT), '--host', '127.0.0.1', '--strictPort'], { ORIGIN: `http://127.0.0.1:${BUILT}`, OGYGIA_PROFILER_SECRET: 'hell', OGYGIA_PROFILES_DB: join(logs, 'keys.db') }, BUILT, '/dt-lab');
+		const pv = await serve(
+			[
+				'node_modules/vite/bin/vite.js',
+				'preview',
+				'--port',
+				String(BUILT),
+				'--host',
+				'127.0.0.1',
+				'--strictPort'
+			],
+			{
+				ORIGIN: `http://127.0.0.1:${BUILT}`,
+				OGYGIA_PROFILER_SECRET: 'hell',
+				OGYGIA_PROFILES_DB: join(logs, 'keys.db')
+			},
+			BUILT,
+			'/dt-lab'
+		);
 		try {
-			await key('profiler page score (twins)', process.execPath, ['internal/bench/profiler-score-key.ts', `http://127.0.0.1:${BUILT}`, 'hell']);
-			await key('profiler report links open their rows', process.execPath, ['internal/bench/profiler-links-check.ts', `http://127.0.0.1:${BUILT}`, 'hell']);
-			await key('profiler: every press does something', process.execPath, ['internal/bench/profiler-click-check.ts', `http://127.0.0.1:${BUILT}`, 'hell']);
+			await key('profiler page score (twins)', process.execPath, [
+				'internal/bench/profiler-score-key.ts',
+				`http://127.0.0.1:${BUILT}`,
+				'hell'
+			]);
+			await key('profiler report links open their rows', process.execPath, [
+				'internal/bench/profiler-links-check.ts',
+				`http://127.0.0.1:${BUILT}`,
+				'hell'
+			]);
+			await key('profiler: every press does something', process.execPath, [
+				'internal/bench/profiler-click-check.ts',
+				`http://127.0.0.1:${BUILT}`,
+				'hell'
+			]);
 		} finally {
 			pv.stop();
 		}
 	}
-	await key('profiler slow patterns', process.execPath, ['internal/bench/profiler-answer-key.ts', '--serve']);
+	await key('profiler slow patterns', process.execPath, [
+		'internal/bench/profiler-answer-key.ts',
+		'--serve'
+	]);
 }
 
-console.log('\n' + results.map((r) => `${r.ok ? '✓' : '✗'} ${r.name.padEnd(48)} ${String(r.s).padStart(4)} s${r.ok ? '' : '\n    ' + r.bad.join('\n    ')}`).join('\n'));
+console.log(
+	'\n' +
+		results
+			.map(
+				(r) =>
+					`${r.ok ? '✓' : '✗'} ${r.name.padEnd(48)} ${String(r.s).padStart(4)} s${r.ok ? '' : '\n    ' + r.bad.join('\n    ')}`
+			)
+			.join('\n')
+);
 console.log(`logs: ${logs}`);
 process.exit(results.every((r) => r.ok) ? 0 : 1);

@@ -40,7 +40,11 @@ test.describe('island-in-island single hydration + dev warn', () => {
 		const html = ssr_html;
 		check('/nested returns 200', ssr_status === 200);
 		// the nested hole renders inline as static HTML — a lake (`wake="none"`), so it ships no JS
-		check('/nested renders the nested hole as ONE lake', count(html, REGION_FROZEN_G_RE) === 1, `${count(html, REGION_FROZEN_G_RE)}`);
+		check(
+			'/nested renders the nested hole as ONE lake',
+			count(html, REGION_FROZEN_G_RE) === 1,
+			`${count(html, REGION_FROZEN_G_RE)}`
+		);
 		check(
 			'/nested emits exactly ONE waking ogygia-region (outer only; inner degraded)',
 			count(html, REGION_OPEN_G_RE) - count(html, REGION_FROZEN_G_RE) === 1,
@@ -80,7 +84,9 @@ test.describe('island-in-island single hydration + dev warn', () => {
 		);
 		check(
 			'the nested hole kept its server HTML (Hey, …)',
-			HEY_RE.test((await page.locator('[data-nested-server] ogygia-region[wake="none"]').textContent()) ?? '')
+			HEY_RE.test(
+				(await page.locator('[data-nested-server] ogygia-region[wake="none"]').textContent()) ?? ''
+			)
 		);
 		await page.waitForSelector('ogygia-region[data-hydrated]', { timeout: 5000 }).catch(() => {});
 		check(

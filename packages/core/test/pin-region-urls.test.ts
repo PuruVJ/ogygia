@@ -48,7 +48,11 @@ describe('pin_region_urls', () => {
 	});
 
 	it('leaves alone what is pinned already, another origin, and what holds no URL', () => {
-		const el = region({ entry: '/_app/immutable/x.js', src: 'https://cdn.other.test/x.js', endpoint: '' });
+		const el = region({
+			entry: '/_app/immutable/x.js',
+			src: 'https://cdn.other.test/x.js',
+			endpoint: ''
+		});
 		pin_region_urls(el);
 		expect(el.attrs.get('entry')).toBe('/_app/immutable/x.js');
 		expect(el.attrs.get('src')).toBe('https://cdn.other.test/x.js');

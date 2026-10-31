@@ -8,4 +8,6 @@
 	const room = getContext<SharedCounter | undefined>('room');
 </script>
 
-<button class="island" data-setctx-writer onclick={() => room?.inc()}>bump ({room?.count ?? -1})</button>
+<button class="island" data-setctx-writer onclick={() => room?.inc()}
+	>bump ({room?.count ?? -1})</button
+>

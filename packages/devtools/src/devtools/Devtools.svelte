@@ -82,7 +82,8 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	// OPEN AS THE PAGE LOADS (remembered from the last page): when it began to show — the Page tab says
 	// so when the page's first paint follows it closely, since a browser may count the dock's own text
 	// as the page's first paint (Safari: its largest paint too)
-	if (open && typeof performance !== 'undefined') globalThis[Symbol.for('ogygia.dock-open-at')] ??= performance.now();
+	if (open && typeof performance !== 'undefined')
+		globalThis[Symbol.for('ogygia.dock-open-at')] ??= performance.now();
 	let placed = saved.win != null;
 	function save_layout() {
 		try {
@@ -234,15 +235,16 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 		// `names` (island id → component name) and `bytes` (island id → transitive dev-graph size) label
 		// the tabs with real names/costs. Best-effort — the endpoint only exists on the dev server (a
 		// build carries its names in the dock's own module: ui-app.ts).
-		if (!LAZY) fetch('/__ogygia_devtools_meta')
-			.then((r) => (r.ok ? r.json() : null))
-			.then((meta) => {
-				if (!meta || typeof meta !== 'object') return;
-				if (meta.names) window.__ogygia_region_names = meta.names;
-				if (meta.bytes) window.__ogygia_region_bytes = meta.bytes;
-				tick++;
-			})
-			.catch(() => {});
+		if (!LAZY)
+			fetch('/__ogygia_devtools_meta')
+				.then((r) => (r.ok ? r.json() : null))
+				.then((meta) => {
+					if (!meta || typeof meta !== 'object') return;
+					if (meta.names) window.__ogygia_region_names = meta.names;
+					if (meta.bytes) window.__ogygia_region_bytes = meta.bytes;
+					tick++;
+				})
+				.catch(() => {});
 
 		if (startOpen && !open) set_open(true);
 		else if (open) refresh_on();
@@ -274,21 +276,41 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 					<span class="grip" aria-hidden="true"></span>
 					<h2 class="ttl">ogygia devtools</h2>
 					{#if !csrTrue}
-						<button class="trace" {...winCancel} title="copy an event trace to the clipboard (saved as a file where the clipboard is not allowed)" onclick={copy_trace}>
+						<button
+							class="trace"
+							{...winCancel}
+							title="copy an event trace to the clipboard (saved as a file where the clipboard is not allowed)"
+							onclick={copy_trace}
+						>
 							{copied || 'trace'}
 						</button>
 					{:else}
 						<span class="mode">csr=true</span>
 					{/if}
 					{#if hide}
-						<button class="trace hide" data-og-hide {...winCancel} title="turn devtools off in this browser (?og-devtools=on brings it back)" onclick={hide}>hide</button>
+						<button
+							class="trace hide"
+							data-og-hide
+							{...winCancel}
+							title="turn devtools off in this browser (?og-devtools=on brings it back)"
+							onclick={hide}>hide</button
+						>
 					{/if}
 					<button class="x" {...winCancel} title="close" onclick={() => set_open(false)}>✕</button>
 				</div>
 				{#if !csrTrue}
 					<div class="tabs" role="tablist" aria-label="devtools instruments">
 						{#each TABS as t}
-							<button class="tab" {...winCancel} role="tab" aria-selected={tab === t.id} aria-controls="og-dt-panel" data-og-tab={t.id} class:on={tab === t.id} onclick={() => (tab = t.id)}>
+							<button
+								class="tab"
+								{...winCancel}
+								role="tab"
+								aria-selected={tab === t.id}
+								aria-controls="og-dt-panel"
+								data-og-tab={t.id}
+								class:on={tab === t.id}
+								onclick={() => (tab = t.id)}
+							>
 								{t.label}
 							</button>
 						{/each}
@@ -297,15 +319,22 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 			</header>
 
 			<!-- the panel scrolls: focusable so a keyboard can scroll it, labelled by the open tab -->
-			<div class="body" id="og-dt-panel" role="tabpanel" tabindex="0" aria-label={TABS.find((t) => t.id === tab)?.label ?? 'devtools'}>
+			<div
+				class="body"
+				id="og-dt-panel"
+				role="tabpanel"
+				tabindex="0"
+				aria-label={TABS.find((t) => t.id === tab)?.label ?? 'devtools'}
+			>
 				{#if csrTrue}
 					<!-- a Kit-hydrated page: no islands, but the browser's side of it still tells a lot -->
 					<div class="notice" data-og-csr-notice>
 						<p class="h">This page runs on <code>csr=true</code>.</p>
 						<p>
-							SvelteKit hydrates the whole page here, so ogygia's runtime never boots: there are no islands,
-							no wire and no byte ledger. What the browser saw is below. Open a <code>csr=false</code> page
-							for the island tools.
+							SvelteKit hydrates the whole page here, so ogygia's runtime never boots: there are no
+							islands, no wire and no byte ledger. What the browser saw is below. Open a <code
+								>csr=false</code
+							> page for the island tools.
 						</p>
 					</div>
 					<PageTab {tick} bind:focus bind:selected />
@@ -369,7 +398,11 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 		   z-index in the page context — see ui.ts; in here we only order against our own siblings:
 		   the boundary overlay sits below at 2147483000 so the window paints over the lens.) */
 		z-index: 2147483647;
-		font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+		font:
+			11px/1.5 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 	}
 
 	/* ── window ───────────────────────────────────────────────────────────── */
@@ -595,13 +628,20 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 		border: 1px solid rgba(148, 163, 184, 0.35);
 		background: #0b1220;
 		color: #e2e8f0;
-		font: 600 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+		font:
+			600 12px/1 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 		cursor: pointer;
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 		/* Peeks up below the fold + dimmed until revealed (open or hovered). */
 		transform: translateY(44%);
 		opacity: 0.55;
-		transition: transform 0.18s ease, opacity 0.18s ease, background 0.15s ease;
+		transition:
+			transform 0.18s ease,
+			opacity 0.18s ease,
+			background 0.15s ease;
 	}
 	.launch.up {
 		transform: translateY(-8px);

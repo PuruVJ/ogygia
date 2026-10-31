@@ -91,9 +91,17 @@ export function island_subgraph_bytes(
 				// location — are no app bytes, but their lines can draw differently in the browser)
 				const f = (n.file || '').split('\\').join('/');
 				const at = f.indexOf('/content/');
-				if (read && at !== -1 && OWN_FILE_RE.test(f) && f.endsWith('.svelte') && hazards.length < 5) {
+				if (
+					read &&
+					at !== -1 &&
+					OWN_FILE_RE.test(f) &&
+					f.endsWith('.svelte') &&
+					hazards.length < 5
+				) {
 					const src = read(n.file!);
-					if (src) for (const h of hydration_hazards(src).slice(0, 3)) if (hazards.length < 5) hazards.push({ file: `ogygia/${f.slice(at + 1)}`, ...h });
+					if (src)
+						for (const h of hydration_hazards(src).slice(0, 3))
+							if (hazards.length < 5) hazards.push({ file: `ogygia/${f.slice(at + 1)}`, ...h });
 				}
 				continue;
 			}
@@ -114,18 +122,33 @@ export function island_subgraph_bytes(
 				// a BARREL the island still imports whole: little code of its own, many app modules
 				// behind it (a pure re-export index). Every module behind it rides into the island.
 				// (a component uses what it imports: only a script module can be a re-export index)
-				if (fanout >= BARREL_FANOUT && code.length <= fanout * BARREL_BYTES_PER_EXPORT && !file.endsWith('.svelte')) barrels.push({ file, fanout });
+				if (
+					fanout >= BARREL_FANOUT &&
+					code.length <= fanout * BARREL_BYTES_PER_EXPORT &&
+					!file.endsWith('.svelte')
+				)
+					barrels.push({ file, fanout });
 				// its lines that draw differently in the browser (its source on disk, not the served code)
 				if (read && n.file && file.endsWith('.svelte') && hazards.length < 5) {
 					const src = read(n.file);
-					if (src) for (const h of hydration_hazards(src).slice(0, 3)) if (hazards.length < 5) hazards.push({ file, ...h });
+					if (src)
+						for (const h of hydration_hazards(src).slice(0, 3))
+							if (hazards.length < 5) hazards.push({ file, ...h });
 				}
 			}
 		}
 		// (a site-kit island has no app bytes of its own, and still its lines)
 		if ((count > 0 || hazards.length) && (!out[iid] || out[iid].bytes < bytes)) {
 			each.sort((a, b) => b.bytes - a.bytes);
-			out[iid] = { bytes, modules: count, top: each.slice(0, 5), ...(barrels.length ? { barrels: barrels.sort((a, b) => b.fanout - a.fanout).slice(0, 3) } : {}), ...(hazards.length ? { hazards } : {}) };
+			out[iid] = {
+				bytes,
+				modules: count,
+				top: each.slice(0, 5),
+				...(barrels.length
+					? { barrels: barrels.sort((a, b) => b.fanout - a.fanout).slice(0, 3) }
+					: {}),
+				...(hazards.length ? { hazards } : {})
+			};
 		}
 	}
 	return out;

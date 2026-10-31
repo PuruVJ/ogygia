@@ -25,12 +25,34 @@
 {#snippet kind(n: DrillNode)}
 	{#if KIND[n.kind]}
 		<span class="dr-kind {n.kind}">
-			{KIND[n.kind]}{#if n.calls && n.calls > 1} · {n.calls} {n.kind === 'cpu' ? 'renders' : 'calls'}{/if}
-			{#if n.runs}<span title="Its lowest and highest over the profiled renders (for a wait: its calls' own time, which the network makes jitter): a difference smaller than this spread is noise"> · {n.kind === 'wait' ? 'calls took ' : ''}{fmt_ms(n.runs[0])}–{fmt_ms(n.runs[1])} ms over renders</span>{/if}
-			{#if n.cold !== undefined}<span class="dr-cold" title="What it took in the first, cold render (loading and compiling its code, filling first-call caches): what a fresh serverless instance pays on its first request"> · {fmt_ms(n.cold)} ms cold</span>{/if}
-			{#if n.alone === undefined}{:else if n.alone < 0.05}<span title="Other calls were in flight the whole time: making this one faster saves nothing unless they get faster too"> · always beside other calls</span>
-			{:else if n.alone < n.ms - 0.05}<span title="Nothing else was in flight for this long: a faster answer saves at least this. The rest of its time it waited alongside other calls."> · {fmt_ms(n.alone)} ms alone</span>
-			{:else}<span title="Nothing else was in flight while it ran: every ms it gets faster, the render does too"> · alone</span>{/if}
+			{KIND[n.kind]}{#if n.calls && n.calls > 1}
+				· {n.calls} {n.kind === 'cpu' ? 'renders' : 'calls'}{/if}
+			{#if n.runs}<span
+					title="Its lowest and highest over the profiled renders (for a wait: its calls' own time, which the network makes jitter): a difference smaller than this spread is noise"
+				>
+					· {n.kind === 'wait' ? 'calls took ' : ''}{fmt_ms(n.runs[0])}–{fmt_ms(n.runs[1])} ms over renders</span
+				>{/if}
+			{#if n.cold !== undefined}<span
+					class="dr-cold"
+					title="What it took in the first, cold render (loading and compiling its code, filling first-call caches): what a fresh serverless instance pays on its first request"
+				>
+					· {fmt_ms(n.cold)} ms cold</span
+				>{/if}
+			{#if n.alone === undefined}{:else if n.alone < 0.05}<span
+					title="Other calls were in flight the whole time: making this one faster saves nothing unless they get faster too"
+				>
+					· always beside other calls</span
+				>
+			{:else if n.alone < n.ms - 0.05}<span
+					title="Nothing else was in flight for this long: a faster answer saves at least this. The rest of its time it waited alongside other calls."
+				>
+					· {fmt_ms(n.alone)} ms alone</span
+				>
+			{:else}<span
+					title="Nothing else was in flight while it ran: every ms it gets faster, the render does too"
+				>
+					· alone</span
+				>{/if}
 		</span>
 	{/if}
 {/snippet}
@@ -39,9 +61,21 @@
 	{#if n.fills}
 		{@const unread = n.fills.every((f) => !f.read)}
 		<!-- what the row was for: the page-data keys its lines feed; all unread = time for nothing -->
-		<span class="dr-fills" class:unread title={unread ? 'Every key this feeds is read by nothing on the page: this time buys nothing. Drop it from the load, or move it where it is used.' : 'The page-data keys this feeds (from the load’s return)'}>
+		<span
+			class="dr-fills"
+			class:unread
+			title={unread
+				? 'Every key this feeds is read by nothing on the page: this time buys nothing. Drop it from the load, or move it where it is used.'
+				: 'The page-data keys this feeds (from the load’s return)'}
+		>
 			<!-- read keys first; an unread one in a mixed list is marked, its share of the work is waste -->
-			→ {#each [...n.fills].sort((a, b) => Number(b.read) - Number(a.read)).slice(0, 5) as f, i (f.key)}{i ? ', ' : ''}<span class:gone={!f.read && !unread} title={f.read ? '' : 'nothing on the page reads this key'}>{f.key}</span>{/each}{n.fills.length > 5 ? ` +${n.fills.length - 5}` : ''}{#if unread}&nbsp;· nothing reads it{/if}
+			→ {#each [...n.fills]
+				.sort((a, b) => Number(b.read) - Number(a.read))
+				.slice(0, 5) as f, i (f.key)}{i ? ', ' : ''}<span
+					class:gone={!f.read && !unread}
+					title={f.read ? '' : 'nothing on the page reads this key'}>{f.key}</span
+				>{/each}{n.fills.length > 5 ? ` +${n.fills.length - 5}` : ''}{#if unread}&nbsp;· nothing
+				reads it{/if}
 		</span>
 	{/if}
 {/snippet}
@@ -51,10 +85,16 @@
 		{@const s = n.split}
 		{@const per = (ms: number) => fmt_ms(ms / s.calls)}
 		<!-- each call's own clock: what the other side claims, the rest until headers, the body -->
-		<span class="dr-split" title="Each call's own clock (averaged over its calls): until the answer's headers came, then reading the body. Their side is what the service's own Server-Timing header says it spent; the rest is the network, TLS, their framework or a queue in front of them.">
+		<span
+			class="dr-split"
+			title="Each call's own clock (averaged over its calls): until the answer's headers came, then reading the body. Their side is what the service's own Server-Timing header says it spent; the rest is the network, TLS, their framework or a queue in front of them."
+		>
 			{s.calls > 1 ? 'each call' : 'the call'}:
 			{#if s.theirs_ms !== undefined}
-				<b>{per(s.theirs_ms)} ms their side</b>{#if s.top}&nbsp;({s.top.map((t) => `${t.name} ${per(t.ms)}`).join(', ')}){/if}{#if s.told && s.told < s.calls} on {s.told} of {s.calls}{/if}
+				<b>{per(s.theirs_ms)} ms their side</b>{#if s.top}&nbsp;({s.top
+						.map((t) => `${t.name} ${per(t.ms)}`)
+						.join(', ')}){/if}{#if s.told && s.told < s.calls}
+					on {s.told} of {s.calls}{/if}
 				· {per(s.network_ms)} ms network &amp; the rest
 			{:else}
 				{per(s.network_ms)} ms until headers
@@ -69,12 +109,18 @@
 	{#if n.children?.length}
 		<details class="d{depth}" open={depth < 1 && n.kind !== 'more'}>
 			<summary>
-				<span class="dr-bar"><i class="dr-fill {n.kind}" style="width:{Math.max(0.5, pct).toFixed(1)}%"></i></span>
+				<span class="dr-bar"
+					><i class="dr-fill {n.kind}" style="width:{Math.max(0.5, pct).toFixed(1)}%"></i></span
+				>
 				<span class="dr-ms">{fmt_ms(n.ms)} ms</span>
 				<span class="dr-lab">{n.label}</span>
 				{@render kind(n)}
 				{@render fills(n)}
-				{#if n.why}<span class="dr-why">{#each n.why as k (k)}<span title="a slow pattern the report found here">{PATTERN_LABEL[k as PatternKind] ?? k}</span>{/each}</span>{/if}
+				{#if n.why}<span class="dr-why"
+						>{#each n.why as k (k)}<span title="a slow pattern the report found here"
+								>{PATTERN_LABEL[k as PatternKind] ?? k}</span
+							>{/each}</span
+					>{/if}
 				{#if n.at && n.kind !== 'line'}<code class="dr-at">{n.at}</code>{/if}
 				{@render split(n)}
 			</summary>
@@ -84,12 +130,21 @@
 		</details>
 	{:else}
 		<div class="leaf d{depth}">
-			<span class="dr-bar"><i class="dr-fill {n.kind}" style="width:{Math.max(0.5, pct).toFixed(1)}%"></i></span>
+			<span class="dr-bar"
+				><i class="dr-fill {n.kind}" style="width:{Math.max(0.5, pct).toFixed(1)}%"></i></span
+			>
 			<span class="dr-ms">{fmt_ms(n.ms)} ms</span>
-			{#if n.kind === 'line'}<code class="dr-lab">{n.at ?? n.label}</code>{:else}<span class="dr-lab" class:dim={n.kind === 'more'}>{n.label}</span>{/if}
+			{#if n.kind === 'line'}<code class="dr-lab">{n.at ?? n.label}</code>{:else}<span
+					class="dr-lab"
+					class:dim={n.kind === 'more'}>{n.label}</span
+				>{/if}
 			{@render kind(n)}
 			{@render fills(n)}
-			{#if n.why}<span class="dr-why">{#each n.why as k (k)}<span title="a slow pattern the report found here">{PATTERN_LABEL[k as PatternKind] ?? k}</span>{/each}</span>{/if}
+			{#if n.why}<span class="dr-why"
+					>{#each n.why as k (k)}<span title="a slow pattern the report found here"
+							>{PATTERN_LABEL[k as PatternKind] ?? k}</span
+						>{/each}</span
+				>{/if}
 			{#if n.at && n.kind !== 'line'}<code class="dr-at">{n.at}</code>{/if}
 			{@render split(n)}
 		</div>
@@ -98,9 +153,10 @@
 
 <div class="drill">
 	<p class="hint">
-		One {fmt_ms(root.ms)} ms render, split until it reaches a line: each part of the request, who held its time (your function,
-		a library, a call it waited on) and the line to open. A library's time goes to your lines that call it; a wait, to the line that
-		made the call; calls waiting at once share the stretch. Every level adds up to the one above.
+		One {fmt_ms(root.ms)} ms render, split until it reaches a line: each part of the request, who held
+		its time (your function, a library, a call it waited on) and the line to open. A library's time goes
+		to your lines that call it; a wait, to the line that made the call; calls waiting at once share the
+		stretch. Every level adds up to the one above.
 	</p>
 	{#each root.children ?? [] as c, i (c.label + '\0' + i)}{@render row(c, 0)}{/each}
 </div>

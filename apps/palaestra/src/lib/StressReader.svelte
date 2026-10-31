@@ -27,7 +27,11 @@
 {#await many_all}
 	<span data-stress-many="pending">many: pending</span>
 {:then arr}
-	<span data-stress-many="resolved" data-stress-many-count={arr.length} data-stress-many-last={arr[arr.length - 1]}>
+	<span
+		data-stress-many="resolved"
+		data-stress-many-count={arr.length}
+		data-stress-many-last={arr[arr.length - 1]}
+	>
 		many: {arr.length}
 	</span>
 {/await}

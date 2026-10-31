@@ -48,7 +48,14 @@ const server: ServerPlugin<DevtoolsServerOptions> = defineServer<DevtoolsServerO
 		if (!config) return next();
 		// DEMAND-ONLY: until a request asks for the profiler's path (and only until the first one mounts
 		// it), this app pays exactly what a profiler-less app pays
-		if (profiler_demand_skip(!!config.onDemand, mounted !== undefined, event.url.pathname, config.path || '/__profiler'))
+		if (
+			profiler_demand_skip(
+				!!config.onDemand,
+				mounted !== undefined,
+				event.url.pathname,
+				config.path || '/__profiler'
+			)
+		)
 			return next();
 		const prof = await mount(config);
 		if (!prof) return next();

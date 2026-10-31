@@ -24,37 +24,38 @@ model the features were all approximating, and makes each feature one cell in it
 
 ogygia decides four things for every piece of UI:
 
-| Axis | Question | Dial |
-|---|---|---|
-| **HTML source** | Where does the first HTML come from? | `render: 'inline' \| 'deferred' \| 'build'` |
-| **Freshness** | How long can rendered HTML be reused, and when is it refreshed? | `cache`, `revalidate`, `vary` |
-| **JS** | When does code run in the browser? | `wake` |
-| **Lifetime** | Does it survive navigation? | `keep` |
+| Axis            | Question                                                        | Dial                                        |
+| --------------- | --------------------------------------------------------------- | ------------------------------------------- |
+| **HTML source** | Where does the first HTML come from?                            | `render: 'inline' \| 'deferred' \| 'build'` |
+| **Freshness**   | How long can rendered HTML be reused, and when is it refreshed? | `cache`, `revalidate`, `vary`               |
+| **JS**          | When does code run in the browser?                              | `wake`                                      |
+| **Lifetime**    | Does it survive navigation?                                     | `keep`                                      |
 
 And it applies them at three **scopes**, with the same words at each:
 
-| Scope | What | Where the dials go |
-|---|---|---|
-| **Region** | one component placement | import attributes (`with { … }`) or a preset |
-| **Page** | a Kit route's whole document | route exports (`export const cache = '1h'`) |
-| **Remote** | a document or widget from another app | `peer.page(path, { … })` |
+| Scope      | What                                  | Where the dials go                           |
+| ---------- | ------------------------------------- | -------------------------------------------- |
+| **Region** | one component placement               | import attributes (`with { … }`) or a preset |
+| **Page**   | a Kit route's whole document          | route exports (`export const cache = '1h'`)  |
+| **Remote** | a document or widget from another app | `peer.page(path, { … })`                     |
 
 Every current feature is a point in this space:
 
-| Today | Under v1 |
-|---|---|
-| island (`wake: 'load'`) | region, `wake: 'load'` |
-| lake (`wake: 'none'`) | region, `wake: 'none'` |
-| server island / hole (`render: 'deferred'`) | region, `render: 'deferred'` (+ `fetch` schedule) |
-| hole with `maxAge` (in-process R6 cache) | region, `render: 'deferred', cache: '5m'` (shared store, purity-checked) |
-| live region (`render: 'live'`) | region, `render: 'inline', revalidate: '30s'` |
-| **frozen fragment (new)** | region, `cache: '1h'` (inline render, stored) |
-| frozen page (`export const freeze = true`) | page, `export const cache = '1d'` |
-| federation peer cache (`cache: { ttl }` in ms) | remote, `cache: '5m'` |
-| `og.code` / `og.md` / `og.bake` regions | region, `render: 'build'` (generalized: any component) |
-| "fully interactive page" (page-region dials note) | page, `export const wake = 'load'` |
+| Today                                             | Under v1                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------ |
+| island (`wake: 'load'`)                           | region, `wake: 'load'`                                                   |
+| lake (`wake: 'none'`)                             | region, `wake: 'none'`                                                   |
+| server island / hole (`render: 'deferred'`)       | region, `render: 'deferred'` (+ `fetch` schedule)                        |
+| hole with `maxAge` (in-process R6 cache)          | region, `render: 'deferred', cache: '5m'` (shared store, purity-checked) |
+| live region (`render: 'live'`)                    | region, `render: 'inline', revalidate: '30s'`                            |
+| **frozen fragment (new)**                         | region, `cache: '1h'` (inline render, stored)                            |
+| frozen page (`export const freeze = true`)        | page, `export const cache = '1d'`                                        |
+| federation peer cache (`cache: { ttl }` in ms)    | remote, `cache: '5m'`                                                    |
+| `og.code` / `og.md` / `og.bake` regions           | region, `render: 'build'` (generalized: any component)                   |
+| "fully interactive page" (page-region dials note) | page, `export const wake = 'load'`                                       |
 
 Two things fall out that don't exist today and aren't appendages:
+
 - **`render: 'build'`** for any component: rendered once at build, pasted forever (the "baked
   fragments" idea, and the generalization of `og.code`/`og.md`).
 - **Page `wake`**: a whole page as one island, the `page-region-dials.md` thesis, with no
@@ -74,22 +75,23 @@ Two things fall out that don't exist today and aren't appendages:
 </script>
 ```
 
-| Dial | Values | Applies to | Today |
-|---|---|---|---|
-| `render` | `inline` (default) · `deferred` · `build` | all | `static` · `deferred` · `live` |
-| `fetch` | `load` · `idle` · `visible` · `interaction` · `media(…)` | `deferred` | `wake` (overloaded) |
-| `prefetch` | same values | `deferred` | same |
-| `stitch` | `server` · `edge` | `deferred` | `serve` · `edge` (presets also `true`) |
-| `cache` | duration · `false` | `inline`, `deferred` | `maxAge` (preset only, unit by mode) |
-| `revalidate` | duration · schedule | `inline`, `deferred` | `render: 'live'` + `wake`/`revalidate` |
-| `vary` | comma list of bucket names | with `cache` | new |
-| `wake` | `none` · `load` · `idle` · `visible` · `interaction` · `media(…)` | all | same (hole meaning removed) |
-| `keep` | navigation key | `wake` ≠ `none` | same, silently dropped elsewhere |
-| `margin` | CSS length | `visible` schedules | preset only |
-| `preset` | name | all | must be the only key |
-| `held` | `'true'` | `.svelte` and `.ts` | `region: 'raw'` |
+| Dial         | Values                                                            | Applies to           | Today                                  |
+| ------------ | ----------------------------------------------------------------- | -------------------- | -------------------------------------- |
+| `render`     | `inline` (default) · `deferred` · `build`                         | all                  | `static` · `deferred` · `live`         |
+| `fetch`      | `load` · `idle` · `visible` · `interaction` · `media(…)`          | `deferred`           | `wake` (overloaded)                    |
+| `prefetch`   | same values                                                       | `deferred`           | same                                   |
+| `stitch`     | `server` · `edge`                                                 | `deferred`           | `serve` · `edge` (presets also `true`) |
+| `cache`      | duration · `false`                                                | `inline`, `deferred` | `maxAge` (preset only, unit by mode)   |
+| `revalidate` | duration · schedule                                               | `inline`, `deferred` | `render: 'live'` + `wake`/`revalidate` |
+| `vary`       | comma list of bucket names                                        | with `cache`         | new                                    |
+| `wake`       | `none` · `load` · `idle` · `visible` · `interaction` · `media(…)` | all                  | same (hole meaning removed)            |
+| `keep`       | navigation key                                                    | `wake` ≠ `none`      | same, silently dropped elsewhere       |
+| `margin`     | CSS length                                                        | `visible` schedules  | preset only                            |
+| `preset`     | name                                                              | all                  | must be the only key                   |
+| `held`       | `'true'`                                                          | `.svelte` and `.ts`  | `region: 'raw'`                        |
 
 Rules (each one fixes an inventory finding):
+
 1. **Every dial is allowed inline.** The preset-only list (`margin`, `maxAge`, `onExpire`,
    `revalidate`) goes. A preset is a named bundle, not a privileged channel.
 2. **`preset` combines with inline overrides**, inline wins. Today it must stand alone.
@@ -110,17 +112,17 @@ Rules (each one fixes an inventory finding):
 
 Composition table (what you get):
 
-| `render` | `wake` | `cache` | Result |
-|---|---|---|---|
-| inline | — | — | plain SSR component (no ogygia cost) |
-| inline | load… | — | island |
-| inline | none | — | lake |
-| inline | — / any | `1h` | **cached fragment**: stored markup pasted, holes inside re-signed |
-| inline | — / any | — + `revalidate` | self-refreshing region (today's live) |
-| deferred | — | — | server island (hole) |
-| deferred | load… | — | server island that wakes after arrival |
-| deferred | — | `5m` | server island, shared cache across instances and visitors-without-personal-reads |
-| build | — / any | — | rendered at build, pasted forever |
+| `render` | `wake`  | `cache`          | Result                                                                           |
+| -------- | ------- | ---------------- | -------------------------------------------------------------------------------- |
+| inline   | —       | —                | plain SSR component (no ogygia cost)                                             |
+| inline   | load…   | —                | island                                                                           |
+| inline   | none    | —                | lake                                                                             |
+| inline   | — / any | `1h`             | **cached fragment**: stored markup pasted, holes inside re-signed                |
+| inline   | — / any | — + `revalidate` | self-refreshing region (today's live)                                            |
+| deferred | —       | —                | server island (hole)                                                             |
+| deferred | load…   | —                | server island that wakes after arrival                                           |
+| deferred | —       | `5m`             | server island, shared cache across instances and visitors-without-personal-reads |
+| build    | — / any | —                | rendered at build, pasted forever                                                |
 
 ## 3. The page grammar (route exports)
 
@@ -177,6 +179,7 @@ export const handle = ogygia.handle({
 ```
 
 What this replaces:
+
 - `freeze.configure()`, `decide()`, `setProfilerStore()`, devtools `configure()`, the exported
   `install_federation`/`serve_federation`, `routes({ flags, freeze, visitor })`.
 - The doc claim "profiler configured ENTIRELY in vite config" that its storage contradicts.
@@ -238,10 +241,10 @@ Replaces `freeze.invalidate`, `freeze.invalidateWhere`, `Peer.drop`, inbound tha
 
 ### Adapters
 
-| Kind | v1 factories (`ogygia/cache`) | Today |
-|---|---|---|
+| Kind  | v1 factories (`ogygia/cache`)                                      | Today                                  |
+| ----- | ------------------------------------------------------------------ | -------------------------------------- |
 | store | `memory()` · `redis(client)` · `upstash({…})` · `cloudflareKv(kv)` | `memoryStore` · `valkey` · same · same |
-| edge | `akamai({…})` · `cloudfront({…})` · `cloudflare({…})` | + duplicate `awsCloudfront` |
+| edge  | `akamai({…})` · `cloudfront({…})` · `cloudflare({…})`              | + duplicate `awsCloudfront`            |
 
 `CacheStore` is always async, gains optional `getMany` (batched fragment reads) and a
 generation counter per tag (the invalidation-race fix). `redis` accepts ioredis or node-redis
@@ -259,21 +262,21 @@ generation counter per tag (the invalidation-race fix). `redis` accepts ioredis 
 
 ## 6. Entry points
 
-| v1 | Contents | Today |
-|---|---|---|
-| `ogygia` | `Region`, `Provide`, `region()`, `requestEvent()`, `keepFallback()`, `preference()`, `script()`, `hydratedBy()`, `isOgygiaPage()`, `SharedState` | + `og_derived`, `createContext`, `__tag_context`, `Boundary`, `transport` (gated copy) |
-| `ogygia/vite` | `ogygia()`, `debarrel()` | + 12 internal helpers |
-| `ogygia/server` | `handle()`, `transport`, `scanRegions`/`liftRegions`/`restoreRegions`, `transformMarkup` | split across `server`, `hooks` (alias), `markup` |
-| `ogygia/navigation` | Kit-shaped navigation API for csr=false pages | `ogygia/app` (+ `bust_page_cache`, `spa_html_cacheable`; misses `pushState`/`replaceState`/`onNavigate` the shim has) |
-| `ogygia/cache` | `cache`, stores, edges | `ogygia/freeze`, `ogygia/freeze/source` |
-| `ogygia/flags` | `flag()`, `openfeature()`, `ofrep()` | `ogygia/flag`, `ogygia/flag/openfeature`, + exported internals |
-| `ogygia/federation` | `federate()`, `mount()`, `user()` | + `serve_federation`, `install_federation`, signing helpers |
-| `ogygia/profiler` | `span()`, `tag()`, `instrument()` | + `set_span_recorder` |
-| `ogygia/profiler/client` · `/storage` | `mark()` · `memory()`, `sqlite()`, `redis()`, `postgres()` | `memoryStore`, `sqliteStore`, … |
-| `ogygia/devtools` · `ogygia/testing` | unchanged surface, camelCase | snake exports |
-| `ogygia/content` (+ `/server`, `/markdown`, `/vite`, `/components`) | unchanged surface, camelCase | `/slot`, `/docs-shell` as separate entries |
-| `ogygia/types` | ambient types, generated from one source | two hand-synced files (17 vs 34 modules) |
-| `ogygia/internal/*` | everything compiler/runtime-internal, undocumented, may change | 9 published subpaths mixed with public ones |
+| v1                                                                  | Contents                                                                                                                                         | Today                                                                                                                 |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `ogygia`                                                            | `Region`, `Provide`, `region()`, `requestEvent()`, `keepFallback()`, `preference()`, `script()`, `hydratedBy()`, `isOgygiaPage()`, `SharedState` | + `og_derived`, `createContext`, `__tag_context`, `Boundary`, `transport` (gated copy)                                |
+| `ogygia/vite`                                                       | `ogygia()`, `debarrel()`                                                                                                                         | + 12 internal helpers                                                                                                 |
+| `ogygia/server`                                                     | `handle()`, `transport`, `scanRegions`/`liftRegions`/`restoreRegions`, `transformMarkup`                                                         | split across `server`, `hooks` (alias), `markup`                                                                      |
+| `ogygia/navigation`                                                 | Kit-shaped navigation API for csr=false pages                                                                                                    | `ogygia/app` (+ `bust_page_cache`, `spa_html_cacheable`; misses `pushState`/`replaceState`/`onNavigate` the shim has) |
+| `ogygia/cache`                                                      | `cache`, stores, edges                                                                                                                           | `ogygia/freeze`, `ogygia/freeze/source`                                                                               |
+| `ogygia/flags`                                                      | `flag()`, `openfeature()`, `ofrep()`                                                                                                             | `ogygia/flag`, `ogygia/flag/openfeature`, + exported internals                                                        |
+| `ogygia/federation`                                                 | `federate()`, `mount()`, `user()`                                                                                                                | + `serve_federation`, `install_federation`, signing helpers                                                           |
+| `ogygia/profiler`                                                   | `span()`, `tag()`, `instrument()`                                                                                                                | + `set_span_recorder`                                                                                                 |
+| `ogygia/profiler/client` · `/storage`                               | `mark()` · `memory()`, `sqlite()`, `redis()`, `postgres()`                                                                                       | `memoryStore`, `sqliteStore`, …                                                                                       |
+| `ogygia/devtools` · `ogygia/testing`                                | unchanged surface, camelCase                                                                                                                     | snake exports                                                                                                         |
+| `ogygia/content` (+ `/server`, `/markdown`, `/vite`, `/components`) | unchanged surface, camelCase                                                                                                                     | `/slot`, `/docs-shell` as separate entries                                                                            |
+| `ogygia/types`                                                      | ambient types, generated from one source                                                                                                         | two hand-synced files (17 vs 34 modules)                                                                              |
+| `ogygia/internal/*`                                                 | everything compiler/runtime-internal, undocumented, may change                                                                                   | 9 published subpaths mixed with public ones                                                                           |
 
 Removed: `ogygia/hooks`, `ogygia/markup`, `ogygia/app`, `ogygia/freeze*`, `ogygia/flag*`,
 `ogygia/router`, `ogygia/router/client` (§8).
@@ -293,19 +296,19 @@ Removed: `ogygia/hooks`, `ogygia/markup`, `ogygia/app`, `ogygia/freeze*`, `ogygi
 - **One word, one meaning** (the glossary becomes the source of truth and the docs lint against
   it):
 
-| Word | v1 meaning only | Retired meanings → new word |
-|---|---|---|
-| island | a region whose JS runs (`wake`) | — |
-| lake | `wake: 'none'` static HTML inside an island | "frozen" (lake) → lake |
-| server island | `render: 'deferred'` region | "hole" stays internal only |
-| cache / cached | stored rendered HTML, any scope | "frozen page", "freeze", "thaw" → cached page, cache, invalidate |
-| live | (retired) | `render: 'live'` → `revalidate`; live held regions → `query.live` stays Kit's term |
-| source | `og.source` data source (cache receipts) | content source → **loader**; flag source → **provider** (OpenFeature's own word) |
-| frame | internal wire unit only | content `Frame` shell → `Shell` |
-| keep | survive navigation | `og-keep` transform restore list → `og-restore`; `trap.keep`/`barrels.keep` → `retain` |
-| sink | devtools event consumers only | flags `exposure` → `onExposure`; profiler `sink` → `export` |
-| fallback | what shows before a region's HTML | `<Region placeholder>` + `ogygiaFallback` → one name: `fallback` / `{#snippet ogFallback()}` |
-| preload / prefetch | `prefetch` = warm on a schedule; `preload(region)` = warm now | removed `regions.preload` stays an error |
+| Word               | v1 meaning only                                               | Retired meanings → new word                                                                  |
+| ------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| island             | a region whose JS runs (`wake`)                               | —                                                                                            |
+| lake               | `wake: 'none'` static HTML inside an island                   | "frozen" (lake) → lake                                                                       |
+| server island      | `render: 'deferred'` region                                   | "hole" stays internal only                                                                   |
+| cache / cached     | stored rendered HTML, any scope                               | "frozen page", "freeze", "thaw" → cached page, cache, invalidate                             |
+| live               | (retired)                                                     | `render: 'live'` → `revalidate`; live held regions → `query.live` stays Kit's term           |
+| source             | `og.source` data source (cache receipts)                      | content source → **loader**; flag source → **provider** (OpenFeature's own word)             |
+| frame              | internal wire unit only                                       | content `Frame` shell → `Shell`                                                              |
+| keep               | survive navigation                                            | `og-keep` transform restore list → `og-restore`; `trap.keep`/`barrels.keep` → `retain`       |
+| sink               | devtools event consumers only                                 | flags `exposure` → `onExposure`; profiler `sink` → `export`                                  |
+| fallback           | what shows before a region's HTML                             | `<Region placeholder>` + `ogygiaFallback` → one name: `fallback` / `{#snippet ogFallback()}` |
+| preload / prefetch | `prefetch` = warm on a schedule; `preload(region)` = warm now | removed `regions.preload` stays an error                                                     |
 
 ## 8. Cuts and merges
 
@@ -346,12 +349,12 @@ Removed: `ogygia/hooks`, `ogygia/markup`, `ogygia/app`, `ogygia/freeze*`, `ogygi
 
 ## 10. Errors: one policy
 
-| Kind | Behaviour |
-|---|---|
-| Config or attribute mistake | build error, pointed, with the fix (`maxAge: 300` → "durations need a unit: '5m'") |
-| Removed API | build/runtime error naming the v1 replacement (the `LEGACY_OPTION_RENAMES` pattern, extended) |
-| Runtime product failure (store down, provider down, peer down) | degrade, one log line, one devtools event; never fail the page |
-| Programmer error at runtime (invalidate an undeclared source) | throw |
+| Kind                                                           | Behaviour                                                                                     |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Config or attribute mistake                                    | build error, pointed, with the fix (`maxAge: 300` → "durations need a unit: '5m'")            |
+| Removed API                                                    | build/runtime error naming the v1 replacement (the `LEGACY_OPTION_RENAMES` pattern, extended) |
+| Runtime product failure (store down, provider down, peer down) | degrade, one log line, one devtools event; never fail the page                                |
+| Programmer error at runtime (invalidate an undeclared source)  | throw                                                                                         |
 
 ## 11. What this means for frozen fragments
 

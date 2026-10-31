@@ -8,4 +8,4 @@ export const load: LayoutServerLoad = () => {
 		user: currentUser(),
 		navCounts: statusCounts()
 	};
-}
+};

@@ -35,7 +35,9 @@ export function hazard_words(lines: readonly IslandHazard[]): string {
 	const one = (h: IslandHazard) => {
 		const code = h.code.length > 70 ? h.code.slice(0, 69) + '…' : h.code;
 		const where = `${h.file.split('/').pop()}:${h.line} (\`${code}\`)`;
-		return h.kind === 'await' ? `${where} awaits at the top of its script: the browser runs it again, and another answer draws another tree` : `${where} reads ${h.reads ?? 'a browser-only value'} while rendering, a value the server does not have`;
+		return h.kind === 'await'
+			? `${where} awaits at the top of its script: the browser runs it again, and another answer draws another tree`
+			: `${where} reads ${h.reads ?? 'a browser-only value'} while rendering, a value the server does not have`;
 	};
 	return `In its own code, the likeliest: ${lines.slice(0, 2).map(one).join('; ')}.`;
 }
@@ -44,14 +46,34 @@ export function hazard_words(lines: readonly IslandHazard[]): string {
 export function hazard_fix(lines: readonly IslandHazard[]): string {
 	const kinds = new Set(lines.map((h) => h.kind));
 	return [
-		...(kinds.has('await') ? ['Give both sides the same answer: pass the data in from the server (a load, a prop) rather than awaiting it again in the browser.'] : []),
-		...(kinds.has('browser') ? ["Read the browser-only value after the wake (in `$effect` or `onMount`), or take it from what both sides have (the page's URL from `$app/state`, a time passed in as a prop)."] : [])
+		...(kinds.has('await')
+			? [
+					'Give both sides the same answer: pass the data in from the server (a load, a prop) rather than awaiting it again in the browser.'
+				]
+			: []),
+		...(kinds.has('browser')
+			? [
+					"Read the browser-only value after the wake (in `$effect` or `onMount`), or take it from what both sides have (the page's URL from `$app/state`, a time passed in as a prop)."
+				]
+			: [])
 	].join(' ');
 }
 
-const BROWSER_READS =['typeof window', 'window.', 'document.', 'navigator.', 'localStorage', 'sessionStorage', 'Date.now(', 'new Date()', 'Math.random(', 'matchMedia('];
+const BROWSER_READS = [
+	'typeof window',
+	'window.',
+	'document.',
+	'navigator.',
+	'localStorage',
+	'sessionStorage',
+	'Date.now(',
+	'new Date()',
+	'Math.random(',
+	'matchMedia('
+];
 
-const is_ident = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
+const is_ident = (c: number) =>
+	(c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
 
 /** The first browser-only read on a stretch of code, or undefined. */
 function browser_read(code: string): string | undefined {
@@ -60,7 +82,8 @@ function browser_read(code: string): string | undefined {
 		if (at === -1) continue;
 		// (a word, not part of one: `mywindow.`, `subdocument.`)
 		if (at > 0 && is_ident(code.charCodeAt(at - 1))) continue;
-		if (r === 'typeof window' || r.endsWith('(') || r === 'localStorage' || r === 'sessionStorage') return r;
+		if (r === 'typeof window' || r.endsWith('(') || r === 'localStorage' || r === 'sessionStorage')
+			return r;
 		// `window.location`: the member read, up to the next non-name character
 		let end = at + r.length;
 		while (end < code.length && is_ident(code.charCodeAt(end))) end++;
@@ -139,15 +162,42 @@ export function hydration_hazards(source: string): Hazard[] {
 			const top = depth === 0 && deferred_depth === -1 && !module_script && !in_arrow_body;
 			if (top && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*')) {
 				const aw = line.indexOf('await ');
-				if (aw !== -1 && (aw === 0 || !is_ident(line.charCodeAt(aw - 1)))) out.push({ line: n + 1, code: line, kind: 'await' });
-				else if (!line.startsWith('import ') && !line.startsWith('function ') && !line.startsWith('export function ')) {
+				if (aw !== -1 && (aw === 0 || !is_ident(line.charCodeAt(aw - 1))))
+					out.push({ line: n + 1, code: line, kind: 'await' });
+				else if (
+					!line.startsWith('import ') &&
+					!line.startsWith('function ') &&
+					!line.startsWith('export function ')
+				) {
 					const reads = browser_read(line);
-					if (reads) out.push({ line: n + 1, code: line, kind: 'browser', reads, ...(line.startsWith('if (') || line.startsWith('if(') ? { guard: true as const } : {}) });
+					if (reads)
+						out.push({
+							line: n + 1,
+							code: line,
+							kind: 'browser',
+							reads,
+							...(line.startsWith('if (') || line.startsWith('if(') ? { guard: true as const } : {})
+						});
 				}
 			}
 			// a callback opening on this line (onMount, $effect, function, an arrow): its body runs later
-			if (deferred_depth === -1 && (line.includes('onMount(') || line.includes('$effect(') || line.includes('function') || line.includes('=>')) && !line.startsWith('const ') && !line.startsWith('let ')) deferred_depth = depth;
-			else if (deferred_depth === -1 && (line.startsWith('const ') || line.startsWith('let ')) && line.includes('=>') && line.includes('{')) deferred_depth = depth;
+			if (
+				deferred_depth === -1 &&
+				(line.includes('onMount(') ||
+					line.includes('$effect(') ||
+					line.includes('function') ||
+					line.includes('=>')) &&
+				!line.startsWith('const ') &&
+				!line.startsWith('let ')
+			)
+				deferred_depth = depth;
+			else if (
+				deferred_depth === -1 &&
+				(line.startsWith('const ') || line.startsWith('let ')) &&
+				line.includes('=>') &&
+				line.includes('{')
+			)
+				deferred_depth = depth;
 			for (const ch of line) {
 				if (ch === '{') depth++;
 				else if (ch === '}') depth--;

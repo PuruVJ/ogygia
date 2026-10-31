@@ -99,7 +99,9 @@ const LIGHT_MAP: Record<string, string> = {
 
 function remap_hex(value: string, map: Record<string, string>) {
 	const key = value.toLowerCase();
-	return map[key] ?? map[key.replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, '#$1$1$2$2$3$3')] ?? value;
+	return (
+		map[key] ?? map[key.replace(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i, '#$1$1$2$2$3$3')] ?? value
+	);
 }
 
 function paint_tags(theme: ThemeRegistrationResolved, tag: string): ThemeRegistrationResolved {

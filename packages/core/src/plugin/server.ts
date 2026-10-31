@@ -30,7 +30,10 @@ export interface AppSigner {
 }
 
 /** Make each plugin live, in order: app, shared hooks, `setup`. */
-export function start_plugins(entries: readonly ServerPluginEntry[], signer: AppSigner): LivePlugin[] {
+export function start_plugins(
+	entries: readonly ServerPluginEntry[],
+	signer: AppSigner
+): LivePlugin[] {
 	return entries.map(({ name, options, server }) => {
 		const warned = new Set<string>();
 		const app: ServerApp<unknown> = {
@@ -57,7 +60,10 @@ export function start_plugins(entries: readonly ServerPluginEntry[], signer: App
 
 /** Two `resolve()` option sets as one: the inner transform (ogygia's document injection) runs first,
  *  the outer (a plugin's `handle`) sees the finished chunk; the other options merge, outer last. */
-export function compose_resolve_options(inner?: ResolveOptions, outer?: ResolveOptions): ResolveOptions | undefined {
+export function compose_resolve_options(
+	inner?: ResolveOptions,
+	outer?: ResolveOptions
+): ResolveOptions | undefined {
 	if (!inner) return outer;
 	if (!outer) return inner;
 	const a = inner.transformPageChunk;
@@ -87,7 +93,12 @@ export function around(plugins: readonly LivePlugin[], core: Handle): Handle {
 		const next_handle = inner;
 		inner = async ({ event, resolve }) =>
 			handle({ event, options: app.options, app }, (outer) =>
-				Promise.resolve(next_handle({ event, resolve: (ev, opts) => resolve(ev, compose_resolve_options(opts, outer)) }))
+				Promise.resolve(
+					next_handle({
+						event,
+						resolve: (ev, opts) => resolve(ev, compose_resolve_options(opts, outer))
+					})
+				)
 			);
 	}
 	return inner;

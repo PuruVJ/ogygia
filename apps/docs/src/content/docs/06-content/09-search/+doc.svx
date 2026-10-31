@@ -47,7 +47,7 @@ The same engine (`docs.search`), the same section documents, the same ranking. O
 <Search base="/docs" placeholder="Search the docs" />
 ```
 
-The server renders only the trigger: a real link to the fallback page. On the first *intent* (⌘K, `/`, or a click), it loads the palette, and starts an [Orama](https://orama.com) worker that fetches and indexes the static file **off the main thread**. Ranking marks matched terms, and boosts title matches. No server touches a query. Nothing heavy loads for a visitor who never searches.
+The server renders only the trigger: a real link to the fallback page. On the first _intent_ (⌘K, `/`, or a click), it loads the palette, and starts an [Orama](https://orama.com) worker that fetches and indexes the static file **off the main thread**. Ranking marks matched terms, and boosts title matches. No server touches a query. Nothing heavy loads for a visitor who never searches.
 
 Orama is an **optional peer**: installed by the scaffold, and loaded only on the search path:
 
@@ -111,19 +111,19 @@ The engine itself is a **contract, not a dependency**. The default is Orama. `si
 ::: details What a hit looks like
 `SearchHit` is plain data, ready to render:
 
-| field | meaning |
-| --- | --- |
-| `href` | deep link, baked for `base`; lands on the heading of the matched *section* |
-| `title` | the page title |
-| `section` | the nav group / top-level section label |
-| `heading` | the heading of the matched section |
-| `excerpt` | the matched prose, with `<mark>` around matched terms |
-| `score` | the rank from the engine, with title matches boosted |
+| field     | meaning                                                                    |
+| --------- | -------------------------------------------------------------------------- |
+| `href`    | deep link, baked for `base`; lands on the heading of the matched _section_ |
+| `title`   | the page title                                                             |
+| `section` | the nav group / top-level section label                                    |
+| `heading` | the heading of the matched section                                         |
+| `excerpt` | the matched prose, with `<mark>` around matched terms                      |
+| `score`   | the rank from the engine, with title matches boosted                       |
 :::
 
 ## Do / don't
 
 - **Do** ship the static index for a prerendered site. An on-device worker is faster to serve, and operates offline. The server never sees a keystroke.
 - **Do** keep the fallback page. It is one server load. With it, search survives when JS is off, or not yet loaded.
-- **Don't** mint a `search` remote *and* ship the index for the same box. Pick one path. The index is for the worker. The remote is for server queries.
+- **Don't** mint a `search` remote _and_ ship the index for the same box. Pick one path. The index is for the worker. The remote is for server queries.
 - **Don't** build your own index off the raw bodies. `docs.emit.search()` splits by section. Thus a hit deep-links to the correct heading.

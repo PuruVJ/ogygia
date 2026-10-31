@@ -11,7 +11,13 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/devtools"
 	},
-	"keywords": ["ogygia", "sveltekit", "devtools", "profiler", "performance"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"devtools",
+		"profiler",
+		"performance"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/devtools/index.d.ts",
@@ -51,7 +57,10 @@
 			"default": "./src/profiler/storage/postgres.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p e2e && vitest run",

@@ -9,7 +9,11 @@
 	import { setNested } from './context.ts';
 	import type { Component as SvelteComponent } from 'svelte';
 
-	let { component: Component, props }: { component: SvelteComponent<Record<string, unknown>>; props: Record<string, unknown> } = $props();
+	let {
+		component: Component,
+		props
+	}: { component: SvelteComponent<Record<string, unknown>>; props: Record<string, unknown> } =
+		$props();
 
 	setNested();
 </script>

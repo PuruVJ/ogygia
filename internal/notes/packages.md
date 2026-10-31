@@ -15,15 +15,15 @@ The split needs one performant middle layer every package plugs into.
 Five maps (devtools+testing, profiler+cli, content+federation+flags, freeze, existing seams).
 The short version: **the core already has five half-built plug-in mechanisms, none shared.**
 
-| Mechanism today | Where | Used by |
-|---|---|---|
-| ~25 `set_*` setters (module `let` slots) | freeze/registry, freeze/capture, federation/hole, devtools/server-registry, profiler/span, server/request-stats, flags… | every subsystem, each its own |
-| `Symbol.for('ogygia.…')` globals | ~25 keys | claims key defined 3× (flags, router/ctx, federation/wire) |
-| Runtime `slots` + compiler `FEATURES` table | runtime/slots.ts, compiler/link/runtime-entry.ts | core client features only — the one that is right |
-| `define` tokens | vite/index.ts:602-619 | devtools, beacon, forms, delta |
-| Hardcoded steps in `hooks.ts #core` | :993-1245 | flags prime, federation serve, freeze read/write, profiler wrap, devtools seed |
-| Compiler specifier collectors | driver.ts:57,200,1691; compiler/flags.ts:70 | federation, router, content, flags |
-| Internal `PackageScan` entry | vite/index.ts:254 | profiler UI only |
+| Mechanism today                             | Where                                                                                                                   | Used by                                                                        |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| ~25 `set_*` setters (module `let` slots)    | freeze/registry, freeze/capture, federation/hole, devtools/server-registry, profiler/span, server/request-stats, flags… | every subsystem, each its own                                                  |
+| `Symbol.for('ogygia.…')` globals            | ~25 keys                                                                                                                | claims key defined 3× (flags, router/ctx, federation/wire)                     |
+| Runtime `slots` + compiler `FEATURES` table | runtime/slots.ts, compiler/link/runtime-entry.ts                                                                        | core client features only — the one that is right                              |
+| `define` tokens                             | vite/index.ts:602-619                                                                                                   | devtools, beacon, forms, delta                                                 |
+| Hardcoded steps in `hooks.ts #core`         | :993-1245                                                                                                               | flags prime, federation serve, freeze read/write, profiler wrap, devtools seed |
+| Compiler specifier collectors               | driver.ts:57,200,1691; compiler/flags.ts:70                                                                             | federation, router, content, flags                                             |
+| Internal `PackageScan` entry                | vite/index.ts:254                                                                                                       | profiler UI only                                                               |
 
 Per-package edges that must be cut (the rest are one-way core → subsystem calls the contract absorbs):
 
@@ -71,12 +71,12 @@ interface OgygiaPlugin {
 
 **Server realm** — the plugin's server module exports stages at fixed points of `#core`:
 
-| Stage | When | Today's hardcoded occupant |
-|---|---|---|
-| `request` | before the page/endpoint split; may answer | `prime_flags`, `serve_federation`, freeze read |
-| `wrap` | around the whole of `#core` | profiler `prof()` |
-| `document` | on the final HTML | freeze capture + ESI stitch, devtools seed |
-| `response` | after the response exists | freeze write/self-evict, `flush_exposures` |
+| Stage      | When                                       | Today's hardcoded occupant                     |
+| ---------- | ------------------------------------------ | ---------------------------------------------- |
+| `request`  | before the page/endpoint split; may answer | `prime_flags`, `serve_federation`, freeze read |
+| `wrap`     | around the whole of `#core`                | profiler `prof()`                              |
+| `document` | on the final HTML                          | freeze capture + ESI stitch, devtools seed     |
+| `response` | after the response exists                  | freeze write/self-evict, `flush_exposures`     |
 
 Per-request plugin state lives in ONE `bag` slot per plugin on the existing `RequestBag` (the
 request ALS), not in new setters.
@@ -117,8 +117,8 @@ The whole API is seven concepts. Every ad-hoc mechanism in core folds into one o
    manifest so the build places it statically), `devtools` (panels + insights). Future realms slot in
    the same way: `cli` (commands), `mcp` (tools), `testing` (matchers). One file per realm, like
    Kit's `+page.server.ts` / `+page.ts`: node code never leaks into a browser bundle.
-3. **Hooks** — named moments, each with a KIND (Rollup's taxonomy): *first* (first answer wins:
-   server `page`), *sequential* (each may replace: `response`), *parallel* (all run, no answer:
+3. **Hooks** — named moments, each with a KIND (Rollup's taxonomy): _first_ (first answer wins:
+   server `page`), _sequential_ (each may replace: `response`), _parallel_ (all run, no answer:
    `done`). Ordering is per plugin (`enforce: 'pre' | 'post'`) and per hook (`{ order, handler }`),
    like Vite. Documented once, the same everywhere.
 4. **Context** — every hook gets a ctx scoped to its moment: `b` (build), `app` (server process:
@@ -202,17 +202,17 @@ export const PLUGIN_API = 1; // plugin declares `api: 1`; core refuses a mismatc
 
 **1. Compile port** — handed to `compile.*` hooks (node, build time).
 
-| Member | Replaces today | Who needs it |
-|---|---|---|
-| `app` (read-only: root, routes dir, dev/build, kit major, `resolve(alias)`) | reaching into `CompileCtx` | all |
-| `virtual(id, (ssr) => source)` | per-subsystem ids in compiler/ids.ts + driver loads | freeze routes, profiler maps, devtools meta |
-| `files(scan)` | the profiler's internal `PackageScan` entry | profiler UI, content shells |
-| `macro(name, fn)` with a `MacroCtx` (args, file, ssr, emitImport) | og.code/og.md/og.loader/og.source hardwired in macros/pipeline.ts | content, freeze |
-| `presetKey(name, validate)` and `routeExport(name, read)` | `stitch` in REGION_PRESET_KEYS + transform; kit.ts `export const freeze` | freeze |
-| `specifier(spec, collect)` | FEDERATION_SPEC, compiler/flags.ts collector, content check | flags, federation, content |
-| `buildCache(name)`, `hash()` | content importing BuildCache + host createHash | content |
-| `islandDeps` (read the island-deps handoff) | profiler/index reading island-deps virtual; content CSS handoff | profiler, content |
-| `after(stage, fn)` (writeBundle / closeBundle legs) | profiler maps fill, flags manifest write | profiler, flags |
+| Member                                                                      | Replaces today                                                           | Who needs it                                |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
+| `app` (read-only: root, routes dir, dev/build, kit major, `resolve(alias)`) | reaching into `CompileCtx`                                               | all                                         |
+| `virtual(id, (ssr) => source)`                                              | per-subsystem ids in compiler/ids.ts + driver loads                      | freeze routes, profiler maps, devtools meta |
+| `files(scan)`                                                               | the profiler's internal `PackageScan` entry                              | profiler UI, content shells                 |
+| `macro(name, fn)` with a `MacroCtx` (args, file, ssr, emitImport)           | og.code/og.md/og.loader/og.source hardwired in macros/pipeline.ts        | content, freeze                             |
+| `presetKey(name, validate)` and `routeExport(name, read)`                   | `stitch` in REGION_PRESET_KEYS + transform; kit.ts `export const freeze` | freeze                                      |
+| `specifier(spec, collect)`                                                  | FEDERATION_SPEC, compiler/flags.ts collector, content check              | flags, federation, content                  |
+| `buildCache(name)`, `hash()`                                                | content importing BuildCache + host createHash                           | content                                     |
+| `islandDeps` (read the island-deps handoff)                                 | profiler/index reading island-deps virtual; content CSS handoff          | profiler, content                           |
+| `after(stage, fn)` (writeBundle / closeBundle legs)                         | profiler maps fill, flags manifest write                                 | profiler, flags                             |
 
 **2. Server port** — one `Req` object per request, passed to the four stages.
 
@@ -519,17 +519,17 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
 
 ## Packages
 
-| Package | From | Notes |
-|---|---|---|
-| `@ogygia/core` | everything else, incl. the CLIENT nav (runtime/router.ts, runtime/router-nav.ts, `virtual:ogygia/router-config`; it has no public subpath) | DONE R11: packages/core; `ogygia` (packages/ogygia) re-exports it subpath for subpath (Q4) |
-| `@ogygia/router` | src/router (the SERVER router: `routes()`, `page`, `mount` hosts) + `client-api.ts` (the typed `api<App>()` fetch client, was `ogygia/router/client`, now `@ogygia/router/api`) | DONE R10. Core imported one piece of it (`StandardSchemaV1`, re-exported by `ogygia/plugin/utils`), now reversed; federation + profiler build on it; the compiler's router prescan became `b.pageModules()`; router-css stays core (`ogygia/plugin/css`) |
-| `@ogygia/devtools` | src/devtools + src/profiler (MERGED, user 2026-10-31) | one plugin `devtools({ profiler })`: in-page panel + server profiler, each its own on-switch; profiler stays a lazy import; storage adapters as `/profiler/storage/*` subpaths; `@neodrag/svelte` peer moves here |
-| `@ogygia/content` | src/content, Blocks.svelte, markdown macros | mdsvex, shiki, orama, bits-ui peers move here |
-| `@ogygia/federation` | src/federation | |
-| `@ogygia/flags` | flags.ts, src/flags | `/openfeature` subpath |
-| `@ogygia/freeze` | src/freeze | adapters as subpaths (no npm deps today) |
-| `@ogygia/testing` | src/testing | depends on devtools + profiler |
-| `@ogygia/cli` | cli.ts, mcp.ts, perf/ | owns the `ogygia` bin; no MCP SDK dep today |
+| Package              | From                                                                                                                                                                            | Notes                                                                                                                                                                                                                                                    |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@ogygia/core`       | everything else, incl. the CLIENT nav (runtime/router.ts, runtime/router-nav.ts, `virtual:ogygia/router-config`; it has no public subpath)                                      | DONE R11: packages/core; `ogygia` (packages/ogygia) re-exports it subpath for subpath (Q4)                                                                                                                                                               |
+| `@ogygia/router`     | src/router (the SERVER router: `routes()`, `page`, `mount` hosts) + `client-api.ts` (the typed `api<App>()` fetch client, was `ogygia/router/client`, now `@ogygia/router/api`) | DONE R10. Core imported one piece of it (`StandardSchemaV1`, re-exported by `ogygia/plugin/utils`), now reversed; federation + profiler build on it; the compiler's router prescan became `b.pageModules()`; router-css stays core (`ogygia/plugin/css`) |
+| `@ogygia/devtools`   | src/devtools + src/profiler (MERGED, user 2026-10-31)                                                                                                                           | one plugin `devtools({ profiler })`: in-page panel + server profiler, each its own on-switch; profiler stays a lazy import; storage adapters as `/profiler/storage/*` subpaths; `@neodrag/svelte` peer moves here                                        |
+| `@ogygia/content`    | src/content, Blocks.svelte, markdown macros                                                                                                                                     | mdsvex, shiki, orama, bits-ui peers move here                                                                                                                                                                                                            |
+| `@ogygia/federation` | src/federation                                                                                                                                                                  |                                                                                                                                                                                                                                                          |
+| `@ogygia/flags`      | flags.ts, src/flags                                                                                                                                                             | `/openfeature` subpath                                                                                                                                                                                                                                   |
+| `@ogygia/freeze`     | src/freeze                                                                                                                                                                      | adapters as subpaths (no npm deps today)                                                                                                                                                                                                                 |
+| `@ogygia/testing`    | src/testing                                                                                                                                                                     | depends on devtools + profiler                                                                                                                                                                                                                           |
+| `@ogygia/cli`        | cli.ts, mcp.ts, perf/                                                                                                                                                           | owns the `ogygia` bin; no MCP SDK dep today                                                                                                                                                                                                              |
 
 NOT a package: `internal/compiler-browser(-full)`. Two re-export barrels over the compiler, used only
 by the docs Observatory. Keep as core subpaths.
@@ -558,14 +558,14 @@ by the docs Observatory. Keep as core subpaths.
 ## Open questions (user's call)
 
 1. ~~Plugin declaration~~ DECIDED: `plugins: [...]` list (user, 2026-10-31).
-5. ~~Public or first-party~~ DECIDED: first-party only until the ports settle (user, 2026-10-31).
+2. ~~Public or first-party~~ DECIDED: first-party only until the ports settle (user, 2026-10-31).
    Same door; docs make no stability promise to outside authors.
-2. ~~Insights home~~ DECIDED: core subpath `@ogygia/core/insights` (user, 2026-10-31). Was: core vs its own
+3. ~~Insights home~~ DECIDED: core subpath `@ogygia/core/insights` (user, 2026-10-31). Was: core vs its own
    `@ogygia/insights` package.
-3. ~~Package names~~ DECIDED (user, 2026-10-31): short first-party names (`@ogygia/flags`,
+4. ~~Package names~~ DECIDED (user, 2026-10-31): short first-party names (`@ogygia/flags`,
    `@ogygia/devtools`, …; apps import them daily), no `plugin-` prefix. Third-party, later:
    `ogygia-plugin-*` + the `ogygia-plugin` npm keyword.
-4. ~~The main-package question~~ DECIDED (user, 2026-10-31): `ogygia` is the thin front door — it
+5. ~~The main-package question~~ DECIDED (user, 2026-10-31): `ogygia` is the thin front door — it
    re-exports everything from `@ogygia/core` as-is and owns the `npx ogygia` command (its bin runs
    the app's `@ogygia/cli`). Not batteries-included: plugins are installed and listed per app. (R11.)
 6. TODO TO DISCUSS (user, 2026-10-31): SCOPE THE E2E SUITE like turbo scopes unit tests. Today it is

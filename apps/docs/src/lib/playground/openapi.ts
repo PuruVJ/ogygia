@@ -9,7 +9,13 @@
  * `import.meta.glob` itself and builds a source with `defineSource`. Exactly how `markdown()`/`json()`
  * are made — one level up, for a spec instead of a file.
  */
-import { defineSource, titleCase, type GlobMap, type GroupMeta, type RawSource } from '@ogygia/content';
+import {
+	defineSource,
+	titleCase,
+	type GlobMap,
+	type GroupMeta,
+	type RawSource
+} from '@ogygia/content';
 
 // ── the shapes an operation entry carries (all structured DATA; the page renders it) ──
 
@@ -17,9 +23,25 @@ export type OASchema = Record<string, unknown> & {
 	/** The named component this schema came from (`Pet`), when it was a `$ref` — for cross-links. */
 	name?: string;
 };
-export type OAParam = { name: string; in: string; required: boolean; description?: string; schema?: OASchema };
-export type OABody = { required: boolean; description?: string; mediaType: string; schema?: OASchema } | null;
-export type OAResponse = { status: string; description?: string; mediaType?: string; schema?: OASchema };
+export type OAParam = {
+	name: string;
+	in: string;
+	required: boolean;
+	description?: string;
+	schema?: OASchema;
+};
+export type OABody = {
+	required: boolean;
+	description?: string;
+	mediaType: string;
+	schema?: OASchema;
+} | null;
+export type OAResponse = {
+	status: string;
+	description?: string;
+	mediaType?: string;
+	schema?: OASchema;
+};
 export type OASecurity = { scheme: string; scopes: string[] };
 
 export type Operation = {
@@ -62,7 +84,9 @@ function pointer(spec: Spec, ref: string): unknown {
 	if (!ref.startsWith('#/')) return undefined;
 	let node: unknown = spec;
 	for (const seg of ref.slice(2).split('/')) {
-		node = (node as Record<string, unknown> | undefined)?.[decodeURIComponent(seg.replace(/~1/g, '/').replace(/~0/g, '~'))];
+		node = (node as Record<string, unknown> | undefined)?.[
+			decodeURIComponent(seg.replace(/~1/g, '/').replace(/~0/g, '~'))
+		];
 	}
 	return node;
 }
@@ -91,7 +115,10 @@ function deref(spec: Spec, node: unknown, seen: Set<string>): OASchema | undefin
 }
 
 /** The first media type's schema from a `content` map (we render JSON first). */
-function pick_content(spec: Spec, content: unknown): { mediaType: string; schema?: OASchema } | null {
+function pick_content(
+	spec: Spec,
+	content: unknown
+): { mediaType: string; schema?: OASchema } | null {
 	if (!content || typeof content !== 'object') return null;
 	const entries = Object.entries(content as Record<string, { schema?: unknown }>);
 	const chosen = entries.find(([m]) => m.includes('json')) ?? entries[0];
@@ -122,16 +149,35 @@ function to_operation(spec: Spec, method: string, path: string, raw: RawOp): Ope
 	}
 	const responses: OAResponse[] = Object.entries(raw.responses ?? {}).map(([status, r]) => {
 		const c = pick_content(spec, (r as { content?: unknown }).content);
-		return { status, description: (r as { description?: string }).description, mediaType: c?.mediaType, schema: c?.schema };
+		return {
+			status,
+			description: (r as { description?: string }).description,
+			mediaType: c?.mediaType,
+			schema: c?.schema
+		};
 	});
 	const security: OASecurity[] = (raw.security ?? []).flatMap((s) =>
 		Object.entries(s).map(([scheme, scopes]) => ({ scheme, scopes }))
 	);
-	return { method, path, operationId, tag, summary: raw.summary ?? operationId, description: raw.description ?? '', parameters, requestBody, responses, security };
+	return {
+		method,
+		path,
+		operationId,
+		tag,
+		summary: raw.summary ?? operationId,
+		description: raw.description ?? '',
+		parameters,
+		requestBody,
+		responses,
+		security
+	};
 }
 
 /** Flatten every spec in the glob into an ordered operation list + the tag groups. */
-function collect(specs: Spec[]): { ops: Array<{ id: string; op: Operation; order: number[] }>; groups: Map<string, GroupMeta> } {
+function collect(specs: Spec[]): {
+	ops: Array<{ id: string; op: Operation; order: number[] }>;
+	groups: Map<string, GroupMeta>;
+} {
 	const groups = new Map<string, GroupMeta>();
 	const tag_index = new Map<string, number>();
 	const ops: Array<{ id: string; op: Operation; order: number[] }> = [];
@@ -172,7 +218,9 @@ function collect(specs: Spec[]): { ops: Array<{ id: string; op: Operation; order
  *   export const petstore = content({ loader: openapi(import.meta.glob('../content/openapi/*.json', { eager: true, import: 'default' })) });
  */
 export function openapi(globMap: GlobMap) {
-	const specs = Object.values(globMap).map((m) => (typeof m === 'function' ? undefined : (m as Spec))).filter(Boolean) as Spec[];
+	const specs = Object.values(globMap)
+		.map((m) => (typeof m === 'function' ? undefined : (m as Spec)))
+		.filter(Boolean) as Spec[];
 	const { ops, groups } = collect(specs);
 	const by_id = new Map(ops.map((o) => [o.id, o]));
 

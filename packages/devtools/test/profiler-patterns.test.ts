@@ -691,13 +691,28 @@ describe('cache_rules', () => {
 	it('one helper line fetching several endpoints: requests from lines, not places', () => {
 		const helper = { path: '/app/src/routes/+page.server.ts', line: 17 };
 		const other = { path: '/app/src/routes/+page.server.ts', line: 22 };
-		const call = (name: string, at: typeof helper, start: number) => ({ start, ms: 30, target: `GET api/${name}`, at, scope: '/p', exact: `GET https://x/api/${name}` });
-		const calls = [call('catalog', helper, 0), call('reviews', helper, 40), call('stock', helper, 80), call('product', other, 120)];
+		const call = (name: string, at: typeof helper, start: number) => ({
+			start,
+			ms: 30,
+			target: `GET api/${name}`,
+			at,
+			scope: '/p',
+			exact: `GET https://x/api/${name}`
+		});
+		const calls = [
+			call('catalog', helper, 0),
+			call('reviews', helper, 40),
+			call('stock', helper, 80),
+			call('product', other, 120)
+		];
 		const p = find_same_answers({ calls, stable: new Set(calls.map((c) => c.exact)) })!;
 		expect(p.title).toBe('The same answer is fetched on every render (4 requests from 2 lines)');
 		expect(p.evidence).toContain('; 3 more requests do the same');
 		// each at its own line: places
-		const two = find_same_answers({ calls: [call('a', helper, 0), call('b', other, 40)], stable: new Set(['GET https://x/api/a', 'GET https://x/api/b']) })!;
+		const two = find_same_answers({
+			calls: [call('a', helper, 0), call('b', other, 40)],
+			stable: new Set(['GET https://x/api/a', 'GET https://x/api/b'])
+		})!;
 		expect(two.title).toBe('The same answer is fetched on every render (2 places)');
 		expect(two.evidence).toContain('; 1 more place does the same');
 	});
@@ -809,7 +824,11 @@ describe('find_wait_patterns', () => {
 	it('calls one after another from ONE line that runs no loop are nested, not a missed Promise.all', () => {
 		// a build without maps folds `const a = await f(); const b = await f(a.x)` into one line
 		const q = '/app/src/routes/w/+page.server.ts';
-		const code = ['export async function load() {', '\tconst c = await f(`c-${(await f(`b-${(await f("a")).x}`)).x}`);', '}'].join('\n');
+		const code = [
+			'export async function load() {',
+			'\tconst c = await f(`c-${(await f(`b-${(await f("a")).x}`)).x}`);',
+			'}'
+		].join('\n');
 		const src2 = (path: string, a: number, b: number) =>
 			path === q ? { start: a, lines: code.split('\n').slice(a - 1, b) } : undefined;
 		const calls = [0, 21, 42].map((start) => ({
@@ -1485,8 +1504,13 @@ describe('audit false positives (normal pages)', () => {
 	});
 
 	it('a Date parsed from text and formatted on one line: the formatting is the time, not the parse', () => {
-		for (const code of ['return p.reviews.map((r) => shortDate.format(new Date(r.at)));', "const s = new Date(r.at).toLocaleDateString('en-GB');"])
-			expect(find_patterns({ ledger: [at(15, code, 5, 0)], functions: [comp] }).map((x) => x.kind)).not.toContain('date-parse');
+		for (const code of [
+			'return p.reviews.map((r) => shortDate.format(new Date(r.at)));',
+			"const s = new Date(r.at).toLocaleDateString('en-GB');"
+		])
+			expect(
+				find_patterns({ ledger: [at(15, code, 5, 0)], functions: [comp] }).map((x) => x.kind)
+			).not.toContain('date-parse');
 	});
 });
 
@@ -1613,21 +1637,33 @@ describe('inferno round: context fixes', () => {
 		const lines = files[path].split('\n');
 		const f = fn({ key: 'matches', name: 'matches', path, line: 1, calls: 500 });
 		const g = fn({ key: 'clean', name: 'clean', path, line: 5, calls: 500 });
-		const at = (line: number, cpu_ms: number, key = 'matches') => row({ path, line, code: lines[line - 1].trim(), fn: key, cpu_ms, alloc_bytes: 1e6 });
+		const at = (line: number, cpu_ms: number, key = 'matches') =>
+			row({ path, line, code: lines[line - 1].trim(), fn: key, cpu_ms, alloc_bytes: 1e6 });
 		it('the use alone: named, at the build line', () => {
-			const p = find_patterns({ ledger: [at(3, 3)], functions: [f], source }).find((x) => x.kind === 'regexp-per-call');
-			expect(p?.sites.map((s) => [s.line, s.code])).toEqual([[2, "const re = new RegExp(escape(term), 'i');"]]);
+			const p = find_patterns({ ledger: [at(3, 3)], functions: [f], source }).find(
+				(x) => x.kind === 'regexp-per-call'
+			);
+			expect(p?.sites.map((s) => [s.line, s.code])).toEqual([
+				[2, "const re = new RegExp(escape(term), 'i');"]
+			]);
 		});
 		it('both lines, either order: one site, both costs', () => {
-			for (const ledger of [[at(3, 0.9), at(2, 0.6)], [at(2, 0.6), at(3, 0.9)]]) {
-				const p = find_patterns({ ledger, functions: [f], source }).find((x) => x.kind === 'regexp-per-call');
+			for (const ledger of [
+				[at(3, 0.9), at(2, 0.6)],
+				[at(2, 0.6), at(3, 0.9)]
+			]) {
+				const p = find_patterns({ ledger, functions: [f], source }).find(
+					(x) => x.kind === 'regexp-per-call'
+				);
 				expect(p?.sites.length).toBe(1);
 				expect(p?.sites[0].line).toBe(2);
 				expect(p?.sites[0].cpu_ms).toBeCloseTo(1.5);
 			}
 		});
 		it('passed to replace: not moved (making the new text is work that stays)', () => {
-			const p = find_patterns({ ledger: [at(7, 3, 'clean')], functions: [g], source }).find((x) => x.kind === 'regexp-per-call');
+			const p = find_patterns({ ledger: [at(7, 3, 'clean')], functions: [g], source }).find(
+				(x) => x.kind === 'regexp-per-call'
+			);
 			expect(p).toBeUndefined();
 		});
 	});
@@ -2145,7 +2181,11 @@ describe('heap growth check', () => {
 		// 1.2 MB a render (the /inferno plant): not flat
 		expect(is_flat([122.8, 124, 125.2, 126.5].map((x) => x * M))).toBe(false);
 		// a cache still filling (each reading 200 KB more, over the 256 KB spread): not flat
-		expect(is_flat([100 * M, 100 * M + 20 * K, 100 * M + 220 * K, 100 * M + 420 * K].map((x) => x - 400 * K))).toBe(false);
+		expect(
+			is_flat(
+				[100 * M, 100 * M + 20 * K, 100 * M + 220 * K, 100 * M + 420 * K].map((x) => x - 400 * K)
+			)
+		).toBe(false);
 		expect(is_flat([100 * M])).toBe(false);
 	});
 
@@ -2433,11 +2473,13 @@ describe('sync I/O too quick to sample, from V8 call counts', () => {
 		"\treturn readFileSync('other.json');",
 		'}',
 		'const rows = items.map((x) => {',
-		"\treturn readFileSync(x);",
+		'\treturn readFileSync(x);',
 		'});',
 		"export const load = async ({ url }) => ({ size: readManifest(), at: statSync('x') });"
 	].join('\n');
-	const files = [{ path: '/app/src/routes/p/+page.server.ts', file: 'routes/p/+page.server.ts', text: page }];
+	const files = [
+		{ path: '/app/src/routes/p/+page.server.ts', file: 'routes/p/+page.server.ts', text: page }
+	];
 	const counts = {
 		'readFileSync\0node:fs': 1,
 		'existsSync\0node:fs': 1,
@@ -2458,7 +2500,9 @@ describe('sync I/O too quick to sample, from V8 call counts', () => {
 	});
 	it('no *Sync call counted in Node, or none in the route files: nothing', () => {
 		expect(counted_sync_io({ 'readManifest\0file:///x': 1 }, files)).toBeUndefined();
-		expect(counted_sync_io(counts, [{ ...files[0], text: 'export const load = () => ({});' }])).toBeUndefined();
+		expect(
+			counted_sync_io(counts, [{ ...files[0], text: 'export const load = () => ({});' }])
+		).toBeUndefined();
 	});
 });
 
@@ -2471,8 +2515,13 @@ describe('same_document_pattern: what keeps a shared cache out is named first', 
 		expect(p.evidence).toContain('once the response no longer sets a cookie');
 	});
 	it('private / no-store, and both', () => {
-		const p = same_document_pattern({ ...base, blocked: { cookie: true, cache_control: 'private, max-age=0' } });
-		expect(p.fix).toContain('sets a cookie (Set-Cookie) and answers Cache-Control: private, max-age=0');
+		const p = same_document_pattern({
+			...base,
+			blocked: { cookie: true, cache_control: 'private, max-age=0' }
+		});
+		expect(p.fix).toContain(
+			'sets a cookie (Set-Cookie) and answers Cache-Control: private, max-age=0'
+		);
 		expect(p.fix).toContain('drop private / no-store');
 	});
 	it('nothing in the way: the plain advice', () => {

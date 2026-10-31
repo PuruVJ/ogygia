@@ -42,7 +42,11 @@ function mark(records: MutationRecord[]): void {
 export function watch_region(): void {
 	if (!supported || ++sleeping > 1) return;
 	observer ??= new MutationObserver(mark);
-	observer.observe(document.documentElement, { childList: true, characterData: true, subtree: true });
+	observer.observe(document.documentElement, {
+		childList: true,
+		characterData: true,
+		subtree: true
+	});
 }
 
 /** A region woke (or left): stop watching once none sleeps. */

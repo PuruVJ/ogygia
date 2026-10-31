@@ -11,7 +11,8 @@
  * once. Regex is fine here: a lab, not a hot path.
  */
 const SHEETS: Record<string, string> = {
-	'demo-card.shadow': ':host{display:block;border:2px solid #0a7;padding:8px}b.title{display:block;color:rgb(0, 119, 85)}',
+	'demo-card.shadow':
+		':host{display:block;border:2px solid #0a7;padding:8px}b.title{display:block;color:rgb(0, 119, 85)}',
 	'demo-link.shadow': ':host{display:inline}a{text-decoration:underline}',
 	'demo-nav.shadow': ':host{display:block}nav{display:flex;gap:8px}'
 };
@@ -19,19 +20,41 @@ const SHEETS: Record<string, string> = {
 export function scoped_render(html: string): string {
 	const used = new Set<string>();
 	let out = render(html, 'demo-card', used, (inner) => {
-		const trimmed = inner.replace(/>\s+</g, '><').replace(/>\s+([^<\s])/g, '> $1').replace(/([^>\s])\s+</g, '$1 <');
+		const trimmed = inner
+			.replace(/>\s+</g, '><')
+			.replace(/>\s+([^<\s])/g, '> $1')
+			.replace(/([^>\s])\s+</g, '$1 <');
 		const stamped = trimmed.replace(/(<[a-z][\w-]*)( og-c=")/g, '$1 c-id="0.1"$2');
 		return `<div class="card sc-demo-card"><b class="title sc-demo-card">Card title</b><slot class="sc-demo-card sc-demo-card-s">${stamped}</slot></div><!--o.0.1-->`;
 	});
-	out = render(out, 'demo-link', used, (inner) => `<a class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#"><slot class="sc-demo-link sc-demo-link-s">${inner}</slot></a>`);
+	out = render(
+		out,
+		'demo-link',
+		used,
+		(inner) =>
+			`<a class="link sc-demo-link" aria-hidden="true" tabindex="-1" href="#"><slot class="sc-demo-link sc-demo-link-s">${inner}</slot></a>`
+	);
 	// a nav whose own client hydrate unpacks this tree (restore-lab/nav-a: the shadow tree, then the
 	// original children back in the light DOM — what a scoped component runtime does on first load)
-	out = render(out, 'demo-nav', used, (inner) => `<nav class="web sc-demo-nav" c-id="9.0"><b class="sc-demo-nav" c-id="9.1">menu</b><slot class="sc-demo-nav sc-demo-nav-s">${inner}</slot></nav>`);
-	const sheets = [...used].map((k) => `<template data-og-head="${k}">${SHEETS[k]}</template>`).join('');
+	out = render(
+		out,
+		'demo-nav',
+		used,
+		(inner) =>
+			`<nav class="web sc-demo-nav" c-id="9.0"><b class="sc-demo-nav" c-id="9.1">menu</b><slot class="sc-demo-nav sc-demo-nav-s">${inner}</slot></nav>`
+	);
+	const sheets = [...used]
+		.map((k) => `<template data-og-head="${k}">${SHEETS[k]}</template>`)
+		.join('');
 	return sheets + out;
 }
 
-function render(html: string, tag: string, used: Set<string>, tree: (inner: string) => string): string {
+function render(
+	html: string,
+	tag: string,
+	used: Set<string>,
+	tree: (inner: string) => string
+): string {
 	let out = '';
 	let at = 0;
 	for (;;) {
@@ -45,7 +68,9 @@ function render(html: string, tag: string, used: Set<string>, tree: (inner: stri
 			host += ` og-shadow="${tag}.shadow" og-keep="data-rendered"`;
 			used.add(`${tag}.shadow`);
 		}
-		host = /\sclass="/.test(host) ? host.replace(/\sclass="([^"]*)"/, ` class="$1 sc-${tag}-h"`) : host + ` class="sc-${tag}-h"`;
+		host = /\sclass="/.test(host)
+			? host.replace(/\sclass="([^"]*)"/, ` class="$1 sc-${tag}-h"`)
+			: host + ` class="sc-${tag}-h"`;
 		host += ' data-rendered=""';
 		out += html.slice(at, open) + `<${tag}${host}>` + tree(html.slice(gt + 1, close)) + `</${tag}>`;
 		at = close + tag.length + 3;

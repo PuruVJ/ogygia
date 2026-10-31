@@ -9,10 +9,13 @@
 
 <div data-shell>
 	<p data-shell-text>shell</p>
-	<Region __mode="lake" __entry="lake-kit"><p data-frozen>frozen</p><Region
+	<Region __mode="lake" __entry="lake-kit"
+		><p data-frozen>frozen</p>
+		<Region
 			__mode="island"
 			__entry="/test/browser/fixtures/Counter.svelte"
 			__component={Counter}
 			__props={{ start: 3 }}
-		/></Region>
+		/></Region
+	>
 </div>

@@ -11,11 +11,32 @@ import { chromium } from 'playwright';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:4196';
 const H = { 'x-profiler-key': process.argv[3] ?? 'hell' };
-const SKIP = ['download', 'export', 'share', 'keep', 'delete', 'forget', 'reset', 'stop', 'profile', 'record', 'remove', '.ogp', 'json', 'html', 'cpuprofile', 'clear', 'import'];
+const SKIP = [
+	'download',
+	'export',
+	'share',
+	'keep',
+	'delete',
+	'forget',
+	'reset',
+	'stop',
+	'profile',
+	'record',
+	'remove',
+	'.ogp',
+	'json',
+	'html',
+	'cpuprofile',
+	'clear',
+	'import'
+];
 
 async function profile(path) {
 	for (let i = 0; i < 20; i++) {
-		const r = await fetch(`${base}/__profiler/page?p=${encodeURIComponent(path)}&runs=2`, { headers: H, redirect: 'manual' });
+		const r = await fetch(`${base}/__profiler/page?p=${encodeURIComponent(path)}&runs=2`, {
+			headers: H,
+			redirect: 'manual'
+		});
 		const loc = r.headers.get('location');
 		if (loc) return loc.split('/').pop();
 		await new Promise((ok) => setTimeout(ok, 1500));
@@ -28,7 +49,9 @@ const b = await profile('/inferno-deals');
 const PAGES = [`/__profiler/report/${a}`, '/__profiler', `/__profiler/compare/${a}/${b}`];
 
 const browser = await chromium.launch();
-const page = await (await browser.newContext({ extraHTTPHeaders: H, viewport: { width: 1400, height: 900 } })).newPage();
+const page = await (
+	await browser.newContext({ extraHTTPHeaders: H, viewport: { width: 1400, height: 900 } })
+).newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 200)));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text().slice(0, 200)));
@@ -41,18 +64,37 @@ const signature = () =>
 			return h;
 		};
 		const state = [...document.querySelectorAll('*')]
-			.map((e) => `${e.className?.baseVal ?? e.className}${e.open ? 'O' : ''}${e.checked ? 'C' : ''}${e.getAttribute('aria-expanded') ?? ''}${e.getAttribute('aria-selected') ?? ''}${(e.getAttribute('style') ?? '').length}`)
+			.map(
+				(e) =>
+					`${e.className?.baseVal ?? e.className}${e.open ? 'O' : ''}${e.checked ? 'C' : ''}${e.getAttribute('aria-expanded') ?? ''}${e.getAttribute('aria-selected') ?? ''}${(e.getAttribute('style') ?? '').length}`
+			)
 			.join('|');
-		return [hash(document.body.innerText), hash(state), document.querySelectorAll('*').length, Math.round(scrollY), location.hash, document.activeElement?.tagName].join(':');
+		return [
+			hash(document.body.innerText),
+			hash(state),
+			document.querySelectorAll('*').length,
+			Math.round(scrollY),
+			location.hash,
+			document.activeElement?.tagName
+		].join(':');
 	});
 const collect = () =>
 	page.evaluate(() => {
-		window.__og_press = [...document.querySelectorAll('button, a[href], [role="button"], [role="tab"], summary, th, tr, li, label, [tabindex]')].filter(
+		window.__og_press = [
+			...document.querySelectorAll(
+				'button, a[href], [role="button"], [role="tab"], summary, th, tr, li, label, [tabindex]'
+			)
+		].filter(
 			(e) =>
 				getComputedStyle(e).cursor === 'pointer' &&
 				e.getClientRects().length &&
 				// a toggle that is already on
-				!(e.classList.contains('on') || e.getAttribute('aria-pressed') === 'true' || e.getAttribute('aria-selected') === 'true' || e.classList.contains('picked'))
+				!(
+					e.classList.contains('on') ||
+					e.getAttribute('aria-pressed') === 'true' ||
+					e.getAttribute('aria-selected') === 'true' ||
+					e.classList.contains('picked')
+				)
 		);
 		return window.__og_press.length;
 	});
@@ -70,10 +112,18 @@ try {
 			const it = await page.evaluate((i) => {
 				const e = window.__og_press[i];
 				if (!e?.isConnected) return null;
-				return { label: `${e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 50)}"`, href: e.getAttribute('href') };
+				return {
+					label: `${e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 50)}"`,
+					href: e.getAttribute('href')
+				};
 			}, i);
 			// plain links leave the page by design; buttons that start work are not a press's business
-			if (!it || (it.href && !it.href.startsWith('#')) || SKIP.some((w) => it.label.toLowerCase().includes(w))) continue;
+			if (
+				!it ||
+				(it.href && !it.href.startsWith('#')) ||
+				SKIP.some((w) => it.label.toLowerCase().includes(w))
+			)
+				continue;
 			// look at it first, as a person pressing it would (a link to where the page already is
 			// changes nothing; from the link's own place, it jumps)
 			await page.evaluate((i) => window.__og_press[i].scrollIntoView({ block: 'center' }), i);
@@ -106,14 +156,28 @@ try {
 		const mouse_only = await page.evaluate(() => {
 			const out = [];
 			for (const e of document.querySelectorAll('*')) {
-				if (e.tagName === 'CANVAS' || getComputedStyle(e).cursor !== 'pointer' || !e.getClientRects().length) continue;
+				if (
+					e.tagName === 'CANVAS' ||
+					getComputedStyle(e).cursor !== 'pointer' ||
+					!e.getClientRects().length
+				)
+					continue;
 				if (e.parentElement && getComputedStyle(e.parentElement).cursor === 'pointer') continue;
-				const reach = e.matches('button, a[href], input, select, textarea, summary, label') || e.tabIndex >= 0 || !!e.querySelector('button, a[href], input, select, summary, [tabindex="0"]');
-				if (!reach) out.push(`${e.tagName.toLowerCase()} "${(e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30)}"`);
+				const reach =
+					e.matches('button, a[href], input, select, textarea, summary, label') ||
+					e.tabIndex >= 0 ||
+					!!e.querySelector('button, a[href], input, select, summary, [tabindex="0"]');
+				if (!reach)
+					out.push(
+						`${e.tagName.toLowerCase()} "${(e.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30)}"`
+					);
 			}
 			return out;
 		});
-		if (mouse_only.length) threw.push(`${mouse_only.length} mouse-only control(s): ${mouse_only.slice(0, 4).join(', ')}`);
+		if (mouse_only.length)
+			threw.push(
+				`${mouse_only.length} mouse-only control(s): ${mouse_only.slice(0, 4).join(', ')}`
+			);
 		// Enter on a sort header sorts, and says so
 		const th = page.locator('th.sort').first();
 		if (await th.count()) {
@@ -123,16 +187,21 @@ try {
 			await th.focus();
 			await page.keyboard.press('Enter');
 			await page.waitForTimeout(200);
-			if ((await th.getAttribute('aria-sort')) === sort0) threw.push('Enter on a sort header did not change its aria-sort');
+			if ((await th.getAttribute('aria-sort')) === sort0)
+				threw.push('Enter on a sort header did not change its aria-sort');
 		}
 		const name = url.split('/').slice(0, 3).join('/');
 		if (dead.length || threw.length) {
 			failed++;
-			console.log(`✗ ${name}: ${dead.length ? `${dead.length} press(es) changed nothing: ${dead.slice(0, 5).join(', ')}` : ''}${threw.length ? ` ${threw.slice(0, 3).join(' | ')}` : ''}`);
+			console.log(
+				`✗ ${name}: ${dead.length ? `${dead.length} press(es) changed nothing: ${dead.slice(0, 5).join(', ')}` : ''}${threw.length ? ` ${threw.slice(0, 3).join(' | ')}` : ''}`
+			);
 		} else console.log(`✓ ${name}: ${n} pressable, each does something`);
 	}
 } finally {
 	await browser.close();
 }
-console.log(failed ? `FAILED (${failed})` : `every press does something (${pressed} presses), no errors`);
+console.log(
+	failed ? `FAILED (${failed})` : `every press does something (${pressed} presses), no errors`
+);
 process.exit(failed ? 1 : 0);

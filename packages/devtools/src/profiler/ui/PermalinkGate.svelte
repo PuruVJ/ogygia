@@ -36,7 +36,14 @@
 	let error = $state('');
 	/** `kept`: this browser's own copy (the owner's report, on an instance that no longer has it),
 	 *  not a link someone shared: its owner can still share it on */
-	let report = $state<{ a: Analysis; meta: ReportMeta; extras: ReportExtras; history?: PageHistory | null; prev?: string | null; kept?: boolean } | null>(null);
+	let report = $state<{
+		a: Analysis;
+		meta: ReportMeta;
+		extras: ReportExtras;
+		history?: PageHistory | null;
+		prev?: string | null;
+		kept?: boolean;
+	} | null>(null);
 	/** THE BROWSER STORE: no fragment → this may be a report this browser kept (an ephemeral host
 	 *  no longer has it, or the server restarted). Looked up once, by the id in the URL. */
 	let looking = $state(!blob && typeof location !== 'undefined');
@@ -44,14 +51,35 @@
 		const id = location.pathname.split('/').filter(Boolean).pop() ?? '';
 		void get_report(id)
 			.then(async (rec) => {
-				const dump = rec?.dump as { analysis: Analysis; meta: ReportMeta; extras: ReportExtras } | null | undefined;
+				const dump = rec?.dump as
+					| { analysis: Analysis; meta: ReportMeta; extras: ReportExtras }
+					| null
+					| undefined;
 				if (!dump?.analysis || !dump.meta) return;
 				// this page's history from the other reports this browser kept
 				const kept = await list_reports();
-				const metas = [dump.meta, ...(await Promise.all(kept.filter((k) => k.id !== dump.meta.id && k.page === dump.meta.page).map((k) => get_report(k.id)))).map((r) => (r?.dump as { meta: ReportMeta } | undefined)?.meta).filter((m): m is ReportMeta => !!m)];
+				const metas = [
+					dump.meta,
+					...(
+						await Promise.all(
+							kept
+								.filter((k) => k.id !== dump.meta.id && k.page === dump.meta.page)
+								.map((k) => get_report(k.id))
+						)
+					)
+						.map((r) => (r?.dump as { meta: ReportMeta } | undefined)?.meta)
+						.filter((m): m is ReportMeta => !!m)
+				];
 				const history = page_history(metas).find((h) => h.page === dump.meta.page) ?? null;
 				const i = history ? history.points.findIndex((p) => p.id === dump.meta.id) : -1;
-				report = { a: dump.analysis, meta: dump.meta, extras: dump.extras, history, prev: i > 0 ? history!.points[i - 1].id : null, kept: true };
+				report = {
+					a: dump.analysis,
+					meta: dump.meta,
+					extras: dump.extras,
+					history,
+					prev: i > 0 ? history!.points[i - 1].id : null,
+					kept: true
+				};
 			})
 			.finally(() => (looking = false));
 	}
@@ -77,13 +105,24 @@
 </script>
 
 {#if report}
-	<ReportBody a={report.a} meta={report.meta} {base} extras={report.extras} ogpB64={undefined} history={report.history ?? null} prev={report.prev ?? null} kept={report.kept ?? false} />
+	<ReportBody
+		a={report.a}
+		meta={report.meta}
+		{base}
+		extras={report.extras}
+		ogpB64={undefined}
+		history={report.history ?? null}
+		prev={report.prev ?? null}
+		kept={report.kept ?? false}
+	/>
 {:else}
 	<Shell {base} bare>
 		<div class="share-unlock">
 			{#if looking}
 				<h1>Looking in this browser…</h1>
-				<p class="hint">The server does not hold this report; checking whether this browser kept it.</p>
+				<p class="hint">
+					The server does not hold this report; checking whether this browser kept it.
+				</p>
 			{:else if !blob && exists && login}
 				<h1>Log in to view this report</h1>
 				<p class="hint">
@@ -95,14 +134,16 @@
 				<h1>No report here</h1>
 				<p class="hint">
 					This server does not hold it and this browser did not keep it (an ephemeral host keeps a
-					report only in the browser that recorded it). Open a share link (it ends in <code>#…</code>){#if login},
-						or <a href={login}>log in with the profiler secret</a> to view your own reports{:else},
+					report only in the browser that recorded it). Open a share link (it ends in <code>#…</code
+					>){#if login}, or <a href={login}>log in with the profiler secret</a> to view your own reports{:else},
 						or log in to view your own reports{/if}.
 				</p>
 				<a class="btn" href={base}>← dashboard</a>
 			{:else}
 				<h1>Shared profile</h1>
-				<p class="hint">This report is encrypted in the link. Enter the password the sender gave you.</p>
+				<p class="hint">
+					This report is encrypted in the link. Enter the password the sender gave you.
+				</p>
 				<form class="share-form" onsubmit={unlock}>
 					<input
 						type="password"

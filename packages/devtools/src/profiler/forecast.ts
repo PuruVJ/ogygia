@@ -372,4 +372,7 @@ export function forecast_of(
 
 /** fixes that keep an ANSWER for later renders: worth it only where the answer may be a little
  *  stale, so a decision about freshness, not a code fix — told apart from the rest */
-const CACHING: ReadonlySet<PatternKind> = new Set<PatternKind>(['same-answer', 'almost-same-answer']);
+const CACHING: ReadonlySet<PatternKind> = new Set<PatternKind>([
+	'same-answer',
+	'almost-same-answer'
+]);

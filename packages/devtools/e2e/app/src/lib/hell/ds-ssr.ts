@@ -10,11 +10,16 @@
 // splices over a 2 MB string, regexes over the whole document. The profiler's `instrument` makes
 // every render a span and `span` names the phases, so the report can say what this pass costs.
 import type { Handle } from '@sveltejs/kit';
-import { renderToString as ionicRenderToString, type HydrateResults, type SerializeDocumentOptions } from '@ionic/core/hydrate';
+import {
+	renderToString as ionicRenderToString,
+	type HydrateResults,
+	type SerializeDocumentOptions
+} from '@ionic/core/hydrate';
 import { instrument, span } from '@ogygia/devtools/profiler';
 
 // PATTERN library-per-item (a full renderer run per tag) · PATTERN kept-per-render (it keeps ~60 MB each page)
-const render = (html: string, options?: SerializeDocumentOptions): Promise<HydrateResults> => ionicRenderToString(html, options);
+const render = (html: string, options?: SerializeDocumentOptions): Promise<HydrateResults> =>
+	ionicRenderToString(html, options);
 const renderToString = instrument(render, 'ds.render', (r, html) => ({
 	tag: /<(ion-[a-z-]+)/.exec(html)?.[1] ?? 'fragment',
 	bytes: r.html?.length ?? 0,
@@ -34,7 +39,11 @@ export function getTags(html: string): string[] {
 
 export async function processDsTags(pageHtml: string): Promise<string> {
 	let { styleMatches, html } = span('ds.styles.extract', () => extractStyleTags(pageHtml));
-	const tags = span('ds.tags', () => getTags(html), (t) => ({ tags: t.length }));
+	const tags = span(
+		'ds.tags',
+		() => getTags(html),
+		(t) => ({ tags: t.length })
+	);
 
 	const rendered = await span(
 		'ds.render.all',
@@ -84,7 +93,8 @@ function findIonTags(html: string): { start: number; end: number; tag: string }[
 		let j = start + 5;
 		while (j < html.length) {
 			const c = html.charCodeAt(j);
-			if (c === 62 /* > */ || c === 32 || c === 9 || c === 10 || c === 13 || c === 47 /* / */) break;
+			if (c === 62 /* > */ || c === 32 || c === 9 || c === 10 || c === 13 || c === 47 /* / */)
+				break;
 			j++;
 		}
 		const name = html.slice(start + 5, j);
@@ -167,10 +177,20 @@ export async function processDsTagsFast(pageHtml: string): Promise<string> {
 		return { head_start: hs, head_end, styles: styles.join(''), head: kept.join('') };
 	});
 	const body_html = head_start === -1 ? pageHtml : pageHtml.slice(head_end);
-	const tags = span('ds.tags', () => findIonTags(body_html), (t) => ({ tags: t.length }));
+	const tags = span(
+		'ds.tags',
+		() => findIonTags(body_html),
+		(t) => ({ tags: t.length })
+	);
 	// render each distinct tag once (a repeated chip renders once and is reused)
 	const distinct = [...new Set(tags.map((t) => t.tag))];
-	const rendered = new Map(await span('ds.render.all', () => Promise.all(distinct.map(async (t) => [t, await renderOne(t)] as const)), (r) => ({ rendered: r.length, distinct: r.length })));
+	const rendered = new Map(
+		await span(
+			'ds.render.all',
+			() => Promise.all(distinct.map(async (t) => [t, await renderOne(t)] as const)),
+			(r) => ({ rendered: r.length, distinct: r.length })
+		)
+	);
 	// ONE pass: the pieces between the tags and each rendered element, joined once
 	const body = span('ds.splice', () => {
 		const out: string[] = [];
@@ -189,24 +209,34 @@ export async function processDsTagsFast(pageHtml: string): Promise<string> {
 	});
 }
 
-export function extractStyleTags(html: string): { styleMatches: { index: number; style: string }[]; html: string } {
+export function extractStyleTags(html: string): {
+	styleMatches: { index: number; style: string }[];
+	html: string;
+} {
 	const styleMatches: { index: number; style: string }[] = [];
 	const headMatch = html.match(/<head[\s\S]*?<\/head>/i);
 	if (headMatch) {
 		const head = headMatch[0];
 		const styleTagRegex = /<style[\s\S]*?<\/style>/gi;
 		let match: RegExpExecArray | null;
-		while ((match = styleTagRegex.exec(head)) !== null) styleMatches.push({ index: match.index, style: match[0] });
+		while ((match = styleTagRegex.exec(head)) !== null)
+			styleMatches.push({ index: match.index, style: match[0] });
 		const headWithoutStyles = head.replace(styleTagRegex, '');
 		html = html.replace(head, headWithoutStyles);
 	}
 	return { styleMatches, html };
 }
 
-export function insertStyleTags(html: string, styleMatches: { index: number; style: string }[]): string {
+export function insertStyleTags(
+	html: string,
+	styleMatches: { index: number; style: string }[]
+): string {
 	for (const { style } of styleMatches) {
 		const insertIndex = html.indexOf('</head>');
-		html = insertIndex !== -1 ? html.slice(0, insertIndex) + style + html.slice(insertIndex) : style + html;
+		html =
+			insertIndex !== -1
+				? html.slice(0, insertIndex) + style + html.slice(insertIndex)
+				: style + html;
 	}
 	return html;
 }
@@ -224,8 +254,13 @@ export const ds_ssr: Handle = async ({ event, resolve }) => {
 	// `?ds=fast` runs the efficient pass; the default stays the messy one the page is here to show.
 	// The variant rides on the span so the two reports name it in the compare.
 	// (/hell-fixed, the page with the profiler's fixes applied, always takes the fast pass)
-	const fast = event.url.searchParams.get('ds') === 'fast' || event.url.pathname.startsWith('/hell-fixed');
-	const out = await span('ds.pass', () => (fast ? processDsTagsFast(doc) : processDsTags(doc)), (h) => ({ bytes: h.length, variant: fast ? 'fast' : 'messy' }));
+	const fast =
+		event.url.searchParams.get('ds') === 'fast' || event.url.pathname.startsWith('/hell-fixed');
+	const out = await span(
+		'ds.pass',
+		() => (fast ? processDsTagsFast(doc) : processDsTags(doc)),
+		(h) => ({ bytes: h.length, variant: fast ? 'fast' : 'messy' })
+	);
 	// a new body: the original length / etag would truncate or mislabel it
 	const headers = new Headers(res.headers);
 	headers.delete('content-length');

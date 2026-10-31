@@ -6,7 +6,9 @@
 </script>
 
 <h1 data-static-shell>Defer twins</h1>
-<p data-static-shell>Three identical server islands share one call — expect a single endpoint request.</p>
+<p data-static-shell>
+	Three identical server islands share one call — expect a single endpoint request.
+</p>
 
 <Greeting salutation="Twin">
 	{#snippet ogygiaFallback()}<p class="fb" data-fallback>loading…</p>{/snippet}

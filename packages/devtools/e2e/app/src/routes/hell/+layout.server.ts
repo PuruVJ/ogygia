@@ -13,5 +13,12 @@ export const load: LayoutServerLoad = async ({ url, fetch }) => {
 		const res = await fetch(`${url.origin}/hell/api/flags?ms=20`);
 		return (await res.json()) as { name: string; ms: number };
 	});
-	return { session, flags, crumbs: [{ href: '/', label: 'crumb.home' }, { href: '/hell', label: 'crumb.catalog' }] };
+	return {
+		session,
+		flags,
+		crumbs: [
+			{ href: '/', label: 'crumb.home' },
+			{ href: '/hell', label: 'crumb.catalog' }
+		]
+	};
 };

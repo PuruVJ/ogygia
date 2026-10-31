@@ -3,7 +3,11 @@
 
 <script module>
 	/** the last session's data + report, kept across tab switches (not across reloads) */
-	let last = $state(/** @type {{ data: import('./session.ts').SessionData; report: import('@ogygia/core/insights').SessionReport } | null} */ (null));
+	let last = $state(
+		/** @type {{ data: import('./session.ts').SessionData; report: import('@ogygia/core/insights').SessionReport } | null} */ (
+			null
+		)
+	);
 </script>
 
 <script>
@@ -44,7 +48,9 @@
 	let profiler_here = $state(false);
 	let with_server = $state(true);
 	let server_note = $state('');
-	let server_window = $state(/** @type {import('./profile-store.ts').SlimProfile & { window?: any } | null} */ (null));
+	let server_window = $state(
+		/** @type {import('./profile-store.ts').SlimProfile & { window?: any } | null} */ (null)
+	);
 	/** @type {Promise<boolean> | null} */
 	let probe = null;
 	const probe_profiler = () =>
@@ -74,7 +80,8 @@
 				const r = await fetch('/__profiler/window/start', { method: 'POST' });
 				window_on = r.ok;
 				window_state = r.ok ? 'on' : 'off';
-				if (!r.ok) server_note = `The server window did not start (${r.status}): ${(await r.text()).slice(0, 120)}`;
+				if (!r.ok)
+					server_note = `The server window did not start (${r.status}): ${(await r.text()).slice(0, 120)}`;
 			} catch (e) {
 				window_state = 'off';
 				server_note = `The server window did not start: ${e instanceof Error ? e.message : String(e)}`;
@@ -99,12 +106,20 @@
 					if (r.ok) {
 						const json = await r.json();
 						server_window = { ...slim_profile(json), window: json.window };
-					} else if (!(resumed && r.status === 400)) server_note = `The server window failed (${r.status}).`;
+					} else if (!(resumed && r.status === 400))
+						server_note = `The server window failed (${r.status}).`;
 				} catch (e) {
 					server_note = `The server window failed: ${e instanceof Error ? e.message : String(e)}`;
 				}
 			}
-			last = { data, report: analyze_session(data, session_names(data, (fp) => region_name_by_fp(fp)), location.href) };
+			last = {
+				data,
+				report: analyze_session(
+					data,
+					session_names(data, (fp) => region_name_by_fp(fp)),
+					location.href
+				)
+			};
 			// (the answer key and e2e read the same report the tab shows; every tab reads the session)
 			window.__ogygia_session = last.report;
 			set_last_session(last);
@@ -123,7 +138,8 @@
 			if (r.kind === 'interaction') el = last.data.interactions[r.i]?.el?.deref() ?? null;
 			else if (r.kind === 'click') el = last.data.clicks[r.i]?.el?.deref() ?? null;
 			else if (r.kind === 'shift') el = last.data.shifts[r.i]?.el?.deref() ?? null;
-			else if (r.kind === 'island') el = document.querySelector(`ogygia-region[data-og-fp="${r.fp}"]`);
+			else if (r.kind === 'island')
+				el = document.querySelector(`ogygia-region[data-og-fp="${r.fp}"]`);
 			if (el && el.isConnected) out.push(el);
 		}
 		return out;
@@ -133,7 +149,10 @@
 	let hover = $state('');
 	const tl = $derived.by(() => {
 		if (!last) return null;
-		const lanes = session_timeline(last.data, session_names(last.data, (fp) => region_name_by_fp(fp)));
+		const lanes = session_timeline(
+			last.data,
+			session_names(last.data, (fp) => region_name_by_fp(fp))
+		);
 		const span = Math.max(1, last.data.to - last.data.from);
 		return { lanes, span };
 	});
@@ -152,7 +171,9 @@
 	}
 
 	// CLIENT → SERVER in one click: a slow request found in the session, profiled on the server
-	let server = $state(/** @type {Record<string, { busy?: boolean; error?: string; p?: import('./profile-store.ts').SlimProfile }>} */ ({}));
+	let server = $state(
+		/** @type {Record<string, { busy?: boolean; error?: string; p?: import('./profile-store.ts').SlimProfile }>} */ ({})
+	);
 	async function profile_request(url) {
 		const u = new URL(url);
 		const path = u.pathname + u.search;
@@ -165,7 +186,12 @@
 		}
 	}
 	const ms = (n) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : Math.round(n) + ' ms');
-	const kb = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+	const kb = (n) =>
+		n < 1024
+			? n + ' B'
+			: n < 1048576
+				? (n / 1024).toFixed(1) + ' KB'
+				: (n / 1048576).toFixed(1) + ' MB';
 
 	onMount(() => () => clear_highlight());
 </script>
@@ -174,24 +200,44 @@
 	<div class="bar">
 		{#if live}
 			<button class="stop" data-og-session-stop disabled={busy} onclick={stop}>■ Stop</button>
-			<span class="live"><i class="dot"></i>recording {elapsed.toFixed(0)} s — use the page: click, type, scroll, navigate</span>
-			{#if window_state}<span class="muted" data-og-session-server-state={window_state}>· server {window_state === 'on' ? 'too' : window_state === 'starting' ? 'starting…' : 'not recorded'}</span>{/if}
+			<span class="live"
+				><i class="dot"></i>recording {elapsed.toFixed(0)} s — use the page: click, type, scroll, navigate</span
+			>
+			{#if window_state}<span class="muted" data-og-session-server-state={window_state}
+					>· server {window_state === 'on'
+						? 'too'
+						: window_state === 'starting'
+							? 'starting…'
+							: 'not recorded'}</span
+				>{/if}
 		{:else}
 			<button class="go" data-og-session-start onclick={start}>● Record</button>
-			{#if profiler_here}<label class="srvtoggle"><input type="checkbox" bind:checked={with_server} data-og-session-server-toggle /> and the server</label>{/if}
-			<span class="muted">{last ? `last session: ${ms(last.report.duration_ms)}` : 'Press record, use the page, press stop.'}</span>
+			{#if profiler_here}<label class="srvtoggle"
+					><input type="checkbox" bind:checked={with_server} data-og-session-server-toggle /> and the
+					server</label
+				>{/if}
+			<span class="muted"
+				>{last
+					? `last session: ${ms(last.report.duration_ms)}`
+					: 'Press record, use the page, press stop.'}</span
+			>
 		{/if}
 	</div>
 	{#if limits.length}
 		<p class="muted" data-og-session-browser-limits>
-			This browser does not report {limits.join(', ')}: a session here cannot find what needs them. Record in a Chromium browser for those.
+			This browser does not report {limits.join(', ')}: a session here cannot find what needs them.
+			Record in a Chromium browser for those.
 		</p>
 	{/if}
 
 	{#if last && !live}
 		{@const r = last.report}
 		<div class="stats">
-			<div><b>{r.counts.interactions}</b><span>interactions{r.counts.slow ? ` · ${r.counts.slow} slow` : ''}</span></div>
+			<div>
+				<b>{r.counts.interactions}</b><span
+					>interactions{r.counts.slow ? ` · ${r.counts.slow} slow` : ''}</span
+				>
+			</div>
 			<div><b>{ms(r.counts.longtask_ms)}</b><span>{r.counts.longtasks} long tasks</span></div>
 			<div><b>{r.counts.requests}</b><span>requests · {kb(r.counts.request_bytes)}</span></div>
 			<div><b>{r.counts.shifts}</b><span>shifts by themselves</span></div>
@@ -203,27 +249,60 @@
 		{#if server_window}
 			{@const sw = server_window}
 			{@const hot = sw.hot.filter((h) => h.ms >= 1)}
-			<h3>On the server, meanwhile <span class="muted">{sw.window?.requests?.length ?? 0} requests · the profiler's window</span></h3>
+			<h3>
+				On the server, meanwhile <span class="muted"
+					>{sw.window?.requests?.length ?? 0} requests · the profiler's window</span
+				>
+			</h3>
 			<div class="srvprof" data-og-session-window>
 				{#if sw.window?.requests?.length}
 					<table>
 						<tbody>
 							{#each sw.window.requests.slice(0, 8) as q, i (q.path + i)}
-								<tr><td class="tgt">{q.method} {q.path}{#if q.route}<span class="muted"> · {q.route}</span>{/if}</td><td class="num">{ms(q.ms)}</td><td class="num">{q.status ?? ''}</td></tr>
+								<tr
+									><td class="tgt"
+										>{q.method}
+										{q.path}{#if q.route}<span class="muted"> · {q.route}</span>{/if}</td
+									><td class="num">{ms(q.ms)}</td><td class="num">{q.status ?? ''}</td></tr
+								>
 							{/each}
 						</tbody>
 					</table>
 				{/if}
 				{#if hot.length}
 					<p class="muted">the server's hottest code across them (own time):</p>
-					<ul>{#each hot.slice(0, 5) as h, k (k)}<li>{h.name} <span class="muted">{h.file ? h.file.slice(h.file.lastIndexOf('/') + 1) : ''}{h.line !== null ? `:${h.line}` : ''} · {h.kind}</span> {ms(h.ms)}</li>{/each}</ul>
+					<ul>
+						{#each hot.slice(0, 5) as h, k (k)}<li>
+								{h.name}
+								<span class="muted"
+									>{h.file ? h.file.slice(h.file.lastIndexOf('/') + 1) : ''}{h.line !== null
+										? `:${h.line}`
+										: ''} · {h.kind}</span
+								>
+								{ms(h.ms)}
+							</li>{/each}
+					</ul>
 				{/if}
 				{#if sw.network?.calls.length}
 					<p class="muted">outbound calls:</p>
-					<ul>{#each [...sw.network.calls].sort((a, b) => b.wait_ms - a.wait_ms).slice(0, 4) as c, k (k)}<li>{c.method} {c.url.split('?')[0]} {ms(c.wait_ms)}</li>{/each}</ul>
+					<ul>
+						{#each [...sw.network.calls]
+							.sort((a, b) => b.wait_ms - a.wait_ms)
+							.slice(0, 4) as c, k (k)}<li>
+								{c.method}
+								{c.url.split('?')[0]}
+								{ms(c.wait_ms)}
+							</li>{/each}
+					</ul>
 				{/if}
-				{#each sw.findings.filter((x) => x.severity !== 'info').slice(0, 3) as x, k (k)}<p class="fix">{x.message}</p>{/each}
-				{#if sw.links}<a class="full" href={sw.links.html} target="_blank" rel="noopener">full server report ↗</a>{/if}
+				{#each sw.findings.filter((x) => x.severity !== 'info').slice(0, 3) as x, k (k)}<p
+						class="fix"
+					>
+						{x.message}
+					</p>{/each}
+				{#if sw.links}<a class="full" href={sw.links.html} target="_blank" rel="noopener"
+						>full server report ↗</a
+					>{/if}
 			</div>
 		{/if}
 
@@ -248,7 +327,14 @@
 								>
 									{#if it.server}
 										{@const total = Math.max(1, it.t1 - it.t0)}
-										<b class="srvpart" style:width="{Math.min(100, (it.server.ms / total) * 100)}%"><b class="uppart" style:width="{it.server.ms ? Math.min(100, (it.server.up / it.server.ms) * 100) : 0}%"></b></b>
+										<b class="srvpart" style:width="{Math.min(100, (it.server.ms / total) * 100)}%"
+											><b
+												class="uppart"
+												style:width="{it.server.ms
+													? Math.min(100, (it.server.up / it.server.ms) * 100)
+													: 0}%"
+											></b></b
+										>
 									{/if}
 								</i>
 							{/each}
@@ -272,23 +358,48 @@
 						<p class="msg">{f.message}</p>
 						{#if f.fix}<p class="fix">{f.fix}</p>{/if}
 						{#if f.refs.length && els_of(f.refs).length}
-							<button class="chip" onclick={() => highlight(els_of(f.refs), f.message.slice(0, 80), true)}>show on the page ({els_of(f.refs).length})</button>
+							<button
+								class="chip"
+								onclick={() => highlight(els_of(f.refs), f.message.slice(0, 80), true)}
+								>show on the page ({els_of(f.refs).length})</button
+							>
 						{/if}
 						{#if f.url}
 							{@const sv = server[f.url]}
-							<button class="chip srv" data-og-session-profile disabled={sv?.busy} onclick={() => profile_request(f.url)}>
-								{sv?.busy ? 'profiling on the server…' : sv?.p ? 'profile again' : 'profile it on the server'}
+							<button
+								class="chip srv"
+								data-og-session-profile
+								disabled={sv?.busy}
+								onclick={() => profile_request(f.url)}
+							>
+								{sv?.busy
+									? 'profiling on the server…'
+									: sv?.p
+										? 'profile again'
+										: 'profile it on the server'}
 							</button>
 							{#if sv?.error}<p class="fix">{sv.error}</p>{/if}
 							{#if sv?.p}
 								{@const p = sv.p}
 								{@const hot = p.hot.filter((h) => h.ms >= 1)}
 								<div class="srvprof" data-og-session-server>
-									<p><b>{ms(p.render_ms)}</b> per render on the server{#if p.forecast && p.forecast.after_ms < p.forecast.now_ms - 1}, <b class="ok">{ms(p.forecast.after_ms)}</b> after its fixes{/if}.</p>
+									<p>
+										<b>{ms(p.render_ms)}</b> per render on the server{#if p.forecast && p.forecast.after_ms < p.forecast.now_ms - 1},
+											<b class="ok">{ms(p.forecast.after_ms)}</b> after its fixes{/if}.
+									</p>
 									{#if hot.length}
 										<p class="muted">hottest code:</p>
 										<ul>
-											{#each hot.slice(0, 3) as h, k (k)}<li>{h.name} <span class="muted">{h.file ? h.file.slice(h.file.lastIndexOf('/') + 1) : ''}{h.line !== null ? `:${h.line}` : ''}</span> {ms(h.ms)}</li>{/each}
+											{#each hot.slice(0, 3) as h, k (k)}<li>
+													{h.name}
+													<span class="muted"
+														>{h.file ? h.file.slice(h.file.lastIndexOf('/') + 1) : ''}{h.line !==
+														null
+															? `:${h.line}`
+															: ''}</span
+													>
+													{ms(h.ms)}
+												</li>{/each}
 										</ul>
 									{:else}
 										<p class="muted">Almost no CPU: the server spent the time waiting.</p>
@@ -296,11 +407,23 @@
 									{#if p.network?.calls.length}
 										<p class="muted">waited on:</p>
 										<ul>
-											{#each [...p.network.calls].sort((a, b) => b.wait_ms - a.wait_ms).slice(0, 3) as c, k (k)}<li>{c.method} {c.url.split('?')[0]} {ms(c.wait_ms)}</li>{/each}
+											{#each [...p.network.calls]
+												.sort((a, b) => b.wait_ms - a.wait_ms)
+												.slice(0, 3) as c, k (k)}<li>
+													{c.method}
+													{c.url.split('?')[0]}
+													{ms(c.wait_ms)}
+												</li>{/each}
 										</ul>
 									{/if}
-									{#each p.findings.filter((x) => x.severity !== 'info').slice(0, 2) as x, k (k)}<p class="fix">{x.message}</p>{/each}
-									{#if p.links}<a class="full" href={p.links.html} target="_blank" rel="noopener">full report ↗</a>{/if}
+									{#each p.findings.filter((x) => x.severity !== 'info').slice(0, 2) as x, k (k)}<p
+											class="fix"
+										>
+											{x.message}
+										</p>{/each}
+									{#if p.links}<a class="full" href={p.links.html} target="_blank" rel="noopener"
+											>full report ↗</a
+										>{/if}
 								</div>
 							{/if}
 						{/if}
@@ -316,9 +439,16 @@
 			<table>
 				<tbody>
 					{#each r.interactions as x (x.i)}
-						<tr onmouseenter={() => highlight(els_of([{ kind: 'interaction', i: x.i }]), x.target)} onmouseleave={() => clear_highlight()}>
+						<tr
+							onmouseenter={() => highlight(els_of([{ kind: 'interaction', i: x.i }]), x.target)}
+							onmouseleave={() => clear_highlight()}
+						>
 							<td>{x.name}</td>
-							<td class="tgt" title={x.target}>{x.target}{#if x.fp}<span class="muted"> · {last?.data.names?.[x.fp] || region_name_by_fp(x.fp)}</span>{/if}</td>
+							<td class="tgt" title={x.target}
+								>{x.target}{#if x.fp}<span class="muted">
+										· {last?.data.names?.[x.fp] || region_name_by_fp(x.fp)}</span
+									>{/if}</td
+							>
 							<td class="num" class:warnc={x.duration >= 200}>{ms(x.duration)}</td>
 						</tr>
 					{/each}
@@ -327,18 +457,34 @@
 		{/if}
 
 		{#if r.requests.length}
-			<h3>Requests <span class="muted">slowest first · the server's own split where it sent one</span></h3>
+			<h3>
+				Requests <span class="muted">slowest first · the server's own split where it sent one</span>
+			</h3>
 			<table data-og-session-requests>
 				<tbody>
 					{#each r.requests as q, i (q.url + i)}
 						<tr>
-							<td class="tgt" title={q.url}>{q.url}{#if q.status && q.status >= 400}<span class="warnc"> {q.status}</span>{/if}</td>
+							<td class="tgt" title={q.url}
+								>{q.url}{#if q.status && q.status >= 400}<span class="warnc">
+										{q.status}</span
+									>{/if}</td
+							>
 							<td class="num">{ms(q.ms)}</td>
 							<td class="split">
 								{#if q.server_ms !== null}
 									{@const w = Math.max(q.ms, q.server_ms, 1)}
-									<span class="bar" title="server {ms(q.server_ms)}{q.net_ms !== null ? ` (waiting on calls ${ms(q.net_ms)})` : ''} · network {ms(Math.max(0, q.ms - q.server_ms))}">
-										<i class="srv" style:width="{((q.server_ms - (q.net_ms ?? 0)) / w) * 100}%"></i>{#if q.net_ms}<i class="up" style:width="{(q.net_ms / w) * 100}%"></i>{/if}<i class="netw" style:width="{(Math.max(0, q.ms - q.server_ms) / w) * 100}%"></i>
+									<span
+										class="bar"
+										title="server {ms(q.server_ms)}{q.net_ms !== null
+											? ` (waiting on calls ${ms(q.net_ms)})`
+											: ''} · network {ms(Math.max(0, q.ms - q.server_ms))}"
+									>
+										<i class="srv" style:width="{((q.server_ms - (q.net_ms ?? 0)) / w) * 100}%"
+										></i>{#if q.net_ms}<i class="up" style:width="{(q.net_ms / w) * 100}%"
+											></i>{/if}<i
+											class="netw"
+											style:width="{(Math.max(0, q.ms - q.server_ms) / w) * 100}%"
+										></i>
 									</span>
 									<span class="muted">{ms(q.server_ms)} server{q.up ? ` · ${q.up}` : ''}</span>
 								{/if}
@@ -354,12 +500,23 @@
 			<table>
 				<tbody>
 					{#each r.cpu.fns.slice(0, 8) as f, i (f.name + f.file + i)}
-						<tr><td>{f.name}</td><td class="tgt">{f.file ? f.file.slice(f.file.lastIndexOf('/') + 1) : ''}{f.line !== null ? `:${f.line}` : ''}</td><td class="num">{ms(f.self_ms)}</td></tr>
+						<tr
+							><td>{f.name}</td><td class="tgt"
+								>{f.file ? f.file.slice(f.file.lastIndexOf('/') + 1) : ''}{f.line !== null
+									? `:${f.line}`
+									: ''}</td
+							><td class="num">{ms(f.self_ms)}</td></tr
+						>
 					{/each}
 				</tbody>
 			</table>
 		{:else if last.data.cpu_off}
-			<p class="muted">No CPU samples: {last.data.cpu_off === 'no-policy' ? 'the document needs the Document-Policy: js-profiling header (the dev server sends it), or another recording held the sampler' : 'this browser has no JS sampler'}. Long animation frames still name the scripts where the browser supports them.</p>
+			<p class="muted">
+				No CPU samples: {last.data.cpu_off === 'no-policy'
+					? 'the document needs the Document-Policy: js-profiling header (the dev server sends it), or another recording held the sampler'
+					: 'this browser has no JS sampler'}. Long animation frames still name the scripts where
+				the browser supports them.
+			</p>
 		{/if}
 	{/if}
 </div>

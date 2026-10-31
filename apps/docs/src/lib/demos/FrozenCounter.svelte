@@ -1,10 +1,7 @@
 <script lang="ts">
 	import '$lib/styles/widget.css';
 
-	let {
-		start = 0,
-		note = ''
-	}: { start?: number; note?: string } = $props();
+	let { start = 0, note = '' }: { start?: number; note?: string } = $props();
 </script>
 
 <div class="widget">

@@ -65,7 +65,10 @@ describe('remote_seed_wanted', () => {
 
 describe('collect_remote_seed — Kit bucketing × reachability', () => {
 	const implicit = () => [
-		remote('bjveep/getGreeting', 'query', { '["lake"]': { greeting: 'lake' }, '["reader"]': { greeting: 'reader' } }),
+		remote('bjveep/getGreeting', 'query', {
+			'["lake"]': { greeting: 'lake' },
+			'["reader"]': { greeting: 'reader' }
+		}),
 		remote('bjveep/getManifesto', 'prerender', { '[]': { text: 'islands' } }),
 		remote('bjveep/clock', 'query_live', { '[]': '12:00' }),
 		remote('1rczqrp/footerProps', 'query', { '["fr-FR"]': { logo: 'x' } }),
@@ -75,7 +78,11 @@ describe('collect_remote_seed — Kit bucketing × reachability', () => {
 
 	it('wanted = null → everything public seeds, in Kit’s buckets (the pre-gate rule)', async () => {
 		const d = await collect_remote_seed(implicit(), null, { key, skip_value });
-		expect(Object.keys(d.q).sort()).toEqual(['1rczqrp/footerProps/["fr-FR"]', 'bjveep/getGreeting/["lake"]', 'bjveep/getGreeting/["reader"]']);
+		expect(Object.keys(d.q).sort()).toEqual([
+			'1rczqrp/footerProps/["fr-FR"]',
+			'bjveep/getGreeting/["lake"]',
+			'bjveep/getGreeting/["reader"]'
+		]);
 		expect(Object.keys(d.p)).toEqual(['bjveep/getManifesto/[]']);
 		expect(Object.keys(d.l)).toEqual(['bjveep/clock/[]']);
 		expect(Object.keys(d.f)).toEqual(['form-1']); // form outputs keyed by the action id directly
@@ -92,7 +99,10 @@ describe('collect_remote_seed — Kit bucketing × reachability', () => {
 
 	it('wanted = {bjveep} → only that module’s remotes seed — every type of it, every payload; the footer does not', async () => {
 		const d = await collect_remote_seed(implicit(), new Set(['bjveep']), { key, skip_value });
-		expect(Object.keys(d.q).sort()).toEqual(['bjveep/getGreeting/["lake"]', 'bjveep/getGreeting/["reader"]']);
+		expect(Object.keys(d.q).sort()).toEqual([
+			'bjveep/getGreeting/["lake"]',
+			'bjveep/getGreeting/["reader"]'
+		]);
 		expect(Object.keys(d.p)).toEqual(['bjveep/getManifesto/[]']);
 		expect(Object.keys(d.l)).toEqual(['bjveep/clock/[]']);
 		expect(d.q['1rczqrp/footerProps/["fr-FR"]']).toBeUndefined();
@@ -131,7 +141,12 @@ describe('collect_remote_seed — Kit bucketing × reachability', () => {
 	it('a still-PENDING result is omitted (the client fetches it) — a resolved sibling payload still seeds', async () => {
 		const pending = new Promise(() => {});
 		const d = await collect_remote_seed(
-			[remote('bjveep/getGreeting', 'query', { '["slow"]': pending, '["fast"]': Promise.resolve({ ok: 1 }) })],
+			[
+				remote('bjveep/getGreeting', 'query', {
+					'["slow"]': pending,
+					'["fast"]': Promise.resolve({ ok: 1 })
+				})
+			],
 			null,
 			{ key }
 		);
@@ -149,7 +164,12 @@ describe('collect_remote_seed — Kit bucketing × reachability', () => {
 
 	it('a value carrying a BAKED region is skipped (a page-sized render, not data), the rest seeds', async () => {
 		const d = await collect_remote_seed(
-			[remote('docs/page', 'query', { '["a"]': { body: { [BAKED]: true } }, '["b"]': { title: 'b' } })],
+			[
+				remote('docs/page', 'query', {
+					'["a"]': { body: { [BAKED]: true } },
+					'["b"]': { title: 'b' }
+				})
+			],
 			null,
 			{ key, skip_value }
 		);
@@ -167,11 +187,19 @@ describe('collect_remote_seed — Kit bucketing × reachability', () => {
 		for (const type of types) {
 			const entries = [remote(`aaa/one`, type, { '[]': 1 }), remote(`bbb/two`, type, { '[]': 2 })];
 			// lake-only (nothing reachable) → nothing
-			expect(Object.keys((await collect_remote_seed(entries, new Set(), { key }))[bucket_of[type]])).toEqual([]);
+			expect(
+				Object.keys((await collect_remote_seed(entries, new Set(), { key }))[bucket_of[type]])
+			).toEqual([]);
 			// island reaches module aaa only
-			expect(Object.keys((await collect_remote_seed(entries, new Set(['aaa']), { key }))[bucket_of[type]])).toEqual(['aaa/one/[]']);
+			expect(
+				Object.keys(
+					(await collect_remote_seed(entries, new Set(['aaa']), { key }))[bucket_of[type]]
+				)
+			).toEqual(['aaa/one/[]']);
 			// fail-open
-			expect(Object.keys((await collect_remote_seed(entries, null, { key }))[bucket_of[type]]).sort()).toEqual(['aaa/one/[]', 'bbb/two/[]']);
+			expect(
+				Object.keys((await collect_remote_seed(entries, null, { key }))[bucket_of[type]]).sort()
+			).toEqual(['aaa/one/[]', 'bbb/two/[]']);
 		}
 	});
 

@@ -36,7 +36,9 @@ export function data_url_of(page: URL): string {
 	const u = new URL(page.href);
 	u.hash = '';
 	const p = page.pathname;
-	u.pathname = p.endsWith('.html') ? p.slice(0, -5) + '.html__data.json' : (p.endsWith('/') ? p.slice(0, -1) : p) + '/__data.json';
+	u.pathname = p.endsWith('.html')
+		? p.slice(0, -5) + '.html__data.json'
+		: (p.endsWith('/') ? p.slice(0, -1) : p) + '/__data.json';
 	if (p.endsWith('/')) u.searchParams.append('x-sveltekit-trailing-slash', '1');
 	return u.href;
 }
@@ -45,7 +47,11 @@ export function data_url_of(page: URL): string {
  * The page's facts, or a reason they are not available (a redirect, an error, a load that threw,
  * not a Kit data answer). `decoders`: the app's `transport` decoders, as Kit's client uses them.
  */
-export async function look_up_page(page: URL, fetch: Fetch, decoders: Decoders): Promise<PageFacts | { miss: string }> {
+export async function look_up_page(
+	page: URL,
+	fetch: Fetch,
+	decoders: Decoders
+): Promise<PageFacts | { miss: string }> {
 	let res: Response;
 	try {
 		res = await fetch(data_url_of(page), { headers: { [PAGE_FACTS_HEADER]: '1' } });
@@ -78,7 +84,8 @@ export async function look_up_page(page: URL, fetch: Fetch, decoders: Decoders):
 		return stop('the answer is not Kit data');
 	}
 	if (head?.type === 'redirect') return stop(`a load redirected to ${head.location}`);
-	if (head?.type !== 'data' || !Array.isArray(head.nodes)) return stop('the answer is not Kit data');
+	if (head?.type !== 'data' || !Array.isArray(head.nodes))
+		return stop('the answer is not Kit data');
 
 	const deferreds = new Map<number, Deferred>();
 	const revive = (flat: unknown) =>
@@ -107,7 +114,10 @@ export async function look_up_page(page: URL, fetch: Fetch, decoders: Decoders):
 	const named = res.headers.get(PAGE_FACTS_ROUTE_HEADER);
 	if (named) {
 		try {
-			const r = JSON.parse(decodeURIComponent(named)) as { id?: string | null; params?: Record<string, string> };
+			const r = JSON.parse(decodeURIComponent(named)) as {
+				id?: string | null;
+				params?: Record<string, string>;
+			};
 			route = { id: r.id ?? null };
 			params = r.params ?? {};
 		} catch {
@@ -128,7 +138,12 @@ async function settle_streamed(
 	const line = (raw: string) => {
 		if (!raw) return;
 		try {
-			const chunk = JSON.parse(raw) as { type?: string; id?: number; data?: unknown; error?: unknown };
+			const chunk = JSON.parse(raw) as {
+				type?: string;
+				id?: number;
+				data?: unknown;
+				error?: unknown;
+			};
 			if (chunk.type !== 'chunk' || chunk.id === undefined) return;
 			const d = deferreds.get(chunk.id);
 			if (!d) return;

@@ -27,7 +27,10 @@ import { look_up_page, type PageFacts } from './page-facts.ts';
 import { merge_seed_ask, shape_page_data, type SeedAsk, type SeedKeys } from './seed-shape.ts';
 import { PAGE_FACTS_SCRIPT_TYPE } from '../page-facts-script.ts';
 
-type Transport = Record<string, { decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }>;
+type Transport = Record<
+	string,
+	{ decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }
+>;
 
 let warn: ((message: string) => void) | null = null;
 
@@ -38,7 +41,10 @@ export function configure_render_page(o: { warn: ((message: string) => void) | n
 
 /** A request rendering on behalf of a page it is not: the islands endpoint or a remote call. */
 export function renders_for_a_page(event: RequestEvent): boolean {
-	return event.url.pathname.endsWith(islands_endpoint()) || (event as { isRemoteRequest?: boolean }).isRemoteRequest === true;
+	return (
+		event.url.pathname.endsWith(islands_endpoint()) ||
+		(event as { isRemoteRequest?: boolean }).isRemoteRequest === true
+	);
 }
 
 /** The page a request renders for: the same-origin Referer of a request rendering for a page, else
@@ -65,7 +71,11 @@ const facts_of = new WeakMap<Request, PageFacts>();
  * looks up, a hole relies on its tree's build answer). The venue is the request's kind, as Kit and
  * the islands endpoint name it — never whether some per-request state happens to exist.
  */
-export function prepare_render_page(event: RequestEvent | undefined, transport: Transport | undefined, reads_data: boolean | null): Promise<void> | void {
+export function prepare_render_page(
+	event: RequestEvent | undefined,
+	transport: Transport | undefined,
+	reads_data: boolean | null
+): Promise<void> | void {
 	if (!event || !renders_for_a_page(event)) return;
 	if (!(reads_data ?? (event as { isRemoteRequest?: boolean }).isRemoteRequest === true)) return;
 	const request = event.request;
@@ -76,7 +86,10 @@ export function prepare_render_page(event: RequestEvent | undefined, transport: 
 	const decoders: Record<string, (v: unknown) => unknown> = {};
 	for (const name in transport ?? {}) decoders[name] = transport![name].decode;
 	const p = look_up_page(page, event.fetch, decoders).then((facts) => {
-		if ('miss' in facts) warn?.(`[ogygia] ${page.pathname}: the page's data for a render outside it is unavailable: ${facts.miss}. The render sees an empty page.data.`);
+		if ('miss' in facts)
+			warn?.(
+				`[ogygia] ${page.pathname}: the page's data for a render outside it is unavailable: ${facts.miss}. The render sees an empty page.data.`
+			);
 		else facts_of.set(request, facts);
 	});
 	looked_up.set(request, p);
@@ -87,7 +100,10 @@ export function prepare_render_page(event: RequestEvent | undefined, transport: 
  * The page a render sees. `snapshot`: what this request's page render recorded, if anything. `null`
  * when there is neither a snapshot nor a request (a render off-request: the caller's empty page).
  */
-export function render_page(snapshot: PageSnapshot | undefined, event: RequestEvent | undefined): KitPage | null {
+export function render_page(
+	snapshot: PageSnapshot | undefined,
+	event: RequestEvent | undefined
+): KitPage | null {
 	if (!snapshot && !event) return null;
 	if (event && renders_for_a_page(event)) {
 		// FOR A PAGE: the Referer's page — its looked-up facts, else its url alone
@@ -118,7 +134,15 @@ export function render_page(snapshot: PageSnapshot | undefined, event: RequestEv
 }
 
 /** Reads a component makes without meaning a page key (Svelte, devalue, a thenable check). */
-const NOT_A_KEY = new Set(['then', 'toJSON', 'constructor', 'valueOf', 'toString', '$$typeof', 'nodeType']);
+const NOT_A_KEY = new Set([
+	'then',
+	'toJSON',
+	'constructor',
+	'valueOf',
+	'toString',
+	'$$typeof',
+	'nodeType'
+]);
 const warned_keys = new WeakMap<PageFacts, Set<string>>();
 
 /**
@@ -155,7 +179,10 @@ const versions = new WeakMap<Request, string>();
  * answer it has. The version of this request's page: its looked-up facts (a render for a page) or
  * its recorded snapshot (in the page) — hashed once per request; `''` when there is no data.
  */
-export function render_page_version(event: RequestEvent | undefined, snapshot: PageSnapshot | undefined): string {
+export function render_page_version(
+	event: RequestEvent | undefined,
+	snapshot: PageSnapshot | undefined
+): string {
 	if (!event) return '';
 	const known = versions.get(event.request);
 	if (known !== undefined) return known;
@@ -205,7 +232,10 @@ export function note_render_page_ask(event: RequestEvent, seed: SeedAsk): boolea
  * them into the page store: seeds.ts). `''` when no island in it reads the page, the page was not
  * looked up, or a value does not serialize (a still-streaming promise).
  */
-export function render_page_facts_script(event: RequestEvent | undefined, transport: Transport | undefined): string {
+export function render_page_facts_script(
+	event: RequestEvent | undefined,
+	transport: Transport | undefined
+): string {
 	if (!event || !renders_for_a_page(event)) return '';
 	const facts = facts_of.get(event.request);
 	const keys = asks_of.get(event.request);

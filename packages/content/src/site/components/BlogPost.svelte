@@ -32,7 +32,9 @@
 	const doc_title = $derived(shell?.title ? `${title} — ${shell.title}` : title);
 	const iso = $derived(data.date ?? '');
 	const pretty = $derived(
-		iso ? new Date(iso).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
+		iso
+			? new Date(iso).toLocaleDateString('en', { year: 'numeric', month: 'long', day: 'numeric' })
+			: ''
 	);
 	const prev = $derived(view.trail.prev);
 	const next = $derived(view.trail.next);
@@ -51,7 +53,9 @@
 	<header class="og-post-head">
 		<div class="og-post-dateline">
 			{#if pretty}<time datetime={iso}>{pretty}</time>{/if}
-			{#if data.author}<span class="og-post-sep">·</span><span class="og-post-author">{data.author}</span>{/if}
+			{#if data.author}<span class="og-post-sep">·</span><span class="og-post-author"
+					>{data.author}</span
+				>{/if}
 		</div>
 		<h1 class="og-post-title">{title}</h1>
 		{#if data.summary}<p class="og-post-summary">{data.summary}</p>{/if}
@@ -169,7 +173,9 @@
 		border-radius: 12px;
 		text-decoration: none;
 		color: var(--og-text);
-		transition: border-color 0.15s ease, background 0.15s ease;
+		transition:
+			border-color 0.15s ease,
+			background 0.15s ease;
 	}
 	.og-post-pager-link:hover {
 		border-color: var(--og-accent);

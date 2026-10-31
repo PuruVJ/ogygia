@@ -18,21 +18,21 @@ One envelope means one way to hydrate, one way to sign, one way to pass props, a
 
 Two independent dials configure a region. You set them as import attributes:
 
-| Dial | Question it answers | Values |
-| --- | --- | --- |
-| `render` | Where does the HTML come from, and when? | inline in the SSR pass of the page (default) · `'deferred'`: fetched from a signed endpoint on each request |
-| `wake` | Does this ship client JS, and when does it run? | none (default, HTML only) · `'load'` · `'idle'` · `'visible'` · `'interaction'` · a media query · `'none'` (frozen by intent) |
+| Dial     | Question it answers                             | Values                                                                                                                        |
+| -------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `render` | Where does the HTML come from, and when?        | inline in the SSR pass of the page (default) · `'deferred'`: fetched from a signed endpoint on each request                   |
+| `wake`   | Does this ship client JS, and when does it run? | none (default, HTML only) · `'load'` · `'idle'` · `'visible'` · `'interaction'` · a media query · `'none'` (frozen by intent) |
 
 Each combination is legal. Each named kind is one point in that grid:
 
 ## The kinds
 
-| Kind | Mark | What it is |
-| --- | --- | --- |
-| [Client island](/docs/regions/client-islands) | `with { wake: 'visible' }` | SSRs inline. Hydrates on a schedule. The interactive one. |
+| Kind                                          | Mark                          | What it is                                                                                                                      |
+| --------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| [Client island](/docs/regions/client-islands) | `with { wake: 'visible' }`    | SSRs inline. Hydrates on a schedule. The interactive one.                                                                       |
 | [Server island](/docs/regions/server-islands) | `with { render: 'deferred' }` | HTML rendered on each fetch from a signed endpoint. Fresh on each request. Streams into a static shell. Can wake after arrival. |
-| [Lake](/docs/regions/lakes) | `with { wake: 'none' }` | Frozen server HTML. Ships zero JS. Continues unchanged through SPA swaps. |
-| [Held region](/docs/regions/held-regions) | `region(Comp, props)` | A region as a **value**: made in a load or a remote function, sent over the wire, placed with `<Region of={value} />`. |
+| [Lake](/docs/regions/lakes)                   | `with { wake: 'none' }`       | Frozen server HTML. Ships zero JS. Continues unchanged through SPA swaps.                                                       |
+| [Held region](/docs/regions/held-regions)     | `region(Comp, props)`         | A region as a **value**: made in a load or a remote function, sent over the wire, placed with `<Region of={value} />`.          |
 
 Unmarked markup is not a region. It is plain server HTML compiled into the page. That is the default, and the least costly thing on the site.
 
@@ -56,4 +56,4 @@ From here, read the kind you need. Or start with [client islands](/docs/regions/
 
 ---
 
-*Next chapter: an island alone cannot reach the server. [Remote functions](/docs/data-state/remote-functions) give it a way.*
+_Next chapter: an island alone cannot reach the server. [Remote functions](/docs/data-state/remote-functions) give it a way._

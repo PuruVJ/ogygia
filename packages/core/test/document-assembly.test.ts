@@ -21,7 +21,10 @@ describe('locate', () => {
 	});
 
 	it('reports -1 for a chunk without the point (streamed head / body chunks)', () => {
-		expect(locate('<html><head><title>t</title></head><body><p>')).toEqual({ head_end: 28, body_end: -1 });
+		expect(locate('<html><head><title>t</title></head><body><p>')).toEqual({
+			head_end: 28,
+			body_end: -1
+		});
 		expect(locate('<p>more</p></body></html>')).toEqual({ head_end: -1, body_end: 11 });
 		expect(locate('<p>middle</p>')).toEqual({ head_end: -1, body_end: -1 });
 	});
@@ -48,10 +51,15 @@ describe('assemble', () => {
 	});
 
 	it('swaps in a rewritten head slice (the deduped head) without touching the body', () => {
-		const html = doc('<p>body</p>', '<link rel="stylesheet" href="/a"><link rel="stylesheet" href="/a">');
+		const html = doc(
+			'<p>body</p>',
+			'<link rel="stylesheet" href="/a"><link rel="stylesheet" href="/a">'
+		);
 		const spans = locate(html);
 		const head = '<!doctype html><html><head><link rel="stylesheet" href="/a">';
-		expect(assemble(html, spans, head, '', '')).toBe(head + '</head><body><p>body</p></body></html>');
+		expect(assemble(html, spans, head, '', '')).toBe(
+			head + '</head><body><p>body</p></body></html>'
+		);
 	});
 
 	it('drops the body injection on a chunk with no </body> (streamed head chunk)', () => {
@@ -107,7 +115,10 @@ describe('budget on a multi-MB document', () => {
 		const originals = Object.fromEntries(banned.map((k) => [k, String.prototype[k]]));
 		const hits: string[] = [];
 		for (const k of banned) {
-			(String.prototype as unknown as Record<string, unknown>)[k] = function (this: string, ...args: unknown[]) {
+			(String.prototype as unknown as Record<string, unknown>)[k] = function (
+				this: string,
+				...args: unknown[]
+			) {
 				if (this.length > 1_000_000) hits.push(k);
 				return (originals[k] as (...a: unknown[]) => unknown).apply(this, args);
 			};
@@ -116,20 +127,25 @@ describe('budget on a multi-MB document', () => {
 			const out = assemble(big, locate(big), null, '<meta name="h">', '<script>b</script>');
 			expect(out.length).toBe(big.length + '<meta name="h">'.length + '<script>b</script>'.length);
 		} finally {
-			for (const k of banned) (String.prototype as unknown as Record<string, unknown>)[k] = originals[k];
+			for (const k of banned)
+				(String.prototype as unknown as Record<string, unknown>)[k] = originals[k];
 		}
 		expect(hits).toEqual([]);
 	});
 
 	it('the csr probe reads only the last 64 KB before </body>, not the document', () => {
 		// Kit's boot sits at the end of the body — a bootstrap 3 MB up the page is not Kit's.
-		const early = doc('<script>var __sveltekit_x = 1;</script>' + '<i>' + 'y'.repeat(3_000_000) + '</i>');
+		const early = doc(
+			'<script>var __sveltekit_x = 1;</script>' + '<i>' + 'y'.repeat(3_000_000) + '</i>'
+		);
 		expect(html_has_kit_bootstrap(early, locate(early).body_end)).toBe(false);
 		const late = doc('<i>' + 'y'.repeat(3_000_000) + '</i><script>var __sveltekit_x = 1;</script>');
 		expect(html_has_kit_bootstrap(late, locate(late).body_end)).toBe(true);
 		// …and a side-channel payload inside the window still never counts (P0).
 		const reflected = doc(
-			'<i>' + 'y'.repeat(3_000_000) + '</i><script type="application/ogygia-page">{"u":"?q=__sveltekit_x="}</script>'
+			'<i>' +
+				'y'.repeat(3_000_000) +
+				'</i><script type="application/ogygia-page">{"u":"?q=__sveltekit_x="}</script>'
 		);
 		expect(html_has_kit_bootstrap(reflected, locate(reflected).body_end)).toBe(false);
 	});

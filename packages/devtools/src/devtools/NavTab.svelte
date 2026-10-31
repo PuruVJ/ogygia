@@ -65,7 +65,9 @@
 	});
 </script>
 
-<div class="cap">nav lab <span class="muted">· the last SPA navigation's per-island decisions</span></div>
+<div class="cap">
+	nav lab <span class="muted">· the last SPA navigation's per-island decisions</span>
+</div>
 
 {#if !model.hasNav}
 	<div class="muted">no navigation yet — click a link (SPA nav) and reopen this tab.</div>
@@ -82,8 +84,14 @@
 
 	<div class="counts">
 		{#each ORDER as name}
-			<span class="chip" class:zero={!model.counts[name]} style:--c={DECISION[name].c} title={DECISION[name].help}>
-				{name} {model.counts[name]}
+			<span
+				class="chip"
+				class:zero={!model.counts[name]}
+				style:--c={DECISION[name].c}
+				title={DECISION[name].help}
+			>
+				{name}
+				{model.counts[name]}
 			</span>
 		{/each}
 	</div>
@@ -107,7 +115,9 @@
 			</tbody>
 		</table>
 	{:else}
-		<div class="muted">this nav was a full swap (no per-region diff) — decisions only exist on the reconcile path.</div>
+		<div class="muted">
+			this nav was a full swap (no per-region diff) — decisions only exist on the reconcile path.
+		</div>
 	{/if}
 
 	<div class="sec">recent navigations</div>
@@ -115,7 +125,11 @@
 		<thead><tr><th>to</th><th>ms</th><th>path</th></tr></thead>
 		<tbody>
 			{#each model.history as h (h.seq)}
-				<tr><td class="nm">{h.to}</td><td>{h.ms.toFixed(1)}</td><td>{h.reconciled ? 'reconciled' : 'full swap'}</td></tr>
+				<tr
+					><td class="nm">{h.to}</td><td>{h.ms.toFixed(1)}</td><td
+						>{h.reconciled ? 'reconciled' : 'full swap'}</td
+					></tr
+				>
 			{/each}
 		</tbody>
 	</table>

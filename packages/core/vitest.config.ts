@@ -30,28 +30,66 @@ export default defineConfig({
 			'$app/state': fileURLToPath(new URL('./test/_stubs/app-state.ts', import.meta.url)),
 			'$app/paths': fileURLToPath(new URL('./test/_stubs/app-paths.ts', import.meta.url)),
 			'$app/env': fileURLToPath(new URL('./test/_stubs/app-env.ts', import.meta.url)),
-			'virtual:ogygia/runtime-url': fileURLToPath(new URL('./test/_stubs/virtual-runtime-url.ts', import.meta.url)),
-			'virtual:ogygia/router-config': fileURLToPath(new URL('./test/_stubs/virtual-router-config.ts', import.meta.url)),
-			'virtual:ogygia/profiler-config': fileURLToPath(new URL('./test/_stubs/virtual-profiler-config.ts', import.meta.url)),
-			'virtual:ogygia/profiler-maps': fileURLToPath(new URL('./test/_stubs/virtual-profiler-maps.ts', import.meta.url)),
-			'virtual:ogygia/dev-hmr-url': fileURLToPath(new URL('./test/_stubs/virtual-dev-hmr-url.ts', import.meta.url)),
-			'virtual:ogygia/island-deps': fileURLToPath(new URL('./test/_stubs/virtual-island-deps.ts', import.meta.url)),
-			'virtual:ogygia/devtools-meta': fileURLToPath(new URL('./test/_stubs/virtual-devtools-meta.ts', import.meta.url)),
-			'virtual:ogygia/hydrate-features': fileURLToPath(new URL('./test/_stubs/virtual-hydrate-features.ts', import.meta.url)),
-			'virtual:ogygia/transportables': fileURLToPath(new URL('./test/_stubs/virtual-transportables.ts', import.meta.url)),
-			'virtual:ogygia/kit-wire': fileURLToPath(new URL('./test/_stubs/virtual-kit-wire.ts', import.meta.url)),
-			'virtual:ogygia/region-endpoint': fileURLToPath(new URL('./test/_stubs/virtual-region-endpoint.ts', import.meta.url)),
-			'virtual:ogygia/request-event': fileURLToPath(new URL('./test/_stubs/virtual-request-event.ts', import.meta.url)),
-			'virtual:ogygia/route-csr': fileURLToPath(new URL('./test/_stubs/virtual-route-csr.ts', import.meta.url)),
+			'virtual:ogygia/runtime-url': fileURLToPath(
+				new URL('./test/_stubs/virtual-runtime-url.ts', import.meta.url)
+			),
+			'virtual:ogygia/router-config': fileURLToPath(
+				new URL('./test/_stubs/virtual-router-config.ts', import.meta.url)
+			),
+			'virtual:ogygia/profiler-config': fileURLToPath(
+				new URL('./test/_stubs/virtual-profiler-config.ts', import.meta.url)
+			),
+			'virtual:ogygia/profiler-maps': fileURLToPath(
+				new URL('./test/_stubs/virtual-profiler-maps.ts', import.meta.url)
+			),
+			'virtual:ogygia/dev-hmr-url': fileURLToPath(
+				new URL('./test/_stubs/virtual-dev-hmr-url.ts', import.meta.url)
+			),
+			'virtual:ogygia/island-deps': fileURLToPath(
+				new URL('./test/_stubs/virtual-island-deps.ts', import.meta.url)
+			),
+			'virtual:ogygia/devtools-meta': fileURLToPath(
+				new URL('./test/_stubs/virtual-devtools-meta.ts', import.meta.url)
+			),
+			'virtual:ogygia/hydrate-features': fileURLToPath(
+				new URL('./test/_stubs/virtual-hydrate-features.ts', import.meta.url)
+			),
+			'virtual:ogygia/transportables': fileURLToPath(
+				new URL('./test/_stubs/virtual-transportables.ts', import.meta.url)
+			),
+			'virtual:ogygia/kit-wire': fileURLToPath(
+				new URL('./test/_stubs/virtual-kit-wire.ts', import.meta.url)
+			),
+			'virtual:ogygia/region-endpoint': fileURLToPath(
+				new URL('./test/_stubs/virtual-region-endpoint.ts', import.meta.url)
+			),
+			'virtual:ogygia/request-event': fileURLToPath(
+				new URL('./test/_stubs/virtual-request-event.ts', import.meta.url)
+			),
+			'virtual:ogygia/route-csr': fileURLToPath(
+				new URL('./test/_stubs/virtual-route-csr.ts', import.meta.url)
+			),
 			// The server graph `ogygia/internal/server` loads (the region signer) — reached by the
 			// profiler's modules (packages/devtools) a suite here imports.
-			'virtual:ogygia/secret': fileURLToPath(new URL('./test/_stubs/virtual-secret.ts', import.meta.url)),
-			'virtual:ogygia/sign': fileURLToPath(new URL('./test/_stubs/virtual-sign.ts', import.meta.url)),
-			'virtual:ogygia/session-cookie': fileURLToPath(new URL('./test/_stubs/virtual-session-cookie.ts', import.meta.url)),
-			'virtual:ogygia/region-ttl': fileURLToPath(new URL('./test/_stubs/virtual-region-ttl.ts', import.meta.url)),
-			'virtual:ogygia/server-manifest': fileURLToPath(new URL('./test/_stubs/virtual-server-manifest.ts', import.meta.url)),
+			'virtual:ogygia/secret': fileURLToPath(
+				new URL('./test/_stubs/virtual-secret.ts', import.meta.url)
+			),
+			'virtual:ogygia/sign': fileURLToPath(
+				new URL('./test/_stubs/virtual-sign.ts', import.meta.url)
+			),
+			'virtual:ogygia/session-cookie': fileURLToPath(
+				new URL('./test/_stubs/virtual-session-cookie.ts', import.meta.url)
+			),
+			'virtual:ogygia/region-ttl': fileURLToPath(
+				new URL('./test/_stubs/virtual-region-ttl.ts', import.meta.url)
+			),
+			'virtual:ogygia/server-manifest': fileURLToPath(
+				new URL('./test/_stubs/virtual-server-manifest.ts', import.meta.url)
+			),
 			// The browser runtime (`runtime/core.ts` → `app-transport.ts`) reads the app's transport codecs.
-			'virtual:ogygia/transport': fileURLToPath(new URL('./test/_stubs/virtual-transport.ts', import.meta.url))
+			'virtual:ogygia/transport': fileURLToPath(
+				new URL('./test/_stubs/virtual-transport.ts', import.meta.url)
+			)
 		}
 	},
 	test: {

@@ -14,7 +14,7 @@ describe('handle_parts: the handle functions a hooks file borrows from other mod
 			"import { redirect, type Handle } from '@sveltejs/kit';",
 			"import { handle as ogygiaHandle } from 'ogygia/server';",
 			"import { ds_ssr } from '$lib/hell/ds-ssr';",
-			"import {",
+			'import {',
 			'\tguard as authGuard,',
 			'\tother',
 			"} from './auth.js';",
@@ -42,16 +42,41 @@ describe('handle_parts: the handle functions a hooks file borrows from other mod
 
 	it('the phase: that function in its own file reads as hooks, the same name elsewhere does not', () => {
 		const hooks = new Map([['ds_ssr', 'ds-ssr']]);
-		const leaf = { name: '(anonymous)', url: '/app/src/lib/hell/ds-ssr.ts', line: 62, category: 'app' as const };
-		const root = { name: 'ds_ssr', url: '/app/src/lib/hell/ds-ssr.ts', line: 214, category: 'app' as const };
+		const leaf = {
+			name: '(anonymous)',
+			url: '/app/src/lib/hell/ds-ssr.ts',
+			line: 62,
+			category: 'app' as const
+		};
+		const root = {
+			name: 'ds_ssr',
+			url: '/app/src/lib/hell/ds-ssr.ts',
+			line: 214,
+			category: 'app' as const
+		};
 		expect(phase_of_stack([leaf, root], hooks)).toBe('hooks');
 		expect(phase_of_stack([leaf, root])).toBe('other');
 		expect(phase_of_stack([{ ...root, url: '/app/src/lib/my-ds-ssr.ts' }], hooks)).toBe('other');
 		// after an await the stack roots at the function that resumed, not the handle: its file says it
-		const resumed = { name: 'processDsTags', url: '/app/src/lib/hell/ds-ssr.ts', line: 35, category: 'app' as const };
-		const span = { name: 'span', url: '/app/node_modules/ogygia/dist/profiler/span.js', line: 103, category: 'dependency' as const };
+		const resumed = {
+			name: 'processDsTags',
+			url: '/app/src/lib/hell/ds-ssr.ts',
+			line: 35,
+			category: 'app' as const
+		};
+		const span = {
+			name: 'span',
+			url: '/app/node_modules/ogygia/dist/profiler/span.js',
+			line: 103,
+			category: 'dependency' as const
+		};
 		expect(phase_of_stack([leaf, span, resumed], hooks)).toBe('hooks');
 		// a component under the hook is still render: the deepest frame decides
-		expect(phase_of_stack([{ name: 'Card', url: '/app/src/Card.svelte', line: 1, category: 'component' }, root], hooks)).toBe('render');
+		expect(
+			phase_of_stack(
+				[{ name: 'Card', url: '/app/src/Card.svelte', line: 1, category: 'component' }, root],
+				hooks
+			)
+		).toBe('render');
 	});
 });

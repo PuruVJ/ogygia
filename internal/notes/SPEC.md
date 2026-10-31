@@ -5,6 +5,7 @@
 Astro-style islands in SvelteKit, delivered as a **library** (`packages/sk-islands`) + a **playground** Kit app proving it. Real, working, verified code — no hand-waving.
 
 Requirements:
+
 1. Islands **SSR** (full HTML present before any JS runs).
 2. Page shell ships **zero Kit JS** (`csr = false`). Only islands hydrate.
 3. Hydration strategies: `load`, `visible` (IntersectionObserver), `media` (matchMedia), `idle` (bonus).
@@ -36,7 +37,7 @@ Requirements:
 
 Use pnpm. Published deps: `@sveltejs/kit@^2.70.2`, `svelte@^5.56.8`, `@sveltejs/vite-plugin-svelte` latest, `vite` latest compatible, `@sveltejs/adapter-node` (need a real server for remote functions), `devalue`.
 
-Playground config: `compilerOptions.experimental.async = true` in svelte.config.js; `kit.experimental.remoteFunctions = true` (verify exact flag name/shape against the *installed* node_modules/@sveltejs/kit, not the v3 clone). Root `+layout.server.js` or per-page `export const csr = false;`.
+Playground config: `compilerOptions.experimental.async = true` in svelte.config.js; `kit.experimental.remoteFunctions = true` (verify exact flag name/shape against the _installed_ node_modules/@sveltejs/kit, not the v3 clone). Root `+layout.server.js` or per-page `export const csr = false;`.
 
 ## Architecture
 
@@ -46,7 +47,7 @@ For every `.svelte` file under the app root that references `Island` imported fr
 
 1. Parse with `svelte.parse(source, { modern: true })` (import from `svelte/compiler` — handles TS expressions when `lang="ts"`).
 2. Find `<Island ...>` component nodes. For each, take the **exact source text** of its children (magic-string slice — preserves everything: components, snippets, each blocks, text).
-3. **Free-variable analysis** on that subtree: walk all expression nodes (estree-walker over the template AST's expressions + any snippet bodies), collect referenced identifiers, subtract identifiers bound *within* the subtree (snippet params, `{#each}` locals, `{@const}`, `{#await}` value). Classify the remaining free identifiers:
+3. **Free-variable analysis** on that subtree: walk all expression nodes (estree-walker over the template AST's expressions + any snippet bodies), collect referenced identifiers, subtract identifiers bound _within_ the subtree (snippet params, `{#each}` locals, `{@const}`, `{#await}` value). Classify the remaining free identifiers:
    - Resolves to an **import declaration** in the host file → copy that import into the virtual module (do NOT serialize).
    - JS globals (`console`, `Math`, `JSON`, `Date`, `window`, `fetch`, `undefined`, etc. — use a sane allowlist / `identifier in globalThis` at build time) → leave alone.
    - Anything else (host `<script>` vars, template-scope vars like an outer `{#each}` local) → **captured prop**. These get serialized per-instance.
@@ -66,6 +67,7 @@ For every `.svelte` file under the app root that references `Island` imported fr
    and prepend `import __SkIsland_0 from '<virtual island id>';` to the host script.
 
 Virtual `.svelte` module mechanics (sharp edges — solve them, empirically):
+
 - The id must end in `.svelte` so `vite-plugin-svelte` compiles it. `\0`-prefixed ids may be excluded by vite-plugin-svelte's filter. If a plain `virtual:` id doesn't get compiled, fall back to resolving to a fake real-looking path (e.g. `<hostDir>/__sk-island__/abc123.svelte`) served from your `load` hook (enforce-pre wins over vite's fs loader). Verify whichever works in BOTH dev and build, for BOTH the client and SSR environments.
 - Copied relative imports must resolve: implement `resolveId(source, importer)` — when importer is one of your virtual modules, delegate to `this.resolve(source, hostFilePath, { skipSelf: true })`.
 - Preprocessors (vitePreprocess) must apply to virtual modules — they should flow through vite-plugin-svelte's normal pipeline.
@@ -73,6 +75,7 @@ Virtual `.svelte` module mechanics (sharp edges — solve them, empirically):
 ### 2. `Island.svelte` (SSR-focused component exported by the library)
 
 Renders:
+
 ```svelte
 <sk-island data-entry={__entry} data-strategy={strategy} data-media={media}>
   <__component {...__props} />          <!-- real SSR of the island content -->
@@ -80,6 +83,7 @@ Renders:
 </sk-island>
 <script type="module" src={runtimeUrl}></script>
 ```
+
 - Strategy props: `load` (default), `visible` (true or a rootMargin string), `idle`, `media="(query)"`.
 - `devalue.stringify` the props; escape `<` as `<` (script-injection safety; mirror what Kit does).
 - The `<script type="module">` tag is emitted **per island** — browsers dedupe module loads by URL, so duplicates are harmless. Prefix URL with Kit's `assets`/`base` from `$app/paths`.
@@ -97,6 +101,7 @@ Renders:
 ### 4. SPA router (`<OgygiaRouter />`; Astro ClientRouter equivalent)
 
 Small client module (can live in the same runtime chunk):
+
 - Intercept same-origin `<a>` clicks (skip modified clicks, `target`, `download`, `rel=external`, `data-no-spa`).
 - `fetch(href)` → `DOMParser` → swap `document.body`, merge `<head>` (diff by `outerHTML`: remove page-specific stale nodes, add new ones — careful with stylesheets in dev vs build, and keep the runtime script alive), update `document.title`.
 - Wrap the swap in `document.startViewTransition` when available.

@@ -31,7 +31,8 @@ const BUILD_PORT = 3091;
 const DEV_PORT = 3092;
 const COPY_SKIP_RE = /node_modules|\.svelte-kit|(^|\/)build($|\/)/;
 // a stable signing key, so the build and the server agree (CI sets its own)
-const SECRET = process.env.OGYGIA_SECRET ?? '3f9a2b7c1e5d8046af62c93b1d7e4058a6c2f19b3e8d70425c9a1f6b8d3e07c4';
+const SECRET =
+	process.env.OGYGIA_SECRET ?? '3f9a2b7c1e5d8046af62c93b1d7e4058a6c2f19b3e8d70425c9a1f6b8d3e07c4';
 // adapter-node 6 takes the request's protocol from a header (default https): the test server is http
 const PROTO = { 'x-forwarded-proto': 'http' };
 
@@ -55,7 +56,9 @@ function prepare(): void {
 	});
 	for (const dep of ['ogygia', 'vite', '@sveltejs/kit'])
 		expect(existsSync(join(APP, 'node_modules', dep)), `installed ${dep}`).toBe(true);
-	const kit = JSON.parse(readFileSync(join(APP, 'node_modules/@sveltejs/kit/package.json'), 'utf8'));
+	const kit = JSON.parse(
+		readFileSync(join(APP, 'node_modules/@sveltejs/kit/package.json'), 'utf8')
+	);
 	expect(kit.version.startsWith('3.'), `Kit 3 installed (got ${kit.version})`).toBe(true);
 }
 
@@ -69,10 +72,15 @@ async function exercise(page: Page, base: string, path: string, kit_page: boolea
 	await page.goto(base + path, { waitUntil: 'networkidle' });
 	await sleep(500);
 	const at = `${path}:`;
-	check(`${at} every island in the lake hydrated`, (await page.locator('ogygia-region[data-hydrated]').count()) === 5);
+	check(
+		`${at} every island in the lake hydrated`,
+		(await page.locator('ogygia-region[data-hydrated]').count()) === 5
+	);
 	check(
 		`${at} the kit-page thread is ${kit_page ? 'set' : 'absent'}`,
-		(await page.evaluate(() => !!(globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.kit-page')])) === kit_page
+		(await page.evaluate(
+			() => !!(globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.kit-page')]
+		)) === kit_page
 	);
 	check(`${at} the island reads this page`, (await page.textContent('[data-probe-path]')) === path);
 	check(`${at} the hole filled`, (await page.locator('[data-hole-greeting]').count()) === 1);
@@ -81,7 +89,10 @@ async function exercise(page: Page, base: string, path: string, kit_page: boolea
 	check(`${at} island interactive`, (await page.textContent('[data-counter]')) === 'count 1');
 
 	// a custom transport type as a remote ARGUMENT, re-sent from the browser
-	check(`${at} custom-type query argument (SSR)`, (await page.textContent('[data-point-sum]')) === '5');
+	check(
+		`${at} custom-type query argument (SSR)`,
+		(await page.textContent('[data-point-sum]')) === '5'
+	);
 	await page.click('[data-point-bump]');
 	await expect.poll(() => page.textContent('[data-point-sum]')).toBe('6');
 
@@ -92,12 +103,18 @@ async function exercise(page: Page, base: string, path: string, kit_page: boolea
 	await page.fill('[data-item-input]', text);
 	await page.click('[data-item-submit]');
 	await expect.poll(() => page.locator('[data-items] li').allTextContents()).toContain(text);
-	check(`${at} the form refreshed the query (one more item)`, (await page.locator('[data-items] li').count()) === before + 1);
+	check(
+		`${at} the form refreshed the query (one more item)`,
+		(await page.locator('[data-items] li').count()) === before + 1
+	);
 	check(`${at} the submit did not reload the page`, (await document_stamp(page)) === stamp);
 
 	if (kit_page) {
 		await page.click('[data-kit-btn]');
-		check(`${at} Kit's own client is alive next to the lake`, (await page.textContent('[data-kit-btn]')) === 'kit:1');
+		check(
+			`${at} Kit's own client is alive next to the lake`,
+			(await page.textContent('[data-kit-btn]')) === 'kit:1'
+		);
 	}
 	check(`${at} no errors or warnings`, errs.length === 0, errs.slice(0, 3).join(' | '));
 }
@@ -109,7 +126,9 @@ test.describe('SvelteKit 3: build + dev on the packed ogygia (self-building fixt
 		prepare();
 	});
 
-	test('production build: builds, islands hydrate on csr=false and csr=true pages, remote form refreshes', async ({ browser }) => {
+	test('production build: builds, islands hydrate on csr=false and csr=true pages, remote form refreshes', async ({
+		browser
+	}) => {
 		test.setTimeout(5 * 60_000);
 		const env = { ...process.env, OGYGIA_SECRET: SECRET };
 		expect(run('pnpm', ['run', 'build'], { cwd: APP, env }), 'Kit 3 production build').toBe(true);
@@ -120,7 +139,12 @@ test.describe('SvelteKit 3: build + dev on the packed ogygia (self-building fixt
 				cmd: 'node',
 				args: ['build/index.js'],
 				cwd: APP,
-				env: { PORT: String(BUILD_PORT), HOST: '127.0.0.1', PROTOCOL_HEADER: 'x-forwarded-proto', OGYGIA_SECRET: SECRET },
+				env: {
+					PORT: String(BUILD_PORT),
+					HOST: '127.0.0.1',
+					PROTOCOL_HEADER: 'x-forwarded-proto',
+					OGYGIA_SECRET: SECRET
+				},
 				url: base + '/'
 			});
 			const context = await browser.newContext({ extraHTTPHeaders: PROTO });
@@ -132,14 +156,24 @@ test.describe('SvelteKit 3: build + dev on the packed ogygia (self-building fixt
 		}
 	});
 
-	test('dev: islands hydrate on csr=false and csr=true pages, remote form refreshes', async ({ browser }) => {
+	test('dev: islands hydrate on csr=false and csr=true pages, remote form refreshes', async ({
+		browser
+	}) => {
 		test.setTimeout(5 * 60_000);
 		const base = `http://127.0.0.1:${DEV_PORT}`;
 		let srv: SpawnedServer | undefined;
 		try {
 			srv = await spawn_server({
 				cmd: 'node',
-				args: ['node_modules/vite/bin/vite.js', 'dev', '--host', '127.0.0.1', '--port', String(DEV_PORT), '--strictPort'],
+				args: [
+					'node_modules/vite/bin/vite.js',
+					'dev',
+					'--host',
+					'127.0.0.1',
+					'--port',
+					String(DEV_PORT),
+					'--strictPort'
+				],
 				cwd: APP,
 				env: { OGYGIA_SECRET: SECRET },
 				url: base + '/',

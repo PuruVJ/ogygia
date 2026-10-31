@@ -33,12 +33,24 @@ test.describe('SPA navigation accessibility', () => {
 		const ann = await page.evaluate(() => {
 			const el = document.querySelector('[data-ogygia-announcer]');
 			return el
-				? { live: el.getAttribute('aria-live'), atomic: el.getAttribute('aria-atomic'), text: el.textContent }
+				? {
+						live: el.getAttribute('aria-live'),
+						atomic: el.getAttribute('aria-atomic'),
+						text: el.textContent
+					}
 				: null;
 		});
 		const title = await page.title();
-		check('announcer exists as an assertive+atomic live region', !!ann && ann.live === 'assertive' && ann.atomic === 'true', JSON.stringify(ann));
-		check('announcer speaks the new page label (its title)', !!ann && !!ann.text && ann.text === (title || '/about'), `text=${ann?.text} title=${title}`);
+		check(
+			'announcer exists as an assertive+atomic live region',
+			!!ann && ann.live === 'assertive' && ann.atomic === 'true',
+			JSON.stringify(ann)
+		);
+		check(
+			'announcer speaks the new page label (its title)',
+			!!ann && !!ann.text && ann.text === (title || '/about'),
+			`text=${ann?.text} title=${title}`
+		);
 
 		// Focus reset to <body> — a keyboard/AT user starts at the top of the new page.
 		const active = await page.evaluate(() => document.activeElement?.tagName);
@@ -48,7 +60,9 @@ test.describe('SPA navigation accessibility', () => {
 		await page.click('nav a[href="/data"]');
 		await page.waitForFunction(() => location.pathname === '/data', { timeout: 8000 });
 		await sleep(120);
-		const count = await page.evaluate(() => document.querySelectorAll('[data-ogygia-announcer]').length);
+		const count = await page.evaluate(
+			() => document.querySelectorAll('[data-ogygia-announcer]').length
+		);
 		check('exactly one announcer node after a second nav', count === 1, `count=${count}`);
 	});
 
@@ -74,6 +88,10 @@ test.describe('SPA navigation accessibility', () => {
 		await page.waitForFunction(() => location.pathname === '/about', { timeout: 8000 });
 		await sleep(120);
 		const focusedId = await page.evaluate(() => document.activeElement?.id);
-		check('focus landed on the #hash target element', focusedId === 'about-heading', String(focusedId));
+		check(
+			'focus landed on the #hash target element',
+			focusedId === 'about-heading',
+			String(focusedId)
+		);
 	});
 });

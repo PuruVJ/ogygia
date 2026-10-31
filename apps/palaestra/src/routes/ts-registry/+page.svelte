@@ -13,10 +13,14 @@
 	const AsRegionTicker = registry[2].component as Component<Record<string, unknown>>;
 </script>
 
-<h1 data-static-shell>.ts registry — wake import, raw region, and asRegion of a named barrel import</h1>
+<h1 data-static-shell>
+	.ts registry — wake import, raw region, and asRegion of a named barrel import
+</h1>
 
 <!-- held raw region, given a wake schedule at the call → hydrates on load -->
-<Region of={region(rawDescriptor, { start: 3, label: 'Ts registry raw' }, () => ({ wake: 'load' }))} />
+<Region
+	of={region(rawDescriptor, { start: 3, label: 'Ts registry raw' }, () => ({ wake: 'load' }))}
+/>
 
 <!-- spacer so the wake:'visible' bindings gate on scroll, not first paint -->
 <div style="height: 140vh" data-spacer></div>

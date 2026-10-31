@@ -94,7 +94,9 @@
 			// present for a real language. Skipped inside a `::: code-group` or a JS↔TS variant block —
 			// those already carry their own header controls (the tab bar / the variant toggle).
 			const holder = pre.closest('.og-tabs, .og-code');
-			const label_text = holder ? '' : pre.getAttribute('data-file') || pre.getAttribute('data-lang') || '';
+			const label_text = holder
+				? ''
+				: pre.getAttribute('data-file') || pre.getAttribute('data-lang') || '';
 			if (label_text) {
 				const name = document.createElement('span');
 				name.className = 'og-code-name';
@@ -151,8 +153,7 @@
 		}
 		const scan = () => document.querySelectorAll(selector).forEach(enhance);
 		scan();
-		const mo =
-			typeof MutationObserver !== 'undefined' ? new MutationObserver(() => scan()) : null;
+		const mo = typeof MutationObserver !== 'undefined' ? new MutationObserver(() => scan()) : null;
 		// `childList` catches blocks a live region inserts; `hidden`/`open` catch a block REVEALED
 		// after load — a `::: code-group` tab switch (the panel's `hidden` toggles) or a `::: details`
 		// opening. `enhance` skips hidden `<pre>`s (`offsetParent === null`) at first scan, so without

@@ -9,8 +9,17 @@ script({ run: () => 0 });
 script({ run: (a: string, b: number) => a + b, args: ['x', 1] });
 script({ run: async () => {}, type: 'module', async: true, nonce: 'n', id: 'i', 'data-x': 1 });
 script({ run() {} });
-script({ run(a: string, b: { n: number; tags: string[]; maybe?: string }) { void a; void b; }, args: ['x', { n: 1, tags: [] }] });
-interface Cfg { url: string; on: boolean }
+script({
+	run(a: string, b: { n: number; tags: string[]; maybe?: string }) {
+		void a;
+		void b;
+	},
+	args: ['x', { n: 1, tags: [] }]
+});
+interface Cfg {
+	url: string;
+	on: boolean;
+}
 const cfg: Cfg = { url: '/a', on: true };
 script((c: Cfg) => c.url, cfg);
 script((k) => k.length, 'inferred from the arg');

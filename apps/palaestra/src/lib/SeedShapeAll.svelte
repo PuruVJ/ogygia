@@ -7,4 +7,6 @@
 	const bigLen = $derived(pick(page.data as Record<string, unknown>, 'big').length);
 </script>
 
-<div data-seed-shape-all><span data-small>{small}</span> big:<span data-big-len>{bigLen}</span></div>
+<div data-seed-shape-all>
+	<span data-small>{small}</span> big:<span data-big-len>{bigLen}</span>
+</div>

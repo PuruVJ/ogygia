@@ -88,7 +88,9 @@
 		// via the native `<button>` click above. Selecting on arrow would yank the panel out from under
 		// someone just browsing the tab names.
 		const off2 = roving({ selector: '.og-tabs-tab', orientation: 'horizontal' })(bar) ?? (() => {});
-		const off3 = on(window, 'resize', () => place(btns.findIndex((b) => b.getAttribute('aria-selected') === 'true')));
+		const off3 = on(window, 'resize', () =>
+			place(btns.findIndex((b) => b.getAttribute('aria-selected') === 'true'))
+		);
 
 		// Initial state, UNTRACKED — the attachment stays dependency-free (see `apply`).
 		untrack(() => {

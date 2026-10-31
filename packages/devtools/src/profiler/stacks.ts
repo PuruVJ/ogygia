@@ -76,12 +76,32 @@ export function range_hot(index: StackIndex, t0: number, t1: number, limit = 30)
 	}
 	const row = (f: number): RangeRow => {
 		const fr = index.frames[f];
-		return { name: fr.n, ...(fr.f ? { file: fr.f } : {}), category: fr.c, self_ms: round2(self.get(f) ?? 0), total_ms: round2(total.get(f) ?? 0) };
+		return {
+			name: fr.n,
+			...(fr.f ? { file: fr.f } : {}),
+			category: fr.c,
+			self_ms: round2(self.get(f) ?? 0),
+			total_ms: round2(total.get(f) ?? 0)
+		};
 	};
-	const by_self = [...self.keys()].sort((a, b) => self.get(b)! - self.get(a)!).slice(0, limit).map(row);
+	const by_self = [...self.keys()]
+		.sort((a, b) => self.get(b)! - self.get(a)!)
+		.slice(0, limit)
+		.map(row);
 	const by_total = [...total.keys()].sort((a, b) => total.get(b)! - total.get(a)!);
-	const components = by_total.filter((f) => index.frames[f].c === 'component').slice(0, limit).map(row);
-	return { t0: round2(t0), t1: round2(t1), cpu_ms: round2(cpu), idle_ms: round2(idle), self: by_self, total: by_total.slice(0, limit).map(row), components };
+	const components = by_total
+		.filter((f) => index.frames[f].c === 'component')
+		.slice(0, limit)
+		.map(row);
+	return {
+		t0: round2(t0),
+		t1: round2(t1),
+		cpu_ms: round2(cpu),
+		idle_ms: round2(idle),
+		self: by_self,
+		total: by_total.slice(0, limit).map(row),
+		components
+	};
 }
 
 export interface StackAt {
@@ -107,7 +127,11 @@ export function stack_at(index: StackIndex, t: number): StackAt | null {
 
 /** The CPU of the window as `bins` equal slices: ms of CPU per slice, for a density strip.
  *  `by`: 'all' for any frame; a category to count only samples whose leaf is that category. */
-export function density(index: StackIndex, bins = 200, by: 'all' | FrameCategory = 'all'): number[] {
+export function density(
+	index: StackIndex,
+	bins = 200,
+	by: 'all' | FrameCategory = 'all'
+): number[] {
 	const out = new Array<number>(bins).fill(0);
 	const w = index.window_ms || 1;
 	for (let i = 0; i < index.t.length; i++) {

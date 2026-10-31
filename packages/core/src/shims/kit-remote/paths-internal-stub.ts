@@ -9,7 +9,8 @@ declare const __SVELTEKIT_APP_DIR__: string;
 declare const __SVELTEKIT_PATHS_BASE__: string;
 declare const __SVELTEKIT_PATHS_ASSETS__: string;
 
-export const base: string = typeof __SVELTEKIT_PATHS_BASE__ !== 'undefined' ? __SVELTEKIT_PATHS_BASE__ : '';
+export const base: string =
+	typeof __SVELTEKIT_PATHS_BASE__ !== 'undefined' ? __SVELTEKIT_PATHS_BASE__ : '';
 export const assets: string =
 	typeof __SVELTEKIT_PATHS_ASSETS__ !== 'undefined' && __SVELTEKIT_PATHS_ASSETS__
 		? __SVELTEKIT_PATHS_ASSETS__

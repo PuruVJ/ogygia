@@ -39,7 +39,9 @@ export function on_svelte_warning(cb: (w: SvelteWarning) => void): void {
 }
 
 /** `%c[svelte] code\n%cmessage …` → the parts (null: not a Svelte hydration warning). */
-export function parse_svelte_warning(text: string): { code: string; message: string; file?: string } | null {
+export function parse_svelte_warning(
+	text: string
+): { code: string; message: string; file?: string } | null {
 	const at = text.indexOf('[svelte] ');
 	if (at === -1) return null;
 	let rest = text.slice(at + 9);
@@ -58,7 +60,10 @@ export function parse_svelte_warning(text: string): { code: string; message: str
 		let start = dot;
 		while (start > 0 && message.charCodeAt(start - 1) > 32 && message[start - 1] !== '`') start--;
 		// (Svelte breaks its paths with zero-width spaces so the console can wrap them)
-		file = message.slice(start, dot + 7).split('​').join('');
+		file = message
+			.slice(start, dot + 7)
+			.split('​')
+			.join('');
 	}
 	return { code, message, ...(file ? { file } : {}) };
 }
@@ -74,7 +79,11 @@ export function tap_svelte_warnings(): void {
 				const p = parse_svelte_warning(args.filter((a) => typeof a === 'string').join('\n'));
 				if (p && kept.length < 100) {
 					const fp = hydrating?.getAttribute('data-og-fp') ?? undefined;
-					const w: SvelteWarning = { ...p, ...(fp ? { fp } : {}), t: Math.round(performance.now() * 10) / 10 };
+					const w: SvelteWarning = {
+						...p,
+						...(fp ? { fp } : {}),
+						t: Math.round(performance.now() * 10) / 10
+					};
 					kept.push(w);
 					for (const cb of listeners) cb(w);
 				}

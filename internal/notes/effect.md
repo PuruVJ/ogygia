@@ -3,7 +3,7 @@
 Status: **REJECTED — do not build** (2026-08-17, same day as the design). Kept as archaeology so
 the idea isn't re-litigated from scratch. The design process itself produced the verdict: every
 good decision shrank the primitive (returns → gone; schedule → gone; args → gone), until what
-remained was *syntax sugar over a capability islands already provide*. The final straws:
+remained was _syntax sugar over a capability islands already provide_. The final straws:
 
 1. **It violates the framework's own legibility law.** This note rejects v3 auto-lift because "you
    can glance at a template and know what ships JS" — then proposes the one alive thing with no
@@ -63,7 +63,7 @@ That single feature was the source of every hard problem in the design:
 
 The realization: **returning state made it a state primitive, and it was never one. It is a
 side-effect primitive.** State belongs where it already lives — at the top level of a `.svelte.ts`
-module, or inside an island. Drop the return and all four problems vanish *as categories*:
+module, or inside an island. Drop the return and all four problems vanish _as categories_:
 
 - No server execution at all. The body is client-only, like every effect.
 - Nothing to read in static markup, so nothing to warn about.
@@ -93,7 +93,7 @@ Signature: **`import.meta.og.effect(fn)` — one argument, like `bake`.** No opt
   business — `requestIdleCallback` for telemetry, `scheduler.postTask`, whatever fits. Timing is
   ordinary code, not framework surface. (The scope renders no UI, so element-bound schedules —
   `'visible'`, `'interaction'`, media — never applied anyway.)
-- **No args option.** Values from the page are just *referenced* — the capture law below routes
+- **No args option.** Values from the page are just _referenced_ — the capture law below routes
   them. An explicit args array would be a second, worse spelling of the same thing, and it could
   never cover everything a body references anyway (router hooks like `beforeNavigate`, imported
   helpers — those are imports, carried whole).
@@ -121,10 +121,10 @@ No runtime export exists; like every `import.meta.og.*` construct the call is re
 and never reaches runtime. Unrewritten (plugin missing), it throws on its first line — loud, never
 a silent server-only no-op.
 
-| context | the rewrite |
-| --- | --- |
-| Kit page, csr=true | `$effect(() => untrack(fn))` inline — client-only, once, teardown honored, effect context provided by the component itself |
-| inside any ogygia island | same inline rewrite — the island is hydrated |
+| context                                    | the rewrite                                                                                                                                                                                                                      |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kit page, csr=true                         | `$effect(() => untrack(fn))` inline — client-only, once, teardown honored, effect context provided by the component itself                                                                                                       |
+| inside any ogygia island                   | same inline rewrite — the island is hydrated                                                                                                                                                                                     |
 | ogygia route component (csr=false — inert) | **no local call at all** (nothing runs server-side); the compiler extracts `fn` into a generated headless island minted at the callsite, whose entire script is that same `$effect` line, with captures arriving as island props |
 
 `untrack` gives init-shaped once-semantics (stray reactive reads in `fn` must not re-run a
@@ -197,7 +197,7 @@ snippet capture rules wholesale:
 One namespace-grammar note survives the args removal: every other construct takes only
 build-readable inputs; `fn` is build-read (written in place, like `bake`'s) but its captures are
 **runtime values**. Sound because the build never reads them — it only routes them. Rule of thumb:
-*what the build must understand is literal; what merely flows to runtime may be an expression.*
+_what the build must understand is literal; what merely flows to runtime may be an expression._
 
 ### The store-init case (the capture error is the teacher, not the obstacle)
 
@@ -226,10 +226,10 @@ import.meta.og.effect(() => { const cart = new CartStore(); register(cart); });
 ```
 
 The asymmetry this error papers over deliberately: on a Kit csr=true page the component-scope
-version *would* work (live closure). The portability law forbids it in both worlds so one file
+version _would_ work (live closure). The portability law forbids it in both worlds so one file
 can't be correct in Kit and silently dead in ogygia. The error message must therefore teach, not
-scold: *"`cart` is created in component scope, which never runs client-side here — create it inside
-the effect, or move it to module scope."*
+scold: _"`cart` is created in component scope, which never runs client-side here — create it inside
+the effect, or move it to module scope."_
 
 ## Why it lives on `import.meta.og.*`
 
@@ -246,13 +246,13 @@ Exactly `effect`'s contract — and the spelling enforces it socially: users alr
 
 ## Where it sits in the family
 
-| primitive | runs | reactivity | returns |
-| --- | --- | --- | --- |
-| `script(fn, ...args)` | before first paint, once per document | none | nothing (emits a `<script>` string to place) |
-| `import.meta.og.effect(fn)` | client-only, at hydration, per the portability law | effect context (inner `$state`/`$effect` legal) | **nothing — build error to use** |
-| island (`with { wake }`) | SSR + at hydration | full component | — |
-| `import.meta.og.wire` | codec runs at (de)serialize time | — | codec key on a class |
-| `import.meta.og.bake(fn)` | at build, never shipped | none | inlined constant |
+| primitive                   | runs                                               | reactivity                                      | returns                                      |
+| --------------------------- | -------------------------------------------------- | ----------------------------------------------- | -------------------------------------------- |
+| `script(fn, ...args)`       | before first paint, once per document              | none                                            | nothing (emits a `<script>` string to place) |
+| `import.meta.og.effect(fn)` | client-only, at hydration, per the portability law | effect context (inner `$state`/`$effect` legal) | **nothing — build error to use**             |
+| island (`with { wake }`)    | SSR + at hydration                                 | full component                                  | —                                            |
+| `import.meta.og.wire`       | codec runs at (de)serialize time                   | —                                               | codec key on a class                         |
+| `import.meta.og.bake(fn)`   | at build, never shipped                            | none                                            | inlined constant                             |
 
 `script` vs `effect` is the clean before/after pair: `script` = pre-paint, no imports, no
 reactivity, once per document. `effect` = post-hydration, own imports, effect context, per the

@@ -11,7 +11,8 @@ vi.mock('virtual:ogygia/sign', () => ({
 	region_mac_message: (...parts: unknown[]) => parts.join('|')
 }));
 
-const { signing_key, key_fingerprint, reset_signing_key } = await import('../src/server/signing-key.ts');
+const { signing_key, key_fingerprint, reset_signing_key } =
+	await import('../src/server/signing-key.ts');
 
 const WARNED = Symbol.for('ogygia.build-key-warned');
 const g = globalThis as Record<symbol, unknown>;
@@ -58,7 +59,9 @@ describe('the signing key', () => {
 		reset_signing_key();
 		signing_key();
 		expect(error).toHaveBeenCalledTimes(1);
-		expect(String(error.mock.calls[0][0])).toContain('was set when this app was built but is not set where it runs');
+		expect(String(error.mock.calls[0][0])).toContain(
+			'was set when this app was built but is not set where it runs'
+		);
 	});
 
 	it('a production server with no OGYGIA_SECRET anywhere warns, once', () => {

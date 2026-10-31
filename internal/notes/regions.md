@@ -9,25 +9,26 @@
 ogygia has ONE renderable unit: the **region**. Everything else is a dial on it or a way to use it.
 
 - **Declare**: `import C with { wake, fill }` (+ `keep`). No `partial:` key — that's the whole point.
-- **Use**: *place* it (`<C />`) or *hold* it (`region(C, props)`). Same unit, two usages.
+- **Use**: _place_ it (`<C />`) or _hold_ it (`region(C, props)`). Same unit, two usages.
 - **Realize**: `<Region of={held}>` is the mount()-like step — it reads the descriptor and emits `<ogygia-region>` as inline / island / deferred.
 - Island, lake, server island, block, content body = all regions with different dial settings. The old names become nicknames.
 
 ## TARGET VOCABULARY — LOCKED 2026-08-10
 
 Explored "collapse wake+fill into one flat `region:` key" and **rejected it**, for two verified reasons:
-1. **2D, not 1D.** `wake` (when JS runs) and `fill` (when HTML arrives) are independent axes. `fill: 'load', wake: 'visible'` is TWO schedules — no single flat string encodes it without an ugly compound. Data: playground+docs have 133 wake-only, 27 fill-only, ~8 fill+wake combos (several with *different* per-axis values).
+
+1. **2D, not 1D.** `wake` (when JS runs) and `fill` (when HTML arrives) are independent axes. `fill: 'load', wake: 'visible'` is TWO schedules — no single flat string encodes it without an ugly compound. Data: playground+docs have 133 wake-only, 27 fill-only, ~8 fill+wake combos (several with _different_ per-axis values).
 2. **Reads wrong.** `region: 'load'` puts a schedule on a noun. Schedules want a VERB (`wake: 'load'` = "wake on load"). `region` is the unit (a noun); it only takes adjectives (`region: 'raw'` = "a raw region", reads fine).
 
 **So the locked vocabulary keeps the verbs and deletes only `partial`:**
 
-| Key | Values | Meaning |
-| --- | --- | --- |
-| `wake:` | `load`·`idle`·`visible`·`interaction`·`none`·`(media)` | island (or lake at `none`). when JS runs. VERB, reads right. |
-| `fill:` | `load`·`idle`·`visible`·`(media)` | HTML arrives later (server / deferred). the rare 2nd axis. VERB. |
-| `region:` | `'raw'` (only value) | HELD-across-a-boundary (a registry). adjective, reads right. |
-| `preset:` | name | named bundle. |
-| `keep:` | name | lifetime (survives navigation; was `persist`). |
+| Key       | Values                                                 | Meaning                                                          |
+| --------- | ------------------------------------------------------ | ---------------------------------------------------------------- |
+| `wake:`   | `load`·`idle`·`visible`·`interaction`·`none`·`(media)` | island (or lake at `none`). when JS runs. VERB, reads right.     |
+| `fill:`   | `load`·`idle`·`visible`·`(media)`                      | HTML arrives later (server / deferred). the rare 2nd axis. VERB. |
+| `region:` | `'raw'` (only value)                                   | HELD-across-a-boundary (a registry). adjective, reads right.     |
+| `preset:` | name                                                   | named bundle.                                                    |
+| `keep:`   | name                                                   | lifetime (survives navigation; was `persist`).                   |
 
 - `wake`/`fill` STAY (verbs, read well, encode the real 2D). NOT renamed to `region`.
 - `region` is the UNIT (concept + `region()` + `<Region>` + `<ogygia-region>`), plus the single held-marker value `region: 'raw'`.
@@ -45,6 +46,7 @@ The wall (proven in the 2a attempt): a marked import used AS A VALUE could be he
 ## The mechanism: one descriptor per marked import
 
 Today the transform emits FOUR different artifacts:
+
 - `wake:` → an `<Island>` wrapper at the usage site + a virtual island module.
 - `fill:` → a `<ServerIsland>` wrapper + endpoint machinery.
 - `wake:'none'` (lake) → `<LakeRegion>`/`<LakeBoundary>`/`<LakePlaceholder>` + lift/restore.
@@ -54,8 +56,9 @@ Today the transform emits FOUR different artifacts:
 `{ component, clientChunkUrl, sign, renderHtml, wake, fill }`. That is the "generated script module with all required info."
 
 Two usages of the same descriptor:
+
 - **Place** `<C props/>` → transform expands to render the descriptor (props scraped off the tag). Placement path is unchanged in behavior; it just sources from the descriptor.
-- **Hold** `region(C, props)` → `C` *is* the descriptor; `region()` packages it + props into a `RegionValue`.
+- **Hold** `region(C, props)` → `C` _is_ the descriptor; `region()` packages it + props into a `RegionValue`.
 
 The signer rides the descriptor but is a tiny SSR-only re-export, invoked ONLY when the region crosses the wire (returned from a remote). Tree-shaken when a region is only ever placed. So "wake emits a binding" costs nothing unless you mint-and-send.
 
@@ -67,6 +70,7 @@ The signer rides the descriptor but is a tiny SSR-only re-export, invoked ONLY w
 ## The collapse: 6 components → 1
 
 `<Region>` switches on the descriptor + schedule and absorbs all of:
+
 - **Island** (`wake: load|idle|visible|interaction`) → `<ogygia-region wake=…>`, hydrate on schedule.
 - **ServerIsland** (`fill: …`) → `<ogygia-region render="defer" when=… endpoint=…>`, fetch HTML then optional wake.
 - **Lake** (`wake: 'none'`) → `<ogygia-region wake="none">`, lift/restore, zero JS. LakeRegion/LakeBoundary/LakePlaceholder fold in as the `wake:'none'` branch.

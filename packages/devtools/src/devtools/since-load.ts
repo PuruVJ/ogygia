@@ -31,7 +31,14 @@ export interface SinceLoad {
 	ago_ms: number;
 	fixed: string[];
 	added: string[];
-	moved: { what: string; a: number; b: number; unit: 'ms' | ''; better: boolean; part?: { label: string; a: number; b: number } }[];
+	moved: {
+		what: string;
+		a: number;
+		b: number;
+		unit: 'ms' | '';
+		better: boolean;
+		part?: { label: string; a: number; b: number };
+	}[];
 	/** what was left out of the compare, and why (the last load was the dev server's first compile) */
 	note?: string;
 }
@@ -39,17 +46,32 @@ export interface SinceLoad {
 /** findings a dev server's first compile of the page can raise on its own (its islands' code arrives late) */
 const COMPILE_BORNE = new Set(['late-interactive', 'slow-module', 'queued']);
 /** …and, when the PAGE compiled on its request, everything that waited on its first byte */
-const PAGE_COMPILE_BORNE = new Set([...COMPILE_BORNE, 'slow-ttfb', 'slow-fcp', 'slow-lcp', 'vital-ttfb', 'vital-fcp', 'vital-lcp', 'render-blocking']);
+const PAGE_COMPILE_BORNE = new Set([
+	...COMPILE_BORNE,
+	'slow-ttfb',
+	'slow-fcp',
+	'slow-lcp',
+	'vital-ttfb',
+	'vital-fcp',
+	'vital-lcp',
+	'render-blocking'
+]);
 
 /** an island's step moved when it changed by at least this much (and 30%): a module load is noisier
  *  (the network, the dev server compiling), so it needs more */
 const ISLAND_FLOOR_MS = { hydrate: 10, load: 50 } as const;
 
-const label = (f: { code: string; names: string[] }) => (f.names.length ? `${f.code} (${[...new Set(f.names)].slice(0, 3).join(', ')})` : f.code);
+const label = (f: { code: string; names: string[] }) =>
+	f.names.length ? `${f.code} (${[...new Set(f.names)].slice(0, 3).join(', ')})` : f.code;
 
-export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at: number = Date.now()): SinceLoad | null {
+export function since_load(
+	prev: LoadSnapshot,
+	now: LoadSnapshot,
+	at: number = Date.now()
+): SinceLoad | null {
 	if (prev.path !== now.path) return null;
-	const key = (f: { code: string; names: string[] }) => `${f.code}|${[...new Set(f.names)].sort().join(',')}`;
+	const key = (f: { code: string; names: string[] }) =>
+		`${f.code}|${[...new Set(f.names)].sort().join(',')}`;
 	// (the dev server's own doing, on either side, is no change of the code: left out of both)
 	const dev = new Set([...prev.findings, ...now.findings].filter((f) => f.dev).map((f) => f.code));
 	const had = new Set(prev.findings.map(key));
@@ -64,7 +86,12 @@ export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at: number = D
 		return p && p.load_ms - i.load_ms >= ISLAND_FLOOR_MS.load && i.load_ms <= p.load_ms * 0.67;
 	}).length;
 	const all_warmer = now.islands.length >= 2 && sped >= Math.max(2, now.islands.length * 0.6);
-	const compiled = all_warmer || !!prev.page_compiled || prev.islands.some((i) => (i.compile_ms ?? 0) >= i.load_ms * 0.5 && i.load_ms >= ISLAND_FLOOR_MS.load);
+	const compiled =
+		all_warmer ||
+		!!prev.page_compiled ||
+		prev.islands.some(
+			(i) => (i.compile_ms ?? 0) >= i.load_ms * 0.5 && i.load_ms >= ISLAND_FLOOR_MS.load
+		);
 	// (every module warmer at once is the page's whole first compile: its first byte waited too)
 	const cold_page = !!prev.page_compiled || all_warmer;
 	const borne = cold_page ? PAGE_COMPILE_BORNE : COMPILE_BORNE;
@@ -74,11 +101,25 @@ export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at: number = D
 	const added = now.findings.filter((f) => !had.has(key(f)) && !dev.has(f.code)).map(label);
 	const moved: SinceLoad['moved'] = [];
 	const table = (s: LoadSnapshot) => Object.fromEntries(s.vitals.map((v) => [v.key, v.value]));
-	for (const m of vitals_moved(table(prev), table(now), (side, k) => (side === 'a' ? prev : now).parts?.[k] ?? null))
+	for (const m of vitals_moved(
+		table(prev),
+		table(now),
+		(side, k) => (side === 'a' ? prev : now).parts?.[k] ?? null
+	))
 		// (the page compiling on the last load's request held its first byte, and every paint after it;
 		// a shift the dev server's CSS made, on either load, is no shift of the code)
-		if (!(cold_page && (m.key === 'ttfb' || m.key === 'fcp' || m.key === 'lcp')) && !(m.key === 'cls' && (prev.cls_dev || now.cls_dev)))
-			moved.push({ what: m.key.toUpperCase(), a: m.a, b: m.b, unit: m.key === 'cls' ? '' : 'ms', better: m.b < m.a, ...(m.part ? { part: m.part } : {}) });
+		if (
+			!(cold_page && (m.key === 'ttfb' || m.key === 'fcp' || m.key === 'lcp')) &&
+			!(m.key === 'cls' && (prev.cls_dev || now.cls_dev))
+		)
+			moved.push({
+				what: m.key.toUpperCase(),
+				a: m.a,
+				b: m.b,
+				unit: m.key === 'cls' ? '' : 'ms',
+				better: m.b < m.a,
+				...(m.part ? { part: m.part } : {})
+			});
 	for (const i of now.islands) {
 		const p = prev.islands.find((x) => x.name === i.name);
 		if (!p) continue;
@@ -90,11 +131,15 @@ export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at: number = D
 			const was = step === 'hydrate' ? p.hydrate_ms : Math.max(0, p.load_ms - (p.compile_ms ?? 0));
 			const is = step === 'hydrate' ? i.hydrate_ms : Math.max(0, i.load_ms - (i.compile_ms ?? 0));
 			const d = is - was;
-			if (Math.abs(d) >= ISLAND_FLOOR_MS[step] && Math.abs(d) >= Math.max(was, is) * 0.3) moved.push({ what: `${i.name} ${step}`, a: was, b: is, unit: 'ms', better: d < 0 });
+			if (Math.abs(d) >= ISLAND_FLOOR_MS[step] && Math.abs(d) >= Math.max(was, is) * 0.3)
+				moved.push({ what: `${i.name} ${step}`, a: was, b: is, unit: 'ms', better: d < 0 });
 		}
 	}
 	// the biggest moves first
-	moved.sort((x, y) => Math.abs(y.b - y.a) / (Math.abs(y.a) || 1) - Math.abs(x.b - x.a) / (Math.abs(x.a) || 1));
+	moved.sort(
+		(x, y) =>
+			Math.abs(y.b - y.a) / (Math.abs(y.a) || 1) - Math.abs(x.b - x.a) / (Math.abs(x.a) || 1)
+	);
 	return {
 		ago_ms: Math.max(0, at - prev.at),
 		fixed,

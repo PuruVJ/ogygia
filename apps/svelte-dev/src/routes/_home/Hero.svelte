@@ -15,18 +15,50 @@
 		<h1>web development for the rest of us</h1>
 		<a href="/docs" class="cta">
 			get started
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg
+			>
 		</a>
 	</div>
 
 	<picture class="machine">
-		<source srcset={MachineDesktop.sources.avif} width="3795" height="993" type="image/avif" media="(min-width: 800px)" />
-		<source srcset={MachineDesktop.sources.webp} width="3795" height="993" type="image/webp" media="(min-width: 800px)" />
-		<source srcset={MachineDesktop.sources.png} width="3795" height="993" type="image/png" media="(min-width: 800px)" />
+		<source
+			srcset={MachineDesktop.sources.avif}
+			width="3795"
+			height="993"
+			type="image/avif"
+			media="(min-width: 800px)"
+		/>
+		<source
+			srcset={MachineDesktop.sources.webp}
+			width="3795"
+			height="993"
+			type="image/webp"
+			media="(min-width: 800px)"
+		/>
+		<source
+			srcset={MachineDesktop.sources.png}
+			width="3795"
+			height="993"
+			type="image/png"
+			media="(min-width: 800px)"
+		/>
 		<source srcset={MachineMobile.sources.avif} width="2208" height="936" type="image/avif" />
 		<source srcset={MachineMobile.sources.webp} width="2208" height="936" type="image/webp" />
 		<source srcset={MachineMobile.sources.png} width="2208" height="936" type="image/png" />
-		<img alt="The Svelte compiler packaging up your component code" src={MachineMobile.img.src} fetchpriority="high" />
+		<img
+			alt="The Svelte compiler packaging up your component code"
+			src={MachineMobile.img.src}
+			fetchpriority="high"
+		/>
 	</picture>
 </div>
 
@@ -53,16 +85,34 @@
 			@media (prefers-color-scheme: dark) {
 				background:
 					linear-gradient(to bottom, transparent, var(--sk-bg-1)),
-					radial-gradient(64.14% 72.25% at 47.58% 31.75%, hsl(209deg 6% 47% / 52%) 0%, hsla(0, 0%, 100%, 0) 100%),
-					linear-gradient(92.4deg, hsl(210, 7%, 16%) 14.67%, hsl(0deg 0% 0% / 48%) 54.37%, hsla(207, 22%, 13%, 0.62) 92.49%),
+					radial-gradient(
+						64.14% 72.25% at 47.58% 31.75%,
+						hsl(209deg 6% 47% / 52%) 0%,
+						hsla(0, 0%, 100%, 0) 100%
+					),
+					linear-gradient(
+						92.4deg,
+						hsl(210, 7%, 16%) 14.67%,
+						hsl(0deg 0% 0% / 48%) 54.37%,
+						hsla(207, 22%, 13%, 0.62) 92.49%
+					),
 					linear-gradient(0deg, hsl(204, 38%, 20%), hsl(204, 10%, 90%));
 			}
 		}
 		:global(:root.dark) &::before {
 			background:
 				linear-gradient(to bottom, transparent, var(--sk-bg-1)),
-				radial-gradient(64.14% 72.25% at 47.58% 31.75%, hsl(209deg 6% 47% / 52%) 0%, hsla(0, 0%, 100%, 0) 100%),
-				linear-gradient(92.4deg, hsl(210, 7%, 16%) 14.67%, hsl(0deg 0% 0% / 48%) 54.37%, hsla(207, 22%, 13%, 0.62) 92.49%),
+				radial-gradient(
+					64.14% 72.25% at 47.58% 31.75%,
+					hsl(209deg 6% 47% / 52%) 0%,
+					hsla(0, 0%, 100%, 0) 100%
+				),
+				linear-gradient(
+					92.4deg,
+					hsl(210, 7%, 16%) 14.67%,
+					hsl(0deg 0% 0% / 48%) 54.37%,
+					hsla(207, 22%, 13%, 0.62) 92.49%
+				),
 				linear-gradient(0deg, hsl(204, 38%, 20%), hsl(204, 10%, 90%));
 		}
 	}

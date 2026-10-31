@@ -35,7 +35,28 @@ const rand = () => {
 };
 const pick = <T>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)];
 
-const WORDS = ['alpine', 'breeze', 'cobalt', 'delta', 'ember', 'fjord', 'granite', 'harbor', 'iris', 'juniper', 'kestrel', 'lumen', 'meadow', 'nimbus', 'onyx', 'prairie', 'quartz', 'ridge', 'sierra', 'tundra'];
+const WORDS = [
+	'alpine',
+	'breeze',
+	'cobalt',
+	'delta',
+	'ember',
+	'fjord',
+	'granite',
+	'harbor',
+	'iris',
+	'juniper',
+	'kestrel',
+	'lumen',
+	'meadow',
+	'nimbus',
+	'onyx',
+	'prairie',
+	'quartz',
+	'ridge',
+	'sierra',
+	'tundra'
+];
 const KINDS = ['jacket', 'boot', 'tent', 'pack', 'stove', 'lamp', 'glove', 'bottle', 'rope', 'map'];
 const COUNTRIES = ['DE', 'FR', 'IT', 'ES', 'SE', 'NO', 'US', 'CA', 'JP', 'NZ'];
 
@@ -61,11 +82,17 @@ export const PRODUCTS: Product[] = Array.from({ length: 3000 }, (_, i) => ({
 		at: new Date(t0 + Math.floor(rand() * 400) * day).toISOString(),
 		body: `${pick(WORDS)} ${pick(WORDS)} ${pick(KINDS)}, would ${pick(['buy', 'skip', 'recommend'])} again`
 	})),
-	specs: Object.fromEntries(Array.from({ length: 12 }, (_, k) => [`spec_${k}`, `${pick(WORDS)}-${k}`]))
+	specs: Object.fromEntries(
+		Array.from({ length: 12 }, (_, k) => [`spec_${k}`, `${pick(WORDS)}-${k}`])
+	)
 }));
 
 /** seller offers, one list for the whole catalog (the way a pricing feed arrives) */
-export const OFFERS = Array.from({ length: 3000 }, (_, i) => ({ sku: `SKU-${String((i * 7) % 3000).padStart(5, '0')}`, seller: pick(WORDS), price: Math.round(rand() * 50000) / 100 }));
+export const OFFERS = Array.from({ length: 3000 }, (_, i) => ({
+	sku: `SKU-${String((i * 7) % 3000).padStart(5, '0')}`,
+	seller: pick(WORDS),
+	price: Math.round(rand() * 50000) / 100
+}));
 
 /** the UI strings: 2 000 keys, the way a translation export looks */
 export const DICT: Record<string, string> = Object.fromEntries(
@@ -73,4 +100,7 @@ export const DICT: Record<string, string> = Object.fromEntries(
 );
 
 /** badge tokens the CMS template carries, replaced in the finished HTML */
-export const BADGES = Array.from({ length: 40 }, (_, i) => ({ token: `%%BADGE_${i}%%`, html: `<span class="badge b${i}">${pick(WORDS)}</span>` }));
+export const BADGES = Array.from({ length: 40 }, (_, i) => ({
+	token: `%%BADGE_${i}%%`,
+	html: `<span class="badge b${i}">${pick(WORDS)}</span>`
+}));

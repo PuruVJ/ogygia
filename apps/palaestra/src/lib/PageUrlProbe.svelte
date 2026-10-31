@@ -12,10 +12,16 @@
 	const paramId = $derived(page.params.id ?? '');
 	const routeId = $derived(page.route.id ?? '');
 	const status = $derived(page.status);
-	const dataKeys = $derived(Object.keys(page.data ?? {}).sort().join(','));
+	const dataKeys = $derived(
+		Object.keys(page.data ?? {})
+			.sort()
+			.join(',')
+	);
 	const formIsNull = $derived(page.form == null ? 'null' : 'set');
 	const errorIsNull = $derived(page.error == null ? 'null' : 'set');
-	const stateType = $derived(page.state && typeof page.state === 'object' ? 'object' : typeof page.state);
+	const stateType = $derived(
+		page.state && typeof page.state === 'object' ? 'object' : typeof page.state
+	);
 </script>
 
 <div class="island" data-pageurl-probe>

@@ -18,7 +18,9 @@ const ENV_SECRET_RE = /^OGYGIA_SECRET=(.+)$/m;
 const ENV_FILE = new URL('../.env', import.meta.url);
 const SECRET = (
 	process.env.OGYGIA_SECRET ??
-	(fs.existsSync(ENV_FILE) ? (fs.readFileSync(ENV_FILE, 'utf8').match(ENV_SECRET_RE)?.[1] ?? '') : '')
+	(fs.existsSync(ENV_FILE)
+		? (fs.readFileSync(ENV_FILE, 'utf8').match(ENV_SECRET_RE)?.[1] ?? '')
+		: '')
 ).trim();
 const DAY = 24 * 3600;
 const now = () => Math.floor(Date.now() / 1000);
@@ -34,26 +36,48 @@ async function hole_endpoint(base: string, path: string): Promise<string> {
 function signed_at(endpoint: string, exp: number): string {
 	const u = new URL(endpoint);
 	const p = u.searchParams;
-	const sig = sign(SECRET, region_mac_message(p.get('id') ?? '', String(exp), p.get('props') ?? '', '', p.get('ttl') ?? '', p.get('r') ?? ''));
+	const sig = sign(
+		SECRET,
+		region_mac_message(
+			p.get('id') ?? '',
+			String(exp),
+			p.get('props') ?? '',
+			'',
+			p.get('ttl') ?? '',
+			p.get('r') ?? ''
+		)
+	);
 	p.set('exp', String(exp));
 	p.set('sig', sig);
 	return u.href;
 }
 
 test.describe('holes outlive a CDN-cached document', () => {
-	test('mint: an anonymous hole on a shared-cacheable page is signed for the page’s cache life', async ({ baseURL }) => {
+	test('mint: an anonymous hole on a shared-cacheable page is signed for the page’s cache life', async ({
+		baseURL
+	}) => {
 		const cached = await hole_endpoint(baseURL!, '/server-shared-cache');
 		const plain = await hole_endpoint(baseURL!, '/server');
 		const exp_cached = Number(new URL(cached).searchParams.get('exp'));
 		const exp_plain = Number(new URL(plain).searchParams.get('exp'));
 		check('the cached page carries a hole endpoint', !!cached);
-		check('cached page: hole valid ≥ 8 days (s-maxage 7d + swr 1d)', exp_cached - now() >= 8 * DAY, `${((exp_cached - now()) / DAY).toFixed(1)} days`);
-		check('non-cached page: hole keeps the short regions.ttl window', exp_plain - now() <= 3600, `${exp_plain - now()} s`);
+		check(
+			'cached page: hole valid ≥ 8 days (s-maxage 7d + swr 1d)',
+			exp_cached - now() >= 8 * DAY,
+			`${((exp_cached - now()) / DAY).toFixed(1)} days`
+		);
+		check(
+			'non-cached page: hole keeps the short regions.ttl window',
+			exp_plain - now() <= 3600,
+			`${exp_plain - now()} s`
+		);
 		const res = await fetch(cached);
 		check('the long-lived capability renders (200)', res.status === 200, String(res.status));
 	});
 
-	test('renew: the endpoint re-signs an expired capability it minted — and nothing else', async ({ baseURL }) => {
+	test('renew: the endpoint re-signs an expired capability it minted — and nothing else', async ({
+		baseURL
+	}) => {
 		check('palaestra secret found', SECRET.length > 0);
 		const live = await hole_endpoint(baseURL!, '/server');
 		const expired = signed_at(live, now() - 3600);
@@ -64,34 +88,72 @@ test.describe('holes outlive a CDN-cached document', () => {
 		const renewed = await fetch(expired + '&renew=1');
 		const fresh = renewed.headers.get('x-ogygia-capability') ?? '';
 		check('expired capability, &renew=1 → 200', renewed.status === 200, String(renewed.status));
-		check('the renewed answer is never cached', renewed.headers.get('cache-control') === 'no-store', String(renewed.headers.get('cache-control')));
-		check('the renewed answer carries the fresh capability', fresh.startsWith('/') && fresh.includes('sig='), fresh);
-		check('the renewed answer is the hole', (await renewed.text()).includes('data-server-greeting'));
+		check(
+			'the renewed answer is never cached',
+			renewed.headers.get('cache-control') === 'no-store',
+			String(renewed.headers.get('cache-control'))
+		);
+		check(
+			'the renewed answer carries the fresh capability',
+			fresh.startsWith('/') && fresh.includes('sig='),
+			fresh
+		);
+		check(
+			'the renewed answer is the hole',
+			(await renewed.text()).includes('data-server-greeting')
+		);
 
 		const again = await fetch(new URL(fresh, baseURL).href);
-		check('the fresh capability works on its own (200)', again.status === 200, String(again.status));
+		check(
+			'the fresh capability works on its own (200)',
+			again.status === 200,
+			String(again.status)
+		);
 		const fresh_exp = Number(new URL(fresh, baseURL).searchParams.get('exp'));
-		check('the fresh capability is short-lived (regions.ttl)', fresh_exp > now() && fresh_exp - now() <= 3600, `${fresh_exp - now()} s`);
+		check(
+			'the fresh capability is short-lived (regions.ttl)',
+			fresh_exp > now() && fresh_exp - now() <= 3600,
+			`${fresh_exp - now()} s`
+		);
 
 		const forged = new URL(expired);
 		forged.searchParams.set('sig', '0'.repeat(64));
 		const r_forged = await fetch(forged.href + '&renew=1');
-		check('forged signature, &renew=1 → 403 (only URLs this app minted renew)', r_forged.status === 403, String(r_forged.status));
+		check(
+			'forged signature, &renew=1 → 403 (only URLs this app minted renew)',
+			r_forged.status === 403,
+			String(r_forged.status)
+		);
 
 		const r_live = await fetch(live + '&renew=1');
-		check('a capability that has not expired never renews → 403', r_live.status === 403, String(r_live.status));
+		check(
+			'a capability that has not expired never renews → 403',
+			r_live.status === 403,
+			String(r_live.status)
+		);
 		check('…and carries no fresh capability', !r_live.headers.get('x-ogygia-capability'));
 
 		const r_old = await fetch(signed_at(live, now() - 9 * DAY) + '&renew=1');
-		check('expired beyond the renew window (9 days) → 403', r_old.status === 403, String(r_old.status));
+		check(
+			'expired beyond the renew window (9 days) → 403',
+			r_old.status === 403,
+			String(r_old.status)
+		);
 
 		const tampered = new URL(expired);
 		tampered.searchParams.set('exp', String(now() - 7200)); // a different exp than the one signed
 		const r_tampered = await fetch(tampered.href + '&renew=1');
-		check('tampered exp, &renew=1 → 403 (the MAC covers the original exp)', r_tampered.status === 403, String(r_tampered.status));
+		check(
+			'tampered exp, &renew=1 → 403 (the MAC covers the original exp)',
+			r_tampered.status === 403,
+			String(r_tampered.status)
+		);
 	});
 
-	test('browser: a stale document’s expired hole renews itself and fills', async ({ page, baseURL }) => {
+	test('browser: a stale document’s expired hole renews itself and fills', async ({
+		page,
+		baseURL
+	}) => {
 		const live = await hole_endpoint(baseURL!, '/server');
 		const lp = new URL(live).searchParams;
 		const expired = new URL(signed_at(live, now() - 2 * 3600)).searchParams;
@@ -106,7 +168,8 @@ test.describe('holes outlive a CDN-cached document', () => {
 		});
 		const hole_statuses: string[] = [];
 		page.on('response', (r) => {
-			if (r.url().includes('__ogygia__')) hole_statuses.push(`${r.status()}${r.url().includes('renew=1') ? ' renew' : ''}`);
+			if (r.url().includes('__ogygia__'))
+				hole_statuses.push(`${r.status()}${r.url().includes('renew=1') ? ' renew' : ''}`);
 		});
 		await page.goto('/server', { waitUntil: 'domcontentloaded' });
 		const filled = await page
@@ -114,9 +177,19 @@ test.describe('holes outlive a CDN-cached document', () => {
 			.then(() => true)
 			.catch(() => false);
 		check('the stale hole fills', filled, hole_statuses.join(', '));
-		check('it took one 403, then one renewal', hole_statuses.includes('403') && hole_statuses.includes('200 renew'), hole_statuses.join(', '));
+		check(
+			'it took one 403, then one renewal',
+			hole_statuses.includes('403') && hole_statuses.includes('200 renew'),
+			hole_statuses.join(', ')
+		);
 		const endpoint_now = await page.getAttribute('ogygia-region[endpoint]', 'endpoint');
-		const adopted = endpoint_now ? Number(new URL(endpoint_now, baseURL).searchParams.get('exp')) : 0;
-		check('the hole adopted the fresh capability for its later fetches', adopted > now(), endpoint_now ?? 'no endpoint');
+		const adopted = endpoint_now
+			? Number(new URL(endpoint_now, baseURL).searchParams.get('exp'))
+			: 0;
+		check(
+			'the hole adopted the fresh capability for its later fetches',
+			adopted > now(),
+			endpoint_now ?? 'no endpoint'
+		);
 	});
 });

@@ -1,6 +1,11 @@
 // Node fetch-based SSR assertions. Usage: pnpm exec playwright test fetch-checks
 import { test, check, island_graph } from '@ogygia/tooling/e2e';
-import { ISLAND_HINT_G_RE, KIT_MARKER_RE, REGION_OPEN_G_RE, RUNTIME_SCRIPT_TAG_G_RE } from '@ogygia/tooling/e2e/re.ts';
+import {
+	ISLAND_HINT_G_RE,
+	KIT_MARKER_RE,
+	REGION_OPEN_G_RE,
+	RUNTIME_SCRIPT_TAG_G_RE
+} from '@ogygia/tooling/e2e/re.ts';
 
 const COUNT_10_RE = /count is 10/;
 const COUNT_99_RE = /count is 99/;

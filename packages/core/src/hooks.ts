@@ -25,14 +25,23 @@ import { try_get_request_store } from '@sveltejs/kit/internal/server';
 import type { RequestState } from '@sveltejs/kit/internal/server';
 import * as devalue from 'devalue';
 // (the islands' loaders come through `load_islands()`, a dynamic import — link/server-manifest.ts)
-import { load_islands, island_url, island_name, island_reads_page_data, render_island } from 'virtual:ogygia/server-manifest';
+import {
+	load_islands,
+	island_url,
+	island_name,
+	island_reads_page_data,
+	render_island
+} from 'virtual:ogygia/server-manifest';
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
 import { REGION_BRAND } from './region-brand.ts';
 import { signing_key } from './server/signing-key.ts';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
-import { enabled as router_enabled, viewTransitions as router_view_transitions } from 'virtual:ogygia/router-config';
+import {
+	enabled as router_enabled,
+	viewTransitions as router_view_transitions
+} from 'virtual:ogygia/router-config';
 import { mpaSpeculationRules } from './compiler/link/speculation.ts';
 import { route_options } from 'virtual:ogygia/route-options';
 import { set_page_route_options } from './plugin/routes.ts';
@@ -71,7 +80,13 @@ import { B64Url } from './server/payload.ts';
 import { REF_WIRE_KEY, ref_reviver } from './ref.ts';
 import { plugins as plugin_entries } from 'virtual:ogygia/server-plugins';
 import type { RequestContext } from './plugin/index.ts';
-import { current_facts, facts_of, mark_per_visitor, set_current_request, type RequestFacts } from './plugin/facts.ts';
+import {
+	current_facts,
+	facts_of,
+	mark_per_visitor,
+	set_current_request,
+	type RequestFacts
+} from './plugin/facts.ts';
 import { around, request_contexts, start_plugins } from './plugin/server.ts';
 // PULL-registration at decode time (idempotent; no import-time side effects).
 import { register_wire_kind } from './live-transport.ts';
@@ -99,7 +114,13 @@ import { locate, assemble } from './server/document-assembly.ts';
 import { error_route_is_csr_true, route_is_csr_true } from './context.ts';
 import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.ts';
 import { html_has_kit_bootstrap } from './runtime/kit-boot.ts';
-import { check_script, mark, settle, STAND_IN_CSS, type TransformKind } from './server/reversible.ts';
+import {
+	check_script,
+	mark,
+	settle,
+	STAND_IN_CSS,
+	type TransformKind
+} from './server/reversible.ts';
 import { hole_head } from './server/hole-graph.ts';
 import { restore, restore_adopt } from './runtime/restore.ts';
 import { RateLimiter } from './server/rate-limit.ts';
@@ -121,12 +142,22 @@ import { serialize_provided_context } from './context-bridge.ts';
 import { escape_script_text } from './escape.ts';
 import { hole_copy_key } from './runtime/hash.ts';
 import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.ts';
-import { set_ask_scope_opener, set_page_recorder, set_seed_ask_reader, type PageSnapshot } from './page-seed-registry.ts';
+import {
+	set_ask_scope_opener,
+	set_page_recorder,
+	set_seed_ask_reader,
+	type PageSnapshot
+} from './page-seed-registry.ts';
 import { collect_remote_seed } from './server/remote-seed-gate.ts';
 import { DocumentTail, set_tail_reader } from './server/document-tail.ts';
 import { runtime_bootstrap } from './server/entry-location.ts';
 import { region_css_tag } from './server/region-css.ts';
-import { set_late_recorder, set_late_scope_opener, set_late_taker, type LateRegion } from './late-region-registry.ts';
+import {
+	set_late_recorder,
+	set_late_scope_opener,
+	set_late_taker,
+	type LateRegion
+} from './late-region-registry.ts';
 import {
 	record_request_stats,
 	record_hole_stats,
@@ -140,8 +171,20 @@ import { json_culprit } from './seed-refs.ts';
 import type { SeedAsk } from './server/seed-shape.ts';
 import { set_server_devtools_recorder, record_server_event } from './events/server-registry.ts';
 import { drop_dead_kit_resolves } from './server/dead-kit-resolves.ts';
-import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './events/schema.ts';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, TESTING_COOKIE, TESTING_LEAN, TESTING_PARAM, switch_in_url } from './insights/switch.ts';
+import {
+	DEVTOOLS_SCHEMA_VERSION,
+	type DevtoolsEvent,
+	type DevtoolsEventInput
+} from './events/schema.ts';
+import {
+	DEVTOOLS_COOKIE,
+	DEVTOOLS_ON,
+	SWITCH_COOKIE_OPTIONS,
+	TESTING_COOKIE,
+	TESTING_LEAN,
+	TESTING_PARAM,
+	switch_in_url
+} from './insights/switch.ts';
 import { mark_personal } from './server/personal-response.ts';
 
 /** Is devtools on for this request's browser (a devtools BUILD): the URL's `?og-devtools=on|off`
@@ -163,7 +206,8 @@ const MAX_REGION_BODY = 2_000_000;
 // DEVTOOLS gate — server realm. The SSR bundle carries the `__OGYGIA_DEVTOOLS__` define; off → the
 // recorder is never installed and every `if (DEVTOOLS)` folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
-const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
+const DEVTOOLS_LAZY =
+	typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 /** High-res clock for server-realm devtools timestamps. */
 const dt_now = () =>
 	typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
@@ -252,10 +296,12 @@ set_ctx_recorder((key, value) => {
 // before a Kit page bag exists, so its regions' asks are collected here, off the same `Request` (the
 // one stable identity, and no second ALS). The document reads them back and seeds like a Kit page.
 const doc_asks = new WeakMap<Request, { wanted: boolean; keys: SeedKeys | null }>();
-const request_of = () => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request;
+const request_of = () =>
+	(try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request;
 set_ask_scope_opener(() => {
 	const request = request_of();
-	if (request && !bags.has(request) && !doc_asks.has(request)) doc_asks.set(request, { wanted: false, keys: null });
+	if (request && !bags.has(request) && !doc_asks.has(request))
+		doc_asks.set(request, { wanted: false, keys: null });
 });
 // the regions' asks so far, for the server router's document (it builds its own seed)
 set_seed_ask_reader(() => {
@@ -317,8 +363,17 @@ set_kit_event_reader(
 	() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event ?? null
 );
 /** Does this hole's server tree read `page.data` (the build's answer; unknown in dev → yes). */
-const hole_reads_page_data = (id: string): boolean => island_reads_page_data === null || island_reads_page_data[id] !== false;
-type TransportStore = { event?: RequestEvent; state?: { transport?: Record<string, { decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }> } };
+const hole_reads_page_data = (id: string): boolean =>
+	island_reads_page_data === null || island_reads_page_data[id] !== false;
+type TransportStore = {
+	event?: RequestEvent;
+	state?: {
+		transport?: Record<
+			string,
+			{ decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }
+		>;
+	};
+};
 set_render_page_port({
 	ready(reads_data) {
 		const store = try_get_request_store() as TransportStore | undefined;
@@ -330,13 +385,19 @@ set_render_page_port({
 	},
 	version(hole_id) {
 		if (!hole_reads_page_data(hole_id)) return '';
-		const v = render_page_version((try_get_request_store() as TransportStore | undefined)?.event, bag_of()?.page ?? undefined);
+		const v = render_page_version(
+			(try_get_request_store() as TransportStore | undefined)?.event,
+			bag_of()?.page ?? undefined
+		);
 		return v ? '&pv=' + v : '';
 	}
 });
 set_kit_page_reader(() => {
 	const bag = bag_of();
-	return render_page(bag ? (bag.page ?? {}) : undefined, (try_get_request_store() as { event?: RequestEvent } | undefined)?.event);
+	return render_page(
+		bag ? (bag.page ?? {}) : undefined,
+		(try_get_request_store() as { event?: RequestEvent } | undefined)?.event
+	);
 });
 // LATE REGIONS: a promise `of` registers per request; the id keys the region's slot wrapper AND
 // its later template chunk. The taker DRAINS (the router reads once, post-render).
@@ -361,7 +422,9 @@ set_late_taker(() => {
 // FACTS (plugin/facts.ts): the region-endpoint mint (prerender-grade holes in a storable render)
 // and the data-source recorder find the running code's request the way the bag does — through
 // Kit's request store.
-set_current_request(() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request);
+set_current_request(
+	() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request
+);
 // DATA SOURCES: every `__og_source`-wrapped call files its `(id, fingerprint)` tag with the running
 // request's facts — when a plugin asked for them (`facts.sources` set to a list: a storable render's
 // invalidation reverse index, a federated fragment reporting what it read).
@@ -499,7 +562,8 @@ function capability_of(params: URLSearchParams): Capability {
  */
 function capability_target(cap: Capability): string | null {
 	if (Object.hasOwn(island_url, cap.id)) return cap.id;
-	if (cap.render !== '' && Object.hasOwn(render_island, cap.render)) return render_island[cap.render];
+	if (cap.render !== '' && Object.hasOwn(render_island, cap.render))
+		return render_island[cap.render];
 	return null;
 }
 
@@ -586,13 +650,20 @@ const seed_codec_cache = new WeakMap<object, SeedCodecs>();
 
 /** The seed's devalue reducers — the app's transport encoders merged with the defer markers — and a
  *  stringify bound to them, made once per transport object (Kit hands the same one every request). */
-function seed_codecs(transport: Record<string, { encode: (v: unknown) => unknown }> | undefined): SeedCodecs {
+function seed_codecs(
+	transport: Record<string, { encode: (v: unknown) => unknown }> | undefined
+): SeedCodecs {
 	const key = transport ?? NO_TRANSPORT;
 	let hit = seed_codec_cache.get(key);
 	if (!hit) {
-		const encoders = Object.fromEntries(Object.entries(transport ?? {}).map(([name, codec]) => [name, codec.encode]));
+		const encoders = Object.fromEntries(
+			Object.entries(transport ?? {}).map(([name, codec]) => [name, codec.encode])
+		);
 		const seed_reducers = { ...encoders, ...page_seed_reducers };
-		hit = { seed_reducers, seed_stringify: ((v: unknown) => stringify(v, seed_reducers)) as typeof stringify };
+		hit = {
+			seed_reducers,
+			seed_stringify: ((v: unknown) => stringify(v, seed_reducers)) as typeof stringify
+		};
 		seed_codec_cache.set(key, hit);
 	}
 	return hit;
@@ -608,7 +679,8 @@ function has_body_close(carry: Uint8Array, chunk: Uint8Array): boolean {
 		for (let k = 0; k < 7; k++) if (buf[i + k] !== BODY_CLOSE_BYTES[k]) return false;
 		return true;
 	};
-	for (let i = chunk.lastIndexOf(60); i !== -1; i = i === 0 ? -1 : chunk.lastIndexOf(60, i - 1)) if (at_bytes(chunk, i)) return true;
+	for (let i = chunk.lastIndexOf(60); i !== -1; i = i === 0 ? -1 : chunk.lastIndexOf(60, i - 1))
+		if (at_bytes(chunk, i)) return true;
 	if (!carry.length) return false;
 	// the seam: the carry, then the chunk's first bytes
 	const seam = new Uint8Array(carry.length + Math.min(6, chunk.length));
@@ -618,7 +690,12 @@ function has_body_close(carry: Uint8Array, chunk: Uint8Array): boolean {
 	return false;
 }
 
-function csr_page_of(html: string, body_end: number, event?: RequestEvent, bag?: RequestBag): boolean {
+function csr_page_of(
+	html: string,
+	body_end: number,
+	event?: RequestEvent,
+	bag?: RequestBag
+): boolean {
 	return event?.route?.id != null
 		? bag?.page?.error != null
 			? error_route_is_csr_true(event.route.id)
@@ -678,7 +755,9 @@ class OgygiaHandle {
 		// (flags drain exposures: the serverless-safe tail). No plugins: straight through, no wrapper.
 		const facts = facts_of(event.request);
 		if (plugins.length === 0) return this.#route(event, resolve, path, NO_CTXS, facts);
-		const ctxs = request_contexts(plugins, event, path, facts, (endpoint) => this.#render_hole(endpoint, event));
+		const ctxs = request_contexts(plugins, event, path, facts, (endpoint) =>
+			this.#render_hole(endpoint, event)
+		);
 		try {
 			for (let i = 0; i < plugins.length; i++) {
 				const answer = await plugins[i].def.request?.(ctxs[i]);
@@ -722,7 +801,10 @@ class OgygiaHandle {
 			if (event.isDataRequest && event.request.headers.has(PAGE_FACTS_HEADER)) {
 				const res = await resolve(event);
 				try {
-					res.headers.set(PAGE_FACTS_ROUTE_HEADER, encodeURIComponent(JSON.stringify({ id: event.route.id, params: event.params })));
+					res.headers.set(
+						PAGE_FACTS_ROUTE_HEADER,
+						encodeURIComponent(JSON.stringify({ id: event.route.id, params: event.params }))
+					);
 				} catch {
 					/* an immutable response: the render keeps the endpoint's route and params */
 				}
@@ -732,7 +814,8 @@ class OgygiaHandle {
 			// page carries its own events, so it is never stored and never shared-cached.
 			const devtools_on = DEVTOOLS && (!DEVTOOLS_LAZY || devtools_switch(event));
 			// (a prerender has no visitor, and may not read the query)
-			const devtools_personal = DEVTOOLS_LAZY && !building && (devtools_on || switch_in_url(event.url) !== null);
+			const devtools_personal =
+				DEVTOOLS_LAZY && !building && (devtools_on || switch_in_url(event.url) !== null);
 			facts.private = devtools_personal;
 			// (an app transform renders a router-fetched page as an ANSWER — every host planned,
 			// `#transform_document` — a form a store keyed by path does not hold)
@@ -771,7 +854,11 @@ class OgygiaHandle {
 			// so no other visitor's page carries the side-channel. `?og-devtools=on|off` flips it on this
 			// very response, so the page that turned it on is measured from its start)
 			// (LEAN TESTING — insights/switch.ts — keeps the HTML what a visitor gets: no event side-channel)
-			const lean = devtools_on && !building && (event.cookies.get(TESTING_COOKIE) === TESTING_LEAN || event.url.searchParams.get(TESTING_PARAM) === TESTING_LEAN);
+			const lean =
+				devtools_on &&
+				!building &&
+				(event.cookies.get(TESTING_COOKIE) === TESTING_LEAN ||
+					event.url.searchParams.get(TESTING_PARAM) === TESTING_LEAN);
 			if (devtools_on && !lean) dt_buffers.set(bag, { events: [], seq: 0 });
 			// Hang the bag off the request for the rest of it — the render's own Kit store and the
 			// streamed tail chunks (late regions, resolve scripts, after `resolve()` returned) all
@@ -792,11 +879,17 @@ class OgygiaHandle {
 			event.setHeaders = (headers) => {
 				set_headers(headers);
 				for (const key in headers)
-					if (key.toLowerCase() === 'cache-control') note_cache_control(event.request, headers[key]);
+					if (key.toLowerCase() === 'cache-control')
+						note_cache_control(event.request, headers[key]);
 			};
 			const response = await resolve(event, {
 				transformPageChunk: async ({ html }) =>
-					this.inject_client_seeds(this.#transform ? await this.#transform_document(html, event, bag) : html, store?.state, event, bag)
+					this.inject_client_seeds(
+						this.#transform ? await this.#transform_document(html, event, bag) : html,
+						store?.state,
+						event,
+						bag
+					)
 			});
 			if (devtools_personal) mark_personal(response);
 			// with an app transform a router-fetched page is rendered as an answer (`#transform_document`):
@@ -809,12 +902,21 @@ class OgygiaHandle {
 				}
 			// a browser that turned devtools on may sample its main thread (the JS Self-Profiling API needs
 			// the document to allow it): the CPU of a page load and of a recorded session. Its own pages only
-			if (devtools_on && DEVTOOLS_LAZY && (response.headers.get('content-type') ?? '').includes('text/html')) {
+			if (
+				devtools_on &&
+				DEVTOOLS_LAZY &&
+				(response.headers.get('content-type') ?? '').includes('text/html')
+			) {
 				try {
-					if (!response.headers.has('document-policy')) response.headers.set('document-policy', 'js-profiling');
+					if (!response.headers.has('document-policy'))
+						response.headers.set('document-policy', 'js-profiling');
 					// the route this page rendered (Kit's id), for `page().route` — a header, so even lean
 					// testing's HTML stays a visitor's
-					if (event.route?.id) response.headers.append('server-timing', `og-route;desc=${JSON.stringify(event.route.id)}`);
+					if (event.route?.id)
+						response.headers.append(
+							'server-timing',
+							`og-route;desc=${JSON.stringify(event.route.id)}`
+						);
 				} catch {
 					// immutable headers
 				}
@@ -824,7 +926,8 @@ class OgygiaHandle {
 			// replaced response is final: it goes out as the plugins left it.
 			if (bag.deferred && bag.deferred.length) facts.streamed = true;
 			let out = response;
-			for (let i = 0; i < ctxs.length; i++) out = (await plugins[i].def.response?.(ctxs[i], out)) ?? out;
+			for (let i = 0; i < ctxs.length; i++)
+				out = (await plugins[i].def.response?.(ctxs[i], out)) ?? out;
 			if (out !== response) return out;
 			// Stream captured `$page.data` promises into islands (csr=false, real browser load). The doc
 			// — with the pending seed + resolve-global bootstrap — is fully built now (transformPageChunk
@@ -865,7 +968,8 @@ class OgygiaHandle {
 	 */
 	async render_batch(event: RequestEvent): Promise<Response> {
 		const MAX_BATCH = 32;
-		if (event.request.headers.get('sec-fetch-site') === 'cross-site') return region_denied('cross-site');
+		if (event.request.headers.get('sec-fetch-site') === 'cross-site')
+			return region_denied('cross-site');
 		const ip = client_ip(event);
 		if (!ip) return region_response('Too Many Requests', { status: 429 });
 		if (this.probe_rate.limited(ip) || this.render_rate.limited(ip)) {
@@ -935,12 +1039,17 @@ class OgygiaHandle {
 		// restores it before the swap, so live and incoming hosts meet in one form.
 		const answer = router_fetched(event);
 		const marked = mark(html, 'document', csr, answer);
-		const out = await this.#transform!(marked ? marked.html : html, { kind: 'document', csr, event });
+		const out = await this.#transform!(marked ? marked.html : html, {
+			kind: 'document',
+			csr,
+			event
+		});
 		const s = marked ? settle(out, marked.record, { dev }) : null;
 		// A page loaded as one keeps hosts in the transform's first-load form: if this copy ever reaches
 		// the router (a store, a prerender, a cache), it loads it instead of swapping it in
 		let first_load = false;
-		if (marked && !answer) for (const h of marked.record.hosts.values()) if (!h.planned) first_load = true;
+		if (marked && !answer)
+			for (const h of marked.record.hosts.values()) if (!h.planned) first_load = true;
 		// (its head assets and the restorer ride the seed injection's ONE assembly of the document —
 		// no splice here, which was another full copy the assembly then re-located)
 		bag.transform_head =
@@ -955,7 +1064,11 @@ class OgygiaHandle {
 	 *  before insertion (and hoists its `data-og-head` assets), so no stand-in sheet is needed. */
 	async #transform_region(html: string, event: RequestEvent): Promise<string> {
 		const marked = mark(html, 'region', false);
-		const out = await this.#transform!(marked ? marked.html : html, { kind: 'region', csr: false, event });
+		const out = await this.#transform!(marked ? marked.html : html, {
+			kind: 'region',
+			csr: false,
+			event
+		});
 		if (!marked) return out;
 		const s = settle(out, marked.record, { dev });
 		return s.check ? s.html + check_script(s.check) : s.html;
@@ -1012,7 +1125,8 @@ class OgygiaHandle {
 			// its own remotes — and a sidecar written without a seed carries its values whole.
 			// (the app's transform: its head assets before `</head>`, the restorer first before `</body>`)
 			if (head !== null && bag?.transform_head) head_inject = bag.transform_head + head_inject;
-			const tail = spans.body_end !== -1 && bag ? (bag.transform_body ?? '') + bag.tail.render(null) : '';
+			const tail =
+				spans.body_end !== -1 && bag ? (bag.transform_body ?? '') + bag.tail.render(null) : '';
 			if (head === null && !tail) return html;
 			// The runtime an island inside a lake emitted goes before the head's JavaScript here too
 			// (see the csr=false path below): its regions keep their server markup from the first connect.
@@ -1066,7 +1180,9 @@ class OgygiaHandle {
 			// sole base/assets authority, and every ogygia URL (prod `/${appDir}/…`, dev `/@id/…`) is
 			// baked base-LESS — so an island-LESS page under a non-root `base` loads the runtime too.
 			const runtime_tag =
-				router_enabled && runtime_url && !page_declares_runtime_script(probe) ? runtime_bootstrap(asset) : null;
+				router_enabled && runtime_url && !page_declares_runtime_script(probe)
+					? runtime_bootstrap(asset)
+					: null;
 			const ordered = runtime_first(probe, runtime_tag);
 			if (ordered !== probe) head_out = ordered;
 			// The DEV bridge is NOT gated on the router — it carries `@vite/client`, and Vite's own
@@ -1299,8 +1415,7 @@ class OgygiaHandle {
 				// holes. The seed explainer reads the request's shared measure memo — a lookup per key.
 				...(detail
 					? {
-							seed_culprit:
-								page_payload && !page_payload.json ? json_culprit(seed_data) : null,
+							seed_culprit: page_payload && !page_payload.json ? json_culprit(seed_data) : null,
 							island_rows: bag!.tail.island_rows() ?? [],
 							seed: this.explain_seed(page_snap.data, seed_keys, bag!),
 							hole_rows: bag!.tail.hole_rows()
@@ -1327,7 +1442,8 @@ class OgygiaHandle {
 		const names = new Map<string, string>();
 		for (const row of rows) if (row.name && !names.has(row.entry)) names.set(row.entry, row.name);
 		const name_of = (entry: string) => names.get(entry) ?? entry;
-		const add = (m: Map<string, Set<string>>, k: string, v: string) => (m.get(k) ?? m.set(k, new Set()).get(k)!).add(v);
+		const add = (m: Map<string, Set<string>>, k: string, v: string) =>
+			(m.get(k) ?? m.set(k, new Set()).get(k)!).add(v);
 		const whole = new Set<string>();
 		const readers = new Map<string, Set<string>>();
 		for (const [entry, ask] of bag.seed_asks ?? []) {
@@ -1349,7 +1465,15 @@ class OgygiaHandle {
 					readers: read,
 					referenced_by: refd,
 					shipped,
-					reason: !shipped ? null : read.length ? 'read' : refd.length ? 'referenced' : whole_by.length ? 'whole' : 'read'
+					reason: !shipped
+						? null
+						: read.length
+							? 'read'
+							: refd.length
+								? 'referenced'
+								: whole_by.length
+									? 'whole'
+									: 'read'
 				});
 			}
 		}
@@ -1603,9 +1727,18 @@ class OgygiaHandle {
 
 	/** A cached hole's memo key: the call and the visitor's session, and — when its tree reads
 	 *  `page.data` — the page it renders for (one page's facts never answer another page's hole). */
-	#hole_cache_key(id: string, payload: string, event: RequestEvent, reads_page_data: boolean): string {
+	#hole_cache_key(
+		id: string,
+		payload: string,
+		event: RequestEvent,
+		reads_page_data: boolean
+	): string {
 		const session = this.#region_session(event);
-		return render_cache_key(id, payload, reads_page_data ? session + '\n' + page_url_of(event).href : session);
+		return render_cache_key(
+			id,
+			payload,
+			reads_page_data ? session + '\n' + page_url_of(event).href : session
+		);
 	}
 
 	/** The session cookie value sealed into a region capability (empty when no `sessionCookie` is
@@ -1613,7 +1746,6 @@ class OgygiaHandle {
 	#region_session(event: RequestEvent): string {
 		return session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
 	}
-
 
 	// ── Shared capability core ──────────────────────────────────────────────────────────────────
 	// The endpoint ({@link render_region}) and the batch path ({@link #render_capability}) MUST verify
@@ -1659,16 +1791,32 @@ class OgygiaHandle {
 	#renew_capability(cap: Capability, event: RequestEvent): Capability | null {
 		if (this.#region_session(event) !== '') return null;
 		const { secret } = signing_key();
-		if (!verify(secret, region_mac_message(cap.id, cap.exp, cap.payload, '', cap.ttl, cap.render), cap.sig)) return null;
+		if (
+			!verify(
+				secret,
+				region_mac_message(cap.id, cap.exp, cap.payload, '', cap.ttl, cap.render),
+				cap.sig
+			)
+		)
+			return null;
 		const exp = String(capability_expiry(Math.floor(Date.now() / 1000), regionTtl));
-		return { ...cap, exp, sig: sign(secret, region_mac_message(cap.id, exp, cap.payload, '', cap.ttl, cap.render)), k: signing_key().fp };
+		return {
+			...cap,
+			exp,
+			sig: sign(secret, region_mac_message(cap.id, exp, cap.payload, '', cap.ttl, cap.render)),
+			k: signing_key().fp
+		};
 	}
 
 	/** THE auth check: session-bound region MAC verify (its render identity inside, when it has one). */
 	#verify_region_mac(cap: Capability, event: RequestEvent): boolean {
 		// The capability seals the session cookie (if any) into the signed message.
 		const session = session_cookie ? (event.cookies.get(session_cookie) ?? '') : '';
-		return verify(signing_key().secret, region_mac_message(cap.id, cap.exp, cap.payload, session, cap.ttl, cap.render), cap.sig);
+		return verify(
+			signing_key().secret,
+			region_mac_message(cap.id, cap.exp, cap.payload, session, cap.ttl, cap.render),
+			cap.sig
+		);
 	}
 
 	/** Eval the island module (registers transportable codecs the reviver needs on a cold-start defer),
@@ -1730,7 +1878,10 @@ class OgygiaHandle {
 
 		const ttl = Number(cap.ttl) || 0;
 		const reads_page_data = hole_reads_page_data(target);
-		const cache = ttl > 0 ? { key: this.#hole_cache_key(target, payload, event, reads_page_data), ttl } : undefined;
+		const cache =
+			ttl > 0
+				? { key: this.#hole_cache_key(target, payload, event, reads_page_data), ttl }
+				: undefined;
 		// (the profiler logs each batched hole as its own hole request — only when one listens)
 		const stats = batch && has_batch_hole_listener();
 		const t0 = stats ? performance.now() : 0;
@@ -1751,7 +1902,9 @@ class OgygiaHandle {
 				id,
 				cache: outcome,
 				ttl,
-				...(timing.queue_ms !== undefined ? { queue_ms: Math.round(timing.queue_ms * 10) / 10 } : {}),
+				...(timing.queue_ms !== undefined
+					? { queue_ms: Math.round(timing.queue_ms * 10) / 10 }
+					: {}),
 				...(island_name?.[target] ? { name: island_name[target] } : {}),
 				p: hole_copy_key(payload),
 				ms: performance.now() - t0,
@@ -1814,7 +1967,9 @@ class OgygiaHandle {
 		const refused = this.#capability_precheck(cap, renewal);
 		if (refused) {
 			if (import.meta.env.DEV && refused === 'foreign-key')
-				console.warn(`[ogygia] region endpoint 403: id "${id}" was signed by key ${cap.k}, this server signs with ${signing_key().fp}`);
+				console.warn(
+					`[ogygia] region endpoint 403: id "${id}" was signed by key ${cap.k}, this server signs with ${signing_key().fp}`
+				);
 			return region_denied(refused);
 		}
 
@@ -1825,7 +1980,8 @@ class OgygiaHandle {
 
 		if (renewal) {
 			const fresh = this.#renew_capability(cap, event);
-			if (!fresh) return region_denied(this.#region_session(event) !== '' ? 'renew-session' : 'sig');
+			if (!fresh)
+				return region_denied(this.#region_session(event) !== '' ? 'renew-session' : 'sig');
 			cap = fresh;
 			renewed = `${url.pathname}?id=${encodeURIComponent(id)}${cap.render ? `&r=${cap.render}` : ''}&props=${payload}&exp=${cap.exp}${ttl_raw ? `&ttl=${ttl_raw}` : ''}&sig=${cap.sig}&k=${cap.k}`;
 		} else {
@@ -1870,10 +2026,21 @@ class OgygiaHandle {
 
 		const ttl = Number(ttl_raw) || 0;
 		const reads_page_data = hole_reads_page_data(target);
-		const cache = ttl > 0 ? { key: this.#hole_cache_key(target, payload, event, reads_page_data), ttl } : undefined;
+		const cache =
+			ttl > 0
+				? { key: this.#hole_cache_key(target, payload, event, reads_page_data), ttl }
+				: undefined;
 		const timing: { queue_ms?: number; render_ms?: number } = {};
 		let outcome: 'hit' | 'miss' | 'none' = 'none';
-		const body = await this.#render_component(load, props, cache, (o) => (outcome = o), timing, event.url, reads_page_data);
+		const body = await this.#render_component(
+			load,
+			props,
+			cache,
+			(o) => (outcome = o),
+			timing,
+			event.url,
+			reads_page_data
+		);
 		// (the profiler's hole economics, with the wait for a render slot: a hole's time on the
 		// server is its queue AND its render)
 		record_hole_stats(event.request, {
@@ -1895,7 +2062,9 @@ class OgygiaHandle {
 				(DEVTOOLS && event.cookies.get(DEVTOOLS_COOKIE) === DEVTOOLS_ON) ||
 				event.cookies.get('og_profiler_beacon') === '1');
 		const server_timing: Record<string, string> = timed
-			? { 'server-timing': `og-queue;dur=${timing.queue_ms!.toFixed(1)}, og-render;dur=${(timing.render_ms ?? 0).toFixed(1)}` }
+			? {
+					'server-timing': `og-queue;dur=${timing.queue_ms!.toFixed(1)}, og-render;dur=${(timing.render_ms ?? 0).toFixed(1)}`
+				}
 			: {};
 		if (body === null) {
 			return region_response('Region render failed', { status: 500 });

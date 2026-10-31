@@ -12,7 +12,11 @@
 </main>
 
 <style>
-	main { max-width: 720px; margin: 2rem auto; font-family: system-ui, sans-serif; }
+	main {
+		max-width: 720px;
+		margin: 2rem auto;
+		font-family: system-ui, sans-serif;
+	}
 	.card {
 		border: 2px dashed #dc2626;
 		border-radius: 10px;
@@ -20,6 +24,10 @@
 		color: #991b1b;
 		background: #fef2f2;
 	}
-	.card h2 { margin: 0 0 0.5rem; }
-	.sub { color: #6b7280; }
+	.card h2 {
+		margin: 0 0 0.5rem;
+	}
+	.sub {
+		color: #6b7280;
+	}
 </style>

@@ -74,8 +74,7 @@ console.log('▸ Building palaestra (production — this is what the preview ser
 	const real = build_palaestra(process.env);
 	process.stdout.write(real.out);
 	if (!real.ok) fail('palaestra build failed');
-	if (WARN_RE.test(real.out))
-		fail('stable OGYGIA_SECRET present, but the build still warned');
+	if (WARN_RE.test(real.out)) fail('stable OGYGIA_SECRET present, but the build still warned');
 	console.log('PASS  stable secret → build is silent about prerendered capabilities');
 }
 

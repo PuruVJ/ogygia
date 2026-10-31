@@ -6,6 +6,10 @@
 	let clicks = $state(0);
 </script>
 
-<button data-pc-badge={where} data-locale={(page.data as { locale?: string }).locale ?? ''} onclick={() => clicks++}>
+<button
+	data-pc-badge={where}
+	data-locale={(page.data as { locale?: string }).locale ?? ''}
+	onclick={() => clicks++}
+>
 	{(page.data as { locale?: string }).locale ?? '-'} · {clicks}
 </button>

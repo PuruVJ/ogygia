@@ -131,7 +131,6 @@ export function stream_document(
 	return new Response(body, { status: res.status, headers });
 }
 
-
 /** The in-slot failure card (message escaped) — a stream must never end broken or empty. */
 export function error_card_html(e: unknown): string {
 	const msg = e instanceof Error ? e.message : String(e);

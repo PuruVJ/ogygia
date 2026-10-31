@@ -12,7 +12,8 @@
 		<button type="button" class="dfd-frame-reload" onclick={() => (n += 1)}> Fetch again ↻ </button>
 	</div>
 	{#key n}
-		<iframe class="dfd-frame-view" title="Deferred server-island demo" src="/demo/deferred"></iframe>
+		<iframe class="dfd-frame-view" title="Deferred server-island demo" src="/demo/deferred"
+		></iframe>
 	{/key}
 </div>
 

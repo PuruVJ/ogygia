@@ -8,4 +8,4 @@ export const load: PageServerLoad = ({ url }) => {
 	const page = Number(url.searchParams.get('page') || '1') || 1;
 	const { rows, total, pages } = listOrders({ status, sort, dir, page, perPage: 20 });
 	return { rows, total, pages, page, status, sort, dir };
-}
+};

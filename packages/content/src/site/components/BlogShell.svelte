@@ -61,7 +61,9 @@
 	<a class="og-skip" href="#og-main">Skip to content</a>
 	<header class="og-bheader">
 		<div class="og-bheader-inner">
-			<a class="og-bheader-brand" href={the_base || '/'}>{#if brand}{@render brand()}{:else}{title}{/if}</a>
+			<a class="og-bheader-brand" href={the_base || '/'}
+				>{#if brand}{@render brand()}{:else}{title}{/if}</a
+			>
 			<nav class="og-bheader-nav" aria-label="Primary">
 				{#each links as l (l.href)}<a class="og-bheader-link" href={l.href}>{l.text}</a>{/each}
 			</nav>

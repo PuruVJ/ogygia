@@ -27,7 +27,11 @@ export function islands_endpoint(): string {
 /** Set by the handle (`handle({ endpoint })`); the default when none is given. */
 export function configure_islands_endpoint(path: string | undefined): void {
 	// (the suffix match and the mint both read a leading slash: `api/x` would match `/myapi/x`)
-	endpoint_slot[ENDPOINT_KEY] = !path ? DEFAULT_ISLANDS_ENDPOINT : path.startsWith('/') ? path : '/' + path;
+	endpoint_slot[ENDPOINT_KEY] = !path
+		? DEFAULT_ISLANDS_ENDPOINT
+		: path.startsWith('/')
+			? path
+			: '/' + path;
 }
 
 /** Max b64url props blob accepted by the region handle (and refused at mint time). */
@@ -47,7 +51,7 @@ export const DEFAULT_REGION_TTL_SEC = 3600;
  * that same public tuple for longer reveals nothing new. Redeploy survival additionally needs a
  * stable `OGYGIA_SECRET` (the default per-build key rotates; ServerIsland warns at build).
  */
-export const PRERENDER_REGION_TTL_SEC: number =10 * 365 * 24 * 3600;
+export const PRERENDER_REGION_TTL_SEC: number = 10 * 365 * 24 * 3600;
 
 /**
  * WHEN a capability minted now expires — aligned to a window, not `now + ttl`.

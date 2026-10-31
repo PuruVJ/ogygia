@@ -62,7 +62,9 @@ test('a hole answer morphs over an already-upgraded, already-open fallback: iden
 	release_answer();
 
 	// The deeper links the answer brought are grafted in…
-	await expect.poll(() => region.querySelector('#mm-deep-a') != null, { timeout: 10_000 }).toBe(true);
+	await expect
+		.poll(() => region.querySelector('#mm-deep-a') != null, { timeout: 10_000 })
+		.toBe(true);
 	// …WITHOUT replacing the opened item: same element instance, its shadow root and open state intact.
 	const after = region.querySelector('#mm-top-0') as HTMLElement;
 	expect(after, 'same element instance — not re-created').toBe(item);
@@ -72,7 +74,9 @@ test('a hole answer morphs over an already-upgraded, already-open fallback: iden
 	expect(after.shadowRoot, 'the upgrade (shadow root) survived').not.toBeNull();
 	expect(after.getAttribute('data-open'), 'the open state survived the swap').toBe('true');
 	expect(region.querySelector('#mm-deep-b'), 'the second deeper link grafted too').not.toBeNull();
-	expect(after.querySelector('[data-top]')?.textContent, 'the top-level label is intact').toBe('Top');
+	expect(after.querySelector('[data-top]')?.textContent, 'the top-level label is intact').toBe(
+		'Top'
+	);
 });
 
 test('a plain placeholder fallback (nothing to keep) still fills from the answer', async () => {
@@ -86,7 +90,9 @@ test('a plain placeholder fallback (nothing to keep) still fills from the answer
 	await expect.poll(() => fetched.length, { timeout: 10_000 }).toBe(1);
 	release_answer();
 
-	await expect.poll(() => region.querySelector('#mm-top-0') != null, { timeout: 10_000 }).toBe(true);
+	await expect
+		.poll(() => region.querySelector('#mm-top-0') != null, { timeout: 10_000 })
+		.toBe(true);
 	expect(region.querySelector('[data-fallback]'), 'the placeholder is gone').toBeNull();
 	expect(region.querySelector('#mm-deep-a'), 'the answer content is in').not.toBeNull();
 });

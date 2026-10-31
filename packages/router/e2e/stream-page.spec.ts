@@ -27,7 +27,11 @@ test.describe('streamed pages (yield regions): flush-before-slow-yield timing, t
 		for (const tpl of raw.match(/<template data-og-late[\s\S]*?<\/template>/g) ?? []) {
 			const regions = (tpl.match(/<ogygia-region\b/g) ?? []).length;
 			const sidecars = (tpl.match(/data-ogygia-props/g) ?? []).length;
-			check('wire: islands in a late chunk carry their sidecar inside the chunk', sidecars >= regions, `${regions} regions, ${sidecars} sidecars`);
+			check(
+				'wire: islands in a late chunk carry their sidecar inside the chunk',
+				sidecars >= regions,
+				`${regions} regions, ${sidecars} sidecars`
+			);
 		}
 	});
 

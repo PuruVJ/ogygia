@@ -24,7 +24,12 @@ const GRAPH_SCRIPT_RE = /<script type="application\/json" data-ogygia-graph>([^<
 afterEach(() => set_island_deps({}));
 
 function render_island(wake: string) {
-	const props: Record<string, unknown> = { __mode: 'island', __entry: ENTRY, __component: Tiny, __props: {} };
+	const props: Record<string, unknown> = {
+		__mode: 'island',
+		__entry: ENTRY,
+		__component: Tiny,
+		__props: {}
+	};
 	if (wake.startsWith('(')) props.media = wake;
 	else if (wake !== 'load') props[wake] = true;
 	const out = render(region, { props });
@@ -50,7 +55,9 @@ describe('island graph — encode / decode', () => {
 	it('the script cannot be broken out of', () => {
 		const html = island_graph_script(new Map([['/a.js', ['/</script><x>.js']]]));
 		expect(html.indexOf('</script>')).toBe(html.length - '</script>'.length);
-		expect([...decode_island_graph(GRAPH_SCRIPT_RE.exec(html)![1]).values()][0]).toEqual(['/</script><x>.js']);
+		expect([...decode_island_graph(GRAPH_SCRIPT_RE.exec(html)![1]).values()][0]).toEqual([
+			'/</script><x>.js'
+		]);
 	});
 });
 
@@ -92,7 +99,9 @@ describe('island graph — the document tail', () => {
 
 describe('preload is gone', () => {
 	it('the key is a build error that says why', () => {
-		expect(() => assert_no_legacy_options({ preload: 'all' } as never)).toThrow(/`preload` is gone/);
+		expect(() => assert_no_legacy_options({ preload: 'all' } as never)).toThrow(
+			/`preload` is gone/
+		);
 		expect(() => assert_no_legacy_options({})).not.toThrow();
 	});
 

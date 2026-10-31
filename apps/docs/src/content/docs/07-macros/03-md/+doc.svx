@@ -27,7 +27,7 @@ related:
 <Region of={intro} />
 ```
 
-Headings (with auto-slugged ids), lists, emphasis, links, and highlighted code fences: all that your document pipeline does, `md()` does, because it *is* your pipeline. The result is a region, rendered with `<Region of={…} />`. It ships as HTML, with no client JS.
+Headings (with auto-slugged ids), lists, emphasis, links, and highlighted code fences: all that your document pipeline does, `md()` does, because it _is_ your pipeline. The result is a region, rendered with `<Region of={…} />`. It ships as HTML, with no client JS.
 
 ## The rules
 

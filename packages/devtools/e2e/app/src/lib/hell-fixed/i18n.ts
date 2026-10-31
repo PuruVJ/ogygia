@@ -44,7 +44,11 @@ function plural(key: string, n: number | undefined, locale: string): string | un
 	return lookup(`${key}.${rules.select(n)}`, locale) ?? lookup(key, locale);
 }
 
-export function t(key: string, vars: Record<string, string | number> = {}, locale = 'en-US'): string {
+export function t(
+	key: string,
+	vars: Record<string, string | number> = {},
+	locale = 'en-US'
+): string {
 	const n = typeof vars.n === 'number' ? vars.n : undefined;
 	const template = plural(key, n, locale) ?? key;
 	return template.replace(/\{(\w+)\}/g, (_, k: string) => String(vars[k] ?? ''));

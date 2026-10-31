@@ -11,7 +11,8 @@
 	let { list: raw }: { list: Country[] } = $props();
 	const list = sortCountries(raw);
 	const regions = [...new Set(list.map((c) => c.region))];
-	for (const r of regions) track('country.region', { region: r, n: list.filter((c) => c.region === r).length });
+	for (const r of regions)
+		track('country.region', { region: r, n: list.filter((c) => c.region === r).length });
 </script>
 
 <div data-country-panel>
@@ -21,7 +22,8 @@
 			<ul>
 				{#each list.filter((c) => c.region === r) as c (c.code)}
 					<li>
-						<strong>{c.name}</strong> <code>{c.code}</code> <small>{t('country.sites', { n: c.links.length })}</small>
+						<strong>{c.name}</strong> <code>{c.code}</code>
+						<small>{t('country.sites', { n: c.links.length })}</small>
 						{#each c.links as l (l.href)}<a href={l.href}>{l.label}</a>{/each}
 					</li>
 				{/each}

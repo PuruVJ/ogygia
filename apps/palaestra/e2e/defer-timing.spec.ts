@@ -108,7 +108,9 @@ test.describe('server-island fetch timing load/idle/visible/media', () => {
 			'prefetch hole still shows its fallback (a warm is not a swap)',
 			(await page.locator('[data-fallback-prefetch]').count()) > 0
 		);
-		const prefetch_requests_before = islandReqs.filter((u) => u.includes('id=' + idPrefetch)).length;
+		const prefetch_requests_before = islandReqs.filter((u) =>
+			u.includes('id=' + idPrefetch)
+		).length;
 		await page.locator('[data-defer="prefetch"] ogygia-region').hover();
 		await page
 			.waitForSelector('[data-defer="prefetch"] [data-server-greeting]', { timeout: 6000 })

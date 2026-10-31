@@ -22,6 +22,7 @@ One plain (non-island) component's server markup is kept in the freeze store and
 later page renders. The rest of the page renders per request. Holes inside keep working.
 
 What it is NOT:
+
 - Not a hole: no extra browser request, no fallback flash.
 - Not a frozen page: loads still run; the page around it is per request.
 - Not the R6 hole render cache (in-process, hole endpoint only, no invalidation).
@@ -34,13 +35,13 @@ What it is NOT:
 ```
 page render (Kit, one pass)                          handle (transformPageChunk)
 ──────────────────────────────────────────────       ─────────────────────────────────────
-… layout …                                           
-<Header nav={…}/> → wrapper:                         
-   key = frag(build, identity, props, vary…)         
-   emit  <!--og-frag:NONCE:0-->                       
-   bag.frags[0] = {key, component, props, ctx}       
-   store.get(key)  ─────── in flight ───────┐        
-… rest of the page renders …                 │        
+… layout …
+<Header nav={…}/> → wrapper:
+   key = frag(build, identity, props, vary…)
+   emit  <!--og-frag:NONCE:0-->
+   bag.frags[0] = {key, component, props, ctx}
+   store.get(key)  ─────── in flight ───────┐
+… rest of the page renders …                 │
                                              ▼        chunk with the marker arrives:
                                                        await bag.frags[*].read
                                                        HIT  → body + journal
@@ -69,15 +70,15 @@ page render (Kit, one pass)                          handle (transformPageChunk)
 
 ### Why placeholder + stitch beats wait-in-place
 
-| | wait in place (v1) | placeholder + stitch (v2) |
-|---|---|---|
-| Needs Svelte async mode | yes | **no** |
-| Page render blocked on Redis | at that spot | **never** |
-| Replay of side effects | inside Svelte, scattered | **one place, before seeds/tail** |
-| Tail journaling (seed refs, shared sidecars) | hard (tail is live) | **easy (tail not built yet)** |
-| Holes re-minted per visitor | extra pass | **same pass** |
-| Nested fragments resolved together | serial | **one batched read** |
-| Miss cost | overlaps the render | after the render (same CPU) |
+|                                              | wait in place (v1)       | placeholder + stitch (v2)        |
+| -------------------------------------------- | ------------------------ | -------------------------------- |
+| Needs Svelte async mode                      | yes                      | **no**                           |
+| Page render blocked on Redis                 | at that spot             | **never**                        |
+| Replay of side effects                       | inside Svelte, scattered | **one place, before seeds/tail** |
+| Tail journaling (seed refs, shared sidecars) | hard (tail is live)      | **easy (tail not built yet)**    |
+| Holes re-minted per visitor                  | extra pass               | **same pass**                    |
+| Nested fragments resolved together           | serial                   | **one batched read**             |
+| Miss cost                                    | overlaps the render      | after the render (same CPU)      |
 
 ## 3. Surface (NEEDS SIGN-OFF)
 
@@ -106,6 +107,7 @@ Recommended: a fourth `render` mode on the existing import-attribute grammar.
   `freeze.invalidate(Header, { locale: 'fr' })` (only that variant).
 
 Other surfaces worth having later (same machinery):
+
 - **Config by file, zero code change**: `freeze: { fragments: { 'src/lib/Header.svelte': 'header' } }`.
   Ops can turn it on without touching components.
 - **Component-side**: `export const freeze = 'header'` in Header's `<script module>`.
@@ -202,6 +204,7 @@ type FragmentEntry = {
 ### Replay
 
 Every journal line calls the REAL per-request API, so dedupe behaves as if it rendered:
+
 - `claimRuntimeEmit()` won → `runtime_bootstrap()` into the head.
 - `claim_region_css(css)` → `region_css_tag` for winners (inline-under-threshold per page).
 - `record_page(current page, …)`: the page seed is fresh even when the markup isn't.
@@ -217,6 +220,7 @@ Identical slot ids twice. The second instance is rendered live (rare; headers ap
 
 The store keeps the hole's ingredients, never a signed address. At stitch time each hole is
 signed for THIS visitor with normal `regions.ttl`:
+
 - **Session visitors work.** Today a frozen page's hole, minted on an anonymous render, fails
   the MAC for a visitor with a session cookie (403, and renewal refuses session holders).
   Re-minting at stitch fixes that for fragments. Frozen pages should adopt the same trick.
@@ -224,6 +228,7 @@ signed for THIS visitor with normal `regions.ttl`:
 - Cost: one HMAC per hole per request, the same as rendering them live.
 
 Combinations that fall out:
+
 - **`stitch: 'serve'` holes inside a fragment**: at stitch time the hole's answer is rendered
   server-side too (`stitch_html` exists) and pasted. Result: a frozen header shell + the
   personal bits (cart count, user menu) filled in the SAME response. No client fetch, no
@@ -234,26 +239,26 @@ Combinations that fall out:
 
 ## 7. Where a fragment can sit, and what can sit in it
 
-| Fragment inside… | v1 behaviour |
-|---|---|
-| a normal csr=false page | **the main case** |
-| a frozen page | page capture keeps the fragment MARKER (late binding, default at origin) or bakes it in (early binding, needed for edge-cached pages). Late: a header change evicts zero pages; a page hit costs one more read (batched). Early: tags cascade, the header change evicts every page holding it |
-| another fragment | the inner stays a marker in the outer's stored body; both resolve in one batched read; the inner can change without the outer recapturing ("Russian dolls") |
-| a hole's answer (endpoint render) | works: `render_region` runs the same stitch on its body. Hole answers get cheap |
-| a woken island (inline SSR) | live, dev note: the island hydrates and would mismatch frozen markup |
-| a csr=true route | live, dev note (Kit hydrates; stale markup = hydration mismatch). Later: allowed when byte-identical, which the shadow check (§11) can measure |
-| a prerendered page | renders inline at build (no store). Or seeds the store (§11, baking) |
-| a federated (MFE) document | works per app; see shared fragments in §11 |
+| Fragment inside…                  | v1 behaviour                                                                                                                                                                                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a normal csr=false page           | **the main case**                                                                                                                                                                                                                                                                             |
+| a frozen page                     | page capture keeps the fragment MARKER (late binding, default at origin) or bakes it in (early binding, needed for edge-cached pages). Late: a header change evicts zero pages; a page hit costs one more read (batched). Early: tags cascade, the header change evicts every page holding it |
+| another fragment                  | the inner stays a marker in the outer's stored body; both resolve in one batched read; the inner can change without the outer recapturing ("Russian dolls")                                                                                                                                   |
+| a hole's answer (endpoint render) | works: `render_region` runs the same stitch on its body. Hole answers get cheap                                                                                                                                                                                                               |
+| a woken island (inline SSR)       | live, dev note: the island hydrates and would mismatch frozen markup                                                                                                                                                                                                                          |
+| a csr=true route                  | live, dev note (Kit hydrates; stale markup = hydration mismatch). Later: allowed when byte-identical, which the shadow check (§11) can measure                                                                                                                                                |
+| a prerendered page                | renders inline at build (no store). Or seeds the store (§11, baking)                                                                                                                                                                                                                          |
+| a federated (MFE) document        | works per app; see shared fragments in §11                                                                                                                                                                                                                                                    |
 
-| …inside a fragment | v1 behaviour |
-|---|---|
-| deferred hole | re-minted per visitor (§6) |
-| serve-stitched hole | rendered per request, pasted (§6) |
-| island | journaled (CSS, runtime, sidecar, graph) |
-| lake | fine (static markup) |
-| another fragment | late-bound marker |
-| late region (streamed) | refuses: a late region is per request by definition |
-| `{#await}` | csr=false: the pending branch is final markup anyway; stored as rendered |
+| …inside a fragment     | v1 behaviour                                                             |
+| ---------------------- | ------------------------------------------------------------------------ |
+| deferred hole          | re-minted per visitor (§6)                                               |
+| serve-stitched hole    | rendered per request, pasted (§6)                                        |
+| island                 | journaled (CSS, runtime, sidecar, graph)                                 |
+| lake                   | fine (static markup)                                                     |
+| another fragment       | late-bound marker                                                        |
+| late region (streamed) | refuses: a late region is per request by definition                      |
+| `{#await}`             | csr=false: the pending branch is final markup anyway; stored as rendered |
 
 ## 8. Safety: when a capture refuses to store
 
@@ -263,6 +268,7 @@ With v2 the miss render runs after the page render, so **there are no concurrent
 the window**: attribution is exact without AsyncLocalStorage. (v1 had to accept over-blame.)
 
 Refuses when the capture:
+
 - reads a cookie (non-default), `getAll`, writes a cookie, calls `setHeaders`;
 - reads `cookie`, `authorization`, `accept-language`, `user-agent`, `referer`, `x-user*`,
   `x-session*`;
@@ -280,6 +286,7 @@ Refuses when the capture:
   `<svelte:boundary>` failure. Never freeze a broken header.
 
 Belt-and-braces checks on the bytes (cheap, `indexOf` per value):
+
 - **Personal-data canary**: any request cookie value, `authorization` value, or CSRF token of 8+
   characters found in the captured body or head → refuse. Catches leaks the observers can't
   see, like `event.fetch('/api/me')` forwarding cookies.
@@ -294,6 +301,7 @@ Shared-gap fix to do in frozen pages first: wrap `event.fetch` in the observer; 
 `cookie`/`authorization` counts as a personal read.
 
 Store trust:
+
 - **Signed entries** (`freeze.signEntries: true`): HMAC over the entry with `OGYGIA_SECRET`;
   a tampered entry is a miss. Anyone who can write a shared Redis could otherwise inject HTML
   into every page.
@@ -404,17 +412,17 @@ start with `/`, so `invalidate('/x')` never touches fragments.
 
 ## 13. Failure modes
 
-| What fails | What the visitor gets |
-|---|---|
-| Store down / slow | Live render, one log line |
-| Miss render throws | Last good copy if any (staleIfError), else Kit's error page as today |
-| Gates refuse | This response uses the render; next request renders live |
-| Recapture shrinks | Last good copy, log |
-| Old code's entry | Unreachable (code-hash in key); ages out |
-| Header publish | Bounded by maxAge; `invalidate(Header)` / `og.source` tags fix it now |
-| Tampered entry (signed mode) | Miss, log |
-| Same fragment twice | Second renders live |
-| csr=true / inside an island | Live, dev note |
+| What fails                   | What the visitor gets                                                 |
+| ---------------------------- | --------------------------------------------------------------------- |
+| Store down / slow            | Live render, one log line                                             |
+| Miss render throws           | Last good copy if any (staleIfError), else Kit's error page as today  |
+| Gates refuse                 | This response uses the render; next request renders live              |
+| Recapture shrinks            | Last good copy, log                                                   |
+| Old code's entry             | Unreachable (code-hash in key); ages out                              |
+| Header publish               | Bounded by maxAge; `invalidate(Header)` / `og.source` tags fix it now |
+| Tampered entry (signed mode) | Miss, log                                                             |
+| Same fragment twice          | Second renders live                                                   |
+| csr=true / inside an island  | Live, dev note                                                        |
 
 ## 14. Build plan
 
@@ -572,6 +580,7 @@ Severity: **S1** = wrong or broken page / leak, **S2** = silent waste or confusi
 ### Server features (frozen pages, flags, stores, security) — sweep 2026-10-05
 
 Design corrections first:
+
 - **S1 · Page capture bakes in the stitched fragment.** `capture_freeze` reads
   `response.text()` (`hooks.ts:697`) AFTER `transformPageChunk` ran, so every frozen page stores
   the pasted header: early binding by accident. And the page HIT path (`freeze_response`) never
@@ -625,6 +634,7 @@ Design corrections first:
   pass + nonce. (Likely a live bug for tails too; verify.)
 
 Live frozen-page bugs found on the way (not fragment-specific; fix first, fragments inherit):
+
 - **Verified · `invalidateWhere({ prefix: '/' })` misses everything on shared stores.**
   `normalize_prefix('/')` = `/`, and `scan_prefix(p + '/')` scans `//*` (`valkey.ts:103`;
   same in upstash `:74`, cloudflare-kv `:67`). Only the exact `/` key goes; edges purge

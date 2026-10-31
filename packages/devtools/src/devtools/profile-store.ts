@@ -35,7 +35,14 @@ export interface SlimProfile {
 	score: {
 		score: number;
 		grade: string;
-		categories: { key: string; label: string; score: number; value: string; lost: number; detail: string[] }[];
+		categories: {
+			key: string;
+			label: string;
+			score: number;
+			value: string;
+			lost: number;
+			detail: string[];
+		}[];
 		missing: { label: string; why: string }[];
 		/** since the last profile of this page */
 		was?: { score: number; grade: string };
@@ -48,19 +55,43 @@ export interface SlimProfile {
 		files: { name: string; kind: string; bytes: number; lazy: boolean; contains: string[] }[];
 		/** one module shipped as two copies, both loaded by this page: its files, their bytes, where each
 		 *  came from, and what the second copy costs */
-		twice?: { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[];
+		twice?: {
+			name: string;
+			copies: { file: string; bytes: number; from?: string }[];
+			extra: number;
+		}[];
 	} | null;
-	forecast: { now_ms: number; after_ms: number; parts: { title: string; kind: string; ms: number; wait: boolean }[] } | null;
+	forecast: {
+		now_ms: number;
+		after_ms: number;
+		parts: { title: string; kind: string; ms: number; wait: boolean }[];
+	} | null;
 	findings: { severity: string; code: string; message: string; fix?: string; fps?: string[] }[];
 	islands: SlimIsland[];
-	components: { name: string; file: string | null; self_ms: number; total_ms: number; instances: number | null }[];
-	network: { count: number; total_ms: number; sequential_ms: number; calls: { method: string; url: string; status: number | null; wait_ms: number }[] } | null;
+	components: {
+		name: string;
+		file: string | null;
+		self_ms: number;
+		total_ms: number;
+		instances: number | null;
+	}[];
+	network: {
+		count: number;
+		total_ms: number;
+		sequential_ms: number;
+		calls: { method: string; url: string; status: number | null; wait_ms: number }[];
+	} | null;
 	seed_bytes: number | null;
 	links: { html: string; json: string } | null;
 	/** named spans split by an element tag (`span('ds.render', …, { tag })`): the page's elements of it */
 	spans: { name: string; total_ms: number; tags: { tag: string; count: number; ms: number }[] }[];
 	/** the document as bytes: its size, what kind, and the declarative shadow roots in it */
-	html: { total: number; shadow: number; shadow_count: number; by_kind: Record<string, number> } | null;
+	html: {
+		total: number;
+		shadow: number;
+		shadow_count: number;
+		by_kind: Record<string, number>;
+	} | null;
 	/** the largest paint the browser saw (its tag, the island it sat in) */
 	lcp: { tag: string | null; fp: string | null; ms: number | null } | null;
 	/** the server's hottest code (own time, per render) */
@@ -71,7 +102,11 @@ export interface SlimProfile {
  * Profile a same-origin path on the server, now (the profiler's `/page?format=json`; a 409 = the
  * recorder is busy: wait and ask again). Stores the slim copy and returns it.
  */
-export async function run_profile(path: string, runs = 3, base = '/__profiler'): Promise<SlimProfile> {
+export async function run_profile(
+	path: string,
+	runs = 3,
+	base = '/__profiler'
+): Promise<SlimProfile> {
 	const url = `${base}/page?p=${encodeURIComponent(path)}&runs=${runs}&format=json`;
 	for (let tries = 0; tries < 30; tries++) {
 		const r = await fetch(url, { headers: { accept: 'application/json' } });
@@ -86,11 +121,16 @@ export async function run_profile(path: string, runs = 3, base = '/__profiler'):
 			let said = text;
 			try {
 				const j = JSON.parse(text) as { error?: unknown; message?: unknown };
-				said = typeof j.error === 'string' ? j.error : typeof j.message === 'string' ? j.message : text;
+				said =
+					typeof j.error === 'string' ? j.error : typeof j.message === 'string' ? j.message : text;
 			} catch {
 				// not JSON: the text itself
 			}
-			throw new Error(r.status === 503 ? said.slice(0, 600) : `the profiler answered ${r.status}: ${said.slice(0, 300)}`);
+			throw new Error(
+				r.status === 503
+					? said.slice(0, 600)
+					: `the profiler answered ${r.status}: ${said.slice(0, 300)}`
+			);
 		}
 		const p = slim_profile(await r.json());
 		set_profile(p);
@@ -101,12 +141,28 @@ export async function run_profile(path: string, runs = 3, base = '/__profiler'):
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-const arr = (v: unknown): Record<string, any>[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
+const arr = (v: unknown): Record<string, any>[] =>
+	Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : [];
 /** an island row's first hazard line — a value it renders before a guard around browser-only work */
 function slim_hazard(v: unknown): { hazard?: NonNullable<SlimIsland['hazard']> } {
-	const list = arr(v).filter((h) => typeof h.file === 'string' && typeof h.line === 'number' && (h.kind === 'await' || h.kind === 'browser'));
+	const list = arr(v).filter(
+		(h) =>
+			typeof h.file === 'string' &&
+			typeof h.line === 'number' &&
+			(h.kind === 'await' || h.kind === 'browser')
+	);
 	const h = list.find((x) => !x.guard) ?? list[0];
-	return h ? { hazard: { file: h.file, line: h.line, kind: h.kind, ...(typeof h.reads === 'string' ? { reads: h.reads } : {}), ...(h.guard === true ? { guard: true as const } : {}) } } : {};
+	return h
+		? {
+				hazard: {
+					file: h.file,
+					line: h.line,
+					kind: h.kind,
+					...(typeof h.reads === 'string' ? { reads: h.reads } : {}),
+					...(h.guard === true ? { guard: true as const } : {})
+				}
+			}
+		: {};
 }
 
 function median(xs: number[]): number {
@@ -121,7 +177,9 @@ function median(xs: number[]): number {
 export function slim_profile(r: Record<string, any>): SlimProfile {
 	const target = r?.target ?? {};
 	// (`runs` are the renders with the profiler's own cost taken out — the forecast's base)
-	const runs = (Array.isArray(target.runs) ? target.runs : []).filter((x: unknown) => typeof x === 'number');
+	const runs = (Array.isArray(target.runs) ? target.runs : []).filter(
+		(x: unknown) => typeof x === 'number'
+	);
 	const sc = r?.score;
 	const fc = r?.forecast;
 	const net = r?.network;
@@ -132,8 +190,12 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 		at: num(r?.created) ?? Date.now(),
 		runs,
 		render_ms: Math.round(median(runs) * 10) / 10,
-		...(typeof target.cache_control === 'string' && target.cache_control ? { cache_control: target.cache_control.slice(0, 200) } : {}),
-		...(target.prerendered === 'file' || target.prerendered === 'route' ? { prerendered: target.prerendered } : {}),
+		...(typeof target.cache_control === 'string' && target.cache_control
+			? { cache_control: target.cache_control.slice(0, 200) }
+			: {}),
+		...(target.prerendered === 'file' || target.prerendered === 'route'
+			? { prerendered: target.prerendered }
+			: {}),
 		score:
 			sc && typeof sc.score === 'number'
 				? {
@@ -147,8 +209,13 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 							lost: num(c.lost) ?? 0,
 							detail: Array.isArray(c.detail) ? c.detail.map(String).slice(0, 4) : []
 						})),
-						missing: arr(sc.missing).map((m) => ({ label: String(m.label ?? m.key), why: String(m.why ?? '') })),
-						...(typeof r?.since?.score?.a === 'number' ? { was: { score: r.since.score.a, grade: String(r.since.score.a_grade ?? '') } } : {})
+						missing: arr(sc.missing).map((m) => ({
+							label: String(m.label ?? m.key),
+							why: String(m.why ?? '')
+						})),
+						...(typeof r?.since?.score?.a === 'number'
+							? { was: { score: r.since.score.a, grade: String(r.since.score.a_grade ?? '') } }
+							: {})
 					}
 				: null,
 		assets: r?.assets?.totals
@@ -159,7 +226,11 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 					files: arr(r.assets.files)
 						.slice(0, 10)
 						.map((f) => ({
-							name: String(f.url ?? '').split('?')[0].split('/').pop() ?? '',
+							name:
+								String(f.url ?? '')
+									.split('?')[0]
+									.split('/')
+									.pop() ?? '',
 							kind: String(f.kind ?? ''),
 							bytes: num(f.bytes) ?? 0,
 							lazy: !!f.lazy,
@@ -172,7 +243,11 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 								name: String(d.name ?? ''),
 								copies: arr(d.copies)
 									.slice(0, 3)
-									.map((c) => ({ file: String(c.file ?? ''), bytes: num(c.bytes) ?? 0, ...(typeof c.from === 'string' ? { from: c.from } : {}) })),
+									.map((c) => ({
+										file: String(c.file ?? ''),
+										bytes: num(c.bytes) ?? 0,
+										...(typeof c.from === 'string' ? { from: c.from } : {})
+									})),
 								extra: num(d.extra) ?? 0
 							}))
 							.filter((d) => d.name && d.copies.length >= 2);
@@ -187,7 +262,12 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 						after_ms: num(fc.after_ms) ?? fc.now_ms,
 						parts: arr(fc.parts)
 							.slice(0, 8)
-							.map((p) => ({ title: String(p.title ?? p.kind), kind: String(p.kind ?? ''), ms: num(p.ms) ?? 0, wait: !!p.wait }))
+							.map((p) => ({
+								title: String(p.title ?? p.kind),
+								kind: String(p.kind ?? ''),
+								ms: num(p.ms) ?? 0,
+								wait: !!p.wait
+							}))
 					}
 				: null,
 		findings: arr(r?.findings)
@@ -217,7 +297,13 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 		})),
 		components: arr(r?.components)
 			.slice(0, 12)
-			.map((c) => ({ name: String(c.name ?? ''), file: str(c.file), self_ms: num(c.self_ms) ?? 0, total_ms: num(c.total_ms) ?? 0, instances: num(c.instances) })),
+			.map((c) => ({
+				name: String(c.name ?? ''),
+				file: str(c.file),
+				self_ms: num(c.self_ms) ?? 0,
+				total_ms: num(c.total_ms) ?? 0,
+				instances: num(c.instances)
+			})),
 		network: net
 			? {
 					count: num(net.count) ?? 0,
@@ -225,7 +311,12 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 					sequential_ms: num(net.sequential_ms) ?? 0,
 					calls: arr(net.calls)
 						.slice(0, 20)
-						.map((c) => ({ method: String(c.method ?? 'GET'), url: String(c.url ?? ''), status: num(c.status), wait_ms: num(c.wait_ms) ?? 0 }))
+						.map((c) => ({
+							method: String(c.method ?? 'GET'),
+							url: String(c.url ?? ''),
+							status: num(c.status),
+							wait_ms: num(c.wait_ms) ?? 0
+						}))
 				}
 			: null,
 		seed_bytes: num(r?.ogygia?.seed_bytes),
@@ -239,18 +330,28 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 				tags: arr(s.by.tag)
 					.slice(0, 8)
 					// its SHARE of the CPU (spans overlap: their summed durations count each wait many times)
-					.map((t) => ({ tag: String(t.value ?? ''), count: num(t.count) ?? 0, ms: num(t.share_ms) ?? num(t.wall_ms) ?? 0 }))
+					.map((t) => ({
+						tag: String(t.value ?? ''),
+						count: num(t.count) ?? 0,
+						ms: num(t.share_ms) ?? num(t.wall_ms) ?? 0
+					}))
 			})),
 		html: r?.strip
 			? {
 					total: num(r.strip.total) ?? 0,
 					shadow: num(r.strip.by_kind?.shadow) ?? 0,
 					shadow_count: num(r.strip.shadow_count) ?? 0,
-					by_kind: Object.fromEntries(Object.entries(r.strip.by_kind ?? {}).filter(([, v]) => typeof v === 'number')) as Record<string, number>
+					by_kind: Object.fromEntries(
+						Object.entries(r.strip.by_kind ?? {}).filter(([, v]) => typeof v === 'number')
+					) as Record<string, number>
 				}
 			: null,
 		lcp: r?.browser?.visit?.paints
-			? { tag: str(r.browser.visit.paints.lcp_tag), fp: str(r.browser.visit.paints.lcp_fp), ms: num(r.browser.visit.paints.lcp) }
+			? {
+					tag: str(r.browser.visit.paints.lcp_tag),
+					fp: str(r.browser.visit.paints.lcp_fp),
+					ms: num(r.browser.visit.paints.lcp)
+				}
 			: null,
 		hot: arr(r?.hot_functions)
 			.filter((f) => f.category !== 'profiler' && f.category !== 'idle')
@@ -266,7 +367,11 @@ export function slim_profile(r: Record<string, any>): SlimProfile {
 }
 
 /** The server row for an island: by fingerprint, else by entry (the same island with other props). */
-export function island_row(p: SlimProfile | null, fp: string | null, entry: string | null): SlimIsland | null {
+export function island_row(
+	p: SlimProfile | null,
+	fp: string | null,
+	entry: string | null
+): SlimIsland | null {
 	if (!p) return null;
 	if (fp) {
 		const hit = p.islands.find((i) => i.fp === fp);
@@ -274,7 +379,9 @@ export function island_row(p: SlimProfile | null, fp: string | null, entry: stri
 	}
 	if (entry) {
 		const tail = entry.slice(entry.lastIndexOf('/') + 1);
-		return p.islands.find((i) => i.entry && i.entry.slice(i.entry.lastIndexOf('/') + 1) === tail) ?? null;
+		return (
+			p.islands.find((i) => i.entry && i.entry.slice(i.entry.lastIndexOf('/') + 1) === tail) ?? null
+		);
 	}
 	return null;
 }

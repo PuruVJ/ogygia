@@ -17,7 +17,8 @@ describe('absolutize_hole_html', () => {
 	});
 
 	it('resolves an island’s location (`src`) beside its identity — left relative, it imported `/<page>/_app/…`', () => {
-		const html = '<ogygia-region entry="./_app/immutable/og-region.1d43.js" wake="visible" src="./_app/immutable/og-region.1d43.Xy9.js"></ogygia-region>';
+		const html =
+			'<ogygia-region entry="./_app/immutable/og-region.1d43.js" wake="visible" src="./_app/immutable/og-region.1d43.Xy9.js"></ogygia-region>';
 		const out = absolutize_hole_html(html, new URL('http://localhost/docs/__ogygia__?id=abc'));
 		expect(out).toContain('entry="/docs/_app/immutable/og-region.1d43.js"');
 		expect(out).toContain('src="/docs/_app/immutable/og-region.1d43.Xy9.js"');

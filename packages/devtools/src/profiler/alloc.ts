@@ -97,7 +97,13 @@ export function alloc_timeline(input: AllocInput): AllocTimeline | undefined {
 			const k = seg.label + '\0' + (seg.file ?? '');
 			const hit = by.get(k);
 			if (hit) hit.ms += ov;
-			else by.set(k, { label: seg.label, category: seg.category, ...(seg.file ? { file: seg.file } : {}), ms: ov });
+			else
+				by.set(k, {
+					label: seg.label,
+					category: seg.category,
+					...(seg.file ? { file: seg.file } : {}),
+					ms: ov
+				});
 		}
 		const top = [...by.values()].sort((a, b) => b.ms - a.ms).slice(0, 4);
 		raw.push({
@@ -105,7 +111,12 @@ export function alloc_timeline(input: AllocInput): AllocTimeline | undefined {
 			t1: round2(t1),
 			mb: round1(mb),
 			rate: round1((mb / len) * 1000),
-			running: top.map((x) => ({ label: x.label, category: x.category, ...(x.file ? { file: x.file } : {}), share: cpu > 0 ? round2(x.ms / cpu) : 0 })),
+			running: top.map((x) => ({
+				label: x.label,
+				category: x.category,
+				...(x.file ? { file: x.file } : {}),
+				share: cpu > 0 ? round2(x.ms / cpu) : 0
+			})),
 			gc: had_gc
 		});
 	}

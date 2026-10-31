@@ -13,7 +13,11 @@ afterEach(() => {
 const island = '<ogygia-region wake="load" data-island></ogygia-region>';
 
 test('an island inside a lake, a hole, or a baked live region is the runtime’s on a Kit document', () => {
-	for (const open of ['<ogygia-region wake="none">', '<ogygia-region render="defer" when="load">', '<ogygia-region live data-og-baked>']) {
+	for (const open of [
+		'<ogygia-region wake="none">',
+		'<ogygia-region render="defer" when="load">',
+		'<ogygia-region live data-og-baked>'
+	]) {
 		document.body.innerHTML = `${open}<div>${island}</div></ogygia-region>`;
 		expect(ours_on_kit_document(document.querySelector('[data-island]')!), open).toBe(true);
 	}

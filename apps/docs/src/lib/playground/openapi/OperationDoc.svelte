@@ -64,11 +64,23 @@
 						{#each params as p (p.name)}
 							<tr>
 								<td><code class="oa-pname">{p.name}</code></td>
-								<td><span class="oa-ptype">{p.schema?.type ?? 'string'}{p.schema?.format ? ` · ${p.schema.format}` : ''}</span></td>
-								<td>{#if p.required}<span class="oa-required">required</span>{/if}</td>
+								<td
+									><span class="oa-ptype"
+										>{p.schema?.type ?? 'string'}{p.schema?.format
+											? ` · ${p.schema.format}`
+											: ''}</span
+									></td
+								>
+								<td
+									>{#if p.required}<span class="oa-required">required</span>{/if}</td
+								>
 								<td>
 									{p.description ?? ''}
-									{#if p.schema?.enum}<span class="oa-inline-enum">{(p.schema.enum as unknown[]).map((v) => JSON.stringify(v)).join(' · ')}</span>{/if}
+									{#if p.schema?.enum}<span class="oa-inline-enum"
+											>{(p.schema.enum as unknown[])
+												.map((v) => JSON.stringify(v))
+												.join(' · ')}</span
+										>{/if}
 								</td>
 							</tr>
 						{/each}
@@ -80,7 +92,9 @@
 
 	{#if op.requestBody}
 		<section>
-			<h2 class="oa-h2">Request body{#if op.requestBody.required}<span class="oa-required">required</span>{/if}</h2>
+			<h2 class="oa-h2">
+				Request body{#if op.requestBody.required}<span class="oa-required">required</span>{/if}
+			</h2>
 			{#if op.requestBody.description}<p class="oa-op-desc">{op.requestBody.description}</p>{/if}
 			<p class="oa-media">{op.requestBody.mediaType}</p>
 			<Schema schema={op.requestBody.schema} />
@@ -97,7 +111,9 @@
 						<span class="oa-response-desc">{r.description ?? ''}</span>
 						{#if r.mediaType}<span class="oa-media">{r.mediaType}</span>{/if}
 					</div>
-					{#if r.schema}<div class="oa-response-body"><Schema schema={r.schema} open={false} /></div>{/if}
+					{#if r.schema}<div class="oa-response-body">
+							<Schema schema={r.schema} open={false} />
+						</div>{/if}
 				</li>
 			{/each}
 		</ul>
@@ -122,11 +138,21 @@
 		border-radius: 6px;
 		color: #fff;
 	}
-	.oa-m-get { background: #3b6ea5; }
-	.oa-m-post { background: #2f8a52; }
-	.oa-m-put { background: #b07b1e; }
-	.oa-m-patch { background: #8a6d2f; }
-	.oa-m-delete { background: #b4402f; }
+	.oa-m-get {
+		background: #3b6ea5;
+	}
+	.oa-m-post {
+		background: #2f8a52;
+	}
+	.oa-m-put {
+		background: #b07b1e;
+	}
+	.oa-m-patch {
+		background: #8a6d2f;
+	}
+	.oa-m-delete {
+		background: #b4402f;
+	}
 	.oa-path {
 		font-family: var(--og-mono, monospace);
 		font-size: 0.95rem;
@@ -174,9 +200,22 @@
 		border-bottom: 1px solid var(--og-border, #f0f0f2);
 		vertical-align: top;
 	}
-	.oa-pname { font-family: var(--og-mono, monospace); font-weight: 600; }
-	.oa-ptype { font-family: var(--og-mono, monospace); font-size: 0.82rem; color: var(--og-accent, #3b6ea5); }
-	.oa-inline-enum { display: block; margin-top: 0.2rem; font-family: var(--og-mono, monospace); font-size: 0.76rem; color: var(--og-text-dim, #888); }
+	.oa-pname {
+		font-family: var(--og-mono, monospace);
+		font-weight: 600;
+	}
+	.oa-ptype {
+		font-family: var(--og-mono, monospace);
+		font-size: 0.82rem;
+		color: var(--og-accent, #3b6ea5);
+	}
+	.oa-inline-enum {
+		display: block;
+		margin-top: 0.2rem;
+		font-family: var(--og-mono, monospace);
+		font-size: 0.76rem;
+		color: var(--og-text-dim, #888);
+	}
 	.oa-required {
 		font-size: 0.66rem;
 		text-transform: uppercase;
@@ -192,8 +231,19 @@
 		color: var(--og-text-dim, #888);
 		margin: 0.2rem 0 0.5rem;
 	}
-	.oa-responses { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
-	.oa-response-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+	.oa-responses {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.7rem;
+	}
+	.oa-response-head {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
 	.oa-status {
 		font-family: var(--og-mono, monospace);
 		font-weight: 700;
@@ -201,14 +251,42 @@
 		padding: 0.15rem 0.5rem;
 		border-radius: 6px;
 	}
-	.oa-status-ok { color: #2f8a52; background: color-mix(in oklab, #2f8a52 14%, transparent); }
-	.oa-status-info { color: #3b6ea5; background: color-mix(in oklab, #3b6ea5 14%, transparent); }
-	.oa-status-warn { color: #b07b1e; background: color-mix(in oklab, #b07b1e 16%, transparent); }
-	.oa-status-err { color: #b4402f; background: color-mix(in oklab, #b4402f 14%, transparent); }
-	.oa-response-desc { color: var(--og-text, #333); font-size: 0.9rem; }
-	.oa-response-body { margin-top: 0.5rem; }
-	.oa-sec-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 0.6rem; flex-wrap: wrap; }
-	.oa-sec-list li { display: flex; align-items: center; gap: 0.4rem; }
+	.oa-status-ok {
+		color: #2f8a52;
+		background: color-mix(in oklab, #2f8a52 14%, transparent);
+	}
+	.oa-status-info {
+		color: #3b6ea5;
+		background: color-mix(in oklab, #3b6ea5 14%, transparent);
+	}
+	.oa-status-warn {
+		color: #b07b1e;
+		background: color-mix(in oklab, #b07b1e 16%, transparent);
+	}
+	.oa-status-err {
+		color: #b4402f;
+		background: color-mix(in oklab, #b4402f 14%, transparent);
+	}
+	.oa-response-desc {
+		color: var(--og-text, #333);
+		font-size: 0.9rem;
+	}
+	.oa-response-body {
+		margin-top: 0.5rem;
+	}
+	.oa-sec-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		gap: 0.6rem;
+		flex-wrap: wrap;
+	}
+	.oa-sec-list li {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
 	.oa-scheme {
 		font-family: var(--og-mono, monospace);
 		font-size: 0.82rem;
@@ -216,5 +294,8 @@
 		padding: 0.1rem 0.4rem;
 		border-radius: 5px;
 	}
-	.oa-scopes { font-size: 0.8rem; color: var(--og-text-dim, #888); }
+	.oa-scopes {
+		font-size: 0.8rem;
+		color: var(--og-text-dim, #888);
+	}
 </style>

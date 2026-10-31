@@ -7,7 +7,9 @@
 
 /** a route's page or layout file, by its folder under `src/routes` (`form: 'src'`) or its built
  *  chunk under `entries/pages` (`'built'`: `[id]` written `_id_`); undefined for any other file */
-export function route_file_of(path: string): { dir: string; page: boolean; form: 'src' | 'built' } | undefined {
+export function route_file_of(
+	path: string
+): { dir: string; page: boolean; form: 'src' | 'built' } | undefined {
 	const read = (marker: string, form: 'src' | 'built', page: string, layout: string[]) => {
 		const at = path.lastIndexOf(marker);
 		if (at === -1) return undefined;
@@ -19,7 +21,10 @@ export function route_file_of(path: string): { dir: string; page: boolean; form:
 		if (layout.some((l) => base.startsWith(l))) return { dir, page: false, form };
 		return undefined;
 	};
-	return read('/src/routes/', 'src', '+page', ['+layout', '+error']) ?? read('/entries/pages/', 'built', '_page', ['_layout', '_error']);
+	return (
+		read('/src/routes/', 'src', '+page', ['+layout', '+error']) ??
+		read('/entries/pages/', 'built', '_page', ['_layout', '_error'])
+	);
 }
 
 /** a route id's own folder and the folders above it (whose layouts it renders in), per form */

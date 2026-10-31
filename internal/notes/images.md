@@ -4,7 +4,7 @@ The primitive has two halves:
 
 1. **`raster(component, props)` — one verb.** A component settles to pixels. Pixels settle on
    the same clocks as HTML — build (bake), per
-   request (a dual region's ticket) — because an image *is* a region whose output is pixels.
+   request (a dual region's ticket) — because an image _is_ a region whose output is pixels.
 2. **The descriptor — one currency.** Pixels travel under a stable identity (`id`: content hash
    of the source) as plain devalue data. The descriptor is to pixels what a **ref** is to an
    entry: the shallow face every wire carries for free; the pixels are the heavy face the
@@ -31,7 +31,7 @@ the house pattern (`og.bake`, `og.code`). Files go through the macro, full stop.
   peers; unused adapters cost nothing.
 
 Zero dependency on content/site — a bare Kit app with no collections gets the whole image
-story. `site()`'s `cards` emission and the markdown pipeline are *consumers* of this layer,
+story. `site()`'s `cards` emission and the markdown pipeline are _consumers_ of this layer,
 never its home. **unpic is vendored** (MIT, tiny) as the URL-generation brain: layout-derived
 srcset/sizes, CDN detection, platform-optimizer URL formats.
 
@@ -356,6 +356,7 @@ What SSR emits (fullWidth + priority + dark + art — all machinery visible):
 
   No flash, no JS, csr:false native, prerender-safe. (v1's "resolve theme server-side through
   preference()" was wrong and is dead.)
+
 - **Art direction** renders as `<source media>` entries with their OWN width/height (no CLS
   when the crop switches) and their own placeholder token; a scoped `@media` rule swaps the
   blur with the crop.
@@ -386,13 +387,13 @@ GET <base>/🏝️/image?src=…&w=1280&f=avif&sig=hVx2…
 
 ## 7. Who resizes what, when
 
-| source | dev | static build | SSR deploy |
-|---|---|---|---|
-| local file / frontmatter / markdown | `🏝️/image` on demand | hashed assets | hashed assets |
-| component card (bake / emission) | rendered on request, error overlaid | hashed assets (BuildCache) | hashed assets |
-| transform CDN (`cdn()`) | CDN URLs | CDN URLs | CDN URLs |
-| plain remote | `🏝️/image` proxy | fetched + encoded once | signed `🏝️/image` proxy |
-| per-visitor region | region ticket | build error (needs a server) | region ticket |
+| source                              | dev                                 | static build                 | SSR deploy              |
+| ----------------------------------- | ----------------------------------- | ---------------------------- | ----------------------- |
+| local file / frontmatter / markdown | `🏝️/image` on demand                | hashed assets                | hashed assets           |
+| component card (bake / emission)    | rendered on request, error overlaid | hashed assets (BuildCache)   | hashed assets           |
+| transform CDN (`cdn()`)             | CDN URLs                            | CDN URLs                     | CDN URLs                |
+| plain remote                        | `🏝️/image` proxy                    | fetched + encoded once       | signed `🏝️/image` proxy |
+| per-visitor region                  | region ticket                       | build error (needs a server) | region ticket           |
 
 ## 8. Deferred raster — a dual region whose output is pixels
 
@@ -414,7 +415,7 @@ GET <base>/🏝️/image?src=…&w=1280&f=avif&sig=hVx2…
 - The handle's render branch: verify → ssr_render → `engine.render` → `image/png` +
   `Cache-Control: private, max-age=N`.
 - **PPR payoff**: a CDN-cached static shell with a per-visitor image hole. **The hole gets a
-  preview**: at build, the region's *fallback* render is rastered once and placeholder-encoded;
+  preview**: at build, the region's _fallback_ render is rastered once and placeholder-encoded;
   the shell paints that blur in the hole. The visitor's image arrives into a frame that already
   has its shape and palette.
 - Image holes do **not** join the HTML batch parcel — they're plain `<img>` fetches (mixed
@@ -525,7 +526,7 @@ Each a one-line consequence — no image subsystem behind any of them:
   `raster()` +server.ts is the general form.
 - **Diagram** (markdown): a `mermaid`/`d2` fence renders to SVG at build (crisp, selectable),
   and may wake as a live island for pan/zoom. A diagram is a region that happens to look like
-  an image — image identity (morph, warm) *and* region aliveness.
+  an image — image identity (morph, warm) _and_ region aliveness.
 
 ## 12. Failure modes, named at the right clock
 
@@ -562,8 +563,8 @@ settle(source, clock, format) → artifact + identity
 - **Format**: what it comes to rest as — html, pixels, text/xml, a value.
 - **Identity**: every settled artifact gets a content-hash id and a shallow face that travels
   instead of the payload — ref (entries), descriptor (pixels), ticket (deferred renders). One
-  law, three costumes: *identity travels light, payload settles on a clock, organs react to
-  identity.*
+  law, three costumes: _identity travels light, payload settles on a clock, organs react to
+  identity._
 
 Every feature is a cell: bake = (fn, build, value); this spec's macro = (file, build, pixels);
 cards = (region, build, pixels) and request-time cards are the same cell on the other clock
@@ -598,7 +599,7 @@ places where the grammar becomes literal shared code:
 House rules that fall out (naming law, enforced in review): same words on every settle
 surface — `maxAge` never `ttl`, `preset` never `profile`, `format` never `output`/`as`; every
 build-clock error names the request clock and vice versa. Design test for any future feature:
-*which cell of the cube is this?* If it isn't one, it's a new subsystem wearing a costume.
+_which cell of the cube is this?_ If it isn't one, it's a new subsystem wearing a costume.
 
 ## 14. Open questions
 

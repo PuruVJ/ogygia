@@ -21,7 +21,8 @@ const DOCUMENT_ACCEPT = 'text/html,application/xhtml+xml,application/xml;q=0.9,*
 
 const FOREIGN = '**/router-links/foreign/**';
 const FOREIGN_PATH = '/router-links/foreign/docs/';
-const FOREIGN_HTML = '<!doctype html><html><head><title>foreign</title></head><body><h1 data-foreign-page>foreign app</h1></body></html>';
+const FOREIGN_HTML =
+	'<!doctype html><html><head><title>foreign</title></head><body><h1 data-foreign-page>foreign app</h1></body></html>';
 
 /** Requests the router made for a page (its fetches carry `x-ogygia-spa`). */
 function spa_requests(page: Page): Request[] {
@@ -50,7 +51,11 @@ const RELINK = () => {
 
 async function open(page: Page) {
 	await page.goto('/router-links', { waitUntil: 'networkidle' });
-	await page.waitForFunction(() => !!customElements.get('ogygia-region') || !!document.querySelector('meta[name="ogygia-router"]'));
+	await page.waitForFunction(
+		() =>
+			!!customElements.get('ogygia-region') ||
+			!!document.querySelector('meta[name="ogygia-router"]')
+	);
 }
 
 test.describe('the router fetches a page the way the browser fetches a document', () => {
@@ -65,7 +70,11 @@ test.describe('the router fetches a page the way the browser fetches a document'
 		await page.waitForSelector('[data-router-links]');
 		await page.waitForTimeout(300);
 		const purposes = reqs.map((r) => r.headers()['x-ogygia-purpose'] ?? 'nav');
-		check('a prefetch and a history fetch were made', purposes.includes('prefetch') && purposes.includes('history'), purposes.join(','));
+		check(
+			'a prefetch and a history fetch were made',
+			purposes.includes('prefetch') && purposes.includes('history'),
+			purposes.join(',')
+		);
 		const wrong = reqs.filter((r) => r.headers()['accept'] !== DOCUMENT_ACCEPT);
 		check(
 			'every router page fetch sends the document Accept',
@@ -74,7 +83,9 @@ test.describe('the router fetches a page the way the browser fetches a document'
 		);
 	});
 
-	test('a server that redirects */* but serves text/html: the click lands on the page a navigation gets', async ({ page }) => {
+	test('a server that redirects */* but serves text/html: the click lands on the page a navigation gets', async ({
+		page
+	}) => {
 		const seen: Array<{ accept: string; spa: boolean }> = [];
 		await page.route(FOREIGN, (route) => {
 			const h = route.request().headers();
@@ -86,12 +97,26 @@ test.describe('the router fetches a page the way the browser fetches a document'
 		await open(page);
 		await page.locator('[data-foreign]').click();
 		await page.waitForSelector('[data-foreign-page]', { timeout: 10_000 });
-		check('the address is the clicked one, not the redirect target', new URL(page.url()).pathname === FOREIGN_PATH, page.url());
-		check('the foreign document was loaded by the browser (a real navigation)', seen.some((s) => !s.spa), JSON.stringify(seen));
-		check('no request was answered with the */* redirect', seen.every((s) => s.accept.includes('text/html')), JSON.stringify(seen));
+		check(
+			'the address is the clicked one, not the redirect target',
+			new URL(page.url()).pathname === FOREIGN_PATH,
+			page.url()
+		);
+		check(
+			'the foreign document was loaded by the browser (a real navigation)',
+			seen.some((s) => !s.spa),
+			JSON.stringify(seen)
+		);
+		check(
+			'no request was answered with the */* redirect',
+			seen.every((s) => s.accept.includes('text/html')),
+			JSON.stringify(seen)
+		);
 	});
 
-	test('a page the router will not render is handed off to the CLICKED address, not the fetch’s redirect', async ({ page }) => {
+	test('a page the router will not render is handed off to the CLICKED address, not the fetch’s redirect', async ({
+		page
+	}) => {
 		// Only the router's fetch is redirected (a server keying on its own header): the browser's
 		// own request for the clicked address must be what the visitor ends up on.
 		// The redirect target is a real non-ogygia document (routes/router-links/elsewhere/+server.ts):
@@ -105,11 +130,20 @@ test.describe('the router fetches a page the way the browser fetches a document'
 		const before = await page.evaluate(() => history.length);
 		await page.locator('[data-foreign]').click();
 		await page.waitForSelector('[data-foreign-page]', { timeout: 10_000 });
-		check('landed on the clicked address', new URL(page.url()).pathname === FOREIGN_PATH, page.url());
-		check('one history entry for one click', (await page.evaluate(() => history.length)) === before + 1);
+		check(
+			'landed on the clicked address',
+			new URL(page.url()).pathname === FOREIGN_PATH,
+			page.url()
+		);
+		check(
+			'one history entry for one click',
+			(await page.evaluate(() => history.length)) === before + 1
+		);
 	});
 
-	test('a web-component link that re-dispatches its click: one fetch, one history entry', async ({ page }) => {
+	test('a web-component link that re-dispatches its click: one fetch, one history entry', async ({
+		page
+	}) => {
 		await page.addInitScript(RELINK);
 		const reqs = spa_requests(page);
 		await open(page);
@@ -118,7 +152,9 @@ test.describe('the router fetches a page the way the browser fetches a document'
 		await page.locator('[data-relink]').click();
 		await page.waitForSelector('#about-heading');
 		await page.waitForTimeout(300);
-		const navs = reqs.slice(n0).filter((r) => new URL(r.url()).pathname === '/about' && !r.headers()['x-ogygia-purpose']);
+		const navs = reqs
+			.slice(n0)
+			.filter((r) => new URL(r.url()).pathname === '/about' && !r.headers()['x-ogygia-purpose']);
 		check('exactly one navigation fetch', navs.length === 1, String(navs.length));
 		check('exactly one history entry', (await page.evaluate(() => history.length)) === before + 1);
 	});
@@ -126,9 +162,12 @@ test.describe('the router fetches a page the way the browser fetches a document'
 	test('a beforeNavigate cancel does not leave the link swallowed', async ({ page }) => {
 		await open(page);
 		await page.evaluate(() => {
-			const nav = (globalThis as unknown as Record<symbol, { beforeNavigate(fn: (n: { cancel(): void }) => void): () => void }>)[
-				Symbol.for('ogygia.nav')
-			];
+			const nav = (
+				globalThis as unknown as Record<
+					symbol,
+					{ beforeNavigate(fn: (n: { cancel(): void }) => void): () => void }
+				>
+			)[Symbol.for('ogygia.nav')];
 			let once = true;
 			nav.beforeNavigate((n) => {
 				if (once) {
@@ -142,6 +181,10 @@ test.describe('the router fetches a page the way the browser fetches a document'
 		check('the cancelled click stayed', new URL(page.url()).pathname === '/router-links');
 		await page.locator('[data-plain]').click();
 		await page.waitForSelector('#about-heading', { timeout: 10_000 });
-		check('the next click on the same link navigates', new URL(page.url()).pathname === '/about', page.url());
+		check(
+			'the next click on the same link navigates',
+			new URL(page.url()).pathname === '/about',
+			page.url()
+		);
 	});
 });

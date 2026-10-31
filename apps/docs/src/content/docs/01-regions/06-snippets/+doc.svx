@@ -17,7 +17,7 @@ You do not select this feature. It is what makes these operate at all: `<Tabs>{@
 A snippet crosses in one of two ways. ogygia selects the way, based on the need to wake:
 
 - **Static**: plain content (prose, a code block, markup with no interactivity) renders **one time on the server** and freezes to HTML. The client adopts that HTML in place. Nothing runs again, and nothing ships. This is the common case for children.
-- **Live**: a named `{#snippet}` whose body must *wake* (it renders an island, or it is interactive) compiles to its own entry. It **wakes on the far side**. It renders inline on the server and hydrates on the client. Thus it is interactive where it lands, also after a boundary forwards it. Parameters are supported: the arguments of each call ride across.
+- **Live**: a named `{#snippet}` whose body must _wake_ (it renders an island, or it is interactive) compiles to its own entry. It **wakes on the far side**. It renders inline on the server and hydrates on the client. Thus it is interactive where it lands, also after a boundary forwards it. Parameters are supported: the arguments of each call ride across.
 
 ```svelte
 <script>
@@ -60,7 +60,7 @@ This matters because of composition. A plain (non-island) component can forward 
 
 ## Building one by hand: `region.snippet()`
 
-When you need a snippet made from raw HTML, use `region.snippet()`. It is the sibling of `region()` for components. It mirrors `createRawSnippet` from Svelte. But the result is a *region* snippet: you can render it in the same graph with `{@render}`, and it can cross a boundary.
+When you need a snippet made from raw HTML, use `region.snippet()`. It is the sibling of `region()` for components. It mirrors `createRawSnippet` from Svelte. But the result is a _region_ snippet: you can render it in the same graph with `{@render}`, and it can cross a boundary.
 
 Lift an applicable snippet without parameters, to freeze it as static content:
 

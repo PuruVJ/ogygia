@@ -19,7 +19,15 @@ test.beforeAll(async () => {
 	// (the suite's webServer already built the palaestra: serve that build with the lab's transform)
 	srv = await spawn_server({
 		cmd: process.execPath,
-		args: ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort', '--host', '127.0.0.1'],
+		args: [
+			'node_modules/vite/bin/vite.js',
+			'preview',
+			'--port',
+			String(PORT),
+			'--strictPort',
+			'--host',
+			'127.0.0.1'
+		],
 		cwd: palaestra,
 		env: { OGYGIA_RESTORE_LAB: '1', ORIGIN: base },
 		url: `${base}/restore-lab`,
@@ -28,7 +36,9 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => srv?.kill());
 
-test('the island inside a reshaped host hydrates as is, and stays interactive', async ({ page }) => {
+test('the island inside a reshaped host hydrates as is, and stays interactive', async ({
+	page
+}) => {
 	const errors: string[] = [];
 	page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 	page.on('pageerror', (e) => errors.push(e.message));
@@ -79,13 +89,16 @@ test('a hole’s answer arrives restored, and its island hydrates after', async 
 			shadow: !!card.shadowRoot,
 			sheets: card.shadowRoot?.adoptedStyleSheets.length ?? 0,
 			healed: document.querySelectorAll('[data-og-healed],[data-og-recovered]').length,
-			head_sheets: document.head.querySelectorAll('template[data-og-head="demo-card.shadow"]').length
+			head_sheets: document.head.querySelectorAll('template[data-og-head="demo-card.shadow"]')
+				.length
 		};
 	});
 	expect(hole).toEqual({ shadow: true, sheets: 1, healed: 0, head_sheets: 1 });
 });
 
-test('a router navigation away and back: every restored host has its sheet, and nothing throws', async ({ page }) => {
+test('a router navigation away and back: every restored host has its sheet, and nothing throws', async ({
+	page
+}) => {
 	// REGRESSION (field report on 4e800c75): after a router navigation every restored host lost its
 	// sheet — the restorer's adopt step threw on a root left in the incoming page's parsed document
 	// ("Sharing constructed stylesheets in multiple documents") and stopped before the roots that went in
@@ -121,7 +134,9 @@ test('a router navigation away and back: every restored host has its sheet, and 
 	expect(errors).toEqual([]);
 });
 
-test('a router navigation morphs a server-owned host its own runtime unpacked, without the transform’s tree in its light DOM', async ({ page }) => {
+test('a router navigation morphs a server-owned host its own runtime unpacked, without the transform’s tree in its light DOM', async ({
+	page
+}) => {
 	// REGRESSION (field report on 0.8.4): a site nav (a server-owned custom element the transform renders
 	// in scoped form, unpacked by its own runtime on first load) collapsed to one unstyled item after an
 	// in-place navigation — the incoming page carried the host in the transform's first-load form, and
@@ -152,24 +167,38 @@ test('a router navigation morphs a server-owned host its own runtime unpacked, w
 	expect(errors).toEqual([]);
 });
 
-test('a first-load copy reaching the router (a store, a prerender, a cache that ignores Vary) is loaded, never swapped in', async ({ page, request }) => {
+test('a first-load copy reaching the router (a store, a prerender, a cache that ignores Vary) is loaded, never swapped in', async ({
+	page,
+	request
+}) => {
 	await page.goto('/restore-lab/nav-a');
-	await expect.poll(() => page.locator('demo-nav[data-nav]').evaluate((el) => !!el.shadowRoot)).toBe(true);
+	await expect
+		.poll(() => page.locator('demo-nav[data-nav]').evaluate((el) => !!el.shadowRoot))
+		.toBe(true);
 	// the router's fetch gets the copy a full load gets
 	const first_load = await (await request.get('/restore-lab/nav-b')).text();
 	await page.route('**/restore-lab/nav-b', (route) =>
-		route.request().headers()['x-ogygia-spa'] ? route.fulfill({ body: first_load, contentType: 'text/html' }) : route.continue()
+		route.request().headers()['x-ogygia-spa']
+			? route.fulfill({ body: first_load, contentType: 'text/html' })
+			: route.continue()
 	);
 	const documents: string[] = [];
 	page.on('request', (r) => r.resourceType() === 'document' && documents.push(r.url()));
 	await page.locator('[data-nav-go]').click();
 	await expect(page.locator('[data-nav-page="b"]')).toBeVisible();
-	expect(documents.some((u) => u.endsWith('/restore-lab/nav-b')), 'the router handed it to a full load').toBe(true);
-	await expect.poll(() => page.locator('demo-nav[data-nav]').evaluate((el) => !!el.shadowRoot)).toBe(true);
+	expect(
+		documents.some((u) => u.endsWith('/restore-lab/nav-b')),
+		'the router handed it to a full load'
+	).toBe(true);
+	await expect
+		.poll(() => page.locator('demo-nav[data-nav]').evaluate((el) => !!el.shadowRoot))
+		.toBe(true);
 	expect(await page.evaluate(() => document.querySelectorAll('[c-id]').length)).toBe(0);
 });
 
-test('a router-fetched page is rendered as an answer: every host planned, and the response varies on it', async ({ request }) => {
+test('a router-fetched page is rendered as an answer: every host planned, and the response varies on it', async ({
+	request
+}) => {
 	const load = await request.get('/restore-lab/nav-b');
 	const nav = await request.get('/restore-lab/nav-b', { headers: { 'x-ogygia-spa': '1' } });
 	const load_html = await load.text();

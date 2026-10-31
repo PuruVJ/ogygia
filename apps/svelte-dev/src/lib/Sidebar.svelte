@@ -12,7 +12,10 @@
 	const groups = $derived(
 		(await nav(topic === 'svelte' ? '' : topic + '/'))
 			.filter((n): n is NavGroup => n.kind === 'group')
-			.map((g) => ({ label: g.label, items: g.items.filter((i): i is NavLeaf => i.kind === 'leaf') }))
+			.map((g) => ({
+				label: g.label,
+				items: g.items.filter((i): i is NavLeaf => i.kind === 'leaf')
+			}))
 	);
 </script>
 
@@ -25,7 +28,9 @@
 					{#each group.items as item (item.href)}
 						{@const current = path === decodeURIComponent(item.href)}
 						<li class="page-item" class:current>
-							<a class="page" href={item.href} aria-current={current ? 'page' : undefined}>{item.title}</a>
+							<a class="page" href={item.href} aria-current={current ? 'page' : undefined}
+								>{item.title}</a
+							>
 						</li>
 					{/each}
 				</ul>

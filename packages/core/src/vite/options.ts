@@ -210,7 +210,7 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 	content:
 		'`content` is a plugin now — install `@ogygia/content` and list `content({ markdown, presets })` (from `@ogygia/content/vite`) beside `ogygia()` in vite.config `plugins`; the svelte config takes `preprocess()` / `extensions()` from there too.',
 	devtools:
-		'`devtools` is a plugin now — install `@ogygia/devtools` and list `devtools()` (from `@ogygia/devtools/vite`) beside `ogygia()` in vite.config `plugins`; only where you want it, e.g. `...(mode !== \'production\' ? [devtools()] : [])`.',
+		"`devtools` is a plugin now — install `@ogygia/devtools` and list `devtools()` (from `@ogygia/devtools/vite`) beside `ogygia()` in vite.config `plugins`; only where you want it, e.g. `...(mode !== 'production' ? [devtools()] : [])`.",
 	profiler:
 		'`profiler` is part of the devtools plugin now — install `@ogygia/devtools` and list `devtools({ profiler: { … } })` (from `@ogygia/devtools/vite`) beside `ogygia()` in vite.config `plugins`.'
 };
@@ -244,9 +244,7 @@ const REGION_PRESET_KEYS = new Set([
 export function validate_region_presets(presets: Record<string, unknown>): void {
 	for (const [name, bag] of Object.entries(presets)) {
 		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
-			throw new Error(
-				`[ogygia] presets.${name} is empty — a preset with nothing is a mistake.`
-			);
+			throw new Error(`[ogygia] presets.${name} is empty — a preset with nothing is a mistake.`);
 		}
 		for (const k of Object.keys(bag)) {
 			if (!REGION_PRESET_KEYS.has(k)) {
@@ -297,15 +295,15 @@ export function resolve_options(
 			: '';
 
 	// Capability URL TTL (seconds). Clamped to [60, 86400].
-	const region_ttl = Math.min(
-		86400,
-		Math.max(60, Math.floor(options.ttl ?? defaultRegionTtl))
-	);
+	const region_ttl = Math.min(86400, Math.max(60, Math.floor(options.ttl ?? defaultRegionTtl)));
 
 	// Renewal window (seconds) after a capability expired: `maxPageAge`. `0` = never renew; at most 10
 	// years (the prerender capability life — nothing outlives that).
 	const renew_raw = options.maxPageAge;
-	if (renew_raw !== undefined && !(typeof renew_raw === 'number' && Number.isFinite(renew_raw) && renew_raw >= 0)) {
+	if (
+		renew_raw !== undefined &&
+		!(typeof renew_raw === 'number' && Number.isFinite(renew_raw) && renew_raw >= 0)
+	) {
 		throw new Error(
 			`[ogygia] maxPageAge must be a number of seconds ≥ 0 (got ${String(renew_raw)}). Write e.g. \`30 * 24 * 3600\` for 30 days, or \`0\` to turn renewal off.`
 		);

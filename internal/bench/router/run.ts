@@ -46,7 +46,8 @@ function stats(xs: number[]): Stat {
 	return { n: s.length, min: s[0], p50: q(0.5), p90: q(0.9), max: s[s.length - 1] };
 }
 const ms = (x: number) => (x >= 100 ? x.toFixed(0) : x.toFixed(1));
-const fmt = (s: Stat) => `p50 ${ms(s.p50)}ms  p90 ${ms(s.p90)}ms  (min ${ms(s.min)} max ${ms(s.max)} n=${s.n})`;
+const fmt = (s: Stat) =>
+	`p50 ${ms(s.p50)}ms  p90 ${ms(s.p90)}ms  (min ${ms(s.min)} max ${ms(s.max)} n=${s.n})`;
 const kb = (b: number) => (b / 1024).toFixed(1) + ' kB';
 const sleep = (t: number) => new Promise((r) => setTimeout(r, t));
 const banner = (s: string) => console.log(`\n\x1b[1m\x1b[36m▸ ${s}\x1b[0m`);
@@ -92,8 +93,14 @@ const INIT = `(() => {
 if (doBuild) {
 	banner('Building library + palaestra');
 	const ok =
-		spawnSync('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/core'), stdio: 'inherit' }).status === 0 &&
-		spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], { cwd: join(repo, 'apps/palaestra'), stdio: 'inherit' }).status === 0;
+		spawnSync('node', ['node_modules/tsdown/dist/run.mjs'], {
+			cwd: join(repo, 'packages/core'),
+			stdio: 'inherit'
+		}).status === 0 &&
+		spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], {
+			cwd: join(repo, 'apps/palaestra'),
+			stdio: 'inherit'
+		}).status === 0;
 	if (!ok) process.exit(1);
 } else if (!existsSync(join(repo, 'apps/palaestra/.svelte-kit/output/server'))) {
 	console.error('No palaestra build found — run with --build first.');
@@ -101,35 +108,61 @@ if (doBuild) {
 }
 
 banner(`Serving palaestra at ${BASE}`);
-const server = spawn('node', ['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'], {
-	cwd: join(repo, 'apps/palaestra'),
-	env: { ...process.env, ORIGIN: BASE },
-	stdio: 'ignore'
-});
-const killServer = () => { try { server.kill('SIGTERM'); } catch {} };
+const server = spawn(
+	'node',
+	['node_modules/vite/bin/vite.js', 'preview', '--port', String(PORT), '--strictPort'],
+	{
+		cwd: join(repo, 'apps/palaestra'),
+		env: { ...process.env, ORIGIN: BASE },
+		stdio: 'ignore'
+	}
+);
+const killServer = () => {
+	try {
+		server.kill('SIGTERM');
+	} catch {}
+};
 process.on('exit', killServer);
-process.on('SIGINT', () => { killServer(); process.exit(130); });
+process.on('SIGINT', () => {
+	killServer();
+	process.exit(130);
+});
 
 {
 	const t0 = Date.now();
 	let up = false;
 	while (Date.now() - t0 < 30000) {
-		try { if ((await fetch(BASE + '/', { redirect: 'manual' })).status > 0) { up = true; break; } } catch {}
+		try {
+			if ((await fetch(BASE + '/', { redirect: 'manual' })).status > 0) {
+				up = true;
+				break;
+			}
+		} catch {}
 		await sleep(250);
 	}
-	if (!up) { console.error('preview server never came up'); killServer(); process.exit(1); }
+	if (!up) {
+		console.error('preview server never came up');
+		killServer();
+		process.exit(1);
+	}
 }
 
 // ── browser plumbing ────────────────────────────────────────────────────────
 const browser: Browser = await chromium.launch();
 
 async function freshPage(opts: { reducedMotion?: 'reduce' | 'no-preference' } = {}) {
-	const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: opts.reducedMotion ?? 'no-preference' });
+	const context = await browser.newContext({
+		viewport: { width: 1280, height: 720 },
+		reducedMotion: opts.reducedMotion ?? 'no-preference'
+	});
 	await context.addInitScript(INIT);
 	const page = await context.newPage();
 	const DBG = !!process.env.OGYGIA_BENCH_DEBUG;
 	page.on('pageerror', (e) => {
-		if (/Transition was skipped/.test(e.message)) { vtSkips++; return; }
+		if (/Transition was skipped/.test(e.message)) {
+			vtSkips++;
+			return;
+		}
 		pageErrors++;
 		if (DBG) console.error('  [pageerror]', e.message.split('\n')[0]);
 	});
@@ -148,7 +181,9 @@ async function freshPage(opts: { reducedMotion?: 'reduce' | 'no-preference' } = 
 async function measureNav(page: Page, sel: string) {
 	const r = await page.evaluate(async (s) => {
 		const B = (window as any).__ob;
-		B.hyd = []; B.live = []; B.server = [];
+		B.hyd = [];
+		B.live = [];
+		B.server = [];
 		const swapP = B.swapWait();
 		const a = document.querySelector(s) as HTMLElement | null;
 		if (!a) throw new Error('no link: ' + s);
@@ -158,20 +193,35 @@ async function measureNav(page: Page, sel: string) {
 		return { t0, tSwap };
 	}, sel);
 	// hydration quiescence: no new ogygia:hydrated for 400ms (or none at all within 3s)
-	await page.waitForFunction(() => {
-		const B = (window as any).__ob;
-		return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
-	}, undefined, { timeout: 3000 }).catch(() => {});
+	await page
+		.waitForFunction(
+			() => {
+				const B = (window as any).__ob;
+				return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
+			},
+			undefined,
+			{ timeout: 3000 }
+		)
+		.catch(() => {});
 	const post = await page.evaluate(() => {
 		const B = (window as any).__ob;
-		return { hyd: B.hyd as number[], longtasks: B.longtasks as Array<{ start: number; dur: number }> };
+		return {
+			hyd: B.hyd as number[],
+			longtasks: B.longtasks as Array<{ start: number; dur: number }>
+		};
 	});
 	const swap = r.tSwap - r.t0;
 	const hyd = post.hyd.map((t) => t - r.t0);
 	const blocking = post.longtasks
 		.filter((lt) => lt.start >= r.t0 - 5 && lt.start <= r.tSwap + 300)
 		.reduce((a, lt) => a + Math.max(0, lt.dur - 50), 0);
-	return { swap, firstHyd: hyd[0] ?? null, lastHyd: hyd[hyd.length - 1] ?? null, hydCount: hyd.length, blocking };
+	return {
+		swap,
+		firstHyd: hyd[0] ?? null,
+		lastHyd: hyd[hyd.length - 1] ?? null,
+		hydCount: hyd.length,
+		blocking
+	};
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -179,17 +229,30 @@ async function measureNav(page: Page, sel: string) {
 // ═════════════════════════════════════════════════════════════════════════════
 banner('1/13  Boot — cold load of /');
 {
-	const ttfb: number[] = [], dcl: number[] = [], load: number[] = [], settle: number[] = [], evalMs: number[] = [];
-	let jsBytes = 0, jsDecoded = 0, jsCount = 0, htmlDecoded = 0;
+	const ttfb: number[] = [],
+		dcl: number[] = [],
+		load: number[] = [],
+		settle: number[] = [],
+		evalMs: number[] = [];
+	let jsBytes = 0,
+		jsDecoded = 0,
+		jsCount = 0,
+		htmlDecoded = 0;
 	for (let i = 0; i < Math.min(N, 12); i++) {
 		const { context, page } = await freshPage();
 		const cdp: CDPSession = await context.newCDPSession(page);
 		await cdp.send('Performance.enable');
 		await page.goto(BASE + '/', { waitUntil: 'load' });
-		await page.waitForFunction(() => {
-			const B = (window as any).__ob;
-			return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
-		}, undefined, { timeout: 5000 }).catch(() => {});
+		await page
+			.waitForFunction(
+				() => {
+					const B = (window as any).__ob;
+					return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
+				},
+				undefined,
+				{ timeout: 5000 }
+			)
+			.catch(() => {});
 		const m = await page.evaluate(() => {
 			const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
 			const res = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
@@ -209,44 +272,80 @@ banner('1/13  Boot — cold load of /');
 		});
 		const metrics = await cdp.send('Performance.getMetrics');
 		const script = metrics.metrics.find((x) => x.name === 'ScriptDuration')?.value ?? 0;
-		ttfb.push(m.ttfb); dcl.push(m.dcl); load.push(m.load);
+		ttfb.push(m.ttfb);
+		dcl.push(m.dcl);
+		load.push(m.load);
 		if (m.settle != null) settle.push(m.settle);
 		evalMs.push(script * 1000);
-		if (i === 0) { jsBytes = m.jsBytes; jsDecoded = m.jsDecoded; jsCount = m.jsCount; htmlDecoded = m.htmlDecoded; }
+		if (i === 0) {
+			jsBytes = m.jsBytes;
+			jsDecoded = m.jsDecoded;
+			jsCount = m.jsCount;
+			htmlDecoded = m.htmlDecoded;
+		}
 		await context.close();
 	}
-	section('boot', [
-		`TTFB              ${fmt(stats(ttfb))}`,
-		`DOMContentLoaded  ${fmt(stats(dcl))}`,
-		`load event        ${fmt(stats(load))}`,
-		`islands settled   ${fmt(stats(settle))}   (all wake:load islands hydrated)`,
-		`script eval       ${fmt(stats(evalMs))}   (total ScriptDuration)`,
-		`JS payload        ${kb(jsBytes)} transfer / ${kb(jsDecoded)} decoded across ${jsCount} files; HTML ${kb(htmlDecoded)}`
-	], { ttfb: stats(ttfb), dcl: stats(dcl), load: stats(load), settle: stats(settle), evalMs: stats(evalMs), jsBytes, jsDecoded, jsCount, htmlDecoded });
+	section(
+		'boot',
+		[
+			`TTFB              ${fmt(stats(ttfb))}`,
+			`DOMContentLoaded  ${fmt(stats(dcl))}`,
+			`load event        ${fmt(stats(load))}`,
+			`islands settled   ${fmt(stats(settle))}   (all wake:load islands hydrated)`,
+			`script eval       ${fmt(stats(evalMs))}   (total ScriptDuration)`,
+			`JS payload        ${kb(jsBytes)} transfer / ${kb(jsDecoded)} decoded across ${jsCount} files; HTML ${kb(htmlDecoded)}`
+		],
+		{
+			ttfb: stats(ttfb),
+			dcl: stats(dcl),
+			load: stats(load),
+			settle: stats(settle),
+			evalMs: stats(evalMs),
+			jsBytes,
+			jsDecoded,
+			jsCount,
+			htmlDecoded
+		}
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
 // 2. Soft nav, cold cache: /prefetch → /about (no hover, no prefetch)
 // ═════════════════════════════════════════════════════════════════════════════
 banner('2/13  Soft navigation, cold cache — /prefetch → /about');
-const coldNav = { swap: [] as number[], firstHyd: [] as number[], lastHyd: [] as number[], blocking: [] as number[] };
+const coldNav = {
+	swap: [] as number[],
+	firstHyd: [] as number[],
+	lastHyd: [] as number[],
+	blocking: [] as number[]
+};
 {
 	for (let i = 0; i < N; i++) {
 		const { context, page } = await freshPage();
 		await page.goto(BASE + '/prefetch', { waitUntil: 'load' });
 		await sleep(120);
 		const r = await measureNav(page, '[data-prefetch-hover]');
-		coldNav.swap.push(r.swap); coldNav.blocking.push(r.blocking);
+		coldNav.swap.push(r.swap);
+		coldNav.blocking.push(r.blocking);
 		if (r.firstHyd != null) coldNav.firstHyd.push(r.firstHyd);
 		if (r.lastHyd != null) coldNav.lastHyd.push(r.lastHyd);
 		await context.close();
 	}
-	section('soft-nav-cold', [
-		`click → body swapped     ${fmt(stats(coldNav.swap))}`,
-		`click → first island up  ${fmt(stats(coldNav.firstHyd))}`,
-		`click → all islands up   ${fmt(stats(coldNav.lastHyd))}`,
-		`main-thread blocking     ${fmt(stats(coldNav.blocking))}   (long-task time >50ms during nav)`
-	], { swap: stats(coldNav.swap), firstHyd: stats(coldNav.firstHyd), lastHyd: stats(coldNav.lastHyd), blocking: stats(coldNav.blocking) });
+	section(
+		'soft-nav-cold',
+		[
+			`click → body swapped     ${fmt(stats(coldNav.swap))}`,
+			`click → first island up  ${fmt(stats(coldNav.firstHyd))}`,
+			`click → all islands up   ${fmt(stats(coldNav.lastHyd))}`,
+			`main-thread blocking     ${fmt(stats(coldNav.blocking))}   (long-task time >50ms during nav)`
+		],
+		{
+			swap: stats(coldNav.swap),
+			firstHyd: stats(coldNav.firstHyd),
+			lastHyd: stats(coldNav.lastHyd),
+			blocking: stats(coldNav.blocking)
+		}
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -259,7 +358,9 @@ const warmNav = { swap: [] as number[], firstHyd: [] as number[], lastHyd: [] as
 		const { context, page } = await freshPage();
 		await page.goto(BASE + '/prefetch', { waitUntil: 'load' });
 		await sleep(120);
-		const done = page.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 4000 }).catch(() => null);
+		const done = page
+			.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 4000 })
+			.catch(() => null);
 		await page.dispatchEvent('[data-prefetch-hover]', 'mouseover');
 		await done;
 		await sleep(60); // let the cache write settle
@@ -269,11 +370,19 @@ const warmNav = { swap: [] as number[], firstHyd: [] as number[], lastHyd: [] as
 		if (r.lastHyd != null) warmNav.lastHyd.push(r.lastHyd);
 		await context.close();
 	}
-	section('soft-nav-warm', [
-		`click → body swapped     ${fmt(stats(warmNav.swap))}`,
-		`click → first island up  ${fmt(stats(warmNav.firstHyd))}`,
-		`click → all islands up   ${fmt(stats(warmNav.lastHyd))}`
-	], { swap: stats(warmNav.swap), firstHyd: stats(warmNav.firstHyd), lastHyd: stats(warmNav.lastHyd) });
+	section(
+		'soft-nav-warm',
+		[
+			`click → body swapped     ${fmt(stats(warmNav.swap))}`,
+			`click → first island up  ${fmt(stats(warmNav.firstHyd))}`,
+			`click → all islands up   ${fmt(stats(warmNav.lastHyd))}`
+		],
+		{
+			swap: stats(warmNav.swap),
+			firstHyd: stats(warmNav.firstHyd),
+			lastHyd: stats(warmNav.lastHyd)
+		}
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -281,7 +390,8 @@ const warmNav = { swap: [] as number[], firstHyd: [] as number[], lastHyd: [] as
 // ═════════════════════════════════════════════════════════════════════════════
 banner('4/13  Hard navigation baseline — full reload of /about');
 {
-	const dcl: number[] = [], load: number[] = [];
+	const dcl: number[] = [],
+		load: number[] = [];
 	const { context, page } = await freshPage();
 	for (let i = 0; i < N + 1; i++) {
 		await page.goto(BASE + '/about', { waitUntil: 'load' });
@@ -290,15 +400,20 @@ banner('4/13  Hard navigation baseline — full reload of /about');
 			const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
 			return { dcl: nav.domContentLoadedEventEnd, load: nav.loadEventEnd };
 		});
-		dcl.push(m.dcl); load.push(m.load);
+		dcl.push(m.dcl);
+		load.push(m.load);
 		await page.goto(BASE + '/prefetch', { waitUntil: 'load' });
 	}
 	await context.close();
-	section('hard-nav', [
-		`navigationStart → DOMContentLoaded  ${fmt(stats(dcl))}`,
-		`navigationStart → load              ${fmt(stats(load))}`,
-		`vs soft nav: warm swap is ${(stats(load).p50 / stats(warmNav.swap).p50).toFixed(1)}× faster, cold swap ${(stats(load).p50 / stats(coldNav.swap).p50).toFixed(1)}× faster (p50)`
-	], { dcl: stats(dcl), load: stats(load) });
+	section(
+		'hard-nav',
+		[
+			`navigationStart → DOMContentLoaded  ${fmt(stats(dcl))}`,
+			`navigationStart → load              ${fmt(stats(load))}`,
+			`vs soft nav: warm swap is ${(stats(load).p50 / stats(warmNav.swap).p50).toFixed(1)}× faster, cold swap ${(stats(load).p50 / stats(coldNav.swap).p50).toFixed(1)}× faster (p50)`
+		],
+		{ dcl: stats(dcl), load: stats(load) }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -318,8 +433,11 @@ banner('5/13  Prefetch runway — hover → HTML in cache');
 			// resolved when the fetch's resource entry lands
 			return await new Promise<number>((res, rej) => {
 				const scan = () => {
-					const e = performance.getEntriesByType('resource').find((x) => new URL(x.name).pathname === '/about');
-					if (e && (e as PerformanceResourceTiming).responseEnd > 0) res((e as PerformanceResourceTiming).responseEnd - t0);
+					const e = performance
+						.getEntriesByType('resource')
+						.find((x) => new URL(x.name).pathname === '/about');
+					if (e && (e as PerformanceResourceTiming).responseEnd > 0)
+						res((e as PerformanceResourceTiming).responseEnd - t0);
 					else if (performance.now() - t0 > 4000) rej(new Error('no prefetch'));
 					else setTimeout(scan, 4);
 				};
@@ -329,10 +447,14 @@ banner('5/13  Prefetch runway — hover → HTML in cache');
 		runway.push(r);
 		await context.close();
 	}
-	section('prefetch-runway', [
-		`hover → HTML fully cached  ${fmt(stats(runway))}`,
-		`any hover longer than this makes the next click swap from cache (zero network)`
-	], { runway: stats(runway) });
+	section(
+		'prefetch-runway',
+		[
+			`hover → HTML fully cached  ${fmt(stats(runway))}`,
+			`any hover longer than this makes the next click swap from cache (zero network)`
+		],
+		{ runway: stats(runway) }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -343,10 +465,14 @@ banner('6/13  View transitions — same warm nav, VT on vs off');
 	const run = async (reduced: boolean) => {
 		const swaps: number[] = [];
 		for (let i = 0; i < Math.min(N, 12); i++) {
-			const { context, page } = await freshPage({ reducedMotion: reduced ? 'reduce' : 'no-preference' });
+			const { context, page } = await freshPage({
+				reducedMotion: reduced ? 'reduce' : 'no-preference'
+			});
 			await page.goto(BASE + '/prefetch', { waitUntil: 'load' });
 			await sleep(120);
-			const done = page.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 4000 }).catch(() => null);
+			const done = page
+				.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 4000 })
+				.catch(() => null);
 			await page.dispatchEvent('[data-prefetch-hover]', 'mouseover');
 			await done;
 			await sleep(60);
@@ -358,11 +484,15 @@ banner('6/13  View transitions — same warm nav, VT on vs off');
 	};
 	const vtOn = await run(false);
 	const vtOff = await run(true);
-	section('view-transitions', [
-		`VT on   click → swap  ${fmt(vtOn)}`,
-		`VT off  click → swap  ${fmt(vtOff)}   (prefers-reduced-motion)`,
-		`VT overhead ≈ ${ms(Math.max(0, vtOn.p50 - vtOff.p50))}ms p50 (snapshot + animation frame)`
-	], { vtOn, vtOff });
+	section(
+		'view-transitions',
+		[
+			`VT on   click → swap  ${fmt(vtOn)}`,
+			`VT off  click → swap  ${fmt(vtOff)}   (prefers-reduced-motion)`,
+			`VT overhead ≈ ${ms(Math.max(0, vtOn.p50 - vtOff.p50))}ms p50 (snapshot + animation frame)`
+		],
+		{ vtOn, vtOff }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -370,7 +500,8 @@ banner('6/13  View transitions — same warm nav, VT on vs off');
 // ═════════════════════════════════════════════════════════════════════════════
 banner('7/13  Back/forward — popstate → swap');
 {
-	const back: number[] = [], fwd: number[] = [];
+	const back: number[] = [],
+		fwd: number[] = [];
 	for (let i = 0; i < N; i++) {
 		const { context, page } = await freshPage();
 		await page.goto(BASE + '/prefetch', { waitUntil: 'load' });
@@ -396,10 +527,14 @@ banner('7/13  Back/forward — popstate → swap');
 		fwd.push(f);
 		await context.close();
 	}
-	section('back-forward', [
-		`back (popstate → swap)     ${fmt(stats(back))}`,
-		`forward (popstate → swap)  ${fmt(stats(fwd))}   (/about still in 8s page cache → no network)`
-	], { back: stats(back), forward: stats(fwd) });
+	section(
+		'back-forward',
+		[
+			`back (popstate → swap)     ${fmt(stats(back))}`,
+			`forward (popstate → swap)  ${fmt(stats(fwd))}   (/about still in 8s page cache → no network)`
+		],
+		{ back: stats(back), forward: stats(fwd) }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -407,33 +542,50 @@ banner('7/13  Back/forward — popstate → swap');
 // ═════════════════════════════════════════════════════════════════════════════
 banner('8/13  wake:visible — scroll into view → hydrated');
 {
-	const first: number[] = [], all: number[] = [];
+	const first: number[] = [],
+		all: number[] = [];
 	for (let i = 0; i < N; i++) {
 		const { context, page } = await freshPage();
 		await page.goto(BASE + '/', { waitUntil: 'load' });
-		await page.waitForFunction(() => {
-			const B = (window as any).__ob;
-			return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
-		}, undefined, { timeout: 5000 }).catch(() => {});
+		await page
+			.waitForFunction(
+				() => {
+					const B = (window as any).__ob;
+					return B.hyd.length > 0 && performance.now() - B.hyd[B.hyd.length - 1] > 400;
+				},
+				undefined,
+				{ timeout: 5000 }
+			)
+			.catch(() => {});
 		await page.evaluate(() => {
 			(window as any).__ob.hyd = [];
 			(window as any).__vt0 = performance.now();
 			window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' as ScrollBehavior });
 		});
-		await page.waitForFunction(() => (window as any).__ob.hyd.length >= 2, undefined, { timeout: 5000 }).catch(() => {});
+		await page
+			.waitForFunction(() => (window as any).__ob.hyd.length >= 2, undefined, { timeout: 5000 })
+			.catch(() => {});
 		const r = await page.evaluate(() => {
 			const B = (window as any).__ob;
 			const t0 = (window as any).__vt0;
-			return { first: B.hyd.length ? B.hyd[0] - t0 : null, all: B.hyd.length ? B.hyd[B.hyd.length - 1] - t0 : null, n: B.hyd.length };
+			return {
+				first: B.hyd.length ? B.hyd[0] - t0 : null,
+				all: B.hyd.length ? B.hyd[B.hyd.length - 1] - t0 : null,
+				n: B.hyd.length
+			};
 		});
 		if (r.first != null) first.push(r.first);
 		if (r.all != null) all.push(r.all);
 		await context.close();
 	}
-	section('wake-visible', [
-		`scroll → first visible island hydrated  ${fmt(stats(first))}`,
-		`scroll → all visible islands hydrated   ${fmt(stats(all))}`
-	], { first: stats(first), all: stats(all) });
+	section(
+		'wake-visible',
+		[
+			`scroll → first visible island hydrated  ${fmt(stats(first))}`,
+			`scroll → all visible islands hydrated   ${fmt(stats(all))}`
+		],
+		{ first: stats(first), all: stats(all) }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -441,24 +593,39 @@ banner('8/13  wake:visible — scroll into view → hydrated');
 // ═════════════════════════════════════════════════════════════════════════════
 banner('9/13  wake:interaction — click → hydrate → replay applied');
 {
-	const toHyd: number[] = [], toApplied: number[] = [];
+	const toHyd: number[] = [],
+		toApplied: number[] = [];
 	for (let i = 0; i < N; i++) {
 		const { context, page } = await freshPage();
 		await page.goto(BASE + '/interaction', { waitUntil: 'load' });
-		await page.waitForFunction(() => (window as any).__ob.hyd.length >= 1, undefined, { timeout: 5000 }).catch(() => {});
+		await page
+			.waitForFunction(() => (window as any).__ob.hyd.length >= 1, undefined, { timeout: 5000 })
+			.catch(() => {});
 		await sleep(150);
 		await page.evaluate(() => {
 			const B = (window as any).__ob;
 			B.hyd = [];
-			const region = document.querySelector('[data-interaction-counter]')!.closest('ogygia-region') || document.body;
+			const region =
+				document.querySelector('[data-interaction-counter]')!.closest('ogygia-region') ||
+				document.body;
 			B.ixDone = new Promise<number>((res) => {
 				const check = () => {
 					const c = document.querySelector('[data-i-count]');
-					if (c && c.textContent === '1') { res(performance.now()); return true; }
+					if (c && c.textContent === '1') {
+						res(performance.now());
+						return true;
+					}
 					return false;
 				};
 				if (check()) return;
-				new MutationObserver((_, o) => { if (check()) o.disconnect(); }).observe(region, { subtree: true, childList: true, characterData: true, attributes: true });
+				new MutationObserver((_, o) => {
+					if (check()) o.disconnect();
+				}).observe(region, {
+					subtree: true,
+					childList: true,
+					characterData: true,
+					attributes: true
+				});
 			});
 			B.ixT0 = performance.now();
 			(document.querySelector('[data-i-btn]') as HTMLElement).click();
@@ -472,10 +639,14 @@ banner('9/13  wake:interaction — click → hydrate → replay applied');
 		toApplied.push(r.done - r.t0);
 		await context.close();
 	}
-	section('wake-interaction', [
-		`click → island hydrated        ${fmt(stats(toHyd))}   (module fetched on demand)`,
-		`click → replayed click applied ${fmt(stats(toApplied))}   (counter shows 1 — the click was not lost)`
-	], { toHydrated: stats(toHyd), toApplied: stats(toApplied) });
+	section(
+		'wake-interaction',
+		[
+			`click → island hydrated        ${fmt(stats(toHyd))}   (module fetched on demand)`,
+			`click → replayed click applied ${fmt(stats(toApplied))}   (counter shows 1 — the click was not lost)`
+		],
+		{ toHydrated: stats(toHyd), toApplied: stats(toApplied) }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -483,11 +654,15 @@ banner('9/13  wake:interaction — click → hydrate → replay applied');
 // ═════════════════════════════════════════════════════════════════════════════
 banner('10/13  Weave — SPA nav to 4 server islands (1s/1.5s/2s/3s delays)');
 {
-	const swaps: number[] = [], firstFrame: number[] = [], lastFrame: number[] = [];
-	let batchPosts = 0, regionGets = 0;
+	const swaps: number[] = [],
+		firstFrame: number[] = [],
+		lastFrame: number[] = [];
+	let batchPosts = 0,
+		regionGets = 0;
 	for (let i = 0; i < 5; i++) {
 		const { context, page } = await freshPage();
-		let posts = 0, gets = 0;
+		let posts = 0,
+			gets = 0;
 		page.on('request', (req) => {
 			if (!ISLAND.test(req.url())) return;
 			if (req.method() === 'POST') posts++;
@@ -506,7 +681,9 @@ banner('10/13  Weave — SPA nav to 4 server islands (1s/1.5s/2s/3s delays)');
 			const times: number[] = [];
 			await new Promise<void>((res) => {
 				const scan = () => {
-					const remaining = sections.filter((s) => document.querySelector(`[data-weave="${s}"] [data-fallback]`));
+					const remaining = sections.filter((s) =>
+						document.querySelector(`[data-weave="${s}"] [data-fallback]`)
+					);
 					const settled = sections.length - remaining.length;
 					while (times.length < settled) times.push(performance.now() - t0);
 					if (!remaining.length || performance.now() - t0 > 8000) res();
@@ -519,15 +696,26 @@ banner('10/13  Weave — SPA nav to 4 server islands (1s/1.5s/2s/3s delays)');
 		swaps.push(r.swap);
 		if (r.first != null) firstFrame.push(r.first);
 		if (r.last != null) lastFrame.push(r.last);
-		batchPosts += posts; regionGets += gets;
+		batchPosts += posts;
+		regionGets += gets;
 		await context.close();
 	}
-	section('weave', [
-		`click → swap            ${fmt(stats(swaps))}   (swap NOT blocked by 3s server delays)`,
-		`click → first frame in  ${fmt(stats(firstFrame))}   (server delay ≥1000ms is intentional)`,
-		`click → all frames in   ${fmt(stats(lastFrame))}   (slowest region is 3000ms)`,
-		`island-endpoint requests: ${batchPosts} POST (batch) + ${regionGets} GET across 5 runs — ${batchPosts === 5 && regionGets === 0 ? 'ONE batch per nav, zero waterfall ✓' : 'UNEXPECTED'}`
-	], { swap: stats(swaps), firstFrame: stats(firstFrame), lastFrame: stats(lastFrame), batchPosts, regionGets });
+	section(
+		'weave',
+		[
+			`click → swap            ${fmt(stats(swaps))}   (swap NOT blocked by 3s server delays)`,
+			`click → first frame in  ${fmt(stats(firstFrame))}   (server delay ≥1000ms is intentional)`,
+			`click → all frames in   ${fmt(stats(lastFrame))}   (slowest region is 3000ms)`,
+			`island-endpoint requests: ${batchPosts} POST (batch) + ${regionGets} GET across 5 runs — ${batchPosts === 5 && regionGets === 0 ? 'ONE batch per nav, zero waterfall ✓' : 'UNEXPECTED'}`
+		],
+		{
+			swap: stats(swaps),
+			firstFrame: stats(firstFrame),
+			lastFrame: stats(lastFrame),
+			batchPosts,
+			regionGets
+		}
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -536,21 +724,30 @@ banner('10/13  Weave — SPA nav to 4 server islands (1s/1.5s/2s/3s delays)');
 banner('11/13  Races — 5 rapid navs, settle on the last');
 {
 	const settle: number[] = [];
-	let wrongFinal = 0, abortedTotal = 0;
+	let wrongFinal = 0,
+		abortedTotal = 0;
 	for (let i = 0; i < 10; i++) {
 		const { context, page } = await freshPage();
 		let aborted = 0;
-		page.on('requestfailed', (r) => { if (r.headers()['x-ogygia-spa'] === '1') aborted++; });
+		page.on('requestfailed', (r) => {
+			if (r.headers()['x-ogygia-spa'] === '1') aborted++;
+		});
 		await page.goto(BASE + '/', { waitUntil: 'load' });
 		await sleep(150);
 		const r = await page.evaluate(async () => {
 			const hrefs = ['/about', '/data', '/server', '/nested', '/static'];
 			const t0 = performance.now();
-			hrefs.forEach((h, i2) => setTimeout(() => (document.querySelector(`nav a[href="${h}"]`) as HTMLElement)?.click(), i2 * 25));
+			hrefs.forEach((h, i2) =>
+				setTimeout(
+					() => (document.querySelector(`nav a[href="${h}"]`) as HTMLElement)?.click(),
+					i2 * 25
+				)
+			);
 			return await new Promise<{ ms: number; ok: boolean }>((res) => {
 				const scan = () => {
 					const h1 = document.querySelector('h1')?.textContent || '';
-					if (location.pathname === '/static' && h1 === 'Prerendered page') res({ ms: performance.now() - t0, ok: true });
+					if (location.pathname === '/static' && h1 === 'Prerendered page')
+						res({ ms: performance.now() - t0, ok: true });
 					else if (performance.now() - t0 > 6000) res({ ms: performance.now() - t0, ok: false });
 					else setTimeout(scan, 8);
 				};
@@ -562,10 +759,14 @@ banner('11/13  Races — 5 rapid navs, settle on the last');
 		abortedTotal += aborted;
 		await context.close();
 	}
-	section('races', [
-		`first click → settled on final page  ${fmt(stats(settle))}`,
-		`correct final page 10/10${wrongFinal ? ` MINUS ${wrongFinal} WRONG` : ' ✓'}; ${abortedTotal} stale in-flight fetches aborted across runs`
-	], { settle: stats(settle), wrongFinal, abortedTotal });
+	section(
+		'races',
+		[
+			`first click → settled on final page  ${fmt(stats(settle))}`,
+			`correct final page 10/10${wrongFinal ? ` MINUS ${wrongFinal} WRONG` : ' ✓'}; ${abortedTotal} stale in-flight fetches aborted across runs`
+		],
+		{ settle: stats(settle), wrongFinal, abortedTotal }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -591,10 +792,14 @@ banner('12/13  Throughput — 40 alternating navs / ↔ /about');
 	}
 	const wall = (Date.now() - t0) / 1000;
 	await context.close();
-	section('throughput', [
-		`per-nav swap  ${fmt(stats(per))}   (page cache warm after first round trip)`,
-		`sustained     ${(40 / wall).toFixed(1)} navs/sec over ${wall.toFixed(1)}s`
-	], { perNav: stats(per), navsPerSec: 40 / wall });
+	section(
+		'throughput',
+		[
+			`per-nav swap  ${fmt(stats(per))}   (page cache warm after first round trip)`,
+			`sustained     ${(40 / wall).toFixed(1)} navs/sec over ${wall.toFixed(1)}s`
+		],
+		{ perNav: stats(per), navsPerSec: 40 / wall }
+	);
 }
 
 banner('13/13  Memory — 60 navs, GC-to-GC growth');
@@ -612,19 +817,27 @@ banner('13/13  Memory — 60 navs, GC-to-GC growth');
 		await sleep(250);
 		const m = (await cdp.send('Performance.getMetrics')).metrics;
 		const get = (n: string) => m.find((x) => x.name === n)?.value ?? 0;
-		return { heap: get('JSHeapUsedSize'), nodes: get('Nodes'), listeners: get('JSEventListeners'), documents: get('Documents') };
+		return {
+			heap: get('JSHeapUsedSize'),
+			nodes: get('Nodes'),
+			listeners: get('JSEventListeners'),
+			documents: get('Documents')
+		};
 	};
 	// Alternate / ↔ /about so every measurement lands on the SAME resting DOM (`/`): any node/heap
 	// delta is retention, not "the last page is just bigger". Sample at 30 and 60 to prove bounded.
 	const before = await grab();
 	const step = async () => {
 		for (let i = 0; i < 30; i++) {
-			await page.evaluate(async (href) => {
-				const B = (window as any).__ob;
-				const p = B.swapWait();
-				(document.querySelector(`nav a[href="${href}"]`) as HTMLElement).click();
-				await p;
-			}, i % 2 === 0 ? '/about' : '/');
+			await page.evaluate(
+				async (href) => {
+					const B = (window as any).__ob;
+					const p = B.swapWait();
+					(document.querySelector(`nav a[href="${href}"]`) as HTMLElement).click();
+					await p;
+				},
+				i % 2 === 0 ? '/about' : '/'
+			);
 			await sleep(25);
 		}
 		await sleep(400);
@@ -637,13 +850,17 @@ banner('13/13  Memory — 60 navs, GC-to-GC growth');
 	const perNav = (after.heap - before.heap) / 60 / 1024;
 	const secondHalf = (after.heap - mid.heap) / 30 / 1024;
 	const bounded = after.nodes === mid.nodes && after.documents <= 1;
-	section('memory', [
-		`JS heap   ${kb(before.heap)} → ${kb(mid.heap)} (30 navs) → ${kb(after.heap)} (60 navs)`,
-		`  per-nav Δheap: ${perNav.toFixed(1)} kB/nav overall, ${secondHalf.toFixed(1)} kB/nav in the 2nd half`,
-		`DOM nodes ${before.nodes} → ${mid.nodes} → ${after.nodes}  (resting on / each time)`,
-		`listeners ${before.listeners} → ${after.listeners}   documents ${before.documents} → ${after.documents}`,
-		`verdict: ${bounded ? 'BOUNDED — nodes plateau, no per-nav accumulation, no detached document retained ✓' : 'nodes still climbing at 60 navs — investigate'}`
-	], { before, mid, after, perNavKb: perNav, secondHalfKbPerNav: secondHalf, bounded });
+	section(
+		'memory',
+		[
+			`JS heap   ${kb(before.heap)} → ${kb(mid.heap)} (30 navs) → ${kb(after.heap)} (60 navs)`,
+			`  per-nav Δheap: ${perNav.toFixed(1)} kB/nav overall, ${secondHalf.toFixed(1)} kB/nav in the 2nd half`,
+			`DOM nodes ${before.nodes} → ${mid.nodes} → ${after.nodes}  (resting on / each time)`,
+			`listeners ${before.listeners} → ${after.listeners}   documents ${before.documents} → ${after.documents}`,
+			`verdict: ${bounded ? 'BOUNDED — nodes plateau, no per-nav accumulation, no detached document retained ✓' : 'nodes still climbing at 60 navs — investigate'}`
+		],
+		{ before, mid, after, perNavKb: perNav, secondHalfKbPerNav: secondHalf, bounded }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -652,7 +869,8 @@ banner('13/13  Memory — 60 navs, GC-to-GC growth');
 banner('Bonus  4× CPU throttle — cold + warm soft nav');
 {
 	const run = async (warm: boolean) => {
-		const swaps: number[] = [], lastHyd: number[] = [];
+		const swaps: number[] = [],
+			lastHyd: number[] = [];
 		for (let i = 0; i < 8; i++) {
 			const { context, page } = await freshPage();
 			const cdp = await context.newCDPSession(page);
@@ -660,7 +878,9 @@ banner('Bonus  4× CPU throttle — cold + warm soft nav');
 			await page.goto(BASE + '/prefetch', { waitUntil: 'load' });
 			await sleep(200);
 			if (warm) {
-				const done = page.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 5000 }).catch(() => null);
+				const done = page
+					.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 5000 })
+					.catch(() => null);
 				await page.dispatchEvent('[data-prefetch-hover]', 'mouseover');
 				await done;
 				await sleep(80);
@@ -674,10 +894,14 @@ banner('Bonus  4× CPU throttle — cold + warm soft nav');
 	};
 	const cold = await run(false);
 	const warmR = await run(true);
-	section('cpu-throttle-4x', [
-		`cold  click → swap ${fmt(cold.swap)};  all islands ${fmt(cold.lastHyd)}`,
-		`warm  click → swap ${fmt(warmR.swap)};  all islands ${fmt(warmR.lastHyd)}`
-	], { cold, warm: warmR });
+	section(
+		'cpu-throttle-4x',
+		[
+			`cold  click → swap ${fmt(cold.swap)};  all islands ${fmt(cold.lastHyd)}`,
+			`warm  click → swap ${fmt(warmR.swap)};  all islands ${fmt(warmR.lastHyd)}`
+		],
+		{ cold, warm: warmR }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -689,9 +913,15 @@ banner('Bonus  4× CPU throttle — cold + warm soft nav');
 banner('Bonus 2  Slow-4G — cold click vs hover-warmed click (this is where warming shows)');
 {
 	// Chrome-DevTools "Slow 4G": ~400 kb/s down, 400 kb/s up, 400 ms RTT.
-	const NET = { offline: false, latency: 400, downloadThroughput: (400 * 1024) / 8, uploadThroughput: (400 * 1024) / 8 };
+	const NET = {
+		offline: false,
+		latency: 400,
+		downloadThroughput: (400 * 1024) / 8,
+		uploadThroughput: (400 * 1024) / 8
+	};
 	const run = async (warm: boolean) => {
-		const swaps: number[] = [], lastHyd: number[] = [];
+		const swaps: number[] = [],
+			lastHyd: number[] = [];
 		for (let i = 0; i < 8; i++) {
 			const { context, page } = await freshPage();
 			const cdp = await context.newCDPSession(page);
@@ -703,13 +933,22 @@ banner('Bonus 2  Slow-4G — cold click vs hover-warmed click (this is where war
 			if (warm) {
 				// Hover long enough for the slow link to deliver the HTML AND warm the island modules.
 				await page.dispatchEvent('[data-prefetch-hover]', 'mouseover');
-				await page.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 15000 }).catch(() => null);
+				await page
+					.waitForResponse((r) => new URL(r.url()).pathname === '/about', { timeout: 15000 })
+					.catch(() => null);
 				await sleep(1500); // let module chunks finish over the slow link
 			}
 			const r = await measureNav(page, '[data-prefetch-hover]');
 			swaps.push(r.swap);
 			if (r.lastHyd != null) lastHyd.push(r.lastHyd);
-			await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 }).catch(() => {});
+			await cdp
+				.send('Network.emulateNetworkConditions', {
+					offline: false,
+					latency: 0,
+					downloadThroughput: -1,
+					uploadThroughput: -1
+				})
+				.catch(() => {});
 			await context.close();
 		}
 		return { swap: stats(swaps), lastHyd: stats(lastHyd) };
@@ -717,12 +956,16 @@ banner('Bonus 2  Slow-4G — cold click vs hover-warmed click (this is where war
 	const cold = await run(false);
 	const warmR = await run(true);
 	const speedup = cold.lastHyd.p50 / warmR.lastHyd.p50;
-	section('network-slow-4g', [
-		`cold click (nothing prefetched)  → swap ${fmt(cold.swap)};  all islands ${fmt(cold.lastHyd)}`,
-		`warm click (hover-prefetched)    → swap ${fmt(warmR.swap)};  all islands ${fmt(warmR.lastHyd)}`,
-		`click → all-islands-interactive is ${speedup.toFixed(1)}× faster warm vs cold on Slow-4G (p50)`,
-		`this is the real-world payoff of HTML prefetch + island-module warming; on localhost it is ~0`
-	], { cold, warm: warmR, speedup });
+	section(
+		'network-slow-4g',
+		[
+			`cold click (nothing prefetched)  → swap ${fmt(cold.swap)};  all islands ${fmt(cold.lastHyd)}`,
+			`warm click (hover-prefetched)    → swap ${fmt(warmR.swap)};  all islands ${fmt(warmR.lastHyd)}`,
+			`click → all-islands-interactive is ${speedup.toFixed(1)}× faster warm vs cold on Slow-4G (p50)`,
+			`this is the real-world payoff of HTML prefetch + island-module warming; on localhost it is ~0`
+		],
+		{ cold, warm: warmR, speedup }
+	);
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -732,7 +975,12 @@ banner('Bonus 2  Slow-4G — cold click vs hover-warmed click (this is where war
 // ═════════════════════════════════════════════════════════════════════════════
 banner('Bonus 3  Slow-4G — wake:visible scroll → hydrated (idle module warming)');
 {
-	const NET = { offline: false, latency: 400, downloadThroughput: (400 * 1024) / 8, uploadThroughput: (400 * 1024) / 8 };
+	const NET = {
+		offline: false,
+		latency: 400,
+		downloadThroughput: (400 * 1024) / 8,
+		uploadThroughput: (400 * 1024) / 8
+	};
 	const first: number[] = [];
 	for (let i = 0; i < 8; i++) {
 		const { context, page } = await freshPage();
@@ -742,11 +990,17 @@ banner('Bonus 3  Slow-4G — wake:visible scroll → hydrated (idle module warmi
 		await page.goto(BASE + '/', { waitUntil: 'load' }).catch(() => {});
 		await sleep(3500); // idle warm runs over the slow link while the user reads above the fold
 		const r = await page.evaluate(async () => {
-			const B = (window as any).__ob; B.hyd = [];
+			const B = (window as any).__ob;
+			B.hyd = [];
 			const t0 = performance.now();
 			window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' as ScrollBehavior });
 			await new Promise<void>((res) => {
-				const c = () => { const h = B.hyd; if (h.length && performance.now() - h[h.length - 1] > 600) res(); else if (performance.now() - t0 > 15000) res(); else setTimeout(c, 25); };
+				const c = () => {
+					const h = B.hyd;
+					if (h.length && performance.now() - h[h.length - 1] > 600) res();
+					else if (performance.now() - t0 > 15000) res();
+					else setTimeout(c, 25);
+				};
 				c();
 			});
 			return B.hyd.length ? B.hyd[0] - t0 : null;
@@ -754,10 +1008,14 @@ banner('Bonus 3  Slow-4G — wake:visible scroll → hydrated (idle module warmi
 		if (r != null) first.push(r);
 		await context.close();
 	}
-	section('visible-slow-4g', [
-		`scroll → first visible island hydrated  ${fmt(stats(first))}   (module already warmed at idle)`,
-		`without idle warming this pays a full cold chunk fetch on scroll (~410ms p50 on this link)`
-	], { first: stats(first) });
+	section(
+		'visible-slow-4g',
+		[
+			`scroll → first visible island hydrated  ${fmt(stats(first))}   (module already warmed at idle)`,
+			`without idle warming this pays a full cold chunk fetch on scroll (~410ms p50 on this link)`
+		],
+		{ first: stats(first) }
+	);
 }
 
 // ── report ──────────────────────────────────────────────────────────────────
@@ -770,7 +1028,10 @@ const meta = {
 	iterations: N,
 	pageErrors,
 	vtSkips,
-	commit: spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repo, encoding: 'utf-8' }).stdout?.trim()
+	commit: spawnSync('git', ['rev-parse', '--short', 'HEAD'], {
+		cwd: repo,
+		encoding: 'utf-8'
+	}).stdout?.trim()
 };
 json.meta = meta;
 

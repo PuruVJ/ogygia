@@ -7,7 +7,11 @@
  * module; the driver serves the client leg for `ssr: false`.
  */
 import { describe, expect, it } from 'vitest';
-import { make_wake_island, lazy_entry_source, island_wrapper_client_source } from '../src/compiler/region/emit.ts';
+import {
+	make_wake_island,
+	lazy_entry_source,
+	island_wrapper_client_source
+} from '../src/compiler/region/emit.ts';
 import { lazyEntryVirtualId } from '../src/compiler/ids.ts';
 import { is_island_path } from '../src/compiler/region/transform.ts';
 
@@ -29,23 +33,36 @@ describe('wake island — the wrapper is leg-split, the client leg is lazy', () 
 	it('mints a client wrapper that imports the LAZY module, never the component or the entry', () => {
 		const r = record() as Record<string, string>;
 		expect(r.lazyPath).toBe(lazyEntryVirtualId('abc123'));
-		expect(r.wrapperClientSource).toContain(`import __OgygiaEntry, { load as __OgygiaLoad } from "virtual:ogygia/lazy/abc123.js";`);
+		expect(r.wrapperClientSource).toContain(
+			`import __OgygiaEntry, { load as __OgygiaLoad } from "virtual:ogygia/lazy/abc123.js";`
+		);
 		expect(r.wrapperClientSource).not.toContain('Block.svelte');
 		expect(r.wrapperClientSource).not.toContain('virtual:ogygia/island/abc123.js');
 		expect(r.wrapperClientSource).toContain('__component={__OgygiaEntry} __load={__OgygiaLoad}');
 		expect(r.wrapperClientSource).toContain('__entry={"/_app/immutable/og-region.abc123.js"}');
 		expect(r.wrapperClientSource).toContain('<script lang="ts">');
 		// the SSR wrapper is unchanged: it renders, so it imports the entry and the component
-		expect(r.wrapperSource).toContain('import __OgygiaEntry from "virtual:ogygia/island/abc123.js";');
+		expect(r.wrapperSource).toContain(
+			'import __OgygiaEntry from "virtual:ogygia/island/abc123.js";'
+		);
 		expect(r.wrapperSource).toContain('Block.svelte');
 	});
 
 	it('the lazy module reads the ONE csr fact + the rendered stamp, top-level-awaits the entry, and exports an on-demand load', () => {
-		const src = lazy_entry_source('virtual:ogygia/island/abc123.js', '/_app/immutable/og-region.abc123.js');
+		const src = lazy_entry_source(
+			'virtual:ogygia/island/abc123.js',
+			'/_app/immutable/og-region.abc123.js'
+		);
 		expect(src).toContain(`import { documentIsCsrTrue } from 'ogygia/internal';`);
-		expect(src).toContain(`document.querySelector("meta[name=\\"ogygia-kit-island\\"][content=\\"/_app/immutable/og-region.abc123.js\\"]")`);
-		expect(src).toContain(`export default documentIsCsrTrue() && !rendered ? undefined : (await import("virtual:ogygia/island/abc123.js")).default;`);
-		expect(src).toContain(`export const load = () => import("virtual:ogygia/island/abc123.js").then((m) => m.default);`);
+		expect(src).toContain(
+			`document.querySelector("meta[name=\\"ogygia-kit-island\\"][content=\\"/_app/immutable/og-region.abc123.js\\"]")`
+		);
+		expect(src).toContain(
+			`export default documentIsCsrTrue() && !rendered ? undefined : (await import("virtual:ogygia/island/abc123.js")).default;`
+		);
+		expect(src).toContain(
+			`export const load = () => import("virtual:ogygia/island/abc123.js").then((m) => m.default);`
+		);
 		expect(src).not.toMatch(/__sveltekit_/); // no private Kit-page probe of its own
 	});
 
@@ -56,11 +73,20 @@ describe('wake island — the wrapper is leg-split, the client leg is lazy', () 
 
 	it('a stamp with a quote in the entry cannot break out of the selector', () => {
 		const src = lazy_entry_source('virtual:ogygia/island/q.js', '/x"y.js');
-		expect(src).toContain(JSON.stringify(`meta[name="ogygia-kit-island"][content=${JSON.stringify('/x"y.js')}]`));
+		expect(src).toContain(
+			JSON.stringify(`meta[name="ogygia-kit-island"][content=${JSON.stringify('/x"y.js')}]`)
+		);
 	});
 
 	it('keep + strategy attributes ride the client wrapper exactly as the SSR one', () => {
-		const client = island_wrapper_client_source('i', 'virtual:ogygia/lazy/i.js', 'load', { keep: 'nav' }, '/e.js', '');
+		const client = island_wrapper_client_source(
+			'i',
+			'virtual:ogygia/lazy/i.js',
+			'load',
+			{ keep: 'nav' },
+			'/e.js',
+			''
+		);
 		expect(client).toContain('__keep={"nav"}');
 		expect(client).toContain('__mode="island" load');
 	});

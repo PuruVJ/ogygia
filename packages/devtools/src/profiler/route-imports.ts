@@ -58,13 +58,26 @@ export function module_imports(file: string, src: string): string[] {
 	const seen = new Set<string>();
 	for (const line of src.split('\n')) {
 		const t = line.trim();
-		if (!(t.startsWith('import') || t.startsWith('export') || t.startsWith('}') || t.startsWith("'") || t.startsWith('"'))) continue;
+		if (
+			!(
+				t.startsWith('import') ||
+				t.startsWith('export') ||
+				t.startsWith('}') ||
+				t.startsWith("'") ||
+				t.startsWith('"')
+			)
+		)
+			continue;
 		for (const q of ["'", '"']) {
 			const a = line.indexOf(q);
 			const b = a === -1 ? -1 : line.indexOf(q, a + 1);
 			if (b === -1) continue;
 			const spec = line.slice(a + 1, b);
-			if (spec.endsWith('.svelte') || !(spec.startsWith('$lib/') || spec.startsWith('./') || spec.startsWith('../'))) continue;
+			if (
+				spec.endsWith('.svelte') ||
+				!(spec.startsWith('$lib/') || spec.startsWith('./') || spec.startsWith('../'))
+			)
+				continue;
 			let base: string;
 			if (spec.startsWith('$lib/')) base = 'lib/' + spec.slice(5);
 			else {
@@ -77,7 +90,9 @@ export function module_imports(file: string, src: string): string[] {
 			}
 			// (`./x.js` written for a `.ts` file: the TypeScript convention)
 			const stem = base.endsWith('.js') ? base.slice(0, -3) : base;
-			for (const c of base.endsWith('.ts') ? [base] : [stem + '.ts', stem + '.js', base, stem + '/index.ts', stem + '/index.js'])
+			for (const c of base.endsWith('.ts')
+				? [base]
+				: [stem + '.ts', stem + '.js', base, stem + '/index.ts', stem + '/index.js'])
 				if (!seen.has(c)) {
 					seen.add(c);
 					out.push(c);

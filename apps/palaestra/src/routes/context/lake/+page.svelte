@@ -14,6 +14,6 @@
 <hr />
 <h1 data-static-shell>Context into a lake</h1>
 
-<Provide values={[ roomCtx(counter) ]}>
+<Provide values={[roomCtx(counter)]}>
 	<CtxLakeHost />
 </Provide>

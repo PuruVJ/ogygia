@@ -80,9 +80,18 @@ await browser.close();
 // ── report ───────────────────────────────────────────────────────────────────
 results.sort((a, b) => a.opsPerSec - b.opsPerSec); // slowest (hottest to fix) first
 const fmtOps = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : (n / 1e3).toFixed(0) + 'k');
-const commit = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repo, encoding: 'utf-8' }).stdout?.trim();
+const commit = spawnSync('git', ['rev-parse', '--short', 'HEAD'], {
+	cwd: repo,
+	encoding: 'utf-8'
+}).stdout?.trim();
 
-console.log('\n\x1b[1m\x1b[36mCORE OPS/SEC — slowest first (best-of-' + ROUNDS + ', ' + BUDGET_MS + 'ms window)\x1b[0m');
+console.log(
+	'\n\x1b[1m\x1b[36mCORE OPS/SEC — slowest first (best-of-' +
+		ROUNDS +
+		', ' +
+		BUDGET_MS +
+		'ms window)\x1b[0m'
+);
 const lines: string[] = [];
 for (const r of results) {
 	const line = `${r.name.padEnd(26)} ${fmtOps(r.opsPerSec).padStart(7)} ops/s   ${r.nsPerOp.toFixed(1).padStart(7)} ns/op`;
@@ -104,5 +113,12 @@ const md = [
 const outDir = join(repo, 'internal/bench/results');
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, 'ops-latest.md'), md);
-writeFileSync(join(outDir, 'ops-latest.json'), JSON.stringify({ commit, date: new Date().toISOString(), budgetMs: BUDGET_MS, rounds: ROUNDS, results }, null, '\t'));
+writeFileSync(
+	join(outDir, 'ops-latest.json'),
+	JSON.stringify(
+		{ commit, date: new Date().toISOString(), budgetMs: BUDGET_MS, rounds: ROUNDS, results },
+		null,
+		'\t'
+	)
+);
 console.log(`\n  results → internal/bench/results/ops-latest.md (+ .json)`);

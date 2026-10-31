@@ -4,4 +4,6 @@
 	let count = $state(0);
 </script>
 
-<button data-bk-counter={name} onclick={() => count++}>{name} · <span data-bk-n>{count}</span></button>
+<button data-bk-counter={name} onclick={() => count++}
+	>{name} · <span data-bk-n>{count}</span></button
+>

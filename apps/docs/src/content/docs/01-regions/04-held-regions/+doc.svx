@@ -10,7 +10,7 @@ related:
 A **held region** is a component that the server selects at runtime and the client renders. The props are type-checked and go over the wire. It is the ogygia version of RSC: the server decides the UI, and the client only paints it.
 
 ::: tip When to use
-Use a held region when the *selection of the component* belongs to the server. Examples: search results that are a card or an empty-state, a feed with mixed item types, a dashboard tile that the backend decides. A [server island](/docs/regions/server-islands) fills a *fixed* hole with request-specific HTML. A held region lets the **server select the component** that fills it. The client never imports the options.
+Use a held region when the _selection of the component_ belongs to the server. Examples: search results that are a card or an empty-state, a feed with mixed item types, a dashboard tile that the backend decides. A [server island](/docs/regions/server-islands) fills a _fixed_ hole with request-specific HTML. A held region lets the **server select the component** that fills it. The client never imports the options.
 :::
 
 ```svelte
@@ -60,15 +60,15 @@ export const search = query(v.string(), async (raw) => {
 
 The wake schedule of a held region is **baked at the import** with a `wake:` mark. The vocabulary is the same as for a placed island:
 
-| Mark | Meaning |
-| --- | --- |
-| `wake: 'load'` | interactive, hydrate on load |
-| `wake: 'idle'` | interactive, hydrate when idle |
-| `wake: 'visible'` | interactive, hydrate when scrolled into view |
+| Mark                         | Meaning                                           |
+| ---------------------------- | ------------------------------------------------- |
+| `wake: 'load'`               | interactive, hydrate on load                      |
+| `wake: 'idle'`               | interactive, hydrate when idle                    |
+| `wake: 'visible'`            | interactive, hydrate when scrolled into view      |
 | `wake: '(min-width: 60rem)'` | interactive, hydrate when the media query matches |
-| `region: 'raw'` | HTML only, no baked schedule |
+| `region: 'raw'`              | HTML only, no baked schedule                      |
 
-A held region has no `render` mark of its own. You decide *when to fetch* through the moment you render `<Region>`. The baked `wake:` mark, or the schedule at the `region()` call, decides *when it wakes*.
+A held region has no `render` mark of its own. You decide _when to fetch_ through the moment you render `<Region>`. The baked `wake:` mark, or the schedule at the `region()` call, decides _when it wakes_.
 
 `region: 'raw'` is the escape hatch. It bakes nothing. Thus the `region()` call sets the schedule with a `(data) => options` function. This is applicable to a registry of raw components. Each component then decides its timing from its own data:
 
@@ -132,31 +132,31 @@ So do not track the wait at all. `of` accepts the **promise** directly from the 
 
 The timeline on a slow link, from submit:
 
-| Time | Phase | What's on screen |
-| --- | --- | --- |
-| `0 ms` | request in flight | your `Searching…` placeholder |
-| request resolves | HTML here; CSS `<link>` hoisted to `<head>`, sheet downloading | still the placeholder |
-| CSS `load` | region paints | the **styled** card, in one step |
+| Time             | Phase                                                          | What's on screen                 |
+| ---------------- | -------------------------------------------------------------- | -------------------------------- |
+| `0 ms`           | request in flight                                              | your `Searching…` placeholder    |
+| request resolves | HTML here; CSS `<link>` hoisted to `<head>`, sheet downloading | still the placeholder            |
+| CSS `load`       | region paints                                                  | the **styled** card, in one step |
 
 There is no blank gap: the placeholder holds the space until the paint. There is no unstyled flash: the paint waits for the sheet. Nothing outside the region says when the region is ready. Thus nothing can disagree. ogygia limits the stylesheet wait to a few seconds. A broken sheet then paints, and does not stop the page.
 
-A **new search** gives `of` a new promise. The region keeps the *previous* card on screen until the next result has its styles. Then it morphs in place. There is no placeholder flash between results.
+A **new search** gives `of` a new promise. The region keeps the _previous_ card on screen until the next result has its styles. Then it morphs in place. There is no placeholder flash between results.
 
-Why a held region has this window at all: it carries **its own CSS**. The page never imported `PackageCard`. Thus its styles are on no page stylesheet. They travel with the region. A held region rendered in the *server* pass (a blocks page, SDUI) has no window: its links go into `<head>` during SSR, and it arrives with its styles. No placeholder is involved.
+Why a held region has this window at all: it carries **its own CSS**. The page never imported `PackageCard`. Thus its styles are on no page stylesheet. They travel with the region. A held region rendered in the _server_ pass (a blocks page, SDUI) has no window: its links go into `<head>` during SSR, and it arrives with its styles. No placeholder is involved.
 
 ::: warning Why `placeholder`, not `ogygiaFallback`
-`ogygiaFallback` is the reserved slot for a `render: 'deferred'` server island (a fixed hole). A held region is a *value* that you place. Thus its not-ready UI is a snippet on its `<Region>`. That is plain Svelte.
+`ogygiaFallback` is the reserved slot for a `render: 'deferred'` server island (a fixed hole). A held region is a _value_ that you place. Thus its not-ready UI is a snippet on its `<Region>`. That is plain Svelte.
 :::
 
 ### Don't await it yourself
 
-With `experimental.async` on, you *can* write `of={await search(query)}` inside a `<svelte:boundary>` and let its `pending` snippet control the wait. Do not do this. The boundary stops its wait when the fetch resolves. But the region still has a paint to do: swap the HTML, load its stylesheet. You then own a wait that you cannot fully see. Your "done" signal fires early.
+With `experimental.async` on, you _can_ write `of={await search(query)}` inside a `<svelte:boundary>` and let its `pending` snippet control the wait. Do not do this. The boundary stops its wait when the fetch resolves. But the region still has a paint to do: swap the HTML, load its stylesheet. You then own a wait that you cannot fully see. Your "done" signal fires early.
 
-The runtime still protects you. A region **never paints without its styles**. It holds its previous content, or its `placeholder`, or empty space, until the sheet is in. Thus the failure mode is a hold with nothing better to show, not a flash. But the correct fix is to not make the gap. Give the region the promise. Put the loading UI where the lifecycle lives. Boundaries, `{#await}`, and loading flags stay good for *your* UI around the region. Region readiness is not theirs to report.
+The runtime still protects you. A region **never paints without its styles**. It holds its previous content, or its `placeholder`, or empty space, until the sheet is in. Thus the failure mode is a hold with nothing better to show, not a flash. But the correct fix is to not make the gap. Give the region the promise. Put the loading UI where the lifecycle lives. Boundaries, `{#await}`, and loading flags stay good for _your_ UI around the region. Region readiness is not theirs to report.
 
 ## Crossing shapes: the wire law
 
-All examples above send *one* region. The general rule for many:
+All examples above send _one_ region. The general rule for many:
 
 > **A region is the only unit of code that crosses. Everything else is data. Any data shape crosses if its leaves are regions.**
 
@@ -278,8 +278,6 @@ preload(region(Recommendations, { userId }));
 
 ## Do / don't
 
-- **Do** use a held region when the server owns the *which-component* decision. Use a [server island](/docs/regions/server-islands) when the component is fixed.
+- **Do** use a held region when the server owns the _which-component_ decision. Use a [server island](/docs/regions/server-islands) when the component is fixed.
 - **Do** select a raw held region (`with { region: 'raw' }`) for result UI that never needs interaction. It ships zero JS.
 - **Don't** import the result components on the client. The server sends them. The client only renders `<Region>`.
-
-

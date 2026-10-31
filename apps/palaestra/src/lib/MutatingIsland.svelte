@@ -7,7 +7,8 @@
 	// to a captured var is a BUILD error (task 1a), so it cannot be demoed at runtime.
 	import { onMount } from 'svelte';
 
-	let { config }: { config: { count: number; meta: Map<string, number>; roles: Set<string> } } = $props();
+	let { config }: { config: { count: number; meta: Map<string, number>; roles: Set<string> } } =
+		$props();
 
 	let done = $state(false);
 

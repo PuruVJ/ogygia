@@ -1,8 +1,18 @@
 import { frameAddress } from '../frame.ts';
 import { kit_hydrates_page } from './kit-boot.ts';
-import { init_shadow_registries, parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.ts';
+import {
+	init_shadow_registries,
+	parse_region_html,
+	restore_adopt_sheets,
+	restore_markup
+} from './parse-html.ts';
 import { wire_classes_for } from './wire-classes.ts';
-import { mark_region_changed, region_changed, unwatch_region, watch_region } from './drift-watch.ts';
+import {
+	mark_region_changed,
+	region_changed,
+	unwatch_region,
+	watch_region
+} from './drift-watch.ts';
 import { runtime_session } from './session.ts';
 import {
 	capability_expired,
@@ -15,7 +25,12 @@ import {
 	RegionAnswerRefused,
 	deny_of
 } from './region-endpoint-url.ts';
-import { island_entry_of, import_entry, on_entry_fallback, pin_region_urls } from './entry-locations.ts';
+import {
+	island_entry_of,
+	import_entry,
+	on_entry_fallback,
+	pin_region_urls
+} from './entry-locations.ts';
 import {
 	is_awake,
 	is_deferred,
@@ -45,7 +60,16 @@ import { fetch_priority_of, load_slot, viewport_class, type LoadClass } from './
 import { connected_regions } from './connected.ts';
 import { restore_props_sidecar } from './sidecar.ts';
 import { hole_facts_of } from './hole-facts.ts';
-import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_hole_fetched } from './beacon.ts';
+import {
+	beacon_hydrated,
+	beacon_watch,
+	beacon_failed,
+	beacon_warning,
+	beacon_hole_failed,
+	beacon_hole_answered,
+	beacon_entry_fallback,
+	beacon_hole_fetched
+} from './beacon.ts';
 import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.ts';
 import type { IslandHandle, IslandModule } from './hydrate-core.ts';
 import { emit as dt_emit } from '../events/bus.ts';
@@ -120,7 +144,6 @@ function dt_ids(el: Element): { entry?: string; fp?: string } {
 	const fp = el.getAttribute('data-og-fp') || undefined;
 	return { entry, fp };
 }
-
 
 /** High-res clock for devtools timings (guarded — dead when devtools is off). */
 function now_ms(): number {
@@ -484,7 +507,8 @@ class OgygiaRegion extends HTMLElement {
 	// ONE hydration in flight: a click that lands while the island's own schedule is already waking
 	// it waits for THAT run (an early return would replay the click before the island is live)
 	#hydrate_run: Promise<void> | null = null;
-	#fire_hydrate = () => (this.#hydrate_run ??= this.#hydrate().finally(() => (this.#hydrate_run = null)));
+	#fire_hydrate = () =>
+		(this.#hydrate_run ??= this.#hydrate().finally(() => (this.#hydrate_run = null)));
 	#fire_server = () => this.#server();
 	#fire_prefetch = () => this.#prefetch_html();
 
@@ -550,7 +574,9 @@ class OgygiaRegion extends HTMLElement {
 		// content the parent island adopts as opaque DOM; NOT part of its hydrated graph, so nothing else
 		// will wake them.
 		const boundary = this.parentElement && this.parentElement.closest('ogygia-region');
-		const slot = this.parentElement && this.parentElement.closest('ogygia-slot,ogygia-snippet[data-og-static]');
+		const slot =
+			this.parentElement &&
+			this.parentElement.closest('ogygia-slot,ogygia-snippet[data-og-static]');
 		const in_adopted_slot = !!(boundary && slot && boundary.contains(slot));
 		// Third exception (fragment federation): a FOREIGN-ORIGIN entry — a stitched fragment's
 		// island, possibly swapped in post-hoc by a client-stitch hole — is by construction NOT
@@ -655,7 +681,9 @@ class OgygiaRegion extends HTMLElement {
 		const address = frameAddress(endpoint);
 		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.prefetch', ...dt_ids(this) });
 		// a warm ahead of the hole's own schedule: background work (load-scheduler.ts)
-		void slots.frames?.ensure(address, this.#frame_fetcher(endpoint, false, 'ahead'))?.catch(() => {});
+		void slots.frames
+			?.ensure(address, this.#frame_fetcher(endpoint, false, 'ahead'))
+			?.catch(() => {});
 	}
 
 	/**
@@ -672,51 +700,62 @@ class OgygiaRegion extends HTMLElement {
 			// the origin at once.
 			const release = await load_slot({ kind: 'content', cls, label: endpoint }).ready;
 			try {
-				return await this.#fetch_region(endpoint, revalidate, fetch_priority_of(class_now()), signal);
+				return await this.#fetch_region(
+					endpoint,
+					revalidate,
+					fetch_priority_of(class_now()),
+					signal
+				);
 			} finally {
 				release();
 			}
 		};
 	}
 
-	#fetch_region(endpoint: string, revalidate: boolean, priority: 'high' | 'auto' | 'low', signal: AbortSignal) {
+	#fetch_region(
+		endpoint: string,
+		revalidate: boolean,
+		priority: 'high' | 'auto' | 'low',
+		signal: AbortSignal
+	) {
 		return runtime_session.server_gate.run(async () => {
-				if (BEACON) beacon_hole_fetched(endpoint);
-				let res = await fetch(endpoint, {
+			if (BEACON) beacon_hole_fetched(endpoint);
+			let res = await fetch(endpoint, {
+				credentials: 'same-origin',
+				cache: revalidate ? 'no-store' : 'default',
+				priority,
+				signal
+			} as RequestInit);
+			// An EXPIRED capability (its document outlived it in a cache): renew once. The handle
+			// re-signs an anonymous hole it minted itself and answers with the hole AND the fresh
+			// capability, which this element adopts for its later fetches (#adopt_renewed).
+			if (res.status === 403 && capability_expired(endpoint)) {
+				res = await fetch(renewal_url(endpoint), {
 					credentials: 'same-origin',
-					cache: revalidate ? 'no-store' : 'default',
-					priority,
+					cache: 'no-store',
 					signal
-				} as RequestInit);
-				// An EXPIRED capability (its document outlived it in a cache): renew once. The handle
-				// re-signs an anonymous hole it minted itself and answers with the hole AND the fresh
-				// capability, which this element adopts for its later fetches (#adopt_renewed).
-				if (res.status === 403 && capability_expired(endpoint)) {
-					res = await fetch(renewal_url(endpoint), {
-						credentials: 'same-origin',
-						cache: 'no-store',
-						signal
-					});
-					const fresh = res.ok ? res.headers.get('x-ogygia-capability') : null;
-					if (fresh && is_allowed_region_endpoint(fresh)) this.#renewed_endpoint = fresh;
-				}
-				if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
-				// THE ANSWER MUST BE THE REGION'S. ogygia's handle answers a region request in place —
-				// a fragment, a 204, an error status — and never redirects; a redirected response, or a
-				// body that is a whole document, means a handle in front of `ogygia.handle()` took the
-				// request (an auth wall, a locale bounce, a 404 handler) and the browser followed it.
-				// Swapping that in put a site's account page — scripts, skeletons, a second header —
-				// into every hole of its header for signed-in visitors. Refused: the fallback stands.
-				if (is_redirected_answer(res)) throw new RegionAnswerRefused('redirected', res.url);
-				// A refused capability is deterministic (its key, its MAC, its id): no retry would differ.
-				if (res.status === 403) throw new RegionAnswerRefused('forbidden', res.url || endpoint, deny_of(res, endpoint));
-				if (!res.ok) throw new Error('status ' + res.status);
-				// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
-				if (res.status === 204) return KEEP_FALLBACK_HTML;
-				const text = await res.text();
-				if (is_document_answer(text)) throw new RegionAnswerRefused('document', res.url);
-				return text;
-			});
+				});
+				const fresh = res.ok ? res.headers.get('x-ogygia-capability') : null;
+				if (fresh && is_allowed_region_endpoint(fresh)) this.#renewed_endpoint = fresh;
+			}
+			if (!is_same_origin_response(res)) throw new Error('cross-origin redirect');
+			// THE ANSWER MUST BE THE REGION'S. ogygia's handle answers a region request in place —
+			// a fragment, a 204, an error status — and never redirects; a redirected response, or a
+			// body that is a whole document, means a handle in front of `ogygia.handle()` took the
+			// request (an auth wall, a locale bounce, a 404 handler) and the browser followed it.
+			// Swapping that in put a site's account page — scripts, skeletons, a second header —
+			// into every hole of its header for signed-in visitors. Refused: the fallback stands.
+			if (is_redirected_answer(res)) throw new RegionAnswerRefused('redirected', res.url);
+			// A refused capability is deterministic (its key, its MAC, its id): no retry would differ.
+			if (res.status === 403)
+				throw new RegionAnswerRefused('forbidden', res.url || endpoint, deny_of(res, endpoint));
+			if (!res.ok) throw new Error('status ' + res.status);
+			// 204: the hole said keepFallback() — the page's fallback stands, nothing to swap.
+			if (res.status === 204) return KEEP_FALLBACK_HTML;
+			const text = await res.text();
+			if (is_document_answer(text)) throw new RegionAnswerRefused('document', res.url);
+			return text;
+		});
 	}
 
 	/** The schedule hooks a frozen region (lake) drives its revalidation through. */
@@ -932,7 +971,11 @@ class OgygiaRegion extends HTMLElement {
 		slots.lakes.after_html_swap(this, { revalidate });
 		if (BEACON && !revalidate && this.#fetch_started) {
 			const ep = this.getAttribute('endpoint');
-			beacon_hole_answered(this, this.#fetch_started, ep ? slots.frames?.batch_times?.(ep) : undefined);
+			beacon_hole_answered(
+				this,
+				this.#fetch_started,
+				ep ? slots.frames?.batch_times?.(ep) : undefined
+			);
 		}
 		if (DEVTOOLS)
 			dt_emit({
@@ -943,7 +986,9 @@ class OgygiaRegion extends HTMLElement {
 				bytes: html.length,
 				revalidate,
 				// the first answer: how long the fallback showed, from the fetch's start (retries included)
-				...(!revalidate && this.#fetch_started ? { wait_ms: Math.round(performance.now() - this.#fetch_started) } : {})
+				...(!revalidate && this.#fetch_started
+					? { wait_ms: Math.round(performance.now() - this.#fetch_started) }
+					: {})
 			});
 		this.dispatchEvent(new CustomEvent('ogygia:server', { bubbles: true }));
 	}
@@ -985,7 +1030,8 @@ class OgygiaRegion extends HTMLElement {
 			else this.replaceChildren(...nodes);
 			// the holes this render re-minted: a new address fetches its new answer (the kept ones keep
 			// theirs: same call, same page facts)
-			for (const el of this.querySelectorAll('ogygia-region')) if (el instanceof OgygiaRegion) el.#renew();
+			for (const el of this.querySelectorAll('ogygia-region'))
+				if (el instanceof OgygiaRegion) el.#renew();
 		}
 		restore_adopt_sheets();
 		init_shadow_registries(this);
@@ -1058,12 +1104,19 @@ class OgygiaRegion extends HTMLElement {
 			// `join_batch`) — not a cacheable hole (`ttl`: its GET is the browser cache's to answer)
 			// and not an expired capability (only its own GET renews it).
 			const frames = slots.frames;
-			if (!opts.revalidate && frames?.join && !endpoint.includes('&ttl=') && !capability_expired(endpoint))
+			if (
+				!opts.revalidate &&
+				frames?.join &&
+				!endpoint.includes('&ttl=') &&
+				!capability_expired(endpoint)
+			)
 				await frames.join(endpoint);
 			const run = () =>
 				frames?.ensure(
 					address,
-					this.#frame_fetcher(endpoint, !!opts.revalidate, () => (this.#user_woken ? 'user' : viewport_class(this))),
+					this.#frame_fetcher(endpoint, !!opts.revalidate, () =>
+						this.#user_woken ? 'user' : viewport_class(this)
+					),
 					{ force: opts.revalidate }
 				);
 			let html: string | undefined;
@@ -1086,7 +1139,8 @@ class OgygiaRegion extends HTMLElement {
 			// capability, not a flaky network): say what answered instead and do not retry.
 			const refused = err instanceof RegionAnswerRefused;
 			// (a refused capability's reason travels as the failure's message)
-			const deny = refused && err.reason === 'forbidden' ? err.deny || 'no reason given' : undefined;
+			const deny =
+				refused && err.reason === 'forbidden' ? err.deny || 'no reason given' : undefined;
 			if (import.meta.env.DEV) {
 				if (deny !== undefined) {
 					console.warn(
@@ -1122,7 +1176,13 @@ class OgygiaRegion extends HTMLElement {
 						id,
 						reason: refused ? err.reason : 'error',
 						...(final_path ? { final_path } : {}),
-						...(refused ? {} : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+						...(refused
+							? {}
+							: {
+									message: String((err as Error)?.message ?? err)
+										.split('\n')[0]
+										.slice(0, 200)
+								}),
 						...(deny !== undefined ? { message: deny.slice(0, 200) } : {}),
 						attempts: this.#fetch_attempts,
 						t: Math.round(performance.now())
@@ -1135,7 +1195,13 @@ class OgygiaRegion extends HTMLElement {
 					entry: this.getAttribute('entry') || undefined,
 					endpoint,
 					reason: refused ? err.reason : 'error',
-					...(refused ? { final_url: err.final_url } : { message: String((err as Error)?.message ?? err).split('\n')[0].slice(0, 200) }),
+					...(refused
+						? { final_url: err.final_url }
+						: {
+								message: String((err as Error)?.message ?? err)
+									.split('\n')[0]
+									.slice(0, 200)
+							}),
 					...(deny !== undefined ? { message: deny.slice(0, 200) } : {}),
 					attempt: this.#fetch_attempts,
 					final
@@ -1240,7 +1306,11 @@ class OgygiaRegion extends HTMLElement {
 				hydrate_started(this); // a viewport island in flight holds ready islands below the fold
 				// (with the module: the transportable classes its props and context carry — runtime/wire-classes.ts)
 				// The island's module first: its graph links go in before the lazy runtime chunks' own preloads.
-				[mod, core] = await Promise.all([load_island(entry, cls()), hydrate_core(), wire_classes_for(this)]);
+				[mod, core] = await Promise.all([
+					load_island(entry, cls()),
+					hydrate_core(),
+					wire_classes_for(this)
+				]);
 			} finally {
 				release();
 			}
@@ -1280,14 +1350,21 @@ class OgygiaRegion extends HTMLElement {
 			if (!this.isConnected || !this.#app) return;
 			this.setAttribute('data-hydrated', '');
 			if (BEACON) beacon_hydrated(this, t0, t_loaded, t_done, ssr_html, t_turn); // the profiler's browser half (no-op without its tag)
-			if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.done', ...dt_ids(this), ms: t_mounted - dt_t0 });
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'region.hydrate.done',
+					...dt_ids(this),
+					ms: t_mounted - dt_t0
+				});
 			this.dispatchEvent(new CustomEvent('ogygia:hydrated', { bubbles: true }));
 		} catch (err) {
 			// (a failed island stops being watched; its copy, if kept, counts as changed from here)
 			if (this.#watching) mark_region_changed(this);
 			this.#unwatch();
 			// the beacon's CPU window stops waiting for this one, and the visit reports it (no-op without it)
-			if (BEACON) beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0, t_turn);
+			if (BEACON)
+				beacon_failed(this, (err as { message?: string })?.message ?? String(err), t0, t_turn);
 			if (DEVTOOLS)
 				dt_emit({
 					domain: 'runtime',
@@ -1470,7 +1547,8 @@ class OgygiaRegion extends HTMLElement {
 		if (this.#watching) mark_region_changed(this);
 		this.#unwatch();
 		// Out past the task it left in: the island is gone (a move came back before the microtask).
-		if (CLIENT_PLUGINS && (this.#live_app || this.#app)) client_region_unmount(this, this.getAttribute('entry') ?? '');
+		if (CLIENT_PLUGINS && (this.#live_app || this.#app))
+			client_region_unmount(this, this.getAttribute('entry') ?? '');
 		if (this.#live_app) {
 			this.#live_app.dispose();
 			this.#live_app = null;
@@ -1558,7 +1636,10 @@ function apply_dev_head_region_css(): void {
 	});
 }
 
-export function boot(installers: Array<() => void> = [], client_plugins: readonly ClientPlugin[] = []): void {
+export function boot(
+	installers: Array<() => void> = [],
+	client_plugins: readonly ClientPlugin[] = []
+): void {
 	// The navigation handle island code reaches the runtime through (./nav-handle.ts): the MPA one
 	// first, which the router feature's install replaces with the SPA router's when it is present.
 	if (typeof document !== 'undefined' && !(NAV_HANDLE_KEY in globalThis)) publish_nav(mpa_nav());
@@ -1588,7 +1669,15 @@ export function boot(installers: Array<() => void> = [], client_plugins: readonl
 		tap_svelte_warnings();
 		on_svelte_warning((w) => {
 			if (BEACON) beacon_warning(w);
-			if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'svelte.hydration.warning', code: w.code, message: w.message, ...(w.file ? { file: w.file } : {}), ...(w.fp ? { fp: w.fp } : {}) });
+			if (DEVTOOLS)
+				dt_emit({
+					domain: 'runtime',
+					name: 'svelte.hydration.warning',
+					code: w.code,
+					message: w.message,
+					...(w.file ? { file: w.file } : {}),
+					...(w.fp ? { fp: w.fp } : {})
+				});
 		});
 	}
 

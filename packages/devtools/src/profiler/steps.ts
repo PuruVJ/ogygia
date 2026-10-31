@@ -53,9 +53,20 @@ export function render_steps(t: Timeline, stacks?: StackIndex, max = 80): Render
 	const merged: (Segment & { folded: number })[] = [];
 	for (const s of segs) {
 		const kind = s.kind === 'gap' ? 'wait' : s.kind;
-		const label = s.kind === 'gap' ? (s.pending?.length ? s.pending.slice(0, 3).join(', ') : 'nothing on the CPU, nothing named in flight') : s.label;
+		const label =
+			s.kind === 'gap'
+				? s.pending?.length
+					? s.pending.slice(0, 3).join(', ')
+					: 'nothing on the CPU, nothing named in flight'
+				: s.label;
 		const last = merged[merged.length - 1];
-		if (last && last.kind === kind && last.label === label && kind === 'cpu' && Math.abs(last.t1 - s.t0) < 0.05) {
+		if (
+			last &&
+			last.kind === kind &&
+			last.label === label &&
+			kind === 'cpu' &&
+			Math.abs(last.t1 - s.t0) < 0.05
+		) {
 			last.t1 = s.t1;
 			if (!last.detail && s.detail) last.detail = s.detail;
 			continue;
@@ -65,7 +76,8 @@ export function render_steps(t: Timeline, stacks?: StackIndex, max = 80): Render
 	// fold the smallest into a neighbour until under `max`
 	while (merged.length > max) {
 		let min_i = 0;
-		for (let i = 1; i < merged.length; i++) if (merged[i].t1 - merged[i].t0 < merged[min_i].t1 - merged[min_i].t0) min_i = i;
+		for (let i = 1; i < merged.length; i++)
+			if (merged[i].t1 - merged[i].t0 < merged[min_i].t1 - merged[min_i].t0) min_i = i;
 		const victim = merged[min_i];
 		const into = min_i > 0 ? merged[min_i - 1] : merged[min_i + 1];
 		if (!into) break;
@@ -94,7 +106,9 @@ export function render_steps(t: Timeline, stacks?: StackIndex, max = 80): Render
 			category: s.category,
 			...(s.file ? { file: s.file } : {}),
 			...(s.detail ? { detail: s.detail } : {}),
-			...(s.calls?.length ? { calls: s.calls.map((c) => ({ label: c.label, ms: round2(c.ms) })) } : {}),
+			...(s.calls?.length
+				? { calls: s.calls.map((c) => ({ label: c.label, ms: round2(c.ms) })) }
+				: {}),
 			...(s.within ? { within: s.within } : {}),
 			at_ms: round2(s.t1),
 			cpu_so_far_ms: round2(cpu),

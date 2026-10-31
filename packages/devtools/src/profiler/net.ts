@@ -304,7 +304,9 @@ export function drop_answers(): void {
  * (the bytes before it and after it are the same), and that stretch as text with a little around
  * it — a timestamp, a request id. Undefined when either answer was not kept, or they are the same.
  */
-export function answer_diff(key: string): { bytes: number; size: number; text: string } | undefined {
+export function answer_diff(
+	key: string
+): { bytes: number; size: number; text: string } | undefined {
 	const a = kept_first.get(key);
 	const b = kept.get(key)?.body;
 	if (!a || !b) return undefined;

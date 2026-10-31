@@ -11,7 +11,9 @@ import {
 import { island_graph_script } from '../../src/server/document-tail.ts';
 
 const ours = () =>
-	[...document.head.querySelectorAll(`link[${GRAPH_PRELOAD_ATTR}]`)].map((l) => new URL((l as HTMLLinkElement).href).pathname);
+	[...document.head.querySelectorAll(`link[${GRAPH_PRELOAD_ATTR}]`)].map(
+		(l) => new URL((l as HTMLLinkElement).href).pathname
+	);
 
 let host: HTMLElement;
 beforeEach(() => {
@@ -27,7 +29,9 @@ beforeEach(() => {
 });
 afterEach(() => {
 	host.remove();
-	document.head.querySelectorAll(`link[${GRAPH_PRELOAD_ATTR}], link[data-test-hint]`).forEach((l) => l.remove());
+	document.head
+		.querySelectorAll(`link[${GRAPH_PRELOAD_ATTR}], link[data-test-hint]`)
+		.forEach((l) => l.remove());
 });
 
 test('nothing is linked until an island starts; then exactly its graph', () => {
@@ -70,7 +74,10 @@ test('a graph script added later (a router swap) is read on the next miss', () =
 });
 
 test('a graph read from another page resolves against that page (router warm)', () => {
-	register_island_graph(JSON.stringify({ h: ['../chunks/x.js'], e: { './d.js': [0] } }), `${location.origin}/deep/page/`);
+	register_island_graph(
+		JSON.stringify({ h: ['../chunks/x.js'], e: { './d.js': [0] } }),
+		`${location.origin}/deep/page/`
+	);
 	preload_island_graph('/deep/page/d.js');
 	expect(ours()).toEqual(['/deep/chunks/x.js']);
 });

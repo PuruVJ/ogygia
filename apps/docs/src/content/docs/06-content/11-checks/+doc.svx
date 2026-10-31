@@ -28,7 +28,7 @@ Where it fires:
 - **At prerender**: a broken link fails the build with the page, the link text, and the target.
 - **In dev**: the same finding surfaces when you open the page. Thus you catch it as you write.
 
-The audit knows the *full* address space, [dimension](/docs/content/dimensions) coordinates and declared redirects included. Thus it can tell a truly dead link from one that resolves through an alias.
+The audit knows the _full_ address space, [dimension](/docs/content/dimensions) coordinates and declared redirects included. Thus it can tell a truly dead link from one that resolves through an alias.
 
 ## Findings as data
 
@@ -83,7 +83,7 @@ export const docs = site({ outline: docs, checks: [links(), requireSummary()] })
 Severity is the dial. `'error'` throws from `load`: it fails the build at prerender, and blocks the page in dev. `'warn'` surfaces in the `docs.check()` findings, and never blocks a render.
 
 ::: details Checks vs. structural build errors
-Two different layers, by intent. **Structural invariants** (an orphan entry, a slug collision, an inconsistent `NN-` sequence) are always-on [outline](/docs/content/outline) build errors. They cannot be configured off, because a site with them is not well-formed. **Checks** are *content policy*: pluggable, per-site, severity-dialed. `links()` is policy. A deliberately-dead link during a migration is your call: allow it, tolerate it as `warn`, or forbid it.
+Two different layers, by intent. **Structural invariants** (an orphan entry, a slug collision, an inconsistent `NN-` sequence) are always-on [outline](/docs/content/outline) build errors. They cannot be configured off, because a site with them is not well-formed. **Checks** are _content policy_: pluggable, per-site, severity-dialed. `links()` is policy. A deliberately-dead link during a migration is your call: allow it, tolerate it as `warn`, or forbid it.
 :::
 
 ## Do / don't
@@ -95,4 +95,4 @@ Two different layers, by intent. **Structural invariants** (an orphan entry, a s
 
 ---
 
-*Next chapter: [the router](/docs/app/spa-router) makes navigation feel like an app: one request, no reload, no waterfall.*
+_Next chapter: [the router](/docs/app/spa-router) makes navigation feel like an app: one request, no reload, no waterfall._

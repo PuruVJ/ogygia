@@ -27,7 +27,12 @@
  * and suspenders: the false-positive rewrite the scanner alone could (in theory) make is unreachable
  * whenever the module actually parses — which, for the `.server.ts` files loaders live in, is always.
  */
-import { find_og_calls, split_first_string, parse_module, type OgCall } from '@ogygia/core/internal/compiler-browser';
+import {
+	find_og_calls,
+	split_first_string,
+	parse_module,
+	type OgCall
+} from '@ogygia/core/internal/compiler-browser';
 import { parse_git_spec, git_glob_pattern, type GitSpec } from './git.ts';
 import { bridge } from '../bridge.ts';
 

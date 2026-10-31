@@ -28,7 +28,10 @@ function mdSafe(prose: string): string {
 			.map((seg, i) =>
 				i % 2 === 1
 					? seg
-					: seg.replace(/\{@link\s+([^}|\s]+)(?:\s*\|\s*([^}]+))?\}/g, (_, name, label) => `\`${label ?? name}\``)
+					: seg.replace(
+							/\{@link\s+([^}|\s]+)(?:\s*\|\s*([^}]+))?\}/g,
+							(_, name, label) => `\`${label ?? name}\``
+						)
 			)
 			.join('');
 	});
@@ -74,9 +77,8 @@ function section(e: ApiExport): string {
 
 export function renderModule(mod: ApiModule): string {
 	const names = mod.exports.map((e) => `\`${e.name}\``).join(' · ');
-	const head = [
-		`\`\`\`ts\nimport { … } from '${mod.id}';\n\`\`\``,
-		`**Exports** ${names}`
-	].join('\n\n');
+	const head = [`\`\`\`ts\nimport { … } from '${mod.id}';\n\`\`\``, `**Exports** ${names}`].join(
+		'\n\n'
+	);
 	return [head, ...mod.exports.map(section)].join('\n\n');
 }

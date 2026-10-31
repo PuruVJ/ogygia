@@ -5,15 +5,26 @@
 //
 // The map is module state shared by every test in this file: each test uses its own URLs.
 import { describe, expect, test } from 'vitest';
-import { entry_location, import_entry, island_entry_of, note_entry_location, on_entry_fallback } from '../../src/runtime/entry-locations.ts';
-import { island_module_url, warm_island_module, is_warmed_module } from '../../src/runtime/region-endpoint-url.ts';
+import {
+	entry_location,
+	import_entry,
+	island_entry_of,
+	note_entry_location,
+	on_entry_fallback
+} from '../../src/runtime/entry-locations.ts';
+import {
+	island_module_url,
+	warm_island_module,
+	is_warmed_module
+} from '../../src/runtime/region-endpoint-url.ts';
 import { register_island_graph } from '../../src/runtime/island-graph-preload.ts';
 import { encode_island_graph } from '../../src/island-graph.ts';
 
 const LOCATED = '/test/browser/fixtures/entry-located.ts';
 const IDENTITY = '/test/browser/fixtures/entry-identity.ts';
 const abs = (u: string) => new URL(u, location.href).href;
-const requested = (part: string) => performance.getEntriesByType('resource').filter((r) => r.name.includes(part));
+const requested = (part: string) =>
+	performance.getEntriesByType('resource').filter((r) => r.name.includes(part));
 
 describe('the map', () => {
 	test('an unknown entry resolves to itself', () => {
@@ -28,10 +39,18 @@ describe('the map', () => {
 
 	test('relative pairs resolve against the document they were read from', () => {
 		const doc = 'http://other.test/deep/page/';
-		note_entry_location('./_app/immutable/og-region.cccccccccccc.js', './_app/immutable/chunks/X.js', doc);
-		expect(entry_location('http://other.test/deep/page/_app/immutable/og-region.cccccccccccc.js')).toBe('http://other.test/deep/page/_app/immutable/chunks/X.js');
+		note_entry_location(
+			'./_app/immutable/og-region.cccccccccccc.js',
+			'./_app/immutable/chunks/X.js',
+			doc
+		);
+		expect(
+			entry_location('http://other.test/deep/page/_app/immutable/og-region.cccccccccccc.js')
+		).toBe('http://other.test/deep/page/_app/immutable/chunks/X.js');
 		// …and the same identity written root-relative on that origin is the same key
-		expect(entry_location('/deep/page/_app/immutable/og-region.cccccccccccc.js', doc)).toBe('http://other.test/deep/page/_app/immutable/chunks/X.js');
+		expect(entry_location('/deep/page/_app/immutable/og-region.cccccccccccc.js', doc)).toBe(
+			'http://other.test/deep/page/_app/immutable/chunks/X.js'
+		);
 	});
 
 	test('nothing is noted for a missing location, or one that is the identity itself', () => {
@@ -65,11 +84,19 @@ describe('the map', () => {
 
 	test('an island graph script carries locations for entries no element has (its `s` map)', () => {
 		const doc = 'http://graph.test/p/';
-		const text = encode_island_graph(new Map([['./i/og-region.000000000002.js', ['./i/chunks/Dep.js']]]), new Map([['/i/og-region.000000000003.js', './i/chunks/Snip.js']]));
+		const text = encode_island_graph(
+			new Map([['./i/og-region.000000000002.js', ['./i/chunks/Dep.js']]]),
+			new Map([['/i/og-region.000000000003.js', './i/chunks/Snip.js']])
+		);
 		register_island_graph(text, doc);
-		expect(entry_location('http://graph.test/i/og-region.000000000003.js')).toBe('http://graph.test/p/i/chunks/Snip.js');
+		expect(entry_location('http://graph.test/i/og-region.000000000003.js')).toBe(
+			'http://graph.test/p/i/chunks/Snip.js'
+		);
 		// a graph without `s` (an older server) notes nothing
-		register_island_graph(encode_island_graph(new Map([['/i/og-region.000000000004.js', []]])), doc);
+		register_island_graph(
+			encode_island_graph(new Map([['/i/og-region.000000000004.js', []]])),
+			doc
+		);
 		expect(entry_location('http://graph.test/i/og-region.000000000004.js')).toBeUndefined();
 	});
 });
@@ -125,7 +152,11 @@ describe('a fallback is reported (the runtime wires devtools and the beacon to i
 		note_entry_location(bad, '/test/browser/fixtures/gone-Oo55Pp66.js');
 		await import_entry(bad).catch(() => {});
 		await expect.poll(() => reports.length).toBe(2);
-		expect(reports[0]).toEqual({ entry: ok, src: abs('/test/browser/fixtures/gone-Kk11Ll22.js'), recovered: true });
+		expect(reports[0]).toEqual({
+			entry: ok,
+			src: abs('/test/browser/fixtures/gone-Kk11Ll22.js'),
+			recovered: true
+		});
 		expect(reports[1]).toMatchObject({ entry: bad, recovered: false });
 		// a load that worked reports nothing
 		const fine = IDENTITY + '?t=8';

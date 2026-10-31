@@ -6,11 +6,36 @@
 	//
 	// CM is SSR-safe at module load; the view is built in a client-only $effect.
 	import { untrack } from 'svelte';
-	import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, dropCursor, ViewPlugin, Decoration, type DecorationSet, type ViewUpdate } from '@codemirror/view';
+	import {
+		EditorView,
+		keymap,
+		lineNumbers,
+		highlightActiveLine,
+		highlightActiveLineGutter,
+		drawSelection,
+		dropCursor,
+		ViewPlugin,
+		Decoration,
+		type DecorationSet,
+		type ViewUpdate
+	} from '@codemirror/view';
 	import { EditorState, Compartment, RangeSetBuilder } from '@codemirror/state';
 	import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-	import { syntaxHighlighting, HighlightStyle, indentOnInput, bracketMatching, indentUnit } from '@codemirror/language';
-	import { autocompletion, completionKeymap, startCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
+	import {
+		syntaxHighlighting,
+		HighlightStyle,
+		indentOnInput,
+		bracketMatching,
+		indentUnit
+	} from '@codemirror/language';
+	import {
+		autocompletion,
+		completionKeymap,
+		startCompletion,
+		type Completion,
+		type CompletionContext,
+		type CompletionResult
+	} from '@codemirror/autocomplete';
 	import { javascript } from '@codemirror/lang-javascript';
 	import { html } from '@codemirror/lang-html';
 	import { svelte } from '@replit/codemirror-lang-svelte';
@@ -54,14 +79,23 @@
 		// hosts Svelte, so untagged fences default to svelte and `<script>`/tags nest through markdown's
 		// HTML handling — a pragmatic "markdown + svelte" blend without a bespoke grammar.
 		if (k === 'md' || k.endsWith('.md')) return markdown({ codeLanguages: MD_CODE_LANGS });
-		if (k === 'svx' || k.endsWith('.svx')) return markdown({ codeLanguages: MD_CODE_LANGS, defaultCodeLanguage: svelte() });
+		if (k === 'svx' || k.endsWith('.svx'))
+			return markdown({ codeLanguages: MD_CODE_LANGS, defaultCodeLanguage: svelte() });
 		return javascript(); // sensible default for the compiled JS output
 	}
 	// Fenced-code + embedded languages inside markdown/svx, resolved by info-string to the grammars we
 	// already ship (loaded lazily by @codemirror/lang-markdown when a matching fence appears).
 	const MD_CODE_LANGS = [
-		LanguageDescription.of({ name: 'javascript', alias: ['js', 'mjs', 'jsx'], load: async () => javascript() }),
-		LanguageDescription.of({ name: 'typescript', alias: ['ts', 'tsx'], load: async () => javascript({ typescript: true }) }),
+		LanguageDescription.of({
+			name: 'javascript',
+			alias: ['js', 'mjs', 'jsx'],
+			load: async () => javascript()
+		}),
+		LanguageDescription.of({
+			name: 'typescript',
+			alias: ['ts', 'tsx'],
+			load: async () => javascript({ typescript: true })
+		}),
 		LanguageDescription.of({ name: 'svelte', load: async () => svelte() }),
 		LanguageDescription.of({ name: 'html', alias: ['htm'], load: async () => html() })
 	];
@@ -69,20 +103,60 @@
 	// Every colour is a --cm-* var → the editor tracks the site code theme with zero JS.
 	const highlight = HighlightStyle.define([
 		{ tag: t.comment, color: 'var(--cm-comment)', fontStyle: 'italic' },
-		{ tag: [t.keyword, t.moduleKeyword, t.controlKeyword, t.operatorKeyword, t.self], color: 'var(--cm-keyword)' },
+		{
+			tag: [t.keyword, t.moduleKeyword, t.controlKeyword, t.operatorKeyword, t.self],
+			color: 'var(--cm-keyword)'
+		},
 		{ tag: [t.string, t.special(t.string), t.attributeValue], color: 'var(--cm-string)' },
-		{ tag: [t.number, t.bool, t.null, t.atom, t.constant(t.variableName), t.standard(t.variableName)], color: 'var(--cm-constant)' },
-		{ tag: [t.function(t.variableName), t.function(t.propertyName), t.labelName], color: 'var(--cm-fn)' },
+		{
+			tag: [
+				t.number,
+				t.bool,
+				t.null,
+				t.atom,
+				t.constant(t.variableName),
+				t.standard(t.variableName)
+			],
+			color: 'var(--cm-constant)'
+		},
+		{
+			tag: [t.function(t.variableName), t.function(t.propertyName), t.labelName],
+			color: 'var(--cm-fn)'
+		},
 		{ tag: [t.typeName, t.className, t.namespace, t.changed], color: 'var(--cm-type)' },
 		{ tag: t.tagName, color: 'var(--cm-tag)' },
 		{ tag: t.attributeName, color: 'var(--cm-attr)' },
-		{ tag: [t.angleBracket, t.punctuation, t.separator, t.brace, t.bracket, t.paren, t.derefOperator, t.operator], color: 'var(--cm-punct)' },
-		{ tag: [t.propertyName, t.variableName, t.definition(t.variableName), t.definition(t.propertyName)], color: 'var(--cm-name)' },
+		{
+			tag: [
+				t.angleBracket,
+				t.punctuation,
+				t.separator,
+				t.brace,
+				t.bracket,
+				t.paren,
+				t.derefOperator,
+				t.operator
+			],
+			color: 'var(--cm-punct)'
+		},
+		{
+			tag: [
+				t.propertyName,
+				t.variableName,
+				t.definition(t.variableName),
+				t.definition(t.propertyName)
+			],
+			color: 'var(--cm-name)'
+		},
 		{ tag: [t.meta, t.documentMeta], color: 'var(--cm-comment)' },
 		{ tag: t.regexp, color: 'var(--cm-string)' },
 		// Markdown / svx prose tags (so a `.md`/`.svx` file isn't near-monochrome): headings + emphasis
 		// carry weight/slant; links, inline code, and the structural markers (`#`, `*`, `>`) get colour.
-		{ tag: [t.heading, t.heading1, t.heading2, t.heading3, t.heading4], color: 'var(--cm-tag)', fontWeight: '600' },
+		{
+			tag: [t.heading, t.heading1, t.heading2, t.heading3, t.heading4],
+			color: 'var(--cm-tag)',
+			fontWeight: '600'
+		},
 		{ tag: t.strong, fontWeight: '600' },
 		{ tag: t.emphasis, fontStyle: 'italic' },
 		{ tag: t.strikethrough, textDecoration: 'line-through' },
@@ -95,15 +169,24 @@
 
 	const chrome = EditorView.theme({
 		'&': { color: 'var(--cm-fg)', backgroundColor: 'transparent' },
-		'.cm-scroller': { fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)', fontSize: '12.5px', lineHeight: '1.6' },
+		'.cm-scroller': {
+			fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace)',
+			fontSize: '12.5px',
+			lineHeight: '1.6'
+		},
 		'.cm-content': { caretColor: 'var(--cm-caret)', padding: '10px 0' },
 		'.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--cm-caret)', borderLeftWidth: '2px' },
-		'&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': { backgroundColor: 'var(--cm-selection)' },
+		'&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
+			backgroundColor: 'var(--cm-selection)'
+		},
 		'.cm-activeLine': { backgroundColor: 'var(--cm-active-line)' },
 		'.cm-gutters': { backgroundColor: 'transparent', color: 'var(--cm-gutter)', border: 'none' },
 		'.cm-activeLineGutter': { backgroundColor: 'var(--cm-active-line)', color: 'var(--cm-fg)' },
 		'.cm-lineNumbers .cm-gutterElement': { padding: '0 6px 0 14px', minWidth: '2ch' },
-		'.cm-matchingBracket': { backgroundColor: 'var(--cm-bracket)', outline: '1px solid var(--cm-bracket-border)' },
+		'.cm-matchingBracket': {
+			backgroundColor: 'var(--cm-bracket)',
+			outline: '1px solid var(--cm-bracket-border)'
+		},
 		'&.cm-focused': { outline: 'none' },
 		// Autocomplete popup — themed to the editor (was CodeMirror's default LIGHT popup on a dark editor).
 		'.cm-tooltip': {
@@ -123,9 +206,19 @@
 			backgroundColor: 'var(--cm-popup-sel)',
 			color: 'var(--cm-popup-sel-fg)'
 		},
-		'.cm-completionDetail': { color: 'var(--cm-comment)', fontStyle: 'italic', marginLeft: '0.6em' },
-		'.cm-completionMatchedText': { color: 'var(--cm-keyword)', textDecoration: 'none', fontWeight: '600' },
-		'.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText': { color: 'inherit' },
+		'.cm-completionDetail': {
+			color: 'var(--cm-comment)',
+			fontStyle: 'italic',
+			marginLeft: '0.6em'
+		},
+		'.cm-completionMatchedText': {
+			color: 'var(--cm-keyword)',
+			textDecoration: 'none',
+			fontWeight: '600'
+		},
+		'.cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText': {
+			color: 'inherit'
+		},
 		'.cm-completionIcon': { color: 'var(--cm-comment)', opacity: '0.85' }
 	});
 
@@ -133,7 +226,11 @@
 	// accent box, so at a glance you see what's ogygia vs plain Svelte/JS.
 	// `[^{}]` matches a dial's contents (multi-line after Format included) but NO nested braces — so an
 	// UNCLOSED `with {` stops at the next brace (e.g. markup `start={`) instead of running away.
-	const OG_PATTERNS = [/\bwith\s*\{[^{}]*\}/g, /\bimport\.meta\.og\.\w+/g, /virtual:ogygia\/[\w/.-]+/g];
+	const OG_PATTERNS = [
+		/\bwith\s*\{[^{}]*\}/g,
+		/\bimport\.meta\.og\.\w+/g,
+		/virtual:ogygia\/[\w/.-]+/g
+	];
 	const og_mark = Decoration.mark({ class: 'cm-og-syntax' });
 	const ogHighlighter = ViewPlugin.fromClass(
 		class {
@@ -151,7 +248,8 @@
 					for (const pat of OG_PATTERNS) {
 						pat.lastIndex = 0;
 						let m: RegExpExecArray | null;
-						while ((m = pat.exec(text))) marks.push({ from: from + m.index, to: from + m.index + m[0].length });
+						while ((m = pat.exec(text)))
+							marks.push({ from: from + m.index, to: from + m.index + m[0].length });
 					}
 				}
 				marks.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -170,13 +268,43 @@
 
 	// ── Autocomplete for OUR syntax: import.meta.og.* macros + the dial import-attributes ──
 	const MACROS: Completion[] = [
-		{ label: 'loader', type: 'method', detail: 'content loaders', info: '.markdown(dir) · .folder(dir) · .json(dir) · .git(spec)' },
-		{ label: 'code', type: 'method', detail: 'highlight a snippet', info: 'import.meta.og.code(src, lang, meta?)' },
+		{
+			label: 'loader',
+			type: 'method',
+			detail: 'content loaders',
+			info: '.markdown(dir) · .folder(dir) · .json(dir) · .git(spec)'
+		},
+		{
+			label: 'code',
+			type: 'method',
+			detail: 'highlight a snippet',
+			info: 'import.meta.og.code(src, lang, meta?)'
+		},
 		{ label: 'md', type: 'method', detail: 'inline markdown', info: 'import.meta.og.md(text)' },
-		{ label: 'regions', type: 'method', detail: 'glob region imports', info: "import.meta.og.regions('./blocks/*.svelte')" },
-		{ label: 'wire', type: 'method', detail: 'live-class wire codec', info: 'static wire = import.meta.og.wire({ encode, decode })' },
-		{ label: 'bake', type: 'method', detail: 'run at build, inline the result', info: 'import.meta.og.bake(() => …)' },
-		{ label: 'asRegion', type: 'method', detail: 'named/barrel import → island', info: 'import.meta.og.asRegion(Comp, { wake: "load" })' }
+		{
+			label: 'regions',
+			type: 'method',
+			detail: 'glob region imports',
+			info: "import.meta.og.regions('./blocks/*.svelte')"
+		},
+		{
+			label: 'wire',
+			type: 'method',
+			detail: 'live-class wire codec',
+			info: 'static wire = import.meta.og.wire({ encode, decode })'
+		},
+		{
+			label: 'bake',
+			type: 'method',
+			detail: 'run at build, inline the result',
+			info: 'import.meta.og.bake(() => …)'
+		},
+		{
+			label: 'asRegion',
+			type: 'method',
+			detail: 'named/barrel import → island',
+			info: 'import.meta.og.asRegion(Comp, { wake: "load" })'
+		}
 	];
 	// Picking a dial key drops in `key: ''` with the cursor between the quotes. Enum dials (wake/render)
 	// then pop their value list immediately (startCompletion) — pick key, pick value, done.
@@ -189,14 +317,40 @@
 		};
 	}
 	const DIAL_KEYS: Completion[] = [
-		{ label: 'wake', type: 'property', detail: 'when JS runs / HTML fetches', apply: dial_apply('wake', true) },
-		{ label: 'render', type: 'property', detail: 'where the HTML comes from', apply: dial_apply('render', true) },
+		{
+			label: 'wake',
+			type: 'property',
+			detail: 'when JS runs / HTML fetches',
+			apply: dial_apply('wake', true)
+		},
+		{
+			label: 'render',
+			type: 'property',
+			detail: 'where the HTML comes from',
+			apply: dial_apply('render', true)
+		},
 		{ label: 'region', type: 'property', detail: 'held marker', apply: "region: 'raw'" },
-		{ label: 'keep', type: 'property', detail: 'keep node + $state across nav', apply: dial_apply('keep', false) },
-		{ label: 'preset', type: 'property', detail: 'named dial bundle', apply: dial_apply('preset', false) },
-		{ label: 'margin', type: 'property', detail: 'IntersectionObserver rootMargin', apply: dial_apply('margin', false) }
+		{
+			label: 'keep',
+			type: 'property',
+			detail: 'keep node + $state across nav',
+			apply: dial_apply('keep', false)
+		},
+		{
+			label: 'preset',
+			type: 'property',
+			detail: 'named dial bundle',
+			apply: dial_apply('preset', false)
+		},
+		{
+			label: 'margin',
+			type: 'property',
+			detail: 'IntersectionObserver rootMargin',
+			apply: dial_apply('margin', false)
+		}
 	];
-	const vals = (xs: [string, string][]): Completion[] => xs.map(([label, detail]) => ({ label, type: 'enum', detail }));
+	const vals = (xs: [string, string][]): Completion[] =>
+		xs.map(([label, detail]) => ({ label, type: 'enum', detail }));
 	const WAKE_VALS = vals([
 		['load', 'on hydrate'],
 		['idle', 'requestIdleCallback'],
@@ -214,7 +368,11 @@
 	// match what's typed; including the quote made CM filter every option out). Apply supplies the quotes
 	// the text doesn't already have: none typed → `'value'`; opening quote only → `value'`; both quotes
 	// already present (cursor between them) → bare `value`.
-	function quoted_values(ctx: CompletionContext, m: RegExpExecArray, options: Completion[]): CompletionResult {
+	function quoted_values(
+		ctx: CompletionContext,
+		m: RegExpExecArray,
+		options: Completion[]
+	): CompletionResult {
 		const q = m[1] || "'";
 		const hasQuote = !!m[1];
 		const next = ctx.state.doc.sliceString(ctx.pos, ctx.pos + 1);
@@ -240,7 +398,8 @@
 			const renderV = /\brender\s*:\s*(['"]?)(\w*)$/.exec(inner);
 			if (renderV) return quoted_values(context, renderV, RENDER_VALS);
 			const regionV = /\bregion\s*:\s*(['"]?)(\w*)$/.exec(inner);
-			if (regionV) return quoted_values(context, regionV, vals([['raw', 'HTML only — ships no JS']]));
+			if (regionV)
+				return quoted_values(context, regionV, vals([['raw', 'HTML only — ships no JS']]));
 			const key = /(\w*)$/.exec(inner)![1];
 			return { from: context.pos - key.length, options: DIAL_KEYS, validFor: /^\w*$/ };
 		}
@@ -287,7 +446,12 @@
 	// never crosses files. Switching stashes the current state and restores the target's.
 	const doc_states = new Map<string, EditorState>();
 	let prev_key: string | undefined;
-	function make_state(text: string, key: string | undefined, l: typeof lang, cursor: number): EditorState {
+	function make_state(
+		text: string,
+		key: string | undefined,
+		l: typeof lang,
+		cursor: number
+	): EditorState {
 		return EditorState.create({
 			doc: text,
 			selection: !readonly && cursor > 0 && cursor <= text.length ? { anchor: cursor } : undefined,
@@ -297,7 +461,12 @@
 
 	$effect(() => {
 		const key = untrack(() => docKey);
-		const st = make_state(untrack(() => doc), key, untrack(() => lang), untrack(() => initialCursor));
+		const st = make_state(
+			untrack(() => doc),
+			key,
+			untrack(() => lang),
+			untrack(() => initialCursor)
+		);
 		if (key) doc_states.set(key, st);
 		prev_key = key;
 		const v = new EditorView({ state: st, parent: el });
@@ -336,7 +505,12 @@
 	});
 </script>
 
-<div class="cm-host" class:readonly bind:this={el} data-obs-editor={readonly ? undefined : true}></div>
+<div
+	class="cm-host"
+	class:readonly
+	bind:this={el}
+	data-obs-editor={readonly ? undefined : true}
+></div>
 
 <style>
 	.cm-host {

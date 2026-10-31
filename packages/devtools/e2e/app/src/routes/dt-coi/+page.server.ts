@@ -5,6 +5,9 @@
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ setHeaders }) => {
-	setHeaders({ 'cross-origin-opener-policy': 'same-origin', 'cross-origin-embedder-policy': 'require-corp' });
+	setHeaders({
+		'cross-origin-opener-policy': 'same-origin',
+		'cross-origin-embedder-policy': 'require-corp'
+	});
 	return { at: 'cross-origin-isolated lab' };
 };

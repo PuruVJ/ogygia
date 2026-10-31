@@ -17,7 +17,12 @@
  */
 import { createHash } from 'node:crypto';
 import { building, dev } from '$app/env';
-import { defineServer, STORED_DOCUMENT_META, type RequestContext, type ServerPlugin } from '@ogygia/core/plugin';
+import {
+	defineServer,
+	STORED_DOCUMENT_META,
+	type RequestContext,
+	type ServerPlugin
+} from '@ogygia/core/plugin';
 import {
 	begin_flight,
 	current_edges,
@@ -66,7 +71,11 @@ const BUILD_MARKER_KEY = '\0og:build';
  *  requests (RFC 9110), which is what makes a CDN or browser revalidation of a stored page cost
  *  zero body bytes. Validators live on the ENTRY, never in edge adapters: they are the render's
  *  identity, not a CDN dialect. */
-export function freeze_response(entry: FreezeEntry, via: 'hit' | 'join' | 'stored', request?: Request): Response {
+export function freeze_response(
+	entry: FreezeEntry,
+	via: 'hit' | 'join' | 'stored',
+	request?: Request
+): Response {
 	if (entry.kind === 'redirect') {
 		return new Response(null, {
 			status: entry.status,
@@ -80,7 +89,8 @@ export function freeze_response(entry: FreezeEntry, via: 'hit' | 'join' | 'store
 		const last_modified = entry.headers['last-modified'];
 		const etag_match = !!etag && !!inm && inm.split(',').some((t) => t.trim() === etag);
 		// If-None-Match wins when present (RFC 9110 §13.1.3); IMS compares against store time.
-		const ims_match = !inm && !!ims && !!last_modified && Date.parse(ims) >= Date.parse(last_modified);
+		const ims_match =
+			!inm && !!ims && !!last_modified && Date.parse(ims) >= Date.parse(last_modified);
 		if (etag_match || ims_match) {
 			const headers: Record<string, string> = { 'x-ogygia-freeze': via };
 			for (const h of ['etag', 'last-modified', 'cache-control'] as const) {
@@ -102,7 +112,9 @@ export function freeze_response(entry: FreezeEntry, via: 'hit' | 'join' | 'store
 function served_html(entry: Extract<FreezeEntry, { kind: 'page' }>, via: string): string {
 	if (via === 'stored') return entry.html;
 	const at = entry.head_end ?? entry.html.indexOf('</head>');
-	return at === -1 ? entry.html : entry.html.slice(0, at) + STORED_DOCUMENT_META + entry.html.slice(at);
+	return at === -1
+		? entry.html
+		: entry.html.slice(0, at) + STORED_DOCUMENT_META + entry.html.slice(at);
 }
 
 /** Serve-time stitching: fill every `stitch` hole in the stored shell with a fresh SERVER render
@@ -123,7 +135,9 @@ async function serve_stitched(
 }
 
 function serve(entry: FreezeEntry, via: 'hit' | 'join', ctx: Ctx): Promise<Response> | Response {
-	return entry.kind === 'page' && entry.stitch ? serve_stitched(entry, via, ctx) : freeze_response(entry, via, ctx.event.request);
+	return entry.kind === 'page' && entry.stitch
+		? serve_stitched(entry, via, ctx)
+		: freeze_response(entry, via, ctx.event.request);
 }
 
 /** The verdict's other word: a REFUSED page gets `private, no-store` when the app set nothing —
@@ -149,7 +163,9 @@ function dev_freeze_note(response: Response, ctx: Ctx, obs: Observation): void {
 		(obs.wrote_cookie ? 'a cookie write' : null) ??
 		(response.status !== 200 ? `status ${response.status}` : null) ??
 		(response.headers.has('set-cookie') ? 'a set-cookie response header' : null) ??
-		(!(response.headers.get('content-type') ?? '').includes('text/html') ? 'a non-html response' : null) ??
+		(!(response.headers.get('content-type') ?? '').includes('text/html')
+			? 'a non-html response'
+			: null) ??
 		(ctx.facts.streamed ? 'streamed load promises' : null);
 	if (!refusal) {
 		try {
@@ -186,7 +202,12 @@ async function capture_freeze(
 	if (response.status === 301 || response.status === 308) {
 		const location = response.headers.get('location');
 		if (!location) return null;
-		const entry: FreezeEntry = { kind: 'redirect', status: response.status, location, created: Date.now() };
+		const entry: FreezeEntry = {
+			kind: 'redirect',
+			status: response.status,
+			location,
+			created: Date.now()
+		};
 		await freeze_put(path, entry, { ttl, tags });
 		return { entry, response };
 	}
@@ -317,7 +338,13 @@ const server: ServerPlugin<FreezeServerOptions, State> = defineServer<FreezeServ
 								url: path,
 								bytes: stored.entry.kind === 'page' ? stored.entry.html.length : 0
 							}
-						: { domain: 'server', name: 'server.freeze', op: 'skip', url: path, reason: obs.disqualified_by ?? 'response-ineligible' }
+						: {
+								domain: 'server',
+								name: 'server.freeze',
+								op: 'skip',
+								url: path,
+								reason: obs.disqualified_by ?? 'response-ineligible'
+							}
 				);
 				if (stored) {
 					return stored.entry.kind === 'page' && stored.entry.stitch
@@ -348,7 +375,11 @@ const server: ServerPlugin<FreezeServerOptions, State> = defineServer<FreezeServ
 		const marker = await store.get(BUILD_MARKER_KEY);
 		const seen = marker?.kind === 'page' ? marker.html : undefined;
 		if (seen !== version)
-			await store.put(BUILD_MARKER_KEY, { kind: 'page', html: version, headers: {}, created: Date.now() }, { ttl: 86_400, tags: [] });
+			await store.put(
+				BUILD_MARKER_KEY,
+				{ kind: 'page', html: version, headers: {}, created: Date.now() },
+				{ ttl: 86_400, tags: [] }
+			);
 		return seen;
 	}
 });

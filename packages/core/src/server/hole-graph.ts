@@ -15,7 +15,11 @@
  * URLs are made root-absolute (the graph here, the CSS tags by the answer's own absolutizing pass):
  * the answer lands in a page at any depth, and a `./_app/…` resolved there would 404. indexOf only.
  */
-import { ISLAND_GRAPH_ATTR, decode_island_graph, decode_island_locations } from '../island-graph.ts';
+import {
+	ISLAND_GRAPH_ATTR,
+	decode_island_graph,
+	decode_island_locations
+} from '../island-graph.ts';
 import { island_graph_script } from './document-tail.ts';
 
 function root_absolute(value: string, base: URL): string {
@@ -39,7 +43,11 @@ const REGION_CSS_ATTR = 'data-ogygia-region-css';
  *  `<style data-ogygia-region-css="…">…</style>`). */
 export function head_region_css(head: string): string {
 	let out = '';
-	for (let at = head.indexOf(REGION_CSS_ATTR); at !== -1; at = head.indexOf(REGION_CSS_ATTR, at + 1)) {
+	for (
+		let at = head.indexOf(REGION_CSS_ATTR);
+		at !== -1;
+		at = head.indexOf(REGION_CSS_ATTR, at + 1)
+	) {
 		const start = head.lastIndexOf('<', at);
 		if (start === -1) continue;
 		const is_style = head.startsWith('<style', start);
@@ -65,9 +73,14 @@ export function hole_graph_script(head: string, base: URL): string {
 		const text = head.slice(open + 1, close);
 		for (const [entry, hrefs] of decode_island_graph(text)) {
 			const key = root_absolute(entry, base);
-			if (!graph.has(key)) graph.set(key, hrefs.map((h) => root_absolute(h, base)));
+			if (!graph.has(key))
+				graph.set(
+					key,
+					hrefs.map((h) => root_absolute(h, base))
+				);
 		}
-		for (const [entry, src] of decode_island_locations(text)) locations.set(root_absolute(entry, base), root_absolute(src, base));
+		for (const [entry, src] of decode_island_locations(text))
+			locations.set(root_absolute(entry, base), root_absolute(src, base));
 		at = close;
 	}
 	return island_graph_script(graph, locations);

@@ -140,12 +140,19 @@
 					ctx.fillText(node.label + ' · ' + node.value + ' ms', c.x + 4, c.y + 11);
 					ctx.restore();
 				}
-				const inner = squarify(node.children, c.x + 2, c.y + 15, Math.max(0, c.w - 4), Math.max(0, c.h - 17));
+				const inner = squarify(
+					node.children,
+					c.x + 2,
+					c.y + 15,
+					Math.max(0, c.w - 4),
+					Math.max(0, c.h - 17)
+				);
 				for (const ic of inner) {
 					const leaf = ic.it;
 					const op = 0.55 + Math.min(0.4, (leaf.pct ?? 0) / 40);
 					box(ic.x, ic.y, ic.w, ic.h, leaf.color, op);
-					if (ic.w > 46 && ic.h > 14) label(ic.x, ic.y, ic.w, leaf.label, ic.h > 26 ? leaf.value + ' ms' : '');
+					if (ic.w > 46 && ic.h > 14)
+						label(ic.x, ic.y, ic.w, leaf.label, ic.h > 26 ? leaf.value + ' ms' : '');
 					rects.push({ x: ic.x, y: ic.y, w: ic.w, h: ic.h, node: leaf, zoom: node });
 				}
 				rects.push({ x: c.x, y: c.y, w: c.w, h: 15, node, zoom: node });
@@ -201,7 +208,11 @@
 			tip = null;
 			return;
 		}
-		tip = { node: q.node, x: Math.min(ev.clientX + 14, window.innerWidth - 430), y: ev.clientY + 14 };
+		tip = {
+			node: q.node,
+			x: Math.min(ev.clientX + 14, window.innerWidth - 430),
+			y: ev.clientY + 14
+		};
 	}
 	function onClick(ev: MouseEvent) {
 		const q = at(ev);
@@ -217,7 +228,10 @@
 	{#if stack.length === 1}
 		<span style="color:var(--text-faint)">click a box to zoom in</span>
 	{:else}
-		{stack.slice(1).map((n) => n.label).join(' › ')} —
+		{stack
+			.slice(1)
+			.map((n) => n.label)
+			.join(' › ')} —
 		<a href="#top" onclick={zoomOut}>zoom out</a>
 	{/if}
 </div>
@@ -232,7 +246,8 @@
 	<div class="tree-tip" style="display:block;left:{tip.x}px;top:{tip.y}px">
 		<b>{tip.node.label}</b>
 		{#if tip.node.sub}<br /><span style="color:var(--text-faint)">{tip.node.sub}</span>{/if}
-		<br />{tip.node.value} ms{#if tip.node.pct != null} · {tip.node.pct}% of busy{/if}
+		<br />{tip.node.value} ms{#if tip.node.pct != null}
+			· {tip.node.pct}% of busy{/if}
 	</div>
 {/if}
 

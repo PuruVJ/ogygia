@@ -66,7 +66,10 @@ function myers(a: string[], b: string[], max_d: number): DiffOp[] | null {
 	for (let d = 0; d <= max; d++) {
 		trace.push(v.slice());
 		for (let k = -d; k <= d; k += 2) {
-			let x = k === -d || (k !== d && v[off + k - 1] < v[off + k + 1]) ? v[off + k + 1] : v[off + k - 1] + 1;
+			let x =
+				k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])
+					? v[off + k + 1]
+					: v[off + k - 1] + 1;
 			let y = x - k;
 			while (x < n && y < m && a[x] === b[y]) {
 				x++;
@@ -81,14 +84,15 @@ function myers(a: string[], b: string[], max_d: number): DiffOp[] | null {
 				for (let dd = d; dd > 0; dd--) {
 					const pv = trace[dd];
 					const kk = cx - cy;
-					const prev_k = kk === -dd || (kk !== dd && pv[off + kk - 1] < pv[off + kk + 1]) ? kk + 1 : kk - 1;
+					const prev_k =
+						kk === -dd || (kk !== dd && pv[off + kk - 1] < pv[off + kk + 1]) ? kk + 1 : kk - 1;
 					const px = pv[off + prev_k];
 					const py = px - prev_k;
-					while (cx > px && cy > py) ops.push({ op: 'same', text: a[--cx] }), cy--;
+					while (cx > px && cy > py) (ops.push({ op: 'same', text: a[--cx] }), cy--);
 					if (cx === px) ops.push({ op: 'add', text: b[--cy] });
 					else ops.push({ op: 'del', text: a[--cx] });
 				}
-				while (cx > 0 && cy > 0) ops.push({ op: 'same', text: a[--cx] }), cy--;
+				while (cx > 0 && cy > 0) (ops.push({ op: 'same', text: a[--cx] }), cy--);
 				return ops.reverse();
 			}
 		}
@@ -103,16 +107,30 @@ export function html_diff(server: string, browser: string, context = 3, max_d = 
 	let head = 0;
 	while (head < a.length && head < b.length && a[head] === b[head]) head++;
 	let tail = 0;
-	while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+	while (
+		tail < a.length - head &&
+		tail < b.length - head &&
+		a[a.length - 1 - tail] === b[b.length - 1 - tail]
+	)
+		tail++;
 	const mid_a = a.slice(head, a.length - tail);
 	const mid_b = b.slice(head, b.length - tail);
 	let ops = myers(mid_a, mid_b, max_d);
 	let partial = false;
 	if (!ops) {
 		partial = true;
-		ops = [...mid_a.slice(0, 20).map((text) => ({ op: 'del' as const, text })), ...mid_b.slice(0, 20).map((text) => ({ op: 'add' as const, text }))];
+		ops = [
+			...mid_a.slice(0, 20).map((text) => ({ op: 'del' as const, text })),
+			...mid_b.slice(0, 20).map((text) => ({ op: 'add' as const, text }))
+		];
 	}
-	const all: DiffOp[] = [...a.slice(Math.max(0, head - context), head).map((text) => ({ op: 'same' as const, text })), ...ops, ...a.slice(a.length - tail, a.length - tail + context).map((text) => ({ op: 'same' as const, text }))];
+	const all: DiffOp[] = [
+		...a.slice(Math.max(0, head - context), head).map((text) => ({ op: 'same' as const, text })),
+		...ops,
+		...a
+			.slice(a.length - tail, a.length - tail + context)
+			.map((text) => ({ op: 'same' as const, text }))
+	];
 	// hunks: runs of changes with `context` same-tokens around them
 	const hunks: DiffHunk[] = [];
 	let cur: DiffOp[] | null = null;

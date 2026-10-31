@@ -9,7 +9,17 @@
  * public services — a host it does not know is still measured, as "other".
  */
 
-export type ThirdPartyKind = 'tag manager' | 'analytics' | 'ads' | 'session replay' | 'chat' | 'a/b testing' | 'consent' | 'fonts' | 'library cdn' | 'other';
+export type ThirdPartyKind =
+	| 'tag manager'
+	| 'analytics'
+	| 'ads'
+	| 'session replay'
+	| 'chat'
+	| 'a/b testing'
+	| 'consent'
+	| 'fonts'
+	| 'library cdn'
+	| 'other';
 
 /** host suffix → what that kind of service is (labels only; detection does not need them) */
 const KNOWN: [string, ThirdPartyKind][] = [
@@ -56,7 +66,8 @@ const KNOWN: [string, ThirdPartyKind][] = [
 ];
 
 export function kind_of_host(host: string): ThirdPartyKind {
-	for (const [suffix, kind] of KNOWN) if (host === suffix || host.endsWith('.' + suffix)) return kind;
+	for (const [suffix, kind] of KNOWN)
+		if (host === suffix || host.endsWith('.' + suffix)) return kind;
 	return 'other';
 }
 
@@ -120,7 +131,14 @@ function host_of(url: string): string {
  *  starts after that and after another origin's script ran was loaded by a script. `in_page`: the
  *  URLs the live document holds — a script no element names came by an import or a fetch (a
  *  self-loading library's parts), whenever it started. */
-export function third_party(resources: readonly Res[], page_origin: string, cpu_by_host: ReadonlyMap<string, number> | null, named?: ReadonlySet<string>, parsed?: number, in_page?: ReadonlySet<string>): ThirdParty | null {
+export function third_party(
+	resources: readonly Res[],
+	page_origin: string,
+	cpu_by_host: ReadonlyMap<string, number> | null,
+	named?: ReadonlySet<string>,
+	parsed?: number,
+	in_page?: ReadonlySet<string>
+): ThirdParty | null {
 	const page_host = host_of(page_origin);
 	const by = new Map<string, ThirdPartyOrigin>();
 	let first_third_script_end = Infinity;
@@ -130,7 +148,18 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 	for (const r of sorted) {
 		const host = host_of(r.url);
 		if (!host || host === page_host) continue;
-		const o = by.get(host) ?? { host, kind: kind_of_host(host), files: 0, scripts: 0, script_bytes: 0, unsized: 0, wire: 0, blocking: 0, first: r.start, cpu_ms: cpu_by_host ? (cpu_by_host.get(host) ?? 0) : null };
+		const o = by.get(host) ?? {
+			host,
+			kind: kind_of_host(host),
+			files: 0,
+			scripts: 0,
+			script_bytes: 0,
+			unsized: 0,
+			wire: 0,
+			blocking: 0,
+			first: r.start,
+			cpu_ms: cpu_by_host ? (cpu_by_host.get(host) ?? 0) : null
+		};
 		o.files++;
 		o.wire += r.transfer ?? 0;
 		if (r.blocking) o.blocking++;
@@ -139,14 +168,25 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 			o.script_bytes += r.size ?? 0;
 			if (!r.size) o.unsized++;
 			else if (r.weighed) weighed++;
-			if (r.start >= first_third_script_end && (named ? !named.has(r.url) : (in_page !== undefined && !in_page.has(r.url)) || (parsed !== undefined && r.start > parsed))) runtime_loaded++;
+			if (
+				r.start >= first_third_script_end &&
+				(named
+					? !named.has(r.url)
+					: (in_page !== undefined && !in_page.has(r.url)) ||
+						(parsed !== undefined && r.start > parsed))
+			)
+				runtime_loaded++;
 			first_third_script_end = Math.min(first_third_script_end, r.end);
 		}
 		by.set(host, o);
 	}
 	if (!by.size) return null;
-	const origins = [...by.values()].sort((a, b) => (b.cpu_ms ?? 0) - (a.cpu_ms ?? 0) || b.script_bytes - a.script_bytes || b.wire - a.wire);
-	const sum = (k: 'script_bytes' | 'unsized' | 'wire' | 'blocking') => origins.reduce((s, o) => s + o[k], 0);
+	const origins = [...by.values()].sort(
+		(a, b) =>
+			(b.cpu_ms ?? 0) - (a.cpu_ms ?? 0) || b.script_bytes - a.script_bytes || b.wire - a.wire
+	);
+	const sum = (k: 'script_bytes' | 'unsized' | 'wire' | 'blocking') =>
+		origins.reduce((s, o) => s + o[k], 0);
 	return {
 		origins,
 		script_bytes: sum('script_bytes'),
@@ -161,15 +201,21 @@ export function third_party(resources: readonly Res[], page_origin: string, cpu_
 
 /** What to do about each kind, in one line (Partytown only where it tends to work). */
 const ADVICE: Record<ThirdPartyKind, string> = {
-	'tag manager': 'audit its tags (each one is a script it adds at runtime), fire them after the page is interactive or on consent, or move them to server-side tagging',
-	analytics: 'load it after the page is interactive (idle or first interaction); a pure beacon tag is the kind that runs well off the main thread in a worker (Partytown), worth trying there',
+	'tag manager':
+		'audit its tags (each one is a script it adds at runtime), fire them after the page is interactive or on consent, or move them to server-side tagging',
+	analytics:
+		'load it after the page is interactive (idle or first interaction); a pure beacon tag is the kind that runs well off the main thread in a worker (Partytown), worth trying there',
 	ads: 'reserve the slots at their final size and load the ad code after the main content; conversion pixels can wait for idle',
-	'session replay': 'start it after the first interaction, or sample it (record a share of visits): it watches every DOM change',
+	'session replay':
+		'start it after the first interaction, or sample it (record a share of visits): it watches every DOM change',
 	chat: 'show a plain button that looks like the widget and load the widget on its first click (a facade)',
-	'a/b testing': 'it edits the page before or as islands wake: run the experiment on the server (render the variant) so islands hydrate clean',
+	'a/b testing':
+		'it edits the page before or as islands wake: run the experiment on the server (render the variant) so islands hydrate clean',
 	consent: 'keep it small and async, and let it gate the other tags rather than load beside them',
-	fonts: 'self-host the fonts (one origin fewer on the critical path) and preload the one the first screen uses',
-	'library cdn': 'bundle the library with the app (one origin fewer, cached with your code, no runtime fetches of its parts)',
+	fonts:
+		'self-host the fonts (one origin fewer on the critical path) and preload the one the first screen uses',
+	'library cdn':
+		'bundle the library with the app (one origin fewer, cached with your code, no runtime fetches of its parts)',
 	other: 'load it async, after the first paint, or where it is used'
 };
 
@@ -180,38 +226,65 @@ export interface ThirdPartyFinding {
 	fix?: string;
 }
 
-const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1048576).toFixed(1)} MB` : n > 0 && n < 1024 ? `${n} B` : `${Math.round(n / 1024)} KB`);
+const kb = (n: number) =>
+	n >= 1024 * 1024
+		? `${(n / 1048576).toFixed(1)} MB`
+		: n > 0 && n < 1024
+			? `${n} B`
+			: `${Math.round(n / 1024)} KB`;
 
 /** `edited`: islands that did not wake from the server's markup on this visit (changed, recovered,
  *  healed, failed), with when they woke (ms; Infinity when unknown or never). */
-export function third_party_findings(tp: ThirdParty | null, edited: readonly { name: string; done: number }[] = []): ThirdPartyFinding[] {
+export function third_party_findings(
+	tp: ThirdParty | null,
+	edited: readonly { name: string; done: number }[] = []
+): ThirdPartyFinding[] {
 	if (!tp) return [];
 	const out: ThirdPartyFinding[] = [];
 	// a browser that hides other origins' sizes reports 0 for each of their files: count those scripts
 	// instead of calling them 0 KB, and let a library that loads many parts be worth naming on count
 	const MANY = 5;
-	const heavy = tp.origins.filter((o) => (o.cpu_ms ?? 0) >= 50 || o.script_bytes >= 50 * 1024 || o.unsized >= MANY || o.blocking);
+	const heavy = tp.origins.filter(
+		(o) => (o.cpu_ms ?? 0) >= 50 || o.script_bytes >= 50 * 1024 || o.unsized >= MANY || o.blocking
+	);
 	const size = (bytes: number, scripts: number, unsized: number) =>
-		!unsized ? kb(bytes) : unsized === scripts ? `${scripts} script${scripts === 1 ? '' : 's'}, sizes hidden` : `at least ${kb(bytes)}`;
-	const label = (o: ThirdPartyOrigin) => `${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''} ${size(o.script_bytes, o.scripts, o.unsized)}${o.cpu_ms ? `, ${Math.round(o.cpu_ms)} ms CPU` : ''}${o.blocking ? `, ${o.blocking} blocking` : ''}`;
+		!unsized
+			? kb(bytes)
+			: unsized === scripts
+				? `${scripts} script${scripts === 1 ? '' : 's'}, sizes hidden`
+				: `at least ${kb(bytes)}`;
+	const label = (o: ThirdPartyOrigin) =>
+		`${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''} ${size(o.script_bytes, o.scripts, o.unsized)}${o.cpu_ms ? `, ${Math.round(o.cpu_ms)} ms CPU` : ''}${o.blocking ? `, ${o.blocking} blocking` : ''}`;
 	const scripts = tp.origins.reduce((s, o) => s + o.scripts, 0);
 	// (sizes the browser hid that were weighed apart from the visit: real bytes, said whose they are)
-	const weighed = tp.weighed ? ` (this browser hid the size of ${tp.weighed === scripts ? (scripts === 1 ? 'it' : 'each') : `${tp.weighed} of them`}; weighed from the files themselves)` : '';
+	const weighed = tp.weighed
+		? ` (this browser hid the size of ${tp.weighed === scripts ? (scripts === 1 ? 'it' : 'each') : `${tp.weighed} of them`}; weighed from the files themselves)`
+		: '';
 	const served = !tp.unsized
 		? `${kb(tp.script_bytes)} of JS${weighed}`
 		: tp.unsized === scripts
 			? `${scripts} script${scripts === 1 ? '' : 's'} (this browser hides other origins' file sizes; a Chromium visit shows them)`
 			: `at least ${kb(tp.script_bytes)} of JS (${tp.unsized} of the ${scripts} scripts had their size hidden by this browser${tp.weighed ? `; ${tp.weighed} more it hid were weighed from the files themselves` : ''})`;
-	const worth = tp.script_bytes >= 30 * 1024 || tp.unsized >= MANY || (tp.cpu_ms ?? 0) >= 50 || tp.blocking > 0;
+	const worth =
+		tp.script_bytes >= 30 * 1024 || tp.unsized >= MANY || (tp.cpu_ms ?? 0) >= 50 || tp.blocking > 0;
 	if (worth)
 		out.push({
 			code: 'third-party',
-			severity: (tp.cpu_ms ?? 0) >= 200 || tp.blocking > 0 || tp.script_bytes >= 200 * 1024 ? 'warn' : 'info',
+			severity:
+				(tp.cpu_ms ?? 0) >= 200 || tp.blocking > 0 || tp.script_bytes >= 200 * 1024
+					? 'warn'
+					: 'info',
 			message:
 				`${tp.origins.length} other origin${tp.origins.length === 1 ? '' : 's'} served ${served}${tp.cpu_ms !== null ? ` and ran ${Math.round(tp.cpu_ms)} ms on the main thread` : ''}` +
 				`${tp.runtime_loaded ? `; ${tp.runtime_loaded} of their scripts the page never names, loaded by other scripts (how a tag manager or a self-loading library adds code)` : ''}. ` +
 				`The heaviest: ${(heavy.length ? heavy : tp.origins).slice(0, 3).map(label).join('; ')}.`,
-			fix: [...new Set((heavy.length ? heavy : tp.origins).slice(0, 3).map((o) => `${o.kind === 'other' ? o.host : o.kind}: ${ADVICE[o.kind]}`))].join(' · ')
+			fix: [
+				...new Set(
+					(heavy.length ? heavy : tp.origins)
+						.slice(0, 3)
+						.map((o) => `${o.kind === 'other' ? o.host : o.kind}: ${ADVICE[o.kind]}`)
+				)
+			].join(' · ')
 		});
 	const blocking = tp.origins.filter((o) => o.blocking);
 	if (blocking.length)
@@ -224,12 +297,19 @@ export function third_party_findings(tp: ThirdParty | null, edited: readonly { n
 	// a third party that could have edited the page: its scripts started before islands that did not
 	// wake clean had woken (a font or a library CDN does not edit markup)
 	const last_woke = edited.reduce((m, e) => Math.max(m, e.done), -Infinity);
-	const editors = tp.origins.filter((o) => o.scripts > 0 && o.first < last_woke && o.kind !== 'fonts' && o.kind !== 'library cdn');
+	const editors = tp.origins.filter(
+		(o) => o.scripts > 0 && o.first < last_woke && o.kind !== 'fonts' && o.kind !== 'library cdn'
+	);
 	if (edited.length && editors.length)
 		out.push({
 			code: 'third-party-edits',
 			severity: 'warn',
-			message: `${[...new Set(edited.map((e) => e.name))].slice(0, 3).join(', ')} did not wake from the server's markup, and ${editors.slice(0, 3).map((o) => `${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''}`).join(', ')} ran scripts before ${edited.length === 1 ? 'it' : 'they'} woke: a script from another origin that edits the DOM is the usual cause.`,
+			message: `${[...new Set(edited.map((e) => e.name))].slice(0, 3).join(', ')} did not wake from the server's markup, and ${editors
+				.slice(0, 3)
+				.map((o) => `${o.host}${o.kind !== 'other' ? ` (${o.kind})` : ''}`)
+				.join(
+					', '
+				)} ran scripts before ${edited.length === 1 ? 'it' : 'they'} woke: a script from another origin that edits the DOM is the usual cause.`,
 			fix: 'Keep third-party edits out of island subtrees (target the markup around them), or render the variant on the server so the island hydrates what it was sent.'
 		});
 	return out;

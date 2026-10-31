@@ -10,14 +10,20 @@ import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';
-import { DocumentTail, set_tail_reader, document_tail, props_preview } from '../src/server/document-tail.ts';
+import {
+	DocumentTail,
+	set_tail_reader,
+	document_tail,
+	props_preview
+} from '../src/server/document-tail.ts';
 import { decode_island_graph } from '../src/island-graph.ts';
 import { set_island_deps } from './_stubs/virtual-island-deps.ts';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;
 
-const SIDECAR_G = /<script type="application\/ogygia-props" data-ogygia-props="([0-9a-f]+)"[^>]*>([^<]*)<\/script>/g;
+const SIDECAR_G =
+	/<script type="application\/ogygia-props" data-ogygia-props="([0-9a-f]+)"[^>]*>([^<]*)<\/script>/g;
 const FP_ATTR_G = /data-og-fp="([0-9a-f]+)"/g;
 const GRAPH_SCRIPT_RE = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/;
 
@@ -32,7 +38,8 @@ const island = (props: Record<string, unknown> = {}, entry = '/islands/tiny.js')
 /** Render islands inside the Kit page-pass stand-in (snippet children of KitPagePass). */
 function render_in_kit_pass(list: Array<Record<string, unknown>>) {
 	const children = (renderer: { push(html: string): void }) => {
-		for (const props of list) (region as unknown as (r: unknown, p: unknown) => void)(renderer, props);
+		for (const props of list)
+			(region as unknown as (r: unknown, p: unknown) => void)(renderer, props);
 	};
 	return render(kit_pass, { props: { children } });
 }
@@ -51,7 +58,12 @@ describe('DocumentTail', () => {
 		t.hints(['/a.js', '/b.js']);
 		t.hints(['/b.js', '/c.js']);
 		const wire = (text: string) => ({ wire: () => ({ text, json: false }) });
-		t.props('f1', wire('1'), { entry: '/islands/one.js', name: 'One', module_url: '/one.js', wake: 'load' });
+		t.props('f1', wire('1'), {
+			entry: '/islands/one.js',
+			name: 'One',
+			module_url: '/one.js',
+			wake: 'load'
+		});
 		t.props('f1', wire('DUPLICATE'));
 		t.props('f2', wire('2'));
 		t.hints(['/one.js'], 'f1');
@@ -69,7 +81,16 @@ describe('DocumentTail', () => {
 		expect(t.island_rows()).toBeNull();
 		t.render(null, true);
 		expect(t.island_rows()).toMatchObject([
-			{ fp: 'f1', entry: '/islands/one.js', name: 'One', wake: 'load', count: 2, props_bytes: 1, json: false, hints: ['/one.js'] },
+			{
+				fp: 'f1',
+				entry: '/islands/one.js',
+				name: 'One',
+				wake: 'load',
+				count: 2,
+				props_bytes: 1,
+				json: false,
+				hints: ['/one.js']
+			},
 			{ fp: 'f2', entry: '', name: '', count: 1 }
 		]);
 	});
@@ -89,7 +110,11 @@ describe('DocumentTail', () => {
 		const t = new DocumentTail();
 		t.hole('aaaaaaaaaaaaaaaa', '/__ogygia__?id=a&props=W3t9XQ&exp=1&sig=s', '');
 		t.hole('aaaaaaaaaaaaaaaa', '/__ogygia__?id=DUPLICATE', '');
-		t.hole('bbbbbbbbbbbbbbbb', '/__ogygia__?id=b&props=W3t9XQ&exp=1&sig=s', '<script type="application/ogygia-props" data-ogygia-props>[{"n":1},1]</script>');
+		t.hole(
+			'bbbbbbbbbbbbbbbb',
+			'/__ogygia__?id=b&props=W3t9XQ&exp=1&sig=s',
+			'<script type="application/ogygia-props" data-ogygia-props>[{"n":1},1]</script>'
+		);
 		t.hole('', '/__ogygia__?id=no-identity', ''); // no identity → nothing to key on
 		t.hole('cccccccccccccccc', '', ''); // no address → nothing worth recording
 		t.props('f1', { wire: () => ({ text: '1', json: false }) });
@@ -98,8 +123,24 @@ describe('DocumentTail', () => {
 		t.note_hole('cafebabe0101', 'load', null, 0, 'Recs', { forProduct: 'P0' });
 		t.note_hole('cafebabe0102', 'visible', 'load', 60);
 		expect(t.hole_rows()).toEqual([
-			{ id: 'cafebabe0101', name: 'Recs', props: '{"forProduct":"P0"}', when: 'load', hydrate: null, ttl: 0, count: 2 },
-			{ id: 'cafebabe0102', name: '', props: '', when: 'visible', hydrate: 'load', ttl: 60, count: 1 }
+			{
+				id: 'cafebabe0101',
+				name: 'Recs',
+				props: '{"forProduct":"P0"}',
+				when: 'load',
+				hydrate: null,
+				ttl: 0,
+				count: 2
+			},
+			{
+				id: 'cafebabe0102',
+				name: '',
+				props: '',
+				when: 'visible',
+				hydrate: 'load',
+				ttl: 60,
+				count: 1
+			}
 		]);
 		// the preview: empty for nothing, safe on a cycle, truncated past 80 chars
 		expect(props_preview({})).toBe('');
@@ -112,8 +153,12 @@ describe('DocumentTail', () => {
 		expect(t.empty).toBe(false);
 		const html = t.render();
 		// after the props sidecars, one script, `<` escaped so the sidecar HTML inside cannot close it
-		expect(html.indexOf('data-ogygia-props="f1"')).toBeLessThan(html.indexOf('application/ogygia-holes'));
-		const m = /<script type="application\/ogygia-holes" data-ogygia-holes>(.*)<\/script>$/.exec(html);
+		expect(html.indexOf('data-ogygia-props="f1"')).toBeLessThan(
+			html.indexOf('application/ogygia-holes')
+		);
+		const m = /<script type="application\/ogygia-holes" data-ogygia-holes>(.*)<\/script>$/.exec(
+			html
+		);
 		expect(m).not.toBeNull();
 		expect(m![1]).not.toContain('<');
 		expect(JSON.parse(m![1])).toEqual({
@@ -142,7 +187,12 @@ describe('DocumentTail', () => {
 
 describe('Region.svelte × the tail', () => {
 	// The islands' chunk closures: a placed island's graph is data (island-graph.ts), never a hint.
-	beforeEach(() => set_island_deps({ '/islands/tiny.js': ['/chunks/svelte.js'], '/islands/hole.js': ['/chunks/svelte.js'] }));
+	beforeEach(() =>
+		set_island_deps({
+			'/islands/tiny.js': ['/chunks/svelte.js'],
+			'/islands/hole.js': ['/chunks/svelte.js']
+		})
+	);
 	afterEach(() => set_island_deps({}));
 	const graph_of = (html: string) => decode_island_graph(GRAPH_SCRIPT_RE.exec(html)?.[1] ?? '{}');
 
@@ -155,7 +205,9 @@ describe('Region.svelte × the tail', () => {
 		expect(fps).toHaveLength(1);
 		expect(sidecars).toHaveLength(1);
 		expect(sidecars[0][1]).toBe(fps[0]);
-		expect(out.body.indexOf('</ogygia-region>')).toBeLessThan(out.body.indexOf('<script type="application/ogygia-props"'));
+		expect(out.body.indexOf('</ogygia-region>')).toBeLessThan(
+			out.body.indexOf('<script type="application/ogygia-props"')
+		);
 	});
 
 	it('tail installed but NOT a Kit page pass (an ogygia render root): head + adjacent, tail untouched', () => {
@@ -177,7 +229,9 @@ describe('Region.svelte × the tail', () => {
 		expect(tail.size).toEqual({ hints: 0, graph: 1, props: 1, holes: 0 });
 		const html = tail.render();
 		// keyed twice: `data-ogygia-props` for the reconciler, `id` for the runtime's O(1) lookup
-		expect(html).toContain(`<script type="application/ogygia-props" data-ogygia-props="${fps[0]}" id="og-props-${fps[0]}"`);
+		expect(html).toContain(
+			`<script type="application/ogygia-props" data-ogygia-props="${fps[0]}" id="og-props-${fps[0]}"`
+		);
 		expect(html).not.toContain('modulepreload');
 		expect(graph_of(html)).toEqual(new Map([['/islands/tiny.js', ['/chunks/svelte.js']]]));
 		// the profiler's closure for the island: its entry, then its chunks
@@ -219,7 +273,15 @@ describe('Region.svelte × the tail', () => {
 	it('outside the page pass the same server island keeps its graph in the head', () => {
 		install_tail();
 		const out = render(region, {
-			props: { __mode: 'server', __entry: 'hole-1', __component: Tiny, __props: {}, __defer: 'load', __hydrate: 'load', __module: '/islands/hole.js' }
+			props: {
+				__mode: 'server',
+				__entry: 'hole-1',
+				__component: Tiny,
+				__props: {},
+				__defer: 'load',
+				__hydrate: 'load',
+				__module: '/islands/hole.js'
+			}
 		});
 		expect(graph_of(out.head).size).toBe(1);
 		expect(out.head).not.toContain('modulepreload');

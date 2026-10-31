@@ -66,7 +66,10 @@ describe('standalone driver (no Vite)', () => {
 		const { compiler } = make_compiler();
 		const style = `<style lang="scss">\n@for $i from 1 through 3 { :global(.ql-indent-#{$i}) { padding-left: #{$i * 3}em; } }\n</style>`;
 		const src = `<script>\nimport TabGroup from 'some-pkg/tabs' with { wake: 'load' };\n</script>\n<TabGroup />\n${style}`;
-		const result = compiler.transform(src, `${ROOT}/src/lib/ScssHost.svelte`, { ssr: true }) as { code: string; islands: unknown[] } | null;
+		const result = compiler.transform(src, `${ROOT}/src/lib/ScssHost.svelte`, { ssr: true }) as {
+			code: string;
+			islands: unknown[];
+		} | null;
 		expect(result).not.toBeNull();
 		expect(result!.islands.length).toBeGreaterThan(0);
 		expect(result!.code).toContain(style);

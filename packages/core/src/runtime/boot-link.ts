@@ -7,7 +7,11 @@
  */
 import { slots } from './slots.ts';
 import { KitBoot, kit_hydrates_page } from './kit-boot.ts';
-import { ABSOLUTE_URL_SCHEME, is_warmed_module, warm_island_module } from './region-endpoint-url.ts';
+import {
+	ABSOLUTE_URL_SCHEME,
+	is_warmed_module,
+	warm_island_module
+} from './region-endpoint-url.ts';
 import { note_entry_location } from './entry-locations.ts';
 import { register_island_graph } from './island-graph-preload.ts';
 import { props_sidecar_of } from './sidecar.ts';

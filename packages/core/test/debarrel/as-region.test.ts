@@ -46,7 +46,9 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		expect(isl.held).toBe(true);
 		expect(String(isl.bindingSsrSource)).toContain('__hydrate: "visible"');
 		// the island's entry imports the LEAF file, not the barrel
-		expect(String(isl.source)).toMatch(/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*\/lib\/A\.svelte["']/);
+		expect(String(isl.source)).toMatch(
+			/import __OgygiaComp_[0-9a-f]+ from ["'][^"']*\/lib\/A\.svelte["']/
+		);
 		expect(String(isl.source)).not.toContain('index.ts');
 		expect(r!.code).not.toContain('import.meta.og.asRegion');
 		// B stays a plain default import of its leaf
@@ -61,7 +63,9 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		});
 		const r = transformTsRegions(f.read('src/registry.ts'), f.id('src/registry.ts'), ctx(f.root));
 		expect(r!.islands).toHaveLength(1);
-		expect(String((r!.islands[0] as Record<string, unknown>).source)).toMatch(/import \{ A as __OgygiaComp_[0-9a-f]+ \} from /);
+		expect(String((r!.islands[0] as Record<string, unknown>).source)).toMatch(
+			/import \{ A as __OgygiaComp_[0-9a-f]+ \} from /
+		);
 	});
 
 	it('INSIDE ogygia the import feeding asRegion is left alone: the prescan keys the island on the raw import, the transform must see the same one', async () => {
@@ -76,7 +80,8 @@ describe('debarrel + import.meta.og.asRegion', () => {
 			'lib/index.ts': `export { default as A } from './A.svelte';\nexport { default as B } from './B.svelte';\nexport { util } from './util';`,
 			'src/registry.ts': `import { A, B } from '$lib';\nimport { util } from '$lib';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B, util];`
 		});
-		const skip = (decl: { specs: { local: string }[] }) => decl.specs.some((s) => asRegionLocals(f.read('src/registry.ts')).has(s.local));
+		const skip = (decl: { specs: { local: string }[] }) =>
+			decl.specs.some((s) => asRegionLocals(f.read('src/registry.ts')).has(s.local));
 		expect(await f.rewrite('src/registry.ts', undefined, { skip })).toBe(
 			`import { A, B } from '$lib';\nimport { util } from '${f.id('lib/util.ts')}';\nconst ARegion = import.meta.og.asRegion(A, { wake: 'visible' });\nexport const registry = [ARegion, B, util];`
 		);
@@ -84,7 +89,9 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		const raw = transformTsRegions(f.read('src/registry.ts'), f.id('src/registry.ts'), ctx(f.root));
 		const rewritten = (await f.rewrite('src/registry.ts', undefined, { skip }))!;
 		const after = transformTsRegions(rewritten, f.id('src/registry.ts'), ctx(f.root));
-		expect((after!.islands[0] as Record<string, unknown>).id).toBe((raw!.islands[0] as Record<string, unknown>).id);
+		expect((after!.islands[0] as Record<string, unknown>).id).toBe(
+			(raw!.islands[0] as Record<string, unknown>).id
+		);
 	});
 
 	it('the wired plugin (ogygia({ barrels })) applies that rule end to end', async () => {
@@ -95,7 +102,11 @@ describe('debarrel + import.meta.og.asRegion', () => {
 			'src/registry.ts': `import { A } from '$lib';\nimport { util } from '$lib';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`
 		});
 		const plugin = ogygia({ barrels: true })[0];
-		const transform = plugin.transform as (this: unknown, code: string, id: string) => Promise<{ code: string } | null>;
+		const transform = plugin.transform as (
+			this: unknown,
+			code: string,
+			id: string
+		) => Promise<{ code: string } | null>;
 		const ctx_ = {
 			resolve: async (spec: string, importer: string) => {
 				const id = await f.host().resolve(spec, importer);
@@ -103,9 +114,15 @@ describe('debarrel + import.meta.og.asRegion', () => {
 			},
 			addWatchFile() {}
 		};
-		(plugin.configResolved as (c: unknown) => void)({ root: f.root, command: 'build', logger: { info() {} } });
+		(plugin.configResolved as (c: unknown) => void)({
+			root: f.root,
+			command: 'build',
+			logger: { info() {} }
+		});
 		const out = await transform.call(ctx_, f.read('src/registry.ts'), f.id('src/registry.ts'));
-		expect(out!.code).toBe(`import { A } from '$lib';\nimport { util } from '${f.id('lib/util.ts')}';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`);
+		expect(out!.code).toBe(
+			`import { A } from '$lib';\nimport { util } from '${f.id('lib/util.ts')}';\nexport const R = import.meta.og.asRegion(A, { wake: 'load' });\nexport const u = util;`
+		);
 	});
 
 	it('a region-MARKED barrel import is left to the compiler (skip policy), so the mark still errors or works exactly as before', async () => {

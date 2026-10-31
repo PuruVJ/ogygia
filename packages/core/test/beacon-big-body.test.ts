@@ -14,7 +14,8 @@ beforeEach(() => {
 	fetches = [];
 	visibility = 'visible';
 	g.document = {
-		querySelector: (s: string) => (s.includes('ogygia-profiler-beacon') ? { getAttribute: () => '/__profiler/beacon' } : null),
+		querySelector: (s: string) =>
+			s.includes('ogygia-profiler-beacon') ? { getAttribute: () => '/__profiler/beacon' } : null,
 		querySelectorAll: () => [],
 		addEventListener: () => {},
 		get visibilityState() {
@@ -33,7 +34,9 @@ beforeEach(() => {
 	});
 	vi.stubGlobal('fetch', (_u: string, init: { body: string; keepalive?: boolean }) => {
 		fetches.push({ n: init.body.length, keepalive: !!init.keepalive });
-		return init.keepalive && init.body.length > 65536 ? Promise.reject(new TypeError('Failed to fetch')) : Promise.resolve(new Response(null, { status: 204 }));
+		return init.keepalive && init.body.length > 65536
+			? Promise.reject(new TypeError('Failed to fetch'))
+			: Promise.resolve(new Response(null, { status: 204 }));
 	});
 });
 afterEach(() => {

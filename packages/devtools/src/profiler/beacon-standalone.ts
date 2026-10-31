@@ -18,22 +18,39 @@ import { script } from '@ogygia/core';
 
 /** The beacon itself. Runs in the browser, as an inline classic script. */
 export function standalone_beacon(): void {
-	type Timed = PerformanceEntry & { value?: number; hadRecentInput?: boolean; interactionId?: number; url?: string; element?: Element | null };
+	type Timed = PerformanceEntry & {
+		value?: number;
+		hadRecentInput?: boolean;
+		interactionId?: number;
+		url?: string;
+		element?: Element | null;
+	};
 	type Visit = Record<string, unknown>;
 	interface SelfProfiler {
 		stop(): Promise<unknown>;
 	}
-	const w = window as Window & { __og_beacon_standalone?: number; Profiler?: new (o: { sampleInterval: number; maxBufferSize: number }) => SelfProfiler };
+	const w = window as Window & {
+		__og_beacon_standalone?: number;
+		Profiler?: new (o: { sampleInterval: number; maxBufferSize: number }) => SelfProfiler;
+	};
 	if (w.__og_beacon_standalone) return;
 	w.__og_beacon_standalone = 1;
-	const url = document.querySelector('meta[name="ogygia-profiler-beacon"]')?.getAttribute('content');
+	const url = document
+		.querySelector('meta[name="ogygia-profiler-beacon"]')
+		?.getAttribute('content');
 	if (!url || typeof PerformanceObserver === 'undefined') return;
 	// the runtime is on the page: its beacon reports, this one never starts
 	if (document.querySelector('script[data-ogygia-runtime]')) return;
 
 	const r2 = (n: number) => Math.round(n * 100) / 100;
 	const vitals: Record<string, number> = {};
-	const paints: { fcp?: number; lcp?: number; lcp_url?: string; lcp_tag?: string; lcp_lazy?: true } = {};
+	const paints: {
+		fcp?: number;
+		lcp?: number;
+		lcp_url?: string;
+		lcp_tag?: string;
+		lcp_lazy?: true;
+	} = {};
 	const shifts: { t: number; value: number }[] = [];
 	const longtasks: { t: number; ms: number }[] = [];
 	const observers: PerformanceObserver[] = [];
@@ -52,7 +69,11 @@ export function standalone_beacon(): void {
 			const po = new PerformanceObserver((list) => {
 				if (!off) on(list.getEntries() as Timed[]);
 			});
-			po.observe(type === 'event' ? ({ type, buffered: true, durationThreshold: 16 } as PerformanceObserverInit) : { type, buffered: true });
+			po.observe(
+				type === 'event'
+					? ({ type, buffered: true, durationThreshold: 16 } as PerformanceObserverInit)
+					: { type, buffered: true }
+			);
 			observers.push(po);
 		} catch {
 			/* an entry type this browser does not have */
@@ -60,13 +81,16 @@ export function standalone_beacon(): void {
 	};
 
 	try {
-		const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+		const nav = performance.getEntriesByType('navigation')[0] as
+			| PerformanceNavigationTiming
+			| undefined;
 		if (nav && nav.responseStart > 0) vitals.ttfb = r2(nav.responseStart);
 	} catch {
 		/* no navigation timing */
 	}
 	watch('paint', (es) => {
-		for (const e of es) if (e.name === 'first-contentful-paint') vitals.fcp = paints.fcp = r2(e.startTime);
+		for (const e of es)
+			if (e.name === 'first-contentful-paint') vitals.fcp = paints.fcp = r2(e.startTime);
 	});
 	watch('largest-contentful-paint', (es) => {
 		const e = es[es.length - 1];
@@ -86,7 +110,8 @@ export function standalone_beacon(): void {
 		for (const e of es) {
 			if (e.hadRecentInput || typeof e.value !== 'number') continue;
 			cls += e.value;
-			if (shifts.length < 60) shifts.push({ t: r2(e.startTime), value: Math.round(e.value * 1e4) / 1e4 });
+			if (shifts.length < 60)
+				shifts.push({ t: r2(e.startTime), value: Math.round(e.value * 1e4) / 1e4 });
 		}
 		vitals.cls = Math.round(cls * 1e3) / 1e3;
 		again();
@@ -108,10 +133,12 @@ export function standalone_beacon(): void {
 		/* unsupported */
 	}
 	watch('resource', (es) => {
-		for (const e of es) if (seen.length < 3000) seen.push(e as unknown as PerformanceResourceTiming);
+		for (const e of es)
+			if (seen.length < 3000) seen.push(e as unknown as PerformanceResourceTiming);
 	});
 	watch('longtask', (es) => {
-		for (const e of es) if (longtasks.length < 100) longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
+		for (const e of es)
+			if (longtasks.length < 100) longtasks.push({ t: r2(e.startTime), ms: r2(e.duration) });
 	});
 	// the main thread, sampled for the load (JS Self-Profiling, where the document allows it)
 	try {
@@ -135,7 +162,13 @@ export function standalone_beacon(): void {
 	}
 	function post(body: string, keepalive: boolean) {
 		try {
-			const settled = fetch(url!, { method: 'POST', body, keepalive, credentials: 'same-origin', headers: { 'content-type': 'text/plain' } }).catch(() => {});
+			const settled = fetch(url!, {
+				method: 'POST',
+				body,
+				keepalive,
+				credentials: 'same-origin',
+				headers: { 'content-type': 'text/plain' }
+			}).catch(() => {});
 			if (keepalive) hold(body.length, settled);
 		} catch {
 			/* no fetch */
@@ -178,7 +211,9 @@ export function standalone_beacon(): void {
 		link_as = {};
 		link_co = {};
 		try {
-			for (const l of document.querySelectorAll<HTMLLinkElement>('link[href][as],link[rel="modulepreload"][href]')) {
+			for (const l of document.querySelectorAll<HTMLLinkElement>(
+				'link[href][as],link[rel="modulepreload"][href]'
+			)) {
 				link_as[l.href] = l.getAttribute('as') || 'script';
 				link_co[l.href] = l.getAttribute('crossorigin');
 			}
@@ -188,7 +223,13 @@ export function standalone_beacon(): void {
 		return link_as;
 	}
 
-	const LINK_AS: Record<string, string> = { style: 'css', script: 'script', font: 'font', image: 'img', fetch: 'fetch' };
+	const LINK_AS: Record<string, string> = {
+		style: 'css',
+		script: 'script',
+		font: 'font',
+		image: 'img',
+		fetch: 'fetch'
+	};
 	/** a resource's type, the way the runtime's beacon types it */
 	function kind(r: PerformanceResourceTiming): string {
 		const x = ext(r.name);
@@ -196,7 +237,16 @@ export function standalone_beacon(): void {
 		if (x === 'woff' || x === 'woff2' || x === 'ttf' || x === 'otf') return 'font';
 		if (x === 'css') return 'css';
 		if (x === 'js' || x === 'mjs') return 'script';
-		if (x === 'png' || x === 'jpg' || x === 'jpeg' || x === 'gif' || x === 'webp' || x === 'avif' || x === 'svg') return 'img';
+		if (
+			x === 'png' ||
+			x === 'jpg' ||
+			x === 'jpeg' ||
+			x === 'gif' ||
+			x === 'webp' ||
+			x === 'avif' ||
+			x === 'svg'
+		)
+			return 'img';
 		if (by === 'link') {
 			const as = links()[r.name];
 			return as ? LINK_AS[as] || 'other' : 'css';
@@ -210,17 +260,38 @@ export function standalone_beacon(): void {
 	 *  else, its body over the network the second time (the preload's crossorigin or credentials did
 	 *  not match). The runtime's beacon makes the same list. */
 	function preload_misses(all: readonly PerformanceResourceTiming[]) {
-		const out: { url: string; type: string; bytes: number; as: string; crossorigin: string | null }[] = [];
+		const out: {
+			url: string;
+			type: string;
+			bytes: number;
+			as: string;
+			crossorigin: string | null;
+		}[] = [];
 		try {
 			const as = links();
 			const by_url = new Map<string, PerformanceResourceTiming[]>();
-			for (const r of all) if (!r.name.includes('/__profiler/')) (by_url.get(r.name) ?? by_url.set(r.name, []).get(r.name)!).push(r);
+			for (const r of all)
+				if (!r.name.includes('/__profiler/'))
+					(by_url.get(r.name) ?? by_url.set(r.name, []).get(r.name)!).push(r);
 			for (const [u, list] of by_url) {
 				if (list.length < 2 || out.length >= 20) continue;
 				const pre = list.find((r) => r.initiatorType === 'link');
 				if (!pre) continue;
-				const again = list.find((r) => r !== pre && r.initiatorType !== 'link' && r.encodedBodySize > 0 && r.transferSize >= r.encodedBodySize);
-				if (again) out.push({ url: u.slice(0, 500), type: kind(pre), bytes: again.transferSize, as: as[u] || '', crossorigin: typeof link_co[u] === 'string' ? link_co[u] : null });
+				const again = list.find(
+					(r) =>
+						r !== pre &&
+						r.initiatorType !== 'link' &&
+						r.encodedBodySize > 0 &&
+						r.transferSize >= r.encodedBodySize
+				);
+				if (again)
+					out.push({
+						url: u.slice(0, 500),
+						type: kind(pre),
+						bytes: again.transferSize,
+						as: as[u] || '',
+						crossorigin: typeof link_co[u] === 'string' ? link_co[u] : null
+					});
 			}
 		} catch {
 			/* no resource timing */
@@ -233,15 +304,20 @@ export function standalone_beacon(): void {
 		link_as = null;
 		let nav: PerformanceNavigationTiming | undefined;
 		try {
-			nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+			nav = performance.getEntriesByType('navigation')[0] as
+				| PerformanceNavigationTiming
+				| undefined;
 		} catch {
 			/* no navigation timing */
 		}
 		if (!nav || !(nav.responseStart > 0)) return null;
 		const resources: Record<string, unknown>[] = [];
-		const totals: Record<string, { type: string; count: number; transfer: number; size: number }> = {};
+		const totals: Record<string, { type: string; count: number; transfer: number; size: number }> =
+			{};
 		let count = 0;
-		const all = seen.length ? seen : (performance.getEntriesByType('resource') as PerformanceResourceTiming[]);
+		const all = seen.length
+			? seen
+			: (performance.getEntriesByType('resource') as PerformanceResourceTiming[]);
 		try {
 			for (const r of all) {
 				if (r.name.includes('/__profiler/')) continue;
@@ -255,25 +331,49 @@ export function standalone_beacon(): void {
 			for (const r of all) {
 				if (resources.length >= 200) break;
 				if (r.name.includes('/__profiler/')) continue;
-				const o: Record<string, unknown> = { url: r.name.slice(0, 500), type: kind(r), start: r2(r.startTime), end: r2(r.responseEnd || r.startTime + r.duration) };
+				const o: Record<string, unknown> = {
+					url: r.name.slice(0, 500),
+					type: kind(r),
+					start: r2(r.startTime),
+					end: r2(r.responseEnd || r.startTime + r.duration)
+				};
 				if (r.requestStart) o.req_start = r2(r.requestStart);
 				if (r.responseStart) o.res_start = r2(r.responseStart);
 				if (r.transferSize) o.transfer = r.transferSize;
 				if (r.decodedBodySize) o.size = r.decodedBodySize;
-				if ((r as PerformanceResourceTiming & { renderBlockingStatus?: string }).renderBlockingStatus === 'blocking') o.blocking = true;
+				if (
+					(r as PerformanceResourceTiming & { renderBlockingStatus?: string })
+						.renderBlockingStatus === 'blocking'
+				)
+					o.blocking = true;
 				resources.push(o);
 			}
 		} catch {
 			/* no resource timing */
 		}
-		const n: Record<string, unknown> = { req_start: r2(nav.requestStart), res_start: r2(nav.responseStart), res_end: r2(nav.responseEnd) };
+		const n: Record<string, unknown> = {
+			req_start: r2(nav.requestStart),
+			res_start: r2(nav.responseStart),
+			res_end: r2(nav.responseEnd)
+		};
 		if (nav.domInteractive) n.dom_interactive = r2(nav.domInteractive);
 		if (nav.domContentLoadedEventEnd) n.dcl = r2(nav.domContentLoadedEventEnd);
 		if (nav.loadEventEnd) n.load = r2(nav.loadEventEnd);
 		if (nav.transferSize) n.transfer = nav.transferSize;
 		if (nav.decodedBodySize) n.size = nav.decodedBodySize;
 		if (nav.nextHopProtocol) n.protocol = nav.nextHopProtocol;
-		const out: Visit = { at: Math.round(performance.timeOrigin), nav: n, paints, resources, longtasks, islands: [], firsts: [], shifts, viewport: [innerWidth, innerHeight], ua: navigator.userAgent.slice(0, 200) };
+		const out: Visit = {
+			at: Math.round(performance.timeOrigin),
+			nav: n,
+			paints,
+			resources,
+			longtasks,
+			islands: [],
+			firsts: [],
+			shifts,
+			viewport: [innerWidth, innerHeight],
+			ua: navigator.userAgent.slice(0, 200)
+		};
 		if (count > resources.length) {
 			out.resource_totals = Object.values(totals);
 			out.resources_all = count;
@@ -283,7 +383,13 @@ export function standalone_beacon(): void {
 		out.origin = location.origin;
 		try {
 			const types = PerformanceObserver.supportedEntryTypes || [];
-			const missing = ['layout-shift', 'longtask', 'event', 'largest-contentful-paint', 'long-animation-frame'].filter((t) => !types.includes(t));
+			const missing = [
+				'layout-shift',
+				'longtask',
+				'event',
+				'largest-contentful-paint',
+				'long-animation-frame'
+			].filter((t) => !types.includes(t));
 			if (missing.length) out.unsupported = missing;
 		} catch {
 			/* no entry-type list */
@@ -314,9 +420,15 @@ export function standalone_beacon(): void {
 		sent = true;
 		// (the small vitals first, then the visit: the queued requests share 64 KB, and the visit has a
 		// slim copy to fit what is left)
-		if (Object.keys(vitals).length) send(JSON.stringify({ page: location.pathname, at: Math.round(performance.timeOrigin), vitals }));
+		if (Object.keys(vitals).length)
+			send(
+				JSON.stringify({ page: location.pathname, at: Math.round(performance.timeOrigin), vitals })
+			);
 		const v = visit();
-		if (v) send(JSON.stringify({ page: location.pathname, visit: v }), () => JSON.stringify({ page: location.pathname, visit: { ...v, resources: [] } }));
+		if (v)
+			send(JSON.stringify({ page: location.pathname, visit: v }), () =>
+				JSON.stringify({ page: location.pathname, visit: { ...v, resources: [] } })
+			);
 		cpu(true);
 	}
 	/** a later paint or shift: the visit again a moment later (debounced), once one has gone */
@@ -375,4 +487,7 @@ export function standalone_beacon(): void {
 }
 
 /** The inline tag the profiler puts in its own user's document, beside the beacon meta tag. */
-export const BEACON_STANDALONE_TAG: string =script({ run: standalone_beacon, 'data-ogygia-beacon': true });
+export const BEACON_STANDALONE_TAG: string = script({
+	run: standalone_beacon,
+	'data-ogygia-beacon': true
+});

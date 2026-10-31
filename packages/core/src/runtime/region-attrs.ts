@@ -40,7 +40,8 @@ export function is_deferred(el: Element): boolean {
  * `isInLake()` (context.ts — set by LakeBoundary and on every render root whose HTML lands in one) and
  * `region_kind` (reversible.ts).
  */
-export const OPAQUE_SELECTOR = 'ogygia-region[wake="none"],ogygia-region[render="defer"],ogygia-region[data-og-baked]';
+export const OPAQUE_SELECTOR =
+	'ogygia-region[wake="none"],ogygia-region[render="defer"],ogygia-region[data-og-baked]';
 
 /** True if this region sits inside an {@link OPAQUE_SELECTOR opaque} region: on a Kit-hydrated
  *  document nothing but the runtime will ever wake it. */

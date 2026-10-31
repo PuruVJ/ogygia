@@ -71,7 +71,8 @@
 		{/each}
 		{#if score.missing.length}
 			<p class="missing">
-				Left out: {#each score.missing as m, i (m.key)}{i ? '; ' : ''}<b>{m.label}</b> ({m.why}){/each}.
+				Left out: {#each score.missing as m, i (m.key)}{i ? '; ' : ''}<b>{m.label}</b>
+					({m.why}){/each}.
 			</p>
 		{/if}
 	</div>

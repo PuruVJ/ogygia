@@ -7,9 +7,9 @@
 
 <h1 data-static-shell>Server islands</h1>
 <p data-static-shell>
-	The greeting below is a server island. Its <code>ogygiaFallback</code> renders in the initial HTML; the runtime
-	then fetches the rendered component from <code>/_islands</code> (cookie-personalized, slow data)
-	and swaps it in. No component JS ships to the browser.
+	The greeting below is a server island. Its <code>ogygiaFallback</code> renders in the initial
+	HTML; the runtime then fetches the rendered component from <code>/_islands</code> (cookie-personalized,
+	slow data) and swaps it in. No component JS ships to the browser.
 </p>
 
 <Greeting salutation="Hello">

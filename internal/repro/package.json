@@ -1,13 +1,13 @@
 {
-  "name": "svelte-async-hydration-repro",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "node server.js"
-  },
-  "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "catalog:repro-control",
-    "svelte": "catalog:repro-control",
-    "vite": "catalog:repro-control"
-  }
+	"name": "svelte-async-hydration-repro",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "node server.js"
+	},
+	"devDependencies": {
+		"@sveltejs/vite-plugin-svelte": "catalog:repro-control",
+		"svelte": "catalog:repro-control",
+		"vite": "catalog:repro-control"
+	}
 }

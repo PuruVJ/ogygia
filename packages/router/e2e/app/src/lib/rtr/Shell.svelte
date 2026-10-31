@@ -1,5 +1,11 @@
-<script>let { children, data } = $props();</script>
-<div data-testid="shell"><header class="rtr-header">APP SHELL who={data?.who}</header><div class="body">{@render children()}</div></div>
+<script>
+	let { children, data } = $props();
+</script>
+
+<div data-testid="shell">
+	<header class="rtr-header">APP SHELL who={data?.who}</header>
+	<div class="body">{@render children()}</div>
+</div>
 
 <style>
 	.rtr-header {

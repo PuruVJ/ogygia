@@ -12,12 +12,27 @@ describe('doc_diff', () => {
 	});
 
 	it('an attribute stamped per render (one group, whatever tags), an island (region and props as one), comment markers', () => {
-		const d = doc_diff(page('x1', 'x2', 'f1', '5'), page('y1', 'y2', 'f2', '9'), (e) => (e.includes('og-region.abc') ? 'Price' : undefined))!;
+		const d = doc_diff(page('x1', 'x2', 'f1', '5'), page('y1', 'y2', 'f2', '9'), (e) =>
+			e.includes('og-region.abc') ? 'Price' : undefined
+		)!;
 		expect(d).toMatchObject({ aligned: true, differing: 5 });
 		expect(d.groups).toEqual([
 			{ what: 'data-track on <a>', tag: 'a', attr: 'data-track', count: 2, a: 'x1', b: 'y1' },
-			{ what: 'comment markers (<!--…-->)', tag: 'comment', count: 1, a: '<!--r.5-->', b: '<!--r.9-->' },
-			{ what: "the Price island's props", tag: 'ogygia-region', island: 'Price', count: 1, a: 'f1', b: 'f2' }
+			{
+				what: 'comment markers (<!--…-->)',
+				tag: 'comment',
+				count: 1,
+				a: '<!--r.5-->',
+				b: '<!--r.9-->'
+			},
+			{
+				what: "the Price island's props",
+				tag: 'ogygia-region',
+				island: 'Price',
+				count: 1,
+				a: 'f1',
+				b: 'f2'
+			}
 		]);
 	});
 
@@ -41,14 +56,31 @@ describe('doc_diff', () => {
 	});
 
 	it('the review cases: a dropped piece, an added one at the end, a dropped attribute, single quotes, a whole attribute name', () => {
-		expect(doc_diff('<ul><li>a</li><p>t5</p><li>b</li></ul>', '<ul><li>a</li><li>b</li></ul>')!.groups.map((g) => g.what)).toEqual(['<p> dropped in the later render']);
-		expect(doc_diff('<ul><li>a</li></ul>', '<ul><li>a</li></ul><footer>x')!.groups.map((g) => g.what)).toEqual(['<footer> added in the later render']);
-		expect(doc_diff('<a class="x" data-n="1">A</a>', '<a class="x">A</a>')!.groups.map((g) => g.what)).toEqual(['data-n on <a>']);
-		expect(doc_diff("<a data-n='1'>A</a>", "<a data-n='2'>A</a>")!.groups[0]).toMatchObject({ what: 'data-n on <a>', a: '1', b: '2' });
-		expect(attr_sites('<a data-track-id={x} id={y}>', 'id', ['a'])).toEqual([{ line: 1, code: '<a data-track-id={x} id={y}>' }]);
+		expect(
+			doc_diff(
+				'<ul><li>a</li><p>t5</p><li>b</li></ul>',
+				'<ul><li>a</li><li>b</li></ul>'
+			)!.groups.map((g) => g.what)
+		).toEqual(['<p> dropped in the later render']);
+		expect(
+			doc_diff('<ul><li>a</li></ul>', '<ul><li>a</li></ul><footer>x')!.groups.map((g) => g.what)
+		).toEqual(['<footer> added in the later render']);
+		expect(
+			doc_diff('<a class="x" data-n="1">A</a>', '<a class="x">A</a>')!.groups.map((g) => g.what)
+		).toEqual(['data-n on <a>']);
+		expect(doc_diff("<a data-n='1'>A</a>", "<a data-n='2'>A</a>")!.groups[0]).toMatchObject({
+			what: 'data-n on <a>',
+			a: '1',
+			b: '2'
+		});
+		expect(attr_sites('<a data-track-id={x} id={y}>', 'id', ['a'])).toEqual([
+			{ line: 1, code: '<a data-track-id={x} id={y}>' }
+		]);
 		expect(attr_sites('<a data-track-id={x}>', 'id', ['a'])).toEqual([]);
 		// Svelte's shorthand
-		expect(attr_sites('<a {id} href="/x">', 'id', ['a'])).toEqual([{ line: 1, code: '<a {id} href="/x">' }]);
+		expect(attr_sites('<a {id} href="/x">', 'id', ['a'])).toEqual([
+			{ line: 1, code: '<a {id} href="/x">' }
+		]);
 	});
 
 	it('past a small insertion, the rest still lines up', () => {

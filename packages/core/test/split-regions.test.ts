@@ -36,13 +36,19 @@ describe('classification', () => {
 
 describe('tag names are case-insensitive, and whole names only', () => {
 	it('an upper-case region is a region; an upper-case raw-text element is skipped', () => {
-		expect(one('<OGYGIA-REGION entry="/e.js" wake="load"><p>x</p></Ogygia-Region>').kind).toBe('island');
-		expect(kinds('<SCRIPT>"<ogygia-region wake=load>"</SCRIPT><Style>/*<ogygia-region>*/</STYLE>')).toEqual([]);
+		expect(one('<OGYGIA-REGION entry="/e.js" wake="load"><p>x</p></Ogygia-Region>').kind).toBe(
+			'island'
+		);
+		expect(
+			kinds('<SCRIPT>"<ogygia-region wake=load>"</SCRIPT><Style>/*<ogygia-region>*/</STYLE>')
+		).toEqual([]);
 	});
 
 	it('a longer name that starts with a known one is not that tag', () => {
 		expect(kinds('<ogygia-regionx wake="load"></ogygia-regionx>')).toEqual([]);
-		expect(kinds('<scripts><ogygia-region entry="/e.js" wake="load"></ogygia-region></scripts>')).toEqual(['island']);
+		expect(
+			kinds('<scripts><ogygia-region entry="/e.js" wake="load"></ogygia-region></scripts>')
+		).toEqual(['island']);
 	});
 });
 
@@ -210,7 +216,10 @@ describe('liftRegions / restoreRegions — the round-trip for a third-party SSR 
 	it('never clobbers an attribute the region already owns', () => {
 		const html = '<ogygia-region entry="/real.js" wake="load">x</ogygia-region>';
 		const { regions } = liftRegions(html);
-		const out = restoreRegions('<og-lift data-i="0" entry="/spoof.js" c-id="0.1"></og-lift>', regions);
+		const out = restoreRegions(
+			'<og-lift data-i="0" entry="/spoof.js" c-id="0.1"></og-lift>',
+			regions
+		);
 		expect(out).toContain('entry="/real.js"');
 		expect(out).not.toContain('/spoof.js');
 		expect(out).toContain('c-id="0.1"');

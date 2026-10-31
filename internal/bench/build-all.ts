@@ -28,11 +28,20 @@ const run = (cmd, args, opts = {}) => {
 // its own pnpm-workspace.yaml (the ogygia app's `@ogygia/core` override), which `--ignore-workspace`
 // would skip; it is the nearest one, so the install still never reaches the repo's workspace.
 const pnpmInstall = (cwd, env, own_workspace = false) => {
-	spawnSync('pnpm', ['install', ...(own_workspace ? [] : ['--ignore-workspace']), '--no-lockfile', '--config.confirmModulesPurge=false'], {
-		stdio: 'inherit',
-		cwd,
-		env: { ...env, CI: '1' }
-	});
+	spawnSync(
+		'pnpm',
+		[
+			'install',
+			...(own_workspace ? [] : ['--ignore-workspace']),
+			'--no-lockfile',
+			'--config.confirmModulesPurge=false'
+		],
+		{
+			stdio: 'inherit',
+			cwd,
+			env: { ...env, CI: '1' }
+		}
+	);
 	if (!existsSync(join(cwd, 'node_modules', '.modules.yaml')))
 		throw new Error(`pnpm install produced no node_modules in ${cwd}`);
 };
@@ -65,7 +74,10 @@ mkdirSync(TARBALLS, { recursive: true });
 // The bench app takes ogygia (with the core it re-exports) and its content package (markdown posts),
 // all packed, published shape.
 const packTo = (cwd, name) => {
-	const pack = spawnSync('pnpm', ['pack', '--pack-destination', TARBALLS], { cwd, encoding: 'utf8' });
+	const pack = spawnSync('pnpm', ['pack', '--pack-destination', TARBALLS], {
+		cwd,
+		encoding: 'utf8'
+	});
 	if (pack.status !== 0) throw new Error(`${name} pack failed`);
 	const tgzLine = pack.stdout.trim().split('\n').pop().trim();
 	const tarball = tgzLine.startsWith('/') ? tgzLine : join(TARBALLS, tgzLine.split('/').pop());
@@ -84,7 +96,10 @@ pkg.dependencies['@ogygia/content'] = `file:${contentTarball}`;
 writeFileSync(join(ogygiaApp, 'package.json'), JSON.stringify(pkg, null, '\t') + '\n');
 // `ogygia` and `@ogygia/content` ask for `@ogygia/core` by version (the registry may not have it yet):
 // the app's own workspace file points every one of them at the tarball (gitignored, rewritten each run)
-writeFileSync(join(ogygiaApp, 'pnpm-workspace.yaml'), `overrides:\n  '@ogygia/core': 'file:${coreTarball}'\n`);
+writeFileSync(
+	join(ogygiaApp, 'pnpm-workspace.yaml'),
+	`overrides:\n  '@ogygia/core': 'file:${coreTarball}'\n`
+);
 
 function installAndBuild(name, { bun = false } = {}) {
 	const cwd = join(ROOT, 'frameworks', name);

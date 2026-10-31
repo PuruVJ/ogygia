@@ -165,7 +165,10 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 		const entryFile = interaction_file.split('/').pop() ?? '@@none@@';
 		const stableFile = interaction_entry.split('/').pop() ?? '@@none@@';
 		await page.route(`**/${entryFile}`, (r) => r.abort());
-		await page.route((url) => url.pathname.endsWith('/' + stableFile), (r) => r.abort());
+		await page.route(
+			(url) => url.pathname.endsWith('/' + stableFile),
+			(r) => r.abort()
+		);
 		await page.goto('/interaction', { waitUntil: 'networkidle' });
 		await page.locator('[data-i-btn]').click();
 		await page.waitForTimeout(400);

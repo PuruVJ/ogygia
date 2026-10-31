@@ -79,8 +79,8 @@
 {:else}
 	{#if model.shared > 0}
 		<div class="hero">
-			<b>{model.shared}</b> shared live object{model.shared === 1 ? '' : 's'} — each held by several
-			islands but decoded ONCE, so every holder reunites on the same instance.
+			<b>{model.shared}</b> shared live object{model.shared === 1 ? '' : 's'} — each held by several islands
+			but decoded ONCE, so every holder reunites on the same instance.
 		</div>
 	{/if}
 	<table>
@@ -98,7 +98,9 @@
 					<td>{r.resolves}×</td>
 					<td>
 						{#if r.reunions > 0}
-							<span class="badge">1 instance · {r.reunions} reunion{r.reunions === 1 ? '' : 's'}</span>
+							<span class="badge"
+								>1 instance · {r.reunions} reunion{r.reunions === 1 ? '' : 's'}</span
+							>
 						{:else}<span class="muted">fresh</span>{/if}
 					</td>
 				</tr>
@@ -106,9 +108,9 @@
 		</tbody>
 	</table>
 	<div class="note muted">
-		<b>held by</b> = how many carriers (islands) picked this handle up. <b>reunited</b> = a memo hit
-		returning the existing live instance instead of decoding a fresh one — the reunification that
-		makes N islands share ONE reactive object.
+		<b>held by</b> = how many carriers (islands) picked this handle up. <b>reunited</b> = a memo hit returning
+		the existing live instance instead of decoding a fresh one — the reunification that makes N islands
+		share ONE reactive object.
 	</div>
 
 	{#if model.disposes.length}

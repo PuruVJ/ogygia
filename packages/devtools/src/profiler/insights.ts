@@ -69,8 +69,19 @@ export function sync_io(a: Analysis): SyncIoRow[] {
 		if (!SYNC_IO.has(f.name)) continue;
 		if (f.category !== 'node' && !f.url.startsWith('node:')) continue;
 		const stack = (f.stacks ?? []).slice().sort((x, y) => y.ms - x.ms)[0];
-		const callers = (stack?.frames ?? []).filter((fr) => fr.c === 'app' || fr.c === 'component').slice(0, 3).map((fr) => (fr.f ? `${fr.n} (${fr.f})` : fr.n));
-		out.push({ key: f.key, name: f.name, module: f.url.startsWith('node:') ? f.url.split('/')[0] : f.url || 'node (native)', self_ms: f.self_ms, total_ms: f.total_ms, calls: f.calls ?? null, callers });
+		const callers = (stack?.frames ?? [])
+			.filter((fr) => fr.c === 'app' || fr.c === 'component')
+			.slice(0, 3)
+			.map((fr) => (fr.f ? `${fr.n} (${fr.f})` : fr.n));
+		out.push({
+			key: f.key,
+			name: f.name,
+			module: f.url.startsWith('node:') ? f.url.split('/')[0] : f.url || 'node (native)',
+			self_ms: f.self_ms,
+			total_ms: f.total_ms,
+			calls: f.calls ?? null,
+			callers
+		});
 	}
 	return out.sort((x, y) => y.total_ms - x.total_ms);
 }
@@ -94,12 +105,27 @@ export interface MemoCandidate {
 
 const GLUE_RE = /^(?:\(anonymous\)|\$\.|get |set |render|children|slot|each_|if_|await_)/;
 /** request handlers and loads run once per request by design: not candidates */
-const HANDLER_NAMES = new Set(['load', 'handle', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'fetch', 'resolve']);
+const HANDLER_NAMES = new Set([
+	'load',
+	'handle',
+	'GET',
+	'POST',
+	'PUT',
+	'PATCH',
+	'DELETE',
+	'fetch',
+	'resolve'
+]);
 const is_handler_file = (url: string) => url.includes('hooks.server') || url.includes('+server.');
 
 /** App functions called many times per render at a steady cost each: what a cache keyed on the
  *  argument would remove. Heuristic, from counts and cost alone: the report says so. */
-export function memo_candidates(a: Analysis, makers: GcMaker[] = [], limit = 8, runs = 1): MemoCandidate[] {
+export function memo_candidates(
+	a: Analysis,
+	makers: GcMaker[] = [],
+	limit = 8,
+	runs = 1
+): MemoCandidate[] {
 	// UNITS: time and allocations add up every profiled render (`runs`); the call count is one
 	// render's (the coverage render). Everything here is per render.
 	const budget = Math.max(a.busy_ms / runs, 1);
@@ -112,7 +138,8 @@ export function memo_candidates(a: Analysis, makers: GcMaker[] = [], limit = 8, 
 		let sum = 0;
 		for (const m of makers) {
 			if (m.name === f.name && base(m.url) === b) sum += m.allocated;
-			else if (m.caller && m.caller.startsWith(f.name + ' (') && m.caller.includes(b + ':')) sum += m.allocated;
+			else if (m.caller && m.caller.startsWith(f.name + ' (') && m.caller.includes(b + ':'))
+				sum += m.allocated;
 		}
 		return sum || undefined;
 	};
@@ -121,13 +148,24 @@ export function memo_candidates(a: Analysis, makers: GcMaker[] = [], limit = 8, 
 		// a component renders once per item by design; the candidates are the app's own functions
 		if (f.category !== 'app') continue;
 		const calls = f.calls ?? 0;
-		if (calls < 10 || GLUE_RE.test(f.name) || HANDLER_NAMES.has(f.name) || is_handler_file(f.url)) continue;
+		if (calls < 10 || GLUE_RE.test(f.name) || HANDLER_NAMES.has(f.name) || is_handler_file(f.url))
+			continue;
 		const total = f.total_ms / runs;
 		if (total < Math.max(2, budget * 0.005)) continue;
 		const per_call = total / calls;
 		if (per_call < 0.02) continue;
 		const alloc = alloc_of(f);
-		out.push({ key: f.key, name: f.name, url: f.url, line: f.line, calls: Math.round(calls), total_ms: Math.round(total * 100) / 100, per_call_ms: Math.round(per_call * 1000) / 1000, ...(alloc ? { alloc_per_call: Math.round(alloc / runs / calls) } : {}), ...(f.parent ? { parent: f.parent } : {}) });
+		out.push({
+			key: f.key,
+			name: f.name,
+			url: f.url,
+			line: f.line,
+			calls: Math.round(calls),
+			total_ms: Math.round(total * 100) / 100,
+			per_call_ms: Math.round(per_call * 1000) / 1000,
+			...(alloc ? { alloc_per_call: Math.round(alloc / runs / calls) } : {}),
+			...(f.parent ? { parent: f.parent } : {})
+		});
 	}
 	return out.sort((x, y) => y.total_ms - x.total_ms).slice(0, limit);
 }
@@ -152,7 +190,12 @@ export interface Simulation {
  *  that sat between them; a call without one keeps its recorded start; the CPU after the last
  *  call keeps its length. `parallel` starts a call with its predecessor instead of after it,
  *  `cache` makes it instant, `remove` takes it out. A model of the waits, not of the CPU. */
-export function simulate_awaits(nodes: AwaitNode[], edges: AwaitEdge[], window_ms: number, changes: Record<string, WhatIf>): Simulation {
+export function simulate_awaits(
+	nodes: AwaitNode[],
+	edges: AwaitEdge[],
+	window_ms: number,
+	changes: Record<string, WhatIf>
+): Simulation {
 	const idx = nodes.map((n, i) => ({ ...n, i })).sort((a, b) => a.t0 - b.t0);
 	// predecessor of each node: the last node of the edge's `from` label that ended before it started
 	const by_label = new Map<string, typeof idx>();
@@ -162,7 +205,8 @@ export function simulate_awaits(nodes: AwaitNode[], edges: AwaitEdge[], window_m
 		for (const b of by_label.get(e.to) ?? []) {
 			if (pred.has(b.i)) continue;
 			let best: (typeof idx)[number] | undefined;
-			for (const a of by_label.get(e.from) ?? []) if (a.t1 <= b.t0 + 0.05 && (!best || a.t1 > best.t1)) best = a;
+			for (const a of by_label.get(e.from) ?? [])
+				if (a.t1 <= b.t0 + 0.05 && (!best || a.t1 > best.t1)) best = a;
 			if (best) pred.set(b.i, { p: best, gap: e.gap_ms });
 		}
 	}
@@ -182,7 +226,12 @@ export function simulate_awaits(nodes: AwaitNode[], edges: AwaitEdge[], window_m
 			const p_start = start.get(pr.p.i) ?? pr.p.t0;
 			const p_end = end.get(pr.p.i) ?? pr.p.t1;
 			// a removed predecessor is not waited for; a parallelized call starts with its predecessor
-			t0 = p_change === 'remove' ? Math.min(n.t0, p_start) : change === 'parallel' ? p_start : p_end + pr.gap;
+			t0 =
+				p_change === 'remove'
+					? Math.min(n.t0, p_start)
+					: change === 'parallel'
+						? p_start
+						: p_end + pr.gap;
 			chain = [...(chain_of.get(pr.p.i) ?? [pr.p.label]), n.label];
 		} else {
 			t0 = n.t0;
@@ -208,7 +257,12 @@ export function simulate_awaits(nodes: AwaitNode[], edges: AwaitEdge[], window_m
 		after_ms,
 		delta_ms: Math.round((after_ms - window_ms) * 100) / 100,
 		chain: longest,
-		nodes: idx.map((n) => ({ label: n.label, t0: Math.round((start.get(n.i) ?? n.t0) * 100) / 100, t1: Math.round((end.get(n.i) ?? n.t1) * 100) / 100, moved: Math.abs((start.get(n.i) ?? n.t0) - n.t0) > 0.05 || (changes[n.label] !== undefined) }))
+		nodes: idx.map((n) => ({
+			label: n.label,
+			t0: Math.round((start.get(n.i) ?? n.t0) * 100) / 100,
+			t1: Math.round((end.get(n.i) ?? n.t1) * 100) / 100,
+			moved: Math.abs((start.get(n.i) ?? n.t0) - n.t0) > 0.05 || changes[n.label] !== undefined
+		}))
 	};
 }
 
@@ -254,7 +308,15 @@ export function span_values(spans: readonly SpanRecord[] | undefined): SpanValue
 		const sorted = [...e.values].sort((a, b) => a - b);
 		const n = sorted.length;
 		const sum = sorted.reduce((a, b) => a + b, 0);
-		const row: SpanValueRow = { span: key.slice(0, at), attr: key.slice(at + 1), n, min: sorted[0], p50: sorted[n >> 1], max: sorted[n - 1], sum: Math.round(sum * 1000) / 1000 };
+		const row: SpanValueRow = {
+			span: key.slice(0, at),
+			attr: key.slice(at + 1),
+			n,
+			min: sorted[0],
+			p50: sorted[n >> 1],
+			max: sorted[n - 1],
+			sum: Math.round(sum * 1000) / 1000
+		};
 		// a fit needs the value to have moved: a spread under 5% of its size is noise, not a slope
 		if (n >= 3 && sorted[n - 1] - sorted[0] >= Math.abs(sorted[n - 1]) * 0.05) {
 			const mx = sum / n;

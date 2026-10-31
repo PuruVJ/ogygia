@@ -10,8 +10,20 @@ describe('almost the same answer', () => {
 			{ start: 0, end: 10 },
 			{ start: 10, end: 20 }
 		];
-		const c = (url: string, start: number, body_hash: string) => ({ method: 'GET', url, status: 200, start, body_hash });
-		const calls = [c('/a', 1, 'x'), c('/a', 11, 'y'), c('/b', 1, 'z'), c('/b', 11, 'z'), c('/c', 1, 'p')];
+		const c = (url: string, start: number, body_hash: string) => ({
+			method: 'GET',
+			url,
+			status: 200,
+			start,
+			body_hash
+		});
+		const calls = [
+			c('/a', 1, 'x'),
+			c('/a', 11, 'y'),
+			c('/b', 1, 'z'),
+			c('/b', 11, 'z'),
+			c('/c', 1, 'p')
+		];
 		expect([...varied_answers(calls, runs)]).toEqual(['GET /a']);
 	});
 

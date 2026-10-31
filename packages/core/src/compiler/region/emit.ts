@@ -162,7 +162,9 @@ export function island_wrapper_client_source(
  */
 export function lazy_entry_source(entryPath: string, entry_url: string): string {
 	const entry = JSON.stringify(entryPath);
-	const stamp = JSON.stringify(`meta[name="ogygia-kit-island"][content=${JSON.stringify(entry_url)}]`);
+	const stamp = JSON.stringify(
+		`meta[name="ogygia-kit-island"][content=${JSON.stringify(entry_url)}]`
+	);
 	return (
 		`import { documentIsCsrTrue } from 'ogygia/internal';\n` +
 		`const rendered = typeof document !== 'undefined' && !!document.querySelector(${stamp});\n` +

@@ -11,14 +11,24 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/testing"
 	},
-	"keywords": ["ogygia", "sveltekit", "testing", "playwright", "performance", "web-vitals"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"testing",
+		"playwright",
+		"performance",
+		"web-vitals"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./src/index.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",

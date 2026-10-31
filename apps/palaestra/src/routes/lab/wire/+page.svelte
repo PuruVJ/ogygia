@@ -14,9 +14,10 @@
 
 <h1>Cross-island serialization</h1>
 <p>
-	A <code>SharedCounter</code> (a real class with a <code>$state</code> field and a <code>double</code>
-	getter) is provided once. The writer and the two readers are independent island bundles. The class
-	crosses the boundary as its <code>og.wire</code> encoding and is decoded back to one live instance.
+	A <code>SharedCounter</code> (a real class with a <code>$state</code> field and a
+	<code>double</code>
+	getter) is provided once. The writer and the two readers are independent island bundles. The class crosses
+	the boundary as its <code>og.wire</code> encoding and is decoded back to one live instance.
 </p>
 
 <Provide values={[roomCtx(counter)]}>
@@ -38,8 +39,8 @@
 
 <p class="hint">
 	Each reader shows <b>count</b> then <b>double</b>. Click <b>inc</b> in the writer — both readers
-	jump together (7→8→9…, double = 14→16→18…). <code>data-is-instance="true"</code> on every island
-	means the live object was revived, not a snapshot.
+	jump together (7→8→9…, double = 14→16→18…). <code>data-is-instance="true"</code> on every island means
+	the live object was revived, not a snapshot.
 </p>
 
 <style>

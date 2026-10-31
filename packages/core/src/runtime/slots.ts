@@ -224,11 +224,13 @@ export const slots: Slots = {
 /** A link a lazy chunk needs, or a loud error: every link is filled before its chunk can load, so a
  *  missing one means a chunk ran without the boot that owns it (a test that skipped `link_boot()`). */
 function linked<T>(link: T | null, name: string): T {
-	if (link === null) throw new Error(`[ogygia] runtime chunk used \`slots.${name}\` before the boot linked it`);
+	if (link === null)
+		throw new Error(`[ogygia] runtime chunk used \`slots.${name}\` before the boot linked it`);
 	return link;
 }
 export const boot_link = (): BootLink => linked(slots.boot, 'boot');
 export const router_link = (): RouterLink => linked(slots.router_link, 'router_link');
-export const interaction_link = (): InteractionLink => linked(slots.interaction_link, 'interaction_link');
+export const interaction_link = (): InteractionLink =>
+	linked(slots.interaction_link, 'interaction_link');
 export const morph_sync_attributes = (): NonNullable<Slots['sync_attributes']> =>
 	linked(slots.sync_attributes, 'sync_attributes');

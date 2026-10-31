@@ -9,7 +9,11 @@
 
 <style>
 	.blk-hero {
-		background: linear-gradient(135deg, color-mix(in oklab, var(--accent, #6b8afd) 22%, transparent), transparent);
+		background: linear-gradient(
+			135deg,
+			color-mix(in oklab, var(--accent, #6b8afd) 22%, transparent),
+			transparent
+		);
 		border: 1px solid color-mix(in oklab, var(--accent, #6b8afd) 30%, transparent);
 		border-radius: 12px;
 		padding: 1.1rem 1.25rem;

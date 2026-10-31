@@ -11,7 +11,8 @@ export function priceOf(n: number, currency: string): string {
 const money = new Map<string, Intl.NumberFormat>();
 export function priceCached(n: number, currency: string): string {
 	let f = money.get(currency);
-	if (!f) money.set(currency, (f = new Intl.NumberFormat('en-US', { style: 'currency', currency })));
+	if (!f)
+		money.set(currency, (f = new Intl.NumberFormat('en-US', { style: 'currency', currency })));
 	return f.format(n);
 }
 

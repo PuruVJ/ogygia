@@ -19,9 +19,15 @@ export function ensure_region_names(): Promise<void> {
 		try {
 			const r = await fetch('/__ogygia_devtools_meta');
 			if (!r.ok) return;
-			const meta = (await r.json()) as { names?: Record<string, string>; bytes?: Record<string, unknown> };
-			if (meta?.names) window.__ogygia_region_names = { ...meta.names, ...(window.__ogygia_region_names ?? {}) };
-			if (meta?.bytes) (window as unknown as { __ogygia_region_bytes?: unknown }).__ogygia_region_bytes = meta.bytes;
+			const meta = (await r.json()) as {
+				names?: Record<string, string>;
+				bytes?: Record<string, unknown>;
+			};
+			if (meta?.names)
+				window.__ogygia_region_names = { ...meta.names, ...(window.__ogygia_region_names ?? {}) };
+			if (meta?.bytes)
+				(window as unknown as { __ogygia_region_bytes?: unknown }).__ogygia_region_bytes =
+					meta.bytes;
 		} catch {
 			// no meta endpoint (a build with no names): hashes stand in
 		}

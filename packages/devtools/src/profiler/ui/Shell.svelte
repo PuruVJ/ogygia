@@ -34,7 +34,13 @@
 		toc = false,
 		bare = false,
 		children
-	}: { base?: string; current?: string | null; toc?: boolean; bare?: boolean; children: Snippet } = $props();
+	}: {
+		base?: string;
+		current?: string | null;
+		toc?: boolean;
+		bare?: boolean;
+		children: Snippet;
+	} = $props();
 </script>
 
 <svelte:head>
@@ -53,9 +59,9 @@
 		<main class="app-main" class:has-toc={toc}>
 			{@render children()}
 			<div class="footer">
-				ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory) inside
-				the function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total ÷ how many
-				times it ran (a ×N tag means it ran N times; no tag means once).
+				ogygia/profiler — samples the whole Node process during SSR. <b>Self</b> = time (or memory)
+				inside the function itself. <b>Total</b> = self plus everything it called. <b>Per call</b> = total
+				÷ how many times it ran (a ×N tag means it ran N times; no tag means once).
 			</div>
 		</main>
 	</div>

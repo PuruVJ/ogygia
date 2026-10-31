@@ -170,7 +170,10 @@ export class BarrelIndex {
 				explicit.add(rec.exported);
 				const target = await this.#host.resolve(rec.source, id);
 				if (target)
-					map.entries.set(rec.exported, { id: target.replace(STRIP_QUERY_RE, ''), namespace: true });
+					map.entries.set(rec.exported, {
+						id: target.replace(STRIP_QUERY_RE, ''),
+						namespace: true
+					});
 				else map.opaque = true;
 			} else stars.push({ source: rec.source, type_only: rec.type_only });
 		}
@@ -195,14 +198,21 @@ export class BarrelIndex {
 				if (explicit.has(name)) continue;
 				const existing = map.entries.get(name);
 				if (existing === undefined) map.entries.set(name, leaf);
-				else if (existing !== leaf && !same_leaf(existing, leaf)) map.entries.set(name, 'ambiguous');
+				else if (existing !== leaf && !same_leaf(existing, leaf))
+					map.entries.set(name, 'ambiguous');
 			}
 		}
 		return map;
 	}
 
 	/** The leaf behind `import { imported } from source` written inside barrel `from`. */
-	async #leaf(from: string, source: string, imported: string, map: ExportMap, walk: Walk): Promise<Leaf | null> {
+	async #leaf(
+		from: string,
+		source: string,
+		imported: string,
+		map: ExportMap,
+		walk: Walk
+	): Promise<Leaf | null> {
 		const target = await this.#host.resolve(source, from);
 		if (!target) return null;
 		if (target !== target.replace(STRIP_QUERY_RE, '')) return null; // `?raw` etc. — leave it
@@ -253,7 +263,11 @@ export class BarrelIndex {
 	}
 
 	/** Every non-default name `export * from target` contributes, mapped to its leaf. */
-	async #star_names(target: string, parent: ExportMap, walk: Walk): Promise<Map<string, Leaf> | null> {
+	async #star_names(
+		target: string,
+		parent: ExportMap,
+		walk: Walk
+	): Promise<Map<string, Leaf> | null> {
 		const shape = this.shape(target);
 		if (!shape) return null;
 		const out = new Map<string, Leaf>();

@@ -5,7 +5,8 @@ import { describe, test, expect } from 'vitest';
 import { Compiler, Program } from '../dist/compiler/index.js';
 
 // the manifest's placeholder as the server manifest emits it (a string literal no bundler folds)
-const PLACEHOLDER = '(() => { try { return JSON.parse("__OGYGIA_PAGE_DATA_READS__"); } catch { return null; } })()';
+const PLACEHOLDER =
+	'(() => { try { return JSON.parse("__OGYGIA_PAGE_DATA_READS__"); } catch { return null; } })()';
 /** The value the patched placeholder evaluates to. */
 const value_of = (code: string): unknown => new Function(`return ${code};`)();
 
@@ -17,17 +18,36 @@ function compiler_with(holes: Record<string, string>, reads: Record<string, Set<
 		program.registry.set(vp, { server: true, componentPath: component } as never);
 	}
 	for (const [id, keys] of Object.entries(reads)) program.page_keys.set(id, keys);
-	const profiler = { prof: { transformMs: 0, transformN: 0, transformHit: 0, prescanMs: 0, bakeMs: 0, bakeN: 0, resolveMs: 0, loadMs: 0 }, P: false, outHash: new Map<string, number>() };
+	const profiler = {
+		prof: {
+			transformMs: 0,
+			transformN: 0,
+			transformHit: 0,
+			prescanMs: 0,
+			bakeMs: 0,
+			bakeN: 0,
+			resolveMs: 0,
+			loadMs: 0
+		},
+		P: false,
+		outHash: new Map<string, number>()
+	};
 	return new Compiler(program, profiler);
 }
 
 describe('patch_page_data_reads', () => {
 	const graph: Record<string, { importedIds: string[]; dynamicallyImportedIds: string[] }> = {
-		'/app/Header.svelte': { importedIds: ['/app/Nav.svelte'], dynamicallyImportedIds: ['/app/blocks/Promo.svelte'] },
+		'/app/Header.svelte': {
+			importedIds: ['/app/Nav.svelte'],
+			dynamicallyImportedIds: ['/app/blocks/Promo.svelte']
+		},
 		'/app/Nav.svelte': { importedIds: ['/app/util.ts'], dynamicallyImportedIds: [] },
 		'/app/util.ts': { importedIds: [], dynamicallyImportedIds: [] },
 		'/app/blocks/Promo.svelte': { importedIds: [], dynamicallyImportedIds: [] },
-		'/app/Footer.svelte': { importedIds: ['/app/util.ts', '/app/Url.svelte'], dynamicallyImportedIds: [] },
+		'/app/Footer.svelte': {
+			importedIds: ['/app/util.ts', '/app/Url.svelte'],
+			dynamicallyImportedIds: []
+		},
 		'/app/Url.svelte': { importedIds: ['/app/Footer.svelte'], dynamicallyImportedIds: [] }
 	};
 	const info = (id: string) => graph[id] ?? null;
@@ -44,7 +64,10 @@ describe('patch_page_data_reads', () => {
 	});
 
 	test('an unpinnable read (`all`) counts; a component the graph does not know looks up', () => {
-		const c = compiler_with({ cccccccccccc: '/app/Nav.svelte', dddddddddddd: '/app/Gone.svelte' }, { '/app/util.ts': 'all' });
+		const c = compiler_with(
+			{ cccccccccccc: '/app/Nav.svelte', dddddddddddd: '/app/Gone.svelte' },
+			{ '/app/util.ts': 'all' }
+		);
 		// (a bundler that re-quoted the literal with single quotes)
 		const out = c.patch_page_data_reads(PLACEHOLDER.split('"').join("'"), info, ids);
 		expect(value_of(out!.code)).toEqual({ cccccccccccc: true, dddddddddddd: true });

@@ -21,6 +21,11 @@ export function GET({ params }) {
 	// CORS + Timing-Allow-Origin, as real tag hosts send: the browser then reports sizes and lets the
 	// sampler see inside the script
 	return new Response(body, {
-		headers: { 'content-type': 'text/javascript', 'access-control-allow-origin': '*', 'timing-allow-origin': '*', 'cache-control': 'no-store' }
+		headers: {
+			'content-type': 'text/javascript',
+			'access-control-allow-origin': '*',
+			'timing-allow-origin': '*',
+			'cache-control': 'no-store'
+		}
 	});
 }

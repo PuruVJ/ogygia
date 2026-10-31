@@ -21,7 +21,8 @@ const CONTENT_PLUGIN = Symbol('content-plugin');
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function content_options(cfg: any): any {
 	if (Array.isArray(cfg?.plugins))
-		for (const p of cfg.plugins) if (p && typeof p === 'object' && CONTENT_PLUGIN in p) return p[CONTENT_PLUGIN];
+		for (const p of cfg.plugins)
+			if (p && typeof p === 'object' && CONTENT_PLUGIN in p) return p[CONTENT_PLUGIN];
 	return cfg?.content;
 }
 
@@ -41,7 +42,14 @@ export interface ReplMarkdownConfig {
 	code?: { transformers?: any[] };
 }
 
-const SAFE_BOOL_KEYS = ['containers', 'tabs', 'headingAnchors', 'headingIds', 'codeIds', 'region'] as const;
+const SAFE_BOOL_KEYS = [
+	'containers',
+	'tabs',
+	'headingAnchors',
+	'headingIds',
+	'codeIds',
+	'region'
+] as const;
 
 /** Every markdown option the in-browser preview can honour. Anything else in `content.markdown` is
  *  reported (not silently dropped) so the user knows what to change. */
@@ -83,14 +91,49 @@ function find_call_object_start(src: string, name: string): number {
 	while (i < src.length) {
 		const c = src[i];
 		const c2 = src[i + 1];
-		if (line_comment) { if (c === '\n') line_comment = false; i++; continue; }
-		if (block_comment) { if (c === '*' && c2 === '/') { block_comment = false; i += 2; continue; } i++; continue; }
-		if (str) { if (c === '\\') i += 2; else { if (c === str) str = null; i++; } continue; }
-		if (c === '/' && c2 === '/') { line_comment = true; i += 2; continue; }
-		if (c === '/' && c2 === '*') { block_comment = true; i += 2; continue; }
-		if (c === '"' || c === "'" || c === '`') { str = c; i++; continue; }
+		if (line_comment) {
+			if (c === '\n') line_comment = false;
+			i++;
+			continue;
+		}
+		if (block_comment) {
+			if (c === '*' && c2 === '/') {
+				block_comment = false;
+				i += 2;
+				continue;
+			}
+			i++;
+			continue;
+		}
+		if (str) {
+			if (c === '\\') i += 2;
+			else {
+				if (c === str) str = null;
+				i++;
+			}
+			continue;
+		}
+		if (c === '/' && c2 === '/') {
+			line_comment = true;
+			i += 2;
+			continue;
+		}
+		if (c === '/' && c2 === '*') {
+			block_comment = true;
+			i += 2;
+			continue;
+		}
+		if (c === '"' || c === "'" || c === '`') {
+			str = c;
+			i++;
+			continue;
+		}
 		// a code position: match `name` on a word boundary, then `(` (ws), then `{`
-		if (src.startsWith(name, i) && !WORD.test(src[i - 1] ?? '') && !WORD.test(src[i + name.length] ?? '')) {
+		if (
+			src.startsWith(name, i) &&
+			!WORD.test(src[i - 1] ?? '') &&
+			!WORD.test(src[i + name.length] ?? '')
+		) {
 			let j = i + name.length;
 			while (j < src.length && /\s/.test(src[j])) j++;
 			if (src[j] === '(') {
@@ -150,7 +193,9 @@ function sanitize(md: any): ReplMarkdownConfig {
 	// transformers: keep only the ones that evaluated to a real object (the named ones); a stubbed custom
 	// transformer came back as the inert stub function → dropped.
 	if (md.code && Array.isArray(md.code.transformers)) {
-		const real = md.code.transformers.filter((x: unknown) => x != null && typeof x === 'object' && !Array.isArray(x));
+		const real = md.code.transformers.filter(
+			(x: unknown) => x != null && typeof x === 'object' && !Array.isArray(x)
+		);
 		if (real.length) out.code = { transformers: real };
 	}
 	return out;
@@ -249,7 +294,10 @@ function diagnose(cfg: any): ConfigNote[] {
 
 /** Parse a `vite.config.*` source → the safe markdown config PLUS deliberate notes on anything the
  *  preview couldn't apply. `markdown` is null when there's no ogygia() call or it's unparseable. */
-export function parse_config(configSrc: string): { markdown: ReplMarkdownConfig | null; notes: ConfigNote[] } {
+export function parse_config(configSrc: string): {
+	markdown: ReplMarkdownConfig | null;
+	notes: ConfigNote[];
+} {
 	// `content({ … })` listed beside `ogygia()` reads as the older `ogygia({ content: { … } })` shape;
 	// an `ogygia({ … })` call that carries the content plugin itself is read as it stands
 	const ogygiaSrc = extract_call_object(configSrc, 'ogygia');
@@ -259,7 +307,10 @@ export function parse_config(configSrc: string): { markdown: ReplMarkdownConfig 
 	if (!objSrc) return { markdown: null, notes: [] };
 	const stub = (): undefined => undefined;
 	const helpers: Record<string, unknown> = {
-		diff_markers, inline_markers, diffMarkers: diff_markers, inlineMarkers: inline_markers,
+		diff_markers,
+		inline_markers,
+		diffMarkers: diff_markers,
+		inlineMarkers: inline_markers,
 		content: (options?: unknown) => ({ [CONTENT_PLUGIN]: options ?? {} })
 	};
 	const sandbox = new Proxy(helpers, {

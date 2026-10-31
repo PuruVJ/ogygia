@@ -9,7 +9,9 @@
 
 <nav class="island" data-delta-nav>
 	<span data-delta-stamp>nav-server-stamp:{renderedAt}</span>
-	<button data-delta-btn onclick={() => (clicks += 1)}>clicks <span data-delta-clicks>{clicks}</span></button>
+	<button data-delta-btn onclick={() => (clicks += 1)}
+		>clicks <span data-delta-clicks>{clicks}</span></button
+	>
 	<a href="/delta/a" data-to-a>A</a>
 	<a href="/delta/b" data-to-b>B</a>
 </nav>

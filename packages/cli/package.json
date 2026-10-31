@@ -11,7 +11,12 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/cli"
 	},
-	"keywords": ["ogygia", "sveltekit", "cli", "mcp"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"cli",
+		"mcp"
+	],
 	"bin": {
 		"ogygia-cli": "./dist/cli.mjs"
 	},
@@ -19,7 +24,11 @@
 		"./bin": "./dist/cli.mjs",
 		"./package.json": "./package.json"
 	},
-	"files": ["dist", "ai", "README.md"],
+	"files": [
+		"dist",
+		"ai",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && vitest run",

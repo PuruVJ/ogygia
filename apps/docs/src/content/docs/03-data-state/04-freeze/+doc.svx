@@ -211,7 +211,7 @@ and it does not.
 - **Refused pages get `private, no-store`** when your app set no cache-control of its own. The
   headers of the verdict replace blanket CDN rules, in both directions.
 - **csr-agnostic**: a `csr = true` page stores the same way. Kit hydrates the stored copy.
-- **The store holds the render**, not data. A hit skips the data fetch *and* the component
+- **The store holds the render**, not data. A hit skips the data fetch _and_ the component
   execution. Your data caches stay useful underneath, for the misses.
 - Store failures never fail a request. A broken store means renders, not errors.
 - Blind spot, the same contract as prerender: `Date.now()`/randomness inside a load is "true at

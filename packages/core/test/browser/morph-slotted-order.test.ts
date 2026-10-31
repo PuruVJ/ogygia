@@ -43,10 +43,15 @@ const parse = (html: string) => {
 const item = (n: number) => `<so-item id="i${n}"></so-item>`;
 const panel = (n: number) => `<div data-c="c${n}"></div>`;
 const label = (n: Node) =>
-	n.nodeType === 8 ? `<!--${(n as Comment).data}-->` : n.nodeType === 3 ? null : (n as Element).id || (n as Element).getAttribute('data-c');
+	n.nodeType === 8
+		? `<!--${(n as Comment).data}-->`
+		: n.nodeType === 3
+			? null
+			: (n as Element).id || (n as Element).getAttribute('data-c');
 const all = (host: Element) => [...host.childNodes].map(label).filter(Boolean);
 const elements = (host: Element) => [...host.children].map(label);
-const shape = (html: string, pick: (h: Element) => unknown) => pick(Object.assign(document.createElement('div'), { innerHTML: html }));
+const shape = (html: string, pick: (h: Element) => unknown) =>
+	pick(Object.assign(document.createElement('div'), { innerHTML: html }));
 
 // Svelte's shape: `{#each}` tabs, each an `{#if}` tab + an `{#if}` panel, block markers around them
 const tab = (n: number, show: boolean, with_panel: boolean) =>

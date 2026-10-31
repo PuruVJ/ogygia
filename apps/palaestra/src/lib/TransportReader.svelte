@@ -9,5 +9,6 @@
 </script>
 
 <div class="island" data-transport-reader data-is-instance={typeof counter?.inc === 'function'}>
-	count = <strong data-t-count>{counter.count}</strong>, double = <span data-t-double>{counter.double}</span>
+	count = <strong data-t-count>{counter.count}</strong>, double =
+	<span data-t-double>{counter.double}</span>
 </div>

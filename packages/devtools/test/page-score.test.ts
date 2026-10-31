@@ -3,7 +3,13 @@
 // fairness case that started the rework: a page with NO islands that ships 6 MB of JS must score
 // far below a lean islands page, not 100.
 import { describe, test, expect } from 'vitest';
-import { page_score, curve, CURVES, type ScoreInputs, type ScoreAssets } from '../src/profiler/score.ts';
+import {
+	page_score,
+	curve,
+	CURVES,
+	type ScoreInputs,
+	type ScoreAssets
+} from '../src/profiler/score.ts';
 
 const KB = 1024;
 const MB = 1024 * KB;
@@ -35,7 +41,16 @@ const lean: ScoreInputs = {
 
 // the same content as a fully hydrated page: no islands, a 6 MB start graph, inline page data
 const heavy: ScoreInputs = {
-	assets: { js: 6 * MB, js_wire: 1.6 * MB, js_files: 140, lazy_js: 0, css: 120 * KB, wire: 2.1 * MB, blocking: 120 * KB, blocking_count: 6 },
+	assets: {
+		js: 6 * MB,
+		js_wire: 1.6 * MB,
+		js_files: 140,
+		lazy_js: 0,
+		css: 120 * KB,
+		wire: 2.1 * MB,
+		blocking: 120 * KB,
+		blocking_count: 6
+	},
 	htmlBytes: 180 * KB,
 	hasIslands: false,
 	browserSeen: true,
@@ -91,15 +106,27 @@ describe('page_score', () => {
 
 	test("a fast machine's clean visit does not wash out heavy JS", () => {
 		const no_visit = page_score({ ...heavy, vitals: null, tbt: null });
-		const fast_visit = page_score({ ...heavy, vitals: { lcp: 700, cls: 0, inp: 40, fcp: 500, ttfb: 60 }, tbt: 0 });
+		const fast_visit = page_score({
+			...heavy,
+			vitals: { lcp: 700, cls: 0, inp: 40, fcp: 500, ttfb: 60 },
+			tbt: 0
+		});
 		// the visit adds good categories, but JS keeps its full weight: still well short of an A
 		expect(fast_visit.score).toBeLessThan(90);
-		expect(fast_visit.categories.find((c) => c.key === 'js')!.weight).toBe(no_visit.categories.find((c) => c.key === 'js')!.weight);
+		expect(fast_visit.categories.find((c) => c.key === 'js')!.weight).toBe(
+			no_visit.categories.find((c) => c.key === 'js')!.weight
+		);
 	});
 
 	test('an unweighed page (dev server) leaves JS out, says why, and never reads 0 B', () => {
-		const s = page_score({ ...lean, assets: null, assets_missing: 'the dev server serves modules one by one' });
-		expect(s.categories.some((c) => c.key === 'js' || c.key === 'weight' || c.key === 'blocking')).toBe(false);
+		const s = page_score({
+			...lean,
+			assets: null,
+			assets_missing: 'the dev server serves modules one by one'
+		});
+		expect(
+			s.categories.some((c) => c.key === 'js' || c.key === 'weight' || c.key === 'blocking')
+		).toBe(false);
 		expect(s.missing.find((m) => m.key === 'js')?.why).toContain('dev server');
 	});
 
@@ -108,11 +135,17 @@ describe('page_score', () => {
 		const keys = s.categories.map((c) => c.key);
 		expect(keys).not.toContain('loading');
 		expect(keys).not.toContain('hydration');
-		expect(s.missing.map((m) => m.key).sort()).toEqual(['hydration', 'loading', 'responsiveness', 'stability']);
+		expect(s.missing.map((m) => m.key).sort()).toEqual([
+			'hydration',
+			'loading',
+			'responsiveness',
+			'stability'
+		]);
 	});
 
 	test('hydration faults are steep and ordered: recovered > never woke > changed', () => {
-		const h = (x: Partial<ScoreInputs>) => page_score({ ...lean, ...x }).categories.find((c) => c.key === 'hydration')!.score;
+		const h = (x: Partial<ScoreInputs>) =>
+			page_score({ ...lean, ...x }).categories.find((c) => c.key === 'hydration')!.score;
 		expect(h({ recovered: 1 })).toBeLessThan(h({ neverWoke: 1 }));
 		expect(h({ neverWoke: 1 })).toBeLessThan(h({ changed: 1 }));
 		expect(h({ changed: 1 })).toBeLessThan(100);
@@ -127,9 +160,16 @@ describe('page_score', () => {
 	});
 
 	test('render-blocking counts requests too, not only bytes', () => {
-		const one = page_score({ ...lean, assets: { ...lean_assets, blocking: 30 * KB, blocking_count: 1 } });
-		const many = page_score({ ...lean, assets: { ...lean_assets, blocking: 30 * KB, blocking_count: 10 } });
-		const b = (s: ReturnType<typeof page_score>) => s.categories.find((c) => c.key === 'blocking')!.score;
+		const one = page_score({
+			...lean,
+			assets: { ...lean_assets, blocking: 30 * KB, blocking_count: 1 }
+		});
+		const many = page_score({
+			...lean,
+			assets: { ...lean_assets, blocking: 30 * KB, blocking_count: 10 }
+		});
+		const b = (s: ReturnType<typeof page_score>) =>
+			s.categories.find((c) => c.key === 'blocking')!.score;
 		expect(b(many)).toBeLessThan(b(one));
 	});
 
@@ -142,7 +182,16 @@ describe('page_score', () => {
 
 	test('every sub-score is 0–100 and the grade bands hold', () => {
 		const worst = page_score({
-			assets: { js: 20 * MB, js_wire: 6 * MB, js_files: 900, lazy_js: 0, css: 2 * MB, wire: 30 * MB, blocking: 3 * MB, blocking_count: 40 },
+			assets: {
+				js: 20 * MB,
+				js_wire: 6 * MB,
+				js_files: 900,
+				lazy_js: 0,
+				css: 2 * MB,
+				wire: 30 * MB,
+				blocking: 3 * MB,
+				blocking_count: 40
+			},
 			htmlBytes: 5 * MB,
 			hasIslands: true,
 			browserSeen: true,
@@ -161,10 +210,15 @@ describe('page_score', () => {
 		expect(worst.score).toBeLessThan(10);
 	});
 
-	test("a browser that cannot see long tasks or shifts: unknown, named — never a clean zero", () => {
+	test('a browser that cannot see long tasks or shifts: unknown, named — never a clean zero', () => {
 		const why = 'the browser that visited does not report long tasks';
 		// INP measured, blocking time not: scored on INP alone, and the missing part said
-		const s = page_score({ ...lean, vitals: { lcp: 700, cls: null, inp: 40, fcp: 500, ttfb: 60 }, tbt: null, unmeasured: { tbt: why, cls: 'no shifts from Safari' } });
+		const s = page_score({
+			...lean,
+			vitals: { lcp: 700, cls: null, inp: 40, fcp: 500, ttfb: 60 },
+			tbt: null,
+			unmeasured: { tbt: why, cls: 'no shifts from Safari' }
+		});
 		const resp = s.categories.find((c) => c.key === 'responsiveness')!;
 		expect(resp.value).toBe('INP 40 ms');
 		expect(s.missing.find((m) => m.label.startsWith('Blocking time'))?.why).toBe(why);
@@ -176,9 +230,14 @@ describe('page_score', () => {
 describe('what a visit fetched for nothing', () => {
 	test('the page weight says it, and the score stays the weighed bytes', () => {
 		const plain = page_score(lean);
-		const with_waste = page_score({ ...lean, wasted: { bytes: 340 * KB, images: 336 * KB, preloads: 4 * KB } });
+		const with_waste = page_score({
+			...lean,
+			wasted: { bytes: 340 * KB, images: 336 * KB, preloads: 4 * KB }
+		});
 		const w = with_waste.categories.find((c) => c.key === 'weight')!;
-		expect(w.note).toBe('Light on the wire. A visit fetched 340 KB for nothing: 336 KB of image pixels bigger than their boxes and 4 KB of preloads nothing used.');
+		expect(w.note).toBe(
+			'Light on the wire. A visit fetched 340 KB for nothing: 336 KB of image pixels bigger than their boxes and 4 KB of preloads nothing used.'
+		);
 		expect(with_waste.score).toBe(plain.score);
 	});
 });

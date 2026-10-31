@@ -20,17 +20,44 @@ const CDN = 'https://cdn.jsdelivr.net/npm/';
 const CDN_PKG_URL = /^https:\/\/cdn\.jsdelivr\.net\/npm\/((?:@[^/]+\/)?[^/@]+)(?:@([^/]+))?\/(.*)$/;
 /** Node builtins can't run in the browser — stub them (covers most `browser: { fs: false }` intents). */
 const NODE_BUILTINS = new Set([
-	'fs', 'path', 'os', 'crypto', 'stream', 'util', 'events', 'http', 'https', 'net', 'tls', 'zlib',
-	'child_process', 'worker_threads', 'perf_hooks', 'url', 'assert', 'buffer', 'process', 'module',
-	'querystring', 'string_decoder', 'tty', 'v8', 'vm'
+	'fs',
+	'path',
+	'os',
+	'crypto',
+	'stream',
+	'util',
+	'events',
+	'http',
+	'https',
+	'net',
+	'tls',
+	'zlib',
+	'child_process',
+	'worker_threads',
+	'perf_hooks',
+	'url',
+	'assert',
+	'buffer',
+	'process',
+	'module',
+	'querystring',
+	'string_decoder',
+	'tty',
+	'v8',
+	'vm'
 ]);
 /** Builtins with a real, lightweight npm BROWSER POLYFILL that bundles + runs cleanly — resolve the shim
  *  instead of stubbing, so a package that reaches for `buffer` / `events` / `path` actually works (the way
  *  Vite/webpack polyfill). Deliberately EXCLUDES `util`/`url`/`assert` (their shims drag in an es-abstract
  *  graph that doesn't bundle) and the heavy `crypto`/`http`/`zlib`/`os` shims — those stay stubbed. */
 const NODE_POLYFILLS: Record<string, string> = {
-	buffer: 'buffer', events: 'events', process: 'process', punycode: 'punycode',
-	string_decoder: 'string_decoder', path: 'path-browserify', querystring: 'querystring-es3',
+	buffer: 'buffer',
+	events: 'events',
+	process: 'process',
+	punycode: 'punycode',
+	string_decoder: 'string_decoder',
+	path: 'path-browserify',
+	querystring: 'querystring-es3',
 	stream: 'stream-browserify'
 };
 const is_node_builtin = (id: string) => id.startsWith('node:') || NODE_BUILTINS.has(id);
@@ -76,7 +103,8 @@ const WASM_AS_URL = /[?&]url(&|$)/;
 const NATIVE_ASSET = /\.node(\?|$)/i;
 /** Binary media/fonts that occasionally leak into a JS graph — fetched-as-text they'd be un-parseable
  *  garbage that fails the build at generate time (past load's reach); stub them up front. */
-const BINARY_ASSET = /\.(png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp[34]|webm|ogg|wav|pdf|zip)(\?|$)/i;
+const BINARY_ASSET =
+	/\.(png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp[34]|webm|ogg|wav|pdf|zip)(\?|$)/i;
 
 /** A `.css` import → a JS module that injects the stylesheet (rolldown can't parse CSS as JS). Idempotent
  *  per href so a re-mount doesn't stack duplicate <style> tags. Exported for the workspace loader too. */
@@ -133,7 +161,9 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 
 	/** Run `work` (given an abort signal) but never let it outlast the timeout — RACE against a wall-clock
 	 *  timer so a stalled CDN can't hang the bundle, robust even if the fetch ignores the abort signal. */
-	function with_timeout<T>(work: (signal: AbortSignal | undefined) => Promise<T | null>): Promise<T | null> {
+	function with_timeout<T>(
+		work: (signal: AbortSignal | undefined) => Promise<T | null>
+	): Promise<T | null> {
 		const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const timeout_p = new Promise<null>((res) => {
@@ -146,7 +176,10 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 	}
 
 	/** Cache + de-dupe a fetch keyed by `key`, running `work` once on a miss (both fetch_text/wasm share). */
-	function cached_fetch(key: string, work: (signal: AbortSignal | undefined) => Promise<string | null>): Promise<string | null> {
+	function cached_fetch(
+		key: string,
+		work: (signal: AbortSignal | undefined) => Promise<string | null>
+	): Promise<string | null> {
 		if (text_cache.has(key)) return Promise.resolve(text_cache.get(key)!);
 		const pending = inflight.get(key);
 		if (pending) return pending;
@@ -247,7 +280,8 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 							for (const cand of rel.endsWith('.js') ? [rel] : [rel, rel + '.js']) {
 								const mapped = apply_browser_map(browser, cand);
 								if (mapped === BROWSER_STUB) return BROWSER_STUB + ':' + id;
-								if (mapped !== cand) return (await resolve_existing(obase, mapped)) ?? new URL(mapped, obase).href;
+								if (mapped !== cand)
+									return (await resolve_existing(obase, mapped)) ?? new URL(mapped, obase).href;
 							}
 						}
 					}
@@ -277,7 +311,12 @@ export function cdnPlugin(opts: CdnPluginOptions = {}): RolldownPlugin {
 			}
 			return null; // workspace/other → left to sibling plugins
 		},
-		load(id: string): { code: string; moduleType?: string } | Promise<{ code: string; moduleType?: string }> | null {
+		load(
+			id: string
+		):
+			| { code: string; moduleType?: string }
+			| Promise<{ code: string; moduleType?: string }>
+			| null {
 			if (id.startsWith(BROWSER_STUB)) {
 				// An inert module — default {} so any import shape "works". moduleType:'js' so a stubbed
 				// `.css`/`.node`/… id isn't mis-tagged (rolldown infers type from the id's extension).

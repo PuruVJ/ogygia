@@ -46,9 +46,23 @@ export const pages: CmsPage[] = [
 		related: ['concepts/loaders'],
 		redirect_from: [],
 		body: [
-			{ type: 'Hero', props: { title: 'Docs from a CMS', tagline: 'Every word on this page arrived over HTTP.' } },
-			{ type: 'Prose', props: { text: 'This site has no markdown files. A fake headless CMS serves pages, categories, order and labels through a REST API, and an ogygia content loader turns them into the same collections the filesystem sites use.' } },
-			{ type: 'Callout', props: { tone: 'info', text: 'The sidebar order and the section names come from CMS position fields and category names — no NN- folders anywhere.' } }
+			{
+				type: 'Hero',
+				props: { title: 'Docs from a CMS', tagline: 'Every word on this page arrived over HTTP.' }
+			},
+			{
+				type: 'Prose',
+				props: {
+					text: 'This site has no markdown files. A fake headless CMS serves pages, categories, order and labels through a REST API, and an ogygia content loader turns them into the same collections the filesystem sites use.'
+				}
+			},
+			{
+				type: 'Callout',
+				props: {
+					tone: 'info',
+					text: 'The sidebar order and the section names come from CMS position fields and category names — no NN- folders anywhere.'
+				}
+			}
 		]
 	},
 	{
@@ -61,9 +75,26 @@ export const pages: CmsPage[] = [
 		related: [],
 		redirect_from: ['start/setup'],
 		body: [
-			{ type: 'Prose', props: { text: 'A CMS-backed collection is a loader with get, list and ids — each one a fetch.' } },
-			{ type: 'Code', props: { lang: 'ts', code: "const raw = {\n  get: (id) => fetch(`${CMS}/pages/${id}`).then(to_record),\n  list: () => fetch(`${CMS}/pages?full=1`).then(to_records),\n  ids: () => fetch(`${CMS}/pages`).then(to_ids)\n};" } },
-			{ type: 'Callout', props: { tone: 'warn', text: 'This page also declares redirect_from: ["start/setup"] in the CMS — visiting /start/setup 308s here.' } }
+			{
+				type: 'Prose',
+				props: {
+					text: 'A CMS-backed collection is a loader with get, list and ids — each one a fetch.'
+				}
+			},
+			{
+				type: 'Code',
+				props: {
+					lang: 'ts',
+					code: 'const raw = {\n  get: (id) => fetch(`${CMS}/pages/${id}`).then(to_record),\n  list: () => fetch(`${CMS}/pages?full=1`).then(to_records),\n  ids: () => fetch(`${CMS}/pages`).then(to_ids)\n};'
+				}
+			},
+			{
+				type: 'Callout',
+				props: {
+					tone: 'warn',
+					text: 'This page also declares redirect_from: ["start/setup"] in the CMS — visiting /start/setup 308s here.'
+				}
+			}
 		]
 	},
 	{
@@ -76,7 +107,12 @@ export const pages: CmsPage[] = [
 		related: [],
 		redirect_from: [],
 		body: [
-			{ type: 'Prose', props: { text: 'Add a row to the pages table, give it a category and a position, and the outline places it — same weave, different corpus.' } }
+			{
+				type: 'Prose',
+				props: {
+					text: 'Add a row to the pages table, give it a category and a position, and the outline places it — same weave, different corpus.'
+				}
+			}
 		]
 	},
 	{
@@ -89,7 +125,12 @@ export const pages: CmsPage[] = [
 		related: ['start/install'],
 		redirect_from: [],
 		body: [
-			{ type: 'Prose', props: { text: 'A loader is the whole contract between ogygia and a backend. The filesystem is one loader; this REST API is another; the collection cannot tell them apart.' } }
+			{
+				type: 'Prose',
+				props: {
+					text: 'A loader is the whole contract between ogygia and a backend. The filesystem is one loader; this REST API is another; the collection cannot tell them apart.'
+				}
+			}
 		]
 	},
 	{
@@ -102,9 +143,19 @@ export const pages: CmsPage[] = [
 		related: [],
 		redirect_from: [],
 		body: [
-			{ type: 'Prose', props: { text: 'The block below is a row in the CMS body tree: { type: "Counter", props: { start: 5 } }. The registry maps it to a Svelte island that hydrates on visibility.' } },
+			{
+				type: 'Prose',
+				props: {
+					text: 'The block below is a row in the CMS body tree: { type: "Counter", props: { start: 5 } }. The registry maps it to a Svelte island that hydrates on visibility.'
+				}
+			},
 			{ type: 'Counter', props: { start: 5 } },
-			{ type: 'Prose', props: { text: 'Everything around it stays HTML-only — blocks without a wake schedule ship zero JS.' } }
+			{
+				type: 'Prose',
+				props: {
+					text: 'Everything around it stays HTML-only — blocks without a wake schedule ship zero JS.'
+				}
+			}
 		]
 	},
 	{
@@ -117,7 +168,12 @@ export const pages: CmsPage[] = [
 		related: [],
 		redirect_from: [],
 		body: [
-			{ type: 'Prose', props: { text: 'A CMS loader may expose live() — an async iterable of changed ids. The collection re-reads just those entries; a draft toggled in the CMS pops in and out of the nav.' } }
+			{
+				type: 'Prose',
+				props: {
+					text: 'A CMS loader may expose live() — an async iterable of changed ids. The collection re-reads just those entries; a draft toggled in the CMS pops in and out of the nav.'
+				}
+			}
 		]
 	},
 	{
@@ -129,7 +185,14 @@ export const pages: CmsPage[] = [
 		draft: true,
 		related: [],
 		redirect_from: [],
-		body: [{ type: 'Prose', props: { text: 'Filtered out by the collection filter — invisible in nav, entries and direct URL.' } }]
+		body: [
+			{
+				type: 'Prose',
+				props: {
+					text: 'Filtered out by the collection filter — invisible in nav, entries and direct URL.'
+				}
+			}
+		]
 	}
 ];
 

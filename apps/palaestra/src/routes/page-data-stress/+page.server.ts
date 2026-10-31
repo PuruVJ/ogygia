@@ -10,7 +10,10 @@ export const load = () => ({
 		label: 'outer',
 		inner: new Promise<string>((res) => setTimeout(() => res('INNER-DEEP'), 120))
 	}),
-	many: Array.from({ length: 12 }, (_, i) => new Promise<string>((res) => setTimeout(() => res(`m${i}`), 40 + i * 12))),
+	many: Array.from(
+		{ length: 12 },
+		(_, i) => new Promise<string>((res) => setTimeout(() => res(`m${i}`), 40 + i * 12))
+	),
 	falsy: Promise.resolve(null),
 	// Custom transport type: the getter only exists if `decode` reconstructed the class (not a plain object).
 	temp: new Temperature(20),

@@ -5,11 +5,17 @@ import { BRANDS, type Brand, type Product } from '../inferno/data';
 
 /** PATTERN formatter-per-call: each review's date formatted with a locale method and options, which builds a formatter inside on every call */
 export function reviewDates(p: Product): string[] {
-	return p.reviews.map((r) => new Date(r.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
+	return p.reviews.map((r) =>
+		new Date(r.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+	);
 }
 
 /** DECOY: one formatter for the module, built once, used per review */
-const shortDate = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const shortDate = new Intl.DateTimeFormat('en-GB', {
+	day: 'numeric',
+	month: 'short',
+	year: 'numeric'
+});
 export function reviewDatesShared(p: Product): string[] {
 	return p.reviews.map((r) => shortDate.format(new Date(r.at)));
 }

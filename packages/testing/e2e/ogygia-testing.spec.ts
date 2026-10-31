@@ -9,7 +9,15 @@ import { fileURLToPath } from 'node:url';
 import { test as base, expect as baseExpect } from '@playwright/test';
 import { REPO as repo } from '@ogygia/tooling/e2e';
 import { spawn_server, type SpawnedServer } from '@ogygia/tooling/e2e/servers.ts';
-import { withOgygia, compare, toMarkdown, checkBudget, createOgygia, playwrightDriver, turnOnDevtools } from '../dist/index.js';
+import {
+	withOgygia,
+	compare,
+	toMarkdown,
+	checkBudget,
+	createOgygia,
+	playwrightDriver,
+	turnOnDevtools
+} from '../dist/index.js';
 
 const { test, expect } = withOgygia(base, baseExpect);
 
@@ -31,12 +39,17 @@ test.beforeAll(async () => {
 });
 test.afterAll(() => srv?.kill());
 
-test('page() and hydration(): the planted problems, as a test sees them', async ({ page, ogygia }) => {
+test('page() and hydration(): the planted problems, as a test sees them', async ({
+	page,
+	ogygia
+}) => {
 	test.setTimeout(90_000);
 	await page.goto('/dt-lab');
 	const load = await ogygia.page();
 	const codes = load.findings.map((f) => f.code);
-	expect(codes).toEqual(expect.arrayContaining(['hydrate-failed', 'markup-changed', 'long-hydrate']));
+	expect(codes).toEqual(
+		expect.arrayContaining(['hydrate-failed', 'markup-changed', 'long-hydrate'])
+	);
 	expect(load.findings.find((f) => f.code === 'long-hydrate')!.names).toContain('Heavy');
 	expect(load.islands.length).toBeGreaterThan(3);
 
@@ -49,7 +62,10 @@ test('page() and hydration(): the planted problems, as a test sees them', async 
 	// each instance keyed by its place among islands of its name (no `islandKey` attribute given)
 	expect(hyd.islands.find((i) => i.name === 'Broken')!.key).toBe('Broken#1');
 	// the clock renders other text in the browser: a markup change, not attributes; nothing touched it
-	expect(hyd.islands.find((i) => i.name === 'Clock')).toMatchObject({ attributesOnly: false, inputDuringHydration: false });
+	expect(hyd.islands.find((i) => i.name === 'Clock')).toMatchObject({
+		attributesOnly: false,
+		inputDuringHydration: false
+	});
 	// what measuring cost the page, for a test to subtract
 	expect(load.self!.script_ms).toBeGreaterThan(0);
 	expect(load.self!.phases.islands).toBeGreaterThan(0);
@@ -71,7 +87,10 @@ test('page() and hydration(): the planted problems, as a test sees them', async 
 	expect(checkBudget(load, { longTaskMs: 0 })[0].ok).toBe(false);
 });
 
-test('record(): a session of clicks, with the server split of the request one made', async ({ page, ogygia }) => {
+test('record(): a session of clicks, with the server split of the request one made', async ({
+	page,
+	ogygia
+}) => {
 	test.setTimeout(90_000);
 	await page.goto('/dt-session');
 	await page.waitForTimeout(9000); // past the page-load sampler (one sampler at a time)
@@ -90,7 +109,9 @@ test('record(): a session of clicks, with the server split of the request one ma
 	);
 	// the server over the same stretch: the request the click made, and the upstream it called
 	expect(session.server?.error).toBeUndefined();
-	expect(session.server?.window?.requests.map((r) => r.path)).toEqual(expect.arrayContaining(['/dt-session/api', '/hell/api/session']));
+	expect(session.server?.window?.requests.map((r) => r.path)).toEqual(
+		expect.arrayContaining(['/dt-session/api', '/hell/api/session'])
+	);
 	expect(session).toMeetBudget({ serverBusyMs: 60_000 });
 	const slow = session.findings.find((f) => f.code === 'slow-interaction');
 	expect(slow?.message).toContain('SessionSlow');
@@ -116,11 +137,16 @@ test('record() across a full page load: one session, both pages', async ({ page,
 	});
 	expect(session.counts.pages).toBe(2);
 	// the first page's slow click keeps its island's name, the second page's broken island is there
-	expect(session.findings.find((f) => f.code === 'slow-interaction')?.message).toContain('SessionSlow');
+	expect(session.findings.find((f) => f.code === 'slow-interaction')?.message).toContain(
+		'SessionSlow'
+	);
 	expect(session.findings.find((f) => f.code === 'hydrate-failed')?.message).toContain('Broken');
 });
 
-test('record({ blockNavigation }): a click that would load another document is held back and listed', async ({ page, ogygia }) => {
+test('record({ blockNavigation }): a click that would load another document is held back and listed', async ({
+	page,
+	ogygia
+}) => {
 	test.setTimeout(90_000);
 	await page.goto('/dt-session');
 	await page.waitForTimeout(9000);
@@ -130,7 +156,10 @@ test('record({ blockNavigation }): a click that would load another document is h
 			await page.locator('[data-ds="slow"]').click();
 			// a plain link out of the router's reach: a full document load
 			await page.evaluate(() => {
-				const a = Object.assign(document.createElement('a'), { href: '/dt-lab', textContent: 'leave' });
+				const a = Object.assign(document.createElement('a'), {
+					href: '/dt-lab',
+					textContent: 'leave'
+				});
 				a.setAttribute('data-sveltekit-reload', '');
 				a.setAttribute('data-leave', '');
 				document.body.append(a);
@@ -146,15 +175,22 @@ test('record({ blockNavigation }): a click that would load another document is h
 	expect(session.navigations[0].url).toContain('/dt-lab');
 	expect(session.navigations[0]).toMatchObject({ approx: false });
 	expect(session.navigations[0].after).toContain('leave');
-	expect(session.findings.find((f) => f.code === 'navigation-blocked')?.message).toContain('/dt-lab');
+	expect(session.findings.find((f) => f.code === 'navigation-blocked')?.message).toContain(
+		'/dt-lab'
+	);
 });
 
-test('a reload in a click handler is named by the button that ran it, run after run (the exported driver)', async ({ page, baseURL }) => {
+test('a reload in a click handler is named by the button that ran it, run after run (the exported driver)', async ({
+	page,
+	baseURL
+}) => {
 	test.setTimeout(120_000);
 	// (a caller holding its own pages: the driver withOgygia builds, with a hook on each held load)
 	const held: string[] = [];
 	await turnOnDevtools(page, baseURL);
-	const og = createOgygia(playwrightDriver(page, { baseURL, onNavigationHeld: (n) => held.push(n.url) }));
+	const og = createOgygia(
+		playwrightDriver(page, { baseURL, onNavigationHeld: (n) => held.push(n.url) })
+	);
 	await page.goto('/dt-session');
 	await page.waitForTimeout(9000);
 	await page.evaluate(() => {
@@ -184,7 +220,10 @@ test('a reload in a click handler is named by the button that ran it, run after 
 	expect(held).toHaveLength(3);
 });
 
-test('a router navigation handed to the browser and held back leaves page() on the same page', async ({ page, ogygia }) => {
+test('a router navigation handed to the browser and held back leaves page() on the same page', async ({
+	page,
+	ogygia
+}) => {
 	test.setTimeout(90_000);
 	await page.goto('/dt-session');
 	await page.waitForTimeout(9000);
@@ -195,7 +234,10 @@ test('a router navigation handed to the browser and held back leaves page() on t
 			// a link the router takes (no reload attribute) to a csr=true page: it starts a navigation,
 			// pushes the address, then hands the load to the browser, which the test holds back
 			await page.evaluate(() => {
-				const a = Object.assign(document.createElement('a'), { href: '/head-budget-kit', textContent: 'to a kit page' });
+				const a = Object.assign(document.createElement('a'), {
+					href: '/head-budget-kit',
+					textContent: 'to a kit page'
+				});
 				a.setAttribute('data-to-kit', '');
 				document.body.append(a);
 			});
@@ -204,7 +246,10 @@ test('a router navigation handed to the browser and held back leaves page() on t
 		},
 		{ blockNavigation: true }
 	);
-	expect(await page.evaluate(() => location.pathname), 'the router took the link (it pushed the address)').toBe('/head-budget-kit');
+	expect(
+		await page.evaluate(() => location.pathname),
+		'the router took the link (it pushed the address)'
+	).toBe('/head-budget-kit');
 	await ogygia.settled({ quiet: 500, timeout: 15_000 });
 	const later = await ogygia.page();
 	const hyd = await ogygia.hydration();
@@ -219,7 +264,10 @@ test('a router navigation handed to the browser and held back leaves page() on t
 
 test.describe('lean testing', () => {
 	test.use({ ogygiaOptions: { lean: true } });
-	test('the testing API in full, and nothing else of devtools: no launcher, no event side-channel', async ({ page, ogygia }) => {
+	test('the testing API in full, and nothing else of devtools: no launcher, no event side-channel', async ({
+		page,
+		ogygia
+	}) => {
 		test.setTimeout(60_000);
 		const html = page.waitForResponse((r) => r.url().endsWith('/dt-lab')).then((r) => r.text());
 		await page.goto('/dt-lab');
@@ -228,7 +276,9 @@ test.describe('lean testing', () => {
 		expect(load.engine).toMatchObject({ version: 3, lean: true });
 		expect(hyd.islands.find((i) => i.name === 'Broken')?.status).toBe('failed');
 		expect(await page.locator('[data-ogygia-devtools-host]').count(), 'no launcher').toBe(0);
-		expect(await html, 'no server event side-channel in the HTML').not.toContain('application/ogygia-devtools');
+		expect(await html, 'no server event side-channel in the HTML').not.toContain(
+			'application/ogygia-devtools'
+		);
 	});
 });
 
@@ -251,7 +301,10 @@ test.describe('a recording whose page leaves for a document with no testing API'
 	});
 });
 
-test('record() across an in-app navigation: the first page keeps its island names', async ({ page, ogygia }) => {
+test('record() across an in-app navigation: the first page keeps its island names', async ({
+	page,
+	ogygia
+}) => {
 	test.setTimeout(90_000);
 	await page.goto('/dt-session');
 	await page.waitForTimeout(9000);
@@ -275,7 +328,10 @@ test('record() across an in-app navigation: the first page keeps its island name
 	for (const f of session.findings) expect(f.message, f.code).not.toMatch(/\b[0-9a-f]{16}\b/);
 });
 
-test('profile(): the server profile of a path, and compare() over two runs', async ({ page, ogygia }) => {
+test('profile(): the server profile of a path, and compare() over two runs', async ({
+	page,
+	ogygia
+}) => {
 	test.setTimeout(120_000);
 	await page.goto('/interaction');
 	const a = await ogygia.profile('/interaction', { runs: 2 });
@@ -286,7 +342,10 @@ test('profile(): the server profile of a path, and compare() over two runs', asy
 	// two "runs" of the same test (a CI base and head): what a PR comment would say
 	const run = (reports: typeof ogygia.reports) => [{ test: 'profile', reports }];
 	const head = structuredClone(a);
-	head.findings = [...head.findings, { severity: 'warn', code: 'planted-new', message: 'a new problem' }];
+	head.findings = [
+		...head.findings,
+		{ severity: 'warn', code: 'planted-new', message: 'a new problem' }
+	];
 	const diff = compare(run([a]), run([head]));
 	expect(diff[0].findings.added.join()).toContain('planted-new');
 	expect(toMarkdown(diff)).toContain('new: planted-new');

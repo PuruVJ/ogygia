@@ -10,7 +10,18 @@ import { another_routes_file } from './route-files.ts';
 import { sequential_ms, type NetCall } from './net.ts';
 import type { Visit } from './visit.ts';
 import { browser_findings, browser_page_report } from './browser-findings.ts';
-import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '@ogygia/core/insights';
+import {
+	DOM_LARGE,
+	browser_of,
+	engine_of,
+	explain_held_open,
+	inline_threshold_tune,
+	late_found,
+	lcp_font,
+	lcp_rivals,
+	vital_parts,
+	type HeldOpen
+} from '@ogygia/core/insights';
 import { fp_compare } from '@ogygia/core/insights';
 import type { ClientWindows, InteractionCpu } from './client-windows.ts';
 import type { ByteStrip } from './byte-strip.ts';
@@ -19,7 +30,13 @@ import { unscoped_finding } from '@ogygia/core/internal/instruments';
 import type { River } from './river.ts';
 import type { GcAttribution } from './gc.ts';
 import { sync_io, memo_candidates, span_values, type Retained } from './insights.ts';
-import { page_score, fmt_bytes, type ScoreInputs, type ScoreAssets, type PageScore } from './score.ts';
+import {
+	page_score,
+	fmt_bytes,
+	type ScoreInputs,
+	type ScoreAssets,
+	type PageScore
+} from './score.ts';
 
 /** a file's name from its URL, for a score detail line */
 function asset_name(url: string): string {
@@ -506,7 +523,14 @@ export interface ReportExtras {
 	hole_requests?: { id: string; ms: number; name?: string; p?: string }[];
 	/** the visit's in-app navigations, server side: the page request each one made (by its start `t`,
 	 *  the page clock) — its ms, the CPU it burned, its outbound calls */
-	nav_requests?: { t: number; ms: number; cpu_ms: number; net_ms: number; net_count: number; inflight?: number }[];
+	nav_requests?: {
+		t: number;
+		ms: number;
+		cpu_ms: number;
+		net_ms: number;
+		net_count: number;
+		inflight?: number;
+	}[];
 	/** the visit's own document request as the server's handler held it (the request log) */
 	doc_request?: { ms: number };
 	/** browser-side hydration timings joined by fingerprint (the runtime's beacon) */
@@ -591,7 +615,17 @@ const fmt_pct = (part: number, whole: number): string =>
 	whole > 0 ? ((part / whole) * 100).toFixed(1) + '%' : '—';
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 /** The dev server's own packages: their work (module loading, transforms) exists only in dev. */
-const DEV_TOOLS = new Set(['vite', 'rolldown', 'rollup', 'esbuild', 'vite-node', 'vitefu', 'postcss', 'lightningcss', '@sveltejs/vite-plugin-svelte']);
+const DEV_TOOLS = new Set([
+	'vite',
+	'rolldown',
+	'rollup',
+	'esbuild',
+	'vite-node',
+	'vitefu',
+	'postcss',
+	'lightningcss',
+	'@sveltejs/vite-plugin-svelte'
+]);
 /** A sampled origin that is a dev tool's: `fn (vite)` — a package in the brackets, not a `file:line`. */
 export function dev_tool_caller(caller: string): boolean {
 	const open = caller.lastIndexOf('(');
@@ -599,14 +633,29 @@ export function dev_tool_caller(caller: string): boolean {
 	const pkg = caller.slice(open + 1, -1);
 	return DEV_TOOLS.has(pkg) || pkg.startsWith('@rolldown/') || pkg.startsWith('@vitejs/');
 }
-const CALL_KEYWORDS = new Set(['if', 'for', 'while', 'switch', 'return', 'await', 'function', 'catch', 'typeof', 'new', 'yield']);
+const CALL_KEYWORDS = new Set([
+	'if',
+	'for',
+	'while',
+	'switch',
+	'return',
+	'await',
+	'function',
+	'catch',
+	'typeof',
+	'new',
+	'yield'
+]);
 /**
  * Where inside a hot function its time lands, when one line holds the biggest share and it is not
  * the function's own first line: that line, its code, and the function it calls there. Once V8
  * inlines a callee its time is the caller's own — a load "burning" 85 ms is often one call in it
  * (measured on /inferno: newestReview inlined into load, named in one run of six). No regex.
  */
-export function hot_line_of(f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'lines' | 'src'>, app_fns: ReadonlySet<string>): { line: number; ms: number; code: string; calls?: string } | null {
+export function hot_line_of(
+	f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'lines' | 'src'>,
+	app_fns: ReadonlySet<string>
+): { line: number; ms: number; code: string; calls?: string } | null {
 	const top = f.lines?.[0];
 	if (!top || top.line === f.line || top.ms < f.self_ms * 0.4 || !f.src) return null;
 	const text = f.src.lines[top.line - f.src.start];
@@ -619,7 +668,8 @@ export function hot_line_of(f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'li
 	let start = -1;
 	for (let i = 0; i < code.length; i++) {
 		const c = code.charCodeAt(i);
-		const ident = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
+		const ident =
+			(c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 36;
 		if (ident) {
 			if (start === -1) start = i;
 			continue;
@@ -628,7 +678,10 @@ export function hot_line_of(f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'li
 			const name = code.slice(start, i);
 			// (an app function the profile names; or a plain call — not a method, not a constructor:
 			// a function inlined everywhere leaves no frame of its own to be named by)
-			const plain = (start === 0 || code.charCodeAt(start - 1) !== 46) && name.charCodeAt(0) >= 97 && name.charCodeAt(0) <= 122;
+			const plain =
+				(start === 0 || code.charCodeAt(start - 1) !== 46) &&
+				name.charCodeAt(0) >= 97 &&
+				name.charCodeAt(0) <= 122;
 			if (!CALL_KEYWORDS.has(name) && name !== f.name && (app_fns.has(name) || plain)) {
 				calls = name;
 				break;
@@ -636,11 +689,19 @@ export function hot_line_of(f: Pick<FrameStat, 'name' | 'line' | 'self_ms' | 'li
 		}
 		start = -1;
 	}
-	return { line: top.line, ms: top.ms, code: code.length > 100 ? code.slice(0, 99) + '…' : code, ...(calls ? { calls } : {}) };
+	return {
+		line: top.line,
+		ms: top.ms,
+		code: code.length > 100 ? code.slice(0, 99) + '…' : code,
+		...(calls ? { calls } : {})
+	};
 }
 /** A render that mostly waited: on its timeline, waiting (calls, and what no hook saw) is 60% of a
  *  render of 20 ms or more; with no timeline, the window's CPU under a quarter (the old reading). */
-export function mostly_waited(tl: { window_ms: number; wait_ms: number; gap_ms: number } | null | undefined, busy_pct: number): boolean {
+export function mostly_waited(
+	tl: { window_ms: number; wait_ms: number; gap_ms: number } | null | undefined,
+	busy_pct: number
+): boolean {
 	if (!tl) return busy_pct < 25;
 	return tl.window_ms >= 20 && tl.wait_ms + tl.gap_ms >= tl.window_ms * 0.6;
 }
@@ -793,11 +854,15 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 		// below the fold within seconds, and that is not the page's start (the score's twins caught
 		// a 3 s window counting a scrolled-to editor as start-up JS)
 		const loaded_by = v.nav.load ?? v.nav.dcl ?? v.nav.res_end;
-		const at_start = new Set(v.resources.filter((r) => r.type === 'script' && r.start <= loaded_by).map((r) => r.url));
+		const at_start = new Set(
+			v.resources.filter((r) => r.type === 'script' && r.start <= loaded_by).map((r) => r.url)
+		);
 		for (const a of pa.assets)
 			if (a.lazy && a.kind === 'script' && at_start.has(a.url)) {
 				// (the runtime's own parts: its, not an island's that woke on the first screen)
-				const b = a.phase ? (runtime_parts ??= { bytes: 0, wire: 0, files: 0 }) : (woke_early ??= { bytes: 0, wire: 0, files: 0 });
+				const b = a.phase
+					? (runtime_parts ??= { bytes: 0, wire: 0, files: 0 })
+					: (woke_early ??= { bytes: 0, wire: 0, files: 0 });
 				b.bytes += a.bytes;
 				b.wire += a.wire;
 				b.files++;
@@ -808,8 +873,10 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 	const t = pa.totals;
 	return {
 		js: t.js + (runtime?.bytes ?? 0) + (woke_early?.bytes ?? 0) + (runtime_parts?.bytes ?? 0),
-		js_wire: t.js_wire + (runtime?.wire ?? 0) + (woke_early?.wire ?? 0) + (runtime_parts?.wire ?? 0),
-		js_files: t.js_files + (runtime?.files ?? 0) + (woke_early?.files ?? 0) + (runtime_parts?.files ?? 0),
+		js_wire:
+			t.js_wire + (runtime?.wire ?? 0) + (woke_early?.wire ?? 0) + (runtime_parts?.wire ?? 0),
+		js_files:
+			t.js_files + (runtime?.files ?? 0) + (woke_early?.files ?? 0) + (runtime_parts?.files ?? 0),
 		runtime,
 		woke_early,
 		runtime_parts
@@ -818,7 +885,9 @@ export function start_js(extras: Pick<ReportExtras, 'assets' | 'visit'>): {
 
 /** The modules the build shipped twice whose copies are both in files this page loads (its weighed
  *  files and its visit's scripts), each with the bytes the second copy costs; the costliest first. */
-export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 'visit'>): { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[] {
+export function page_duplicates(
+	extras: Pick<ReportExtras, 'dupes' | 'assets' | 'visit'>
+): { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[] {
 	if (!extras.dupes?.length || !extras.assets) return [];
 	const path_of = (u: string) => {
 		try {
@@ -829,7 +898,8 @@ export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 
 	};
 	const loaded = new Set<string>();
 	for (const a of extras.assets.assets) loaded.add(path_of(a.url));
-	for (const r of extras.visit?.resources ?? []) if (r.type === 'script') loaded.add(path_of(r.url));
+	for (const r of extras.visit?.resources ?? [])
+		if (r.type === 'script') loaded.add(path_of(r.url));
 	const here = (file: string) => {
 		for (const p of loaded) if (p.endsWith(file)) return true;
 		return false;
@@ -837,7 +907,10 @@ export function page_duplicates(extras: Pick<ReportExtras, 'dupes' | 'assets' | 
 	return extras.dupes
 		.map((d) => ({ name: d.name, copies: d.copies.filter((c) => here(c.file)) }))
 		.filter((d) => d.copies.length >= 2)
-		.map((d) => ({ ...d, extra: d.copies.reduce((s, c) => s + c.bytes, 0) - Math.max(...d.copies.map((c) => c.bytes)) }))
+		.map((d) => ({
+			...d,
+			extra: d.copies.reduce((s, c) => s + c.bytes, 0) - Math.max(...d.copies.map((c) => c.bytes))
+		}))
 		.sort((a, b) => b.extra - a.extra);
 }
 
@@ -858,36 +931,61 @@ function dock_skewed(v: Visit | undefined): boolean {
  *  the weight, marked. And only Chromium says which files held the first paint: for another engine,
  *  the files the HTML makes blocking (a head stylesheet, a classic sync script) are marked so. And a
  *  font downloaded again takes the Vary header the weighing read (the cause, in Safari, with Origin). */
-export function with_hidden_filled(v: Visit, origin: string | undefined, assets: PageAssets | undefined, other: Visit | undefined): Visit {
+export function with_hidden_filled(
+	v: Visit,
+	origin: string | undefined,
+	assets: PageAssets | undefined,
+	other: Visit | undefined
+): Visit {
 	if (!origin) return v;
 	const known = new Map<string, { size: number; transfer: number }>();
-	for (const r of other?.resources ?? []) if (r.size) known.set(r.url, { size: r.size, transfer: r.transfer ?? 0 });
-	for (const a of assets?.assets ?? []) if (a.bytes) known.set(a.url, { size: a.bytes, transfer: a.wire });
+	for (const r of other?.resources ?? [])
+		if (r.size) known.set(r.url, { size: r.size, transfer: r.transfer ?? 0 });
+	for (const a of assets?.assets ?? [])
+		if (a.bytes) known.set(a.url, { size: a.bytes, transfer: a.wire });
 	const engine = engine_of(v.ua);
-	const blocking = engine && engine !== 'chromium' ? new Set((assets?.assets ?? []).filter((a) => a.blocking).map((a) => a.url)) : null;
+	const blocking =
+		engine && engine !== 'chromium'
+			? new Set((assets?.assets ?? []).filter((a) => a.blocking).map((a) => a.url))
+			: null;
 	if (!known.size && !blocking?.size) return v;
 	let filled = false;
 	const resources = v.resources.map((r) => {
 		let out = r;
 		if (blocking?.has(r.url) && !r.blocking) out = { ...out, blocking: true };
 		const w = r.size || r.url.startsWith(origin + '/') ? undefined : known.get(r.url);
-		if (w) out = { ...out, size: w.size, transfer: r.transfer || w.transfer, weighed: true as const };
+		if (w)
+			out = { ...out, size: w.size, transfer: r.transfer || w.transfer, weighed: true as const };
 		if (out !== r) filled = true;
 		return out;
 	});
 	// …and a font the browser downloaded again: its Vary header as the report's weighing read it (a
 	// font that varies by Origin is one Safari refetches once its @font-face came late)
-	const vary = new Map((assets?.assets ?? []).filter((a) => a.kind === 'font' && a.vary).map((a) => [a.url, a.vary!]));
-	const misses = vary.size ? v.preload_misses?.map((m) => (m.type === 'font' && !m.vary && vary.has(m.url) ? { ...m, vary: vary.get(m.url)! } : m)) : undefined;
+	const vary = new Map(
+		(assets?.assets ?? []).filter((a) => a.kind === 'font' && a.vary).map((a) => [a.url, a.vary!])
+	);
+	const misses = vary.size
+		? v.preload_misses?.map((m) =>
+				m.type === 'font' && !m.vary && vary.has(m.url) ? { ...m, vary: vary.get(m.url)! } : m
+			)
+		: undefined;
 	const misses_filled = !!misses?.some((m, i) => m !== v.preload_misses![i]);
-	return filled || misses_filled ? { ...v, resources, ...(misses_filled ? { preload_misses: misses } : {}) } : v;
+	return filled || misses_filled
+		? { ...v, resources, ...(misses_filled ? { preload_misses: misses } : {}) }
+		: v;
 }
 
 /** browser findings whose answer is the screen's: below its first screen, hidden on it, images it
  *  shows smaller or lower down */
-const SCREEN_CODES: ReadonlySet<string> = new Set(['eager-offscreen', 'eager-hidden', 'images-eager-below', 'image-oversized']);
+const SCREEN_CODES: ReadonlySet<string> = new Set([
+	'eager-offscreen',
+	'eager-hidden',
+	'images-eager-below',
+	'image-oversized'
+]);
 const IN_BROWSER = 'In the browser: ';
-const screen_of = (v: Visit | undefined): string | null => (v?.viewport ? `${v.viewport[0]}×${v.viewport[1]}` : null);
+const screen_of = (v: Visit | undefined): string | null =>
+	v?.viewport ? `${v.viewport[0]}×${v.viewport[1]}` : null;
 
 /** A remote function's name from its call's address (`/<appDir>/remote/<file hash>/<name>/<argument>`),
  *  or the address when it is not one. */
@@ -903,11 +1001,42 @@ const PATH_WARN_MS = 3;
 /** findings about a server render — its CPU, components, calls, memory — that mean nothing when the
  *  build's file answered (no render ran: `run_static`) */
 const RENDER_ONLY: ReadonlySet<string> = new Set([
-	'low-confidence', 'phases', 'top-cpu', 'top-component', 'component-heavy', 'component-repeat', 'hot-function',
-	'cold-start', 'cold-instance', 'slower-each-run', 'component-cold-run', 'component-variance', 'sequential-network',
-	'mostly-waiting', 'slow-upstream', 'n-plus-one', 'gc-heavy', 'gc-pause', 'gc-cause', 'alloc-burst', 'path-group',
-	'serialization', 'markup-heavy', 'logic-heavy', 'hot-list', 'retained-per-render', 'mem-growth', 'span-slow',
-	'span-repeat', 'memo-candidate', 'deopt', 'sync-io', 'billed-wait', 'sequential-awaits', 'unseen-wait', 'window-requests'
+	'low-confidence',
+	'phases',
+	'top-cpu',
+	'top-component',
+	'component-heavy',
+	'component-repeat',
+	'hot-function',
+	'cold-start',
+	'cold-instance',
+	'slower-each-run',
+	'component-cold-run',
+	'component-variance',
+	'sequential-network',
+	'mostly-waiting',
+	'slow-upstream',
+	'n-plus-one',
+	'gc-heavy',
+	'gc-pause',
+	'gc-cause',
+	'alloc-burst',
+	'path-group',
+	'serialization',
+	'markup-heavy',
+	'logic-heavy',
+	'hot-list',
+	'retained-per-render',
+	'mem-growth',
+	'span-slow',
+	'span-repeat',
+	'memo-candidate',
+	'deopt',
+	'sync-io',
+	'billed-wait',
+	'sequential-awaits',
+	'unseen-wait',
+	'window-requests'
 ]);
 
 // (the profiler's page weight and the devtools' Page tab say the same number: page-insights.ts)
@@ -921,13 +1050,17 @@ function page_weight_findings(
 ): void {
 	const pa = extras.assets;
 	if (!pa) {
-		if (extras.assets_missing) info('page-unweighed', `The page's files were not weighed: ${extras.assets_missing}.`);
+		if (extras.assets_missing)
+			info('page-unweighed', `The page's files were not weighed: ${extras.assets_missing}.`);
 		return;
 	}
 	const t = { ...pa.totals, ...start_js(extras)! };
 	const islands = island_rows_of(meta).length;
 	const big = pa.assets.filter((x) => x.kind === 'script' && !x.lazy).slice(0, 3);
-	const named = big.map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}${x.contains?.length ? ` (${x.contains.slice(0, 4).join(', ')})` : ''}`);
+	const named = big.map(
+		(x) =>
+			`${asset_name(x.url)} ${fmt_bytes(x.bytes)}${x.contains?.length ? ` (${x.contains.slice(0, 4).join(', ')})` : ''}`
+	);
 	// SCRIPTS LOADED AT RUNTIME: invisible in the HTML, measured by the browser
 	// (this app's own island entries among them, on a visit whose holes answered: islands that arrived
 	// inside a hole's HTML — no page HTML can name what a hole will hold, and no other script fetched
@@ -941,8 +1074,18 @@ function page_weight_findings(
 		(rt.bytes >= 50 * 1024 ? warn : info)(
 			'runtime-scripts',
 			by_holes && own
-				? `Your browser also loaded ${fmt_bytes(rt.bytes)} of JS in ${rt.files} file${rt.files === 1 ? '' : 's'} that the page's HTML and its imports never name: ${fmt_bytes(own.bytes)} (${own.files}) is this app's, the code of ${rt.island_entries} island${rt.island_entries === 1 ? '' : 's'} that arrived inside the page's holes (${holes_answered} answered) — no HTML can name what a hole will hold${others.length ? `; other scripts fetched the rest at runtime — ${others.slice(0, 3).map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`).join(', ')}` : ''}. They count in the page's JS.`
-				: `Your browser also loaded ${fmt_bytes(rt.bytes)} of JS in ${rt.files} file${rt.files === 1 ? '' : 's'} that the page's HTML and its imports never name: other scripts fetched ${rt.files === 1 ? 'it' : 'them'} at runtime — ${rt.by.slice(0, 3).map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`).join(', ')}. They count in the page's JS.`,
+				? `Your browser also loaded ${fmt_bytes(rt.bytes)} of JS in ${rt.files} file${rt.files === 1 ? '' : 's'} that the page's HTML and its imports never name: ${fmt_bytes(own.bytes)} (${own.files}) is this app's, the code of ${rt.island_entries} island${rt.island_entries === 1 ? '' : 's'} that arrived inside the page's holes (${holes_answered} answered) — no HTML can name what a hole will hold${
+						others.length
+							? `; other scripts fetched the rest at runtime — ${others
+									.slice(0, 3)
+									.map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`)
+									.join(', ')}`
+							: ''
+					}. They count in the page's JS.`
+				: `Your browser also loaded ${fmt_bytes(rt.bytes)} of JS in ${rt.files} file${rt.files === 1 ? '' : 's'} that the page's HTML and its imports never name: other scripts fetched ${rt.files === 1 ? 'it' : 'them'} at runtime — ${rt.by
+						.slice(0, 3)
+						.map((b) => `${b.who} ${fmt_bytes(b.bytes)} (${b.files})`)
+						.join(', ')}. They count in the page's JS.`,
 			{
 				fix:
 					by_holes && own
@@ -980,15 +1123,25 @@ function page_weight_findings(
 			}
 		);
 	} else if (t.lazy_js >= 50 * 1024)
-		info('js-lazy', `${fmt_bytes(t.lazy_js)} of island JS waits until it is needed: the page starts with ${fmt_bytes(t.js)}.`);
+		info(
+			'js-lazy',
+			`${fmt_bytes(t.lazy_js)} of island JS waits until it is needed: the page starts with ${fmt_bytes(t.js)}.`
+		);
 	if (t.blocking_count >= 3 || t.blocking >= 100 * 1024) {
-		const files = pa.assets.filter((x) => x.blocking).slice(0, 4).map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}`);
+		const files = pa.assets
+			.filter((x) => x.blocking)
+			.slice(0, 4)
+			.map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}`);
 		const tune = inline_threshold_tune(pa.assets.filter((x) => x.blocking));
-		warn('render-blocking', `${t.blocking_count} files (${fmt_bytes(t.blocking)}) must arrive before anything paints: ${files.join(', ')}.`, {
-			fix: tune
-				? `Inline the small stylesheets: with \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these sheets (${fmt_bytes(tune.bytes)}) arrive inside the HTML, and the first paint waits on ${t.blocking_count - tune.files} file${t.blocking_count - tune.files === 1 ? '' : 's'} instead of ${t.blocking_count}. Merge or trim the rest; load scripts as modules or with defer.`
-				: 'Inline the small stylesheets, merge the rest, load scripts as modules or with defer.'
-		});
+		warn(
+			'render-blocking',
+			`${t.blocking_count} files (${fmt_bytes(t.blocking)}) must arrive before anything paints: ${files.join(', ')}.`,
+			{
+				fix: tune
+					? `Inline the small stylesheets: with \`kit: { inlineStyleThreshold: ${tune.threshold} }\` in svelte.config.js, ${tune.files} of these sheets (${fmt_bytes(tune.bytes)}) arrive inside the HTML, and the first paint waits on ${t.blocking_count - tune.files} file${t.blocking_count - tune.files === 1 ? '' : 's'} instead of ${t.blocking_count}. Merge or trim the rest; load scripts as modules or with defer.`
+					: 'Inline the small stylesheets, merge the rest, load scripts as modules or with defer.'
+			}
+		);
 	}
 	// a component's styles shipped without their scope (the build's fallback marker in the CSS)
 	if (pa.unscoped?.length) {
@@ -999,11 +1152,15 @@ function page_weight_findings(
 		// by reason: a budget or timeout miss makes the totals vary run to run; an error status does not
 		const why = new Map<string, number>();
 		for (const m of pa.missed_why ?? []) {
-			const k = m.why.startsWith('status ') || m.why.startsWith('error') ? m.why.split(':')[0] : m.why;
+			const k =
+				m.why.startsWith('status ') || m.why.startsWith('error') ? m.why.split(':')[0] : m.why;
 			why.set(k, (why.get(k) ?? 0) + 1);
 		}
 		const reasons = [...why].map(([k, n]) => `${n} ${k}`).join(', ');
-		info('assets-missed', `${pa.missed.length} file(s) the page loads could not be weighed${reasons ? ` (${reasons})` : ' (a 404, a timeout, or the time budget)'}: ${pa.missed.slice(0, 3).map(asset_name).join(', ')}.${why.has('budget') || why.has('timeout') ? ' Profile with `weigh=full` for totals that hold run to run.' : ''}`);
+		info(
+			'assets-missed',
+			`${pa.missed.length} file(s) the page loads could not be weighed${reasons ? ` (${reasons})` : ' (a 404, a timeout, or the time budget)'}: ${pa.missed.slice(0, 3).map(asset_name).join(', ')}.${why.has('budget') || why.has('timeout') ? ' Profile with `weigh=full` for totals that hold run to run.' : ''}`
+		);
 	}
 }
 
@@ -1092,7 +1249,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			warn(
 				'heap-near-limit',
 				`The server's heap was nearly full (${meta.heap_guard.used_mb} of ${meta.heap_guard.limit_mb} MB), so the profiler left out ${meta.heap_guard.skipped.join(', ')}: one more render of this page could have run it out of memory and ended the process. What it keeps per render is the cause.`,
-				{ fix: 'Fix what a render keeps alive (the Kept per render pattern names the line), and restart the server before profiling again.' }
+				{
+					fix: 'Fix what a render keeps alive (the Kept per render pattern names the line), and restart the server before profiling again.'
+				}
 			);
 	}
 
@@ -1178,7 +1337,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			(slow[0].ms >= 1000 ? warn : info)(
 				'window-requests',
 				`${reqs.length} request${reqs.length === 1 ? '' : 's'} in the window; the slowest: ${slow.map(split).join(' · ')}.` +
-					(overlapped ? ' Some ran at the same time: their CPU is the process’s over each one, so it overlaps.' : ''),
+					(overlapped
+						? ' Some ran at the same time: their CPU is the process’s over each one, so it overlaps.'
+						: ''),
 				{
 					...(slow[0].ms >= 1000
 						? {
@@ -1206,11 +1367,18 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			`Network calls ran back-to-back for ${fmt_ms(seq)} ms of the window — usually sequential awaits.`,
 			{ fix: 'Start independent calls together with Promise.all.' }
 		);
-	} else if (meta.trigger !== 'window' && (meta.run_status ?? 200) < 300 && mostly_waited(tl, busy_pct) && (net.length || !tl || tl.wait_ms >= tl.gap_ms)) {
+	} else if (
+		meta.trigger !== 'window' &&
+		(meta.run_status ?? 200) < 300 &&
+		mostly_waited(tl, busy_pct) &&
+		(net.length || !tl || tl.wait_ms >= tl.gap_ms)
+	) {
 		// (read off ONE render's timeline, not the window: between the profiler's renders the process
 		// idles, and a page rendering in 0.4 ms read as "mostly waiting … likely a database" — so did a
 		// 404. A wait mostly no hook saw is the timeline's own finding, unseen-wait)
-		const part = tl ? `: ${fmt_ms(tl.wait_ms + tl.gap_ms)} of the ${fmt_ms(tl.window_ms)} ms render` : '';
+		const part = tl
+			? `: ${fmt_ms(tl.wait_ms + tl.gap_ms)} of the ${fmt_ms(tl.window_ms)} ms render`
+			: '';
 		info(
 			'mostly-waiting',
 			net.length
@@ -1305,14 +1473,27 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	const top3 = own.slice(0, 3).filter((f) => f.self_ms >= 5);
 	const top3_ms = top3.reduce((s, f) => s + f.self_ms, 0);
 	const single = !!hot && hot.self_ms >= a.busy_ms * 0.2;
-	const crowd = !!hot && !single && top3.length === 3 && hot.self_ms >= a.busy_ms * 0.12 && top3_ms >= a.busy_ms * 0.4;
-	const where = (f: (typeof own)[number]) => (f.label ? `the function at ${f.url}:${f.line}` : `${f.name} (${f.url}:${f.line})`);
+	const crowd =
+		!!hot &&
+		!single &&
+		top3.length === 3 &&
+		hot.self_ms >= a.busy_ms * 0.12 &&
+		top3_ms >= a.busy_ms * 0.4;
+	const where = (f: (typeof own)[number]) =>
+		f.label ? `the function at ${f.url}:${f.line}` : `${f.name} (${f.url}:${f.line})`;
 	if (hot && hot.self_ms >= 5 && (single || crowd)) {
 		const from = hot.stacks?.[0]?.frames.find((fr) => fr.c === 'component' || fr.c === 'app');
-		const spot = hot_line_of(hot, new Set(a.functions.filter((f) => f.category === 'app').map((f) => f.name)));
+		const spot = hot_line_of(
+			hot,
+			new Set(a.functions.filter((f) => f.category === 'app').map((f) => f.name))
+		);
 		// (close behind the top one: within a quarter of it — the next profile may rank them the other way)
 		const close = own.slice(1, 3).filter((f) => f.self_ms >= 5 && f.self_ms >= hot.self_ms * 0.75);
-		const spot_lead = crowd ? `In ${hot.name}, the biggest part` : spot && share_word(spot.ms, hot.self_ms) === 'most of it' ? 'Most of it' : 'The biggest part';
+		const spot_lead = crowd
+			? `In ${hot.name}, the biggest part`
+			: spot && share_word(spot.ms, hot.self_ms) === 'most of it'
+				? 'Most of it'
+				: 'The biggest part';
 		warn(
 			'hot-function',
 			(crowd
@@ -1321,10 +1502,14 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					(hot.calls ? `, ${hot.calls} calls per render` : '') +
 					(from ? `, called from ${from.n}` : '') +
 					'.' +
-					(close.length ? ` Close behind: ${close.map((f) => `${where(f)} ${fmt_pct(f.self_ms, a.busy_ms)}`).join(', ')}.` : '')) +
+					(close.length
+						? ` Close behind: ${close.map((f) => `${where(f)} ${fmt_pct(f.self_ms, a.busy_ms)}`).join(', ')}.`
+						: '')) +
 				(spot
 					? ` ${spot_lead} lands on line ${spot.line}: \`${spot.code}\`` +
-						(spot.calls ? ` — ${spot.calls} is called there, and V8 counts a function it inlined as the caller's own time: look inside ${spot.calls}.` : '.')
+						(spot.calls
+							? ` — ${spot.calls} is called there, and V8 counts a function it inlined as the caller's own time: look inside ${spot.calls}.`
+							: '.')
 					: ''),
 			{
 				anchor: `fn:${hot.key}`,
@@ -1415,7 +1600,10 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					}
 				);
 			}
-		} else if ((s.wall_ms < s.total_ms * 0.6 ? wall_per_render : ms_per_render) >= Math.max(10, window_ms * 0.2)) {
+		} else if (
+			(s.wall_ms < s.total_ms * 0.6 ? wall_per_render : ms_per_render) >=
+			Math.max(10, window_ms * 0.2)
+		) {
 			// calls that ran together cost their wall, not their sum (242 overlapping calls summed to
 			// 15.8 s inside a 6 s window)
 			const together = s.wall_ms < s.total_ms * 0.6;
@@ -1497,7 +1685,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		warn(
 			'bfcache-no-store',
 			`The page answers with Cache-Control: ${meta.run_cache_control}: the browser keeps no page marked no-store in its back/forward cache, so every Back and Forward to it is another full render here (and another wait for the visitor).`,
-			{ fix: 'Drop no-store from pages that hold nothing private, or use `private, no-cache` (the browser keeps the page and checks with the server before reusing it). Keep no-store for pages that must never be shown again after logout.' }
+			{
+				fix: 'Drop no-store from pages that hold nothing private, or use `private, no-cache` (the browser keeps the page and checks with the server before reusing it). Keep no-store for pages that must never be shown again after logout.'
+			}
 		);
 	}
 	// A PRERENDERED PAGE: production serves the HTML the build wrote; nothing renders per request.
@@ -1509,14 +1699,19 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			meta.run_static
 				? 'This page is a file the build wrote (prerendered): the server answered with it before the app saw the request, so no render ran — the times above are the file being served, nothing to make faster on the server. A visit to it cannot be measured either: static HTML carries no profiler tag.'
 				: `This page is prerendered (its route exports \`prerender = true\`): production serves the HTML the build wrote, so its server render costs nothing per request — the times above are what the build spends on it, once. A visit to the built file cannot be measured either: static HTML carries no profiler tag.`,
-			{ fix: 'Look at what the browser does with it instead: the page weight, the islands it wakes, its JS — and the devtools Page tab on a visit, which measures any page.' }
+			{
+				fix: 'Look at what the browser does with it instead: the page weight, the islands it wakes, its JS — and the devtools Page tab on a visit, which measures any page.'
+			}
 		);
 	// A PAGE OF MANY ELEMENTS, from the HTML itself (no visit, or a visit that did not measure it):
 	// the same words the browser's count gets, which leads when a visit has it
 	const els = extras.strip?.elements;
 	if (els && els.total >= DOM_LARGE && !extras.visit?.dom) {
 		const top = els.islands[0];
-		const row = top && top.n >= els.total * 0.3 ? island_rows_of(meta).find((r) => r.fp === top.fp) : undefined;
+		const row =
+			top && top.n >= els.total * 0.3
+				? island_rows_of(meta).find((r) => r.fp === top.fp)
+				: undefined;
 		const name = row?.name || (top ? `the island ${top.fp.slice(0, 8)}` : '');
 		const held = top && top.n >= els.total * 0.3;
 		const n = (x: number) => x.toLocaleString('en-US');
@@ -1549,17 +1744,31 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		(moved ? warn : info)(
 			'img-unsized',
 			`${names.length === 1 ? `An image in the HTML (${names[0]}) has` : `${unsized.length >= 8 ? '8 or more' : unsized.length} images in the HTML (${names.slice(0, 4).join(', ')}${names.length > 4 ? '…' : ''}) have`} no width and height: the browser cannot hold their room before the file arrives, so what is below moves when it does${moved ? ` — and the browser measured the page moving (CLS ${cls})` : ' (unless CSS gives them a size)'}.`,
-			{ fix: 'Give each `<img>` its width and height attributes (the file’s own; CSS can still scale it): the browser then holds the room from the first paint. Or give it a CSS aspect-ratio.' }
+			{
+				fix: 'Give each `<img>` its width and height attributes (the file’s own; CSS can still scale it): the browser then holds the room from the first paint. Or give it a CSS aspect-ratio.'
+			}
 		);
 	}
 	// what held the profiled render's document open: its streamed promises by page.data key
 	const tail = extras.strip?.tail;
 	const held_open: HeldOpen | undefined = tail?.keys.length
-		? { side: 'server', keys: tail.keys.map((k) => ({ key: k.key, at: k.left_ms })), early_ms: tail.early_ms, early_bytes: tail.early_bytes, late_ms: tail.late_ms, late_bytes: tail.late_bytes, islands: island_rows_of(meta).length }
+		? {
+				side: 'server',
+				keys: tail.keys.map((k) => ({ key: k.key, at: k.left_ms })),
+				early_ms: tail.early_ms,
+				early_bytes: tail.early_bytes,
+				late_ms: tail.late_ms,
+				late_bytes: tail.late_bytes,
+				islands: island_rows_of(meta).length
+			}
 		: undefined;
 	// (no visit: the render alone says it — the same finding, from the server's side)
 	if (!extras.visit && held_open) {
-		const f = explain_held_open({ vitals: {}, visit: null, islands: [], firsts: [], shifts: [], longtasks: [], held_open }, [], (fp) => fp);
+		const f = explain_held_open(
+			{ vitals: {}, visit: null, islands: [], firsts: [], shifts: [], longtasks: [], held_open },
+			[],
+			(fp) => fp
+		);
 		if (f) warn(f.code, f.message, { fix: f.fix });
 	}
 	// THE BROWSER'S FINDINGS: the devtools Page tab's analysis of the visit, word for word
@@ -1569,8 +1778,15 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// (the visit's own origin first; a dev server weighs nothing, so what the page named is then
 		// unknown and parse time decides what a script loaded)
 		const origin = extras.visit.origin || page_origin(extras.assets);
-		const third = origin ? { origin, named: extras.assets?.assets.map((a) => a.url), by_host: cpu_by_host(extras) } : undefined;
-		const hole_by_id = new Map((own_requests(meta).find((r) => r.og?.hole_rows?.length)?.og?.hole_rows ?? []).map((h) => [h.id, h]));
+		const third = origin
+			? { origin, named: extras.assets?.assets.map((a) => a.url), by_host: cpu_by_host(extras) }
+			: undefined;
+		const hole_by_id = new Map(
+			(own_requests(meta).find((r) => r.og?.hole_rows?.length)?.og?.hole_rows ?? []).map((h) => [
+				h.id,
+				h
+			])
+		);
 		// (a COPY by its key when the visit said which — copies of one component share the id and
 		// differ by props; without a key, a component with several copies is named bare: no copy's
 		// props stand for the others)
@@ -1600,27 +1816,61 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const nav_req = new Map((extras.nav_requests ?? []).map((r) => [r.t, r]));
 		// (another origin's sizes this browser hid: the report's own weights, else the other engine's
 		// visit; and, beyond Chromium, the files the HTML makes blocking)
-		const sized = with_hidden_filled(extras.visit, origin, extras.assets, extras.other_engine_visit);
-		const visit = nav_req.size && sized.navs ? { ...sized, navs: sized.navs.map((n) => (nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n)) } : sized;
+		const sized = with_hidden_filled(
+			extras.visit,
+			origin,
+			extras.assets,
+			extras.other_engine_visit
+		);
+		const visit =
+			nav_req.size && sized.navs
+				? {
+						...sized,
+						navs: sized.navs.map((n) =>
+							nav_req.has(n.t) ? { ...n, on_server: nav_req.get(n.t)! } : n
+						)
+					}
+				: sized;
 		// (the blocking files: the report's own finding when it weighed the page; else the browser's timing)
 		// (each island's own bytes, from the build's weights: what an eager island below the fold
 		// moves off the first load, as the devtools say it from the browser's ledger)
 		const all_rows = island_rows_of(meta);
 		const own = island_js_unique(all_rows, extras.weights);
-		const visit_rows = own ? all_rows.map((r) => (own.get(r.entry) ? { ...r, own_bytes: own.get(r.entry)! } : r)) : all_rows;
-		const in_browser = browser_findings(browser_page_report(visit, visit_rows, extras.client_cpu?.windows, third, hole_name, hole_server, extras.interaction_cpu, !!meta.dev, held_open)).filter((f) => f.code !== 'render-blocking' || !extras.assets);
+		const visit_rows = own
+			? all_rows.map((r) => (own.get(r.entry) ? { ...r, own_bytes: own.get(r.entry)! } : r))
+			: all_rows;
+		const in_browser = browser_findings(
+			browser_page_report(
+				visit,
+				visit_rows,
+				extras.client_cpu?.windows,
+				third,
+				hole_name,
+				hole_server,
+				extras.interaction_cpu,
+				!!meta.dev,
+				held_open
+			)
+		).filter((f) => f.code !== 'render-blocking' || !extras.assets);
 		// THE SCREEN THE VISIT HAD: what sits below its first screen, what draws nothing on it, which
 		// images it shows smaller, are that screen's — the finding says which
 		const here = screen_of(visit);
 		// …AND THE BROWSER, when it is not a Chromium one (the reference every finding is tuned on):
 		// Safari reports no layout shifts and refetches a preload Chromium reuses — the finding says whose
 		const engine = browser_of(visit?.ua);
-		const who = engine && !engine.startsWith('Chrome') && !engine.startsWith('Edge') && !engine.startsWith('Opera') ? ` (${engine})` : '';
+		const who =
+			engine &&
+			!engine.startsWith('Chrome') &&
+			!engine.startsWith('Edge') &&
+			!engine.startsWith('Opera')
+				? ` (${engine})`
+				: '';
 		out.push(
 			...in_browser.map((f) => {
 				if (!f.message.startsWith(IN_BROWSER)) return f;
 				const rest = f.message.slice(IN_BROWSER.length);
-				if (here && SCREEN_CODES.has(f.code)) return { ...f, message: `In the browser${who}, on a ${here} screen: ${rest}` };
+				if (here && SCREEN_CODES.has(f.code))
+					return { ...f, message: `In the browser${who}, on a ${here} screen: ${rest}` };
 				return who ? { ...f, message: `In the browser${who}: ${rest}` } : f;
 			})
 		);
@@ -1629,8 +1879,23 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const other = extras.other_screen_visit;
 		const there = other ? screen_of(other) : null;
 		if (other && there) {
-			const ours = new Map(in_browser.filter((f) => SCREEN_CODES.has(f.code)).map((f) => [f.code, new Set(f.fps ?? [])]));
-			const theirs = browser_findings(browser_page_report(other, visit_rows, undefined, third, hole_name, hole_server, undefined, !!meta.dev)).filter((f) => {
+			const ours = new Map(
+				in_browser
+					.filter((f) => SCREEN_CODES.has(f.code))
+					.map((f) => [f.code, new Set(f.fps ?? [])])
+			);
+			const theirs = browser_findings(
+				browser_page_report(
+					other,
+					visit_rows,
+					undefined,
+					third,
+					hole_name,
+					hole_server,
+					undefined,
+					!!meta.dev
+				)
+			).filter((f) => {
 				if (!SCREEN_CODES.has(f.code)) return false;
 				const o = ours.get(f.code);
 				return !o || (f.fps ?? []).some((fp) => !o.has(fp));
@@ -1640,7 +1905,13 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					severity: 'info',
 					code: 'other-screen',
 					message: `On a ${there} screen (another visit to this page) the browser saw what this one did not: ${theirs.map((f) => f.message.slice(f.message.startsWith(IN_BROWSER) ? IN_BROWSER.length : 0)).join(' ')}`,
-					...(theirs.some((f) => f.fix) ? { fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))].slice(0, 2).join(' ') } : {}),
+					...(theirs.some((f) => f.fix)
+						? {
+								fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))]
+									.slice(0, 2)
+									.join(' ')
+							}
+						: {}),
 					fps: [...new Set(theirs.flatMap((f) => f.fps ?? []))]
 				});
 		}
@@ -1652,21 +1923,48 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const eng_name = eng ? browser_of(eng.ua) : null;
 		if (eng && eng_name) {
 			const have = new Set(in_browser.map((f) => f.code));
-			const theirs = browser_findings(browser_page_report(eng, visit_rows, undefined, third, hole_name, hole_server, undefined, !!meta.dev)).filter(
-				(f) => !have.has(f.code) && !SCREEN_CODES.has(f.code) && f.code !== 'dock-in-paint'
-			);
+			const theirs = browser_findings(
+				browser_page_report(
+					eng,
+					visit_rows,
+					undefined,
+					third,
+					hole_name,
+					hole_server,
+					undefined,
+					!!meta.dev
+				)
+			).filter((f) => !have.has(f.code) && !SCREEN_CODES.has(f.code) && f.code !== 'dock-in-paint');
 			if (theirs.length)
 				out.push({
 					severity: 'info',
 					code: 'other-browser',
 					message: `In ${eng_name} (another visit to this page) the browser saw what this one did not: ${theirs.map((f) => f.message.slice(f.message.startsWith(IN_BROWSER) ? IN_BROWSER.length : 0)).join(' ')}`,
-					...(theirs.some((f) => f.fix) ? { fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))].slice(0, 2).join(' ') } : {}),
+					...(theirs.some((f) => f.fix)
+						? {
+								fix: [...new Set(theirs.map((f) => f.fix).filter((x): x is string => !!x))]
+									.slice(0, 2)
+									.join(' ')
+							}
+						: {}),
 					fps: [...new Set(theirs.flatMap((f) => f.fps ?? []))]
 				});
 		}
 		// what the visiting browser could not see: those findings cannot appear, whatever the page does
 		// (long tasks the beacon estimated from frames drawn late: said so, not counted as blind)
-		const WHAT: Record<string, string> = { 'layout-shift': extras.visit.shifts_from === 'boxes' ? "layout shifts (a wake that moved the layout is estimated from the island's box)" : 'layout shifts', longtask: extras.visit.longtasks_from === 'frames' ? 'long tasks (its stalls are estimated from the frames it drew late)' : 'long tasks', event: 'interaction timing', 'largest-contentful-paint': 'the largest paint', 'long-animation-frame': 'which script held a frame' };
+		const WHAT: Record<string, string> = {
+			'layout-shift':
+				extras.visit.shifts_from === 'boxes'
+					? "layout shifts (a wake that moved the layout is estimated from the island's box)"
+					: 'layout shifts',
+			longtask:
+				extras.visit.longtasks_from === 'frames'
+					? 'long tasks (its stalls are estimated from the frames it drew late)'
+					: 'long tasks',
+			event: 'interaction timing',
+			'largest-contentful-paint': 'the largest paint',
+			'long-animation-frame': 'which script held a frame'
+		};
 		const blind = (extras.visit.unsupported ?? []).map((t) => WHAT[t]).filter(Boolean);
 		if (blind.length)
 			info(
@@ -1732,7 +2030,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		warn(
 			'retained-per-render',
 			`One render leaves ${Math.round(mb * 10) / 10} MB alive after a full collection: ${top}. Every render adds that much; the instance grows until it restarts` +
-				(runway ? ` — at this rate its ${limit} MB ${meta.lambda ? 'of memory' : 'heap'} runs out after about ${runway} render${runway === 1 ? '' : 's'} of this page, and the process dies.` : '.') +
+				(runway
+					? ` — at this rate its ${limit} MB ${meta.lambda ? 'of memory' : 'heap'} runs out after about ${runway} render${runway === 1 ? '' : 's'} of this page, and the process dies.`
+					: '.') +
 				(pkg ? ` ${Math.round(pkg_share * 100)}% of it is held inside ${pkg}.` : ''),
 			{
 				fix: pkg
@@ -1788,7 +2088,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			: extras.promises.count;
 		// on the dev server, the dev server's own module loading (its file reads, its resolver) makes
 		// most of them: no build has it, and the app cannot change it — left out, and said so
-		const dev_share = meta.dev ? extras.promises.top.reduce((s, t) => s + (dev_tool_caller(t.caller) ? t.share : 0), 0) : 0;
+		const dev_share = meta.dev
+			? extras.promises.top.reduce((s, t) => s + (dev_tool_caller(t.caller) ? t.share : 0), 0)
+			: 0;
 		const per = all * (1 - Math.min(dev_share, 1));
 		if (per >= 10_000) {
 			const rest = 1 - dev_share || 1;
@@ -1797,11 +2099,19 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 				.slice(0, 3)
 				.map((t) => `${t.caller} ${Math.round((t.share / rest) * 100)}%`)
 				.join(', ');
-			const left_out = dev_share >= 0.05 ? ` (the dev server's own module loading made about ${Math.round(all - per).toLocaleString()} more, left out)` : '';
+			const left_out =
+				dev_share >= 0.05
+					? ` (the dev server's own module loading made about ${Math.round(all - per).toLocaleString()} more, left out)`
+					: '';
 			// SVELTE'S ASYNC RENDERER made most of them: one promise for each component and block it renders
 			// (an awaited render collects every child's output asynchronously). Not an await of the app's —
 			// the count follows how many pieces the page renders, and the components rendered most set it
-			const renderer = extras.promises.top.filter((t) => t.caller.startsWith('#collect_content_async') && t.caller.endsWith('(svelte)')).reduce((s, t) => s + t.share, 0) / (1 - dev_share || 1);
+			const renderer =
+				extras.promises.top
+					.filter(
+						(t) => t.caller.startsWith('#collect_content_async') && t.caller.endsWith('(svelte)')
+					)
+					.reduce((s, t) => s + t.share, 0) / (1 - dev_share || 1);
 			if (renderer >= 0.5) {
 				const many = a.components
 					.filter((c) => (c.calls ?? 0) >= 50)
@@ -1827,10 +2137,24 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	}
 	// A TIMER EACH RENDER STARTS AND NEVER ENDS: still open after every render, from the same line
 	{
-		const by = new Map<string, { caller: string; n: number; repeat?: number; delay?: number; at?: { path: string; line: number } }>();
+		const by = new Map<
+			string,
+			{
+				caller: string;
+				n: number;
+				repeat?: number;
+				delay?: number;
+				at?: { path: string; line: number };
+			}
+		>();
 		for (const o of extras.io ?? []) {
 			if (!o.left_each_run || !o.caller) continue;
-			const g = by.get(o.caller) ?? { caller: o.caller, n: 0, ...(o.repeat !== undefined ? { repeat: o.repeat } : { delay: o.delay }), ...(o.caller_at ? { at: o.caller_at } : {}) };
+			const g = by.get(o.caller) ?? {
+				caller: o.caller,
+				n: 0,
+				...(o.repeat !== undefined ? { repeat: o.repeat } : { delay: o.delay }),
+				...(o.caller_at ? { at: o.caller_at } : {})
+			};
 			g.n++;
 			by.set(o.caller, g);
 		}
@@ -1907,7 +2231,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			'runs-set-aside',
 			`${meta.runs_set_aside} of the ${total} renders ran while another visitor asked for this same page, and were left out: their work runs the same lines, so nothing but the clock tells it apart. The report reads the ${kept} render${kept === 1 ? '' : 's'} that ran clean.`,
 			kept < 2
-				? { fix: 'Record again when the page is quieter (or on an instance out of rotation) for more than one clean render.' }
+				? {
+						fix: 'Record again when the page is quieter (or on an instance out of rotation) for more than one clean render.'
+					}
 				: {}
 		);
 	}
@@ -1954,7 +2280,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 					'self-fetch',
 					`The render read ${names.length === 1 ? `a \`prerender\` remote function's answer (${names[0]})` : `\`prerender\` remote functions' answers (${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''})`} over HTTP ${per} time${per === 1 ? '' : 's'}: Kit fetches it from the site's own public address on every server render — here this same instance answered, ${fmt_ms(self_ms)} ms of requests while it was rendering. Where the host serves the prerendered answer as a file it is still a trip out and back per render; where it does not (an argument the build did not prerender), the function runs anyway, in a request of its own.`,
 					{
-						fix: 'For data a render needs, use a `query` (it runs in the render\'s own process, no request) or read it in the load; keep `prerender` for answers the browser fetches.'
+						fix: "For data a render needs, use a `query` (it runs in the render's own process, no request) or read it in the load; keep `prerender` for answers the browser fetches."
 					}
 				);
 			} else
@@ -1979,7 +2305,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		// (a key another page's load returned — a visitor of that page overlapping the renders — is
 		// not this page's to read)
 		const route = own_requests(meta).find((r) => r.route)?.route ?? meta.request?.route;
-		const unread = ln.unread.filter((k) => k.from && !(route && another_routes_file(route, k.from)));
+		const unread = ln.unread.filter(
+			(k) => k.from && !(route && another_routes_file(route, k.from))
+		);
 		if (unread.length) {
 			const names = unread
 				.slice(0, 4)
@@ -2071,7 +2399,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		warn(
 			'mem-growth',
 			`The server's memory grew ${mem_delta} MB while the recording ran. A first recording grows it as caches and the heap reach their working size; one that grows it again each time is keeping something per render.`,
-			{ fix: 'Record again: if it grows by about as much again, look for what a render adds to a module-level map, array or cache that is never cleared — the memory card lists what one render leaves alive.' }
+			{
+				fix: 'Record again: if it grows by about as much again, look for what a render adds to a module-level map, array or cache that is never cleared — the memory card lists what one render leaves alive.'
+			}
 		);
 
 	const profiler_ms = a.buckets.find((b) => b.key === 'profiler overhead')?.self_ms ?? 0;
@@ -2098,8 +2428,10 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	const gap = out.find((f) => f.code === 'lcp-gap');
 	if (gap && out.some((f) => f.code === 'slow-lcp')) {
 		const dash = gap.message.indexOf(' — ');
-		if (dash !== -1) gap.message = `${gap.message.slice(0, dash)}: the server is not the bottleneck. Where the browser's wait went is the largest paint's own card (In the browser: LCP …).`;
-		gap.fix = "The wait is the browser's, not the server's: follow the largest paint's own card (In the browser: LCP …), which names the part that cost most and its fix.";
+		if (dash !== -1)
+			gap.message = `${gap.message.slice(0, dash)}: the server is not the bottleneck. Where the browser's wait went is the largest paint's own card (In the browser: LCP …).`;
+		gap.fix =
+			"The wait is the browser's, not the server's: follow the largest paint's own card (In the browser: LCP …), which names the part that cost most and its fix.";
 	}
 	// BEFORE ANY VISIT: an awake island whose own code reads a browser-only value while rendering
 	// draws a different tree in the browser — its markup will change as it wakes. The sources say
@@ -2108,8 +2440,11 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 	if (extras.hazards) {
 		const told = new Set<string>();
 		const rows = island_rows_of(meta);
-		for (const f of out) if (f.code === 'markup-changed' || f.code === 'hydration-mismatch') for (const fp of f.fps ?? []) for (const r of rows) if (r.fp === fp) told.add(r.entry);
-		if (out.some((f) => f.code === 'hydration-mismatch')) for (const c of extras.client ?? []) if (c.recovered > 0) told.add(c.entry);
+		for (const f of out)
+			if (f.code === 'markup-changed' || f.code === 'hydration-mismatch')
+				for (const fp of f.fps ?? []) for (const r of rows) if (r.fp === fp) told.add(r.entry);
+		if (out.some((f) => f.code === 'hydration-mismatch'))
+			for (const c of extras.client ?? []) if (c.recovered > 0) told.add(c.entry);
 		const seen = new Set<string>();
 		const reads: { name: string; line: IslandHazard }[] = [];
 		for (const r of rows) {
@@ -2124,7 +2459,11 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 			info(
 				'island-browser-read',
 				`${who.length <= 3 ? who.join(', ') : `${who.slice(0, 3).join(', ')} and ${who.length - 3} more`} ${reads.length === 1 ? 'reads' : 'read'} a browser-only value while rendering, so the browser draws ${reads.length === 1 ? 'it' : 'them'} differently and the markup changes as ${reads.length === 1 ? 'it wakes' : 'they wake'}: ${hazard_words(reads.map((x) => x.line)).slice('In its own code, the likeliest: '.length)}`,
-				{ fix: hazard_fix(reads.map((x) => x.line)), file: reads[0].line.file, line: reads[0].line.line }
+				{
+					fix: hazard_fix(reads.map((x) => x.line)),
+					file: reads[0].line.file,
+					line: reads[0].line.line
+				}
 			);
 	}
 	// THE BROWSER'S MARKUP CHANGE, by line: an island whose markup changed on wake, and a line of its
@@ -2133,7 +2472,9 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		const mc = out.find((f) => f.code === 'markup-changed');
 		if (mc?.fps?.length) {
 			const rows = island_rows_of(meta);
-			const entries = new Set(mc.fps.flatMap((fp) => rows.filter((r) => r.fp === fp).map((r) => r.entry)));
+			const entries = new Set(
+				mc.fps.flatMap((fp) => rows.filter((r) => r.fp === fp).map((r) => r.entry))
+			);
 			const lines = [...entries].flatMap((e) => extras.hazards?.[e] ?? []);
 			if (lines.length) {
 				mc.message += ` ${hazard_words(lines)}`;
@@ -2376,7 +2717,13 @@ export function group_islands(rows: readonly IslandStat[]): IslandStat[] {
 /** Code every page with islands loads once, never an island's own to change: the runtimes, Kit,
  *  and devalue (the runtime's decoder for rich props — the `props-devalue` finding is where that is
  *  the island's doing). The heavy-module and barrel notes leave these out. */
-const FRAMEWORK = new Set(['svelte runtime', 'ogygia runtime', '@sveltejs/kit', 'devalue', 'esm-env']);
+const FRAMEWORK = new Set([
+	'svelte runtime',
+	'ogygia runtime',
+	'@sveltejs/kit',
+	'devalue',
+	'esm-env'
+]);
 
 export function island_js_bytes(
 	row: IslandStat,
@@ -2410,7 +2757,9 @@ export function lake_saving(
 	if (!weights) return null;
 	const going = new Set(them.map((r) => r.entry));
 	const kept = new Set<string>();
-	for (const r of rows) if (r.wake !== 'none' && !going.has(r.entry)) for (const u of [r.module_url, ...r.hints]) if (u) kept.add(u);
+	for (const r of rows)
+		if (r.wake !== 'none' && !going.has(r.entry))
+			for (const u of [r.module_url, ...r.hints]) if (u) kept.add(u);
 	const theirs = new Set<string>();
 	for (const r of them) for (const u of [r.module_url, ...r.hints]) if (u) theirs.add(u);
 	let loads = 0;
@@ -2432,16 +2781,22 @@ export function lake_saving(
  * `island_js_bytes` counts shared chunks once per island; this counts each once, where it belongs.
  * Keyed by entry (copies of one island are one closure). Null without the build's weights.
  */
-export function island_js_unique(rows: readonly IslandStat[], weights: Record<string, number> | undefined): Map<string, number> | null {
+export function island_js_unique(
+	rows: readonly IslandStat[],
+	weights: Record<string, number> | undefined
+): Map<string, number> | null {
 	if (!weights) return null;
 	const waking = rows.filter((r) => r.wake !== 'none');
 	const users = new Map<string, Set<string>>();
-	for (const r of waking) for (const u of new Set([r.module_url, ...r.hints])) if (u) (users.get(u) ?? users.set(u, new Set()).get(u)!).add(r.entry);
+	for (const r of waking)
+		for (const u of new Set([r.module_url, ...r.hints]))
+			if (u) (users.get(u) ?? users.set(u, new Set()).get(u)!).add(r.entry);
 	const out = new Map<string, number>();
 	for (const r of waking) {
 		if (out.has(r.entry)) continue;
 		let only = 0;
-		for (const u of new Set([r.module_url, ...r.hints])) if (u && users.get(u)?.size === 1) only += weights[u] ?? 0;
+		for (const u of new Set([r.module_url, ...r.hints]))
+			if (u && users.get(u)?.size === 1) only += weights[u] ?? 0;
 		out.set(r.entry, only);
 	}
 	return out;
@@ -2464,15 +2819,27 @@ function ogygia_findings(
 	// A FINGERPRINT THAT MOVED BETWEEN THE PROFILE'S OWN RENDERS: the same page, the same inputs —
 	// a prop made fresh per render (a time, a random id). The devtools' comparison (fp-drift.ts),
 	// ogygia's own ids (stores, class instances: random per render on purpose) left out.
-	const renders = meta.requests.filter((r) => r.internal && r.og?.island_rows?.length).map((r) => r.og!.island_rows!);
+	const renders = meta.requests
+		.filter((r) => r.internal && r.og?.island_rows?.length)
+		.map((r) => r.og!.island_rows!);
 	if (renders.length >= 2) {
-		const kept = (rows: IslandStat[]) => rows.map((r) => ({ entry: r.entry, fp: r.fp, ...(r.canonical !== undefined ? { props: r.canonical } : {}) }));
+		const kept = (rows: IslandStat[]) =>
+			rows.map((r) => ({
+				entry: r.entry,
+				fp: r.fp,
+				...(r.canonical !== undefined ? { props: r.canonical } : {})
+			}));
 		const moved = fp_compare(kept(renders[0]), kept(renders[renders.length - 1]));
 		if (moved.length) {
-			const name_of = (entry: string) => island_name(renders[0].find((r) => r.entry === entry) ?? entry);
+			const name_of = (entry: string) =>
+				island_name(renders[0].find((r) => r.entry === entry) ?? entry);
 			const m = moved[0];
 			const whose = moved.length === 1 ? 'its' : `${name_of(m.entry)}'s`;
-			const said = m.path ? `${whose} prop \`${m.path}\` was ${m.was}, then ${m.now}` : m.was !== undefined ? `${whose} props went from …${m.was}… to …${m.now}…` : `${whose} props changed`;
+			const said = m.path
+				? `${whose} prop \`${m.path}\` was ${m.was}, then ${m.now}`
+				: m.was !== undefined
+					? `${whose} props went from …${m.was}… to …${m.now}…`
+					: `${whose} props changed`;
 			info(
 				'fp-unstable',
 				`${names(moved.map((x) => name_of(x.entry)))} rendered with a different fingerprint on the profiler's renders of the same page: ${said}${moved.length > 1 ? ` (and ${moved.length - 1} more)` : ''}. If the page's data did not change between them, that value is made fresh on every render.`,
@@ -2609,7 +2976,10 @@ function ogygia_findings(
 		// whether it goes or not — "alone pulls" once named the closure, shared code included)
 		const unique = island_js_unique(islands, extras.weights);
 		let mine: { row: IslandStat; bytes: number } | null = null;
-		if (unique) for (const r of islands) if (r.wake !== 'none' && (!mine || (unique.get(r.entry) ?? 0) > mine.bytes)) mine = { row: r, bytes: unique.get(r.entry) ?? 0 };
+		if (unique)
+			for (const r of islands)
+				if (r.wake !== 'none' && (!mine || (unique.get(r.entry) ?? 0) > mine.bytes))
+					mine = { row: r, bytes: unique.get(r.entry) ?? 0 };
 		if (total >= 300 * 1024 && heaviest) {
 			const pick = mine && mine.bytes >= 20 * 1024 ? mine : null;
 			warn(
@@ -2657,8 +3027,15 @@ function ogygia_findings(
 			const list = [...found].sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 3);
 			info(
 				'island-heavy-module',
-				list.map(([name, f]) => `${name.split('/').pop()} is ${Math.round((f.bytes / f.of) * 100)}% of ${island_name(f.row)}'s own code (${fmt_kb(f.bytes)} of ${fmt_kb(f.of)}, before minifying)`).join('; ') + '.',
-				{ fix: 'That one module is where the island’s weight is: split it (one module per piece: an icon, a locale), load it when it is needed, or render it on the server.' }
+				list
+					.map(
+						([name, f]) =>
+							`${name.split('/').pop()} is ${Math.round((f.bytes / f.of) * 100)}% of ${island_name(f.row)}'s own code (${fmt_kb(f.bytes)} of ${fmt_kb(f.of)}, before minifying)`
+					)
+					.join('; ') + '.',
+				{
+					fix: 'That one module is where the island’s weight is: split it (one module per piece: an icon, a locale), load it when it is needed, or render it on the server.'
+				}
 			);
 		}
 	}
@@ -2681,8 +3058,16 @@ function ogygia_findings(
 			const list = [...found].sort((a, b) => b[1].fanout - a[1].fanout).slice(0, 3);
 			warn(
 				'island-barrel',
-				list.map(([name, f]) => `${island_name(f.row)} ships a barrel whole: ${name}, and the ${f.fanout} modules behind it`).join('; ') + '. A Svelte component is never side-effect free to the bundler, so what the island does not use ships anyway.',
-				{ fix: 'Import what the island uses from its own file, or turn on ogygia({ barrels }). If it is on, the barrel has side effects of its own (a statement besides its re-exports), or the build log says why it was skipped.' }
+				list
+					.map(
+						([name, f]) =>
+							`${island_name(f.row)} ships a barrel whole: ${name}, and the ${f.fanout} modules behind it`
+					)
+					.join('; ') +
+					'. A Svelte component is never side-effect free to the bundler, so what the island does not use ships anyway.',
+				{
+					fix: 'Import what the island uses from its own file, or turn on ogygia({ barrels }). If it is on, the barrel has side effects of its own (a statement besides its re-exports), or the build log says why it was skipped.'
+				}
 			);
 		}
 	}
@@ -2734,7 +3119,8 @@ function ogygia_findings(
 	if (client.length) {
 		const seen = new Set(client.map((c) => c.entry));
 		// (one the visit saw fail is the browser's hydrate-failed finding, with its error)
-		for (const r of extras.visit?.regions ?? []) if (r.failed !== undefined && r.entry) seen.add(r.entry);
+		for (const r of extras.visit?.regions ?? [])
+			if (r.failed !== undefined && r.entry) seen.add(r.entry);
 		// (a `visible` island below the visit's first screen waits for a scroll that never came: it did
 		// what it should — only one on that screen, or a visit without positions, is silent for a reason)
 		const path_of_entry = (e: string) => {
@@ -2758,9 +3144,15 @@ function ogygia_findings(
 		// (no positions — no visit, or one without a screen — and a `visible` island's silence says
 		// nothing: it may simply never have been scrolled to; named as that, not as a failure)
 		const placed = !!vh && (extras.visit?.regions?.length ?? 0) > 0;
-		const unplaced = placed ? [] : islands.filter((r) => r.wake === 'visible' && !seen.has(r.entry));
+		const unplaced = placed
+			? []
+			: islands.filter((r) => r.wake === 'visible' && !seen.has(r.entry));
 		const silent = islands.filter(
-			(r) => (r.wake === 'load' || r.wake === 'idle' || (r.wake === 'visible' && placed && !below.has(path_of_entry(r.entry)))) && !seen.has(r.entry)
+			(r) =>
+				(r.wake === 'load' ||
+					r.wake === 'idle' ||
+					(r.wake === 'visible' && placed && !below.has(path_of_entry(r.entry)))) &&
+				!seen.has(r.entry)
 		);
 		if (unplaced.length)
 			info(
@@ -2784,14 +3176,23 @@ function ogygia_findings(
 		// THE SAME MARKUP CAME BACK (this report's visit compared them, comments aside): the island's
 		// code drew no other tree, so no line of it is the cause — only Svelte's hidden block markers
 		// disagreed (a host of ogygia's in another shape than its render, as kept islands' once was)
-		const fps_of = (entry: string) => new Set(island_rows_of(meta).filter((r) => r.entry === entry).map((r) => r.fp));
+		const fps_of = (entry: string) =>
+			new Set(
+				island_rows_of(meta)
+					.filter((r) => r.entry === entry)
+					.map((r) => r.fp)
+			);
 		const seen_of = (c: (typeof broken)[number]) => {
 			const fps = fps_of(c.entry);
-			return (extras.visit?.islands ?? []).filter((i) => i.recovered && (fps.has(i.fp) || i.entry === c.entry));
+			return (extras.visit?.islands ?? []).filter(
+				(i) => i.recovered && (fps.has(i.fp) || i.entry === c.entry)
+			);
 		};
 		const all_same = broken.filter((c) => {
 			const seen = seen_of(c);
-			return seen.length > 0 && seen.every((i) => !i.changed && !i.healed && i.ssr_bytes !== undefined);
+			return (
+				seen.length > 0 && seen.every((i) => !i.changed && !i.healed && i.ssr_bytes !== undefined)
+			);
 		});
 		// …WITH ITS MARKERS UNPAIRED AS IT ARRIVED: rewritten on the way (a render always pairs them)
 		const rewired = all_same.filter((c) => seen_of(c).some((i) => i.markers));
@@ -2841,7 +3242,8 @@ function ogygia_findings(
 		// a row is a component (one entry): its copies are every fingerprint of that entry. "3 islands"
 		// on a page with 280 awake ones, and a sum of medians, read as nonsense at scale
 		const rows = island_rows_of(meta);
-		const copies_of = (entry: string) => rows.filter((r) => r.entry === entry).reduce((s, r) => s + (r.count || 1), 0);
+		const copies_of = (entry: string) =>
+			rows.filter((r) => r.entry === entry).reduce((s, r) => s + (r.count || 1), 0);
 		const copies = client.reduce((s, c) => s + copies_of(c.entry), 0);
 		const n_slow = copies_of(slow.entry);
 		// where the slowest one's time went, from this report's own visit: its modules, its turn
@@ -2850,16 +3252,22 @@ function ogygia_findings(
 		const mine = (extras.visit?.islands ?? []).filter((i) => fps.has(i.fp) && i.done >= i.t0);
 		const med = (xs: number[]) => (xs.length ? [...xs].sort((a, b) => a - b)[xs.length >> 1] : 0);
 		const load = mine.length ? med(mine.map((i) => i.loaded - i.t0)) : slow.load_p50_ms;
-		const wait = mine.length ? med(mine.map((i) => (i.turn !== undefined ? i.turn - i.loaded : 0))) : 0;
+		const wait = mine.length
+			? med(mine.map((i) => (i.turn !== undefined ? i.turn - i.loaded : 0)))
+			: 0;
 		// (the step to the end of its effects: Svelte runs them right after `hydrate()`)
-		const step = mine.length ? med(mine.map((i) => Math.max(i.done, i.fx ?? 0) - (i.turn ?? i.loaded))) : Math.max(0, slow.p50_ms - slow.load_p50_ms);
+		const step = mine.length
+			? med(mine.map((i) => Math.max(i.done, i.fx ?? 0) - (i.turn ?? i.loaded)))
+			: Math.max(0, slow.p50_ms - slow.load_p50_ms);
 		const whole = load + wait + step || slow.p50_ms;
 		const why = load >= whole * 0.6 ? 'load' : wait >= whole * 0.5 ? 'wait' : 'step';
 		// who it waited behind: the islands whose hydrate step ran inside its wait, summed by component
 		let behind = '';
 		let behind_name = '';
 		if (why === 'wait' && mine.length) {
-			const one = [...mine].sort((a, b) => (a.turn ?? a.loaded) - a.loaded - ((b.turn ?? b.loaded) - b.loaded))[mine.length >> 1];
+			const one = [...mine].sort(
+				(a, b) => (a.turn ?? a.loaded) - a.loaded - ((b.turn ?? b.loaded) - b.loaded)
+			)[mine.length >> 1];
 			const w0 = one.loaded;
 			const w1 = one.turn ?? one.loaded;
 			const name_of = new Map(rows.map((r) => [r.fp, island_name(r)]));
@@ -2867,7 +3275,11 @@ function ogygia_findings(
 			for (const o of extras.visit?.islands ?? []) {
 				if (o === one || o.turn === undefined) continue;
 				const ran = Math.min(o.done, w1) - Math.max(o.turn, w0);
-				if (ran > 0) by.set(name_of.get(o.fp) ?? o.fp.slice(0, 8), (by.get(name_of.get(o.fp) ?? o.fp.slice(0, 8)) ?? 0) + ran);
+				if (ran > 0)
+					by.set(
+						name_of.get(o.fp) ?? o.fp.slice(0, 8),
+						(by.get(name_of.get(o.fp) ?? o.fp.slice(0, 8)) ?? 0) + ran
+					);
 			}
 			const top = [...by].sort((a, b) => b[1] - a[1])[0];
 			if (top && top[1] >= (w1 - w0) * 0.3) {
@@ -2879,7 +3291,11 @@ function ogygia_findings(
 		info(
 			'client-hydrate',
 			`In the browser, ${copies} island${copies === 1 ? '' : 's'} of ${client.length} component${client.length === 1 ? '' : 's'} reported hydration. The slowest, ${island_name(slow)}${n_slow > 1 ? ` (${n_slow} copies)` : ''}, took ${fmt_ms(slow.p50_ms)} ms from wake to hydrated at the median` +
-				(mine.length ? `: ${fmt_ms(load)} ms loading its modules, ${fmt_ms(wait)} ms waiting its turn behind other islands${behind}, ${fmt_ms(step)} ms hydrating.` : load >= slow.p50_ms * 0.6 ? `, mostly loading its ${fmt_ms(load)} ms of modules.` : '.'),
+				(mine.length
+					? `: ${fmt_ms(load)} ms loading its modules, ${fmt_ms(wait)} ms waiting its turn behind other islands${behind}, ${fmt_ms(step)} ms hydrating.`
+					: load >= slow.p50_ms * 0.6
+						? `, mostly loading its ${fmt_ms(load)} ms of modules.`
+						: '.'),
 			{
 				fix:
 					why === 'load'
@@ -2914,7 +3330,15 @@ export function kit_load_serialize_ms(a: Analysis): number {
 		let all = 0;
 		for (const s of stacks) {
 			all += s.ms;
-			if (s.frames.some((fr) => fr.n === 'add_node' || fr.n === 'render_response' || fr.f.indexOf('data_serializer') !== -1)) kit += s.ms;
+			if (
+				s.frames.some(
+					(fr) =>
+						fr.n === 'add_node' ||
+						fr.n === 'render_response' ||
+						fr.f.indexOf('data_serializer') !== -1
+				)
+			)
+				kit += s.ms;
 		}
 		if (all > 0) ms += f.self_ms * (kit / all);
 	}
@@ -2972,7 +3396,9 @@ function kit_findings(a: Analysis, meta: ReportMeta, info: Say, warn: Say): void
 	// built on every request, dropped. Measured on a 250 KB load: about a third of the server's CPU.
 	// (anchored on devalue's heaviest function: uneval's own frame holds little — its inner walk and
 	// stringify do the work)
-	const uneval = a.functions.filter((f) => f.pkg === 'devalue').sort((x, y) => y.self_ms - x.self_ms);
+	const uneval = a.functions
+		.filter((f) => f.pkg === 'devalue')
+		.sort((x, y) => y.self_ms - x.self_ms);
 	const kit_ms = kit_load_serialize_ms(a);
 	const runs = meta.trigger === 'page' ? Math.max(meta.runs?.length ?? 1, 1) : 1;
 	if (uneval.length && kit_ms >= 3 && kit_ms >= a.busy_ms * 0.03) {
@@ -3230,7 +3656,7 @@ function accuracy_findings(
 				{
 					fix:
 						wait_more > cpu_more && calls !== 0
-							?'Most of it is the first calls opening their connections: reuse one HTTP agent or client across requests (module scope, keep-alive on), and keep calls to services that are slow to connect out of the first render where you can.'
+							? 'Most of it is the first calls opening their connections: reuse one HTTP agent or client across requests (module scope, keep-alive on), and keep calls to services that are slow to connect out of the first render where you can.'
 							: 'Fewer and smaller server modules on the page’s path: lazy-import what the render rarely needs, keep heavy libraries out of hooks and layouts, and prefer a warm instance (provisioned concurrency) where the platform offers one.'
 				}
 			);
@@ -3374,12 +3800,24 @@ function accuracy_findings(
 			const own = extras.visit;
 			const font = lcp_font(own);
 			const parts = own?.paints?.lcp_url
-				? vital_parts({ vitals: {}, visit: { nav: own.nav, paints: own.paints, resources: own.resources }, islands: [], firsts: [], shifts: [], longtasks: [] }, 'lcp')
+				? vital_parts(
+						{
+							vitals: {},
+							visit: { nav: own.nav, paints: own.paints, resources: own.resources },
+							islands: [],
+							firsts: [],
+							shifts: [],
+							longtasks: []
+						},
+						'lcp'
+					)
 				: null;
 			const after = parts?.filter((x) => x.key !== 'ttfb') ?? [];
 			const top = after.length ? after.reduce((a, b) => (b.ms > a.ms ? b : a)) : null;
 			const gap = (own?.paints?.lcp ?? v.lcp) - ttfb;
-			const lcp_file = own?.paints?.lcp_url ? own.paints.lcp_url.slice(own.paints.lcp_url.lastIndexOf('/') + 1).split('?')[0] : '';
+			const lcp_file = own?.paints?.lcp_url
+				? own.paints.lcp_url.slice(own.paints.lcp_url.lastIndexOf('/') + 1).split('?')[0]
+				: '';
 			const part = !font && top && top.ms >= gap / 2 ? top : null;
 			const PART_WORDS: Record<string, [string, string]> = {
 				delay: [
@@ -3418,7 +3856,9 @@ function accuracy_findings(
 						: words
 							? words[0]
 							: 'assets, fonts, hydration.') +
-					(rivals ? ` Beside it, ${fmt_bytes(rivals.bytes)} of images far below the first screen downloaded (${rivals.files.join(', ')}).` : ''),
+					(rivals
+						? ` Beside it, ${fmt_bytes(rivals.bytes)} of images far below the first screen downloaded (${rivals.files.join(', ')}).`
+						: ''),
 				{
 					fix:
 						(font
@@ -3426,7 +3866,9 @@ function accuracy_findings(
 							: words
 								? words[1]
 								: 'Make the hero markup static (a lake), preload its image and font, and keep the islands above the fold small: the server is not the bottleneck here.') +
-						(rivals ? ' And give the images below the first screen `loading="lazy"`: they took a share of the network the largest paint needed.' : '')
+						(rivals
+							? ' And give the images below the first screen `loading="lazy"`: they took a share of the network the largest paint needed.'
+							: '')
 				}
 			);
 		} else if (ttfb > 0 && ttfb >= server * 2 && ttfb - server >= 200) {
@@ -3439,10 +3881,16 @@ function accuracy_findings(
 			let split = '';
 			let where: 'connect' | 'before' | 'inside' | null = null;
 			if (ph && held !== undefined) {
-				const connect = (ph.redirect ?? 0) + (ph.worker ?? 0) + (ph.dns ?? 0) + (ph.connect ?? 0) + (ph.tls ?? 0);
+				const connect =
+					(ph.redirect ?? 0) + (ph.worker ?? 0) + (ph.dns ?? 0) + (ph.connect ?? 0) + (ph.tls ?? 0);
 				const before = Math.max(0, (ph.wait ?? 0) - held);
 				const inside = Math.max(0, held - server);
-				where = connect >= before && connect >= inside ? 'connect' : before >= inside ? 'before' : 'inside';
+				where =
+					connect >= before && connect >= inside
+						? 'connect'
+						: before >= inside
+							? 'before'
+							: 'inside';
 				split = ` In the report's own visit (TTFB ${fmt_ms(own!.res_start)} ms): ${fmt_ms(connect)} ms redirecting and connecting, ${fmt_ms(before)} ms before the server's handler took the request, and ${fmt_ms(inside)} ms inside the handler beyond the render.`;
 			}
 			warn(
@@ -3456,7 +3904,7 @@ function accuracy_findings(
 								? 'The request waited before this server took it: a proxy or CDN in front, a cold instance starting, or the network. Look at what fronts the server, and at the cold-start section.'
 								: where === 'inside'
 									? meta.dev
-										? "The server held the request past its render: on the dev server a first request compiles the page (profile a build for its real TTFB), or a hook before the render awaits something."
+										? 'The server held the request past its render: on the dev server a first request compiles the page (profile a build for its real TTFB), or a hook before the render awaits something.'
 										: 'The server held the request past its render: a hook before or after the render (auth, a session lookup, a redirect check) awaits something. Profile it with the handle, not only the page.'
 									: 'Look at the cold-start section and at what fronts the server (a CDN, an auth proxy): the render is not where that time goes.'
 				}
@@ -3467,7 +3915,9 @@ function accuracy_findings(
 				`The browser measured TTFB ${v.ttfb === null ? '—' : fmt_ms(v.ttfb) + ' ms'}, LCP ${fmt_ms(v.lcp)} ms${v.cls !== null ? `, CLS ${v.cls}` : ''}${v.inp !== null ? `, INP ${fmt_ms(v.inp)} ms` : ''} over ${v.n} visit${v.n === 1 ? '' : 's'}.` +
 					// (the latest visit loaded with the devtools dock open, its first paint right after the dock's:
 					// the paints may be the dock's own — see dock-in-paint)
-					(dock_skewed(extras.visit) ? ' The latest visit loaded with the devtools dock open, and its paints may be the dock’s: read the paints from a visit with the dock closed.' : '')
+					(dock_skewed(extras.visit)
+						? ' The latest visit loaded with the devtools dock open, and its paints may be the dock’s: read the paints from a visit with the dock closed.'
+						: '')
 			);
 		}
 	}
@@ -3514,7 +3964,10 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 				js: sj!.js,
 				js_wire: sj!.js_wire,
 				js_files: sj!.js_files,
-				lazy_js: Math.max(0, pa.totals.lazy_js - (sj!.woke_early?.bytes ?? 0) - (sj!.runtime_parts?.bytes ?? 0)),
+				lazy_js: Math.max(
+					0,
+					pa.totals.lazy_js - (sj!.woke_early?.bytes ?? 0) - (sj!.runtime_parts?.bytes ?? 0)
+				),
 				css: pa.totals.css,
 				// (the runtime's parts it loaded at start were "other scripts'" before it knew them: still over the wire)
 				wire: pa.totals.wire + (sj!.runtime?.wire ?? 0) + (sj!.runtime_parts?.wire ?? 0),
@@ -3523,8 +3976,17 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 				top: pa.assets
 					.filter((x) => x.kind === 'script' && !x.lazy)
 					.slice(0, 4)
-					.map((x) => `${asset_name(x.url)} ${fmt_bytes(x.bytes)}${x.contains?.length ? ` (${x.contains.slice(0, 3).join(', ')})` : ''}`)
-					.concat(sj!.runtime ? [`loaded at runtime ${sj!.runtime.island_entries && extras.visit?.holes_answered?.length ? `(islands inside its holes) ${fmt_bytes(sj!.runtime.bytes)}` : `by other scripts ${fmt_bytes(sj!.runtime.bytes)} (${sj!.runtime.by[0].who})`}`] : [])
+					.map(
+						(x) =>
+							`${asset_name(x.url)} ${fmt_bytes(x.bytes)}${x.contains?.length ? ` (${x.contains.slice(0, 3).join(', ')})` : ''}`
+					)
+					.concat(
+						sj!.runtime
+							? [
+									`loaded at runtime ${sj!.runtime.island_entries && extras.visit?.holes_answered?.length ? `(islands inside its holes) ${fmt_bytes(sj!.runtime.bytes)}` : `by other scripts ${fmt_bytes(sj!.runtime.bytes)} (${sj!.runtime.by[0].who})`}`
+								]
+							: []
+					)
 			}
 		: null;
 	// data shipped for hydration: the seeds, the props tail, the inline script text
@@ -3541,10 +4003,24 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 	// the same for layout shifts and CLS)
 	const no_longtasks = !!visit?.unsupported?.includes('longtask');
 	const no_shifts = !!visit?.unsupported?.includes('layout-shift');
-	const tbt = no_longtasks ? null : visit?.longtasks?.length ? Math.round(visit.longtasks.reduce((s, t) => s + Math.max(0, t.ms - 50), 0)) : visit ? 0 : null;
+	const tbt = no_longtasks
+		? null
+		: visit?.longtasks?.length
+			? Math.round(visit.longtasks.reduce((s, t) => s + Math.max(0, t.ms - 50), 0))
+			: visit
+				? 0
+				: null;
 	const unmeasured: ScoreInputs['unmeasured'] = {
-		...(no_longtasks ? { tbt: 'the browser that visited does not report long tasks (Safari, for one): profile the page from a Chromium browser to measure it' } : {}),
-		...(no_shifts ? { cls: 'the browser that visited does not report layout shifts (Safari, for one): profile the page from a Chromium browser to measure it' } : {})
+		...(no_longtasks
+			? {
+					tbt: 'the browser that visited does not report long tasks (Safari, for one): profile the page from a Chromium browser to measure it'
+				}
+			: {}),
+		...(no_shifts
+			? {
+					cls: 'the browser that visited does not report layout shifts (Safari, for one): profile the page from a Chromium browser to measure it'
+				}
+			: {})
 	};
 	const inputs: ScoreInputs = {
 		assets,
@@ -3552,9 +4028,20 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 		htmlBytes: extras.strip?.total ?? pa?.html.bytes ?? null,
 		// the bytes the browser fetched for nothing: pixels past what each box shows, preloads nothing used
 		...(() => {
-			const img = (visit?.images_oversized ?? []).reduce((s, i) => s + i.bytes * Math.max(0, 1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1])), 0);
+			const img = (visit?.images_oversized ?? []).reduce(
+				(s, i) =>
+					s +
+					i.bytes *
+						Math.max(
+							0,
+							1 - (i.shown[0] * i.shown[1] * i.dpr * i.dpr) / (i.natural[0] * i.natural[1])
+						),
+				0
+			);
 			const pre = (visit?.preloads_unused ?? []).reduce((s, p) => s + p.bytes, 0);
-			return img + pre >= 10 * 1024 ? { wasted: { bytes: Math.round(img + pre), images: Math.round(img), preloads: pre } } : {};
+			return img + pre >= 10 * 1024
+				? { wasted: { bytes: Math.round(img + pre), images: Math.round(img), preloads: pre } }
+				: {};
 		})(),
 		hasIslands: islands.length > 0,
 		browserSeen: client.length > 0 || !!visit,
@@ -3580,7 +4067,11 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 						lcp: visit.paints?.lcp ?? null,
 						fcp: visit.paints?.fcp ?? null,
 						ttfb: visit.nav?.start_hidden ? null : (visit.nav?.res_start ?? null),
-						cls: no_shifts ? null : visit.shifts?.length ? Math.round(visit.shifts.reduce((s, x) => s + x.value, 0) * 1000) / 1000 : 0,
+						cls: no_shifts
+							? null
+							: visit.shifts?.length
+								? Math.round(visit.shifts.reduce((s, x) => s + x.value, 0) * 1000) / 1000
+								: 0,
 						inp: null
 					}
 				: null,
@@ -3602,7 +4093,12 @@ export type ReportJson = {
 		prerendered: string | null;
 		budget_note: string | null;
 		runs_measured: number[] | null;
-		instance: { first_request_ms: number; node_ms: number; age_s: number; requests_before: number } | null;
+		instance: {
+			first_request_ms: number;
+			node_ms: number;
+			age_s: number;
+			requests_before: number;
+		} | null;
 		lambda: boolean;
 		request: { method: string; path: string; route: string | null; ms: number } | null;
 		redirect_stub?: boolean | undefined;
@@ -3633,13 +4129,23 @@ export type ReportJson = {
 	};
 	score: PageScore;
 	findings: Finding[];
-	budget: { label: string; category: import('./analyze.ts').FrameCategory; ms: number; pct: number }[];
+	budget: {
+		label: string;
+		category: import('./analyze.ts').FrameCategory;
+		ms: number;
+		pct: number;
+	}[];
 	timeline: {
 		window_ms: number;
 		cpu_ms: number;
 		wait_ms: number;
 		unaccounted_ms: number;
-		phases: { phase: import('./timeline.ts').Phase; label: string; cpu_ms: number; wait_ms: number }[];
+		phases: {
+			phase: import('./timeline.ts').Phase;
+			label: string;
+			cpu_ms: number;
+			wait_ms: number;
+		}[];
 		steps: {
 			at_ms: number;
 			ms: number;
@@ -3790,13 +4296,25 @@ export type ReportJson = {
 		source: { start: number; lines: string[] } | null;
 		callees: import('./analyze.ts').Callee[] | null;
 	}[];
-	files: { file: string; category: import('./analyze.ts').FrameCategory; self_ms: number; pct_busy: number }[];
+	files: {
+		file: string;
+		category: import('./analyze.ts').FrameCategory;
+		self_ms: number;
+		pct_busy: number;
+	}[];
 	network: {
 		count: number;
 		total_ms: number;
 		sequential_ms: number;
 		errors: number;
-		hosts: { host: string; calls: number; total_ms: number; p50_ms: number; max_ms: number; errors: number }[];
+		hosts: {
+			host: string;
+			calls: number;
+			total_ms: number;
+			p50_ms: number;
+			max_ms: number;
+			errors: number;
+		}[];
 		calls: {
 			method: string;
 			url: string;
@@ -3834,7 +4352,13 @@ export type ReportJson = {
 	browser: {
 		cpu?:
 			| {
-					components: { name: string; file: string; self_ms: number; total_ms: number; instances: number | null }[];
+					components: {
+						name: string;
+						file: string;
+						self_ms: number;
+						total_ms: number;
+						instances: number | null;
+					}[];
 					hot_functions: {
 						name: string;
 						file: string;
@@ -3845,9 +4369,16 @@ export type ReportJson = {
 						total_ms: number;
 					}[];
 					by_island?:
-						| { fp: string; name: string | null; ms: number; top: import('./client-windows.ts').WindowFn[] }[]
+						| {
+								fp: string;
+								name: string | null;
+								ms: number;
+								top: import('./client-windows.ts').WindowFn[];
+						  }[]
 						| undefined;
-					outside_islands?: { ms: number; top: import('./client-windows.ts').WindowFn[] } | undefined;
+					outside_islands?:
+						| { ms: number; top: import('./client-windows.ts').WindowFn[] }
+						| undefined;
 					at: number;
 					sampled_ms: number;
 					busy_ms: number;
@@ -3857,11 +4388,19 @@ export type ReportJson = {
 		visit?:
 			| {
 					longtasks: number;
-					islands: { changed?: boolean | undefined; fp: string; t0: number; loaded: number; done: number }[];
+					islands: {
+						changed?: boolean | undefined;
+						fp: string;
+						t0: number;
+						loaded: number;
+						done: number;
+					}[];
 					firsts: { fp: string; t: number; type: string }[];
 					shifts: number;
 					cls_by_island: { [k: string]: number };
-					resource_totals?: { type: string; count: number; transfer: number; size: number }[] | undefined;
+					resource_totals?:
+						| { type: string; count: number; transfer: number; size: number }[]
+						| undefined;
 					at: number;
 					nav: import('./visit.ts').VisitNav;
 					paints: {
@@ -3873,7 +4412,11 @@ export type ReportJson = {
 						lcp_replaced?: true;
 						lcp_lazy?: true;
 						lcp_priority?: 'high' | 'low';
-						held?: { outcome: 'arrived' | 'input' | 'cap' | 'none'; resources: number; waited_ms: number };
+						held?: {
+							outcome: 'arrived' | 'input' | 'cap' | 'none';
+							resources: number;
+							waited_ms: number;
+						};
 					};
 					resources: number;
 					resource_bytes: number;
@@ -3965,7 +4508,14 @@ export type ReportJson = {
 		count: number;
 		reasons: Record<string, number>;
 	}[];
-	sync_io: { name: string; module: string; self_ms: number; total_ms: number; calls: number | null; callers: string[] }[];
+	sync_io: {
+		name: string;
+		module: string;
+		self_ms: number;
+		total_ms: number;
+		calls: number | null;
+		callers: string[];
+	}[];
 	memo_candidates: import('./insights.ts').MemoCandidate[];
 	promises: { count: number; per_render: number; top: { caller: string; share: number }[] } | null;
 	retained: {
@@ -3985,7 +4535,12 @@ export type ReportJson = {
 	stacks: {
 		window_ms: number;
 		raw_samples: number;
-		frames: { name: string; file: string | null; category: import('./analyze.ts').FrameCategory; parent: number }[];
+		frames: {
+			name: string;
+			file: string | null;
+			category: import('./analyze.ts').FrameCategory;
+			parent: number;
+		}[];
 		t_ms: number[];
 		d_ms: number[];
 		leaf: number[];
@@ -4090,7 +4645,11 @@ export type ReportJson = {
 
 /** The page's assets in the JSON report (`twice` is absent when nothing shipped twice). */
 type ReportJsonAssets = {
-	twice?: { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[];
+	twice?: {
+		name: string;
+		copies: { file: string; bytes: number; from?: string }[];
+		extra: number;
+	}[];
 	missed_why?: { url: string; why: string }[] | undefined;
 	missed?: string[] | undefined;
 	totals: {
@@ -4131,7 +4690,12 @@ type ReportJsonAssets = {
 	missing?: undefined;
 };
 
-export function report_json(a: Analysis, meta: ReportMeta, base: string, extras: ReportExtras): ReportJson {
+export function report_json(
+	a: Analysis,
+	meta: ReportMeta,
+	base: string,
+	extras: ReportExtras
+): ReportJson {
 	const dur = a.duration_ms || 1;
 	const busy = a.busy_ms || 1;
 	const net = extras.net.filter((c) => c.ms >= 0);
@@ -4335,7 +4899,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 						modules: [r.module_url, ...r.hints].filter(Boolean),
 						interactivity: r.interactivity,
 						// its own lines that draw differently in the browser (the devtools' island card reads them)
-						...(extras.hazards?.[r.entry]?.length ? { hazards: extras.hazards[r.entry].slice(0, 3) } : {}),
+						...(extras.hazards?.[r.entry]?.length
+							? { hazards: extras.hazards[r.entry].slice(0, 3) }
+							: {}),
 						client: cl
 							? {
 									hydrations: cl.n,
@@ -4502,7 +5068,12 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 		},
 		// the cold (warm-up) render against the warm ones, per file
 		cold: meta.cold
-			? { ms: meta.cold.ms, busy_ms: meta.cold.busy_ms, files: cold_rows(a, meta), ...(meta.cold.calls !== undefined ? { calls: meta.cold.calls } : {}) }
+			? {
+					ms: meta.cold.ms,
+					busy_ms: meta.cold.busy_ms,
+					files: cold_rows(a, meta),
+					...(meta.cold.calls !== undefined ? { calls: meta.cold.calls } : {})
+				}
 			: null,
 		// the page's web vitals from the profiler user's own browser, the app's own marks there, and
 		// the browser's CPU profile of hydration (components + functions, compact)
@@ -4523,7 +5094,9 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 										resource_bytes: extras.visit.resource_totals
 											? extras.visit.resource_totals.reduce((s, t) => s + t.transfer, 0)
 											: extras.visit.resources.reduce((s, r) => s + (r.transfer ?? 0), 0),
-										...(extras.visit.resource_totals ? { resource_totals: extras.visit.resource_totals } : {}),
+										...(extras.visit.resource_totals
+											? { resource_totals: extras.visit.resource_totals }
+											: {}),
 										longtasks: extras.visit.longtasks.length,
 										islands: extras.visit.islands.map((i) => ({
 											fp: i.fp,
@@ -4558,12 +5131,14 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
 										// each island's hydrate window, and the long tasks outside them: what ran there
 										...(extras.client_cpu.windows
 											? {
-													by_island: Object.entries(extras.client_cpu.windows.islands).map(([fp, w]) => ({
-														fp,
-														name: island_rows_of(meta).find((r) => r.fp === fp)?.name ?? null,
-														ms: w.ms,
-														top: w.top
-													})),
+													by_island: Object.entries(extras.client_cpu.windows.islands).map(
+														([fp, w]) => ({
+															fp,
+															name: island_rows_of(meta).find((r) => r.fp === fp)?.name ?? null,
+															ms: w.ms,
+															top: w.top
+														})
+													),
 													outside_islands: extras.client_cpu.windows.outside
 												}
 											: {}),

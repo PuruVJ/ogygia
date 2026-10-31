@@ -13,15 +13,15 @@ Two small systems cover much ground: **when** a region wakes, and **what occurs*
 
 Two keys share one set of schedule words. `wake` carries the schedule for islands. `fetch` carries it for server islands (`render: 'deferred'`). Thus you learn the words one time:
 
-| Value | When it fires | Good for |
-| --- | --- | --- |
-| `load` | Immediately after the runtime starts | UI above the fold that must be interactive now |
-| `idle` | On `requestIdleCallback` | Widgets that can wait |
-| `visible` | When scrolled into the viewport | All content below the fold |
-| `interaction` | On the first pointer, key, or focus inside it | UI that most visitors never touch |
-| `'(media query)'` | When the CSS media query matches | UI for mobile only or desktop only |
+| Value             | When it fires                                 | Good for                                       |
+| ----------------- | --------------------------------------------- | ---------------------------------------------- |
+| `load`            | Immediately after the runtime starts          | UI above the fold that must be interactive now |
+| `idle`            | On `requestIdleCallback`                      | Widgets that can wait                          |
+| `visible`         | When scrolled into the viewport               | All content below the fold                     |
+| `interaction`     | On the first pointer, key, or focus inside it | UI that most visitors never touch              |
+| `'(media query)'` | When the CSS media query matches              | UI for mobile only or desktop only             |
 
-On an **island** (`render` defaults to `static`), `wake` says *when the JS runs*. On a **server island** (`render: 'deferred'`), `fetch` says *when the HTML is fetched*. The words are the same for both. On a server island, `interaction` makes an on-demand hole: the first hover or focus inside its fallback fetches it. A server island never takes `wake`, since it has no JS of its own.
+On an **island** (`render` defaults to `static`), `wake` says _when the JS runs_. On a **server island** (`render: 'deferred'`), `fetch` says _when the HTML is fetched_. The words are the same for both. On a server island, `interaction` makes an on-demand hole: the first hover or focus inside its fallback fetches it. A server island never takes `wake`, since it has no JS of its own.
 
 ```svelte
 <script>
@@ -54,11 +54,11 @@ Each of the four demos below is a real island with that schedule:
 
 - **The first click counts.** ogygia captures it while the island wakes, and replays it when the island is live. A button, a checkbox, or a link activates exactly one time.
 - **Typed text stays.** Characters land in the field natively, because it is real HTML. After hydration, the typed value, the selection, and the focus are restored, and `bind:` syncs.
-- **Hover warms it.** When the pointer enters the region, the chunk prefetches. Thus, when the press lands, the wake is usually immediate. For an on-demand *hole* (`render: 'deferred', fetch: 'interaction'`) the hover fetches and swaps in one go; add `prefetch: 'idle'` to warm its HTML at page idle instead, so the first hover finds it already there (see [`prefetch` in `presets`](/docs/reference/api#ogygiavite-presets)).
+- **Hover warms it.** When the pointer enters the region, the chunk prefetches. Thus, when the press lands, the wake is usually immediate. For an on-demand _hole_ (`render: 'deferred', fetch: 'interaction'`) the hover fetches and swaps in one go; add `prefetch: 'idle'` to warm its HTML at page idle instead, so the first hover finds it already there (see [`prefetch` in `presets`](/docs/reference/api#ogygiavite-presets)).
 
 The same holds for every other schedule until the island is live. A `load`, `idle`, `visible` or media island is server markup with no handlers until it wakes, so a press on it before then wakes it at once, and the click is replayed when it is live. A Ctrl/Cmd/Shift- or middle-click on a link opens it as the browser would, since a replay could not.
 
-One caution: the replayed first event is not a *trusted* browser gesture. Gesture-gated APIs (`window.open`, clipboard, fullscreen) are blocked if called from it. A component that ignores untrusted clicks (`if (!event.isTrusted) return`, often written to skip its own synthetic clicks) ignores the replay too, so narrow such a guard. A component can find this condition and adapt:
+One caution: the replayed first event is not a _trusted_ browser gesture. Gesture-gated APIs (`window.open`, clipboard, fullscreen) are blocked if called from it. A component that ignores untrusted clicks (`if (!event.isTrusted) return`, often written to skip its own synthetic clicks) ignores the replay too, so narrow such a guard. A component can find this condition and adapt:
 
 ```svelte
 <script>
@@ -92,9 +92,9 @@ ogygia({ visible: { margin: '0px' } });
 
 ### How the bytes arrive
 
-The wake decides when an island's code *downloads* as well as when it runs. Nothing to configure:
+The wake decides when an island's code _downloads_ as well as when it runs. Nothing to configure:
 
-- **No island code moves before your hero has arrived.** Every wake except `interaction` waits until the page has painted *and* every image or preload you marked `fetchpriority="high"` has loaded (that is your LCP resource: ogygia does not guess it). The visitor's first click or key ends the wait at once (the browser stops measuring LCP there), and so does a 2.5 s cap. A page with no marked image waits only for the paint. Mark your hero:
+- **No island code moves before your hero has arrived.** Every wake except `interaction` waits until the page has painted _and_ every image or preload you marked `fetchpriority="high"` has loaded (that is your LCP resource: ogygia does not guess it). The visitor's first click or key ends the wait at once (the browser stops measuring LCP there), and so does a 2.5 s cap. A page with no marked image waits only for the paint. Mark your hero:
 
   ```html
   <img src="/hero.jpg" fetchpriority="high" alt="…" />
@@ -122,20 +122,20 @@ A `render: 'deferred'` region is content only. It never ships JS. On it, `fetch`
 import Panel from '$lib/Panel.svelte' with { render: 'deferred', fetch: 'visible' };
 ```
 
-Sometimes a fetched hole *also* needs interactivity. Do not stack two schedules on one import. Nest a normal `wake` island inside the component of the server island. `fetch` decides when the HTML arrives. `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/regions/server-islands).
+Sometimes a fetched hole _also_ needs interactivity. Do not stack two schedules on one import. Nest a normal `wake` island inside the component of the server island. `fetch` decides when the HTML arrives. `wake` on the inner island decides when its JS runs. See [Server islands → nesting an island](/docs/regions/server-islands).
 
 ## Nesting: one rule
 
 Walk up the tree. The **closest marked parent decides**.
 
-| Nesting | What happens |
-| --- | --- |
-| Island on the page | Gets its own JS |
-| Island inside an island | Shares the JS of its parent: one interactive tree, not two |
-| Lake inside an island | Stays static HTML. The JS of the lake never ships |
-| Island inside a lake | Gets its own JS again |
-| Server island inside an island | Renders inline as static HTML, like a lake (`render: 'deferred'` ignored). Its JS never ships, and an island inside it gets its own JS |
-| Server island inside a live snippet | Stays deferred: its fallback ships, its HTML arrives on its schedule |
+| Nesting                             | What happens                                                                                                                           |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Island on the page                  | Gets its own JS                                                                                                                        |
+| Island inside an island             | Shares the JS of its parent: one interactive tree, not two                                                                             |
+| Lake inside an island               | Stays static HTML. The JS of the lake never ships                                                                                      |
+| Island inside a lake                | Gets its own JS again                                                                                                                  |
+| Server island inside an island      | Renders inline as static HTML, like a lake (`render: 'deferred'` ignored). Its JS never ships, and an island inside it gets its own JS |
+| Server island inside a live snippet | Stays deferred: its fallback ships, its HTML arrives on its schedule                                                                   |
 
 ```
 page → island → lake → island → …
@@ -148,7 +148,6 @@ An island in an island shares one tree. Thus the schedule of the child is ignore
 - **Do** set islands below the fold to `visible`. This performance gain has no cost.
 - **Do** use `idle` for UI that the user does not touch immediately.
 - **Don't** try to make a `render: 'deferred'` region interactive alone. It ships no JS. Nest a `wake` island inside it.
-
 
 <style>
   .doc-demo-grid {

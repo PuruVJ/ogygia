@@ -16,7 +16,9 @@ const inject_html = (key: 'counter_ssr_b64' | 'counter_tail_ssr_b64' | 'counter_
 // resolve it against the seed script in the same document and hand the island its own copy.
 test('an island whose props are a seed REFERENCE hydrates with the referenced data', async () => {
 	document.body.innerHTML = inject_html('counter_seedref_ssr_b64');
-	expect(document.querySelector('script[data-ogygia-props]')!.textContent).toContain('OgygiaSeedRef');
+	expect(document.querySelector('script[data-ogygia-props]')!.textContent).toContain(
+		'OgygiaSeedRef'
+	);
 	const ssr_button = document.querySelector('button');
 
 	bootDev();

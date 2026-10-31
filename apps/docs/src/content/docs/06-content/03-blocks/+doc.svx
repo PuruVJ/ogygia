@@ -13,7 +13,7 @@ related:
 A **block** page is data: a tree of nodes. Each node names a component `type` plus its `props`. `blocks()` renders that tree the same way that `markdown()` renders `.svx`: as an entry `body` that you drop in with `<Region of={entry.body} />`. It is the render half of a visual page builder. Your CMS (or a JSON file) owns the layout. ogygia owns the rendering.
 
 ::: tip When to use
-Use blocks when *content decides layout*: marketing pages assembled in a visual editor, CMS-driven landing pages, each case where a non-developer arranges components. When a developer writes the layout in a `.svelte` file, you do not need this. Only write the components.
+Use blocks when _content decides layout_: marketing pages assembled in a visual editor, CMS-driven landing pages, each case where a non-developer arranges components. When a developer writes the layout in a `.svelte` file, you do not need this. Only write the components.
 :::
 
 The panel below is a block tree (a `Hero`, a `Grid` of two `Feature`s, and one interactive `CounterBlock`) rendered live from the data lower on this page.

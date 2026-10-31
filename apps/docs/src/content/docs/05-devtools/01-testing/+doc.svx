@@ -95,11 +95,11 @@ The reports are built by the page's testing engine, which ships with the site's 
 
 What each engine version detects:
 
-| Version | Added | Detection |
-| --- | --- | --- |
-| 1 (0.8.2) | | |
-| 2 | instance `key`, `t0` / `done`, `navigations`, finding `names`, `counts.cls` | A router navigation that never swapped the page no longer starts a new page for `page()`. Hydration status as in 1. |
-| 3 | `attributesOnly`, `attributes`, `inputDuringHydration`, `ignoreAttributes`, `self`, lean testing | Hydration status as in 1 and 2. The new fields only say what kind of change it was. |
+| Version   | Added                                                                                            | Detection                                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 1 (0.8.2) |                                                                                                  |                                                                                                                     |
+| 2         | instance `key`, `t0` / `done`, `navigations`, finding `names`, `counts.cls`                      | A router navigation that never swapped the page no longer starts a new page for `page()`. Hydration status as in 1. |
+| 3         | `attributesOnly`, `attributes`, `inputDuringHydration`, `ignoreAttributes`, `self`, lean testing | Hydration status as in 1 and 2. The new fields only say what kind of change it was.                                 |
 
 So an island that reads `clean` on one engine and `changed` on another differed in that run. Input landing while it hydrated is the usual cause, and version 3 flags it.
 
@@ -138,21 +138,21 @@ A window that cannot run never costs you the session: `session.server` is then `
 
 ## The matchers
 
-| Matcher | Passes when |
-| --- | --- |
+| Matcher                                    | Passes when                                                                                                                            |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `toHaveNoFindings({ severity?, ignore? })` | No finding at or above `severity` (`info`, `warn`, `error`), except the codes in `ignore`. Works on page, session and profile reports. |
-| `toMeetBudget(budget)` | Every line of the budget is met. |
-| `toHydrateCleanly({ allow? })` | No island failed, recovered, or changed its markup (`allow` lets some statuses through). |
+| `toMeetBudget(budget)`                     | Every line of the budget is met.                                                                                                       |
+| `toHydrateCleanly({ allow? })`             | No island failed, recovered, or changed its markup (`allow` lets some statuses through).                                               |
 
 A failing matcher says what missed and where: `Clock: changed — −rendered on the server +rendered on the browser`.
 
 Budget lines, by report:
 
-| Report | Lines |
-| --- | --- |
-| `page()` | `lcp`, `fcp`, `cls`, `inp`, `ttfb`, `longTaskMs`, `islandWakeMs` (the slowest island's wake) |
-| `record()` | `maxInteractionMs`, `slowInteractions`, `errors`, `cls` (shifts with no input), `longTaskMs`, `failedRequests`, `serverBusyMs` (with `server: true`) |
-| `profile()` | `score` (at least), `renderMs` (the median render), `jsBytes` (JS at start; a build only) |
+| Report      | Lines                                                                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page()`    | `lcp`, `fcp`, `cls`, `inp`, `ttfb`, `longTaskMs`, `islandWakeMs` (the slowest island's wake)                                                         |
+| `record()`  | `maxInteractionMs`, `slowInteractions`, `errors`, `cls` (shifts with no input), `longTaskMs`, `failedRequests`, `serverBusyMs` (with `server: true`) |
+| `profile()` | `score` (at least), `renderMs` (the median render), `jsBytes` (JS at start; a build only)                                                            |
 
 `checkBudget(report, budget)` returns the same lines as data, for your own logic.
 

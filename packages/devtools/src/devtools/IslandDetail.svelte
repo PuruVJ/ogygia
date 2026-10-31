@@ -104,7 +104,7 @@
 		const t0 = marks.length ? marks[0].t : 0;
 		const start = marks.find((m) => m.name === 'region.hydrate.start');
 		const done = marks.find((m) => m.name === 'region.hydrate.done');
-		const hydrateMs = start && done ? done.t - start.t : (rendered && rendered.ms) ?? null;
+		const hydrateMs = start && done ? done.t - start.t : ((rendered && rendered.ms) ?? null);
 		// what the browser measured of this island (the Page tab's row + the findings that name it)
 		let browser = null;
 		try {
@@ -157,7 +157,9 @@
 		<button class="back" onclick={onclose} title="back to the roster">‹ back</button>
 		<span class="dot og-{model.info.kind}"></span>
 		<b class="name">{model.name}</b>
-		<span class="k">{model.info.kind}{model.info.kind === 'island' ? ' · ' + model.info.wake : ''}</span>
+		<span class="k"
+			>{model.info.kind}{model.info.kind === 'island' ? ' · ' + model.info.wake : ''}</span
+		>
 		<button class="loc" onclick={locate}>scroll to it ›</button>
 	</div>
 
@@ -190,11 +192,27 @@
 		<div class="rows" data-og-detail-browser>
 			{#if model.browser.row}
 				{@const r = model.browser.row}
-				<div class="row"><span class="rk">module load</span><span class="v">{r.load_ms} ms</span></div>
-				{#if r.queue_ms !== null}<div class="row"><span class="rk">waited for its turn</span><span class="v">{r.queue_ms} ms</span></div>{/if}
-				<div class="row"><span class="rk">hydrate step</span><span class="v">{r.hydrate_ms} ms{#if r.longtask_ms}<span class="muted"> · {r.longtask_ms} ms in long tasks</span>{/if}</span></div>
-				<div class="row"><span class="rk">awake at</span><span class="v">{Math.round(r.done)} ms<span class="muted"> after navigation</span></span></div>
-				{#if r.shift}<div class="row"><span class="rk">layout shift</span><span class="v">{r.shift}</span></div>{/if}
+				<div class="row">
+					<span class="rk">module load</span><span class="v">{r.load_ms} ms</span>
+				</div>
+				{#if r.queue_ms !== null}<div class="row">
+						<span class="rk">waited for its turn</span><span class="v">{r.queue_ms} ms</span>
+					</div>{/if}
+				<div class="row">
+					<span class="rk">hydrate step</span><span class="v"
+						>{r.hydrate_ms} ms{#if r.longtask_ms}<span class="muted">
+								· {r.longtask_ms} ms in long tasks</span
+							>{/if}</span
+					>
+				</div>
+				<div class="row">
+					<span class="rk">awake at</span><span class="v"
+						>{Math.round(r.done)} ms<span class="muted"> after navigation</span></span
+					>
+				</div>
+				{#if r.shift}<div class="row">
+						<span class="rk">layout shift</span><span class="v">{r.shift}</span>
+					</div>{/if}
 			{/if}
 			{#each model.browser.findings as f, i (f.code + i)}
 				<div class="find {f.severity}">{f.message}</div>
@@ -204,16 +222,40 @@
 
 	{#if model.session}
 		{@const ss = model.session}
-		<div class="sec">in the last session <span class="secn">— what using it did (Record tab)</span></div>
+		<div class="sec">
+			in the last session <span class="secn">— what using it did (Record tab)</span>
+		</div>
 		<div class="rows" data-og-detail-session>
-			<div class="row"><span class="rk">clicks</span><span class="v">{ss.clicks}{#if ss.mutations}<span class="muted"> · {ss.mutations} DOM changes</span>{/if}</span></div>
+			<div class="row">
+				<span class="rk">clicks</span><span class="v"
+					>{ss.clicks}{#if ss.mutations}<span class="muted">
+							· {ss.mutations} DOM changes</span
+						>{/if}</span
+				>
+			</div>
 			{#each ss.slow as x, i (i)}
-				<div class="row"><span class="rk">slow interaction</span><span class="v">{Math.round(x.duration)} ms<span class="muted"> · handlers {Math.round(x.processing)} ms · {x.target}</span></span></div>
+				<div class="row">
+					<span class="rk">slow interaction</span><span class="v"
+						>{Math.round(x.duration)} ms<span class="muted">
+							· handlers {Math.round(x.processing)} ms · {x.target}</span
+						></span
+					>
+				</div>
 			{/each}
 			{#each ss.requests.slice(0, 5) as q, i (q.url + i)}
 				<div class="row">
 					<span class="rk">asked the server</span>
-					<span class="v">{q.url} <b>{Math.round(q.ms)} ms</b>{#if q.status && q.status >= 400}<span class="muted"> · {q.status}</span>{/if}{#if q.server_ms !== null}<span class="muted"> · {Math.round(q.server_ms)} ms on the server{q.net_ms ? `, ${Math.round(q.net_ms)} ms waiting` : ''}{q.up ? ` (${q.up})` : ''}</span>{/if}</span>
+					<span class="v"
+						>{q.url} <b>{Math.round(q.ms)} ms</b>{#if q.status && q.status >= 400}<span
+								class="muted"
+							>
+								· {q.status}</span
+							>{/if}{#if q.server_ms !== null}<span class="muted">
+								· {Math.round(q.server_ms)} ms on the server{q.net_ms
+									? `, ${Math.round(q.net_ms)} ms waiting`
+									: ''}{q.up ? ` (${q.up})` : ''}</span
+							>{/if}</span
+					>
 				</div>
 			{/each}
 		</div>
@@ -221,15 +263,48 @@
 
 	{#if model.server}
 		{@const s = model.server.row}
-		<div class="sec">on the server <span class="secn">— last profile, {new Date(model.server.at).toLocaleTimeString()}{model.server.same ? '' : ' (same island, other props)'}</span></div>
+		<div class="sec">
+			on the server <span class="secn"
+				>— last profile, {new Date(model.server.at).toLocaleTimeString()}{model.server.same
+					? ''
+					: ' (same island, other props)'}</span
+			>
+		</div>
 		<div class="rows" data-og-detail-server>
-			<div class="row"><span class="rk">render</span><span class="v">{s.ssr_ms !== null ? s.ssr_ms + ' ms' : 'not measured'}</span></div>
-			{#if s.props_bytes !== null}<div class="row"><span class="rk">props</span><span class="v">{kb(s.props_bytes)}{#if s.culprit}<span class="muted"> · not plain JSON: {s.culprit}</span>{/if}</span></div>{/if}
-			{#if s.seed_refs}<div class="row"><span class="rk">seed references</span><span class="v">{s.seed_refs}</span></div>{/if}
-			{#if s.client_p50_ms !== null}<div class="row"><span class="rk">hydrate (beacon)</span><span class="v">{s.client_p50_ms} ms{#if s.recovered}<span class="muted"> · recovered {s.recovered}×</span>{/if}</span></div>{/if}
+			<div class="row">
+				<span class="rk">render</span><span class="v"
+					>{s.ssr_ms !== null ? s.ssr_ms + ' ms' : 'not measured'}</span
+				>
+			</div>
+			{#if s.props_bytes !== null}<div class="row">
+					<span class="rk">props</span><span class="v"
+						>{kb(s.props_bytes)}{#if s.culprit}<span class="muted">
+								· not plain JSON: {s.culprit}</span
+							>{/if}</span
+					>
+				</div>{/if}
+			{#if s.seed_refs}<div class="row">
+					<span class="rk">seed references</span><span class="v">{s.seed_refs}</span>
+				</div>{/if}
+			{#if s.client_p50_ms !== null}<div class="row">
+					<span class="rk">hydrate (beacon)</span><span class="v"
+						>{s.client_p50_ms} ms{#if s.recovered}<span class="muted">
+								· recovered {s.recovered}×</span
+							>{/if}</span
+					>
+				</div>{/if}
 			{#if s.hazard && !model.t?.hazards?.length}
 				<!-- a build has no dev-server walk: the profiler's reading of its sources says it -->
-				<div class="row" data-og-detail-hazard><span class="rk">browser-only</span><span class="v">{s.hazard.file.split('/').pop()}:{s.hazard.line} <span class="muted">· {s.hazard.kind === 'await' ? 'awaits at the top of its script' : `reads ${s.hazard.reads ?? 'a browser-only value'} ${s.hazard.guard ? 'in a guard' : 'while rendering'}`}</span></span></div>
+				<div class="row" data-og-detail-hazard>
+					<span class="rk">browser-only</span><span class="v"
+						>{s.hazard.file.split('/').pop()}:{s.hazard.line}
+						<span class="muted"
+							>· {s.hazard.kind === 'await'
+								? 'awaits at the top of its script'
+								: `reads ${s.hazard.reads ?? 'a browser-only value'} ${s.hazard.guard ? 'in a guard' : 'while rendering'}`}</span
+						></span
+					>
+				</div>
 			{/if}
 		</div>
 	{/if}
@@ -238,40 +313,105 @@
 	<div class="rows">
 		{#if ledger}
 			<!-- a build: its files, weighed by the browser — what only it needs, and whom it shares with -->
-			<div class="row" data-og-detail-bytes><span class="rk">its code</span><span class="v">{kb(ledger.row.wire)} in {ledger.row.files} files{#if ledger.row.cold}<span class="muted"> · {ledger.row.cold} not loaded yet</span>{/if}</span></div>
-			<div class="row"><span class="rk">only it</span><span class="v">{kb(ledger.row.unique)}<span class="muted"> · what removing it would save</span></span></div>
+			<div class="row" data-og-detail-bytes>
+				<span class="rk">its code</span><span class="v"
+					>{kb(ledger.row.wire)} in {ledger.row.files} files{#if ledger.row.cold}<span
+							class="muted"
+						>
+							· {ledger.row.cold} not loaded yet</span
+						>{/if}</span
+				>
+			</div>
+			<div class="row">
+				<span class="rk">only it</span><span class="v"
+					>{kb(ledger.row.unique)}<span class="muted"> · what removing it would save</span></span
+				>
+			</div>
 			{#if ledger.row.shared}
-				<div class="row"><span class="rk">shared</span><span class="v">{kb(ledger.row.shared)}{#if ledger.shares_with.length}<span class="muted"> · with {ledger.shares_with.slice(0, 4).join(', ')}{ledger.shares_with.length > 4 ? ` and ${ledger.shares_with.length - 4} more` : ''}</span>{/if}</span></div>
+				<div class="row">
+					<span class="rk">shared</span><span class="v"
+						>{kb(ledger.row.shared)}{#if ledger.shares_with.length}<span class="muted">
+								· with {ledger.shares_with.slice(0, 4).join(', ')}{ledger.shares_with.length > 4
+									? ` and ${ledger.shares_with.length - 4} more`
+									: ''}</span
+							>{/if}</span
+					>
+				</div>
 			{/if}
 			{#if twice_here.length}
 				<!-- a module in its files that the page loads a second copy of, elsewhere (the last profile) -->
-				<div class="row" data-og-detail-twice><span class="rk">loaded twice</span><span class="v">{#each twice_here.slice(0, 3) as d, i (d.name)}{i ? ' · ' : ''}{d.name} <span class="muted">{kb(d.extra)}{d.mine.from ? `, its copy from ${d.mine.from}` : ''}</span>{/each}{#if twice_here.length > 3}<span class="muted"> and {twice_here.length - 3} more</span>{/if}</span></div>
+				<div class="row" data-og-detail-twice>
+					<span class="rk">loaded twice</span><span class="v"
+						>{#each twice_here.slice(0, 3) as d, i (d.name)}{i ? ' · ' : ''}{d.name}
+							<span class="muted"
+								>{kb(d.extra)}{d.mine.from ? `, its copy from ${d.mine.from}` : ''}</span
+							>{/each}{#if twice_here.length > 3}<span class="muted">
+								and {twice_here.length - 3} more</span
+							>{/if}</span
+					>
+				</div>
 			{/if}
 		{/if}
 		{#if model.t}
-			<div class="row"><span class="rk">js + deps</span><span class="v">{kb(model.t.bytes)}<span class="muted"> · {model.t.modules} mod</span></span></div>
+			<div class="row">
+				<span class="rk">js + deps</span><span class="v"
+					>{kb(model.t.bytes)}<span class="muted"> · {model.t.modules} mod</span></span
+				>
+			</div>
 			{#if model.t.top?.length}
 				<!-- where the island's weight is: its heaviest modules, as shares (dev code, unminified) -->
-				<div class="row" data-og-detail-top><span class="rk">heaviest</span><span class="v">{#each model.t.top.slice(0, 3) as m, i (m.file)}{i ? ' · ' : ''}{m.file.split('/').pop()} <span class="muted">{Math.round((m.bytes / model.t.bytes) * 100)}%</span>{/each}</span></div>
+				<div class="row" data-og-detail-top>
+					<span class="rk">heaviest</span><span class="v"
+						>{#each model.t.top.slice(0, 3) as m, i (m.file)}{i ? ' · ' : ''}{m.file
+								.split('/')
+								.pop()}
+							<span class="muted">{Math.round((m.bytes / model.t.bytes) * 100)}%</span>{/each}</span
+					>
+				</div>
 			{/if}
 			{#if model.t.barrels?.length}
-				<div class="row" data-og-detail-barrel><span class="rk">barrel</span><span class="v">{model.t.barrels[0].file} <span class="muted">· {model.t.barrels[0].fanout} modules ride along</span></span></div>
+				<div class="row" data-og-detail-barrel>
+					<span class="rk">barrel</span><span class="v"
+						>{model.t.barrels[0].file}
+						<span class="muted">· {model.t.barrels[0].fanout} modules ride along</span></span
+					>
+				</div>
 			{/if}
 			{#if model.t.hazards?.length}
 				<!-- its lines that draw differently in the browser (the dev server read its sources): a
 				     value only the browser has, read while rendering; an await at the top of its script -->
 				{@const h = model.t.hazards[0]}
-				<div class="row" data-og-detail-hazard><span class="rk">browser-only</span><span class="v">{h.file.split('/').pop()}:{h.line} <span class="muted">· {h.kind === 'await' ? 'awaits at the top of its script' : `reads ${h.reads ?? 'a browser-only value'} while rendering`}{model.t.hazards.length > 1 ? ` · ${model.t.hazards.length - 1} more` : ''}</span></span></div>
+				<div class="row" data-og-detail-hazard>
+					<span class="rk">browser-only</span><span class="v"
+						>{h.file.split('/').pop()}:{h.line}
+						<span class="muted"
+							>· {h.kind === 'await'
+								? 'awaits at the top of its script'
+								: `reads ${h.reads ?? 'a browser-only value'} while rendering`}{model.t.hazards
+								.length > 1
+								? ` · ${model.t.hazards.length - 1} more`
+								: ''}</span
+						></span
+					>
+				</div>
 			{/if}
 		{/if}
 		{#if model.chunk?.loaded}
-			<div class="row"><span class="rk">entry chunk</span><span class="v">{kb(model.chunk.wire)}<span class="muted"> wire · {kb(model.chunk.raw)} raw</span></span></div>
+			<div class="row">
+				<span class="rk">entry chunk</span><span class="v"
+					>{kb(model.chunk.wire)}<span class="muted"> wire · {kb(model.chunk.raw)} raw</span></span
+				>
+			</div>
 		{/if}
 		{#if model.rendered?.propsBytes != null}
-			<div class="row"><span class="rk">props payload</span><span class="v">{model.rendered.propsBytes} B</span></div>
+			<div class="row">
+				<span class="rk">props payload</span><span class="v">{model.rendered.propsBytes} B</span>
+			</div>
 		{/if}
 		{#if model.rendered?.htmlBytes != null}
-			<div class="row"><span class="rk">server HTML</span><span class="v">{model.rendered.htmlBytes} B</span></div>
+			<div class="row">
+				<span class="rk">server HTML</span><span class="v">{model.rendered.htmlBytes} B</span>
+			</div>
 		{/if}
 	</div>
 
@@ -286,17 +426,41 @@
 
 	<div class="sec">identity</div>
 	<div class="rows">
-		<div class="row"><span class="rk">mode</span><span class="v">{model.rendered?.mode ?? model.info.kind}</span></div>
-		<div class="row"><span class="rk">state</span><span class="v">{model.info.kind === 'island' ? (model.info.hydrated ? 'hydrated' : 'cold') : model.info.hydrated ? 'filled' : 'pending'}</span></div>
-		<div class="row"><span class="rk">server-rendered</span><span class="v">{model.rendered ? 'yes' : 'no'}</span></div>
-		{#if model.info.fp}<div class="row"><span class="rk">fingerprint</span><span class="v mono">{model.info.fp}</span></div>{/if}
-		{#if model.info.entry}<div class="row"><span class="rk">entry</span><span class="v mono" title={model.info.entry}>{model.info.entry.split('/').pop()}</span></div>{/if}
+		<div class="row">
+			<span class="rk">mode</span><span class="v">{model.rendered?.mode ?? model.info.kind}</span>
+		</div>
+		<div class="row">
+			<span class="rk">state</span><span class="v"
+				>{model.info.kind === 'island'
+					? model.info.hydrated
+						? 'hydrated'
+						: 'cold'
+					: model.info.hydrated
+						? 'filled'
+						: 'pending'}</span
+			>
+		</div>
+		<div class="row">
+			<span class="rk">server-rendered</span><span class="v">{model.rendered ? 'yes' : 'no'}</span>
+		</div>
+		{#if model.info.fp}<div class="row">
+				<span class="rk">fingerprint</span><span class="v mono">{model.info.fp}</span>
+			</div>{/if}
+		{#if model.info.entry}<div class="row">
+				<span class="rk">entry</span><span class="v mono" title={model.info.entry}
+					>{model.info.entry.split('/').pop()}</span
+				>
+			</div>{/if}
 	</div>
 </div>
 
 <style>
 	.detail {
-		font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+		font:
+			11px/1.5 ui-monospace,
+			SFMono-Regular,
+			Menlo,
+			monospace;
 	}
 	.bar {
 		display: flex;

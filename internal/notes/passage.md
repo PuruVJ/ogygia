@@ -9,10 +9,10 @@ future reconciler are all operations on `i`.
 
 Every feature is a point in a three-axis space over the one primitive:
 
-| Axis | Values | Old scattered names |
-|---|---|---|
-| **kind** (what resolve yields) | renderable / value / code | region, snippet · store, wire · fn, remote |
-| **lifetime** (how long `i` binds) | request / page / session / forever | server `remember:false` · live map · the Keep (`codec.id`) · frozen lake |
+| Axis                              | Values                                                    | Old scattered names                                                           |
+| --------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| **kind** (what resolve yields)    | renderable / value / code                                 | region, snippet · store, wire · fn, remote                                    |
+| **lifetime** (how long `i` binds) | request / page / session / forever                        | server `remember:false` · live map · the Keep (`codec.id`) · frozen lake      |
 | **schedule** (when resolve fires) | now / hydrate / visible / interact / on-arrival / on-call | inline · wake:load · wake:visible · wake:interact · defer/streaming · lazy fn |
 
 New features = new points, not new subsystems. Examples: persistent layout = renderable ·
@@ -102,6 +102,7 @@ callback = code · page · on-call.
      No bloat, but og.$ functions become Promise-returning on the client — a semantic change
      the user must sign off on. Fits the `schedule` axis (`on-call`) as an OPT-IN later
      (`og.$(fn, { lazy: true })`), not as the default.
+
 2. **Runtime (SHIPPED):** `__register_fn(tag, factory)` + `fn_handle(tag, bound)` (the call-site
    rewrite target — returns the LIVE fn immediately on the minting side, branded with its travel
    handle) + the `fn` kind (decode = registry lookup + rebind; re-brands so a revived fn can cross
@@ -110,7 +111,7 @@ callback = code · page · on-call.
    `test/fn-transport.test.ts`. Original design notes: `{k:'fn', i, t: tag, d: bound}`; decode = load the chunk (same manifest
    channel as island entries), `factory(...bound)` → the live closure. Eager-at-hydration
    resolution (fits islands; lazy on-call is a later `schedule` policy). Never memoize the
-   *function* by accident of object-check — decide identity semantics explicitly (bound fns are
+   _function_ by accident of object-check — decide identity semantics explicitly (bound fns are
    per-handle; two handles with the same tag+bound may share).
 
 ## What must NOT unify (guardrails)
@@ -154,6 +155,7 @@ C9 round-trip green). Fixture: apps/palaestra/src/routes/dollar-fn + apps/palaes
 ## (historical) og.$ notes
 
 Shipped this session (12/12 transform tests + 6/6 runtime tests green):
+
 - `src/vite/og-dollar.ts` — `rewrite_dollar(src, id, rel_id, markup_exts)`: AST-precise
   detection over `og_js_regions`, capture analysis (free names → bound params, ~60 known
   globals pass, member-props/object-keys/labels excluded), rewrite to
@@ -165,6 +167,7 @@ Shipped this session (12/12 transform tests + 6/6 runtime tests green):
   factory + returns the live bound fn. Server leg and same-bundle islands work TODAY.
 
 REMAINING (one session): wire into vite/index.ts —
+
 1. transform hook: call `rewrite_dollar` next to `rewrite_wire` (~line 2228; gate on
    `out.includes('import.meta.og.$')`, mind that `.$(` must not match `.$state` — the marker
    test `import.meta.og.$` + AST already disambiguates); collect `hoists` into plugin state.
@@ -291,6 +294,7 @@ primitive must ALSO delete existing complexity — the deletion list is the acce
 criterion per phase. Build order: W → S → Y → D → B → E. Keep unit+e2e green after EACH.
 
 ### Phase W — DONE ✓ (45/45 e2e)
+
 SHIPPED: `watch(id,cb)` / `notify(id,live)` / `watcher_count(id)` in ref.ts (watchers map on the
 registry); resolve's reunification early-return now, FOR WATCHED IDS ONLY, folds fresh data via
 kind.merge + notifies (unwatched id = byte-for-byte the old behavior, so store/snippet identity
@@ -306,15 +310,18 @@ SUBSCRIPTION mechanism") is met by the frame-store migration; page-defer is a re
 subscription. This is the spec's own escape hatch ("not 'no file'") applied honestly.
 
 ### Phase W (spec) — `watch(id, cb)`
+
 Hub-level subscription: re-resolving an id with fresh data notifies watchers (decode →
 update-in-place via kind.merge when present, else replace + notify). DELETES, in order:
+
 1. the frame store as a separate subsystem (address→frame subscribe/write = watch
    specialized to regions; migrate frame-store.ts onto the hub, keep its address scheme);
 2. page-defer's pending-promise registry (a streamed resolve = watch firing once);
 3. SWR/live-lake refresh plumbing (re-send ref → watchers fire).
-Migrate ONE at a time, e2e-gated (live-partial.ts, page-data-stress.ts, flicker.ts guard these).
+   Migrate ONE at a time, e2e-gated (live-partial.ts, page-data-stress.ts, flicker.ts guard these).
 
 ### Phase S — DONE ✓ (45/45 e2e; core resolve-path rewrite preserved every identity semantic)
+
 SHIPPED: `Scope = 'request'|'page'|'session'` + `Ref.sc?`; the registry's `live` and `keep` maps
 COLLAPSED into ONE `instances: Map<Scope, Map<string,object>>` ('page' bucket keyed by ref.i,
 'session' bucket keyed by continuity name, 'request' never stored). `resolve(ref, scope|boolean)` —
@@ -326,6 +333,7 @@ orthogonal). 946 unit + 3 todo green incl. new scope tests (string↔boolean par
 isolation). e2e gating the core resolve-path change.
 
 ### Phase S (spec) — scoped identity
+
 Ref gains `sc?: string` (scope). One store keyed (scope, id). Scopes: 'request' (server,
 never memoized — the old remember:false), 'page' (the old live map), 'session' (the old
 Keep). `resolve(ref, remember: boolean)` becomes `resolve(ref, scope)` with a boolean shim
@@ -333,6 +341,7 @@ for ABI during migration. DELETES: the live-map/Keep/keepOwner trichotomy, keep_
 (a kind returns a session-scoped name instead), the C20 dup-key hazard, `remember` flags.
 
 ### Phase Y — DONE ✓ (45/45 e2e; adding OgygiaRef to the app transport broke nothing, no wire decision needed)
+
 SHIPPED: `ogygiaTransport` now has TWO entries — `Region` (FIRST, legacy EncodedRegion+hi shape,
 first-match claims regions) and `OgygiaRef` (carries wire/store/snippet/fn/derived via the SAME
 ref_reducer/ref_reviver the island seams use). Kit routes universal `load` data AND remote-fn
@@ -346,6 +355,7 @@ symmetry tests (store crosses, plain declined, Region-first order). e2e gating t
 continuity/context/remote.
 
 ### Phase Y (spec) — symmetry (one codec everywhere)
+
 ogygiaTransport carries ALL kinds (today: Region only) via ref_reducer/ref_reviver — Kit's
 wire and ogygia's seams become the same codec. Remote-function ARGS go through the same
 reducers → a store/wire/fn passed to a command() round-trips by identity (server resolves
@@ -354,6 +364,7 @@ the "which seam am I on" distinction. CARE: server resolve of client-sent refs i
 request-scoped (never trust client identity across requests; capability-vs-data guardrail).
 
 ### Phase D — DONE ✓ (45/45 e2e; nav-time page disposal preserved wire continuity + persist)
+
 SHIPPED: `RefKind.dispose?(live)` hook; `dispose_scope(scope)` (tears down each bucket instance via
 its kind.dispose — dispatched through a new `instance_kind: WeakMap<instance,kindKey>` — runs
 registered scope-disposers, then empties the bucket; SKIPS page instances also aliased in the
@@ -370,6 +381,7 @@ primitive stays available for kinds that genuinely fit (a future live-ref channe
 e2e gating continuity/persist/remote.
 
 ### Phase D (spec) — dispose
+
 Kind gains `dispose?(live)`. Scope teardown disposes every instance in it. Nav = dispose
 the 'page' scope (one line). DELETES: MAX_LIVE (refcount/scope GC replaces; keep a backstop
 if paranoid), the router's hand-rolled clearing sweeps (spaLifecycle prepare/finish's
@@ -377,6 +389,7 @@ state-clearing half, clear_remote_seeds/clear_remote_instances become page-scope
 CARE: persist/keep regions and session scope must NOT dispose on nav.
 
 ### Phase B — DONE ✓ (45/45 e2e; batched context resolution preserved every check)
+
 SHIPPED: `batch(fn)` (buffers watch notifications during fn, flushes ONCE on outermost exit — a
 later id overwrites an earlier so each watched id fires at most once with its final value;
 reentrant via depth counter) + `resolve_batch(refs, scope)` sugar. `notify` is now batch-aware.
@@ -387,11 +400,13 @@ merges). 957 unit + 3 todo green incl. batch tests (no torn state, repeat-notify
 value, reentrant). e2e gating context/continuity.
 
 ### Phase B (spec) — batch resolve
+
 `resolve_batch(refs)`: decode all, wire all, THEN notify watchers once (Svelte batching for
 store notifications). DELETES: part of the router swap's manual state sequencing (settle
 lakes/restore forms ordering stays for DOM; state-side folds). Guards torn cross-ref states.
 
 ### Phase E — DONE ✓ (45/45 e2e; boundary-lab 12/12 og_derived resumes; dollar-fn 4/4). HUB v2 COMPLETE.
+
 SHIPPED: `Ref.deps?: string[]`; RefKind.encode may return `deps`; mint copies deps onto the Ref;
 registry `dep_index: Map<sourceId, Set<dependentId>>`; resolve registers reverse edges from
 ref.deps; og_derived's encode now MINTS its source stores + formula fn to learn their ids (mint
@@ -404,6 +419,7 @@ together on nav disposal already; refcounting adds churn with no lifetime win he
 future cross-scope case. Final sweep (unit/tsc/oxlint/verify:package all green) e2e-gating.
 
 ## HUB v2 — COMPLETE LEDGER (all six phases W→S→Y→D→B→E)
+
 ADDED (primitives): watch/notify/watcher_count (one subscription mechanism) · Scope +
 scoped `instances` store · one-codec transport symmetry (load data + remote args/returns carry
 every kind) · dispose_scope / Kind.dispose / register_scope_disposer · batch / resolve_batch ·
@@ -417,6 +433,7 @@ promise settler, not pub-sub) · remote-cache fold (precise SPA-lifecycle timing
 derived refcount-dispose (same-scope lifetime, no win).
 
 ### Phase E (spec) — dependency edges
+
 Ref gains `deps?: string[]` (ids this ref resolves against — og_derived emits its sources +
 formula). Hub maintains the reverse index. Buys: refcounted dispose (drop id when no
 dependents and scope allows), closure snapshots (snapshot = dep-closure walk), partial
@@ -424,6 +441,7 @@ invalidation (server names an id → hub knows dependents → re-resolve subtree
 recipe becomes the first emitter. The RECONCILER must consume this graph, never build its own.
 
 ### Acceptance per phase
+
 - unit suite green + full e2e (45) green; new primitives get corpus-style tests;
 - the phase's DELETION list actually deleted (grep-proof);
 - passage.md updated with what died.
@@ -438,6 +456,7 @@ Two halves: client-only reconcile (snappy no-flicker nav, ships alone) then an o
 delta protocol (the SSR-cost win — the Amplify/Kubernetes 5-10s problem).
 
 ### Rails already in place (hub v2 + prior)
+
 - Region hub-identity: every region carries `hi` (EncodedRegion.hi) — the match key.
 - State resumes by identity: wire classes / stores / og_derived reunify, so a KEPT region's
   island stays alive with its data (no re-hydrate).
@@ -448,6 +467,7 @@ delta protocol (the SSR-cost win — the Amplify/Kubernetes 5-10s problem).
 - morph.ts already exists (live/held regions push new HTML) — likely reusable for the shell.
 
 ### CLIENT-ONLY RECONCILE — COMPLETE ✓ (R0-R5, 45/45 e2e, default nav path)
+
 STATUS: R0 DONE ✓ — src/runtime/reconcile.ts (fnv1a, endpoint_key strips exp/sig, signature_of /
 fingerprint_of pure core, region_signature/region_props_fp DOM wrappers), 8 unit tests, build
 green. Nothing wired, so no e2e until R1. NEXT: R1.
@@ -457,13 +477,14 @@ GROUND TRUTH (verified): rendered island regions are `<ogygia-region entry="<chu
 or `<ogygia-region entry="" render="defer" endpoint="<signed id+props+sig>">`. They carry NO hub
 `hi` — that field is for region-as-VALUE reunification, not DOM islands. The compiler emits the
 element and is OFF-LIMITS, so both keys are derived client-side from existing attrs:
-  - `region_signature(el)` = entry + endpoint-id (which region SLOT — the match key; document-order
-    position disambiguates duplicates, handled by the R1 diff).
-  - `region_props_fp(el)` = hash(entry + endpoint + `<script data-ogygia-props>` seed text). The
-    props SEED is SSR-stable (hydration reads but doesn't mutate it), unlike live innerHTML — so
-    equal props_fp old↔new means "same inputs → KEEP the live node (its island state is truth)";
-    different means PATCH. Pure core `fingerprint_of(entry, endpoint, propsText)` is unit-testable
-    without a DOM. Delivered as `src/runtime/reconcile.ts`. Small, low-risk, nothing wired yet.
+
+- `region_signature(el)` = entry + endpoint-id (which region SLOT — the match key; document-order
+  position disambiguates duplicates, handled by the R1 diff).
+- `region_props_fp(el)` = hash(entry + endpoint + `<script data-ogygia-props>` seed text). The
+  props SEED is SSR-stable (hydration reads but doesn't mutate it), unlike live innerHTML — so
+  equal props_fp old↔new means "same inputs → KEEP the live node (its island state is truth)";
+  different means PATCH. Pure core `fingerprint_of(entry, endpoint, propsText)` is unit-testable
+  without a DOM. Delivered as `src/runtime/reconcile.ts`. Small, low-risk, nothing wired yet.
 
 STATUS: R1 DONE ✓ 45/45 e2e (reconcile is the DEFAULT nav path). R2 (shell morph) DONE ✓ by reuse —
 morph_children already morphs non-region children in place (focus/scroll/selection preserved); the
@@ -488,9 +509,10 @@ decode (core.ts wraps read_region_props + both collect_provided_context sites), 
 a WeakMap<region, Set<id>>; reconcile_body computes REMOVED regions (live keys absent from next) and
 dispose_ids(their owned ids) AFTER morph. Kept regions keep their ids; patched regions' old ids
 dispose (fp-key changed → counted removed) and the new node re-resolves fresh. 969 unit + 4 skipped
-+ 3 todo green; continuity (kept cart survives) + boundary-lab 12/12 pass standalone; full e2e gating.
-NOTE: the linter normalized the earlier NUL key separators back to spaces across reconcile.ts/core.ts
-— no NUL bytes now, Edit tool works normally.
+
+- 3 todo green; continuity (kept cart survives) + boundary-lab 12/12 pass standalone; full e2e gating.
+  NOTE: the linter normalized the earlier NUL key separators back to spaces across reconcile.ts/core.ts
+  — no NUL bytes now, Edit tool works normally.
 
 R3 DESIGN NOTE (original plan, now implemented above): the reconcile branch currently SKIPS dispose_scope('page')
 entirely so KEPT islands' hub instances survive — but that means REMOVED regions' page-scoped
@@ -504,17 +526,17 @@ This ownership map ALSO feeds snapshots + the eventual reconciler-proper. If the
 proves too invasive, FALLBACK: a generational page-bucket bound that never evicts ids referenced
 since the last nav (kept islands re-touch nothing, so track touch-on-resolve). Prefer ownership.
 
-  R1 first e2e caught 2 real bugs, both FIXED:
-  (1) a KEPT region whose props follow the route (persist player, track prop) was keyed by
-      props-fingerprint → remounted (ticks reset). FIX: keep/persist regions key by STABLE identity
-      ('k'+keepName / 'p'+signature), not fp; NON-kept regions keep the fp key. + absorb_kept_props()
-      in reconcile_body pushes the incoming page's props into each kept island via absorbPersistProps
-      (the same hook persist.relocate used) BEFORE morph discards the new nodes.
-  (2) a KEPT island reading $app/state page.url went stale on nav (/orders/5→/6, no remount). FIX:
-      the reconcile branch calls slots.spaLifecycle.softInvalidate(doc) to re-seed the shared page +
-      remote store from the new doc — kept islands update reactively (a remount-nav got this free).
-  NOTE: reconcile.ts now uses NUL-byte separators in the stamped keys (codebase identity convention)
-  — grep -a / python for edits. continuity + page-state pass standalone; full e2e gating the rest.
+R1 first e2e caught 2 real bugs, both FIXED:
+(1) a KEPT region whose props follow the route (persist player, track prop) was keyed by
+props-fingerprint → remounted (ticks reset). FIX: keep/persist regions key by STABLE identity
+('k'+keepName / 'p'+signature), not fp; NON-kept regions keep the fp key. + absorb_kept_props()
+in reconcile_body pushes the incoming page's props into each kept island via absorbPersistProps
+(the same hook persist.relocate used) BEFORE morph discards the new nodes.
+(2) a KEPT island reading $app/state page.url went stale on nav (/orders/5→/6, no remount). FIX:
+the reconcile branch calls slots.spaLifecycle.softInvalidate(doc) to re-seed the shared page +
+remote store from the new doc — kept islands update reactively (a remount-nav got this free).
+NOTE: reconcile.ts now uses NUL-byte separators in the stamped keys (codebase identity convention)
+— grep -a / python for edits. continuity + page-state pass standalone; full e2e gating the rest.
 The diff reduced to STAMPING + morph reuse (morph.ts already
 keyed-matches + preserves data-hydrated islands & persist chrome without recursing). SHIPPED:
 reconcile.ts stamp_region_keys (regions → data-key='r '+sig+' '+fp; keep-chrome → 'k '+keepName;
@@ -532,12 +554,13 @@ tests, no jsdom env — validated by e2e) + 3 todo green.
 
 **R1 — the diff/patch core.** Replace `body.replaceWith` in router.ts swap() with a region-keyed
 reconcile: index old regions by `hi`, index new regions by `hi`, then per region —
-  - same hi + same fp → KEEP the old node untouched (island + state stay live);
-  - same hi + diff fp → PATCH just that region's subtree (swap its DOM, its island re-binds);
-  - hi only in new → MOUNT;
-  - hi only in old → REMOVE (+ dispose its ids, see R3).
-This is the bulk of the new code. Acceptance: a nav between two pages sharing a region keeps that
-region's DOM node identical (===) across the swap; a changed region swaps only itself.
+
+- same hi + same fp → KEEP the old node untouched (island + state stay live);
+- same hi + diff fp → PATCH just that region's subtree (swap its DOM, its island re-binds);
+- hi only in new → MOUNT;
+- hi only in old → REMOVE (+ dispose its ids, see R3).
+  This is the bulk of the new code. Acceptance: a nav between two pages sharing a region keeps that
+  region's DOM node identical (===) across the swap; a changed region swaps only itself.
 
 **R2 — shell morph.** The markup BETWEEN regions still differs page-to-page. Morph it (reuse
 morph.ts / idiomorph-style keyed diff) so the non-region shell updates without a full replace.
@@ -564,7 +587,9 @@ non-region nodes". This is the big collapse — reconcile absorbs the older reco
 ### SERVER DELTA (build second; the SSR-cost win)
 
 ### R6 — DONE ✓ endpoint render cache (45/45 e2e; cache HIT proven — /server-cached endpoint
+
 ### served byte-identical render on a repeat request, same timestamp, no re-render)
+
 INVESTIGATED (Explore agent, file:line evidence): the imagined R6 — skip re-rendering unchanged
 INLINE islands to save the monolithic-SSR compute — is BLOCKED by the architecture within the
 off-limits constraints. WHY: a plain `wake` island renders as `<Component/>` inlined into Kit's
@@ -597,6 +622,7 @@ RISK: fingerprint drift between client and server = silently stale regions; need
 guard. This half is real protocol design — do it only after client reconcile is proven.
 
 ### Cross-cutting risks
+
 - View Transitions: swap() already has VT handling; reconcile must compose with it (VT wants a DOM
   mutation to animate — patch-in-place still triggers it).
 - Nested regions + lakes (region-in-lake): match/patch must recurse correctly; settle_lakes_in
@@ -606,12 +632,15 @@ guard. This half is real protocol design — do it only after client reconcile i
 - head/title: still swap wholesale (cheap).
 
 ### Recommendation
+
 Build R0-R5 (client reconcile) as one loop, gated e2e phase-by-phase like hub v2. It ships the
 no-flicker nav + the persist collapse WITHOUT any server change. Defer R6 (server delta) to its own
 effort once R1's diff is battle-tested — that is where the real design risk lives.
 
 ## REGION-GRANULAR RENDER — COMPLETE ✓ (G1-G4, 46/46 e2e, boundary-lab 12/12, dollar-fn 4/4)
+
 ## (user authorized touching the compiler)
+
 GOAL: skip re-rendering UNCHANGED inline islands on warm requests (the real Amplify SSR-compute win),
 by making an inline island render through the SAME cache-fronted render() seam a deferred region
 already uses. Architectural unification, NOT a hack: an inline island with maxAge and a deferred
@@ -620,6 +649,7 @@ WHEN (page pass vs endpoint). Re-entrant svelte/server render() VERIFIED to work
 script can render() another during the page's own SSR pass — the deferred path already relies on it).
 maxAge is now UNIVERSAL (was deferred-only).
 PHASES:
+
 - G1 DONE ✓: compiler (transform.ts, NOW authorized — leave the pre-existing line-929 tsc error
   alone) parses a PRESET's maxAge for ISLAND marks (live_opts.maxAge, not inline — maxAge is
   preset-only by the allowlist) → options.cacheTtlSec → emits `__cacheTtl` on the island wrapper
@@ -637,6 +667,7 @@ PHASES:
   cacheable/anonymous content; per-user (session≠'') caches per user; a first cold render is unchanged.
 
 ## REGION-GRANULAR RENDER — G2/G3/G4 DONE ✓ (proven; full-e2e gating)
+
 G2: `cached_render(render_body, cache, now)` in render-cache.ts = the ONE cache-fronted render seam;
 hooks.ts #render_component refactored onto it (gate+timeout stay AROUND the render_body). 9 seam tests.
 G3: `render_island_cached(component, props, entry, props_payload, ttl)` in server/region-endpoint.ts
@@ -656,6 +687,7 @@ warms after 1st); per-user when a sessionCookie is configured (session in key), 
 pages (session='' → the content-page win); slot-children islands skip the cache (snippet not keyed).
 
 ## G4 HYDRATION WALL — hit + resolved (the honest bit)
+
 render(Component,{props}).body hydrates INTERACTIVELY but NOT in-place: its markers differ from an
 inline <Component/>, so the runtime RE-CREATES the island root instead of adopting it (hydrate-in-place.ts
 caught 6/6 non-cached islands re-created when I routed all islands through render()). FIX: branch OUTSIDE
@@ -668,6 +700,7 @@ for the server SKIPPING its render — an acceptable, opt-in cost for a maxAge i
 are 100% unaffected. hydrate-in-place PASS (0/6), cached-island PASS (5/5).
 
 ## SERVER-DELTA NAV — skip re-rendering unchanged islands on SPA nav (progressive enhancement)
+
 D1 DONE ✓: extracted the PURE fingerprint core → src/runtime/fingerprint.ts (fnv1a/endpoint_key/
 signature_of/fingerprint_of, no deps; reconcile.ts re-exports). Region.svelte emits
 data-og-fp = fingerprint_of(island_module_url, '', island_payload) on BOTH island arms (cached +
@@ -681,32 +714,36 @@ SAFETY MODEL: full-render fallback on no header / oversized / full load; hydrate
 fingerprint parity guarantees correct skips; a blank hole is the failure to gate ruthlessly against.
 
 ## SERVER-DELTA NAV — COMPLETE ✓ (D1-D5, 47/47 e2e, boundary-lab 12/12, hydrate-in-place 2/2, no blank holes)
+
 D2: router.ts nav_headers() sends x-ogygia-known = the current doc's hydrated-region data-og-fp values
 (deduped, 6KB cap → omit = full render). data-hydrated ONLY (never claim what we don't have live).
 Proven: SPA nav /→/about carried 6 fps.
 D3: known_region_fps() in server/region-endpoint.ts (per-event memoized Set from x-ogygia-known,
 honored ONLY when x-ogygia-spa present; client-stub empty). Region.svelte THIRD template arm
 {:else if island_skip} emits <ogygia-region ...attrs... data-og-fp data-og-skipped></ogygia-region>
-+ props script but NO component content, for a NON-cached island whose fp ∈ known set (+ !slot-children).
-Non-skipped islands keep the EXACT prior arms (in-place hydration untouched — hydrate-in-place 0/6).
-D4: the reconciler KEEPS the skipped empty region for free — same data-key as the live one (via
-entry+wake+props-script → region_props_fp), R1 morph preserves the live data-hydrated node → the empty
-incoming is discarded. Verified: 0 blank holes after nav.
-D5: fixture routes/delta/{a,b} share a layout island DeltaNav (identical fp). e2e/server-delta.ts
-(registered): server SKIPS the shared island on the SPA nav (data-og-skipped in the delta response,
-delta 2799 < full 3068 bytes = compute+bytes saved), the island SURVIVES the nav as the SAME live node
-(server-stamp unchanged), stays interactive with click state preserved across the nav (2→3), 0 holes,
-0 errors. 11/11.
-SAFETY MODEL (proven): PROGRESSIVE ENHANCEMENT — no header / oversized / full-load → render everything;
-HYDRATED-ONLY claims (client never asserts a region it lacks); FINGERPRINT PARITY guarantees the server
-skips exactly what the client keeps (9/9 real-DOM match); a non-shared nav skips NOTHING (0 false skips).
-LIMITATIONS: only SHARED islands with identical props are skipped (the layout-island nav win); cached
-(maxAge) islands use their own cache; slot-children islands never skip; first load renders all.
-THE FULL SERVER-DELTA IS NOW REAL: on every SPA nav the server skips re-rendering the islands the client
-already has — the reconciler keeps them live. This is the capstone the client reconciler was built for.
+
+- props script but NO component content, for a NON-cached island whose fp ∈ known set (+ !slot-children).
+  Non-skipped islands keep the EXACT prior arms (in-place hydration untouched — hydrate-in-place 0/6).
+  D4: the reconciler KEEPS the skipped empty region for free — same data-key as the live one (via
+  entry+wake+props-script → region_props_fp), R1 morph preserves the live data-hydrated node → the empty
+  incoming is discarded. Verified: 0 blank holes after nav.
+  D5: fixture routes/delta/{a,b} share a layout island DeltaNav (identical fp). e2e/server-delta.ts
+  (registered): server SKIPS the shared island on the SPA nav (data-og-skipped in the delta response,
+  delta 2799 < full 3068 bytes = compute+bytes saved), the island SURVIVES the nav as the SAME live node
+  (server-stamp unchanged), stays interactive with click state preserved across the nav (2→3), 0 holes,
+  0 errors. 11/11.
+  SAFETY MODEL (proven): PROGRESSIVE ENHANCEMENT — no header / oversized / full-load → render everything;
+  HYDRATED-ONLY claims (client never asserts a region it lacks); FINGERPRINT PARITY guarantees the server
+  skips exactly what the client keeps (9/9 real-DOM match); a non-shared nav skips NOTHING (0 false skips).
+  LIMITATIONS: only SHARED islands with identical props are skipped (the layout-island nav win); cached
+  (maxAge) islands use their own cache; slot-children islands never skip; first load renders all.
+  THE FULL SERVER-DELTA IS NOW REAL: on every SPA nav the server skips re-rendering the islands the client
+  already has — the reconciler keeps them live. This is the capstone the client reconciler was built for.
 
 ## PRE-RELEASE SIMPLIFY #1 — one region identity (DONE, full-e2e gating)
+
 Collapsed the fingerprint/data-key/region_props_fp trio into ONE 64-bit identity, read not recomputed:
+
 - fingerprint.ts fnv1a is now 64-bit (canonical FNV-1a-64 via BigInt, 16-hex). WHY: the server-delta
   SKIPS on a fingerprint match, so a 32-bit collision would keep stale/wrong content silently — 64
   bits makes that a non-risk. Volume is a few short strings per region per render, negligible.
@@ -715,18 +752,19 @@ Collapsed the fingerprint/data-key/region_props_fp trio into ONE 64-bit identity
   server's value, so the recompute-divergence class of bug (silent wrong skip/keep) is gone.
 - the reconcile data-key 'r' variant is now just 'r'+fp (dropped the redundant signature prefix —
   the fp already hashes entry+endpoint+props; signature encoded entry twice). One identity, not two.
-CORRECTNESS: the tested parity invariant (data-og-fp == region_props_fp) is now automatic, not a
-coincidence of two pure-fn call sites. 987 unit green; hydrate-in-place 2/2, continuity 25/25,
-page-state 17/17, server-delta 11/11, cached-island 5/5 all pass. Full e2e gating.
-FOLLOW-ONS (not this pass): frameAddress (deferred content delivery, id|props) and iid (compile-time
-chunk id) are the other two encodings of entry+props — collapsing them touches the endpoint scheme +
-the compiler, a deeper refactor. The random hub id `hi` stays (genuinely separate: held-region VALUE
-reunification, not on the DOM). DECISIONS THIS SESSION: keep render:'live'/remount (NOT subsumed by
-anything built — region-level stale-while-revalidate is orthogonal to nav-diff/nav-skip/request-cache;
-needs e2e, not a cut); lakes stay wake:'none' (user override). Still queued: one-nav-path (delete
-persist fallback friction), rip inline maxAge cache, rip dead dep_index/invalidate.
+  CORRECTNESS: the tested parity invariant (data-og-fp == region_props_fp) is now automatic, not a
+  coincidence of two pure-fn call sites. 987 unit green; hydrate-in-place 2/2, continuity 25/25,
+  page-state 17/17, server-delta 11/11, cached-island 5/5 all pass. Full e2e gating.
+  FOLLOW-ONS (not this pass): frameAddress (deferred content delivery, id|props) and iid (compile-time
+  chunk id) are the other two encodings of entry+props — collapsing them touches the endpoint scheme +
+  the compiler, a deeper refactor. The random hub id `hi` stays (genuinely separate: held-region VALUE
+  reunification, not on the DOM). DECISIONS THIS SESSION: keep render:'live'/remount (NOT subsumed by
+  anything built — region-level stale-while-revalidate is orthogonal to nav-diff/nav-skip/request-cache;
+  needs e2e, not a cut); lakes stay wake:'none' (user override). Still queued: one-nav-path (delete
+  persist fallback friction), rip inline maxAge cache, rip dead dep_index/invalidate.
 
 ## PRE-RELEASE CUT #1 — dead dependency graph REMOVED ✓
+
 Deleted Ref.deps, RefKind.encode's deps return, HubRegistry.dep_index (+ init), the mint deps-copy,
 resolve's edge registration, dispose_ids' dep_index cleanup, and the invalidate() function — all of
 src/ref.ts phase-E. og_derived (store-transport.ts) no longer emits deps (its encode still ships the
@@ -736,6 +774,7 @@ resumes). Nothing consumed the graph, so no behavior changed. REMAINING: cut #2 
 cache), cut #3 (one nav path).
 
 ## PRE-RELEASE CUT #2 — inline maxAge render cache REMOVED ✓ (full-e2e gating)
+
 Region.svelte island branch back to 3 arms (inline | skip | normal) — deleted the cached {@html
 island_html} arm + island_html derived + render_island import. Deleted render_island() from
 server/region-endpoint.ts (+ its now-unused render/Component/render_cache imports) + the vite client
@@ -749,6 +788,7 @@ deferred regions give clean cross-request caching with no hydration cost. 985 un
 2/2, server-delta 11/11, continuity 25/25, boundary-lab 12/12, dollar-fn 4/4 standalone. Full e2e gating.
 
 ## PRE-RELEASE CUT #3 — one nav path, persist DELETED ✓ (full-e2e gating)
+
 Deleted src/runtime/persist.ts entirely (collect/relocate/end/mark_tree/unmark_tree/is_persist_preserving
 /index_top_level_persist + the slots.persist wiring + PersistOps type + noop + full.ts install +
 test/persist.test.ts). The router swap FALLBACK (reconcile off / open-shadow-nested region) is now a
@@ -761,8 +801,9 @@ m.live/m.morph, and the persist manifest entry loaded `live` (LiveHost) for keep
 would have left keep-island pages without morph (→ plain-swap fallback → keep lost) or without live (→ no
 prop-push). FIX in src/vite/runtime-entry.ts: morph now loads on m.router (reconcile is THE nav path, so
 every router page gets it) and live loads on keep (m.persist / persistKeys). Removed the persist FeatureId
-+ order + manifest entry (kept the RuntimeMarks.persist/persistKeys flags — the compiler still emits them
-and live-detect reads them). VERIFIED: continuity keep-player SAME live node + ticks survive + prop-push
-to /cart-b + wire cart continuity, hydrate-in-place 0/6 — all via reconcile+morph, NO persist. 980 unit.
-Full e2e gating. RESULT: one nav path (reconcile) + a dumb-but-safe fallback; the mark_tree/disconnect-guard
-/dual-relocate friction is gone.
+
+- order + manifest entry (kept the RuntimeMarks.persist/persistKeys flags — the compiler still emits them
+  and live-detect reads them). VERIFIED: continuity keep-player SAME live node + ticks survive + prop-push
+  to /cart-b + wire cart continuity, hydrate-in-place 0/6 — all via reconcile+morph, NO persist. 980 unit.
+  Full e2e gating. RESULT: one nav path (reconcile) + a dumb-but-safe fallback; the mark_tree/disconnect-guard
+  /dual-relocate friction is gone.

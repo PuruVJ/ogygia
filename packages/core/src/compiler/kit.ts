@@ -79,7 +79,9 @@ export function resolve_kit_paths(root: string): KitPaths {
 export function kit_major(root: string): number | null {
 	try {
 		const require = createRequire(path.join(root, 'noop.js'));
-		const pkg = JSON.parse(fs.readFileSync(require.resolve('@sveltejs/kit/package.json'), 'utf8')) as { version?: string };
+		const pkg = JSON.parse(
+			fs.readFileSync(require.resolve('@sveltejs/kit/package.json'), 'utf8')
+		) as { version?: string };
 		const major = Number.parseInt(pkg.version ?? '', 10);
 		return Number.isFinite(major) ? major : null;
 	} catch {
@@ -194,13 +196,23 @@ const option_read_re = new Map<string, RegExp>();
 const option_strip_re = new Map<string, RegExp>();
 function read_re(name: string): RegExp {
 	let re = option_read_re.get(name);
-	if (!re) option_read_re.set(name, (re = new RegExp(`export\\s+const\\s+${name}(?:\\s*:\\s*boolean)?\\s*=\\s*(true|false)`)));
+	if (!re)
+		option_read_re.set(
+			name,
+			(re = new RegExp(`export\\s+const\\s+${name}(?:\\s*:\\s*boolean)?\\s*=\\s*(true|false)`))
+		);
 	return re;
 }
 function strip_re(name: string): RegExp {
 	let re = option_strip_re.get(name);
 	if (!re)
-		option_strip_re.set(name, (re = new RegExp(`export\\s+const\\s+${name}(?:\\s*:\\s*boolean)?\\s*=\\s*(?:true|false)\\s*;?`, 'g')));
+		option_strip_re.set(
+			name,
+			(re = new RegExp(
+				`export\\s+const\\s+${name}(?:\\s*:\\s*boolean)?\\s*=\\s*(?:true|false)\\s*;?`,
+				'g'
+			))
+		);
 	return re;
 }
 
@@ -230,7 +242,9 @@ export function is_route_option_file(id: string, routesDir: string): boolean {
 export function strip_route_options(code: string, names: readonly string[]): string {
 	for (const name of names) {
 		if (!code.includes(name)) continue; // cheap out — the common file has none
-		code = code.replace(strip_re(name), (m) => (m.length >= 4 ? '/*' + ' '.repeat(m.length - 4) + '*/' : ' '.repeat(m.length)));
+		code = code.replace(strip_re(name), (m) =>
+			m.length >= 4 ? '/*' + ' '.repeat(m.length - 4) + '*/' : ' '.repeat(m.length)
+		);
 	}
 	return code;
 }
@@ -499,7 +513,10 @@ function page_route_id(dir: string, routesDir: string): string {
 
 /** Every page route id (group-stripped) → each declared option's value. Undeclared options are
  *  absent, so the plugin applies its default; a page with none declared maps to `{}`. */
-export function page_route_options(routesDir: string, names: readonly string[]): Record<string, Record<string, boolean>> {
+export function page_route_options(
+	routesDir: string,
+	names: readonly string[]
+): Record<string, Record<string, boolean>> {
 	const key = routesDir + '\0' + names.join(',');
 	let m = _page_options.get(key);
 	if (!m) {

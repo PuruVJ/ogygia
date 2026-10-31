@@ -15,11 +15,15 @@ test.describe('long-task budget: the large CMS page boots with no task over 50 m
 	}) => {
 		// Observe from the very first script: an init script installs the observer before the runtime.
 		await page.addInitScript(() => {
-			const w = window as unknown as { __og_long: Array<{ start: number; dur: number }>; __og_dcl: number };
+			const w = window as unknown as {
+				__og_long: Array<{ start: number; dur: number }>;
+				__og_dcl: number;
+			};
 			w.__og_long = [];
 			w.__og_dcl = 0;
 			new PerformanceObserver((list) => {
-				for (const e of list.getEntries()) w.__og_long.push({ start: e.startTime, dur: e.duration });
+				for (const e of list.getEntries())
+					w.__og_long.push({ start: e.startTime, dur: e.duration });
 			}).observe({ type: 'longtask', buffered: true });
 			document.addEventListener('DOMContentLoaded', () => (w.__og_dcl = performance.now()));
 		});
@@ -35,7 +39,10 @@ test.describe('long-task budget: the large CMS page boots with no task over 50 m
 		await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 
 		const { long, dcl } = await page.evaluate(() => {
-			const w = window as unknown as { __og_long: Array<{ start: number; dur: number }>; __og_dcl: number };
+			const w = window as unknown as {
+				__og_long: Array<{ start: number; dur: number }>;
+				__og_dcl: number;
+			};
 			return { long: w.__og_long, dcl: w.__og_dcl };
 		});
 		// Parsing 700 KB of HTML is the browser's task, before DOMContentLoaded; ours start after.
@@ -51,11 +58,15 @@ test.describe('long-task budget: the large CMS page boots with no task over 50 m
 		);
 		// The seed was consumed: its text is gone from the DOM (the graph lives in the page store).
 		const seed_left = await page.evaluate(
-			() => document.querySelector('script[type="application/ogygia-page"]')?.textContent?.length ?? 0
+			() =>
+				document.querySelector('script[type="application/ogygia-page"]')?.textContent?.length ?? 0
 		);
 		check('the seed text is blanked after its single parse', seed_left === 0, String(seed_left));
 		// The header island (300 KB props outside the seed) is live.
 		await page.locator('[data-bench-header] nav button').first().click();
-		check('header island interactive after boot', (await page.locator('[data-bench-header] ul li').count()) > 0);
+		check(
+			'header island interactive after boot',
+			(await page.locator('[data-bench-header] ul li').count()) > 0
+		);
 	});
 });

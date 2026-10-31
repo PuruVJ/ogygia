@@ -14,7 +14,8 @@ import type { Fence, MetaParser } from '@ogygia/content/markdown';
 /** The twoslash directives present in the corpus (checked: @filename ×140, @errors ×69,
  *  @noErrors ×41, @lib ×2). A conservative allowlist — real code comments like
  *  `// @ts-expect-error` must stay visible. */
-const DIRECTIVE = /^\s*\/\/ @(?:errors|filename|noErrors|noErrorValidation|lib|module|moduleResolution|target|strict)\b.*$/;
+const DIRECTIVE =
+	/^\s*\/\/ @(?:errors|filename|noErrors|noErrorValidation|lib|module|moduleResolution|target|strict)\b.*$/;
 
 const CUT = /^\s*\/\/ ---cut---\s*$/;
 

@@ -17,7 +17,16 @@
 	let loaded = $state(false);
 
 	type Dump = { meta: ReportMeta; analysis: Analysis; extras: ReportExtras };
-	const pack = (d: Dump) => ({ meta: d.meta, analysis: d.analysis, findings: derive_findings(d.analysis, d.meta, d.extras).map((f) => `${f.code}: ${f.message}`), ...(d.extras.gc_attr ? { gc: d.extras.gc_attr } : {}), ...(d.extras.patterns ? { patterns: d.extras.patterns } : {}), ...(d.extras.ledger ? { ledger: d.extras.ledger } : {}), ...(d.extras.drill ? { drill: d.extras.drill } : {}), ...(d.extras.forecast ? { forecast: d.extras.forecast } : {}) });
+	const pack = (d: Dump) => ({
+		meta: d.meta,
+		analysis: d.analysis,
+		findings: derive_findings(d.analysis, d.meta, d.extras).map((f) => `${f.code}: ${f.message}`),
+		...(d.extras.gc_attr ? { gc: d.extras.gc_attr } : {}),
+		...(d.extras.patterns ? { patterns: d.extras.patterns } : {}),
+		...(d.extras.ledger ? { ledger: d.extras.ledger } : {}),
+		...(d.extras.drill ? { drill: d.extras.drill } : {}),
+		...(d.extras.forecast ? { forecast: d.extras.forecast } : {})
+	});
 	void Promise.all([get_report(a), get_report(b)])
 		.then(([A, B]) => {
 			const da = A?.dump as Dump | undefined;
@@ -33,8 +42,9 @@
 {:else if loaded}
 	<h1>Compare</h1>
 	<p class="verdict">
-		This server no longer holds {missing.length === 2 ? 'either report' : 'one of these reports'}, and this browser did not keep {missing.length === 2 ? 'them' : 'it'} ({missing.join(', ')}).
-		A report is kept only by the browser that recorded or opened it.
+		This server no longer holds {missing.length === 2 ? 'either report' : 'one of these reports'},
+		and this browser did not keep {missing.length === 2 ? 'them' : 'it'} ({missing.join(', ')}). A
+		report is kept only by the browser that recorded or opened it.
 	</p>
 	<p class="hint"><a href={base}>← dashboard</a></p>
 {:else}

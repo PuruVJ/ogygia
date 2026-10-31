@@ -20,7 +20,11 @@ describe('freeze memory store is byte-bounded', () => {
 	it('redirects are cheap entries: a thousand of them fit', async () => {
 		const store = memory_store(1000, 5_000_000);
 		for (let i = 0; i < 1000; i++) {
-			await store.put(`/r${i}`, { kind: 'redirect', status: 301, location: '/x', created: 0 }, { ttl: 60 });
+			await store.put(
+				`/r${i}`,
+				{ kind: 'redirect', status: 301, location: '/x', created: 0 },
+				{ ttl: 60 }
+			);
 		}
 		expect(await store.size!()).toBe(1000);
 	});

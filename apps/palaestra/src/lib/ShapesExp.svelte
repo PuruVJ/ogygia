@@ -2,7 +2,14 @@
 	// Wire-law harness island. Each button fires one shape's remote; each result area is probed by
 	// the measurement script (presence, computed styles, hydration, endpoint fetch counts).
 	import { Region } from 'ogygia';
-	import { arrayShape, objectShape, propsEager, propsLazy, recomposerShape, treeShape } from '$lib/shapes.remote';
+	import {
+		arrayShape,
+		objectShape,
+		propsEager,
+		propsLazy,
+		recomposerShape,
+		treeShape
+	} from '$lib/shapes.remote';
 
 	let go = $state({ array: false, object: false, pe: false, pl: false, rc: false, tree: false });
 	let err = $state<Record<string, string>>({});

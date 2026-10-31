@@ -7,11 +7,27 @@
 
 <h1 data-static-shell>Route weaving</h1>
 <p data-static-shell>
-	Four server islands, woven into one batch stream on navigation. No waterfall — and staggered so you
-	can watch them stream in: Bravo (1s), Delta (1.5s), Alpha (2s), Charlie (3s).
+	Four server islands, woven into one batch stream on navigation. No waterfall — and staggered so
+	you can watch them stream in: Bravo (1s), Delta (1.5s), Alpha (2s), Charlie (3s).
 </p>
 
-<section data-batch="a"><Slow s={2} label="Alpha · 2s">{#snippet ogygiaFallback()}<p data-fallback="a">loading a…</p>{/snippet}</Slow></section>
-<section data-batch="b"><Slow s={1} label="Bravo · 1s">{#snippet ogygiaFallback()}<p data-fallback="b">loading b…</p>{/snippet}</Slow></section>
-<section data-batch="c"><Slow s={3} label="Charlie · 3s">{#snippet ogygiaFallback()}<p data-fallback="c">loading c…</p>{/snippet}</Slow></section>
-<section data-batch="d"><Slow s={1.5} label="Delta · 1.5s">{#snippet ogygiaFallback()}<p data-fallback="d">loading d…</p>{/snippet}</Slow></section>
+<section data-batch="a">
+	<Slow s={2} label="Alpha · 2s"
+		>{#snippet ogygiaFallback()}<p data-fallback="a">loading a…</p>{/snippet}</Slow
+	>
+</section>
+<section data-batch="b">
+	<Slow s={1} label="Bravo · 1s"
+		>{#snippet ogygiaFallback()}<p data-fallback="b">loading b…</p>{/snippet}</Slow
+	>
+</section>
+<section data-batch="c">
+	<Slow s={3} label="Charlie · 3s"
+		>{#snippet ogygiaFallback()}<p data-fallback="c">loading c…</p>{/snippet}</Slow
+	>
+</section>
+<section data-batch="d">
+	<Slow s={1.5} label="Delta · 1.5s"
+		>{#snippet ogygiaFallback()}<p data-fallback="d">loading d…</p>{/snippet}</Slow
+	>
+</section>

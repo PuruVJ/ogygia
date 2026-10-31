@@ -10,7 +10,12 @@
  * the (verbatim, forwarded) folder-options object — which may hold regex literals. Node-only.
  */
 import { createRequire } from 'node:module';
-import { fs, path, BuildCache, configure_build_cache } from '@ogygia/core/internal/compiler-browser';
+import {
+	fs,
+	path,
+	BuildCache,
+	configure_build_cache
+} from '@ogygia/core/internal/compiler-browser';
 
 // git's own corners of the shared build cache: resolved shas (kv) + the checkout trees (a dir).
 // Persistence location is the cache's concern — git thinks in get/set and a directory, never paths.

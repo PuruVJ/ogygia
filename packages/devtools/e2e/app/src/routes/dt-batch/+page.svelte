@@ -3,7 +3,10 @@
 	// (`visible`), so they go out as ONE batch request; the fourth is slow (1.2 s on the server).
 	// With the `og-auth-wall=post` cookie, something in front of ogygia refuses the batch (405): every
 	// hole then fetches on its own — the devtools must name the refused batch and what it cost.
-	import BatchHole from '$lib/dtholes/BatchHole.svelte' with { render: 'deferred', fetch: 'visible' };
+	import BatchHole from '$lib/dtholes/BatchHole.svelte' with {
+		render: 'deferred',
+		fetch: 'visible'
+	};
 </script>
 
 <h1>batch lab</h1>

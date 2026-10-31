@@ -39,7 +39,7 @@ export async function componentCssHead(components: readonly unknown[]): Promise<
 	if (DEV && registry && !warned_inactive && components.length && !router_css_active()) {
 		warned_inactive = true;
 		console.warn(
-			'[ogygia] a page rendered outside Kit\'s routes, but no plugin declared page modules, so its components\' CSS is not linked. Using `@ogygia/router`? List `router()` from `@ogygia/router/vite` beside `ogygia()` in vite.config `plugins`.'
+			"[ogygia] a page rendered outside Kit's routes, but no plugin declared page modules, so its components' CSS is not linked. Using `@ogygia/router`? List `router()` from `@ogygia/router/vite` beside `ogygia()` in vite.config `plugins`."
 		);
 	}
 	const entries = components.flatMap((c) => router_css_of(c));

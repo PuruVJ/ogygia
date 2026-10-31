@@ -16,11 +16,13 @@ const CSR_META_RE = /<meta name="ogygia-csr" content="true">/;
 const LAKE_RE = /<ogygia-region entry="[^"]+" wake="none" remount="cache">/;
 const LAKE_STATIC_RE = /data-lake-static/;
 // The header island inside the lake as a REAL region (its shell precedes its markup), not inline.
-const HEADER_REGION_RE = /<ogygia-region entry="[^"]+" wake="load"[^>]*>[^<]*(?:<!--[^>]*-->)*<header data-chrome-header/;
+const HEADER_REGION_RE =
+	/<ogygia-region entry="[^"]+" wake="load"[^>]*>[^<]*(?:<!--[^>]*-->)*<header data-chrome-header/;
 const HYDRATION_MISMATCH_RE = /hydration_mismatch/;
 // The browser logs the DOCUMENT's own 404 / 500 status as a console error — the response under
 // test, not a page error.
-const DOCUMENT_STATUS_LOG_RE = /Failed to load resource: the server responded with a status of (?:404|500)/;
+const DOCUMENT_STATUS_LOG_RE =
+	/Failed to load resource: the server responded with a status of (?:404|500)/;
 
 for (const [path, status] of [
 	['/error-kit/missing/', 404],
@@ -34,7 +36,10 @@ for (const [path, status] of [
 			check(`status ${status}`, res.status === status, String(res.status));
 			const html = await res.text();
 			check('Kit ships its bootstrap (the layouts hydrate)', KIT_BOOT_RE.test(html));
-			check('handle stamped the csr meta (the runtime reads it, never Kit’s bootstrap)', CSR_META_RE.test(html));
+			check(
+				'handle stamped the csr meta (the runtime reads it, never Kit’s bootstrap)',
+				CSR_META_RE.test(html)
+			);
 			check('lake emitted as ONE frozen region element (the adoptable form)', LAKE_RE.test(html));
 			check('exactly one frozen region', (html.match(/wake="none"/g) ?? []).length === 1);
 			check('lake HTML rendered inside it', LAKE_STATIC_RE.test(html));
@@ -50,31 +55,54 @@ for (const [path, status] of [
 			const warns: string[] = [];
 			page.on('pageerror', (e) => errs.push(e.message));
 			page.on('console', (m) => {
-				if (m.type() === 'error' && !DOCUMENT_STATUS_LOG_RE.test(m.text())) errs.push('console: ' + m.text());
+				if (m.type() === 'error' && !DOCUMENT_STATUS_LOG_RE.test(m.text()))
+					errs.push('console: ' + m.text());
 				if (m.type() === 'warning') warns.push(m.text());
 			});
 			await page.goto(path, { waitUntil: 'networkidle' });
 			await sleep(500);
 
-			check('lake SURVIVED Kit hydration (the header did not vanish)', (await page.locator('[data-lake-static]').count()) === 1);
-			check('still exactly one frozen region', (await page.locator('ogygia-region[wake="none"]').count()) === 1);
+			check(
+				'lake SURVIVED Kit hydration (the header did not vanish)',
+				(await page.locator('[data-lake-static]').count()) === 1
+			);
+			check(
+				'still exactly one frozen region',
+				(await page.locator('ogygia-region[wake="none"]').count()) === 1
+			);
 			check(
 				'no hydration mismatch',
 				!warns.some((w) => HYDRATION_MISMATCH_RE.test(w)),
-				warns.filter((w) => HYDRATION_MISMATCH_RE.test(w)).slice(0, 1).join('; ')
+				warns
+					.filter((w) => HYDRATION_MISMATCH_RE.test(w))
+					.slice(0, 1)
+					.join('; ')
 			);
 			check(
 				'header island inside the lake hydrated on the RUNTIME',
-				(await page.locator('ogygia-region[wake="none"] ogygia-region[wake="load"][data-hydrated]:has([data-chrome-header])').count()) === 1
+				(await page
+					.locator(
+						'ogygia-region[wake="none"] ogygia-region[wake="load"][data-hydrated]:has([data-chrome-header])'
+					)
+					.count()) === 1
 			);
 			const hbtn = page.locator('[data-chrome-header] button');
 			await hbtn.click();
 			check('header island interactive', (await hbtn.textContent())!.includes('h:1'));
-			check('greeting hole fetched and swapped in', (await page.locator('[data-server-greeting]').count()) === 1);
-			check(`error page shows ${status}`, (await page.locator('[data-error-page]').textContent())!.includes(String(status)));
+			check(
+				'greeting hole fetched and swapped in',
+				(await page.locator('[data-server-greeting]').count()) === 1
+			);
+			check(
+				`error page shows ${status}`,
+				(await page.locator('[data-error-page]').textContent())!.includes(String(status))
+			);
 			const kbtn = page.locator('[data-kit-btn]');
 			await kbtn.click();
-			check('Kit’s own client is alive on the error page', (await kbtn.textContent())!.includes('kit:1'));
+			check(
+				'Kit’s own client is alive on the error page',
+				(await kbtn.textContent())!.includes('kit:1')
+			);
 			check('no page errors', errs.length === 0, errs.slice(0, 2).join('; '));
 		});
 	});

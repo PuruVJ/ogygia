@@ -219,12 +219,22 @@ export function instrument<T extends object, K extends keyof T>(
 ): () => void;
 export function instrument(...args: unknown[]): unknown {
 	if (typeof args[0] === 'function') {
-		const [fn, name, attrs] = args as [(...a: unknown[]) => unknown, string, ((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined];
+		const [fn, name, attrs] = args as [
+			(...a: unknown[]) => unknown,
+			string,
+			((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined
+		];
 		return wrap_call(fn, name, attrs);
 	}
-	const [target, method, name, attrs] = args as [Record<PropertyKey, unknown>, PropertyKey, string, ((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined];
+	const [target, method, name, attrs] = args as [
+		Record<PropertyKey, unknown>,
+		PropertyKey,
+		string,
+		((result: unknown, ...a: unknown[]) => SpanAttrs | undefined) | undefined
+	];
 	const original = target[method];
-	if (typeof original !== 'function') throw new Error(`instrument: ${String(method)} is not a function`);
+	if (typeof original !== 'function')
+		throw new Error(`instrument: ${String(method)} is not a function`);
 	target[method] = wrap_call(original as (...a: unknown[]) => unknown, name, attrs);
 	return () => {
 		target[method] = original;

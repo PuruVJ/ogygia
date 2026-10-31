@@ -37,7 +37,12 @@ function png(w: number, h: number, noisy: number): Uint8Array<ArrayBuffer> {
 	view.setUint32(0, w);
 	view.setUint32(4, h);
 	head.set([8, 2, 0, 0, 0], 8);
-	const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', deflateSync(raw)), chunk('IEND', new Uint8Array())];
+	const parts = [
+		new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+		chunk('IHDR', head),
+		chunk('IDAT', deflateSync(raw)),
+		chunk('IEND', new Uint8Array())
+	];
 	const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
 	let at = 0;
 	for (const p of parts) {
@@ -48,12 +53,18 @@ function png(w: number, h: number, noisy: number): Uint8Array<ArrayBuffer> {
 }
 
 const made = new Map<string, Uint8Array<ArrayBuffer>>();
-const SPEC: Record<string, [number, number, number]> = { 'big.png': [2000, 1333, 25], 'flat.png': [2000, 1333, 0], 'right.png': [400, 300, 1] };
+const SPEC: Record<string, [number, number, number]> = {
+	'big.png': [2000, 1333, 25],
+	'flat.png': [2000, 1333, 0],
+	'right.png': [400, 300, 1]
+};
 
 export const GET = ({ params }) => {
 	const spec = SPEC[params.file];
 	if (!spec) return new Response('no such image', { status: 404 });
 	let bytes = made.get(params.file);
 	if (!bytes) made.set(params.file, (bytes = png(...spec)));
-	return new Response(bytes, { headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } });
+	return new Response(bytes, {
+		headers: { 'content-type': 'image/png', 'cache-control': 'no-store' }
+	});
 };

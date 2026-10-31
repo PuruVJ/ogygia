@@ -14,7 +14,9 @@
 
 <h2 data-static-shell>Remote form (inside an island)</h2>
 <GuestbookForm />
-<p data-static-shell>Plain <code>&lt;form method="POST"&gt;</code>. No JS needed; works with the SPA router active.</p>
+<p data-static-shell>
+	Plain <code>&lt;form method="POST"&gt;</code>. No JS needed; works with the SPA router active.
+</p>
 
 {#if data.ok}<p data-form-ok>Thanks — your entry was saved.</p>{/if}
 {#if form?.error}<p data-form-error>{form.error}</p>{/if}

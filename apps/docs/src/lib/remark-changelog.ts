@@ -13,7 +13,13 @@
  */
 const VERSION_DATE = /^\[?\s*([\w.-]+?)\s*\]?\s*[—–-]\s*(\d{4}-\d{2}-\d{2})\s*$/;
 
-type MdastNode = { type: string; depth?: number; value?: string; children?: MdastNode[]; data?: unknown };
+type MdastNode = {
+	type: string;
+	depth?: number;
+	value?: string;
+	children?: MdastNode[];
+	data?: unknown;
+};
 
 function text_of(node: MdastNode): string {
 	if (node.value != null) return node.value;
@@ -22,7 +28,11 @@ function text_of(node: MdastNode): string {
 
 // Build-time default format (visitors get their own locale via the LocaleDates island). `T00:00:00`
 // keeps it at local midnight so the day never shifts across a timezone.
-const DATE_FMT = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const DATE_FMT = new Intl.DateTimeFormat('en-US', {
+	year: 'numeric',
+	month: 'long',
+	day: 'numeric'
+});
 function pretty_date(iso: string): string {
 	const d = new Date(iso + 'T00:00:00');
 	return Number.isNaN(+d) ? iso : DATE_FMT.format(d);

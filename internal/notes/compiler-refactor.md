@@ -35,7 +35,7 @@ function except where marked stateful.
 2. **Analyze — read AST → IR.** A pure "what does this file declare" pass: region marks (import
    attributes, normalized), `asRegion` / `region()` call sites, the csr tri-state, free-var captures,
    macro invocations with their literal args, content-collection definitions. Output is `FileIR`, a
-   plain data structure. *(Today this is fused with Lower inside `transformHost`; see migration.)*
+   plain data structure. _(Today this is fused with Lower inside `transformHost`; see migration.)_
 
 3. **Lower — IR → rewritten source.** From the IR, rewrite with MagicString: import→binding rewrites,
    `asRegion` const→hoisted import, macro expansion (code/md/bake/wire/loader/regions → inlined
@@ -82,7 +82,7 @@ tidiness: **a future REPL / playground is just a second adapter over the same dr
 under a synthetic id, run parse ▸ analyze ▸ lower ▸ emit in a worker (no bundler needed), and render
 the left→right view — input source on the left, and on the right not only the rewritten `{ code }` and
 the emitted island artifacts, but the `FileIR` and `IslandDescriptor[]` themselves. That IR view is the
-"reasoning" layer that makes the compiler legible: you see the *marks and descriptors* a file lowers
+"reasoning" layer that makes the compiler legible: you see the _marks and descriptors_ a file lowers
 to, not just its output bytes. Keeping the driver Vite-free is therefore a design goal, not only a
 cleanliness one — it is what makes that tool a thin shell instead of a reimplementation.
 
@@ -94,7 +94,7 @@ transforms of data stay functions.
 
 - **`Compiler`** (the driver) — the long-lived session. Holds the `Program`, the `CompileCtx`, the
   transform cache. `compiler.transform(source, id)` / `.emit(virtualId)` / `.invalidate(id)`. This
-  object *is* the compiler's public API.
+  object _is_ the compiler's public API.
 - **`Program`** (the linker / island graph) — the long-lived cross-file state: the descriptor
   registry, `entryOf`, `regionKinds`. `program.register(descriptors, hostId)` / `.unregister(hostId)`
   / `.entry(iid)`, and the whole-program codegen (`clientManifest()`, `serverManifest()`,
@@ -122,15 +122,15 @@ closures → methods), so it must stay byte-identical or stop.
 `vite/` becomes thin — it only maps bundler lifecycle to driver calls and owns the things that are
 irreducibly Vite (`this.emitFile`, `this.resolve`, the dev server):
 
-| Vite hook | does |
-| --- | --- |
-| `config` / `configResolved` | `OgygiaOptions` → `CompileCtx`, construct the driver |
-| `resolveId` | virtual ids, injected-import resolution (`PKG_ROOT`, no `this.resolve` — see the 0.7.0 sub-package fix), `$app/*` shims |
-| `transform` | `driver.transform(code, id)` by file type |
-| `load` | `driver.emit(id)` |
-| `buildStart` | scan the corpus, feed `.ts`/`.js` region files through `driver.transform` up front (server-manifest must exist before an endpoint is hit) |
-| `handleHotUpdate` / `configureServer` | `driver.invalidate` + full-reload decisions |
-| `generateBundle` / `writeBundle` / `renderChunk` | island-deps handoff, island sourcemap rewrite, chunk emit |
+| Vite hook                                        | does                                                                                                                                      |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `config` / `configResolved`                      | `OgygiaOptions` → `CompileCtx`, construct the driver                                                                                      |
+| `resolveId`                                      | virtual ids, injected-import resolution (`PKG_ROOT`, no `this.resolve` — see the 0.7.0 sub-package fix), `$app/*` shims                   |
+| `transform`                                      | `driver.transform(code, id)` by file type                                                                                                 |
+| `load`                                           | `driver.emit(id)`                                                                                                                         |
+| `buildStart`                                     | scan the corpus, feed `.ts`/`.js` region files through `driver.transform` up front (server-manifest must exist before an endpoint is hit) |
+| `handleHotUpdate` / `configureServer`            | `driver.invalidate` + full-reload decisions                                                                                               |
+| `generateBundle` / `writeBundle` / `renderChunk` | island-deps handoff, island sourcemap rewrite, chunk emit                                                                                 |
 
 ## Module tree
 
@@ -230,10 +230,10 @@ checks + the compiler-stress digest (unchanged throughout: **`e27d5db6·ad66d3f3
 went **2752 → 2063** lines.
 
 - **The spine (all three classes):** `compiler/program.ts` (the `Program` cross-file linker — registry
-  + register/unregister/note_runtime_mark + the feature-mark bag; per-instance, never module-global),
-  `compiler/ctx.ts` (`CompileCtx` — the resolved config + naming accessors), `compiler/driver.ts`
-  (`Compiler` — holds Program + Ctx + transform cache; `transform()` is the Vite-free front-end; the
-  adapter binds the Ctx at the end of `configResolved`). `compiler/ids.ts` holds the virtual-id vocabulary.
+  - register/unregister/note_runtime_mark + the feature-mark bag; per-instance, never module-global),
+    `compiler/ctx.ts` (`CompileCtx` — the resolved config + naming accessors), `compiler/driver.ts`
+    (`Compiler` — holds Program + Ctx + transform cache; `transform()` is the Vite-free front-end; the
+    adapter binds the Ctx at the end of `configResolved`). `compiler/ids.ts` holds the virtual-id vocabulary.
 - **The module tree:** `parse/` (oxc + scan = og-lexer⊕og-extract), `macros/` (code/bake/wire/dollar/
   store/dedent), `content/` (regions/loaders/git/transportables), `link/` (manifest/server-manifest/
   island-deps/runtime-entry/transport/caps/router-config/speculation — the whole-program emitters, each

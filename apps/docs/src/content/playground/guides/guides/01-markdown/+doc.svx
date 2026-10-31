@@ -12,6 +12,7 @@ ogygia reads `.svx` files: Markdown with Svelte mixed in. You get the whole of C
 ```bash [npm]
 npm create ogygia@latest
 ```
+
 ```bash [pnpm]
 pnpm create ogygia
 ```
@@ -49,7 +50,7 @@ Each heading gets a slug and an anchor automatically, so `## Wake strategies` be
 
 ## Text formatting
 
-The usual Markdown emphasis all works: **bold**, *italic*, `inline code`, and combinations like ***both***. Inline code is highlighted with the same theme as fenced blocks, so a token like `$state` reads consistently everywhere.
+The usual Markdown emphasis all works: **bold**, _italic_, `inline code`, and combinations like _**both**_. Inline code is highlighted with the same theme as fenced blocks, so a token like `$state` reads consistently everywhere.
 
 Lists come in both flavors. Unordered:
 

@@ -35,8 +35,7 @@ const files: Record<string, string> = {
 	// A second hydrate island placed from a host that is NOT a route file — the registry / glob shape
 	// Kit's own `routes/**/+*` entries never reach. Its host lives in a route GROUP directory, whose
 	// parentheses are glob syntax to the scanner and must be escaped by the adapter.
-	'src/lib/(group)/Host.svelte':
-		`<script>\n\timport Chart from './Chart.svelte' with { wake: 'idle' };\n</script>\n<Chart />\n`,
+	'src/lib/(group)/Host.svelte': `<script>\n\timport Chart from './Chart.svelte' with { wake: 'idle' };\n</script>\n<Chart />\n`,
 	'src/lib/(group)/Chart.svelte': `<script>\n\timport { draw } from 'chart-lib';\n</script>\n<p>{draw()}</p>\n`
 };
 

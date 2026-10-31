@@ -18,8 +18,8 @@
 <hr />
 <h1 data-static-shell>Kit page (csr = true) — coexistence demo</h1>
 <p data-static-shell>
-	This page opts into full Kit hydration. The island below still works, but Kit hydrates it
-	(exactly once) as a normal component.
+	This page opts into full Kit hydration. The island below still works, but Kit hydrates it (exactly
+	once) as a normal component.
 </p>
 
 <Counter start={42} label="Island on a csr=true page" />

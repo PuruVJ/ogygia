@@ -14,8 +14,8 @@
 
 <h1 data-static-shell>Captured-snapshot mutation guard</h1>
 <p data-static-shell>
-	The island receives <code>config</code> (a snapshot with a Map + Set) and mutates it in its own
-	script. In dev the runtime warns once per path; in prod it is silent and the mutation is a no-op.
+	The island receives <code>config</code> (a snapshot with a Map + Set) and mutates it in its own script.
+	In dev the runtime warns once per path; in prod it is silent and the mutation is a no-op.
 </p>
 
 <MutatingIsland {config} />

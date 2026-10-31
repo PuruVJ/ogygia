@@ -20,8 +20,14 @@ type RemoteEntry = { resource?: RemoteResource };
 export class RemoteCache {
 	readonly query_responses: Record<string, RemoteNode> = {};
 	readonly prerender_responses: Record<string, RemoteNode> = {};
-	readonly query_map: Map<string, Map<string, RemoteEntry>> = new Map<string, Map<string, RemoteEntry>>();
-	readonly live_query_map: Map<string, Map<string, RemoteEntry>> = new Map<string, Map<string, RemoteEntry>>();
+	readonly query_map: Map<string, Map<string, RemoteEntry>> = new Map<
+		string,
+		Map<string, RemoteEntry>
+	>();
+	readonly live_query_map: Map<string, Map<string, RemoteEntry>> = new Map<
+		string,
+		Map<string, RemoteEntry>
+	>();
 
 	/** Drop SSR seed bags only (safe while old islands are still connected). */
 	clear_seeds(): void {
@@ -47,10 +53,12 @@ export class RemoteCache {
 	refresh_instances(): Promise<void> {
 		const pending: Promise<unknown>[] = [];
 		for (const entries of this.query_map.values()) {
-			for (const { resource } of entries.values()) if (resource?.refresh) pending.push(resource.refresh());
+			for (const { resource } of entries.values())
+				if (resource?.refresh) pending.push(resource.refresh());
 		}
 		for (const entries of this.live_query_map.values()) {
-			for (const { resource } of entries.values()) if (resource?.reconnect) pending.push(resource.reconnect());
+			for (const { resource } of entries.values())
+				if (resource?.reconnect) pending.push(resource.reconnect());
 		}
 		return Promise.allSettled(pending).then(() => {});
 	}
@@ -85,7 +93,8 @@ function get_remote_cache(): RemoteCache {
 export const remote_cache: RemoteCache = get_remote_cache();
 
 export const query_responses: RemoteCache['query_responses'] = remote_cache.query_responses;
-export const prerender_responses: RemoteCache['prerender_responses'] = remote_cache.prerender_responses;
+export const prerender_responses: RemoteCache['prerender_responses'] =
+	remote_cache.prerender_responses;
 export const query_map: RemoteCache['query_map'] = remote_cache.query_map;
 export const live_query_map: RemoteCache['live_query_map'] = remote_cache.live_query_map;
 

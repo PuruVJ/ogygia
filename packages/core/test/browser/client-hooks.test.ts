@@ -54,7 +54,7 @@ test('a hooks.client with no init export is a clean no-op (no throw)', async () 
 	await expect.poll(() => loaded, { timeout: 5000 }).toBe(true);
 });
 
-test("a failing init is caught, not thrown — it never blocks the page", async () => {
+test('a failing init is caught, not thrown — it never blocks the page', async () => {
 	set_csr('false');
 	const errors: unknown[] = [];
 	const real = console.error;

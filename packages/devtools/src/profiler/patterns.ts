@@ -298,7 +298,13 @@ export function stable_answers(
 /** the GETs made in EVERY render whose answers were NOT the same bytes each time (`GET <url>`):
  *  the candidates for "almost the same answer" (net.ts `answer_diff` says how little changed) */
 export function varied_answers(
-	calls: readonly { method: string; url: string; status: number; start: number; body_hash?: string }[],
+	calls: readonly {
+		method: string;
+		url: string;
+		status: number;
+		start: number;
+		body_hash?: string;
+	}[],
 	runs: readonly { start: number; end: number }[]
 ): Set<string> {
 	const out = new Set<string>();
@@ -418,8 +424,16 @@ export function find_same_answers(input: {
 	// (a row is a kind of request at a line: one helper line fetching eleven endpoints is eleven rows,
 	// and "12 places" said twelve lines where there were two)
 	const lines = new Set(sites.map((s) => s.path + ':' + s.line)).size;
-	const where = sites.length < 2 ? '' : lines === sites.length ? ` (${lines} places)` : ` (${sites.length} requests from ${lines} line${lines === 1 ? '' : 's'})`;
-	const more = sites.length < 2 ? '' : `; ${sites.length - 1} more ${lines === sites.length ? `place${sites.length === 2 ? '' : 's'}` : `request${sites.length === 2 ? '' : 's'}`} do${sites.length === 2 ? 'es' : ''} the same`;
+	const where =
+		sites.length < 2
+			? ''
+			: lines === sites.length
+				? ` (${lines} places)`
+				: ` (${sites.length} requests from ${lines} line${lines === 1 ? '' : 's'})`;
+	const more =
+		sites.length < 2
+			? ''
+			: `; ${sites.length - 1} more ${lines === sites.length ? `place${sites.length === 2 ? '' : 's'}` : `request${sites.length === 2 ? '' : 's'}`} do${sites.length === 2 ? 'es' : ''} the same`;
 	if (input.almost) {
 		const changes =
 			input.almost.get((top.target ?? '').split(' (')[0]) ?? [...input.almost.values()][0];
@@ -428,7 +442,8 @@ export function find_same_answers(input: {
 			title: `Almost the same answer is fetched on every render${where}`,
 			fix: `Every render asked for this and got the same answer back but for a small part that changes each time (${changes ? `\`${changes}\`` : 'a timestamp or an id'}): the data itself did not change. Cache the answer across requests like any unchanging one, and fill the changing part in yourself, or ask the API to leave it out (many add a request id or a generation time). If the changing part matters to the page, keep only that part live.`,
 			example: {
-				before: 'const catalog = await (await fetch(API + "/catalog")).json(); // { items, generatedAt }',
+				before:
+					'const catalog = await (await fetch(API + "/catalog")).json(); // { items, generatedAt }',
 				after:
 					'let cached, at = 0;\nif (Date.now() - at > 60_000) (cached = await (await fetch(API + "/catalog")).json()), (at = Date.now());\nconst catalog = { ...cached, generatedAt: new Date().toISOString() };'
 			},
@@ -983,14 +998,21 @@ function intl_locals(body: readonly string[]): Set<string> {
 }
 /** the names in a function body that hold a RegExp built right there (`const re = new RegExp(…)`),
  *  each with its line: `first` is the body's first line number */
-function regexp_locals(body: readonly string[], first: number): Map<string, { line: number; code: string }> {
+function regexp_locals(
+	body: readonly string[],
+	first: number
+): Map<string, { line: number; code: string }> {
 	const out = new Map<string, { line: number; code: string }>();
 	for (let i = 0; i < body.length; i++) {
 		// (a cheap test before tokenizing every line of the body)
 		if (!body[i].includes('RegExp')) continue;
 		const t = tokens(body[i]);
 		for (let k = 0; k + 3 < t.length; k++)
-			if (t[k + 1] === '=' && ((t[k + 2] === 'new' && t[k + 3] === 'RegExp') || (t[k + 2] === 'RegExp' && t[k + 3] === '(')))
+			if (
+				t[k + 1] === '=' &&
+				((t[k + 2] === 'new' && t[k + 3] === 'RegExp') ||
+					(t[k + 2] === 'RegExp' && t[k + 3] === '('))
+			)
 				out.set(t[k], { line: first + i, code: body[i].trim() });
 	}
 	return out;
@@ -1000,7 +1022,10 @@ function regexp_locals(body: readonly string[], first: number): Map<string, { li
 const REGEXP_USE: ReadonlySet<string> = new Set(['test', 'exec']);
 /** the RegExp the same function built that this line checks with: `re.test(s)`, `re.exec(s)` — V8
  *  often charges a `new RegExp` to its first use, the line below it */
-function used_local_regexp(t: readonly string[], locals: ReadonlyMap<string, { line: number; code: string }>): { line: number; code: string } | undefined {
+function used_local_regexp(
+	t: readonly string[],
+	locals: ReadonlyMap<string, { line: number; code: string }>
+): { line: number; code: string } | undefined {
 	if (!locals.size) return undefined;
 	for (let k = 0; k + 3 < t.length; k++) {
 		const at = locals.get(t[k]);
@@ -1059,11 +1084,19 @@ function locale_call_with_args(t: readonly string[]): boolean {
 	return false;
 }
 
-const DATE_FORMAT_CALLS: ReadonlySet<string> = new Set(['format', 'formatToParts', 'formatRange', 'toLocaleDateString', 'toLocaleString', 'toLocaleTimeString']);
+const DATE_FORMAT_CALLS: ReadonlySet<string> = new Set([
+	'format',
+	'formatToParts',
+	'formatRange',
+	'toLocaleDateString',
+	'toLocaleString',
+	'toLocaleTimeString'
+]);
 /** the line formats a value for display: `fmt.format(d)`, `d.toLocaleDateString(…)` */
 function formats_date(t: readonly string[]): boolean {
 	for (let k = 0; k + 2 < t.length; k++)
-		if ((t[k] === '.' || t[k] === '?.') && DATE_FORMAT_CALLS.has(t[k + 1]) && t[k + 2] === '(') return true;
+		if ((t[k] === '.' || t[k] === '?.') && DATE_FORMAT_CALLS.has(t[k + 1]) && t[k + 2] === '(')
+			return true;
 	return false;
 }
 
@@ -1129,7 +1162,8 @@ const RULES: Rule[] = [
 		},
 		// (or the line that first runs it, below: the build's time is often charged there — the site
 		// is moved to the build's own line)
-		match: (t, c) => c.repeated && (!!constructs(t, REGEXP) || !!used_local_regexp(t, c.regexp_locals))
+		match: (t, c) =>
+			c.repeated && (!!constructs(t, REGEXP) || !!used_local_regexp(t, c.regexp_locals))
 	},
 	{
 		// the time is INSIDE the pattern: V8 runs a compiled regex as its own code (`RegExp: <source>`
@@ -1381,7 +1415,10 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
  * one. Module top-level code runs once at start-up and is left out. Pure: the counts and the files'
  * text in, the pattern out (undefined when nothing qualifies). No regex.
  */
-export function counted_sync_io(counts: Readonly<Record<string, number>>, files: readonly { path: string; file: string; text: string }[]): Pattern | undefined {
+export function counted_sync_io(
+	counts: Readonly<Record<string, number>>,
+	files: readonly { path: string; file: string; text: string }[]
+): Pattern | undefined {
 	const sync = new Map<string, number>();
 	const ran = new Set<string>();
 	for (const [k, n] of Object.entries(counts)) {
@@ -1416,7 +1453,8 @@ export function counted_sync_io(counts: Readonly<Record<string, number>>, files:
 			// the line's own name for a function it opens: `function x(`, `const x = (…) =>`, `x(…) {`
 			let named: string | null = null;
 			const fn_at = t.indexOf('function');
-			if (fn_at !== -1) named = t[fn_at + 1] === '*' ? (t[fn_at + 2] ?? null) : (t[fn_at + 1] ?? null);
+			if (fn_at !== -1)
+				named = t[fn_at + 1] === '*' ? (t[fn_at + 2] ?? null) : (t[fn_at + 1] ?? null);
 			else {
 				const decl = t.findIndex((x) => x === 'const' || x === 'let' || x === 'var');
 				const eq = decl === -1 ? -1 : t.indexOf('=', decl);
@@ -1424,8 +1462,15 @@ export function counted_sync_io(counts: Readonly<Record<string, number>>, files:
 					// `= (…) =>` / `= async (…) =>` / `= x =>`: a function; `= items.map((y) => {` is not
 					const j = t[eq + 1] === 'async' ? eq + 2 : eq + 1;
 					const to = t.indexOf('=>', j);
-					if (to !== -1 && (t[j] === '(' || to === j + 1) && !t.slice(j, to).includes('.')) named = t[decl + 1] ?? null;
-				} else if (t.length > 2 && t[1] === '(' && t[t.length - 1] === '{' && !BLOCK_WORDS.has(t[0])) named = t[0];
+					if (to !== -1 && (t[j] === '(' || to === j + 1) && !t.slice(j, to).includes('.'))
+						named = t[decl + 1] ?? null;
+				} else if (
+					t.length > 2 &&
+					t[1] === '(' &&
+					t[t.length - 1] === '{' &&
+					!BLOCK_WORDS.has(t[0])
+				)
+					named = t[0];
 			}
 			let arrow = false;
 			for (let k = 0; k < t.length; k++) {
@@ -1473,9 +1518,26 @@ export function counted_sync_io(counts: Readonly<Record<string, number>>, files:
 		evidence: `${said.map((n) => `${n} ×${sync.get(n)}`).join(', ')} per render (V8's call counts): too quick for the CPU sampler here, under a millisecond, but each call stops every other request on this server until the disk answers.`
 	};
 }
-const BLOCK_WORDS: ReadonlySet<string> = new Set(['if', 'for', 'while', 'switch', 'catch', 'with', 'return']);
+const BLOCK_WORDS: ReadonlySet<string> = new Set([
+	'if',
+	'for',
+	'while',
+	'switch',
+	'catch',
+	'with',
+	'return'
+]);
 /** the *Sync calls V8's coverage counts under their own names (in Node's `node:` modules) */
-const COUNTED_SYNC: ReadonlySet<string> = new Set([...SYNC_IO, 'appendFileSync', 'mkdirSync', 'openSync', 'readSync', 'execFileSync', 'pbkdf2Sync', 'scryptSync']);
+const COUNTED_SYNC: ReadonlySet<string> = new Set([
+	...SYNC_IO,
+	'appendFileSync',
+	'mkdirSync',
+	'openSync',
+	'readSync',
+	'execFileSync',
+	'pbkdf2Sync',
+	'scryptSync'
+]);
 
 export function find_patterns(input: PatternInput): Pattern[] {
 	const fns = new Map<string, FrameStat>();
@@ -1605,7 +1667,10 @@ export function find_patterns(input: PatternInput): Pattern[] {
 			matched = true;
 			// A REGEXP'S FIRST USE (`re.test(s)`) charged with its build: the site is the build's line,
 			// and the two lines' cost one site's
-			const built = rule.kind === 'regexp-per-call' && !constructs(t, REGEXP) ? used_local_regexp(t, ctx.regexp_locals) : undefined;
+			const built =
+				rule.kind === 'regexp-per-call' && !constructs(t, REGEXP)
+					? used_local_regexp(t, ctx.regexp_locals)
+					: undefined;
 			const line = built?.line ?? l.line;
 			const same = e.sites.find((s) => s.path === l.path && s.line === line);
 			if (same) {
@@ -2629,7 +2694,9 @@ export function same_document_pattern(input: {
 }): Pattern {
 	const blocks = [
 		...(input.blocked?.cookie ? ['sets a cookie (Set-Cookie)'] : []),
-		...(input.blocked?.cache_control ? [`answers Cache-Control: ${input.blocked.cache_control}`] : [])
+		...(input.blocked?.cache_control
+			? [`answers Cache-Control: ${input.blocked.cache_control}`]
+			: [])
 	];
 	const first = blocks.length
 		? ` First, the response ${blocks.join(' and ')}: no shared cache (a CDN, a proxy) keeps such a page, so the header below does nothing until that goes. ${input.blocked?.cookie ? 'Set the cookie where it is needed (an endpoint the page calls, a hook that skips this path) rather than on every page; ' : ''}${input.blocked?.cache_control ? 'drop private / no-store from a page that holds nothing per visitor; ' : ''}then`
@@ -2927,7 +2994,10 @@ function look_inside(
 				if (rule.kind === 'library-per-item' || rule.kind === 'sync-io') continue;
 				if (rule.match(tl, c)) {
 					// (a RegExp's first use: the site is the line that built it)
-					const built = rule.kind === 'regexp-per-call' && !constructs(tl, REGEXP) ? used_local_regexp(tl, rx_locals) : undefined;
+					const built =
+						rule.kind === 'regexp-per-call' && !constructs(tl, REGEXP)
+							? used_local_regexp(tl, rx_locals)
+							: undefined;
 					const said = built?.code ?? code;
 					return {
 						rule,

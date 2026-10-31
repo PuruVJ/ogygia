@@ -24,7 +24,8 @@ describe('dedupe_head_links · modulepreload', () => {
 	});
 
 	it('keeps distinct hrefs and links of other kinds untouched', () => {
-		const other = '<link rel="preload" as="fetch" href="/x"><link rel="preload" as="fetch" href="/x"><link rel="icon" href="/i.png">';
+		const other =
+			'<link rel="preload" as="fetch" href="/x"><link rel="preload" as="fetch" href="/x"><link rel="icon" href="/i.png">';
 		const html = `<head>${other}${hint('/a.js')}${hint('/b.js')}</head>`;
 		expect(dedupe_head_links(html)).toBe(html);
 	});
@@ -61,7 +62,9 @@ describe('dedupe_head_links · modulepreload', () => {
 
 	it('dedupes the low-priority hints every island emits (two islands, shared deps)', () => {
 		const html = low('/a.js') + low('/shared.js') + low('/b.js') + low('/shared.js') + '</head>';
-		expect(dedupe_head_links(html)).toBe(low('/a.js') + low('/shared.js') + low('/b.js') + '</head>');
+		expect(dedupe_head_links(html)).toBe(
+			low('/a.js') + low('/shared.js') + low('/b.js') + '</head>'
+		);
 	});
 
 	it('first occurrence wins regardless of attributes (no priority arbitration: every hint is low)', () => {
@@ -73,7 +76,9 @@ describe('dedupe_head_links · modulepreload', () => {
 describe('dedupe_head_links · stylesheet', () => {
 	it('drops a Kit copy of a sheet the region pass already linked (Kit links after the rendered head)', () => {
 		const html = `<head>${og('/a.css')}${og('/b.css')}${kit('/a.css')}${kit('/c.css')}</head>`;
-		expect(dedupe_head_links(html)).toBe(`<head>${og('/a.css')}${og('/b.css')}${kit('/c.css')}</head>`);
+		expect(dedupe_head_links(html)).toBe(
+			`<head>${og('/a.css')}${og('/b.css')}${kit('/c.css')}</head>`
+		);
 	});
 
 	it('drops a region copy when Kit linked first — whichever comes first wins', () => {
@@ -110,6 +115,8 @@ describe('dedupe_head_links · one pass', () => {
 
 	it('handles both families in one document in one call', () => {
 		const html = `<head>${kit('/a.css')}${hint('/a.js')}${og('/a.css')}${low('/a.js')}${hint('/b.js')}</head>`;
-		expect(dedupe_head_links(html)).toBe(`<head>${kit('/a.css')}${hint('/a.js')}${hint('/b.js')}</head>`);
+		expect(dedupe_head_links(html)).toBe(
+			`<head>${kit('/a.css')}${hint('/a.js')}${hint('/b.js')}</head>`
+		);
 	});
 });

@@ -19,11 +19,11 @@ This page exists to exercise the design system at scale. It uses every heading l
 
 Good documentation is mostly words, so the reading experience for plain prose has to be excellent before anything else matters. Paragraphs should have comfortable measure, generous line height, and enough contrast to read for an hour without strain. The body font carries the bulk of the page, and it must sit calmly next to headings, code, and the occasional inline element like `--og-accent` without any of them fighting for attention.
 
-Here is a second paragraph, because a single one never reveals the rhythm between blocks. The space above and below a paragraph, the way a heading pulls the eye down to the next section, the weight of **bold** against the lightness of *italic* — all of it only becomes visible once there is enough text for a rhythm to exist. This page has plenty.
+Here is a second paragraph, because a single one never reveals the rhythm between blocks. The space above and below a paragraph, the way a heading pulls the eye down to the next section, the weight of **bold** against the lightness of _italic_ — all of it only becomes visible once there is enough text for a rhythm to exist. This page has plenty.
 
 ### Emphasis and inline elements
 
-You can combine emphasis freely: **bold**, *italic*, ***bold italic***, and `inline code`. Inline code should read as code without shouting — a subtle background, a monospace face, and the same syntax color family as the fenced blocks. A token like `wake: 'visible'` should be instantly recognizable as something you would type.
+You can combine emphasis freely: **bold**, _italic_, _**bold italic**_, and `inline code`. Inline code should read as code without shouting — a subtle background, a monospace face, and the same syntax color family as the fenced blocks. A token like `wake: 'visible'` should be instantly recognizable as something you would type.
 
 ### Links
 
@@ -36,8 +36,8 @@ Links come in two kinds. External links leave the site, like [the Svelte docs](h
 - ogygia renders pages on the server as static HTML.
 - Only components marked as islands ship client JavaScript.
 - Each island wakes on its own schedule.
-	- Nested items are supported for sub-points.
-	- They indent cleanly and keep their bullet style.
+  - Nested items are supported for sub-points.
+  - They indent cleanly and keep their bullet style.
 - The result is less JavaScript and a faster first paint.
 
 ### Ordered lists
@@ -51,11 +51,11 @@ Links come in two kinds. External links leave the site, like [the Svelte docs](h
 ### Mixed and nested
 
 1. Set up the project.
-	- Node 18 or newer.
-	- Svelte 5 in runes mode.
+   - Node 18 or newer.
+   - Svelte 5 in runes mode.
 2. Author content.
-	- Write `.svx` files with frontmatter.
-	- Co-locate island components.
+   - Write `.svx` files with frontmatter.
+   - Co-locate island components.
 3. Ship it.
 
 ## Blockquotes
@@ -73,7 +73,7 @@ A multi-line quote holds a longer thought, and it should keep its left rule and 
 
 Callout-style quotes lead with a bold label:
 
-> **Note.** Wake strategies change *when* an island hydrates, never *whether* it is interactive. A lazier strategy defers cost; it never removes functionality.
+> **Note.** Wake strategies change _when_ an island hydrates, never _whether_ it is interactive. A lazier strategy defers cost; it never removes functionality.
 
 > **Warning.** Props passed into an island must be serializable. Functions and class instances do not survive the trip across the hydration boundary.
 
@@ -81,31 +81,31 @@ Callout-style quotes lead with a bold label:
 
 A simple two-column table:
 
-| Term | Meaning |
-| --- | --- |
-| Island | An interactive component that hydrates on its own. |
+| Term   | Meaning                                                      |
+| ------ | ------------------------------------------------------------ |
+| Island | An interactive component that hydrates on its own.           |
 | Region | Any addressable block: island, server island, lake, or held. |
-| Lake | A large static region rendered once and cached. |
+| Lake   | A large static region rendered once and cached.              |
 
 A wider table with alignment and inline code:
 
-| Strategy | Wakes when | Cost | Use for |
-| --- | --- | --- | --- |
-| `load` | Immediately | Highest | Above-the-fold, reached at once. |
-| `idle` | On `requestIdleCallback` | Medium | Non-urgent interactive widgets. |
-| `visible` | On scroll into view | Low | The safe default for below the fold. |
-| `interaction` | On first hover/focus/tap | Lowest | Rarely-used controls. |
+| Strategy      | Wakes when               | Cost    | Use for                              |
+| ------------- | ------------------------ | ------- | ------------------------------------ |
+| `load`        | Immediately              | Highest | Above-the-fold, reached at once.     |
+| `idle`        | On `requestIdleCallback` | Medium  | Non-urgent interactive widgets.      |
+| `visible`     | On scroll into view      | Low     | The safe default for below the fold. |
+| `interaction` | On first hover/focus/tap | Lowest  | Rarely-used controls.                |
 
 A reference-style table with more rows, the kind an API page produces:
 
-| Token | Default (light) | Default (dark) | Controls |
-| --- | --- | --- | --- |
-| `--og-bg` | `#ffffff` | `#101014` | Page background |
-| `--og-bg-subtle` | `#f7f7f8` | `#17171d` | Cards and code blocks |
-| `--og-line` | `#e4e4e8` | `#26262e` | Borders |
-| `--og-text` | `#1c1c21` | `#e8e8ee` | Body text |
-| `--og-text-muted` | `#6b6b76` | `#9a9aa6` | Secondary text |
-| `--og-accent` | `#0d9488` | `#0d9488` | Links and active states |
+| Token             | Default (light) | Default (dark) | Controls                |
+| ----------------- | --------------- | -------------- | ----------------------- |
+| `--og-bg`         | `#ffffff`       | `#101014`      | Page background         |
+| `--og-bg-subtle`  | `#f7f7f8`       | `#17171d`      | Cards and code blocks   |
+| `--og-line`       | `#e4e4e8`       | `#26262e`      | Borders                 |
+| `--og-text`       | `#1c1c21`       | `#e8e8ee`      | Body text               |
+| `--og-text-muted` | `#6b6b76`       | `#9a9aa6`      | Secondary text          |
+| `--og-accent`     | `#0d9488`       | `#0d9488`      | Links and active states |
 
 ## Code in every language
 

@@ -5,4 +5,8 @@
 	const page = ctx?.page;
 </script>
 
-<p data-probe>{page ? `${page.status}|${page.url?.pathname ?? '-'}|${page.route.id ?? '-'}|${JSON.stringify(page.data)}` : 'NO CONTEXT'}</p>
+<p data-probe>
+	{page
+		? `${page.status}|${page.url?.pathname ?? '-'}|${page.route.id ?? '-'}|${JSON.stringify(page.data)}`
+		: 'NO CONTEXT'}
+</p>

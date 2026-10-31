@@ -37,8 +37,10 @@ function open_db(): Promise<IDBDatabase | null> {
 			const req = indexedDB.open(DB_NAME, DB_VERSION);
 			req.onupgradeneeded = () => {
 				const db = req.result;
-				if (!db.objectStoreNames.contains('reports')) db.createObjectStore('reports', { keyPath: 'id' });
-				if (!db.objectStoreNames.contains('visits')) db.createObjectStore('visits', { keyPath: 'key' });
+				if (!db.objectStoreNames.contains('reports'))
+					db.createObjectStore('reports', { keyPath: 'id' });
+				if (!db.objectStoreNames.contains('visits'))
+					db.createObjectStore('visits', { keyPath: 'key' });
 			};
 			req.onsuccess = () => resolve(req.result);
 			req.onerror = () => resolve(null);
@@ -56,7 +58,11 @@ function done<T>(req: IDBRequest<T>): Promise<T | null> {
 	});
 }
 
-async function with_store<T>(name: 'reports' | 'visits', mode: IDBTransactionMode, fn: (s: IDBObjectStore) => Promise<T>): Promise<T | null> {
+async function with_store<T>(
+	name: 'reports' | 'visits',
+	mode: IDBTransactionMode,
+	fn: (s: IDBObjectStore) => Promise<T>
+): Promise<T | null> {
 	const db = await open_db();
 	if (!db) return null;
 	try {
@@ -70,10 +76,29 @@ async function with_store<T>(name: 'reports' | 'visits', mode: IDBTransactionMod
 }
 
 /** Keep a report's dump. The newest MAX_REPORTS stay. */
-export async function put_report(dump: { meta: { id: string; page?: string; created: number; trigger: string; runs?: number[]; request?: { path: string } } }): Promise<boolean> {
+export async function put_report(dump: {
+	meta: {
+		id: string;
+		page?: string;
+		created: number;
+		trigger: string;
+		runs?: number[];
+		request?: { path: string };
+	};
+}): Promise<boolean> {
 	const m = dump.meta;
-	const median = m.runs?.length ? [...m.runs].sort((a, b) => a - b)[Math.floor(m.runs.length / 2)] : null;
-	const rec: StoredDump = { id: m.id, page: m.page ?? m.request?.path ?? null, at: m.created, label: m.page ?? m.request?.path ?? m.trigger, trigger: m.trigger, median, dump };
+	const median = m.runs?.length
+		? [...m.runs].sort((a, b) => a - b)[Math.floor(m.runs.length / 2)]
+		: null;
+	const rec: StoredDump = {
+		id: m.id,
+		page: m.page ?? m.request?.path ?? null,
+		at: m.created,
+		label: m.page ?? m.request?.path ?? m.trigger,
+		trigger: m.trigger,
+		median,
+		dump
+	};
 	const ok = await with_store('reports', 'readwrite', async (s) => {
 		s.put(rec);
 		const keys = ((await done(s.getAll())) as StoredDump[] | null) ?? [];
@@ -84,12 +109,19 @@ export async function put_report(dump: { meta: { id: string; page?: string; crea
 }
 
 export async function get_report(id: string): Promise<StoredDump | null> {
-	return ((await with_store('reports', 'readonly', (s) => done(s.get(id)))) as StoredDump | null | undefined) ?? null;
+	return (
+		((await with_store('reports', 'readonly', (s) => done(s.get(id)))) as
+			| StoredDump
+			| null
+			| undefined) ?? null
+	);
 }
 
 /** Every kept report, newest first, without the dumps (the list is cheap to draw). */
 export async function list_reports(): Promise<Omit<StoredDump, 'dump'>[]> {
-	const all = ((await with_store('reports', 'readonly', (s) => done(s.getAll()))) as StoredDump[] | null) ?? [];
+	const all =
+		((await with_store('reports', 'readonly', (s) => done(s.getAll()))) as StoredDump[] | null) ??
+		[];
 	return all.sort((a, b) => b.at - a.at).map(({ dump: _d, ...rest }) => rest);
 }
 
@@ -102,7 +134,9 @@ export async function delete_report(id: string): Promise<void> {
 
 /** The visits of a page this browser made, newest first. */
 export async function list_visits(page: string, limit = 10): Promise<StoredVisit[]> {
-	const all = ((await with_store('visits', 'readonly', (s) => done(s.getAll()))) as StoredVisit[] | null) ?? [];
+	const all =
+		((await with_store('visits', 'readonly', (s) => done(s.getAll()))) as StoredVisit[] | null) ??
+		[];
 	return all
 		.filter((v) => v.page === page)
 		.sort((a, b) => b.at - a.at)

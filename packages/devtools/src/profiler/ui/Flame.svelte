@@ -121,7 +121,9 @@
 	}
 	function onMove(ev: MouseEvent) {
 		const q = hit(ev);
-		tip = q ? { node: q.node, x: Math.min(ev.clientX + 14, window.innerWidth - 360), y: ev.clientY + 14 } : null;
+		tip = q
+			? { node: q.node, x: Math.min(ev.clientX + 14, window.innerWidth - 360), y: ev.clientY + 14 }
+			: null;
 	}
 	function onClick(ev: MouseEvent) {
 		const q = hit(ev);
@@ -145,8 +147,8 @@
 	{#if q}
 		<span class="hint">
 			{#if matches.count}
-				{matches.count} bar{matches.count === 1 ? '' : 's'} · {matches.ms.toFixed(1)} ms · Enter zooms to
-				the heaviest
+				{matches.count} bar{matches.count === 1 ? '' : 's'} · {matches.ms.toFixed(1)} ms · Enter zooms
+				to the heaviest
 			{:else}no match{/if}
 		</span>
 	{/if}

@@ -39,7 +39,11 @@ const CLOCK_SKEW_SEC = 300;
  * with {@link CLOCK_SKEW_SEC} of slack for a slow clock; a URL that has not expired never renews
  * (the server refuses it), so a wrong guess costs one refused request.
  */
-export function capability_expired(endpoint: string, now_ms: number = Date.now(), page_origin: string = location.origin): boolean {
+export function capability_expired(
+	endpoint: string,
+	now_ms: number = Date.now(),
+	page_origin: string = location.origin
+): boolean {
 	try {
 		const exp = Number(new URL(endpoint, page_origin).searchParams.get('exp'));
 		return Number.isFinite(exp) && exp > 0 && exp <= now_ms / 1000 + CLOCK_SKEW_SEC;
@@ -102,7 +106,8 @@ export class RegionAnswerRefused extends Error {
 }
 
 /** The reason a 403 without `x-ogygia-deny` gets: ogygia's handle never answered it. */
-export const NOT_OGYGIA_403 = 'not ogygia: a proxy, CDN or firewall in front answered (a 403 without x-ogygia-deny)';
+export const NOT_OGYGIA_403 =
+	'not ogygia: a proxy, CDN or firewall in front answered (a 403 without x-ogygia-deny)';
 
 /**
  * A 403 from the islands endpoint, as one line: its `x-ogygia-deny` reason, and for `foreign-key`
@@ -123,7 +128,10 @@ export function deny_of(res: Response, endpoint: string): string {
 }
 
 /** After fetch: reject opaque redirects that left the page origin. */
-export function is_same_origin_response(res: Response, page_origin: string = location.origin): boolean {
+export function is_same_origin_response(
+	res: Response,
+	page_origin: string = location.origin
+): boolean {
 	if (!res.url) return true; // older environments — rely on request URL check
 	try {
 		return new URL(res.url).origin === page_origin;
@@ -178,7 +186,11 @@ function warm_key(url: string): string {
 }
 
 /** Fire-and-forget `import()` of an island's module, deduped by resolved URL. */
-export function warm_island_module(entry: string, base?: string, cls: LoadClass = 'speculative'): void {
+export function warm_island_module(
+	entry: string,
+	base?: string,
+	cls: LoadClass = 'speculative'
+): void {
 	const url = island_module_url(entry, base);
 	if (!url) return;
 	const key = warm_key(url);

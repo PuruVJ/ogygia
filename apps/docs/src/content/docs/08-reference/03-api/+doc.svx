@@ -13,21 +13,21 @@ All that ogygia exposes, by import path, plus each option on the `ogygia()` Vite
 
 The runtime surface. Import the namespace (`import * as ogygia from 'ogygia'`) or named exports.
 
-| Export | Kind | What it is |
-| --- | --- | --- |
-| `Boundary` | component | Error boundary for island subtrees. |
-| `Region` | component | Renders a [held region](/docs/regions/held-regions): `<Region of={x} />`. |
-| `region` | function | Mints a held region: `region(Component, props)`. |
-| `isRegion` | function | Type guard for a held region value. |
-| `transport` | hook value | The Kit `transport` entry that lets a held region cross the wire. |
-| `wire` | macro | Declare the codec of a transportable class with `static wire = import.meta.og.wire({ encode, decode })`. It is a compile-time macro, not an importable symbol. See [shared state](/docs/data-state/state-context#sharing-state). |
-| `script` | function | An inline `<script>` string: a self-contained function (`run`), or JSON / JSON-LD / an import map / speculation rules, with typed attributes. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts). |
-| `preload` | function | Warm the HTML of a deferred/live region now, before its binder wakes: `preload(region(…))`. See [held regions](/docs/regions/held-regions). |
-| `preference` | function | A persisted, site-wide client choice that flips a CSS state with no shipped JS beyond one pre-paint script: the theme / code-language / tabs primitive. |
-| `createContext` | function | Typed sugar over a string context key: `createContext('key')`, callable for a `<Provide>` entry, `.get()` to read. See [state & context](/docs/data-state/state-context). |
-| `Provide` | component | Provide context values to islands below it across the DOM: `<Provide values={[ctx(v)]}>`. |
-| `setContext` | function | Drop-in for the `setContext` of Svelte, which also bridges string-keyed values to child islands (the flat page root). |
-| `hydratedBy` | function | Which schedule woke this hydration root (for example `'interaction'`). Call it during setup, like `getContext`. |
+| Export          | Kind       | What it is                                                                                                                                                                                                                       |
+| --------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Boundary`      | component  | Error boundary for island subtrees.                                                                                                                                                                                              |
+| `Region`        | component  | Renders a [held region](/docs/regions/held-regions): `<Region of={x} />`.                                                                                                                                                        |
+| `region`        | function   | Mints a held region: `region(Component, props)`.                                                                                                                                                                                 |
+| `isRegion`      | function   | Type guard for a held region value.                                                                                                                                                                                              |
+| `transport`     | hook value | The Kit `transport` entry that lets a held region cross the wire.                                                                                                                                                                |
+| `wire`          | macro      | Declare the codec of a transportable class with `static wire = import.meta.og.wire({ encode, decode })`. It is a compile-time macro, not an importable symbol. See [shared state](/docs/data-state/state-context#sharing-state). |
+| `script`        | function   | An inline `<script>` string: a self-contained function (`run`), or JSON / JSON-LD / an import map / speculation rules, with typed attributes. See [Pre-hydration scripts](#ogygia-pre-hydration-scripts).                        |
+| `preload`       | function   | Warm the HTML of a deferred/live region now, before its binder wakes: `preload(region(…))`. See [held regions](/docs/regions/held-regions).                                                                                      |
+| `preference`    | function   | A persisted, site-wide client choice that flips a CSS state with no shipped JS beyond one pre-paint script: the theme / code-language / tabs primitive.                                                                          |
+| `createContext` | function   | Typed sugar over a string context key: `createContext('key')`, callable for a `<Provide>` entry, `.get()` to read. See [state & context](/docs/data-state/state-context).                                                        |
+| `Provide`       | component  | Provide context values to islands below it across the DOM: `<Provide values={[ctx(v)]}>`.                                                                                                                                        |
+| `setContext`    | function   | Drop-in for the `setContext` of Svelte, which also bridges string-keyed values to child islands (the flat page root).                                                                                                            |
+| `hydratedBy`    | function   | Which schedule woke this hydration root (for example `'interaction'`). Call it during setup, like `getContext`.                                                                                                                  |
 
 Types: `RegionValue`, `AwaitableRegion`, `InlineRegion`, `DualRegion`, `DeferredRegion`, `TransportCodec`.
 
@@ -35,14 +35,14 @@ Types: `RegionValue`, `AwaitableRegion`, `InlineRegion`, `DualRegion`, `Deferred
 
 Authored on a component import, not called:
 
-| Attribute | Makes | Values |
-| --- | --- | --- |
-| `with { wake }` | the schedule: when an island's JS runs (or when a `live` region revalidates) | `'load'` · `'idle'` · `'visible'` · `'interaction'` · `'(media)'` · `'none'` |
-| `with { fetch }` | the schedule of a `render: 'deferred'` hole: when its HTML arrives | `'load'` (default) · `'idle'` · `'visible'` · `'interaction'` · `'(media)'` |
-| `with { render }` | the delivery mode | `'static'` (default) · `'deferred'` (server island) · `'live'` (revalidates) |
-| `with { region }` | a held, server-chosen region marker | `'raw'` |
-| `with { keep }` | keep the live island across SPA navigation | a name |
-| `with { preset }` | a named preset from plugin config | any preset name |
+| Attribute         | Makes                                                                        | Values                                                                       |
+| ----------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `with { wake }`   | the schedule: when an island's JS runs (or when a `live` region revalidates) | `'load'` · `'idle'` · `'visible'` · `'interaction'` · `'(media)'` · `'none'` |
+| `with { fetch }`  | the schedule of a `render: 'deferred'` hole: when its HTML arrives           | `'load'` (default) · `'idle'` · `'visible'` · `'interaction'` · `'(media)'`  |
+| `with { render }` | the delivery mode                                                            | `'static'` (default) · `'deferred'` (server island) · `'live'` (revalidates) |
+| `with { region }` | a held, server-chosen region marker                                          | `'raw'`                                                                      |
+| `with { keep }`   | keep the live island across SPA navigation                                   | a name                                                                       |
+| `with { preset }` | a named preset from plugin config                                            | any preset name                                                              |
 
 `render` and `wake` are the two dials: the mode and the schedule. A `render: 'deferred'` hole takes `fetch` for its schedule, not `wake`. The old `render: 'deferred'` + `wake` pairing fails the build. See [Regions](/docs/regions/regions) for the concept.
 
@@ -86,13 +86,13 @@ A csr=false page has no client until islands wake. Thus all that must run **befo
 </svelte:head>
 ```
 
-| Payload key | Tag | What it is |
-| --- | --- | --- |
-| `run` (+ `args`) | `<script>` or `<script type="module">` | A self-contained function, called with `args`. |
-| `json` | `type="application/json"` | Data for code on the page (`JSON.parse(el.textContent)`). |
-| `ld` | `type="application/ld+json"` | Structured data for search engines. |
-| `importmap` | `type="importmap"` | Bare specifiers for the module scripts of the page. |
-| `speculation` | `type="speculationrules"` | The pages the browser may prefetch or prerender. |
+| Payload key      | Tag                                    | What it is                                                |
+| ---------------- | -------------------------------------- | --------------------------------------------------------- |
+| `run` (+ `args`) | `<script>` or `<script type="module">` | A self-contained function, called with `args`.            |
+| `json`           | `type="application/json"`              | Data for code on the page (`JSON.parse(el.textContent)`). |
+| `ld`             | `type="application/ld+json"`           | Structured data for search engines.                       |
+| `importmap`      | `type="importmap"`                     | Bare specifiers for the module scripts of the page.       |
+| `speculation`    | `type="speculationrules"`              | The pages the browser may prefetch or prerender.          |
 
 Attributes sit in the same object. `id`, `nonce` and any `data-*` work on every kind. `true` writes a bare attribute. `false`, `null` and `undefined` leave it out. Values are escaped. The object spreads, so a preset is a plain object: `script({ ...base, run })`.
 
@@ -158,7 +158,7 @@ ogygia({ barrels: { keep: [/stores\/index\.ts$/] } })      // never touch these
 
 What it does and does not do:
 
-- **Project modules need no listing.** Every file outside `node_modules` is a candidate; purity decides. A barrel is *pure* when every top-level statement is an import, a re-export, a type, or `export {}`. A module with its own code next to the re-exports is left alone unless listed in `force` (then its re-exported names move and a bare `import 'barrel'` stays, so its own code still runs).
+- **Project modules need no listing.** Every file outside `node_modules` is a candidate; purity decides. A barrel is _pure_ when every top-level statement is an import, a re-export, a type, or `export {}`. A module with its own code next to the re-exports is left alone unless listed in `force` (then its re-exported names move and a bare `import 'barrel'` stays, so its own code still runs).
 - **Dependencies are opt-in** through `packages`, because Vite pre-bundles bare imports in dev: a leaf import that skips the optimizer while another importer gets the pre-bundled copy is two instances of one module. List a package when you know it is safe (an ESM component library, excluded from `optimizeDeps`).
 - **Nested barrels, `export *` fan-outs, rename chains and `import … ; export { … }` bindings** are followed to the real leaf. A name two stars disagree on, a name the barrel does not export, and a name behind something unparsable (JSON, CommonJS, a `?raw` import) stay on the barrel import.
 - **Import attributes and `type` modifiers ride along** (`with { type: 'json' }`, `import { type T }`). Sourcemaps are emitted.
@@ -236,7 +236,7 @@ import { content } from '@ogygia/content/vite';
 plugins: [ogygia(), content({ markdown: {} }), sveltekit()]
 ```
 
-**`presets`** are named markdown variants, with the same grammar as the presets of each subsystem. A [loader macro](/docs/macros/loaders) opts a full collection in with `{ preset: 'name' }`. The files of that collection compile through the config of the preset, merged over `markdown` (per setting key). Under the hood, each opted-in file is its own module *variant*. Thus the same file used by another collection (under another preset, or none) renders independently. There is nothing to conflict.
+**`presets`** are named markdown variants, with the same grammar as the presets of each subsystem. A [loader macro](/docs/macros/loaders) opts a full collection in with `{ preset: 'name' }`. The files of that collection compile through the config of the preset, merged over `markdown` (per setting key). Under the hood, each opted-in file is its own module _variant_. Thus the same file used by another collection (under another preset, or none) renders independently. There is nothing to conflict.
 
 ```ts
 content({
@@ -299,9 +299,9 @@ export const handle = ogygia.handle();
 
 `handle(options)` is the SvelteKit server handle. It serves the signed region endpoint (per-hole loads, and the single-flight navigation batch), and injects client seeds.
 
-| Option | What it does |
-| --- | --- |
-| `endpoint` | The region endpoint's path. Default `/__ogygia__`. |
+| Option                                  | What it does                                                                                                                                                                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `endpoint`                              | The region endpoint's path. Default `/__ogygia__`.                                                                                                                                                                                     |
 | `transform(html, { kind, csr, event })` | Post-processes every document (`kind: 'document'`) and every region answer (`kind: 'region'`), and may reshape Svelte-owned markup: ogygia restores it before anything hydrates. See [Server transforms](/docs/app/server-transforms). |
 
 ## `ogygia/markup`
@@ -312,14 +312,14 @@ import { scanRegions, liftRegions, restoreRegions, transformMarkup, restore } fr
 
 Kit-free and import-free: it runs in the non-SvelteKit half of a monorepo, or in a test.
 
-| Export | What it is |
-| --- | --- |
-| `scanRegions(html)` | Yields every region in a document (island, lake or hole), with its span and attributes. |
-| `liftRegions(html)` · `restoreRegions(shell, regions)` | Lift the regions out around a foreign SSR pass, and splice them back with the marks the pass stamped. |
-| `transformMarkup(html, transform, { kind, csr, dev })` | The server round trip of `handle({ transform })`: mark, your transform, settle. |
-| `checkScript(check)` | The dev check's payload (`settled.check` with `dev: true`), to put in front of the markup so `restore` checks each host. |
-| `localizeMarks(block)` | Renumbers a block's marks from 0 for a render cache key; `.back(rendered)` puts the document's ids back. |
-| `restore(root)` | The browser half, on a parsed document or fragment (jsdom included). |
+| Export                                                 | What it is                                                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `scanRegions(html)`                                    | Yields every region in a document (island, lake or hole), with its span and attributes.                                  |
+| `liftRegions(html)` · `restoreRegions(shell, regions)` | Lift the regions out around a foreign SSR pass, and splice them back with the marks the pass stamped.                    |
+| `transformMarkup(html, transform, { kind, csr, dev })` | The server round trip of `handle({ transform })`: mark, your transform, settle.                                          |
+| `checkScript(check)`                                   | The dev check's payload (`settled.check` with `dev: true`), to put in front of the markup so `restore` checks each host. |
+| `localizeMarks(block)`                                 | Renumbers a block's marks from 0 for a render cache key; `.back(rendered)` puts the document's ids back.                 |
+| `restore(root)`                                        | The browser half, on a parsed document or fragment (jsdom included).                                                     |
 
 ## `ogygia/app`
 
@@ -335,13 +335,13 @@ Prefer these over `$app/navigation` inside islands. See [SPA router](/docs/app/s
 import { content, markdown, json, blocks, glob, mapRaw } from '@ogygia/content';
 ```
 
-| Export | What it is |
-| --- | --- |
+| Export                                   | What it is                                                                                                                                                                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `content({ loader, schema, relations })` | Defines a collection. `Data` is inferred from `schema`, `Meta` from the loader, with no annotations. `refs` / `get` / `groups`; wire remotes (`list`, `live`) through `withRemotes()`. See [Content collections](/docs/content/collections). |
-| `markdown` · `json` · `blocks` | Source builders: `content({ loader: markdown(import.meta.glob(…)) })`. `markdown` provides `meta.headings`. |
-| `blocks.resolve(tree, registry)` | Server-side helper: turns a block tree that you hold into region nodes, for a no-collection recomposer recipe. See [Blocks](/docs/content/blocks). |
-| `glob` · `mapRaw` · `defineSource` | Source primitives to build custom loaders (a CMS, an API). See [Content collections](/docs/content/collections). |
-| `parseSchema` | Lower-level helper. `parseFrontmatter` lives on `@ogygia/content/markdown`. |
+| `markdown` · `json` · `blocks`           | Source builders: `content({ loader: markdown(import.meta.glob(…)) })`. `markdown` provides `meta.headings`.                                                                                                                                  |
+| `blocks.resolve(tree, registry)`         | Server-side helper: turns a block tree that you hold into region nodes, for a no-collection recomposer recipe. See [Blocks](/docs/content/blocks).                                                                                           |
+| `glob` · `mapRaw` · `defineSource`       | Source primitives to build custom loaders (a CMS, an API). See [Content collections](/docs/content/collections).                                                                                                                             |
+| `parseSchema`                            | Lower-level helper. `parseFrontmatter` lives on `@ogygia/content/markdown`.                                                                                                                                                                  |
 
 An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), `meta` (source-derived, for example `{ headings }`), `body` (a held region). Types: `Entry`, `ContentEntry`, `ContentHandle`, `Source`, `Heading`, `SchemaLike`.
 
@@ -353,13 +353,13 @@ An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), 
 
 Each feature below is its own package. Install it, and list its plugin once beside `ogygia()` in your Vite config. See [Plugins](/docs/reference/plugins).
 
-| Package | Plugin | Imports in app code |
-| --- | --- | --- |
-| `@ogygia/content` | `content({ markdown, presets })` | `@ogygia/content`, `/remote`, `/markdown`, `/docs-shell`, `/types` |
-| `@ogygia/flags` | `flags()` | `flag`, `decide` from `@ogygia/flags`; `openfeature`, `ofrep` from `@ogygia/flags/openfeature` |
-| `@ogygia/freeze` | `freeze({ ttl, default })` | `freeze` and the store and CDN adapters from `@ogygia/freeze` |
-| `@ogygia/federation` | `federation()` | `federate`, `mount` from `@ogygia/federation` |
-| `@ogygia/router` | `router()` | `routes`, `page`, … from `@ogygia/router`; `api` from `@ogygia/router/api` |
-| `@ogygia/devtools` | `devtools({ dock, profiler })` | `@ogygia/devtools/profiler`, `/profiler/client`, `/profiler/storage/*` |
-| `@ogygia/testing` | none (a test helper) | `@ogygia/testing` |
-| `@ogygia/cli` | none (the command) | `npx ogygia …` |
+| Package              | Plugin                           | Imports in app code                                                                            |
+| -------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `@ogygia/content`    | `content({ markdown, presets })` | `@ogygia/content`, `/remote`, `/markdown`, `/docs-shell`, `/types`                             |
+| `@ogygia/flags`      | `flags()`                        | `flag`, `decide` from `@ogygia/flags`; `openfeature`, `ofrep` from `@ogygia/flags/openfeature` |
+| `@ogygia/freeze`     | `freeze({ ttl, default })`       | `freeze` and the store and CDN adapters from `@ogygia/freeze`                                  |
+| `@ogygia/federation` | `federation()`                   | `federate`, `mount` from `@ogygia/federation`                                                  |
+| `@ogygia/router`     | `router()`                       | `routes`, `page`, … from `@ogygia/router`; `api` from `@ogygia/router/api`                     |
+| `@ogygia/devtools`   | `devtools({ dock, profiler })`   | `@ogygia/devtools/profiler`, `/profiler/client`, `/profiler/storage/*`                         |
+| `@ogygia/testing`    | none (a test helper)             | `@ogygia/testing`                                                                              |
+| `@ogygia/cli`        | none (the command)               | `npx ogygia …`                                                                                 |

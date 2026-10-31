@@ -3,7 +3,12 @@
 // purge, cloudflare KV sentinel-key tag index). The macro + runtime themselves are core's
 // (packages/core/test/source.test.ts).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { __og_source, fingerprint_args, source_tag, set_source_recorder } from '../../core/src/source.ts';
+import {
+	__og_source,
+	fingerprint_args,
+	source_tag,
+	set_source_recorder
+} from '../../core/src/source.ts';
 import { configure, reset_for_tests, freeze_put, freeze_get, invalidate } from '../src/registry.ts';
 import { memory_store } from '../src/memory-store.ts';
 import { upstash } from '../src/adapters/upstash.ts';

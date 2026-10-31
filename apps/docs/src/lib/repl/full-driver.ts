@@ -9,7 +9,13 @@
  * and a file-map-backed host fs so `prescan()` sees the workspace. This module installs its OWN
  * host/parser seams so it's self-consistent even if the full + lean entries don't share the singleton.
  */
-import { Compiler, Program, CompileCtx, set_host, set_parser } from 'ogygia/internal/compiler-browser-full';
+import {
+	Compiler,
+	Program,
+	CompileCtx,
+	set_host,
+	set_parser
+} from 'ogygia/internal/compiler-browser-full';
 // The manifest virtual-id vocabulary + the `\0` resolver, from the SOURCE-served `ids` entry (svelte
 // condition → src, never prebundled) — NOT from `compiler-browser-full`, whose prebundle drops the
 // `export { RESOLVED } from './ids.js'` re-export ("does not provide an export named 'RESOLVED'", which
@@ -271,7 +277,11 @@ export class ReplDriver {
 
 	/** Run the full driver over the workspace, returning the transformed host for each csr leg. A fresh
 	 *  Program/Compiler per call keeps cross-file linker state from leaking between edits. */
-	async analyze(files: Record<string, string>, macros: ReplMacros, host_rel: string): Promise<DriverResult> {
+	async analyze(
+		files: Record<string, string>,
+		macros: ReplMacros,
+		host_rel: string
+	): Promise<DriverResult> {
 		this.#files = files;
 		const host_id = '/repl/' + host_rel.replace(/^\/+/, '');
 		const src = files[host_rel] ?? '';
@@ -280,7 +290,11 @@ export class ReplDriver {
 		// A leg returns its transformed host AND its Compiler — the SSR leg's Compiler carries the real
 		// linker Program (registry / region kinds / marks) the Regions view reads.
 		const leg = async (ssr: boolean): Promise<{ code: string | null; compiler: Compiler }> => {
-			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
+			const compiler = new Compiler(new Program({ forms: true, router: true }), {
+				prof: {} as never,
+				P: false,
+				outHash: new Map()
+			});
 			compiler.configure(repl_ctx(macros));
 			try {
 				const r = await compiler.transform_module(src, host_id, { ssr, emitFile });
@@ -306,7 +320,13 @@ export class ReplDriver {
 				csr: extract_csr_summary(csrLeg.compiler)
 			};
 		} catch (e) {
-			return { ssr: null, client: null, csrTrue: null, error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined };
+			return {
+				ssr: null,
+				client: null,
+				csrTrue: null,
+				error: e instanceof Error ? e.message : String(e),
+				stack: e instanceof Error ? e.stack : undefined
+			};
 		}
 	}
 
@@ -322,7 +342,11 @@ export class ReplDriver {
 		const host_id = '/repl/' + host_rel.replace(/^\/+/, '');
 		const src = files[host_rel] ?? '';
 		try {
-			const compiler = new Compiler(new Program({ forms: true, router: true }), { prof: {} as never, P: false, outHash: new Map() });
+			const compiler = new Compiler(new Program({ forms: true, router: true }), {
+				prof: {} as never,
+				P: false,
+				outHash: new Map()
+			});
 			compiler.configure(repl_ctx(macros));
 			const r = await compiler.transform_module(src, host_id, { ssr: true, emitFile: () => '' });
 			return { ssr: r?.code ?? src, regions: extract_regions(compiler) };

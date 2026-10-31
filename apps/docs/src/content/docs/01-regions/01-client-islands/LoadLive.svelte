@@ -1,8 +1,3 @@
-<div class="feel">
-	<p class="feel-status">Live since {readyAt}</p>
-	<button type="button" class="feel-btn" onclick={() => (n += 1)}>Ping · {n}</button>
-</div>
-
 <script lang="ts">
 	import '$lib/styles/feel.css';
 
@@ -13,3 +8,8 @@
 		readyAt = new Date().toLocaleTimeString();
 	});
 </script>
+
+<div class="feel">
+	<p class="feel-status">Live since {readyAt}</p>
+	<button type="button" class="feel-btn" onclick={() => (n += 1)}>Ping · {n}</button>
+</div>

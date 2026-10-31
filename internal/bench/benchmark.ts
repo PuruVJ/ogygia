@@ -43,7 +43,18 @@ import { launch } from 'chrome-launcher';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const KB = (n) => n / 1024;
-const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain' };
+const MIME = {
+	'.html': 'text/html',
+	'.js': 'text/javascript',
+	'.mjs': 'text/javascript',
+	'.css': 'text/css',
+	'.json': 'application/json',
+	'.svg': 'image/svg+xml',
+	'.png': 'image/png',
+	'.ico': 'image/x-icon',
+	'.woff2': 'font/woff2',
+	'.txt': 'text/plain'
+};
 const fwId = (fw) => fw.id ?? fw.name;
 const fwApproach = (fw) => fw.approach ?? fw.model;
 
@@ -101,7 +112,9 @@ function serveDir(root) {
 		res.writeHead(404);
 		res.end('not found');
 	});
-	return new Promise((res) => server.listen(0, '127.0.0.1', () => res({ server, port: server.address().port })));
+	return new Promise((res) =>
+		server.listen(0, '127.0.0.1', () => res({ server, port: server.address().port }))
+	);
 }
 
 // Sizes are always reported decoded + brotli, independent of how the server serves them,
@@ -122,7 +135,10 @@ function detectEncoding(url, acceptEncoding) {
 			res.resume();
 		});
 		req.on('error', () => resolve('unknown'));
-		req.setTimeout(3000, () => { req.destroy(); resolve('unknown'); });
+		req.setTimeout(3000, () => {
+			req.destroy();
+			resolve('unknown');
+		});
 	});
 }
 
@@ -205,7 +221,11 @@ function headingSkeleton(html) {
 	const re = /<(h[12])\b[^>]*>([\s\S]*?)<\/\1>/gi;
 	let m;
 	while ((m = re.exec(html))) {
-		const text = m[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+		const text = m[2]
+			.replace(/<[^>]+>/g, '')
+			.replace(/\s+/g, ' ')
+			.trim()
+			.toLowerCase();
 		out.push(`${m[1]}:${text}`);
 	}
 	return out.join('|');
@@ -256,7 +276,9 @@ async function fidelityCheck(frameworks, posts, outPath) {
 			for (const id of ids.slice(1)) {
 				const s = samples.get(id);
 				if (s.counters !== ref.counters) {
-					lines.push(`- ✗ counter count mismatch: ${ids[0]}=${ref.counters} vs ${id}=${s.counters}`);
+					lines.push(
+						`- ✗ counter count mismatch: ${ids[0]}=${ref.counters} vs ${id}=${s.counters}`
+					);
 					ok = false;
 				}
 				if (s.headings !== ref.headings) {
@@ -271,7 +293,9 @@ async function fidelityCheck(frameworks, posts, outPath) {
 						);
 						ok = false;
 					} else {
-						lines.push(`- ~ prose near-match ${ids[0]} vs ${id} (${(ratio * 100).toFixed(2)}% length drift — OK)`);
+						lines.push(
+							`- ~ prose near-match ${ids[0]} vs ${id} (${(ratio * 100).toFixed(2)}% length drift — OK)`
+						);
 					}
 				} else {
 					lines.push(`- ✓ ${ids[0]} ≡ ${id} (prose + headings + counters)`);
@@ -291,7 +315,8 @@ async function fidelityCheck(frameworks, posts, outPath) {
 async function measureFramework(fw, posts, chromePort, opts = {}) {
 	const booted = await bootFramework(fw);
 	if (!booted) {
-		if (fw.url) console.error(`  ! skipping ${fwId(fw)}: ${fw.url} not reachable (start its server first)`);
+		if (fw.url)
+			console.error(`  ! skipping ${fwId(fw)}: ${fw.url} not reachable (start its server first)`);
 		else console.error(`  ! skipping ${fwId(fw)}: dist not found at ${fw.dist} (build it first)`);
 		return null;
 	}
@@ -305,14 +330,25 @@ async function measureFramework(fw, posts, chromePort, opts = {}) {
 		process.stderr.write(`  ${fwId(fw)} ${post.id} … `);
 		const lh = await runLighthouse(url, chromePort, opts.acceptEncoding);
 		const html = await fetchSizes(url);
-		let jsRaw = 0, jsBr = 0;
+		let jsRaw = 0,
+			jsBr = 0;
 		for (const s of lh.scripts) {
 			const { raw, br } = await fetchSizes(s);
 			jsRaw += raw;
 			jsBr += br;
 		}
-		rows.push({ post: post.id, words: post.words, jsRaw, jsBr, htmlRaw: html.raw, htmlBr: html.br, ...lh });
-		console.error(`score ${lh.score}, LCP ${Math.round(lh.lcp)}ms, TBT ${Math.round(lh.tbt)}ms, eval ${Math.round(lh.evalMs)}ms, JS ${kb1(jsBr)}KB br`);
+		rows.push({
+			post: post.id,
+			words: post.words,
+			jsRaw,
+			jsBr,
+			htmlRaw: html.raw,
+			htmlBr: html.br,
+			...lh
+		});
+		console.error(
+			`score ${lh.score}, LCP ${Math.round(lh.lcp)}ms, TBT ${Math.round(lh.tbt)}ms, eval ${Math.round(lh.evalMs)}ms, JS ${kb1(jsBr)}KB br`
+		);
 	}
 	handle?.server.close();
 
@@ -351,17 +387,33 @@ function condensedTable(results) {
 		'|---|---|---|---|---|---|---|---|'
 	];
 	for (const r of results)
-		l.push(`| **${r.id}** | ${r.approach} | ${jsCell(r.rows)} | ${htmlRange(r.rows)} | ${r.avg.score} | ${(r.avg.lcp / 1000).toFixed(1)} s | ${r.avg.tbt} ms | ${r.avg.evalMs} ms |`);
+		l.push(
+			`| **${r.id}** | ${r.approach} | ${jsCell(r.rows)} | ${htmlRange(r.rows)} | ${r.avg.score} | ${(r.avg.lcp / 1000).toFixed(1)} s | ${r.avg.tbt} ms | ${r.avg.evalMs} ms |`
+		);
 	return l.join('\n');
 }
 
 function fullTable(results, posts) {
-	const head = ['Framework', 'Approach', 'Served', ...posts.map((p) => `JS ${p.id}`), ...posts.map((p) => `HTML ${p.id}`), 'Avg score', 'Avg LCP', 'Avg CLS', 'Avg TBT', 'Avg JS eval', 'Avg DOM'];
+	const head = [
+		'Framework',
+		'Approach',
+		'Served',
+		...posts.map((p) => `JS ${p.id}`),
+		...posts.map((p) => `HTML ${p.id}`),
+		'Avg score',
+		'Avg LCP',
+		'Avg CLS',
+		'Avg TBT',
+		'Avg JS eval',
+		'Avg DOM'
+	];
 	const l = [`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`];
 	for (const r of results) {
 		const js = r.rows.map((x) => `${kb1(x.jsRaw)} / ${kb1(x.jsBr)}`);
 		const html = r.rows.map((x) => `${kb1(x.htmlRaw)} / ${kb1(x.htmlBr)}`);
-		l.push(`| **${r.id}** | ${r.approach} | ${r.encoding} | ${js.join(' | ')} | ${html.join(' | ')} | ${r.avg.score} | ${r.avg.lcp} ms | ${r.avg.cls.toFixed(3)} | ${r.avg.tbt} ms | ${r.avg.evalMs} ms | ${r.avg.dom ?? 'n/a'} |`);
+		l.push(
+			`| **${r.id}** | ${r.approach} | ${r.encoding} | ${js.join(' | ')} | ${html.join(' | ')} | ${r.avg.score} | ${r.avg.lcp} ms | ${r.avg.cls.toFixed(3)} | ${r.avg.tbt} ms | ${r.avg.evalMs} ms | ${r.avg.dom ?? 'n/a'} |`
+		);
 	}
 	return l.join('\n');
 }
@@ -397,7 +449,9 @@ async function main() {
 		console.error('▸ fidelity preflight');
 		const fidelityOk = await fidelityCheck(frameworks, posts, resolve(ROOT, 'results/fidelity.md'));
 		if (!fidelityOk) {
-			console.error('\nFidelity failed — not publishing numbers. Fix apps or pass --skip-fidelity.');
+			console.error(
+				'\nFidelity failed — not publishing numbers. Fix apps or pass --skip-fidelity.'
+			);
 			process.exit(1);
 		}
 	}
@@ -418,25 +472,40 @@ async function main() {
 	}
 
 	if (!results.length) {
-		console.error('\nNo frameworks measured. Build the static ones and/or start the server ones, then retry.');
+		console.error(
+			'\nNo frameworks measured. Build the static ones and/or start the server ones, then retry.'
+		);
 		process.exit(1);
 	}
 
 	const encodings = [...new Set(results.map((r) => r.encoding))];
 	const mixed = encodings.length > 1;
 	if (mixed) {
-		console.error(`\n  ! WARNING: targets did not all use the same content-encoding: ${results.map((r) => `${r.id}=${r.encoding}`).join(', ')}`);
+		console.error(
+			`\n  ! WARNING: targets did not all use the same content-encoding: ${results.map((r) => `${r.id}=${r.encoding}`).join(', ')}`
+		);
 		console.error('    LCP scales with transfer bytes, so these rows are not directly comparable.');
 	}
 
 	const md = [
-		'# ogygiaBench results', '',
-		'> Port of [khromov/interactive-blogs-benchmark](https://github.com/khromov/interactive-blogs-benchmark). Credit [@khromov](https://github.com/khromov).', '',
-		'## Condensed', '', condensedTable(results), '',
+		'# ogygiaBench results',
+		'',
+		'> Port of [khromov/interactive-blogs-benchmark](https://github.com/khromov/interactive-blogs-benchmark). Credit [@khromov](https://github.com/khromov).',
+		'',
+		'## Condensed',
+		'',
+		condensedTable(results),
+		'',
 		'- **JS brotli** = brotli JS the page loads. *flat* = identical on all posts (islands); `→` = first → last-post growth.',
-		'- HTML ≈ identical across frameworks (same prose). Prefer **Avg JS eval** over TBT here.', '',
-		'## Full (JS / HTML shown as uncompressed / brotli KB)', '', fullTable(results, posts), '',
-		mixed ? `> ⚠️ **Mixed content-encoding across targets** (${results.map((r) => `${r.id}: ${r.encoding}`).join(', ')}). LCP scales with transfer bytes, so these rows are not directly comparable.\n` : '',
+		'- HTML ≈ identical across frameworks (same prose). Prefer **Avg JS eval** over TBT here.',
+		'',
+		'## Full (JS / HTML shown as uncompressed / brotli KB)',
+		'',
+		fullTable(results, posts),
+		'',
+		mixed
+			? `> ⚠️ **Mixed content-encoding across targets** (${results.map((r) => `${r.id}: ${r.encoding}`).join(', ')}). LCP scales with transfer bytes, so these rows are not directly comparable.\n`
+			: '',
 		`_Lighthouse, mobile + simulated throttling, HTTP/1.1, content-encoding: ${encodings.join(' + ')}. Generated by \`benchmark.mjs\`${args.gzip ? ' --gzip' : ''}._`
 	].join('\n');
 
@@ -491,4 +560,7 @@ async function main() {
 	}
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+	console.error(e);
+	process.exit(1);
+});

@@ -83,7 +83,9 @@ test('DEV: a document-relative region-css href resolves against the document, no
 
 	// The module ran — only possible if the import resolved against the document.
 	await expect
-		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
+		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), {
+			timeout: 10_000
+		})
 		.toBe('1');
 	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
 });
@@ -110,7 +112,9 @@ test('DEV: a link for an island that will wake is STILL imported at boot — its
 
 	// The module ran at boot — without any wake.
 	await expect
-		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
+		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), {
+			timeout: 10_000
+		})
 		.toBe('1');
 	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
 	region.remove();
@@ -130,7 +134,9 @@ test('DEV: a link for a lake (wake="none") is still imported — nothing else wo
 	bootDev();
 
 	await expect
-		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), { timeout: 10_000 })
+		.poll(() => document.documentElement.getAttribute('data-og-dev-css-marker'), {
+			timeout: 10_000
+		})
 		.toBe('1');
 	expect(document.head.querySelectorAll('link[data-ogygia-region-css]').length).toBe(0);
 	lake.remove();

@@ -83,9 +83,7 @@ function render_driver_island(r: ServerRenderer, p: Record<string, unknown>, mod
 			`data-og-fp="${fp}" data-obs-real-island data-obs-driver>`
 	);
 	if (typeof comp === 'function') comp(r, inner);
-	r.push(
-		`</ogygia-region><script data-ogygia-props>${esc_script(payload)}</script></ogygia-slot>`
-	);
+	r.push(`</ogygia-region><script data-ogygia-props>${esc_script(payload)}</script></ogygia-slot>`);
 }
 
 /** A server-side `<Region …/>`: renders EITHER the driver's real island wrapper (`__mode` set →
@@ -124,5 +122,13 @@ export function make_ogygia_server_module(): Record<string, unknown> {
 export function make_ogygia_internal_module(): Record<string, unknown> {
 	// `Region` here is the island-capable server shim — the driver's generated wrapper imports
 	// `{ Region } from 'ogygia/internal'` and renders `<Region __mode="island" …>`.
-	return { Region, og_html_region, __register_transportable, __tag_context, __og_$, __og_store, __og_boundary };
+	return {
+		Region,
+		og_html_region,
+		__register_transportable,
+		__tag_context,
+		__og_$,
+		__og_store,
+		__og_boundary
+	};
 }

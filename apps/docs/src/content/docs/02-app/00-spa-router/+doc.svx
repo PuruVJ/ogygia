@@ -76,11 +76,11 @@ Not every page fetch is a real visit. A hover **prefetch** happens before any in
 
 So the client names the reason in an `x-ogygia-purpose` header:
 
-| Value | When |
-| --- | --- |
-| _(absent)_ | A real, user-driven navigation. |
+| Value      | When                                                 |
+| ---------- | ---------------------------------------------------- |
+| _(absent)_ | A real, user-driven navigation.                      |
 | `prefetch` | Warmed on hover, press, or viewport, before a click. |
-| `history` | A back/forward restore. |
+| `history`  | A back/forward restore.                              |
 
 Read it in a server load or hook and skip the speculative work when it is set. It is advisory: a server that ignores it still renders correctly.
 
@@ -90,11 +90,11 @@ A `redirect()` in a server load works across a SPA navigation. The router optimi
 
 ## Speculative prerender {#speculate}
 
-Prefetch warms the *HTML cache*. **Speculation goes further: the browser fully prerenders the next page.** It runs its JS, fills its islands, and resolves its server-island holes, in a hidden tab, before you click. On click, the prerendered page activates immediately, already interactive.
+Prefetch warms the _HTML cache_. **Speculation goes further: the browser fully prerenders the next page.** It runs its JS, fills its islands, and resolves its server-island holes, in a hidden tab, before you click. On click, the prerendered page activates immediately, already interactive.
 
 It is **automatic, and it belongs to MPA mode**. With `router: false`, the browser owns navigation. Thus the server handle injects one native [Speculation Rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API) script into each page. There is no config and no client JS. The rules carry both legs. A prerender-capable browser prerenders probable next pages (moderate eagerness, about hover dwell). A prefetch-only browser prefetches them. A browser without support ignores the JSON. There is nothing to feature-detect and nothing to fall back to.
 
-With the router **on**, ogygia emits no rules, by intent. Speculation caches go only to *real* navigations. A body-swap router can never read them. A speculated page would download two times, and a prerendered one would render, then be discarded. The router's own [prefetch](#link-prefetch), plus island-module warming, is the same idea, applied to a cache that the swap can use.
+With the router **on**, ogygia emits no rules, by intent. Speculation caches go only to _real_ navigations. A body-swap router can never read them. A speculated page would download two times, and a prerendered one would render, then be discarded. The router's own [prefetch](#link-prefetch), plus island-module warming, is the same idea, applied to a cache that the swap can use.
 
 `preloadData` / `preloadCode` follow the mode. Router on: `preloadData(url)` warms the swap cache and the island modules of the page. `preloadCode` does nothing, because code arrives with the swap. Router off: `preloadData(url)` hints a native **prerender** for that URL, and `preloadCode(url)` a native **prefetch**. Thus programmatic warming speaks the language of the platform also.
 
@@ -187,11 +187,11 @@ The sidebar on this site uses it. It does not flash or reset as you navigate. To
 
 A body swap never executes inserted `<script>` tags. That is standard browser behavior. Thus per-navigation code needs a hook. The router dispatches three plain DOM events on `document`. The names follow Astro, with an `og:` prefix:
 
-| event | when |
-| --- | --- |
-| `og:before-swap` | last chance to read the DOM of the OUTGOING page |
-| `og:after-swap` | the incoming DOM is in place (islands can still wake on their own schedules) |
-| `og:page-load` | navigation complete — head merged, scroll settled. Also fired one time on the first load. Thus ONE listener covers each page view |
+| event            | when                                                                                                                              |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `og:before-swap` | last chance to read the DOM of the OUTGOING page                                                                                  |
+| `og:after-swap`  | the incoming DOM is in place (islands can still wake on their own schedules)                                                      |
+| `og:page-load`   | navigation complete — head merged, scroll settled. Also fired one time on the first load. Thus ONE listener covers each page view |
 
 ```js
 document.addEventListener('og:page-load', () => analytics.pageview(location.pathname));
@@ -226,4 +226,4 @@ The router does no script processing. `<script>` tags that a body swap inserts d
 
 ---
 
-*Next chapter: much of what a site does never changes between requests. [The `import.meta.og.*` macros](/docs/macros/overview) settle it at build.*
+_Next chapter: much of what a site does never changes between requests. [The `import.meta.og.*` macros](/docs/macros/overview) settle it at build._

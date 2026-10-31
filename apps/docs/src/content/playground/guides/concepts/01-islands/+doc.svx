@@ -40,14 +40,14 @@ Without the `with { wake: '...' }` attribute the same import is server-only: the
 
 ## Wake strategies
 
-The wake hint decides *when* an island's chunk loads and hydrates. Pick the cheapest strategy that still feels instant to the user.
+The wake hint decides _when_ an island's chunk loads and hydrates. Pick the cheapest strategy that still feels instant to the user.
 
-| Strategy | Wakes when | Use for |
-| --- | --- | --- |
-| `load` | Immediately on page load | Above-the-fold widgets the user reaches for at once. |
-| `idle` | The browser is idle (`requestIdleCallback`) | Interactive but non-urgent components. |
-| `visible` | The island scrolls into the viewport | Anything below the fold. The safe default. |
-| `interaction` | The user first hovers, focuses, or taps it | Rarely-used controls, like a settings popover. |
+| Strategy      | Wakes when                                  | Use for                                              |
+| ------------- | ------------------------------------------- | ---------------------------------------------------- |
+| `load`        | Immediately on page load                    | Above-the-fold widgets the user reaches for at once. |
+| `idle`        | The browser is idle (`requestIdleCallback`) | Interactive but non-urgent components.               |
+| `visible`     | The island scrolls into the viewport        | Anything below the fold. The safe default.           |
+| `interaction` | The user first hovers, focuses, or taps it  | Rarely-used controls, like a settings popover.       |
 
 ### load
 
@@ -98,7 +98,7 @@ When in doubt, follow this order:
 3. Does the user reach for it the instant the page loads? Use `load`.
 4. Is it a rarely-touched control? Use `interaction`.
 
-> **Note.** Wake strategies are hints about *timing*, not *whether* a component is interactive. Every island listed here is fully interactive once it wakes — the strategy only changes how soon that happens. Choosing a lazier strategy never removes functionality; it just defers the cost.
+> **Note.** Wake strategies are hints about _timing_, not _whether_ a component is interactive. Every island listed here is fully interactive once it wakes — the strategy only changes how soon that happens. Choosing a lazier strategy never removes functionality; it just defers the cost.
 
 ## Islands are just components
 

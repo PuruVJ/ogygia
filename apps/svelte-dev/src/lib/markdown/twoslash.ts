@@ -200,7 +200,13 @@ export function twoslash_svelte(): ShikiTransformer {
 
 // ── popup JSDoc → markdown ─────────────────────────────────────────────────────────
 
-const ENTITIES: Record<string, string> = { '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&amp;': '&' };
+const ENTITIES: Record<string, string> = {
+	'&lt;': '<',
+	'&gt;': '>',
+	'&quot;': '"',
+	'&#39;': "'",
+	'&amp;': '&'
+};
 function decode(s: string): string {
 	return s
 		.replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
@@ -263,7 +269,8 @@ export function twoslash_popup_markdown(): ShikiTransformer {
 				/<div class="twoslash-popup-docs([^"]*)">([\s\S]*?)<\/div>/g,
 				(_m, cls: string, inner: string) => {
 					// The `-tags` block is structured HTML (params/examples) — leave it; only prose is markdown.
-					if (cls.includes('twoslash-popup-docs-tags')) return `<div class="twoslash-popup-docs${cls}">${inner}</div>`;
+					if (cls.includes('twoslash-popup-docs-tags'))
+						return `<div class="twoslash-popup-docs${cls}">${inner}</div>`;
 					const rendered = mdast_to_html(fromMarkdown(decode(inner)));
 					return `<div class="twoslash-popup-docs${cls}">${rendered}</div>`;
 				}

@@ -8,7 +8,14 @@ import { byte_strip, arrival_ms } from '../src/profiler/byte-strip.ts';
 import { parse_visit, one_clock, merge_visits, type Visit } from '../src/profiler/visit.ts';
 import { build_river, load_return_keys, seed_key_bytes } from '../src/profiler/river.ts';
 import { html_diff, tokenize_html, shift_boxes } from '../src/profiler/dom-diff.ts';
-import { SinkBuffer, parse_sink, cloud_points, layer_cake, hot_for_range, type SinkRow } from '../src/profiler/sink.ts';
+import {
+	SinkBuffer,
+	parse_sink,
+	cloud_points,
+	layer_cake,
+	hot_for_range,
+	type SinkRow
+} from '../src/profiler/sink.ts';
 import { heap_sites, slice_delta, attribute_gc, gc_kind } from '../src/profiler/gc.ts';
 import { analyze } from '../src/profiler/analyze.ts';
 import { sync_io, memo_candidates, simulate_awaits } from '../src/profiler/insights.ts';
@@ -36,7 +43,21 @@ describe('byte strip', () => {
 		}
 		expect(pos).toBe(doc.length);
 		const kinds = s.segments.map((x) => x.kind);
-		expect(kinds).toEqual(['head', 'runtime', 'style', 'css-link', 'head', 'markup', 'island', 'shadow', 'seed', 'props', 'holes', 'script', 'markup']);
+		expect(kinds).toEqual([
+			'head',
+			'runtime',
+			'style',
+			'css-link',
+			'head',
+			'markup',
+			'island',
+			'shadow',
+			'seed',
+			'props',
+			'holes',
+			'script',
+			'markup'
+		]);
 		// the island is ONE block whatever sits inside it (its shadow root and script are its bytes)
 		const island = s.segments.find((x) => x.kind === 'island')!;
 		expect(island.label).toBe('0000aaaa1111bbbb');
@@ -53,7 +74,11 @@ describe('byte strip', () => {
 		const s = byte_strip(doc);
 		// html head title script style link body p | region div template script | template | 4 scripts
 		expect(s.elements).toEqual({ total: 17, islands: [{ fp: '0000aaaa1111bbbb', n: 4 }] });
-		expect(byte_strip('<!-- <div><p> --><DIV class="a"><textarea><b>no</b></textarea><svg><path d="M0"/></svg></DIV>').elements?.total).toBe(4);
+		expect(
+			byte_strip(
+				'<!-- <div><p> --><DIV class="a"><textarea><b>no</b></textarea><svg><path d="M0"/></svg></DIV>'
+			).elements?.total
+		).toBe(4);
 	});
 
 	it('names each <img> with no width or height by its src; sized, hidden, scripted and data-width ones are not', () => {
@@ -61,7 +86,12 @@ describe('byte strip', () => {
 			'<body><img src="/a/hero.jpg?w=1" alt="x"><img src=/b/plain.png><img width="10" height="10" src="/c/sized.png">' +
 			'<img hidden src="/d/hidden.png"><img data-width="9" data-height="9" src="/e/data.png"><IMG WIDTH=4 SRC="/f/half.png">' +
 			'<script>const s = "<img src=/g/in-script.png>"</script><template><img src="/h/tpl.png"></template></body>';
-		expect(byte_strip(doc2).unsized_images).toEqual(['/a/hero.jpg?w=1', '/b/plain.png', '/e/data.png', '/f/half.png']);
+		expect(byte_strip(doc2).unsized_images).toEqual([
+			'/a/hero.jpg?w=1',
+			'/b/plain.png',
+			'/e/data.png',
+			'/f/half.png'
+		]);
 		expect(byte_strip('<img width="1" height="1" src="x.png">').unsized_images).toBeUndefined();
 	});
 
@@ -73,7 +103,10 @@ describe('byte strip', () => {
 	});
 
 	it('a byte arrives in proportion to its place in the download', () => {
-		expect(arrival_ms({ start: 500, end: 1000 }, 1000, 100, 300)).toEqual({ first: 200, last: 300 });
+		expect(arrival_ms({ start: 500, end: 1000 }, 1000, 100, 300)).toEqual({
+			first: 200,
+			last: 300
+		});
 		expect(arrival_ms({ start: 0, end: 10 }, 0, 100, 300)).toEqual({ first: 100, last: 100 });
 	});
 });
@@ -81,18 +114,45 @@ describe('byte strip', () => {
 describe('visit + one clock', () => {
 	const raw = {
 		at: 1_700_000_000_000,
-		nav: { req_start: 5, res_start: 120, res_end: 180, dcl: 400, load: 900, size: 200_000, protocol: 'h2' },
+		nav: {
+			req_start: 5,
+			res_start: 120,
+			res_end: 180,
+			dcl: 400,
+			load: 900,
+			size: 200_000,
+			protocol: 'h2'
+		},
 		paints: { fcp: 350, lcp: 700, lcp_fp: '0000aaaa1111bbbb' },
 		resources: [
-			{ url: 'http://h/_app/a.css', type: 'css', start: 130, end: 300, blocking: true, transfer: 10_000 },
+			{
+				url: 'http://h/_app/a.css',
+				type: 'css',
+				start: 130,
+				end: 300,
+				blocking: true,
+				transfer: 10_000
+			},
 			{ url: 'http://h/_app/b.js', type: 'script', start: 140, end: 500, size: 50_000 },
 			{ url: 'http://h/hero.jpg', type: 'img', start: 200, end: 650 },
 			{ url: 'junk', type: 'css', start: 'x', end: 1 }
 		],
 		longtasks: [{ t: 520, ms: 80 }],
-		islands: [{ fp: '0000aaaa1111bbbb', entry: '/_app/Hero.js', t0: 500, loaded: 560, done: 690 }, { fp: 'nope', t0: 1, done: 2 }],
+		islands: [
+			{ fp: '0000aaaa1111bbbb', entry: '/_app/Hero.js', t0: 500, loaded: 560, done: 690 },
+			{ fp: 'nope', t0: 1, done: 2 }
+		],
 		firsts: [{ fp: '0000aaaa1111bbbb', t: 1500, type: 'click' }],
-		shifts: [{ t: 600, value: 0.12, fp: '0000aaaa1111bbbb', from: [0, 100, 800, 300], to: [0, 400, 800, 300] }, { t: 1, value: 'x' }],
+		shifts: [
+			{
+				t: 600,
+				value: 0.12,
+				fp: '0000aaaa1111bbbb',
+				from: [0, 100, 800, 300],
+				to: [0, 400, 800, 300]
+			},
+			{ t: 1, value: 'x' }
+		],
 		viewport: [1200, 800],
 		marks: [{ name: 'ds.hydrate', t0: 200, ms: 300 }]
 	};
@@ -110,25 +170,57 @@ describe('visit + one clock', () => {
 		expect(parse_visit('/p', { nav: {} })).toBeNull();
 		expect(parse_visit('nope', raw)).toBeNull();
 		expect(parse_visit('/p', 'x')).toBeNull();
-		expect(parse_visit('/p', { ...raw, resources: Array.from({ length: 500 }, () => raw.resources[0]) })!.resources).toHaveLength(200);
+		expect(
+			parse_visit('/p', { ...raw, resources: Array.from({ length: 500 }, () => raw.resources[0]) })!
+				.resources
+		).toHaveLength(200);
 	});
 
 	it('one_clock: the server render ends at the first byte, lanes per resource type, islands, marks, and a critical path to first paint and LCP', () => {
 		const v = parse_visit('/p', raw)!;
-		const clock = one_clock(v, { window_ms: 100, phases: [{ phase: 'load', cpu_ms: 10, wait_ms: 50 }, { phase: 'render', cpu_ms: 40, wait_ms: 0 }] }, { '0000aaaa1111bbbb': 'Hero' });
+		const clock = one_clock(
+			v,
+			{
+				window_ms: 100,
+				phases: [
+					{ phase: 'load', cpu_ms: 10, wait_ms: 50 },
+					{ phase: 'render', cpu_ms: 40, wait_ms: 0 }
+				]
+			},
+			{ '0000aaaa1111bbbb': 'Hero' }
+		);
 		expect(clock.server_at).toEqual({ t0: 20, t1: 120, clipped: false });
-		expect(clock.lanes.map((l) => l.name)).toEqual(['server render', 'document', 'css (1)', 'script (1)', 'img (1)', 'main thread busy', 'islands (1)']);
+		expect(clock.lanes.map((l) => l.name)).toEqual([
+			'server render',
+			'document',
+			'css (1)',
+			'script (1)',
+			'img (1)',
+			'main thread busy',
+			'islands (1)'
+		]);
 		const server = clock.lanes[0].bars;
-		expect(server.map((b) => [b.label, b.t0, b.t1])).toEqual([['load', 20, 80], ['render', 80, 120]]);
+		expect(server.map((b) => [b.label, b.t0, b.t1])).toEqual([
+			['load', 20, 80],
+			['render', 80, 120]
+		]);
 		expect(clock.lanes[1].bars.map((b) => b.kind)).toEqual(['ttfb', 'download']);
 		const islands = clock.lanes.at(-1)!.bars;
 		expect(islands.map((b) => b.label)).toEqual(['Hero · loading modules', 'Hero · hydrating']);
 		expect(clock.marks.map((m) => m.kind)).toEqual(['fcp', 'lcp', 'dcl', 'load', 'first', 'mark']);
 		// the critical path: the server's biggest phase, the first byte, the blocking css, then LCP's island
-		expect(clock.critical.map((c) => c.id)).toEqual(['server:load', 'doc:ttfb', 'res:css:0', 'island:0000aaaa1111bbbb']);
+		expect(clock.critical.map((c) => c.id)).toEqual([
+			'server:load',
+			'doc:ttfb',
+			'res:css:0',
+			'island:0000aaaa1111bbbb'
+		]);
 		expect(clock.end).toBeGreaterThanOrEqual(900);
 		// a render longer than the visit's TTFB is clipped and explained
-		const clipped = one_clock(v, { window_ms: 5000, phases: [{ phase: 'render', cpu_ms: 5000, wait_ms: 0 }] });
+		const clipped = one_clock(v, {
+			window_ms: 5000,
+			phases: [{ phase: 'render', cpu_ms: 5000, wait_ms: 0 }]
+		});
 		expect(clipped.server_at!.clipped).toBe(true);
 		expect(clipped.notes[0]).toMatch(/clipped/);
 		// no server timeline, no server lane
@@ -140,7 +232,17 @@ describe('visit + one clock', () => {
 			...raw,
 			holes_answered: [
 				// preloaded: left before the paint, waited 890 ms for a slot, rendered in 900
-				{ id: 'aaaaaaaaaaaa', start: 300, t: 1900, below_fold: false, left: 10, first: 1805, end: 1810, queue: 890, render: 900 },
+				{
+					id: 'aaaaaaaaaaaa',
+					start: 300,
+					t: 1900,
+					below_fold: false,
+					left: 10,
+					first: 1805,
+					end: 1810,
+					queue: 890,
+					render: 900
+				},
 				// no timing: one segment, the wait
 				{ id: 'bbbbbbbbbbbb', start: 300, t: 700, below_fold: true }
 			]
@@ -167,19 +269,35 @@ describe('visit + one clock', () => {
 			]
 		})!;
 		expect(merge_visits(two, two).holes_answered).toHaveLength(2);
-		expect(one_clock(two, null, {}, { aaaaaaaaaaaa: 'QueueHole' }).lanes.filter((l) => l.group === 'holes').map((l) => l.name)).toEqual(['QueueHole 1', 'QueueHole 2']);
+		expect(
+			one_clock(two, null, {}, { aaaaaaaaaaaa: 'QueueHole' })
+				.lanes.filter((l) => l.group === 'holes')
+				.map((l) => l.name)
+		).toEqual(['QueueHole 1', 'QueueHole 2']);
 	});
 });
 
 describe('data river', () => {
 	it('load_return_keys reads the object literals a load returns; spreads and non-literals are unknown', () => {
-		expect(load_return_keys(`export async function load({ fetch }) {\n  const a = await fetch('/x');\n  return { products: await a.json(), 'total': 3, "flags": f, count };\n}`)).toEqual(['products', 'total', 'flags', 'count']);
-		expect(load_return_keys(`export const load = async () => {\n if (x) return { a: 1 };\n return ({ b: { nested: 1 }, c: [1,2] });\n}`)).toEqual(['a', 'b', 'c']);
-		expect(load_return_keys(`export const load: PageServerLoad = () => { return { ...parent, x: 1 } }`)).toBeNull();
+		expect(
+			load_return_keys(
+				`export async function load({ fetch }) {\n  const a = await fetch('/x');\n  return { products: await a.json(), 'total': 3, "flags": f, count };\n}`
+			)
+		).toEqual(['products', 'total', 'flags', 'count']);
+		expect(
+			load_return_keys(
+				`export const load = async () => {\n if (x) return { a: 1 };\n return ({ b: { nested: 1 }, c: [1,2] });\n}`
+			)
+		).toEqual(['a', 'b', 'c']);
+		expect(
+			load_return_keys(`export const load: PageServerLoad = () => { return { ...parent, x: 1 } }`)
+		).toBeNull();
 		expect(load_return_keys(`export function load() { return data }`)).toBeNull();
 		expect(load_return_keys(`export function other() { return { a: 1 } }`)).toBeNull();
 		// strings and comments inside do not confuse the walk
-		expect(load_return_keys(`export function load() { return { a: "}, b: 1", /* c: 2 */ d: '{' } }`)).toEqual(['a', 'd']);
+		expect(
+			load_return_keys(`export function load() { return { a: "}, b: 1", /* c: 2 */ d: '{' } }`)
+		).toEqual(['a', 'd']);
 	});
 
 	it('seed_key_bytes measures each top-level key, unwrapping the seed shapes', () => {
@@ -210,8 +328,25 @@ describe('data river', () => {
 	});
 
 	it('merge_visits folds two records of one visit: arrays union, the later navigation and paints win', () => {
-		const a = parse_visit('/p', { at: 5, nav: { req_start: 0, res_start: 100, res_end: 120 }, islands: [{ fp: '0000aaaa1111bbbb', t0: 1, loaded: 2, done: 3 }], firsts: [], shifts: [], longtasks: [] })!;
-		const b = parse_visit('/p', { at: 5, nav: { req_start: 0, res_start: 100, res_end: 120, load: 900 }, paints: { lcp: 700 }, islands: [{ fp: '0000aaaa1111bbbb', t0: 1, loaded: 2, done: 3 }, { fp: 'cafebabecafebabe', t0: 4, loaded: 5, done: 6 }], marks: [{ name: 'm', ms: 3 }], shifts: [{ t: 1, value: 0.1 }] })!;
+		const a = parse_visit('/p', {
+			at: 5,
+			nav: { req_start: 0, res_start: 100, res_end: 120 },
+			islands: [{ fp: '0000aaaa1111bbbb', t0: 1, loaded: 2, done: 3 }],
+			firsts: [],
+			shifts: [],
+			longtasks: []
+		})!;
+		const b = parse_visit('/p', {
+			at: 5,
+			nav: { req_start: 0, res_start: 100, res_end: 120, load: 900 },
+			paints: { lcp: 700 },
+			islands: [
+				{ fp: '0000aaaa1111bbbb', t0: 1, loaded: 2, done: 3 },
+				{ fp: 'cafebabecafebabe', t0: 4, loaded: 5, done: 6 }
+			],
+			marks: [{ name: 'm', ms: 3 }],
+			shifts: [{ t: 1, value: 0.1 }]
+		})!;
 		const m = merge_visits(a, b);
 		expect(m.islands.map((i) => i.fp)).toEqual(['0000aaaa1111bbbb', 'cafebabecafebabe']);
 		expect(m.nav.load).toBe(900);
@@ -228,20 +363,40 @@ describe('data river', () => {
 				{ lane: null, label: 'GET http://api/track', ms: 30 }
 			],
 			lanes: [{ file: 'routes/p/+page.server.ts', keys: ['products', 'flags'] }],
-			islands: [{ name: 'Card', keys: ['products'] }, { name: 'Footer', keys: [] }],
+			islands: [
+				{ name: 'Card', keys: ['products'] },
+				{ name: 'Footer', keys: [] }
+			],
 			seed: { products: 40_000, flags: 200, unused: 9000 }
 		});
 		const ids = (col: number) => r.nodes.filter((n) => n.col === col).map((n) => n.label);
 		expect(ids(0)).toEqual(['GET /products ×2', 'GET /track']);
-		expect(ids(1)).toEqual(['routes/p/+page.server.ts', 'outside a load', 'a load outside the window']);
+		expect(ids(1)).toEqual([
+			'routes/p/+page.server.ts',
+			'outside a load',
+			'a load outside the window'
+		]);
 		expect(ids(2)).toEqual(['products', 'flags', 'unused']);
 		expect(ids(3)).toEqual(['Card', 'Footer']);
-		expect(r.links.find((l) => l.from.startsWith('call:') && l.to === 'load:routes/p/+page.server.ts')!.value).toBe(350);
-		expect(r.links.filter((l) => l.to === 'island:Card').map((l) => l.from)).toEqual(['key:products']);
-		expect(r.waste).toEqual([{ key: 'unused', bytes: 9000 }, { key: 'flags', bytes: 200 }]);
+		expect(
+			r.links.find((l) => l.from.startsWith('call:') && l.to === 'load:routes/p/+page.server.ts')!
+				.value
+		).toBe(350);
+		expect(r.links.filter((l) => l.to === 'island:Card').map((l) => l.from)).toEqual([
+			'key:products'
+		]);
+		expect(r.waste).toEqual([
+			{ key: 'unused', bytes: 9000 },
+			{ key: 'flags', bytes: 200 }
+		]);
 		expect(r.notes[0]).toMatch(/2 keys in the seed that no island reads/);
 		// an island that reads everything takes every key, and the note says why the seed is whole
-		const all = build_river({ calls: [], lanes: [], islands: [{ name: 'X', keys: null }], seed: { a: 1, b: 2 } });
+		const all = build_river({
+			calls: [],
+			lanes: [],
+			islands: [{ name: 'X', keys: null }],
+			seed: { a: 1, b: 2 }
+		});
 		expect(all.links.filter((l) => l.to === 'island:X')).toHaveLength(2);
 		expect(all.waste).toEqual([]);
 		expect(all.notes[0]).toMatch(/No island names the keys/);
@@ -250,13 +405,25 @@ describe('data river', () => {
 
 describe('dom diff + shift boxes', () => {
 	it('tokenizes tags and text, diffs by token, and reports what changed', () => {
-		expect(tokenize_html('<p class="a">hi <b>x</b></p>')).toEqual(['<p class="a">', 'hi ', '<b>', 'x', '</b>', '</p>']);
+		expect(tokenize_html('<p class="a">hi <b>x</b></p>')).toEqual([
+			'<p class="a">',
+			'hi ',
+			'<b>',
+			'x',
+			'</b>',
+			'</p>'
+		]);
 		const d = html_diff('<p>hello <b>world</b></p>', '<p>hello <i>world</i></p>');
 		expect(d.ops.map((o) => o.kind)).toEqual(['same', 'del', 'add', 'same', 'del', 'add', 'same']);
 		expect(d.removed).toBe('<b>'.length + '</b>'.length);
 		expect(d.added).toBe('<i>'.length + '</i>'.length);
 		expect(d.same_ratio).toBeLessThan(1);
-		expect(html_diff('<a>x</a>', '<a>x</a>')).toMatchObject({ added: 0, removed: 0, same_ratio: 1, truncated: false });
+		expect(html_diff('<a>x</a>', '<a>x</a>')).toMatchObject({
+			added: 0,
+			removed: 0,
+			same_ratio: 1,
+			truncated: false
+		});
 		// a huge middle is not diffed token by token
 		const big = html_diff('<p>' + 'a '.repeat(3000) + '</p>', '<p>' + 'b '.repeat(3000) + '</p>');
 		expect(big.truncated).toBe(true);
@@ -275,16 +442,32 @@ describe('dom diff + shift boxes', () => {
 		expect(boxes.map((b) => b.value)).toEqual([0.3, 0.02]);
 		expect(boxes[0]).toMatchObject({ x: 0.5, y: 0.5, w: 0.5, h: 0.25, fp: 'ab' });
 		expect(boxes[1].fy).toBe(0);
-		expect(shift_boxes([{ t: 1, value: 1, to: [0, 0, 1, 1] }], undefined)).toEqual([{ x: 0, y: 0, w: 1, h: 1, fx: 0, fy: 0, value: 1, t: 1 }]);
+		expect(shift_boxes([{ t: 1, value: 1, to: [0, 0, 1, 1] }], undefined)).toEqual([
+			{ x: 0, y: 0, w: 1, h: 1, fx: 0, fy: 0, value: 1, t: 1 }
+		]);
 	});
 });
 
 describe('sink', () => {
-	const req = (t: number, route: string, ms: number, cpu: number, wait: number): SinkRow => ({ k: 'req', t, path: route, route, ms, cpu, wait, status: 200 });
+	const req = (t: number, route: string, ms: number, cpu: number, wait: number): SinkRow => ({
+		k: 'req',
+		t,
+		path: route,
+		route,
+		ms,
+		cpu,
+		wait,
+		status: 200
+	});
 	it('buffers rows, drops the oldest request rows first when full, drains NDJSON that parses back', () => {
 		const b = new SinkBuffer(400);
 		for (let i = 0; i < 20; i++) b.push(req(i, '/a', 10, 5, 2));
-		b.push({ k: 'win', t0: 0, t1: 1000, fns: [{ name: 'f', file: 'x.ts', self_ms: 3, category: 'app' }] });
+		b.push({
+			k: 'win',
+			t0: 0,
+			t1: 1000,
+			fns: [{ name: 'f', file: 'x.ts', self_ms: 3, category: 'app' }]
+		});
 		expect(b.size).toBeLessThan(21);
 		const text = b.drain();
 		const rows = parse_sink(text + '\n{bad json\n');
@@ -298,8 +481,21 @@ describe('sink', () => {
 			req(100, '/a', 100, 60, 30),
 			req(200, '/a', 300, 100, 150),
 			req(300, '/b', 50, 50, 0),
-			{ k: 'win', t0: 0, t1: 1000, fns: [{ name: 'slow', file: 'a.ts', self_ms: 40, category: 'app' }, { name: 'fmt', file: 'b.ts', self_ms: 10, category: 'app' }] },
-			{ k: 'win', t0: 1000, t1: 2000, fns: [{ name: 'slow', file: 'a.ts', self_ms: 20, category: 'app' }] },
+			{
+				k: 'win',
+				t0: 0,
+				t1: 1000,
+				fns: [
+					{ name: 'slow', file: 'a.ts', self_ms: 40, category: 'app' },
+					{ name: 'fmt', file: 'b.ts', self_ms: 10, category: 'app' }
+				]
+			},
+			{
+				k: 'win',
+				t0: 1000,
+				t1: 2000,
+				fns: [{ name: 'slow', file: 'a.ts', self_ms: 20, category: 'app' }]
+			},
 			{ k: 'trap', t: 5, path: '/x', ms: 900, id: 'r1' }
 		];
 		expect(cloud_points(rows).map((p) => p.ms)).toEqual([100, 300, 50]);
@@ -309,14 +505,26 @@ describe('sink', () => {
 		expect(cake[1]).toMatchObject({ n: 1, cpu: 50, wait: 0, rest: 0 });
 		// a range covering the whole first window and half the second
 		const hot = hot_for_range(rows, 0, 1500);
-		expect(hot[0]).toEqual({ name: 'slow', file: 'a.ts', category: 'app', self_ms: 50, windows: 2 });
+		expect(hot[0]).toEqual({
+			name: 'slow',
+			file: 'a.ts',
+			category: 'app',
+			self_ms: 50,
+			windows: 2
+		});
 		expect(hot[1].self_ms).toBe(10);
 		expect(hot_for_range(rows, 5000, 6000)).toEqual([]);
 	});
 });
 
 describe('who caused the GC', () => {
-	const frame = (functionName: string, url: string, line = 1) => ({ functionName, url, lineNumber: line, columnNumber: 0, scriptId: '1' });
+	const frame = (functionName: string, url: string, line = 1) => ({
+		functionName,
+		url,
+		lineNumber: line,
+		columnNumber: 0,
+		scriptId: '1'
+	});
 	// ProductCard → toProductVM → structuredClone allocates; a helper `fmt` allocates a little; svelte's runtime is on the stack too
 	const tree = (a: number, b: number, c: number) => ({
 		callFrame: frame('(root)', ''),
@@ -326,11 +534,18 @@ describe('who caused the GC', () => {
 				callFrame: frame('ProductCard', '/app/src/lib/ProductCard.svelte'),
 				selfSize: 0,
 				children: [
-					{ callFrame: frame('toProductVM', '/app/src/lib/mappers.ts', 10), selfSize: 0, children: [{ callFrame: frame('structuredClone', ''), selfSize: a }] },
+					{
+						callFrame: frame('toProductVM', '/app/src/lib/mappers.ts', 10),
+						selfSize: 0,
+						children: [{ callFrame: frame('structuredClone', ''), selfSize: a }]
+					},
 					{ callFrame: frame('fmt', '/app/src/lib/fmt.ts', 3), selfSize: b }
 				]
 			},
-			{ callFrame: frame('set_text', '/app/node_modules/svelte/src/internal/server/index.js'), selfSize: c }
+			{
+				callFrame: frame('set_text', '/app/node_modules/svelte/src/internal/server/index.js'),
+				selfSize: c
+			}
 		]
 	});
 
@@ -340,7 +555,9 @@ describe('who caused the GC', () => {
 		const s2 = heap_sites(tree(5000, 200, 150), dict);
 		expect(s1.size).toBe(3);
 		const d = slice_delta(s1, s2);
-		const by_name = Object.fromEntries(Object.entries(d).map(([k, v]) => [dict[k as keyof typeof dict].name, v]));
+		const by_name = Object.fromEntries(
+			Object.entries(d).map(([k, v]) => [dict[k as keyof typeof dict].name, v])
+		);
 		expect(by_name).toEqual({ structuredClone: 4000, set_text: 100 });
 		const clone = Object.values(dict).find((x) => x.name === 'structuredClone')!;
 		expect(clone.component).toBe('ProductCard');
@@ -353,7 +570,12 @@ describe('who caused the GC', () => {
 
 	it('attribute_gc charges each pause to what was allocated since the previous one, and each maker its share of pause time', () => {
 		const dict = {};
-		const reads = [tree(0, 0, 0), tree(8_000_000, 100_000, 0), tree(16_000_000, 200_000, 500_000), tree(16_000_000, 200_000, 500_000)];
+		const reads = [
+			tree(0, 0, 0),
+			tree(8_000_000, 100_000, 0),
+			tree(16_000_000, 200_000, 500_000),
+			tree(16_000_000, 200_000, 500_000)
+		];
 		const sites = reads.map((t) => heap_sites(t, dict));
 		const slices = [
 			{ t0: 0, t1: 20, bytes: slice_delta(sites[0], sites[1]) },
@@ -367,7 +589,18 @@ describe('who caused the GC', () => {
 			{ t: 59, ms: 1, kind: 'minor' as const, flags: 4 }
 		];
 		const g = attribute_gc({ slices, events, dict, window_ms: 60, retained_mb: 3 });
-		expect(g.summary).toMatchObject({ count: 4, total_ms: 31, max_ms: 20, minor: 3, major: 1, incremental: 0, weak: 0, retained_mb: 3, slices: 3, slice_ms: 20 });
+		expect(g.summary).toMatchObject({
+			count: 4,
+			total_ms: 31,
+			max_ms: 20,
+			minor: 3,
+			major: 1,
+			incremental: 0,
+			weak: 0,
+			retained_mb: 3,
+			slices: 3,
+			slice_ms: 20
+		});
 		expect(g.summary.allocated_mb).toBeCloseTo(15.9, 0); // 16.7 M bytes
 		// the first pause at 18 ms: 18/20 of the first read's 8.1 MB, structuredClone 99%
 		expect(g.pauses[0].top[0]).toMatchObject({ name: 'structuredClone', component: 'ProductCard' });
@@ -382,44 +615,111 @@ describe('who caused the GC', () => {
 		expect(g.pauses[3].forced).toBe(true);
 		expect(g.pauses[3].why).toMatch(/forced/);
 		// makers: structuredClone carries nearly all the pause time
-		expect(g.makers[0]).toMatchObject({ name: 'structuredClone', component: 'ProductCard', caller: 'toProductVM (lib/mappers.ts:11)', pauses: 3 });
+		expect(g.makers[0]).toMatchObject({
+			name: 'structuredClone',
+			component: 'ProductCard',
+			caller: 'toProductVM (lib/mappers.ts:11)',
+			pauses: 3
+		});
 		expect(g.makers[0].gc_ms).toBeGreaterThan(25);
 		expect(g.makers[0].share).toBeGreaterThan(0.9);
 		expect(g.components[0]).toMatchObject({ name: 'ProductCard' });
 		expect(g.components[0].gc_ms).toBeGreaterThan(25);
 		// the same line reached through two stacks is ONE maker
-		const two = (x: number) => ({ callFrame: frame('(root)', ''), selfSize: 0, children: [{ callFrame: frame('loop', '/app/src/lib/ds.ts', 5), selfSize: 0, children: [{ callFrame: frame('a', '/app/src/lib/ds.ts', 6), selfSize: 0, children: [{ callFrame: frame('replace', ''), selfSize: x }] }, { callFrame: frame('b', '/app/src/lib/ds.ts', 7), selfSize: 0, children: [{ callFrame: frame('replace', ''), selfSize: x }] }] }] });
+		const two = (x: number) => ({
+			callFrame: frame('(root)', ''),
+			selfSize: 0,
+			children: [
+				{
+					callFrame: frame('loop', '/app/src/lib/ds.ts', 5),
+					selfSize: 0,
+					children: [
+						{
+							callFrame: frame('a', '/app/src/lib/ds.ts', 6),
+							selfSize: 0,
+							children: [{ callFrame: frame('replace', ''), selfSize: x }]
+						},
+						{
+							callFrame: frame('b', '/app/src/lib/ds.ts', 7),
+							selfSize: 0,
+							children: [{ callFrame: frame('replace', ''), selfSize: x }]
+						}
+					]
+				}
+			]
+		});
 		const d2 = {};
 		const r0 = heap_sites(two(0), d2);
 		const r1 = heap_sites(two(1000), d2);
-		const merged = attribute_gc({ slices: [{ t0: 0, t1: 10, bytes: slice_delta(r0, r1) }], events: [{ t: 9, ms: 2, kind: 'minor', flags: 0 }], dict: d2, window_ms: 10 });
+		const merged = attribute_gc({
+			slices: [{ t0: 0, t1: 10, bytes: slice_delta(r0, r1) }],
+			events: [{ t: 9, ms: 2, kind: 'minor', flags: 0 }],
+			dict: d2,
+			window_ms: 10
+		});
 		// a and b are different app callers, so two rows; each reached once
-		expect(merged.makers.map((m) => `${m.name} ← ${m.caller}`).sort()).toEqual(['replace ← a (lib/ds.ts:7)', 'replace ← b (lib/ds.ts:8)']);
+		expect(merged.makers.map((m) => `${m.name} ← ${m.caller}`).sort()).toEqual([
+			'replace ← a (lib/ds.ts:7)',
+			'replace ← b (lib/ds.ts:8)'
+		]);
 		// no slices, no events: an empty, well-formed answer
-		expect(attribute_gc({ slices: [], events: [], dict: {}, window_ms: 10 })).toMatchObject({ summary: { count: 0, total_ms: 0, max_ms: 0, allocated_mb: 0 }, pauses: [], makers: [], components: [] });
+		expect(attribute_gc({ slices: [], events: [], dict: {}, window_ms: 10 })).toMatchObject({
+			summary: { count: 0, total_ms: 0, max_ms: 0, allocated_mb: 0 },
+			pauses: [],
+			makers: [],
+			components: []
+		});
 	});
 
 	it('gc_kind reads Node’s kind bits', () => {
-		expect([1, 4, 8, 16, 0].map(gc_kind)).toEqual(['minor', 'major', 'incremental', 'weak', 'other']);
+		expect([1, 4, 8, 16, 0].map(gc_kind)).toEqual([
+			'minor',
+			'major',
+			'incremental',
+			'weak',
+			'other'
+		]);
 	});
 });
 
 describe('as if the profiler were not there', () => {
-	const frame = (functionName: string, url: string, line = 1) => ({ functionName, url, lineNumber: line, columnNumber: 0, scriptId: '1' });
+	const frame = (functionName: string, url: string, line = 1) => ({
+		functionName,
+		url,
+		lineNumber: line,
+		columnNumber: 0,
+		scriptId: '1'
+	});
 	it('a pause is charged as the app would have paid it: the profiler’s own share of the allocations before it is taken out', () => {
 		const dict = {};
 		const tree = (app: number, prof: number) => ({
 			callFrame: frame('(root)', ''),
 			selfSize: 0,
 			children: [
-				{ callFrame: frame('Page', '/app/src/lib/Page.svelte'), selfSize: 0, children: [{ callFrame: frame('render', '/app/src/lib/Page.svelte'), selfSize: app }] },
-				{ callFrame: frame('heap_sites', '/x/node_modules/ogygia/dist/profiler/gc.js'), selfSize: prof }
+				{
+					callFrame: frame('Page', '/app/src/lib/Page.svelte'),
+					selfSize: 0,
+					children: [{ callFrame: frame('render', '/app/src/lib/Page.svelte'), selfSize: app }]
+				},
+				{
+					callFrame: frame('heap_sites', '/x/node_modules/ogygia/dist/profiler/gc.js'),
+					selfSize: prof
+				}
 			]
 		});
 		const sites = heap_sites(tree(3000, 1000), dict);
 		const bytes: Record<string, number> = {};
 		for (const [k, v] of sites) bytes[k] = v;
-		const g = attribute_gc({ slices: [{ t0: 0, t1: 10, bytes }], events: [{ t: 9, ms: 8, kind: 'minor', flags: 0 }], dict, window_ms: 10, running: [{ t0: 0, t1: 5, label: 'Header', category: 'component', file: 'src/lib/Header.svelte' }, { t0: 5, t1: 10, label: 'render', category: 'component', file: 'src/lib/Page.svelte' }] });
+		const g = attribute_gc({
+			slices: [{ t0: 0, t1: 10, bytes }],
+			events: [{ t: 9, ms: 8, kind: 'minor', flags: 0 }],
+			dict,
+			window_ms: 10,
+			running: [
+				{ t0: 0, t1: 5, label: 'Header', category: 'component', file: 'src/lib/Header.svelte' },
+				{ t0: 5, t1: 10, label: 'render', category: 'component', file: 'src/lib/Page.svelte' }
+			]
+		});
 		// 1000 of 4000 bytes were the profiler's: a quarter of the 8 ms pause is its
 		expect(g.pauses[0].ms_measured).toBe(8);
 		expect(g.pauses[0].ms).toBe(6);
@@ -428,9 +728,22 @@ describe('as if the profiler were not there', () => {
 		expect(g.pauses[0].estimated).toBe(true);
 		expect(g.pauses[0].allocated).toBe(Math.round(3000 * 0.9));
 		expect(g.pauses[0].why).toMatch(/≈/);
-		expect(g.pauses[0].running).toEqual({ label: 'render', category: 'component', file: 'src/lib/Page.svelte' });
+		expect(g.pauses[0].running).toEqual({
+			label: 'render',
+			category: 'component',
+			file: 'src/lib/Page.svelte'
+		});
 		// the moment of the pause is the collector's own segment: the answer is the app's work just before it
-		const g2 = attribute_gc({ slices: [{ t0: 0, t1: 10, bytes }], events: [{ t: 9, ms: 8, kind: 'minor', flags: 0 }], dict, window_ms: 10, running: [{ t0: 0, t1: 8, label: 'render', category: 'component', file: 'src/lib/Page.svelte' }, { t0: 8, t1: 10, label: 'garbage collection', category: 'gc' }] });
+		const g2 = attribute_gc({
+			slices: [{ t0: 0, t1: 10, bytes }],
+			events: [{ t: 9, ms: 8, kind: 'minor', flags: 0 }],
+			dict,
+			window_ms: 10,
+			running: [
+				{ t0: 0, t1: 8, label: 'render', category: 'component', file: 'src/lib/Page.svelte' },
+				{ t0: 8, t1: 10, label: 'garbage collection', category: 'gc' }
+			]
+		});
 		expect(g2.pauses[0].running?.label).toBe('render');
 		expect(g.summary).toMatchObject({ measured_ms: 8, overhead_ms: 2, total_ms: 6, max_ms: 6 });
 		expect(g.makers.map((m) => `${m.name} in ${m.component}`)).toEqual(['render in Page']);
@@ -439,7 +752,13 @@ describe('as if the profiler were not there', () => {
 });
 
 describe('more from the same snapshot', () => {
-	const frame = (functionName: string, url: string, line = 1) => ({ functionName, url, lineNumber: line, columnNumber: 0, scriptId: '1' });
+	const frame = (functionName: string, url: string, line = 1) => ({
+		functionName,
+		url,
+		lineNumber: line,
+		columnNumber: 0,
+		scriptId: '1'
+	});
 	it('deopts: the reasons V8 wrote into the profile, per function, with self time', () => {
 		const p = {
 			startTime: 0,
@@ -455,7 +774,12 @@ describe('more from the same snapshot', () => {
 		};
 		const a = analyze(p as never);
 		expect(a.deopts).toHaveLength(1);
-		expect(a.deopts[0]).toMatchObject({ name: 'fmt', count: 2, reasons: { 'wrong map': 1, 'not a Smi': 1 }, self_ms: 30 });
+		expect(a.deopts[0]).toMatchObject({
+			name: 'fmt',
+			count: 2,
+			reasons: { 'wrong map': 1, 'not a Smi': 1 },
+			self_ms: 30
+		});
 	});
 	it('sync_io names the blocking node calls with their app callers; memo candidates need many calls at a steady cost', () => {
 		const p = {
@@ -470,18 +794,52 @@ describe('more from the same snapshot', () => {
 			samples: [3, 3, 4, 4, 4],
 			timeDeltas: [10_000, 10_000, 10_000, 10_000, 10_000]
 		};
-		const a = analyze(p as never, undefined, { 'toVM\0/app/src/lib/mappers.ts': 48, 'readFileSync\0node:fs': 2 });
+		const a = analyze(p as never, undefined, {
+			'toVM\0/app/src/lib/mappers.ts': 48,
+			'readFileSync\0node:fs': 2
+		});
 		const s = sync_io(a);
 		expect(s).toHaveLength(1);
 		expect(s[0]).toMatchObject({ name: 'readFileSync', module: 'node:fs', total_ms: 20, calls: 2 });
 		expect(s[0].callers[0]).toMatch(/^load/);
-		const m = memo_candidates(a, [{ key: 'k', name: 'toVM', url: '/app/src/lib/mappers.ts', line: 9, category: 'app', component: null, allocated: 480_000, share: 0.5, gc_ms: 1, pauses: 0 }]);
+		const m = memo_candidates(a, [
+			{
+				key: 'k',
+				name: 'toVM',
+				url: '/app/src/lib/mappers.ts',
+				line: 9,
+				category: 'app',
+				component: null,
+				allocated: 480_000,
+				share: 0.5,
+				gc_ms: 1,
+				pauses: 0
+			}
+		]);
 		expect(m).toHaveLength(1);
 		expect(m[0]).toMatchObject({ name: 'toVM', calls: 48, total_ms: 30, alloc_per_call: 10_000 });
 		expect(m[0].per_call_ms).toBeCloseTo(0.625, 3);
 		// the same profile as 3 page renders: 30 ms is 10 per render, the 48 calls are one render's
 		// (coverage), so one call is 10 / 48, not 30 / 48
-		const m3 = memo_candidates(a, [{ key: 'k', name: 'toVM', url: '/app/src/lib/mappers.ts', line: 9, category: 'app', component: null, allocated: 480_000, share: 0.5, gc_ms: 1, pauses: 0 }], 8, 3);
+		const m3 = memo_candidates(
+			a,
+			[
+				{
+					key: 'k',
+					name: 'toVM',
+					url: '/app/src/lib/mappers.ts',
+					line: 9,
+					category: 'app',
+					component: null,
+					allocated: 480_000,
+					share: 0.5,
+					gc_ms: 1,
+					pauses: 0
+				}
+			],
+			8,
+			3
+		);
 		expect(m3[0]).toMatchObject({ calls: 48, total_ms: 10, alloc_per_call: 3333 });
 		expect(m3[0].per_call_ms).toBeCloseTo(10 / 48, 3);
 	});
@@ -492,9 +850,17 @@ describe('more from the same snapshot', () => {
 			{ label: 'b', t0: 105, t1: 205, lane: 0, kind: 'net' },
 			{ label: 'c', t0: 210, t1: 310, lane: 0, kind: 'net' }
 		];
-		const edges = [{ from: 'a', to: 'b', gap_ms: 5 }, { from: 'b', to: 'c', gap_ms: 5 }];
+		const edges = [
+			{ from: 'a', to: 'b', gap_ms: 5 },
+			{ from: 'b', to: 'c', gap_ms: 5 }
+		];
 		const base = simulate_awaits(nodes, edges, 360, {});
-		expect(base).toMatchObject({ before_ms: 360, after_ms: 360, delta_ms: 0, chain: ['a', 'b', 'c'] });
+		expect(base).toMatchObject({
+			before_ms: 360,
+			after_ms: 360,
+			delta_ms: 0,
+			chain: ['a', 'b', 'c']
+		});
 		const par = simulate_awaits(nodes, edges, 360, { b: 'parallel', c: 'parallel' });
 		expect(par.after_ms).toBe(150); // all three start at 0, the longest ends at 100, plus the 50 ms tail
 		expect(par.delta_ms).toBe(-210);

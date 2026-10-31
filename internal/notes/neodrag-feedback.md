@@ -16,14 +16,15 @@ This cost the most time. To make one node both draggable and resizable you attac
   rendered translated to `2 × winPos`, i.e. off-screen and invisible. Silent, no error, very hard to
   diagnose.
 - The correct model turned out to be: `winPos` for the drag translate, a **separate** `winResizeOff` for
-  the w/n-resize pin translate, and neodrag sums them. Only discovered by reasoning about *why* it went
+  the w/n-resize pin translate, and neodrag sums them. Only discovered by reasoning about _why_ it went
   off-screen, then reading the wrapper source.
 
 **Asks:**
+
 - A first-class combined primitive or documented recipe: "make a node drag- and resize-able." Ideally a
   single `position` that both capabilities cooperate on, so there is no way to double-count.
 - If they must stay separate offsets, **say so loudly** in the `Resizable.position` doc: "must be a
-  *different* value than the draggable's position; the two are summed."
+  _different_ value than the draggable's position; the two are summed."
 - A worked example in the docs of a draggable+resizable panel with persistence (this is THE common case).
 
 ## 2. Resize doesn't manage `user-select` — resizing highlights the whole panel
@@ -44,9 +45,10 @@ Two-way binding is detected via `Object.getOwnPropertyDescriptor(options, 'posit
 
 This is clever but completely implicit — I only understood it by reading `resize.svelte.js`. It bit me
 because a conditionally-rendered window (`{#if open}`) re-attaches on each open, and a plain value showed
-the *construction-time* position, not the current one.
+the _construction-time_ position, not the current one.
 
 **Asks:**
+
 - Document the accessor-detection contract explicitly (a short table: plain value = initial, get/set =
   controlled two-way).
 - Consider a less magic API — e.g. an explicit `{ value, onChange }` or a `bindable`-style helper — so the
@@ -59,6 +61,7 @@ author 8 handle elements and position/size/cursor each edge in CSS yourself. Eve
 the same ~40 lines of `.rh-n/.rh-e/.rh-se { … cursor: nwse-resize }`.
 
 **Asks:**
+
 - An `edges: ResizeEdge[]` (or `handles: true`) option that auto-injects the handle elements with sane
   default hit-areas + cursors, overridable via CSS custom props or slots.
 - Failing that, ship a copy-pasteable handles CSS snippet in the docs.
@@ -66,7 +69,7 @@ the same ~40 lines of `.rh-n/.rh-e/.rh-se { … cursor: nwse-resize }`.
 ## 5. `bounds` padding sign is a footgun without an example
 
 To let the panel travel **past** the viewport edge I needed `bounds: { target: 'viewport', padding: -240 }`
-— negative padding *expands* the bound outward. This is the opposite of the intuitive reading and is only
+— negative padding _expands_ the bound outward. This is the opposite of the intuitive reading and is only
 mentioned as "positive values shrink inward." The very common "let it go partly off-screen but keep a
 grabbable sliver" case deserves a named recipe.
 
@@ -90,10 +93,11 @@ Svelte transform (`ssr.noExternal: ['@neodrag/svelte']`) and dev needs
 tripped us again for a second integration.
 
 **Asks:**
+
 - Put the required Vite config (noExternal + per-subpath optimizeDeps) front-and-center in the install
   docs — it's not optional for SSR frameworks (SvelteKit).
 - Consider shipping a pre-compiled entry (or a `browser`/`svelte` condition that's already runes-free) so
-  the package can be bundled by non-Svelte-aware tools (tsdown/rollup) — we wanted neodrag *bundled into*
+  the package can be bundled by non-Svelte-aware tools (tsdown/rollup) — we wanted neodrag _bundled into_
   a library's dist and couldn't, because the runes need the Svelte compiler.
 
 ## What was genuinely good

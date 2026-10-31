@@ -17,13 +17,26 @@ import {
 } from 'ogygia/internal/compiler-browser';
 import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/cdn-plugin.ts';
 import { sveltePlugin } from './repl/svelte-plugin.ts';
-import { markdownPlugin, md_to_svelte, md_to_svelte_islands, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
+import {
+	markdownPlugin,
+	md_to_svelte,
+	md_to_svelte_islands,
+	MD_MODULE,
+	configure_content
+} from './repl/markdown-plugin.ts';
 import { parse_config_markdown, parse_config, type ConfigNote } from './repl/repl-config.ts';
 import { snippet_macros, type MarkdownOptions } from '@ogygia/content/markdown';
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
 import { make_ogygia_server_module, make_ogygia_internal_module } from './repl/og-server.ts';
-import type { ReplDriver, ReplMacros, DriverRegion, DriverCodecs, DriverManifests, DriverCsrSummary } from './repl/full-driver.ts';
+import type {
+	ReplDriver,
+	ReplMacros,
+	DriverRegion,
+	DriverCodecs,
+	DriverManifests,
+	DriverCsrSummary
+} from './repl/full-driver.ts';
 
 // The FULL ogygia compiler driver (complete macros + transportable manifests + csr legs). Loaded
 // lazily inside the `drivetest` handler — a static import would drag the whole driver graph onto the
@@ -58,8 +71,10 @@ const cdn_cache = makeCdnCache();
 const CDN_CACHE_NAME = 'observatory-cdn-v1';
 const CDN_NO_VERSION_PKG = /\/npm\/(?:@[^/]+\/)?[^/@]+\/package\.json(\?|$)/;
 async function caching_fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-	const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
-	if (typeof caches === 'undefined' || CDN_NO_VERSION_PKG.test(url)) return fetch(input as RequestInfo, init);
+	const url =
+		typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
+	if (typeof caches === 'undefined' || CDN_NO_VERSION_PKG.test(url))
+		return fetch(input as RequestInfo, init);
 	try {
 		const cache = await caches.open(CDN_CACHE_NAME);
 		const hit = await cache.match(url);
@@ -197,13 +212,25 @@ function resolve_strategy(attrs: Record<string, unknown>) {
 	if (render === 'live')
 		return { kind: 'live', color: '#8b5cf6', detail: 'baked HTML, revalidates in the background' };
 	if (render === 'deferred')
-		return { kind: 'server hole', color: '#8b5cf6', detail: `signed endpoint; HTML fetched on '${(attrs.fetch as string | undefined) || 'load'}'` };
+		return {
+			kind: 'server hole',
+			color: '#8b5cf6',
+			detail: `signed endpoint; HTML fetched on '${(attrs.fetch as string | undefined) || 'load'}'`
+		};
 	if (attrs.region === 'raw')
 		return { kind: 'held (raw)', color: '#f59e0b', detail: 'server-picked HTML, zero JS' };
 	if (wake === 'none')
-		return { kind: 'lake', color: '#f59e0b', detail: 'frozen SSR DOM inside an island, no client module' };
+		return {
+			kind: 'lake',
+			color: '#f59e0b',
+			detail: 'frozen SSR DOM inside an island, no client module'
+		};
 	if (attrs.preset)
-		return { kind: 'preset', color: '#14b8a6', detail: `bundle '${attrs.preset}' from ogygia({ presets })` };
+		return {
+			kind: 'preset',
+			color: '#14b8a6',
+			detail: `bundle '${attrs.preset}' from ogygia({ presets })`
+		};
 	return { kind: 'island', color: '#14b8a6', detail: `hydrates on '${wake || 'load'}'` };
 }
 
@@ -255,12 +282,22 @@ function build_ctx(ssr: boolean, routeCsr: boolean = false) {
 }
 
 /** Svelte-based mark map (fast, always-on) for the friendly strategy table + a fallback host rewrite. */
-function analyze_marks(source: string): { islands: Island[]; output: string; ok: boolean; error?: string } {
+function analyze_marks(source: string): {
+	islands: Island[];
+	output: string;
+	ok: boolean;
+	error?: string;
+} {
 	let ast: ReturnType<typeof parse>;
 	try {
 		ast = parse(source, { modern: true });
 	} catch (e) {
-		return { islands: [], output: source, ok: false, error: e instanceof Error ? e.message : String(e) };
+		return {
+			islands: [],
+			output: source,
+			ok: false,
+			error: e instanceof Error ? e.message : String(e)
+		};
 	}
 	const bodies: Array<Record<string, unknown>> = [];
 	const inst = (ast as { instance?: { content?: { body?: unknown[] } } }).instance;
@@ -274,11 +311,13 @@ function analyze_marks(source: string): { islands: Island[]; output: string; ok:
 		if (node.type !== 'ImportDeclaration') continue;
 		const attrs: Record<string, unknown> = {};
 		for (const a of (node.attributes as Array<Record<string, never>>) || []) {
-			const key = (a.key as { name?: string; value?: string })?.name ?? (a.key as { value?: string })?.value;
+			const key =
+				(a.key as { name?: string; value?: string })?.name ?? (a.key as { value?: string })?.value;
 			if (key) attrs[key] = (a.value as { value?: unknown })?.value;
 		}
 		if (!Object.keys(attrs).some((k) => MARK_KEYS.has(k))) continue;
-		const local = (node.specifiers as Array<{ local?: { name?: string } }>)?.[0]?.local?.name ?? '?';
+		const local =
+			(node.specifiers as Array<{ local?: { name?: string } }>)?.[0]?.local?.name ?? '?';
 		const component = (node.source as { value: string }).value;
 		const strategy = resolve_strategy(attrs);
 		const id = fallback_id(component + ' ' + JSON.stringify(attrs));
@@ -302,7 +341,10 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 // Rewrites svelte's compiled ESM to a CJS-style function body (its output is a constrained shape),
 // evals it with a `__require` closure, and renders the default export. This is the real render loop
 // running in the browser — no bundler, no server.
-function eval_module(code: string, req: (spec: string) => Record<string, unknown>): Record<string, unknown> {
+function eval_module(
+	code: string,
+	req: (spec: string) => Record<string, unknown>
+): Record<string, unknown> {
 	// A named-import list → a valid destructuring list: `a, b as c` → `a, b: c` (ES `import {b as c}`
 	// aliases to `b`, but object destructuring renames with `:`). The driver's generated modules use
 	// renamed imports (`import { makeRegionEndpoint as __ogRegionSign }`).
@@ -317,13 +359,26 @@ function eval_module(code: string, req: (spec: string) => Record<string, unknown
 			.join(', ');
 	const body = code
 		// import * as X from 'y' [with {...}]
-		.replace(/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = __require("$2");')
+		.replace(
+			/import\s+\*\s+as\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+			'const $1 = __require("$2");'
+		)
 		// import D, { a, b } from 'y'
-		.replace(/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, (_m, d: string, list: string, spec: string) => `const __m_${d} = __require("${spec}"); const ${d} = __m_${d}.default; const {${names(list)}} = __m_${d};`)
+		.replace(
+			/import\s+([\w$]+)\s*,\s*\{([^}]*)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+			(_m, d: string, list: string, spec: string) =>
+				`const __m_${d} = __require("${spec}"); const ${d} = __m_${d}.default; const {${names(list)}} = __m_${d};`
+		)
 		// import D from 'y' [with {...}]
-		.replace(/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, 'const $1 = (__require("$2")).default;')
+		.replace(
+			/import\s+([\w$]+)\s+from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+			'const $1 = (__require("$2")).default;'
+		)
 		// import { a, b } from 'y'
-		.replace(/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g, (_m, list: string, spec: string) => `const {${names(list)}} = __require("${spec}");`)
+		.replace(
+			/import\s*\{([^}]+)\}\s*from\s+['"]([^'"]+)['"]\s*(?:with\s*\{[^}]*\})?\s*;?/g,
+			(_m, list: string, spec: string) => `const {${names(list)}} = __require("${spec}");`
+		)
 		// import 'y' (side-effect)
 		.replace(/import\s+['"][^'"]+['"]\s*;?/g, '')
 		// export default X
@@ -368,7 +423,10 @@ function client_bundle(files: Record<string, string>, entry: string): Analysis['
 }
 
 /** Boundary-lens metadata per island file — kind/wake/bytes, so the render can mark each region. */
-type IslandInfo = Map<string, { kind: string; wake: string; name: string; bytes: number; ships: boolean; keep?: string }>;
+type IslandInfo = Map<
+	string,
+	{ kind: string; wake: string; name: string; bytes: number; ships: boolean; keep?: string }
+>;
 
 /** Boundary-lens + strategy metadata for every marked region across the file map, keyed by target
  *  file. Reused by execute (SSR preview) + real_island_render (islands mode) + render_page (nav). */
@@ -385,7 +443,10 @@ function build_island_info(files: Record<string, string>): IslandInfo {
 			const lf = ledger.files.find((x) => x.name === target);
 			info.set(target, {
 				kind: isl.strategy.kind,
-				wake: (isl.attrs.wake as string) || (isl.attrs.fetch as string) || (isl.strategy.kind === 'island' ? 'load' : ''),
+				wake:
+					(isl.attrs.wake as string) ||
+					(isl.attrs.fetch as string) ||
+					(isl.strategy.kind === 'island' ? 'load' : ''),
 				name: target,
 				bytes: lf?.bytes ?? 0,
 				ships: lf?.ships ?? false,
@@ -412,7 +473,11 @@ function render_page(files: Record<string, string>, entry: string): Analysis['re
  *  render as their real components). Imports not in the map (or `ogygia/internal`) render as labelled
  *  stubs. Marked regions are wrapped in an invisible `<ogygia-obs-island>` boundary so the BOUNDARY
  *  LENS can x-ray the output (dead shell vs live island). The compile→link→render loop, in-browser. */
-function execute(files: Record<string, string>, entry: string, islandInfo?: IslandInfo): Analysis['rendered'] {
+function execute(
+	files: Record<string, string>,
+	entry: string,
+	islandInfo?: IslandInfo
+): Analysis['rendered'] {
 	const stubs = new Set<string>();
 	const cache = new Map<string, Record<string, unknown>>();
 	const wire: NonNullable<Analysis['rendered']>['wire'] = [];
@@ -440,11 +505,19 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 	// Wrap a compiled server component so its render is bracketed by a boundary marker (display:contents,
 	// invisible to layout) carrying the region's strategy — the raw material the lens tints + labels.
 	// The same seam captures the WIRE payload (the props that cross to this island).
-	const with_boundary = (exports: Record<string, unknown>, info: NonNullable<ReturnType<IslandInfo['get']>>): Record<string, unknown> => {
+	const with_boundary = (
+		exports: Record<string, unknown>,
+		info: NonNullable<ReturnType<IslandInfo['get']>>
+	): Record<string, unknown> => {
 		const Real = exports.default as (r: { push: (s: string) => void }, p: unknown) => void;
 		const Marked = ($$renderer: { push: (s: string) => void }, props: unknown) => {
 			const payload = wire_payload(props);
-			wire.push({ name: info.name, kind: info.kind, payload, bytes: new TextEncoder().encode(payload).length });
+			wire.push({
+				name: info.name,
+				kind: info.kind,
+				payload,
+				bytes: new TextEncoder().encode(payload).length
+			});
 			$$renderer.push(
 				`<ogygia-obs-island data-obs-island data-kind="${esc(info.kind)}" data-name="${esc(info.name)}" data-wake="${esc(info.wake)}" data-bytes="${info.bytes}" data-ships="${info.ships}">`
 			);
@@ -456,15 +529,22 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 	try {
 		const make_require = (): ((spec: string) => Record<string, unknown>) => {
 			const require = (spec: string): Record<string, unknown> => {
-				if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
+				if (spec === 'svelte/internal/server')
+					return svelteInternalServer as Record<string, unknown>;
 				if (spec === 'svelte/server') return { render } as Record<string, unknown>;
 				// The REAL ogygia runtime where we have it — region()/isRegion + a server <Region> (held
 				// regions render inline, zero JS) from 'ogygia', og_html_region from 'ogygia/internal'.
 				// Everything else (content wrappers TabGroup/Tab/… — islands) falls back to a passthrough
 				// (children + optional label, stacked) so a `::: tabs` page shows its content, not a crash.
 				if (spec === 'ogygia' || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) {
-					const Passthrough = ($$renderer: { push: (s: string) => void }, props?: Record<string, unknown>) => {
-						if (props?.label) $$renderer.push(`<div class="repl-passthrough-label">${esc(String(props.label))}</div>`);
+					const Passthrough = (
+						$$renderer: { push: (s: string) => void },
+						props?: Record<string, unknown>
+					) => {
+						if (props?.label)
+							$$renderer.push(
+								`<div class="repl-passthrough-label">${esc(String(props.label))}</div>`
+							);
 						const kids = props?.children;
 						if (typeof kids === 'function') (kids as (r: unknown) => void)($$renderer);
 					};
@@ -483,7 +563,11 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 					const info = islandInfo?.get(file);
 					const hit = cache.get(file);
 					if (hit) return info ? with_boundary(hit, info) : hit;
-					const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as {
+					const { js } = compile(files[file], {
+						filename: file,
+						generate: 'server',
+						dev: false
+					}) as {
 						js: { code: string };
 					};
 					const exports: Record<string, unknown> = {};
@@ -510,7 +594,12 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 		const out = render(Component as never, { props: {} }) as { body?: string; html?: string };
 		return { ok: true, html: out.body ?? out.html ?? '', stubs: [...stubs], wire };
 	} catch (e) {
-		return { ok: false, error: e instanceof Error ? e.message : String(e), stubs: [...stubs], wire };
+		return {
+			ok: false,
+			error: e instanceof Error ? e.message : String(e),
+			stubs: [...stubs],
+			wire
+		};
 	}
 }
 
@@ -571,7 +660,8 @@ function byte_ledger(files: Record<string, string>): NonNullable<Analysis['ledge
 		for (const spec of import_specifiers(files[f])) {
 			const t = resolve_file(spec, files);
 			if (!t || walk_seen.has(t)) continue;
-			if (t.endsWith('.svelte') && !reason.get(t)?.ships && !carried_by.has(t)) carried_by.set(t, f);
+			if (t.endsWith('.svelte') && !reason.get(t)?.ships && !carried_by.has(t))
+				carried_by.set(t, f);
 			stack.push(t);
 		}
 	}
@@ -615,18 +705,34 @@ function import_specifiers(code: string): string[] {
  *  self-runs + hydrates it (a bare region nested in the Observatory's awake island would be skipped).
  *  The `entry` is a `__ISLAND__:<file>` placeholder the MAIN thread rewrites to a blob of the linked
  *  client component. Only islands (kind island/preset) get a region; everything else renders inline. */
-function real_island_render(files: Record<string, string>, entry: string, islandInfo: IslandInfo): Analysis['realDom'] {
+function real_island_render(
+	files: Record<string, string>,
+	entry: string,
+	islandInfo: IslandInfo
+): Analysis['realDom'] {
 	const cache = new Map<string, Record<string, unknown>>();
 	const usedIslands = new Set<string>();
 	const escAttr = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 	const escScript = (s: string) => s.replace(/<\//g, '<\\/');
 	// Islands captured during the app render; rendered in ISOLATION afterwards (no re-entrant render()).
-	const captured: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	const captured: Array<{
+		info: NonNullable<ReturnType<IslandInfo['get']>>;
+		Comp: unknown;
+		props: Record<string, unknown>;
+	}> = [];
 	// Server islands (render: 'deferred') captured the same way; their HTML is served via a fetch intercept.
-	const deferred: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	const deferred: Array<{
+		info: NonNullable<ReturnType<IslandInfo['get']>>;
+		Comp: unknown;
+		props: Record<string, unknown>;
+	}> = [];
 	const deferredHtml: Record<string, string> = {};
 	// Live regions (render: 'live') — first paint baked here; the main thread ticks re-renders in via applyLive.
-	const live: Array<{ info: NonNullable<ReturnType<IslandInfo['get']>>; Comp: unknown; props: Record<string, unknown> }> = [];
+	const live: Array<{
+		info: NonNullable<ReturnType<IslandInfo['get']>>;
+		Comp: unknown;
+		props: Record<string, unknown>;
+	}> = [];
 	const liveOut: NonNullable<Analysis['realDom']>['live'] = [];
 	try {
 		const require = (spec: string): Record<string, unknown> => {
@@ -645,7 +751,11 @@ function real_island_render(files: Record<string, string>, entry: string, island
 				const built = () => {
 					const hit = cache.get(file);
 					if (hit) return hit;
-					const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+					const { js } = compile(files[file], {
+						filename: file,
+						generate: 'server',
+						dev: false
+					}) as { js: { code: string } };
 					const exports: Record<string, unknown> = {};
 					cache.set(file, exports);
 					Object.assign(exports, eval_module(js.code, require));
@@ -655,7 +765,10 @@ function real_island_render(files: Record<string, string>, entry: string, island
 				// Live region → placeholder for a `<ogygia-region live>` (morphs in place each tick).
 				if (isLive) {
 					const Real = exports.default;
-					const Live = ($$renderer: { push: (s: string) => void }, props: Record<string, unknown>) => {
+					const Live = (
+						$$renderer: { push: (s: string) => void },
+						props: Record<string, unknown>
+					) => {
 						const idx = live.length;
 						live.push({ info: info!, Comp: Real, props: props || {} });
 						usedIslands.add(file);
@@ -666,7 +779,10 @@ function real_island_render(files: Record<string, string>, entry: string, island
 				// Server island → placeholder for a DEFERRED region (HTML fetched later on schedule).
 				if (isServerHole) {
 					const Real = exports.default;
-					const Deferred = ($$renderer: { push: (s: string) => void }, props: Record<string, unknown>) => {
+					const Deferred = (
+						$$renderer: { push: (s: string) => void },
+						props: Record<string, unknown>
+					) => {
 						const idx = deferred.length;
 						deferred.push({ info: info!, Comp: Real, props: props || {} });
 						usedIslands.add(file);
@@ -678,7 +794,10 @@ function real_island_render(files: Record<string, string>, entry: string, island
 				// Waking island → emit a placeholder comment now; capture (Comp, props) to render in
 				// isolation after the app render. Index by captured.length so each placement is distinct.
 				const Real = exports.default;
-				const Marked = ($$renderer: { push: (s: string) => void }, props: Record<string, unknown>) => {
+				const Marked = (
+					$$renderer: { push: (s: string) => void },
+					props: Record<string, unknown>
+				) => {
 					const idx = captured.length;
 					captured.push({ info: info!, Comp: Real, props: props || {} });
 					usedIslands.add(file);
@@ -688,10 +807,15 @@ function real_island_render(files: Record<string, string>, entry: string, island
 			}
 			// unprovided component → inert inline stub (keeps the render alive)
 			const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '');
-			return { default: ($$r: { push: (s: string) => void }) => $$r.push(`<span data-og-stub="${name}"></span>`) };
+			return {
+				default: ($$r: { push: (s: string) => void }) =>
+					$$r.push(`<span data-og-stub="${name}"></span>`)
+			};
 		};
 		if (files[entry] == null) return { ok: false, error: `no entry file '${entry}'` };
-		const { js } = compile(files[entry], { filename: entry, generate: 'server', dev: false }) as { js: { code: string } };
+		const { js } = compile(files[entry], { filename: entry, generate: 'server', dev: false }) as {
+			js: { code: string };
+		};
 		const mod = eval_module(js.code, require);
 		const App = mod.default as unknown;
 		if (typeof App !== 'function') return { ok: false, error: 'no default component export' };
@@ -820,7 +944,11 @@ async function macro_files(files: Record<string, string>): Promise<Record<string
 		// Fast skip: only .svelte/.ts/.js hosts, and only when a macro marker is actually present.
 		if (!/\.(svelte|ts|js)$/.test(name) || !src.includes('import.meta.og.')) continue;
 		try {
-			const { code, touched } = await run_browser_macros(src, '/repl/' + name.replace(/^\/+/, ''), macros);
+			const { code, touched } = await run_browser_macros(
+				src,
+				'/repl/' + name.replace(/^\/+/, ''),
+				macros
+			);
 			if (touched) {
 				out[name] = code;
 				changed = true;
@@ -835,7 +963,10 @@ async function macro_files(files: Record<string, string>): Promise<Record<string
 /** A "svelte view" of the workspace: every `.md` / `.svx` file replaced by its markdown-pipeline Svelte
  *  source (same key), so the whole sync analyze/SSR machinery treats a content page as a normal component
  *  (mdsvex is async, so this is resolved ONCE up front). Non-content files pass through untouched. */
-async function content_svelte_view(files: Record<string, string>, keepDials = false): Promise<Record<string, string>> {
+async function content_svelte_view(
+	files: Record<string, string>,
+	keepDials = false
+): Promise<Record<string, string>> {
 	const out: Record<string, string> = { ...files };
 	const to_svelte = keepDials ? md_to_svelte_islands : md_to_svelte;
 	for (const [name, code] of Object.entries(files)) {
@@ -845,7 +976,8 @@ async function content_svelte_view(files: Record<string, string>, keepDials = fa
 		} catch (e) {
 			// A markdown compile error surfaces as a normal svelte-compile error downstream — leave a stub
 			// component so `rendered` still resolves (and the error shows) instead of crashing analyze.
-			out[name] = `<pre class="og-md-error">markdown error: ${(e instanceof Error ? e.message : String(e)).replace(/[<&]/g, ' ')}</pre>`;
+			out[name] =
+				`<pre class="og-md-error">markdown error: ${(e instanceof Error ? e.message : String(e)).replace(/[<&]/g, ' ')}</pre>`;
 		}
 	}
 	return out;
@@ -886,14 +1018,26 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 		const mod = await ensure_oxc();
 		// oxc probe (sync parseSync proves the browser parser)
 		try {
-			const content = (parse(source, { modern: true }) as { instance?: { content?: { start?: number; end?: number } } })
-				.instance?.content;
+			const content = (
+				parse(source, { modern: true }) as {
+					instance?: { content?: { start?: number; end?: number } };
+				}
+			).instance?.content;
 			const script =
-				content && content.start != null && content.end != null ? source.slice(content.start, content.end) : '';
-			const res = mod.parseSync('host.ts', script) as { program?: { body?: Array<{ type: string }> }; errors?: unknown[] };
+				content && content.start != null && content.end != null
+					? source.slice(content.start, content.end)
+					: '';
+			const res = mod.parseSync('host.ts', script) as {
+				program?: { body?: Array<{ type: string }> };
+				errors?: unknown[];
+			};
 			const body = res.program?.body ?? [];
 			const errs = res.errors ?? [];
-			oxc = { engine: 'rolldown-browser (oxc/wasm)', ok: errs.length === 0, imports: body.filter((n) => n.type === 'ImportDeclaration').length };
+			oxc = {
+				engine: 'rolldown-browser (oxc/wasm)',
+				ok: errs.length === 0,
+				imports: body.filter((n) => n.type === 'ImportDeclaration').length
+			};
 		} catch {
 			oxc = { engine: 'rolldown-browser (oxc/wasm)', ok: false, imports: 0 };
 		}
@@ -922,7 +1066,11 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 				// The build kind is 'hydrate' for every emitted binding — even a held-raw region (its chunk
 				// exists only in case it's woken at the `region()` call; it ships zero JS otherwise). Show the
 				// friendly strategy label from the marks instead, so the map reads 'held (raw)' / 'lake' / etc.
-				kind: marks.islands.find((m) => base0(m.component) === base0(isl.componentPath))?.strategy.kind ?? isl.kind ?? '',
+				kind:
+					marks.islands.find((m) => base0(m.component) === base0(isl.componentPath))?.strategy
+						.kind ??
+					isl.kind ??
+					'',
 				wrapperPath: isl.wrapperPath,
 				wrapperSource: isl.wrapperSource,
 				entryPath: isl.virtualPath,
@@ -932,7 +1080,8 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 			// component basename — so the map shows the build's actual ids, not the FNV placeholder.
 			const base = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
 			const realById = new Map<string, string>();
-			for (const isl of list) if (isl.componentPath && isl.id) realById.set(base(isl.componentPath), isl.id);
+			for (const isl of list)
+				if (isl.componentPath && isl.id) realById.set(base(isl.componentPath), isl.id);
 			for (const isl of marks.islands) {
 				const rid = realById.get(base(isl.component));
 				if (rid) {
@@ -942,16 +1091,25 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 			}
 			// The CLIENT leg (ssr=false): on a csr=false page the client gets stubs, not the wrapper.
 			try {
-				const clientResult = transformHost(source, '/repl/src/routes/App.svelte', build_ctx(false)) as {
+				const clientResult = transformHost(
+					source,
+					'/repl/src/routes/App.svelte',
+					build_ctx(false)
+				) as {
 					code?: string;
 				} | null;
-				if (clientResult && typeof clientResult.code === 'string') realClientCode = clientResult.code;
+				if (clientResult && typeof clientResult.code === 'string')
+					realClientCode = clientResult.code;
 			} catch {
 				/* client leg is best-effort */
 			}
 			// The csr=TRUE leg: ogygia steps aside — the transform strips island directives to plain.
 			try {
-				const csrTrue = transformHost(source, '/repl/src/routes/App.svelte', build_ctx(true, true)) as {
+				const csrTrue = transformHost(
+					source,
+					'/repl/src/routes/App.svelte',
+					build_ctx(true, true)
+				) as {
 					code?: string;
 				} | null;
 				if (csrTrue && typeof csrTrue.code === 'string') realCsrTrueCode = csrTrue.code;
@@ -1017,7 +1175,8 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 					const b = (p?: string) => (p ? p.split('?')[0].split('/').pop() || p : '');
 					const realById = new Map<string, string>();
 					for (const r of dr.regions)
-						if ((r.role === 'entry' || r.role === 'region') && r.component && r.id) realById.set(r.component, r.id);
+						if ((r.role === 'entry' || r.role === 'region') && r.component && r.id)
+							realById.set(r.component, r.id);
 					for (const isl of marks.islands) {
 						const rid = realById.get(b(isl.component));
 						if (rid) {
@@ -1032,7 +1191,11 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 				// Re-run the LAST pipeline step (svelte → server JS) over the driver's output, so the
 				// "compiled" view matches the transform shown above instead of the lean one.
 				try {
-					const { js } = compile(realCode, { filename: 'App.svelte', generate: 'server', dev: true }) as {
+					const { js } = compile(realCode, {
+						filename: 'App.svelte',
+						generate: 'server',
+						dev: true
+					}) as {
 						js: { code: string };
 					};
 					compiledServer = js.code;
@@ -1092,7 +1255,11 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 
 /** LIVE REGIONS: render ONE component (with props) to HTML — the per-tick body the main thread pushes
  *  into a `<ogygia-region live>` via applyLive(), which morphs it in place (keeping focus/typed text). */
-function render_live(files: Record<string, string>, file: string, props: Record<string, unknown>): string {
+function render_live(
+	files: Record<string, string>,
+	file: string,
+	props: Record<string, unknown>
+): string {
 	const cache = new Map<string, Record<string, unknown>>();
 	const require = (spec: string): Record<string, unknown> => {
 		if (spec === 'svelte/internal/server') return svelteInternalServer as Record<string, unknown>;
@@ -1101,7 +1268,9 @@ function render_live(files: Record<string, string>, file: string, props: Record<
 		if (f && f.endsWith('.svelte')) {
 			const hit = cache.get(f);
 			if (hit) return hit;
-			const { js } = compile(files[f], { filename: f, generate: 'server', dev: false }) as { js: { code: string } };
+			const { js } = compile(files[f], { filename: f, generate: 'server', dev: false }) as {
+				js: { code: string };
+			};
 			const ex: Record<string, unknown> = {};
 			cache.set(f, ex);
 			Object.assign(ex, eval_module(js.code, require));
@@ -1111,7 +1280,9 @@ function render_live(files: Record<string, string>, file: string, props: Record<
 	};
 	try {
 		if (files[file] == null) return '';
-		const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+		const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as {
+			js: { code: string };
+		};
 		const mod = eval_module(js.code, require);
 		const Comp = mod.default as unknown;
 		if (typeof Comp !== 'function') return '';
@@ -1156,7 +1327,8 @@ async function driver_render(
 	const driver = await get_repl_driver();
 	driver.install((id, code) => oxc_mod!.parseSync(id, code));
 	const dr = await driver.ssr_leg(files, repl_macros(files), entry); // SSR-only — the preview never needs client/csr legs
-	if (dr.error || dr.ssr == null || !dr.regions) return { ok: false, error: dr.error ?? 'no driver output' };
+	if (dr.error || dr.ssr == null || !dr.regions)
+		return { ok: false, error: dr.error ?? 'no driver output' };
 	const regionByVpath = new Map(dr.regions.map((r) => [r.vpath, r]));
 	const cache = new Map<string, Record<string, unknown>>();
 	const cached = (key: string, make: () => Record<string, unknown>): Record<string, unknown> => {
@@ -1174,7 +1346,11 @@ async function driver_render(
 		if (spec === 'ogygia') return OGYGIA_SERVER;
 		// The region signer / server-island minter — inert in the preview (no signed endpoints).
 		if (spec === 'ogygia/internal/server')
-			return { makeRegionEndpoint: () => '', mintServerIsland: () => '', known_region_fps: () => new Set() };
+			return {
+				makeRegionEndpoint: () => '',
+				mintServerIsland: () => '',
+				known_region_fps: () => new Set()
+			};
 		if (spec === 'virtual:ogygia/island-deps')
 			return { islandCss: () => '', islandDeps: () => [], contentCss: () => '' };
 		// A driver-generated region/wrapper/island virtual module → eval its real generated source.
@@ -1182,14 +1358,23 @@ async function driver_render(
 		if (reg) {
 			return cached(reg.vpath, () => {
 				if (reg.role === 'wrapper') {
-					const { js } = compile(reg.source ?? '', { filename: 'wrapper.svelte', generate: 'server', dev: false }) as { js: { code: string } };
+					const { js } = compile(reg.source ?? '', {
+						filename: 'wrapper.svelte',
+						generate: 'server',
+						dev: false
+					}) as { js: { code: string } };
 					return eval_module(js.code, require);
 				}
 				return eval_module((reg.role === 'region' ? reg.ssrSource : reg.source) ?? '', require);
 			});
 		}
 		// Any other ogygia virtual (transportables/fn-manifest/…) → side-effect no-op in the preview.
-		if (spec.startsWith('virtual:ogygia/') || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) return {};
+		if (
+			spec.startsWith('virtual:ogygia/') ||
+			spec.startsWith('ogygia/') ||
+			spec.startsWith('@ogygia/')
+		)
+			return {};
 		// A workspace component (the region binding + wrapper import it by its `/repl/…` absolute path).
 		const key = spec.replace(/^\/repl\//, '').replace(/^\/+/, '');
 		const file = files[key] != null ? key : resolve_file(spec, files);
@@ -1198,13 +1383,20 @@ async function driver_render(
 		// to a marker, not blank the whole driver preview (which then can't fall back either).
 		const stub = (): Record<string, unknown> => {
 			const name = (spec.split('/').pop() || spec).replace(/\.svelte$/, '').replace(/[^\w]/g, '');
-			return { default: ($$r: { push: (s: string) => void }) => $$r.push(`<span data-og-stub="${name}"></span>`) };
+			return {
+				default: ($$r: { push: (s: string) => void }) =>
+					$$r.push(`<span data-og-stub="${name}"></span>`)
+			};
 		};
 		if (file && files[file] != null) {
 			return cached(file, () => {
 				try {
 					if (file.endsWith('.svelte')) {
-						const { js } = compile(files[file], { filename: file, generate: 'server', dev: false }) as { js: { code: string } };
+						const { js } = compile(files[file], {
+							filename: file,
+							generate: 'server',
+							dev: false
+						}) as { js: { code: string } };
 						return eval_module(js.code, require);
 					}
 					return eval_module(files[file], require);
@@ -1216,9 +1408,12 @@ async function driver_render(
 		return stub();
 	};
 	try {
-		const { js } = compile(dr.ssr, { filename: 'App.svelte', generate: 'server', dev: false }) as { js: { code: string } };
+		const { js } = compile(dr.ssr, { filename: 'App.svelte', generate: 'server', dev: false }) as {
+			js: { code: string };
+		};
 		const App = eval_module(js.code, require).default;
-		if (typeof App !== 'function') return { ok: false, error: 'driver host has no default component export' };
+		if (typeof App !== 'function')
+			return { ok: false, error: 'driver host has no default component export' };
 		const html = (render(App as never, { props: {} }) as { body?: string }).body ?? '';
 		return { ok: true, html, regions: dr.regions };
 	} catch (e) {
@@ -1235,7 +1430,8 @@ async function driver_preview(
 	entry: string
 ): Promise<{ ok: boolean; html?: string; modules?: Record<string, string>; error?: string }> {
 	const rendered = await driver_render(files, entry);
-	if (!rendered.ok || rendered.html == null || !rendered.regions) return { ok: false, error: rendered.error };
+	if (!rendered.ok || rendered.html == null || !rendered.regions)
+		return { ok: false, error: rendered.error };
 	// Client island modules — each island's component compiled client-side, keyed by the ISLAND ID the SSR
 	// emitted (`entry="__ISLAND__:<id>"`), from the registry's componentPath. Macro-rewritten first so an
 	// island using $/store compiles. The Harness links `__ISLAND__:<id>` → a blob of these + hydrates.
@@ -1254,7 +1450,9 @@ async function driver_preview(
 			resolve_file(reg.component ?? '', view);
 		if (!file || view[file] == null || !file.endsWith('.svelte')) continue;
 		try {
-			const { js } = compile(view[file], { filename: file, generate: 'client', dev: false }) as { js: { code: string } };
+			const { js } = compile(view[file], { filename: file, generate: 'client', dev: false }) as {
+				js: { code: string };
+			};
 			modules[reg.id] = js.code;
 		} catch {
 			/* skip an island whose component won't client-compile */
@@ -1263,9 +1461,8 @@ async function driver_preview(
 	// A region whose component the workspace doesn't ship (a static demo template like "all strategies")
 	// gets no client module — strip its `entry` so the runtime leaves it as static server HTML instead of
 	// trying to fetch `__ISLAND__:<id>` as a URL (which fails, noisily). It still shows; it just won't wake.
-	const html = rendered.html.replace(
-		/\s*entry="__ISLAND__:([^"]+)"/g,
-		(m, id: string) => (modules[id] ? m : '')
+	const html = rendered.html.replace(/\s*entry="__ISLAND__:([^"]+)"/g, (m, id: string) =>
+		modules[id] ? m : ''
 	);
 	return { ok: true, html, modules };
 }
@@ -1277,7 +1474,9 @@ async function bundle_preview(
 	apply_content_config(files); // honour the workspace vite.config's markdown options in the bundle leg too
 	files = await macro_files(files); // run the real `import.meta.og.*` macro passes before bundling too
 	const rb = (await import('@rolldown/browser')) as {
-		rolldown: (o: unknown) => Promise<{ generate: (o: unknown) => Promise<{ output: Array<{ code: string }> }> }>;
+		rolldown: (
+			o: unknown
+		) => Promise<{ generate: (o: unknown) => Promise<{ output: Array<{ code: string }> }> }>;
 	};
 	const packages: string[] = [];
 	const missing: string[] = [];
@@ -1315,7 +1514,11 @@ async function bundle_preview(
 			onLog() {}
 		});
 		const { output } = await bundle.generate({ format: 'cjs', exports: 'named' });
-		return { code: output[0].code, packages: [...new Set(packages)], missing: [...new Set(missing)] };
+		return {
+			code: output[0].code,
+			packages: [...new Set(packages)],
+			missing: [...new Set(missing)]
+		};
 	} catch (e) {
 		return { error: clean_bundle_error(e instanceof Error ? e.message : String(e)) };
 	}
@@ -1323,7 +1526,13 @@ async function bundle_preview(
 
 type InMsg =
 	| { id: number; type?: 'analyze'; files: Record<string, string>; active: string }
-	| { id: number; type: 'live'; files: Record<string, string>; file: string; props: Record<string, unknown> }
+	| {
+			id: number;
+			type: 'live';
+			files: Record<string, string>;
+			file: string;
+			props: Record<string, unknown>;
+	  }
 	| { id: number; type: 'page'; files: Record<string, string>; entry: string }
 	| { id: number; type: 'bundle'; files: Record<string, string>; entry: string }
 	| { id: number; type: 'drivetest'; files: Record<string, string>; entry: string }
@@ -1332,7 +1541,11 @@ type InMsg =
 self.onmessage = (e: MessageEvent<InMsg>) => {
 	const msg = e.data;
 	if (msg.type === 'live') {
-		self.postMessage({ id: msg.id, type: 'live', html: render_live(msg.files, msg.file, msg.props) });
+		self.postMessage({
+			id: msg.id,
+			type: 'live',
+			html: render_live(msg.files, msg.file, msg.props)
+		});
 		return;
 	}
 	if (msg.type === 'page') {
@@ -1342,7 +1555,9 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 	}
 	if (msg.type === 'bundle') {
 		// The REAL rolldown bundle for the live preview (workspace + jsdelivr CDN deps). Async (network).
-		bundle_preview(msg.files, msg.entry).then((r) => self.postMessage({ id: msg.id, type: 'bundle', ...r }));
+		bundle_preview(msg.files, msg.entry).then((r) =>
+			self.postMessage({ id: msg.id, type: 'bundle', ...r })
+		);
 		return;
 	}
 	if (msg.type === 'drivetest') {
@@ -1353,7 +1568,19 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 			driver.install((id, code) => oxc_mod!.parseSync(id, code));
 			const result = await driver.analyze(msg.files, repl_macros(msg.files), msg.entry);
 			self.postMessage({ id: msg.id, type: 'drivetest', result });
-		})().catch((e) => self.postMessage({ id: msg.id, type: 'drivetest', result: { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined, ssr: null, client: null, csrTrue: null } }));
+		})().catch((e) =>
+			self.postMessage({
+				id: msg.id,
+				type: 'drivetest',
+				result: {
+					error: e instanceof Error ? e.message : String(e),
+					stack: e instanceof Error ? e.stack : undefined,
+					ssr: null,
+					client: null,
+					csrTrue: null
+				}
+			})
+		);
 		return;
 	}
 	if (msg.type === 'driverender') {
@@ -1361,7 +1588,13 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 		// client island modules the Harness links + hydrates.
 		driver_preview(msg.files, msg.entry)
 			.then((result) => self.postMessage({ id: msg.id, type: 'driverender', result }))
-			.catch((e) => self.postMessage({ id: msg.id, type: 'driverender', result: { ok: false, error: e instanceof Error ? e.message : String(e) } }));
+			.catch((e) =>
+				self.postMessage({
+					id: msg.id,
+					type: 'driverender',
+					result: { ok: false, error: e instanceof Error ? e.message : String(e) }
+				})
+			);
 		return;
 	}
 	analyze(msg.files, msg.active).then((result) => self.postMessage({ id: msg.id, result }));

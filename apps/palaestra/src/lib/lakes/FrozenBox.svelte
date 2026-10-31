@@ -8,10 +8,7 @@
 
 	// Distinctive string the lakes suite greps for — it must appear in NO emitted client chunk.
 	const FROZEN_MARKER = 'FROZEN_LAKE_CODE_MARKER_9f3a';
-	let {
-		label = '',
-		children
-	}: { label?: string; children?: import('svelte').Snippet } = $props();
+	let { label = '', children }: { label?: string; children?: import('svelte').Snippet } = $props();
 	let frozen = $state(0);
 	// Increments per SERVER render, so a `render: 'live'` revalidate is visibly newer than the cache.
 	const stamp = next_stamp();
@@ -21,7 +18,9 @@
 	<p data-frozen-static>frozen SSR content ({FROZEN_MARKER})</p>
 	<p data-frozen-stamp={stamp}>server render #{stamp}</p>
 	{#if label}<p data-frozen-label>{label}</p>{/if}
-	<button data-frozen-btn onclick={() => (frozen += 1)}>frozen button: {frozen} (inert — no JS)</button>
+	<button data-frozen-btn onclick={() => (frozen += 1)}
+		>frozen button: {frozen} (inert — no JS)</button
+	>
 	<InnerLive />
 	{@render children?.()}
 </div>

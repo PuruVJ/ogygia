@@ -249,7 +249,8 @@ export const ogygiaTransport: {
 	[REF_WIRE_KEY]: {
 		encode(value: unknown): Ref | false {
 			// primitives never mint — answer before touching the registry
-			if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false;
+			if (value === null || (typeof value !== 'object' && typeof value !== 'function'))
+				return false;
 			return ensure_all_kinds()(value) ?? false;
 		},
 		decode(ref: Ref) {

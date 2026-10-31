@@ -6,4 +6,8 @@
 	const posts = await postList();
 </script>
 
-<BlogList {posts} title="ogygia blog" intro="Dogfooding the blog shell — three posts over a dated collection." />
+<BlogList
+	{posts}
+	title="ogygia blog"
+	intro="Dogfooding the blog shell — three posts over a dated collection."
+/>

@@ -14,10 +14,15 @@ export const OGP_ELEMENT_ID = 'og-report-ogp';
 
 /** the page's `.ogp` bytes as base64, or '' (a report shown from this browser's kept copy) */
 export function page_ogp(): string {
-	return typeof document === 'undefined' ? '' : (document.getElementById(OGP_ELEMENT_ID)?.textContent ?? '').trim();
+	return typeof document === 'undefined'
+		? ''
+		: (document.getElementById(OGP_ELEMENT_ID)?.textContent ?? '').trim();
 }
 
-async function carried(id: string, ogpB64: string): Promise<{ body: BodyInit; headers: Record<string, string> } | null> {
+async function carried(
+	id: string,
+	ogpB64: string
+): Promise<{ body: BodyInit; headers: Record<string, string> } | null> {
 	ogpB64 ||= page_ogp();
 	if (ogpB64) {
 		const bin = atob(ogpB64);
@@ -27,12 +32,24 @@ async function carried(id: string, ogpB64: string): Promise<{ body: BodyInit; he
 	}
 	const kept = await get_report(id);
 	if (!kept || typeof CompressionStream === 'undefined') return null;
-	const gz = new Blob([JSON.stringify(kept.dump)]).stream().pipeThrough(new CompressionStream('gzip'));
-	return { body: await new Response(gz).blob(), headers: { 'content-type': 'application/json', 'x-og-encoding': 'gzip' } };
+	const gz = new Blob([JSON.stringify(kept.dump)])
+		.stream()
+		.pipeThrough(new CompressionStream('gzip'));
+	return {
+		body: await new Response(gz).blob(),
+		headers: { 'content-type': 'application/json', 'x-og-encoding': 'gzip' }
+	};
 }
 
-export async function report_request(base: string, id: string, as: 'html' | 'json' | 'dump' | 'ogp', ogpB64 = ''): Promise<Response> {
+export async function report_request(
+	base: string,
+	id: string,
+	as: 'html' | 'json' | 'dump' | 'ogp',
+	ogpB64 = ''
+): Promise<Response> {
 	const url = `${base}/report/${id}.${as}`;
 	const c = await carried(id, ogpB64);
-	return c ? fetch(url, { method: 'POST', headers: c.headers, body: c.body, credentials: 'same-origin' }) : fetch(url, { credentials: 'same-origin' });
+	return c
+		? fetch(url, { method: 'POST', headers: c.headers, body: c.body, credentials: 'same-origin' })
+		: fetch(url, { credentials: 'same-origin' });
 }

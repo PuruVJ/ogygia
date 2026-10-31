@@ -26,7 +26,12 @@
 
 	// LIVE STATUS — polled from the instance (`/status.json`): is a recording running, how many
 	// requests are in flight, memory, how many reports it holds. The rail's pulse.
-	let live = $state<{ recording: boolean; inflight: number; rss_mb: number; reports: number } | null>(null);
+	let live = $state<{
+		recording: boolean;
+		inflight: number;
+		rss_mb: number;
+		reports: number;
+	} | null>(null);
 	$effect(() => {
 		let alive = true;
 		const poll = async () => {
@@ -45,7 +50,13 @@
 		};
 	});
 
-	type Row = { id: string; label: string; page?: string; created: number; where: 'server' | 'local' };
+	type Row = {
+		id: string;
+		label: string;
+		page?: string;
+		created: number;
+		where: 'server' | 'local';
+	};
 	let local = $state<Row[]>([]);
 	$effect(() => {
 		list_reports()
@@ -53,15 +64,13 @@
 				rows
 					.sort((a, b) => b.at - a.at)
 					.slice(0, 12)
-					.map(
-						(r): Row => ({
-							id: r.id,
-							label: r.page ?? r.label ?? r.id,
-							page: r.page ?? undefined,
-							created: r.at,
-							where: 'local'
-						})
-					)
+					.map((r): Row => ({
+						id: r.id,
+						label: r.page ?? r.label ?? r.id,
+						page: r.page ?? undefined,
+						created: r.at,
+						where: 'local'
+					}))
 			)
 			.then((rows) => (local = rows))
 			.catch(() => (local = []));
@@ -94,7 +103,9 @@
 		{ href: `${base}/site`, label: 'Whole site', icon: '◈' },
 		{ href: `${base}/view`, label: 'Import .ogp', icon: '↥' }
 	];
-	const is_here = (href: string) => typeof window !== 'undefined' && window.location.pathname === new URL(href, window.location.origin).pathname;
+	const is_here = (href: string) =>
+		typeof window !== 'undefined' &&
+		window.location.pathname === new URL(href, window.location.origin).pathname;
 </script>
 
 <aside class="rail">
@@ -105,11 +116,16 @@
 
 	<nav>
 		{#each nav as n (n.href)}
-			<a href={n.href} class="navi" class:on={is_here(n.href)}><span class="ni">{n.icon}</span>{n.label}</a>
+			<a href={n.href} class="navi" class:on={is_here(n.href)}
+				><span class="ni">{n.icon}</span>{n.label}</a
+			>
 		{/each}
 	</nav>
 
-	<div class="status" title={live ? `${live.inflight} in flight · ${live.rss_mb} MB · ${live.reports} in memory` : ''}>
+	<div
+		class="status"
+		title={live ? `${live.inflight} in flight · ${live.rss_mb} MB · ${live.reports} in memory` : ''}
+	>
 		<span class="dot" class:run={live?.recording}></span>
 		{#if live?.recording}
 			recording…
@@ -128,13 +144,18 @@
 					<li>
 						<a href="{base}/report/{r.id}" class:cur={r.id === current}>
 							<span class="rl">{r.label}</span>
-							<span class="rm">{ago(r.created)}{#if r.where === 'server'} · shared{/if}</span>
+							<span class="rm"
+								>{ago(r.created)}{#if r.where === 'server'}
+									· shared{/if}</span
+							>
 						</a>
 					</li>
 				{/each}
 			</ul>
 		{:else}
-			<p class="empty">None kept in this browser yet. On a report, hit <b>Keep</b> to pin it here.</p>
+			<p class="empty">
+				None kept in this browser yet. On a report, hit <b>Keep</b> to pin it here.
+			</p>
 		{/if}
 	</div>
 

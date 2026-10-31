@@ -42,7 +42,8 @@ const JS_STRING_ESCAPES: Record<string, string> = {
 	'\u2029': '\\u2029'
 };
 
-const quote = (s: string) => "'" + s.replace(JS_STRING_ESCAPE_RE, (c) => JS_STRING_ESCAPES[c]) + "'";
+const quote = (s: string) =>
+	"'" + s.replace(JS_STRING_ESCAPE_RE, (c) => JS_STRING_ESCAPES[c]) + "'";
 
 /** Rewrite one module's import declarations. `offset` maps positions when `code` is a slice of a
  *  bigger file (a Svelte `<script>` block): edits are applied to `ms` at `offset + pos`. `id`
@@ -68,7 +69,10 @@ export async function rewrite_imports(
 
 		// Group by leaf MODULE: one import line per leaf, each specifier keeping its own leaf name
 		// (`{ a, b as bee }` from one file → `import { a, b as bee }`).
-		const by_leaf = new Map<string, { id: string; namespace: boolean; items: { spec: ImportSpec; leaf: Leaf }[] }>();
+		const by_leaf = new Map<
+			string,
+			{ id: string; namespace: boolean; items: { spec: ImportSpec; leaf: Leaf }[] }
+		>();
 		const stays: ImportSpec[] = [];
 		for (const spec of decl.specs) {
 			const entry = map.entries.get(spec.imported);
@@ -93,7 +97,8 @@ export async function rewrite_imports(
 			for (const s of specs) moved.push(s.imported);
 			const attrs = decl.attributes;
 			if (group.namespace) {
-				for (const s of specs) lines.push(`import * as ${s.local} from ${quote(group.id)}${attrs};`);
+				for (const s of specs)
+					lines.push(`import * as ${s.local} from ${quote(group.id)}${attrs};`);
 				continue;
 			}
 			const type_all = decl.type_only || specs.every((s) => s.type_only);
@@ -137,10 +142,13 @@ export async function rewrite_imports(
 					(s) =>
 						`${!decl.type_only && s.type_only ? 'type ' : ''}${s.imported === s.local ? s.imported : `${s.imported} as ${s.local}`}`
 				);
-			const parts = [def ? def.local : null, named.length ? `{ ${named.join(', ')} }` : null].filter(
-				Boolean
+			const parts = [
+				def ? def.local : null,
+				named.length ? `{ ${named.join(', ')} }` : null
+			].filter(Boolean);
+			lines.push(
+				`import ${type_kw}${parts.join(', ')} from ${quote(decl.source)}${decl.attributes};`
 			);
-			lines.push(`import ${type_kw}${parts.join(', ')} from ${quote(decl.source)}${decl.attributes};`);
 		} else if (!map.pure) {
 			lines.push(`import ${quote(decl.source)}${decl.attributes};`);
 		}

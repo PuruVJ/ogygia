@@ -49,9 +49,14 @@ test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Ki
 		check('/head-budget-kit returns 200', res.status === 200);
 		check('csr=true: Kit bootstrap present', KIT_MARKER_RE.test(html));
 		check('csr=true: NO ogygia runtime script', !RUNTIME_SCRIPT_RE.test(html));
-		check('csr=true: NO <ogygia-region> in the SSR (islands render inline)', !REGION_TAG_RE.test(html));
+		check(
+			'csr=true: NO <ogygia-region> in the SSR (islands render inline)',
+			!REGION_TAG_RE.test(html)
+		);
 		const sheets = (html.match(STYLESHEET_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
-		const preloads = (html.match(MODULEPRELOAD_LINK_G) ?? []).map((t) => t.match(HREF_RE)?.[1] ?? '');
+		const preloads = (html.match(MODULEPRELOAD_LINK_G) ?? []).map(
+			(t) => t.match(HREF_RE)?.[1] ?? ''
+		);
 		check(
 			`stylesheet links within budget (${sheets.length} ≤ ${MAX_STYLESHEETS})`,
 			sheets.length <= MAX_STYLESHEETS,
@@ -74,12 +79,28 @@ test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Ki
 		for (const tok of RENDERED)
 			check(`rendered island CSS is linked (${tok})`, has(tok), `sheets: ${sheets.join(', ')}`);
 		for (const tok of UNRENDERED)
-			check(`unrendered mark CSS is NOT linked (${tok})`, !has(tok), `sheets: ${sheets.join(', ')}`);
-		check('no stylesheet href linked twice', new Set(sheets).size === sheets.length, sheets.join('\n'));
+			check(
+				`unrendered mark CSS is NOT linked (${tok})`,
+				!has(tok),
+				`sheets: ${sheets.join(', ')}`
+			);
+		check(
+			'no stylesheet href linked twice',
+			new Set(sheets).size === sheets.length,
+			sheets.join('\n')
+		);
 		// One stamp: the registry block that rendered (BlockDirect is Kit's plain component here).
 		const stamps = [...html.matchAll(STAMP_G)].map((m) => m[1]);
-		check(`exactly one rendered stamp (block a), got ${stamps.length}`, stamps.length === 1, stamps.join('\n'));
-		check('the stamp names the island entry', /og-region\.[0-9a-f]+\.js$/.test(stamps[0] ?? ''), stamps[0] ?? '');
+		check(
+			`exactly one rendered stamp (block a), got ${stamps.length}`,
+			stamps.length === 1,
+			stamps.join('\n')
+		);
+		check(
+			'the stamp names the island entry',
+			/og-region\.[0-9a-f]+\.js$/.test(stamps[0] ?? ''),
+			stamps[0] ?? ''
+		);
 	});
 
 	test('browser: Kit hydrates the rendered islands (styled, interactive); a client navigation loads block b on demand', async ({
@@ -98,13 +119,25 @@ test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Ki
 				.evaluate((el) => getComputedStyle(el).outlineColor)
 				.catch(() => '');
 		check('direct island styled', (await outline('[data-hb-direct]')) === 'rgb(9, 176, 84)');
-		check('chosen registry block a styled', (await outline('[data-hb-block="a"]')) === 'rgb(9, 176, 84)');
-		check('only block a rendered from the registry', (await page.locator('[data-hb-block]').count()) === 1);
+		check(
+			'chosen registry block a styled',
+			(await outline('[data-hb-block="a"]')) === 'rgb(9, 176, 84)'
+		);
+		check(
+			'only block a rendered from the registry',
+			(await page.locator('[data-hb-block]').count()) === 1
+		);
 		await page.locator('[data-hb-direct] button').click();
 		await page.locator('[data-hb-block="a"] button').click();
 		await sleep(150);
-		check('direct island hydrated by Kit (click counted)', (await page.locator('[data-hb-direct] button').innerText()).includes('n 1'));
-		check('block a hydrated by Kit (click counted)', (await page.locator('[data-hb-block="a"] button').innerText()).includes('n 1'));
+		check(
+			'direct island hydrated by Kit (click counted)',
+			(await page.locator('[data-hb-direct] button').innerText()).includes('n 1')
+		);
+		check(
+			'block a hydrated by Kit (click counted)',
+			(await page.locator('[data-hb-block="a"] button').innerText()).includes('n 1')
+		);
 		check(
 			'no <ogygia-region> in the live DOM',
 			(await page.locator('ogygia-region').count()) === 0
@@ -112,19 +145,38 @@ test.describe('HEAD BUDGET (csr=true): a Kit page links only what it renders, Ki
 		// ── Kit client-side navigation: block b was never rendered by the server ──
 		await page.locator('[data-to-b]').click();
 		await page.waitForSelector('[data-hb-block="b"] button', { timeout: 8000 }).catch(() => {});
-		check('after client navigation: block b rendered (loaded on demand)', (await page.locator('[data-hb-block="b"]').count()) === 1);
+		check(
+			'after client navigation: block b rendered (loaded on demand)',
+			(await page.locator('[data-hb-block="b"]').count()) === 1
+		);
 		check('block b styled', (await outline('[data-hb-block="b"]')) === 'rgb(9, 176, 84)');
 		await page.locator('[data-hb-block="b"] button').click();
 		await sleep(150);
-		check('block b interactive', (await page.locator('[data-hb-block="b"] button').innerText()).includes('n 1'));
-		check('document still a Kit page (no full reload markers lost)', (await page.evaluate(() => location.pathname)) === '/head-budget-kit/b');
+		check(
+			'block b interactive',
+			(await page.locator('[data-hb-block="b"] button').innerText()).includes('n 1')
+		);
+		check(
+			'document still a Kit page (no full reload markers lost)',
+			(await page.evaluate(() => location.pathname)) === '/head-budget-kit/b'
+		);
 		// ── and back ──
 		await page.locator('[data-to-a]').click();
 		await page.waitForSelector('[data-hb-block="a"] button', { timeout: 8000 }).catch(() => {});
-		check('back: block a rendered again', (await page.locator('[data-hb-block="a"]').count()) === 1);
+		check(
+			'back: block a rendered again',
+			(await page.locator('[data-hb-block="a"]').count()) === 1
+		);
 		await page.locator('[data-hb-block="a"] button').click();
 		await sleep(150);
-		check('back: block a interactive', (await page.locator('[data-hb-block="a"] button').innerText()).includes('n 1'));
-		check('no page errors / hydration mismatches', errors.length === 0, errors.slice(0, 3).join(' | '));
+		check(
+			'back: block a interactive',
+			(await page.locator('[data-hb-block="a"] button').innerText()).includes('n 1')
+		);
+		check(
+			'no page errors / hydration mismatches',
+			errors.length === 0,
+			errors.slice(0, 3).join(' | ')
+		);
 	});
 });

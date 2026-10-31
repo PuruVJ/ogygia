@@ -183,9 +183,14 @@ export function report_seed_shaping(
 			}
 		}
 		const rows = [...blamed].slice(0, 8);
-		for (const [file, r] of rows) lines.push(`  ${rel(file)}${r.line === null ? '' : ':' + r.line} — ${r.why}`);
-		if (blamed.size > rows.length) lines.push(`  … and ${blamed.size - rows.length} more module${blamed.size - rows.length === 1 ? '' : 's'}`);
-		if (!blamed.size) lines.push(`  (read through code the build never saw — a dependency, or a foreign fragment)`);
+		for (const [file, r] of rows)
+			lines.push(`  ${rel(file)}${r.line === null ? '' : ':' + r.line} — ${r.why}`);
+		if (blamed.size > rows.length)
+			lines.push(
+				`  … and ${blamed.size - rows.length} more module${blamed.size - rows.length === 1 ? '' : 's'}`
+			);
+		if (!blamed.size)
+			lines.push(`  (read through code the build never saw — a dependency, or a foreign fragment)`);
 	}
 	console.log(lines.join('\n'));
 	return why_of;

@@ -59,13 +59,33 @@ export function hole_slots(ring: readonly RequestEntry[]): HoleSlots | null {
 			// (a row folds its copies: several copies are several props)
 			if (h.props) set.add(h.count > 1 ? `${h.props}×${h.count}` : h.props);
 		}
-	const by = new Map<string, { requests: number; hits: number; failed: number; rendered: number; render: number; queue: number; queue_max: number; name?: string }>();
+	const by = new Map<
+		string,
+		{
+			requests: number;
+			hits: number;
+			failed: number;
+			rendered: number;
+			render: number;
+			queue: number;
+			queue_max: number;
+			name?: string;
+		}
+	>();
 	let queued = 0;
 	let queued_sum = 0;
 	for (const e of ring) {
 		const h = e.hole;
 		if (!h) continue;
-		const s = by.get(h.id) ?? { requests: 0, hits: 0, failed: 0, rendered: 0, render: 0, queue: 0, queue_max: 0 };
+		const s = by.get(h.id) ?? {
+			requests: 0,
+			hits: 0,
+			failed: 0,
+			rendered: 0,
+			render: 0,
+			queue: 0,
+			queue_max: 0
+		};
 		s.requests++;
 		s.name ??= h.name;
 		// a failed render (it threw, it timed out) is not a render time
@@ -92,15 +112,15 @@ export function hole_slots(ring: readonly RequestEntry[]): HoleSlots | null {
 			const copies = props.get(id);
 			const one = copies?.size === 1 ? [...copies][0] : undefined;
 			return {
-			id,
-			name: one && !one.includes('×') ? `${name} ${one}` : name,
-			requests: s.requests,
-			hits: s.hits,
-			failed: s.failed,
-			render_ms: s.rendered ? s.render / s.rendered : 0,
-			queue_ms: s.rendered ? s.queue / s.rendered : 0,
-			queue_max_ms: s.queue_max,
-			slot_share: s.render / slot_total
+				id,
+				name: one && !one.includes('×') ? `${name} ${one}` : name,
+				requests: s.requests,
+				hits: s.hits,
+				failed: s.failed,
+				render_ms: s.rendered ? s.render / s.rendered : 0,
+				queue_ms: s.rendered ? s.queue / s.rendered : 0,
+				queue_max_ms: s.queue_max,
+				slot_share: s.render / slot_total
 			};
 		})
 		.sort((a, b) => b.slot_share - a.slot_share);

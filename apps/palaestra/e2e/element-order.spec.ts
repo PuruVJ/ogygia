@@ -6,7 +6,9 @@
 // Usage: pnpm exec playwright test element-order
 import { expect, test } from '@playwright/test';
 
-test('the answer’s full panel replaces the fallback’s empty one: one panel, all rows', async ({ page }) => {
+test('the answer’s full panel replaces the fallback’s empty one: one panel, all rows', async ({
+	page
+}) => {
 	await page.goto('/element-order');
 	await expect(page.locator('#eo-row-3')).toBeAttached({ timeout: 10_000 });
 	await page.waitForTimeout(200);

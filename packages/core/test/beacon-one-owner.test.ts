@@ -10,7 +10,8 @@ const g = globalThis as Record<string, unknown>;
 beforeEach(() => {
 	vi.useFakeTimers();
 	g.document = {
-		querySelector: (s: string) => (s.includes('ogygia-profiler-beacon') ? { getAttribute: () => '/__profiler/beacon' } : null),
+		querySelector: (s: string) =>
+			s.includes('ogygia-profiler-beacon') ? { getAttribute: () => '/__profiler/beacon' } : null,
 		querySelectorAll: () => [],
 		addEventListener: () => {},
 		visibilityState: 'visible',
@@ -38,7 +39,11 @@ test('the second copy hands its marks and hydrations to the first', async () => 
 	expect(b._beacon_state().marks).toBe(0);
 	expect(b._beacon_state().scheduled).toBe(false); // never watched the page itself
 
-	const el = { getAttribute: (n: string) => (n === 'data-og-fp' ? 'fp1' : n === 'entry' ? 'x.js' : null), hasAttribute: () => false, innerHTML: '' };
+	const el = {
+		getAttribute: (n: string) => (n === 'data-og-fp' ? 'fp1' : n === 'entry' ? 'x.js' : null),
+		hasAttribute: () => false,
+		innerHTML: ''
+	};
 	b.beacon_hydrated(el as unknown as Element, 0, 1, 2);
 	expect(a._beacon_state().queued).toBe(1);
 	expect(b.beacon_page()?.islands.map((i) => i.fp)).toEqual(['fp1']); // read through the owner too

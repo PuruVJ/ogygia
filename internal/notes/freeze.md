@@ -5,13 +5,13 @@
 > publish thaws it. The word already lived in the docs ("the shell freezes", "a frozen shell")
 > before it became the API, and `Object.freeze` hands every JS dev the mental model: immutable
 > until replaced. Kit-grammar fit: `export const freeze = true` beside `prerender`/`ssr`/`csr`.
-> Rejection trail, for the record: *materialize* (confusing noun), *edition/shelf/pin/once* (too
-> non-technical), *derived/projection* (don't describe the mechanism), *render\** (「render」implies
-> client rendering), *snapshot* (Kit page export collision), *cache* (too common, wrong mental
-> model), *artifacts* (a build-output word for a runtime thing — shipped, then reopened),
-> *published* (a CMS-workflow word in the user's field), *isr* (Vercel's; its default flavor is
-> timer SWR, and it hides the two tiers + stitching), *memo* (reads component-level, React.memo),
-> *ssr = 'once'* (overloads a Kit option — vetoed on principle: never overload an existing concept).
+> Rejection trail, for the record: _materialize_ (confusing noun), _edition/shelf/pin/once_ (too
+> non-technical), _derived/projection_ (don't describe the mechanism), _render\*_ (「render」implies
+> client rendering), _snapshot_ (Kit page export collision), _cache_ (too common, wrong mental
+> model), _artifacts_ (a build-output word for a runtime thing — shipped, then reopened),
+> _published_ (a CMS-workflow word in the user's field), _isr_ (Vercel's; its default flavor is
+> timer SWR, and it hides the two tiers + stitching), _memo_ (reads component-level, React.memo),
+> _ssr = 'once'_ (overloads a Kit option — vetoed on principle: never overload an existing concept).
 > The identifier is the verb, like `prerender`; prose says **frozen pages**.
 
 > STATUS: design, not built. Grounded against se-web-platform (bcms) — see §Grounding.
@@ -70,11 +70,11 @@ freeze.configure({ store: valkey(client), edge: [akamai(creds), cloudfront(cfg)]
 
 ## Storage tiers (compose downward, same keys + tags throughout)
 
-| Tier | Where | When |
-| --- | --- | --- |
-| 1 (default) | in-process bounded LRU + optional disk (`.ogygia/freeze/`) | single-instance adapter-node; zero infra |
-| 2 | pluggable KV `{ get, put(key, html, tags), evictByTag }` | replicas / serverless (shared store solves storage AND cross-instance invalidation) |
-| 3 | the CDN itself: `Cache-Tag` headers from recorded deps + a purge-by-tag adapter | zero origin CPU *and* traffic; per-host purge adapters (least drop-in) |
+| Tier        | Where                                                                           | When                                                                                |
+| ----------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| 1 (default) | in-process bounded LRU + optional disk (`.ogygia/freeze/`)                      | single-instance adapter-node; zero infra                                            |
+| 2           | pluggable KV `{ get, put(key, html, tags), evictByTag }`                        | replicas / serverless (shared store solves storage AND cross-instance invalidation) |
+| 3           | the CDN itself: `Cache-Tag` headers from recorded deps + a purge-by-tag adapter | zero origin CPU _and_ traffic; per-host purge adapters (least drop-in)              |
 
 **Tier 3 in the v1-no-sources world**: purge Akamai BY URL (Fast Purge; the publish payload
 names the urlPath) and CloudFront by path — tags are NOT needed for page publishes. ONE built-in
@@ -107,15 +107,16 @@ Dependency index: inverted `tag → keys` in the same store (native on tier 3).
 — hardcoding it made the contract weaker than what it derives from; `{ prefix: '/fr/fr/' }` IS
 the locale nuke, `{ prefix: '/docs' }` a section nuke, and header/domain-locale apps lose
 nothing the URL-derived locale ever gave them):
+
 - `FreezeStore { get(key), put(key, Entry, {ttl}), evict(url), evictWhere({prefix}) }`
   with `Entry = page{html,headers} | redirect{status,location}`; keys ARE pathnames, so prefix
   eviction is a native scan — valkey = `SCAN MATCH og:a:<prefix>*` (NO index set needed) + EX
   TTL backstop; memory = startsWith sweep.
 - `EdgeAdapter { headers(meta) — the edge's storage instructions (akamai stamps depth-capped
-  PREFIX tags `p:/fr, p:/fr/fr, p:/fr/fr/x` since Fast Purge can't take an arbitrary prefix —
+  PREFIX tags `p:/fr, p:/fr/fr, p:/fr/fr/x`since Fast Purge can't take an arbitrary prefix —
   depth cap 3, deeper purges fall back to origin evict + edge TTL; cloudfront returns {}),
   purgeUrl(url) (Akamai Fast Purge /ccu/v3/invalidate/url; CloudFront CreateInvalidation by
-  pathname), purgeWhere({prefix}) (Akamai tag purge `p:<prefix>`; CloudFront `<prefix>/*`
+  pathname), purgeWhere({prefix}) (Akamai tag purge`p:<prefix>`; CloudFront `<prefix>/*`
   wildcard) }`.
 
 **SHIPPED adapter roster** (all BYO clients/creds, zero new deps; every request/auth shape
@@ -134,6 +135,7 @@ cookied visitors included (exactly what a cookie-less CDN key does today, bcms's
 design). Cookied-FIRST traffic on a cold URL never stores (non-default read → per-request);
 the first anonymous render mints the canonical. A page that must truly vary per cookie keeps
 the personalization in a `render:'deferred'` hole.
+
 - Fan-out lives in ogygia, not adapters: `invalidate(url)` = store.evict + allSettled purgeUrl
   across edges (one edge down ≠ request down); serve path merges every edge's `headers(meta)`
   onto the response AND into the stored entry.
@@ -183,6 +185,7 @@ the self-freshening option inside the 7-day-cached pages until tag-purge lands.
 **Loads / purity census (route families → verdicts).** No load in the tree calls `setHeaders`;
 none stream (explicit "do not stream" comment); ONE form action exists in the whole app
 (preference-center) — mutations live in BFF `+server` endpoints and external CMS publishes.
+
 - **Store cleanly, keyed (urlPath, locale) + Builder content id**: the `[...catchall]`
   landing pages (the primary CMS renderer), FAQ, se_brand, Wiztopic newsroom, partner-channel,
   insights v1+v2 (v2 already Redis-memoizes its model resolution), techcomm (which ALREADY has
@@ -242,6 +245,7 @@ stored render's own snapshot — consistent by construction.
 ## RESTRUCTURE (user, 2026-09-01: "why source at all if the page is cached whole?") — v1 needs NO sources
 
 The store's key IS the URL, and a Builder publish payload CARRIES its urlPath — so:
+
 - **v1, zero markers**: `invalidate('/fr/fr/<urlPath>/')` for one-doc-one-URL publishes (the
   primary case: landing/insights/faq/se_brand); `invalidateWhere({ prefix: '/fr/fr/' })` coarse
   subtree nuke for shared content (header/footer — rare publishes, lazy re-render); a TTL
@@ -393,6 +397,7 @@ counters, store contents, purge logs):
   reach precisely — and a non-consumer bystander's freeze survives
 
 **The finish-well batch (user-ordered, everything-but-stitching, 2026-09-01):**
+
 - **DEV never serves/fills the store** — an edited page must always re-render (HMR truth beats
   byte reuse). The verdict still runs and TEACHES: eligible pages carry
   `x-ogygia-freeze: would-store`; refusals print ONE named console note per path. Locked by

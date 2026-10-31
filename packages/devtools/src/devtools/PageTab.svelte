@@ -48,18 +48,26 @@
 	const nav_key = $derived(view?.nav?.t ?? 0);
 	$effect(() => {
 		nav_key;
-		const id = setTimeout(() => {
-			check_styles();
-			check_cache();
-		}, nav_key ? 400 : 60);
+		const id = setTimeout(
+			() => {
+				check_styles();
+				check_cache();
+			},
+			nav_key ? 400 : 60
+		);
 		return () => clearTimeout(id);
 	});
 	const findings = $derived.by(() => {
 		if (!view) return [];
-		const extra = [...(styles ? styles_findings(styles) : []), ...(cache ? cache_findings(cache) : [])].map((f) => ({ ...f, fps: /** @type {string[]} */ ([]) }));
+		const extra = [
+			...(styles ? styles_findings(styles) : []),
+			...(cache ? cache_findings(cache) : [])
+		].map((f) => ({ ...f, fps: /** @type {string[]} */ ([]) }));
 		// errors, then warnings, then notes: the report's own order (a stable sort keeps the rest)
 		const order = /** @type {Record<string, number>} */ ({ error: 0, warn: 1, info: 2 });
-		return [...view.report.findings, ...extra].sort((a, b) => order[a.severity] - order[b.severity]);
+		return [...view.report.findings, ...extra].sort(
+			(a, b) => order[a.severity] - order[b.severity]
+		);
 	});
 
 	let wrapW = $state(560);
@@ -101,8 +109,14 @@
 	const hole_segs = hole_segments;
 	const SEG_TITLE = HOLE_SEG_LABEL;
 
-	const kb = (/** @type {number} */ n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB');
-	const ms = (/** @type {number} */ n) => (n >= 1000 ? (n / 1000).toFixed(2) + ' s' : Math.round(n) + ' ms');
+	const kb = (/** @type {number} */ n) =>
+		n < 1024
+			? n + ' B'
+			: n < 1048576
+				? (n / 1024).toFixed(1) + ' KB'
+				: (n / 1048576).toFixed(2) + ' MB';
+	const ms = (/** @type {number} */ n) =>
+		n >= 1000 ? (n / 1000).toFixed(2) + ' s' : Math.round(n) + ' ms';
 
 	function el_of(/** @type {string} */ fp) {
 		return document.querySelector(`ogygia-region[data-og-fp="${fp}"]`);
@@ -116,7 +130,9 @@
 	}
 	// a hole has no fingerprint: its endpoint finds it
 	function hole_el(/** @type {string | undefined} */ endpoint) {
-		return endpoint ? document.querySelector(`ogygia-region[endpoint="${CSS.escape(endpoint)}"]`) : null;
+		return endpoint
+			? document.querySelector(`ogygia-region[endpoint="${CSS.escape(endpoint)}"]`)
+			: null;
 	}
 	function vital_text(v) {
 		return v.key === 'cls' ? String(v.value) : ms(v.value);
@@ -131,7 +147,12 @@
 			if (!ssr) return null;
 			const net = get('net');
 			const ups = ['up1', 'up2', 'up3'].map(get).filter(Boolean);
-			return { ssr: ssr.duration, net: net?.duration ?? null, calls: net?.description ?? '', ups: ups.map((u) => ({ desc: u.description, ms: u.duration })) };
+			return {
+				ssr: ssr.duration,
+				net: net?.duration ?? null,
+				calls: net?.description ?? '',
+				ups: ups.map((u) => ({ desc: u.description, ms: u.duration }))
+			};
 		} catch {
 			return null;
 		}
@@ -144,7 +165,8 @@
 		const out = [];
 		for (const key of ['ttfb', 'fcp', 'lcp', 'cls', 'inp']) {
 			const v = view.page.vitals[key];
-			if (typeof v === 'number') out.push({ key, label: LABEL[key], value: v, rating: rate(key, v) });
+			if (typeof v === 'number')
+				out.push({ key, label: LABEL[key], value: v, rating: rate(key, v) });
 		}
 		return out;
 	});
@@ -167,7 +189,15 @@
 			recording = false;
 		}
 	}
-	const KIND_COLOR = { app: '#22c55e', ogygia: '#14b8a6', svelte: '#f97316', dependency: '#a78bfa', 'page script': '#f472b6', browser: '#64748b', devtools: '#334155' };
+	const KIND_COLOR = {
+		app: '#22c55e',
+		ogygia: '#14b8a6',
+		svelte: '#f97316',
+		dependency: '#a78bfa',
+		'page script': '#f472b6',
+		browser: '#64748b',
+		devtools: '#334155'
+	};
 	const diff = $derived.by(() => {
 		if (!view || !diff_fp) return null;
 		const s = view.page.snapshots.find((x) => x.fp === diff_fp);
@@ -178,11 +208,17 @@
 <div class="pg" bind:clientWidth={wrapW}>
 	{#if !view}
 		<p class="muted" data-og-page-unmeasured>
-			This page load was not measured: in a build, devtools measures only for a browser that opened it
-			before the page loaded (so other visitors pay nothing). <b>Reload</b> and it is measured from the start.
+			This page load was not measured: in a build, devtools measures only for a browser that opened
+			it before the page loaded (so other visitors pay nothing). <b>Reload</b> and it is measured from
+			the start.
 		</p>
 	{:else}
-		<div class="cap">page <span class="muted">· what the browser saw of this visit (dev server: modules load one by one, so load times run high)</span></div>
+		<div class="cap">
+			page <span class="muted"
+				>· what the browser saw of this visit (dev server: modules load one by one, so load times
+				run high)</span
+			>
+		</div>
 
 		{#if view.since && (view.since.fixed.length || view.since.added.length || view.since.moved.length || view.since.note)}
 			{@const s = view.since}
@@ -193,7 +229,14 @@
 				{#if s.added.length}<p class="bad">new: {s.added.join(' · ')}</p>{/if}
 				{#if s.moved.length}
 					<p>
-						{#each s.moved as m, i (m.what)}{i ? ' · ' : ''}<span class={m.better ? 'good' : 'bad'}>{m.what} {m.unit ? ms(m.a) : m.a} → {m.unit ? ms(m.b) : m.b}{#if m.part}<span class="muted" data-og-page-since-part>, mostly {m.part.label} {ms(m.part.a)} → {ms(m.part.b)}</span>{/if}</span>{/each}
+						{#each s.moved as m, i (m.what)}{i ? ' · ' : ''}<span class={m.better ? 'good' : 'bad'}
+								>{m.what}
+								{m.unit ? ms(m.a) : m.a} → {m.unit ? ms(m.b) : m.b}{#if m.part}<span
+										class="muted"
+										data-og-page-since-part
+										>, mostly {m.part.label} {ms(m.part.a)} → {ms(m.part.b)}</span
+									>{/if}</span
+							>{/each}
 					</p>
 				{/if}
 				{#if s.note}<p class="muted" data-og-page-since-note>{s.note}</p>{/if}
@@ -202,21 +245,29 @@
 
 		{#if view.unmeasured.length}
 			<p class="navnote" data-og-page-browser-limits>
-				This browser does not report {view.unmeasured.join(', ')}. Findings that need them cannot appear here, so their
-				absence is not a clean bill: check those in a Chromium browser.
+				This browser does not report {view.unmeasured.join(', ')}. Findings that need them cannot
+				appear here, so their absence is not a clean bill: check those in a Chromium browser.
 			</p>
 		{/if}
 
 		{#if view.nav}
 			<p class="navnote" data-og-page-nav>
-				Since the in-app navigation to <code>{view.nav.to}</code> ({ms(performance.now() - view.nav.t)} ago): the findings and
-				island rows below are this page's. The vitals are the first page's load (a navigation paints nothing the browser
-				reports); record the main thread again to see this page's.
+				Since the in-app navigation to <code>{view.nav.to}</code> ({ms(
+					performance.now() - view.nav.t
+				)} ago): the findings and island rows below are this page's. The vitals are the first page's load
+				(a navigation paints nothing the browser reports); record the main thread again to see this page's.
 			</p>
 		{/if}
 		<div class="vitals" data-og-vitals>
 			{#each doc_vitals as v (v.key)}
-				<div class="vital {v.rating}" title="{v.label}: {v.rating === 'good' ? 'good' : v.rating === 'fair' ? 'needs work' : 'poor'}">
+				<div
+					class="vital {v.rating}"
+					title="{v.label}: {v.rating === 'good'
+						? 'good'
+						: v.rating === 'fair'
+							? 'needs work'
+							: 'poor'}"
+				>
 					<span class="k">{v.label}</span><span class="v">{vital_text(v)}</span>
 				</div>
 			{:else}
@@ -231,7 +282,10 @@
 
 		{#if doc_server}
 			<p class="srvline" data-og-page-server>
-				The server rendered this page in <b>{ms(doc_server.ssr)}</b>{#if doc_server.net !== null}, {ms(doc_server.net)} of it waiting on {doc_server.calls.split('(')[1]?.split(')')[0] ?? 'its'} outbound calls{#if doc_server.ups.length} — the slowest {doc_server.ups.map((u) => `${u.desc} ${ms(u.ms)}`).join(', ')}{/if}{/if}.
+				The server rendered this page in <b>{ms(doc_server.ssr)}</b>{#if doc_server.net !== null}, {ms(
+						doc_server.net
+					)} of it waiting on {doc_server.calls.split('(')[1]?.split(')')[0] ?? 'its'} outbound calls{#if doc_server.ups.length}
+						— the slowest {doc_server.ups.map((u) => `${u.desc} ${ms(u.ms)}`).join(', ')}{/if}{/if}.
 			</p>
 		{/if}
 
@@ -250,10 +304,16 @@
 						{#if f.fps.length}
 							<p class="acts">
 								{#each f.fps.slice(0, 6) as fp (fp)}
-									<button class="chip" onclick={() => open(fp)}>{view.regions.find((r) => r.fp === fp)?.name ?? fp.slice(0, 8)}</button>
+									<button class="chip" onclick={() => open(fp)}
+										>{view.regions.find((r) => r.fp === fp)?.name ?? fp.slice(0, 8)}</button
+									>
 								{/each}
 								{#if f.code === 'markup-changed'}
-									<button class="chip alt" onclick={() => (diff_fp = diff_fp === f.fps[0] ? null : f.fps[0])}>{diff_fp ? 'hide' : 'show'} difference</button>
+									<button
+										class="chip alt"
+										onclick={() => (diff_fp = diff_fp === f.fps[0] ? null : f.fps[0])}
+										>{diff_fp ? 'hide' : 'show'} difference</button
+									>
 								{/if}
 							</p>
 						{/if}
@@ -272,13 +332,22 @@
 
 		<!-- (a page with no islands — a Kit-hydrated one — has no wakes to show: no empty heading) -->
 		{#if view.report.rows.length || view.kept?.length || view.regions.some((r) => r.kind === 'island')}
-			<h3>Island wakes <span class="muted">{view.report.rows.length}{view.kept?.length ? ` · ${view.kept.length} kept` : ''}</span></h3>
+			<h3>
+				Island wakes <span class="muted"
+					>{view.report.rows.length}{view.kept?.length ? ` · ${view.kept.length} kept` : ''}</span
+				>
+			</h3>
 		{/if}
 		{#if view.kept?.length}
 			<!-- the router reused them: the same island with the same props on both pages -->
 			<p class="kept" data-og-page-kept>
 				Kept from the page before, still awake (no code to load, no hydrate):
-				{#each view.kept.slice(0, 12) as k, i (k.fp)}{i ? ', ' : ''}<button class="chip" onclick={() => open(k.fp)} onmouseenter={() => light([k.fp])} onmouseleave={() => (focus = null)}>{k.name}</button>{/each}{view.kept.length > 12 ? ` and ${view.kept.length - 12} more` : ''}.
+				{#each view.kept.slice(0, 12) as k, i (k.fp)}{i ? ', ' : ''}<button
+						class="chip"
+						onclick={() => open(k.fp)}
+						onmouseenter={() => light([k.fp])}
+						onmouseleave={() => (focus = null)}>{k.name}</button
+					>{/each}{view.kept.length > 12 ? ` and ${view.kept.length - 12} more` : ''}.
 			</p>
 		{/if}
 		{#if axis && view.report.rows.length}
@@ -286,7 +355,9 @@
 				<span><i class="sw load"></i>module</span>
 				<span><i class="sw queue"></i>waiting for its turn</span>
 				<span><i class="sw hyd"></i>hydrate</span>
-				{#each axis.lines as l (l.k)}<span><i class="ln" style:background={l.c}></i>{l.k} {ms(l.t)}</span>{/each}
+				{#each axis.lines as l (l.k)}<span
+						><i class="ln" style:background={l.c}></i>{l.k} {ms(l.t)}</span
+					>{/each}
 			</div>
 			<div class="wf">
 				{#each view.report.rows as r (r.fp)}
@@ -301,22 +372,54 @@
 						onclick={() => open(r.fp)}
 						onkeydown={(e) => e.key === 'Enter' && open(r.fp)}
 					>
-						<span class="name" style:width="{LABEL_W}px" title={r.name}>{r.name}<span class="wake">{r.wake}</span></span>
+						<span class="name" style:width="{LABEL_W}px" title={r.name}
+							>{r.name}<span class="wake">{r.wake}</span></span
+						>
 						<span class="track" style:width="{trackW}px">
-							{#each axis.lines as l (l.k)}<i class="ln abs" style:left="{axis.x(l.t)}px" style:background={l.c}></i>{/each}
-							<i class="seg load" style:left="{axis.x(r.t0)}px" style:width="{Math.max(1, axis.x(r.t0 + r.load_ms) - axis.x(r.t0))}px"></i>
-							{#if r.queue_ms !== null}<i class="seg queue" style:left="{axis.x(r.t0 + r.load_ms)}px" style:width="{Math.max(0, axis.x(lo) - axis.x(r.t0 + r.load_ms))}px"></i>{/if}
-							<i class="seg hyd" style:left="{axis.x(lo)}px" style:width="{Math.max(2, axis.x(r.done) - axis.x(lo))}px"></i>
+							{#each axis.lines as l (l.k)}<i
+									class="ln abs"
+									style:left="{axis.x(l.t)}px"
+									style:background={l.c}
+								></i>{/each}
+							<i
+								class="seg load"
+								style:left="{axis.x(r.t0)}px"
+								style:width="{Math.max(1, axis.x(r.t0 + r.load_ms) - axis.x(r.t0))}px"
+							></i>
+							{#if r.queue_ms !== null}<i
+									class="seg queue"
+									style:left="{axis.x(r.t0 + r.load_ms)}px"
+									style:width="{Math.max(0, axis.x(lo) - axis.x(r.t0 + r.load_ms))}px"
+								></i>{/if}
+							<i
+								class="seg hyd"
+								style:left="{axis.x(lo)}px"
+								style:width="{Math.max(2, axis.x(r.done) - axis.x(lo))}px"
+							></i>
 						</span>
-						<span class="t" title="module {r.load_ms} ms{r.queue_ms !== null ? ` · waited ${r.queue_ms} ms` : ''} · hydrate {r.hydrate_ms} ms">{ms(r.done)}</span>
+						<span
+							class="t"
+							title="module {r.load_ms} ms{r.queue_ms !== null
+								? ` · waited ${r.queue_ms} ms`
+								: ''} · hydrate {r.hydrate_ms} ms">{ms(r.done)}</span
+						>
 						<span class="tags">
 							{#if r.recovered}<b class="tag err">recovered</b>{/if}
 							{#if r.changed && !r.recovered}<b class="tag warn">markup changed</b>{/if}
-							{#if r.early_ms !== null}<b class="tag warn">clicked {Math.round(r.early_ms)} ms early</b>{/if}
+							{#if r.early_ms !== null}<b class="tag warn"
+									>clicked {Math.round(r.early_ms)} ms early</b
+								>{/if}
 							{#if r.shift >= 0.01}<b class="tag warn">CLS {r.shift}</b>{/if}
-							{#if r.hydrate_ms >= 50}<b class="tag warn">{Math.round(r.hydrate_ms)} ms task</b>{/if}
-							{#if r.cpu_ms && r.cpu_ms >= 20}<b class="tag info" title="main-thread CPU sampled in its hydrate window">{Math.round(r.cpu_ms)} ms CPU</b>{/if}
-							{#if r.below_fold && (r.wake === 'load' || r.wake === 'idle')}<b class="tag info">below the fold</b>{/if}
+							{#if r.hydrate_ms >= 50}<b class="tag warn">{Math.round(r.hydrate_ms)} ms task</b
+								>{/if}
+							{#if r.cpu_ms && r.cpu_ms >= 20}<b
+									class="tag info"
+									title="main-thread CPU sampled in its hydrate window"
+									>{Math.round(r.cpu_ms)} ms CPU</b
+								>{/if}
+							{#if r.below_fold && (r.wake === 'load' || r.wake === 'idle')}<b class="tag info"
+									>below the fold</b
+								>{/if}
 						</span>
 					</div>
 				{/each}
@@ -327,7 +430,13 @@
 
 		{#if axis && (view.holes?.length || view.holes_failed?.length)}
 			<!-- each hole's first answer: how long its fallback stood, and where that time went -->
-			<h3>Hole answers <span class="muted">{view.holes?.length ?? 0}{view.holes_failed?.length ? ` · ${view.holes_failed.length} never came` : ''}</span></h3>
+			<h3>
+				Hole answers <span class="muted"
+					>{view.holes?.length ?? 0}{view.holes_failed?.length
+						? ` · ${view.holes_failed.length} never came`
+						: ''}</span
+				>
+			</h3>
 			<div class="legend">
 				<span><i class="sw h-before"></i>before its request left</span>
 				<span><i class="sw h-slot"></i>render slot</span>
@@ -349,9 +458,21 @@
 						onkeydown={(e) => e.key === 'Enter' && (selected = hole_el(f.endpoint) ?? selected)}
 					>
 						<span class="name" style:width="{LABEL_W}px" title={f.name}>{f.name}</span>
-						<span class="track" style:width="{trackW}px"><i class="seg h-failed" style:left="0px" style:width="{trackW}px"></i></span>
+						<span class="track" style:width="{trackW}px"
+							><i class="seg h-failed" style:left="0px" style:width="{trackW}px"></i></span
+						>
 						<span class="t">none</span>
-						<span class="tags"><b class="tag err">{f.reason === 'error' ? `failed ${f.attempts}×${f.message ? ` (${f.message})` : ''}` : f.reason === 'forbidden' ? `refused${f.message ? ` (${f.message})` : ''}` : f.reason === 'redirected' ? 'redirected' : 'answered with a page'}</b></span>
+						<span class="tags"
+							><b class="tag err"
+								>{f.reason === 'error'
+									? `failed ${f.attempts}×${f.message ? ` (${f.message})` : ''}`
+									: f.reason === 'forbidden'
+										? `refused${f.message ? ` (${f.message})` : ''}`
+										: f.reason === 'redirected'
+											? 'redirected'
+											: 'answered with a page'}</b
+							></span
+						>
 					</div>
 				{/each}
 				{#each view.holes ?? [] as h, i (h.endpoint ?? i)}
@@ -368,12 +489,27 @@
 					>
 						<span class="name" style:width="{LABEL_W}px" title={h.name}>{h.name}</span>
 						<span class="track" style:width="{trackW}px">
-							{#each axis.lines as l (l.k)}<i class="ln abs" style:left="{axis.x(l.t)}px" style:background={l.c}></i>{/each}
-							{#each segs as s (s.k)}<i class="seg h-{s.k}" title="{SEG_TITLE[s.k]}: {ms(s.b - s.a)}" style:left="{axis.x(s.a)}px" style:width="{Math.max(1, axis.x(s.b) - axis.x(s.a))}px"></i>{/each}
+							{#each axis.lines as l (l.k)}<i
+									class="ln abs"
+									style:left="{axis.x(l.t)}px"
+									style:background={l.c}
+								></i>{/each}
+							{#each segs as s (s.k)}<i
+									class="seg h-{s.k}"
+									title="{SEG_TITLE[s.k]}: {ms(s.b - s.a)}"
+									style:left="{axis.x(s.a)}px"
+									style:width="{Math.max(1, axis.x(s.b) - axis.x(s.a))}px"
+								></i>{/each}
 						</span>
-						<span class="t" title="its fallback stood this long{h.below_fold ? ' (below the first screen)' : ''}">{ms(h.wait_ms)}</span>
+						<span
+							class="t"
+							title="its fallback stood this long{h.below_fold ? ' (below the first screen)' : ''}"
+							>{ms(h.wait_ms)}</span
+						>
 						<span class="tags">
-							{#if h.server_queue_ms && h.server_queue_ms >= 200}<b class="tag warn">{ms(h.server_queue_ms)} for a slot</b>{/if}
+							{#if h.server_queue_ms && h.server_queue_ms >= 200}<b class="tag warn"
+									>{ms(h.server_queue_ms)} for a slot</b
+								>{/if}
 							{#if h.below_fold}<b class="tag info">below the fold</b>{/if}
 						</span>
 					</div>
@@ -381,7 +517,11 @@
 			</div>
 		{/if}
 
-		<h3>Main thread <span class="muted">{cpu ? `${ms(cpu.busy_ms)} busy in ${ms(cpu.window_ms)}` : ''}</span></h3>
+		<h3>
+			Main thread <span class="muted"
+				>{cpu ? `${ms(cpu.busy_ms)} busy in ${ms(cpu.window_ms)}` : ''}</span
+			>
+		</h3>
 		<div class="cpu" data-og-cpu>
 			<div class="cpu-bar">
 				{#if traces.length > 1}
@@ -391,7 +531,14 @@
 				{:else if traces.length}
 					<span class="muted">{traces[0].label}</span>
 				{/if}
-				<button class="chip alt" data-og-cpu-record disabled={recording || view.page.cpu.off === 'unsupported' || view.page.cpu.off === 'no-policy'} onclick={record}>
+				<button
+					class="chip alt"
+					data-og-cpu-record
+					disabled={recording ||
+						view.page.cpu.off === 'unsupported' ||
+						view.page.cpu.off === 'no-policy'}
+					onclick={record}
+				>
 					{recording ? 'recording 5 s… use the page now' : 'record 5 s'}
 				</button>
 			</div>
@@ -408,26 +555,46 @@
 			{:else if cpu}
 				<div class="kinds" title="where the busy time went">
 					{#each cpu.by_kind as k (k.kind)}
-						<i style:width="{(k.ms / Math.max(1, cpu.busy_ms)) * 100}%" style:background={KIND_COLOR[k.kind]} title="{k.kind} {ms(k.ms)}"></i>
+						<i
+							style:width="{(k.ms / Math.max(1, cpu.busy_ms)) * 100}%"
+							style:background={KIND_COLOR[k.kind]}
+							title="{k.kind} {ms(k.ms)}"
+						></i>
 					{/each}
 				</div>
 				<div class="legend">
-					{#each cpu.by_kind as k (k.kind)}<span><i class="sw" style:background={KIND_COLOR[k.kind]}></i>{k.kind} {ms(k.ms)}</span>{/each}
+					{#each cpu.by_kind as k (k.kind)}<span
+							><i class="sw" style:background={KIND_COLOR[k.kind]}></i>{k.kind} {ms(k.ms)}</span
+						>{/each}
 				</div>
 				<table data-og-cpu-fns>
-					<thead><tr><th>function</th><th>where</th><th class="num">own</th><th class="num">with callees</th></tr></thead>
+					<thead
+						><tr
+							><th>function</th><th>where</th><th class="num">own</th><th class="num"
+								>with callees</th
+							></tr
+						></thead
+					>
 					<tbody>
 						{#each cpu.fns.slice(0, 10) as f, i (f.name + f.file + f.line + i)}
 							<tr>
 								<td><i class="sw" style:background={KIND_COLOR[f.kind]}></i>{f.name}</td>
-								<td class="url" title={f.file}>{f.file ? f.file.slice(f.file.lastIndexOf('/') + 1) : '—'}{f.line !== null ? `:${f.line}` : ''}</td>
+								<td class="url" title={f.file}
+									>{f.file ? f.file.slice(f.file.lastIndexOf('/') + 1) : '—'}{f.line !== null
+										? `:${f.line}`
+										: ''}</td
+								>
 								<td class="num">{ms(f.self_ms)}</td>
 								<td class="num">{ms(f.total_ms)}</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
-				<p class="muted">Sampled every {cpu.interval_ms} ms by the browser: a function under ~{Math.round(cpu.interval_ms * 2)} ms may not show.</p>
+				<p class="muted">
+					Sampled every {cpu.interval_ms} ms by the browser: a function under ~{Math.round(
+						cpu.interval_ms * 2
+					)} ms may not show.
+				</p>
 			{/if}
 		</div>
 
@@ -436,7 +603,11 @@
 			<table>
 				<tbody>
 					{#each view.report.blocking.slice(0, 8) as b, i (b.url + i)}
-						<tr><td class="url" title={b.url}>{b.url.split('?')[0].split('/').pop() || b.url}</td><td class="num">{ms(b.ms)}</td><td class="num">{b.bytes ? kb(b.bytes) : ''}</td></tr>
+						<tr
+							><td class="url" title={b.url}>{b.url.split('?')[0].split('/').pop() || b.url}</td><td
+								class="num">{ms(b.ms)}</td
+							><td class="num">{b.bytes ? kb(b.bytes) : ''}</td></tr
+						>
 					{/each}
 				</tbody>
 			</table>
@@ -444,42 +615,91 @@
 
 		<h3>
 			Styles
-			<span class="muted">{styles ? `${styles.sheets.length} sheet${styles.sheets.length === 1 ? '' : 's'} · ${styles.rules} rules` : styles_busy ? 'reading…' : ''}</span>
-			<button class="chip alt" onclick={check_styles} disabled={styles_busy} title="try every selector against the page as it is now (open a menu first to count its rules)">check again</button>
+			<span class="muted"
+				>{styles
+					? `${styles.sheets.length} sheet${styles.sheets.length === 1 ? '' : 's'} · ${styles.rules} rules`
+					: styles_busy
+						? 'reading…'
+						: ''}</span
+			>
+			<button
+				class="chip alt"
+				onclick={check_styles}
+				disabled={styles_busy}
+				title="try every selector against the page as it is now (open a menu first to count its rules)"
+				>check again</button
+			>
 		</h3>
 		{#if styles}
 			{#if styles.unscoped.length}
 				<p class="unscoped" data-og-page-unscoped>
-					Unscoped: {#each styles.unscoped as u, i (u.file)}{i ? ', ' : ''}<code>{u.file}</code>{/each}. Their rules apply to every element on the page.
+					Unscoped: {#each styles.unscoped as u, i (u.file)}{i ? ', ' : ''}<code>{u.file}</code
+						>{/each}. Their rules apply to every element on the page.
 				</p>
 			{/if}
 			<table data-og-page-styles>
-				<thead><tr><th>sheet</th><th class="num">rules</th><th class="num">match nothing</th><th class="num">size</th></tr></thead>
+				<thead
+					><tr
+						><th>sheet</th><th class="num">rules</th><th class="num">match nothing</th><th
+							class="num">size</th
+						></tr
+					></thead
+				>
 				<tbody>
 					{#each styles.sheets.slice(0, 10) as s, i (s.label + i)}
 						<tr>
-							<td class="url" title={s.href ?? 'a style element in the document'}>{s.label}{#if s.blocking} <span class="tag">blocked paint</span>{/if}{#if s.ogygia} <span class="tag og">ogygia</span>{/if}</td>
+							<td class="url" title={s.href ?? 'a style element in the document'}
+								>{s.label}{#if s.blocking}
+									<span class="tag">blocked paint</span>{/if}{#if s.ogygia}
+									<span class="tag og">ogygia</span>{/if}</td
+							>
 							<td class="num">{s.rules}</td>
-							<td class="num">{s.unmatched === null ? '—' : s.rules ? `${s.unmatched} (${Math.round((s.unmatched / s.rules) * 100)}%)` : '0'}</td>
+							<td class="num"
+								>{s.unmatched === null
+									? '—'
+									: s.rules
+										? `${s.unmatched} (${Math.round((s.unmatched / s.rules) * 100)}%)`
+										: '0'}</td
+							>
 							<td class="num">{s.bytes ? kb(s.bytes) : '—'}</td>
 						</tr>
 					{/each}
 				</tbody>
 			</table>
-			{#if styles.sheets.length > 10}<p class="muted">and {styles.sheets.length - 10} more sheets</p>{/if}
+			{#if styles.sheets.length > 10}<p class="muted">
+					and {styles.sheets.length - 10} more sheets
+				</p>{/if}
 			{#if styles.examples.length}
-				<p class="muted">Match nothing now, e.g. {#each styles.examples.slice(0, 4) as e, i (e)}{i ? ', ' : ''}<code>{e.length > 60 ? e.slice(0, 60) + '…' : e}</code>{/each}. Content that shows up later (menus, dialogs) counts here until it is open.</p>
+				<p class="muted">
+					Match nothing now, e.g. {#each styles.examples.slice(0, 4) as e, i (e)}{i
+							? ', '
+							: ''}<code>{e.length > 60 ? e.slice(0, 60) + '…' : e}</code>{/each}. Content that
+					shows up later (menus, dialogs) counts here until it is open.
+				</p>
 			{/if}
-			{#if styles.unreadable}<p class="muted">{styles.unreadable} sheet{styles.unreadable === 1 ? '' : 's'} from another origin could not be read.</p>{/if}
+			{#if styles.unreadable}<p class="muted">
+					{styles.unreadable} sheet{styles.unreadable === 1 ? '' : 's'} from another origin could not
+					be read.
+				</p>{/if}
 		{/if}
 
 		{#if view.report.bytes.length}
 			<h3>Files by type</h3>
 			<table>
-				<thead><tr><th>type</th><th class="num">files</th><th class="num">sent</th><th class="num">size</th></tr></thead>
+				<thead
+					><tr
+						><th>type</th><th class="num">files</th><th class="num">sent</th><th class="num"
+							>size</th
+						></tr
+					></thead
+				>
 				<tbody>
 					{#each view.report.bytes as b (b.type)}
-						<tr><td>{b.type}</td><td class="num">{b.count}</td><td class="num">{b.transfer ? kb(b.transfer) : '—'}</td><td class="num">{b.size ? kb(b.size) : '—'}</td></tr>
+						<tr
+							><td>{b.type}</td><td class="num">{b.count}</td><td class="num"
+								>{b.transfer ? kb(b.transfer) : '—'}</td
+							><td class="num">{b.size ? kb(b.size) : '—'}</td></tr
+						>
 					{/each}
 				</tbody>
 			</table>
@@ -726,7 +946,11 @@
 		background: #7dd3fc;
 	}
 	.seg.h-failed {
-		background: repeating-linear-gradient(90deg, rgba(248, 113, 113, 0.55) 0 4px, transparent 4px 8px);
+		background: repeating-linear-gradient(
+			90deg,
+			rgba(248, 113, 113, 0.55) 0 4px,
+			transparent 4px 8px
+		);
 	}
 	.ln {
 		display: inline-block;

@@ -72,7 +72,8 @@ export function restore(parent: Element, lifted: LiftedLake[]): void {
 	const lakes = lifted_lakes_of(parent);
 	// a live snippet's lakes stayed in place: settled and remembered here all the same, as the host is awake
 	for (const lake of parent.querySelectorAll(FROZEN_SELECTOR)) {
-		if (lake.parentElement?.closest('ogygia-region') !== parent || !in_live_snippet(lake, parent)) continue;
+		if (lake.parentElement?.closest('ogygia-region') !== parent || !in_live_snippet(lake, parent))
+			continue;
 		const id = lake.getAttribute('entry') || '';
 		settle_in(lake);
 		runtime_session.initialized_lakes.add(id);
@@ -82,7 +83,8 @@ export function restore(parent: Element, lifted: LiftedLake[]): void {
 			maxAgeMs: region_max_age_ms(lake)
 		});
 		// not moved, so nothing reconnects: re-enter the regions that waited on this lake
-		for (const r of lake.querySelectorAll('ogygia-region')) (r as HTMLElement & { connectedCallback?(): void }).connectedCallback?.();
+		for (const r of lake.querySelectorAll('ogygia-region'))
+			(r as HTMLElement & { connectedCallback?(): void }).connectedCallback?.();
 	}
 	for (let i = 0; i < lifted.length && i < lakes.length; i++) {
 		const lake = lakes[i];
@@ -115,7 +117,8 @@ function remember(
 	meta: { endpoint: string; when: string; maxAgeMs: number }
 ) {
 	const policy = region_remount(lake);
-	if (!((policy === 'cache' || policy === 'swr') && id && !runtime_session.lake_cache.has(id))) return;
+	if (!((policy === 'cache' || policy === 'swr') && id && !runtime_session.lake_cache.has(id)))
+		return;
 	const cached = document.createDocumentFragment();
 	for (const child of Array.from(lake.childNodes)) {
 		cached.appendChild(child.cloneNode(true));

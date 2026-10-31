@@ -20,7 +20,13 @@ const facts = async (el: Locator) => ({
 	route: await el.getAttribute('data-route'),
 	slug: await el.getAttribute('data-slug')
 });
-const PAGE = { who: 'page-load', locale: 'en', path: '/page-context/alpha', route: '/page-context/[slug]', slug: 'alpha' };
+const PAGE = {
+	who: 'page-load',
+	locale: 'en',
+	path: '/page-context/alpha',
+	route: '/page-context/[slug]',
+	slug: 'alpha'
+};
 
 test('build output: each hole’s page.data answer is patched in (a hole that reads none never looks its page up)', () => {
 	// REGRESSION: a plain `null` placeholder was inlined by the bundler into every reader, so every
@@ -40,17 +46,23 @@ test('build output: each hole’s page.data answer is patched in (a hole that re
 	// some holes read page.data (the page-context lab's), others do not (the restore lab's)
 	const map_at = code.indexOf('JSON.parse("{');
 	expect(map_at).toBeGreaterThan(-1);
-	const map = JSON.parse(JSON.parse(code.slice(map_at + 'JSON.parse('.length, code.indexOf('")', map_at) + 1))) as Record<string, boolean>;
+	const map = JSON.parse(
+		JSON.parse(code.slice(map_at + 'JSON.parse('.length, code.indexOf('")', map_at) + 1))
+	) as Record<string, boolean>;
 	expect(Object.values(map)).toContain(true);
 	expect(Object.values(map)).toContain(false);
 });
 
-test('a region a remote query renders when its island wakes sees the calling page', async ({ page }) => {
+test('a region a remote query renders when its island wakes sees the calling page', async ({
+	page
+}) => {
 	await page.goto('/page-context/alpha');
 	expect(await facts(page.locator('[data-pc="remote"]'))).toEqual(PAGE);
 });
 
-test('a hole whose tree reads page.data sees its page’s data, url, route and params', async ({ page }) => {
+test('a hole whose tree reads page.data sees its page’s data, url, route and params', async ({
+	page
+}) => {
 	await page.goto('/page-context/alpha');
 	const hole = page.locator('[data-pc="hole"]');
 	await expect(hole).toBeAttached({ timeout: 10_000 });
@@ -67,17 +79,25 @@ test('a region a remote query renders on refresh sees the calling page', async (
 	expect(await facts(page.locator('[data-pc="remote"]'))).toEqual(PAGE);
 });
 
-test('a command that changes what the load reads returns a region with the new facts', async ({ page, context }) => {
+test('a command that changes what the load reads returns a region with the new facts', async ({
+	page,
+	context
+}) => {
 	await context.clearCookies();
 	await page.goto('/page-context/alpha');
 	await page.waitForSelector('ogygia-region[data-hydrated] [data-pc-switch]');
 	await page.locator('[data-pc-switch]').click();
-	await expect(page.locator('[data-pc="remote"]')).toHaveAttribute('data-locale', 'fr', { timeout: 10_000 });
+	await expect(page.locator('[data-pc="remote"]')).toHaveAttribute('data-locale', 'fr', {
+		timeout: 10_000
+	});
 	expect(await facts(page.locator('[data-pc="remote"]'))).toEqual({ ...PAGE, locale: 'fr' });
 	await context.clearCookies();
 });
 
-test('one page, not two: the islands inside the new region and on the page see the region’s facts', async ({ page, context }) => {
+test('one page, not two: the islands inside the new region and on the page see the region’s facts', async ({
+	page,
+	context
+}) => {
 	await context.clearCookies();
 	const errors: string[] = [];
 	page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -85,10 +105,16 @@ test('one page, not two: the islands inside the new region and on the page see t
 	await page.waitForSelector('ogygia-region[data-hydrated] [data-pc-switch]');
 	await expect(page.locator('[data-pc-badge="page"]')).toHaveAttribute('data-locale', 'en');
 	await page.locator('[data-pc-switch]').click();
-	await expect(page.locator('[data-pc="remote"]')).toHaveAttribute('data-locale', 'fr', { timeout: 10_000 });
+	await expect(page.locator('[data-pc="remote"]')).toHaveAttribute('data-locale', 'fr', {
+		timeout: 10_000
+	});
 	// the island inside hydrates against the locale its HTML was rendered with, and works
 	const inside = page.locator('[data-pc-badge="inside"]');
-	await expect(inside.locator('xpath=ancestor::ogygia-region[1]')).toHaveAttribute('data-hydrated', '', { timeout: 10_000 });
+	await expect(inside.locator('xpath=ancestor::ogygia-region[1]')).toHaveAttribute(
+		'data-hydrated',
+		'',
+		{ timeout: 10_000 }
+	);
 	await inside.click();
 	await expect(inside).toHaveText('fr · 1');
 	expect(await page.locator('[data-og-healed],[data-og-recovered]').count()).toBe(0);

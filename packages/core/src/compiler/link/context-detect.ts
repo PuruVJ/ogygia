@@ -22,8 +22,13 @@ import { OWN_PACKAGE_NAMES, OWN_SPECIFIER_SOURCE } from '../../own-package.ts';
 type SvelteNode = Record<string, any>;
 
 // (`ogygia` in an app; `@ogygia/core` in a plugin package's own components)
-const OGYGIA_NAMED_IMPORT = new RegExp(`import\\s+(?:type\\s+)?\\{([\\s\\S]*?)\\}\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`, 'g');
-const OGYGIA_NS_IMPORT = new RegExp(`import\\s*\\*\\s*as\\s+(\\w+)\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`);
+const OGYGIA_NAMED_IMPORT = new RegExp(
+	`import\\s+(?:type\\s+)?\\{([\\s\\S]*?)\\}\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`,
+	'g'
+);
+const OGYGIA_NS_IMPORT = new RegExp(
+	`import\\s*\\*\\s*as\\s+(\\w+)\\s*from\\s*['"]${OWN_SPECIFIER_SOURCE}['"]`
+);
 const CTX_PROVIDER = /\b(?:Provide|setContext|createContext)\b/;
 const NS_CTX_USAGE = /\b(\w+)\.(?:Provide|setContext|createContext)\b/g;
 

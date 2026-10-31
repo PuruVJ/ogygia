@@ -15,7 +15,9 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 // (Kit 3 lives in its own workspace importer, internal/kit-sources: its svelte ^5.57 peer would
 // otherwise move the svelte ogygia resolves, and a dev server ran two Svelte runtimes)
-const kit_sources = createRequire(path.join(__dirname, '../../../internal/kit-sources/package.json'));
+const kit_sources = createRequire(
+	path.join(__dirname, '../../../internal/kit-sources/package.json')
+);
 const KITS = {
 	'Kit 2': path.dirname(require.resolve('@sveltejs/kit/package.json')),
 	'Kit 3': path.dirname(kit_sources.resolve('@sveltejs/kit3/package.json'))
@@ -23,7 +25,8 @@ const KITS = {
 
 const IMPORT_G = /import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
 const EXPORT_LIST_G = /export\s*\{([^}]*)\}/g;
-const EXPORT_DECL_G = /export\s+(?:async\s+)?(?:const|let|var|function\*?|class)\s+([A-Za-z_$][\w$]*)/g;
+const EXPORT_DECL_G =
+	/export\s+(?:async\s+)?(?:const|let|var|function\*?|class)\s+([A-Za-z_$][\w$]*)/g;
 
 function names(list: string, side: 'local' | 'exported'): string[] {
 	return list
@@ -80,7 +83,9 @@ function exports_of(file: string): Set<string> {
 /** Kit's public `$app/<name>` exports, browser condition (Kit 3 moved them under folders + `#app`). */
 function kit_app_exports(kit: string, name: string): Set<string> {
 	const app = path.join(kit, 'src/runtime/app');
-	const entry = fs.existsSync(path.join(app, `${name}.js`)) ? path.join(app, `${name}.js`) : path.join(app, name, 'index.js');
+	const entry = fs.existsSync(path.join(app, `${name}.js`))
+		? path.join(app, `${name}.js`)
+		: path.join(app, name, 'index.js');
 	const out = exports_of(entry);
 	// `export * from '#app/<name>'` → the package import's browser target
 	if (fs.readFileSync(entry, 'utf8').includes(`export * from '#app/${name}'`)) {

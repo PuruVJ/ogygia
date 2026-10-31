@@ -9,7 +9,17 @@
 // (No PATTERN comments: this page measures the forecast, it is not an answer key of its own.)
 import { existsSync, readFileSync } from 'node:fs';
 import { PRODUCTS } from '$lib/inferno/data';
-import { attachBrands, forView, indexById, labelFor, matches, toView, totalPrice, validateAll, pages } from '$lib/inferno-fixed/catalog';
+import {
+	attachBrands,
+	forView,
+	indexById,
+	labelFor,
+	matches,
+	toView,
+	totalPrice,
+	validateAll,
+	pages
+} from '$lib/inferno-fixed/catalog';
 import { byName } from '$lib/inferno-fixed/format';
 import { injectBadges, sitemapHtml } from '$lib/inferno/html';
 import type { PageServerLoad } from './$types';
@@ -27,7 +37,11 @@ function get<T>(url: string): Promise<T> {
 	return hit as Promise<T>;
 }
 
-async function svc(origin: string, name: string, ms: number): Promise<{ name: string; ms: number }> {
+async function svc(
+	origin: string,
+	name: string,
+	ms: number
+): Promise<{ name: string; ms: number }> {
 	return get(`${origin}/hell/api/${name}?ms=${ms}`);
 }
 
@@ -74,10 +88,23 @@ export const load: PageServerLoad = async ({ url }) => {
 	const term = url.searchParams.get('q') ?? 'a';
 	keep = url.searchParams.has('cache');
 
-	const [user, cart, promos] = await Promise.all([svc(origin, 'user', 30), svc(origin, 'cart', 25), svc(origin, 'promos', 20)]);
-	const [a, b, c, d] = await Promise.all([svc(origin, 'nav', 20), svc(origin, 'footer', 20), svc(origin, 'seo', 20), svc(origin, 'flags', 20)]);
+	const [user, cart, promos] = await Promise.all([
+		svc(origin, 'user', 30),
+		svc(origin, 'cart', 25),
+		svc(origin, 'promos', 20)
+	]);
+	const [a, b, c, d] = await Promise.all([
+		svc(origin, 'nav', 20),
+		svc(origin, 'footer', 20),
+		svc(origin, 'seo', 20),
+		svc(origin, 'flags', 20)
+	]);
 
-	const [session, locale, again] = await Promise.all([currentUser(origin), localeOf(origin), currentUser(origin)]);
+	const [session, locale, again] = await Promise.all([
+		currentUser(origin),
+		localeOf(origin),
+		currentUser(origin)
+	]);
 
 	const manifest = readManifest();
 	const drained = await drainJobs(800);

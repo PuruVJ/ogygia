@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-import { island_host_loaded, parse_ssr_hosts, ssr_hosts_handoff_path } from '../src/compiler/link/emit-gate.ts';
+import {
+	island_host_loaded,
+	parse_ssr_hosts,
+	ssr_hosts_handoff_path
+} from '../src/compiler/link/emit-gate.ts';
 import { host_key } from '../src/compiler/program.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -12,7 +16,10 @@ import { host_key } from '../src/compiler/program.ts';
 // ─────────────────────────────────────────────────────────────────────────────
 
 const root = '/app';
-const loaded = new Set([host_key(join(root, 'src/routes/+page.svelte')), host_key(join(root, 'src/lib/Host.svelte'))]);
+const loaded = new Set([
+	host_key(join(root, 'src/routes/+page.svelte')),
+	host_key(join(root, 'src/lib/Host.svelte'))
+]);
 
 describe('island_host_loaded', () => {
 	it('emits an island whose host the server leg transformed', () => {
@@ -39,7 +46,9 @@ describe('island_host_loaded', () => {
 
 describe('the handoff file', () => {
 	it('lives under Kit outDir and round-trips the server leg set', () => {
-		expect(ssr_hosts_handoff_path('/app/.svelte-kit-v2')).toBe('/app/.svelte-kit-v2/og-ssr-hosts.json');
+		expect(ssr_hosts_handoff_path('/app/.svelte-kit-v2')).toBe(
+			'/app/.svelte-kit-v2/og-ssr-hosts.json'
+		);
 		const set = parse_ssr_hosts(JSON.stringify([...loaded].sort()));
 		expect(set).toEqual(loaded);
 	});

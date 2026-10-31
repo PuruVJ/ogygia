@@ -17,5 +17,8 @@
 	<img data-cls-img src="/dt-lcp/hero.svg?quick" alt="no size set" />
 {/if}
 <div data-cls-text style="font-size: 22px; line-height: 1.6; max-width: 1100px">
-	{#each Array(14) as _, i (i)}<p>Paragraph {i + 1}: text below the plant, pushed down when it lands. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.</p>{/each}
+	{#each Array(14) as _, i (i)}<p>
+			Paragraph {i + 1}: text below the plant, pushed down when it lands. Lorem ipsum dolor sit
+			amet, consectetur adipiscing elit, sed do eiusmod tempor.
+		</p>{/each}
 </div>

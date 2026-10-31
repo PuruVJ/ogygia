@@ -23,7 +23,10 @@ const HOP_MAX = 4;
 
 /** Collect the data-source receipts (`og.source`) an expose render files, so the fragment reports
  *  what it read: the request's `sources` fact is a fresh list for the render, then restored. */
-export function begin_source_capture(request: Request): { readonly sources: Set<string>; end(): void } {
+export function begin_source_capture(request: Request): {
+	readonly sources: Set<string>;
+	end(): void;
+} {
 	const facts = fed_app()?.facts(request);
 	const saved = facts ? facts.sources : null;
 	if (facts) facts.sources = [];

@@ -121,21 +121,39 @@ test.describe('load scheduler: island code waits for the page’s critical resou
 	// now catches it: the press wakes it at once and the click is replayed when it is live. The `load`
 	// island is mid-hydration here (its code is held behind the hero), the race a shared run fixes.
 	for (const wake of ['load', 'visible'] as const) {
-		test(`a click on a ${wake} island before it is live wakes it and is not lost`, async ({ page }) => {
+		test(`a click on a ${wake} island before it is live wakes it and is not lost`, async ({
+			page
+		}) => {
 			const release = hold_hero(page);
 			await page.goto('/load-scheduler', { waitUntil: 'domcontentloaded' });
 			await page.waitForFunction(() => !!customElements.get('ogygia-region'));
 			await page.waitForTimeout(300);
 			const region = page.locator(`[data-ls-${wake}] ogygia-region`);
-			check(`the ${wake} island is not live yet`, (await region.getAttribute('data-hydrated')) === null);
+			check(
+				`the ${wake} island is not live yet`,
+				(await region.getAttribute('data-hydrated')) === null
+			);
 			await page.locator(`[data-ls-${wake}] button`).click();
-			await page.waitForSelector(`[data-ls-${wake}] ogygia-region[data-hydrated]`, { timeout: 10_000 });
+			await page.waitForSelector(`[data-ls-${wake}] ogygia-region[data-hydrated]`, {
+				timeout: 10_000
+			});
 			// (replayed one frame after hydration)
-			await page.waitForFunction((w) => document.querySelector(`[data-ls-${w}] button`)?.textContent === 'count is 1', wake, { timeout: 2000 }).catch(() => {});
-			check(`the click counted once (${wake})`, (await page.locator(`[data-ls-${wake}] button`).textContent()) === 'count is 1');
+			await page
+				.waitForFunction(
+					(w) => document.querySelector(`[data-ls-${w}] button`)?.textContent === 'count is 1',
+					wake,
+					{ timeout: 2000 }
+				)
+				.catch(() => {});
+			check(
+				`the click counted once (${wake})`,
+				(await page.locator(`[data-ls-${wake}] button`).textContent()) === 'count is 1'
+			);
 			// live now: a second click is the island's own, counted once more
 			await page.locator(`[data-ls-${wake}] button`).click();
-			await expect.poll(() => page.locator(`[data-ls-${wake}] button`).textContent()).toBe('count is 2');
+			await expect
+				.poll(() => page.locator(`[data-ls-${wake}] button`).textContent())
+				.toBe('count is 2');
 			release();
 		});
 	}

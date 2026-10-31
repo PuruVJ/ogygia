@@ -18,7 +18,10 @@
 		names = {},
 		hole_names = {}
 	}: {
-		server: { window_ms: number; phases: { phase: string; label?: string; cpu_ms: number; wait_ms: number }[] } | null;
+		server: {
+			window_ms: number;
+			phases: { phase: string; label?: string; cpu_ms: number; wait_ms: number }[];
+		} | null;
 		visit?: Visit | null;
 		page: string;
 		names?: Record<string, string>;
@@ -70,14 +73,23 @@
 		'hole-server': '#c4b5fd',
 		'hole-rest': '#7dd3fc'
 	};
-	const MARK: Record<string, string> = { fcp: '#8a94a2', lcp: '#d9a03d', dcl: '#8a94a2', load: '#8a94a2', first: '#6ca8e0', mark: '#a371f7' };
-	const color = (b: ClockBar) => COLOR[b.kind] ?? (b.kind.startsWith('server-') ? '#4d9c6b' : '#6b7280');
+	const MARK: Record<string, string> = {
+		fcp: '#8a94a2',
+		lcp: '#d9a03d',
+		dcl: '#8a94a2',
+		load: '#8a94a2',
+		first: '#6ca8e0',
+		mark: '#a371f7'
+	};
+	const color = (b: ClockBar) =>
+		COLOR[b.kind] ?? (b.kind.startsWith('server-') ? '#4d9c6b' : '#6b7280');
 	const x = (t: number) => (clock ? LEFT + (t / clock.end) * (W - LEFT - 8) : LEFT);
 	const height = $derived(clock ? TOP + clock.lanes.length * ROW + 40 : 0);
 	// time grid: a tick every nice step
 	const ticks = $derived.by(() => {
 		if (!clock) return [];
-		const step = [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000].find((s) => clock.end / s <= 12) ?? 10000;
+		const step =
+			[50, 100, 200, 250, 500, 1000, 2000, 5000, 10000].find((s) => clock.end / s <= 12) ?? 10000;
 		const out: number[] = [];
 		for (let t = 0; t <= clock.end; t += step) out.push(t);
 		return out;
@@ -107,10 +119,24 @@
 
 {#if clock && v}
 	<div class="legend">
-		<span class="hint">{source === 'browser' ? 'from this browser’s own visit' : 'from your visit (beacon)'} · {new Date(v.at).toLocaleTimeString()}{v.nav.protocol ? ` · ${v.nav.protocol}` : ''}{v.viewport ? ` · ${v.viewport[0]}×${v.viewport[1]}` : ''}</span>
-		<label class="hint"><input type="checkbox" bind:checked={only_critical} /> dim what is not on the critical path</label>
+		<span class="hint"
+			>{source === 'browser' ? 'from this browser’s own visit' : 'from your visit (beacon)'} · {new Date(
+				v.at
+			).toLocaleTimeString()}{v.nav.protocol ? ` · ${v.nav.protocol}` : ''}{v.viewport
+				? ` · ${v.viewport[0]}×${v.viewport[1]}`
+				: ''}</span
+		>
+		<label class="hint"
+			><input type="checkbox" bind:checked={only_critical} /> dim what is not on the critical path</label
+		>
 	</div>
-	<svg viewBox="0 0 {W} {height}" class="clock" role="img" aria-label="one clock: server, document, network, main thread, islands" onmouseleave={() => (tip = null)}>
+	<svg
+		viewBox="0 0 {W} {height}"
+		class="clock"
+		role="img"
+		aria-label="one clock: server, document, network, main thread, islands"
+		onmouseleave={() => (tip = null)}
+	>
 		{#each ticks as t (t)}
 			<line x1={x(t)} x2={x(t)} y1={TOP - 4} y2={height - 26} class="grid" />
 			<text x={x(t)} y={TOP - 8} class="tick">{t} ms</text>
@@ -137,30 +163,60 @@
 			{/each}
 		{/each}
 		{#each label_rows as m, i (m.kind + m.t + i)}
-			<line x1={x(m.t)} x2={x(m.t)} y1={TOP - 2} y2={height - 26} stroke={MARK[m.kind] ?? '#9aa4b2'} class="mark" class:soft={m.kind === 'first' || m.kind === 'mark'} />
-			{#if m.row >= 0}<text x={x(m.t) + 3} y={height - 16 + m.row * 9} class="mark-label" fill={MARK[m.kind] ?? '#9aa4b2'}>{m.label} {Math.round(m.t)}</text>{/if}
+			<line
+				x1={x(m.t)}
+				x2={x(m.t)}
+				y1={TOP - 2}
+				y2={height - 26}
+				stroke={MARK[m.kind] ?? '#9aa4b2'}
+				class="mark"
+				class:soft={m.kind === 'first' || m.kind === 'mark'}
+			/>
+			{#if m.row >= 0}<text
+					x={x(m.t) + 3}
+					y={height - 16 + m.row * 9}
+					class="mark-label"
+					fill={MARK[m.kind] ?? '#9aa4b2'}>{m.label} {Math.round(m.t)}</text
+				>{/if}
 		{/each}
 	</svg>
 	{#if tip}
 		<div class="tip" style="left:{tip.x + 12}px;top:{tip.y + 12}px">
 			<b>{tip.bar.label}</b><br />
-			{fmt_ms(tip.bar.t0)} → {fmt_ms(tip.bar.t1)} ms ({fmt_ms(tip.bar.t1 - tip.bar.t0)} ms){#if tip.bar.detail}<br />{tip.bar.detail}{/if}{#if tip.bar.critical}<br /><i>on the critical path</i>{/if}
+			{fmt_ms(tip.bar.t0)} → {fmt_ms(tip.bar.t1)} ms ({fmt_ms(tip.bar.t1 - tip.bar.t0)} ms){#if tip.bar.detail}<br
+				/>{tip.bar.detail}{/if}{#if tip.bar.critical}<br /><i>on the critical path</i>{/if}
 		</div>
 	{/if}
 	{#if clock.critical.length}
 		<ol class="path">
 			{#each clock.critical as c (c.id)}
-				<li><b>{c.label}</b> <span class="hint">{fmt_ms(c.t0)} → {fmt_ms(c.t1)} ms</span> — {c.why}</li>
+				<li>
+					<b>{c.label}</b> <span class="hint">{fmt_ms(c.t0)} → {fmt_ms(c.t1)} ms</span> — {c.why}
+				</li>
 			{/each}
-			{#if v.paints.lcp !== undefined}<li><b>largest paint</b> <span class="hint">at {fmt_ms(v.paints.lcp)} ms</span>{#if v.paints.lcp_tag} — a <code>{v.paints.lcp_tag}</code>{#if v.paints.lcp_fp && names[v.paints.lcp_fp]} inside <b>{names[v.paints.lcp_fp]}</b>{/if}{/if}</li>{/if}
+			{#if v.paints.lcp !== undefined}<li>
+					<b>largest paint</b>
+					<span class="hint">at {fmt_ms(v.paints.lcp)} ms</span>{#if v.paints.lcp_tag}
+						— a <code>{v.paints.lcp_tag}</code>{#if v.paints.lcp_fp && names[v.paints.lcp_fp]}
+							inside <b>{names[v.paints.lcp_fp]}</b>{/if}{/if}
+				</li>{/if}
 		</ol>
 	{/if}
 	{#each clock.notes as n (n)}<p class="hint">{n}</p>{/each}
 	<p class="hint">
-		The server bar is the profiled render placed so it ends at this visit's first byte; everything else is what this browser measured on the same clock. Islands show module load (light) then hydration (dark). Each hole's lane is its answer: grey before its request left, amber waiting for a render slot on the server, violet the server render, blue the network and the swap (the devtools Page tab draws the same). A striped-looking gap before first paint with nothing in the lanes is the browser parsing and laying out.
+		The server bar is the profiled render placed so it ends at this visit's first byte; everything
+		else is what this browser measured on the same clock. Islands show module load (light) then
+		hydration (dark). Each hole's lane is its answer: grey before its request left, amber waiting
+		for a render slot on the server, violet the server render, blue the network and the swap (the
+		devtools Page tab draws the same). A striped-looking gap before first paint with nothing in the
+		lanes is the browser parsing and laying out.
 	</p>
 {:else if looked}
-	<p class="hint">No visit of <code>{page}</code> from this browser yet. Open the page once while logged in to the profiler, then come back: the beacon records the visit into this browser and (on a long-lived host) into the server.</p>
+	<p class="hint">
+		No visit of <code>{page}</code> from this browser yet. Open the page once while logged in to the profiler,
+		then come back: the beacon records the visit into this browser and (on a long-lived host) into the
+		server.
+	</p>
 {:else}
 	<p class="hint">Looking for a visit of this page in this browser…</p>
 {/if}

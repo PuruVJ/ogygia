@@ -29,13 +29,19 @@
 			state_ = 'failed';
 		}
 	}
-	const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+	const idle = (
+		globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }
+	).requestIdleCallback;
 	if (idle) idle(() => void keep(), { timeout: 3000 });
 	else setTimeout(() => void keep(), 500);
 </script>
 
-<span class="keep hint" title="Reports are kept in this browser's own storage so they outlive the server (an ephemeral host forgets them within seconds)">
-	{#if state_ === 'kept'}kept in this browser{:else if state_ === 'keeping'}keeping in this browser…{:else if state_ === 'failed'}could not keep in this browser{:else}&nbsp;{/if}
+<span
+	class="keep hint"
+	title="Reports are kept in this browser's own storage so they outlive the server (an ephemeral host forgets them within seconds)"
+>
+	{#if state_ === 'kept'}kept in this browser{:else if state_ === 'keeping'}keeping in this browser…{:else if state_ === 'failed'}could
+		not keep in this browser{:else}&nbsp;{/if}
 </span>
 
 <style>

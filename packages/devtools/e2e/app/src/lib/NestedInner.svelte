@@ -5,4 +5,6 @@
 	let n = $state(0);
 </script>
 
-<button data-nested-inner onclick={() => (n += 1)}>{label}: <span data-nested-inner-n>{n}</span></button>
+<button data-nested-inner onclick={() => (n += 1)}
+	>{label}: <span data-nested-inner-n>{n}</span></button
+>

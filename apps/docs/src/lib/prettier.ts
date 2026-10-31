@@ -2,7 +2,10 @@
 // formatter + its Svelte/TS/HTML/CSS plugins are big, so they're dynamic-imported once and cached —
 // warmed on hover, fetched on first real use. oxfmt has no browser build; prettier/standalone is the
 // client-side path.
-type PrettierBundle = { format: (src: string, opts: Record<string, unknown>) => Promise<string>; plugins: unknown[] };
+type PrettierBundle = {
+	format: (src: string, opts: Record<string, unknown>) => Promise<string>;
+	plugins: unknown[];
+};
 
 // prettier/standalone (prebundled for the browser) initialises a config-file loader with
 // `createRequire(import.meta.url)`. The dep optimizer (Rolldown) resolves `node:module` to a browser-
@@ -35,7 +38,17 @@ export function warmPrettier(): Promise<PrettierBundle> {
 			import('prettier/plugins/html'),
 			import('prettier/plugins/postcss')
 		]);
-		return { format: core.format, plugins: [(svelte as { default?: unknown }).default ?? svelte, estree, babel, ts, htmlp, postcss] };
+		return {
+			format: core.format,
+			plugins: [
+				(svelte as { default?: unknown }).default ?? svelte,
+				estree,
+				babel,
+				ts,
+				htmlp,
+				postcss
+			]
+		};
 	})();
 	return load;
 }
@@ -51,7 +64,11 @@ export function parserFor(lang: string | undefined): string {
 
 /** Format a source string. printWidth 60 (the panes are narrow), tabs, clean markup. Throws on syntax
  *  errors — callers keep the raw source. */
-export async function formatCode(src: string, lang: string | undefined, opts: Record<string, unknown> = {}): Promise<string> {
+export async function formatCode(
+	src: string,
+	lang: string | undefined,
+	opts: Record<string, unknown> = {}
+): Promise<string> {
 	const { format, plugins } = await warmPrettier();
 	return format(src, {
 		parser: parserFor(lang),

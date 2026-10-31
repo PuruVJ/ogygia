@@ -28,7 +28,10 @@ function resolve_attr(value: string, base: URL): string {
 	if (!value || !(value.startsWith('./') || value.startsWith('../'))) return value;
 	let resolved: URL;
 	try {
-		resolved = new URL(value.indexOf('&amp;') === -1 ? value : value.replaceAll('&amp;', '&'), base);
+		resolved = new URL(
+			value.indexOf('&amp;') === -1 ? value : value.replaceAll('&amp;', '&'),
+			base
+		);
 	} catch {
 		return value;
 	}
@@ -75,8 +78,19 @@ export function absolutize_hole_html(html: string, base: URL): string {
 		let next = tag;
 		// (`src` too: an island's location, written beside its identity since locations — left relative,
 		// an island inside a hole imported `/<page>/_app/…` and woke on a redirect to an HTML page)
-		if (region) next = rewrite_attr(rewrite_attr(rewrite_attr(tag, 'entry', base, true), 'src', base, true), 'endpoint', base, true);
-		else if (tag.indexOf(REGION_CSS_ATTR) !== -1) next = link ? rewrite_attr(tag, 'href', base, false) : tag.indexOf(REGION_CSS_ATTR + '="') !== -1 ? rewrite_attr(tag, REGION_CSS_ATTR, base, false) : tag;
+		if (region)
+			next = rewrite_attr(
+				rewrite_attr(rewrite_attr(tag, 'entry', base, true), 'src', base, true),
+				'endpoint',
+				base,
+				true
+			);
+		else if (tag.indexOf(REGION_CSS_ATTR) !== -1)
+			next = link
+				? rewrite_attr(tag, 'href', base, false)
+				: tag.indexOf(REGION_CSS_ATTR + '="') !== -1
+					? rewrite_attr(tag, REGION_CSS_ATTR, base, false)
+					: tag;
 		if (next !== tag) {
 			out += html.slice(pos, lt) + next;
 			pos = gt + 1;

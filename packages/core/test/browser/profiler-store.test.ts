@@ -1,15 +1,37 @@
 // THE BROWSER STORE (profiler/ui/store.ts) in a real browser: a report's dump is kept and listed,
 // the newest MAX stay, a page's visits come back newest first, and everything is best-effort.
 import { expect, test } from 'vitest';
-import { put_report, get_report, list_reports, delete_report, list_visits, latest_visit, clear_all } from '../../../devtools/src/profiler/ui/store.ts';
+import {
+	put_report,
+	get_report,
+	list_reports,
+	delete_report,
+	list_visits,
+	latest_visit,
+	clear_all
+} from '../../../devtools/src/profiler/ui/store.ts';
 
-const dump = (id: string, page: string, created: number, runs: number[] = [10, 20, 30]) => ({ kind: 'ogygia-profiler-dump', version: 1, meta: { id, page, created, trigger: 'page', runs }, analysis: { busy_ms: 1 }, extras: {} });
+const dump = (id: string, page: string, created: number, runs: number[] = [10, 20, 30]) => ({
+	kind: 'ogygia-profiler-dump',
+	version: 1,
+	meta: { id, page, created, trigger: 'page', runs },
+	analysis: { busy_ms: 1 },
+	extras: {}
+});
 
 test('reports: put, get, list newest first with the median, delete, and a cap on how many stay', async () => {
 	await clear_all();
 	expect(await put_report(dump('r1', '/a', 1000))).toBe(true);
 	expect(await put_report(dump('r2', '/a', 2000, [5, 7, 9]))).toBe(true);
-	expect(await put_report({ kind: 'ogygia-profiler-dump', version: 1, meta: { id: 'r3', created: 3000, trigger: 'request', request: { path: '/req' } }, analysis: {}, extras: {} })).toBe(true);
+	expect(
+		await put_report({
+			kind: 'ogygia-profiler-dump',
+			version: 1,
+			meta: { id: 'r3', created: 3000, trigger: 'request', request: { path: '/req' } },
+			analysis: {},
+			extras: {}
+		})
+	).toBe(true);
 	const list = await list_reports();
 	expect(list.map((r) => r.id)).toEqual(['r3', 'r2', 'r1']);
 	expect(list[1]).toMatchObject({ page: '/a', median: 7, trigger: 'page', label: '/a' });
@@ -38,7 +60,13 @@ test('visits: a page’s visits newest first, and the latest one', async () => {
 			const req = indexedDB.open('ogygia-profiler', 1);
 			req.onsuccess = () => {
 				const tx = req.result.transaction('visits', 'readwrite');
-				tx.objectStore('visits').put({ key, page, at, visit: { at, nav: { req_start: 0, res_start: 10, res_end: 20 } }, snapshots: [] });
+				tx.objectStore('visits').put({
+					key,
+					page,
+					at,
+					visit: { at, nav: { req_start: 0, res_start: 10, res_end: 20 } },
+					snapshots: []
+				});
 				tx.oncomplete = () => resolve();
 				tx.onerror = () => resolve();
 			};

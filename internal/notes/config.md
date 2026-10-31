@@ -5,6 +5,7 @@ all the way down") and v2's path mechanism (`content.scoped`) are preserved at t
 REJECTED — each rejection reshaped the design, per the usual archaeology.
 
 Implementation notes (delta from the design text below):
+
 - `image` subsystem: skipped — images don't exist yet (user); the grammar slot is reserved.
 - The content door ships on the loader macro only (see "Resolved during implementation research").
 - Live-verified in pharos-playground: the blog collection compiles through a `plain` preset
@@ -67,7 +68,7 @@ content({ loader: cmsSource, preset: 'playground' });                          /
 ## Content's axis is the collection, not the path
 
 A CMS collection has no files — path-scoping (v2's `scoped`) could never reach it. File-backed
-collections merely *enumerate* by path; that is an implementation detail, not the identity. The
+collections merely _enumerate_ by path; that is an implementation detail, not the identity. The
 collection definition is the one place every corpus — files, CMS, OpenAPI, push feed — actually
 exists, so that is where the name rides:
 
@@ -96,16 +97,16 @@ those states **unrepresentable**: a `regions.presets` entry is typed as island a
 else; a `content.presets` entry as content vocabulary; `router` has no presets slot at all. Types
 do the sealing; the runtime keeps only the genuinely dynamic seals:
 
-| leak | seal |
-| --- | --- |
-| use site names an unknown preset | build-voice error listing that subsystem's preset names |
-| unknown key in any bag | config-load error — each subsystem's vocabulary is closed (typed AND runtime-checked; types don't protect dynamic configs) |
-| dynamic preset name (`preset: someVar`) | error — literal only, the standing macro-argument law |
-| one file globbed by two collections carrying different presets | NOT an error — each gets its own module variant (`?og_preset=`), by construction (v3.1) |
-| a loader-macro glob matches zero files | loud warning (the folder() brace-glob dev bug is the precedent: silence ships broken) |
-| empty preset | config-load error (a bundle with nothing is a mistake) |
-| legacy spellings | rename map with pointed errors, never silent aliasing |
-| config in a second home | not representable — `ogygia.extensions()` / `ogygia.preprocess()` / `handle()` stay value-free and must behave identically with or without plugin config (svelte-check path guarantees this today) |
+| leak                                                           | seal                                                                                                                                                                                               |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| use site names an unknown preset                               | build-voice error listing that subsystem's preset names                                                                                                                                            |
+| unknown key in any bag                                         | config-load error — each subsystem's vocabulary is closed (typed AND runtime-checked; types don't protect dynamic configs)                                                                         |
+| dynamic preset name (`preset: someVar`)                        | error — literal only, the standing macro-argument law                                                                                                                                              |
+| one file globbed by two collections carrying different presets | NOT an error — each gets its own module variant (`?og_preset=`), by construction (v3.1)                                                                                                            |
+| a loader-macro glob matches zero files                         | loud warning (the folder() brace-glob dev bug is the precedent: silence ships broken)                                                                                                              |
+| empty preset                                                   | config-load error (a bundle with nothing is a mistake)                                                                                                                                             |
+| legacy spellings                                               | rename map with pointed errors, never silent aliasing                                                                                                                                              |
+| config in a second home                                        | not representable — `ogygia.extensions()` / `ogygia.preprocess()` / `handle()` stay value-free and must behave identically with or without plugin config (svelte-check path guarantees this today) |
 
 Resolution: depth-2 replace (subsystem key → setting key; inner bags replace whole, no deep concat
 of transformer arrays): inline option → preset → subsystem default → built-in.
@@ -115,7 +116,7 @@ recipe) — a preset edit invalidates exactly the files, imports, calls, and col
 it.
 
 **One flagged mechanical question (not a design risk):** how the runtime CMS render path receives
-config *values* (bags hold functions; vite-config inline functions cannot be re-exported into the
+config _values_ (bags hold functions; vite-config inline functions cannot be re-exported into the
 server bundle). This is exactly today's delivery question for the single global markdown config —
 v3 adds only a name lookup on whatever channel already exists. Verify the channel during
 build-out; if today's channel turns out to be build-side only, request-time CMS markdown needs it
@@ -123,13 +124,13 @@ extended regardless of presets.
 
 ## Migration map
 
-| old | new |
-| --- | --- |
-| `visible: {…}` | `regions.visible` |
-| `presets: {…}` | `regions.presets` |
-| `continuity: { forms }` | `router.forms` |
-| `content.markdown` | **unchanged** |
-| `router: false \| {…}` | unchanged |
+| old                     | new               |
+| ----------------------- | ----------------- |
+| `visible: {…}`          | `regions.visible` |
+| `presets: {…}`          | `regions.presets` |
+| `continuity: { forms }` | `router.forms`    |
+| `content.markdown`      | **unchanged**     |
+| `router: false \| {…}`  | unchanged         |
 
 ## Open
 
@@ -163,8 +164,8 @@ shared-namespace collisions.
 **Why it died (user, same day):**
 
 1. "Content is not limited to markdown — it's the 80% consumer, but that's not all it is." v1
-   collapsed `content.markdown` → top-level `markdown`, deleting the category because its *config*
-   had one child — but the *domain* (collections, sources, site, emit, search, blocks) is a real
+   collapsed `content.markdown` → top-level `markdown`, deleting the category because its _config_
+   had one child — but the _domain_ (collections, sources, site, emit, search, blocks) is a real
    subsystem. Categories earn existence from the domain, not from key count.
 2. "The preset puts everything out in the open for each." One communal dictionary meant every use
    site reaches into an untyped-per-kind shared bag; the "empty slice" seal existed only to patch
@@ -177,8 +178,8 @@ Sovereign subsystems (which survived into v3) but with content varying by an ESL
 array of `{ include: glob, …config }` entries.
 
 **Why it died (user, same day):** "Content doesn't necessarily differ by path — content may be
-fully CMS-driven, so path isn't it." The file tree is how *one kind* of collection enumerates, not
-what a collection *is*. Scoping by path could never express a CMS corpus's flavor; the collection
+fully CMS-driven, so path isn't it." The file tree is how _one kind_ of collection enumerates, not
+what a collection _is_. Scoping by path could never express a CMS corpus's flavor; the collection
 definition can express every corpus's. v3's per-collection literal name replaced it, and dropped
 the include/brace-glob/ordering seals wholesale (nothing to seal — the mechanism is gone).
 

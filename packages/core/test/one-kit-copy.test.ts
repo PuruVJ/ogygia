@@ -20,7 +20,10 @@ describe('one Kit', () => {
 				const hook = p.config;
 				if (!hook) continue;
 				const run = typeof hook === 'function' ? hook : hook.handler;
-				const out = (await run({ root: palaestra }, { command, mode: command === 'serve' ? 'development' : 'production' })) as { resolve?: { dedupe?: string[] } } | undefined;
+				const out = (await run(
+					{ root: palaestra },
+					{ command, mode: command === 'serve' ? 'development' : 'production' }
+				)) as { resolve?: { dedupe?: string[] } } | undefined;
 				dedupe = dedupe.concat(out?.resolve?.dedupe ?? []);
 			}
 			expect(dedupe, command).toContain('@sveltejs/kit');

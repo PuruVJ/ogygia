@@ -8,4 +8,7 @@ const CSS = `/*! ogygia-unscoped: LabCard.svelte | Unexpected token */
 }
 `;
 
-export const GET = () => new Response(CSS, { headers: { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'public, max-age=60' } });
+export const GET = () =>
+	new Response(CSS, {
+		headers: { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'public, max-age=60' }
+	});

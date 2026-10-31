@@ -9,7 +9,7 @@ Security and performance audits should read this before changing trust boundarie
 
 **What:** The runtime fetches a capability URL and inserts HTML via `createContextualFragment` + `replaceChildren`. Scripts in that HTML do **not** run; event-handler attributes would.
 
-**Why:** Deferred / SWR regions are MPA-equivalent: the HTML is produced by *our* SSR under a verified HMAC. Trust root is the **server MAC**, not the client.
+**Why:** Deferred / SWR regions are MPA-equivalent: the HTML is produced by _our_ SSR under a verified HMAC. Trust root is the **server MAC**, not the client.
 
 **Do not:**
 
@@ -28,10 +28,10 @@ Security and performance audits should read this before changing trust boundarie
 
 **Defaults:**
 
-| Knob | Default | Why |
-| ---- | ------- | --- |
-| TTL (`regions.ttl`) | **3600s** (1h) | Harvested URLs age out; long enough for typical tabs. Clamp `[60, 86400]`. |
-| `sessionCookie` | **off** | Prerender / shared CDN HTML cannot bind a request cookie. Opt in for personalized HTML. |
+| Knob                | Default        | Why                                                                                     |
+| ------------------- | -------------- | --------------------------------------------------------------------------------------- |
+| TTL (`regions.ttl`) | **3600s** (1h) | Harvested URLs age out; long enough for typical tabs. Clamp `[60, 86400]`.              |
+| `sessionCookie`     | **off**        | Prerender / shared CDN HTML cannot bind a request cookie. Opt in for personalized HTML. |
 
 **Do not:**
 
@@ -77,7 +77,7 @@ Security and performance audits should read this before changing trust boundarie
 
 **What:** `Promise.race` with 10s timeout; concurrent renders capped (`REGION_RENDER_CONCURRENCY`).
 
-**Why:** Svelte `render()` has no AbortSignal. Timeout stops *waiting*; work may continue until the isolate finishes. Concurrency + rate limits bound damage.
+**Why:** Svelte `render()` has no AbortSignal. Timeout stops _waiting_; work may continue until the isolate finishes. Concurrency + rate limits bound damage.
 
 **Do not:** Assume timeout frees CPU instantly. Isolating renders in workers is the real cancel story (out of default scope).
 
@@ -158,8 +158,8 @@ only sends keys + skips invalidate — without `requested`, the POST has no `q` 
 ## QUERY-LIVE — Kit owns SSE
 
 **What:** `query.live` is Kit’s remote SSE. Ogygia reuses Kit’s client remote primitives. On SPA
-body swap: clear SSR seeds *before* `replaceWith` (old islands still mounted); clear
-`query_map` / `live_query_map` *after* (old disconnected, new hydrates still awaiting).
+body swap: clear SSR seeds _before_ `replaceWith` (old islands still mounted); clear
+`query_map` / `live_query_map` _after_ (old disconnected, new hydrates still awaiting).
 The remote cache singleton lives on `globalThis` so Vite duplicate-module loads still share maps.
 
 **Why:** Abort on `request.signal` is Kit’s job. Infinite `while (true)` generators are normal;

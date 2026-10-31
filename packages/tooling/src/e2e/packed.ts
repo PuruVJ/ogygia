@@ -18,7 +18,10 @@ export interface PackedOgygia {
 
 /** `pnpm pack` one package into `dest`; the tarball's absolute path. */
 export function pack(dir: string, dest: string): string {
-	const out = spawnSync('pnpm', ['pack', '--pack-destination', dest], { cwd: dir, encoding: 'utf8' });
+	const out = spawnSync('pnpm', ['pack', '--pack-destination', dest], {
+		cwd: dir,
+		encoding: 'utf8'
+	});
 	if (out.status !== 0) throw new Error(`pnpm pack failed in ${dir}:\n${out.stderr}`);
 	const line = out.stdout.trim().split('\n').pop()!.trim();
 	return line.startsWith('/') ? line : join(dest, line.split('/').pop()!);
@@ -39,6 +42,10 @@ export function use_packed(app: string, packed: PackedOgygia): void {
 	writeFileSync(pkg_file, JSON.stringify(pkg, null, 2) + '\n');
 	const ws = join(app, 'pnpm-workspace.yaml');
 	const before = existsSync(ws) ? readFileSync(ws, 'utf8') : '';
-	if (/^overrides:/m.test(before)) throw new Error(`${ws} already has overrides: merge them by hand`);
-	writeFileSync(ws, `${before}${before && !before.endsWith('\n') ? '\n' : ''}overrides:\n  '@ogygia/core': 'file:${packed.core}'\n`);
+	if (/^overrides:/m.test(before))
+		throw new Error(`${ws} already has overrides: merge them by hand`);
+	writeFileSync(
+		ws,
+		`${before}${before && !before.endsWith('\n') ? '\n' : ''}overrides:\n  '@ogygia/core': 'file:${packed.core}'\n`
+	);
 }

@@ -9,10 +9,15 @@
 import { afterEach, expect, inject, test, vi } from 'vitest';
 import { bootDev } from '../../src/runtime/full.ts';
 import { kit_page_thread } from '../../src/runtime/kit-page-thread.svelte.ts';
-import { publish_kit_page, publish_kit_page_deferred, unpublish_kit_page } from './_kit-thread.svelte.ts';
+import {
+	publish_kit_page,
+	publish_kit_page_deferred,
+	unpublish_kit_page
+} from './_kit-thread.svelte.ts';
 
 const ISLAND = 'ogygia-region[wake="idle"]';
-const inject_html = (key: 'lake_page_reader_ssr_b64') => decodeURIComponent(escape(atob(inject(key))));
+const inject_html = (key: 'lake_page_reader_ssr_b64') =>
+	decodeURIComponent(escape(atob(inject(key))));
 
 afterEach(() => {
 	unpublish_kit_page();
@@ -26,7 +31,10 @@ test('a page-reading island inside a lake on a Kit document waits for Kit’s pa
 	try {
 		// Kit's bootstrap marks the document; its client entry (the thread) has NOT run yet.
 		document.body.innerHTML =
-			'<script>__sveltekit_lab = {};</script>' + '<div data-mount>' + inject_html('lake_page_reader_ssr_b64') + '</div>';
+			'<script>__sveltekit_lab = {};</script>' +
+			'<div data-mount>' +
+			inject_html('lake_page_reader_ssr_b64') +
+			'</div>';
 		const island = document.querySelector(ISLAND) as HTMLElement;
 		expect(island, 'the fixture is the lake + idle island shape').not.toBeNull();
 		const server_branch = island.querySelector('[data-testid="search"]');
@@ -38,7 +46,9 @@ test('a page-reading island inside a lake on a Kit document waits for Kit’s pa
 		// must HOLD: no hydrate, no discard, the server DOM untouched.
 		await new Promise((r) => setTimeout(r, 600));
 		expect(island.hasAttribute('data-hydrated'), 'held until the thread exists').toBe(false);
-		expect(island.querySelector('[data-testid="search"]'), 'the server node is still there').toBe(server_branch);
+		expect(island.querySelector('[data-testid="search"]'), 'the server node is still there').toBe(
+			server_branch
+		);
 		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
 
 		// Kit's entry runs: the thread publishes Kit's page — the same data the server rendered from.
@@ -47,7 +57,9 @@ test('a page-reading island inside a lake on a Kit document waits for Kit’s pa
 		await expect.poll(() => island.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
 		// Same branch as the server → the server DOM was claimed, not discarded.
 		expect(island.hasAttribute('data-og-recovered'), 'no discard').toBe(false);
-		expect(island.querySelector('[data-testid="search"]'), 'the SSR node was adopted').toBe(server_branch);
+		expect(island.querySelector('[data-testid="search"]'), 'the SSR node was adopted').toBe(
+			server_branch
+		);
 		expect(island.querySelector('[data-testid="branch"]')?.textContent).toBe('search');
 		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
 	} finally {
@@ -68,7 +80,10 @@ test('the bridge is published but Kit has not applied its page (status -1): the 
 		// Kit's entry has evaluated (bridge=Y) — but start() has not applied the page (status -1, data {}).
 		const kit = publish_kit_page_deferred();
 		document.body.innerHTML =
-			'<script>__sveltekit_lab = {};</script>' + '<div data-mount>' + inject_html('lake_page_reader_ssr_b64') + '</div>';
+			'<script>__sveltekit_lab = {};</script>' +
+			'<div data-mount>' +
+			inject_html('lake_page_reader_ssr_b64') +
+			'</div>';
 		const island = document.querySelector(ISLAND) as HTMLElement;
 		const server_branch = island.querySelector('[data-testid="search"]');
 		expect(server_branch?.textContent).toBe('search');
@@ -77,17 +92,28 @@ test('the bridge is published but Kit has not applied its page (status -1): the 
 
 		// bridge=Y, data={} — exactly the moment the field capture shows the island collapsing. It must HOLD.
 		await new Promise((r) => setTimeout(r, 400));
-		expect(island.hasAttribute('data-hydrated'), 'held: bridge up but data not applied').toBe(false);
-		expect(island.hasAttribute('data-og-recovered'), 'no discard against the empty data').toBe(false);
-		expect(island.querySelector('[data-testid="search"]'), 'the server node is untouched').toBe(server_branch);
+		expect(island.hasAttribute('data-hydrated'), 'held: bridge up but data not applied').toBe(
+			false
+		);
+		expect(island.hasAttribute('data-og-recovered'), 'no discard against the empty data').toBe(
+			false
+		);
+		expect(island.querySelector('[data-testid="search"]'), 'the server node is untouched').toBe(
+			server_branch
+		);
 		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
 
 		// start() lands the server blob: page.data is populated — the same data the server rendered from.
 		kit.settle({ searchBarMarkup: '<i data-testid="search">search</i>' });
 
 		await expect.poll(() => island.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);
-		expect(island.hasAttribute('data-og-recovered'), 'same branch as the server → claimed, not discarded').toBe(false);
-		expect(island.querySelector('[data-testid="search"]'), 'the SSR node was adopted').toBe(server_branch);
+		expect(
+			island.hasAttribute('data-og-recovered'),
+			'same branch as the server → claimed, not discarded'
+		).toBe(false);
+		expect(island.querySelector('[data-testid="search"]'), 'the SSR node was adopted').toBe(
+			server_branch
+		);
 		expect(island.querySelector('[data-testid="branch"]')?.textContent).toBe('search');
 		expect(warns.filter((w) => w.includes('discarded its ENTIRE'))).toEqual([]);
 	} finally {
@@ -109,7 +135,10 @@ test('DEV: a wait that runs long warns once (diagnosable), still resolves the mo
 		void wait!.then(() => (resolved = true));
 
 		await vi.advanceTimersByTimeAsync(4_900);
-		expect(warns.filter((w) => w.includes('waited')), 'quiet before the threshold').toEqual([]);
+		expect(
+			warns.filter((w) => w.includes('waited')),
+			'quiet before the threshold'
+		).toEqual([]);
 		await vi.advanceTimersByTimeAsync(200);
 		const slow = warns.filter((w) => w.includes('waited'));
 		expect(slow).toHaveLength(1);
@@ -132,7 +161,10 @@ test('DEV: a wait that runs long warns once (diagnosable), still resolves the mo
 test('with the thread already published at wake there is no hold: the island hydrates straight away', async () => {
 	publish_kit_page({ searchBarMarkup: '<i data-testid="search">search</i>' });
 	document.body.innerHTML =
-		'<script>__sveltekit_lab = {};</script>' + '<div data-mount>' + inject_html('lake_page_reader_ssr_b64') + '</div>';
+		'<script>__sveltekit_lab = {};</script>' +
+		'<div data-mount>' +
+		inject_html('lake_page_reader_ssr_b64') +
+		'</div>';
 	const island = document.querySelector(ISLAND) as HTMLElement;
 	bootDev();
 	await expect.poll(() => island.hasAttribute('data-hydrated'), { timeout: 10_000 }).toBe(true);

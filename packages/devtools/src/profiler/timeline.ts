@@ -129,7 +129,14 @@ export interface Segment {
 	category: FrameCategory;
 	phase: Phase;
 	/** wait: every call in flight during the segment */
-	calls?: { label: string; ms: number; caller?: string; callers?: string[]; timings?: TimelineCall['timings']; body_ms?: number }[];
+	calls?: {
+		label: string;
+		ms: number;
+		caller?: string;
+		callers?: string[];
+		timings?: TimelineCall['timings'];
+		body_ms?: number;
+	}[];
 	/** the innermost `span()` this segment sits inside, when any */
 	within?: string;
 	/** cpu: the Kit load file on its stack (`routes/+page.server.ts`) — the load a helper in
@@ -185,7 +192,12 @@ export interface LoadChain {
 	explicit: boolean;
 	/** from the page load's source (set at report time): its `await parent()` line, the names that
 	 *  sets, the first line reading one (null: none), and the awaits between that waited for nothing */
-	parent_use?: { line: number; names: string[]; first_use: number | null; awaits_before_use: number };
+	parent_use?: {
+		line: number;
+		names: string[];
+		first_use: number | null;
+		awaits_before_use: number;
+	};
 }
 
 export interface Timeline {
@@ -229,10 +241,12 @@ const KIT_REMOTE_RE = /\/runtime\/(?:app\/server\/remote|server\/remote)\//;
 const APP_REMOTE_FILE_RE = /\.remote\.[jt]s(?:\.js)?$/;
 const KIT_RENDER_RE = /\/runtime\/server\/page\/render\.js/;
 const KIT_RUNTIME_RE = /@sveltejs\/kit\/src\/runtime\/server\//;
-const APP_LOAD_FILE_RE = /(?:^|[/\\])(?:\+(?:page|layout)(?:\.server)?\.[jt]s|_(?:page|layout)(?:\.server)?\.[jt]s\.js)$/;
+const APP_LOAD_FILE_RE =
+	/(?:^|[/\\])(?:\+(?:page|layout)(?:\.server)?\.[jt]s|_(?:page|layout)(?:\.server)?\.[jt]s\.js)$/;
 const APP_HOOKS_FILE_RE = /(?:^|[/\\])hooks\.server\.[jt]s(?:\.js)?$/;
 /** A load file inside a resolved caller (`load (routes/x/+page.server.ts:44)`) or a frame url. */
-const LOAD_FILE_IN_TEXT_RE = /((?:[^\s()]*[/\\])?[+_](page|layout|error)(\.server)?\.[jt]s(?:\.js)?)(?::\d+)?/;
+const LOAD_FILE_IN_TEXT_RE =
+	/((?:[^\s()]*[/\\])?[+_](page|layout|error)(\.server)?\.[jt]s(?:\.js)?)(?::\d+)?/;
 const SRC_REL_RE = /[/\\]src[/\\](.*)$/;
 
 /** The lane a load frame / caller belongs to: `{ file, level, kind }`, or null. */
@@ -244,7 +258,10 @@ export function load_lane_of(text: string): Pick<LoadLane, 'file' | 'level' | 'k
 	// relative to src when the path has one; else (a built chunk, no sourcemap) the last three segments
 	file = rel ? rel[1] : file.split('/').filter(Boolean).slice(-3).join('/');
 	// Kit's built name (`_page.server.ts.js`) → the source spelling
-	file = file.replace(/(^|\/)_(page|layout|error)((?:\.server)?\.[jt]s)\.js$/, (_, pre, l, ext) => `${pre}+${l}${ext}`);
+	file = file.replace(
+		/(^|\/)_(page|layout|error)((?:\.server)?\.[jt]s)\.js$/,
+		(_, pre, l, ext) => `${pre}+${l}${ext}`
+	);
 	return { file, level: m[2] as LoadLane['level'], kind: m[3] ? 'server' : 'universal' };
 }
 // (the `ogygia` package and the `@ogygia/core` it re-exports; a checkout's `packages/core`)
@@ -295,7 +312,7 @@ function is_in_file(url: string, stem: string): boolean {
 	const at = url.lastIndexOf(stem + '.');
 	if (at === -1) return false;
 	const before = url.charCodeAt(at - 1);
-	return at === 0 || before === 47 /* / */ || before === 92 /* \ */;
+	return at === 0 || before === 47 /* / */ || before === 92; /* \ */
 }
 
 /** The frame a CPU segment is charged to: the deepest component, else the deepest named app
@@ -330,9 +347,17 @@ export function owner_of_stack(frames: FrameInfo[]): {
 	// its first line), or a nameless callback with nothing named above it (an arrow after an await) —
 	// named by where it is, not "(anonymous)"
 	const anon = frames.find((f) => f.category === 'app' && f.url);
-	if (anon) return pick(anon, anon.line <= 1 ? `module load (${short(anon.url)})` : `fn @ ${short(anon.url)}:${anon.line}`);
+	if (anon)
+		return pick(
+			anon,
+			anon.line <= 1 ? `module load (${short(anon.url)})` : `fn @ ${short(anon.url)}:${anon.line}`
+		);
 	const anon_dep = frames.find((f) => f.category === 'dependency' && f.pkg);
-	if (anon_dep) return pick(anon_dep, `${anon_dep.line <= 1 ? 'module load' : '(anonymous)'} (${anon_dep.pkg})`);
+	if (anon_dep)
+		return pick(
+			anon_dep,
+			`${anon_dep.line <= 1 ? 'module load' : '(anonymous)'} (${anon_dep.pkg})`
+		);
 	const top = frames[0];
 	if (!top) return { label: 'unknown', file: '', category: 'unknown' };
 	if (top.category === 'gc') return { label: 'garbage collection', file: '', category: 'gc' };
@@ -388,7 +413,8 @@ export function build_timeline(
 			cur = parent_of(cur);
 		}
 		const leaf = frames[0];
-		const idle = !!leaf && (leaf.category === 'idle' || leaf.name === '(root)' || leaf.name === '(program)');
+		const idle =
+			!!leaf && (leaf.category === 'idle' || leaf.name === '(root)' || leaf.name === '(program)');
 		let lane: Described['lane'] = null;
 		let in_parent = false;
 		/** packages app code calls into on this stack, and the outermost package when no app code is on it */
@@ -404,7 +430,8 @@ export function build_timeline(
 				if (!has_app) inner = f;
 				has_app = true;
 				const child = frames[k - 1];
-				if (child?.category === 'dependency' && child.pkg && !entered.includes(child.pkg)) entered.push(child.pkg);
+				if (child?.category === 'dependency' && child.pkg && !entered.includes(child.pkg))
+					entered.push(child.pkg);
 			} else if (f.category === 'dependency' && f.pkg) root_pkg = f.pkg;
 		}
 		const d = {
@@ -434,7 +461,11 @@ export function build_timeline(
 	const lane_waits = new Map<string, [number, number][]>();
 	const lane_row = (l: NonNullable<Described['lane']>) => {
 		let r = lanes.get(l.file);
-		if (!r) lanes.set(l.file, (r = { ...l, t0: Infinity, t1: -Infinity, cpu_ms: 0, wait_ms: 0, awaited_parent: false }));
+		if (!r)
+			lanes.set(
+				l.file,
+				(r = { ...l, t0: Infinity, t1: -Infinity, cpu_ms: 0, wait_ms: 0, awaited_parent: false })
+			);
 		return r;
 	};
 	const samples = profile.samples ?? [];
@@ -455,7 +486,10 @@ export function build_timeline(
 		if (described.idle) continue;
 		for (const pkg of described.entered) entry_phase.set(pkg, described.phase);
 		if (t < w0) continue;
-		const inherited = described.phase === 'other' && described.orphan_pkg ? entry_phase.get(described.orphan_pkg) : undefined;
+		const inherited =
+			described.phase === 'other' && described.orphan_pkg
+				? entry_phase.get(described.orphan_pkg)
+				: undefined;
 		const info = inherited ? { ...described, phase: inherited } : described;
 		const s0 = Math.max(t - d / 1000, w0) - w0;
 		const s1 = t - w0;
@@ -482,7 +516,14 @@ export function build_timeline(
 			s0 - last.t1 <= (d / 1000) * 2
 		) {
 			last.t1 = s1;
-		} else cpu.push({ t0: s0, t1: s1, owner: info.owner, phase: info.phase, ...(info.lane ? { lane: info.lane.file } : {}) });
+		} else
+			cpu.push({
+				t0: s0,
+				t1: s1,
+				owner: info.owner,
+				phase: info.phase,
+				...(info.lane ? { lane: info.lane.file } : {})
+			});
 	}
 
 	// ── wait intervals from the calls inside the window ──
@@ -546,7 +587,8 @@ export function build_timeline(
 		// its slivers chopped one 31 ms wait into pieces, each repeating the whole call (callers,
 		// Server-Timing) — a third of the timeline's bytes. Outside a wait it stays drawn (the bar is
 		// honest) and out of the totals, as before.
-		const on_cpu = cpu_here && !(cpu_here.owner.category === 'profiler' && all_active.length) ? cpu_here : null;
+		const on_cpu =
+			cpu_here && !(cpu_here.owner.category === 'profiler' && all_active.length) ? cpu_here : null;
 		const open_spans = all_active.filter((w) => w.call.kind === 'span');
 		const inner = open_spans.length
 			? open_spans.reduce((m, w) => (w.call.ms < m.call.ms ? w : m), open_spans[0])
@@ -598,7 +640,9 @@ export function build_timeline(
 					label: `in ${inner.call.label}`,
 					category: 'idle',
 					phase: inner.call.phase ?? last_phase,
-					calls: [{ label: inner.call.label, ms: round2(inner.call.ms), caller: inner.call.caller }],
+					calls: [
+						{ label: inner.call.label, ms: round2(inner.call.ms), caller: inner.call.caller }
+					],
 					within: inner.call.label
 				};
 			} else {
@@ -612,7 +656,9 @@ export function build_timeline(
 					t0: a,
 					t1: b,
 					kind: 'gap',
-					label: uniq.length ? `nothing recorded — pending: ${uniq[0]}${uniq.length > 1 ? ` (+${uniq.length - 1})` : ''}` : 'nothing recorded',
+					label: uniq.length
+						? `nothing recorded — pending: ${uniq[0]}${uniq.length > 1 ? ` (+${uniq.length - 1})` : ''}`
+						: 'nothing recorded',
 					category: 'unknown',
 					phase: last_phase,
 					...(uniq.length ? { pending: uniq.slice(0, 6) } : {})
@@ -639,7 +685,8 @@ export function build_timeline(
 		s.t1 = round2(s.t1);
 	}
 	// a stretch that rounds to nothing is nothing (a sliver between two ticks)
-	for (let i = segments.length - 1; i >= 0; i--) if (segments[i].t1 <= segments[i].t0 && segments.length > 1) segments.splice(i, 1);
+	for (let i = segments.length - 1; i >= 0; i--)
+		if (segments[i].t1 <= segments[i].t0 && segments.length > 1) segments.splice(i, 1);
 
 	// ── totals + phases ──
 	let cpu_ms = 0,
@@ -687,7 +734,12 @@ export function build_timeline(
 				.sort((a, b) => b[1] - a[1])
 				.slice(0, 3)
 				.map(([label, ms]) => ({ label, ms: round2(ms) }));
-			return { phase: r.phase, cpu_ms: round2(r.cpu_ms), wait_ms: round2(r.wait_ms), ...(top.length ? { top } : {}) };
+			return {
+				phase: r.phase,
+				cpu_ms: round2(r.cpu_ms),
+				wait_ms: round2(r.wait_ms),
+				...(top.length ? { top } : {})
+			};
 		})
 		.sort((x, y) => y.cpu_ms + y.wait_ms - (x.cpu_ms + x.wait_ms));
 
@@ -736,7 +788,13 @@ export function build_timeline(
 	}
 	const lane_list = [...lanes.values()]
 		.filter((l) => Number.isFinite(l.t0))
-		.map((l) => ({ ...l, t0: round2(l.t0), t1: round2(l.t1), cpu_ms: round2(l.cpu_ms), wait_ms: round2(l.wait_ms) }))
+		.map((l) => ({
+			...l,
+			t0: round2(l.t0),
+			t1: round2(l.t1),
+			cpu_ms: round2(l.cpu_ms),
+			wait_ms: round2(l.wait_ms)
+		}))
 		.sort((x, y) => x.t0 - y.t0);
 	if (lane_list.length) {
 		timeline.lanes = lane_list;
@@ -746,7 +804,13 @@ export function build_timeline(
 		// universal ones — so only lanes of the page's own kind can be the chain's other end
 		const page = lane_list.find((l) => l.level === 'page');
 		const layout = lane_list
-			.filter((l) => l.level === 'layout' && l.kind === page?.kind && l.t1 - l.t0 >= 2 && (l.wait_ms > 0 || l.cpu_ms >= 2))
+			.filter(
+				(l) =>
+					l.level === 'layout' &&
+					l.kind === page?.kind &&
+					l.t1 - l.t0 >= 2 &&
+					(l.wait_ms > 0 || l.cpu_ms >= 2)
+			)
 			.sort((x, y) => y.t1 - x.t1)[0];
 		if (page && layout && (page.awaited_parent || page.t0 >= layout.t1 - 0.25)) {
 			timeline.chain = {
@@ -767,10 +831,18 @@ export function build_timeline(
  * waited for that end, and `at` is the line that did the waiting. Edges are what the
  * "awaits in a row" callouts are made of; the graph shows them with the exact await site.
  */
-export function await_graph(input: TimelineInput, w0: number, w1: number): { nodes: AwaitNode[]; edges: AwaitEdge[] } {
+export function await_graph(
+	input: TimelineInput,
+	w0: number,
+	w1: number
+): { nodes: AwaitNode[]; edges: AwaitEdge[] } {
 	const calls = input.calls
 		.filter((c) => c.kind !== 'span' && c.ms >= 0 && c.start <= w1 && c.start + c.ms >= w0)
-		.map((c) => ({ c, t0: round2(Math.max(c.start, w0) - w0), t1: round2(Math.min(c.start + c.ms, w1) - w0) }))
+		.map((c) => ({
+			c,
+			t0: round2(Math.max(c.start, w0) - w0),
+			t1: round2(Math.min(c.start + c.ms, w1) - w0)
+		}))
 		.sort((x, y) => x.t0 - y.t0 || x.t1 - y.t1)
 		.slice(0, 200);
 	// lanes: first free row whose last call ended before this one starts
@@ -779,7 +851,14 @@ export function await_graph(input: TimelineInput, w0: number, w1: number): { nod
 		let lane = lane_end.findIndex((e) => e <= t0);
 		if (lane === -1) lane = lane_end.push(0) - 1;
 		lane_end[lane] = t1;
-		return { label: c.label, t0, t1, lane, kind: c.kind, ...(c.caller ? { caller: c.caller } : {}) };
+		return {
+			label: c.label,
+			t0,
+			t1,
+			lane,
+			kind: c.kind,
+			...(c.caller ? { caller: c.caller } : {})
+		};
 	});
 	const edges: AwaitEdge[] = [];
 	for (let i = 0; i < calls.length; i++) {
@@ -792,7 +871,9 @@ export function await_graph(input: TimelineInput, w0: number, w1: number): { nod
 		}
 		if (!prev) continue;
 		// serialized only if nothing else was still in flight when this one started
-		const in_flight = calls.some((o, j) => j !== i && o !== prev && o.t0 < cur.t0 - 0.05 && o.t1 > cur.t0 + 0.05);
+		const in_flight = calls.some(
+			(o, j) => j !== i && o !== prev && o.t0 < cur.t0 - 0.05 && o.t1 > cur.t0 + 0.05
+		);
 		if (in_flight) continue;
 		edges.push({
 			from: prev.c.label,
@@ -834,7 +915,12 @@ export function find_parallelizable(t: Timeline): ParallelGroup[] {
 			const sum = group.lens.reduce((a, c) => a + c, 0);
 			const max = Math.max(...group.lens);
 			if (sum - max >= 1) {
-				parallelizable.push({ calls: group.labels, ms: round2(sum), save_ms: round2(sum - max), at: group.at });
+				parallelizable.push({
+					calls: group.labels,
+					ms: round2(sum),
+					save_ms: round2(sum - max),
+					at: group.at
+				});
 			}
 		}
 		group = null;
@@ -881,15 +967,22 @@ export interface ViewSegment extends Segment {
 	inside?: { label: string; kind: Segment['kind']; ms: number }[];
 }
 
-export function coalesce(t: Timeline, min_ms: number =Math.max(t.window_ms * 0.012, 1)): ViewSegment[] {
+export function coalesce(
+	t: Timeline,
+	min_ms: number = Math.max(t.window_ms * 0.012, 1)
+): ViewSegment[] {
 	const out: ViewSegment[] = [];
 	let small: Segment[] = [];
 	const len = (s: Segment) => s.t1 - s.t0;
 	// (one wait's two halves, not two calls of the same label: `GET /api?name=a` then `?name=b` label
 	// alike, and read as one call they hid a call from the awaits in a row)
-	const same = (a: Segment, b: Segment) => a.kind === b.kind && a.label === b.label && a.within === b.within && call_id(a) === call_id(b);
+	const same = (a: Segment, b: Segment) =>
+		a.kind === b.kind && a.label === b.label && a.within === b.within && call_id(a) === call_id(b);
 	const fold = (list: Segment[]): ViewSegment => {
-		const by = new Map<string, { label: string; kind: Segment['kind']; ms: number; seg: Segment }>();
+		const by = new Map<
+			string,
+			{ label: string; kind: Segment['kind']; ms: number; seg: Segment }
+		>();
 		const kind_ms = { cpu: 0, wait: 0, gap: 0 };
 		for (const s of list) {
 			const k = s.kind + '\0' + s.label;
@@ -899,7 +992,9 @@ export function coalesce(t: Timeline, min_ms: number =Math.max(t.window_ms * 0.0
 			kind_ms[s.kind] += len(s);
 		}
 		const inside = [...by.values()].sort((a, b) => b.ms - a.ms);
-		const kind = (Object.entries(kind_ms) as [Segment['kind'], number][]).sort((a, b) => b[1] - a[1])[0][0];
+		const kind = (Object.entries(kind_ms) as [Segment['kind'], number][]).sort(
+			(a, b) => b[1] - a[1]
+		)[0][0];
 		const top = inside.find((i) => i.kind === kind) ?? inside[0];
 		const phases = new Map<Phase, number>();
 		for (const s of list) phases.set(s.phase, (phases.get(s.phase) ?? 0) + len(s));
@@ -913,7 +1008,10 @@ export function coalesce(t: Timeline, min_ms: number =Math.max(t.window_ms * 0.0
 			t0: list[0].t0,
 			t1: list[list.length - 1].t1,
 			kind,
-			label: list.length === 1 ? top.label : `mostly ${top.label}${others > 0 ? ` (+${others} more)` : ''}`,
+			label:
+				list.length === 1
+					? top.label
+					: `mostly ${top.label}${others > 0 ? ` (+${others} more)` : ''}`,
 			detail: list.length === 1 ? top.seg.detail : undefined,
 			file: top.seg.file,
 			category: top.seg.category,
@@ -921,7 +1019,10 @@ export function coalesce(t: Timeline, min_ms: number =Math.max(t.window_ms * 0.0
 			calls: kind === 'wait' ? top.seg.calls : undefined,
 			within,
 			parts: list.length,
-			inside: list.length === 1 ? undefined : inside.map(({ label, kind, ms }) => ({ label, kind, ms: Math.round(ms * 100) / 100 }))
+			inside:
+				list.length === 1
+					? undefined
+					: inside.map(({ label, kind, ms }) => ({ label, kind, ms: Math.round(ms * 100) / 100 }))
 		};
 	};
 	const flush_small = () => {
@@ -975,9 +1076,18 @@ export function label_call(method: string, url: string): string {
 
 /** The steps worth listing: every coalesced segment at or above `min_pct` of the window, in time
  *  order (`i` indexes the coalesced list). */
-export function chain_steps(t: Timeline, min_pct = 2, max = 14): { i: number; seg: ViewSegment; ms: number; pct: number }[] {
+export function chain_steps(
+	t: Timeline,
+	min_pct = 2,
+	max = 14
+): { i: number; seg: ViewSegment; ms: number; pct: number }[] {
 	const rows = coalesce(t)
-		.map((seg, i) => ({ i, seg, ms: round2(seg.t1 - seg.t0), pct: ((seg.t1 - seg.t0) / t.window_ms) * 100 }))
+		.map((seg, i) => ({
+			i,
+			seg,
+			ms: round2(seg.t1 - seg.t0),
+			pct: ((seg.t1 - seg.t0) / t.window_ms) * 100
+		}))
 		.filter((r) => r.pct >= min_pct);
 	if (rows.length <= max) return rows;
 	// too many: keep the biggest `max`, back in time order

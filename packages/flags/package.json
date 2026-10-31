@@ -11,7 +11,13 @@
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/flags"
 	},
-	"keywords": ["ogygia", "sveltekit", "feature-flags", "ab-testing", "openfeature"],
+	"keywords": [
+		"ogygia",
+		"sveltekit",
+		"feature-flags",
+		"ab-testing",
+		"openfeature"
+	],
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",
@@ -26,7 +32,10 @@
 			"default": "./src/vite.ts"
 		}
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"scripts": {
 		"build": "tsdown",
 		"check": "tsc -p . && tsc -p test && vitest run",

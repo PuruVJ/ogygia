@@ -9,9 +9,9 @@
 
 <h1 data-static-shell>Prerendered page</h1>
 <p data-static-shell>
-	This page is prerendered to a static <code>.html</code> file at build time. It ships zero Kit
-	JS, its counter island hydrates from the static file, and its greeting is a personalized
-	server-island hole filled at runtime.
+	This page is prerendered to a static <code>.html</code> file at build time. It ships zero Kit JS, its
+	counter island hydrates from the static file, and its greeting is a personalized server-island hole
+	filled at runtime.
 </p>
 
 <Counter start={7} label="Prerendered counter" />

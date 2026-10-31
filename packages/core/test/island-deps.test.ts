@@ -15,18 +15,30 @@ import {
 } from '../dist/compiler/link/island-deps.js';
 
 describe('one module, two copies', () => {
-	test("a package file by its source and its build, or two installed versions, is one key; the copies say where they came from", () => {
+	test('a package file by its source and its build, or two installed versions, is one key; the copies say where they came from', () => {
 		expect(module_key('/w/packages/ogygia/src/runtime/beacon.ts')).toBe('ogygia/runtime/beacon');
 		expect(module_key('/w/packages/ogygia/dist/runtime/beacon.js')).toBe('ogygia/runtime/beacon');
-		expect(module_key('/w/node_modules/.pnpm/svelte@5.56.8/node_modules/svelte/src/internal/client/index.js')).toBe('svelte/internal/client/index');
-		expect(module_key('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')).toBe('@scope/lib/a');
+		expect(
+			module_key(
+				'/w/node_modules/.pnpm/svelte@5.56.8/node_modules/svelte/src/internal/client/index.js'
+			)
+		).toBe('svelte/internal/client/index');
+		expect(
+			module_key('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')
+		).toBe('@scope/lib/a');
 		expect(module_key('\0vite/preload-helper')).toBeNull();
 		expect(module_origin('/w/packages/ogygia/dist/runtime/beacon.js')).toBe('ogygia/dist');
 		// a package kept inside an app's own src: its dist, not the app's src
 		expect(module_origin('/w/apps/x/src/lib/dup-pkg/dist/catalog.js')).toBe('dup-pkg/dist');
-		expect(module_key('/w/apps/x/src/lib/dup-pkg/dist/catalog.js')).toBe(module_key('/w/apps/x/src/lib/dup-pkg/src/catalog.ts'));
-		expect(module_origin('/w/node_modules/.pnpm/svelte@5.56.8_acorn@8/node_modules/svelte/src/a.js')).toBe('svelte@5.56.8');
-		expect(module_origin('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')).toBe('@scope/lib@1.0.0');
+		expect(module_key('/w/apps/x/src/lib/dup-pkg/dist/catalog.js')).toBe(
+			module_key('/w/apps/x/src/lib/dup-pkg/src/catalog.ts')
+		);
+		expect(
+			module_origin('/w/node_modules/.pnpm/svelte@5.56.8_acorn@8/node_modules/svelte/src/a.js')
+		).toBe('svelte@5.56.8');
+		expect(
+			module_origin('/w/node_modules/.pnpm/@scope+lib@1.0.0/node_modules/@scope/lib/dist/a.mjs')
+		).toBe('@scope/lib@1.0.0');
 	});
 	test('only a key with two ids is a duplicate; small copies are left out; the heaviest first', () => {
 		const size: Record<string, number> = {
@@ -39,8 +51,25 @@ describe('one module, two copies', () => {
 			'/w/packages/ogygia/src/tiny.ts': 100
 		};
 		const d = duplicate_modules([
-			{ file: '_app/immutable/og-runtime.js', ids: ['/w/packages/ogygia/dist/runtime/beacon.js', '/w/packages/ogygia/dist/ref.js', '/w/packages/ogygia/dist/tiny.js'], size_of: (id) => size[id] },
-			{ file: '_app/immutable/chunks/I.js', ids: ['/w/packages/ogygia/src/runtime/beacon.ts', '/w/packages/ogygia/src/ref.ts', '/w/apps/x/src/lib/A.svelte', '/w/packages/ogygia/src/tiny.ts'], size_of: (id) => size[id] }
+			{
+				file: '_app/immutable/og-runtime.js',
+				ids: [
+					'/w/packages/ogygia/dist/runtime/beacon.js',
+					'/w/packages/ogygia/dist/ref.js',
+					'/w/packages/ogygia/dist/tiny.js'
+				],
+				size_of: (id) => size[id]
+			},
+			{
+				file: '_app/immutable/chunks/I.js',
+				ids: [
+					'/w/packages/ogygia/src/runtime/beacon.ts',
+					'/w/packages/ogygia/src/ref.ts',
+					'/w/apps/x/src/lib/A.svelte',
+					'/w/packages/ogygia/src/tiny.ts'
+				],
+				size_of: (id) => size[id]
+			}
 		]);
 		expect(d.map((x) => x.name)).toEqual(['ogygia/runtime/beacon', 'ogygia/ref']);
 		expect(d[0].copies).toEqual([
@@ -109,7 +138,11 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/chunks/helper.js', '_app/immutable/chunks/shared.js'],
 				dynamicImports: ['_app/immutable/chunks/hydrate-core.js']
 			},
-			'_app/immutable/chunks/helper.js': { type: 'chunk', fileName: '_app/immutable/chunks/helper.js', imports: [] },
+			'_app/immutable/chunks/helper.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/helper.js',
+				imports: []
+			},
 			'_app/immutable/chunks/shared.js': {
 				type: 'chunk',
 				fileName: '_app/immutable/chunks/shared.js',
@@ -161,12 +194,29 @@ describe('collectIslandDepModulepreloads', () => {
 				imports: ['_app/immutable/x.js'] // not an emitted chunk — never hinted
 			}
 		};
-		const empty = { css: {}, page: {}, page_keys: {}, remotes: {}, interactivity: {}, hazards: {}, contents: {}, heavy: {}, dupes: [] };
+		const empty = {
+			css: {},
+			page: {},
+			page_keys: {},
+			remotes: {},
+			interactivity: {},
+			hazards: {},
+			contents: {},
+			heavy: {},
+			dupes: []
+		};
 		// not told which chunk is the runtime → nothing is (no guessing from the name)
 		expect(collectIslandDepModulepreloads(bundle)).toEqual({ js: {}, ...empty });
 		// told → recorded, and a leading slash on the name is fine
 		expect(
-			collectIslandDepModulepreloads(bundle, [], null, null, null, '/_app/immutable/og-runtime.abcdef123456.js')
+			collectIslandDepModulepreloads(
+				bundle,
+				[],
+				null,
+				null,
+				null,
+				'/_app/immutable/og-runtime.abcdef123456.js'
+			)
 		).toEqual({ js: { '/_app/immutable/og-runtime.abcdef123456.js': [] }, ...empty });
 	});
 
@@ -192,7 +242,11 @@ describe('collectIslandDepModulepreloads', () => {
 				type: 'chunk',
 				fileName: '_app/immutable/chunk-a.js',
 				imports: [],
-				moduleIds: ['/app/src/lib/Static.svelte', '/app/node_modules/lib/Widget.svelte', '/app/src/lib/util.js']
+				moduleIds: [
+					'/app/src/lib/Static.svelte',
+					'/app/node_modules/lib/Widget.svelte',
+					'/app/src/lib/util.js'
+				]
 			}
 		};
 		const read = (id: string) => SRC[id] ?? null;
@@ -208,14 +262,32 @@ describe('collectIslandDepModulepreloads', () => {
 				shared: 0,
 				files: 1
 			});
-			const { interactivity } = collectIslandDepModulepreloads(bundle, undefined, undefined, undefined, read);
-			expect(interactivity[FACADE]).toEqual({ handlers: 2, state: 1, effects: 1, binds: 1, actions: 1, awaits: 0, shared: 0, remotes: 0, files: 2 });
+			const { interactivity } = collectIslandDepModulepreloads(
+				bundle,
+				undefined,
+				undefined,
+				undefined,
+				read
+			);
+			expect(interactivity[FACADE]).toEqual({
+				handlers: 2,
+				state: 1,
+				effects: 1,
+				binds: 1,
+				actions: 1,
+				awaits: 0,
+				shared: 0,
+				remotes: 0,
+				files: 2
+			});
 		});
 
 		test("the lines that draw differently in the browser: the app's and the site kit's, never another package's", () => {
 			const src: Record<string, string> = {
-				'/app/src/lib/Clock.svelte': "<script>\n\tconst where = typeof window === 'undefined' ? 'server' : 'browser';\n</script>\n<p>{where}</p>",
-				'/app/node_modules/ogygia/dist/content/site/components/Sidebar.svelte': '<script>\n\tlet { site } = $props();\n\tconst tree = await site.nav();\n</script>',
+				'/app/src/lib/Clock.svelte':
+					"<script>\n\tconst where = typeof window === 'undefined' ? 'server' : 'browser';\n</script>\n<p>{where}</p>",
+				'/app/node_modules/ogygia/dist/content/site/components/Sidebar.svelte':
+					'<script>\n\tlet { site } = $props();\n\tconst tree = await site.nav();\n</script>',
 				'/app/node_modules/lib/Widget.svelte': '<p>{Date.now()}</p>'
 			};
 			const b = {
@@ -223,13 +295,34 @@ describe('collectIslandDepModulepreloads', () => {
 					type: 'chunk',
 					fileName: FACADE.slice(1),
 					imports: [],
-					moduleIds: ['/app/src/lib/Clock.svelte', '/app/node_modules/ogygia/dist/content/site/components/Sidebar.svelte', '/app/node_modules/lib/Widget.svelte']
+					moduleIds: [
+						'/app/src/lib/Clock.svelte',
+						'/app/node_modules/ogygia/dist/content/site/components/Sidebar.svelte',
+						'/app/node_modules/lib/Widget.svelte'
+					]
 				}
 			};
-			const { hazards } = collectIslandDepModulepreloads(b, undefined, undefined, undefined, (id: string) => src[id] ?? null);
+			const { hazards } = collectIslandDepModulepreloads(
+				b,
+				undefined,
+				undefined,
+				undefined,
+				(id: string) => src[id] ?? null
+			);
 			expect(hazards[FACADE]).toEqual([
-				{ file: 'src/lib/Clock.svelte', line: 2, code: "const where = typeof window === 'undefined' ? 'server' : 'browser';", kind: 'browser', reads: 'typeof window' },
-				{ file: 'ogygia/content/site/components/Sidebar.svelte', line: 3, code: 'const tree = await site.nav();', kind: 'await' }
+				{
+					file: 'src/lib/Clock.svelte',
+					line: 2,
+					code: "const where = typeof window === 'undefined' ? 'server' : 'browser';",
+					kind: 'browser',
+					reads: 'typeof window'
+				},
+				{
+					file: 'ogygia/content/site/components/Sidebar.svelte',
+					line: 3,
+					code: 'const tree = await site.nav();',
+					kind: 'await'
+				}
 			]);
 		});
 
@@ -239,16 +332,34 @@ describe('collectIslandDepModulepreloads', () => {
 		});
 
 		test('state another island can change: a context read, a rune module import', () => {
-			expect(interactivity_facts("<script>import { roomCtx } from '$lib/room-context.svelte.js'; const c = roomCtx.get();</script>{c.count}").shared).toBe(1);
-			expect(interactivity_facts("<script>import { getContext } from 'svelte'; const n = getContext('room');</script>").shared).toBe(1);
-			expect(interactivity_facts("<script lang=\"ts\">const g = getContext<string>('greeting');</script>").shared).toBe(1);
-			expect(interactivity_facts("<script>import X from './X.svelte';</script><X />").shared).toBe(0);
+			expect(
+				interactivity_facts(
+					"<script>import { roomCtx } from '$lib/room-context.svelte.js'; const c = roomCtx.get();</script>{c.count}"
+				).shared
+			).toBe(1);
+			expect(
+				interactivity_facts(
+					"<script>import { getContext } from 'svelte'; const n = getContext('room');</script>"
+				).shared
+			).toBe(1);
+			expect(
+				interactivity_facts(
+					'<script lang="ts">const g = getContext<string>(\'greeting\');</script>'
+				).shared
+			).toBe(1);
+			expect(interactivity_facts("<script>import X from './X.svelte';</script><X />").shared).toBe(
+				0
+			);
 		});
 
 		test('what is inside each chunk: app files first, packages named, the runtimes plainly, capped', () => {
 			const { contents } = collectIslandDepModulepreloads(bundle);
 			expect(contents[FACADE]).toEqual(['src/lib/Card.svelte']);
-			expect(contents['/_app/immutable/chunk-a.js']).toEqual(['src/lib/Static.svelte', 'src/lib/util.js', 'lib']);
+			expect(contents['/_app/immutable/chunk-a.js']).toEqual([
+				'src/lib/Static.svelte',
+				'src/lib/util.js',
+				'lib'
+			]);
 			expect(
 				summarize_chunk_contents([
 					'\0virtual:x',
@@ -263,12 +374,31 @@ describe('collectIslandDepModulepreloads', () => {
 					'C:\\app\\src\\lib\\a.ts?og-region=1',
 					...Array.from({ length: 8 }, (_, i) => `/app/src/lib/f${i}.ts`)
 				])
-			).toEqual(['src/lib/a.ts', 'src/lib/f0.ts', 'src/lib/f1.ts', 'src/lib/f2.ts', 'src/lib/f3.ts', 'src/lib/f4.ts', 'svelte runtime', 'ogygia runtime', '@sveltejs/kit', '@scope/pkg', 'date-fns', '+4 more']);
+			).toEqual([
+				'src/lib/a.ts',
+				'src/lib/f0.ts',
+				'src/lib/f1.ts',
+				'src/lib/f2.ts',
+				'src/lib/f3.ts',
+				'src/lib/f4.ts',
+				'svelte runtime',
+				'ogygia runtime',
+				'@sveltejs/kit',
+				'@scope/pkg',
+				'date-fns',
+				'+4 more'
+			]);
 		});
 
 		test('with the bundler’s sizes, the heaviest are named first (a big file is never hidden in "+N more")', () => {
-			const ids = [...Array.from({ length: 7 }, (_, i) => `/app/src/lib/small${i}.ts`), '/app/src/lib/Icons.svelte', '/app/node_modules/tiny/i.js', '/app/node_modules/big/i.js'];
-			const size = (id: string) => (id.includes('Icons') ? 68_000 : id.includes('/big/') ? 40_000 : 100);
+			const ids = [
+				...Array.from({ length: 7 }, (_, i) => `/app/src/lib/small${i}.ts`),
+				'/app/src/lib/Icons.svelte',
+				'/app/node_modules/tiny/i.js',
+				'/app/node_modules/big/i.js'
+			];
+			const size = (id: string) =>
+				id.includes('Icons') ? 68_000 : id.includes('/big/') ? 40_000 : 100;
 			const out = summarize_chunk_contents(ids, 6, 5, size);
 			expect(out[0]).toBe('src/lib/Icons.svelte');
 			expect(out.slice(6, 8)).toEqual(['big', 'tiny']);
@@ -278,20 +408,50 @@ describe('collectIslandDepModulepreloads', () => {
 		});
 
 		test('a chunk’s heaviest named modules with their bytes, a package summed, and the chunk total', () => {
-			const ids = ['/app/src/lib/Icons.svelte', '/app/src/lib/Card.svelte', '/app/node_modules/pkg/a.js', '/app/node_modules/pkg/b.js', '\0virtual:x'];
-			const size = (id: string) => (id.includes('Icons') ? 68_000 : id.includes('Card') ? 2_000 : 1_500);
-			expect(chunk_module_bytes(ids, size)).toEqual({ total: 73_000, top: [{ name: 'src/lib/Icons.svelte', bytes: 68_000 }, { name: 'pkg', bytes: 3_000 }, { name: 'src/lib/Card.svelte', bytes: 2_000 }] });
+			const ids = [
+				'/app/src/lib/Icons.svelte',
+				'/app/src/lib/Card.svelte',
+				'/app/node_modules/pkg/a.js',
+				'/app/node_modules/pkg/b.js',
+				'\0virtual:x'
+			];
+			const size = (id: string) =>
+				id.includes('Icons') ? 68_000 : id.includes('Card') ? 2_000 : 1_500;
+			expect(chunk_module_bytes(ids, size)).toEqual({
+				total: 73_000,
+				top: [
+					{ name: 'src/lib/Icons.svelte', bytes: 68_000 },
+					{ name: 'pkg', bytes: 3_000 },
+					{ name: 'src/lib/Card.svelte', bytes: 2_000 }
+				]
+			});
 		});
 
 		test('every chunk the build emitted is summarized, not only the ones islands pull', () => {
 			const { contents } = collectIslandDepModulepreloads({
 				...bundle,
-				'_app/immutable/chunks/hydrate-core.js': { type: 'chunk', fileName: '_app/immutable/chunks/hydrate-core.js', imports: [], moduleIds: ['/app/node_modules/ogygia/dist/runtime/hydrate-core.js'] },
-				'_app/immutable/entry/start.js': { type: 'chunk', fileName: '_app/immutable/entry/start.js', imports: [], moduleIds: ['/app/node_modules/@sveltejs/kit/src/runtime/client/entry.js', '/app/node_modules/svelte/src/internal/client/index.js'] },
+				'_app/immutable/chunks/hydrate-core.js': {
+					type: 'chunk',
+					fileName: '_app/immutable/chunks/hydrate-core.js',
+					imports: [],
+					moduleIds: ['/app/node_modules/ogygia/dist/runtime/hydrate-core.js']
+				},
+				'_app/immutable/entry/start.js': {
+					type: 'chunk',
+					fileName: '_app/immutable/entry/start.js',
+					imports: [],
+					moduleIds: [
+						'/app/node_modules/@sveltejs/kit/src/runtime/client/entry.js',
+						'/app/node_modules/svelte/src/internal/client/index.js'
+					]
+				},
 				'_app/immutable/assets/x.css': { type: 'asset', fileName: '_app/immutable/assets/x.css' }
 			} as Parameters<typeof collectIslandDepModulepreloads>[0]);
 			expect(contents['/_app/immutable/chunks/hydrate-core.js']).toEqual(['ogygia runtime']);
-			expect(contents['/_app/immutable/entry/start.js']).toEqual(['@sveltejs/kit', 'svelte runtime']);
+			expect(contents['/_app/immutable/entry/start.js']).toEqual([
+				'@sveltejs/kit',
+				'svelte runtime'
+			]);
 			expect(contents['/_app/immutable/assets/x.css']).toBeUndefined();
 			// the island's own entries are unchanged
 			expect(contents[FACADE]).toEqual(['src/lib/Card.svelte']);
@@ -300,9 +460,17 @@ describe('collectIslandDepModulepreloads', () => {
 		test('no reader → no facts; a pure-markup island reads as zero everywhere', () => {
 			expect(collectIslandDepModulepreloads(bundle).interactivity).toEqual({});
 			const only_static = {
-				[FACADE.slice(1)]: { type: 'chunk', fileName: FACADE.slice(1), imports: [], moduleIds: ['/app/src/lib/Static.svelte'] }
+				[FACADE.slice(1)]: {
+					type: 'chunk',
+					fileName: FACADE.slice(1),
+					imports: [],
+					moduleIds: ['/app/src/lib/Static.svelte']
+				}
 			};
-			expect(collectIslandDepModulepreloads(only_static, undefined, undefined, undefined, read).interactivity[FACADE]).toEqual({
+			expect(
+				collectIslandDepModulepreloads(only_static, undefined, undefined, undefined, read)
+					.interactivity[FACADE]
+			).toEqual({
 				handlers: 0,
 				state: 0,
 				effects: 0,
@@ -368,17 +536,31 @@ describe('collectIslandDepModulepreloads', () => {
 		const SHIM = '/pkg/shims/app-state.svelte.js';
 		const ENTRY = '/_app/immutable/og-region.aaaaaaaaaaaa.js';
 		const bundle = (facade_ids: string[], dep_ids: string[]) => ({
-			'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'chunk', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js', imports: ['_app/immutable/chunks/dep.js'], moduleIds: facade_ids },
-			'_app/immutable/chunks/dep.js': { type: 'chunk', fileName: '_app/immutable/chunks/dep.js', imports: [], moduleIds: dep_ids }
+			'_app/immutable/og-region.aaaaaaaaaaaa.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js',
+				imports: ['_app/immutable/chunks/dep.js'],
+				moduleIds: facade_ids
+			},
+			'_app/immutable/chunks/dep.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/dep.js',
+				imports: [],
+				moduleIds: dep_ids
+			}
 		});
-		const keys_of = (table: Record<string, Set<string> | 'all'>) => (id: string) => table[id] ?? null;
+		const keys_of = (table: Record<string, Set<string> | 'all'>) => (id: string) =>
+			table[id] ?? null;
 
 		test('keys union across the facade and a dep chunk, sorted', () => {
 			const r = collectIslandDepModulepreloads(
 				bundle([SHIM, '/app/src/lib/A.svelte'], ['/app/src/lib/util.ts']),
 				[SHIM],
 				null,
-				keys_of({ '/app/src/lib/A.svelte': new Set(['user', '_locale']), '/app/src/lib/util.ts': new Set(['flags']) })
+				keys_of({
+					'/app/src/lib/A.svelte': new Set(['user', '_locale']),
+					'/app/src/lib/util.ts': new Set(['flags'])
+				})
 			);
 			expect(r.page[ENTRY]).toBe(true);
 			expect(r.page_keys[ENTRY]).toEqual(['_locale', 'flags', 'user']);
@@ -393,7 +575,12 @@ describe('collectIslandDepModulepreloads', () => {
 			expect(r.page_keys[ENTRY]).toBeNull();
 		});
 		test('a reader whose keys no module recorded → null (the page reached through unseen code)', () => {
-			const r = collectIslandDepModulepreloads(bundle([SHIM, '/app/src/lib/A.svelte'], []), [SHIM], null, keys_of({}));
+			const r = collectIslandDepModulepreloads(
+				bundle([SHIM, '/app/src/lib/A.svelte'], []),
+				[SHIM],
+				null,
+				keys_of({})
+			);
 			expect(r.page[ENTRY]).toBe(true);
 			expect(r.page_keys[ENTRY]).toBeNull();
 		});
@@ -415,15 +602,33 @@ describe('collectIslandDepModulepreloads', () => {
 		// the island discards (da1f: a search bar `await import`ing a logged-in widget that read
 		// `page.data.locale`).
 		const dyn_bundle = (facade_ids: string[], dyn_ids: string[]) => ({
-			'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'chunk', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js', imports: [], dynamicImports: ['_app/immutable/chunks/dyn.js'], moduleIds: facade_ids },
-			'_app/immutable/chunks/dyn.js': { type: 'chunk', fileName: '_app/immutable/chunks/dyn.js', imports: [], dynamicImports: [], moduleIds: dyn_ids }
+			'_app/immutable/og-region.aaaaaaaaaaaa.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js',
+				imports: [],
+				dynamicImports: ['_app/immutable/chunks/dyn.js'],
+				moduleIds: facade_ids
+			},
+			'_app/immutable/chunks/dyn.js': {
+				type: 'chunk',
+				fileName: '_app/immutable/chunks/dyn.js',
+				imports: [],
+				dynamicImports: [],
+				moduleIds: dyn_ids
+			}
 		});
 		test('a dynamically-imported page reader contributes its keys to the parent seed', () => {
 			const r = collectIslandDepModulepreloads(
-				dyn_bundle([SHIM, '/app/src/lib/SearchBar.svelte'], [SHIM, '/app/src/lib/GuidedSearch.svelte']),
+				dyn_bundle(
+					[SHIM, '/app/src/lib/SearchBar.svelte'],
+					[SHIM, '/app/src/lib/GuidedSearch.svelte']
+				),
 				[SHIM],
 				null,
-				keys_of({ '/app/src/lib/SearchBar.svelte': new Set(['searchBarMarkup']), '/app/src/lib/GuidedSearch.svelte': new Set(['locale']) })
+				keys_of({
+					'/app/src/lib/SearchBar.svelte': new Set(['searchBarMarkup']),
+					'/app/src/lib/GuidedSearch.svelte': new Set(['locale'])
+				})
 			);
 			expect(r.page[ENTRY]).toBe(true);
 			expect(r.page_keys[ENTRY]).toEqual(['locale', 'searchBarMarkup']);
@@ -440,10 +645,16 @@ describe('collectIslandDepModulepreloads', () => {
 		});
 		test('an unpinned dynamically-imported reader ships all (fail-open, like a static one)', () => {
 			const r = collectIslandDepModulepreloads(
-				dyn_bundle([SHIM, '/app/src/lib/SearchBar.svelte'], [SHIM, '/app/src/lib/GuidedSearch.svelte']),
+				dyn_bundle(
+					[SHIM, '/app/src/lib/SearchBar.svelte'],
+					[SHIM, '/app/src/lib/GuidedSearch.svelte']
+				),
 				[SHIM],
 				null,
-				keys_of({ '/app/src/lib/SearchBar.svelte': new Set(['searchBarMarkup']), '/app/src/lib/GuidedSearch.svelte': 'all' })
+				keys_of({
+					'/app/src/lib/SearchBar.svelte': new Set(['searchBarMarkup']),
+					'/app/src/lib/GuidedSearch.svelte': 'all'
+				})
 			);
 			expect(r.page[ENTRY]).toBe(true);
 			expect(r.page_keys[ENTRY]).toBeNull();
@@ -504,13 +715,23 @@ describe('remotes map', () => {
 			expect(remote_hash_of('/app/src/lib/footer-v2/footer.remote.ts', '/app/')).toBe('1rczqrp');
 		});
 		test('a `?query` suffix and Windows separators do not change the hash', () => {
-			expect(remote_hash_of('/app/src/lib/footer-v2/footer.remote.ts?og-region', '/app')).toBe('1rczqrp');
-			expect(remote_hash_of('C:\\app\\src\\lib\\footer-v2\\footer.remote.ts', 'C:\\app')).toBe('1rczqrp');
+			expect(remote_hash_of('/app/src/lib/footer-v2/footer.remote.ts?og-region', '/app')).toBe(
+				'1rczqrp'
+			);
+			expect(remote_hash_of('C:\\app\\src\\lib\\footer-v2\\footer.remote.ts', 'C:\\app')).toBe(
+				'1rczqrp'
+			);
 		});
 		test('.remote.js / .mjs / .cjs / .mts count; anything else is not a remote', () => {
-			expect(remote_hash_of('/app/src/x.remote.js', '/app')).toBe(kit_remote_hash('src/x.remote.js'));
-			expect(remote_hash_of('/app/src/x.remote.mts', '/app')).toBe(kit_remote_hash('src/x.remote.mts'));
-			expect(remote_hash_of('/app/src/x.remote.cjs', '/app')).toBe(kit_remote_hash('src/x.remote.cjs'));
+			expect(remote_hash_of('/app/src/x.remote.js', '/app')).toBe(
+				kit_remote_hash('src/x.remote.js')
+			);
+			expect(remote_hash_of('/app/src/x.remote.mts', '/app')).toBe(
+				kit_remote_hash('src/x.remote.mts')
+			);
+			expect(remote_hash_of('/app/src/x.remote.cjs', '/app')).toBe(
+				kit_remote_hash('src/x.remote.cjs')
+			);
 			expect(remote_hash_of('/app/src/x.svelte', '/app')).toBeNull();
 			expect(remote_hash_of('/app/src/remote.ts', '/app')).toBeNull();
 			expect(remote_hash_of('/app/src/x.remote.ts.bak', '/app')).toBeNull();
@@ -518,13 +739,21 @@ describe('remotes map', () => {
 	});
 
 	test('remote in the facade itself → listed', () => {
-		const r = collectIslandDepModulepreloads(bundle([facade([FOOTER, '/app/src/lib/A.svelte'])]), [], hash_of);
+		const r = collectIslandDepModulepreloads(
+			bundle([facade([FOOTER, '/app/src/lib/A.svelte'])]),
+			[],
+			hash_of
+		);
 		expect(r.remotes[FACADE]).toEqual([kit_remote_hash('src/lib/footer.remote.ts')]);
 	});
 	test('remote in a transitive STATIC dep chunk → listed', () => {
 		const b = bundle([
 			facade(['/app/src/lib/A.svelte'], ['_app/immutable/chunks/dep.js']),
-			chunk('_app/immutable/chunks/dep.js', ['/app/src/lib/B.svelte'], ['_app/immutable/chunks/leaf.js']),
+			chunk(
+				'_app/immutable/chunks/dep.js',
+				['/app/src/lib/B.svelte'],
+				['_app/immutable/chunks/leaf.js']
+			),
 			chunk('_app/immutable/chunks/leaf.js', [FOOTER])
 		]);
 		expect(collectIslandDepModulepreloads(b, [], hash_of).remotes[FACADE]).toEqual([
@@ -556,7 +785,10 @@ describe('remotes map', () => {
 		]);
 		const r = collectIslandDepModulepreloads(b, [], hash_of);
 		expect(r.remotes[FACADE]).toEqual(
-			[kit_remote_hash('src/lib/footer.remote.ts'), kit_remote_hash('src/lib/session.remote.js')].sort()
+			[
+				kit_remote_hash('src/lib/footer.remote.ts'),
+				kit_remote_hash('src/lib/session.remote.js')
+			].sort()
 		);
 	});
 	test('a phantom (non-emitted) import is skipped, a cycle terminates', () => {
@@ -567,7 +799,10 @@ describe('remotes map', () => {
 		]);
 		const r = collectIslandDepModulepreloads(b, [], hash_of);
 		expect(r.remotes[FACADE]).toEqual(
-			[kit_remote_hash('src/lib/footer.remote.ts'), kit_remote_hash('src/lib/session.remote.js')].sort()
+			[
+				kit_remote_hash('src/lib/footer.remote.ts'),
+				kit_remote_hash('src/lib/session.remote.js')
+			].sort()
 		);
 	});
 	test('no resolver given → every entry [] (the map still lists it)', () => {
@@ -585,10 +820,12 @@ describe('remotes map', () => {
 	test('at scale: 3 000 chunks, 300 facades, 60 remote modules, shared + dynamic + cyclic edges \u2014 exact vs a naive reference, fast', () => {
 		// Deterministic LCG so a failure reproduces.
 		let s = 20260914;
-		const rnd = (n: number) => ((s = (s * 1664525 + 1013904223) >>> 0) % n);
+		const rnd = (n: number) => (s = (s * 1664525 + 1013904223) >>> 0) % n;
 		const N = 3000;
 		const files = Array.from({ length: N }, (_, i) =>
-			i < 300 ? `_app/immutable/og-region.${i.toString(16).padStart(12, '0')}.js` : `_app/immutable/chunks/c${i}.js`
+			i < 300
+				? `_app/immutable/og-region.${i.toString(16).padStart(12, '0')}.js`
+				: `_app/immutable/chunks/c${i}.js`
 		);
 		const remote_files = Array.from({ length: 60 }, (_, i) => `/app/src/lib/r${i}.remote.ts`);
 		const b: Record<string, ReturnType<typeof chunk>> = {};
@@ -615,7 +852,8 @@ describe('remotes map', () => {
 					const h = hash_of(id);
 					if (h) out.add(h);
 				}
-				for (const n of [...c.imports, ...c.dynamicImports]) if (b[n] && !seen.has(n)) (seen.add(n), q.push(n));
+				for (const n of [...c.imports, ...c.dynamicImports])
+					if (b[n] && !seen.has(n)) (seen.add(n), q.push(n));
 			}
 			return [...out].sort();
 		};
@@ -626,7 +864,8 @@ describe('remotes map', () => {
 		for (let i = 0; i < 300; i++) expect(r.remotes['/' + files[i]]).toEqual(reference(files[i]));
 		expect(ms).toBeLessThan(2000);
 		// and the static-only preload walk never lists a dynamic-only chunk
-		for (let i = 0; i < 300; i++) for (const d of r.js['/' + files[i]]) expect(b[d.slice(1)].type).toBe('chunk');
+		for (let i = 0; i < 300; i++)
+			for (const d of r.js['/' + files[i]]) expect(b[d.slice(1)].type).toBe('chunk');
 	});
 
 	describe('the virtual module\u2019s islandRemotes', () => {
@@ -650,11 +889,30 @@ describe('remotes map', () => {
 // INLINE REGION CSS: the text of region sheets under Kit's `inlineStyleThreshold`, keyed by href.
 describe('collect_inline_css', () => {
 	const bundle = {
-		'_app/immutable/assets/Tiny.abc.css': { type: 'asset', fileName: '_app/immutable/assets/Tiny.abc.css', source: '.t{color:red}' },
-		'_app/immutable/assets/Big.def.css': { type: 'asset', fileName: '_app/immutable/assets/Big.def.css', source: '.b{' + 'x'.repeat(600) + '}' },
-		'_app/immutable/assets/Bytes.ghi.css': { type: 'asset', fileName: '_app/immutable/assets/Bytes.ghi.css', source: new TextEncoder().encode('.u{content:"é"}') },
-		'_app/immutable/assets/Closes.jkl.css': { type: 'asset', fileName: '_app/immutable/assets/Closes.jkl.css', source: '.c{content:"</style>"}' },
-		'_app/immutable/og-region.aaaaaaaaaaaa.js': { type: 'chunk', fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js' }
+		'_app/immutable/assets/Tiny.abc.css': {
+			type: 'asset',
+			fileName: '_app/immutable/assets/Tiny.abc.css',
+			source: '.t{color:red}'
+		},
+		'_app/immutable/assets/Big.def.css': {
+			type: 'asset',
+			fileName: '_app/immutable/assets/Big.def.css',
+			source: '.b{' + 'x'.repeat(600) + '}'
+		},
+		'_app/immutable/assets/Bytes.ghi.css': {
+			type: 'asset',
+			fileName: '_app/immutable/assets/Bytes.ghi.css',
+			source: new TextEncoder().encode('.u{content:"é"}')
+		},
+		'_app/immutable/assets/Closes.jkl.css': {
+			type: 'asset',
+			fileName: '_app/immutable/assets/Closes.jkl.css',
+			source: '.c{content:"</style>"}'
+		},
+		'_app/immutable/og-region.aaaaaaaaaaaa.js': {
+			type: 'chunk',
+			fileName: '_app/immutable/og-region.aaaaaaaaaaaa.js'
+		}
 	};
 	const hrefs = [
 		'/_app/immutable/assets/Tiny.abc.css',
@@ -683,23 +941,33 @@ describe('collect_inline_css', () => {
 
 	test('the threshold is Kit’s unit (String.length, strictly smaller), and 0 / absent means never inline', () => {
 		// '.u{content:"é"}' is 15 code units (16 bytes — bytes are NOT the unit)
-		expect(collect_inline_css(bundle, hrefs, 15)).not.toHaveProperty('/_app/immutable/assets/Bytes.ghi.css');
-		expect(collect_inline_css(bundle, hrefs, 16)).toHaveProperty('/_app/immutable/assets/Bytes.ghi.css');
+		expect(collect_inline_css(bundle, hrefs, 15)).not.toHaveProperty(
+			'/_app/immutable/assets/Bytes.ghi.css'
+		);
+		expect(collect_inline_css(bundle, hrefs, 16)).toHaveProperty(
+			'/_app/immutable/assets/Bytes.ghi.css'
+		);
 		expect(collect_inline_css(bundle, hrefs, 0)).toEqual({});
 		expect(collect_inline_css(bundle, hrefs, Number.NaN)).toEqual({});
 	});
 
 	test('the virtual module exposes islandCssInline on every leg (null where nothing is kept)', () => {
-		for (const src of [island_deps_module(false, false), island_deps_module(true, true), island_deps_module(true, false)]) {
+		for (const src of [
+			island_deps_module(false, false),
+			island_deps_module(true, true),
+			island_deps_module(true, false)
+		]) {
 			expect(src).toContain('export function islandCssInline(');
 		}
-		expect(island_deps_module(true, false)).toContain("all.css_inline");
+		expect(island_deps_module(true, false)).toContain('all.css_inline');
 	});
 });
 
 describe('islandDepsHandoffPath', () => {
 	test('is under Kit outDir (`.svelte-kit` by default, whatever the app configured otherwise)', () => {
 		expect(islandDepsHandoffPath('/app/.svelte-kit')).toBe('/app/.svelte-kit/og-region-deps.json');
-		expect(islandDepsHandoffPath('/app/.svelte-kit-v2')).toBe('/app/.svelte-kit-v2/og-region-deps.json');
+		expect(islandDepsHandoffPath('/app/.svelte-kit-v2')).toBe(
+			'/app/.svelte-kit-v2/og-region-deps.json'
+		);
 	});
 });

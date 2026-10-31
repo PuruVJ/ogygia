@@ -31,19 +31,27 @@ const guide_opts = {
 // overrides); the preset opts this sub-app's files into `overrides: true` (id-form, redirect-aware
 // links via the site component map) as its own module variants.
 const getting_started = content({
-	loader: import.meta.og.loader.folder('../../content/playground/guides/getting-started', { preset: 'playground' }),
+	loader: import.meta.og.loader.folder('../../content/playground/guides/getting-started', {
+		preset: 'playground'
+	}),
 	...guide_opts
 });
 const concepts = content({
-	loader: import.meta.og.loader.folder('../../content/playground/guides/concepts', { preset: 'playground' }),
+	loader: import.meta.og.loader.folder('../../content/playground/guides/concepts', {
+		preset: 'playground'
+	}),
 	...guide_opts
 });
 const guides_cat = content({
-	loader: import.meta.og.loader.folder('../../content/playground/guides/guides', { preset: 'playground' }),
+	loader: import.meta.og.loader.folder('../../content/playground/guides/guides', {
+		preset: 'playground'
+	}),
 	...guide_opts
 });
 const showcase = content({
-	loader: import.meta.og.loader.folder('../../content/playground/guides/showcase', { preset: 'playground' }),
+	loader: import.meta.og.loader.folder('../../content/playground/guides/showcase', {
+		preset: 'playground'
+	}),
 	...guide_opts
 });
 
@@ -52,7 +60,9 @@ const showcase = content({
 // (structured `data`, no markdown body — so no content preset to name); the `[...slug]` route
 // renders it with `OperationDoc`.
 export const api = content({
-	loader: openapi(import.meta.glob('../../content/playground/openapi/*.json', { eager: true, import: 'default' }))
+	loader: openapi(
+		import.meta.glob('../../content/playground/openapi/*.json', { eager: true, import: 'default' })
+	)
 });
 
 // Thin alternate corpora — just enough to make the version / locale switcher real.

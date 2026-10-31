@@ -1,7 +1,15 @@
 // The page's weight: every file the document loads at start, found in the HTML (string scanning)
 // and weighed through the app, following each module's static imports.
 import { describe, test, expect } from 'vitest';
-import { scan_assets, static_imports, dynamic_imports, tag_attrs, weigh_assets, runtime_scripts, type Weight } from '../src/insights/page-assets.ts';
+import {
+	scan_assets,
+	static_imports,
+	dynamic_imports,
+	tag_attrs,
+	weigh_assets,
+	runtime_scripts,
+	type Weight
+} from '../src/insights/page-assets.ts';
 
 const KIT_PAGE = `<!doctype html><html><head>
 <link href="./_app/immutable/assets/0.abc.css" rel="stylesheet">
@@ -25,7 +33,10 @@ describe('scan_assets', () => {
 	test('finds every file the document loads at start, with what blocks', () => {
 		const { refs, inline } = scan_assets(KIT_PAGE);
 		const by = Object.fromEntries(refs.map((r) => [r.url, r]));
-		expect(by['./_app/immutable/assets/0.abc.css']).toMatchObject({ kind: 'style', blocking: true });
+		expect(by['./_app/immutable/assets/0.abc.css']).toMatchObject({
+			kind: 'style',
+			blocking: true
+		});
 		expect(by['/print.css'].blocking).toBe(false);
 		expect(by['./_app/immutable/entry/start.X.js'].via).toBe('modulepreload'); // first ask wins, deduped
 		expect(by['./_app/immutable/entry/app.Z.js'].via).toBe('inline-import');
@@ -56,11 +67,12 @@ describe('import scanners', () => {
 });
 
 describe('Kit route nodes', () => {
-	test('the page\'s own node (reachable only by app.js\'s dynamic import) is weighed; other routes\' are not', async () => {
+	test("the page's own node (reachable only by app.js's dynamic import) is weighed; other routes' are not", async () => {
 		const html = `<html><head></head><body><script>{ Promise.all([import("./_app/immutable/entry/start.S.js"), import("./_app/immutable/entry/app.A.js")]).then(([kit, app]) => { kit.start(app, element, { node_ids: [0, 5], data: [] }); }); }</script></body></html>`;
 		const files: Record<string, string> = {
 			'/_app/immutable/entry/start.S.js': 'export const s=1;',
-			'/_app/immutable/entry/app.A.js': 'const n=[()=>r(()=>import("../nodes/0.N0.js")),()=>r(()=>import("../nodes/1.N1.js")),()=>r(()=>import("../nodes/5.N5.js")),()=>r(()=>import("../nodes/50.N50.js"))];',
+			'/_app/immutable/entry/app.A.js':
+				'const n=[()=>r(()=>import("../nodes/0.N0.js")),()=>r(()=>import("../nodes/1.N1.js")),()=>r(()=>import("../nodes/5.N5.js")),()=>r(()=>import("../nodes/50.N50.js"))];',
 			'/_app/immutable/nodes/0.N0.js': 'layout',
 			'/_app/immutable/nodes/5.N5.js': 'import"../chunks/editor.E.js";' + 'p'.repeat(100),
 			'/_app/immutable/chunks/editor.E.js': 'e'.repeat(50_000),
@@ -86,7 +98,8 @@ describe('Kit route nodes', () => {
 	});
 
 	test("the ogygia runtime's on-demand parts are its own, loaded later (with what they import)", async () => {
-		const html = '<html><head><script type="module" data-ogygia-runtime src="/_app/immutable/og-runtime.R.js"></script></head><body></body></html>';
+		const html =
+			'<html><head><script type="module" data-ogygia-runtime src="/_app/immutable/og-runtime.R.js"></script></head><body></body></html>';
 		const files: Record<string, string> = {
 			'/_app/immutable/og-runtime.R.js': 'const h=()=>import(`./chunks/hydrate.H.js`);export{h};',
 			'/_app/immutable/chunks/hydrate.H.js': 'import{a}from"./svelte.S.js";' + 'x'.repeat(2000),
@@ -103,8 +116,16 @@ describe('Kit route nodes', () => {
 		});
 		const by = Object.fromEntries(r.assets.map((a) => [new URL(a.url).pathname, a]));
 		expect(by['/_app/immutable/og-runtime.R.js'].runtime).toBe(true);
-		expect(by['/_app/immutable/chunks/hydrate.H.js']).toMatchObject({ via: 'runtime-phase', lazy: true, phase: true });
-		expect(by['/_app/immutable/chunks/svelte.S.js']).toMatchObject({ via: 'static-import', lazy: true, phase: true });
+		expect(by['/_app/immutable/chunks/hydrate.H.js']).toMatchObject({
+			via: 'runtime-phase',
+			lazy: true,
+			phase: true
+		});
+		expect(by['/_app/immutable/chunks/svelte.S.js']).toMatchObject({
+			via: 'static-import',
+			lazy: true,
+			phase: true
+		});
 		// on demand, not at start: the visit says whether they loaded
 		expect(r.totals.lazy_js).toBe(files['/_app/immutable/chunks/hydrate.H.js'].length + 3000);
 	});
@@ -137,19 +158,34 @@ describe('weigh_assets', () => {
 			fetch_url,
 			cache,
 			gzip: (b) => Math.ceil(b.byteLength / 3),
-			extra: [{ url: '/island/lazy.js', kind: 'script', blocking: false, via: 'island', lazy: true }]
+			extra: [
+				{ url: '/island/lazy.js', kind: 'script', blocking: false, via: 'island', lazy: true }
+			]
 		});
 		const urls = r.assets.map((a) => new URL(a.url).pathname);
 		expect(urls).toContain('/_app/immutable/chunks/dep.W.js'); // found through two static imports
 		expect(r.totals.js_files).toBe(6); // start, big, dep, app, legacy, async
-		expect(r.totals.js).toBe(files['/_app/immutable/entry/start.X.js'].length + files['/_app/immutable/chunks/big.Y.js'].length + 1000 + 300 + 200 + 1);
+		expect(r.totals.js).toBe(
+			files['/_app/immutable/entry/start.X.js'].length +
+				files['/_app/immutable/chunks/big.Y.js'].length +
+				1000 +
+				300 +
+				200 +
+				1
+		);
 		expect(r.totals.lazy_js).toBe(700);
 		expect(r.totals.blocking_count).toBe(2); // the head css + the sync script
 		expect(r.totals.wire).toBeGreaterThan(r.html.wire);
 		expect(r.missed).toEqual([]);
 		// a second report reuses the cache: nothing refetched
 		let calls = 0;
-		await weigh_assets({ html: KIT_PAGE, page_url: 'http://x/page', fetch_url: async (u) => (calls++, fetch_url(u)), cache, extra: [] });
+		await weigh_assets({
+			html: KIT_PAGE,
+			page_url: 'http://x/page',
+			fetch_url: async (u) => (calls++, fetch_url(u)),
+			cache,
+			extra: []
+		});
 		expect(calls).toBe(0);
 	});
 });
@@ -159,9 +195,19 @@ describe('runtime_scripts', () => {
 		const r = runtime_scripts(
 			[{ url: 'http://x/_app/immutable/og-runtime.A.js' }],
 			[
-				{ url: 'http://x/_app/immutable/og-region.69b7a9b1ab5a.B.js', type: 'script', start: 100, size: 30_000 },
+				{
+					url: 'http://x/_app/immutable/og-region.69b7a9b1ab5a.B.js',
+					type: 'script',
+					start: 100,
+					size: 30_000
+				},
 				{ url: 'http://x/_app/immutable/chunks/C.js', type: 'script', start: 110, size: 20_000 },
-				{ url: 'https://cdn.example/npm/lib@1/dist/part.js', type: 'script', start: 120, size: 9_000 },
+				{
+					url: 'https://cdn.example/npm/lib@1/dist/part.js',
+					type: 'script',
+					start: 120,
+					size: 9_000
+				},
 				{ url: 'http://x/_app/immutable/og-runtime.A.js', type: 'script', start: 5, size: 18_000 }
 			],
 			'http://x',

@@ -47,21 +47,21 @@ with ogygia added.
 
 Speed is easy to match with islands. The difference is surface area. Here are the four benchmarked frameworks, by what they let you build:
 
-| Capability | SvelteKit | Astro | Mochi | ogygia |
-| --- | :---: | :---: | :---: | :---: |
-| SSR / prerender | ✅ | ✅ | ✅ | ✅ |
-| Partial hydration (islands) | ❌ whole-page | ✅ | ✅ | ✅ |
-| Client JS **flat** as content grows | ❌ | ✅ | ✅ | ✅ |
-| Islands are Svelte 5 | ✅ | ✅ (any framework) | ✅ | ✅ |
-| Per-component wake: `load`·`idle`·`visible`·`interaction`·`media` | ❌ | ➖ (no `interaction`) | ? | ✅ |
-| Server islands (defer render to an endpoint) | ✅ | ✅ | ? | ✅ |
-| **Held regions**: `region()` values you place like data | ❌ | ❌ | ❌ | ✅ |
-| **Frozen regions** (lakes): zero-JS interactive-context subtrees | ❌ | ❌ | ❌ | ✅ |
-| **Live / streaming** regions | ❌ | ❌ | ? | ✅ |
-| Built on SvelteKit: its adapters, hooks, `$app`, remote functions | ✅ | ❌ own framework | ❌ own framework | ✅ |
-| Opt-in SPA router | ✅ | ➖ (MPA + view transitions) | ? | ✅ |
-| Markdown content collections built in | ➖ add mdsvex | ✅ | ✅ | ✅ |
-| Feature-selected runtime (ship only what the app uses) | — | — | ❌ | ✅ |
+| Capability                                                        |   SvelteKit   |            Astro            |      Mochi       | ogygia |
+| ----------------------------------------------------------------- | :-----------: | :-------------------------: | :--------------: | :----: |
+| SSR / prerender                                                   |      ✅       |             ✅              |        ✅        |   ✅   |
+| Partial hydration (islands)                                       | ❌ whole-page |             ✅              |        ✅        |   ✅   |
+| Client JS **flat** as content grows                               |      ❌       |             ✅              |        ✅        |   ✅   |
+| Islands are Svelte 5                                              |      ✅       |     ✅ (any framework)      |        ✅        |   ✅   |
+| Per-component wake: `load`·`idle`·`visible`·`interaction`·`media` |      ❌       |    ➖ (no `interaction`)    |        ?         |   ✅   |
+| Server islands (defer render to an endpoint)                      |      ✅       |             ✅              |        ?         |   ✅   |
+| **Held regions**: `region()` values you place like data           |      ❌       |             ❌              |        ❌        |   ✅   |
+| **Frozen regions** (lakes): zero-JS interactive-context subtrees  |      ❌       |             ❌              |        ❌        |   ✅   |
+| **Live / streaming** regions                                      |      ❌       |             ❌              |        ?         |   ✅   |
+| Built on SvelteKit: its adapters, hooks, `$app`, remote functions |      ✅       |      ❌ own framework       | ❌ own framework |   ✅   |
+| Opt-in SPA router                                                 |      ✅       | ➖ (MPA + view transitions) |        ?         |   ✅   |
+| Markdown content collections built in                             | ➖ add mdsvex |             ✅              |        ✅        |   ✅   |
+| Feature-selected runtime (ship only what the app uses)            |       —       |              —              |        ❌        |   ✅   |
 
 `?` = not verified for the benchmarked version. The trade-off: ogygia carries a little more baseline runtime (the size table above) for the bottom third of this matrix: the region primitives and the Kit-native integration that nothing else here has.
 

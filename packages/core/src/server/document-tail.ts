@@ -94,7 +94,8 @@ export function modulepreload_tag(href: string): string {
  */
 export function runtime_bootstrap_tags(src: string, deps: readonly string[]): string {
 	let html = '<script type="module" data-ogygia-runtime src="' + src + '"></script>';
-	for (const dep of deps) html += '<link rel="modulepreload" href="' + dep + '" data-ogygia-runtime-dep>';
+	for (const dep of deps)
+		html += '<link rel="modulepreload" href="' + dep + '" data-ogygia-runtime-dep>';
 	return html;
 }
 
@@ -190,14 +191,29 @@ export class DocumentTail {
 
 	/** Note a deferred hole the page rendered (every document, not only Kit-hydrated ones): its
 	 *  schedule and cache policy, for the profiler's hole economics. */
-	note_hole(id: string, when: string, hydrate: string | null, ttl: number, name = '', props: unknown = undefined, copy = ''): void {
+	note_hole(
+		id: string,
+		when: string,
+		hydrate: string | null,
+		ttl: number,
+		name = '',
+		props: unknown = undefined,
+		copy = ''
+	): void {
 		const key = `${id}\0${when}\0${hydrate ?? ''}\0${ttl}`;
 		let have = this.#hole_notes.get(key);
 		if (have) have.count++;
-		else this.#hole_notes.set(key, (have = { id, name, props: props_preview(props), when, hydrate, ttl, count: 1 }));
+		else
+			this.#hole_notes.set(
+				key,
+				(have = { id, name, props: props_preview(props), when, hydrate, ttl, count: 1 })
+			);
 		// each copy by its key (the browser's report and the hole's requests name the copy by it)
 		if (copy && (have.copies?.length ?? 0) < 12 && !have.copies?.some((c) => c.p === copy))
-			(have.copies ??= []).push({ p: copy, props: have.count === 1 ? have.props : props_preview(props) });
+			(have.copies ??= []).push({
+				p: copy,
+				props: have.count === 1 ? have.props : props_preview(props)
+			});
 	}
 
 	/** The holes noted on this page. */
@@ -220,7 +236,8 @@ export class DocumentTail {
 	 * position. Identical holes (same id + props → same identity) share one record.
 	 */
 	hole(identity: string, endpoint: string, sidecar: string): void {
-		if (identity && endpoint && !this.#holes.has(identity)) this.#holes.set(identity, { endpoint, sidecar });
+		if (identity && endpoint && !this.#holes.has(identity))
+			this.#holes.set(identity, { endpoint, sidecar });
 	}
 
 	get empty(): boolean {
@@ -235,7 +252,12 @@ export class DocumentTail {
 
 	/** Hint count + graph entry count + sidecar count + hole-record count, for tests and devtools. */
 	get size(): { hints: number; graph: number; props: number; holes: number } {
-		return { hints: this.#hints.size, graph: this.#graph.size, props: this.#props.size, holes: this.#holes.size };
+		return {
+			hints: this.#hints.size,
+			graph: this.#graph.size,
+			props: this.#props.size,
+			holes: this.#holes.size
+		};
 	}
 
 	/** The tail's HTML: hints, the island graph, then props (each rendered now, against `seed`), then
@@ -259,7 +281,9 @@ export class DocumentTail {
 					wake: s.meta?.wake ?? '',
 					props_bytes: w.text.length,
 					canonical_bytes: s.wire.canonical?.length ?? w.text.length,
-					...(s.wire.canonical !== undefined && s.wire.canonical.length <= 4096 ? { canonical: s.wire.canonical } : {}),
+					...(s.wire.canonical !== undefined && s.wire.canonical.length <= 4096
+						? { canonical: s.wire.canonical }
+						: {}),
 					json: w.json,
 					culprit: w.json ? null : (s.wire.culprit?.() ?? null),
 					refs: s.wire.refs?.count ?? 0,

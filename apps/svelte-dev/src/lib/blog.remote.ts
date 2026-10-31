@@ -17,16 +17,20 @@ export type BlogPost = {
 	body?: RegionValue;
 };
 
-export const post = prerender(v.string(), async (slug): Promise<BlogPost | null> => {
-	const entry = await blog.get(slug);
-	if (!entry) return null;
-	// `filePath` lives on the REF (the entry is the heavy face) — recover the date from the catalog.
-	const ref = (await blog.refs()).find((r) => r.id === slug);
-	const body = entry.body ? await entry.body : undefined;
-	return {
-		slug,
-		data: entry.data,
-		date: post_date(ref?.filePath),
-		...(body ? { body } : {})
-	};
-}, { dynamic: true });
+export const post = prerender(
+	v.string(),
+	async (slug): Promise<BlogPost | null> => {
+		const entry = await blog.get(slug);
+		if (!entry) return null;
+		// `filePath` lives on the REF (the entry is the heavy face) — recover the date from the catalog.
+		const ref = (await blog.refs()).find((r) => r.id === slug);
+		const body = entry.body ? await entry.body : undefined;
+		return {
+			slug,
+			data: entry.data,
+			date: post_date(ref?.filePath),
+			...(body ? { body } : {})
+		};
+	},
+	{ dynamic: true }
+);
