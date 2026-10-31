@@ -120,10 +120,6 @@
 			"types": "./dist/insights/index.d.ts",
 			"default": "./src/insights/index.ts"
 		},
-		"./testing": {
-			"types": "./dist/testing/index.d.ts",
-			"default": "./src/testing/index.ts"
-		},
 		"./types": {
 			"types": "./ambient.d.ts"
 		},
@@ -164,7 +160,6 @@
 		"tinyglobby": "^0.2.17"
 	},
 	"peerDependencies": {
-		"@playwright/test": "^1.62.0",
 		"@sveltejs/kit": ">=2.70.2 <4",
 		"playwright": "^1.62.0",
 		"rolldown": ">=1.0.0",
@@ -173,9 +168,6 @@
 	},
 	"peerDependenciesMeta": {
 		"playwright": {
-			"optional": true
-		},
-		"@playwright/test": {
 			"optional": true
 		},
 		"rolldown": {
@@ -301,10 +293,6 @@
 			"./insights": {
 				"types": "./dist/insights/index.d.ts",
 				"default": "./dist/insights/index.js"
-			},
-			"./testing": {
-				"types": "./dist/testing/index.d.ts",
-				"default": "./dist/testing/index.js"
 			},
 			"./internal/compiler": {
 				"types": "./dist/compiler/index.d.ts",

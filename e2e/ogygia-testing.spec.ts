@@ -1,4 +1,4 @@
-// ogygia/testing, used the way an app's own Playwright suite would: `withOgygia(test, expect)`, then
+// @ogygia/testing, used the way an app's own Playwright suite would: `withOgygia(test, expect)`, then
 // the `ogygia` fixture — page(), hydration(), record(), profile() — and the matchers. Against the
 // playground's devtools dev server (its lab pages plant known problems, so each primitive has
 // something real to find), with a deliberately failing matcher checked for a readable message.
@@ -7,7 +7,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test as base, expect as baseExpect } from '@playwright/test';
-import { withOgygia, compare, toMarkdown, checkBudget, createOgygia, playwrightDriver, turnOnDevtools } from '../packages/ogygia/dist/testing/index.js';
+import { withOgygia, compare, toMarkdown, checkBudget, createOgygia, playwrightDriver, turnOnDevtools } from '../packages/testing/dist/index.js';
 import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const { test, expect } = withOgygia(base, baseExpect);

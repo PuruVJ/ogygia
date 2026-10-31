@@ -1,6 +1,6 @@
 /**
  * The report shape the page's testing engine answers (`window.__ogygia_testing.version`). The engine
- * ships with the SITE's build and `ogygia/testing` with the TEST's package, so the two can differ: the
+ * ships with the SITE's build and `@ogygia/testing` with the TEST's package, so the two can differ: the
  * test side reads this from the page, fills in what it can for an older engine, and warns once.
  *
  * Each version, and what it DETECTS differently (results across two versions compare only where
