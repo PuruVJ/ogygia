@@ -1,6 +1,6 @@
 {
 	"name": "@ogygia/devtools",
-	"version": "0.10.2",
+	"version": "0.11.0",
 	"description": "Devtools for ogygia: the in-page dock, and the SSR profiler with its report, client marks and storage adapters",
 	"type": "module",
 	"license": "MIT",

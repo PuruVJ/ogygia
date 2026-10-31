@@ -1,6 +1,6 @@
 {
 	"name": "@ogygia/flags",
-	"version": "0.10.2",
+	"version": "0.11.0",
 	"description": "Feature flags and A/B tests for ogygia: one flag() primitive, decided server-side, zero JS",
 	"type": "module",
 	"license": "MIT",

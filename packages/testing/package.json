@@ -1,6 +1,6 @@
 {
 	"name": "@ogygia/testing",
-	"version": "0.10.2",
+	"version": "0.11.0",
 	"description": "Testing for ogygia: the devtools and the profiler as test primitives, for Playwright or any runner and page driver",
 	"type": "module",
 	"license": "MIT",

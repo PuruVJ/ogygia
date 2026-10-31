@@ -1,6 +1,6 @@
 {
 	"name": "@ogygia/cli",
-	"version": "0.10.2",
+	"version": "0.11.0",
 	"description": "The ogygia command line: init and site scaffolds, the AI skill, the MCP server, perf budgets and bisect, federation keys and catalogs",
 	"type": "module",
 	"license": "MIT",

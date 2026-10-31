@@ -1,6 +1,6 @@
 {
 	"name": "@ogygia/tsdown-plugin-svelte",
-	"version": "1.0.1",
+	"version": "1.1.0",
 	"description": "Ship Svelte components from a tsdown build: preprocessed, TypeScript-free markup, with .svelte.d.ts types",
 	"type": "module",
 	"license": "MIT",
