@@ -91,7 +91,7 @@ import { hole_slots } from './hole-slots.ts';
 import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.ts';
 import { byte_strip, type ByteStrip } from './byte-strip.ts';
 import { stream_tail } from './stream-tail.ts';
-import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.ts';
+import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from '../insights/page-assets.ts';
 import { BEACON_STANDALONE_TAG } from './beacon-standalone.ts';
 import { build_river, load_return_keys, seed_key_bytes, type River } from './river.ts';
 import { SinkBuffer, type SinkRow } from './sink.ts';
@@ -132,7 +132,7 @@ import { fnv1a32 } from '../runtime/hash.ts';
 import { mark_personal } from '../server/personal-response.ts';
 import { attr_sites, doc_diff } from './doc-diff.ts';
 import { almost_same_document_pattern } from './patterns.ts';
-import { hydration_hazards } from './hydration-hazards.ts';
+import { hydration_hazards } from '../insights/hydration-hazards.ts';
 import type { IslandHazard } from './report.ts';
 import {
 	constant_work,
@@ -207,7 +207,7 @@ async function read_timed(
 	return { text, chunks };
 }
 import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.ts';
-import { engine_of, vital_parts, type PageInput } from '../devtools/page-insights.ts';
+import { engine_of, vital_parts, type PageInput } from '../insights/page-insights.ts';
 import { label_call, phase_of_frame } from './timeline.ts';
 import { gzip_large } from './compress.ts';
 import { io_kind, mark_left_each_run } from './async-io.ts';

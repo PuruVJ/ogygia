@@ -3,11 +3,11 @@
  * the compiler already emits, resource-timing byte lookups, and event queries over the bus buffer.
  * No Svelte, no styling: the `.svelte` components own all presentation.
  */
-import { snapshot } from './bus.ts';
+import { snapshot } from '../events/bus.ts';
 import { props_sidecar_of } from '../runtime/sidecar.ts';
 import { tool_made } from '../tool-fetches.ts';
-import type { DevtoolsEvent } from './schema.ts';
-import type { IslandHazard } from '../profiler/hydration-hazards.ts';
+import type { DevtoolsEvent } from '../events/schema.ts';
+import type { IslandHazard } from '../insights/hydration-hazards.ts';
 
 // ── regexes
 const JS_EXT_RE = /\.js$/;

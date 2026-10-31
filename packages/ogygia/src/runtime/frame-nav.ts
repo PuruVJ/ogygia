@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { frameAddress } from '../frame.ts';
 import { is_idle, reserve, release, ticket, write } from './frame-store.ts';
-import { emit as dt_emit } from '../devtools/bus.ts';
+import { emit as dt_emit } from '../events/bus.ts';
 
 import { beacon_hole_batch_missed } from './beacon.ts';
 

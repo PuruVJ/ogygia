@@ -330,6 +330,31 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
   - KNOWN COUPLING (follow-up): core's Kit-transport detector still names `@ogygia/content` (a content
     import can put a held region on Kit's wire). Fold into the plugin API (a plugin declares the
     modules whose imports cross the wire) when the next plugin needs it.
+- R6b 9538b8db `.ts` IMPORT EXTENSIONS + verbatimModuleSyntax (one scripted pass, user-approved);
+  tsdown-plugin-svelte rewrites shipped components' relative `.ts` imports (and `.svelte.d.ts`) to `.js`.
+- R7 DEVTOOLS + PROFILER → `@ogygia/devtools` (in progress). Coupling map (2026-10-31): devtools ~60
+  files / 13k LOC, profiler ~100 files / 46k LOC; ~39 core emit sites on the bus; profiler UI is built
+  on the server router (`ogygia/router`, plus non-public `AnyComponent` / `is_redirect`).
+  - STAYS CORE: the event layer (`src/events/`: bus, schema, sinks, server-registry; `ogygia/events`,
+    `ogygia/devtools` kept as an alias until the move); insights (`src/insights/`: page-insights,
+    third-party, cpu, hydration-hazards, page-assets, fp-drift, hole-segments, html-diff,
+    session-insights, testing-version, switch constants) — the compiler (island-deps hazards) and
+    testing read them; measurement producers (beacon, own-cost, tool-fetches, request-stats, document-
+    tail detail rows, island-deps analysis), gated by "a plugin asked" instead of `profiler`/`devtools`.
+  - STEPS: (1) in-core moves to events/ + insights/ (no behaviour change). (2) server door: a
+    `handle(ctx, next)` lifecycle kind (Kit-Handle shaped, nested around `#core`), the profiler wrap as a
+    server realm, request-stats on `app` + a `batchHole` shared hook, facts `events` / `serverTiming`,
+    devtools switch/lean-testing/document-policy into the devtools server realm; export `AnyComponent` +
+    `isRedirect` from `ogygia/router`. (3) build door: `b.events()` / `b.beacon()` drive the defines,
+    `b.files(scan)` replaces the internal PackageScan, `b.islandFacts()` replaces the profiler_config
+    gates, a core island-names virtual replaces devtools-meta; profiler maps/sourcemaps/module map/
+    dev-maps become the plugin's own vite plugins; drop the `devtools`/`profiler` options. (4) the first
+    CLIENT REALM: `${name}/client` found by name, statically read (`defineClient`), one define per hook so
+    unused hooks DCE, generated imports in runtime-entry + `bootDev`, a core kit-page boot for csr=true
+    pages; hooks `boot`, `islandMount`, `islandUnmount`; the beacon measure gate becomes a core flag.
+    (5) the mechanical move to packages/devtools (64 tests, 12 app imports, 2 configs; `@neodrag/svelte`
+    a dependency). Open: `mcp.ts` imports profiler report/patterns/crypto (→ lazy optional peer, or move
+    the CLI/MCP split forward); plugin packages with `.svelte` need `ssr.noExternal` when installed.
 
 ## Performance rules (the bar every step must pass)
 

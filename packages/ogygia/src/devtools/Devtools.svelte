@@ -32,7 +32,7 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	import { onMount } from 'svelte';
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
 	import IslandDetail from './IslandDetail.svelte';
-	import { to_trace } from './sinks.ts';
+	import { to_trace } from '../events/sinks.ts';
 	import { Draggable } from '@neodrag/svelte';
 	import { Resizable, RESIZE_EDGES } from '@neodrag/svelte/resize';
 
@@ -41,7 +41,7 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	// pointing at a csr=false page instead of the (empty) instrument tabs.
 	// `startOpen` = the launcher's click loaded this dock (a build loads it only on open): open at once.
 	// `hide` (a build only): turn devtools off in this browser — the launcher and dock go, nothing is
-	// measured from the next load (devtools/switch.ts); `?og-devtools=on` brings it back.
+	// measured from the next load (insights/switch.ts); `?og-devtools=on` brings it back.
 	/** @type {{ csrTrue?: boolean, startOpen?: boolean, hide?: () => void }} */
 	let { csrTrue = false, startOpen = false, hide } = $props();
 	const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;

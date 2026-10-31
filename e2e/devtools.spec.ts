@@ -50,7 +50,7 @@ const TIP_SERVER_RENDERED_RE = /server-rendered/;
 const KB_RE = /kB/;
 const TIMELINE_RE = /timeline/;
 
-/** Minimal shape of the events we assert on (mirrors src/devtools/schema.ts). */
+/** Minimal shape of the events we assert on (mirrors src/events/schema.ts). */
 type DtEvent = { domain: string; name: string; seq: number } & Record<string, unknown>;
 
 /** Is `window.__ogygia_devtools` present (i.e. the served build compiled devtools in)? */

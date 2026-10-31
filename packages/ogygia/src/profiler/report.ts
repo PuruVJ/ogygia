@@ -10,11 +10,11 @@ import { another_routes_file } from './route-files.ts';
 import { sequential_ms, type NetCall } from './net.ts';
 import type { Visit } from './visit.ts';
 import { browser_findings, browser_page_report } from './browser-findings.ts';
-import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.ts';
-import { compare as fp_compare } from '../devtools/fp-drift.ts';
+import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../insights/page-insights.ts';
+import { compare as fp_compare } from '../insights/fp-drift.ts';
 import type { ClientWindows, InteractionCpu } from './client-windows.ts';
 import type { ByteStrip } from './byte-strip.ts';
-import { runtime_scripts, type PageAssets, type RuntimeScripts } from './page-assets.ts';
+import { runtime_scripts, type PageAssets, type RuntimeScripts } from '../insights/page-assets.ts';
 import { unscoped_finding } from '../unscoped-css.ts';
 import type { River } from './river.ts';
 import type { GcAttribution } from './gc.ts';
@@ -45,7 +45,7 @@ import type {
 	OgygiaRequestStats
 } from '../server/request-stats.ts';
 import type { SpanRecord } from './span.ts';
-import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.ts';
+import { TESTING_ENGINE_VERSION } from '../insights/testing-version.ts';
 
 export type { OgygiaRequestStats, SpanRecord, HoleRequestStats, IslandStat };
 
@@ -470,7 +470,7 @@ export interface GcSummary {
 }
 
 /** a line of an island's own component that draws differently in the browser, with its file */
-import { hazard_words, hazard_fix, type IslandHazard } from './hydration-hazards.ts';
+import { hazard_words, hazard_fix, type IslandHazard } from '../insights/hydration-hazards.ts';
 export type { IslandHazard };
 export { hazard_words, hazard_fix };
 
@@ -4113,7 +4113,7 @@ type ReportJsonAssets = {
 		lazy?: boolean | undefined;
 		blocking?: boolean | undefined;
 		url: string;
-		kind: import('./page-assets.ts').AssetKind;
+		kind: import('../insights/page-assets.ts').AssetKind;
 		via:
 			| 'script'
 			| 'img'

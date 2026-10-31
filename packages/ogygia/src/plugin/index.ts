@@ -20,11 +20,11 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import type { RequestFacts } from './facts.ts';
 import type { Ask, Notify, ServerHooks } from './hooks.ts';
-import type { DevtoolsEventInput } from '../devtools/schema.ts';
+import type { DevtoolsEventInput } from '../events/schema.ts';
 
 export type { RequestFacts } from './facts.ts';
 export type { ServerHooks } from './hooks.ts';
-export type { DevtoolsEventInput } from '../devtools/schema.ts';
+export type { DevtoolsEventInput } from '../events/schema.ts';
 
 /** The server process, as one plugin sees it (handed to `setup`, and on every `ctx.app`). */
 export interface ServerApp<Options = undefined> {

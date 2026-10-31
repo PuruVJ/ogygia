@@ -10,7 +10,7 @@
 	 * server-realm events the handle folded into the stream via the `application/ogygia-devtools`
 	 * side-channel; nothing here needs a socket — it's the same in-page bus.
 	 */
-	import { snapshot } from './bus.ts';
+	import { snapshot } from '../events/bus.ts';
 	import { short_chunk, kb, region_name } from './regions.ts';
 
 	let { tick = 0 } = $props();

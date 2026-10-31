@@ -6,7 +6,7 @@
  */
 import { ISLAND_GRAPH_ATTR, decode_island_graph } from '../island-graph.ts';
 import { byte_ledger, type Ledger } from './bytes.ts';
-import { dynamic_imports, static_imports } from '../profiler/page-assets.ts';
+import { dynamic_imports, static_imports } from '../insights/page-assets.ts';
 import { all_regions, region_name } from './regions.ts';
 import { tool_fetch, tool_made } from '../tool-fetches.ts';
 

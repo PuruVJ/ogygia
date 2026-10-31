@@ -6,17 +6,17 @@
 import { read_page, unmeasured, type PageView } from './page.ts';
 import { hydration_report, hydration_rows } from './hydration.ts';
 import { start_session, recording, set_last_session, session_names } from './session.ts';
-import { analyze_session, session_timeline, type Ref, type SessionFinding, type SessionReport, type TimelineItem, type TimelineLane } from './session-insights.ts';
+import { analyze_session, session_timeline, type Ref, type SessionFinding, type SessionReport, type TimelineItem, type TimelineLane } from '../insights/session-insights.ts';
 import { region_name_by_fp } from './regions.ts';
-import { snapshot } from './bus.ts';
+import { snapshot } from '../events/bus.ts';
 import { ensure_region_names } from './names.ts';
-import { TESTING_ENGINE_VERSION } from './testing-version.ts';
+import { TESTING_ENGINE_VERSION } from '../insights/testing-version.ts';
 import { nearest_attr } from '../runtime/nearest-attr.ts';
 import { charge, own_cost } from '../runtime/own-cost.ts';
-import { apply_attr_rules, type AttrRule } from './attr-rules.ts';
-import { testing_lean } from './switch.ts';
-import type { PageFinding, PageReport } from './page-insights.ts';
-import type { CpuSummary } from './cpu.ts';
+import { apply_attr_rules, type AttrRule } from '../insights/attr-rules.ts';
+import { testing_lean } from '../insights/switch.ts';
+import type { PageFinding, PageReport } from '../insights/page-insights.ts';
+import type { CpuSummary } from '../insights/cpu.ts';
 import type { BeaconPage, AttrChange } from '../runtime/beacon.ts';
 
 type EngineStamp = { version: number; lean: boolean };

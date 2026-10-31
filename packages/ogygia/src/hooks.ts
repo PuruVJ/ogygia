@@ -142,14 +142,14 @@ import {
 } from './server/request-stats.ts';
 import { json_culprit } from './seed-refs.ts';
 import type { SeedAsk } from './server/seed-shape.ts';
-import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.ts';
+import { set_server_devtools_recorder, record_server_event } from './events/server-registry.ts';
 import { drop_dead_kit_resolves } from './server/dead-kit-resolves.ts';
-import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.ts';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, TESTING_COOKIE, TESTING_LEAN, TESTING_PARAM, switch_in_url } from './devtools/switch.ts';
+import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './events/schema.ts';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, TESTING_COOKIE, TESTING_LEAN, TESTING_PARAM, switch_in_url } from './insights/switch.ts';
 import { mark_personal } from './server/personal-response.ts';
 
 /** Is devtools on for this request's browser (a devtools BUILD): the URL's `?og-devtools=on|off`
- *  wins and is written to the response's cookie, else the cookie (devtools/switch.ts). */
+ *  wins and is written to the response's cookie, else the cookie (insights/switch.ts). */
 function devtools_switch(event: RequestEvent): boolean {
 	// (a prerendered page has no visitor, and a prerender may not read the query: off, and the browser
 	// applies the param itself — devtools/ui.ts)
@@ -805,7 +805,7 @@ class OgygiaHandle {
 				}
 				return res;
 			}
-			// DEVTOOLS for this browser (a BUILD: only one that turned it on — devtools/switch.ts). Its
+			// DEVTOOLS for this browser (a BUILD: only one that turned it on — insights/switch.ts). Its
 			// page carries its own events, so it is never stored and never shared-cached.
 			const devtools_on = DEVTOOLS && (!DEVTOOLS_LAZY || devtools_switch(event));
 			// (a prerender has no visitor, and may not read the query)
@@ -844,10 +844,10 @@ class OgygiaHandle {
 			};
 			// DEVTOOLS: attach a request-scoped event buffer via a side WeakMap (keeps RequestBag — and
 			// its cost — untouched when devtools is off; the map + this line DCE out then).
-			// (a BUILD with devtools on: only for a browser that turned devtools on — devtools/switch.ts —
+			// (a BUILD with devtools on: only for a browser that turned devtools on — insights/switch.ts —
 			// so no other visitor's page carries the side-channel. `?og-devtools=on|off` flips it on this
 			// very response, so the page that turned it on is measured from its start)
-			// (LEAN TESTING — devtools/switch.ts — keeps the HTML what a visitor gets: no event side-channel)
+			// (LEAN TESTING — insights/switch.ts — keeps the HTML what a visitor gets: no event side-channel)
 			const lean = devtools_on && !building && (event.cookies.get(TESTING_COOKIE) === TESTING_LEAN || event.url.searchParams.get(TESTING_PARAM) === TESTING_LEAN);
 			if (devtools_on && !lean) dt_buffers.set(bag, { events: [], seq: 0 });
 			// Hang the bag off the request for the rest of it — the render's own Kit store and the

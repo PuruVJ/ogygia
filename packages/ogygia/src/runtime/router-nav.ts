@@ -29,7 +29,7 @@ import {
 import type { SpaRouter } from './router.ts';
 import { spa_html_cacheable } from './spa-cacheable.ts';
 import { pin_region_urls } from './entry-locations.ts';
-import { emit as dt_emit } from '../devtools/bus.ts';
+import { emit as dt_emit } from '../events/bus.ts';
 
 // What this lazy chunk uses from the boot and from the router, handed over through the registry — it
 // never imports a boot module (./slots.ts `BootLink`: a module both import is split out of the runtime

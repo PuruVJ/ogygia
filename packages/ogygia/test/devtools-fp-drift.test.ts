@@ -1,9 +1,9 @@
-// An island's fingerprint moving between two loads of the same page (devtools/fp-drift.ts): matched by
+// An island's fingerprint moving between two loads of the same page (insights/fp-drift.ts): matched by
 // entry and copy, named with the prop that differs — and never for ogygia's own ids (a store's or a
 // class instance's, random per render by design).
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'devalue';
-import { compare, props_diff } from '../src/devtools/fp-drift.ts';
+import { compare, props_diff } from '../src/insights/fp-drift.ts';
 
 describe('fp drift', () => {
 	it('names the prop that differs (JSON lane): a nested path, the two values', () => {

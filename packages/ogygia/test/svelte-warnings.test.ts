@@ -2,7 +2,7 @@
 // (without the zero-width spaces Svelte breaks paths with), and nothing for other warnings.
 import { expect, test } from 'vitest';
 import { parse_svelte_warning } from '../src/runtime/svelte-warnings.ts';
-import { analyze_page } from '../src/devtools/page-insights.ts';
+import { analyze_page } from '../src/insights/page-insights.ts';
 
 const line =
 	'%c[svelte] hydration_html_changed\n%cThe value of an `{@html ...}` block in /​Users/​me/​app/​src/​Card.svelte changed between server and client renders. The client value will be ignored in favour of the server value\nhttps://svelte.dev/e/hydration_html_changed';

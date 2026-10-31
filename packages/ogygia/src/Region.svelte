@@ -45,7 +45,7 @@
 	import PromiseRegion from './PromiseRegion.svelte';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
-	import { record_server_event } from './devtools/server-registry.ts';
+	import { record_server_event } from './events/server-registry.ts';
 
 	// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 	const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;

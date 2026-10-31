@@ -11,31 +11,27 @@
  *  - the devtools bus: islands woken, hydrations, failures, recoveries, navigations, hole fetches.
  * Elements are kept by WeakRef so the tab can point at them without holding the page alive.
  */
-import { add_sink, snapshot } from './bus.ts';
+import { add_sink, snapshot } from '../events/bus.ts';
 import { all_regions, region_name } from './regions.ts';
-import type { DevtoolsEvent } from './schema.ts';
+import type {
+	SessionClick,
+	SessionData,
+	SessionFrame,
+	SessionInteraction,
+	SessionNav,
+	SessionRequest,
+	SessionShift
+} from '../insights/session-data.ts';
 
-export interface SessionInteraction {
-	t: number;
-	name: string;
-	duration: number;
-	input_delay: number;
-	processing: number;
-	presentation: number;
-	id: number;
-	target: string;
-	fp: string | null;
-	el: WeakRef<Element> | null;
-}
-export interface SessionClick {
-	t: number;
-	target: string;
-	fp: string | null;
-	el: WeakRef<Element> | null;
-	/** it looked like it does something (a control, a link, a clickable role, a pointer cursor): a
-	 *  click on text or a blank stretch that changes nothing is no dead click */
-	clickable?: true;
-}
+export type {
+	SessionClick,
+	SessionData,
+	SessionFrame,
+	SessionInteraction,
+	SessionNav,
+	SessionRequest,
+	SessionShift
+} from '../insights/session-data.ts';
 
 const CLICKABLE = 'a[href],button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="option"],[onclick],[tabindex]:not([tabindex="-1"])';
 /** What a visitor takes for a control: one in its ancestry, or a pointer cursor where they clicked. */
@@ -46,65 +42,6 @@ function looks_clickable(el: Element): boolean {
 	} catch {
 		return false;
 	}
-}
-export interface SessionShift {
-	t: number;
-	value: number;
-	input: boolean;
-	fp: string | null;
-	el: WeakRef<Element> | null;
-}
-export interface SessionRequest {
-	url: string;
-	type: string;
-	t: number;
-	ms: number;
-	bytes: number;
-	status: number | null;
-	/** the server's own account (`Server-Timing`: ogygia's profiler sends ssr / cpu / net / up1-3) */
-	server?: { name: string; ms: number; desc: string }[];
-}
-export interface SessionFrame {
-	t: number;
-	ms: number;
-	blocking: number;
-	scripts: { source: string; fn: string; invoker: string; ms: number }[];
-}
-/** A navigation as it started: where to, when, and the element that started it (the link or form, or
- *  the input being handled then) with its island. */
-export interface SessionNav {
-	url: string;
-	t: number;
-	type: string;
-	source: string | null;
-	fp: string | null;
-}
-
-export interface SessionData {
-	from: number;
-	to: number;
-	interactions: SessionInteraction[];
-	longtasks: { t: number; ms: number }[];
-	frames: SessionFrame[];
-	shifts: SessionShift[];
-	requests: SessionRequest[];
-	mutations: { fp: string | null; count: number; el: WeakRef<Element> | null }[];
-	/** when the DOM changed, and where (one stamp per island per batch of changes) */
-	mut_log: { t: number; fp: string | null }[];
-	/** every click, fast ones too */
-	clicks: SessionClick[];
-	errors: { t: number; message: string }[];
-	/** navigations as they started, with what started them (absent in a part saved before this field) */
-	navs?: SessionNav[];
-	heap: { from: number; to: number } | null;
-	events: DevtoolsEvent[];
-	cpu: unknown | null;
-	cpu_off: string | null;
-	page: string;
-	/** the documents the session crossed (a full page load mid-session), each with when it began */
-	pages: { url: string; t: number }[];
-	/** island fingerprint → component name, taken on each page (its islands are gone after it) */
-	names: Record<string, string>;
 }
 
 /** Names for a session's islands: its own record first, then the page as it is now. */

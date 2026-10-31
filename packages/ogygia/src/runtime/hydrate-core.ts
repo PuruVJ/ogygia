@@ -23,7 +23,7 @@ import { is_deferred, ours_on_kit_document, region_ssr_truncated } from './regio
 import { boot_link, slots, type LiftedLake } from './slots.ts';
 import { keep_host_classes, note_host_classes } from './host-classes.ts';
 import { install as install_hydrate_features } from 'virtual:ogygia/hydrate-features';
-import { emit as dt_emit } from '../devtools/bus.ts';
+import { emit as dt_emit } from '../events/bus.ts';
 // Re-exported for core's wake paths: observing Kit's reactive page needs Svelte, so it lives in this
 // lazy chunk, never in the boot's static graph (see core.ts `hydrate_core`).
 export { kit_page_thread } from './kit-page-thread.svelte.ts';

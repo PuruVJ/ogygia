@@ -30,7 +30,7 @@
  */
 import { after_document_painted, yield_task } from './schedule.ts';
 import { kit_hydrates_page } from './kit-boot.ts';
-import { emit as dt_emit } from '../devtools/bus.ts';
+import { emit as dt_emit } from '../events/bus.ts';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 

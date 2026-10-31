@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_page, boolean_attr_at, dev_two_copies, encoding_only, prebundled_names, first_difference, lcp_font, lcp_rivals, rate, vital_parts, type PageInput, type RegionFact } from '../src/devtools/page-insights.ts';
+import { analyze_page, boolean_attr_at, dev_two_copies, encoding_only, prebundled_names, first_difference, lcp_font, lcp_rivals, rate, vital_parts, type PageInput, type RegionFact } from '../src/insights/page-insights.ts';
 import { without_comments, without_runtime_marks } from '../src/runtime/beacon.ts';
 
 const region = (fp: string, name: string, wake = 'load', extra: Partial<RegionFact> = {}): RegionFact => ({

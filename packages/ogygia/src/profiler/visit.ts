@@ -6,8 +6,8 @@
  * the server keeps a few per page). `one_clock` lays a visit out against the server's render on
  * one clock — the report's first picture.
  */
-import { hole_segments, HOLE_SEG_LABEL } from '../devtools/hole-segments.ts';
-import type { NavPhases, PageInteraction, PageNav } from '../devtools/page-insights.ts';
+import { hole_segments, HOLE_SEG_LABEL } from '../insights/hole-segments.ts';
+import type { NavPhases, PageInteraction, PageNav } from '../insights/page-insights.ts';
 import type { RegionRefusal } from '../runtime/region-endpoint-url.ts';
 
 export interface VisitNav {

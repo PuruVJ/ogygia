@@ -22,7 +22,7 @@ import type { RegionRefusal } from './region-endpoint-url.ts';
 import { tool_made } from '../tool-fetches.ts';
 import { paint_blocker } from './render-blocking.ts';
 import { critical_outcome, type CriticalOutcome } from './load-scheduler.ts';
-import { devtools_switched_on } from '../devtools/switch.ts';
+import { devtools_switched_on } from '../insights/switch.ts';
 import { charge, metered } from './own-cost.ts';
 
 interface Sample {
@@ -1982,7 +1982,7 @@ async function stop_interaction_cpu(hiding: boolean): Promise<void> {
 // then: the server, the browser store and the CPU trace stay behind the tag.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
-// a BUILD with devtools on: measure only for a browser that turned devtools on (devtools/switch.ts) —
+// a BUILD with devtools on: measure only for a browser that turned devtools on (insights/switch.ts) —
 // every other visitor of a preview deploy pays nothing
 const DEVTOOLS_LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
 let opted: boolean | undefined;

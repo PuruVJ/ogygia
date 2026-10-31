@@ -15,8 +15,8 @@
  * The switch's cookie also starts the rest, for that browser only: the server writes its event
  * side-channel and the page is measured from the start (runtime/beacon.ts).
  */
-import { devtools_switched_on, switch_in_url, testing_lean, without_switch, write_switch } from './switch.ts';
-import { TESTING_ENGINE_VERSION } from './testing-version.ts';
+import { devtools_switched_on, switch_in_url, testing_lean, without_switch, write_switch } from '../insights/switch.ts';
+import { TESTING_ENGINE_VERSION } from '../insights/testing-version.ts';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;

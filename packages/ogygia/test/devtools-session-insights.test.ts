@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_session, session_timeline } from '../src/devtools/session-insights.ts';
+import { analyze_session, session_timeline } from '../src/insights/session-insights.ts';
 import type { SessionData } from '../src/devtools/session.ts';
 
 const base = (over: Partial<SessionData> = {}): SessionData => ({

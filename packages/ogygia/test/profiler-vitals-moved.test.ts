@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { vitals_moved } from '../src/profiler/compare.ts';
-import { analyze_page, vital_parts, type PageInput } from '../src/devtools/page-insights.ts';
+import { analyze_page, vital_parts, type PageInput } from '../src/insights/page-insights.ts';
 
 const lcp_page = (download_end: number, lcp: number): PageInput => ({
 	vitals: { lcp },

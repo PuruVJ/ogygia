@@ -1,12 +1,12 @@
 /**
- * What a recorded session (session.ts) says — pure, so it tests on plain data. Findings point back
+ * What a recorded session (devtools/session.ts) says — pure, so it tests on plain data. Findings point back
  * at the page: an interaction's target, a shift's element, an island (the tab resolves the refs).
  * The CPU trace, when there is one, names the function behind a slow interaction or a long task
  * (cpu.ts, with each interaction as its own window); long animation frames name the script when
  * the sampler could not run.
  */
 import { analyze_cpu, fn_label, is_trace, type CpuSummary } from './cpu.ts';
-import type { SessionData } from './session.ts';
+import type { SessionData } from './session-data.ts';
 
 export type Ref = { kind: 'interaction'; i: number } | { kind: 'click'; i: number } | { kind: 'shift'; i: number } | { kind: 'island'; fp: string };
 

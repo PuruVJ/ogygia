@@ -48,11 +48,11 @@ import { hole_facts_of } from './hole-facts.ts';
 import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_hole_fetched } from './beacon.ts';
 import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.ts';
 import type { IslandHandle, IslandModule } from './hydrate-core.ts';
-import { emit as dt_emit } from '../devtools/bus.ts';
+import { emit as dt_emit } from '../events/bus.ts';
 import {
 	install_window_sink as dt_install_window_sink,
 	ingest_server_events as dt_ingest_server
-} from '../devtools/sinks.ts';
+} from '../events/sinks.ts';
 import { install_devtools_ui as dt_install_ui } from '../devtools/ui.ts';
 import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../devtools/leftovers.ts';
 

@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 (globalThis as unknown as { __OGYGIA_DEVTOOLS__: boolean }).__OGYGIA_DEVTOOLS__ = true;
 
 const { DEVTOOLS, emit, snapshot, clear, add_sink, configure } =
-	await import('../src/devtools/bus.ts');
-const { install_console_sink, to_trace } = await import('../src/devtools/sinks.ts');
-const { DEVTOOLS_SCHEMA_VERSION } = await import('../src/devtools/schema.ts');
+	await import('../src/events/bus.ts');
+const { install_console_sink, to_trace } = await import('../src/events/sinks.ts');
+const { DEVTOOLS_SCHEMA_VERSION } = await import('../src/events/schema.ts');
 
 beforeEach(() => {
 	clear();

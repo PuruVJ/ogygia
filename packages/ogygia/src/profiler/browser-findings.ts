@@ -1,5 +1,5 @@
 /**
- * THE BROWSER'S FINDINGS IN THE REPORT — the devtools Page tab's brain (devtools/page-insights.ts)
+ * THE BROWSER'S FINDINGS IN THE REPORT — the devtools Page tab's brain (insights/page-insights.ts)
  * run on the visit the beacon sent, so the report and the Page tab say the same thing about the same
  * load: clicked before it woke, hydrating moved the layout, one long hydrate, waited for its turn,
  * eager below the fold, woke late, the largest paint repainted, a failed island with its error.
@@ -9,8 +9,8 @@
  * Findings the report already makes its own way are left to it: a recovery (hydration-mismatch),
  * an island that never woke (never-hydrated), the vitals, the render-blocking files.
  */
-import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.ts';
-import type { CodeKind, CpuFn, CpuSummary } from '../devtools/cpu.ts';
+import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../insights/page-insights.ts';
+import type { CodeKind, CpuFn, CpuSummary } from '../insights/cpu.ts';
 import type { FrameCategory } from './analyze.ts';
 import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.ts';
 import type { Visit } from './visit.ts';

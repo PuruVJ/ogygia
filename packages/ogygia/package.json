@@ -127,6 +127,14 @@
 			"types": "./dist/devtools/index.d.ts",
 			"default": "./src/devtools/index.ts"
 		},
+		"./events": {
+			"types": "./dist/events/index.d.ts",
+			"default": "./src/events/index.ts"
+		},
+		"./insights": {
+			"types": "./dist/insights/index.d.ts",
+			"default": "./src/insights/index.ts"
+		},
 		"./testing": {
 			"types": "./dist/testing/index.d.ts",
 			"default": "./src/testing/index.ts"
@@ -319,6 +327,14 @@
 			"./devtools": {
 				"types": "./dist/devtools/index.d.ts",
 				"default": "./dist/devtools/index.js"
+			},
+			"./events": {
+				"types": "./dist/events/index.d.ts",
+				"default": "./dist/events/index.js"
+			},
+			"./insights": {
+				"types": "./dist/insights/index.d.ts",
+				"default": "./dist/insights/index.js"
 			},
 			"./testing": {
 				"types": "./dist/testing/index.d.ts",

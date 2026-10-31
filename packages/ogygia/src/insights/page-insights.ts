@@ -11,7 +11,7 @@
  */
 import { without_comments as strip_comments, without_runtime_marks } from '../runtime/beacon.ts';
 import type { RegionRefusal } from '../runtime/region-endpoint-url.ts';
-import { hazard_fix, hazard_words, type IslandHazard } from '../profiler/hydration-hazards.ts';
+import { hazard_fix, hazard_words, type IslandHazard } from './hydration-hazards.ts';
 
 /** markup as a visitor's eyes compare it: no comments (Svelte's re-anchored block markers), no
  *  marks the runtime itself set on the regions inside */
@@ -236,7 +236,7 @@ export interface PageInput {
 	hole_batches?: HoleBatch[];
 	/** what the restorer of a server transform reported (runtime/restore.ts `__og_restore_log`) */
 	restore_events?: RestoreEvent[];
-	/** islands whose fingerprint moved between two loads of this page (devtools/fp-drift.ts) */
+	/** islands whose fingerprint moved between two loads of this page (fp-drift.ts) */
 	fp_drift?: { name: string; fp?: string; path?: string; was?: string; now?: string }[];
 	/** the dev server's pre-bundled packages (its `.vite/deps/_metadata.json`), read when the page
 	 *  loaded one: a package also served raw from its folder runs as two copies */

@@ -8,7 +8,7 @@ import type { RequestContext, ServerApp, ServerPlugin } from './index.ts';
 import { current_facts, facts_of, mark_per_visitor, type RequestFacts } from './facts.ts';
 import { ask, notify, register_hooks } from './hooks.ts';
 import { route_option } from './routes.ts';
-import { record_server_event } from '../devtools/server-registry.ts';
+import { record_server_event } from '../events/server-registry.ts';
 
 /** One plugin's server half as the build lists it (`virtual:ogygia/server-plugins`). */
 export interface ServerPluginEntry {

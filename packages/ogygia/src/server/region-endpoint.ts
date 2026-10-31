@@ -16,7 +16,7 @@ import { current_facts } from '../plugin/facts.ts';
 import { document_shared_lifetime, mint_ttl_sec } from './shared-cache.ts';
 import { encode_region_props } from './region-props.ts';
 import { stringify } from 'devalue';
-import { record_server_event } from '../devtools/server-registry.ts';
+import { record_server_event } from '../events/server-registry.ts';
 
 // DEVTOOLS gate — server realm; off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;

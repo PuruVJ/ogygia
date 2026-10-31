@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hydration_hazards } from '../src/profiler/hydration-hazards.ts';
+import { hydration_hazards } from '../src/insights/hydration-hazards.ts';
 import { hazard_fix, hazard_words } from '../src/profiler/report.ts';
 
 describe('the report says them', () => {

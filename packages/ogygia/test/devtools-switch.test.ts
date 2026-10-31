@@ -1,8 +1,8 @@
-// THE DEVTOOLS SWITCH (devtools/switch.ts): in a build with devtools, one cookie decides whether this
+// THE DEVTOOLS SWITCH (insights/switch.ts): in a build with devtools, one cookie decides whether this
 // browser sees and measures devtools; `?og-devtools=on|off` flips it. A browser that clicked the old
 // launcher (`og_devtools=1`) stays off.
 import { describe, it, expect } from 'vitest';
-import { switch_in_url, switch_on_in, without_switch, DEVTOOLS_PARAM } from '../src/devtools/switch.ts';
+import { switch_in_url, switch_on_in, without_switch, DEVTOOLS_PARAM } from '../src/insights/switch.ts';
 
 describe('the devtools switch', () => {
 	it('reads on / off from the URL, nothing otherwise', () => {

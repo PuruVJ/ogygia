@@ -9,7 +9,7 @@ import type { NetCall, UpstreamTrace } from '../net.ts';
 import type { IoOp } from '../async-io.ts';
 import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.ts';
 import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.ts';
-import { hazard_words } from '../hydration-hazards.ts';
+import { hazard_words } from '../../insights/hydration-hazards.ts';
 import type { HoleStat, IslandStat, SeedKeyStat } from '../../server/request-stats.ts';
 import { io_kind } from '../async-io.ts';
 import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.ts';

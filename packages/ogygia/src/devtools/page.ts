@@ -6,10 +6,10 @@
  */
 import { beacon_page, hole_request_times, is_headless } from '../runtime/beacon.ts';
 import { tool_fetch } from '../tool-fetches.ts';
-import { snapshot } from './bus.ts';
+import { snapshot } from '../events/bus.ts';
 import { page_ledger } from './ledger-dom.ts';
 import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.ts';
-import { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.ts';
+import { compare as fp_compare, type FpDrift, type KeptIsland } from '../insights/fp-drift.ts';
 import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.ts';
 
 const FPS_KEY = 'ogygia:devtools:fps';
@@ -49,10 +49,10 @@ function fp_drift(nav = 0): FpDrift[] {
 	fps_memo = { at, drift };
 	return drift;
 }
-import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.ts';
+import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from '../insights/page-insights.ts';
 import { profile_for } from './profile-store.ts';
 import type { BeaconPage } from '../runtime/beacon.ts';
-import { analyze_cpu, is_trace, type CpuSummary } from './cpu.ts';
+import { analyze_cpu, is_trace, type CpuSummary } from '../insights/cpu.ts';
 import { with_source_lines } from './source-lines.ts';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.ts';
 import { PAGE_DEFER_KEY, PAGE_DEFER_REGISTRY_KEY } from '../page-defer.ts';
@@ -824,7 +824,7 @@ declare global {
 	interface Window {
 		__ogygia_page?: () => PageView | null;
 		/** the Record tab's last session report (tests read what the tab shows) */
-		__ogygia_session?: import('./session-insights.ts').SessionReport;
+		__ogygia_session?: import('../insights/session-insights.ts').SessionReport;
 		/** the Page tab's styles check, run fresh (tests read what the tab shows) */
 		__ogygia_styles?: () => Promise<{ report: import('./styles.ts').StylesReport; findings: import('./styles.ts').StylesFinding[] }>;
 		/** the Page tab's cache check (how the host caches the content-named files), run fresh */

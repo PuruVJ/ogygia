@@ -90,7 +90,7 @@ interface HubRegistry {
 	keep_owner: Map<string, string>;
 }
 
-import { emit as dt_emit } from './devtools/bus.ts';
+import { emit as dt_emit } from './events/bus.ts';
 import { batch, notify, watchers } from './ref-watch.ts';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.

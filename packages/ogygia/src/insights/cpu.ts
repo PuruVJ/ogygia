@@ -67,6 +67,9 @@ export function clean_file(url: string, page_origin = ''): string {
 	return u;
 }
 
+/** ogygia's own instruments: the devtools dock, the event layer, the analysis engine */
+const OWN_INSTRUMENT_RE = /\/ogygia\/(?:src|dist)\/(?:devtools|events|insights)\//;
+
 /** What kind of code a frame is, from its script URL (and name, for the browser's own). */
 export function kind_of(url: string, page_url: string): CodeKind {
 	if (!url) return 'browser';
@@ -77,8 +80,9 @@ export function kind_of(url: string, page_url: string): CodeKind {
 		return file.startsWith('svelte') ? 'svelte' : 'dependency';
 	}
 	if (path.includes('/svelte/src/') || path.includes('/node_modules/svelte/')) return 'svelte';
-	// the measuring itself: the dock and the sampler's own start (kept apart, never a top function)
-	if (path.includes('/ogygia/src/devtools/') || path.includes('/ogygia/dist/devtools/') || path.endsWith('/runtime/beacon.ts') || path.endsWith('/runtime/beacon.js')) return 'devtools';
+	// the measuring itself: the dock (with the event layer and the analysis it runs) and the sampler's
+	// own start (kept apart, never a top function)
+	if (OWN_INSTRUMENT_RE.test(path) || path.endsWith('/runtime/beacon.ts') || path.endsWith('/runtime/beacon.js')) return 'devtools';
 	if (path.includes('/packages/ogygia/') || path.includes('/node_modules/ogygia/') || path.includes('virtual:ogygia')) return 'ogygia';
 	if (path.includes('/node_modules/')) return 'dependency';
 	if (path.includes('/src/')) return 'app';

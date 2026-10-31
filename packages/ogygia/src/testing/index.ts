@@ -35,13 +35,13 @@
  * for `baseURL`, or without one for the origin of the first page the test opens).
  * `profile()` needs `ogygia({ profiler: true })` (and its key on a build).
  */
-import type { PageFinding, RatedVital, IslandRow } from '../devtools/page-insights.ts';
-import type { SessionReport } from '../devtools/session-insights.ts';
-import type { HydrationStatus } from '../devtools/hydration.ts';
-import type { HtmlDiff } from '../devtools/html-diff.ts';
-import { assets_diff } from '../profiler/page-assets.ts';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN } from '../devtools/switch.ts';
-import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.ts';
+import type { PageFinding, RatedVital, IslandRow } from '../insights/page-insights.ts';
+import type { SessionReport } from '../insights/session-insights.ts';
+import type { HydrationStatus } from '../insights/hydration-status.ts';
+import type { HtmlDiff } from '../insights/html-diff.ts';
+import { assets_diff } from '../insights/page-assets.ts';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN } from '../insights/switch.ts';
+import { TESTING_ENGINE_VERSION } from '../insights/testing-version.ts';
 import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 
 // ── the reports (plain JSON, as the page hands them over) ──
@@ -487,7 +487,7 @@ export function playwrightDriver(page: Page, opts: { baseURL?: string; onNavigat
  * that very request (Playwright's route handlers run newest first, so the test's own still run after).
  */
 export async function turnOnDevtools(page: Page, baseURL?: string, opts: { lean?: boolean } = {}): Promise<void> {
-	// `lean`: lean testing too (devtools/switch.ts) — the testing API and nothing else of devtools
+	// `lean`: lean testing too (insights/switch.ts) — the testing API and nothing else of devtools
 	const pairs = [{ name: DEVTOOLS_COOKIE, value: DEVTOOLS_ON }, ...(opts.lean ? [{ name: TESTING_COOKIE, value: TESTING_LEAN }] : [])];
 	const cookie = pairs.map((p) => `${p.name}=${p.value}`).join('; ');
 	if (baseURL) {

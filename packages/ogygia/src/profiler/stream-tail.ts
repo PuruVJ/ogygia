@@ -8,7 +8,7 @@
  * `defer_keys`, the Page tab's own reading). Pure; indexOf only.
  */
 import { PAGE_DEFER_GLOBAL, PAGE_DEFER_KEY } from '../page-defer.ts';
-import { defer_keys } from '../devtools/page-insights.ts';
+import { defer_keys } from '../insights/page-insights.ts';
 import { left_at, type ByteStrip, type StripKind } from './byte-strip.ts';
 
 export interface StreamTail {

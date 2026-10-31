@@ -16,7 +16,7 @@
  * (its event delegation on `document`, set while a component's module evaluates) sit deeper in the
  * stack, and are Svelte's to keep.
  */
-import { devtools_switched_on, testing_lean } from './switch.ts';
+import { devtools_switched_on, testing_lean } from '../insights/switch.ts';
 
 export interface LeftoverReg {
 	kind: 'interval' | 'listener';

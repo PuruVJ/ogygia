@@ -6,7 +6,7 @@
  */
 import { path } from '../host.ts';
 import { merge_page_keys, type PageKeys } from './page-keys.ts';
-import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.ts';
+import { hydration_hazards, type IslandHazard } from '../../insights/hydration-hazards.ts';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;

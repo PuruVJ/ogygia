@@ -3,7 +3,7 @@
 // test can leave chosen attribute changes out.
 import { describe, it, expect } from 'vitest';
 import { attr_changes } from '../src/runtime/beacon.ts';
-import { apply_attr_rules } from '../src/devtools/attr-rules.ts';
+import { apply_attr_rules } from '../src/insights/attr-rules.ts';
 
 describe('attr_changes', () => {
 	it('each attribute a custom element set, added, removed or changed', () => {
