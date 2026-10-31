@@ -9,7 +9,7 @@
 	 * header is just links, so nothing here imports the corpus.
 	 */
 	import { page } from '$app/state';
-	import { script } from 'ogygia';
+	import { script } from '@ogygia/core';
 	import { set_shell_context } from '../context.ts';
 	import { mountBase } from '../site.ts';
 	import Search from './Search.svelte' with { wake: 'idle' };

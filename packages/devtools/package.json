@@ -73,7 +73,7 @@
 	"peerDependencies": {
 		"@ogygia/router": "workspace:^",
 		"@sveltejs/kit": ">=2.70.2 <4",
-		"ogygia": "workspace:^",
+		"@ogygia/core": "workspace:^",
 		"svelte": "^5.56.8",
 		"vite": "^8.2.4"
 	},
@@ -89,7 +89,7 @@
 		"@sveltejs/kit": "^2.70.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",
-		"ogygia": "workspace:*",
+		"@ogygia/core": "workspace:*",
 		"svelte": "5.56.8",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_session, session_timeline } from 'ogygia/insights';
+import { analyze_session, session_timeline } from '@ogygia/core/insights';
 import type { SessionData } from '../src/devtools/session.ts';
 
 const base = (over: Partial<SessionData> = {}): SessionData => ({

@@ -35,8 +35,8 @@
  * for `baseURL`, or without one for the origin of the first page the test opens).
  * `profile()` needs the devtools plugin's profiler, `devtools({ profiler })` (and its key on a build).
  */
-import type { PageFinding, RatedVital, IslandRow, SessionReport, HydrationStatus, HtmlDiff } from 'ogygia/insights';
-import { assets_diff, DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN, TESTING_ENGINE_VERSION } from 'ogygia/insights';
+import type { PageFinding, RatedVital, IslandRow, SessionReport, HydrationStatus, HtmlDiff } from '@ogygia/core/insights';
+import { assets_diff, DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN, TESTING_ENGINE_VERSION } from '@ogygia/core/insights';
 import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 
 // ── the reports (plain JSON, as the page hands them over) ──

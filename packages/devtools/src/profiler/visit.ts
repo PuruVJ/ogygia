@@ -6,9 +6,9 @@
  * the server keeps a few per page). `one_clock` lays a visit out against the server's render on
  * one clock — the report's first picture.
  */
-import { hole_segments, HOLE_SEG_LABEL } from 'ogygia/insights';
-import type { NavPhases, PageInteraction, PageNav } from 'ogygia/insights';
-import type { RegionRefusal } from 'ogygia/internal/instruments';
+import { hole_segments, HOLE_SEG_LABEL } from '@ogygia/core/insights';
+import type { NavPhases, PageInteraction, PageNav } from '@ogygia/core/insights';
+import type { RegionRefusal } from '@ogygia/core/internal/instruments';
 
 export interface VisitNav {
 	/** ms from navigation start */

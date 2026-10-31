@@ -11,7 +11,7 @@
  * remotes that cross the wire, wrap it with `withRemotes()` from `@ogygia/content/remote` in a
  * `.remote.ts`.
  */
-import type { RegionValue } from 'ogygia';
+import type { RegionValue } from '@ogygia/core';
 
 /** A heading pulled from the markdown pass (h2–h4). Powers on-page TOCs; rides `markdown` `meta`. */
 export type Heading = { depth: 2 | 3 | 4; id: string; text: string };

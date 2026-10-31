@@ -10,7 +10,7 @@
  * overlap itself, and labelled so.
  */
 import type { RequestEntry } from './report.ts';
-import { islands_endpoint } from 'ogygia/internal/server';
+import { islands_endpoint } from '@ogygia/core/internal/server';
 
 export interface ContendingRequest {
 	method: string;

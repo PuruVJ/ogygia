@@ -15,7 +15,8 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 
-const pkg = JSON.parse(fs.readFileSync('packages/ogygia/package.json', 'utf8'));
+// (`ogygia` is a thin package over `@ogygia/core`: core's dependencies are what an install brings)
+const pkg = JSON.parse(fs.readFileSync('packages/core/package.json', 'utf8'));
 const SEVERITY = ['critical', 'high', 'moderate', 'low', 'info'];
 const SHARED = new Set(['svelte', '@sveltejs/kit']);
 const BUFFER = 256 * 1024 * 1024;
@@ -31,7 +32,7 @@ function json_of(args) {
 }
 
 const audit = json_of(['audit', '--json']);
-const [tree] = json_of(['list', '--filter', 'ogygia', '--json', '--depth', 'Infinity']);
+const [tree] = json_of(['list', '--filter', '@ogygia/core', '--json', '--depth', 'Infinity']);
 
 // ── ogygia's dependency graph: one node per installed copy (a deduped copy lists its children once) ──
 /** @type {Map<string, { name: string, version: string, children: Set<string> }>} */

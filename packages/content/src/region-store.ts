@@ -21,7 +21,7 @@
  */
 // createHash via the compiler HOST SEAM (defaults to Node; a browser installs a JS sha impl) so the
 // content/markdown pipeline runs in the Observatory REPL with no node:crypto. Vite plugin unchanged.
-import { createHash, BuildCache } from 'ogygia/internal/compiler-browser';
+import { createHash, BuildCache } from '@ogygia/core/internal/compiler-browser';
 
 /** A region in its serialized form — what crosses caches, wires, and builds. `html` is the whole
  *  baked markup; `islands` is reserved for descriptor-carrying regions (the wake list). */

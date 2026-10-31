@@ -6,7 +6,7 @@
  * system rendered, and plain markup. Pure: a string in, ordered segments out. The report draws
  * the strip with the time each byte left the server and the time the browser had it.
  */
-import { scanRegions } from 'ogygia/internal/server';
+import { scanRegions } from '@ogygia/core/internal/server';
 
 export type StripKind =
 	| 'head'

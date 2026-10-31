@@ -4,7 +4,7 @@
  * by name); `flag()` itself works without it (native, sticky decisions), but a
  * `decide({ source, exposure })` needs it.
  */
-import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
+import { definePlugin, type OgygiaPlugin } from '@ogygia/core/vite';
 
 export function flags(): OgygiaPlugin {
 	return definePlugin({ name: '@ogygia/flags' });

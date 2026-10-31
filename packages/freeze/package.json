@@ -35,12 +35,12 @@
 		"test": "vitest run"
 	},
 	"peerDependencies": {
-		"ogygia": "workspace:^"
+		"@ogygia/core": "workspace:^"
 	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
 		"@sveltejs/kit": "^2.70.0",
-		"ogygia": "workspace:*",
+		"@ogygia/core": "workspace:*",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.10"

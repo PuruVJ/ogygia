@@ -7,7 +7,7 @@
 // Appends a row to internal/notes/perf-checkpoints.md. Micro-benches isolate the PLUGIN transform cost from
 // rollup/svelte; build timing captures the whole thing.
 // ─────────────────────────────────────────────────────────────────────────────
-import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
+import { transformHost } from '../packages/core/dist/compiler/region/transform.js';
 import { CTX_EXTRA } from './_ctx-extra.ts';
 import { spawnSync } from 'node:child_process';
 import {

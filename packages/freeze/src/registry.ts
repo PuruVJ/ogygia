@@ -15,8 +15,8 @@ import type {
 } from './types.ts';
 import { memory_store } from './memory-store.ts';
 import { normalize_prefix } from './key.ts';
-import type { DevtoolsEventInput } from 'ogygia/plugin';
-import { sourceTag } from 'ogygia/plugin/utils';
+import type { DevtoolsEventInput } from '@ogygia/core/plugin';
+import { sourceTag } from '@ogygia/core/plugin/utils';
 import { freeze_app } from './app.ts';
 
 /** A server event into the current request's devtools stream (a no-op unless devtools is on). */

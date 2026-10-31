@@ -30,6 +30,7 @@ import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Browser, Page } from '@playwright/test';
 import { test, expect, check, sleep } from './fixtures/index.ts';
+import { pack_ogygia, use_packed } from './fixtures/packed.ts';
 import { spawn_server } from './fixtures/servers.ts';
 
 /** Thrown by a boot when the emulator's tool isn't installed — reported as SKIP, not FAIL. */
@@ -56,7 +57,6 @@ const cmd_exists = (cmd: string) =>
 
 const HERE = fileURLToPath(new URL('./adapters/', import.meta.url));
 const REPO = fileURLToPath(new URL('../', import.meta.url));
-const OGY = join(REPO, 'packages', 'ogygia');
 const FIXTURE = join(HERE, 'fixture');
 const WORK = join(HERE, '.work');
 const APP = join(WORK, 'app');
@@ -246,18 +246,12 @@ const ADAPTERS: Adapter[] = [
 // ── setup: build + pack ogygia, prepare a fixture work copy on the packed tarball ────────────────
 function setup(): string {
 	console.log('▸ building + packing ogygia');
-	if (!run('pnpm', ['run', 'build'], { cwd: OGY })) throw new Error('ogygia build failed');
+	if (!run('pnpm', ['run', 'build:lib'], { cwd: REPO })) throw new Error('ogygia build failed');
 	mkdirSync(WORK, { recursive: true });
-	const tgz = spawnSync('pnpm', ['pack', '--pack-destination', WORK], {
-		cwd: OGY,
-		encoding: 'utf8'
-	})
-		.stdout.trim()
-		.split('\n')
-		.pop()!
-		.trim();
-	const tarball = tgz.startsWith('/') ? tgz : join(WORK, tgz.split('/').pop()!);
-	console.log(`  packed → ${tarball}`);
+	// `ogygia` and the `@ogygia/core` it re-exports, both packed
+	const packed = pack_ogygia(WORK);
+	const tarball = packed.ogygia;
+	console.log(`  packed → ${packed.ogygia}, ${packed.core}`);
 
 	console.log('▸ preparing fixture (real published shape)');
 	rmSync(APP, { recursive: true, force: true });
@@ -265,14 +259,13 @@ function setup(): string {
 		recursive: true,
 		filter: (src) => !WORK_COPY_SKIP_RE.test(src)
 	});
-	const pkg = JSON.parse(readFileSync(join(APP, 'package.json'), 'utf8'));
-	pkg.dependencies.ogygia = `file:${tarball}`;
-	writeFileSync(join(APP, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
+	use_packed(APP, packed);
 	// pnpm exits non-zero on unapproved native build scripts (esbuild/workerd) even though the install
 	// itself completes — and we don't need those binaries for a rolldown-based vite build. Verify the
 	// install by PRESENCE, not exit code. (workerd IS needed for cloudflare; that adapter's boot
-	// invokes wrangler, which fetches its own runtime.)
-	run('pnpm', ['install', '--ignore-workspace', '--no-lockfile'], { cwd: APP });
+	// invokes wrangler, which fetches its own runtime.) No `--ignore-workspace`: the app's own
+	// pnpm-workspace.yaml (the core override) makes it its own root.
+	run('pnpm', ['install', '--no-lockfile'], { cwd: APP });
 	for (const dep of ['ogygia', 'vite', '@sveltejs/kit'])
 		if (!existsSync(join(APP, 'node_modules', dep)))
 			throw new Error(`fixture install failed — node_modules/${dep} missing`);

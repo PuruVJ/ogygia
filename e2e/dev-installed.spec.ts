@@ -19,7 +19,9 @@ import { test, check } from './fixtures/index.ts';
 import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
+// `ogygia` (what apps install) is a thin package over `@ogygia/core`: both are unpacked
 const pkg = path.join(repo, 'packages', 'ogygia');
+const core = path.join(repo, 'packages', 'core');
 const PORT = 3094;
 const base = `http://127.0.0.1:${PORT}`;
 
@@ -29,7 +31,7 @@ let srv: SpawnedServer | null = null;
 /** The real directory of a package the repo already has (the app links to it, as an install would place it). */
 function real(name: string): string {
 	for (const dir of [
-		path.join(pkg, 'node_modules'),
+		path.join(core, 'node_modules'),
 		path.join(repo, 'packages', 'devtools', 'node_modules'),
 		path.join(repo, 'apps', 'playground', 'node_modules'),
 		path.join(repo, 'node_modules')
@@ -80,7 +82,7 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 			fs.writeFileSync(path.join(app, rel), text);
 		}
 		// the packages exactly as published (publishConfig swaps the exports to dist), unpacked: ogygia,
-		// and the devtools plugin the app lists
+		// the core it re-exports, and the devtools plugin the app lists
 		const nm = path.join(app, 'node_modules');
 		const unpack = (from: string, to: string) => {
 			fs.mkdirSync(to, { recursive: true });
@@ -88,6 +90,7 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 			execFileSync('tar', ['-xzf', path.isAbsolute(tgz) ? tgz : path.join(app, path.basename(tgz)), '-C', to, '--strip-components=1']);
 		};
 		unpack(pkg, path.join(nm, 'ogygia'));
+		unpack(core, path.join(nm, '@ogygia', 'core'));
 		unpack(path.join(repo, 'packages', 'devtools'), path.join(nm, '@ogygia', 'devtools'));
 		for (const dep of ['svelte', '@sveltejs', 'vite', 'devalue', 'esm-env', 'estree-walker', 'magic-string', 'rolldown', 'tinyglobby', '@neodrag'])
 			fs.symlinkSync(real(dep), path.join(nm, dep));
@@ -134,12 +137,18 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 				return u.pathname + u.search;
 			})
 		);
-		const own = loaded.filter((p) => p.includes('/node_modules/ogygia/'));
+		// (ogygia's files: the `ogygia` package's and the `@ogygia/core` it re-exports)
+		const own = loaded.filter((p) => p.includes('/node_modules/ogygia/') || p.includes('/node_modules/@ogygia/core/'));
 		check('the page loads ogygia’s runtime and its slots from ogygia’s own files', own.some((p) => p.endsWith('/runtime/slots.js')) && own.some((p) => p.endsWith('/runtime/hydrate-core.js')), own.length + ' files');
 		check('each ogygia file once', new Set(own).size === own.length, own.filter((p, i) => own.indexOf(p) !== i).join(', '));
 		const meta = await (await fetch(`${base}/node_modules/.vite/deps/_metadata.json`)).json().catch(() => null);
 		const bundled = Object.entries((meta?.optimized ?? {}) as Record<string, { src?: string }>)
-			.filter(([id, m]) => id === 'ogygia' || id.startsWith('ogygia/') || (m.src ?? '').includes('/node_modules/ogygia/'))
+			.filter(
+				([id, m]) =>
+					['ogygia', '@ogygia/core'].some((n) => id === n || id.startsWith(n + '/') || id.endsWith(' > ' + n)) ||
+					(m.src ?? '').includes('/node_modules/ogygia/') ||
+					(m.src ?? '').includes('/node_modules/@ogygia/core/')
+			)
 			.map(([id]) => id);
 		check('the dep optimizer bundled no part of ogygia', !!meta && bundled.length === 0, bundled.join(', '));
 		check('…while it still bundles ogygia’s dependencies, shared with the app', !!meta && 'svelte' in (meta.optimized ?? {}), Object.keys(meta?.optimized ?? {}).slice(0, 6).join(', '));

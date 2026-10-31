@@ -105,7 +105,7 @@ async function start_preview() {
 }
 
 if (flags.includes('--build')) {
-	execSync('pnpm build', { cwd: fileURLToPath(new URL('../../packages/ogygia', import.meta.url)), stdio: 'inherit' });
+	execSync('pnpm build', { cwd: fileURLToPath(new URL('../../packages/core', import.meta.url)), stdio: 'inherit' });
 	execSync('pnpm build', { cwd: app, stdio: 'inherit' });
 }
 const stop = serve ? await start_preview() : () => {};

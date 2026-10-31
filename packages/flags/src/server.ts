@@ -3,7 +3,7 @@
  * `request`: prime the decision source once, above the page / hole split, so every read stays sync.
  * `done`: drain queued exposures at the request's end, always (the serverless-safe tail).
  */
-import { defineServer, type ServerPlugin } from 'ogygia/plugin';
+import { defineServer, type ServerPlugin } from '@ogygia/core/plugin';
 import { prime_flags, flush_exposures } from './index.ts';
 import { set_flags_app } from './app.ts';
 

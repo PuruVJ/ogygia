@@ -14,9 +14,9 @@ import { sign_headers, verify_signed_request, lift_document } from '../src/wire.
 import { set_federation } from '../src/registry.ts';
 import fed_server from '../src/server.ts';
 import { routes } from '@ogygia/router';
-import { startPlugin } from 'ogygia/plugin/testing';
+import { startPlugin } from '@ogygia/core/plugin/testing';
 // (core internals a test drives: the running code's request)
-import { facts_of, set_current_request } from '../../ogygia/src/plugin/facts.ts';
+import { facts_of, set_current_request } from '../../core/src/plugin/facts.ts';
 // federation's flag carry
 import { flag } from '../../flags/src/index.ts';
 import flags_server from '../../flags/src/server.ts';

@@ -8,8 +8,8 @@
  */
 import type { Component } from 'svelte';
 import type { Heading, LinkRef } from './index.ts';
-import { region } from 'ogygia';
-import { prebaked_region } from 'ogygia/internal';
+import { region } from '@ogygia/core';
+import { prebaked_region } from '@ogygia/core/internal';
 import {
 	defineSource,
 	toRawSource,

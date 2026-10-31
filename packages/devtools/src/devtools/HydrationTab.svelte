@@ -12,7 +12,7 @@
 	 * healed events), the beacon's before/after markup, the element's `data-og-recovered` reason.
 	 */
 	import { hydration_rows, STATUS_RANK as RANK } from './hydration.ts';
-	import { html_diff } from 'ogygia/insights';
+	import { html_diff } from '@ogygia/core/insights';
 	import { highlight, clear_highlight } from './highlight.ts';
 	import { onMount } from 'svelte';
 

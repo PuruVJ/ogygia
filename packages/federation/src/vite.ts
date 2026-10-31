@@ -4,7 +4,7 @@
  * hooks.server.ts declares the app's identity and peers. This app's island entries keep their
  * foreign-hydrate exports, so a peer's page can host and wake them.
  */
-import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
+import { definePlugin, type OgygiaPlugin } from '@ogygia/core/vite';
 
 export function federation(): OgygiaPlugin {
 	return definePlugin({

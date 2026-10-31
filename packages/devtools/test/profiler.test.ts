@@ -62,7 +62,7 @@ import { parse_visit } from '../src/profiler/visit.ts';
 import { budget_segments, build_treemap, island_rows, waiting_rows } from '../src/profiler/ui/report-data.ts';
 import type { RequestEvent } from '@sveltejs/kit';
 // (core's stub, the file `virtual:ogygia/island-deps` is aliased to — pluginTests())
-import { set_chunk_contents } from '../../ogygia/test/_stubs/virtual-island-deps.ts';
+import { set_chunk_contents } from '../../core/test/_stubs/virtual-island-deps.ts';
 import {
 	app_asset_rel,
 	client_dir_candidates,
@@ -651,6 +651,15 @@ describe('categorize', () => {
 		expect(categorize(frame('Store', '/app/src/lib/state.svelte.ts')).category).toBe('app');
 		// ogygia's own wrappers reached through a workspace link / sourcemap are the library
 		expect(categorize(frame('Region', '/repo/packages/ogygia/src/Region.svelte'))).toEqual({
+			category: 'dependency',
+			pkg: 'ogygia'
+		});
+		// …and core under its own name (a checkout's packages/core, an install's @ogygia/core): still ogygia
+		expect(categorize(frame('Region', '/repo/packages/core/src/Region.svelte'))).toEqual({
+			category: 'dependency',
+			pkg: 'ogygia'
+		});
+		expect(categorize(frame('og_entry_hydrate', '/app/node_modules/@ogygia/core/dist/entry-hydrate.js'))).toEqual({
 			category: 'dependency',
 			pkg: 'ogygia'
 		});
@@ -5135,7 +5144,7 @@ describe('profiler handle', () => {
 	// THE BEACON: an authed document gets the meta tag; the runtime POSTs its hydration timings to
 	// `/beacon`; the report joins them to its island rows by fingerprint. Dev here (open UI).
 	it('beacon: the tag rides an authed document, /beacon is bounded, the report joins by fingerprint', async () => {
-		const { record_request_stats } = await import('ogygia/internal/server');
+		const { record_request_stats } = await import('@ogygia/core/internal/server');
 		const handle = profiler({ secret: 'prof-key' });
 		// a document request gets the tag at the end of <head>; a fetch (no document dest) does not
 		// (dev: the tag needs no flag cookie; production reads `og_profiler_beacon`, set at login)

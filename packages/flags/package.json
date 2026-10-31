@@ -41,11 +41,11 @@
 		"esm-env": "^1.2.2"
 	},
 	"peerDependencies": {
-		"ogygia": "workspace:^"
+		"@ogygia/core": "workspace:^"
 	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
-		"ogygia": "workspace:*",
+		"@ogygia/core": "workspace:*",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.10"

@@ -16,7 +16,7 @@
 
 import type { MdsvexOptions } from 'mdsvex';
 import type { PreprocessorGroup, Processed } from 'svelte/compiler';
-import { BuildCache, content_css_key } from 'ogygia/internal/compiler-browser';
+import { BuildCache, content_css_key } from '@ogygia/core/internal/compiler-browser';
 import { bridge } from '../bridge.ts';
 import { RegionStore } from '../region-store.ts';
 import { remarkHeadingId } from './remark-heading-id.ts';

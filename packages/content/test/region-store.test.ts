@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { RegionStore } from '../src/region-store.ts';
-import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
+import { __set_build_cache_root } from '@ogygia/core/internal/compiler-browser';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'og-region-store-'));
 __set_build_cache_root(tmp);

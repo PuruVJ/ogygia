@@ -687,6 +687,9 @@ importers:
         specifier: ^1.62.0
         version: 1.62.1
     devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
       '@ogygia/devtools':
         specifier: workspace:*
         version: link:../devtools
@@ -699,9 +702,6 @@ importers:
       '@types/node':
         specifier: ^26.1.2
         version: 26.1.2
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
       svelte:
         specifier: 5.56.8
         version: 5.56.8
@@ -727,6 +727,9 @@ importers:
         specifier: ^0.12.8
         version: 0.12.8(svelte@5.56.8)
     devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
       '@ogygia/tooling':
         specifier: workspace:*
         version: link:../tooling
@@ -736,9 +739,6 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.2.0
         version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
       shiki:
         specifier: ^4.4.1
         version: 4.4.3
@@ -761,123 +761,7 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
 
-  packages/devtools:
-    dependencies:
-      '@neodrag/svelte':
-        specifier: 3.0.0-next.12
-        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
-      devalue:
-        specifier: ^5.9.3
-        version: 5.9.4
-    devDependencies:
-      '@ogygia/router':
-        specifier: workspace:*
-        version: link:../router
-      '@ogygia/tooling':
-        specifier: workspace:*
-        version: link:../tooling
-      '@ogygia/tsdown-plugin-svelte':
-        specifier: workspace:*
-        version: link:../tsdown-plugin-svelte
-      '@sveltejs/kit':
-        specifier: ^2.70.0
-        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-      '@sveltejs/vite-plugin-svelte':
-        specifier: ^7.2.0
-        version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-      '@types/node':
-        specifier: ^26.1.2
-        version: 26.1.2
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
-      svelte:
-        specifier: 5.56.8
-        version: 5.56.8
-      tsdown:
-        specifier: ^0.22.14
-        version: 0.22.14(typescript@6.0.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vite:
-        specifier: ^8.3.5
-        version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-
-  packages/federation:
-    devDependencies:
-      '@ogygia/flags':
-        specifier: workspace:*
-        version: link:../flags
-      '@ogygia/router':
-        specifier: workspace:*
-        version: link:../router
-      '@ogygia/tooling':
-        specifier: workspace:*
-        version: link:../tooling
-      '@sveltejs/kit':
-        specifier: ^2.70.0
-        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.57.2)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
-      tsdown:
-        specifier: ^0.22.14
-        version: 0.22.14(typescript@6.0.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-
-  packages/flags:
-    dependencies:
-      esm-env:
-        specifier: ^1.2.2
-        version: 1.2.2
-    devDependencies:
-      '@ogygia/tooling':
-        specifier: workspace:*
-        version: link:../tooling
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
-      tsdown:
-        specifier: ^0.22.14
-        version: 0.22.14(typescript@6.0.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-
-  packages/freeze:
-    devDependencies:
-      '@ogygia/tooling':
-        specifier: workspace:*
-        version: link:../tooling
-      '@sveltejs/kit':
-        specifier: ^2.70.0
-        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.57.2)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
-      tsdown:
-        specifier: ^0.22.14
-        version: 0.22.14(typescript@6.0.3)
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
-
-  packages/ogygia:
+  packages/core:
     dependencies:
       '@sveltejs/kit':
         specifier: '>=2.70.2 <4'
@@ -918,7 +802,7 @@ importers:
         version: 1.77.0
       rolldown:
         specifier: '>=1.0.0'
-        version: 1.2.2
+        version: 1.2.16
       sass-embedded:
         specifier: ^1.104.1
         version: 1.104.1
@@ -927,7 +811,7 @@ importers:
         version: 5.56.8
       svelte-check:
         specifier: ^4.7.4
-        version: 4.7.4(picomatch@4.0.5)(svelte@5.56.8)(typescript@6.0.3)
+        version: 4.7.4(picomatch@4.0.7)(svelte@5.56.8)(typescript@6.0.3)
       svelte2tsx:
         specifier: ^0.7.60
         version: 0.7.60(svelte@5.56.8)(typescript@6.0.3)
@@ -947,8 +831,158 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
 
+  packages/devtools:
+    dependencies:
+      '@neodrag/svelte':
+        specifier: 3.0.0-next.12
+        version: 3.0.0-next.12(@neodrag/core@3.0.0-next.12)(svelte@5.56.8)
+      devalue:
+        specifier: ^5.9.3
+        version: 5.9.4
+    devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../router
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@ogygia/tsdown-plugin-svelte':
+        specifier: workspace:*
+        version: link:../tsdown-plugin-svelte
+      '@sveltejs/kit':
+        specifier: ^2.70.0
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.2.0
+        version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      svelte:
+        specifier: 5.56.8
+        version: 5.56.8
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
+  packages/federation:
+    devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ogygia/flags':
+        specifier: workspace:*
+        version: link:../flags
+      '@ogygia/router':
+        specifier: workspace:*
+        version: link:../router
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@sveltejs/kit':
+        specifier: ^2.70.0
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.57.2)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
+  packages/flags:
+    dependencies:
+      esm-env:
+        specifier: ^1.2.2
+        version: 1.2.2
+    devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
+  packages/freeze:
+    devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@sveltejs/kit':
+        specifier: ^2.70.0
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.57.2)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
+  packages/ogygia:
+    dependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
+      '@sveltejs/kit':
+        specifier: '>=2.70.2 <4'
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.57.2)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      rolldown:
+        specifier: '>=1.0.0'
+        version: 1.2.2
+      svelte:
+        specifier: ^5.56.8
+        version: 5.57.2
+      vite:
+        specifier: ^8.2.4
+        version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+    devDependencies:
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/router:
     devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
       '@ogygia/tooling':
         specifier: workspace:*
         version: link:../tooling
@@ -961,9 +995,6 @@ importers:
       '@types/node':
         specifier: ^26.1.2
         version: 26.1.2
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
       svelte:
         specifier: 5.56.8
         version: 5.56.8
@@ -982,15 +1013,15 @@ importers:
 
   packages/testing:
     devDependencies:
+      '@ogygia/core':
+        specifier: workspace:*
+        version: link:../core
       '@ogygia/tooling':
         specifier: workspace:*
         version: link:../tooling
       '@playwright/test':
         specifier: 1.62.1
         version: 1.62.1
-      ogygia:
-        specifier: workspace:*
-        version: link:../ogygia
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(typescript@6.0.3)
@@ -9456,7 +9487,7 @@ snapshots:
       '@shikijs/twoslash': 4.4.3(supports-color@8.1.1)(typescript@6.0.3)
       floating-vue: 5.2.2(@nuxt/kit@3.21.11)(vue@3.5.41(typescript@6.0.3))
       lz-string: 1.5.0
-      magic-string: 1.4.3
+      magic-string: 1.4.5
       markdown-it: 14.3.0
       mdast-util-from-markdown: 2.0.3(supports-color@8.1.1)
       mdast-util-gfm: 3.1.0(supports-color@8.1.1)
@@ -10336,7 +10367,7 @@ snapshots:
 
   '@unhead/bundler@3.3.1(@oxc-project/types@0.142.0)(@vitejs/devtools-kit@0.4.12(@modelcontextprotocol/server@2.0.0)(cac@7.0.0)(srvx@0.12.5)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(esbuild@0.28.1)(lightningcss@1.33.0)(oxc-parser@0.131.0)(rolldown@1.2.2)(rollup@4.62.4)(unhead@3.3.1(esbuild@0.28.1)(rolldown@1.2.16)(rollup@4.62.4)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))':
     dependencies:
-      magic-string: 1.4.3
+      magic-string: 1.4.5
       oxc-walker: 1.1.1(@oxc-project/types@0.142.0)(oxc-parser@0.131.0)(rolldown@1.2.2)
       unhead: 3.3.1(esbuild@0.28.1)(rolldown@1.2.16)(rollup@4.62.4)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
       unplugin: 3.3.0(esbuild@0.28.1)(rolldown@1.2.2)(rollup@4.62.4)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
@@ -12433,7 +12464,7 @@ snapshots:
   magic-string-stack@2.0.0:
     dependencies:
       '@jridgewell/remapping': 2.3.5
-      magic-string: 1.4.3
+      magic-string: 1.4.5
 
   magic-string@0.30.21:
     dependencies:
@@ -13731,19 +13762,6 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  svelte-check@4.7.4(picomatch@4.0.5)(svelte@5.56.8)(typescript@6.0.3):
-    dependencies:
-      '@jridgewell/trace-mapping': 0.3.31
-      '@sveltejs/load-config': 0.2.1
-      chokidar: 4.0.3
-      fdir: 6.5.0(picomatch@4.0.5)
-      picocolors: 1.1.1
-      sade: 1.8.1
-      svelte: 5.56.8
-      typescript: 6.0.3
-    transitivePeerDependencies:
-      - picomatch
-
   svelte-check@4.7.4(picomatch@4.0.7)(svelte@5.56.8)(typescript@6.0.3):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
@@ -13857,8 +13875,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinypool@2.1.0: {}
 

@@ -4,7 +4,7 @@
  * devtools stream through it. Null before the plugin starts (a unit test that never starts it):
  * nothing is announced then.
  */
-import type { ServerApp } from 'ogygia/plugin';
+import type { ServerApp } from '@ogygia/core/plugin';
 import type { FreezeServerOptions } from './server.ts';
 
 let current: ServerApp<FreezeServerOptions> | null = null;

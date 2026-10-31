@@ -55,8 +55,8 @@ describe('page(async function*) — the streamed slot', () => {
 
 	it('yields REAL regions — async generators auto-await them, the resolved shapes must bake', async () => {
 		// the exact gap that let e2e fail while string-only tests stayed green
-		const { htmlRegion: og_html_region, region } = await import('ogygia/plugin');
-		const { default: RawHtml } = await import('../../ogygia/src/RawHtml.svelte');
+		const { htmlRegion: og_html_region, region } = await import('@ogygia/core/plugin');
+		const { default: RawHtml } = await import('../../core/src/RawHtml.svelte');
 		const app2 = routes({
 			'/s': page(async function* () {
 				yield og_html_region('<p data-first>inline region</p>'); // resolves via its own bake
@@ -141,7 +141,7 @@ describe('mount({ stream: true }) — the sugar', () => {
 
 	it('a COMPONENT fallback bakes as an inline region into the flushed part', async () => {
 		vi.stubGlobal('fetch', async () => new Response(doc_json('late-body')));
-		const { default: RawHtml } = await import('../../ogygia/src/RawHtml.svelte');
+		const { default: RawHtml } = await import('../../core/src/RawHtml.svelte');
 const app = routes({
 			'/cms/[...rest]': mount(peer(), {
 				stream: { fallback: RawHtml as never }

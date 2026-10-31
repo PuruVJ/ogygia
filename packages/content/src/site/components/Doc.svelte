@@ -4,7 +4,7 @@
 	 * region (islands inside hydrate normally), suggested reading, pager, and the on-page toc. Every
 	 * piece removable by prop; the day-1 page is literally `<Doc view={await docs.page(slug)} />`.
 	 */
-	import { Region } from 'ogygia';
+	import { Region } from '@ogygia/core';
 	import Pager from './Pager.svelte';
 	// An island (`wake: 'load'`) so its scrollspy hydrates per page and RE-hydrates after every SPA
 	// navigation — the fix for "no active outline until reload". Only `headings` (plain data) crosses.

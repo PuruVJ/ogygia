@@ -6,8 +6,8 @@
  * on; with `onDemand`, only once someone opens the profiler.
  */
 import type { Handle } from '@sveltejs/kit';
-import { defineServer, type ServerPlugin } from 'ogygia/plugin';
-import { want_request_stats } from 'ogygia/internal/server';
+import { defineServer, type ServerPlugin } from '@ogygia/core/plugin';
+import { want_request_stats } from '@ogygia/core/internal/server';
 import type { ProfilerOptions } from './profiler/index.ts';
 import { profiler_demand_skip } from './profiler/on-demand.ts';
 

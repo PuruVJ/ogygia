@@ -8,7 +8,7 @@
  */
 import { all_regions, region_name } from './regions.ts';
 import type { StylesFinding } from './styles.ts';
-import { tool_fetch, tool_made } from 'ogygia/internal/instruments';
+import { tool_fetch, tool_made } from '@ogygia/core/internal/instruments';
 
 export interface CacheProbe {
 	url: string;

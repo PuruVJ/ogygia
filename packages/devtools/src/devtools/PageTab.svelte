@@ -10,10 +10,10 @@
 	 * files that blocked the first paint, and the bytes by type. The analysis is page-insights.ts.
 	 */
 	import { read_page, cpu_of, summary_lines } from './page.ts';
-	import { first_difference, rate } from 'ogygia/insights';
-	import { beacon_record_cpu } from 'ogygia/internal/instruments';
+	import { first_difference, rate } from '@ogygia/core/insights';
+	import { beacon_record_cpu } from '@ogygia/core/internal/instruments';
 	import { read_styles, scan_unscoped, styles_findings } from './styles.ts';
-	import { hole_segments, HOLE_SEG_LABEL } from 'ogygia/insights';
+	import { hole_segments, HOLE_SEG_LABEL } from '@ogygia/core/insights';
 	import { cache_findings, probe_cache } from './cache-headers.ts';
 
 	let { tick = 0, focus = $bindable(null), selected = $bindable(null) } = $props();

@@ -2,7 +2,7 @@
 // and injected into a blank page, where it runs the SAME scenarios as the node/shim bench but against
 // a real DOM (real childNodes NodeList, real getAttribute, real attribute invalidation). This is the
 // ground truth — the node bench is the fast proxy.
-import { morph_children } from '../../packages/ogygia/dist/runtime/morph.js';
+import { morph_children } from '../../packages/core/dist/runtime/morph.js';
 
 let seed = 0x1234abcd;
 const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { rewrite_code, type CodeCall } from '../src/macros/code.ts';
-import { dedent } from 'ogygia/internal/compiler-browser';
+import { dedent } from '@ogygia/core/internal/compiler-browser';
 
 const MARKUP = ['.svelte'] as const;
 // A fake renderer: echoes its inputs so tests assert what the macro EXTRACTED (dedent, lang, meta),

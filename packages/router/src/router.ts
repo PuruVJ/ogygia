@@ -8,16 +8,16 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Component } from 'svelte';
-import { document } from 'ogygia/server';
+import { document } from '@ogygia/core/server';
 import {
 	region,
 	registerRouteOptions as register_route_options,
 	openLateScope as open_late_scope,
 	takeLateRegions as take_late_regions,
 	lateSlot as slot_html
-} from 'ogygia/plugin';
-import { componentCssHead as router_css_head } from 'ogygia/plugin/css';
-import { escapeText as escape_text, type StandardSchemaV1 } from 'ogygia/plugin/utils';
+} from '@ogygia/core/plugin';
+import { componentCssHead as router_css_head } from '@ogygia/core/plugin/css';
+import { escapeText as escape_text, type StandardSchemaV1 } from '@ogygia/core/plugin/utils';
 import LayoutChain from './LayoutChain.svelte';
 import RawHtml from './RawHtml.svelte';
 import { compile_all, match_path, fill, type CompiledPattern } from './match.ts';

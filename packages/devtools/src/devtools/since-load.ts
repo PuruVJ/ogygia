@@ -7,7 +7,7 @@
  * clear the noise floor to count. The vitals use the profiler's own rule (page-insights
  * `vitals_moved`): "since your last load" and "since your last profile" never disagree.
  */
-import { vitals_moved, type PartedVital, type VitalPart } from 'ogygia/insights';
+import { vitals_moved, type PartedVital, type VitalPart } from '@ogygia/core/insights';
 
 export interface LoadSnapshot {
 	path: string;

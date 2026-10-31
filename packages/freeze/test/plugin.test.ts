@@ -4,8 +4,8 @@
  * it calls (`invalidated`) and answers (`lastBuild`).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { startPlugin } from 'ogygia/plugin/testing';
-import { register_hooks, ask } from '../../ogygia/src/plugin/hooks.ts';
+import { startPlugin } from '@ogygia/core/plugin/testing';
+import { register_hooks, ask } from '../../core/src/plugin/hooks.ts';
 import { freeze as freezePlugin } from '../src/vite.ts';
 import server, { type FreezeServerOptions } from '../src/server.ts';
 import { freeze } from '../src/index.ts';

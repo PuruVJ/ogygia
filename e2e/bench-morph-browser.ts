@@ -3,7 +3,7 @@
 // The node bench (e2e/bench-morph.ts) is the fast proxy against a DOM shim; this is the honest
 // number (live NodeList, native getAttribute, real attribute invalidation).
 //
-//   pnpm --filter ogygia build && node e2e/bench-morph-browser.ts "label"
+//   pnpm --filter @ogygia/core build && node e2e/bench-morph-browser.ts "label"
 //
 // Bundles e2e/browser/morph-entry.js (imports the built dist morph) to an IIFE with rolldown,
 // injects it into a blank page, and calls window.MorphBench.runBench().

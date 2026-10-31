@@ -13,7 +13,7 @@
  * These are pure functions over {@link Fence} — unit-testable with no Vite. The wiring into the
  * markdown highlighter + the sticky-choice CSS lives in the pipeline runner (see `code-render.ts`).
  */
-import type { PreferenceSpec } from 'ogygia';
+import type { PreferenceSpec } from '@ogygia/core';
 
 /** One code fence, as the pipeline sees it. `raw_meta` is the untouched infostring after the lang. */
 export type Fence = {

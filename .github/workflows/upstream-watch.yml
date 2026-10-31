@@ -71,7 +71,7 @@ jobs:
       - name: Baseline — unit + browser suites on the PINNED lockfile
         id: baseline
         continue-on-error: true
-        run: pnpm -C packages/ogygia test
+        run: pnpm -C packages/core test
 
       - name: Record the baseline verdict
         run: echo "BASELINE=${{ steps.baseline.outcome }}" >> "$GITHUB_ENV"

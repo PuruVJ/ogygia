@@ -3,7 +3,7 @@
  * The app-facing API (`federate()`, a peer handle's loads) runs outside any hook and reaches the
  * request facts, the shared hooks and the app's signer through it. Null before the plugin starts.
  */
-import type { ServerApp } from 'ogygia/plugin';
+import type { ServerApp } from '@ogygia/core/plugin';
 
 let current: ServerApp | null = null;
 

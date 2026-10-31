@@ -10,7 +10,7 @@
 	 * Transition, how many deferred holes were single-flighted), and a short history. Reads
 	 * nav.start/finish/reconcile/batch off the bus. The decision-based counterpart to the Timeline.
 	 */
-	import { snapshot } from 'ogygia/events';
+	import { snapshot } from '@ogygia/core/events';
 	import { region_name, region_name_by_fp } from './regions.ts';
 
 	let { tick = 0 } = $props();

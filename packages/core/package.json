@@ -1,0 +1,299 @@
+{
+	"name": "@ogygia/core",
+	"private": true,
+	"version": "0.10.2",
+	"type": "module",
+	"sideEffects": [
+		"**/*.css"
+	],
+	"description": "The core of ogygia (SSR islands for SvelteKit): apps install `ogygia`, plugins build on this",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
+		"directory": "packages/core"
+	},
+	"bugs": {
+		"url": "https://github.com/ogygiajs/ogygia/issues"
+	},
+	"license": "MIT",
+	"exports": {
+		".": {
+			"svelte": "./src/index.ts",
+			"types": "./dist/index.d.ts",
+			"default": "./src/index.ts"
+		},
+		"./vite": {
+			"types": "./dist/vite/index.d.ts",
+			"default": "./dist/vite/index.js"
+		},
+		"./runtime": {
+			"types": "./dist/runtime/index.d.ts",
+			"default": "./src/runtime/index.ts"
+		},
+		"./hooks": {
+			"types": "./dist/hooks.d.ts",
+			"default": "./src/hooks.ts"
+		},
+		"./app": {
+			"types": "./dist/app.d.ts",
+			"default": "./src/app.ts"
+		},
+		"./internal": {
+			"svelte": "./src/internal.ts",
+			"types": "./dist/internal.d.ts",
+			"default": "./src/internal.ts"
+		},
+		"./internal/server": {
+			"svelte": "./src/internal-server.ts",
+			"types": "./dist/internal-server.d.ts",
+			"default": "./src/internal-server.ts"
+		},
+		"./internal/instruments": {
+			"svelte": "./src/internal-instruments.ts",
+			"types": "./dist/internal-instruments.d.ts",
+			"default": "./src/internal-instruments.ts"
+		},
+		"./internal/register": {
+			"svelte": "./src/internal-register.ts",
+			"types": "./dist/internal-register.d.ts",
+			"default": "./src/internal-register.ts"
+		},
+		"./internal/compiler-ids": {
+			"svelte": "./src/compiler/ids.ts",
+			"types": "./dist/compiler/ids.d.ts",
+			"default": "./src/compiler/ids.ts"
+		},
+		"./internal/region-core": {
+			"types": "./dist/region-core.d.ts",
+			"default": "./dist/region-core.js"
+		},
+		"./internal/reconcile": {
+			"svelte": "./src/internal-reconcile.ts",
+			"types": "./dist/internal-reconcile.d.ts",
+			"default": "./src/internal-reconcile.ts"
+		},
+		"./internal/compiler": {
+			"types": "./dist/compiler/index.d.ts",
+			"default": "./dist/compiler/index.js"
+		},
+		"./server": {
+			"types": "./dist/hooks.d.ts",
+			"default": "./src/hooks.ts"
+		},
+		"./markup": {
+			"types": "./dist/markup.d.ts",
+			"default": "./src/markup.ts"
+		},
+		"./plugin": {
+			"types": "./dist/plugin/index.d.ts",
+			"default": "./src/plugin/index.ts"
+		},
+		"./plugin/utils": {
+			"types": "./dist/plugin/utils.d.ts",
+			"default": "./src/plugin/utils.ts"
+		},
+		"./plugin/css": {
+			"types": "./dist/plugin/css.d.ts",
+			"default": "./src/plugin/css.ts"
+		},
+		"./plugin/testing": {
+			"types": "./dist/plugin/testing.d.ts",
+			"default": "./src/plugin/testing.ts"
+		},
+		"./plugin/client": {
+			"types": "./dist/plugin/client.d.ts",
+			"default": "./src/plugin/client.ts"
+		},
+		"./devtools": {
+			"types": "./dist/events/index.d.ts",
+			"default": "./src/events/index.ts"
+		},
+		"./events": {
+			"types": "./dist/events/index.d.ts",
+			"default": "./src/events/index.ts"
+		},
+		"./insights": {
+			"types": "./dist/insights/index.d.ts",
+			"default": "./src/insights/index.ts"
+		},
+		"./types": {
+			"types": "./ambient.d.ts"
+		},
+		"./internal/compiler-browser": {
+			"types": "./dist/compiler/browser.d.ts",
+			"default": "./dist/compiler/browser.js"
+		},
+		"./internal/compiler-browser-full": {
+			"types": "./dist/compiler/browser-full.d.ts",
+			"default": "./dist/compiler/browser-full.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"ambient.d.ts"
+	],
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:node": "vitest run --project node",
+		"test:browser": "vitest run --project browser",
+		"lint": "oxlint -c .oxlintrc.json src",
+		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json && vitest run && pnpm run lint",
+		"prepublishOnly": "pnpm run build && pnpm run verify:package",
+		"verify:package": "node scripts/verify-package.ts"
+	},
+	"dependencies": {
+		"devalue": "^5.9.3",
+		"esm-env": "^1.2.2",
+		"estree-walker": "^3.0.3",
+		"magic-string": "^1.4.5",
+		"tinyglobby": "^0.2.17"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": ">=2.70.2 <4",
+		"rolldown": ">=1.0.0",
+		"svelte": "^5.56.8",
+		"vite": "^8.2.4"
+	},
+	"peerDependenciesMeta": {
+		"rolldown": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@ogygia/tsdown-plugin-svelte": "workspace:*",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@types/node": "^26.1.2",
+		"@vitest/browser": "4.1.10",
+		"@vitest/browser-playwright": "4.1.10",
+		"oxlint": "^1.77.0",
+		"rolldown": ">=1.0.0",
+		"sass-embedded": "^1.104.1",
+		"svelte": "5.56.8",
+		"svelte-check": "^4.7.4",
+		"svelte2tsx": "^0.7.60",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"valibot": "^1.4.2",
+		"vite": "^8.3.5",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"svelte": "./dist/index.js",
+				"default": "./dist/index.js"
+			},
+			"./vite": {
+				"types": "./dist/vite/index.d.ts",
+				"default": "./dist/vite/index.js"
+			},
+			"./runtime": {
+				"types": "./dist/runtime/index.d.ts",
+				"default": "./dist/runtime/index.js"
+			},
+			"./hooks": {
+				"types": "./dist/hooks.d.ts",
+				"default": "./dist/hooks.js"
+			},
+			"./app": {
+				"types": "./dist/app.d.ts",
+				"default": "./dist/app.js"
+			},
+			"./internal": {
+				"types": "./dist/internal.d.ts",
+				"svelte": "./dist/internal.js",
+				"default": "./dist/internal.js"
+			},
+			"./internal/server": {
+				"types": "./dist/internal-server.d.ts",
+				"svelte": "./dist/internal-server.js",
+				"default": "./dist/internal-server.js"
+			},
+			"./internal/instruments": {
+				"types": "./dist/internal-instruments.d.ts",
+				"svelte": "./dist/internal-instruments.js",
+				"default": "./dist/internal-instruments.js"
+			},
+			"./internal/register": {
+				"types": "./dist/internal-register.d.ts",
+				"svelte": "./dist/internal-register.js",
+				"default": "./dist/internal-register.js"
+			},
+			"./internal/compiler-ids": {
+				"types": "./dist/compiler/ids.d.ts",
+				"svelte": "./dist/compiler/ids.js",
+				"default": "./dist/compiler/ids.js"
+			},
+			"./internal/region-core": {
+				"types": "./dist/region-core.d.ts",
+				"svelte": "./dist/region-core.js",
+				"default": "./dist/region-core.js"
+			},
+			"./internal/reconcile": {
+				"types": "./dist/internal-reconcile.d.ts",
+				"svelte": "./dist/internal-reconcile.js",
+				"default": "./dist/internal-reconcile.js"
+			},
+			"./server": {
+				"types": "./dist/hooks.d.ts",
+				"default": "./dist/hooks.js"
+			},
+			"./markup": {
+				"types": "./dist/markup.d.ts",
+				"default": "./dist/markup.js"
+			},
+			"./plugin": {
+				"types": "./dist/plugin/index.d.ts",
+				"default": "./dist/plugin/index.js"
+			},
+			"./plugin/utils": {
+				"types": "./dist/plugin/utils.d.ts",
+				"default": "./dist/plugin/utils.js"
+			},
+			"./plugin/css": {
+				"types": "./dist/plugin/css.d.ts",
+				"default": "./dist/plugin/css.js"
+			},
+			"./plugin/testing": {
+				"types": "./dist/plugin/testing.d.ts",
+				"default": "./dist/plugin/testing.js"
+			},
+			"./plugin/client": {
+				"types": "./dist/plugin/client.d.ts",
+				"default": "./dist/plugin/client.js"
+			},
+			"./devtools": {
+				"types": "./dist/events/index.d.ts",
+				"default": "./dist/events/index.js"
+			},
+			"./events": {
+				"types": "./dist/events/index.d.ts",
+				"default": "./dist/events/index.js"
+			},
+			"./insights": {
+				"types": "./dist/insights/index.d.ts",
+				"default": "./dist/insights/index.js"
+			},
+			"./internal/compiler": {
+				"types": "./dist/compiler/index.d.ts",
+				"default": "./dist/compiler/index.js"
+			},
+			"./types": {
+				"types": "./ambient.d.ts"
+			},
+			"./internal/compiler-browser": {
+				"types": "./dist/compiler/browser.d.ts",
+				"default": "./dist/compiler/browser.js"
+			},
+			"./internal/compiler-browser-full": {
+				"types": "./dist/compiler/browser-full.d.ts",
+				"default": "./dist/compiler/browser-full.js"
+			}
+		}
+	}
+}

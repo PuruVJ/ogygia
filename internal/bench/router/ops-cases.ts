@@ -9,9 +9,9 @@ import {
 	region_hydrate_schedule,
 	region_is_vacant,
 	region_ssr_truncated
-} from '../../../packages/ogygia/src/runtime/region-attrs.js';
-import { island_module_url } from '../../../packages/ogygia/src/runtime/region-endpoint-url.js';
-import { frameAddress } from '../../../packages/ogygia/src/frame.js';
+} from '../../../packages/core/src/runtime/region-attrs.js';
+import { island_module_url } from '../../../packages/core/src/runtime/region-endpoint-url.js';
+import { frameAddress } from '../../../packages/core/src/frame.js';
 import { parse, stringify } from 'devalue';
 
 // devalue prop payloads as read_region_props sees them (the real per-island parse cost).

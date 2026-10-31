@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hydration_hazards } from 'ogygia/insights';
+import { hydration_hazards } from '@ogygia/core/insights';
 import { hazard_fix, hazard_words } from '../src/profiler/report.ts';
 
 describe('the report says them', () => {

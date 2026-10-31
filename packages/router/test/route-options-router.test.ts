@@ -12,7 +12,7 @@ import {
 	routeOption as route_option,
 	clearRouteOptions as clear_route_options,
 	setPageRouteOptions as set_page_route_options
-} from 'ogygia/plugin/testing';
+} from '@ogygia/core/plugin/testing';
 
 const C = (() => null) as never;
 const freeze = (path: string) => route_option('freeze', null, path);

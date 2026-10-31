@@ -346,8 +346,8 @@ CLI: `npx ogygia init` · `site init` · `keys [name]` (Ed25519 pair to stdout, 
 
 ## In this monorepo
 
-- Library src: `packages/ogygia/src`; build it first: `pnpm build:lib` (apps consume dist). Full check: `pnpm check`; e2e: `pnpm test:e2e` (`:fast` skips rebuild).
-- Tests, three layers: unit = Vitest `node` project (`pnpm --filter ogygia test:node`, imports dist); island tests in a REAL browser = Vitest browser mode (`test:browser`, Playwright chromium, `test/browser/*.test.ts` — SSR HTML from `setup.ts`, boots the real runtime); e2e = Playwright test runner (`playwright.config.ts`, `e2e/*.spec.ts`, globalSetup builds lib + playground, `webServer` serves it; self-booting suites use worker fixtures in `e2e/fixtures/`).
+- Library src: `packages/core/src` (`@ogygia/core`; `packages/ogygia` is the thin `ogygia` package over it); build it first: `pnpm build:lib` (apps consume dist). Full check: `pnpm check`; e2e: `pnpm test:e2e` (`:fast` skips rebuild).
+- Tests, three layers: unit = Vitest `node` project (`pnpm --filter @ogygia/core test:node`, imports dist); island tests in a REAL browser = Vitest browser mode (`test:browser`, Playwright chromium, `test/browser/*.test.ts` — SSR HTML from `setup.ts`, boots the real runtime); e2e = Playwright test runner (`playwright.config.ts`, `e2e/*.spec.ts`, globalSetup builds lib + playground, `webServer` serves it; self-booting suites use worker fixtures in `e2e/fixtures/`).
 - Internal naming: non-public exports are `snake_case`; only public API + classes/types are camel/Pascal.
 - Design/trust rationale: `internal/notes/DESIGN.md`, `INVARIANTS.md`, `regions.md`, `config.md`. Docs source of truth: `apps/docs/src/content/docs`.
 - This skill has TWO copies that must stay identical: the bundled source `packages/cli/ai/SKILL.md` (what `npx ogygia ai` installs into consumer apps) and this repo's own `.claude/skills/ogygia/SKILL.md`.

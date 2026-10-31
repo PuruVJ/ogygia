@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['internal/bench/**', 'packages/ogygia/**']
+    paths: ['internal/bench/**', 'packages/ogygia/**', 'packages/core/**']
 
 jobs:
   bench:

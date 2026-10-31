@@ -1,4 +1,4 @@
-// HOLES ON A CACHED DOCUMENT (packages/ogygia/src/server/shared-cache.ts). A page whose load says
+// HOLES ON A CACHED DOCUMENT (packages/core/src/server/shared-cache.ts). A page whose load says
 // `cache-control: public, s-maxage=604800, stale-while-revalidate=86400` is served from a CDN for up
 // to 8 days; its deferred holes used to be signed for `regions.ttl` only, and every visitor of the
 // cached copy got a 403 for every hole once that passed. Now:
@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import { test, check } from './fixtures/index.ts';
 import { AMP_ENTITY_G_RE, ENDPOINT_ATTR_RE } from './fixtures/re.ts';
-import { region_mac_message, sign } from '../packages/ogygia/dist/server/hmac.js';
+import { region_mac_message, sign } from '../packages/core/dist/server/hmac.js';
 
 const ENV_SECRET_RE = /^OGYGIA_SECRET=(.+)$/m;
 // the secret the playground server signs with: the environment's (CI sets it; it also wins over

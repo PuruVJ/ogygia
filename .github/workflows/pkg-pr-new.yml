@@ -43,15 +43,23 @@ jobs:
       # so a report or a lockfile never mistakes it for the release it was built after. Only the
       # packed copy changes — nothing is committed.
       # (a pull_request run checks out GitHub's merge commit: name the branch's own head instead)
+      # Every published package gets the same preview version (they release as one fixed group).
       - env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          cd packages/ogygia
-          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));const [a,b,c]=p.version.split('-')[0].split('.').map(Number);p.version=a+'.'+b+'.'+(c+1)+'-next.'+process.env.HEAD_SHA.slice(0,7);fs.writeFileSync('package.json',JSON.stringify(p,null,'\t')+'\n');console.log(p.version)"
+          for dir in ogygia core flags freeze federation content devtools router testing cli; do
+            (cd packages/$dir && node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));const [a,b,c]=p.version.split('-')[0].split('.').map(Number);p.version=a+'.'+b+'.'+(c+1)+'-next.'+process.env.HEAD_SHA.slice(0,7);fs.writeFileSync('package.json',JSON.stringify(p,null,'\t')+'\n');console.log(p.name+' '+p.version)")
+          done
 
       # `--pnpm` makes pkg.pr.new pack with `pnpm pack` instead of the default `npm pack`. Only pnpm
       # pack applies `publishConfig` (swapping the dev `exports` that point at `src/` for the `dist/`
       # map). Without it the preview shipped raw source exports pointing at files not in the tarball,
       # so `import … from 'ogygia'` failed with ERR_RESOLVE_PACKAGE_ENTRY_FAIL.
       # `--packageManager=pnpm`: the PR comment's install line reads `pnpm add …`, not `npm i …`.
-      - run: npx --yes pkg-pr-new publish --pnpm --packageManager=pnpm './packages/ogygia'
+      # `ogygia` is a thin package over `@ogygia/core`, so both publish (one preview resolves the
+      # other), with the plugin packages an app lists beside them.
+      - run: >-
+          npx --yes pkg-pr-new publish --pnpm --packageManager=pnpm
+          './packages/ogygia' './packages/core' './packages/flags' './packages/freeze'
+          './packages/federation' './packages/content' './packages/devtools' './packages/router'
+          './packages/testing' './packages/cli'

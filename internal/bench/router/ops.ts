@@ -18,13 +18,13 @@ import { spawnSync } from 'node:child_process';
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
 const entry = join(repo, 'internal/bench/router/ops-cases.ts');
 
-// devalue lives in the pnpm store (symlinked into packages/ogygia/node_modules), not repo-root
+// devalue lives in the pnpm store (symlinked into packages/core/node_modules), not repo-root
 // node_modules, so rolldown can't resolve the bare specifier from the bench dir — alias it.
 function resolveDevalue(): string {
 	const store = join(repo, 'node_modules/.pnpm');
 	const hit = existsSync(store) ? readdirSync(store).find((d) => d.startsWith('devalue@')) : null;
 	if (hit) return join(store, hit, 'node_modules/devalue/index.js');
-	return join(repo, 'packages/ogygia/node_modules/devalue/index.js');
+	return join(repo, 'packages/core/node_modules/devalue/index.js');
 }
 const BUDGET_MS = 400; // per-case measured window
 const ROUNDS = 5; // best-of, to shed GC/JIT noise

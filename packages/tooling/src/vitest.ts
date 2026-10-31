@@ -4,8 +4,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import type { ViteUserConfig } from 'vitest/config';
 
 /** Core's test stubs: `app-<name>.ts` stands in for `$app/<name>`, `virtual-<name>.ts` for
- *  `virtual:ogygia/<name>` (packages/ogygia/test/_stubs). */
-const STUBS = fileURLToPath(new URL('../../ogygia/test/_stubs/', import.meta.url));
+ *  `virtual:ogygia/<name>` (packages/core/test/_stubs). */
+const STUBS = fileURLToPath(new URL('../../core/test/_stubs/', import.meta.url));
 
 function stub_aliases(): Record<string, string> {
 	const out: Record<string, string> = {};

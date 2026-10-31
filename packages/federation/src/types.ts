@@ -6,7 +6,7 @@
  * cross-app THAW notices so a publish or a deploy on one team thaws the frozen pages of every
  * team that baked its fragments.
  */
-import type { RegionValue } from 'ogygia';
+import type { RegionValue } from '@ogygia/core';
 import type { Router } from '@ogygia/router';
 import type { Claims } from './wire.ts';
 

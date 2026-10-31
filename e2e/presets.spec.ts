@@ -3,7 +3,7 @@
 import {
 	transformHost,
 	wrapperVirtualId
-} from '../packages/ogygia/dist/compiler/region/transform.js';
+} from '../packages/core/dist/compiler/region/transform.js';
 import { CTX_EXTRA } from './_ctx-extra.ts';
 import path from 'node:path';
 import { test, check } from './fixtures/index.ts';

@@ -9,8 +9,8 @@ import type { NetCall, UpstreamTrace } from '../net.ts';
 import type { IoOp } from '../async-io.ts';
 import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.ts';
 import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.ts';
-import { hazard_words } from 'ogygia/insights';
-import type { HoleStat, IslandStat, SeedKeyStat } from 'ogygia/internal/server';
+import { hazard_words } from '@ogygia/core/insights';
+import type { HoleStat, IslandStat, SeedKeyStat } from '@ogygia/core/internal/server';
 import { io_kind } from '../async-io.ts';
 import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.ts';
 

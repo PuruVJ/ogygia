@@ -5,7 +5,7 @@
 	 * tags, the rendered body, and prev/next by date. No sidebar, no on-this-page rail — a post reads
 	 * top to bottom. Styling rides the `.og-*` tokens; blog-specific structure is scoped below.
 	 */
-	import { Region } from 'ogygia';
+	import { Region } from '@ogygia/core';
 	import CodeChrome from './CodeChrome.svelte' with { wake: 'load' };
 	import { get_shell_context } from '../context.ts';
 	import type { PageView } from '../types.ts';

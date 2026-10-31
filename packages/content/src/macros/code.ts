@@ -25,7 +25,7 @@ import {
 	dedent,
 	parse_module,
 	type JsRegion
-} from 'ogygia/internal/compiler-browser';
+} from '@ogygia/core/internal/compiler-browser';
 
 // Both snippet constructs share this transform: `code(source, lang, meta?)` and `md(text)` each bake
 // to static html at build and inline as the same `og_html_region(...)`.

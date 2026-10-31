@@ -2,7 +2,7 @@
  * The flags plugin: its manifest, its server realm's two hooks, and the facts a read reports.
  */
 import { describe, it, expect } from 'vitest';
-import { startPlugin } from 'ogygia/plugin/testing';
+import { startPlugin } from '@ogygia/core/plugin/testing';
 import { flags } from '../src/vite.ts';
 import server from '../src/server.ts';
 import { decide, flag } from '../src/index.ts';

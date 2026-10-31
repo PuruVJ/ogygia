@@ -32,6 +32,6 @@ export {
 	type RuntimeEventInput,
 	type HubEventInput,
 	type NavEventInput
-} from 'ogygia/events';
+} from '@ogygia/core/events';
 
 export { install_devtools_ui } from './ui.ts';
