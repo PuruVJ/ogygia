@@ -8,6 +8,12 @@ changeset, written by the release: do not edit by hand.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.10.1
+
+### Patch Changes
+
+- [#62](https://github.com/PuruVJ/ogygia/pull/62) [`79cdb65`](https://github.com/PuruVJ/ogygia/commit/79cdb65579eb53ed142f81d24ba0f787c1fefb72) Thanks [@PuruVJ](https://github.com/PuruVJ)! - A `regions.presets` entry takes `fetch` (a deferred hole's timing): 0.10.0 rejected the key, so no deferred preset with a timing could be written.
+
 ## 0.10.0
 
 ### Minor Changes
