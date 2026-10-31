@@ -47,7 +47,7 @@ An argument with glob magic (`*`, `{}`, `?`), or a single file, is passed throug
 
 Each accepts the same second `opts` argument that the underlying builder takes. `folder` and `git` forward folder options (`page`, `meta`, `convention`). Thus ordering and labels are yours to shape.
 
-One option belongs to the macro itself, consumed at compile and never forwarded: **`preset`**, a literal name from [`content.presets`](/docs/reference/api#ogygiavite-content). It opts this full collection into a markdown variant (different `overrides`, themes, transformers), and does not touch the app default:
+One option belongs to the macro itself, consumed at compile and never forwarded: **`preset`**, a literal name from [`content({ presets })`](/docs/reference/api#ogygiavite-content). It opts this full collection into a markdown variant (different `overrides`, themes, transformers), and does not touch the app default:
 
 ```ts
 loader: import.meta.og.loader.folder('../content/blog', { preset: 'plain' })

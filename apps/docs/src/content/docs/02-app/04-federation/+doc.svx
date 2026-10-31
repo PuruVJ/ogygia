@@ -20,6 +20,23 @@ There is **one primitive per app**: `federate()`. It declares the app's identity
 
 Module federation shares **JS modules** between builds at runtime. That couples bundlers, versions, and upgrade schedules. Fragment federation shares **complete HTML plus self-contained islands**. Each team ships its own complete build, with its own Svelte copy (about 12 kB gz per extra build on a page). A foreign island hydrates through a function that the *producing* build exports, closed over its own Svelte. Thus version skew between teams is not a problem, and the broken dependency of one team cannot take down the code of another. The price of independence is a few kB. The gain is that "independent" is real.
 
+## Installing
+
+Federation is its own package, built on the [server router](/docs/app/server-router). Install it in every app that federates, shell and MFE alike, and list its plugin in `ogygia()`:
+
+```bash
+pnpm add @ogygia/federation @ogygia/router
+```
+
+```ts title=vite.config.ts
+import { ogygia } from 'ogygia/vite';
+import { federation } from '@ogygia/federation/vite';
+
+ogygia({ plugins: [federation()] })
+```
+
+The plugin serves the federation endpoints from the handle, and keeps the exports that let another app's page wake this app's islands. See [Plugins](/docs/reference/plugins).
+
 ## One identity per app: `federate()`
 
 Every app calls `federate()` once, at server module-eval. It is the whole federation config: who I am, who I trust, and what I serve. It returns the **peer handles**, typed and keyed by their names.
@@ -27,7 +44,7 @@ Every app calls `federate()` once, at server module-eval. It is the whole federa
 The **shell** — an app that consumes fragments:
 
 ```ts title="src/lib/federation.server.ts (the shell)"
-import { federate } from 'ogygia/federation';
+import { federate } from '@ogygia/federation';
 import { env } from '$env/dynamic/private';
 import { session_from } from '$lib/auth';
 
@@ -45,7 +62,7 @@ export const { cms, dash } = federate({
 The **cms** — an app that serves fragments (an MFE):
 
 ```ts title="src/lib/federation.server.ts (the cms app)"
-import { federate } from 'ogygia/federation';
+import { federate } from '@ogygia/federation';
 import { region } from 'ogygia';
 import { env } from '$env/dynamic/private';
 import { cms_router } from '$lib/router';
@@ -67,7 +84,7 @@ export const { shell } = federate({
 
 **`visitor` is declared once.** It reads the live event (cookies, locals) and becomes the on-behalf-of identity signed into every hop, including the hole-time fetch of a deferred region. There is no second place to wire identity.
 
-**No route files.** `federate()` registers the app with the ogygia handle. The handle (from `ogygia/server`, already in your `hooks.server.ts`) serves everything under `/og/`:
+**No route files.** `federate()` registers the app with the ogygia handle. The handle (from `ogygia/server`, already in your `hooks.server.ts`) runs the `federation()` plugin, which serves everything under `/og/`:
 
 - `/og/fragment/page` — the exposed route table
 - `/og/fragment/<name>` — a named widget

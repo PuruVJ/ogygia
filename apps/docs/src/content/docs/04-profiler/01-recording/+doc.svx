@@ -117,24 +117,28 @@ Which `page.data` keys each island reads is a build's answer (the dev server's s
 
 ## Options
 
-Pass an object in place of `true` to the `profiler` option of the vite plugin:
+Pass an object in place of `true` to the `profiler` option of the `devtools()` plugin:
 
 ```ts
 // vite.config.ts
+import { devtools } from '@ogygia/devtools/vite';
+
 ogygia({
-  profiler: {
-    secret: process.env.OGYGIA_PROFILER_SECRET, // default: the OGYGIA_PROFILER_SECRET env var
-    path: '/__profiler',                        // UI base path
-    sampleInterval: 500,                        // µs between CPU samples
-    maxReports: 6,                              // profiles kept in memory (gzipped)
-    network: true,                              // patch fetch/http to attribute calls
-    serverTiming: undefined,                    // default: on in dev, off in production
-    heap: true,                                 // sample heap allocations while recording
-    enabled: true,                              // master switch
-    trap: { over: 800 },                        // catch the slow one (off by default; see below)
-    sample: { every: 60, window: 2000 },        // always-on sampling (off by default; see below)
-    clientCpu: true,                            // the beacon records the browser's main-thread CPU (Chromium)
-  },
+  plugins: [devtools({
+    profiler: {
+      secret: process.env.OGYGIA_PROFILER_SECRET, // default: the OGYGIA_PROFILER_SECRET env var
+      path: '/__profiler',                        // UI base path
+      sampleInterval: 500,                        // µs between CPU samples
+      maxReports: 6,                              // profiles kept in memory (gzipped)
+      network: true,                              // patch fetch/http to attribute calls
+      serverTiming: undefined,                    // default: on in dev, off in production
+      heap: true,                                 // sample heap allocations while recording
+      enabled: true,                              // master switch
+      trap: { over: 800 },                        // catch the slow one (off by default; see below)
+      sample: { every: 60, window: 2000 },        // always-on sampling (off by default; see below)
+      clientCpu: true,                            // the beacon records the browser's main-thread CPU (Chromium)
+    },
+  })],
 });
 ```
 
@@ -152,7 +156,7 @@ Built to stay cheap: the coarse interval, no per-request context (the request is
 
 **Serverless hosts (Amplify, Lambda).** Those hosts hand console variables to the *build* only.
 The running function does not see them. So pass the secret through the vite config, as above,
-and keep the option unconditional. A guard like `profiler: env.SECRET && { secret }` turns the
+and keep the option unconditional. A guard like `devtools({ profiler: env.SECRET && { secret } })` turns the
 whole profiler off when the variable is missing at build time. Then `/__profiler` falls through
 to your own routing, typically an i18n redirect to the home page, which looks like a broken
 profiler. A configured profiler with an empty secret answers `/__profiler` with a plain
@@ -217,10 +221,10 @@ Nothing is shared between browsers: a report is kept by the browser that recorde
 The request cloud and the layer cake need rows from many instances over a long time. Give each instance a place to post them:
 
 ```ts
-profiler: {
+devtools({ profiler: {
   sink: { url: 'https://…/profiler-rows', key: process.env.PROFILER_SINK_KEY, every: 10_000 },
   serverTiming: true // also lets an upstream running this profiler answer nested traces
-}
+} })
 ```
 
 Each instance posts NDJSON rows: one small row per request (path, route, ms, CPU, waiting, status), one summary per always-on sampler window (the hot functions), and a caught request's dump. `key` goes as a bearer token (default: the profiler secret). A long-lived host posts every `every` ms; a serverless one posts after each request, best effort. Serve the collected rows from any URL the browser can read (a bucket, an endpoint) and paste it into `/__profiler/site`.

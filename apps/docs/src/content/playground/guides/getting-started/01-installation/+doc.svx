@@ -28,34 +28,34 @@ ogygia builds directly on SvelteKit and Vite, so the requirements are the same v
 
 ## Install the package
 
-Add ogygia with your package manager of choice. The runtime, the Vite plugin, and the docs kit all ship in a single package.
+Add ogygia with your package manager of choice. The runtime and the Vite plugin ship in `ogygia`; the docs kit (collections, Markdown, the shell) is the `@ogygia/content` package.
 
 <TabGroup group="pm">
 <Tab label="npm">
 
 ```bash
-npm install ogygia
+npm install ogygia @ogygia/content
 ```
 
 </Tab>
 <Tab label="pnpm">
 
 ```bash
-pnpm add ogygia
+pnpm add ogygia @ogygia/content
 ```
 
 </Tab>
 <Tab label="yarn">
 
 ```bash
-yarn add ogygia
+yarn add ogygia @ogygia/content
 ```
 
 </Tab>
 <Tab label="bun">
 
 ```bash
-bun add ogygia
+bun add ogygia @ogygia/content
 ```
 
 </Tab>
@@ -71,15 +71,16 @@ The plugin is what turns an ordinary import into an island. It rewrites imports 
 // vite.config.ts
 import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
+import { content } from '@ogygia/content/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [
 		ogygia({
-			// Directory that holds your content collections.
-			content: 'src/content',
-			// Wake strategy used when an import omits an explicit hint.
-			defaultWake: 'visible'
+			// How far ahead of the viewport a `visible` island starts loading.
+			visible: { margin: '200px' },
+			// The docs kit: Markdown with Shiki, heading ids and collected headings.
+			plugins: [content({ markdown: {} })]
 		}),
 		sveltekit()
 	]
@@ -90,17 +91,17 @@ The order matters. ogygia needs to see the raw module graph before Kit's own tra
 
 ## Enable Markdown
 
-ogygia reads `.svx` files as Svelte-flavored Markdown. Point the preprocessor at your file extensions in `svelte.config.js` so Kit knows how to compile them.
+ogygia reads `.svx` files as Svelte-flavored Markdown. Add the content package's preprocessor and file extensions in `svelte.config.js` so Kit knows how to compile them.
 
 ```ts
 // svelte.config.js
 import adapter from '@sveltejs/adapter-auto';
-import { markdown } from 'ogygia/markdown';
-import { vitePreprocess } from '@sveltejs/kit/vite';
+import { preprocess, extensions } from '@ogygia/content/vite';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 export default {
-	extensions: ['.svelte', '.svx'],
-	preprocess: [vitePreprocess(), markdown()],
+	extensions: extensions(), // .svelte, plus .svx / .md
+	preprocess: [vitePreprocess(), ...preprocess()],
 	kit: {
 		adapter: adapter()
 	}

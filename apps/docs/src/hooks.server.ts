@@ -20,7 +20,7 @@ const crossOriginIsolation: Handle = async ({ event, resolve }) => {
 	return res;
 };
 
-// The SSR profiler is configured in vite.config.ts (`profiler: true`) and mounted inside
+// The SSR profiler is configured in vite.config.ts (`devtools({ profiler: true })`) and mounted inside
 // ogygia.handle() — not wired here. Without OGYGIA_PROFILER_SECRET the UI hides itself in
 // production, so it's inert on deploys.
 export const handle = sequence(crossOriginIsolation, ogygia.handle());

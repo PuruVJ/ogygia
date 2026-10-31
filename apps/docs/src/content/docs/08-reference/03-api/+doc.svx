@@ -106,31 +106,44 @@ The function is inlined through `Function.prototype.toString`. Thus it must be *
 import { ogygia } from 'ogygia/vite';
 ```
 
-`ogygia(options)` is the Vite plugin. It runs before `sveltekit()`. Each option is optional. The surface has one grammar: **a top-level key per subsystem, each subsystem `defaults + its own presets`**. What a use site can name (`preset: 'name'`) is defined here, in the own dictionary of that subsystem. An island preset can never hold content config, and the reverse.
+`ogygia(options)` is the Vite plugin. It runs before `sveltekit()`. Each option is optional. The root of the options is the region system itself: its defaults (`visible`), its named presets (`presets`), and how long its holes' URLs live (`ttl`, `maxPageAge`). Beside them sit the client router, and `plugins`: every feature that lives in its own package. Each plugin keeps its own settings, so a region preset can never hold content config, and the reverse.
 
 ```ts
 ogygia({
-  regions: {
-    visible: { margin: '120px' },
-    presets: {
-      demo: { wake: 'visible', margin: '200px' },
-      frozenLive: { render: 'live', wake: 'load' }
-    }
-  }
+  visible: { margin: '120px' },
+  presets: {
+    demo: { wake: 'visible', margin: '200px' },
+    frozenLive: { render: 'live', wake: 'load' }
+  },
+  plugins: [content({ markdown: {} })]
 })
 ```
 
-### `regions`
+The old `regions: { … }` wrapper is a build error that names the new spelling. Its keys moved to the root, unchanged.
 
-The islands subsystem: defaults + named island presets.
+### `visible`
 
-**`regions.visible`** sets the default `rootMargin` for `visible` islands and server islands. Thus they warm slightly before they enter the viewport.
+Sets the default `rootMargin` for `visible` islands and server islands. Thus they warm slightly before they enter the viewport.
 
 ```ts
-ogygia({ regions: { visible: { margin: '200px' } } })
+ogygia({ visible: { margin: '200px' } })
 ```
 
-There is no preload setting. The page carries each island's chunk list as data, and the runtime preloads an island's whole graph when it wakes, after the page has painted ([how the bytes arrive](/docs/regions/timing-nesting)). The old `regions.preload` key is a build error.
+There is no preload setting. The page carries each island's chunk list as data, and the runtime preloads an island's whole graph when it wakes, after the page has painted ([how the bytes arrive](/docs/regions/timing-nesting)). The old `preload` key is a build error.
+
+### `plugins`
+
+The features that ship as their own packages, listed once, in order. Install the package, import its factory from `<package>/vite`, and call it:
+
+```ts
+import { ogygia } from 'ogygia/vite';
+import { flags } from '@ogygia/flags/vite';
+import { freeze } from '@ogygia/freeze/vite';
+
+ogygia({ plugins: [flags(), freeze({ ttl: 600 })] })
+```
+
+That is the only place a plugin is named. The build finds its server and browser halves by its package name, so `hooks.server.ts` never mentions it. See [Plugins](/docs/reference/plugins) for the package list and how a plugin plugs in.
 
 ### `router`
 
@@ -174,18 +187,16 @@ import { debarrel } from 'ogygia/vite';
 export default defineConfig({ plugins: [debarrel({ packages: ['@acme/ui'] }), svelte()] });
 ```
 
-### `regions.presets`
+### `presets`
 
 Named bundles of strategy + options, referenced from an import with `preset: 'name'`. A preset uses the same grammar as an inline import: `render` (the mode), `wake` (an island's schedule) or `fetch` (a hole's schedule), plus the tuning options that are not permitted inline (`margin`, `maxAge`, …):
 
 ```ts
 ogygia({
-  regions: {
-    presets: {
-      chart: { render: 'static', wake: 'visible', margin: '200px' },
-      pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' },
-      ticker: { render: 'live', wake: 'idle', maxAge: '10m' }
-    }
+  presets: {
+    chart: { render: 'static', wake: 'visible', margin: '200px' },
+    pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' },
+    ticker: { render: 'live', wake: 'idle', maxAge: '10m' }
   }
 })
 ```
@@ -203,7 +214,7 @@ Fields: `render` (`'static'` | `'deferred'` | `'live'`), `wake` (an island's sch
 A hole's `fetch` is one moment: when its HTML is fetched **and** swapped in. `prefetch` splits them. The HTML is warmed into the frame store on the `prefetch` schedule (`'load'` | `'idle'` | `'visible'` | a media query); the swap still waits for `fetch`. An on-demand hole (`fetch: 'interaction'`) thus has its bytes before the first hover, and the gesture joins the warm frame instead of paying the origin round trip:
 
 ```ts
-ogygia({ regions: { presets: { menu: { render: 'deferred', fetch: 'interaction', prefetch: 'idle', maxAge: '1h' } } } })
+ogygia({ presets: { menu: { render: 'deferred', fetch: 'interaction', prefetch: 'idle', maxAge: '1h' } } })
 ```
 
 ```svelte
@@ -219,7 +230,7 @@ ogygia({ regions: { presets: { menu: { render: 'deferred', fetch: 'interaction',
 A `render: 'deferred'` hole is **dynamic by default**: its endpoint is served `Cache-Control: no-store`. Thus it renders again on each request (a per-request clock, a personalized figure). `maxAge` opts a hole into a browser cache in its place, as seconds (a number), or as a duration string (`'30s'` | `'5m'` | `'1h'`):
 
 ```ts
-ogygia({ regions: { presets: { pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' } } } })
+ogygia({ presets: { pricing: { render: 'deferred', fetch: 'load', maxAge: '1h' } } })
 ```
 
 The endpoint of that hole is served `Cache-Control: private, max-age=3600`. The `maxAge` is **signed into the URL of the hole**. Thus a harvested capability cannot be pointed again at a longer cache. `maxAge: 0` (or an omission) keeps the hole dynamic. With `render: 'live'`, `maxAge` is the client revalidate staleness in its place.
@@ -228,9 +239,9 @@ The endpoint of that hole is served `Cache-Control: private, max-age=3600`. The 
 On a **deferred hole**, `maxAge: 60` means 60 **seconds**: it becomes an HTTP `max-age`, which is in seconds. On a **live / remount lake**, `maxAge: 60` means 60 **milliseconds**: it is client-side staleness, in ms, like each JS timer. The same key, two clocks. Duration strings (`'30s'`, `'5m'`, `'1h'`) mean the same thing in all locations. Thus prefer them, and the trap disappears.
 :::
 
-### `content`
+### `content()`
 
-Set on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` / `.md` content collections, with the `content()` plugin from `@ogygia/content/vite`. See [Content collections](/docs/content/collections).
+Turns on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` / `.md` content collections. It is the plugin of the `@ogygia/content` package (`pnpm add @ogygia/content`), from `@ogygia/content/vite`. See [Content collections](/docs/content/collections).
 
 ```ts
 import { content } from '@ogygia/content/vite';
@@ -270,23 +281,23 @@ Guard the signed island endpoint against abuse: requests per window per client.
 
 Name / options for the session cookie that ogygia uses to scope signed capabilities.
 
-### `regions.ttl`
+### `ttl`
 
 How long a signed region capability URL stays valid, in seconds (default `3600`, clamped to 60–86400). Keep it short: a harvested URL ages out.
 
-Holes outlive it where they have to. Prerendered and frozen pages sign their holes for the life of the deploy. On a page whose load marks it shared-cacheable, for example `setHeaders({ 'cache-control': 'public, s-maxage=604800' })`, an anonymous hole is signed for the page's cache life. A hole on an older cached copy renews itself when it wakes: the endpoint re-signs a URL it minted, anonymous holes only, up to [`regions.maxPageAge`](#ogygiavite-regionsmaxpageage) after it expired. A `cache-control` header a handle sets after the render is invisible to the mint, so set it from a load.
+Holes outlive it where they have to. Prerendered and frozen pages sign their holes for the life of the deploy. On a page whose load marks it shared-cacheable, for example `setHeaders({ 'cache-control': 'public, s-maxage=604800' })`, an anonymous hole is signed for the page's cache life. A hole on an older cached copy renews itself when it wakes: the endpoint re-signs a URL it minted, anonymous holes only, up to [`maxPageAge`](#ogygiavite-maxpageage) after it expired. A `cache-control` header a handle sets after the render is invisible to the mint, so set it from a load.
 
-### `regions.maxPageAge`
+### `maxPageAge`
 
 The oldest a cached copy of a page can be and still get its holes, in seconds (default 8 days). It sets how long after a hole's URL expired the hole can still renew itself. Past it, the hole keeps its fallback, and its request answers `403` with `x-ogygia-deny: renew-window`. `0` turns renewal off.
 
 Raise it when your CDN keeps pages longer than 8 days and the page does not say so in its `cache-control` (a TTL set in the CDN's own configuration):
 
 ```ts
-ogygia({ regions: { maxPageAge: 30 * 24 * 3600 } });
+ogygia({ maxPageAge: 30 * 24 * 3600 });
 ```
 
-It is not a longer `ttl`. A renewed URL still lives only `regions.ttl`, and a hole bound to a session never renews. A renewable URL replays the props signed into it, so keep a hole's props to routing keys (a locale, a page) and read anything sensitive at render time.
+It is not a longer `ttl`. A renewed URL still lives only `ttl`, and a hole bound to a session never renews. A renewable URL replays the props signed into it, so keep a hole's props to routing keys (a locale, a page) and read anything sensitive at render time.
 
 ### `OGYGIA_SECRET`
 
@@ -350,3 +361,22 @@ import { content, markdown, json, blocks, glob, mapRaw } from '@ogygia/content';
 | `parseSchema` | Lower-level helper. `parseFrontmatter` lives on `@ogygia/content/markdown`. |
 
 An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), `meta` (source-derived, for example `{ headings }`), `body` (a held region). Types: `Entry`, `ContentEntry`, `ContentHandle`, `Source`, `Heading`, `SchemaLike`.
+
+## `ogygia/events` · `ogygia/insights`
+
+`ogygia/events` is the event layer: the typed stream of what the framework did (island wakes, server renders, navigations), plus the bus and sink helpers (`add_sink`, `snapshot`, `clear`). It is compiled in only when a plugin asks for it (the devtools plugin does). `ogygia/devtools` is the same module under its old name. `ogygia/insights` is the analysis engine the dock, the profiler and the test helpers share.
+
+## Plugin packages
+
+Each feature below is its own package. Install it, and list its factory once in [`plugins`](#ogygiavite-plugins). See [Plugins](/docs/reference/plugins).
+
+| Package | Plugin | Imports in app code |
+| --- | --- | --- |
+| `@ogygia/content` | `content({ markdown, presets })` | `@ogygia/content`, `/remote`, `/markdown`, `/docs-shell`, `/types` |
+| `@ogygia/flags` | `flags()` | `flag`, `decide` from `@ogygia/flags`; `openfeature`, `ofrep` from `@ogygia/flags/openfeature` |
+| `@ogygia/freeze` | `freeze({ ttl, default })` | `freeze` and the store and CDN adapters from `@ogygia/freeze` |
+| `@ogygia/federation` | `federation()` | `federate`, `mount` from `@ogygia/federation` |
+| `@ogygia/router` | `router()` | `routes`, `page`, … from `@ogygia/router`; `api` from `@ogygia/router/api` |
+| `@ogygia/devtools` | `devtools({ dock, profiler })` | `@ogygia/devtools/profiler`, `/profiler/client`, `/profiler/storage/*` |
+| `@ogygia/testing` | none (a test helper) | `@ogygia/testing` |
+| `@ogygia/cli` | none (the command) | `npx ogygia …` |

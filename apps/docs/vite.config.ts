@@ -109,7 +109,7 @@ export default defineConfig(({ command }) => ({
 		// see src/lib/prettier.ts.
 	},
 	// PROFILER_SOURCEMAPS=1 pnpm build → server chunks get .map files, so the SSR profiler
-	// (ogygia/profiler) maps bundled frames back to source files and recovers original
+	// (@ogygia/devtools/profiler) maps bundled frames back to source files and recovers original
 	// names for anonymous functions. `target: 'esnext'` is required for the Observatory worker's
 	// top-level-await (rolldown WASM); it raises the browser baseline for the whole site (modern only).
 	build: { target: 'esnext', ...(process.env.PROFILER_SOURCEMAPS ? { sourcemap: true } : {}) },

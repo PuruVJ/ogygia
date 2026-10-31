@@ -1455,8 +1455,9 @@ async function find_local_profiler(base: string, key: string): Promise<string[]>
 }
 
 const NOT_MOUNTED = (base: string, where: string) =>
-	`The profiler is not mounted at ${base} on ${where}. Turn it on in vite.config.ts:\n\n` +
-	`  ogygia({ profiler: true /* or { secret, path, … } */ })\n\n` +
+	`The profiler is not mounted at ${base} on ${where}. Install @ogygia/devtools and turn it on in vite.config.ts:\n\n` +
+	`  import { devtools } from '@ogygia/devtools/vite';\n` +
+	`  ogygia({ plugins: [devtools({ profiler: true /* or { secret, path, … } */ })] })\n\n` +
 	`ogygia.handle() mounts it for you — no hooks wiring needed. Restart the server, then retry.`;
 
 async function tool_profile(args: Attrs): Promise<ToolResult> {

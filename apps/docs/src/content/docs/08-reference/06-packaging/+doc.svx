@@ -74,13 +74,13 @@ Only declared packages are scanned, and only their declared paths. There is no b
 Rules for declared paths:
 
 - **Ship source.** Raw `.svelte`, and `.ts`/`.js` with the `with { … }` attributes intact. The pipeline of the consumer compiles them. (When you transpile, make sure that your tool keeps import attributes.)
-- **Depend on ogygia.** A declared surface is real ogygia code. List `ogygia` as a dependency or peer, so that its imports resolve from your package.
+- **Depend on ogygia.** A declared surface is real ogygia code. List `ogygia` as a dependency or peer, so that its imports resolve from your package. A route table also lists `@ogygia/router`, and the consumer lists its [`router()` plugin](/docs/reference/plugins).
 - The app-side placement rules apply unchanged: no content corpora in components, and server-only modules stay server-only.
 
 A shipped route table is then only an export that the consumer spreads:
 
 ```ts title=my-widgets/src/routes.ts
-import { page } from 'ogygia/router';
+import { page } from '@ogygia/router';
 import Board from './pages/Board.svelte' with { wake: 'load' };
 
 export const widget_table = {

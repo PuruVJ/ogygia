@@ -134,7 +134,7 @@ You can replace the HTML elements Markdown generates with your own components. T
 
 ```ts
 // markdown.config.ts
-import { markdown } from 'ogygia/markdown';
+import { markdown } from '@ogygia/content';
 import Link from '$lib/playground/md/Link.svelte';
 import Table from '$lib/playground/md/Table.svelte';
 
@@ -184,7 +184,7 @@ A danger block for the things that will bite. `csr = true` opts a whole route ba
 ::: details Show the config
 ```ts
 export default defineConfig({
-	plugins: [ogygia(), sveltekit()]
+	plugins: [ogygia({ plugins: [content({ markdown: { containers: true } })] }), sveltekit()]
 });
 ```
 :::

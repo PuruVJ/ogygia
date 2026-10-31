@@ -15,6 +15,12 @@ related:
 
 ## With Playwright
 
+Install the package beside Playwright. It is a test helper, not a plugin: nothing goes in `ogygia()` for it.
+
+```bash
+pnpm add -D @ogygia/testing @playwright/test
+```
+
 ogygia does not import Playwright. You hand it your own `test` and `expect`:
 
 ```ts title=tests/fixtures.ts
@@ -43,7 +49,7 @@ test('checkout stays fast', async ({ page, ogygia }) => {
 });
 ```
 
-The server under test needs `ogygia({ devtools: true })`: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#enabling-in-a-build-a-preview-deploy)). The fixture turns devtools on for your `baseURL` (the `og_devtools` cookie), or with no `baseURL` for the origin of the first page the test opens, so each page is measured from its first load. `profile()` needs `ogygia({ profiler: true })`. On a build, give it the profiler's key:
+The server under test needs the [`devtools()` plugin](/docs/devtools/overview#enabling) listed: the dev server, or a preview build with devtools on (see [Devtools in a build](/docs/devtools/overview#enabling-in-a-build-a-preview-deploy)). The fixture turns devtools on for your `baseURL` (the `og_devtools` cookie), or with no `baseURL` for the origin of the first page the test opens, so each page is measured from its first load. `profile()` needs `devtools({ profiler: true })`. On a build, give it the profiler's key:
 
 ```ts title=playwright.config.ts
 export default defineConfig({

@@ -9,7 +9,7 @@ related:
 
 The profiler answers one question: **why is this server render slow?** It names the slow components, functions, network calls, and allocations. There is no per-component instrumentation, and nothing to wrap by hand.
 
-You configure it fully in the Vite plugin (`ogygia({ profiler: true })`). `ogygia.handle()` mounts it automatically. There is no separate hook to add, and no route files to write.
+It ships in the devtools package. You configure it fully in its Vite plugin (`devtools({ profiler: true })`). `ogygia.handle()` mounts it automatically. There is no separate hook to add, and no route files to write.
 
 ## The idea
 
@@ -26,17 +26,24 @@ One trick makes it readable. Svelte compiles each component to a function **name
 
 ## Install
 
-Set it on in `vite.config.ts` — nowhere else. `ogygia.handle()` mounts it for you. Thus `src/hooks.server.ts` stays a plain `sequence(...)`:
+The profiler is part of `@ogygia/devtools`. Install it:
+
+```bash
+pnpm add @ogygia/devtools
+```
+
+Then set it on in `vite.config.ts` — nowhere else. List the `devtools()` plugin in `ogygia()`. `ogygia.handle()` mounts it for you. Thus `src/hooks.server.ts` stays a plain `sequence(...)`:
 
 ```ts
 import { ogygia } from 'ogygia/vite';
+import { devtools } from '@ogygia/devtools/vite';
 
 export default defineConfig({
-	plugins: [ogygia({ profiler: true }), sveltekit()]
+	plugins: [ogygia({ plugins: [devtools({ profiler: true })] }), sveltekit()]
 });
 ```
 
-Pass options in place of `true` to adjust it: `ogygia({ profiler: { secret, path, sampleInterval } })`. In production, set a secret. Then the UI is reachable and gated:
+That also turns on the [devtools dock](/docs/devtools/overview). To get the profiler alone, write `devtools({ dock: false, profiler: true })`. Pass options in place of `true` to adjust it: `devtools({ profiler: { secret, path, sampleInterval } })`. In production, set a secret. Then the UI is reachable and gated:
 
 ```bash
 OGYGIA_PROFILER_SECRET=some-long-random-string

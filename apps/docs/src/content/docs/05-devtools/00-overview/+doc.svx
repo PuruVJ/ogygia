@@ -11,17 +11,28 @@ The devtools are a dock that mounts on each `csr = false` page, and x-rays the i
 
 ## Enabling
 
-One flag in the Vite plugin. It is compiled behind a gate. Thus, when off (the default), the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. You decide where it is on:
+The devtools are their own package. Install it:
+
+```bash
+pnpm add @ogygia/devtools
+```
+
+Then list its plugin in `ogygia()`. It is compiled behind a gate. Thus, where the plugin is not listed, the full devtools graph (the dock, the instruments, their CSS) **tree-shakes to nothing**. The plugin list is code, so you decide where it is on:
 
 ```ts title=vite.config.ts
 import { ogygia } from 'ogygia/vite';
+import { devtools } from '@ogygia/devtools/vite';
 
 export default defineConfig(({ mode }) => ({
   plugins: [
-    ogygia({ devtools: mode !== 'production' }),   // dev server and preview builds, never production
+    ogygia({
+      plugins: [...(mode !== 'production' ? [devtools()] : [])]   // dev server and preview builds, never production
+    }),
   ],
 }));
 ```
+
+`devtools()` takes two switches: `dock` (the dock, on by default) and `profiler` (the [SSR profiler](/docs/profiler/overview), off by default). See [Plugins](/docs/reference/plugins).
 
 On the dev server, a launcher appears at the bottom of each `csr = false` page. In a build it stays hidden until you turn it on in your browser (see below).
 
@@ -31,7 +42,7 @@ Devtools measures the page it shows, so it must not change what it measures. Loa
 
 ### In a build (a preview deploy)
 
-With the flag on in a build (a QA, UAT or preview deploy), a page carries only a small switch (about 10 KB of JS with the event recorder). Visitors see nothing: no launcher, no measuring, no server event data. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
+With the plugin listed in a build (a QA, UAT or preview deploy), a page carries only a small switch (about 10 KB of JS with the event recorder). Visitors see nothing: no launcher, no measuring, no server event data. The build says so once, loudly, so a flag left on by mistake is seen before it ships.
 
 Turn devtools on in your own browser:
 
@@ -59,7 +70,7 @@ The launcher peeks up from the bottom edge. Hover to show it. Click (or **Alt+O*
 - **Hub**: the identity spine. Per `Ref` id: its kind, resolve count, reunion (memo-hit) count, and disposal.
 - **Nav**: per-region SPA-navigation decisions (keep / patch / mount / remove), with timing. Thus you see the reconciler at work.
 - **Timeline**: client-realm events on a time axis, one lane per region, with hydrate bars.
-- **Profiler**: runs the [SSR profiler](/docs/profiler/overview) on this page, right in the dock (needs `ogygia({ profiler: true })`). It shows the score, the server render time and what it would be after the fixes, the findings, the heaviest components, and the outbound calls. Each island's server row joins the island on the page: hover to light it up, click to open it. The island's detail card then shows the same numbers under "on the server". The full report is one click away.
+- **Profiler**: runs the [SSR profiler](/docs/profiler/overview) on this page, right in the dock (needs `devtools({ profiler: true })`). It shows the score, the server render time and what it would be after the fixes, the findings, the heaviest components, and the outbound calls. Each island's server row joins the island on the page: hover to light it up, click to open it. The island's detail card then shows the same numbers under "on the server". The full report is one click away.
 
 ## The Page tab
 

@@ -130,6 +130,17 @@ export default {
 
 `preprocess()` is synchronous. When markdown is off, it does not load mdsvex. mdsvex loads at first use. `extensions()` adds `.svx` / `.md` only when markdown is on. Set themes and headings under `content({ markdown })`. See [content collections](/docs/content/collections).
 
+The content macros (`import.meta.og.loader`, `og.code`, `og.md`) bring their own types. Add a second line to `src/ogygia.d.ts`:
+
+```ts
+/// <reference types="ogygia/types" />
+/// <reference types="@ogygia/content/types" />
+```
+
+### Other features (optional)
+
+Flags, frozen pages, federation, the server router, the devtools dock and the profiler work the same way. Each is a package you install, with a plugin you list once in `ogygia({ plugins: [...] })`. See [Plugins](/docs/reference/plugins) for the list.
+
 ## Adopt one route at a time
 
 ogygia is incremental. Do not convert the full app. Set islands on one route at a time. All other routes stay normal SvelteKit pages.

@@ -29,6 +29,27 @@ One rule controls the full surface: **the boundary picks the representation.** S
 
 For a *page assembled from typed blocks*, not a single markdown body, see [Blocks](/docs/content/blocks). It is a separate, block-level API.
 
+## Installing
+
+Collections are their own package. Install it, and list its plugin in `ogygia()`:
+
+```bash
+pnpm add @ogygia/content
+```
+
+```ts title=vite.config.ts
+import { ogygia } from 'ogygia/vite';
+import { content } from '@ogygia/content/vite';
+
+ogygia({ plugins: [content({ markdown: {} })] })
+```
+
+`markdown` turns the markdown pipeline on. A collection over JSON, a CMS or an API needs only `content()`. For markdown, `svelte.config.js` also takes `preprocess()` and `extensions()` from `@ogygia/content/vite` (see [Install](/docs/start/install)). For the macro types (`import.meta.og.loader`, `og.code`, `og.md`), add one line to `src/ogygia.d.ts`:
+
+```ts
+/// <reference types="@ogygia/content/types" />
+```
+
 ## Define the collection once, in a server module
 
 The `loader` of a collection holds the compiled corpus. Define it in a **`.server.ts`** file (or `.remote.ts`, or under `src/lib/server/`). Then Kit mechanically makes sure that no client module can import it. Thus the corpus can never reach a browser bundle:

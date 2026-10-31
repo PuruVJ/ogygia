@@ -7,7 +7,7 @@ related:
   - regions/held-regions
 ---
 
-`ogygia/router` is **the routing model of SvelteKit, expressed as values** instead of a file tree. One ordinary module declares the full route table: pages, layouts, loads, actions, endpoints. The types thread through it. Thus each component reads its `data`, `params`, and `form` fully typed, with **no codegen and no `$types` import**.
+`@ogygia/router` is **the routing model of SvelteKit, expressed as values** instead of a file tree. One ordinary module declares the full route table: pages, layouts, loads, actions, endpoints. The types thread through it. Thus each component reads its `data`, `params`, and `form` fully typed, with **no codegen and no `$types` import**.
 
 It runs on the **server**: it matches the request, runs the load cascade, and renders the page through its layout chain. It is the counterpart to the [SPA router](/docs/app/spa-router), which navigates between those pages on the client. Use either alone. Together, the server router defines routes, and the SPA router moves between them.
 
@@ -16,6 +16,23 @@ All that a Kit user knows carries over: `+layout.svelte` loads, the data cascade
 ::: tip When to use
 Use it when your routes are *computed*: a CMS whose paths come from a database, a tool whose pages are generated, a package that ships its own routes. Or when you want the full route table, its loaders, and its components in one place, not scattered across `+page.svelte` / `+page.server.ts` / `+server.ts`. For a few ordinary pages, the file routes of Kit are simpler. This is not a replacement that you must adopt.
 :::
+
+## Installing
+
+The server router is its own package. Install it, and list its plugin in `ogygia()`:
+
+```bash
+pnpm add @ogygia/router
+```
+
+```ts title=vite.config.ts
+import { ogygia } from 'ogygia/vite';
+import { router } from '@ogygia/router/vite';
+
+ogygia({ plugins: [router()] })
+```
+
+The plugin tells the build that every module importing `@ogygia/router` renders pages. Thus each component those pages reach gets its CSS linked when it renders. See [Plugins](/docs/reference/plugins).
 
 ## The whole thing in one file
 
@@ -137,7 +154,7 @@ routes(
 );
 ```
 
-| Kit | ogygia/router |
+| Kit | @ogygia/router |
 | --- | --- |
 | `+layout-foo.svelte` (a named layout) | `layout('foo', Foo)` |
 | `+page@foo.svelte` (reset to `foo`) | place the route inside `foo(…)` but outside the inner wraps |
@@ -276,7 +293,7 @@ routes(table, {
 
 ## Control flow: redirect, error, fail
 
-Thrown from a load, action, or handler. The exact names of Kit, imported from `ogygia/router`:
+Thrown from a load, action, or handler. The exact names of Kit, imported from `@ogygia/router`:
 
 ```ts
 import { redirect, error, fail } from '@ogygia/router';
@@ -458,15 +475,15 @@ routes(table, {
   miss: (c) => c.error(404),    // response for an unmatched path under `base`
   load: authGuard,              // a table-wide load before EVERY route — a guard with no chrome
   visitor: session,             // THE identity → c.visitor (see above)
-  experiments: [csrExp],        // auto-carried into federation hops — see Experiments
+  flags: [csrMode],             // decided up front, carried into federation hops — see Flags & experiments
 });
 ```
 
 The table-wide `load` is the root `+layout.server.ts` load of Kit, without a component. It runs before each route (pages *and* endpoints). It throws `redirect`/`error` to gate. Its data merges into each page. It is the place for auth, when there is no shared shell to hang it on.
 
-## Kit ↔ ogygia/router
+## Kit ↔ @ogygia/router
 
-| SvelteKit | ogygia/router |
+| SvelteKit | @ogygia/router |
 | --- | --- |
 | `src/routes/` tree | one `routes({ … })` table |
 | `+page.svelte` | first arg of `page()` |
@@ -479,7 +496,7 @@ The table-wide `load` is the root `+layout.server.ts` load of Kit, without a com
 | `await parent()` | read the merged `data`; in a load, `await sharedLoad(c)` |
 | `page.data` | the leaf page's merged `data` |
 | `depends` + `invalidate` / `invalidateAll` | `invalidateAll()` (re-runs the branch's loads) |
-| `throw redirect()` / `error()` | same names, from `ogygia/router` |
+| `throw redirect()` / `error()` | same names, from `@ogygia/router` |
 | `./$types` (`PageData`, …) | `App['/path']` — no codegen |
 | `$app/state`, `$app/navigation` | work unchanged on router pages |
 
