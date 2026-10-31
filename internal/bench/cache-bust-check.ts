@@ -1,5 +1,5 @@
 // THE CACHE CHECK — island entries and the runtime are content-hashed, so an `immutable` cache can
-// never serve last build's code after a deploy. Two REAL builds of the playground (adapter-node, the
+// never serve last build's code after a deploy. Two REAL builds of the devtools lab (adapter-node, the
 // headers a deploy sends: `public,max-age=31536000,immutable`), one change between them
 // (src/lib/dtcache/version.ts, a module two islands and a hole share), and a browser that KEEPS ITS
 // DISK CACHE across both. Every scenario a deploy meets:
@@ -28,7 +28,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const repo = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const app = path.join(repo, 'apps/playground');
+const app = path.join(repo, 'packages/devtools/e2e/app');
 const version_file = path.join(app, 'src/lib/dtcache/version.ts');
 const { chromium } = createRequire(path.join(repo, 'package.json'))('playwright');
 const PORT = 4197;
@@ -53,11 +53,11 @@ function build(version, name = version) {
 		cwd: app,
 		env: {
 			...process.env,
-			PLAYGROUND_ADAPTER: 'node',
+			LAB_ADAPTER: 'node',
 			// a deploy that caches HTML: Kit's version pinned (else Kit's own chunk, and every island that
 			// imports Kit code, changes every build), and one signing secret across builds (else a
 			// cached page's holes are refused by the next build — cached-document-holes)
-			PLAYGROUND_KIT_VERSION: 'cache-check',
+			LAB_KIT_VERSION: 'cache-check',
 			OGYGIA_SECRET: 'cache-check-secret-0123456789abcdef'
 		},
 		stdio: 'ignore'

@@ -18,7 +18,7 @@ const PORT = 4188;
 const base = args[0] ?? `http://127.0.0.1:${PORT}`;
 const key = args[1] ?? 'hell';
 const serve = !args[0];
-const app = fileURLToPath(new URL('../../apps/playground', import.meta.url));
+const app = fileURLToPath(new URL('../../packages/devtools/e2e/app', import.meta.url));
 const { chromium, webkit } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
 
 /** each lab: the page to visit (its path as recorded: the bare path, a query only on the visit),
@@ -178,7 +178,7 @@ try {
 			console.log(`    ${code}: ${(msg(code) || fix(code)).slice(0, 300) || '(not in the report)'}${fix_of(code) ? `\n      fix: ${fix_of(code).slice(0, 300)}` : ''}`);
 		}
 	}
-	// (the heaviest page of the playground too: its visit is the biggest one)
+	// (the heaviest page of the lab too: its visit is the biggest one)
 	{
 		const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 		await page.setExtraHTTPHeaders(headers);

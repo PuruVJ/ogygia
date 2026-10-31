@@ -4,10 +4,10 @@
 // is measured from the start and gets the server's events; "hide" / `?og-devtools=off` turn it off.
 // Exit 1 on a failure.
 //
-//   cd apps/playground && OGYGIA_DEVTOOLS=1 pnpm build
+//   cd packages/devtools/e2e/app && OGYGIA_DEVTOOLS=1 pnpm build
 //   node node_modules/vite/bin/vite.js preview --port 4181 --host 127.0.0.1
 //   node internal/bench/devtools-build-check.ts [base=http://127.0.0.1:4181]
-//   (rebuild without OGYGIA_DEVTOOLS afterwards: the e2e suite expects devtools off in the build)
+//   (rebuild without OGYGIA_DEVTOOLS afterwards: the devtools e2e suite expects the dock off in the build)
 import { createRequire } from 'node:module';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:4181';
@@ -353,7 +353,7 @@ check('no errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 	await p.waitForTimeout(800);
 	const hazard = await p.locator('[data-og-detail-hazard]').innerText().catch(() => '');
 	// …and the Bytes tab: the modules this page loads twice, from the same profile — the same list the
-	// report's duplicate-module finding names (the playground's workspace ships ogygia's src beside
+	// report's duplicate-module finding names (the lab's workspace ships ogygia's src beside
 	// the runtime's dist: a few modules twice on every page)
 	await p.locator('[data-og-detail] button.back').click().catch(() => {});
 	await p.click('[data-og-tab="bytes"]').catch(() => {});

@@ -1,6 +1,6 @@
 // SEED SHAPING — the static analysis of which `page.data` keys a module reads (AST, binding-
 // resolved). Every pattern below is lifted from a real app's islands (a CMS platform, 2026-09-16)
-// or from the playground fixtures. The contract: literal keys → the set; anything the analysis
+// or from the palaestra's fixtures. The contract: literal keys → the set; anything the analysis
 // cannot pin → 'all'; no page import → null.
 import { describe, expect, it } from 'vitest';
 import { page_data_keys, merge_page_keys } from '../src/compiler/link/page-keys.ts';
@@ -52,7 +52,7 @@ describe('page_data_keys — components', () => {
 	it('a module script and an {#each} over page data', () => {
 		expect(svelte(`<script module>\n\timport { page } from '$app/state';\n</script>\n{#each page.data.items as item}<b>{item}</b>{/each}`)).toEqual(['items']);
 	});
-	it('the playground reader that hands page.data to an arrow → all', () => {
+	it('the palaestra reader that hands page.data to an arrow → all', () => {
 		expect(svelte(`<script lang="ts">\n\timport { page } from '$app/state';\n\tconst d = () => page.data as any;\n</script>\n<p>{d().locale}</p>`)).toBe('all');
 	});
 	it('a component that only reads params → empty set', () => {

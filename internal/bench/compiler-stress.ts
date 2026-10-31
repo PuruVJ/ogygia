@@ -9,7 +9,7 @@
 //      (same source → same output) or caching, reproducible builds, and CI diffs all break.
 //   3. CACHE — transform_cache hit ratio (transformHit / (transformN+transformHit)).
 //
-//   node internal/bench/compiler-stress.ts [--app playground|docs] [--n 5]
+//   node internal/bench/compiler-stress.ts [--app palaestra|docs] [--n 5]
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 const repo = fileURLToPath(new URL('../..', import.meta.url));
 const argv = process.argv.slice(2);
-const app = (argv.find((a) => a.startsWith('--app='))?.slice(6)) || 'playground';
+const app = (argv.find((a) => a.startsWith('--app='))?.slice(6)) || 'palaestra';
 const N = Number(argv.find((a) => a.startsWith('--n='))?.slice(4) || 5);
 const appDir = join(repo, 'apps', app);
 const vite = join(appDir, 'node_modules/vite/bin/vite.js');

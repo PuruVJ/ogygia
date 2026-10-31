@@ -1,10 +1,10 @@
-// THE DEVTOOLS PAGE TAB'S ANSWER KEY: load the playground's /dt-lab (every PLANTED island has one
+// THE DEVTOOLS PAGE TAB'S ANSWER KEY: load the devtools lab's /dt-lab (every PLANTED island has one
 // problem the browser can measure, every DECOY is healthy), act like a hurried visitor, and check
 // the Page tab's report (`window.__ogygia_page()`, the same object the tab renders): each planted
 // problem found and pinned on its island, no decoy named by anything.
 //
 // Against a dev server you started (devtools is dev-only):
-//   cd apps/playground && OGYGIA_DEVTOOLS=1 OGYGIA_RESTORE_LAB=1 node node_modules/vite/bin/vite.js dev --port 4183 --host 127.0.0.1
+//   cd packages/devtools/e2e/app && OGYGIA_DEVTOOLS=1 OGYGIA_RESTORE_LAB=1 node node_modules/vite/bin/vite.js dev --port 4183 --host 127.0.0.1
 //   node internal/bench/devtools-answer-key.ts [base=http://127.0.0.1:4183] [--repeat=3]
 // Or let it start one:
 //   node internal/bench/devtools-answer-key.ts --serve [--repeat=3]
@@ -22,7 +22,7 @@ const serve = flags.includes('--serve');
 const repeat = Math.max(1, Number(flag('repeat') ?? (serve ? 3 : 1)));
 const PORT = 4188;
 const base = args[0] ?? (serve ? `http://127.0.0.1:${PORT}` : 'http://127.0.0.1:4183');
-const app = fileURLToPath(new URL('../../apps/playground', import.meta.url));
+const app = fileURLToPath(new URL('../../packages/devtools/e2e/app', import.meta.url));
 const { chromium } = createRequire(new URL('../../package.json', import.meta.url))('playwright');
 
 /** finding code → the island it must name (null: a page-wide finding, named by nothing) */

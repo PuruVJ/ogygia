@@ -434,6 +434,45 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
     publish first (drop its `private`, trusted publishing for the new name). Until then `changeset
     status` refuses the tree ("ogygia depends on the skipped package @ogygia/core"); with core public
     the fixed group bumps core with the existing changeset (checked).
+- R12 E2E SCOPED BY PACKAGE (AS BUILT; Open question 6). `apps/playground` → `apps/palaestra`
+  (package `palaestra`). The hand-written ownership map (e2e/scope.ts, e2e/affected.ts,
+  e2e/scope.test.ts, `test:e2e:affected`, `check:verify`) is gone; the STRUCTURE scopes the suite:
+  - LAYOUT: `packages/<name>/e2e/*.spec.ts` + `packages/<name>/playwright.config.ts` (its own port) +
+    an `e2e` script (`playwright test`); the fixture app at `packages/<name>/e2e/app` (a workspace
+    package `<name>-e2e-app`, `packages/*/e2e/*` in pnpm-workspace.yaml) depends on `ogygia` + the
+    plugin and lists only it. Core's suite: `apps/palaestra/e2e` against the palaestra, which lists NO
+    plugin (its plugin pages moved out; flags had none). Shared harness `@ogygia/tooling/e2e`
+    (`check()`/`test`/`REPO`, `/servers.ts`, `/re.ts`, `/packed.ts`, `/config.ts` = `suite({ port,
+    serve | build, ready })`, `/build.ts` = a fixture app's build as webServer step or globalSetup;
+    `tsconfig.e2e.json`). Each package's `check` adds `tsc -p e2e`; root `check` adds the fixture apps'
+    and the docs' svelte-check.
+  - SUITES (352 passed + 1 skipped, as before): palaestra 303 (port 3051; adapters, kit3 and the
+    other core packaging specs stay here); devtools 17 (devtools, profiler-serverless,
+    profiler-window-instances, dev-installed — against the DEVTOOLS LAB: every dt-* lab, the profiler's
+    answer-key pages hell / inferno / purgatory / limbo / latecomer (+ -fixed twins), score-lab, slow-io,
+    nettest moved here; copies of the palaestra pages the specs and the internal/bench answer keys
+    visit — /, /interaction, /kit, /portable-snippet, /props-tail, /transportable, /wake-gate,
+    /head-budget-kit, /detector, /plain, /restore-lab, /nested-hole, /heavy, /api; the build is a
+    globalSetup); testing 10 (against the devtools lab's dev server); federation 9 (examples/mfe stays
+    a user-facing demo; the suite boots it); freeze 3 (internal/repro-freeze → packages/freeze/e2e/app,
+    the emulator + ESI demo beside it); router 8 (/rtr + /island-pkg; internal/repro-island-pkg →
+    packages/router/e2e/island-pkg); content 2 (/content-css + the blocks demos); docs 0 + 1 skipped
+    (dev-hmr-venues edits the docs app, so it moved to `apps/docs/e2e`). flags and cli have none.
+  - TURBO: `e2e` = `dependsOn ^build`, `outputs: []`, cache on, `E2E_NO_BUILD` hashed, the `OGYGIA_*`
+    / CI env passed through. A plugin's package turbo.json adds its own `build` and
+    `<fixture-app>#fixture` — a no-script task whose `^build` builds everything the fixture app installs
+    (the `ogygia` shell, the other plugins it lists) and whose hash carries the app's files. testing
+    adds `$TURBO_ROOT$/packages/devtools/e2e/app/**`, federation `$TURBO_ROOT$/examples/mfe/**`, the
+    palaestra its outside fixtures (apps/pure-csr, internal/repro-deep-csr, -kit3, -subpkg,
+    -hole-css-kit). Those `$TURBO_ROOT$` globs do NOT honour .gitignore (the first cache proof missed
+    on them), so each also negates the build output, node_modules, .svelte-kit, .ogygia… of what it
+    names. `build`/`test` ignore `e2e/**`, `check` ignores `e2e/app/**`. So `--affected`
+    agrees with the cache, the package graph names what each suite drives: testing → devtools,
+    federation → freeze, freeze → flags + router (devDependencies).
+  - `pnpm test:e2e` = `turbo run e2e --concurrency=1`; CI runs it with `--affected` on pull requests
+    (`TURBO_SCM_BASE=origin/<base>`), in full on pushes (the turbo cache replays unchanged suites).
+  - Fixture apps pin `svelte` 5.56.8 / `vite` 8.2.0 (the versions core and the palaestra resolve): a
+    fresh importer resolved 5.57.2 and svelte-check saw two Svelte type copies.
 
 ## Performance rules (the bar every step must pass)
 
@@ -524,14 +563,11 @@ by the docs Observatory. Keep as core subpaths.
    depends on every plugin (any plugin change rebuilds it → everything reruns) — real scoping needs a
    small fixture app per package (federation: examples/mfe, freeze: repro-freeze exist; content and
    devtools have none). After the split, its own round.
-   DONE (user: "if you're out of things to do, solve the scoped e2e thing"), by OWNERSHIP rather than
-   turbo tasks: e2e/scope.ts maps each plugin package to its specs (+ fixture apps → their specs);
-   e2e/affected.ts diffs against a base (merge base with origin/next by default) and runs a plugin's
-   specs + its dependents' + a SMOKE set (every plugin's server half runs on every playground request),
-   nothing for docs/notes/unit tests, EVERYTHING for core/tooling/playground/harness/lockfile/root
-   config. `pnpm test:e2e:affected [--base ref] [--dry]`; CI runs it on pull requests, the full suite on
-   pushes to main/next. Rules unit-tested by `node --test e2e/scope.test.ts` (in `check:verify`). Per-
-   package fixture apps (true isolation) remain a later refinement.
+   (First pass, superseded: an OWNERSHIP map — e2e/scope.ts OWNERS + FIXTURES, e2e/affected.ts —
+   that picked specs by hand. Deleted in R12.)
+   DONE BY STRUCTURE (R12, user-approved): each package's specs live with the package and run against
+   a small fixture app that lists only that package's plugin; each package has a turbo `e2e` task, so
+   turbo's package graph + cache decide what reruns — no map to keep in sync. See R12 in the log.
 7. Event-layer export name: `ogygia/events` (recommended; added in R7 step 1) vs keeping
    `ogygia/devtools` (currently an alias) vs folding into `ogygia/insights`.
 

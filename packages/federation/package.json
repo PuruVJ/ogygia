@@ -31,8 +31,9 @@
 	"files": ["dist", "README.md"],
 	"scripts": {
 		"build": "tsdown",
-		"check": "tsc -p . && tsc -p test && vitest run",
-		"test": "vitest run"
+		"check": "tsc -p . && tsc -p test && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
 	},
 	"peerDependencies": {
 		"@ogygia/router": "workspace:^",
@@ -40,10 +41,13 @@
 	},
 	"devDependencies": {
 		"@ogygia/flags": "workspace:*",
+		"@ogygia/freeze": "workspace:*",
 		"@ogygia/router": "workspace:*",
 		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "1.62.1",
 		"@sveltejs/kit": "^2.70.0",
 		"@ogygia/core": "workspace:*",
+		"@types/node": "^26.1.2",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.10"

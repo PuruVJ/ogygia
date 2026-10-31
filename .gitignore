@@ -6,12 +6,12 @@ node_modules/
 .pnpm-store/
 .turbo/
 .svelte-kit/
-/apps/playground/build/
+/apps/palaestra/build/
 /apps/docs/build/
 dist/
-# (a planted duplicate module: the playground's devtools lab imports one package by its src and its
-# dist path — the dist copy IS the fixture)
-!/apps/playground/src/lib/dup-pkg/dist/
+# (a planted duplicate module: the devtools lab imports one package by its src and its dist path —
+# the dist copy IS the fixture)
+!/packages/devtools/e2e/app/src/lib/dup-pkg/dist/
 *.log
 .DS_Store
 .env
@@ -49,12 +49,12 @@ dist/
 
 # self-building e2e fixtures (their e2e scripts build them every run)
 /internal/repro-deep-csr/build/
-/internal/repro-freeze/build/
+/packages/*/e2e/app/build/
 
 # Playwright runner output (traces on failure, html report) + Vitest browser-mode failure screenshots
 test-results/
 .vitest-attachments/
-/playwright-report/
+playwright-report/
 **/__screenshots__/
 # one-off screenshots taken while checking the devtools / profiler UI
 /anchors.png

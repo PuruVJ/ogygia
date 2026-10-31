@@ -1,0 +1,21 @@
+{
+	"$schema": "https://turborepo.com/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"e2e": {
+			"dependsOn": ["^build", "build", "devtools-e2e-app#fixture"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/packages/devtools/e2e/app/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/**/node_modules/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/.svelte-kit/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/.vercel/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/.ogygia/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/.cache-check/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/.turbo/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/build/**",
+				"!$TURBO_ROOT$/packages/devtools/e2e/app/.env*"
+			]
+		}
+	}
+}

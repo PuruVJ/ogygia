@@ -1,5 +1,7 @@
 packages:
   - 'packages/*'
+  # each package's e2e fixture app (packages/<name>/e2e/app) and the packages a fixture app installs
+  - 'packages/*/e2e/*'
   - 'apps/*'
   # Non-library projects (talk deck, benchmark harness, repros) — workspace members so they share
   # the root install instead of each spawning its own node_modules.

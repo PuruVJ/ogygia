@@ -4,7 +4,7 @@
  * THE GAP: Kit links a route's stylesheets from its file-derived route manifest. `@ogygia/router`
  * routes are VALUES (`r.page(Home)`) rendered through `document()` — no route, so nothing ever
  * emitted or linked their CSS: a router page's scoped `<style>` (and its plain `.css` imports)
- * silently never loaded. (The playground's own rtr components are style-less for exactly this reason.)
+ * silently never loaded. (The router fixture app's own rtr components are style-less for exactly this reason.)
  *
  * THE FIX, from existing primitives — no user file is modified, no `r.*` call-site analysis:
  *  1. CLOSURE (build data): a router MODULE is a PAGE MODULE a plugin named (`b.pageModules()`): any

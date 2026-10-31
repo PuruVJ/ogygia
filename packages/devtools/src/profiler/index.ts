@@ -2601,7 +2601,7 @@ class Profiler {
 			net.some((n) => s >= n.start - 2 && e <= n.end + 2);
 		const overlaps_a_call = (s: number, e: number) => net.some((n) => s < n.end && e > n.start);
 		// an op started by a `+server` route handler while one of our calls was in flight is the
-		// server side of a self-fetch (the playground's in-process APIs): the net call already says it
+		// server side of a self-fetch (the devtools lab's in-process APIs): the net call already says it
 		const is_handler_side = (o: IoOp) =>
 			!!o.caller && SERVER_ROUTE_FILE_RE.test(o.caller) && overlaps_a_call(o.start, o.start + o.ms);
 		return {

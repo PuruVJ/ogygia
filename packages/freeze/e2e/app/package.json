@@ -1,0 +1,26 @@
+{
+	"name": "freeze-e2e-app",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "@ogygia/freeze's e2e fixture app (the scenario deck's origin, behind the edge emulators; also the ESI demo's).",
+	"scripts": {
+		"dev": "vite dev --port 3073",
+		"build": "vite build",
+		"preview": "vite preview --port 3073"
+	},
+	"dependencies": {
+		"@ogygia/flags": "workspace:*",
+		"@ogygia/freeze": "workspace:*",
+		"@ogygia/router": "workspace:*",
+		"ogygia": "workspace:*"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-node": "^5.5.7",
+		"@sveltejs/kit": "^2.70.2",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"svelte": "^5.56.8",
+		"typescript": "^6.0.3",
+		"vite": "^8.2.0"
+	}
+}

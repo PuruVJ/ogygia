@@ -176,7 +176,7 @@ new target is a new way to obtain the JSON report, nothing downstream changes.
 
 - **Targets**: `in-process` and `remote` today; a `docker` target (build the image, run it, hit it)
   fits the same `measure(url)` seam.
-- **Metrics**: the snapshot schema is versioned; a new number (say bundle bytes from `e2e/bundle-size`,
+- **Metrics**: the snapshot schema is versioned; a new number (say bundle bytes from `apps/palaestra/e2e/bundle-size`,
   or the client boot numbers from `internal/bench/client-boot.ts`) is one more key per page and one
   more row in the budget.
 - **Reporters**: markdown comment, GitHub check, JSON. A Slack reporter is a function of the same
@@ -202,7 +202,7 @@ new target is a new way to obtain the JSON report, nothing downstream changes.
    first: it is the smaller piece and it is what Amplify needs).
 2. `compare` + budget + exit code + markdown (pure, tested on fixtures).
 3. In-process mode (boot adapter-node, mount the profiler).
-4. The GitHub workflow in this repo, measuring the playground's `/heavy` and `/bench-cms` on every PR.
+4. The GitHub workflow in this repo, measuring the palaestra's `/heavy` and `/bench-cms` on every PR.
 5. `--against base` two-build mode.
 
 ## Open questions

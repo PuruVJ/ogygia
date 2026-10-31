@@ -79,7 +79,7 @@ jobs:
       - name: Bump svelte + @sveltejs/kit to latest across the workspace
         run: |
           # `--latest` ignores the semver ranges and jumps to the newest published versions. Runs in
-          # every workspace package that depends on them (docs, playground, lib devDeps).
+          # every workspace package that depends on them (docs, palaestra, fixture apps, lib devDeps).
           pnpm -r update --latest svelte @sveltejs/kit
           # Record the resolved versions the apps actually build against, for the failure report.
           {
@@ -97,15 +97,16 @@ jobs:
       - name: Warm wrangler
         run: npx --yes wrangler --version
 
-      - name: Type-check + unit tests (build:lib, check:lib, check:playground, check:verify)
+      - name: Type-check + unit tests (build:lib, every package's check)
         run: pnpm run check
 
-      - name: Full e2e suite (verify + adapters, node + bun)
-        run: pnpm run e2e
+      # every suite, none replayed from the cache: the point is the new upstream
+      - name: Full e2e suite (every package's; adapters on node + bun)
+        run: pnpm turbo run e2e --concurrency=1 --force
         env:
           OGYGIA_E2E_WRANGLER: '1'
           # Stable CI-only signing key so the warn-path probe's production build is silent (locally
-          # this comes from apps/playground/.env, which is gitignored). Mirrors e2e.yml — without it
+          # this comes from apps/palaestra/.env, which is gitignored). Mirrors e2e.yml — without it
           # the probe's "stable secret → no warning" assertion fails on every scheduled run. NOT a
           # production secret; the Vercel deploy sets its own OGYGIA_SECRET.
           OGYGIA_SECRET: 3f9a2b7c1e5d8046af62c93b1d7e4058a6c2f19b3e8d70425c9a1f6b8d3e07c4
@@ -142,7 +143,7 @@ jobs:
             printf '%s\n\n' 'Reproduce locally:'
             printf '%s\n' '```sh'
             printf '%s\n' 'pnpm -r update --latest svelte @sveltejs/kit'
-            printf '%s\n' 'pnpm run check && pnpm run e2e'
+            printf '%s\n' 'pnpm run check && pnpm turbo run e2e --concurrency=1 --force'
             printf '%s\n\n' '```'
             printf 'Failing run: %s\n' "${RUN_URL}"
           } > /tmp/upstream-issue.md

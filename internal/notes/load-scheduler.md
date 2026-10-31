@@ -76,7 +76,7 @@ caller.
 - `test/browser/load-scheduler.test.ts`: priorities + viewport class; code waits for the hero,
   gestures and visible content don't; first input releases; no marked resource; the window and
   ranking; viewport promotion and `promote()`.
-- `e2e/load-scheduler.spec.ts` (+ `apps/playground/src/routes/load-scheduler`): the hero held →
+- `apps/palaestra/e2e/load-scheduler.spec.ts` (+ `apps/palaestra/src/routes/load-scheduler`): the hero held →
   no island entry requested, all after it arrives; a click while held wakes at once; a hero that
   never arrives holds no longer than the cap. On the old core: island entries at ~30 ms while the
   hero is held — the field bug.

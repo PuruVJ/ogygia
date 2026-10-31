@@ -1,0 +1,82 @@
+import { sequence } from '@sveltejs/kit/hooks';
+import { redirect, type Handle } from '@sveltejs/kit';
+import { handle as ogygiaHandle, document } from 'ogygia/server';
+import { region } from 'ogygia';
+import DocTest from '$lib/doctest/DocTest.svelte';
+import { scoped_render } from '$lib/restorelab/scoped-render';
+
+// A trivial second handle to prove `ogygia.handle()` composes with `sequence()`.
+const passthrough: Handle = async ({ event, resolve }) => resolve(event);
+
+// Prove `document()`: render a region into a COMPLETE ogygia page from a handle, no +page.svelte.
+// The Counter island inside DocTest must hydrate and stay reactive.
+const doc_test: Handle = async ({ event, resolve }) => {
+	if (event.url.pathname === '/__doctest') {
+		return document(region(DocTest, { label: 'hello' }), { status: 200 });
+	}
+	return resolve(event);
+};
+
+// FOREIGN-MUTATION fixture (e2e/detector.ts): on /detector only, corrupt the FIRST island's
+// region HTML after SSR — strip Svelte's `<!--[-->` hydration anchors inside it, the way a
+// post-SSR HTML middleware (the se.com DSD injector) does. Svelte's hydration must then discard
+// that island's server DOM and re-render; the runtime's data-og-recovered detector must flag
+// EXACTLY that island and not its healthy sibling. See internal/notes/foreign-dom.md.
+const corrupt_detector_region: Handle = async ({ event, resolve }) => {
+	if (event.url.pathname !== '/detector') return resolve(event);
+	return resolve(event, {
+		transformPageChunk: ({ html, done }) => {
+			if (!done) return html;
+			// first region on the page = Broken.svelte's island
+			const start = html.indexOf('<ogygia-region');
+			const end = html.indexOf('</ogygia-region>', start);
+			if (start === -1 || end === -1) return html;
+			const block = html.slice(start, end);
+			return html.slice(0, start) + block.replaceAll('<!--[-->', '') + html.slice(end);
+		}
+	});
+};
+
+// AUTH-WALL fixture (e2e/hole-wall.spec.ts): an app handle IN FRONT of ogygia.handle() that takes
+// a region request away from it — the way a customer's sign-in redirect bounced every locale-less
+// URL of a signed-in visitor (the islands endpoint included) to the account area, and the browser
+// followed it: each hole then held the account page. `og-auth-wall=redirect` answers a hole request
+// with a 302 to a page; `og-auth-wall=document` answers it with a whole document directly (a 404
+// handler's shape). The runtime must refuse both and keep the fallback.
+const auth_wall: Handle = async ({ event, resolve }) => {
+	const mode = event.cookies.get('og-auth-wall');
+	if (mode && event.url.pathname.startsWith('/__ogygia__')) {
+		if (mode === 'redirect') redirect(302, '/hole-wall/account/');
+		if (mode === 'document') {
+			return new Response(
+				'<!DOCTYPE html>\n<html><head><meta name="ogygia-csr" content="true"></head>' +
+					'<body><div data-wall-skeleton class="skeleton">…</div></body></html>',
+				{ status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } }
+			);
+		}
+	}
+	return resolve(event);
+};
+
+// A MOVED ISLANDS ENDPOINT (e2e/islands-endpoint.spec.ts): with OGYGIA_ENDPOINT set, the app serves
+// its holes there — and, like a reverse proxy that forwards only the app's own prefixes, nothing
+// answers the default path any more.
+const moved_endpoint = process.env.OGYGIA_ENDPOINT;
+const proxy_front: Handle = async ({ event, resolve }) => {
+	if (moved_endpoint && event.url.pathname.endsWith('/__ogygia__') && !event.url.pathname.endsWith(moved_endpoint))
+		return new Response('not forwarded', { status: 404 });
+	return resolve(event);
+};
+
+export const handle = sequence(
+	proxy_front,
+	doc_test,
+	auth_wall,
+	// (the restore lab, e2e/restore.spec.ts: a scoped web-component render as the app's transform)
+	ogygiaHandle({
+		...(process.env.OGYGIA_RESTORE_LAB ? { transform: (html: string) => scoped_render(html) } : {}),
+		...(moved_endpoint ? { endpoint: moved_endpoint } : {})
+	}),
+	corrupt_detector_region,
+	passthrough
+);

@@ -1,0 +1,30 @@
+{
+	"$schema": "https://turborepo.com/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"e2e": {
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/apps/pure-csr/**",
+				"$TURBO_ROOT$/internal/repro-deep-csr/**",
+				"$TURBO_ROOT$/internal/repro-kit3/**",
+				"$TURBO_ROOT$/internal/repro-subpkg/**",
+				"$TURBO_ROOT$/internal/repro-hole-css-kit/**",
+				"!$TURBO_ROOT$/apps/**/node_modules/**",
+				"!$TURBO_ROOT$/apps/**/.svelte-kit/**",
+				"!$TURBO_ROOT$/apps/**/.vercel/**",
+				"!$TURBO_ROOT$/apps/**/.turbo/**",
+				"!$TURBO_ROOT$/apps/**/.ogygia/**",
+				"!$TURBO_ROOT$/apps/**/build/**",
+				"!$TURBO_ROOT$/apps/**/dist/**",
+				"!$TURBO_ROOT$/internal/**/node_modules/**",
+				"!$TURBO_ROOT$/internal/**/.svelte-kit/**",
+				"!$TURBO_ROOT$/internal/**/.vercel/**",
+				"!$TURBO_ROOT$/internal/**/.turbo/**",
+				"!$TURBO_ROOT$/internal/**/.ogygia/**",
+				"!$TURBO_ROOT$/internal/**/build/**",
+				"!$TURBO_ROOT$/internal/**/dist/**"
+			]
+		}
+	}
+}

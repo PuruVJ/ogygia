@@ -31,8 +31,9 @@
 	"files": ["dist", "README.md"],
 	"scripts": {
 		"build": "tsdown",
-		"check": "tsc -p . && vitest run",
-		"test": "vitest run"
+		"check": "tsc -p . && tsc -p e2e && vitest run",
+		"test": "vitest run",
+		"e2e": "playwright test"
 	},
 	"peerDependencies": {
 		"@sveltejs/kit": ">=2.70.2 <4",
@@ -41,6 +42,7 @@
 	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
+		"@playwright/test": "1.62.1",
 		"@sveltejs/kit": "^2.70.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",

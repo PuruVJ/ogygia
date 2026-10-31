@@ -7,7 +7,7 @@ client boot with no long task of ogygia's making; every fix REPLACES the machine
 
 ## Measurements (before)
 
-Server, `internal/bench/server-cost.ts` (playground `/bench-cms` vs its no-ogygia twin `/bench-cms/plain`,
+Server, `internal/bench/server-cost.ts` (palaestra `/bench-cms` vs its no-ogygia twin `/bench-cms/plain`,
 same components, same data; 300 req × 4 concurrent; `--cpu-prof` on the vite preview process):
 
 | | plain | islands | delta |
@@ -117,7 +117,7 @@ reducers into one tagged reducer (would change the client revivers; the reducer 
 - Browser: `test/browser/hydration-schedule.test.ts` (no task > 50 ms of ogygia's making for 21 load
   islands; viewport-first order), `test/browser/seed-single-parse.test.ts` (parse count = 1; stale-ref
   regression across a reconcile nav), `e2e/long-task-budget.spec.ts` on the bench page.
-- `e2e/bundle-size.ts` hard-fails above the snapshot + 2 %.
+- `apps/palaestra/e2e/bundle-size.ts` hard-fails above the snapshot + 2 %.
 
 ## Server, round 2 — 2026-09-19
 

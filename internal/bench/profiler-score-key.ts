@@ -1,10 +1,10 @@
-// THE PAGE SCORE'S ANSWER KEY: the playground's score-lab twins carry the same article and the same
+// THE PAGE SCORE'S ANSWER KEY: the devtools lab's score-lab twins carry the same article and the same
 // code editor. /score-lab ships it as a lazy island (csr=false); /score-lab-kit ships it the usual
 // fully hydrated way (csr=true, no islands). The profiler must weigh the fully hydrated twin's whole
 // start graph (the editor's chunk included — no islands is not "0 JS") and rank it well below.
 //
 // Against a preview you started (a build: the dev server serves modules one by one):
-//   cd apps/playground && pnpm build
+//   cd packages/devtools/e2e/app && pnpm build
 //   OGYGIA_PROFILER_SECRET=hell ORIGIN=http://127.0.0.1:4181 node node_modules/vite/bin/vite.js preview --port 4181
 //   node internal/bench/profiler-score-key.ts [base=http://127.0.0.1:4181] [key=hell]
 // Exit code 1 on a failure.

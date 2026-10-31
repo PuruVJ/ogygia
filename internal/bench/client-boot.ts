@@ -1,15 +1,15 @@
 // CLIENT-BOOT BENCH: what the runtime costs the main thread on a large CMS page shape.
-// Serves a BUILT playground (`vite preview` of the given app dir) and loads /bench-cms in Chromium
+// Serves a BUILT palaestra (`vite preview` of the given app dir) and loads /bench-cms in Chromium
 // under a 4× CPU throttle: long tasks after DOMContentLoaded (count, total blocking = Σ(dur − 50)),
 // time until every `wake:'load'` island is hydrated, the seed/props bytes left in the DOM, and the
 // first-party JS self time from a sampling profile. Median of N runs.
-// Usage: node internal/bench/client-boot.ts [app_dir=apps/playground] [runs=3] [port=4180]
+// Usage: node internal/bench/client-boot.ts [app_dir=apps/palaestra] [runs=3] [port=4180]
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-const [app_arg = 'apps/playground', runs_s = '3', port_s = '4180'] = process.argv.slice(2);
+const [app_arg = 'apps/palaestra', runs_s = '3', port_s = '4180'] = process.argv.slice(2);
 const RUNS = Number(runs_s);
 const PORT = Number(port_s);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');

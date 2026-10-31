@@ -1,14 +1,14 @@
-// THE SWEEP: profile every playground route once (runs=2) and print its status and the slow
+// THE SWEEP: profile every devtools-lab route once (runs=2) and print its status and the slow
 // patterns found — a crash or a pattern firing on a page it should not is what to look for. The
 // answer-key pages (planted patterns) and the slow/lab fixtures are skipped.
 //
-//   cd apps/playground && PROFILER_SOURCEMAPS=1 pnpm build
+//   cd packages/devtools/e2e/app && PROFILER_SOURCEMAPS=1 pnpm build
 //   OGYGIA_PROFILER_SECRET=hell ORIGIN=http://127.0.0.1:4181 node node_modules/vite/bin/vite.js preview --port 4181
 //   node internal/bench/profiler-sweep.ts
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 const skip = new Set(['hell', 'inferno', 'latecomer', 'purgatory', 'purgatory-fixed','api', 'lab', 'rtr', 'rs', 'bench-cms', 'slow-io', 'nettest']);
-const dir = fileURLToPath(new URL('../../apps/playground/src/routes', import.meta.url));
+const dir = fileURLToPath(new URL('../../packages/devtools/e2e/app/src/routes', import.meta.url));
 const routes = readdirSync(dir).filter((r) => !r.startsWith('+') && !r.startsWith('(') && !skip.has(r));
 const kinds = new Map();
 const warns = new Map();

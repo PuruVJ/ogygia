@@ -1,4 +1,5 @@
-// EVERY ANSWER KEY, ONE COMMAND. Each key plants known problems on a playground page and checks the
+// EVERY ANSWER KEY, ONE COMMAND. Each key plants known problems on a page of the devtools lab
+// (packages/devtools/e2e/app) and checks the
 // devtools or the profiler name exactly those — and each wants its own server (a devtools dev server,
 // a devtools build, a plain build with the profiler's key). Run them all after any change to the
 // beacon, the page analysis, the score or the report: a key nobody ran let a score regression sit
@@ -7,7 +8,7 @@
 //   node internal/bench/all-keys.ts            every key (builds twice: ~10 min)
 //   node internal/bench/all-keys.ts --quick    the dev-server keys only (~2 min)
 //
-// Ends with the playground built WITHOUT devtools (the e2e suite expects that). Logs per key in
+// Ends with the lab built WITHOUT the dock (the devtools e2e suite expects that). Logs per key in
 // $TMPDIR/ogygia-keys/<key>.log; the summary prints the failing lines. Exit code 1 on any failure.
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
@@ -16,7 +17,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = fileURLToPath(new URL('../..', import.meta.url));
-const app = join(repo, 'apps', 'playground');
+const app = join(repo, 'packages', 'devtools', 'e2e', 'app');
 const logs = join(tmpdir(), 'ogygia-keys');
 mkdirSync(logs, { recursive: true });
 const quick = process.argv.includes('--quick');
@@ -65,7 +66,7 @@ async function key(name, cmd, args, opts) {
 
 const build = async (env) => {
 	const r = await run('pnpm', ['build'], { cwd: app, env });
-	if (r.code !== 0) throw new Error('playground build failed:\n' + r.out.slice(-2000));
+	if (r.code !== 0) throw new Error('devtools lab build failed:\n' + r.out.slice(-2000));
 };
 
 // 1 · the dev-server keys (devtools on)
@@ -98,7 +99,7 @@ if (!quick) {
 			pv.stop();
 		}
 	}
-	// 3 · the profiler on a plain build (and the playground left built without devtools)
+	// 3 · the profiler on a plain build (and the lab left built without the dock)
 	await build({});
 	{
 		const pv = await serve(['node_modules/vite/bin/vite.js', 'preview', '--port', String(BUILT), '--host', '127.0.0.1', '--strictPort'], { ORIGIN: `http://127.0.0.1:${BUILT}`, OGYGIA_PROFILER_SECRET: 'hell', OGYGIA_PROFILES_DB: join(logs, 'keys.db') }, BUILT, '/dt-lab');

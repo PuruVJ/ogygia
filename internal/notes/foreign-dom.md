@@ -2,7 +2,7 @@
 
 Status: DETECTOR BUILT 2026-08-27 (same day): core.ts arms ssr_children pre-hydrate, flags zero-survivor
 regions with `data-og-recovered` + attributing console.warn + `region.hydrate.recovered` devtools
-event. e2e/detector.ts (playground /detector fixture + anchor-stripping hooks transform) — 51/51
+event. apps/palaestra/e2e/detector.spec.ts (palaestra /detector fixture + anchor-stripping hooks transform) — 51/51
 green. Docs row + transform-zone guard test still TODO.
 Repro + fix validation: `/experiment/mfe-poc/qdsrepro` (routes `/`, `/nokey`, `/lake`, `/lakeslot`, `/graft`).
 

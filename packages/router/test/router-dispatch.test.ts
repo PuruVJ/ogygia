@@ -1,7 +1,7 @@
 /**
  * Router v2 dispatch — endpoints, params, verbs, base/slash, thrown redirect/error, miss, and the
  * load memoization + parent-sharing that makes waterfalls-and-waste impossible together. Page RENDER
- * (document/region) is covered by the playground rtr e2e; here we exercise the pure request→response
+ * (document/region) is covered by the router's e2e suite (e2e/); here we exercise the pure request→response
  * spine through endpoints and loads (no runtime needed).
  */
 import { describe, it, expect } from 'vitest';

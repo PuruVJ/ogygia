@@ -7,7 +7,7 @@
 **/.tarballs
 .git
 docs
-playground
+apps/palaestra
 verify
 talks
 experiment

@@ -1064,7 +1064,7 @@ export function derive_findings(a: Analysis, meta: ReportMeta, extras: ReportExt
 		} else if (a.components.length === 0 && a.sample_count < 200) {
 			// no component work AND barely any samples: the page answered 200 with a real body (the
 			// branches above took the rest), so it is FAST — a note that says so, not a warning: it read
-			// as a warning on 25 of the playground's pages that simply render in a millisecond
+			// as a warning on 25 of the devtools lab's pages that simply render in a millisecond
 			const runs = [...(meta.runs ?? [])].sort((x, y) => x - y);
 			const ms = runs.length ? runs[runs.length >> 1] : undefined;
 			info(

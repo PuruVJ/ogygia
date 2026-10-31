@@ -3,13 +3,27 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "!e2e/**", "!playwright.config.ts"],
 			"outputs": ["dist/**"]
 		},
 		"check": {
 			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "!e2e/app/**"],
 			"outputs": []
 		},
 		"test": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "!e2e/**", "!playwright.config.ts"],
+			"outputs": []
+		},
+		"e2e": {
+			"dependsOn": ["^build"],
+			"outputs": [],
+			"cache": true,
+			"env": ["E2E_NO_BUILD"],
+			"passThroughEnv": ["OGYGIA_*", "CI", "PLAYWRIGHT_*", "PW_*", "DEBUG", "HOME", "TMPDIR", "BUN_INSTALL"]
+		},
+		"fixture": {
 			"dependsOn": ["^build"],
 			"outputs": []
 		}

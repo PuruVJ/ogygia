@@ -1,0 +1,19 @@
+{
+	"$schema": "https://turborepo.com/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"e2e": {
+			"dependsOn": ["^build", "build", "mfe-shell#fixture", "mfe-cms#fixture", "mfe-dash#fixture"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/examples/mfe/**",
+				"!$TURBO_ROOT$/examples/mfe/**/node_modules/**",
+				"!$TURBO_ROOT$/examples/mfe/**/.svelte-kit/**",
+				"!$TURBO_ROOT$/examples/mfe/**/.turbo/**",
+				"!$TURBO_ROOT$/examples/mfe/**/build/**",
+				"!$TURBO_ROOT$/examples/mfe/**/.ogygia/**",
+				"!$TURBO_ROOT$/examples/mfe/keys.env"
+			]
+		}
+	}
+}

@@ -2,7 +2,7 @@
  * Server-router component CSS (link/router-css.ts): the closure walker that finds every `.svelte` a
  * router module can reach (barrels included), and the generated `virtual:ogygia/router-css` source
  * for both modes. The runtime registry (router-css.ts) is exercised through the same shapes the
- * virtual emits. End-to-end (build → handoff → linked page) is covered by the playground rtr fixture.
+ * virtual emits. End-to-end (build → handoff → linked page) is covered by the router's e2e suite (packages/router/e2e).
  */
 import { describe, expect, it } from 'vitest';
 import {

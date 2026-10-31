@@ -1,11 +1,12 @@
-// THE PROFILER'S ANSWER KEY: profile an annotated playground page and check the slow patterns the
+// THE PROFILER'S ANSWER KEY: profile an annotated devtools-lab page (packages/devtools/e2e/app)
+// and check the slow patterns the
 // profiler reports against the page's own comments — every `PATTERN <kind>` comment is a problem
 // it must find (`PATTERN-SMALL <kind>`: real, but near the 1 ms floor, so a miss only warns), every
 // `DECOY` comment marks code it must NOT flag (`DECOY-GROWTH`: may sit on the memory card, but the
 // growth check must not call it growing).
 //
 // One run against a preview you started:
-//   cd apps/playground && pnpm build   (the server build writes hidden maps itself; PROFILER_NO_SOURCEMAPS=1: none)
+//   cd packages/devtools/e2e/app && pnpm build   (the server build writes hidden maps itself; PROFILER_NO_SOURCEMAPS=1: none)
 //   OGYGIA_PROFILER_SECRET=hell ORIGIN=http://127.0.0.1:4181 node node_modules/vite/bin/vite.js preview --port 4181
 //   node internal/bench/profiler-answer-key.ts [--page=/hell] [base=http://127.0.0.1:4181] [key=hell]
 //
@@ -30,7 +31,7 @@ const repeat = Math.max(1, Number(flag('repeat') ?? (serve ? 3 : 1)));
 const key = args[1] ?? 'hell';
 const PORT = 4187;
 const base = args[0] ?? (serve ? `http://127.0.0.1:${PORT}` : 'http://127.0.0.1:4181');
-const app = fileURLToPath(new URL('../../apps/playground', import.meta.url));
+const app = fileURLToPath(new URL('../../packages/devtools/e2e/app', import.meta.url));
 const root = join(app, 'src');
 // real, but under the report's 1 ms floor on a fast machine: V8 caches a regex, grows a string
 // as a rope (a small file read quickly is found by V8's call counts, not the samples: no longer here)

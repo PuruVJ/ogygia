@@ -1,4 +1,4 @@
-// THE RECORD TAB'S ANSWER KEY: record a session on the playground's /dt-session, use the page like
+// THE RECORD TAB'S ANSWER KEY: record a session on the devtools lab's /dt-session, use the page like
 // a visitor (each planted island's problem, the decoy, a dead button), stop, and check the report
 // (`window.__ogygia_session`, what the tab shows): each planted problem found and named, the decoy
 // never. Against a dev server with devtools on (see devtools-answer-key.ts).

@@ -1,8 +1,8 @@
 // SERVER-COST BENCH: ogygia's per-request overhead at a large CMS page shape.
-// Starts the built playground (`vite preview`) under --cpu-prof, hammers /bench-cms and its plain twin,
+// Starts the built palaestra (`vite preview`) under --cpu-prof, hammers /bench-cms and its plain twin,
 // reports p50/p95 latency per route, HTML size, RSS over time (memory-flat check), then folds the CPU
 // profile into self-time by function for ogygia's own source files.
-// Usage (from repo root, after `pnpm --filter playground build`):
+// Usage (from repo root, after `pnpm --filter palaestra build`):
 //   node internal/bench/server-cost.ts [requests=300] [concurrency=4]
 import { spawn, execSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -13,7 +13,7 @@ const REQUESTS = Number(process.argv[2] ?? 300);
 const CONC = Number(process.argv[3] ?? 4);
 const PORT = 4179;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const app = path.join(root, 'apps/playground');
+const app = path.join(root, 'apps/palaestra');
 const prof_dir = path.join(root, 'internal/bench/results/server-cost-prof');
 fs.rmSync(prof_dir, { recursive: true, force: true });
 fs.mkdirSync(prof_dir, { recursive: true });
