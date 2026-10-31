@@ -391,7 +391,8 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	const doc_cache = new BuildCache<{ code: string; deps?: string[] }>('markup');
 	// The document REGION rides ogygia's core RegionStore — markdown is one producer harnessing the
 	// shared currency, not the owner of a private format. Same address as the module-code entry.
-	const docs_store = new RegionStore('docs');
+	// ('2': the module code imports from `@ogygia/content`, no longer `ogygia/content`)
+	const docs_store = new RegionStore('docs', '2');
 	const doc_sig = () =>
 		[
 			'v1', // markup-cache format

@@ -22,6 +22,9 @@
 // createHash via the compiler HOST SEAM (defaults to Node; a browser installs a JS sha impl) so the
 // content/markdown pipeline runs in the Observatory REPL with no node:crypto. Vite plugin unchanged.
 import { createHash, BuildCache } from 'ogygia/internal/compiler-browser';
+// (the producer's own version is part of every address: a release that changes what a region emits —
+// an import specifier, a wrapper — must never be served an older release's bake)
+import pkg from '../package.json' with { type: 'json' };
 
 /** A region in its serialized form — what crosses caches, wires, and builds. `html` is the whole
  *  baked markup; `islands` is reserved for descriptor-carrying regions (the wake list). */
@@ -44,6 +47,8 @@ export class RegionStore {
 	/** A stable address from the parts that shape a region's content. */
 	key(parts: ReadonlyArray<string>): string {
 		const h = createHash('sha256');
+		h.update(pkg.version);
+		h.update('\0');
 		h.update(this.#version);
 		for (const p of parts) {
 			h.update('\0');
