@@ -818,13 +818,13 @@ class OgygiaHandle {
 					// immutable headers
 				}
 			}
-			// PLUGINS, `response` stage: the page's response before it streams out (a plugin may store
-			// it and send its copy instead).
+			// PLUGINS, `response` stage (SEQUENTIAL): the page's response before it streams out — each
+			// plugin sees the one before it left (a plugin may store it and send its copy instead). A
+			// replaced response is final: it goes out as the plugins left it.
 			if (bag.deferred && bag.deferred.length) facts.streamed = true;
-			for (let i = 0; i < ctxs.length; i++) {
-				const replaced = await plugins[i].def.response?.(ctxs[i], response);
-				if (replaced) return replaced;
-			}
+			let out = response;
+			for (let i = 0; i < ctxs.length; i++) out = (await plugins[i].def.response?.(ctxs[i], out)) ?? out;
+			if (out !== response) return out;
 			// Stream captured `$page.data` promises into islands (csr=false, real browser load). The doc
 			// — with the pending seed + resolve-global bootstrap — is fully built now (transformPageChunk
 			// ran synchronously inside `resolve`); the tail streams a resolve script per promise as it
