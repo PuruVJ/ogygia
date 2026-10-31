@@ -104,12 +104,14 @@ for (const pkg of published) {
 			// a sibling workspace package (`workspace:`) is audited as itself, not through this one
 			if (String(node.version ?? '').startsWith('link:')) continue;
 			const top = index(name, node);
-			const kind = kind_of(name);
 			const seen = new Set([top]);
-			const queue = [{ key: top, route: [] }];
+			const queue = [{ key: top, route: [], kind: kind_of(name) }];
 			while (queue.length) {
-				const { key, route } = queue.shift();
+				const { key, route, kind: parent_kind } = queue.shift();
 				const n = nodes.get(key);
+				// one of the package's own peers, met deeper (a dependency's peer: bits-ui › runed › Kit)
+				// is the app's copy, and so is everything below it
+				const kind = parent_kind === 'dependency' && pkg.peerDependencies?.[n.name] !== undefined ? 'peer' : parent_kind;
 				const id = `${n.name}@${n.version}`;
 				if (!reached.has(id)) reached.set(id, []);
 				reached
@@ -118,7 +120,7 @@ for (const pkg of published) {
 				for (const child of n.children) {
 					if (seen.has(child)) continue;
 					seen.add(child);
-					queue.push({ key: child, route: [...route, n.name] });
+					queue.push({ key: child, route: [...route, n.name], kind });
 				}
 			}
 		}
