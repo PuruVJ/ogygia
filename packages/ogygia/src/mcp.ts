@@ -1830,7 +1830,7 @@ function tool_flags(args: Attrs): ToolResult {
 	if (!live.flags.length && !manifest)
 		return text(
 			`No flag() call sites under ${dir}/src (${files.length} file(s) scanned), and no ` +
-				`build manifest. Flags are defined with \`flag('name', …)\` from 'ogygia/flag' ` +
+				`build manifest. Flags are defined with \`flag('name', …)\` from '@ogygia/flags' ` +
 				`— literal names only (a dynamic first argument is invisible to the inventory).`
 		);
 

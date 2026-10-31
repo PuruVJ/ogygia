@@ -1,0 +1,74 @@
+{
+	"name": "@ogygia/flags",
+	"private": true,
+	"version": "0.10.1",
+	"description": "Feature flags and A/B tests for ogygia: one flag() primitive, decided server-side, zero JS",
+	"type": "module",
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"directory": "packages/flags"
+	},
+	"keywords": ["ogygia", "sveltekit", "feature-flags", "ab-testing", "openfeature"],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./src/index.ts"
+		},
+		"./openfeature": {
+			"types": "./dist/openfeature.d.ts",
+			"default": "./src/openfeature.ts"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"default": "./src/server.ts"
+		},
+		"./vite": {
+			"types": "./dist/vite.d.ts",
+			"default": "./dist/vite.js"
+		}
+	},
+	"files": ["dist", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc --noEmit -p .",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"esm-env": "^1.2.2"
+	},
+	"peerDependencies": {
+		"ogygia": "workspace:^"
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"ogygia": "workspace:*",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"./openfeature": {
+				"types": "./dist/openfeature.d.ts",
+				"default": "./dist/openfeature.js"
+			},
+			"./server": {
+				"types": "./dist/server.d.ts",
+				"default": "./dist/server.js"
+			},
+			"./vite": {
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
+			}
+		}
+	}
+}

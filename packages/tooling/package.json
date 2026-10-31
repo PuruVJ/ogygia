@@ -1,0 +1,15 @@
+{
+	"name": "@ogygia/tooling",
+	"private": true,
+	"description": "Shared build config for the ogygia packages. Each package's tsdown.config.ts calls library().",
+	"type": "module",
+	"exports": {
+		"./tsdown": "./tsdown.ts"
+	},
+	"dependencies": {
+		"@ogygia/tsdown-plugin-svelte": "workspace:*"
+	},
+	"peerDependencies": {
+		"tsdown": "^0.22.14"
+	}
+}

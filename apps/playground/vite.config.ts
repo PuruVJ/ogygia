@@ -1,5 +1,6 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
+import { flags } from '@ogygia/flags/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -25,6 +26,8 @@ export default defineConfig({
 			// to resolve import virtual:ogygia/island/<id>.js from virtual:ogygia/server-manifest"). The
 			// /as-region and /ts-registry fixtures are that shape; with this on, the build is the test.
 			barrels: true,
+			// Plugins (internal/notes/packages.md): every e2e request runs through the plugin stages.
+			plugins: [flags()],
 			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
 			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
 			// (+ the background recorders, exercised by the hell page: a trap for any request over 400 ms,

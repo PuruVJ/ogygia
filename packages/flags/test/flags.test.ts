@@ -10,10 +10,10 @@ import {
 	decide,
 	flush_exposures,
 	prime_flags,
-	assigned_buckets,
+	type CtxLike,
 	type FlagSource
-} from '../src/flags.js';
-import type { StandardSchemaV1 } from '../src/router/view.js';
+} from '../src/index.js';
+import { assignments as assigned_buckets, type StandardSchemaV1 } from 'ogygia/plugin';
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 
@@ -52,7 +52,7 @@ describe('flag — the four declaration shapes, read by calling', () => {
 	});
 
 	it('function = targeting; true → on, false → definitively off, undefined → fall through', () => {
-		const f = flag('beta', (c) => {
+		const f = flag('beta', (c: CtxLike) => {
 			const sub = c.visitor?.sub;
 			return sub === 'beta' ? true : sub === 'blocked' ? false : undefined;
 		});

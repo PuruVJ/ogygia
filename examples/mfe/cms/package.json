@@ -10,6 +10,7 @@
 	},
 	"dependencies": {
 		"@corp/contracts": "workspace:*",
+		"@ogygia/flags": "workspace:*",
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {

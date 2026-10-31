@@ -5,7 +5,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { routes, when, mount } from '../src/router/index.js';
 import { make_peer } from '../src/federation/peer.js';
-import { flag, decide } from '../src/flags.js';
+// (the router's own flag integration; moves with the router into its package)
+import { flag, decide } from '../../flags/src/index.js';
+import { assignments } from '../src/plugin/facts.js';
 
 beforeEach(() => decide({ overrides: () => true, source: undefined, exposure: undefined }));
 afterEach(() => vi.unstubAllGlobals());
@@ -57,8 +59,7 @@ describe('when() — a gated-off route does not exist', () => {
 		});
 		const req = new Request('http://s/g?og-exp=when-carried:on');
 		await app.fetch(req);
-		const { assigned_buckets } = await import('../src/flags.js');
-		expect(assigned_buckets(req)).toEqual({ 'when-carried': 'on' });
+		expect(assignments(req)).toEqual({ 'when-carried': 'on' });
 	});
 });
 

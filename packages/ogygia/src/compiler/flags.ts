@@ -8,13 +8,17 @@
  *
  * AST-walked, not text-matched (user ruling): `flag` is an ordinary function — a text sweep
  * would miss `import { flag as f }` and false-positive on any local function that happens to be
- * named `flag`. The walk resolves the module's ACTUAL bindings from `'ogygia/flag'` (named, renamed,
+ * named `flag`. The walk resolves the module's ACTUAL bindings from `'@ogygia/flags'` (named, renamed,
  * or namespace imports) and only counts calls through those. Known pragmatic limit (same as the
  * macro family's): a local declaration SHADOWING an imported `flag` inside a nested scope is not
  * scope-analyzed.
  */
 import { walk } from 'estree-walker';
 import { parse_module } from './parse/oxc.js';
+
+/** The import a flag site comes through. (Moves into the flags plugin's compile facet once the
+ *  compile port lands: internal/notes/packages.md.) */
+export const FLAGS_SPEC = '@ogygia/flags';
 
 export interface FlagSite {
 	name: string;
@@ -62,12 +66,12 @@ function collect_from_source(
 	const result = parse_module(src, id);
 	if (!result.ok || !result.program) return;
 
-	// 1) resolve this module's REAL bindings from 'ogygia/flag': local name → kind, plus namespaces
+	// 1) resolve this module's REAL bindings from the flags package: local name → kind, plus namespaces
 	const locals = new Map<string, FlagSite['kind']>();
 	const namespaces = new Set<string>();
 	for (const node of ((result.program as AstNode).body as AstNode[]) ?? []) {
 		if (node.type !== 'ImportDeclaration') continue;
-		if ((node.source as AstNode | undefined)?.value !== 'ogygia/flag') continue;
+		if ((node.source as AstNode | undefined)?.value !== FLAGS_SPEC) continue;
 		for (const s of (node.specifiers as AstNode[]) ?? []) {
 			if (s.type === 'ImportSpecifier') {
 				const imported = (s.imported as AstNode)?.name as string;

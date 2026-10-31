@@ -64,6 +64,17 @@ export function profiler_config_module(
 }
 
 /**
+ * `virtual:ogygia/server-plugins` — SERVER only: each plugin's server half, one static import per
+ * plugin, in the order the app listed them. The handle runs their stages straight off this list; an
+ * app with no plugins gets an empty one (and the client always does).
+ */
+export function server_plugins_module(ssr: boolean, modules: readonly string[]): string {
+	if (!ssr || modules.length === 0) return `export const plugins = [];`;
+	const imports = modules.map((m, i) => `import p${i} from ${JSON.stringify(m)};`).join('\n');
+	return `${imports}\nexport const plugins = [${modules.map((_, i) => `p${i}`).join(', ')}];`;
+}
+
+/**
  * `virtual:ogygia/freeze-config` — SERVER only: the freeze policy from `ogygia({ freeze })`,
  * or `null` when off. Non-null turns the handle's freeze read/write path on (the switch +
  * serializable policy; live store/edge adapters enter via `freeze.configure()` in hooks).

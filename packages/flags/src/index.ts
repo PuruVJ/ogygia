@@ -15,8 +15,7 @@
  * it, `.pick()`, `.value()`, and one `decide()`.
  */
 import { DEV } from 'esm-env';
-import { fnv1a32 } from './runtime/hash.js';
-import type { StandardSchemaV1 } from './router/view.js';
+import { fnv1a32, personalRead, noteAssignment, type StandardSchemaV1 } from 'ogygia/plugin';
 
 export type CtxLike = {
 	request: Request;
@@ -31,8 +30,6 @@ export type CtxLike = {
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 /** Per-request source resolution, cached on the Request (GC'd with it). */
 const RESOLVED = Symbol.for('ogygia.flags.resolved.v1');
-/** Per-request set of (name → decided variant) — powers federation auto-carry + primed-guard. */
-const ASSIGNED = Symbol.for('ogygia.flags.assigned.v1');
 
 /** 0..9999 — sticky hash bucket for (salt, visitor). Uniform + deterministic, not cryptographic;
  *  the shared pure hash keeps this module safe in ANY bundle (runtime + every island entry). */
@@ -103,16 +100,6 @@ let _exposure: ((events: ExposureEvent[]) => void | Promise<void>) | null = null
 let _batch = { max: 25, ms: 2000 };
 let _queue: ExposureEvent[] = [];
 let _timer: ReturnType<typeof setTimeout> | null = null;
-let _flag_observer: ((name: string) => void) | null = null;
-
-/** FREEZE seam: every flag READ (fresh or memoized — a cached read is still a read) reports
- *  its name here. The freeze handle installs an observer that disqualifies the in-flight
- *  render (`flag:<name>`, like a cookie read): an A/B'd page must never freeze ONE variant for
- *  everyone. Priming (`prime_flags`) deliberately does NOT report — it touches cookies on every
- *  request whether or not the page reads a flag. */
-export function set_flag_observer(fn: ((name: string) => void) | null): void {
-	_flag_observer = fn;
-}
 
 /**
  * Configure flags for this server, once (hooks.server.ts / any server module). Everything is
@@ -158,9 +145,9 @@ const _registry = new Map<string, FlagQuery>();
 
 /**
  * Resolve the source ONCE per request over every registered flag, caching decisions on the
- * Request so reads stay sync. Awaited by `handle()` and the router dispatch (the two per-request
- * entry points). Idempotent; a no-op without a source. Never throws — a source failure degrades
- * every flag to its native rule, it does not take the request down.
+ * Request so reads stay sync. Awaited by the flags plugin's `request` stage (flags/server.ts), above
+ * the page / hole split. Idempotent; a no-op without a source. Never throws — a source failure
+ * degrades every flag to its native rule, it does not take the request down.
  */
 export async function prime_flags(c: CtxLike): Promise<void> {
 	const req = c.request as unknown as Record<symbol, unknown>;
@@ -191,18 +178,21 @@ function resolved_for(c: CtxLike, name: string): { variant: string; value?: unkn
 	const map = (
 		c.request as unknown as Record<symbol, Record<string, { variant: string; value?: unknown }>>
 	)[RESOLVED];
+	if (map === undefined && _source && !_unprimed_warned) {
+		// a source is configured but nothing primed this request: the plugin is not in the app's list,
+		// so every read silently ignores the source. Say it once.
+		_unprimed_warned = true;
+		console.warn(
+			'[ogygia] flags: `decide({ source })` is set but no request was primed — add `flags()` to `ogygia({ plugins })` in vite.config.'
+		);
+	}
 	return map?.[name];
 }
+let _unprimed_warned = false;
 
-/** Record the decided variant for federation auto-carry (read by the router's `claims_for`). */
+/** Record the decided variant as a request fact: federation carries the set as signed claims. */
 function record_assigned(c: CtxLike, name: string, variant: string): void {
-	const req = c.request as unknown as Record<symbol, Record<string, string> | undefined>;
-	(req[ASSIGNED] ??= {})[name] = variant;
-}
-
-/** The (name → variant) map a request has decided so far — federation carries it as signed claims. */
-export function assigned_buckets(request: Request): Record<string, string> | undefined {
-	return (request as unknown as Record<symbol, Record<string, string> | undefined>)[ASSIGNED];
+	noteAssignment(c.request, name, variant);
 }
 
 // ── override (?og-exp) ───────────────────────────────────────────────────────────────────────
@@ -366,7 +356,10 @@ export function flag(
 	};
 
 	const bucket = (c: CtxLike): string => {
-		_flag_observer?.(name); // freeze: a read personalizes the render, memoized or not
+		// every READ (fresh or memoized) is a per-visitor read: an A/B'd page must never be stored as
+		// ONE variant for everyone (freeze reads the fact). Priming deliberately does not report: it
+		// touches cookies on every request whether or not the page reads a flag.
+		personalRead(`flag:${name}`);
 		const cached = memo.get(c.request);
 		if (cached !== undefined) return cached;
 		const variant = compute(c);

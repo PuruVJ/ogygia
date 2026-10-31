@@ -46,6 +46,7 @@ export type {
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
+	validate_plugins,
 	validate_content_presets,
 	resolve_options
 } from './options.js';
@@ -207,6 +208,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const visibleMargin = options.regions?.visible?.margin;
 	const presets = options.regions?.presets || {};
 	validate_region_presets(presets);
+	// `ogygia({ plugins })` — each plugin's server half, wired into the handle through
+	// `virtual:ogygia/server-plugins` (standalone has no handle to wire into)
+	const server_plugins = standalone ? [] : validate_plugins(options.plugins);
 	const import_keys = normalize_import_keys(options.importKeys);
 	// `ogygia({ profiler })` — the profiler is configured ONLY here. Normalized to a config object (or
 	// null when off) and baked into `virtual:ogygia/profiler-config`; `ogygia.handle()` reads it and
@@ -730,6 +734,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						libDir,
 						pkg_scan,
 						profiler_config,
+						server_plugins,
 						freeze_config,
 						is_dev,
 						id_salt,

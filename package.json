@@ -4,7 +4,7 @@
 	"type": "module",
 	"packageManager": "pnpm@11.17.0",
 	"scripts": {
-		"build:lib": "pnpm --filter ogygia build",
+		"build:lib": "pnpm --filter ogygia build && pnpm --filter \"./packages/*\" --filter \"!ogygia\" --filter \"!@ogygia/tooling\" build",
 		"build": "pnpm run build:lib && pnpm --filter playground build",
 		"build:docs": "pnpm run build:lib && pnpm --filter docs build",
 		"dev": "pnpm run build:lib && pnpm --filter playground dev",

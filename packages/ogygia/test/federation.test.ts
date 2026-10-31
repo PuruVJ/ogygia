@@ -15,7 +15,8 @@ import { set_federation } from '../src/federation/registry.js';
 import { set_source_observer } from '../src/freeze/capture.js';
 import { set_thaw_notifier } from '../src/freeze/registry.js';
 import { routes } from '../src/router/index.js';
-import { flag } from '../src/flags.js';
+// (federation's flag carry; moves with federation into its package)
+import { flag } from '../../flags/src/index.js';
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 const doc_json = (extra: Record<string, unknown> = {}, status = 200) =>

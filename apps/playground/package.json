@@ -36,6 +36,7 @@
     "@replit/codemirror-lang-svelte": "^6.0.0",
     "@rolldown/browser": "1.2.2",
     "devalue": "^5.9.0",
+    "@ogygia/flags": "workspace:*",
     "ogygia": "workspace:*",
     "repro-hole-css-kit": "workspace:*",
     "repro-island-pkg": "workspace:*",

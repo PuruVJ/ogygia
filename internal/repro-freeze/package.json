@@ -9,6 +9,7 @@
 		"preview": "vite preview --port 3073"
 	},
 	"dependencies": {
+		"@ogygia/flags": "workspace:*",
 		"ogygia": "workspace:*"
 	},
 	"devDependencies": {

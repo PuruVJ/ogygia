@@ -44,7 +44,6 @@ import {
 	redirect_response
 } from './respond.js';
 import { router_css_head } from './css-head.js';
-import { prime_flags } from '../flags.js';
 import { open_late_scope, take_late_regions } from '../late-region-registry.js';
 import {
 	is_stream_slot,
@@ -264,10 +263,8 @@ export function routes<const T extends RouteTable>(table: T, opts: RoutesOptions
 
 		const leaf = by_pattern.get(hit.pattern)!;
 		const ctx = make_ctx(hit.params, url, request, event, href_fn, hit.pattern, opts.visitor);
-		// Resolve the flag SOURCE (if `decide({ source })` set one) ONCE for this request, so every
-		// `flag(c)` read below stays sync. The routes table imported every flag module at startup, so
-		// the registry the source is asked over is complete. Idempotent + no-op without a source.
-		await prime_flags(ctx);
+		// (the flag SOURCE was primed above the page split, by the flags plugin's `request` stage, so
+		// every `flag(c)` read below stays sync)
 		// Pre-decide the table's `flags` — force their buckets into the request so a mount carries
 		// them even if no page here reads them (each read self-records for federation auto-carry).
 		if (opts.flags) for (const f of opts.flags) f(ctx);

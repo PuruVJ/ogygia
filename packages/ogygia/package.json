@@ -136,10 +136,6 @@
 			"types": "./dist/router/client-api.d.ts",
 			"default": "./src/router/client-api.ts"
 		},
-		"./flag": {
-			"types": "./dist/flags.d.ts",
-			"default": "./src/flags.ts"
-		},
 		"./freeze": {
 			"types": "./dist/freeze/index.d.ts",
 			"default": "./src/freeze/index.ts"
@@ -152,9 +148,9 @@
 			"types": "./dist/federation/index.d.ts",
 			"default": "./src/federation/index.ts"
 		},
-		"./flag/openfeature": {
-			"types": "./dist/flags/openfeature.d.ts",
-			"default": "./src/flags/openfeature.ts"
+		"./plugin": {
+			"types": "./dist/plugin/index.d.ts",
+			"default": "./src/plugin/index.ts"
 		},
 		"./devtools": {
 			"types": "./dist/devtools/index.d.ts",
@@ -383,10 +379,6 @@
 				"types": "./dist/router/client-api.d.ts",
 				"default": "./dist/router/client-api.js"
 			},
-			"./flag": {
-				"types": "./dist/flags.d.ts",
-				"default": "./dist/flags.js"
-			},
 			"./freeze": {
 				"types": "./dist/freeze/index.d.ts",
 				"default": "./dist/freeze/index.js"
@@ -399,9 +391,9 @@
 				"types": "./dist/federation/index.d.ts",
 				"default": "./dist/federation/index.js"
 			},
-			"./flag/openfeature": {
-				"types": "./dist/flags/openfeature.d.ts",
-				"default": "./dist/flags/openfeature.js"
+			"./plugin": {
+				"types": "./dist/plugin/index.d.ts",
+				"default": "./dist/plugin/index.js"
 			},
 			"./devtools": {
 				"types": "./dist/devtools/index.d.ts",

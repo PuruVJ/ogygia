@@ -92,7 +92,9 @@ import { regionTtl, renewWindow } from 'virtual:ogygia/region-ttl';
 import { render_cache_key, cached_render } from './server/render-cache.js';
 import { B64Url } from './server/payload.js';
 import { REF_WIRE_KEY, ref_reviver } from './ref.js';
-import { prime_flags, flush_exposures, set_flag_observer } from './flags.js';
+import { plugins } from 'virtual:ogygia/server-plugins';
+import type { Req, ServerPlugin } from './plugin/index.js';
+import { set_personal_read_sink } from './plugin/facts.js';
 // PULL-registration at decode time (idempotent; no import-time side effects).
 import { register_wire_kind } from './live-transport.js';
 import { register_store_kind, register_derived_kind } from './store-transport.js';
@@ -386,11 +388,12 @@ set_late_taker(() => {
 // FREEZE: region capabilities minted during a may-be-stored render go prerender-grade — the
 // region-endpoint mint reads this per-request flag (see freeze/capture.ts for why it's a seam).
 set_freeze_capture_reader(() => bag_of()?.freeze_capture === true);
-// FREEZE: a flag read during an eligible render personalizes the page — disqualify it, named
-// like a cookie read (`flag:<name>`). Priming alone never disqualifies; only actual reads do.
-set_flag_observer((name) => {
+// FREEZE: a per-visitor read during an eligible render (a flag decision: `flag:<name>`, reported
+// through the plugin door's `personalRead`) personalizes the page — disqualify it, named like a
+// cookie read. Priming alone never disqualifies; only actual reads do.
+set_personal_read_sink((label) => {
 	const obs = bag_of()?.freeze_obs;
-	if (obs && obs.disqualified_by === null) obs.disqualified_by = `flag:${name}`;
+	if (obs && obs.disqualified_by === null) obs.disqualified_by = label;
 });
 // FREEZE: og.source receipts — every `__og_source`-wrapped call during a capture render files
 // its `(id, fingerprint)` tag here; stored with the entry as the reverse index for
@@ -995,11 +998,31 @@ class OgygiaHandle {
 		if (path === null) {
 			return new Response('Bad Request', { status: 400 });
 		}
-		// Resolve the flag SOURCE (if `decide({ source })` set one) ONCE per request — HERE, above
-		// the endpoint/page split, so page renders, remote-function calls, AND the region endpoint
-		// (deferred/live holes — the per-visitor leg of a CDN-cached page, where flag reads matter
-		// most) all see the same primed decisions. Sync reads after; no-op without a source.
-		await prime_flags({ request: event.request, url: event.url, cookies: event.cookies });
+		// PLUGINS (`ogygia({ plugins })`, design: internal/notes/packages.md): each one's `request`
+		// stage runs HERE, above the endpoint/page split, so page renders, remote-function calls AND
+		// the region endpoint (deferred/live holes, the per-visitor leg of a cached page) all see what
+		// it set up (flags prime their source here). Its `done` stage runs at the request's end, always
+		// (flags drain exposures: the serverless-safe tail). No plugins: straight through, no wrapper.
+		if (plugins.length === 0) return this.#route(event, resolve, path);
+		const reqs: Req<unknown>[] = plugins.map((p: ServerPlugin<unknown>) => ({ event, bag: p.bag?.() }));
+		try {
+			for (let i = 0; i < plugins.length; i++) {
+				const answer = await plugins[i].request?.(reqs[i]);
+				if (answer) return answer;
+			}
+			return await this.#route(event, resolve, path);
+		} finally {
+			for (let i = 0; i < plugins.length; i++) {
+				try {
+					plugins[i].done?.(reqs[i]);
+				} catch {
+					/* a plugin's tail never fails the request */
+				}
+			}
+		}
+	};
+
+	async #route(event: RequestEvent, resolve: Parameters<Handle>[0]['resolve'], path: string): Promise<Response> {
 		// FRAGMENT FEDERATION: a `federate()` in hooks.server.ts serves `/og/fragment/*`, `/og/thaw`,
 		// and the deferred-hole endpoint straight from the handle (no route files). Null = not a
 		// federation path → fall through. Above the freeze/page split: these are their own protocol.
@@ -1134,15 +1157,10 @@ class OgygiaHandle {
 				for (const key in headers)
 					if (key.toLowerCase() === 'cache-control') note_cache_control(event.request, headers[key]);
 			};
-			let response: Response;
-			try {
-				response = await resolve(event, {
-					transformPageChunk: async ({ html }) =>
-						this.inject_client_seeds(this.#transform ? await this.#transform_document(html, event, bag) : html, store?.state, event, bag)
-				});
-			} finally {
-				flush_exposures(); // drain queued exposures at the request's end (serverless-safe tail)
-			}
+			const response = await resolve(event, {
+				transformPageChunk: async ({ html }) =>
+					this.inject_client_seeds(this.#transform ? await this.#transform_document(html, event, bag) : html, store?.state, event, bag)
+			});
 			if (devtools_personal) mark_personal(response);
 			// with an app transform a router-fetched page is rendered as an answer (`#transform_document`):
 			// a shared cache must keep the two forms apart
@@ -1238,15 +1256,10 @@ class OgygiaHandle {
 			return response;
 		}
 		// POST to the endpoint = a BATCH frame stream (client-side navigation, single-flight): render a set
-		// of signed region calls and flush each as an out-of-order frame in one response. Exposures
-		// queued by flag reads during these renders drain at the request's end too (serverless-safe).
-		try {
-			if (event.request.method.toUpperCase() === 'POST') return await this.render_batch(event);
-			return await this.render_region(event);
-		} finally {
-			flush_exposures();
-		}
-	};
+		// of signed region calls and flush each as an out-of-order frame in one response.
+		if (event.request.method.toUpperCase() === 'POST') return this.render_batch(event);
+		return this.render_region(event);
+	}
 
 	/**
 	 * Batch frame stream (client navigation, single-flight). POST body: a JSON `string[]` of signed

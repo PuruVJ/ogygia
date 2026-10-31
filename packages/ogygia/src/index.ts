@@ -110,6 +110,5 @@ export { isOgygiaPage } from './context.js';
 // Server-seedable via a printed JSON script tag; vanilla door at globalThis.ogygia.shared().
 export { SharedState } from './shared-state.js';
 
-// Flags / rollouts / experiments live on their OWN subpath: `import { flag, decide } from
-// 'ogygia/flag'` (adapters: 'ogygia/flag/openfeature'). Deliberately not re-exported here —
-// the decision surface is its own vocabulary, and the root stays the island vocabulary.
+// Flags / rollouts / experiments live in their OWN package: `import { flag, decide } from
+// '@ogygia/flags'` (adapters: '@ogygia/flags/openfeature'), plus `flags()` in the Vite plugins.

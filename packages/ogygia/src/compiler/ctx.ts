@@ -53,6 +53,9 @@ export interface CompileCtxInit {
 	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
 	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
 	profiler_config: Record<string, unknown> | null;
+	/** Server-half module ids of `ogygia({ plugins })`, in app order — baked into
+	 *  `virtual:ogygia/server-plugins`. Optional (default none). */
+	server_plugins?: readonly string[];
 	/** `ogygia({ freeze })` normalized (or `null` when off) — baked into
 	 *  `virtual:ogygia/freeze-config`; non-null turns the handle's freeze read/write path on. */
 	freeze_config: { ttl: number; default: boolean } | null;
@@ -115,6 +118,7 @@ export class CompileCtx {
 	readonly libDir: string;
 	readonly pkg_scan: PackageScan[];
 	readonly profiler_config: Record<string, unknown> | null;
+	readonly server_plugins: readonly string[];
 	readonly freeze_config: { ttl: number; default: boolean } | null;
 	readonly is_dev: boolean;
 	readonly id_salt: string;
@@ -157,6 +161,7 @@ export class CompileCtx {
 		this.libDir = init.libDir;
 		this.pkg_scan = init.pkg_scan ?? [];
 		this.profiler_config = init.profiler_config;
+		this.server_plugins = init.server_plugins ?? [];
 		this.freeze_config = init.freeze_config;
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;

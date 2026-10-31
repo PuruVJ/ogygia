@@ -58,12 +58,13 @@ const FEDERATION_SPEC = 'ogygia/federation';
 import { island_deps_module } from './link/island-deps.js';
 import { island_shim_source, runtime_shim_source } from './link/entry-shim.js';
 import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.js';
-import { collect_flag_sites } from './flags.js';
+import { collect_flag_sites, FLAGS_SPEC } from './flags.js';
 import { router_css_roots, router_css_module } from './link/router-css.js';
 import {
 	secret_module,
 	sign_module,
 	profiler_config_module,
+	server_plugins_module,
 	freeze_config_module,
 	rate_limit_module,
 	session_cookie_module,
@@ -104,6 +105,7 @@ import {
 	V_ROUTE_CSR,
 	V_REGION_ENDPOINT,
 	V_PROFILER_CONFIG,
+	V_SERVER_PLUGINS,
 	V_PROFILER_MAPS,
 	PROFILER_MAPS_PLACEHOLDER,
 	V_RATE_LIMIT,
@@ -215,8 +217,6 @@ export function app_shim_for(source: string, shims: Record<string, string>): str
 	else if (name.endsWith('.js')) name = name.slice(0, -'.js'.length);
 	return shims['$app/' + name] ?? null;
 }
-/** flag()/experiment() live on the ROOT export — the flag-site sweep only runs on importers. */
-const OGYGIA_ROOT_SPEC = 'ogygia';
 /** Manifest path for a flag site: package-relative for declared surfaces, root-relative else. */
 function flag_site_file(
 	ctx: { pkg_identity(p: string): string | null; root: string },
@@ -563,7 +563,7 @@ export class Compiler {
 					const specs = extract_module_specs(src);
 					if (specs.length) program.module_specs.set(full, specs);
 					if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
-					if (specs.includes(OGYGIA_ROOT_SPEC))
+					if (specs.includes(FLAGS_SPEC))
 						program.flag_sites.push(...collect_flag_sites(src, full, flag_site_file(ctx, full)));
 				}
 				// A `<script module>` transportable class goes in the manifest too (keyed by the
@@ -591,7 +591,7 @@ export class Compiler {
 					const specs = extract_module_specs(src);
 					if (specs.length) program.module_specs.set(full, specs);
 					if (specs.includes(ROUTER_PKG_SPEC)) program.router_modules.add(full);
-					if (specs.includes(OGYGIA_ROOT_SPEC))
+					if (specs.includes(FLAGS_SPEC))
 						program.flag_sites.push(...collect_flag_sites(src, full, flag_site_file(ctx, full)));
 				}
 				// Transportable classes go into the eager-registration manifest so an island
@@ -1258,6 +1258,9 @@ export class Compiler {
 		if (id === RESOLVED(V_PROFILER_CONFIG)) {
 			return profiler_config_module(ssr, ctx.profiler_config);
 		}
+		if (id === RESOLVED(V_SERVER_PLUGINS)) {
+			return server_plugins_module(ssr, ctx.server_plugins);
+		}
 		if (id === RESOLVED(V_PROFILER_MAPS)) {
 			// a placeholder the build fills with the maps (vite/profiler-maps.ts); anything else: none
 			return ssr && ctx.is_build && ctx.profiler_config
@@ -1396,6 +1399,7 @@ export class Compiler {
 		if (source === V_SIGN) return RESOLVED(V_SIGN);
 		if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
 		if (source === V_PROFILER_CONFIG) return RESOLVED(V_PROFILER_CONFIG);
+		if (source === V_SERVER_PLUGINS) return RESOLVED(V_SERVER_PLUGINS);
 		if (source === V_PROFILER_MAPS) return RESOLVED(V_PROFILER_MAPS);
 		if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);
 		if (source === V_SESSION_COOKIE) return RESOLVED(V_SESSION_COOKIE);

@@ -8,6 +8,7 @@ import type { DebarrelOptions } from '../compiler/debarrel/options.js';
 import type { ProfilerOptions } from '../profiler/index.js';
 import type { ContentPluginOptions } from '../content/vite/plugin.js';
 import type { MarkdownOptions } from '../content/markdown/index.js';
+import { PLUGIN_API, type OgygiaPlugin } from '../plugin/index.js';
 
 // ── regexes
 const IDENT_NAME_RE = /^[\w-]+$/;
@@ -234,6 +235,13 @@ export interface OgygiaOptions {
 	profiler?: boolean | ProfilerOptions;
 
 	/**
+	 * The app's plugins, in order — each one a `@ogygia/*` package's `/vite` factory
+	 * (`plugins: [flags()]`). Named here once: the build wires each plugin's server half into
+	 * `ogygia.handle()`, so hooks.server.ts never mentions it.
+	 */
+	plugins?: OgygiaPlugin[];
+
+	/**
 	 * Frozen pages (render-on-write) — the SWITCH + serializable policy, nothing else.
 	 * `true` turns the handle's freeze read/write path on with the tier-1 in-process store: a
 	 * page whose render observed no personalization is stored whole and served as bytes until
@@ -297,6 +305,36 @@ export function assert_no_legacy_options(options: OgygiaOptions): void {
 			'[ogygia] `regions.preload` is gone — there is nothing to choose any more. The page carries each island’s chunk list as data, and the runtime preloads an island’s whole graph when it wakes (after the page has painted), so no island code moves before its wake and none waits on a waterfall after it. Remove the key.'
 		);
 	}
+}
+
+/**
+ * Config-time plugin check: each entry is a plugin value (not the factory itself), written against
+ * this core's `PLUGIN_API`, named once. Returns the server-half module ids in app order.
+ */
+export function validate_plugins(plugins: unknown): string[] {
+	if (plugins === undefined) return [];
+	if (!Array.isArray(plugins)) throw new Error('[ogygia] `plugins` must be an array: `plugins: [flags()]`.');
+	const seen = new Set<string>();
+	const servers: string[] = [];
+	for (const p of plugins as unknown[]) {
+		if (typeof p === 'function')
+			throw new Error('[ogygia] a plugin factory was passed uncalled — write `flags()`, not `flags`.');
+		const plugin = p as Partial<OgygiaPlugin> | null;
+		if (!plugin || typeof plugin !== 'object' || typeof plugin.name !== 'string' || plugin.name === '')
+			throw new Error('[ogygia] each `plugins` entry must be a plugin (the value a `/vite` factory returns).');
+		if (plugin.api !== PLUGIN_API)
+			throw new Error(
+				`[ogygia] plugin \`${plugin.name}\` was written for plugin API ${plugin.api}, this ogygia speaks ${PLUGIN_API} — install matching versions.`
+			);
+		if (seen.has(plugin.name)) throw new Error(`[ogygia] plugin \`${plugin.name}\` is listed twice.`);
+		seen.add(plugin.name);
+		if (plugin.server !== undefined) {
+			if (typeof plugin.server !== 'string' || plugin.server === '')
+				throw new Error(`[ogygia] plugin \`${plugin.name}\`: \`server\` must be a module id.`);
+			servers.push(plugin.server);
+		}
+	}
+	return servers;
 }
 
 const REGION_PRESET_KEYS = new Set([

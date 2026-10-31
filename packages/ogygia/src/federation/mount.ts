@@ -6,10 +6,10 @@
  * it just takes a `Peer` instead of a `client()`.
  */
 import { page } from '../router/define.js';
-import type { PageDef } from '../router/define.js';
+import type { PageDef, ComponentPick } from '../router/define.js';
 import type { Ctx } from '../router/ctx.js';
 import { redirect } from '../router/respond.js';
-import { assigned_buckets, type ComponentPick } from '../flags.js';
+import { assignments as assigned_buckets } from '../plugin/facts.js';
 import { child_traceparent, type Claims, type FragmentDocument } from './wire.js';
 import type { Peer } from './types.js';
 

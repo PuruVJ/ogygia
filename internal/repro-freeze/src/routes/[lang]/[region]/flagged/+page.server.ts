@@ -1,4 +1,4 @@
-import { flag } from 'ogygia/flag';
+import { flag } from '@ogygia/flags';
 import { count_render } from '$lib/server/state.js';
 
 // An A/B'd page: the flag READ during the render personalizes it — the freeze seam must

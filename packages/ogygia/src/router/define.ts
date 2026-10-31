@@ -7,12 +7,19 @@
  * the Kit dictionary live in internal/notes/router-v2.md.
  */
 import type { Component } from 'svelte';
-import type { ComponentPick } from '../flags.js';
 import type { Ctx } from './ctx.js';
 import type { Params } from './view.js';
 import type { StandardSchemaV1 } from './view.js';
 
 import type { InferOutput } from './view.js';
+
+/** A per-request component chooser for `page()` — what `flag.pick({ … })` returns
+ *  (`page(hero.pick({ control: A, bold: B }))`). Branded, not a bare function, because Svelte 5
+ *  components ARE functions. Structural: the flags package builds the same shape without importing
+ *  the router. */
+export interface ComponentPick {
+	__ogpick: (c: { request: Request; url: URL }) => unknown;
+}
 
 /** TYPE helper for a pulled-out or inline load — annotate a bare function so its `c` (and `c.params`)
  *  are typed without the `load()` value wrapper: `const l: Load<'/docs/[slug]'> = async (c) => …`.

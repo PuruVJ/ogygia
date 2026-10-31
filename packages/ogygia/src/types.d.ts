@@ -157,6 +157,10 @@ declare module 'virtual:ogygia/profiler-config' {
 	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
 	export const profilerConfig: Record<string, unknown> | null;
 }
+declare module 'virtual:ogygia/server-plugins' {
+	/** The server halves of `ogygia({ plugins })`, in app order. SERVER only (client: empty). */
+	export const plugins: readonly import('./plugin/index.js').ServerPlugin<unknown>[];
+}
 declare module 'virtual:ogygia/profiler-maps' {
 	/** The server build's module map and chunk sourcemaps as one JSON string (filled after the build),
 	 *  or null outside a profiler-on server build. Loaded lazily by the profiler only. */

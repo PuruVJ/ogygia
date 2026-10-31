@@ -27,6 +27,9 @@ export const V_SECRET = 'virtual:ogygia/secret';
 export const V_SIGN = 'virtual:ogygia/sign';
 export const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
 export const V_PROFILER_CONFIG = 'virtual:ogygia/profiler-config';
+/** The app's plugins' SERVER halves (`ogygia({ plugins })`), statically imported in plugin order.
+ *  SERVER only; the client gets an empty list. */
+export const V_SERVER_PLUGINS = 'virtual:ogygia/server-plugins';
 /** THE PROFILER'S MAPS, carried as code: the server build's module map and every server chunk's
  *  sourcemap, written into this module's chunk after the build (a file read by path does not survive
  *  an adapter that traces imports or re-bundles; an import does). Imported only by the profiler, only
