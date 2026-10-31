@@ -29,7 +29,7 @@ type CmsCategory = { id: string; name: string; position: number };
 /** The category table, fetched once (labels + positions for the nav groups). */
 const categories_once = (() => {
 	let p: Promise<CmsCategory[]> | null = null;
-	return () => (p ??= fetch(`${CMS}/categories`).then((r) => r.json()));
+	return (): Promise<CmsCategory[]> => (p ??= fetch(`${CMS}/categories`).then((r) => r.json()));
 })();
 
 const frontmatter = (row: CmsRow) => ({

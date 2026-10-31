@@ -36,7 +36,8 @@ const base_ctx = {
 	importKeys: {},
 	idSalt: '',
 	clientBindingStub: 'virtual:ogygia/client-binding-stub',
-	routeCsr: undefined
+	routeCsr: undefined,
+	linkVirtualIsland: true
 };
 
 type Island = {

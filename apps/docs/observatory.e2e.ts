@@ -28,10 +28,6 @@ async function until(page, fn, arg, ms = 30000, step = 250) {
 	}
 	return v;
 }
-const previewText = (page) =>
-	page.evaluate(() =>
-		(document.querySelector('[data-obs-preview]')?.textContent || '').replace(/\s+/g, ' ').trim()
-	);
 const setSrc = (page, src) => page.evaluate((s) => window.__OBS_SOURCE.set(s), src);
 const S = (s) => s.replace(/<SCRIPT>/g, '<scr' + 'ipt>').replace(/<\/SCRIPT>/g, '</scr' + 'ipt>');
 
@@ -192,7 +188,7 @@ async function main() {
 	await until(page, () => document.querySelectorAll('[data-obs-file]').length > 0);
 	await page.evaluate(() => {
 		const c = [...document.querySelectorAll('[data-obs-file]')].find((f) =>
-			/\.svelte$/.test(f.getAttribute('data-obs-file') || '')
+			(f.getAttribute('data-obs-file') || '').endsWith('.svelte')
 		);
 		c?.querySelector('.fopen')?.click();
 	});
@@ -511,8 +507,8 @@ async function main() {
 		'vite.config notes surface build-time + unknown + illegal options',
 		!!cfgNotes &&
 			cfgNotes.some((r) => /^info\|.*router.*doesn.t affect/.test(r)) &&
-			cfgNotes.some((r) => /^warn\|markdown\.flurb/.test(r)) &&
-			cfgNotes.some((r) => /^warn\|markdown\.containers must be true or false/.test(r)),
+			cfgNotes.some((r) => r.startsWith('warn|markdown.flurb')) &&
+			cfgNotes.some((r) => r.startsWith('warn|markdown.containers must be true or false')),
 		JSON.stringify(cfgNotes)
 	);
 

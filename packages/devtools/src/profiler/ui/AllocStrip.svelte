@@ -12,18 +12,18 @@
 
 	const W = 960;
 	const H = 90;
-	const s = alloc.samples;
-	const t_max = Math.max(s[s.length - 1]?.t ?? 1, 1);
-	const mbs = s.map((x) => x.mb);
-	const lo = Math.min(...mbs);
-	const hi = Math.max(...mbs);
-	const range = Math.max(hi - lo, 1);
+	const s = $derived(alloc.samples);
+	const t_max = $derived(Math.max(s[s.length - 1]?.t ?? 1, 1));
+	const mbs = $derived(s.map((x) => x.mb));
+	const lo = $derived(Math.min(...mbs));
+	const hi = $derived(Math.max(...mbs));
+	const range = $derived(Math.max(hi - lo, 1));
 	const x_of = (t: number) => (t / t_max) * W;
 	const y_of = (mb: number) => H - 6 - ((mb - lo) / range) * (H - 14);
-	const path = s
-		.map((p, i) => `${i ? 'L' : 'M'}${x_of(p.t).toFixed(1)},${y_of(p.mb).toFixed(1)}`)
-		.join(' ');
-	const win = alloc.window ?? null;
+	const path = $derived(
+		s.map((p, i) => `${i ? 'L' : 'M'}${x_of(p.t).toFixed(1)},${y_of(p.mb).toFixed(1)}`).join(' ')
+	);
+	const win = $derived(alloc.window ?? null);
 	const color = (c: string) => CATEGORY_COLOR[c as keyof typeof CATEGORY_COLOR] ?? '#6b7280';
 	const on_window = (t: number) =>
 		win ? t >= win.offset_ms && t <= win.offset_ms + win.ms : false;

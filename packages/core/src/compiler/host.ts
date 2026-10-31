@@ -13,8 +13,6 @@
  */
 import { createRequire } from 'node:module';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 /** Directory entry (a `readdirSync(dir, { withFileTypes: true })` element). */
 export interface HostDirent {
 	name: string;
@@ -31,15 +29,17 @@ export interface HostStats {
 /** The filesystem surface the compiler uses. Reads must be real (the driver resolves the module graph
  *  through them); writes are the build's on-disk emits — a browser host keeps them in memory or no-ops. */
 export interface HostFs {
-	readFileSync(p: string, enc?: any): string;
+	/** `enc`: the text encoding (the compiler always reads `'utf8'`) */
+	readFileSync(p: string, enc?: string): string;
 	existsSync(p: string): boolean;
-	/** `string[]` normally, `HostDirent[]` with `{ withFileTypes: true }` — hence `any[]`. */
-	readdirSync(p: string, opts?: any): any[];
+	/** names (`string`s) normally, {@link HostDirent}s with `{ withFileTypes: true }`: read entries
+	 *  through {@link dir_entries}, which says which */
+	readdirSync(p: string, opts?: { withFileTypes?: boolean }): unknown[];
 	statSync(p: string): HostStats;
-	globSync(pattern: string | string[], opts?: any): string[];
+	globSync(pattern: string | string[], opts?: Record<string, unknown>): string[];
 	writeFileSync(p: string, data: string): void;
-	mkdirSync(p: string, opts?: any): void;
-	rmSync(p: string, opts?: any): void;
+	mkdirSync(p: string, opts?: { recursive?: boolean }): void;
+	rmSync(p: string, opts?: { recursive?: boolean; force?: boolean }): void;
 	renameSync(from: string, to: string): void;
 }
 /** The `path` surface (node's `path` and `path`-browserify both satisfy this). */
@@ -91,11 +91,16 @@ export function set_host(h?: CompilerHost): void {
 
 /** The current host's `fs` — read `fs.readFileSync(…)` exactly as with `node:fs`. */
 export const fs: HostFs = new Proxy({} as HostFs, {
-	get: (_t, key) => (host().fs as any)[key]
+	get: (_t, key) => host().fs[key as keyof HostFs]
 });
+/** The entries of `dir` on the current host (`readdirSync(dir, { withFileTypes: true })`). */
+export function dir_entries(dir: string): HostDirent[] {
+	// a host answers `withFileTypes` with entries: node's `Dirent`s, or a browser host's look-alikes
+	return fs.readdirSync(dir, { withFileTypes: true }) as HostDirent[];
+}
 /** The current host's `path` — `path.join(…)` / `path.sep` exactly as with `node:path`. */
 export const path: HostPath = new Proxy({} as HostPath, {
-	get: (_t, key) => (host().path as any)[key]
+	get: (_t, key) => host().path[key as keyof HostPath]
 });
 /** The current host's `createHash` — `createHash('md5').update(s).digest('hex')`. */
 export function createHash(algo: string): HostHasher {

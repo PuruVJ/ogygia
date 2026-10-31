@@ -31,7 +31,7 @@ const record = () =>
 
 describe('wake island — the wrapper is leg-split, the client leg is lazy', () => {
 	it('mints a client wrapper that imports the LAZY module, never the component or the entry', () => {
-		const r = record() as Record<string, string>;
+		const r = record();
 		expect(r.lazyPath).toBe(lazyEntryVirtualId('abc123'));
 		expect(r.wrapperClientSource).toContain(
 			`import __OgygiaEntry, { load as __OgygiaLoad } from "virtual:ogygia/lazy/abc123.js";`

@@ -20,7 +20,7 @@ let null_group: PreprocessorGroup | null = null;
 
 function group_for(options: MarkdownOptions | null | undefined): PreprocessorGroup {
 	// `region: false` — we want the compiled module back, then run the emit ourselves for `{ html }`.
-	const build = () => ogygiaPreprocess({ ...(options ?? {}), region: false }) as PreprocessorGroup;
+	const build = () => ogygiaPreprocess({ ...options, region: false }) as PreprocessorGroup;
 	if (!options) return (null_group ??= build());
 	let g = groups.get(options as object);
 	if (!g) groups.set(options as object, (g = build()));

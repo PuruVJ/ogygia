@@ -76,7 +76,7 @@ const SCHEDULES = [
 ];
 
 /** One synthetic host: DISTINCT-pool imports w/ varied schedules + usages (dedup + each-loops). */
-function makeHost(i: number): string {
+function makeHost(): string {
 	const imports: string[] = [`const rows = Array.from({length: 8}, (_, k) => k);`];
 	const usages: string[] = [];
 	const n = ISLANDS;
@@ -99,7 +99,7 @@ console.log(
 
 // ── A. TRANSFORM at scale ────────────────────────────────────────────────────
 const hosts: string[] = [];
-for (let i = 0; i < HOSTS; i++) hosts.push(makeHost(i));
+for (let i = 0; i < HOSTS; i++) hosts.push(makeHost());
 
 const idsSeen = new Set<string>();
 let islandCount = 0;

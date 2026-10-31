@@ -7,6 +7,6 @@
 	let { children } = $props();
 </script>
 
-<DocsShell {site} base="" title="cms playground">
+<DocsShell site={cms} base="" title="cms playground">
 	{@render children()}
 </DocsShell>

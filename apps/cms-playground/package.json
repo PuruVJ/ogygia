@@ -7,7 +7,7 @@
 		"dev": "vite dev --port 5281 --strictPort",
 		"build": "vite build",
 		"preview": "vite preview",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
 	},
 	"dependencies": {
 		"bits-ui": "catalog:",

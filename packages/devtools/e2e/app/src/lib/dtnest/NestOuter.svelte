@@ -6,6 +6,7 @@
 		name,
 		children
 	}: { open?: boolean; name: string; children?: Snippet } = $props();
+	// svelte-ignore state_referenced_locally
 	let open = $state(start);
 </script>
 

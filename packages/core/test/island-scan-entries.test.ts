@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
+import { partial_ctx_init } from './_compile-ctx.ts';
 
 let root = '';
 
@@ -57,24 +58,25 @@ function make_compiler() {
 	};
 	const compiler = new Compiler(program, profiler);
 	compiler.configure(
-		new CompileCtx({
-			root,
-			base: '/',
-			libDir: path.join(root, 'src/lib'),
-			is_dev: true,
-			id_salt: '',
-			visibleMargin: '0px',
-			presets: {},
-			import_keys: normalize_import_keys(undefined),
-			resolve_alias: [],
-			markdown_config: null,
-			pkg_root: '/nowhere/ogygia',
-			app_shims: {
-				'$app/state': '/nowhere/ogygia/shims/app-state.svelte.js',
-				'$app/stores': '/nowhere/ogygia/shims/app-stores.js',
-				'$app/navigation': '/nowhere/ogygia/shims/app-navigation.js'
-			}
-		})
+		new CompileCtx(
+			partial_ctx_init({
+				root,
+				base: '/',
+				libDir: path.join(root, 'src/lib'),
+				is_dev: true,
+				id_salt: '',
+				visibleMargin: '0px',
+				presets: {},
+				import_keys: normalize_import_keys(undefined),
+				resolve_alias: [],
+				pkg_root: '/nowhere/ogygia',
+				app_shims: {
+					'$app/state': '/nowhere/ogygia/shims/app-state.svelte.js',
+					'$app/stores': '/nowhere/ogygia/shims/app-stores.js',
+					'$app/navigation': '/nowhere/ogygia/shims/app-navigation.js'
+				}
+			})
+		)
 	);
 	return { compiler, program };
 }

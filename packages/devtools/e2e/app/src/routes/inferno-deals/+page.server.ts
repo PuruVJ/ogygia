@@ -10,7 +10,7 @@ import type { PageServerLoad } from './$types';
 export const prerender = false;
 
 export const load: PageServerLoad = async () => {
-	const deals = [...PRODUCTS.slice(0, 400)].sort(byName).slice(0, 200);
+	const deals = PRODUCTS.slice(0, 400).sort(byName).slice(0, 200);
 	return {
 		title: tr('ui.key.7'),
 		deals: deals.map((p, i) => ({

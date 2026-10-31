@@ -49,7 +49,6 @@ const deferred = region({
 	when: 'visible',
 	endpoint: '/\u{1F3DD}️?call=greet&v=2'
 });
-const load = region({ wake: 'load', entry: './_app/immutable/nested/x.js' });
 
 // A region with SSR children, so region_is_vacant / region_ssr_truncated do real subtree work.
 const populated = region({ wake: 'load', entry: '/_app/immutable/y.js' });
@@ -73,5 +72,7 @@ export const cases: Record<string, () => unknown> = {
 	devalue_parse_complex: () => parse(props_complex)
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).__opscases = cases;
+/** The page's window once this bundle has run: every case under its name (ops.ts reads it). */
+export type OpsWindow = Window & { __opscases: Record<string, () => unknown> };
+
+(window as unknown as OpsWindow).__opscases = cases;

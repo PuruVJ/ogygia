@@ -246,8 +246,7 @@
 		"test": "vitest run",
 		"test:node": "vitest run --project node",
 		"test:browser": "vitest run --project browser",
-		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json && vitest run && pnpm run lint",
+		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json --fail-on-warnings && tsc -p test && vitest run",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
 		"verify:package": "node scripts/verify-package.ts"
 	},
@@ -265,7 +264,6 @@
 		"@types/node": "catalog:",
 		"@vitest/browser": "4.1.12",
 		"@vitest/browser-playwright": "4.1.12",
-		"oxlint": "^1.77.0",
 		"rolldown": "catalog:",
 		"sass-embedded": "^1.104.1",
 		"svelte": "catalog:",

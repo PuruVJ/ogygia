@@ -6,6 +6,7 @@
 	import InnerWidget from './InnerWidget.svelte' with { wake: 'load' };
 
 	let { start = 0 }: { start?: number } = $props();
+	// svelte-ignore state_referenced_locally
 	const held = region(InnerWidget, { start, label: 'held' });
 </script>
 

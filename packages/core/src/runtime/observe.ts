@@ -31,7 +31,8 @@ function shared(rootMargin: string): Shared {
 				for (const e of entries) {
 					last.set(e.target, e.isIntersecting);
 					const set = callbacks.get(e.target);
-					if (set) for (const cb of [...set]) cb(e.isIntersecting);
+					// (a copy: a callback may unobserve while it runs)
+					if (set) for (const cb of Array.from(set)) cb(e.isIntersecting);
 				}
 			},
 			{ rootMargin }

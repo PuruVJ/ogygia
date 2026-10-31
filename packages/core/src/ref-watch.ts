@@ -51,7 +51,8 @@ export function notify(id: string, live: unknown): void {
 function notify_now(id: string, live: unknown): void {
 	const set = watchers().get(id);
 	if (set === undefined) return;
-	for (const cb of [...set]) {
+	// (a copy: a watcher may unwatch, or add one, while it runs)
+	for (const cb of Array.from(set)) {
 		try {
 			cb(live);
 		} catch {

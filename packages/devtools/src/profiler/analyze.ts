@@ -1289,10 +1289,6 @@ export function sourcemap_resolver(
 // ---------------------------------------------------------------------------
 // core analysis
 
-function frame_key(f: CallFrame): string {
-	return `${f.functionName} ${f.url} ${f.lineNumber}`;
-}
-
 function display_name(f: CallFrame): string {
 	return f.functionName || '(anonymous)';
 }
@@ -2037,7 +2033,10 @@ export function analyze(
 		let best_us = 0;
 		for (const [line, us] of m) {
 			sum += us;
-			if (us > best_us) ((best_us = us), (best = line));
+			if (us > best_us) {
+				best_us = us;
+				best = line;
+			}
 		}
 		if (best > 0 && best_us >= sum / 2) stat.line = best;
 	}
@@ -2183,8 +2182,10 @@ export function analyze(
 		let at = -1;
 		while (lo <= hi) {
 			const mid = (lo + hi) >> 1;
-			if (list[mid].t <= o.t) ((at = mid), (lo = mid + 1));
-			else hi = mid - 1;
+			if (list[mid].t <= o.t) {
+				at = mid;
+				lo = mid + 1;
+			} else hi = mid - 1;
 		}
 		const e = list[at >= 0 ? at : 0];
 		let m = async_us.get(e.app);
@@ -2273,7 +2274,7 @@ export function analyze(
 	const runs = timeline_input?.runs;
 	// the profiler's own CPU INSIDE each run (its wrappers, its reads): what a run's wall time
 	// carries that the app would not have paid — the report takes exactly this out, per run
-	const overhead_run_us: number[] = runs ? new Array(runs.length).fill(0) : [];
+	const overhead_run_us: number[] = runs ? Array.from({ length: runs.length }, () => 0) : [];
 	// PER-RUN CPU BY OWNER: each drill-down CPU row's time in every run, so a row can say how much it
 	// moves from one render to the next (its noise). Owners as the timeline names them
 	// (`owner_of_stack`), grouped as the drill groups them: a package, `node core`, else the owner.
@@ -2341,12 +2342,12 @@ export function analyze(
 			const owner = owner_group_of(samples[i]);
 			if (owner) {
 				let arr = owner_run_us.get(owner);
-				if (!arr) owner_run_us.set(owner, (arr = new Array(runs.length).fill(0)));
+				if (!arr) owner_run_us.set(owner, (arr = Array.from({ length: runs.length }, () => 0)));
 				arr[ri] += d;
 			}
 			for (const key of comps_of(samples[i])) {
 				let arr = run_us.get(key);
-				if (!arr) run_us.set(key, (arr = new Array(runs.length).fill(0)));
+				if (!arr) run_us.set(key, (arr = Array.from({ length: runs.length }, () => 0)));
 				arr[ri] += d;
 			}
 		}

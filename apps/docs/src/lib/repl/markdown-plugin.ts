@@ -8,7 +8,13 @@
  * must be installed first (region ids / fence keys hash through the compiler seam).
  */
 import { compile } from 'svelte/compiler';
-import { ogygiaPreprocess, diff_markers, inline_markers } from '@ogygia/content/markdown';
+import type { Plugin } from '@rolldown/browser';
+import {
+	ogygiaPreprocess,
+	diff_markers,
+	inline_markers,
+	type MarkdownOptions
+} from '@ogygia/content/markdown';
 import type { ReplMarkdownConfig } from './repl-config.ts';
 
 export const MD_MODULE = /\.(md|svx)(\?|$)/;
@@ -51,8 +57,9 @@ export function configure_content(md: ReplMarkdownConfig | null): void {
 	const cfg: ReplMarkdownConfig = md ? { ...md } : {};
 	// Default the two diff transformers on when the config didn't set `code.transformers` at all.
 	if (!cfg.code?.transformers?.length) cfg.code = { transformers: default_transformers() };
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	shared = ogygiaPreprocess(cfg as any);
+	// The sanitized subset, handed over as-is. Its `themes` may name only one side, which the
+	// MarkdownOptions pair type does not allow; the cast keeps that hand-off unchanged.
+	shared = ogygiaPreprocess(cfg as MarkdownOptions);
 }
 
 export function content_preprocessor(): ReturnType<typeof ogygiaPreprocess> {
@@ -81,8 +88,7 @@ export async function md_to_svelte_islands(content: string, filename: string): P
 	return markup_to_svelte(content, filename);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RolldownPlugin = any;
+type RolldownPlugin = Plugin;
 
 export interface MarkdownPluginOptions {
 	/** `'client'` (mount) or `'server'` (SSR). Defaults to client. */
@@ -104,7 +110,7 @@ export function markdownPlugin(opts: MarkdownPluginOptions = {}): RolldownPlugin
 				generate,
 				dev: false,
 				css: 'injected'
-			}) as { js: { code: string; map: unknown } };
+			});
 			return { code: js.code, map: js.map ?? null };
 		}
 	};

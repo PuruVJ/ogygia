@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { byte_strip, arrival_ms } from '../src/profiler/byte-strip.ts';
-import { parse_visit, one_clock, merge_visits, type Visit } from '../src/profiler/visit.ts';
+import { parse_visit, one_clock, merge_visits } from '../src/profiler/visit.ts';
 import { build_river, load_return_keys, seed_key_bytes } from '../src/profiler/river.ts';
 import { html_diff, tokenize_html, shift_boxes } from '../src/profiler/dom-diff.ts';
 import {
@@ -16,7 +16,13 @@ import {
 	hot_for_range,
 	type SinkRow
 } from '../src/profiler/sink.ts';
-import { heap_sites, slice_delta, attribute_gc, gc_kind } from '../src/profiler/gc.ts';
+import {
+	heap_sites,
+	slice_delta,
+	attribute_gc,
+	gc_kind,
+	type AllocSite
+} from '../src/profiler/gc.ts';
 import { analyze } from '../src/profiler/analyze.ts';
 import { sync_io, memo_candidates, simulate_awaits } from '../src/profiler/insights.ts';
 
@@ -550,14 +556,12 @@ describe('who caused the GC', () => {
 	});
 
 	it('heap_sites keys each allocating stack, names the nearest component; slice_delta is the growth between reads', () => {
-		const dict = {};
+		const dict: Record<string, AllocSite> = {};
 		const s1 = heap_sites(tree(1000, 200, 50), dict);
 		const s2 = heap_sites(tree(5000, 200, 150), dict);
 		expect(s1.size).toBe(3);
 		const d = slice_delta(s1, s2);
-		const by_name = Object.fromEntries(
-			Object.entries(d).map(([k, v]) => [dict[k as keyof typeof dict].name, v])
-		);
+		const by_name = Object.fromEntries(Object.entries(d).map(([k, v]) => [dict[k].name, v]));
 		expect(by_name).toEqual({ structuredClone: 4000, set_text: 100 });
 		const clone = Object.values(dict).find((x) => x.name === 'structuredClone')!;
 		expect(clone.component).toBe('ProductCard');

@@ -700,7 +700,8 @@ export function key_sources(source: string): Map<string, number[]> | null {
 	// a name declared INSIDE another's statement (`const res` in a callback) is that statement's local:
 	// its lines are already there, and another local of the same name elsewhere is not a dependency
 	for (const n of names.values()) {
-		for (const d of [...n.deps]) {
+		// (a copy: the loop deletes from `n.deps`)
+		for (const d of Array.from(n.deps)) {
 			const dn = names.get(d);
 			if (dn?.decl.some((set) => [...set].every((l) => n.lines.has(l)))) n.deps.delete(d);
 		}
@@ -795,8 +796,10 @@ export function key_sources(source: string): Map<string, number[]> | null {
 		for (let j = i; j < T.length; j++) {
 			span.push(j + 1);
 			for (const x of T[j]) {
-				if (x === '{') (depth++, (opened = true));
-				else if (x === '}') depth--;
+				if (x === '{') {
+					depth++;
+					opened = true;
+				} else if (x === '}') depth--;
 			}
 			if ((opened && depth <= 0) || (!opened && j === i)) break;
 		}
@@ -825,7 +828,11 @@ export function key_sources(source: string): Map<string, number[]> | null {
 			for (const h of calls_on(todo.pop()!)) {
 				if (took.has(h)) continue;
 				took.add(h);
-				for (const l of helpers.get(h)!) if (!lines_of.has(l)) (lines_of.add(l), todo.push(l));
+				for (const l of helpers.get(h)!)
+					if (!lines_of.has(l)) {
+						lines_of.add(l);
+						todo.push(l);
+					}
 			}
 		}
 		out.set(

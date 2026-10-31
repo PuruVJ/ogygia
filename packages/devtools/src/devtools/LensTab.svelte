@@ -22,7 +22,7 @@
 	const kb = (n) => (n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB');
 
 	const regions = $derived.by(() => {
-		tick; // refresh with the panel tick
+		void tick; // refresh with the panel tick
 		return all_regions().map((r) => ({
 			r,
 			name: region_name(r.entry),

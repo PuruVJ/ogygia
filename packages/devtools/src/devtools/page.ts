@@ -954,7 +954,7 @@ export function read_page(): PageView | null {
 	// (whole tab: what an island of any earlier page left running is still running on this one)
 	const { regs, islands: seen } = leftover_state();
 	const leftovers = owned_leftovers(regs, seen, region_name, performance.now()).map(
-		({ entry: _, ...l }) => l
+		({ entry: _entry, ...l }) => l
 	);
 	// (the listeners holding scrolling, still attached, by the island that added each)
 	const scroll_blockers = owned_scroll_listeners(scroll_listeners(), seen, region_name);

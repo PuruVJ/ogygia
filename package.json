@@ -16,7 +16,7 @@
 		"check:docs": "turbo run check --filter=docs",
 		"test:e2e": "turbo run e2e --concurrency=1",
 		"test:e2e:fast": "E2E_NO_BUILD=1 turbo run e2e --concurrency=1",
-		"check": "turbo run check --filter=./packages/* --filter=./packages/*/e2e/* --filter=palaestra --filter=docs",
+		"check": "turbo run check --filter=./packages/* --filter=./packages/*/e2e/* --filter=./apps/*",
 		"test:adapters": "pnpm --filter palaestra e2e adapters",
 		"demo:esi": "node packages/freeze/e2e/demo-esi.ts",
 		"bundle-size": "node apps/palaestra/e2e/bundle-size.ts",
@@ -29,7 +29,8 @@
 		"ci:version": "changeset version",
 		"ci:release": "changeset publish",
 		"format": "oxfmt .",
-		"format:check": "oxfmt --check ."
+		"format:check": "oxfmt --check .",
+		"lint": "oxlint"
 	},
 	"devDependencies": {
 		"@changesets/changelog-github": "^1.0.1",
@@ -38,6 +39,7 @@
 		"@types/node": "catalog:",
 		"axe-core": "catalog:",
 		"oxfmt": "^0.75.0",
+		"oxlint": "^1.90.0",
 		"playwright": "catalog:",
 		"rolldown": "catalog:",
 		"turbo": "^2.11.10",

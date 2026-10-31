@@ -3,7 +3,13 @@
 // or from the palaestra's fixtures. The contract: literal keys → the set; anything the analysis
 // cannot pin → 'all'; no page import → null.
 import { describe, expect, it } from 'vitest';
-import { page_data_keys, merge_page_keys } from '../src/compiler/link/page-keys.ts';
+import {
+	page_data_keys,
+	merge_page_keys,
+	type AllReason,
+	type PageKeys,
+	type PendingCall
+} from '../src/compiler/link/page-keys.ts';
 
 const ts = (code: string) => {
 	const r = page_data_keys(code, '/app/x.ts', 'script');
@@ -433,9 +439,9 @@ describe('follow_pending_page_calls', () => {
 	};
 	const read = (f: string) => files[f] ?? null;
 	const program = () => ({
-		page_keys: new Map<string, any>(),
-		page_key_reasons: new Map<string, any>(),
-		page_pending: new Map<string, any>()
+		page_keys: new Map<string, PageKeys>(),
+		page_key_reasons: new Map<string, AllReason>(),
+		page_pending: new Map<string, PendingCall[]>()
 	});
 
 	it('follows getParams(page) through a barrel to its url-only reader; url(page) adds its key', async () => {

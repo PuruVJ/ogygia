@@ -69,7 +69,7 @@ describe("ogygia injected imports resolve to ogygia's own files, without this.re
 			ctx_that_forbids_resolve() as never,
 			'ogygia/internal',
 			SUBPKG_HOST,
-			{ ssr: true }
+			{ isEntry: false, ssr: true }
 		);
 		expect(res).toBe(INTERNAL);
 	});
@@ -80,7 +80,7 @@ describe("ogygia injected imports resolve to ogygia's own files, without this.re
 			ctx_that_forbids_resolve() as never,
 			'ogygia/internal/server',
 			SUBPKG_HOST,
-			{ ssr: true }
+			{ isEntry: false, ssr: true }
 		);
 		expect(res).toBe(SERVER);
 	});
@@ -91,7 +91,7 @@ describe("ogygia injected imports resolve to ogygia's own files, without this.re
 			ctx_that_forbids_resolve() as never,
 			'ogygia/internal',
 			SUBPKG_HOST,
-			{ ssr: true }
+			{ isEntry: false, ssr: true }
 		);
 		expect(res).toBe(INTERNAL);
 	});
@@ -102,7 +102,7 @@ describe("ogygia injected imports resolve to ogygia's own files, without this.re
 			ctx_that_forbids_resolve() as never,
 			'ogygia/internal',
 			'/nonexistent-ogygia-consumer-app/src/routes/+layout.svelte',
-			{ ssr: false }
+			{ isEntry: false, ssr: false }
 		);
 		expect(res).toBe(INTERNAL);
 	});

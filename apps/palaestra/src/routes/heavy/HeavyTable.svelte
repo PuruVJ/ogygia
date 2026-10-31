@@ -4,6 +4,8 @@
 	// Renders `rows` HeavyRow children. Its own self-time is small; its TOTAL time (in the
 	// profiler) folds in every HeavyRow, so this shows how "total vs self" localizes cost.
 	let { rows = 800, seed = 12345 }: { rows?: number; seed?: number } = $props();
+	// renders once, on the server: a one-time read of the props is the point
+	// svelte-ignore state_referenced_locally
 	const list = Array.from({ length: rows }, (_, i) => i);
 </script>
 

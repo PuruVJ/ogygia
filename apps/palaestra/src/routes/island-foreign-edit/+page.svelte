@@ -19,6 +19,8 @@
 	import VisibleCounter from '$lib/SpacedCounter.svelte' with { wake: 'visible' };
 
 	function define_foreign_strip() {
+		// the class must live inside: the function ships as its own source text (`toString()` below)
+		// svelte-ignore perf_avoid_nested_class
 		class ForeignStrip extends HTMLElement {
 			connectedCallback() {
 				const region = this.closest('ogygia-region');
@@ -27,7 +29,7 @@
 				const doomed = [];
 				for (let n = walker.nextNode(); n; n = walker.nextNode())
 					if (!/\S/.test(n.textContent || '')) doomed.push(n);
-				for (const n of doomed) n.parentNode && n.parentNode.removeChild(n);
+				for (const n of doomed) if (n.parentNode) n.parentNode.removeChild(n);
 				// the stray comment goes LAST: a leading one would break the walk at its first step,
 				// before it can do the silent damage the counter's shape is there to provoke
 				region.appendChild(document.createComment('foreign-tool'));
@@ -48,7 +50,9 @@
 		}
 		customElements.define('foreign-strip', ForeignStrip);
 	}
-	const foreign_tool = `<script type="module">(${define_foreign_strip.toString()})();<\/script>`;
+	// (the closing tag is split so it does not end this component's own <script> block)
+	const foreign_tool =
+		`<script type="module">(${define_foreign_strip.toString()})();</` + 'script>';
 </script>
 
 <svelte:head>{@html foreign_tool}</svelte:head>

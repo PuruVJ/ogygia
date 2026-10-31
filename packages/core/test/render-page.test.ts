@@ -114,7 +114,10 @@ describe('look_up_page: Kit’s data answer, decoded like its client does', () =
 
 	it('decodes the app’s transport types', async () => {
 		class Money {
-			constructor(public cents: number) {}
+			cents: number;
+			constructor(cents: number) {
+				this.cents = cents;
+			}
 		}
 		const flat = JSON.parse(
 			devalue.stringify(
@@ -148,7 +151,8 @@ describe('look_up_page: Kit’s data answer, decoded like its client does', () =
 			{}
 		);
 		expect('data' in facts).toBe(true);
-		const data = (facts as { data: { slow: Promise<unknown>; n: number } }).data;
+		if (!('data' in facts)) return;
+		const data = facts.data as { slow: Promise<unknown>; n: number };
 		expect(data.n).toBe(7);
 		push(
 			JSON.stringify({ type: 'chunk', id: 1, data: JSON.parse(devalue.stringify('later')) }) + '\n'

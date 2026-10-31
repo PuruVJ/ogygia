@@ -2,7 +2,8 @@
 	// PRELOADS for the devtools answer key. The planted one has no `crossorigin`: a `fetch()` cannot
 	// use it, so the browser downloads the file again. The decoy's `crossorigin="anonymous"` matches
 	// a same-origin `fetch()` and is used. The devtools must name planted.json, never decoy.json.
-	const fetch_both = `<script>fetch('/dt-preload/data/planted').then((r) => r.json());fetch('/dt-preload/data/decoy').then((r) => r.json());<\/script>`;
+	// (`\x2f` is `/`: a literal closing script tag would end this script block)
+	const fetch_both = `<script>fetch('/dt-preload/data/planted').then((r) => r.json());fetch('/dt-preload/data/decoy').then((r) => r.json());<\x2fscript>`;
 </script>
 
 <svelte:head>

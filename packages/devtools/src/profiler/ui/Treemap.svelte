@@ -17,6 +17,8 @@
 
 	const H = 440;
 	let canvas: HTMLCanvasElement;
+	// the zoom stack starts at the root it was given; clicks own it after
+	// svelte-ignore state_referenced_locally
 	let stack = $state<Leaf[]>([hierarchy]);
 	let resizeTick = $state(0);
 	let tip = $state<{ node: Leaf; x: number; y: number } | null>(null);
@@ -182,8 +184,8 @@
 
 	// redraw when the zoom stack changes or the window resizes; the effect reads both so it re-runs.
 	$effect(() => {
-		stack;
-		resizeTick;
+		void stack;
+		void resizeTick;
 		draw();
 	});
 	$effect(() => {

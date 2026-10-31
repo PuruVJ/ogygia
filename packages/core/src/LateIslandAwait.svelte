@@ -9,6 +9,8 @@
 	/** @type {{ load: () => Promise<import('svelte').Component>, props: Record<string, unknown>, children?: import('svelte').Snippet }} */
 	let { load, props, children } = $props();
 	// (a failed load renders nothing)
+	// one load per island, read once on purpose (as in LateIsland.svelte)
+	// svelte-ignore state_referenced_locally
 	const Component = await load().catch(() => undefined);
 </script>
 

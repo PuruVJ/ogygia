@@ -19,6 +19,8 @@ const base = (over: Partial<SessionData> = {}): SessionData => ({
 	cpu: null,
 	cpu_off: 'unsupported',
 	page: '/x',
+	pages: [],
+	names: {},
 	...over
 });
 const names = (fp: string) => ({ a: 'Slow', b: 'Late', c: 'Churn' })[fp as 'a'] ?? fp;

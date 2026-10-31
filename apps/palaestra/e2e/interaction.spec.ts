@@ -19,6 +19,9 @@ test.describe("wake:'interaction' — cold until used, click replay, typing surv
 	let interaction_entry = '';
 	/** the island's file: its location in a build, its identity where it has none (dev) */
 	let interaction_file = '';
+	// Playwright reads the destructured first argument to decide which fixtures to inject; this
+	// hook needs none (only testInfo), so the empty pattern must stay.
+	// oxlint-disable-next-line no-empty-pattern
 	test.beforeAll(async ({}, testInfo) => {
 		raw = await (await fetch(testInfo.project.use.baseURL + '/interaction')).text();
 		interaction_entry = raw.match(INTERACTION_ENTRY_RE)?.[1] ?? '';

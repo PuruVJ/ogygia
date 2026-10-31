@@ -28,9 +28,14 @@
 		hole_names?: Record<string, string>;
 	} = $props();
 
+	// the report's visit seeds the clock; without one, this browser's store is asked once, at setup
+	// svelte-ignore state_referenced_locally
 	let v = $state<Visit | null>(visit);
+	// svelte-ignore state_referenced_locally
 	let source = $state<'server' | 'browser' | 'none'>(visit ? 'server' : 'none');
+	// svelte-ignore state_referenced_locally
 	let looked = $state(!!visit);
+	// svelte-ignore state_referenced_locally
 	if (!visit) {
 		void latest_visit(page)
 			.then((rec) => {

@@ -9,11 +9,11 @@
  * svelte-compile leg used for CDN packages + the live (whole-app) preview.
  */
 import { compile } from 'svelte/compiler';
+import type { Plugin } from '@rolldown/browser';
 
 const SVELTE_MODULE = /\.svelte(?:\?|$)/;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RolldownPlugin = any;
+type RolldownPlugin = Plugin;
 
 export interface SveltePluginOptions {
 	/** `'client'` (mount/hydrate) or `'server'` (SSR). Defaults to client. */
@@ -39,7 +39,7 @@ export function sveltePlugin(opts: SveltePluginOptions = {}): RolldownPlugin {
 				generate,
 				dev: false,
 				css: 'injected'
-			}) as { js: { code: string; map: unknown } };
+			});
 			return { code: js.code, map: js.map ?? null };
 		}
 	};

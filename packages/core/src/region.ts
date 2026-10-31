@@ -227,6 +227,9 @@ function make_region<P extends Record<string, unknown>>(
  * this module stays browser-safe. Awaiting on the client settles to an unchanged copy.
  */
 function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
+	// A region value is a thenable by design: it is the public API, `await region(C, props)` renders
+	// the region to HTML. test/transport.test.ts ("region(C, props) is thenable") covers it.
+	// oxlint-disable-next-line unicorn/no-thenable
 	Object.defineProperty(inline, 'then', {
 		enumerable: false,
 		configurable: true,
@@ -279,6 +282,9 @@ function make_inline_awaitable(inline: InlineRegion): AwaitableRegion {
  */
 function make_awaitable(dual: DualRegion): AwaitableRegion {
 	if (!dual.renderHtml) return dual as AwaitableRegion;
+	// A region value is a thenable by design: it is the public API, `await region(C, props)` renders
+	// the region to HTML. test/live-partial.test.ts ("awaiting a dual renders its HTML") covers it.
+	// oxlint-disable-next-line unicorn/no-thenable
 	Object.defineProperty(dual, 'then', {
 		enumerable: false,
 		configurable: true,

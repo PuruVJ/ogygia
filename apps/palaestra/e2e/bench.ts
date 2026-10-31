@@ -16,8 +16,7 @@ import {
 	existsSync,
 	appendFileSync,
 	rmSync,
-	readdirSync,
-	statSync
+	readdirSync
 } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';

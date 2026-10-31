@@ -174,12 +174,6 @@ interface VarDecl {
  * on the context identity (same alias-proof scheme as `wire`). Covers `createContext(...)` and
  * `<ns>.createContext(...)`.
  */
-function contextExportNames(code: string, id_n: string): string[] {
-	if (!code.includes('createContext')) return [];
-	const body = parse_body(code, id_n);
-	return body ? contextExportNamesFromBody(body) : [];
-}
-
 function contextExportNamesFromBody(body: AstNode[]): string[] {
 	const names: string[] = [];
 	for (const node of body) {

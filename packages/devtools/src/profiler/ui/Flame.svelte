@@ -11,6 +11,8 @@
 
 	const ROW = 20;
 	let canvas: HTMLCanvasElement;
+	// the zoom starts at the root it was given; clicks own it after
+	// svelte-ignore state_referenced_locally
 	let zoom = $state<FlameNode>(flame);
 	let zstack: FlameNode[] = [];
 	let resizeTick = $state(0);
@@ -97,10 +99,11 @@
 		draw(zoom, 0, 0, w);
 	}
 
+	// lay out again when the zoom, the size or the search changes: the effect reads all three
 	$effect(() => {
-		zoom;
-		resizeTick;
-		q;
+		void zoom;
+		void resizeTick;
+		void q;
 		layout();
 	});
 	$effect(() => {

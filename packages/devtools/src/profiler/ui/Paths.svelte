@@ -49,7 +49,7 @@
 			height: PAD * 2 + Math.max(row, 1) * ROW
 		};
 	}
-	const groups = paths.map((g) => ({ g, l: layout(g.tree) }));
+	const groups = $derived(paths.map((g) => ({ g, l: layout(g.tree) })));
 	const link = (a: Laid, b: Laid) => {
 		const x1 = a.x + NODE_W;
 		const y1 = a.y + NODE_H / 2;

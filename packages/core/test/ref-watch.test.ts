@@ -158,7 +158,7 @@ describe('dispose_scope + Kind.dispose + scope disposers (hub v2 phase D)', () =
 		register_kind({
 			k: 'test-sess',
 			match: (v) => typeof v === 'object' && v !== null && '__sess' in (v as object),
-			encode: (v) => ({ d: {} }),
+			encode: () => ({ d: {} }),
 			decode: () => ({ __sess: true }),
 			keep_name: () => 'the-session-thing',
 			dispose: () => void sessDisposed++

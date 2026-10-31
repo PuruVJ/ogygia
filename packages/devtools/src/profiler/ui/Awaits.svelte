@@ -19,22 +19,27 @@
 	const PAD = 8;
 	const LEFT = 8;
 	const x = (t: number) => LEFT + (t / Math.max(window_ms, 0.01)) * (W - 2 * LEFT);
-	const lanes = nodes.reduce((m, n) => Math.max(m, n.lane + 1), 1);
-	const height = PAD * 2 + lanes * LANE;
-	const by_label = new Map<string, AwaitNode[]>();
-	for (const n of nodes) (by_label.get(n.label) ?? by_label.set(n.label, []).get(n.label)!).push(n);
+	const lanes = $derived(nodes.reduce((m, n) => Math.max(m, n.lane + 1), 1));
+	const height = $derived(PAD * 2 + lanes * LANE);
+	const by_label = $derived.by(() => {
+		const m = new Map<string, AwaitNode[]>();
+		for (const n of nodes) (m.get(n.label) ?? m.set(n.label, []).get(n.label)!).push(n);
+		return m;
+	});
 	// an edge joins the last box of `from` that ended before the first box of `to` starting after it
-	const placed = edges
-		.map((e) => {
-			const froms = by_label.get(e.from) ?? [];
-			const tos = by_label.get(e.to) ?? [];
-			let best: { a: AwaitNode; b: AwaitNode } | null = null;
-			for (const b of tos)
-				for (const a of froms)
-					if (a.t1 <= b.t0 + 0.05 && (!best || a.t1 > best.a.t1)) best = { a, b };
-			return best ? { e, ...best } : null;
-		})
-		.filter((p): p is { e: AwaitEdge; a: AwaitNode; b: AwaitNode } => !!p);
+	const placed = $derived(
+		edges
+			.map((e) => {
+				const froms = by_label.get(e.from) ?? [];
+				const tos = by_label.get(e.to) ?? [];
+				let best: { a: AwaitNode; b: AwaitNode } | null = null;
+				for (const b of tos)
+					for (const a of froms)
+						if (a.t1 <= b.t0 + 0.05 && (!best || a.t1 > best.a.t1)) best = { a, b };
+				return best ? { e, ...best } : null;
+			})
+			.filter((p): p is { e: AwaitEdge; a: AwaitNode; b: AwaitNode } => !!p)
+	);
 	// fixed mid-tone series colours (SVG `fill` attributes can't take a CSS var); they read on both themes
 	const color = (kind: string) => (kind === 'net' ? '#6ca8e0' : '#e0a06f');
 	const short = (s: string, px: number) => {
@@ -43,10 +48,10 @@
 	};
 	let tip = $state<{ text: string; x: number; y: number } | null>(null);
 	const show = (text: string, ev: MouseEvent) => (tip = { text, x: ev.clientX, y: ev.clientY });
-	const serialized_ms = edges.reduce((s, e) => s + e.gap_ms, 0);
+	const serialized_ms = $derived(edges.reduce((s, e) => s + e.gap_ms, 0));
 	// WHAT IF: change a call and see the render under the model (insights.ts)
 	let changes = $state<Record<string, WhatIf>>({});
-	const labels = [...new Set(nodes.map((n) => n.label))];
+	const labels = $derived([...new Set(nodes.map((n) => n.label))]);
 	const sim = $derived(
 		Object.keys(changes).length ? simulate_awaits(nodes, edges, window_ms, changes) : null
 	);

@@ -220,10 +220,10 @@ export type OgygiaReport =
  * Puppeteer's too (`evaluate`, and `fetch` for the profiler).
  */
 export interface OgygiaDriver {
-	/** run `fn(arg)` in the page and return its (JSON) result (loosely typed, so `page.evaluate` of any
-	 *  driver fits without a cast) */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	evaluate(fn: (arg: any) => unknown, arg?: any): Promise<any>;
+	/** run `fn(arg)` in the page and return its (JSON) result. Loosely typed (`unknown` in, `unknown`
+	 *  out, and a method, so its parameters compare both ways), so `page.evaluate` of any driver fits
+	 *  without a cast */
+	evaluate(fn: (arg: unknown) => unknown, arg?: unknown): Promise<unknown>;
 	/** GET a URL relative to the app (for `profile()`); default: `fetch` inside the page */
 	get?(url: string, headers: Record<string, string>): Promise<{ status: number; body: string }>;
 	/** POST to a URL relative to the app (the server window of `record(…, { server: true })`);
@@ -298,18 +298,19 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 	const keep = <T extends OgygiaReport>(r: T): T => (reports.push(r), r);
 	// the page's engine version, from the last call (an older site's engine answers less)
 	let engine: OgygiaEngine = { version: TESTING_ENGINE_VERSION };
+	/** `driver.evaluate`, typed at the call site: `fn` goes to the driver as is (it runs in the
+	 *  page), and its result comes back as `fn` returns it. */
+	const in_page = <A, R>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R> =>
+		driver.evaluate(fn as (arg: unknown) => unknown, arg) as Promise<R>;
 	const call = async <T>(name: string, ...args: unknown[]): Promise<T> => {
 		const until = Date.now() + (options.timeout ?? 15_000);
 		while (
-			!(await driver.evaluate(
-				() => !!(window as { __ogygia_testing?: unknown }).__ogygia_testing,
-				null
-			))
+			!(await in_page(() => !!(window as { __ogygia_testing?: unknown }).__ogygia_testing, null))
 		) {
 			if (Date.now() > until) throw new Error(NOT_THERE);
 			await wait(100);
 		}
-		const out = (await driver.evaluate(
+		const out = (await in_page(
 			async ([n, a]: readonly [string, unknown[]]) => {
 				const t = (
 					window as unknown as {
@@ -327,7 +328,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			out.r && typeof out.r === 'object' ? (out.r as { engine?: OgygiaEngine }).engine : undefined;
 		engine = own ?? { version: out.v };
 		if (out.v < TESTING_ENGINE_VERSION) {
-			const at = await driver.evaluate(() => location.origin, null).catch(() => '');
+			const at = await in_page(() => location.origin, null).catch(() => '');
 			const key = `${at}|${out.v}`;
 			if (warned_engines.has(key)) return out.r;
 			warned_engines.add(key);
@@ -341,7 +342,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 	const get =
 		driver.get ??
 		((url: string, headers: Record<string, string>) =>
-			driver.evaluate(
+			in_page(
 				async ([u, h]: readonly [string, Record<string, string>]) => {
 					const r = await fetch(u, { headers: h });
 					return { status: r.status, body: await r.text() };
@@ -351,7 +352,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 	const post =
 		driver.post ??
 		((url: string, headers: Record<string, string>) =>
-			driver.evaluate(
+			in_page(
 				async ([u, h]: readonly [string, Record<string, string>]) => {
 					const r = await fetch(u, { method: 'POST', headers: h });
 					return { status: r.status, body: await r.text() };
@@ -459,7 +460,7 @@ export function createOgygia(driver: OgygiaDriver, options: OgygiaOptions = {}):
 			if (server_error)
 				server = { error: server_error } as unknown as OgygiaSessionReport['server'];
 			if (!r) {
-				const now = await driver.evaluate(() => location.href, null).catch(() => null);
+				const now = await in_page(() => location.href, null).catch(() => null);
 				throw new Error(
 					'the recording was lost: the page went to another document while it ran' +
 						(now ? ` (it is now at ${now})` : '') +
@@ -903,7 +904,6 @@ export const ogygiaMatchers = {
 };
 
 declare global {
-	// eslint-disable-next-line @typescript-eslint/no-namespace
 	namespace PlaywrightTest {
 		interface Matchers<R> {
 			toHaveNoFindings(opts?: { severity?: Severity; ignore?: string[] }): R;

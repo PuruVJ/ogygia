@@ -126,6 +126,17 @@ const DOTS_ONLY_RE = /^\.+$/;
  * parsed, so a `preset` key nested in some OTHER object (a convention option, a regex) is provably
  * not the loader's own — only a top-level property of the FIRST ObjectExpression argument counts.
  */
+/** The parsed `__og(<args>)` program, typed as far as {@link extract_preset} reads it. */
+type ArgsProgram = {
+	readonly body?: readonly ({ readonly expression?: ArgsCall } | undefined)[];
+};
+type ArgsCall = Node & { readonly arguments?: readonly (ArgsObject | undefined)[] };
+type ArgsObject = Node & { readonly properties?: readonly (ArgsProperty | undefined)[] };
+type ArgsProperty = Node & {
+	readonly key?: { readonly name?: unknown; readonly value?: unknown };
+	readonly value?: Node & { readonly value?: unknown };
+};
+
 export function extract_preset(
 	args: string,
 	context: string
@@ -139,7 +150,7 @@ export function extract_preset(
 		);
 	}
 	// program → ExpressionStatement → CallExpression(args)
-	const call = (program as Node).body?.[0]?.expression;
+	const call = (program as ArgsProgram).body?.[0]?.expression;
 	if (call?.type !== 'CallExpression') return { preset: null, args };
 	for (const arg of call.arguments ?? []) {
 		if (arg?.type !== 'ObjectExpression') continue;
@@ -209,11 +220,24 @@ export function loader_patterns(builder: 'markdown' | 'folder' | 'json', raw: st
 	return OPINIONATED[builder].map((p) => `${dir}/${p}`);
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+/** An oxc (ESTree) node as the walk sees it: its `type` tag and offsets; every other field is
+ *  unchecked until read. */
+type Node = {
+	readonly type: string;
+	readonly start: number;
+	readonly end: number;
+	readonly [key: string]: unknown;
+};
+/** The member-chain fields {@link loader_method} reads off a node. */
+type ChainNode = Node & {
+	readonly computed?: boolean;
+	readonly object?: ChainNode;
+	readonly property?: { readonly name?: unknown };
+	readonly meta?: { readonly name?: unknown };
+};
 
 /** Is this callee the member chain `import.meta.og.loader.<method>`? Returns the method or null. */
-function loader_method(callee: Node | undefined): string | null {
+function loader_method(callee: ChainNode | undefined): string | null {
 	// callee = MemberExpression(object = …og.loader, property = <method>)
 	if (!callee || callee.type !== 'MemberExpression' || callee.computed) return null;
 	const method = callee.property?.name;
@@ -244,8 +268,13 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (Array.isArray(child)) {
 			for (const c of child)
 				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
-		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
-			walk(child, visit);
+		} else if (
+			child &&
+			typeof child === 'object' &&
+			'type' in child &&
+			typeof child.type === 'string'
+		) {
+			walk(child as Node, visit);
 		}
 	}
 }
@@ -255,9 +284,9 @@ function find_via_ast(src: string, id: string): LoaderCall[] | null {
 	const { program, ok } = parse_module(src, id);
 	if (!ok || !program) return null;
 	const calls: LoaderCall[] = [];
-	walk(program, (n) => {
+	walk(program as Node, (n) => {
 		if (n.type !== 'CallExpression') return;
-		const method = loader_method(n.callee as Node | undefined);
+		const method = loader_method(n.callee as ChainNode | undefined);
 		if (method == null) return;
 		// `args` = the VERBATIM text between the parens, so `emit()` (via split_first_string) treats an
 		// AST hit and a scanner hit identically. The open paren is the first `(` after the callee.

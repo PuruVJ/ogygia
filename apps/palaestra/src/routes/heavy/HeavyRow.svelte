@@ -10,9 +10,14 @@
 		timeStyle: 'short'
 	});
 
+	// renders once, on the server: the one-time reads of the props are the point
+	// svelte-ignore state_referenced_locally
 	const value = ((seed * (i + 1) * 2654435761) % 1_000_000) / 100;
+	// svelte-ignore state_referenced_locally
 	const change = (((seed + i) % 2000) - 1000) / 10000;
+	// svelte-ignore state_referenced_locally
 	const ts = when.format(new Date(1_600_000_000_000 + i * 86_400_000));
+	// svelte-ignore state_referenced_locally
 	const label = `SKU-${(seed ^ i).toString(16).padStart(6, '0').toUpperCase()}`;
 	const tags = Array.from({ length: 6 }, (_, k) => `t${(i + k) % 40}`).join(' ');
 </script>

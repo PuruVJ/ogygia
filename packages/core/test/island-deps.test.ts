@@ -853,7 +853,10 @@ describe('remotes map', () => {
 					if (h) out.add(h);
 				}
 				for (const n of [...c.imports, ...c.dynamicImports])
-					if (b[n] && !seen.has(n)) (seen.add(n), q.push(n));
+					if (b[n] && !seen.has(n)) {
+						seen.add(n);
+						q.push(n);
+					}
 			}
 			return [...out].sort();
 		};

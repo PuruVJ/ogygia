@@ -34,10 +34,15 @@
 		ephemeral?: boolean;
 	} = $props();
 
+	// the rows and the URL field are seeds: a `from` URL is read once, at setup, and replaces the rows
+	// svelte-ignore state_referenced_locally
 	let rows = $state<SinkRow[]>(initial);
+	// svelte-ignore state_referenced_locally
 	let loading = $state(!!from);
 	let load_error = $state('');
+	// svelte-ignore state_referenced_locally
 	let from_input = $state(from ?? sink?.url ?? '');
+	// svelte-ignore state_referenced_locally
 	if (from) {
 		void fetch(from, { credentials: 'omit' })
 			.then(async (r) => {
@@ -152,6 +157,8 @@
 		Every request is a dot: time across, duration up (log scale), colour by route. Drag across a
 		range to select it; the hot functions of the sampler windows inside it appear below.
 	</p>
+	<!-- a picture to a reader; the brush is a pointer extra over it (no widget role fits a drag) -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<svg
 		bind:this={svg_el}
 		viewBox="0 0 {W} {H}"

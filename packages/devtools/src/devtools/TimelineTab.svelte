@@ -39,7 +39,7 @@
 	const trackW = $derived(Math.max(200, wrapW - LABEL_W - 12));
 
 	const model = $derived.by(() => {
-		tick; // refresh with the panel tick
+		void tick; // refresh with the panel tick
 		// THIS page: from the last in-app navigation on (the nav itself included). Every earlier page's
 		// islands stayed in the buffer: after a few navigations the axis spanned the whole session, one
 		// lane per island of every page visited, each squeezed to a dot.

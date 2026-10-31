@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { isMainThread } from 'node:worker_threads';
 import { loadEnv, type Plugin, type Rolldown, type ViteDevServer } from 'vite';
-import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.ts';
 import { content_css_key } from '../plugin/utils.ts';
 import { island_sourcemaps_plugin } from './sourcemaps.ts';
@@ -12,8 +11,7 @@ import { install_dev_client_maps, install_dev_maps, install_dev_page_keys } from
 import {
 	is_island_path,
 	normalize_import_keys,
-	asRegionLocals,
-	type ImportKeys
+	asRegionLocals
 } from '../compiler/region/transform.ts';
 
 export {
@@ -165,7 +163,7 @@ import {
 	RUNTIME_HASH
 } from './paths.ts';
 
-import type { OgygiaPreset, OgygiaRateLimit, OgygiaOptions } from './options.ts';
+import type { OgygiaOptions } from './options.ts';
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
@@ -308,7 +306,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		return last_leg_server ?? is_ssr;
 	};
 	let content_scanned = false;
-	let sourcemap = false;
 	/** the server build's output, waiting for closeBundle to fill the profiler's maps module */
 	let maps_pending: { dir: string; bundle: Record<string, unknown> } | null = null;
 	let vite_server: ViteDevServer | null = null;
@@ -649,7 +646,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				is_dev = config.command === 'serve';
 				is_build = config.command === 'build';
 				is_ssr = !!config.build?.ssr;
-				sourcemap = !!config.build?.sourcemap;
 
 				// Self-heal a keep-client route left behind by a crashed build (harmless — no URL — but
 				// noisy in the routes tree). Dev never injects, so anything here is a stale leftover.

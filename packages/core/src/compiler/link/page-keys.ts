@@ -16,13 +16,12 @@
  * before. A wrong `'all'` costs bytes; a wrong key set would cost an island its data, so every
  * doubt goes to `'all'`.
  */
-import { parse } from 'svelte/compiler';
+import { parse, type AST } from 'svelte/compiler';
 import { fs } from '../host.ts';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 import { blank_styles } from '../blank-styles.ts';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+type Node = AstNode;
 
 export type PageKeys = ReadonlySet<string> | 'all';
 
@@ -261,7 +260,7 @@ export function parse_roots(code: string, id: string, kind: 'svelte' | 'script')
 		const r = parse_module(code, id);
 		return r.ok && r.program ? [r.program] : null;
 	}
-	let ast: any;
+	let ast: AST.Root;
 	try {
 		// The component's `<style>` is preprocessor territory (SCSS `//` comments, nesting) that
 		// Svelte's parser rejects before any preprocessor ran — and a stylesheet never reads the page.

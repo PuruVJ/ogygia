@@ -28,14 +28,20 @@ await page.setContent('<!doctype html><html><head></head><body></body></html>');
 await page.addScriptTag({ content: code });
 
 console.log(`\n▸ morph bench — REAL CHROMIUM  [${label}]\n`);
-const results = (await page.evaluate(() =>
-	(window as any).MorphBench.runBench({ samples: 15 })
-)) as {
-	name: string;
-	us: number;
-	hz: number;
-	iters: number;
-}[];
+/** The page window once browser/morph-entry.js has run. */
+type MorphBenchWindow = Window & {
+	MorphBench: {
+		runBench(cfg: { samples: number }): {
+			name: string;
+			us: number;
+			hz: number;
+			iters: number;
+		}[];
+	};
+};
+const results = await page.evaluate(() =>
+	(window as unknown as MorphBenchWindow).MorphBench.runBench({ samples: 15 })
+);
 await browser.close();
 
 let total = 0;

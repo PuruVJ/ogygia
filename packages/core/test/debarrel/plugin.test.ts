@@ -6,7 +6,14 @@
  * first in the array and skips region-marked imports.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { build, createServer, type Plugin, type Rollup } from 'vite';
+import {
+	build,
+	createServer,
+	type InlineConfig,
+	type Logger,
+	type Plugin,
+	type Rollup
+} from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fixture, type Fixture } from './_fixture.ts';
 import { debarrel } from '../../src/compiler/debarrel/plugin.ts';
@@ -15,7 +22,7 @@ import { ogygia } from '../../src/vite/index.ts';
 let f: Fixture;
 afterEach(() => f?.dispose());
 
-const app = () => ({
+const app = (): Record<string, string> => ({
 	'package.json': JSON.stringify({ name: 'app', type: 'module' }),
 	'index.html': `<script type="module" src="/src/main.ts"></script>`,
 	'src/main.ts': `import { Button, util } from '$lib';\nimport { pkgLeaf } from '@scope/ui';\nimport App from './App.svelte';\nconsole.log(Button, util, pkgLeaf, App);`,
@@ -52,7 +59,7 @@ const config = (f: Fixture, extra: Parameters<typeof debarrel>[0] = {}) => ({
 const module_ids = (out: Rollup.RollupOutput) =>
 	out.output.flatMap((c) => (c.type === 'chunk' ? Object.keys(c.modules) : []));
 
-const build_ids = async (cfg: ReturnType<typeof config>) => {
+const build_ids = async (cfg: InlineConfig) => {
 	const out = (await build({
 		...cfg,
 		build: { write: false, minify: false }
@@ -155,7 +162,7 @@ describe('vite build', () => {
 	it('the build report names the totals, the time, and the top barrels with their importer counts; `debug` narrates each rewrite', async () => {
 		f = fixture(app());
 		const lines: string[] = [];
-		const logger = {
+		const logger: Logger = {
 			info: (m: string) => lines.push(m),
 			warn() {},
 			warnOnce() {},
@@ -166,7 +173,7 @@ describe('vite build', () => {
 		};
 		const cfg = {
 			...config(f, { debug: true }),
-			customLogger: logger as never,
+			customLogger: logger,
 			logLevel: 'info' as const
 		};
 		await build_ids(cfg);
@@ -189,7 +196,7 @@ describe('vite build', () => {
 		lines.length = 0;
 		await build_ids({
 			...config(f, { report: false }),
-			customLogger: logger as never,
+			customLogger: logger,
 			logLevel: 'info' as const
 		});
 		expect(lines.some((l) => /^\[ogygia\] barrels: \d/.test(l))).toBe(false);
@@ -205,7 +212,7 @@ describe('vite build', () => {
 		}
 		f = fixture(files);
 		const lines: string[] = [];
-		const logger = {
+		const logger: Logger = {
 			info: (m: string) => lines.push(m),
 			warn() {},
 			warnOnce() {},
@@ -214,7 +221,7 @@ describe('vite build', () => {
 			hasErrorLogged: () => false,
 			hasWarned: false
 		};
-		await build_ids({ ...config(f), customLogger: logger as never, logLevel: 'info' as const });
+		await build_ids({ ...config(f), customLogger: logger, logLevel: 'info' as const });
 		const short = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;
 		expect(short).toContain('14 barrels bypassed');
 		expect(short.split('\n').filter((l) => / names  /.test(l))).toHaveLength(8);
@@ -222,7 +229,7 @@ describe('vite build', () => {
 		lines.length = 0;
 		await build_ids({
 			...config(f, { report: 'all' }),
-			customLogger: logger as never,
+			customLogger: logger,
 			logLevel: 'info' as const
 		});
 		const full = lines.find((l) => /^\[ogygia\] barrels: \d/.test(l))!;

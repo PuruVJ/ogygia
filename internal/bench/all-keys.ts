@@ -11,7 +11,7 @@
 // Ends with the lab built WITHOUT the dock (the devtools e2e suite expects that). Logs per key in
 // $TMPDIR/ogygia-keys/<key>.log; the summary prints the failing lines. Exit code 1 on any failure.
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

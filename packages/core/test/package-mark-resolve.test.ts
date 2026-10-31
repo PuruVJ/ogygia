@@ -44,10 +44,13 @@ describe('unresolvable marked package specifier', () => {
 		const src = `<script>\nimport TabGroup from '${SPEC}' with { wake: 'load' };\n</script>\n<TabGroup />`;
 		// Register the host (SSR leg) so the wrapper virtual is in the registry. `transform` is async
 		// (the macro leg awaits), so await it before reading the registry it populates.
-		await handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
+		await handler(plugin.transform!).call(ctx as never, src, HOST, { moduleType: 'js', ssr: true });
 		const iid = regionId(regionIdentity(SPEC, { strategy: 'load', options: {} }));
 		await expect(
-			handler(plugin.resolveId!).call(ctx as never, SPEC, wrapperVirtualId(iid), { ssr: true })
+			handler(plugin.resolveId!).call(ctx as never, SPEC, wrapperVirtualId(iid), {
+				isEntry: false,
+				ssr: true
+			})
 		).rejects.toThrow(/\[ogygia\] cannot resolve 'not-installed-pkg\/tabs'[\s\S]*exports/);
 	});
 
@@ -55,10 +58,11 @@ describe('unresolvable marked package specifier', () => {
 		const plugin = make_plugin();
 		const ctx = { resolve: async () => null, emitFile: () => '' };
 		const src = `<script>\nimport TabGroup from '${SPEC}' with { wake: 'load' };\n</script>\n<TabGroup />`;
-		await handler(plugin.transform!).call(ctx as never, src, HOST, { ssr: true });
+		await handler(plugin.transform!).call(ctx as never, src, HOST, { moduleType: 'js', ssr: true });
 		const iid = regionId(regionIdentity(SPEC, { strategy: 'load', options: {} }));
 		await expect(
 			handler(plugin.resolveId!).call(ctx as never, './local.js', wrapperVirtualId(iid), {
+				isEntry: false,
 				ssr: true
 			})
 		).resolves.toBeNull();

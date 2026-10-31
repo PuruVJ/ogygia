@@ -121,9 +121,11 @@ export function twoslash_banner(): ShikiTransformer {
 			// banner lines (everything through the last cut) so setup code is never displayed.
 			const pre = find_pre(root);
 			if (!pre) return;
-			const code = pre.children.find((n: any) => n.type === 'element' && n.tagName === 'code');
+			const code = pre.children.find(
+				(n): n is HastElement => n.type === 'element' && n.tagName === 'code'
+			);
 			if (!code) return;
-			const lines: any[] = code.children;
+			const lines = code.children;
 			let cut = -1;
 			for (let i = lines.length - 1; i >= 0; i--) {
 				if (node_text(lines[i]).includes(CUT)) {
@@ -139,8 +141,13 @@ export function twoslash_banner(): ShikiTransformer {
 	};
 }
 
+/** The hast tree shiki hands a transformer's `root` hook, and the node kinds inside it. */
+type HastRoot = Parameters<NonNullable<ShikiTransformer['root']>>[0];
+type HastNode = HastRoot | HastRoot['children'][number];
+type HastElement = Extract<HastNode, { type: 'element' }>;
+
 /** The `<pre>` element of a shiki hast root (skip whitespace text nodes). */
-function find_pre(root: any): any {
+function find_pre(root: HastRoot | HastElement): HastElement | null {
 	for (const n of root.children ?? []) {
 		if (n.type === 'element' && n.tagName === 'pre') return n;
 		if (n.type === 'element') {
@@ -152,10 +159,10 @@ function find_pre(root: any): any {
 }
 
 /** Concatenated text content of a hast node. */
-function node_text(node: any): string {
+function node_text(node: HastNode | undefined): string {
 	if (!node) return '';
 	if (node.type === 'text') return node.value;
-	return (node.children ?? []).map(node_text).join('');
+	return ('children' in node ? node.children : []).map(node_text).join('');
 }
 
 // ── the twoslash transformers ────────────────────────────────────────────────────
@@ -220,10 +227,15 @@ function esc_attr(s: string): string {
 	return esc(s).replace(/"/g, '&quot;');
 }
 
+/** The mdast tree `fromMarkdown` builds, and any node inside it. */
+type MdRoot = ReturnType<typeof fromMarkdown>;
+type MdNode = MdRoot | MdRoot['children'][number];
+
 /** Serialize the small mdast node set that appears in JSDoc popups. Escapes text; anything exotic
  *  falls back to its text content — a tooltip never renders arbitrary HTML. */
-function mdast_to_html(node: any): string {
-	const kids = (n: any) => (n.children ?? []).map(mdast_to_html).join('');
+function mdast_to_html(node: MdNode): string {
+	const kids = (n: MdNode): string =>
+		('children' in n ? n.children : []).map(mdast_to_html).join('');
 	switch (node.type) {
 		case 'root':
 			return kids(node);

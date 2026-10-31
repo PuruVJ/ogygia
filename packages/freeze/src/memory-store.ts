@@ -45,7 +45,7 @@ export function memory_store(
 			// `/fr/fr` itself and everything under `/fr/fr/`, never `/fr/fright`.
 			const p = normalize_prefix(prefix);
 			const subtree = subtree_prefix(p);
-			for (const key of [...entries.keys()]) {
+			for (const key of entries.keys()) {
 				if (key === p || key.startsWith(subtree)) entries.delete(key);
 			}
 		},

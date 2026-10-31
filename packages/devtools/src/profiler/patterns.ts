@@ -254,7 +254,10 @@ export function wait_save_on_path(
 		for (const n of awaits.nodes) {
 			if (mine.has(n) || n.t0 >= end || n.t1 <= start) continue;
 			const until = Math.min(n.t1, end);
-			if (until > beside) ((beside = until), (who = n.label));
+			if (until > beside) {
+				beside = until;
+				who = n.label;
+			}
 		}
 		save += Math.max(0, end - beside);
 		if (who && !bound_by) bound_by = who;
@@ -900,7 +903,6 @@ const LOOKUP: ReadonlySet<string> = new Set([
 	'includes',
 	'some'
 ]);
-const TABLE_BUILDERS: ReadonlySet<string> = new Set(['fromEntries', 'from']);
 const COLLECTIONS: ReadonlySet<string> = new Set(['Map', 'Set', 'WeakMap']);
 const SORT: ReadonlySet<string> = new Set(['sort', 'toSorted']);
 const SYNC_IO: ReadonlySet<string> = new Set([
@@ -1076,7 +1078,10 @@ function locale_call_with_args(t: readonly string[]): boolean {
 				if (--depth === 0) break;
 			} else if (depth === 1) {
 				if (x === ',') args++;
-				else if (!any) ((any = true), args++);
+				else if (!any) {
+					any = true;
+					args++;
+				}
 			}
 		}
 		if (args >= needs) return true;
@@ -3108,8 +3113,10 @@ export function find_cold_caches(input: ColdCacheInput): Pattern | undefined {
 			const line = body.start + i;
 			for (let k = 2; k + 1 < t.length; k++) {
 				if (t[k - 1] !== '.' || t[k + 1] !== '(') continue;
-				if (!get_line && (t[k] === 'get' || t[k] === 'has')) ((get_line = line), (map = t[k - 2]));
-				else if (get_line && t[k] === 'set' && t[k - 2] === map) set_line = line;
+				if (!get_line && (t[k] === 'get' || t[k] === 'has')) {
+					get_line = line;
+					map = t[k - 2];
+				} else if (get_line && t[k] === 'set' && t[k - 2] === map) set_line = line;
 			}
 			if (get_line && !return_line && !set_line && t.includes('return')) return_line = line;
 		}
@@ -3140,7 +3147,10 @@ export function find_cold_caches(input: ColdCacheInput): Pattern | undefined {
 				const g = fn_by_name.get(name);
 				const caller = g?.stacks?.[0]?.frames.find((x) => x.c === 'app' || x.c === 'component');
 				if (caller && caller.n !== f.name) continue;
-				if (misses === undefined || n > misses) ((misses = n), (helper = name));
+				if (misses === undefined || n > misses) {
+					misses = n;
+					helper = name;
+				}
 			}
 		}
 		if (misses === undefined) continue;

@@ -23,7 +23,10 @@ import { REF_WIRE_KEY, ref_reducer, ref_reviver } from '../src/ref.ts';
 const SVELTE = ['.svelte'];
 const run = (src: string, id = 'src/lib/cart.ts') => rewrite_store(src, id, id, SVELTE);
 const enc = (v: unknown) => stringify(v, { [STORE_WIRE_KEY]: reduce_store });
-const dec = (s: string) => parse(s, { [STORE_WIRE_KEY]: (d: never) => revive_store(d, true) });
+const dec = (s: string) =>
+	parse(s, {
+		[STORE_WIRE_KEY]: (d: Parameters<typeof revive_store>[0]) => revive_store(d, true)
+	});
 
 describe('og.store transform', () => {
 	it('rewrites the mark to __og_store(tag, factory) and injects the import', () => {
@@ -235,8 +238,7 @@ describe('auto-brand tier (zero-authoring provable factories)', () => {
 describe('og_derived — a derived that RESUMES across the boundary', () => {
 	const encR = (v: unknown, fam = new Set(['store', 'fn', 'derived'])) =>
 		stringify(v, { [REF_WIRE_KEY]: ref_reducer(fam) });
-	const decR = (s: string) =>
-		parse(s, { [REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown });
+	const decR = (s: string) => parse(s, { [REF_WIRE_KEY]: ref_reviver(true) });
 
 	it("crosses ALIVE: bump the reunified source, every island's derived follows", () => {
 		register_derived_kind();

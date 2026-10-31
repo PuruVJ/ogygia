@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The island block — its existence on a page is a ROW in the CMS body tree.
 	let { start = 0 }: { start?: number } = $props();
+	// svelte-ignore state_referenced_locally
 	let count = $state(start);
 </script>
 

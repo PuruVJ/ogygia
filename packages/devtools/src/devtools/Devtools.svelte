@@ -78,11 +78,12 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	let winPos = $state(saved.win ?? { x: 0, y: 0 });
 	let winResizeOff = $state(saved.rz ?? { x: 0, y: 0 });
 	let winSize = $state(saved.size ?? { width: 600, height: 680 });
-	let open = $state(saved.open ?? false);
+	const was_open = saved.open ?? false;
+	let open = $state(was_open);
 	// OPEN AS THE PAGE LOADS (remembered from the last page): when it began to show — the Page tab says
 	// so when the page's first paint follows it closely, since a browser may count the dock's own text
 	// as the page's first paint (Safari: its largest paint too)
-	if (open && typeof performance !== 'undefined')
+	if (was_open && typeof performance !== 'undefined')
 		globalThis[Symbol.for('ogygia.dock-open-at')] ??= performance.now();
 	let placed = saved.win != null;
 	function save_layout() {

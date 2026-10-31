@@ -9,10 +9,13 @@
 	let { data, children } = $props();
 
 	// A template var computed in the script (like currentDir / isPreferenceCenter in x.svelte).
+	// (it renders once, on the server: reading `data` once is right)
+	// svelte-ignore state_referenced_locally
 	const currentDir = data?.rtl ? 'rtl' : 'ltr';
 	setContext('currentDir', currentDir);
 
 	// Only the plain slice the side effects need crosses into the island (no promises, no stores).
+	// svelte-ignore state_referenced_locally
 	const plain = { rtl: data.rtl, appName: data.appName };
 </script>
 

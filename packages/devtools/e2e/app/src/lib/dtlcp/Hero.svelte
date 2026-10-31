@@ -9,6 +9,7 @@
 		quick = false,
 		lazy = false
 	}: { late?: boolean; quick?: boolean; lazy?: boolean } = $props();
+	// svelte-ignore state_referenced_locally
 	let shown = $state(!late);
 	$effect(() => {
 		if (late) setTimeout(() => (shown = true), 2600);

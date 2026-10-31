@@ -1,6 +1,15 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	const d = () => page.data as any;
+	/** What routes/page-data/+page.server.ts loads; every field optional, the island shows
+	 *  '(missing)' for any that does not arrive. */
+	type PageDataShape = {
+		locale?: string;
+		countryApiKey?: string;
+		nested?: { flags?: { helpCenter?: boolean } };
+		fast?: Promise<string>;
+		slow?: Promise<string>;
+	};
+	const d = () => page.data as PageDataShape;
 </script>
 
 <span

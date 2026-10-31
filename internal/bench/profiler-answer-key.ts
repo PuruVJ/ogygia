@@ -254,7 +254,7 @@ async function run_page(page, fresh = async () => {}) {
 	console.log(
 		`  decoys: ${k.decoys.length}, ${flagged.length ? `FLAGGED ${flagged.length} time(s)` : 'all quiet in every run'}`
 	);
-	for (const f of [...new Set(flagged)]) console.log(`    FLAGGED ${f}`);
+	for (const f of new Set(flagged)) console.log(`    FLAGGED ${f}`);
 	failed += flagged.length ? 1 : 0;
 	if (extra.size) console.log(`  also reported (not planted): ${[...extra].join(', ')}`);
 	// a planted kind reported away from its files: a false alarm unless the page plants it there too

@@ -40,7 +40,7 @@ import { GET, POST, api, when, type Handler } from '../src/index.ts';
 /** exact type equality: assignable both ways, and not `any` */
 type Equal<A, B> =
 	(<X>() => X extends A ? 1 : 2) extends <X>() => X extends B ? 1 : 2 ? true : false;
-const expect_type = <T extends true>(_: T): void => {};
+const expect_type = <T extends true>(_proof: T): void => {};
 
 const Body: StandardSchemaV1<{ title: string }> = NumId as never;
 

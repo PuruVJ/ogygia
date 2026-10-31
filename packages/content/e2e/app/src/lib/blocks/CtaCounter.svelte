@@ -2,6 +2,7 @@
 	// Interactive block — its registry import bakes `wake: 'load'`, so pages naming it
 	// pull exactly one hydrate chunk. The button proves hydration.
 	let { start = 0 }: { start?: number } = $props();
+	// svelte-ignore state_referenced_locally
 	let count = $state(start);
 </script>
 

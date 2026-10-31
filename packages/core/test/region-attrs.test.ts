@@ -13,85 +13,78 @@ import {
 	region_ssr_truncated
 } from '../src/runtime/region-attrs.ts';
 
-/** Minimal Element-like for attribute helpers (no DOM env). */
-class FakeEl {
-	constructor(readonly attrs: Record<string, string> = {}) {}
-	getAttribute(name: string) {
-		return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name]! : null;
-	}
+/** Minimal Element-like for attribute helpers (no DOM env). The helpers read only `getAttribute`,
+ *  so that subset is handed to their `Element` signatures. */
+function fake_el(attrs: Record<string, string> = {}): Element {
+	const el: Pick<Element, 'getAttribute'> = {
+		getAttribute: (name) =>
+			Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name]! : null
+	};
+	return el as Element;
 }
 
-/** Minimal ParentNode-like for vacancy checks. */
-class FakeParent {
-	constructor(readonly childNodes: Array<{ nodeType: number; textContent?: string }>) {}
+/** Minimal ParentNode-like for vacancy checks (only `childNodes` is read). */
+function fake_parent(childNodes: Array<{ nodeType: number; textContent?: string }>): ParentNode {
+	return { childNodes } as unknown as ParentNode;
 }
 
 describe('region-attrs (two-axis DOM)', () => {
 	it('is_awake only for hydrate schedules, not none', () => {
-		expect(is_awake(new FakeEl({ wake: 'load' }))).toBe(true);
-		expect(is_awake(new FakeEl({ wake: 'idle' }))).toBe(true);
-		expect(is_awake(new FakeEl({ wake: '(max-width: 600px)' }))).toBe(true);
-		expect(is_awake(new FakeEl({ wake: 'none' }))).toBe(false);
-		expect(is_awake(new FakeEl({ render: 'defer', when: 'load' }))).toBe(false);
+		expect(is_awake(fake_el({ wake: 'load' }))).toBe(true);
+		expect(is_awake(fake_el({ wake: 'idle' }))).toBe(true);
+		expect(is_awake(fake_el({ wake: '(max-width: 600px)' }))).toBe(true);
+		expect(is_awake(fake_el({ wake: 'none' }))).toBe(false);
+		expect(is_awake(fake_el({ render: 'defer', when: 'load' }))).toBe(false);
 	});
 
 	it('is_frozen matches hydrate="none"', () => {
-		expect(is_frozen(new FakeEl({ wake: 'none' }))).toBe(true);
-		expect(is_frozen(new FakeEl({ wake: 'load' }))).toBe(false);
-		expect(is_frozen(new FakeEl({}))).toBe(false);
+		expect(is_frozen(fake_el({ wake: 'none' }))).toBe(true);
+		expect(is_frozen(fake_el({ wake: 'load' }))).toBe(false);
+		expect(is_frozen(fake_el({}))).toBe(false);
 	});
 
 	it('region_remount defaults to cache', () => {
-		expect(region_remount(new FakeEl({ wake: 'none' }))).toBe('cache');
-		expect(region_remount(new FakeEl({ remount: 'cache' }))).toBe('cache');
-		expect(region_remount(new FakeEl({ remount: 'empty' }))).toBe('empty');
-		expect(region_remount(new FakeEl({ remount: 'swr' }))).toBe('swr');
+		expect(region_remount(fake_el({ wake: 'none' }))).toBe('cache');
+		expect(region_remount(fake_el({ remount: 'cache' }))).toBe('cache');
+		expect(region_remount(fake_el({ remount: 'empty' }))).toBe('empty');
+		expect(region_remount(fake_el({ remount: 'swr' }))).toBe('swr');
 	});
 
 	it('region_max_age_ms / region_on_expire', () => {
-		expect(region_max_age_ms(new FakeEl({}))).toBe(0);
-		expect(region_max_age_ms(new FakeEl({ 'max-age': '5000' }))).toBe(5000);
-		expect(region_on_expire(new FakeEl({ remount: 'cache' }))).toBe('empty');
-		expect(region_on_expire(new FakeEl({ remount: 'swr' }))).toBe('fetch');
-		expect(region_on_expire(new FakeEl({ remount: 'swr', 'on-expire': 'empty' }))).toBe('empty');
+		expect(region_max_age_ms(fake_el({}))).toBe(0);
+		expect(region_max_age_ms(fake_el({ 'max-age': '5000' }))).toBe(5000);
+		expect(region_on_expire(fake_el({ remount: 'cache' }))).toBe('empty');
+		expect(region_on_expire(fake_el({ remount: 'swr' }))).toBe('fetch');
+		expect(region_on_expire(fake_el({ remount: 'swr', 'on-expire': 'empty' }))).toBe('empty');
 	});
 
 	it('region_is_vacant treats comments/whitespace as empty but text/elements as filled', () => {
-		expect(region_is_vacant(new FakeParent([]) as unknown as ParentNode)).toBe(true);
+		expect(region_is_vacant(fake_parent([]))).toBe(true);
 		expect(
-			region_is_vacant(
-				new FakeParent([
-					{ nodeType: 8 },
-					{ nodeType: 3, textContent: '  \n' }
-				]) as unknown as ParentNode
-			)
+			region_is_vacant(fake_parent([{ nodeType: 8 }, { nodeType: 3, textContent: '  \n' }]))
 		).toBe(true);
-		expect(
-			region_is_vacant(
-				new FakeParent([{ nodeType: 3, textContent: 'frozen text' }]) as unknown as ParentNode
-			)
-		).toBe(false);
-		expect(region_is_vacant(new FakeParent([{ nodeType: 1 }]) as unknown as ParentNode)).toBe(
+		expect(region_is_vacant(fake_parent([{ nodeType: 3, textContent: 'frozen text' }]))).toBe(
 			false
 		);
+		expect(region_is_vacant(fake_parent([{ nodeType: 1 }]))).toBe(false);
 	});
 
 	it('is_deferred / region_schedule use render+when', () => {
-		const hole = new FakeEl({ render: 'defer', when: 'visible' });
+		const hole = fake_el({ render: 'defer', when: 'visible' });
 		expect(is_deferred(hole)).toBe(true);
 		expect(region_schedule(hole)).toBe('visible');
-		expect(region_schedule(new FakeEl({ render: 'defer' }))).toBe('load');
-		expect(region_schedule(new FakeEl({ wake: 'idle' }))).toBe('idle');
+		expect(region_schedule(fake_el({ render: 'defer' }))).toBe('load');
+		expect(region_schedule(fake_el({ wake: 'idle' }))).toBe('idle');
 		// frozen regions don't schedule a wake; default load is unused for them
-		expect(region_schedule(new FakeEl({ wake: 'none' }))).toBe('load');
+		expect(region_schedule(fake_el({ wake: 'none' }))).toBe('load');
 	});
 
 	it('region_hydrate_schedule / phase2 coalesce', () => {
-		expect(region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'load' }))).toBe(null);
+		expect(region_hydrate_schedule(fake_el({ render: 'defer', when: 'load' }))).toBe(null);
 		expect(
-			region_hydrate_schedule(new FakeEl({ render: 'defer', when: 'visible', wake: 'idle' }))
+			region_hydrate_schedule(fake_el({ render: 'defer', when: 'visible', wake: 'idle' }))
 		).toBe('idle');
-		expect(region_hydrate_schedule(new FakeEl({ wake: 'none' }))).toBe(null);
+		expect(region_hydrate_schedule(fake_el({ wake: 'none' }))).toBe(null);
 
 		// Matching schedules → immediate phase-2 load (no re-arm)
 		expect(phase2_hydrate_schedule('load', 'load')).toBe('load');
@@ -108,7 +101,7 @@ describe('region-attrs (two-axis DOM)', () => {
 	});
 
 	it('deferred client island: awake + deferred axes together', () => {
-		const combo = new FakeEl({
+		const combo = fake_el({
 			render: 'defer',
 			when: 'load',
 			wake: 'visible',

@@ -4,7 +4,7 @@
 	// not baked into the static shell. So this timestamp is fresh on every reload, proving the hole
 	// is dynamic while the shell around it is a frozen static file. `Fallback` declares the reserved
 	// `ogygiaFallback` slot so svelte-check accepts the fallback snippet at the call site.
-	let {}: Fallback = $props();
+	let { ogygiaFallback }: Fallback = $props();
 	const at = new Date().toLocaleTimeString();
 </script>
 

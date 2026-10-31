@@ -31,7 +31,7 @@
  */
 import { og_js_regions, type JsRegion } from '../parse/scan.ts';
 import { find_og_calls } from '../parse/scan.ts';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 
 // ── regexes
 const STATIC_WIRE_TAIL_RE = /\bstatic\s+wire\s*=\s*$/;
@@ -40,8 +40,7 @@ const STATIC_WIRE_TAIL_RE = /\bstatic\s+wire\s*=\s*$/;
 export const WIRE_EXPR = "Symbol.for('ogygia.wire')";
 const MARKER = 'import.meta.og.wire';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+type Node = AstNode;
 
 /** If `node` is the member expression `import.meta.og.<name>`, return `<name>`; else null. */
 export function og_member(node: Node | undefined): string | null {

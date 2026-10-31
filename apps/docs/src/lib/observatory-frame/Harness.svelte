@@ -7,11 +7,19 @@
 	 * runtime/CSS/state with the host. Nav drives the REAL reconcile on the frame body; runtime events
 	 * + nav-link clicks are relayed back to the parent. It's a headless boot island (renders nothing).
 	 */
-	import { mount, unmount } from 'svelte';
+	import { mount, unmount, type Component } from 'svelte';
 	import { add_sink } from 'ogygia/events';
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	type Any = any;
+	/** The frame-window globals this harness keeps across renders. */
+	type ObsWindow = Window & {
+		__OBS_ISLANDS__?: Record<string, unknown>;
+		__OBS_FETCH_PATCHED__?: boolean;
+		/** deferred (server island) answers by id, served to the patched fetch */
+		__OBS_DEFER__?: Record<string, string>;
+	};
+	/** A `live` region element once the runtime has upgraded it. */
+	type LiveNode = Element & { applyLive?: (d: unknown) => void };
+	type Reconcile = typeof import('ogygia/internal/reconcile');
 	type Linked = { default?: (...a: unknown[]) => unknown } & Record<string, unknown>;
 	type Require = (spec: string) => Linked;
 
@@ -51,7 +59,6 @@
 			)
 			.replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
 		const __exports: Linked = {};
-		// eslint-disable-next-line no-new-func
 		new Function(
 			'__require',
 			'__exports',
@@ -64,7 +71,7 @@
 	/** Build a page's real-island DOM offline: link each island's blob entry (reads a frame-window
 	 *  global the blob re-exports, so it hydrates against THIS frame's svelte). */
 	function link_page_dom(html: string, modules: Record<string, string>, sc: Linked) {
-		const store: Record<string, unknown> = ((window as Any).__OBS_ISLANDS__ ||= {});
+		const store: Record<string, unknown> = ((window as ObsWindow).__OBS_ISLANDS__ ||= {});
 		const blobs: string[] = [];
 		const cache = new Map<string, Linked>();
 		const resolveName = (spec: string): string | null => {
@@ -113,9 +120,9 @@
 
 	$effect(() => {
 		let svelteClient: Linked | null = null;
-		let reconcileMod: { reconcile_body?: Any; morph_children?: Any } = {};
-		let mountedApp: Any = null; // csr=true: the whole-app mount (Kit-style)
-		const liveNodes = new Map<string, Element & { applyLive?: (d: unknown) => void }>();
+		let reconcileMod: Partial<Pick<Reconcile, 'reconcile_body' | 'morph_children'>> = {};
+		let mountedApp: ReturnType<typeof mount> | null = null; // csr=true: the whole-app mount (Kit-style)
+		const liveNodes = new Map<string, LiveNode>();
 		const fpNames: Record<string, string> = {}; // data-og-fp → island name, for the event labels
 
 		// BOUNDARY LENS (x-ray): the parent's x-ray mode is this same real render + a `.lens` class on
@@ -153,16 +160,16 @@
 		});
 
 		// deferred (server islands): serve /__obs_defer/* from a map the parent sends; pass the rest.
-		if (!(window as Any).__OBS_FETCH_PATCHED__) {
-			(window as Any).__OBS_FETCH_PATCHED__ = true;
-			(window as Any).__OBS_DEFER__ = {};
+		if (!(window as ObsWindow).__OBS_FETCH_PATCHED__) {
+			(window as ObsWindow).__OBS_FETCH_PATCHED__ = true;
+			(window as ObsWindow).__OBS_DEFER__ = {};
 			const orig = window.fetch.bind(window);
 			window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 				const url =
 					typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
 				const m = /\/__obs_defer\/([^/?#]+)/.exec(url);
 				if (m) {
-					const dhtml = ((window as Any).__OBS_DEFER__ || {})[m[1]];
+					const dhtml = ((window as ObsWindow).__OBS_DEFER__ || {})[m[1]];
 					if (dhtml != null)
 						return new Promise((res) =>
 							setTimeout(
@@ -258,7 +265,7 @@
 				return { default: () => {} };
 			};
 			const App = eval_client(modules[entry], require, svelteClient).default;
-			if (typeof App === 'function') mountedApp = mount(App as Any, { target: el });
+			if (typeof App === 'function') mountedApp = mount(App as Component, { target: el });
 		}
 		function render(
 			html: string,
@@ -267,7 +274,7 @@
 		) {
 			if (!svelteClient) return;
 			unmount_kit();
-			(window as Any).__OBS_DEFER__ = deferred || {};
+			(window as ObsWindow).__OBS_DEFER__ = deferred || {};
 			liveNodes.clear();
 			const el = app();
 			el.innerHTML = '';
@@ -281,8 +288,8 @@
 			apply_lens();
 			for (const node of el.querySelectorAll('ogygia-region[live][data-og-fp]')) {
 				const fp = node.getAttribute('data-og-fp')!;
-				liveNodes.set(fp, node as Element & { applyLive?: (d: unknown) => void });
-				(node as Any).applyLive?.({
+				liveNodes.set(fp, node as LiveNode);
+				(node as LiveNode).applyLive?.({
 					id: fp,
 					module: '',
 					props: {},
@@ -292,10 +299,11 @@
 			}
 		}
 		function nav(html: string, modules: Record<string, string>, deferred: Record<string, string>) {
-			if (!svelteClient || !reconcileMod.reconcile_body) return render(html, modules, deferred);
-			(window as Any).__OBS_DEFER__ = {
-				...((window as Any).__OBS_DEFER__ || {}),
-				...(deferred || {})
+			const { reconcile_body, morph_children } = reconcileMod;
+			if (!svelteClient || !reconcile_body) return render(html, modules, deferred);
+			(window as ObsWindow).__OBS_DEFER__ = {
+				...(window as ObsWindow).__OBS_DEFER__,
+				...deferred
 			};
 			const { container } = link_page_dom(html, modules, svelteClient);
 			for (const r of container.querySelectorAll('ogygia-region[data-og-fp]')) {
@@ -315,7 +323,8 @@
 				)
 			);
 			renderT0 = performance.now();
-			reconcileMod.reconcile_body(el, container, reconcileMod.morph_children);
+			// both arrive together from the one module (see the import below)
+			reconcile_body(el, container, morph_children!);
 			apply_lens(); // re-stamp bytes on the reconciled DOM (kept regions keep their +Xms)
 			post({
 				obsType: 'reconciled',
@@ -326,7 +335,7 @@
 			liveNodes.clear();
 			for (const node of el.querySelectorAll('ogygia-region[live][data-og-fp]')) {
 				const fp = node.getAttribute('data-og-fp')!;
-				liveNodes.set(fp, node as Element & { applyLive?: (d: unknown) => void });
+				liveNodes.set(fp, node as LiveNode);
 			}
 		}
 
@@ -350,7 +359,7 @@
 			else if (d.obsType === 'liveTick') {
 				const node = liveNodes.get(d.fp);
 				if (node && d.html)
-					(node as Any).applyLive?.({
+					node.applyLive?.({
 						id: d.fp,
 						module: '',
 						props: {},
@@ -365,8 +374,8 @@
 			.then(([sc, om]) => {
 				svelteClient = sc as Linked;
 				reconcileMod = {
-					reconcile_body: (om as Any).reconcile_body,
-					morph_children: (om as Any).morph_children
+					reconcile_body: om.reconcile_body,
+					morph_children: om.morph_children
 				};
 				post({ obsType: 'ready' }); // tell the parent to send the first render
 			})

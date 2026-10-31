@@ -46,8 +46,9 @@
 	} | null>(null);
 	/** THE BROWSER STORE: no fragment → this may be a report this browser kept (an ephemeral host
 	 *  no longer has it, or the server restarted). Looked up once, by the id in the URL. */
-	let looking = $state(!blob && typeof location !== 'undefined');
-	if (looking) {
+	const look_in_store = !blob && typeof location !== 'undefined';
+	let looking = $state(look_in_store);
+	if (look_in_store) {
 		const id = location.pathname.split('/').filter(Boolean).pop() ?? '';
 		void get_report(id)
 			.then(async (rec) => {

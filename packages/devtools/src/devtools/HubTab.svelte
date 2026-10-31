@@ -35,7 +35,7 @@
 	};
 
 	const model = $derived.by(() => {
-		tick; // refresh with the panel tick
+		void tick; // refresh with the panel tick
 		const ev = snapshot();
 		const byId = new Map();
 		const get = (id) => {

@@ -362,7 +362,10 @@ describe('content graph — relations + backlinks', () => {
 
 	it('resolves an array relation to RefEntry[]', async () => {
 		const e = (await docs.get('deep'))!;
-		expect((e.rel?.related as { id: string }[]).map((r) => r.id)).toEqual(['intro', 'setup']);
+		expect((e.rel?.related as { id: string }[] | undefined)?.map((r) => r.id)).toEqual([
+			'intro',
+			'setup'
+		]);
 	});
 
 	it('a missing single ref is null', async () => {

@@ -5,15 +5,14 @@
 // Hammers the real build repeatedly and watches the transform layer for three things:
 //   1. THROUGHPUT — per-phase ogygia time (transformMs / prescanMs / bakeMs) via the OGYGIA_PROFILE
 //      instrument, across N builds → p50/p90/max + variance. Drift or high variance = a problem.
-//   2. DETERMINISM — hash the emitted client JS across builds. The compiler MUST be byte-deterministic
+//   2. DETERMINISM — compare ogygia's transform digest across builds. The compiler MUST be byte-deterministic
 //      (same source → same output) or caching, reproducible builds, and CI diffs all break.
 //   3. CACHE — transform_cache hit ratio (transformHit / (transformN+transformHit)).
 //
 //   node internal/bench/compiler-stress.ts [--app palaestra|docs] [--n 5]
 // ─────────────────────────────────────────────────────────────────────────────
 import { spawnSync } from 'node:child_process';
-import { readdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,7 +22,6 @@ const app = argv.find((a) => a.startsWith('--app='))?.slice(6) || 'palaestra';
 const N = Number(argv.find((a) => a.startsWith('--n='))?.slice(4) || 5);
 const appDir = join(repo, 'apps', app);
 const vite = join(appDir, 'node_modules/vite/bin/vite.js');
-const clientOut = join(appDir, '.svelte-kit/output/client/_app/immutable');
 
 type Prof = {
 	transformMs: number;
@@ -43,33 +41,6 @@ const stats = (xs: number[]) => {
 	return { p50: q(0.5), p90: q(0.9), min: s[0], max: s[s.length - 1], sd };
 };
 const f1 = (n: number) => n.toFixed(1);
-
-// hash every emitted client JS chunk (sorted) — the compiler's observable output
-function outputHash(): string {
-	if (!existsSync(clientOut)) return 'NO-OUTPUT';
-	const files: string[] = [];
-	const walk = (d: string) => {
-		for (const e of readdirSync(d, { withFileTypes: true })) {
-			const p = join(d, e.name);
-			if (e.isDirectory()) walk(p);
-			else if (p.endsWith('.js')) files.push(p);
-		}
-	};
-	walk(clientOut);
-	files.sort();
-	// Hash CONTENT ONLY, filename-independent: Vite's chunk filenames are content-hashes derived from
-	// the un-normalized bytes, so they cascade from any change and can't be part of a determinism check.
-	// Normalize SvelteKit's two per-build artifacts (module-scope nonce + `version.name` = Date.now())
-	// so what remains is purely OGYGIA's compiler output. Sort by normalized content → order-independent.
-	const normKit = (c: string) =>
-		c
-			.replace(/__sveltekit_[a-z0-9]+/g, '__sveltekit_NONCE')
-			.replace(/\b17\d{11}\b/g, 'KIT_VERSION_TS');
-	const contents = files.map((f) => normKit(readFileSync(f, 'utf8'))).sort();
-	const h = createHash('sha256');
-	for (const c of contents) h.update(c);
-	return h.digest('hex').slice(0, 16);
-}
 
 const runs: Array<{ ssr: Prof; client: Prof; wallMs: number; hash: string }> = [];
 console.log(`\x1b[1m\x1b[36m▸ compiler stress — ${app}, ${N} clean builds\x1b[0m`);

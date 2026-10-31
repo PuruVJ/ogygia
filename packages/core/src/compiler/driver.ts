@@ -9,7 +9,7 @@
  * The transform cache is content-keyed (`hit.code === source`), so a changed source misses and
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
  */
-import { fs, path, createHash } from './host.ts';
+import { fs, path, createHash, dir_entries } from './host.ts';
 import { fnv1a32 } from '../runtime/hash.ts';
 // `performance` is a global in both Node (≥16) and the browser — no import, so the driver graph loads
 // in the browser compiler (Observatory REPL) without pulling node:perf_hooks.
@@ -549,7 +549,6 @@ export class Compiler {
 		const program = this.program;
 		const { registry, island_graph, transportable_modules, runtime_marks } = program;
 		const root = ctx.root;
-		const libDir = ctx.libDir;
 
 		const src_dir = path.join(root, 'src');
 		clean_stale_ogygia_dirs(src_dir);
@@ -610,7 +609,7 @@ export class Compiler {
 		const walk = (dir: string) => {
 			let entries;
 			try {
-				entries = fs.readdirSync(dir, { withFileTypes: true });
+				entries = dir_entries(dir);
 			} catch {
 				return;
 			}
@@ -1991,9 +1990,15 @@ export class Compiler {
 				const info = graph(id);
 				if (!info) continue;
 				for (const next of info.importedIds)
-					if (!seen.has(next)) (seen.add(next), queue.push(next));
+					if (!seen.has(next)) {
+						seen.add(next);
+						queue.push(next);
+					}
 				for (const next of info.dynamicallyImportedIds)
-					if (!seen.has(next)) (seen.add(next), queue.push(next));
+					if (!seen.has(next)) {
+						seen.add(next);
+						queue.push(next);
+					}
 			}
 			for (const id of seen) proven_clean.add(id);
 			return false;
@@ -2050,7 +2055,8 @@ export class Compiler {
 		}
 
 		if (deleted) {
-			for (const [vpath, entry] of [...registry.entries()]) {
+			// (a copy: the loop deletes from the registry)
+			for (const [vpath, entry] of Array.from(registry.entries())) {
 				if (!same_module_path(entry.componentPath, file)) continue;
 				affected.add(vpath);
 				registry.delete(vpath);

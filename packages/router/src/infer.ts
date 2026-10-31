@@ -9,7 +9,7 @@
  * its ancestors + own. See internal/notes/router-v2.md.
  */
 import type { Snippet } from 'svelte';
-import type { LoadDef, LayoutDef, PageDef, TableShape, VerbEntry } from './define.ts';
+import type { AnyPageDef, LoadDef, LayoutDef, PageDef, TableShape, VerbEntry } from './define.ts';
 import type { ActionFailure } from './respond.ts';
 import type { Params, Simplify, StandardSchemaV1, InferOutput } from './view.ts';
 
@@ -18,9 +18,6 @@ type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) exten
 ) => void
 	? I
 	: never;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyPageDef = PageDef<any, any, any, any, any>;
 
 /** The data a load contributes — a `load()` wrapper OR a bare function (both authoring forms). `{}`
  *  when absent / non-object. LoadDef is checked first (it is itself callable). A `Response` arm is

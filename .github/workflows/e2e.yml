@@ -34,9 +34,12 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      # first, and fast: an unformatted file fails here, not after the suites
+      # first, and fast: an unformatted file or a lint error fails here, not after the suites
       - name: Format check (oxfmt)
         run: pnpm run format:check
+
+      - name: Lint (oxlint)
+        run: pnpm run lint
 
       # turbo's local cache: a package whose inputs did not change replays its build, check and e2e
       - name: Turbo cache
@@ -56,8 +59,8 @@ jobs:
       - name: Warm wrangler
         run: npx --yes wrangler --version
 
-      # Root `check` (build:lib + every package's check, the fixture apps' and the palaestra's
-      # svelte-check, each package's e2e tsc) — the e2e suites alone never run it, which let type debt
+      # Root `check` (build:lib + every package's check, every fixture app's and app's svelte-check
+      # with warnings failing, each package's test and e2e tsc) — the e2e suites alone never run it, which let type debt
       # rot invisibly until upstream-watch tripped on it. Two tasks at a time: every package's check runs
       # its own vitest pool (core's with a browser), and turbo's default ten at once on this 4-core
       # runner starved them into timeouts.

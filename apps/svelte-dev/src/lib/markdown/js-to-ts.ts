@@ -132,11 +132,11 @@ function convert_to_ts(deps: Deps, js_code: string, indent = '', offset = ''): s
 				if (ts.isJSDocTypeTag(tag)) {
 					type = get_type_info(get_jsdoc_type_expression_text(tag.getText()));
 				} else if (ts.isJSDocParameterTag(tag)) {
-					params.push(get_type_info(tag.typeExpression?.getText()!));
+					params.push(get_type_info(tag.typeExpression!.getText()));
 				} else if (ts.isJSDocReturnTag(tag)) {
-					returns = get_type_info(tag.typeExpression?.getText()!);
+					returns = get_type_info(tag.typeExpression!.getText());
 				} else if (ts.isJSDocSatisfiesTag(tag)) {
-					satisfies = get_type_info(tag.typeExpression?.getText()!);
+					satisfies = get_type_info(tag.typeExpression!.getText());
 				} else {
 					throw new Error('Unhandled tag: ' + tag.getText());
 				}

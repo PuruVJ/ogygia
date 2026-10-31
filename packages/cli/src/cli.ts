@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* oxlint-disable no-explicit-any -- CLI manipulates sv-utils' untyped estree AST; `any` is pragmatic here. */
 // ─────────────────────────────────────────────────────────────────────────────
 // `ogygia` CLI — `npx ogygia init`.
 //
@@ -20,6 +19,7 @@ import path from 'node:path';
 import { stdin, stdout } from 'node:process';
 import { createInterface } from 'node:readline/promises';
 import {
+	type AstTypes,
 	color,
 	fileExists,
 	loadFile,
@@ -44,7 +44,6 @@ const strong = color.command;
 const accent = color.command;
 const ok = color.success;
 const bad = color.error;
-const link = color.website;
 const dim = color.dim;
 
 // ── argv ─────────────────────────────────────────────────────────────────────
@@ -130,10 +129,8 @@ async function confirm(question: string, fallback: boolean): Promise<boolean> {
 }
 
 // ── AST predicates (shared with the wiring below) ────────────────────────────
-type AnyNode = any;
-
 /** Is `p` the spread element `...ogygia.transport`? */
-function isOgygiaTransportSpread(p: AnyNode): boolean {
+function isOgygiaTransportSpread(p: AstTypes.ObjectExpression['properties'][number]): boolean {
 	return (
 		p.type === 'SpreadElement' &&
 		p.argument.type === 'MemberExpression' &&
@@ -145,12 +142,15 @@ function isOgygiaTransportSpread(p: AnyNode): boolean {
 }
 
 /** Find a top-level `export const <name> = …` declarator in a Program AST, or null. */
-function findExportedConst(ast: AnyNode, name: string): AnyNode | null {
+function findExportedConst(
+	ast: AstTypes.Program,
+	name: string
+): AstTypes.VariableDeclarator | null {
 	for (const node of ast.body) {
 		if (node.type !== 'ExportNamedDeclaration') continue;
 		if (node.declaration?.type !== 'VariableDeclaration') continue;
 		const d = node.declaration.declarations.find(
-			(dc: AnyNode) => dc.id.type === 'Identifier' && dc.id.name === name
+			(dc) => dc.id.type === 'Identifier' && dc.id.name === name
 		);
 		if (d) return d;
 	}
@@ -158,8 +158,15 @@ function findExportedConst(ast: AnyNode, name: string): AnyNode | null {
 }
 
 // ── preflight (shared by `init` and `site init`) ───────────────────────────
+/** The parts of the app's package.json the CLI reads and writes; the rest round-trips untouched. */
+type PackageJson = {
+	dependencies?: Record<string, string>;
+	devDependencies?: Record<string, string>;
+	[key: string]: unknown;
+};
+
 interface Preflight {
-	pkg: AnyNode;
+	pkg: PackageJson;
 	pkgRaw: string;
 	viteConfig: string;
 	ext: 'ts' | 'js';
@@ -168,7 +175,7 @@ interface Preflight {
 function preflight(): Preflight {
 	const pkgRaw = loadFile(cwd, 'package.json');
 	if (!pkgRaw) die(`no package.json in ${strong(cwd)} — run this inside your SvelteKit project.`);
-	let pkg: AnyNode;
+	let pkg: PackageJson;
 	try {
 		pkg = JSON.parse(pkgRaw);
 	} catch {
@@ -195,10 +202,10 @@ function addOgygiaDep(pf: Preflight, markdown: boolean): void {
 	const cli_missing =
 		!pf.pkg.devDependencies?.['@ogygia/cli'] && !pf.pkg.dependencies?.['@ogygia/cli'];
 	if (missing.length || cli_missing) {
-		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}) };
+		pf.pkg.dependencies = { ...pf.pkg.dependencies };
 		for (const name of missing) pf.pkg.dependencies[name] = `^${version}`;
 		if (cli_missing)
-			pf.pkg.devDependencies = { ...(pf.pkg.devDependencies ?? {}), '@ogygia/cli': `^${version}` };
+			pf.pkg.devDependencies = { ...pf.pkg.devDependencies, '@ogygia/cli': `^${version}` };
 		const indent = JSON_INDENT_RE.exec(pf.pkgRaw)?.[1] ?? '\t';
 		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
 	}
@@ -242,7 +249,7 @@ function wireSvelteConfig(asyncCompiler: boolean): void {
 				pp.elements.push(spread);
 			} else {
 				// `[ <existing>, ...preprocess() ]` — parse a well-formed array, drop in the existing.
-				const arr = js.common.parseExpression('[0, ...preprocess()]') as AnyNode;
+				const arr = js.common.parseExpression('[0, ...preprocess()]') as AstTypes.ArrayExpression;
 				arr.elements[0] = pp;
 				override({ preprocess: arr });
 			}
@@ -321,8 +328,10 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 				if (!init.properties.some(isOgygiaTransportSpread)) init.properties.unshift(spread());
 			} else if (
 				init?.type === 'MemberExpression' &&
-				init.object?.name === 'ogygia' &&
-				init.property?.name === 'transport'
+				init.object.type === 'Identifier' &&
+				init.object.name === 'ogygia' &&
+				init.property.type === 'Identifier' &&
+				init.property.name === 'transport'
 			) {
 				// already exactly ogygia.transport
 			} else if (init) {

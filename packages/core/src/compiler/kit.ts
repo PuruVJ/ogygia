@@ -1,4 +1,4 @@
-import { fs, path } from './host.ts';
+import { fs, path, dir_entries } from './host.ts';
 import { createRequire } from 'node:module';
 import { ISLAND_DIR } from './region/transform.ts';
 
@@ -392,7 +392,7 @@ export function routeCsrIsTrue(hostFile: string, routesDir: string): boolean {
  */
 function route_entries(dir: string): Array<{ name: string; is_dir: boolean; is_file: boolean }> {
 	const out: Array<{ name: string; is_dir: boolean; is_file: boolean }> = [];
-	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+	for (const e of dir_entries(dir)) {
 		let is_dir = e.isDirectory();
 		let is_file = e.isFile();
 		if (!is_dir && !is_file) {
@@ -691,7 +691,7 @@ export function inject_keep_client_route(r: string): void {
 export function clean_stale_ogygia_dirs(dir: string): void {
 	let entries;
 	try {
-		entries = fs.readdirSync(dir, { withFileTypes: true });
+		entries = dir_entries(dir);
 	} catch {
 		return;
 	}

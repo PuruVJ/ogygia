@@ -109,7 +109,9 @@ export type ModuleScript<A extends unknown[]> = ScriptAttrs &
 
 /** The module namespaces `imports` hands to `run`, by the names it declared. (Untyped: annotate the
  *  parameter — `({ carousel }: { carousel: typeof import('…') })` — when you have the module's types.) */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// `any`, not `unknown`: the annotation above must type-check, and a `run` whose parameter declares a
+// module's type is only assignable when each namespace here is `any` (`unknown` rejects it).
+// oxlint-disable-next-line typescript/no-explicit-any
 export type ScriptImports<I extends Record<string, string>> = { readonly [K in keyof I]: any };
 
 /**

@@ -70,7 +70,7 @@ export function start_edge_emulator(options: {
 	const purge_path = (path: string) => {
 		if (path.endsWith('/*')) {
 			const prefix = path.slice(0, -2);
-			for (const key of [...cache.keys()]) {
+			for (const key of cache.keys()) {
 				if (key === prefix || key.startsWith(prefix + '/')) cache.delete(key);
 			}
 		} else {
@@ -164,7 +164,7 @@ export function start_edge_emulator(options: {
 			for (const obj of body.objects ?? []) {
 				if (is_tag) {
 					purges.push({ kind: 'tag', value: obj, auth_ok });
-					for (const [key, entry] of [...cache]) {
+					for (const [key, entry] of cache) {
 						if (entry.tags.includes(obj)) cache.delete(key);
 					}
 				} else {

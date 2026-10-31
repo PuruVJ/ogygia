@@ -62,7 +62,7 @@ function preference_switch(): string {
 			if (!name || !val) return;
 			try {
 				localStorage.setItem('og-pref-' + name, val);
-			} catch (err) {
+			} catch {
 				/* private mode — the attr still updates for this session */
 			}
 			document.documentElement.setAttribute('data-pref-' + name, val);
@@ -94,7 +94,7 @@ function preference_impl(spec: PreferenceSpec): Preference {
 						var v = localStorage.getItem('og-pref-' + n);
 						if (!v || vs.indexOf(v) < 0) v = d;
 						document.documentElement.setAttribute('data-pref-' + n, v);
-					} catch (e) {
+					} catch {
 						document.documentElement.setAttribute('data-pref-' + n, d);
 					}
 				},

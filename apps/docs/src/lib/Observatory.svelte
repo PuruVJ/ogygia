@@ -669,7 +669,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 			.join('/');
 		if (!name || files[name]) return;
 		const base = name.split('/').pop() || name;
-		files[name] = /\.svelte$/.test(name) ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
+		files[name] = name.endsWith('.svelte') ? `<h1>${base.replace(/\.svelte$/, '')}</h1>` : '';
 		active = name;
 		request_all();
 	}
@@ -922,7 +922,9 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		const b = bStr.split('\n');
 		const n = a.length;
 		const m = b.length;
-		const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+		const dp: number[][] = Array.from({ length: n + 1 }, () =>
+			Array.from({ length: m + 1 }, () => 0)
+		);
 		for (let i = n - 1; i >= 0; i--)
 			for (let j = m - 1; j >= 0; j--)
 				dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
@@ -1318,7 +1320,6 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	 *  SHADOWS the global inside the bundle (+ its event handlers), so the preview's logs land in our panel. */
 	function eval_cjs(code: string): Record<string, unknown> {
 		const module = { exports: {} as Record<string, unknown> };
-		// eslint-disable-next-line no-new-func
 		new Function('require', 'module', 'exports', 'console', code)(
 			bundle_require,
 			module,

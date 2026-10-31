@@ -8,7 +8,7 @@
 	import type { SeedRow } from './report-data.ts';
 	import { fmt_bytes } from './format.ts';
 	import { row_id, follow_hash } from './row-anchor.svelte.ts';
-	import { pressable } from './press.ts';
+	import { press_key } from './press.ts';
 
 	let {
 		rows,
@@ -17,8 +17,8 @@
 		seed_bytes
 	}: { rows: SeedRow[]; whole_by: string[]; total: number; seed_bytes: number } = $props();
 	let picked = $state<string | null>(null);
-	const shipped = rows.filter((r) => r.shipped);
-	const dropped = rows.filter((r) => !r.shipped);
+	const shipped = $derived(rows.filter((r) => r.shipped));
+	const dropped = $derived(rows.filter((r) => !r.shipped));
 	const REASON: Record<string, string> = {
 		read: 'read by an island',
 		referenced: 'props point into it',
@@ -47,10 +47,10 @@
 			class:picked={picked === r.key}
 			class:dropped={!r.shipped}
 			onclick={() => (picked = picked === r.key ? null : r.key)}
+			onkeydown={press_key}
 			role="button"
 			tabindex="0"
 			aria-expanded={picked === r.key}
-			{@attach pressable}
 		>
 			<span class="key"><code>{r.key}</code></span>
 			<div class="track">

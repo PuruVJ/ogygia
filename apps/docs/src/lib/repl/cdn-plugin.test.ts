@@ -67,8 +67,16 @@ async function run(entryCode: string) {
 	return importCode(await bundle(entryCode));
 }
 
+/** The slice of a fetch `Response` the CDN plugin reads — all the offline fakes below implement. */
+type FakeResponse = {
+	ok: boolean;
+	text?: () => Promise<string | null>;
+	arrayBuffer: () => Promise<ArrayBuffer>;
+};
+type FakeFetch = (url: unknown) => Promise<FakeResponse>;
+
 /** Bundle an entry with an INJECTED fetch (deterministic, offline) — for the wasm/asset paths. */
-async function bundleWith(entryCode: string, fetchFn: any) {
+async function bundleWith(entryCode: string, fetchFn: FakeFetch) {
 	const files: Record<string, string> = { '/entry.js': entryCode };
 	const ws = {
 		name: 'ws',
@@ -82,7 +90,14 @@ async function bundleWith(entryCode: string, fetchFn: any) {
 	const missing: string[] = [];
 	const b = await rolldown({
 		input: '/entry.js',
-		plugins: [ws, cdnPlugin({ fetch: fetchFn, onMissing: (id) => missing.push(id) })],
+		plugins: [
+			ws,
+			cdnPlugin({
+				// the fakes answer only what the plugin reads, so they stand in for the global fetch
+				fetch: fetchFn as unknown as typeof fetch,
+				onMissing: (id) => missing.push(id)
+			})
+		],
 		cwd: '/',
 		onLog() {}
 	});
@@ -99,8 +114,8 @@ const wasmFetch = async (u: unknown) =>
 		: { ok: false, arrayBuffer: async () => new ArrayBuffer(0), text: async () => null };
 
 const timeout = (ms: number) =>
-	new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
-const withNet = (p: Promise<any>) => Promise.race([p, timeout(45000)]);
+	new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+const withNet = <T>(p: Promise<T>) => Promise.race([p, timeout(45000)]);
 
 async function main() {
 	console.log('CDN plugin — live jsdelivr integration\n');
@@ -114,7 +129,8 @@ async function main() {
 		);
 		ok('CJS default export (canvas-confetti)', m.t === 'function', `typeof=${m.t}`);
 		ok('CJS static props preserved (.reset)', m.hasReset === 'function');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 2;
 		console.log('  ✗ canvas-confetti threw —', e.message);
 	}
@@ -132,7 +148,8 @@ async function main() {
 			typeof m.id === 'string' && m.id.length > 0,
 			`id=${m.id}`
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 2;
 		console.log('  ✗ nanoid threw —', e.message);
 	}
@@ -145,7 +162,8 @@ async function main() {
 			)
 		);
 		ok('ESM barrel named imports (lodash-es)', m.a === 'function' && m.b === 'function');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ lodash-es threw —', e.message);
 	}
@@ -156,7 +174,8 @@ async function main() {
 			run(`import debounce from 'lodash/debounce';\nexport const t = typeof debounce;`)
 		);
 		ok('CJS subpath default (lodash/debounce)', m.t === 'function', `typeof=${m.t}`);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ lodash/debounce threw —', e.message);
 	}
@@ -172,7 +191,8 @@ async function main() {
 			'scoped + exports map + transitive (@floating-ui/dom)',
 			m.a === 'function' && m.b === 'function'
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ @floating-ui/dom threw —', e.message);
 	}
@@ -183,7 +203,8 @@ async function main() {
 			run(`import { nanoid } from 'nanoid@5.0.7';\nexport const t = typeof nanoid;`)
 		);
 		ok('versioned specifier (nanoid@5.0.7)', m.t === 'function');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ nanoid@5.0.7 threw —', e.message);
 	}
@@ -202,7 +223,8 @@ async function main() {
 			importsSvelte && !bundledSvelte,
 			`import=${importsSvelte} bundled=${bundledSvelte}`
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ svelte-external threw —', e.message);
 	}
@@ -230,7 +252,8 @@ async function main() {
 			compiled && svelteExternal,
 			`compiled=${compiled} external=${svelteExternal}`
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 2;
 		console.log(
 			'  ✗ radix-svelte threw —',
@@ -248,7 +271,8 @@ async function main() {
 		ok('unpolyfillable builtin (fs) → inert stub', m.fsType === 'object');
 		ok('node:path → path-browserify polyfill (works)', m.joined === 'a/b', `join=${m.joined}`);
 		ok('buffer → real polyfill (Buffer.from works)', m.enc === 'aGk=', `enc=${m.enc}`);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 3;
 		console.log('  ✗ node-builtin/polyfill threw —', e.message.split('\n')[0]);
 	}
@@ -259,7 +283,8 @@ async function main() {
 			run(`import x from 'this-package-does-not-exist-9z9z9z';\nexport const t = typeof x;`)
 		);
 		ok('unknown package stubbed (build survives)', m.t === 'object', `typeof=${m.t}`);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ unknown-package threw —', e.message);
 	}
@@ -270,7 +295,8 @@ async function main() {
 			run(`import pkg from 'nanoid/package.json';\nexport const name = pkg.name;`)
 		);
 		ok('JSON import (nanoid/package.json)', m.name === 'nanoid', `name=${m.name}`);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ JSON import threw —', e.message);
 	}
@@ -282,7 +308,8 @@ async function main() {
 			'CSS import → style injection',
 			/createElement\((['"])style\1\)/.test(code) && /data-repl-css/.test(code)
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ CSS import threw —', e.message.split('\n')[0]);
 	}
@@ -296,7 +323,8 @@ async function main() {
 			run(`import { nanoid } from 'nanoid@latest';\nexport const t = typeof nanoid;`)
 		);
 		ok('semver range (^5) + dist-tag (latest)', a.t === 'function' && c.t === 'function');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ semver range threw —', e.message.split('\n')[0]);
 	}
@@ -307,7 +335,8 @@ async function main() {
 			run(`import { produce } from 'immer';\nexport const t = typeof produce;`)
 		);
 		ok('CJS internals (immer/produce)', m.t === 'function');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ immer threw —', e.message.split('\n')[0]);
 	}
@@ -316,7 +345,8 @@ async function main() {
 	try {
 		const m = await withNet(run(`import mime from 'mime';\nexport const t = typeof mime;`));
 		ok('pkg with transitive node builtin (mime)', m.t === 'function' || m.t === 'object');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ mime threw —', e.message.split('\n')[0]);
 	}
@@ -327,7 +357,8 @@ async function main() {
 			run(`import { scaleLinear } from 'd3-scale';\nexport const t = typeof scaleLinear;`)
 		);
 		ok('deep transitive graph (d3-scale)', m.t === 'function');
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ d3-scale threw —', e.message.split('\n')[0]);
 	}
@@ -346,7 +377,7 @@ async function main() {
 				return files[id] ?? null;
 			}
 		};
-		const hang = (): Promise<any> => new Promise(() => {}); // never resolves
+		const hang = (): Promise<never> => new Promise(() => {}); // never resolves
 		const t0 = Date.now();
 		const b = await rolldown({
 			input: '/entry.js',
@@ -362,7 +393,8 @@ async function main() {
 			output[0].code.length > 0 && elapsed < 3000,
 			`${elapsed}ms`
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ timeout test threw —', e.message.split('\n')[0]);
 	}
@@ -379,7 +411,8 @@ async function main() {
 			'wasm static import → init() yields a WebAssembly.Instance',
 			inst instanceof WebAssembly.Instance
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ wasm init test threw —', e.message.split('\n')[0]);
 	}
@@ -396,7 +429,8 @@ async function main() {
 			typeof m.url === 'string' && m.url.startsWith('data:application/wasm;base64,'),
 			(m.url || '').slice(0, 40)
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ wasm ?url test threw —', e.message.split('\n')[0]);
 	}
@@ -417,7 +451,8 @@ async function main() {
 			code.length > 0 && missing.length > 0,
 			`missing=${missing.length}`
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ wasm fail test threw —', e.message.split('\n')[0]);
 	}
@@ -433,7 +468,8 @@ async function main() {
 			code.length > 0 && missing.some((id) => /\.node/.test(id)),
 			`missing=${missing.join(',')}`
 		);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 1;
 		console.log('  ✗ .node test threw —', e.message.split('\n')[0]);
 	}
@@ -470,7 +506,8 @@ async function main() {
 		const m = await importCode(code);
 		ok('browser map remaps inner node→browser file', m.version === 'BROWSER', `got ${m.version}`);
 		ok('browser:false inner file → inert stub', m.stubType === 'object', `got ${m.stubType}`);
-	} catch (e: any) {
+	} catch (err) {
+		const e = err as Error;
 		fail += 2;
 		console.log('  ✗ browser-map test threw —', e.message.split('\n')[0]);
 	}

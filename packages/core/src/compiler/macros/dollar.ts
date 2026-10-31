@@ -34,7 +34,7 @@
  */
 import { og_js_regions } from '../parse/scan.ts';
 import { match_close } from '../parse/scan.ts';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 import { og_member } from './wire.ts';
 
 // ── regexes
@@ -44,8 +44,7 @@ const WS_RE = /\s/;
 
 const MARKER = 'import.meta.og.$';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+type Node = AstNode;
 
 /** Globals a hoisted factory may reference without binding (never captured). */
 const KNOWN_GLOBALS = new Set([

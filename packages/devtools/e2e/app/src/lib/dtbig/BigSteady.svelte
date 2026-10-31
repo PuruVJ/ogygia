@@ -1,10 +1,12 @@
 <script lang="ts">
 	// /dt-big's decoy: the same ~40 KB of markup, the same on both sides.
 	let { rows }: { rows: number } = $props();
-	const items = Array.from({ length: rows }, (_, i) => ({
-		id: i,
-		text: `row ${i}: lorem ipsum dolor sit amet, consectetur adipiscing elit`
-	}));
+	const items = $derived(
+		Array.from({ length: rows }, (_, i) => ({
+			id: i,
+			text: `row ${i}: lorem ipsum dolor sit amet, consectetur adipiscing elit`
+		}))
+	);
 </script>
 
 <ul>

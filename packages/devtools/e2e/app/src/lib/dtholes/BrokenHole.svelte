@@ -3,6 +3,7 @@
 	// keeps the fallback. The devtools must name it (the runtime is silent about it in a build).
 	import type { Snippet } from 'svelte';
 	let { label }: { label: string; ogygiaFallback?: Snippet } = $props();
+	// svelte-ignore state_referenced_locally
 	throw new Error(`planted: ${label} cannot render`);
 </script>
 

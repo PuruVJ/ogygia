@@ -7,7 +7,8 @@
 	"scripts": {
 		"dev": "vite dev --port 3073",
 		"build": "vite build",
-		"preview": "vite preview --port 3073"
+		"preview": "vite preview --port 3073",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --fail-on-warnings"
 	},
 	"dependencies": {
 		"@ogygia/flags": "workspace:*",
@@ -20,6 +21,7 @@
 		"@sveltejs/kit": "catalog:",
 		"@sveltejs/vite-plugin-svelte": "catalog:",
 		"svelte": "catalog:",
+		"svelte-check": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"
 	}

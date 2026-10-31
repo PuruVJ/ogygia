@@ -40,7 +40,7 @@
 	}
 
 	const model = $derived.by(() => {
-		tick; // refresh with the panel tick
+		void tick; // refresh with the panel tick
 		const ev = snapshot();
 		const finishes = ev.filter((e) => e.name === 'nav.finish');
 		if (finishes.length === 0) return { hasNav: false };

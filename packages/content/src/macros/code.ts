@@ -32,8 +32,19 @@ import {
 const MARKERS = ['import.meta.og.code', 'import.meta.og.md'] as const;
 const HELPER = '__og_html_region';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+/** An oxc (ESTree) node as the walk sees it: its `type` tag and offsets; every other field is
+ *  unchecked until read. */
+type Node = {
+	readonly type: string;
+	readonly start: number;
+	readonly end: number;
+	readonly [key: string]: unknown;
+};
+/** The fields a `TemplateLiteral` node carries that {@link static_string} reads. */
+type TemplateLiteralNode = Node & {
+	readonly expressions?: readonly unknown[];
+	readonly quasis?: readonly { readonly value?: { readonly cooked?: string | null } }[];
+};
 
 function walk(node: Node, visit: (n: Node) => void): void {
 	visit(node);
@@ -43,8 +54,13 @@ function walk(node: Node, visit: (n: Node) => void): void {
 		if (Array.isArray(child)) {
 			for (const c of child)
 				if (c && typeof c === 'object' && typeof c.type === 'string') walk(c, visit);
-		} else if (child && typeof child === 'object' && typeof child.type === 'string') {
-			walk(child, visit);
+		} else if (
+			child &&
+			typeof child === 'object' &&
+			'type' in child &&
+			typeof child.type === 'string'
+		) {
+			walk(child as Node, visit);
 		}
 	}
 }
@@ -78,12 +94,13 @@ function static_string(
 ): string {
 	if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
 	if (node?.type === 'TemplateLiteral') {
-		if ((node.expressions?.length ?? 0) > 0) {
+		const tl = node as TemplateLiteralNode;
+		if ((tl.expressions?.length ?? 0) > 0) {
 			throw new Error(
 				`[ogygia] ${id}:${line_of(src, offset)} — import.meta.og.code(): ${label} is a template literal with \${…} interpolation, which the build can't resolve. Use a static string.`
 			);
 		}
-		return String(node.quasis?.[0]?.value?.cooked ?? '');
+		return String(tl.quasis?.[0]?.value?.cooked ?? '');
 	}
 	throw new Error(
 		`[ogygia] ${id}:${line_of(src, offset)} — import.meta.og.code(): ${label} must be a static string literal.`
@@ -96,7 +113,7 @@ function find_calls(src: string, region: JsRegion, id: string): CodeCall[] | nul
 	const { program, ok } = parse_module(region.code, id);
 	if (!ok || !program) return null;
 	const calls: CodeCall[] = [];
-	walk(program, (n) => {
+	walk(program as Node, (n) => {
 		if (n.type !== 'CallExpression') return;
 		const method = og_member(n.callee as Node);
 		if (method !== 'code' && method !== 'md') return;

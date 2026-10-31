@@ -39,6 +39,7 @@
 	},
 	"scripts": {
 		"build": "tsdown",
+		"check": "tsc -p . && vitest run",
 		"test": "vitest run",
 		"prepublishOnly": "pnpm run build && vitest run"
 	},

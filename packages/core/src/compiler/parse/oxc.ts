@@ -11,8 +11,16 @@
  */
 import { createRequire } from 'node:module';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+/**
+ * An AST node as the compiler's passes read it: the parser seam's output (oxc's ESTree, or whatever
+ * parser {@link set_parser} installed) and Svelte's template AST, walked generically and read by field
+ * name. Kept loose on purpose: the walkers index arbitrary fields (`node[key]`), and some passes accept
+ * node shapes beyond oxc's (store.ts also matches Babel's `StringLiteral` / `ObjectProperty`), which a
+ * precise ESTree union would rule out. The one loose node type every pass shares.
+ */
+// oxlint-disable-next-line typescript/no-explicit-any
+export type AstNode = Record<string, any>;
+type Node = AstNode;
 
 export type Comment = { start: number; end: number };
 export type ParseResult = { program: Node | null; ok: boolean; comments: Comment[] };

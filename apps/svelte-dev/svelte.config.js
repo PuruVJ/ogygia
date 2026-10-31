@@ -30,7 +30,7 @@ const config = {
 				// The blog is an 8-year ARCHIVE: old posts link legacy doc schemes (`/docs/svelte-components`)
 				// that are dead on svelte.dev too without their historical redirect map. Warn, don't fail —
 				// but a dead /docs link from a DOCS page still fails the build (the corpus is live).
-				if (status === 404 && /^\/blog\//.test(referrer ?? '')) {
+				if (status === 404 && (referrer ?? '').startsWith('/blog/')) {
 					console.warn(`[prerender] skipped (legacy link in archived post): ${path} ← ${referrer}`);
 					return;
 				}

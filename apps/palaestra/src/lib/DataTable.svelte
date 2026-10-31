@@ -1,15 +1,17 @@
 <script lang="ts">
 	// Client-side data management island: sorts server-passed rows in the browser.
-	let { rows }: { rows: Record<string, any>[] } = $props();
-	let sortKey = $state('id');
+	type Row = { id: number; total: number; customer: string; status: string };
+	type SortKey = 'id' | 'total';
+	let { rows }: { rows: Row[] } = $props();
+	let sortKey = $state<SortKey>('id');
 	let asc = $state(true);
 	const sorted = $derived(
-		[...rows].sort((a: Record<string, any>, b: Record<string, any>) => {
+		[...rows].sort((a, b) => {
 			const c = a[sortKey] < b[sortKey] ? -1 : a[sortKey] > b[sortKey] ? 1 : 0;
 			return asc ? c : -c;
 		})
 	);
-	function toggle(k: string) {
+	function toggle(k: SortKey) {
 		if (sortKey === k) asc = !asc;
 		else {
 			sortKey = k;

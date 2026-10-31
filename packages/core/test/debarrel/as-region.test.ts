@@ -14,17 +14,17 @@ import { ogygia } from '../../src/vite/index.ts';
 let f: Fixture;
 afterEach(() => f?.dispose());
 
-const ctx = (root: string) => ({
+const ctx = (root: string): Parameters<typeof transformTsRegions>[2] => ({
 	root,
 	libDir: root + '/lib',
-	readFile: () => null,
 	pathModule: path,
 	dev: false,
 	virtualPathFor: (_host: string, iid: string) => `virtual:ogygia/island/${iid}.js`,
 	wrapperPathFor: (_host: string, iid: string) => `virtual:ogygia/wrapper/${iid}.svelte`,
 	devUrlFor: (p: string) => '/@id/' + p,
 	visibleMargin: '0px',
-	presets: {}
+	importKeys: undefined,
+	idSalt: ''
 });
 
 describe('debarrel + import.meta.og.asRegion', () => {
@@ -42,7 +42,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		const r = transformTsRegions(rewritten, f.id('src/registry.ts'), ctx(f.root));
 		expect(r).not.toBeNull();
 		expect(r!.islands).toHaveLength(1);
-		const isl = r!.islands[0] as Record<string, unknown>;
+		const isl = r!.islands[0];
 		expect(isl.held).toBe(true);
 		expect(String(isl.bindingSsrSource)).toContain('__hydrate: "visible"');
 		// the island's entry imports the LEAF file, not the barrel
@@ -63,9 +63,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		});
 		const r = transformTsRegions(f.read('src/registry.ts'), f.id('src/registry.ts'), ctx(f.root));
 		expect(r!.islands).toHaveLength(1);
-		expect(String((r!.islands[0] as Record<string, unknown>).source)).toMatch(
-			/import \{ A as __OgygiaComp_[0-9a-f]+ \} from /
-		);
+		expect(String(r!.islands[0].source)).toMatch(/import \{ A as __OgygiaComp_[0-9a-f]+ \} from /);
 	});
 
 	it('INSIDE ogygia the import feeding asRegion is left alone: the prescan keys the island on the raw import, the transform must see the same one', async () => {
@@ -89,9 +87,7 @@ describe('debarrel + import.meta.og.asRegion', () => {
 		const raw = transformTsRegions(f.read('src/registry.ts'), f.id('src/registry.ts'), ctx(f.root));
 		const rewritten = (await f.rewrite('src/registry.ts', undefined, { skip }))!;
 		const after = transformTsRegions(rewritten, f.id('src/registry.ts'), ctx(f.root));
-		expect((after!.islands[0] as Record<string, unknown>).id).toBe(
-			(raw!.islands[0] as Record<string, unknown>).id
-		);
+		expect(after!.islands[0].id).toBe(raw!.islands[0].id);
 	});
 
 	it('the wired plugin (ogygia({ barrels })) applies that rule end to end', async () => {

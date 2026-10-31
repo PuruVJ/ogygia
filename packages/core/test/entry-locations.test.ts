@@ -34,6 +34,7 @@ import { set_entry_locations, set_island_deps } from './_stubs/virtual-island-de
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
+import { partial_ctx_init } from './_compile-ctx.ts';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 const GRAPH_RE = /<script type="application\/json" data-ogygia-graph>([^<]*)<\/script>/;
@@ -411,26 +412,27 @@ describe('the driver: entries emitted by name, mapped, and shimmed', () => {
 			outHash: new Map()
 		});
 		compiler.configure(
-			new CompileCtx({
-				root,
-				base: '/',
-				app_dir: '_app',
-				runtime_hash: '0123456789ab',
-				libDir: path.join(root, 'src/lib'),
-				is_dev: false,
-				id_salt: '',
-				visibleMargin: '0px',
-				presets: {},
-				import_keys: normalize_import_keys(undefined),
-				resolve_alias: [],
-				markdown_config: null,
-				pkg_root: '/nowhere/ogygia',
-				app_shims: {
-					'$app/state': '/x/a.js',
-					'$app/stores': '/x/b.js',
-					'$app/navigation': '/x/c.js'
-				}
-			})
+			new CompileCtx(
+				partial_ctx_init({
+					root,
+					base: '/',
+					app_dir: '_app',
+					runtime_hash: '0123456789ab',
+					libDir: path.join(root, 'src/lib'),
+					is_dev: false,
+					id_salt: '',
+					visibleMargin: '0px',
+					presets: {},
+					import_keys: normalize_import_keys(undefined),
+					resolve_alias: [],
+					pkg_root: '/nowhere/ogygia',
+					app_shims: {
+						'$app/state': '/x/a.js',
+						'$app/stores': '/x/b.js',
+						'$app/navigation': '/x/c.js'
+					}
+				})
+			)
 		);
 		compiler.prescan();
 		return compiler;

@@ -38,7 +38,7 @@ function fromArray(
 function orderOf(id: string, filePath: string): number[] {
 	const parts = filePath.replace(/\\/g, '/').split('?')[0].split('/').filter(Boolean);
 	const last = parts[parts.length - 1] ?? '';
-	if (/^(\+doc|index)\./.test(last) || /^\+/.test(last)) parts.pop();
+	if (/^(\+doc|index)\./.test(last) || last.startsWith('+')) parts.pop();
 	else if (parts.length) parts[parts.length - 1] = last.replace(/\.[^.]+$/, '');
 	const idDepth = id.split('/').filter(Boolean).length;
 	const tail = parts.slice(-idDepth);
@@ -503,7 +503,7 @@ describe('link audit', () => {
 				page(
 					'start/install',
 					'content/docs/00-start/00-install/+doc.svx',
-					{ title: 'Install', ...(extra ?? {}) },
+					{ title: 'Install', ...extra },
 					[{ depth: 2, id: 'setup', text: 'Setup' }]
 				),
 				{

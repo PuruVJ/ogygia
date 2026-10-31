@@ -9,16 +9,17 @@
 	// is its own async block that Svelte handles in sync render mode, so it works AND keeps this
 	// widget's loading state LOCAL (a boundary with `pending` up the tree stays the author's choice).
 	import { nav } from '$lib/docs.remote';
+	import type { NavLeaf } from '@ogygia/content';
 
 	// TOP-LEVEL AWAIT, deliberately: this island lives inside a `demo` snippet handed to ShowcaseCard,
 	// so it renders through the portable-snippet path — whose server leg now threads the outer async
 	// renderer (region-snippet.ts). This line is the regression canary for that machinery.
-	const tree: any = await nav();
-	const leaves = tree.flatMap((n: any) =>
+	const tree = await nav();
+	const leaves = tree.flatMap((n) =>
 		n.kind === 'group'
 			? n.items
-					.filter((i: any) => i.kind === 'leaf')
-					.map((l: any) => ({ section: n.label, title: l.title, href: l.href }))
+					.filter((i): i is NavLeaf => i.kind === 'leaf')
+					.map((l) => ({ section: n.label, title: l.title, href: l.href }))
 			: []
 	);
 	const shown = leaves.slice(0, 6);

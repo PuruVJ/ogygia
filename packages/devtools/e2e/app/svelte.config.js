@@ -6,11 +6,23 @@ import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 // deployment does): what the profiler's embedded maps are checked against
 const adapter = process.env.LAB_ADAPTER === 'node' ? () => node() : (o) => vercel(o);
 
+const PLANTED = /\/(lib|routes)\/(heavy|hell|hell-fixed|inferno|inferno-fixed)\//;
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	preprocess: [vitePreprocess()],
 	compilerOptions: {
-		experimental: { async: true }
+		experimental: { async: true },
+		// The profiler's planted-problem pages (heavy, hell, inferno, and their `-fixed` twins) are
+		// test fixtures whose code shape IS the test: each renders once, on the server, and reads its
+		// props once in plain script, the way the app code they imitate does. Rewriting them to
+		// `$derived` or `$state` would move the work the profiler's answer key measures, so the
+		// one-time-read and plain-local warnings are off for those folders only.
+		warningFilter: (w) =>
+			!(
+				(w.code === 'state_referenced_locally' || w.code === 'non_reactive_update') &&
+				PLANTED.test(w.filename ?? '')
+			)
 	},
 	kit: {
 		adapter: adapter({ runtime: 'nodejs22.x' }),

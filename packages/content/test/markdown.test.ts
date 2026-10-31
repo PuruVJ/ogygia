@@ -276,10 +276,6 @@ describe('tab component injection (plain barrel)', () => {
 		':::'
 	].join('\n');
 
-	/** The instance-script (non-module) blocks of the compiled module. */
-	const instance_scripts = (code: string) =>
-		[...code.matchAll(/<script\b(?![^>]*\bmodule\b)[^>]*>[\s\S]*?<\/script>/g)].map((m) => m[0]);
-
 	it('::: code-group injects the plain TabGroup + Tab barrel import', async () => {
 		const code = await render(['# T', '', CODE_GROUP].join('\n'));
 		expect(code).toContain(INJECTED);

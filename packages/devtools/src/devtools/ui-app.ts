@@ -18,7 +18,7 @@ export function mount_app(
 	set_highlight_root(root);
 	// a build knows its islands' component names (the dev server serves them live instead)
 	if (built_names && Object.keys(built_names).length && typeof window !== 'undefined')
-		window.__ogygia_region_names = { ...built_names, ...(window.__ogygia_region_names ?? {}) };
+		window.__ogygia_region_names = { ...built_names, ...window.__ogygia_region_names };
 	// `csr_true` = the standalone boot on a Kit-hydrated (csr=true) page, where the ogygia runtime
 	// (and its event bus) never ran — the dock renders a notice instead of empty instruments.
 	// `hide` (a build): turns devtools off in this browser — the launcher's, handed in so the dock's

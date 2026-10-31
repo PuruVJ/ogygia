@@ -13,7 +13,7 @@ export function ensure_region_names(): Promise<void> {
 	loading = (async () => {
 		if (typeof window === 'undefined') return;
 		if (built_names && Object.keys(built_names).length) {
-			window.__ogygia_region_names = { ...built_names, ...(window.__ogygia_region_names ?? {}) };
+			window.__ogygia_region_names = { ...built_names, ...window.__ogygia_region_names };
 			return;
 		}
 		try {
@@ -24,7 +24,7 @@ export function ensure_region_names(): Promise<void> {
 				bytes?: Record<string, unknown>;
 			};
 			if (meta?.names)
-				window.__ogygia_region_names = { ...meta.names, ...(window.__ogygia_region_names ?? {}) };
+				window.__ogygia_region_names = { ...meta.names, ...window.__ogygia_region_names };
 			if (meta?.bytes)
 				(window as unknown as { __ogygia_region_bytes?: unknown }).__ogygia_region_bytes =
 					meta.bytes;

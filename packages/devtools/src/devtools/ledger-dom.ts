@@ -83,7 +83,10 @@ async function read_parts(src: string): Promise<RuntimeParts> {
 			if (!docked && DOCK_MARKS.some((m) => body.includes(m))) docked = true;
 			for (const s of static_imports(body)) {
 				const u = abs_from(s, at);
-				if (u && !closure.has(u)) (closure.add(u), queue.push(u));
+				if (u && !closure.has(u)) {
+					closure.add(u);
+					queue.push(u);
+				}
 			}
 		}
 		// (the dock: it reaches this file, or carries what only the dock sets — its entry loads its tabs,

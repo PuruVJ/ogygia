@@ -19,7 +19,7 @@ import { fs, path } from '../host.ts';
 import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
 import { og_member } from './wire.ts';
-import { parse_module } from '../parse/oxc.ts';
+import { parse_module, type AstNode } from '../parse/oxc.ts';
 import { og_js_regions } from '../parse/scan.ts';
 import { BuildCache } from '../../build-cache.ts';
 
@@ -33,8 +33,7 @@ const bake_cache = new BuildCache<never>('bake');
 
 const MARKER = 'import.meta.og.bake';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-type Node = Record<string, any>;
+type Node = AstNode;
 
 export type AliasEntry = { find: string | RegExp; replacement: string };
 

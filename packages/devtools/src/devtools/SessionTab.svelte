@@ -36,11 +36,11 @@
 	// (a session the page before was recording resumes at boot, maybe after this tab mounted: the
 	// panel's pulse picks it up)
 	const live = $derived.by(() => {
-		tick;
+		void tick;
 		return rec ?? recording();
 	});
 	const elapsed = $derived.by(() => {
-		tick;
+		void tick;
 		return live ? (performance.now() - live.started) / 1000 : 0;
 	});
 

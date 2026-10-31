@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Sync shared Counter + posts into a framework app so every target renders the same page.
 // Usage: node bench/shared/sync.mjs <ogygia|sveltekit|mochi|astro>
-import { cpSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 

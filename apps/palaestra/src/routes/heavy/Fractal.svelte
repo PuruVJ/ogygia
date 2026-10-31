@@ -10,8 +10,11 @@
 		path = '0'
 	}: { depth?: number; fanout?: number; path?: string } = $props();
 
-	// a little per-node string work so leaves aren't free
+	// a little per-node string work so leaves aren't free (it renders once, on the server, so the
+	// one-time reads of the props are the point)
+	// svelte-ignore state_referenced_locally
 	const hue = (path.length * 47) % 360;
+	// svelte-ignore state_referenced_locally
 	const kids = depth > 0 ? Array.from({ length: fanout }, (_, i) => i) : [];
 </script>
 

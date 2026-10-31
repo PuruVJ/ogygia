@@ -12,14 +12,22 @@
  * stub, so the eval can't touch anything or throw on an unknown import.
  */
 import { diff_markers, inline_markers } from '@ogygia/content/markdown';
+import type { ShikiTransformer } from 'shiki';
 
 /** Tags the options a sandboxed `content({ … })` call (the `@ogygia/content/vite` plugin) was given. */
 const CONTENT_PLUGIN = Symbol('content-plugin');
 
+/** A value the sandboxed eval produced, typed for READING: an object's fields are themselves
+ *  unchecked values, so nothing is trusted until a check narrows it. */
+type Raw = string | number | boolean | bigint | symbol | null | undefined | RawObject;
+interface RawObject {
+	readonly [key: string]: Raw;
+	readonly [CONTENT_PLUGIN]?: Raw;
+}
+
 /** The content options of an evaluated `ogygia({…})` config: the `content({ … })` entry in `plugins`,
  *  else the older top-level `content` key. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function content_options(cfg: any): any {
+function content_options(cfg: RawObject): Raw {
 	if (Array.isArray(cfg?.plugins))
 		for (const p of cfg.plugins)
 			if (p && typeof p === 'object' && CONTENT_PLUGIN in p) return p[CONTENT_PLUGIN];
@@ -38,8 +46,7 @@ export interface ReplMarkdownConfig {
 	themes?: { light?: string; dark?: string };
 	defaultColor?: string;
 	wrapperClass?: string;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	code?: { transformers?: any[] };
+	code?: { transformers?: ShikiTransformer[] };
 }
 
 const SAFE_BOOL_KEYS = [
@@ -173,8 +180,7 @@ export function extract_call_object(src: string, name: string): string | null {
 }
 
 /** Sanitize a raw evaluated markdown-options object down to the SAFE subset the REPL can honour. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function sanitize(md: any): ReplMarkdownConfig {
+function sanitize(md: RawObject): ReplMarkdownConfig {
 	const out: ReplMarkdownConfig = {};
 	for (const k of SAFE_BOOL_KEYS) if (typeof md[k] === 'boolean') out[k] = md[k];
 	// overrides: boolean, or { tags: string[] }
@@ -192,7 +198,7 @@ function sanitize(md: any): ReplMarkdownConfig {
 	if (typeof md.wrapperClass === 'string') out.wrapperClass = md.wrapperClass;
 	// transformers: keep only the ones that evaluated to a real object (the named ones); a stubbed custom
 	// transformer came back as the inert stub function → dropped.
-	if (md.code && Array.isArray(md.code.transformers)) {
+	if (md.code && typeof md.code === 'object' && Array.isArray(md.code.transformers)) {
 		const real = md.code.transformers.filter(
 			(x: unknown) => x != null && typeof x === 'object' && !Array.isArray(x)
 		);
@@ -205,8 +211,7 @@ function sanitize(md: any): ReplMarkdownConfig {
  *  preview can't apply: build-time-only keys, unknown markdown options, illegal value types, and
  *  imports/objects that can't run in the browser. Each note carries a hint on what's allowed / to change.
  *  Never throws (each read is guarded). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function diagnose(cfg: any): ConfigNote[] {
+function diagnose(cfg: RawObject): ConfigNote[] {
 	const notes: ConfigNote[] = [];
 	if (!cfg || typeof cfg !== 'object') return notes;
 	try {
@@ -317,10 +322,9 @@ export function parse_config(configSrc: string): {
 		has: () => true, // trap EVERY free-variable lookup so an unknown import can't reach the real scope
 		get: (t, k) => (k in t ? (t as Record<string | symbol, unknown>)[k] : stub)
 	});
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	let cfg: any;
+	// `objSrc` is an object literal, so a successful eval always yields an object
+	let cfg: RawObject;
 	try {
-		// eslint-disable-next-line no-new-func
 		cfg = new Function('__S__', `with(__S__){ return (${objSrc}); }`)(sandbox);
 	} catch {
 		return {
@@ -337,7 +341,8 @@ export function parse_config(configSrc: string): {
 	// Reads below can still throw lazily (a getter / Proxy). Any of it → defaults, plus a clear note.
 	try {
 		const notes = diagnose(cfg);
-		const md = content_options(cfg)?.markdown ?? cfg?.markdown;
+		const opts = content_options(cfg);
+		const md = (opts && typeof opts === 'object' ? opts.markdown : undefined) ?? cfg?.markdown;
 		const markdown = md && typeof md === 'object' ? sanitize(md) : null;
 		return { markdown, notes };
 	} catch {

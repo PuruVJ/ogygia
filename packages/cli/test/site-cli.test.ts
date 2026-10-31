@@ -94,7 +94,7 @@ const has = (dir: string, rel: string) => existsSync(join(dir, rel));
 describe('site init — svelte.config project', () => {
 	it('scaffolds the full site and wires configs correctly', () => {
 		const dir = svelteConfigProject();
-		const { status, out } = run(dir, ['init', '-y', '--no-install']);
+		const { status } = run(dir, ['init', '-y', '--no-install']);
 		expect(status).toBe(0);
 
 		// every route + the site + starter content exists
