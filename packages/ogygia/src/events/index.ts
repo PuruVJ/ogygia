@@ -5,7 +5,7 @@
  * carries no UI opinion.
  *
  * The framework EMITS from its own seams behind the `__OGYGIA_DEVTOOLS__` compile gate (turned on by
- * `ogygia({ devtools: true })`); this module is what a SINK author imports to read the stream.
+ * a plugin's `b.events()`: the devtools plugin); this module is what a SINK author imports to read the stream.
  */
 export {
 	DEVTOOLS,

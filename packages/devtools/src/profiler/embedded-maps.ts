@@ -17,8 +17,7 @@ export interface EmbeddedMaps {
 let loaded: Promise<EmbeddedMaps | null> | undefined;
 let ready: EmbeddedMaps | null = null;
 
-/** the payload's mark: gzipped JSON, base64 (vite/profiler-maps.ts) */
-export const GZ_PREFIX = 'gz:';
+import { PROFILER_MAPS_GZ_PREFIX as GZ_PREFIX } from 'ogygia/internal/compiler-ids';
 
 export function load_embedded_maps(): Promise<EmbeddedMaps | null> {
 	loaded ??= import('virtual:ogygia/profiler-maps')

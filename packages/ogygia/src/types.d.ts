@@ -152,11 +152,6 @@ declare module 'virtual:ogygia/rate-limit' {
 	/** `max: 0` disables. Baked from `ogygia({ rateLimit })`. */
 	export const rateLimit: { max: number; windowMs: number };
 }
-declare module 'virtual:ogygia/profiler-config' {
-	/** Profiler options from `ogygia({ profiler })`, or `null` when off. SERVER only (client: null).
-	 *  `ogygia.handle()` reads this and dynamically imports + mounts the profiler when non-null. */
-	export const profilerConfig: Record<string, unknown> | null;
-}
 declare module 'virtual:ogygia/server-plugins' {
 	/** The server realms of `ogygia({ plugins })` (name, options, the `<name>/server` module), in
 	 *  plugin order. SERVER only (client: empty). */
@@ -212,6 +207,8 @@ declare const __OGYGIA_DEVTOOLS_LAZY__: boolean;
 /** the profiler's browser half ships (the profiler or devtools is configured); otherwise every
  *  `if (BEACON) …` folds out and runtime/beacon.ts leaves the bundle */
 declare const __OGYGIA_BEACON__: boolean;
+/** a plugin's browser half (`<plugin>/client`) is in the boot: the runtime calls its hooks */
+declare const __OGYGIA_CLIENT_PLUGINS__: boolean;
 /** The app's Kit major version (2, 3), or null when the plugin found none (kit-paths.ts). */
 declare const __OGYGIA_KIT_MAJOR__: number | null;
 

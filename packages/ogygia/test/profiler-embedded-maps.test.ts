@@ -4,12 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fill_profiler_maps } from '../src/vite/profiler-maps.ts';
-import { PROFILER_MAPS_PLACEHOLDER } from '../src/compiler/ids.ts';
+import { PROFILER_MAPS_PLACEHOLDER, PROFILER_MAPS_GZ_PREFIX as GZ_PREFIX } from '../src/compiler/ids.ts';
 import {
 	embedded_files,
 	embedded_key,
 	embedded_source,
-	GZ_PREFIX,
 	load_embedded_maps
 } from '../../devtools/src/profiler/embedded-maps.ts';
 

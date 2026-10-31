@@ -35,7 +35,7 @@ export type { ImportKeys } from '../compiler/region/transform.ts';
 export { debarrel } from '../compiler/debarrel/plugin.ts';
 // the BUILD side of a plugin (design: internal/notes/packages.md, plugin API v2)
 export { definePlugin } from './plugin-api.ts';
-export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupIslands } from './plugin-api.ts';
+export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupRegions } from './plugin-api.ts';
 export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.ts';
 export type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.ts';
 import { check_plugins, plugin_vite_plugins, resolve_plugins, type ResolvedPlugins } from './plugin-api.ts';
@@ -138,10 +138,6 @@ import {
 	PKG_ROOT_ID,
 	real_posix,
 	scan_entry_pattern,
-	PROFILER_UI_DIR,
-	PROFILER_ROUTER_MODULE,
-	DEVTOOLS_ROOT_ID,
-	OGYGIA_HOOKS_MODULE,
 	OGYGIA_REGION_MODULES,
 	OGYGIA_INJECTED_IMPORTS,
 	OGYGIA_INJECTED_FILES,
@@ -165,9 +161,6 @@ const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
 
 const CSS_EXT_RE = /\.css$/;
 const STYLE_BEARING_FILE_RE = /\.(svelte|css|scss|sass|less|styl)$/;
-// TEMP(devtools-split): the built hooks module's profiler import (tsdown emits the packages/devtools
-// sources it follows under dist/devtools/src/)
-const PROFILER_DYNAMIC_IMPORT_RE = /import\((['"])\.\/devtools\/src\/profiler\/index\.js\1\)/;
 /** The bundler's resolver as the CSS walk's (compiler/fouc-css.ts `collectFoucCssReachable`): what
  *  the build resolves, the walk reaches — a package's `exports`, a workspace link, an alias. */
 function bundler_resolve(ctx: {
@@ -204,53 +197,23 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	// once the root and mode are known (configResolved). Standalone has no handle to wire into.
 	const app_plugins = standalone ? [] : check_plugins(options.plugins);
 	let server_plugins: ServerRealm[] = [];
+	let client_plugins: string[] = [];
 	let route_options: string[] = [];
 	let foreign_hydrate = false;
 	let macros: ResolvedPlugins['macros'] = [];
 	let markup: ResolvedPlugins['markup'] = [];
 	const import_keys = normalize_import_keys(options.importKeys);
-	// `ogygia({ profiler })` — the profiler is configured ONLY here. Normalized to a config object (or
-	// null when off) and baked into `virtual:ogygia/profiler-config`; `ogygia.handle()` reads it and
-	// dynamically imports + mounts the profiler, so hooks.server.ts never mentions it. The SECRET is
-	// left out of the bake unless the author passes one — it defaults to the OGYGIA_PROFILER_SECRET env
-	// var at runtime, so it's never baked into a frozen page by default.
-	const profiler_config: Record<string, unknown> | null =
-		!standalone && options.profiler
-			? options.profiler === true
-				? {}
-				: { ...options.profiler }
-			: null;
-	// An explicit `profiler.secret` that is EMPTY at build time is the serverless footgun (Amplify,
-	// Lambda): the author meant to bake it, the build env lacked the var, and the UI silently ends up
-	// disabled in production (the runtime env is empty there too). Named here, warned in `config`
-	// below where the command is known.
-	const profiler_secret_empty =
-		profiler_config !== null &&
-		typeof options.profiler === 'object' &&
-		'secret' in options.profiler &&
-		!options.profiler.secret;
-	// Compile surfaces beyond the app's src — ONE mechanism for ogygia's own profiler UI and for
-	// dependencies that declare `"ogygia": { "files": […] }` in their package.json (discovered in
-	// the config hook, where root is known; the array is captured by reference into the CompileCtx
-	// built in configResolved). The profiler was this feature's hardcoded prototype
-	// (extra_scan_roots / extra_router_modules); it now rides the general rail as one internal
-	// entry: its UI dir + its server-router module. The router module is DETECTED as a router-css
-	// root the same way an app's is (it imports the literal 'ogygia/router') — no hand-seeding.
+	// What the plugins asked of the build (their `build` hooks, run in `config` below): the build's
+	// measurement data (`b.measure()`, the profiler) and core's event emits (`b.events()`, devtools).
+	let measure = false;
+	// Compile surfaces beyond the app's src — ONE mechanism for a plugin's own pages (`b.files()`: the
+	// profiler UI and its server-router module, DETECTED as a router-css root the way an app's is) and
+	// for dependencies that declare `"ogygia": { "files": […] }` in their package.json. Filled in the
+	// config hook (root known); captured by reference into the CompileCtx built in configResolved.
 	const pkg_scan: PackageScan[] = [];
-	if (profiler_config) {
-		// TEMP(devtools-split): the profiler UI lives in packages/devtools; its entry keeps the name
-		// 'ogygia' (so its islands keep their `ogygia/src/profiler/ui/…` identities), and this package's
-		// own root keeps its entry for every other own file
-		pkg_scan.push(
-			{ name: 'ogygia', root: PKG_ROOT_ID.slice(0, -1), dirs: [], files: [] },
-			{
-				name: 'ogygia',
-				root: DEVTOOLS_ROOT_ID.slice(0, -1),
-				dirs: [real_posix(PROFILER_UI_DIR)],
-				files: [real_posix(PROFILER_ROUTER_MODULE)]
-			}
-		);
-	}
+	/** the roots of plugins' own pages (`b.files()`), as module-id prefixes */
+	const plugin_file_roots: string[] = [];
+	let declared_scanned = false;
 
 	// Router / rate-limit / session / ttl / continuity / server-delta → the flat config (pure derivation).
 	const {
@@ -261,13 +224,12 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
-		server_delta,
-		devtools
+		server_delta
 	} = resolve_options(options, DEFAULT_REGION_TTL_SEC, RENEW_WINDOW_SEC);
-	// The devtools value everything downstream reads (define, CompileCtx, dev middleware). A build with
-	// it on gets the lazy form (`devtools_lazy`): launcher only, no measuring until someone opens it.
-	let devtools_effective = devtools;
-	/** a build with devtools on: launcher only, the dock loads on open */
+	// Core's event emits compiled in (a plugin's `b.events()`), and its lazy form (launcher only, no
+	// measuring until someone opens a tool) — everything downstream reads these (define, CompileCtx,
+	// dev middleware).
+	let devtools_effective = false;
 	let devtools_lazy = false;
 
 	// The Program — this plugin instance's cross-file linker / island graph. It owns the descriptor
@@ -452,25 +414,30 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// plugin (Kit 3 takes its config in vite.config only), else the svelte.config.js file.
 					await load_kit_dirs(path.resolve(userConfig.root ?? '.'), userConfig.plugins);
 
-					// DEVTOOLS IN A BUILD: the app decides (`devtools: mode !== 'production'`). A build then
-					// carries only a small launcher; the dock's code loads when someone opens it. Said once,
-					// loudly, so a `true` left on by accident is seen before it ships.
-					devtools_lazy = devtools_effective && env.command === 'build';
-					if (devtools_lazy && isMainThread)
-						console.warn(
-							'[ogygia] devtools is ON for this build: its pages carry the devtools launcher (the dock ' +
-								"loads only when opened). Keep it off for production: `ogygia({ devtools: mode !== 'production' })`."
-						);
-
-					if (profiler_secret_empty && env.command === 'build' && isMainThread) {
-						console.warn(
-							'[ogygia] profiler: `profiler.secret` is EMPTY in this build — the variable it ' +
-								'reads is not set in the BUILD environment. The UI will be DISABLED in production ' +
-								'unless OGYGIA_PROFILER_SECRET exists at runtime (on Amplify / Lambda it does ' +
-								'not): /__profiler will answer "installed but disabled". Set the variable where ' +
-								'the build runs, and keep the `profiler` option unconditional.'
-						);
-					}
+					// PLUGINS: their realms, found by name, and their `build` hooks — here, where the root and
+					// the mode exist and before the defines below, which read what they asked for. (`b.markup()`
+					// hands back the island transform of the instance Vite configures: Kit evaluates the Vite
+					// config more than once.)
+					const resolved = resolve_plugins(
+						app_plugins,
+						path.resolve(userConfig.root ?? '.'),
+						env.command === 'serve',
+						(source, filename) => compiler.transform_content_island(source, filename)
+					);
+					({ servers: server_plugins, clients: client_plugins, route_options, foreign_hydrate, macros, markup } = resolved);
+					measure = resolved.measure;
+					devtools_effective = resolved.events !== false;
+					devtools_lazy = resolved.events !== false && resolved.events.lazy;
+					for (const p of resolved.files)
+						if (!pkg_scan.some((s) => s.name === p.name)) {
+							plugin_file_roots.push(real_posix(p.root) + '/');
+							pkg_scan.push({
+								name: p.name,
+								root: real_posix(p.root),
+								dirs: p.dirs.map(real_posix),
+								files: p.files.map(real_posix)
+							});
+						}
 
 					// Keep Kit's client build alive on all-csr=false apps: inject a URL-less keepalive
 					// route BEFORE Kit reads the routes. Main build thread only; removed at process exit.
@@ -492,11 +459,16 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// never a blind node_modules walk. Discovered here (root known), consumed by the
 					// prescan + transform gates via CompileCtx.pkg_scan. Guarded against double-push:
 					// Kit invokes plugin config more than once per process in some flows.
-					if (!standalone && !pkg_scan.some((p) => p.name !== 'ogygia')) {
+					if (!standalone && !declared_scanned) {
+						declared_scanned = true;
 						for (const p of discover_package_files(path.resolve(userConfig.root ?? '.')))
-							pkg_scan.push(p);
+							if (!pkg_scan.some((s) => s.name === p.name)) pkg_scan.push(p);
 					}
-					const declared_pkg_names = pkg_scan.filter((p) => p.name !== 'ogygia').map((p) => p.name);
+					// Plugin packages are ogygia's own code to the app: SSR-inlined (they ship `.svelte`, and
+					// read core's per-request state) and never pre-bundled (one core in the dev browser).
+					const declared_pkg_names = [
+						...new Set([...pkg_scan.map((p) => p.name), ...app_plugins.map((p) => p.name)])
+					];
 
 					// Match Kit: SSR-inline `esm-env` so its development/production export conditions
 					// resolve per mode (used if anything in our server graph imports it). Do NOT
@@ -538,9 +510,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 									'svelte/internal/client',
 									'svelte/server',
 									// (ogygia's dependency, not the app's: under pnpm the app root can't resolve it bare)
-									'ogygia > devalue',
-									// TEMP(devtools-split): the dock's dependency is @ogygia/devtools' now
-									...(devtools_effective ? ['@ogygia/devtools > @neodrag/svelte', '@ogygia/devtools > @neodrag/svelte/resize'] : [])
+									'ogygia > devalue'
+									// (a plugin's own client dependencies, named through it — `@ogygia/devtools >
+									// @neodrag/svelte` — come from its `vite` plugins' `optimizeDeps.include`)
 								]
 							: [];
 					// ONE OGYGIA IN THE DEV BROWSER: ogygia itself is never pre-bundled. An installed
@@ -567,8 +539,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						define: {
 							__OGYGIA_CONTINUITY_FORMS__: JSON.stringify(continuity_forms),
 							__OGYGIA_SERVER_DELTA__: JSON.stringify(server_delta),
-							// DEVTOOLS event-layer gate — off unless `ogygia({ devtools: true })` AND this is
-							// the dev server (coerced above; builds always get false). When false, every
+							// The event-layer gate — off unless a plugin asked (`b.events()`: devtools). When false, every
 							// `if (DEVTOOLS) emit({…})` folds out and the bus tree-shakes away.
 							__OGYGIA_DEVTOOLS__: JSON.stringify(devtools_effective),
 							// a BUILD with devtools on: the dock and the page measuring wait until
@@ -577,7 +548,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 							// the profiler's browser half (runtime/beacon.ts) ships only to an app that
 							// can read it: the profiler configured, or devtools. Everywhere else every
 							// `if (BEACON) …` folds out and the module leaves the boot (a quarter of it)
-							__OGYGIA_BEACON__: JSON.stringify(profiler_config !== null || devtools_effective || devtools_lazy),
+							__OGYGIA_BEACON__: JSON.stringify(measure || devtools_effective),
+							// a plugin's browser half is in the boot (`<plugin>/client`): the runtime calls its
+							// hooks; none, and every call folds out
+							__OGYGIA_CLIENT_PLUGINS__: JSON.stringify(client_plugins.length > 0),
 							// the app's Kit major: whether Kit's `asset()` takes a path with its leading
 							// slash (2) or without (3) — kit-paths.ts, where a runtime probe guessed wrong in builds
 							__OGYGIA_KIT_MAJOR__: JSON.stringify(kit_major(path.resolve(userConfig.root ?? '.')))
@@ -682,16 +656,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				({ kit_wire_path, kit_remote_index, universal_hooks, client_hooks, kit_transport_init } =
 					resolve_kit_paths(root));
 
-				// PLUGINS: their realms, found by name, and their `build` hooks (now that root + mode exist)
-				// (`b.markup()` hands back THIS configured instance's island transform: Kit evaluates the Vite
-				// config more than once, and only an instance Vite actually configures has a root)
-				({ servers: server_plugins, route_options, foreign_hydrate, macros, markup } = resolve_plugins(
-					app_plugins,
-					root,
-					is_dev,
-					(source, filename) => compiler.transform_content_island(source, filename)
-				));
-
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
 				// the snapshot is complete before the driver is first called.
@@ -702,8 +666,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						app_dir,
 						libDir,
 						pkg_scan,
-						profiler_config,
+						measure,
 						server_plugins,
+						client_plugins,
 						route_options,
 						foreign_hydrate,
 						is_dev,
@@ -763,8 +728,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					opt.entries = entries;
 					const have = new Set(entries);
 					for (const abs of compiler.island_scan_entries()) {
-						// TEMP(devtools-split): the profiler UI's islands (packages/devtools) stay out of the dep scan
-						const pattern = real_posix(abs).startsWith(DEVTOOLS_ROOT_ID) ? null : scan_entry_pattern(abs);
+						// a plugin's own pages (`b.files()`: the profiler UI) render from its handle only — never
+						// crawled as app entries
+						const posix = real_posix(abs);
+						const pattern = plugin_file_roots.some((r) => posix.startsWith(r)) ? null : scan_entry_pattern(abs);
 						if (pattern !== null && !have.has(pattern)) {
 							have.add(pattern);
 							entries.push(pattern);
@@ -966,8 +933,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				vite_server = server;
 				// THE PROFILER IN DEV: Vite runs each server module as its transformed code, so a profile's
 				// lines are that code's; the maps back to the source live in Vite's module graph, not in
-				// `.map` files. The profiler (same process) asks through this (profiler/dev-maps.ts)
-				if (profiler_config) {
+				// `.map` files. The profiler (same process) asks through this (vite/dev-maps.ts)
+				if (measure) {
 					install_dev_maps(server);
 					// ...and the browser's modules, for the traces the browser sends
 					install_dev_client_maps(server);
@@ -1266,25 +1233,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			},
 
 			async transform(code, id, options) {
-				// DEV ONLY: sever the hooks → profiler dependency EDGE from Vite's import-analysis.
-				// SvelteKit's dev "inline all styles" crawl walks every recorded dep (dynamic included)
-				// from the route graph — and Kit's generated server/internal.js (reachable from any page
-				// via `$app/*`) dynamically imports the app hooks, so everything the handle can reach is
-				// crawled. The profiler UI now carries REAL css modules (scoped `<style>` + profiler.css),
-				// so a literal `import('./profiler/index.js')` here would inline the profiler stylesheet
-				// into EVERY dev page of the app (the docs homepage leak). An opaque specifier records no
-				// dep — the crawl stops at hooks — while the runner still resolves it importer-relative at
-				// request time, so `/__profiler` itself is untouched (its css rides the router-css system,
-				// not the crawl). Build legs keep the literal: rolldown must see it to bundle the profiler.
-				// One string equality on the hot path (OGYGIA_HOOKS_MODULE is precomputed — no regex);
-				// the replace only ever runs on that single module.
 				let source = code;
-				if (is_dev && options?.ssr && id === OGYGIA_HOOKS_MODULE) {
-					source = source.replace(
-						PROFILER_DYNAMIC_IMPORT_RE,
-						'import(/* @vite-ignore */ ((s) => s)($1./devtools/src/profiler/index.js$1))'
-					);
-				}
 
 				// KIT-WORLD PAGE THREAD: append the two publish lines to Kit's generated client app
 				// entry (see KIT_PAGE_THREAD above). Client leg only — the SSR graph renders islands
@@ -1392,7 +1341,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// each server chunk. A build without sourcemaps — the normal one — leaves the profiler only
 				// chunk names (`chunks/frames.js`): with this it still tells its own code, ogygia's and a
 				// bundled package's from the app's. Written beside the chunks, so it travels with them.
-				if (is_build && server_leg && profiler_config && _options.dir) {
+				if (is_build && server_leg && measure && _options.dir) {
 					try {
 						write_module_map(_options.dir, bundle as Record<string, unknown>, root);
 					} catch {
@@ -1544,7 +1493,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// The per-chunk contents (what is inside each hashed chunk) serve the profiler's Islands
 				// table only: without a profiler in the config they never leave the build. Nothing here
 				// reaches the browser either way; the server parses the handoff once per process.
-				if (!profiler_config) {
+				if (!measure) {
 					map.contents = {};
 					map.heavy = {};
 					map.hazards = {};
@@ -1555,7 +1504,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// (it has side effects, or the pass is off), so everything it re-exports ships with the
 				// island. The bundler's own module info decides; only with a profiler, like `contents`.
 				const barrels: Record<string, { name: string; fanout: number }[]> = {};
-				if (profiler_config) {
+				if (measure) {
 					for (const [key, chunk] of Object.entries(bundle)) {
 						if (chunk.type !== 'chunk') continue;
 						const found: { name: string; fanout: number }[] = [];
@@ -1581,7 +1530,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					...map,
 					// why an island ships all of page.data (the build's reasons, per entry): the profiler's
 					// seed finding points at that line; like `contents`, only with a profiler
-					...(profiler_config ? { page_why, barrels } : {}),
+					...(measure ? { page_why, barrels } : {}),
 					content_css,
 					css_inline,
 					fn_manifest: Object.fromEntries(compiler.dollar_hoists),
@@ -1592,7 +1541,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			}
 		},
 		island_sourcemaps_plugin({ program, is_island_path }),
-		server_sourcemaps_plugin(!!profiler_config)
+		server_sourcemaps_plugin(() => measure)
 	];
 }
 

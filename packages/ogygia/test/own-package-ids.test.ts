@@ -6,7 +6,7 @@
 // in `optimizeDeps.exclude`, the scanner could not resolve `./Shell.svelte` inside it, and the whole
 // scan failed (nothing pre-bundled).
 import { describe, test, expect } from 'vitest';
-import { id_dir, scan_entry_pattern, PKG_ROOT_ID, OGYGIA_HOOKS_MODULE } from '../dist/vite/paths.js';
+import { id_dir, scan_entry_pattern, PKG_ROOT_ID, OGYGIA_REGION_MODULES } from '../dist/vite/paths.js';
 
 describe('own-package ids', () => {
 	test('a Windows root is the forward-slash prefix of the ids inside it', () => {
@@ -24,7 +24,7 @@ describe('own-package ids', () => {
 	test('the package root and its precomputed module ids are posix, slash-terminated', () => {
 		expect(PKG_ROOT_ID.endsWith('/')).toBe(true);
 		expect(PKG_ROOT_ID.includes('\\')).toBe(false);
-		expect(OGYGIA_HOOKS_MODULE.startsWith(PKG_ROOT_ID)).toBe(true);
+		for (const id of OGYGIA_REGION_MODULES) expect(id.startsWith(PKG_ROOT_ID)).toBe(true);
 	});
 });
 

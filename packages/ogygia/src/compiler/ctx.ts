@@ -51,13 +51,15 @@ export interface CompileCtxInit {
 	 *  ogygia never bakes a base into these URLs (doing so double-applies it). */
 	app_dir: string;
 	libDir: string;
-	/** `ogygia({ profiler })` normalized (or `null` when off) — baked into `virtual:ogygia/profiler-config`
-	 *  so `ogygia.handle()` dynamically imports + mounts the profiler with no hooks/handler wiring. The
-	 *  secret is NOT baked: it reads OGYGIA_PROFILER_SECRET at runtime unless overridden here. */
-	profiler_config: Record<string, unknown> | null;
+	/** A plugin asked for the build's measurement data (`b.measure()`: the profiler) — embedded maps,
+	 *  per-island detail. */
+	measure: boolean;
 	/** The server halves of `ogygia({ plugins })` (module id + options), in app order — baked into
 	 *  `virtual:ogygia/server-plugins`. Optional (default none). */
 	server_plugins?: readonly ServerRealm[];
+	/** The browser halves of `ogygia({ plugins })` (`<plugin>/client` specifiers), in app order —
+	 *  imported by the runtime's boot. Optional (default none). */
+	client_plugins?: readonly string[];
 	/** Route options the plugins declare (`compile.routeOptions`) — stripped from route files and
 	 *  baked into `virtual:ogygia/route-options`. Optional (default none). */
 	route_options?: readonly string[];
@@ -109,7 +111,7 @@ export interface CompileCtxInit {
 	app_shims: Record<string, string>;
 	/** `command === 'build'` — gates the transform-time deterministic island-chunk emit. */
 	is_build: boolean;
-	/** Devtools instruments compiled in (`ogygia({ devtools: true })`). Bakes the standalone dock
+	/** Core's event emits compiled in (a plugin's `b.events()`: devtools). Bakes the standalone dock
 	 *  boot for csr=true pages into `virtual:ogygia/devtools-boot-url`. */
 	devtools: boolean;
 }
@@ -120,8 +122,9 @@ export class CompileCtx {
 	readonly app_dir: string;
 	readonly libDir: string;
 	readonly pkg_scan: PackageScan[];
-	readonly profiler_config: Record<string, unknown> | null;
+	readonly measure: boolean;
 	readonly server_plugins: readonly ServerRealm[];
+	readonly client_plugins: readonly string[];
 	readonly route_options: readonly string[];
 	readonly foreign_hydrate: boolean;
 	readonly is_dev: boolean;
@@ -163,8 +166,9 @@ export class CompileCtx {
 		this.app_dir = init.app_dir;
 		this.libDir = init.libDir;
 		this.pkg_scan = init.pkg_scan ?? [];
-		this.profiler_config = init.profiler_config;
+		this.measure = init.measure;
 		this.server_plugins = init.server_plugins ?? [];
+		this.client_plugins = init.client_plugins ?? [];
 		this.route_options = init.route_options ?? [];
 		this.foreign_hydrate = init.foreign_hydrate ?? false;
 		this.is_dev = init.is_dev;

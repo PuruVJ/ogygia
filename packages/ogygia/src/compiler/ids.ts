@@ -26,7 +26,6 @@ export const V_FN_MANIFEST = 'virtual:ogygia/fn-manifest';
 export const V_SECRET = 'virtual:ogygia/secret';
 export const V_SIGN = 'virtual:ogygia/sign';
 export const V_RATE_LIMIT = 'virtual:ogygia/rate-limit';
-export const V_PROFILER_CONFIG = 'virtual:ogygia/profiler-config';
 /** The app's plugins' SERVER halves (`ogygia({ plugins })`), statically imported in plugin order.
  *  SERVER only; the client gets an empty list. */
 export const V_SERVER_PLUGINS = 'virtual:ogygia/server-plugins';
@@ -38,6 +37,9 @@ export const V_PROFILER_MAPS = 'virtual:ogygia/profiler-maps';
 /** the string the maps module exports until the build fills it (build-time only: never in runtime code,
  *  so the one literal in the output is the one to replace) */
 export const PROFILER_MAPS_PLACEHOLDER = '__ogygia_profiler_maps_placeholder__';
+/** the filled maps payload's mark: gzipped JSON, base64 (vite/profiler-maps.ts writes it, the
+ *  profiler's embedded-maps reads it) */
+export const PROFILER_MAPS_GZ_PREFIX = 'gz:';
 export const V_SESSION_COOKIE = 'virtual:ogygia/session-cookie';
 export const V_REGION_TTL = 'virtual:ogygia/region-ttl';
 export const V_ROUTER_CONFIG = 'virtual:ogygia/router-config';

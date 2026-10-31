@@ -1,6 +1,7 @@
 {
 	"name": "@ogygia/tooling",
 	"private": true,
+	"version": "0.0.0",
 	"description": "Shared build and test config for the ogygia packages: each package's tsdown.config.ts calls library(), its vitest.config.ts pluginTests().",
 	"type": "module",
 	"exports": {

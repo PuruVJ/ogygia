@@ -3,7 +3,7 @@
  * here unchanged) plus the devtools UI's installer.
  *
  * The framework EMITS from its own seams behind the `__OGYGIA_DEVTOOLS__` compile gate (turned on by
- * `ogygia({ devtools: true })`); this module is what a SINK author imports to read the stream.
+ * `devtools()` in `ogygia({ plugins })`); this module is what a SINK author imports to read the stream.
  */
 export {
 	DEVTOOLS,

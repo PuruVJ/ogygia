@@ -57,7 +57,6 @@ import { router_css_roots, router_css_module } from './link/router-css.ts';
 import {
 	secret_module,
 	sign_module,
-	profiler_config_module,
 	server_plugins_module,
 	rate_limit_module,
 	session_cookie_module,
@@ -97,7 +96,6 @@ import {
 	V_REQUEST_EVENT,
 	V_ROUTE_CSR,
 	V_REGION_ENDPOINT,
-	V_PROFILER_CONFIG,
 	V_SERVER_PLUGINS,
 	V_PROFILER_MAPS,
 	PROFILER_MAPS_PLACEHOLDER,
@@ -265,6 +263,15 @@ function dev_runtime_of(runtime_dir: string): { dir: string; ts: boolean } | nul
 	}
 	dev_runtimes.set(runtime_dir, out);
 	return out;
+}
+
+/** The plugins' browser halves for a generated boot: one static import each, and the list to pass. */
+function client_plugins_boot(ctx: CompileCtx): { imports: string; list: string } {
+	if (!ctx.client_plugins.length) return { imports: '', list: '' };
+	return {
+		imports: ctx.client_plugins.map((spec, i) => `import __og_client_${i} from ${JSON.stringify(spec)};\n`).join(''),
+		list: `[${ctx.client_plugins.map((_, i) => `__og_client_${i}`).join(', ')}]`
+	};
 }
 
 function client_hooks_boot(ctx: CompileCtx): { imports: string; call: string } {
@@ -1090,7 +1097,7 @@ export class Compiler {
 		if (id === RESOLVED(V_RUNTIME_ENTRY)) {
 			// Ensure every host was walked (marks complete) before selecting features.
 			this.prescan();
-			const { code } = generateRuntimeEntrySource(program.runtime_marks, ctx.runtime_dir);
+			const { code } = generateRuntimeEntrySource(program.runtime_marks, ctx.runtime_dir, ctx.client_plugins);
 			const ch = client_hooks_boot(ctx);
 			return ch.imports + code + ch.call;
 		}
@@ -1119,7 +1126,8 @@ export class Compiler {
 			// the boot away — the bug that left `sideEffects:false` apps with a runtime that never woke.
 			{
 				const ch = client_hooks_boot(ctx);
-				return `import { bootDev } from 'ogygia/runtime';\n${ch.imports}bootDev();\n${ch.call}`;
+				const cp = client_plugins_boot(ctx);
+				return `import { bootDev } from 'ogygia/runtime';\n${ch.imports}${cp.imports}bootDev(${cp.list});\n${ch.call}`;
 			}
 		}
 		if (id === RESOLVED(V_DEV_HMR)) {
@@ -1136,26 +1144,24 @@ export class Compiler {
 			return `export default ${JSON.stringify('/@id/__x00__' + V_DEV_HMR)};`;
 		}
 		if (id === RESOLVED(V_DEVTOOLS_BOOT)) {
-			// Standalone dock boot for csr=true (Kit-owned) pages: the ogygia runtime never boots
-			// there, so mount ONLY the dock — no router/region features (Kit owns navigation). A
-			// Kit-hydrated page has no ogygia islands to inspect: the dock shows what the browser saw
-			// (the Page tab, fed by the beacon started here) and says why the island tools are absent.
-			// Empty when devtools is off (never injected then).
-			if (!ctx.devtools) return `export {}`;
-			// TEMP(devtools-split): the dock ships from packages/devtools (`dist/vite/../runtime` → its dist)
-			const ui_path = `${ctx.runtime_dir}/../../../devtools/dist/devtools/ui.js`.replace(BACKSLASH_G, '/');
+			// The plugins' browser halves on a csr=true (Kit-owned) page: the ogygia runtime never boots
+			// there (Kit owns navigation, no island wakes), so ONLY they boot, told it is a Kit page (the
+			// devtools dock shows what the browser saw — the Page tab, fed by the beacon started here — and
+			// says why the island tools are absent). Empty with no client realm (never injected then).
+			if (!ctx.client_plugins.length) return `export {}`;
+			const cp = client_plugins_boot(ctx);
 			return (
-				// the dev server hands `define`s (the devtools gate among them) to the page as globals
-				// from Vite's env module: it must run before the dock reads the gate. Kit's own client
-				// (which loads it) comes later in the page, and the dock saw "off" — no dock at all
+				// the dev server hands `define`s (the plugins' gates among them) to the page as globals from
+				// Vite's env module: it must run before they read them. Kit's own client (which loads it)
+				// comes later in the page, and a gate read before it saw "off"
 				(is_dev ? `import '/@vite/env';\n` : '') +
-				`import { install_devtools_ui } from ${JSON.stringify(ui_path)};\n` +
+				cp.imports +
+				`import { boot_client_plugins } from ${JSON.stringify(`${ctx.runtime_dir}/client-plugins.js`.replace(BACKSLASH_G, '/'))};\n` +
 				// the beacon's observers from boot: vitals, resources, long tasks, the CPU sampler (the
-				// browser buffers most of it, but the sampler and interaction timing start here) — the
-				// dock's Page tab reads what the browser saw on a Kit-hydrated page too
+				// browser buffers most of it, but the sampler and interaction timing start here)
 				`import { beacon_watch } from ${JSON.stringify(`${ctx.runtime_dir}/beacon.js`.replace(BACKSLASH_G, '/'))};\n` +
 				`beacon_watch();\n` +
-				`install_devtools_ui({ csr_true: true });\n`
+				`boot_client_plugins(${cp.list}, true);\n`
 			);
 		}
 		if (id === RESOLVED(V_DEVTOOLS_META)) {
@@ -1165,10 +1171,9 @@ export class Compiler {
 			return `export const names = ${JSON.stringify(this.region_names())};`;
 		}
 		if (id === RESOLVED(V_DEVTOOLS_BOOT_URL)) {
-			// The served URL the handle injects on csr=true pages. Empty in build/preview and when
-			// devtools is off; the vite-dev `/@id/` URL otherwise. Dev-only, matching how apps enable
-			// devtools for `vite dev` alone (`devtools: command === 'serve'`).
-			if (!ctx.devtools || !is_dev) return `export default '';`;
+			// The served URL the handle injects on csr=true pages. Empty in build/preview and with no
+			// plugin's client realm; the vite-dev `/@id/` URL otherwise (dev only).
+			if (!ctx.client_plugins.length || !is_dev) return `export default '';`;
 			return `export default ${JSON.stringify('/@id/__x00__' + V_DEVTOOLS_BOOT)};`;
 		}
 		if (id === RESOLVED(V_ISLAND_DEPS)) {
@@ -1235,15 +1240,12 @@ export class Compiler {
 		if (id === RESOLVED(V_RATE_LIMIT)) {
 			return rate_limit_module(ssr, ctx.rate_limit);
 		}
-		if (id === RESOLVED(V_PROFILER_CONFIG)) {
-			return profiler_config_module(ssr, ctx.profiler_config);
-		}
 		if (id === RESOLVED(V_SERVER_PLUGINS)) {
 			return server_plugins_module(ssr, ctx.server_plugins);
 		}
 		if (id === RESOLVED(V_PROFILER_MAPS)) {
 			// a placeholder the build fills with the maps (vite/profiler-maps.ts); anything else: none
-			return ssr && ctx.is_build && ctx.profiler_config
+			return ssr && ctx.is_build && ctx.measure
 				? `export default ${JSON.stringify(PROFILER_MAPS_PLACEHOLDER)};`
 				: 'export default null;';
 		}
@@ -1372,7 +1374,6 @@ export class Compiler {
 		if (source === V_SECRET) return RESOLVED(V_SECRET);
 		if (source === V_SIGN) return RESOLVED(V_SIGN);
 		if (source === V_RATE_LIMIT) return RESOLVED(V_RATE_LIMIT);
-		if (source === V_PROFILER_CONFIG) return RESOLVED(V_PROFILER_CONFIG);
 		if (source === V_SERVER_PLUGINS) return RESOLVED(V_SERVER_PLUGINS);
 		if (source === V_PROFILER_MAPS) return RESOLVED(V_PROFILER_MAPS);
 		if (source === V_ROUTER_CONFIG) return RESOLVED(V_ROUTER_CONFIG);

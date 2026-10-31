@@ -195,7 +195,9 @@ export function phaseFeatures(marks: RuntimeMarks, phase: FeaturePhase): Feature
  */
 export function generateRuntimeEntrySource(
 	marks: RuntimeMarks,
-	runtimeDir: string
+	runtimeDir: string,
+	/** the plugins' browser halves (`<plugin>/client` specifiers), in plugin order */
+	clientPlugins: readonly string[] = []
 ): { code: string; features: FeatureId[] } {
 	const features = phaseFeatures(marks, 'boot');
 	const lines: string[] = [];
@@ -204,10 +206,11 @@ export function generateRuntimeEntrySource(
 	for (const id of features) {
 		lines.push(`import * as ${to_alias(id)} from ${JSON.stringify(runtime_path(runtimeDir, FEATURES[id].module))};`);
 	}
+	clientPlugins.forEach((spec, i) => lines.push(`import __og_client_${i} from ${JSON.stringify(spec)};`));
 	lines.push('');
 	lines.push('boot([');
 	for (const id of features) lines.push(`  ${to_alias(id)}.install,`);
-	lines.push(']);');
+	lines.push(clientPlugins.length ? `], [${clientPlugins.map((_, i) => `__og_client_${i}`).join(', ')}]);` : ']);');
 	// Side effects only: the entry boots and exports nothing (no consumer ever read an export).
 	return { code: lines.join('\n') + '\n', features };
 }

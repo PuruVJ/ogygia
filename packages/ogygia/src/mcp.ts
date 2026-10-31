@@ -17,6 +17,7 @@ import { createRequire } from 'node:module';
 import { gzipSync } from 'node:zlib';
 import { readdirSync, readFileSync, type Dirent } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parse } from 'svelte/compiler';
 import {
 	transformHost,
@@ -25,10 +26,33 @@ import {
 	CLIENT_BINDING_STUB
 } from './compiler/index.ts';
 import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.ts';
-// TEMP(devtools-split): the profiler's report reading lives in packages/devtools until it plugs in through a hook
-import { ogp_decode, is_ogp } from '../../devtools/src/profiler/crypto.ts';
-import { report_json, is_dump } from '../../devtools/src/profiler/report.ts';
-import { fix_impact } from '../../devtools/src/profiler/patterns.ts';
+
+/** The profiler's report reading (`@ogygia/devtools/report`), as these tools use it: loaded from the
+ *  app's own install on first need — core does not depend on the plugin. */
+interface ProfilerReading {
+	is_ogp(bytes: Uint8Array): boolean;
+	ogp_decode(bytes: Uint8Array, key?: string): Promise<unknown>;
+	is_dump(dump: unknown): dump is { analysis: never; meta: never; extras?: never };
+	report_json(analysis: never, meta: never, base: string, extras?: never): unknown;
+	fix_impact(
+		patterns: readonly { save_ms: number; wait?: boolean }[],
+		render_ms: number,
+		renders?: number,
+		wait_ms?: number
+	): { cpu_ms: number; wait_ms: number; render_ms: number; after_ms: number; pct: number } | undefined;
+}
+let profiler_reading: ProfilerReading | null | undefined;
+async function load_profiler_reading(): Promise<ProfilerReading | null> {
+	if (profiler_reading !== undefined) return profiler_reading;
+	try {
+		const from_app = createRequire(path.join(process.cwd(), 'package.json'));
+		const url = pathToFileURL(from_app.resolve('@ogygia/devtools/report')).href;
+		profiler_reading = (await import(url)) as ProfilerReading;
+	} catch {
+		profiler_reading = null;
+	}
+	return profiler_reading;
+}
 
 // ── regexes
 const TRAILING_SLASH_RE = /\/$/;
@@ -724,7 +748,7 @@ async function tool_debug(args: Attrs): Promise<ToolResult> {
 		if (!has_hook)
 			return fail(
 				`${url} loaded, but window.__ogygia_devtools is absent — the app is not a devtools build. Run its dev/build with ` +
-					`OGYGIA_DEVTOOLS=1 (or ogygia({ devtools: true }) in vite.config), then retry.`
+					`OGYGIA_DEVTOOLS=1 (or the devtools plugin, \`plugins: [devtools()]\`, in vite.config), then retry.`
 			);
 		await page.waitForTimeout(wait);
 		if (do_scroll) {
@@ -775,14 +799,29 @@ const median = (xs: number[]): number => {
 	return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
+/** The profiler report's forecast, as these tools read it (`Forecast` in `@ogygia/devtools`). */
+type ReportForecast = {
+	now_ms: number;
+	after_ms: number;
+	cpu_ms: number;
+	wait_ms: number;
+	delete_ms: number;
+	cpu_now_ms?: number;
+	cpu_after_ms?: number;
+	parts: { title: string; kind: string; ms: number; wait: boolean; after_ms?: number; with?: string[] }[];
+	answers?: { after_ms: number; wait_ms: number; measured?: { ms: number; renders: number; model_ms: number } };
+	cache?: boolean;
+	clamped?: boolean;
+	partial?: boolean;
+};
+
 type ProfileReport = {
 	target?: { page?: string; request?: string; runs?: number[] };
 	dev?: boolean;
 	/** one render's critical path: its waiting caps what the wait fixes together take off */
 	timeline?: { wait_ms?: number } | null;
-	/** one render after every fix named, overlapping fixes counted once (forecast.ts) */
-	// TEMP(devtools-split)
-	forecast?: import('../../devtools/src/profiler/forecast.ts').Forecast | null;
+	/** one render after every fix named, overlapping fixes counted once (the profiler's forecast) */
+	forecast?: ReportForecast | null;
 	summary?: {
 		verdict?: string;
 		window_ms?: number;
@@ -1222,8 +1261,13 @@ function render_ledger(r: ProfileReport): string {
 		.join('\n');
 }
 
-/** exported for the tests only (mcp.ts is not a package entry) */
-export function render_profile(origin: string, r: ProfileReport): string {
+/** exported for the tests only (mcp.ts is not a package entry). `reading`: the profiler's report
+ *  reading, when the app has it (an older report's plain fix sum needs it). */
+export function render_profile(
+	origin: string,
+	r: ProfileReport,
+	reading: Pick<ProfilerReading, 'fix_impact'> | null | undefined = profiler_reading
+): string {
 	const target = r.target?.page ?? r.target?.request ?? '(unknown)';
 	const runs = r.target?.runs ?? [];
 	const s = r.summary ?? {};
@@ -1311,7 +1355,7 @@ export function render_profile(origin: string, r: ProfileReport): string {
 	const fc = r.forecast;
 	const impact = fc
 		? undefined
-		: fix_impact(
+		: reading?.fix_impact(
 				(r.patterns ?? []).map((p) => ({ save_ms: p.save_ms ?? 0, wait: p.wait })),
 				median(runs),
 				runs.length || 1,
@@ -1515,6 +1559,7 @@ async function tool_profile(args: Attrs): Promise<ToolResult> {
 	}
 
 	if ((res.headers.get('content-type') ?? '').includes('application/json')) {
+		await load_profiler_reading(); // (an older report's plain fix sum, when the app has the plugin)
 		return text(render_profile(origin, (await res.json()) as ProfileReport));
 	}
 	const body = (await res.text()).replace(HTML_TAG_G, ' ').replace(WS_G, ' ').trim().slice(0, 300);
@@ -1542,6 +1587,12 @@ async function tool_profile_open(args: Attrs): Promise<ToolResult> {
 	} catch (e) {
 		return fail(`could not read ${file}: ${e instanceof Error ? e.message : String(e)}`);
 	}
+	const reading = await load_profiler_reading();
+	if (!reading)
+		return fail(
+			'Opening a .ogp needs the profiler: install `@ogygia/devtools` in this app (run this from its root).'
+		);
+	const { is_ogp, ogp_decode, is_dump, report_json } = reading;
 	if (!is_ogp(bytes)) return fail(`${file} is not an ogygia .ogp profile (bad magic).`);
 
 	// The encryption IS the authorization: decrypt straight from the file, no server, no profiler login.

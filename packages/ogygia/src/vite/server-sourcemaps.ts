@@ -31,7 +31,9 @@ export function client_maps_stash(client_dir: string): string {
 	return path.join(client_dir, '..', '..', CLIENT_MAPS_DIR);
 }
 
-export function server_sourcemaps_plugin(profiler_on: boolean): Plugin {
+/** `measuring()`: a plugin asked for the build's measurement data (read when the config resolves,
+ *  after ogygia's own `config` ran the plugins' build hooks). */
+export function server_sourcemaps_plugin(measuring: () => boolean): Plugin {
 	const g = globalThis as { [SERVER_MAPS]?: Set<string> };
 	/** this instance is the client build of a server build that got hidden maps from us */
 	let client_ours = false;
@@ -40,7 +42,7 @@ export function server_sourcemaps_plugin(profiler_on: boolean): Plugin {
 		config: {
 			order: 'post',
 			handler(config, env) {
-				if (!profiler_on || env.command !== 'build') return;
+				if (!measuring() || env.command !== 'build') return;
 				const ours = (g[SERVER_MAPS] ??= new Set());
 				const root = path.resolve(config.root ?? '.');
 				if (config.build?.ssr) {

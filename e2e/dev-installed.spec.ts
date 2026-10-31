@@ -28,7 +28,12 @@ let srv: SpawnedServer | null = null;
 
 /** The real directory of a package the repo already has (the app links to it, as an install would place it). */
 function real(name: string): string {
-	for (const dir of [path.join(pkg, 'node_modules'), path.join(repo, 'apps', 'playground', 'node_modules'), path.join(repo, 'node_modules')]) {
+	for (const dir of [
+		path.join(pkg, 'node_modules'),
+		path.join(repo, 'packages', 'devtools', 'node_modules'),
+		path.join(repo, 'apps', 'playground', 'node_modules'),
+		path.join(repo, 'node_modules')
+	]) {
 		const p = path.join(dir, name);
 		if (fs.existsSync(p)) return fs.realpathSync(p);
 	}
@@ -39,7 +44,7 @@ const FILES: Record<string, string> = {
 	'package.json': '{ "name": "installed-app", "private": true, "type": "module" }\n',
 	'svelte.config.js': 'export default { kit: {} };\n',
 	// (devtools on, the way an app turns it on in dev: its dock's packages must be found up front)
-	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()] };\n",
+	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia({ plugins: [devtools()] }), sveltekit()] };\n",
 	'src/app.html': '<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',
 	'src/routes/+page.ts': 'export const csr = false;\n',
 	// an island with a snippet prop (its children: they cross as a wired value) …
@@ -74,11 +79,16 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 			fs.mkdirSync(path.dirname(path.join(app, rel)), { recursive: true });
 			fs.writeFileSync(path.join(app, rel), text);
 		}
-		// the package exactly as published (publishConfig swaps the exports to dist), unpacked
+		// the packages exactly as published (publishConfig swaps the exports to dist), unpacked: ogygia,
+		// and the devtools plugin the app lists
 		const nm = path.join(app, 'node_modules');
-		fs.mkdirSync(path.join(nm, 'ogygia'), { recursive: true });
-		const tgz = execFileSync('pnpm', ['pack', '--pack-destination', app], { cwd: pkg, encoding: 'utf8' }).trim().split('\n').at(-1)!;
-		execFileSync('tar', ['-xzf', path.isAbsolute(tgz) ? tgz : path.join(app, path.basename(tgz)), '-C', path.join(nm, 'ogygia'), '--strip-components=1']);
+		const unpack = (from: string, to: string) => {
+			fs.mkdirSync(to, { recursive: true });
+			const tgz = execFileSync('pnpm', ['pack', '--pack-destination', app], { cwd: from, encoding: 'utf8' }).trim().split('\n').at(-1)!;
+			execFileSync('tar', ['-xzf', path.isAbsolute(tgz) ? tgz : path.join(app, path.basename(tgz)), '-C', to, '--strip-components=1']);
+		};
+		unpack(pkg, path.join(nm, 'ogygia'));
+		unpack(path.join(repo, 'packages', 'devtools'), path.join(nm, '@ogygia', 'devtools'));
 		for (const dep of ['svelte', '@sveltejs', 'vite', 'devalue', 'esm-env', 'estree-walker', 'magic-string', 'rolldown', 'tinyglobby', '@neodrag'])
 			fs.symlinkSync(real(dep), path.join(nm, dep));
 		srv = await spawn_server({
@@ -170,7 +180,7 @@ test.describe('dev: an installed (not linked) ogygia runs as one copy in the bro
 		// imports load ogygia by path — the server restarts on the config change
 		fs.writeFileSync(
 			path.join(app, 'vite.config.js'),
-			"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()], optimizeDeps: { include: ['ogygia/runtime'] } };\n"
+			"import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nimport { devtools } from '@ogygia/devtools/vite';\nexport default { plugins: [ogygia({ plugins: [devtools()] }), sveltekit()], optimizeDeps: { include: ['ogygia/runtime'] } };\n"
 		);
 		await page.waitForTimeout(6000);
 		let said: string[] = [];

@@ -151,6 +151,17 @@ export interface HoleRequestStats {
 const stats = new WeakMap<Request, OgygiaRequestStats>();
 const hole_stats = new WeakMap<Request, HoleRequestStats>();
 let detailed = false;
+let wanted = false;
+
+/** A reader of these stats is installed (the profiler, from `@ogygia/devtools`): the handle records
+ *  each request's totals. Off, it records nothing — no stats object per request in an app without one. */
+export function want_request_stats(): void {
+	wanted = true;
+}
+
+export function request_stats_wanted(): boolean {
+	return wanted;
+}
 
 export function record_request_stats(request: Request, s: OgygiaRequestStats): void {
 	stats.set(request, s);

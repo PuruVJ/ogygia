@@ -246,7 +246,7 @@ test.describe('a recording whose page leaves for a document with no testing API'
 			})
 			.catch((e: Error) => e)) as Error;
 		expect(err.message).toContain('went to another document');
-		expect(err.message).not.toContain('devtools: true');
+		expect(err.message).not.toContain('plugins: [devtools()]');
 		expect(err.cause).toBe(boom);
 	});
 });

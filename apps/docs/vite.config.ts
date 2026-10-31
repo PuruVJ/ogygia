@@ -3,6 +3,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
 import { content } from '@ogygia/content/vite';
+import { devtools } from '@ogygia/devtools/vite';
 import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
@@ -127,13 +128,6 @@ export default defineConfig(({ command }) => ({
 		crossOriginIsolation(),
 		wasm(),
 		ogygia({
-			// The devtools dock (launcher + Lens/Bytes/Wire/Nav/Timeline) — dev only, so the built
-			// docs site never ships the instrument graph. `command === 'serve'` is `vite dev`.
-			devtools: command === 'serve',
-			// The SSR profiler — configured ONLY here (no profiler() hook). ogygia.handle() mounts it
-			// internally. UI at /__profiler (dev = open; prod needs ?key=<OGYGIA_PROFILER_SECRET>).
-			// Build with PROFILER_SOURCEMAPS=1 to recover original frame names (see build.sourcemap).
-			profiler: true,
 			regions: {
 				visible: { margin: '120px' },
 				presets: {
@@ -142,6 +136,11 @@ export default defineConfig(({ command }) => ({
 				},
 			},
 			plugins: [
+				// The devtools dock (launcher + Lens/Bytes/Wire/Nav/Timeline) — dev only, so the built docs
+				// site never ships the instrument graph — and the SSR profiler, always: UI at /__profiler
+				// (dev = open; prod needs ?key=<OGYGIA_PROFILER_SECRET>). Build with PROFILER_SOURCEMAPS=1 to
+				// recover original frame names (see build.sourcemap).
+				devtools({ dock: command === 'serve', profiler: true }),
 				content({
 					markdown: {
 						themes: { light: themes.light, dark: themes.dark },

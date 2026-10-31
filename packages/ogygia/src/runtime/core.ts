@@ -53,9 +53,13 @@ import {
 	install_window_sink as dt_install_window_sink,
 	ingest_server_events as dt_ingest_server
 } from '../events/sinks.ts';
-// TEMP(devtools-split): the dock's launcher + leftovers watch live in packages/devtools until they plug in through a hook
-import { install_devtools_ui as dt_install_ui } from '../../../devtools/src/devtools/ui.ts';
-import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../../../devtools/src/devtools/leftovers.ts';
+import {
+	CLIENT_PLUGINS,
+	boot_client_plugins,
+	client_region_mount,
+	client_region_unmount
+} from './client-plugins.ts';
+import type { ClientPlugin } from '../plugin/client.ts';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
@@ -117,20 +121,6 @@ function dt_ids(el: Element): { entry?: string; fp?: string } {
 	return { entry, fp };
 }
 
-/** An island instance starts, for the devtools' leftovers watch: its entry and file locations. */
-function dt_seen(el: Element): void {
-	const entry = el.getAttribute('entry');
-	if (!entry) return;
-	const urls: string[] = [];
-	for (const u of [entry, el.getAttribute('src')]) {
-		try {
-			if (u) urls.push(new URL(u, document.baseURI).href);
-		} catch {
-			/* not a URL */
-		}
-	}
-	dt_island_seen(el, entry, urls);
-}
 
 /** High-res clock for devtools timings (guarded — dead when devtools is off). */
 function now_ms(): number {
@@ -1228,10 +1218,8 @@ class OgygiaRegion extends HTMLElement {
 		let t_loaded = t0;
 		/** when its hydrate step began: a failed step held the thread from here (the reports count it busy) */
 		let t_turn: number | undefined;
-		if (DEVTOOLS) {
-			dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
-			dt_seen(this);
-		}
+		if (DEVTOOLS) dt_emit({ domain: 'runtime', name: 'region.hydrate.start', ...dt_ids(this) });
+		if (CLIENT_PLUGINS) client_region_mount(this);
 		try {
 			// wait for full parse so the end-of-body props sidecars (and the seed) are in the DOM. On an
 			// SPA swap (and any post-load hydrate) the document is already parsed, so skip the await
@@ -1448,7 +1436,7 @@ class OgygiaRegion extends HTMLElement {
 		if (!this.isConnected) return;
 		await this.#kit_page_ready(core);
 		if (!this.isConnected) return;
-		if (DEVTOOLS) dt_seen(this);
+		if (CLIENT_PLUGINS) client_region_mount(this);
 		this.#live_app = core.hydrate_live(this, entry, mod, props);
 		if (!this.#live_app) return;
 		this.setAttribute('data-hydrated', '');
@@ -1482,7 +1470,7 @@ class OgygiaRegion extends HTMLElement {
 		if (this.#watching) mark_region_changed(this);
 		this.#unwatch();
 		// Out past the task it left in: the island is gone (a move came back before the microtask).
-		if (DEVTOOLS && (this.#live_app || this.#app)) dt_island_gone(this, this.getAttribute('entry') ?? '');
+		if (CLIENT_PLUGINS && (this.#live_app || this.#app)) client_region_unmount(this, this.getAttribute('entry') ?? '');
 		if (this.#live_app) {
 			this.#live_app.dispose();
 			this.#live_app = null;
@@ -1570,7 +1558,7 @@ function apply_dev_head_region_css(): void {
 	});
 }
 
-export function boot(installers: Array<() => void> = []): void {
+export function boot(installers: Array<() => void> = [], client_plugins: readonly ClientPlugin[] = []): void {
 	// The navigation handle island code reaches the runtime through (./nav-handle.ts): the MPA one
 	// first, which the router feature's install replaces with the SPA router's when it is present.
 	if (typeof document !== 'undefined' && !(NAV_HANDLE_KEY in globalThis)) publish_nav(mpa_nav());
@@ -1611,12 +1599,11 @@ export function boot(installers: Array<() => void> = []): void {
 		// Fold the SERVER realm's events (the handle's `application/ogygia-devtools` side-channel) into
 		// the same stream — a region's server render + client wake now share one fingerprint-keyed timeline.
 		dt_ingest_server();
-		// The devtools UI — one mounted Svelte app (launcher + tabbed window: Lens / Bytes / Timeline).
-		// A pure bus/DOM consumer, starting hidden (Alt+O). DCEs with the whole devtools graph when off.
-		dt_install_ui();
-		// What islands leave running after they leave the page (intervals, window/document listeners):
-		// watched from before the first island wakes
-		dt_watch_leftovers();
+	}
+	// The plugins' browser halves (`<plugin>/client`: the devtools dock and its leftovers watch), booted
+	// before the first island wakes. Folds away with no plugin's client realm in the build.
+	if (CLIENT_PLUGINS) boot_client_plugins(client_plugins, false);
+	if (DEVTOOLS) {
 		// Which optional features this per-app runtime shipped — the byte-ledger / boundary-lens read
 		// this to know what's even possible on the page. Names come off each installer's slot presence.
 		const features: string[] = [];

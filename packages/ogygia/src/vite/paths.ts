@@ -69,47 +69,6 @@ export const OGYGIA_INJECTED_IMPORTS: Set<string> = new Set(['ogygia/internal', 
  */
 const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
 
-// TEMP(devtools-split): the devtools package's root (packages/devtools, the workspace sibling — `../../..`
-// from `src/vite/` or `dist/vite/`), with the same src/dist pick as this package's own files.
-/** The `@ogygia/devtools` package root (native path). */
-export const DEVTOOLS_ROOT: string = fileURLToPath(new URL('../../../devtools', import.meta.url));
-/** THE own-files test for the devtools package's module ids (cf. PKG_ROOT_ID). */
-export const DEVTOOLS_ROOT_ID: string = id_dir(DEVTOOLS_ROOT);
-const DT_HAS_SRC = fs.existsSync(path.join(DEVTOOLS_ROOT, 'src/profiler/profiler-router.ts'));
-
-/**
- * ogygia's own profiler UI components — island `.svelte` files marked INSIDE ogygia's source and
- * rendered only from server code (`document()` pages), so no app file ever marks them and the src
- * prescan can't discover them. When `ogygia({ profiler })` is set, the plugin adds this dir as a
- * prescan root so their client hydrate chunks build. Same self-reference pattern as
- * OGYGIA_INJECTED_FILES: live `src` in the workspace, the raw-shipped `dist` copy when installed.
- * (App islands — including workspace-package components marked at an app import site — need none of
- * this; the mark lives in app source and the src walk already finds it.)
- */
-// TEMP(devtools-split): the profiler lives in packages/devtools now
-export const PROFILER_UI_DIR: string = DT_HAS_SRC
-	? path.join(DEVTOOLS_ROOT, 'src/profiler/ui')
-	: path.join(DEVTOOLS_ROOT, 'dist/profiler/ui');
-
-/**
- * The profiler's OWN server router (`ogygia/router`, shipped in dist) — never in app source, so the
- * router-css closure walk can't find the page components it renders. When the profiler is on, the
- * plugin injects this as an extra router-css seed: its DIRECT `.svelte` imports (the page components,
- * each wrapping `Shell`) become router-css roots, so their scoped `<style>` blocks are emitted +
- * linked exactly like an app router page's. Parallel to PROFILER_UI_DIR's src/dist self-reference.
- */
-// TEMP(devtools-split): the profiler lives in packages/devtools now
-export const PROFILER_ROUTER_MODULE: string = DT_HAS_SRC
-	? path.join(DEVTOOLS_ROOT, 'src/profiler/profiler-router.ts')
-	: path.join(DEVTOOLS_ROOT, 'dist/profiler/profiler-router.js');
-
-/**
- * ogygia's own `hooks` module (the `ogygia/server` handle), as the POSIX id Vite hands the transform
- * hook — precomputed so the per-module hot path spends ONE string equality (no regex, no split) to
- * spot it. Dev severs this module's `import('./profiler/index.js')` edge from import-analysis there
- * (see the transform hook) so Kit's dev css crawl can't descend into the profiler UI's stylesheets.
- */
-export const OGYGIA_HOOKS_MODULE: string =PKG_ROOT_ID + (OG_HAS_SRC ? 'src/hooks.ts' : 'dist/hooks.js');
 /** ogygia's `Region.svelte` — either copy, as the POSIX id Vite hands the transform hook (a workspace
  *  can load the src one and the dist one both): its LateIsland import is the awaiting one where the
  *  app runs Svelte's async mode (late-island.ts). */

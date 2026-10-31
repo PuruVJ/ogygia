@@ -355,6 +355,27 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
     (5) the mechanical move to packages/devtools (64 tests, 12 app imports, 2 configs; `@neodrag/svelte`
     a dependency). Open: `mcp.ts` imports profiler report/patterns/crypto (→ lazy optional peer, or move
     the CLI/MCP split forward); plugin packages with `.svelte` need `ssr.noExternal` when installed.
+  - AS BUILT (the user asked to move first, then cut): the folders moved to packages/devtools, then
+    each core reach-in became a door piece —
+    - SERVER `handle(ctx, next)` lifecycle hook (`around()` in plugin/server.ts nests them, first plugin
+      outermost; `next(opts)` composes resolve options); `@ogygia/devtools/server` mounts the profiler
+      lazily there (on-demand gate included); core's request stats switch on via `want_request_stats()`
+      (no more profiler config in core: `virtual:ogygia/profiler-config` deleted).
+    - BUILD `b.events({ lazy })` (the `__OGYGIA_DEVTOOLS__` gate + its lazy form), `b.measure()`
+      (embedded maps, module map, island detail, server sourcemaps, dev maps, BEACON), `b.files({ root,
+      dirs, files })` (the profiler UI + its router); plugins' build hooks now run in core's `config`
+      hook (before the defines); plugin packages join `ssr.noExternal` + `optimizeDeps.exclude`. The
+      measurement producers stayed core (they need compiler internals) — gated by `b.measure()`.
+    - CLIENT `ogygia/plugin/client`: `defineClient({ boot({ kitPage }), regionMount(el, { entry, urls }),
+      regionUnmount(el, { entry }) })` (user: public names say REGION, never island); found by name
+      (`<name>/client`), statically imported into the boot entry / `bootDev([…])` / the Kit-page dev boot;
+      one gate `__OGYGIA_CLIENT_PLUGINS__` folds every call when none (per-hook DCE: later).
+    - `ogygia mcp` loads `@ogygia/devtools/report` from the app's install at first need (moves to the CLI
+      package later). The maps' gzip mark is `PROFILER_MAPS_GZ_PREFIX` in compiler ids.
+    - `ogygia({ devtools, profiler })` → `devtools({ dock, profiler })` from `@ogygia/devtools/vite`
+      (legacy-key errors name the new spelling).
+- NEXT (user, 2026-10-31: "yes love it lets do it"): FLATTEN `regions.*` onto ogygia()'s root —
+  `visible`, `presets`, `ttl`, `maxPageAge`; `regions` becomes a legacy key with the new spelling.
 
 ## Performance rules (the bar every step must pass)
 

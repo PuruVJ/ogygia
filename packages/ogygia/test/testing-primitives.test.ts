@@ -190,7 +190,7 @@ describe('compare: hydration, session counts, vitals', () => {
 describe('createOgygia', () => {
 	it('drives any page driver, and tells you when the page has no testing API', async () => {
 		const o = createOgygia({ evaluate: async () => false as never }, { timeout: 50 });
-		await expect(o.page()).rejects.toThrow('devtools: true');
+		await expect(o.page()).rejects.toThrow('plugins: [devtools()]');
 	});
 	/** A page driver over a fake in-page API: `present()` says whether the API is in the page now. */
 	const fake = (api: Record<string, (...a: unknown[]) => unknown>, present: () => boolean = () => true, version = 3) => ({
@@ -215,7 +215,7 @@ describe('createOgygia', () => {
 			.catch((e: Error) => e);
 		expect((err as Error).message).toContain('went to another document');
 		expect((err as Error).message).toContain('http://app.test/elsewhere');
-		expect((err as Error).message).not.toContain('devtools: true');
+		expect((err as Error).message).not.toContain('plugins: [devtools()]');
 		expect((err as Error).cause).toBe(boom);
 	});
 	it('record(): the actions’ error still surfaces when the page stayed', async () => {

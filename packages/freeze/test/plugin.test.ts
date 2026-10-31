@@ -33,7 +33,10 @@ describe('freeze() — the vite value', () => {
 			routeOption: (n) => void names.push(n),
 			foreignHydrate: () => {},
 			macro: () => {},
-			markup: () => ({ transform: () => null })
+			markup: () => ({ transform: () => null }),
+			events: () => {},
+			measure: () => {},
+			files: () => {}
 		});
 		expect(names).toEqual(['freeze']);
 	});

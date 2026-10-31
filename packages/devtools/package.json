@@ -19,6 +19,22 @@
 			"svelte": "./src/devtools/index.ts",
 			"default": "./src/devtools/index.ts"
 		},
+		"./vite": {
+			"types": "./dist/vite.d.ts",
+			"default": "./dist/vite.js"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"default": "./src/server.ts"
+		},
+		"./client": {
+			"types": "./dist/client.d.ts",
+			"default": "./src/client.ts"
+		},
+		"./report": {
+			"types": "./dist/report.d.ts",
+			"default": "./dist/report.js"
+		},
 		"./profiler": {
 			"types": "./dist/profiler/span.d.ts",
 			"default": "./src/profiler/span.ts"
@@ -80,6 +96,22 @@
 				"types": "./dist/devtools/index.d.ts",
 				"svelte": "./dist/devtools/index.js",
 				"default": "./dist/devtools/index.js"
+			},
+			"./vite": {
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
+			},
+			"./server": {
+				"types": "./dist/server.d.ts",
+				"default": "./dist/server.js"
+			},
+			"./client": {
+				"types": "./dist/client.d.ts",
+				"default": "./dist/client.js"
+			},
+			"./report": {
+				"types": "./dist/report.d.ts",
+				"default": "./dist/report.js"
 			},
 			"./profiler": {
 				"types": "./dist/profiler/span.d.ts",

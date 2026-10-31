@@ -12,14 +12,14 @@ type Handler = (
 	env: { command: string }
 ) => unknown;
 const handler = (on: boolean) =>
-	(server_sourcemaps_plugin(on).config as unknown as { handler: Handler }).handler;
+	(server_sourcemaps_plugin(() => on).config as unknown as { handler: Handler }).handler;
 const reset = () =>
 	delete (globalThis as Record<symbol, unknown>)[Symbol.for('ogygia.server-hidden-maps')];
 
 describe('server_sourcemaps_plugin', () => {
 	/** a client build instance given `config`, then its output written: which maps were left, which stashed */
 	const client_write = (config: object) => {
-		const p = server_sourcemaps_plugin(true);
+		const p = server_sourcemaps_plugin(() => true);
 		(p.config as unknown as { handler: Handler }).handler(config as never, { command: 'build' });
 		const out = fs.mkdtempSync(path.join(os.tmpdir(), 'og-cmaps-'));
 		const client = path.join(out, 'output/client');

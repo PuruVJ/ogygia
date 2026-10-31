@@ -2,6 +2,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { flags } from '@ogygia/flags/vite';
 import { content } from '@ogygia/content/vite';
+import { devtools } from '@ogygia/devtools/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -31,18 +32,20 @@ export default defineConfig({
 			// content: the markdown pipeline (stock defaults) so the `.svx` fixture behind
 			// e2e/content-css compiles — that check guards content-body scoped CSS shipping to a
 			// csr=false page.
-			plugins: [flags(), content({ markdown: {} })],
-			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
-			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
-			// (+ the background recorders, exercised by the hell page: a trap for any request over 400 ms,
-			// and a 1 s coarse sample every 20 s folded into the dashboard's always-on table)
-			// serverTiming on in the built preview too: the hell page's own API routes then answer the
-			// profiler's nested-trace ask, so the waterfall shows "inside the upstream"
-			profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true },
-			// DEVTOOLS event layer — OFF by default (so the suite + bundle-size snapshot stay honest and
-			// e2e/devtools.ts proves tree-shaking); flip on with OGYGIA_DEVTOOLS=1 to run the event-driven
-			// proof-of-value build. Env-gated, not always-on, precisely so the default build ships nothing.
-			devtools: !!process.env.OGYGIA_DEVTOOLS,
+			// devtools: the SSR profiler, always (its UI islands build, its handle mounts it; secret from
+			// OGYGIA_PROFILER_SECRET at runtime; + the background recorders the hell page exercises: a trap
+			// for any request over 400 ms, a 1 s coarse sample every 20 s; serverTiming on in the built
+			// preview too, so the hell page's own API routes answer the profiler's nested-trace ask). The
+			// DOCK (core's event layer) is OFF by default — so the suite + bundle-size snapshot stay honest
+			// and e2e/devtools.ts proves tree-shaking — and on with OGYGIA_DEVTOOLS=1.
+			plugins: [
+				flags(),
+				content({ markdown: {} }),
+				devtools({
+					dock: !!process.env.OGYGIA_DEVTOOLS,
+					profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true }
+				})
+			],
 			// Opt IN to server-delta nav (off by default) so e2e/server-delta.ts exercises the protocol:
 			// an SPA nav sends `x-ogygia-known`, the server skips re-rendering the island the client keeps.
 			router: { serverDelta: true },

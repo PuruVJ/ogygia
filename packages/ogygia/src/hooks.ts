@@ -33,13 +33,6 @@ import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import { enabled as router_enabled, viewTransitions as router_view_transitions } from 'virtual:ogygia/router-config';
 import { mpaSpeculationRules } from './compiler/link/speculation.ts';
-import { profilerConfig } from 'virtual:ogygia/profiler-config';
-/** DEMAND-ONLY profiler: gate the profiler import behind a request to its path. Both read off the plain
- *  config object — no profiler code loaded to decide. `path` mirrors ProfilerOptions.path (default). */
-const PROFILER_ON_DEMAND = !!(profilerConfig as { onDemand?: boolean } | null)?.onDemand;
-const PROFILER_UI_PATH = (profilerConfig as { path?: string } | null)?.path || '/__profiler';
-// TEMP(devtools-split): the profiler lives in packages/devtools until it plugs in through a hook
-import { profiler_demand_skip } from '../../devtools/src/profiler/on-demand.ts';
 import { route_options } from 'virtual:ogygia/route-options';
 import { set_page_route_options } from './plugin/routes.ts';
 import {
@@ -78,7 +71,7 @@ import { REF_WIRE_KEY, ref_reviver } from './ref.ts';
 import { plugins as plugin_entries } from 'virtual:ogygia/server-plugins';
 import type { RequestContext } from './plugin/index.ts';
 import { current_facts, facts_of, mark_per_visitor, set_current_request, type RequestFacts } from './plugin/facts.ts';
-import { request_contexts, start_plugins } from './plugin/server.ts';
+import { around, request_contexts, start_plugins } from './plugin/server.ts';
 // PULL-registration at decode time (idempotent; no import-time side effects).
 import { register_wire_kind } from './live-transport.ts';
 import { register_store_kind, register_derived_kind } from './store-transport.ts';
@@ -139,6 +132,7 @@ import {
 	record_batch_hole_stats,
 	has_batch_hole_listener,
 	request_stats_detailed,
+	request_stats_wanted,
 	type SeedKeyStat
 } from './server/request-stats.ts';
 import { json_culprit } from './seed-refs.ts';
@@ -512,30 +506,6 @@ function capability_target(cap: Capability): string | null {
  * Decode a request pathname without throwing on malformed percent-encoding (SEC-05).
  * @returns decoded path, or null if the encoding is invalid
  */
-type ResolveOpts = NonNullable<Parameters<Parameters<Handle>[0]['resolve']>[1]>;
-
-/** Two `resolve()` option sets as one: the inner transform (the core's document injection) runs
- *  first, the outer (the profiler's) sees the finished chunk; the other options merge, outer last. */
-function compose_resolve_opts(inner?: ResolveOpts, outer?: ResolveOpts): ResolveOpts | undefined {
-	if (!inner) return outer;
-	if (!outer) return inner;
-	const a = inner.transformPageChunk;
-	const b = outer.transformPageChunk;
-	return {
-		...inner,
-		...outer,
-		transformPageChunk: !a
-			? b
-			: !b
-				? a
-				: async (input) => {
-						const first = await a(input);
-						if (first === undefined) return first;
-						return b({ ...input, html: first });
-					}
-	};
-}
-
 function decode_pathname(pathname: string): string | null {
 	try {
 		return decodeURIComponent(pathname);
@@ -691,60 +661,9 @@ class OgygiaHandle {
 		});
 	}
 
-	/** Constructed profiler handle, or null when `ogygia({ profiler })` is off. `undefined` = not yet
-	 *  resolved (the dynamic import runs once, on the first request). */
-	#profiler: Handle | null | undefined;
-
-	/** Lazily import + construct the profiler from `virtual:ogygia/profiler-config`. The profiler's
-	 *  weight (node:inspector, crypto, its UI-rendering path) enters a SEPARATE chunk that loads only
-	 *  when configured — so an app that doesn't use it pays nothing, and hooks.server.ts never mentions
-	 *  it. The secret is read from OGYGIA_PROFILER_SECRET at runtime unless the config baked one. */
-	async #ensure_profiler(): Promise<Handle | null> {
-		if (this.#profiler !== undefined) return this.#profiler;
-		if (!profilerConfig) return (this.#profiler = null);
-		try {
-			// TEMP(devtools-split): the profiler lives in packages/devtools until it plugs in through a hook
-			const { profiler } = await import('../../devtools/src/profiler/index.ts');
-			// a runtime store (set via `setProfilerStore` in hooks.server.ts) — a live DB object the
-			// build-time config could not carry; merged over the serializable config here
-			// TEMP(devtools-split)
-			const { getProfilerStore } = await import('../../devtools/src/profiler/storage/index.ts').catch(() => ({ getProfilerStore: () => undefined }));
-			const store = getProfilerStore();
-			this.#profiler = profiler({ ...(profilerConfig as Parameters<typeof profiler>[0]), ...(store ? { store } : {}) });
-		} catch {
-			this.#profiler = null; // profiler unavailable (edge without node:inspector, etc.)
-		}
-		return this.#profiler;
-	}
-
-	// The public handle: when the profiler is configured (vite plugin only) it wraps the core handle,
-	// so it times the SSR render and serves its UI — with zero hooks wiring. Otherwise it's the core.
-	handle: Handle = async ({ event, resolve }) => {
-		// DEMAND-ONLY (`profiler: { onDemand: true }`): do not import / parse / initialise the profiler
-		// (its node:inspector + UI weight — the serverless cold-start cost) until a request actually asks
-		// for it by hitting the profiler path. Until then, and only until the first such request mounts it
-		// (`#profiler` stays `undefined`), this app pays exactly what a profiler-less app pays. Once
-		// mounted, later requests fall through and are instrumented. See profiler_demand_skip.
-		if (
-			profiler_demand_skip(PROFILER_ON_DEMAND, this.#profiler !== undefined, event.url.pathname, PROFILER_UI_PATH)
-		) {
-			return this.#core({ event, resolve });
-		}
-		const prof = await this.#ensure_profiler();
-		if (prof) {
-			// The profiler's `resolve` options (its beacon tag's transformPageChunk) compose with the
-			// core's own transform: the core's runs first (the document is complete), then the profiler's.
-			return prof({
-				event,
-				resolve: (e, outer) =>
-					this.#core({
-						event: e,
-						resolve: (ev, inner) => resolve(ev, compose_resolve_opts(inner, outer))
-					})
-			});
-		}
-		return this.#core({ event, resolve });
-	};
+	// The public handle: the plugins' `handle` hooks (a profiler timing the render and serving its UI)
+	// nested around the core, first plugin outermost — with zero hooks wiring. None: the core itself.
+	handle: Handle = around(plugins, (input) => this.#core(input));
 
 	#core: Handle = async ({ event, resolve }) => {
 		const path = decode_pathname(event.url.pathname);
@@ -1362,7 +1281,7 @@ class OgygiaHandle {
 		// OGYGIA'S OWN COST, for the profiler's request log (server/request-stats.ts): what this
 		// transform took and what it added. One WeakMap write — and none at all in an app without the
 		// profiler (the only reader), so no stats object per request there.
-		if (event && profilerConfig) {
+		if (event && request_stats_wanted()) {
 			const size = bag!.tail.size;
 			record_request_stats(event.request, {
 				transform_ms: Math.round((performance.now() - t_start) * 100) / 100,

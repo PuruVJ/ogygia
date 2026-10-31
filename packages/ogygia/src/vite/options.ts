@@ -5,8 +5,6 @@
  */
 import type { ImportKeys } from '../compiler/region/transform.ts';
 import type { DebarrelOptions } from '../compiler/debarrel/options.ts';
-// TEMP(devtools-split): the `profiler` option's type, from packages/devtools until the option moves
-import type { ProfilerOptions } from '../../../devtools/src/profiler/index.ts';
 import type { OgygiaPlugin } from './plugin-api.ts';
 
 // ── regexes
@@ -172,21 +170,6 @@ export interface OgygiaOptions {
 	importKeys?: Partial<ImportKeys>;
 
 	/**
-	 * The devtools EVENT LAYER (internal/notes/devtools.md). Off by default — user apps never ship it.
-	 * Turn it on and the framework emits typed lifecycle events (island discovery, server render,
-	 * wire crossings, client wake, hub mint/resolve, nav reconcile) keyed on the identities it already
-	 * mints, which any sink (`ogygia/devtools`) can read: the REPL, a boundary-lens overlay, a bug-
-	 * report trace, or our own event-driven e2e.
-	 *
-	 * - `false` (default) — the gate is off; every emit folds to `if (false)` and the bus tree-shakes
-	 *   out of the runtime chunk. Zero cost.
-	 * - `true` — on, wherever you turn it on. In a build (a preview deploy) the pages carry only a
-	 *   small launcher: the dock's code loads when someone opens it, and the page is measured from
-	 *   the next load on. You decide where: `ogygia({ devtools: mode !== 'production' })`.
-	 */
-	devtools?: boolean;
-
-	/**
 	 * Per-IP budget for the signed island endpoint served by `ogygiaHandle()`.
 	 * Default `{ max: 60, windowMs: 60_000 }`. Pass `false` to disable.
 	 */
@@ -198,17 +181,6 @@ export interface OgygiaOptions {
 	 * Default `false` (unbound).
 	 */
 	sessionCookie?: false | string;
-
-	/**
-	 * The drop-in SSR profiler — configured ENTIRELY here, nowhere else. `true` (or an options object)
-	 * turns it on: the plugin builds its UI (real Svelte islands, marked inside ogygia's own source and
-	 * rendered only from its handle, so the client build can't otherwise see them) AND transports this
-	 * config to `ogygia.handle()` via a virtual module. The handle dynamically imports and mounts the
-	 * profiler itself — no `profiler()` in hooks, no handler wiring, and the profiler's weight loads only
-	 * when it's on. The secret defaults to the `OGYGIA_PROFILER_SECRET` env var at runtime; pass
-	 * `{ secret }` to override (baked into the server build). Off → no profiler at all.
-	 */
-	profiler?: boolean | ProfilerOptions;
 
 	/**
 	 * The app's plugins, in order (`plugins: [flags(), freeze()]`). Named here once: the build finds
@@ -252,7 +224,11 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 	freeze:
 		'`freeze` is a plugin now — install `@ogygia/freeze` and write `plugins: [freeze({ ttl, default })]` (from `@ogygia/freeze/vite`).',
 	content:
-		'`content` is a plugin now — install `@ogygia/content` and write `plugins: [content({ markdown, presets })]` (from `@ogygia/content/vite`); the svelte config takes `preprocess()` / `extensions()` from there too.'
+		'`content` is a plugin now — install `@ogygia/content` and write `plugins: [content({ markdown, presets })]` (from `@ogygia/content/vite`); the svelte config takes `preprocess()` / `extensions()` from there too.',
+	devtools:
+		'`devtools` is a plugin now — install `@ogygia/devtools` and write `plugins: [devtools()]` (from `@ogygia/devtools/vite`); list it only where you want it, e.g. `...(mode !== \'production\' ? [devtools()] : [])`.',
+	profiler:
+		'`profiler` is part of the devtools plugin now — install `@ogygia/devtools` and write `plugins: [devtools({ profiler: { … } })]` (from `@ogygia/devtools/vite`).'
 };
 
 /** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
@@ -313,7 +289,6 @@ export interface ResolvedOgygiaConfig {
 	router_view_transitions: boolean;
 	continuity_forms: boolean;
 	server_delta: boolean;
-	devtools: boolean;
 }
 
 /**
@@ -379,10 +354,6 @@ export function resolve_options(
 	const server_delta =
 		router_enabled && typeof options.router === 'object' && options.router.serverDelta === true;
 
-	// DEVTOOLS event layer — off unless the app opts in. Independent of the router (client AND server
-	// realms emit); a plain `true` turns the compile gate on for both dev and this build's output.
-	const devtools = options.devtools === true;
-
 	return {
 		rate_limit,
 		session_cookie,
@@ -391,7 +362,6 @@ export function resolve_options(
 		router_enabled,
 		router_view_transitions,
 		continuity_forms,
-		server_delta,
-		devtools
+		server_delta
 	};
 }

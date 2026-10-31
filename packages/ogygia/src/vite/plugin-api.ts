@@ -63,9 +63,9 @@ export interface MarkupSource {
 	styles?: ReadonlyMap<string, string>;
 }
 
-/** What the build hands back for a markup source: run the island transform on preprocessed Svelte. */
-export interface MarkupIslands {
-	/** Rewrite the marked imports in already-preprocessed Svelte and register its islands. The code,
+/** What the build hands back for a markup source: run the region transform on preprocessed Svelte. */
+export interface MarkupRegions {
+	/** Rewrite the marked imports in already-preprocessed Svelte and register its regions. The code,
 	 *  or null when nothing changed. */
 	transform(source: string, filename: string): string | null;
 }
@@ -89,7 +89,17 @@ export interface BuildContext {
 	macro(name: string, handler: MacroHandler): void;
 	/** A source format that becomes Svelte through a preprocessor (markdown): register it, get the
 	 *  island transform to call from that preprocessor. */
-	markup(source: MarkupSource): MarkupIslands;
+	markup(source: MarkupSource): MarkupRegions;
+	/** Compile core's EVENT emits in, browser and server (`ogygia/events`: island wakes, server renders,
+	 *  hub mints, navigations) — off, every emit folds away. `lazy`: measure only once a viewer opens a
+	 *  tool (the page carries a launcher; a preview build). */
+	events(options?: { lazy?: boolean }): void;
+	/** Record the build's MEASUREMENT data: per-island detail, chunk contents, server source maps, the
+	 *  module map, the embedded maps, the request stats' detail — what a profiler reads. */
+	measure(): void;
+	/** Compile a package's files as app source (their islands, router-css roots): `dirs` / `files`
+	 *  absolute, under `root` (the package's directory). For a plugin's own pages (a UI it serves). */
+	files(scan: { root: string; dirs?: string[]; files?: string[] }): void;
 }
 
 /** Typed identity: a plugin. */
@@ -104,6 +114,8 @@ const REALMS = ['server', 'client', 'devtools'] as const;
 export interface ResolvedPlugins {
 	/** each server realm, in plugin order (`enforce` applied) */
 	servers: ServerRealm[];
+	/** each browser realm (`<name>/client`), in plugin order */
+	clients: string[];
 	/** every route option any plugin reads */
 	route_options: string[];
 	/** a plugin asked for island entries' foreign-hydrate exports */
@@ -112,6 +124,12 @@ export interface ResolvedPlugins {
 	macros: { name: string; handler: MacroHandler }[];
 	/** markup sources (a preprocessor format with islands) */
 	markup: MarkupSource[];
+	/** a plugin asked for core's events (`lazy`: measure once a tool opens), or false */
+	events: false | { lazy: boolean };
+	/** a plugin asked for the build's measurement data */
+	measure: boolean;
+	/** package files compiled as app source, per plugin */
+	files: { name: string; root: string; dirs: string[]; files: string[] }[];
 }
 
 const MACRO_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
@@ -186,7 +204,7 @@ function package_resolves(req: NodeJS.Require, name: string): boolean {
 }
 
 /**
- * When the app's root and mode are known (configResolved): order the plugins (`enforce`), find their
+ * When the app's root and mode are known (the `config` hook): order the plugins (`enforce`), find their
  * realms by name, run their `build` hooks. `markup_transform` is the configured compiler's island
  * transform for preprocessed markup (what `b.markup()` hands back).
  */
@@ -194,11 +212,21 @@ export function resolve_plugins(
 	plugins: readonly OgygiaPlugin[],
 	root: string,
 	dev: boolean,
-	markup_transform: MarkupIslands['transform'] = () => null
+	markup_transform: MarkupRegions['transform'] = () => null
 ): ResolvedPlugins {
 	const ordered = order(plugins);
 	const req = createRequire(path.join(root, 'package.json'));
-	const out: ResolvedPlugins = { servers: [], route_options: [], foreign_hydrate: false, macros: [], markup: [] };
+	const out: ResolvedPlugins = {
+		servers: [],
+		clients: [],
+		route_options: [],
+		foreign_hydrate: false,
+		macros: [],
+		markup: [],
+		events: false,
+		measure: false,
+		files: []
+	};
 	const option_owner = new Map<string, string>();
 	const macro_owner = new Map<string, string>();
 	for (const plugin of ordered) {
@@ -206,6 +234,7 @@ export function resolve_plugins(
 			throw new Error(`[ogygia] plugin \`${plugin.name}\`: no package by that name resolves from ${root} — its name must be its package name.`);
 		if (realm_exists(req, plugin.name, REALMS[0]))
 			out.servers.push({ name: plugin.name, module: `${plugin.name}/server`, options: plugin.options ?? {} });
+		if (realm_exists(req, plugin.name, REALMS[1])) out.clients.push(`${plugin.name}/client`);
 		plugin.build?.({
 			root,
 			dev,
@@ -235,6 +264,17 @@ export function resolve_plugins(
 			markup(source) {
 				out.markup.push(source);
 				return { transform: markup_transform };
+			},
+			events(options) {
+				// eager wins: one plugin measuring from boot outranks another's launcher-only ask
+				const lazy = options?.lazy === true;
+				out.events = out.events ? { lazy: out.events.lazy && lazy } : { lazy };
+			},
+			measure() {
+				out.measure = true;
+			},
+			files(scan) {
+				out.files.push({ name: plugin.name, root: scan.root, dirs: scan.dirs ?? [], files: scan.files ?? [] });
 			}
 		});
 	}
