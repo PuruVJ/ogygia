@@ -111,7 +111,10 @@ for (const pkg of published) {
 				const n = nodes.get(key);
 				// one of the package's own peers, met deeper (a dependency's peer: bits-ui › runed › Kit)
 				// is the app's copy, and so is everything below it
-				const kind = parent_kind === 'dependency' && pkg.peerDependencies?.[n.name] !== undefined ? 'peer' : parent_kind;
+				const kind =
+					parent_kind === 'dependency' && pkg.peerDependencies?.[n.name] !== undefined
+						? 'peer'
+						: parent_kind;
 				const id = `${n.name}@${n.version}`;
 				if (!reached.has(id)) reached.set(id, []);
 				reached

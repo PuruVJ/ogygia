@@ -4,7 +4,6 @@
 	"singleQuote": true,
 	"printWidth": 100,
 	"trailingComma": "none",
-	"sortPackageJson": false,
 	"svelte": true,
 	"associations": [{ "files": ["**/*.svx"], "language": "markdown" }],
 	"overrides": [

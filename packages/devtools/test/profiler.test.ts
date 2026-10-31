@@ -4296,9 +4296,11 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 		});
 		// let the window close and the report finish
 		await new Promise((r) => setTimeout(r, 700));
-		const dash = await (
+		const html = await (
 			await handle({ event: make_event('/__profiler'), resolve: async () => new Response('no') })
 		).text();
+		// the text as shown: HTML collapses whitespace, so a line break in the markup is a space
+		const dash = html.replace(/\s+/g, ' ');
 		expect(dash).toContain('Catch the slow one');
 		expect(dash).toContain('Caught 1 of 1');
 		expect(dash).toMatch(/caught \/slow\/one \(\d+ ms\)/);

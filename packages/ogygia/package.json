@@ -1,18 +1,28 @@
 {
 	"name": "ogygia",
 	"version": "0.10.2",
-	"type": "module",
 	"description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
 	"homepage": "https://ogygia.puruvj.dev",
+	"bugs": {
+		"url": "https://github.com/ogygiajs/ogygia/issues"
+	},
+	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/ogygia"
 	},
-	"bugs": {
-		"url": "https://github.com/ogygiajs/ogygia/issues"
+	"bin": {
+		"ogygia": "./src/cli.ts"
 	},
-	"license": "MIT",
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md",
+		"ambient.d.ts"
+	],
+	"type": "module",
 	"exports": {
 		".": {
 			"svelte": "./src/index.ts",
@@ -120,43 +130,6 @@
 			"types": "./dist/internal/compiler-browser-full.d.ts",
 			"default": "./dist/internal/compiler-browser-full.js"
 		}
-	},
-	"bin": {
-		"ogygia": "./src/cli.ts"
-	},
-	"files": [
-		"dist",
-		"README.md",
-		"LICENSE",
-		"CHANGELOG.md",
-		"ambient.d.ts"
-	],
-	"scripts": {
-		"build": "tsdown",
-		"check": "tsc -p .",
-		"prepublishOnly": "pnpm run build && pnpm run verify:package",
-		"verify:package": "node ../core/scripts/verify-package.ts ."
-	},
-	"dependencies": {
-		"@ogygia/core": "workspace:*"
-	},
-	"peerDependencies": {
-		"@sveltejs/kit": "catalog:peers",
-		"rolldown": "catalog:peers",
-		"svelte": "catalog:peers",
-		"vite": "catalog:peers"
-	},
-	"peerDependenciesMeta": {
-		"rolldown": {
-			"optional": true
-		}
-	},
-	"devDependencies": {
-		"@ogygia/tooling": "workspace:*",
-		"@sveltejs/kit": "catalog:",
-		"@types/node": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:"
 	},
 	"publishConfig": {
 		"bin": {
@@ -270,6 +243,33 @@
 				"types": "./dist/internal/compiler-browser-full.d.ts",
 				"default": "./dist/internal/compiler-browser-full.js"
 			}
+		}
+	},
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p .",
+		"prepublishOnly": "pnpm run build && pnpm run verify:package",
+		"verify:package": "node ../core/scripts/verify-package.ts ."
+	},
+	"dependencies": {
+		"@ogygia/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"@sveltejs/kit": "catalog:",
+		"@types/node": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": "catalog:peers",
+		"rolldown": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
+	},
+	"peerDependenciesMeta": {
+		"rolldown": {
+			"optional": true
 		}
 	}
 }

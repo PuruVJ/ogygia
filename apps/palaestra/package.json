@@ -10,6 +10,14 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p e2e",
 		"e2e": "playwright test"
 	},
+	"dependencies": {
+		"@rolldown/browser": "catalog:",
+		"devalue": "catalog:",
+		"ogygia": "workspace:*",
+		"repro-hole-css-kit": "workspace:*",
+		"repro-subpkg": "workspace:*",
+		"valibot": "catalog:"
+	},
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
 		"@playwright/test": "catalog:",
@@ -29,13 +37,5 @@
 		"vite": "catalog:",
 		"vite-plugin-top-level-await": "^1.6.0",
 		"vite-plugin-wasm": "catalog:"
-	},
-	"dependencies": {
-		"@rolldown/browser": "catalog:",
-		"devalue": "catalog:",
-		"ogygia": "workspace:*",
-		"repro-hole-css-kit": "workspace:*",
-		"repro-subpkg": "workspace:*",
-		"valibot": "catalog:"
 	}
 }

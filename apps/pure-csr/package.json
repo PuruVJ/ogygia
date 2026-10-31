@@ -8,6 +8,9 @@
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
 	},
+	"dependencies": {
+		"ogygia": "workspace:*"
+	},
 	"devDependencies": {
 		"@sveltejs/adapter-node": "catalog:",
 		"@sveltejs/kit": "catalog:",
@@ -16,8 +19,5 @@
 		"svelte-check": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"
-	},
-	"dependencies": {
-		"ogygia": "workspace:*"
 	}
 }

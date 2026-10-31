@@ -2,8 +2,8 @@
 	"name": "repro-hole-css-kit",
 	"version": "0.0.0",
 	"private": true,
-	"type": "module",
 	"description": "A workspace component kit whose components entry is a TypeScript barrel (e2e/hole-css.spec.ts): a hole's island imports two of its components by name; the hole's CSS must carry those two, and none of the rest.",
+	"type": "module",
 	"exports": {
 		"./components": "./components.ts"
 	}

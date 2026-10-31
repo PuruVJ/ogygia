@@ -1,8 +1,8 @@
 {
 	"name": "ogygia-bench-harness",
 	"private": true,
-	"type": "module",
 	"description": "ogygiaBench — port of khromov/interactive-blogs-benchmark with ogygia added.",
+	"type": "module",
 	"scripts": {
 		"posts": "node generate-posts.ts",
 		"sync": "node shared/sync.ts",

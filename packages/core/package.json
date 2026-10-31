@@ -1,21 +1,26 @@
 {
 	"name": "@ogygia/core",
 	"version": "0.10.2",
-	"type": "module",
-	"sideEffects": [
-		"**/*.css"
-	],
 	"description": "The core of ogygia (SSR islands for SvelteKit): apps install `ogygia`, plugins build on this",
 	"homepage": "https://ogygia.puruvj.dev",
+	"bugs": {
+		"url": "https://github.com/ogygiajs/ogygia/issues"
+	},
+	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/core"
 	},
-	"bugs": {
-		"url": "https://github.com/ogygiajs/ogygia/issues"
-	},
-	"license": "MIT",
+	"files": [
+		"dist",
+		"README.md",
+		"ambient.d.ts"
+	],
+	"type": "module",
+	"sideEffects": [
+		"**/*.css"
+	],
 	"exports": {
 		".": {
 			"svelte": "./src/index.ts",
@@ -124,60 +129,7 @@
 			"default": "./dist/compiler/browser-full.js"
 		}
 	},
-	"files": [
-		"dist",
-		"README.md",
-		"ambient.d.ts"
-	],
-	"scripts": {
-		"build": "tsdown",
-		"test": "vitest run",
-		"test:node": "vitest run --project node",
-		"test:browser": "vitest run --project browser",
-		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json && vitest run && pnpm run lint",
-		"prepublishOnly": "pnpm run build && pnpm run verify:package",
-		"verify:package": "node scripts/verify-package.ts"
-	},
-	"dependencies": {
-		"devalue": "catalog:",
-		"esm-env": "catalog:",
-		"estree-walker": "^3.0.3",
-		"magic-string": "catalog:",
-		"tinyglobby": "^0.2.17"
-	},
-	"peerDependencies": {
-		"@sveltejs/kit": "catalog:peers",
-		"rolldown": "catalog:peers",
-		"svelte": "catalog:peers",
-		"vite": "catalog:peers"
-	},
-	"peerDependenciesMeta": {
-		"rolldown": {
-			"optional": true
-		}
-	},
-	"devDependencies": {
-		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@sveltejs/kit": "catalog:",
-		"@sveltejs/vite-plugin-svelte": "catalog:",
-		"@types/node": "catalog:",
-		"@vitest/browser": "4.1.12",
-		"@vitest/browser-playwright": "4.1.12",
-		"oxlint": "^1.77.0",
-		"rolldown": "catalog:",
-		"sass-embedded": "^1.104.1",
-		"svelte": "catalog:",
-		"svelte-check": "catalog:",
-		"svelte2tsx": "catalog:",
-		"tsdown": "catalog:",
-		"typescript": "catalog:",
-		"valibot": "catalog:",
-		"vite": "catalog:",
-		"vitest": "catalog:"
-	},
 	"publishConfig": {
-		"access": "public",
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
@@ -286,6 +238,54 @@
 				"types": "./dist/compiler/browser-full.d.ts",
 				"default": "./dist/compiler/browser-full.js"
 			}
+		},
+		"access": "public"
+	},
+	"scripts": {
+		"build": "tsdown",
+		"test": "vitest run",
+		"test:node": "vitest run --project node",
+		"test:browser": "vitest run --project browser",
+		"lint": "oxlint -c .oxlintrc.json src",
+		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json && vitest run && pnpm run lint",
+		"prepublishOnly": "pnpm run build && pnpm run verify:package",
+		"verify:package": "node scripts/verify-package.ts"
+	},
+	"dependencies": {
+		"devalue": "catalog:",
+		"esm-env": "catalog:",
+		"estree-walker": "^3.0.3",
+		"magic-string": "catalog:",
+		"tinyglobby": "^0.2.17"
+	},
+	"devDependencies": {
+		"@ogygia/tsdown-plugin-svelte": "workspace:*",
+		"@sveltejs/kit": "catalog:",
+		"@sveltejs/vite-plugin-svelte": "catalog:",
+		"@types/node": "catalog:",
+		"@vitest/browser": "4.1.12",
+		"@vitest/browser-playwright": "4.1.12",
+		"oxlint": "^1.77.0",
+		"rolldown": "catalog:",
+		"sass-embedded": "^1.104.1",
+		"svelte": "catalog:",
+		"svelte-check": "catalog:",
+		"svelte2tsx": "catalog:",
+		"tsdown": "catalog:",
+		"typescript": "catalog:",
+		"valibot": "catalog:",
+		"vite": "catalog:",
+		"vitest": "catalog:"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": "catalog:peers",
+		"rolldown": "catalog:peers",
+		"svelte": "catalog:peers",
+		"vite": "catalog:peers"
+	},
+	"peerDependenciesMeta": {
+		"rolldown": {
+			"optional": true
 		}
 	}
 }

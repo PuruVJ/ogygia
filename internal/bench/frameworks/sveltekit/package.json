@@ -1,7 +1,7 @@
 {
 	"name": "sveltekit-bench",
-	"private": true,
 	"version": "0.0.0",
+	"private": true,
 	"type": "module",
 	"scripts": {
 		"sync": "node ../../shared/sync.ts sveltekit",

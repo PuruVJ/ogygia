@@ -2,13 +2,18 @@
 	"name": "router-e2e-app",
 	"version": "0.0.0",
 	"private": true,
-	"type": "module",
 	"description": "@ogygia/router's e2e fixture app: the server-router table at /rtr (seeds, streamed pages, late regions) and a dependency's distributed routes (repro-island-pkg).",
+	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+	},
+	"dependencies": {
+		"@ogygia/router": "workspace:*",
+		"ogygia": "workspace:*",
+		"repro-island-pkg": "workspace:*"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-node": "catalog:",
@@ -18,10 +23,5 @@
 		"svelte-check": "catalog:",
 		"typescript": "catalog:",
 		"vite": "catalog:"
-	},
-	"dependencies": {
-		"@ogygia/router": "workspace:*",
-		"ogygia": "workspace:*",
-		"repro-island-pkg": "workspace:*"
 	}
 }
