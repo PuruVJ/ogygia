@@ -46,14 +46,14 @@
 	{#if isBlog}
 		<BlogShell base="/playground/blog" title="ogygia blog" links={[{ text: 'Playground', href: '/playground' }, { text: 'Docs', href: '/docs' }]}>
 			{#snippet actions()}
-				<a class="pg-gh" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub ↗</a>
+				<a class="pg-gh" href="https://github.com/ogygiajs/ogygia" target="_blank" rel="noreferrer">GitHub ↗</a>
 			{/snippet}
 			{@render children()}
 		</BlogShell>
 	{:else}
 		<DocsShell meta={shellMeta!} base="/playground" title="ogygia playground">
 			{#snippet actions()}
-				<a class="pg-gh" href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer"
+				<a class="pg-gh" href="https://github.com/ogygiajs/ogygia" target="_blank" rel="noreferrer"
 					>GitHub ↗</a
 				>
 			{/snippet}

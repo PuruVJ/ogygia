@@ -65,7 +65,7 @@ const hi = content({
 	...guide_opts
 });
 
-const github = { label: 'GitHub', href: 'https://github.com/PuruVJ/ogygia' } as const;
+const github = { label: 'GitHub', href: 'https://github.com/ogygiajs/ogygia' } as const;
 const reference = { label: 'Reference', items: api, base: 'api', collapsed: true } as const;
 
 // The rich default corpus (v2 · en) — flat categories. `base` puts the category in the URL

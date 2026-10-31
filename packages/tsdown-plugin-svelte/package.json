@@ -1,13 +1,13 @@
 {
 	"name": "@ogygia/tsdown-plugin-svelte",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Ship Svelte components from a tsdown build: preprocessed, TypeScript-free markup, with .svelte.d.ts types",
 	"type": "module",
 	"license": "MIT",
 	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/tsdown-plugin-svelte"
 	},
 	"keywords": ["tsdown", "rolldown", "svelte", "plugin", "library"],

@@ -8,6 +8,6 @@
 	"format": "auto",
 	"updateInternalDependencies": "patch",
 	"commit": false,
-	"changelog": ["@changesets/changelog-github", { "repo": "PuruVJ/ogygia" }],
+	"changelog": ["@changesets/changelog-github", { "repo": "ogygiajs/ogygia" }],
 	"privatePackages": { "version": false, "tag": false }
 }

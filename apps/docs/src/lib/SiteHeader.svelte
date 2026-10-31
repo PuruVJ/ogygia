@@ -35,7 +35,7 @@
 			<Theme />
 			<a
 				class="site-gh"
-				href="https://github.com/PuruVJ/ogygia"
+				href="https://github.com/ogygiajs/ogygia"
 				target="_blank"
 				rel="noreferrer"
 				aria-label="GitHub repository"

@@ -60,7 +60,7 @@
 				<a class="btn btn--ghost" href="/docs/start/install">Install</a>
 				<a
 					class="btn btn--ghost"
-					href="https://github.com/PuruVJ/ogygia"
+					href="https://github.com/ogygiajs/ogygia"
 					target="_blank"
 					rel="noreferrer">GitHub</a
 				>
@@ -514,7 +514,7 @@
 
 <SiteFooter meta="ogygia · MIT · named for Calypso's island">
 	{#snippet links()}
-		<a href="https://github.com/PuruVJ/ogygia" target="_blank" rel="noreferrer">GitHub</a>
+		<a href="https://github.com/ogygiajs/ogygia" target="_blank" rel="noreferrer">GitHub</a>
 		<a href="https://www.npmjs.com/package/ogygia" target="_blank" rel="noreferrer">npm</a>
 	{/snippet}
 </SiteFooter>

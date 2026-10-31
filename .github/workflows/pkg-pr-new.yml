@@ -1,7 +1,7 @@
 name: pkg.pr.new
 
 # Publishes a continuous PREVIEW build of `ogygia` for every push / PR, so a branch can be tested
-# with `npm i https://pkg.pr.new/PuruVJ/ogygia@<sha-or-branch>` before anything hits npm.
+# with `npm i https://pkg.pr.new/ogygiajs/ogygia@<sha-or-branch>` before anything hits npm.
 # Requires the pkg.pr.new GitHub App installed on the repo: https://github.com/apps/pkg-pr-new
 
 on:
