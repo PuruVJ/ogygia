@@ -866,7 +866,7 @@ class: text-left
 
 <a href="https://www.npmjs.com/package/ogygia">npmjs.com/package/ogygia</a>
 <a href="https://ogygia.puruvj.dev">ogygia.puruvj.dev</a>
-<a href="https://github.com/PuruVJ/ogygia">github.com/PuruVJ/ogygia</a>
+<a href="https://github.com/ogygiajs/ogygia">github.com/ogygiajs/ogygia</a>
 <a href="https://ogygia.puruvj.dev/playground">playground · strategies · remotes · router</a>
 
 </div>
