@@ -192,10 +192,12 @@ function add_expression_refs(expr: SvelteNode, svelte_bound: Set<string>, sink: 
 			} else if (node.type === 'Identifier' && is_reference(node, parent, key)) {
 				if (!has(node.name)) {
 					sink.refs.add(node.name);
-					if (node.name.startsWith('$') && node.start != null && node.end != null) {
+					// (Svelte's parse carries offsets on every node; estree's type does not declare them)
+					const at = node as typeof node & { start?: number; end?: number };
+					if (node.name.startsWith('$') && at.start != null && at.end != null) {
 						let sites = sink.stores.get(node.name);
 						if (!sites) sink.stores.set(node.name, (sites = []));
-						sites.push({ start: node.start, end: node.end });
+						sites.push({ start: at.start, end: at.end });
 					}
 				}
 			}

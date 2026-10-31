@@ -161,15 +161,11 @@
 	},
 	"peerDependencies": {
 		"@sveltejs/kit": ">=2.70.2 <4",
-		"playwright": "^1.62.0",
 		"rolldown": ">=1.0.0",
 		"svelte": "^5.56.8",
 		"vite": "^8.2.4"
 	},
 	"peerDependenciesMeta": {
-		"playwright": {
-			"optional": true
-		},
 		"rolldown": {
 			"optional": true
 		}
