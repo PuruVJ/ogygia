@@ -2,6 +2,9 @@
 	"$schema": "https://turborepo.com/schema.json",
 	"extends": ["//"],
 	"tasks": {
+		"check": {
+			"dependsOn": ["^build", "build"]
+		},
 		"e2e": {
 			"dependsOn": ["^build", "build", "devtools-e2e-app#fixture"],
 			"inputs": [
