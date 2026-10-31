@@ -553,9 +553,9 @@ by the docs Observatory. Keep as core subpaths.
 3. ~~Package names~~ DECIDED (user, 2026-10-31): short first-party names (`@ogygia/flags`,
    `@ogygia/devtools`, …; apps import them daily), no `plugin-` prefix. Third-party, later:
    `ogygia-plugin-*` + the `ogygia-plugin` npm keyword.
-4. The main-package question. Option: `ogygia` = batteries included (depends on every `@ogygia/*`,
-   maps today's option keys onto plugins, zero migration); `@ogygia/core` = lean. Bundles are the
-   same either way; only install size differs.
+4. ~~The main-package question~~ DECIDED (user, 2026-10-31): `ogygia` is the thin front door — it
+   re-exports everything from `@ogygia/core` as-is and owns the `npx ogygia` command (its bin runs
+   the app's `@ogygia/cli`). Not batteries-included: plugins are installed and listed per app. (R11.)
 6. TODO TO DISCUSS (user, 2026-10-31): SCOPE THE E2E SUITE like turbo scopes unit tests. Today it is
    one root Playwright run, outside turbo, always in full. Idea: group specs by owning package, give
    each package an `e2e` turbo task keyed on its own inputs + core's build, so a devtools change runs
