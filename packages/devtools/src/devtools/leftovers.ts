@@ -16,7 +16,7 @@
  * (its event delegation on `document`, set while a component's module evaluates) sit deeper in the
  * stack, and are Svelte's to keep.
  */
-import { devtools_switched_on, testing_lean } from 'ogygia/insights';
+import { devtools_switched_on, testing_lean } from '@ogygia/core/insights';
 
 export interface LeftoverReg {
 	kind: 'interval' | 'listener';

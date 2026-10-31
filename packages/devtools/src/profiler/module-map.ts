@@ -89,11 +89,19 @@ export function module_category(id: string): { category: FrameCategory; pkg?: st
 	// (in any spelling: bare, with the NUL prefix Vite gives virtual ids, or that NUL written out)
 	if (posix.includes('virtual:ogygia')) return { category: 'dependency', pkg: 'ogygia' };
 	const nm = posix.lastIndexOf('node_modules/');
+	// (ogygia's own: the `ogygia` package and the `@ogygia/core` it re-exports — a checkout's
+	// `packages/core` — and this profiler)
 	const own = (p: string) =>
-		p.includes('ogygia/src/') || p.includes('ogygia/dist/') || p.includes('/devtools/src/profiler/') || p.includes('/devtools/dist/profiler/');
+		p.includes('ogygia/src/') ||
+		p.includes('ogygia/dist/') ||
+		p.includes('/packages/core/src/') ||
+		p.includes('/packages/core/dist/') ||
+		p.includes('/devtools/src/profiler/') ||
+		p.includes('/devtools/dist/profiler/');
 	if (nm !== -1) {
 		const rest = posix.slice(nm + 'node_modules/'.length).split('/');
-		const pkg = rest[0].startsWith('@') ? `${rest[0]}/${rest[1]}` : rest[0];
+		const folder = rest[0].startsWith('@') ? `${rest[0]}/${rest[1]}` : rest[0];
+		const pkg = folder === '@ogygia/core' ? 'ogygia' : folder;
 		if ((pkg === 'ogygia' || pkg === '@ogygia/devtools') && rest.includes('profiler')) return { category: 'profiler' };
 		if (pkg === 'svelte') return { category: 'svelte', pkg };
 		return { category: 'dependency', pkg };

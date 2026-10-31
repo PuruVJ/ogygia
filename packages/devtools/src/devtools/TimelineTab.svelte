@@ -7,7 +7,7 @@
 	 * hydrate.start→done bar per region. Server events are excluded on purpose — their clock is a
 	 * different origin. The track width follows the window (bind:clientWidth), so it never overflows.
 	 */
-	import { snapshot } from 'ogygia/events';
+	import { snapshot } from '@ogygia/core/events';
 	import { last_nav } from './page.ts';
 	import { region_name, region_name_by_fp } from './regions.ts';
 

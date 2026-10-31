@@ -4,12 +4,12 @@
  * `window.__ogygia_page()` (dev-only, devtools builds) so the planted-problem answer key and e2e
  * read the same report the tab shows without opening the panel.
  */
-import { beacon_page, hole_request_times, is_headless } from 'ogygia/internal/instruments';
-import { tool_fetch } from 'ogygia/internal/instruments';
-import { snapshot } from 'ogygia/events';
+import { beacon_page, hole_request_times, is_headless } from '@ogygia/core/internal/instruments';
+import { tool_fetch } from '@ogygia/core/internal/instruments';
+import { snapshot } from '@ogygia/core/events';
 import { page_ledger } from './ledger-dom.ts';
 import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.ts';
-import { fp_compare, type FpDrift, type KeptIsland } from 'ogygia/insights';
+import { fp_compare, type FpDrift, type KeptIsland } from '@ogygia/core/insights';
 import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.ts';
 
 const FPS_KEY = 'ogygia:devtools:fps';
@@ -49,14 +49,14 @@ function fp_drift(nav = 0): FpDrift[] {
 	fps_memo = { at, drift };
 	return drift;
 }
-import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from 'ogygia/insights';
+import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from '@ogygia/core/insights';
 import { profile_for } from './profile-store.ts';
-import type { BeaconPage } from 'ogygia/internal/instruments';
-import { analyze_cpu, is_trace, type CpuSummary } from 'ogygia/insights';
+import type { BeaconPage } from '@ogygia/core/internal/instruments';
+import { analyze_cpu, is_trace, type CpuSummary } from '@ogygia/core/insights';
 import { with_source_lines } from './source-lines.ts';
 import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.ts';
-import { PAGE_DEFER_KEY, PAGE_DEFER_REGISTRY_KEY } from 'ogygia/internal/instruments';
-import { PAGE_SEED_SELECTOR } from 'ogygia/internal/instruments';
+import { PAGE_DEFER_KEY, PAGE_DEFER_REGISTRY_KEY } from '@ogygia/core/internal/instruments';
+import { PAGE_SEED_SELECTOR } from '@ogygia/core/internal/instruments';
 
 export interface PageView {
 	page: BeaconPage;
@@ -824,7 +824,7 @@ declare global {
 	interface Window {
 		__ogygia_page?: () => PageView | null;
 		/** the Record tab's last session report (tests read what the tab shows) */
-		__ogygia_session?: import('ogygia/insights').SessionReport;
+		__ogygia_session?: import('@ogygia/core/insights').SessionReport;
 		/** the Page tab's styles check, run fresh (tests read what the tab shows) */
 		__ogygia_styles?: () => Promise<{ report: import('./styles.ts').StylesReport; findings: import('./styles.ts').StylesFinding[] }>;
 		/** the Page tab's cache check (how the host caches the content-named files), run fresh */

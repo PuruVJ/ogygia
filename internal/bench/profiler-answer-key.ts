@@ -261,7 +261,7 @@ async function start_preview() {
 }
 
 if (flags.includes('--build')) {
-	execSync('pnpm build', { cwd: fileURLToPath(new URL('../../packages/ogygia', import.meta.url)), stdio: 'inherit' });
+	execSync('pnpm build', { cwd: fileURLToPath(new URL('../../packages/core', import.meta.url)), stdio: 'inherit' });
 	// the DEFAULT build: with the profiler on, its server build writes hidden maps by itself.
 	// `--no-maps`: a build with none (an app that set `build.sourcemap: false`) — the fallback path
 	execSync('pnpm build', { cwd: app, stdio: 'inherit', env: { ...process.env, ...(flags.includes('--no-maps') ? { PROFILER_NO_SOURCEMAPS: '1' } : {}) } });

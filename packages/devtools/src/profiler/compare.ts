@@ -7,7 +7,7 @@
 import type { Analysis } from './analyze.ts';
 import type { ReportMeta } from './report.ts';
 import { own_requests } from './own-requests.ts';
-import type { VitalMove } from 'ogygia/insights';
+import type { VitalMove } from '@ogygia/core/insights';
 import type { GcAttribution } from './gc.ts';
 import type { Pattern, PatternKind } from './patterns.ts';
 import type { LedgerLine } from './ledger.ts';
@@ -263,7 +263,7 @@ export interface Since {
 		moved: { key: string; label: string; a: number; b: number }[];
 	};
 	/** what changed in the page's JS between the two builds (both weighed): the files behind a JS move */
-	assets?: import('ogygia/insights').AssetsDiff;
+	assets?: import('@ogygia/core/insights').AssetsDiff;
 	/** the browser's findings fixed and new (both reports with a visit), as `code (islands)` */
 	browser?: { fixed: string[]; added: string[] };
 	/** which islands changed file between the two builds (what a returning visitor downloads again) */
@@ -274,7 +274,7 @@ export interface Since {
 }
 
 // (the vitals that moved: ONE rule, shared with the Page tab's "since your last load")
-export { vitals_moved, type VitalMove } from 'ogygia/insights';
+export { vitals_moved, type VitalMove } from '@ogygia/core/insights';
 
 /**
  * WHAT A DEPLOY COSTS A RETURNING VISITOR. Each island's file is named by its content, so between two

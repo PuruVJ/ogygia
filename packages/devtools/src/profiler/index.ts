@@ -91,7 +91,7 @@ import { hole_slots } from './hole-slots.ts';
 import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.ts';
 import { byte_strip, type ByteStrip } from './byte-strip.ts';
 import { stream_tail } from './stream-tail.ts';
-import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from 'ogygia/insights';
+import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from '@ogygia/core/insights';
 import { BEACON_STANDALONE_TAG } from './beacon-standalone.ts';
 import { build_river, load_return_keys, seed_key_bytes, type River } from './river.ts';
 import { SinkBuffer, type SinkRow } from './sink.ts';
@@ -128,11 +128,11 @@ import {
 } from './embedded-maps.ts';
 import { module_imports, route_imports } from './route-imports.ts';
 import { app_relative } from './app-path.ts';
-import { fnv1a32 } from 'ogygia/plugin/utils';
-import { mark_personal } from 'ogygia/internal/server';
+import { fnv1a32 } from '@ogygia/core/plugin/utils';
+import { mark_personal } from '@ogygia/core/internal/server';
 import { attr_sites, doc_diff } from './doc-diff.ts';
 import { almost_same_document_pattern } from './patterns.ts';
-import { hydration_hazards } from 'ogygia/insights';
+import { hydration_hazards } from '@ogygia/core/insights';
 import type { IslandHazard } from './report.ts';
 import {
 	constant_work,
@@ -207,7 +207,7 @@ async function read_timed(
 	return { text, chunks };
 }
 import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.ts';
-import { engine_of, vital_parts, type PageInput } from 'ogygia/insights';
+import { engine_of, vital_parts, type PageInput } from '@ogygia/core/insights';
 import { label_call, phase_of_frame } from './timeline.ts';
 import { gzip_large } from './compress.ts';
 import { io_kind, mark_left_each_run } from './async-io.ts';
@@ -217,7 +217,7 @@ import {
 	set_batch_hole_listener,
 	set_request_stats_detail,
 	type BatchHoleStats
-} from 'ogygia/internal/server';
+} from '@ogygia/core/internal/server';
 import { chunkBarrels, chunkContents, chunkDuplicates, chunkHeavy, islandHazards, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
 import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.ts';
 import { register_profiler_file } from './frames.ts';

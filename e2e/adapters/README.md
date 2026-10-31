@@ -4,7 +4,7 @@ Proves an all-`csr = false` islands app works end to end on **every** SvelteKit 
 
 When every route is `csr = false`, SvelteKit skips its client build, so ogygia's runtime would 404 and
 islands would silently break. ogygia fixes this by injecting a URL-less keepalive route during the
-build and removing it at process exit (see `packages/ogygia/src/vite/index.ts`). This suite guards
+build and removing it at process exit (see `packages/core/src/vite/index.ts`). This suite guards
 that fix — permanently.
 
 ## What it does

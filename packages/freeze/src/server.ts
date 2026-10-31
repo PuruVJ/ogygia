@@ -17,7 +17,7 @@
  */
 import { createHash } from 'node:crypto';
 import { building, dev } from '$app/env';
-import { defineServer, STORED_DOCUMENT_META, type RequestContext, type ServerPlugin } from 'ogygia/plugin';
+import { defineServer, STORED_DOCUMENT_META, type RequestContext, type ServerPlugin } from '@ogygia/core/plugin';
 import {
 	begin_flight,
 	current_edges,

@@ -11,7 +11,7 @@ import {
 	regionIdentity,
 	regionId,
 	CLIENT_BINDING_STUB
-} from '../packages/ogygia/dist/compiler/region/transform.js';
+} from '../packages/core/dist/compiler/region/transform.js';
 import { test, check } from './fixtures/index.ts';
 import { WRAPPER_VIRTUAL_RE } from './fixtures/re.ts';
 

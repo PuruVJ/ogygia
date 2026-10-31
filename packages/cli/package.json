@@ -27,7 +27,7 @@
 		"test": "vitest run"
 	},
 	"peerDependencies": {
-		"ogygia": "workspace:^",
+		"@ogygia/core": "workspace:^",
 		"playwright": "^1.62.0",
 		"svelte": "^5.56.8"
 	},
@@ -41,7 +41,7 @@
 		"@ogygia/tooling": "workspace:*",
 		"@sveltejs/sv-utils": "^0.3.3",
 		"@types/node": "^26.1.2",
-		"ogygia": "workspace:*",
+		"@ogygia/core": "workspace:*",
 		"svelte": "5.56.8",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",

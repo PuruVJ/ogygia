@@ -27,7 +27,7 @@
 	},
 	"peerDependencies": {
 		"@playwright/test": "^1.62.0",
-		"ogygia": "workspace:^"
+		"@ogygia/core": "workspace:^"
 	},
 	"peerDependenciesMeta": {
 		"@playwright/test": {
@@ -37,7 +37,7 @@
 	"devDependencies": {
 		"@ogygia/tooling": "workspace:*",
 		"@playwright/test": "1.62.1",
-		"ogygia": "workspace:*",
+		"@ogygia/core": "workspace:*",
 		"tsdown": "^0.22.14",
 		"typescript": "^6.0.3",
 		"vitest": "^4.1.10"

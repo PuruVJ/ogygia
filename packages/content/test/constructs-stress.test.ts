@@ -11,7 +11,7 @@ import path from 'node:path';
 import { rewrite_code, type CodeCall } from '../src/macros/code.ts';
 import { rewrite_regions } from '../src/macros/regions.ts';
 import { rewrite_loaders } from '../src/macros/loaders.ts';
-import { __set_build_cache_root, run_browser_macros } from 'ogygia/internal/compiler-browser';
+import { __set_build_cache_root, run_browser_macros } from '@ogygia/core/internal/compiler-browser';
 
 const MARKUP = ['.svelte'] as const;
 const echo = async (c: CodeCall) =>

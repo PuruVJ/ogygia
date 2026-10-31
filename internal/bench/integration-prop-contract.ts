@@ -15,17 +15,17 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from '../../packages/ogygia/dist/live-transport.js';
-import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, revive_region_snippet } from '../../packages/ogygia/dist/region-snippet.js';
+import { TRANSPORT_WIRE_KEY, reduce_transportable, revive_transportable } from '../../packages/core/dist/live-transport.js';
+import { REGION_SNIPPET_WIRE_KEY, reduce_region_snippet, revive_region_snippet } from '../../packages/core/dist/region-snippet.js';
 
-// devalue lives in the pnpm store (symlinked under packages/ogygia/node_modules), not repo-root
+// devalue lives in the pnpm store (symlinked under packages/core/node_modules), not repo-root
 // node_modules, so a bare `import 'devalue'` from here doesn't resolve — find it and import by path.
 const repo = fileURLToPath(new URL('../..', import.meta.url));
 function devaluePath(): string {
 	const store = join(repo, 'node_modules/.pnpm');
 	const hit = existsSync(store) ? readdirSync(store).find((d) => d.startsWith('devalue@')) : null;
 	if (hit) return join(store, hit, 'node_modules/devalue/index.js');
-	return join(repo, 'packages/ogygia/node_modules/devalue/index.js');
+	return join(repo, 'packages/core/node_modules/devalue/index.js');
 }
 const { stringify, parse } = (await import(devaluePath())) as typeof import('devalue');
 

@@ -10,7 +10,7 @@
  * version, theme/lang config, pipeline signature, lang, infostring, source) — NO invalidation
  * logic: a changed input is a different address, stale entries just sit until pruned.
  */
-import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
+import { __set_build_cache_root } from '@ogygia/core/internal/compiler-browser';
 import { RegionStore, type SerializedRegion } from '../region-store.ts';
 
 /** @deprecated Old name — a fence's cached form IS a {@link SerializedRegion}. */

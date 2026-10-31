@@ -11,7 +11,7 @@
 	 * were REUNIONS (a memo hit returning the existing instance vs a first fresh decode). Plus the
 	 * dispose reaping that runs on navigation. Reads hub.mint / hub.resolve / hub.dispose off the bus.
 	 */
-	import { snapshot } from 'ogygia/events';
+	import { snapshot } from '@ogygia/core/events';
 
 	let { tick = 0 } = $props();
 

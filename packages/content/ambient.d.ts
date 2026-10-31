@@ -55,7 +55,7 @@ interface ImportMetaOg {
 	 * infostring, so `'twoslash {2-4} file=app.ts'` behaves exactly as in a markdown fence. The
 	 * macro dedents `source` and returns a region — render it with `<Region of={…} />`.
 	 */
-	code(source: string, lang: string, meta?: string): import('ogygia').RegionValue;
+	code(source: string, lang: string, meta?: string): import('@ogygia/core').RegionValue;
 	/**
 	 * A Markdown STRING rendered at BUILD through the app's own markdown pipeline (same remark/rehype
 	 * plugins, same Shiki fences) and inlined as a static region — so `md('…')` and a `.md` document
@@ -63,5 +63,5 @@ interface ImportMetaOg {
 	 * For static prose + fenced code only (dynamic content is a build error); render with
 	 * `<Region of={…} />`.
 	 */
-	md(text: string): import('ogygia').RegionValue;
+	md(text: string): import('@ogygia/core').RegionValue;
 }

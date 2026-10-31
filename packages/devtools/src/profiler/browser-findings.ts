@@ -9,8 +9,8 @@
  * Findings the report already makes its own way are left to it: a recovery (hydration-mismatch),
  * an island that never woke (never-hydrated), the vitals, the render-blocking files.
  */
-import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from 'ogygia/insights';
-import type { CodeKind, CpuFn, CpuSummary } from 'ogygia/insights';
+import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '@ogygia/core/insights';
+import type { CodeKind, CpuFn, CpuSummary } from '@ogygia/core/insights';
 import type { FrameCategory } from './analyze.ts';
 import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.ts';
 import type { Visit } from './visit.ts';

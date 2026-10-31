@@ -66,7 +66,7 @@ function mount_fn(
 		const stream_slot = async function* (c: Ctx) {
 			if (typeof fb === 'string') yield fb;
 			else {
-				const { region } = await import('ogygia/plugin');
+				const { region } = await import('@ogygia/core/plugin');
 				yield region(fb as never, {});
 			}
 			const peer = resolve_peer(c);

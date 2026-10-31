@@ -6,9 +6,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 (globalThis as unknown as { __OGYGIA_DEVTOOLS__: boolean }).__OGYGIA_DEVTOOLS__ = true;
 
-const { ingest, clear, configure } = await import('ogygia/events');
+const { ingest, clear, configure } = await import('@ogygia/core/events');
 const { last_nav } = await import('../src/devtools/page.ts');
-import type { DevtoolsEvent } from 'ogygia/events';
+import type { DevtoolsEvent } from '@ogygia/core/events';
 
 let seq = 0;
 const ev = (name: 'nav.start' | 'nav.finish', t: number, to: string) =>

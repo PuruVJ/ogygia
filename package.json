@@ -32,8 +32,8 @@
 		"changeset": "changeset",
 		"ci:version": "changeset version",
 		"ci:release": "changeset publish",
-		"format": "oxfmt packages/ogygia/src packages/ogygia/test",
-		"format:check": "oxfmt --check packages/ogygia/src packages/ogygia/test"
+		"format": "oxfmt packages/core/src packages/core/test",
+		"format:check": "oxfmt --check packages/core/src packages/core/test"
 	},
 	"devDependencies": {
 		"@changesets/changelog-github": "^1.0.1",

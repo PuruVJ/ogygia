@@ -17,7 +17,7 @@
  * heavy machinery there so the module graph stays light and every builder is importable from
  * `@ogygia/content`.
  */
-import type { RegionValue } from 'ogygia';
+import type { RegionValue } from '@ogygia/core';
 
 /** Directory/section decoration a source may expose (`groups()`), keyed by clean group path. */
 export type GroupMeta = { label?: string };

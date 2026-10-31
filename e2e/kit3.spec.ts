@@ -13,16 +13,16 @@
 // Standalone install (not a workspace member): a workspace link would resolve ogygia's own Kit 2 dev
 // install next to the app's Kit 3. Usage: pnpm exec playwright test kit3
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { test, expect, check, sleep, stamp_document, document_stamp } from './fixtures/index.ts';
+import { pack_ogygia, use_packed } from './fixtures/packed.ts';
 import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
-const OGY = join(REPO, 'packages', 'ogygia');
 const FIXTURE = join(REPO, 'internal', 'repro-kit3');
 // outside the repo: nothing above the app may resolve a package for it (the repo root holds Kit 2)
 const WORK = join(tmpdir(), 'ogygia-e2e-kit3');
@@ -39,20 +39,17 @@ function run(cmd: string, args: string[], opts: SpawnSyncOptions = {}): boolean 
 	return spawnSync(cmd, args, { stdio: 'inherit', ...opts }).status === 0;
 }
 
-/** Build + pack ogygia, copy the fixture beside the tarball, install it standalone. */
+/** Build + pack ogygia (and the core it re-exports), copy the fixture beside the tarballs, install it
+ *  standalone (its own workspace root: fixtures/packed.ts). */
 function prepare(): void {
-	expect(run('pnpm', ['run', 'build'], { cwd: OGY }), 'ogygia build').toBe(true);
+	expect(run('pnpm', ['run', 'build:lib'], { cwd: REPO }), 'ogygia build').toBe(true);
 	rmSync(WORK, { recursive: true, force: true });
 	mkdirSync(WORK, { recursive: true });
-	const out = spawnSync('pnpm', ['pack', '--pack-destination', WORK], { cwd: OGY, encoding: 'utf8' });
-	const line = out.stdout.trim().split('\n').pop()!.trim();
-	const tarball = line.startsWith('/') ? line : join(WORK, line.split('/').pop()!);
+	const packed = pack_ogygia(WORK);
 	cpSync(FIXTURE, APP, { recursive: true, filter: (src) => !COPY_SKIP_RE.test(src) });
-	const pkg = JSON.parse(readFileSync(join(APP, 'package.json'), 'utf8'));
-	pkg.dependencies.ogygia = `file:${tarball}`;
-	writeFileSync(join(APP, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
+	use_packed(APP, packed);
 	// pnpm exits non-zero on unapproved native build scripts though the install completes: check by presence
-	run('pnpm', ['install', '--ignore-workspace', '--no-lockfile', '--config.confirmModulesPurge=false'], {
+	run('pnpm', ['install', '--no-lockfile', '--config.confirmModulesPurge=false'], {
 		cwd: APP,
 		env: { ...process.env, CI: '1' }
 	});

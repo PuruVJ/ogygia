@@ -14,7 +14,7 @@
  * largest paint, a shift or a worse interaction re-sends the visit (debounced, at most 8 times): the
  * hide-time message is the one most often lost.
  */
-import { script } from 'ogygia';
+import { script } from '@ogygia/core';
 
 /** The beacon itself. Runs in the browser, as an inline classic script. */
 export function standalone_beacon(): void {

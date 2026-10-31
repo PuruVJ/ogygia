@@ -402,6 +402,38 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
   - LEFT: the router still declares the `freeze` route option by name (router.ts `option_of`, define.ts
     `freeze` fields) — generalizing it is the "route `meta` freeze reads" edge cut above. Docs: only the
     server-router + federation pages' import lines changed; the docs pass comes later.
+- R11 CORE MOVE (AS BUILT): `packages/core` = `@ogygia/core` (private for now, in the fixed group);
+  `packages/ogygia` = the `ogygia` SHELL apps install. Apps keep importing `ogygia/*`; plugins import
+  `@ogygia/core/*` (peer + dev dep `@ogygia/core: workspace`).
+  - SHELL: every core subpath mirrored (same conditions: `svelte`/`default` → src in the workspace,
+    `types` → dist, publishConfig → dist; `./vite`, `./internal/compiler`, `./internal/region-core`,
+    `./internal/compiler-browser(-full)` → dist like core's), each a one-line `export * from
+    '@ogygia/core/<x>'` (core has no default exports on any subpath). `ogygia/types` is `/// <reference
+    types="@ogygia/core/types" />`. The bin (`src/cli.ts`, the front door to `@ogygia/cli`) moved here
+    with README/LICENSE/CHANGELOG (`ogygia` is the npm package with that history); core got a short
+    README. Built with `library()` + the cli bundle config; core's tsdown lost its cli config. The shell
+    repeats core's peers so an install hands core the app's svelte/kit/vite.
+  - ONE MODULE COPY: shell src re-exports resolve to core's src in the workspace (dist when published);
+    compiler-emitted specifiers stay `ogygia/...` (apps depend on `ogygia`; `ogygia/internal` and
+    `ogygia/internal/server` still resolve head-on to core files via `OGYGIA_INJECTED_FILES`).
+  - SELF-NAME: `src/own-package.ts` (`OWN_PACKAGE_NAMES` = `ogygia`, `@ogygia/core`; `is_own_specifier`;
+    `OWN_SPECIFIER_SOURCE`; `OWN_FILE_RE` = `…/ogygia|@ogygia/core|packages/core/(src|dist)/…`). Used by
+    vite `ssr.noExternal` + `optimizeDeps.exclude` + the dev `optimizeDeps.include` warning; the dev
+    include names `ogygia > @ogygia/core > devalue`; package-files skip; island-deps (pkg name + own
+    path + OWN_OR_DEP); context-detect (`CTX_MODULES` + import scanners); transport's wire scanners;
+    region-bytes; insights/cpu (`kind_of`, own instruments); page-insights `dev_two_copies` (one package
+    under two names). Devtools' profiler classifiers (analyze `OGYGIA_OWN_RE` + `package_of` naming
+    `@ogygia/core` "ogygia", timeline, ledger `is_app_path`/`is_framework_pkg`, module-map) follow.
+  - TOOLING: `pluginTests()` stubs → packages/core/test/_stubs; core's `verify-package.ts` takes a
+    package dir and packs workspace deps beside it (`ogygia` verifies against the packed core; its own
+    node_modules is now a temp dir, no more stray self-link in the repo's); e2e `fixtures/packed.ts`
+    packs both and overrides `@ogygia/core` in the app's own pnpm-workspace.yaml (pnpm 11 ignores
+    package.json `pnpm.overrides`, and `--ignore-workspace` skips the yaml); dev-installed unpacks core;
+    pkg-pr-new publishes the shell, core and every plugin; bench build-all packs core too.
+  - LEFT (user's call): publishing. `ogygia` 0.11.0 depends on `@ogygia/core` 0.11.0, so core must
+    publish first (drop its `private`, trusted publishing for the new name). Until then `changeset
+    status` refuses the tree ("ogygia depends on the skipped package @ogygia/core"); with core public
+    the fixed group bumps core with the existing changeset (checked).
 
 ## Performance rules (the bar every step must pass)
 
@@ -438,7 +470,7 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
 
 | Package | From | Notes |
 |---|---|---|
-| `@ogygia/core` | everything else, incl. the CLIENT nav (runtime/router.ts, runtime/router-nav.ts, `virtual:ogygia/router-config`; it has no public subpath) | `ogygia` re-exports it (Q4) |
+| `@ogygia/core` | everything else, incl. the CLIENT nav (runtime/router.ts, runtime/router-nav.ts, `virtual:ogygia/router-config`; it has no public subpath) | DONE R11: packages/core; `ogygia` (packages/ogygia) re-exports it subpath for subpath (Q4) |
 | `@ogygia/router` | src/router (the SERVER router: `routes()`, `page`, `mount` hosts) + `client-api.ts` (the typed `api<App>()` fetch client, was `ogygia/router/client`, now `@ogygia/router/api`) | DONE R10. Core imported one piece of it (`StandardSchemaV1`, re-exported by `ogygia/plugin/utils`), now reversed; federation + profiler build on it; the compiler's router prescan became `b.pageModules()`; router-css stays core (`ogygia/plugin/css`) |
 | `@ogygia/devtools` | src/devtools + src/profiler (MERGED, user 2026-10-31) | one plugin `devtools({ profiler })`: in-page panel + server profiler, each its own on-switch; profiler stays a lazy import; storage adapters as `/profiler/storage/*` subpaths; `@neodrag/svelte` peer moves here |
 | `@ogygia/content` | src/content, Blocks.svelte, markdown macros | mdsvex, shiki, orama, bits-ui peers move here |

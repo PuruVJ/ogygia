@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sourcemap_resolver, type FrameStat } from '../src/profiler/analyze.ts';
-import { build_ledger, confirmed, grows_between, grows_of, short_source } from '../src/profiler/ledger.ts';
+import { build_ledger, confirmed, grows_between, grows_of, is_app_path, short_source } from '../src/profiler/ledger.ts';
 import type { GcMaker } from '../src/profiler/gc.ts';
 import type { RetainedSite } from '../src/profiler/insights.ts';
 
@@ -99,6 +99,13 @@ describe('line ledger', () => {
 		});
 		expect(ledger.find((l) => l.line === 61)).toBeUndefined();
 		expect(ledger.find((l) => l.line === 63)?.mem_in_fn).toBeUndefined();
+	});
+
+	it('core’s own source, under either package name, is no app path', () => {
+		expect(is_app_path('/repo/packages/core/src/seed-refs.ts')).toBe(false);
+		expect(is_app_path('/repo/packages/ogygia/src/index.ts')).toBe(false);
+		expect(is_app_path('/app/node_modules/@ogygia/core/dist/seed-refs.js')).toBe(false);
+		expect(is_app_path('/app/src/lib/core/x.ts')).toBe(true);
 	});
 
 	it('ogygia’s own source through a workspace link is the library, not a line the app edits', () => {

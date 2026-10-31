@@ -111,7 +111,7 @@ export function pkg_of(file: string): string {
 
 /** the framework the app runs on: SvelteKit, Svelte, ogygia itself, Vite */
 export const is_framework_pkg = (p: string): boolean =>
-	p.startsWith('@sveltejs/') || p === 'svelte' || p.startsWith('ogygia') || p === 'vite';
+	p.startsWith('@sveltejs/') || p === 'svelte' || p.startsWith('ogygia') || p === '@ogygia/core' || p === 'vite';
 
 /** After `renders` more renders a leaking line holds about `renders` × what one render left; one
  *  filling a bounded cache holds its capacity's worth. At 80 % of `renders`× or more it grew with
@@ -202,7 +202,7 @@ export function short_source(path: string): string {
 
 /** a source path the reader could open and edit: not a dependency, not Node's own, not the
  *  framework's generated build output (a compiled route chunk nobody edits), and not ogygia's own
- *  source reached through a workspace link (`packages/ogygia/src/…`: no node_modules segment, but
+ *  source reached through a workspace link (`packages/core/src/…`: no node_modules segment, but
  *  the library all the same, as analyze's categorize already says) */
 export const is_app_path = (path: string): boolean =>
 	!!path &&
@@ -214,6 +214,8 @@ export const is_app_path = (path: string): boolean =>
 	(!path.includes('/.svelte-kit/') || path.includes('/.svelte-kit/output/')) &&
 	!path.includes('/ogygia/src/') &&
 	!path.includes('/ogygia/dist/') &&
+	!path.includes('/packages/core/src/') &&
+	!path.includes('/packages/core/dist/') &&
 	!path.includes('/devtools/src/profiler/') &&
 	!path.includes('/devtools/dist/profiler/');
 

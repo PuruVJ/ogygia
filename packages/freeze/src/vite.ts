@@ -12,7 +12,7 @@
  * a layout it sits under declares `export const freeze = true` (it cascades like `csr`, deepest
  * declaration wins; ogygia strips it before Kit sees it).
  */
-import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
+import { definePlugin, type OgygiaPlugin } from '@ogygia/core/vite';
 import type { FreezeServerOptions } from './server.ts';
 
 export interface FreezeOptions {

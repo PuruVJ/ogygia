@@ -3,7 +3,7 @@
  * a browser bundle (the server realm is never imported there) and in a unit test that does not
  * start the plugin: reads then record nothing.
  */
-import type { ServerApp } from 'ogygia/plugin';
+import type { ServerApp } from '@ogygia/core/plugin';
 
 let current: ServerApp | null = null;
 

@@ -16,7 +16,7 @@
  * import time.
  */
 import type { Component } from 'svelte';
-import { region, type RegionSchedule, type RegionValue } from 'ogygia';
+import { region, type RegionSchedule, type RegionValue } from '@ogygia/core';
 import {
 	defineSource,
 	toRawSource,

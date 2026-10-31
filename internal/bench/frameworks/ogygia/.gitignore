@@ -2,3 +2,5 @@ node_modules
 .svelte-kit
 build
 .DS_Store
+# written by build-all.ts (the `@ogygia/core` tarball override)
+pnpm-workspace.yaml

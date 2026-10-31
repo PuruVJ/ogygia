@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolve_block_tree } from '../src/blocks.ts';
-import { isRegion } from 'ogygia';
+import { isRegion } from '@ogygia/core';
 import type { Component } from 'svelte';
 
 // A `with { region: 'raw' }` SSR-leg binding, as the transform generates it.

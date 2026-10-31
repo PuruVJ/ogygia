@@ -16,7 +16,7 @@ import {
 	expand_braces,
 	loader_patterns
 } from '../src/macros/loaders.ts';
-import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
+import { __set_build_cache_root } from '@ogygia/core/internal/compiler-browser';
 
 describe('parse_git_spec', () => {
 	it('owner/repo → default ref HEAD, empty sub', () => {

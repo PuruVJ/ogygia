@@ -4,11 +4,11 @@
  * — handed to the pure `byte_ledger` (bytes.ts). Null off a build (the dev server writes no graph).
  * Shared by the Bytes tab and an island's detail card.
  */
-import { ISLAND_GRAPH_ATTR, decode_island_graph } from 'ogygia/internal/instruments';
+import { ISLAND_GRAPH_ATTR, decode_island_graph } from '@ogygia/core/internal/instruments';
 import { byte_ledger, type Ledger } from './bytes.ts';
-import { dynamic_imports, static_imports } from 'ogygia/insights';
+import { dynamic_imports, static_imports } from '@ogygia/core/insights';
 import { all_regions, region_name } from './regions.ts';
-import { tool_fetch, tool_made } from 'ogygia/internal/instruments';
+import { tool_fetch, tool_made } from '@ogygia/core/internal/instruments';
 
 const abs = (href: string | null | undefined): string | null => {
 	if (!href) return null;

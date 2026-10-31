@@ -5,7 +5,7 @@
  * component it can reach gets its whole-tree CSS linked when it renders. It also makes the package the
  * app's own code to the build (server-inlined: it ships `.svelte`).
  */
-import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
+import { definePlugin, type OgygiaPlugin } from '@ogygia/core/vite';
 
 export function router(): OgygiaPlugin {
 	return definePlugin({

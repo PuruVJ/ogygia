@@ -17,8 +17,8 @@ gate. Run it every time — it is the regression net for every island/lake/parti
 ## Manual / individual runs
 
 ```bash
-# 1. Build the library, then the playground
-pnpm --filter ogygia build
+# 1. Build the libraries, then the playground
+pnpm build:lib
 pnpm --filter playground build
 
 # 2. Serve the production build.
@@ -60,7 +60,7 @@ batch POST to `/__ogygia__`, and each hole's HTML streams back as a `<template d
 moment it settles (out of order). This is covered end-to-end by `frame-nav-batch.ts` (no per-hole
 waterfall), `frame-ooo.ts` (fast-first flush order), `frame-batch.ts` (one response, a frame per
 call, forged calls dropped), and `frame-single-flight.ts` (a command returns its region). The pure
-parcel builder is covered by unit tests (`packages/ogygia/test/stream-regions.test.ts`).
+parcel builder is covered by unit tests (`packages/core/test/stream-regions.test.ts`).
 
 Trust-boundary notes for region HMAC / SPA / seeds live in [`INVARIANTS.md`](../internal/notes/INVARIANTS.md).
 

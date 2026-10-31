@@ -11,7 +11,7 @@
  *  - the devtools bus: islands woken, hydrations, failures, recoveries, navigations, hole fetches.
  * Elements are kept by WeakRef so the tab can point at them without holding the page alive.
  */
-import { add_sink, snapshot } from 'ogygia/events';
+import { add_sink, snapshot } from '@ogygia/core/events';
 import { all_regions, region_name } from './regions.ts';
 import type {
 	SessionClick,
@@ -21,7 +21,7 @@ import type {
 	SessionNav,
 	SessionRequest,
 	SessionShift
-} from 'ogygia/insights';
+} from '@ogygia/core/insights';
 
 export type {
 	SessionClick,
@@ -31,7 +31,7 @@ export type {
 	SessionNav,
 	SessionRequest,
 	SessionShift
-} from 'ogygia/insights';
+} from '@ogygia/core/insights';
 
 const CLICKABLE = 'a[href],button,input,select,textarea,label,summary,[role="button"],[role="link"],[role="tab"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="option"],[onclick],[tabindex]:not([tabindex="-1"])';
 /** What a visitor takes for a control: one in its ancestry, or a pointer cursor where they clicked. */

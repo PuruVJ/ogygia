@@ -247,7 +247,8 @@ export function load_lane_of(text: string): Pick<LoadLane, 'file' | 'level' | 'k
 	file = file.replace(/(^|\/)_(page|layout|error)((?:\.server)?\.[jt]s)\.js$/, (_, pre, l, ext) => `${pre}+${l}${ext}`);
 	return { file, level: m[2] as LoadLane['level'], kind: m[3] ? 'server' : 'universal' };
 }
-const OGYGIA_SERVER_RE = /\/ogygia\/(?:src|dist)\/(?!profiler\/)/;
+// (the `ogygia` package and the `@ogygia/core` it re-exports; a checkout's `packages/core`)
+const OGYGIA_SERVER_RE = /\/(?:ogygia|@ogygia\/core|packages\/core)\/(?:src|dist)\/(?!profiler\/)/;
 
 /** The Kit phase of ONE frame, or null when the frame says nothing about it. */
 export function phase_of_frame(f: FrameInfo, hooks?: ReadonlyMap<string, string>): Phase | null {

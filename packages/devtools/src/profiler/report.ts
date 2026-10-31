@@ -10,12 +10,12 @@ import { another_routes_file } from './route-files.ts';
 import { sequential_ms, type NetCall } from './net.ts';
 import type { Visit } from './visit.ts';
 import { browser_findings, browser_page_report } from './browser-findings.ts';
-import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from 'ogygia/insights';
-import { fp_compare } from 'ogygia/insights';
+import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '@ogygia/core/insights';
+import { fp_compare } from '@ogygia/core/insights';
 import type { ClientWindows, InteractionCpu } from './client-windows.ts';
 import type { ByteStrip } from './byte-strip.ts';
-import { runtime_scripts, type PageAssets, type RuntimeScripts } from 'ogygia/insights';
-import { unscoped_finding } from 'ogygia/internal/instruments';
+import { runtime_scripts, type PageAssets, type RuntimeScripts } from '@ogygia/core/insights';
+import { unscoped_finding } from '@ogygia/core/internal/instruments';
 import type { River } from './river.ts';
 import type { GcAttribution } from './gc.ts';
 import { sync_io, memo_candidates, span_values, type Retained } from './insights.ts';
@@ -43,9 +43,9 @@ import type {
 	HoleStat,
 	IslandStat,
 	OgygiaRequestStats
-} from 'ogygia/internal/server';
+} from '@ogygia/core/internal/server';
 import type { SpanRecord } from './span.ts';
-import { TESTING_ENGINE_VERSION } from 'ogygia/insights';
+import { TESTING_ENGINE_VERSION } from '@ogygia/core/insights';
 
 export type { OgygiaRequestStats, SpanRecord, HoleRequestStats, IslandStat };
 
@@ -470,7 +470,7 @@ export interface GcSummary {
 }
 
 /** a line of an island's own component that draws differently in the browser, with its file */
-import { hazard_words, hazard_fix, type IslandHazard } from 'ogygia/insights';
+import { hazard_words, hazard_fix, type IslandHazard } from '@ogygia/core/insights';
 export type { IslandHazard };
 export { hazard_words, hazard_fix };
 
@@ -3725,9 +3725,9 @@ export type ReportJson = {
 			js_bytes: number | null;
 			js_only_bytes: number | null;
 			modules: string[];
-			interactivity: import('ogygia/internal/server').IslandInteractivity | null;
+			interactivity: import('@ogygia/core/internal/server').IslandInteractivity | null;
 		}[];
-		seed: { keys: import('ogygia/internal/server').SeedKeyStat[]; whole_by: string[] } | null;
+		seed: { keys: import('@ogygia/core/internal/server').SeedKeyStat[]; whole_by: string[] } | null;
 		hole_rows: {
 			id: string;
 			component: string | null;
@@ -4113,7 +4113,7 @@ type ReportJsonAssets = {
 		lazy?: boolean | undefined;
 		blocking?: boolean | undefined;
 		url: string;
-		kind: import('ogygia/insights').AssetKind;
+		kind: import('@ogygia/core/insights').AssetKind;
 		via:
 			| 'script'
 			| 'img'

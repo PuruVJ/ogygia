@@ -27,7 +27,7 @@ import {
 	collect_flag_sites,
 	flags_manifest,
 	type FlagSite
-} from 'ogygia/internal/compiler';
+} from '@ogygia/core/internal/compiler';
 
 /** The profiler's report reading (`@ogygia/devtools/report`), as these tools use it: loaded from the
  *  app's own install on first need — core does not depend on the plugin. */

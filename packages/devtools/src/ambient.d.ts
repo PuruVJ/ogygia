@@ -1,6 +1,6 @@
 // Ambient declarations for what this package reads from ogygia's build: the virtual modules the
 // ogygia Vite plugin serves, its compile-time constants, and the dev-only window maps. Shapes kept in
-// sync with packages/ogygia/src/types.d.ts (core's build copy). Not shipped (tsdown skips `.d.ts`).
+// sync with packages/core/src/types.d.ts (core's build copy). Not shipped (tsdown skips `.d.ts`).
 
 declare module 'virtual:ogygia/devtools-meta' {
 	/** island id → component name (a build; empty on the dev server) */

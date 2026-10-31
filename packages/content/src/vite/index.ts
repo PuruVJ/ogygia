@@ -17,7 +17,7 @@
 import path from 'node:path';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import type { Plugin as VitePlugin } from 'vite';
-import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
+import { definePlugin, type OgygiaPlugin } from '@ogygia/core/vite';
 import { bridge } from '../bridge.ts';
 import { ogygiaPresetPreprocess, type MarkdownOptions } from '../markdown/index.ts';
 import { snippet_macros } from '../macros/snippets.ts';

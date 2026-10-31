@@ -1,7 +1,7 @@
 # mfe — fragment federation v2 demo (three teams, one page)
 
 Three independent SvelteKit + ogygia apps, each its own build and server, composing into one
-site. Everything here uses the real `packages/ogygia` (`workspace:*`) — no patched copies.
+site. Everything here uses the real `packages/ogygia` and `packages/core` (`workspace:*`) — no patched copies.
 
 | app       | port | role                                                                                |
 | --------- | ---- | ----------------------------------------------------------------------------------- |
@@ -17,7 +17,7 @@ wire is language-agnostic), `chaos/` (a latency/failure proxy for the reliabilit
 
 ```sh
 pnpm install                       # at the REPO root (these apps are workspace members)
-pnpm --filter ogygia build
+pnpm build:lib
 node gen-keys.ts && source keys.env    # in examples/mfe — mints one Ed25519 pair PER app (gitignored)
 # (general apps: `npx ogygia keys <name>` prints one pair as env lines — same format)
 # three terminals (source keys.env in each — every app gets ALL publics + all origins + its own signing key):

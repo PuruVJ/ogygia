@@ -9,7 +9,7 @@
  * baked its fragments. A peer is notified whether or not it has a key (a pure consumer still needs to
  * drop its SWR copies). Fire and forget — a peer that is down never fails a publish.
  */
-import { defineServer, type ServerPlugin } from 'ogygia/plugin';
+import { defineServer, type ServerPlugin } from '@ogygia/core/plugin';
 import { set_fed_app } from './app.ts';
 import { install_federation, serve_federation } from './serve.ts';
 import { current_federation } from './registry.ts';

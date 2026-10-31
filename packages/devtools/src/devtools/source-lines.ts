@@ -7,7 +7,7 @@
  * read (the next look has it), `null` when it cannot say (no inline map: a build's chunk, a file the
  * dev server did not transform). No regex: the map's marker is found by search, the VLQ by table.
  */
-import { tool_fetch } from 'ogygia/internal/instruments';
+import { tool_fetch } from '@ogygia/core/internal/instruments';
 
 const MARK = '//# sourceMappingURL=data:application/json;base64,';
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';

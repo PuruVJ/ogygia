@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { matchable, split_selectors, styles_findings, type StylesReport } from '../src/devtools/styles.ts';
-import { find_unscoped, unscoped_finding, unscoped_marker } from 'ogygia/internal/instruments';
-import { weigh_assets } from 'ogygia/insights';
+import { find_unscoped, unscoped_finding, unscoped_marker } from '@ogygia/core/internal/instruments';
+import { weigh_assets } from '@ogygia/core/insights';
 
 describe('the unscoped-fallback marker', () => {
 	it('carries the file name only and the reason, and reads back', () => {

@@ -9,8 +9,8 @@
  * PAGE-STATE-SINGLETON law. On the client (or a server with no federation handle) the seam is
  * unset and the mint degrades to an empty inert region rather than throwing.
  */
-import type { DeferredRegion } from 'ogygia';
-import { deferredRegion } from 'ogygia/plugin';
+import type { DeferredRegion } from '@ogygia/core';
+import { deferredRegion } from '@ogygia/core/plugin';
 import type { Claims } from './wire.ts';
 
 /** What the handle installs: sign a hole and return its fetch URL, or null if it cannot. */

@@ -8,7 +8,7 @@ import {
 	reduce_transportable,
 	revive_transportable,
 	__register_transportable
-} from '../packages/ogygia/dist/live-transport.js';
+} from '../packages/core/dist/live-transport.js';
 import { test, check } from './fixtures/index.ts';
 
 const DUPE_WARN_RE = /both use continuity id "dupe"/;

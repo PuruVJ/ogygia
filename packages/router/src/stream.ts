@@ -21,8 +21,8 @@
  * Streaming's honest trades (documented): status/title/headers flush with the first yield — a
  * late error can't change an already-sent 200, and Server-Timing set after the flush is lost.
  */
-import { lateChunk as late_chunk, LATE_BOOT_SCRIPT } from 'ogygia/plugin';
-import { escapeText as escape_text } from 'ogygia/plugin/utils';
+import { lateChunk as late_chunk, LATE_BOOT_SCRIPT } from '@ogygia/core/plugin';
+import { escapeText as escape_text } from '@ogygia/core/plugin/utils';
 
 /** The slot id for the page position (one streamed slot per page in v1). */
 export const PAGE_SLOT_ID = 'pg';

@@ -3,7 +3,7 @@
  * the leftovers watch (what a region's component leaves running after it leaves the page). With the dock off
  * (`devtools({ dock: false })`, core's events not compiled in) every hook here folds to nothing.
  */
-import { defineClient, type ClientPlugin } from 'ogygia/plugin/client';
+import { defineClient, type ClientPlugin } from '@ogygia/core/plugin/client';
 import { install_devtools_ui } from './devtools/ui.ts';
 import { watch_leftovers, leftover_island_seen, leftover_island_gone } from './devtools/leftovers.ts';
 

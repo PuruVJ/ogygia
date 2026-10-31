@@ -3,11 +3,11 @@
  * the Standard Schema interface used to gate endpoints (core's: `ogygia/plugin/utils`). The value layer
  * lives in define.ts; this module is types only.
  */
-import type { StandardSchemaV1 } from 'ogygia/plugin/utils';
+import type { StandardSchemaV1 } from '@ogygia/core/plugin/utils';
 
 // An endpoint's `GET(schema, handler)` validates against the Standard Schema interface (the `~standard`
 // spec Zod / Valibot / ArkType all implement — the very thing Kit's remote functions consume).
-export type { StandardSchemaV1, StandardResult, StandardIssue } from 'ogygia/plugin/utils';
+export type { StandardSchemaV1, StandardResult, StandardIssue } from '@ogygia/core/plugin/utils';
 export type InferOutput<S> = S extends StandardSchemaV1<infer O> ? O : never;
 
 /** Route params derived from the pattern string via template literals — `/docs/[slug]` → { slug: string },

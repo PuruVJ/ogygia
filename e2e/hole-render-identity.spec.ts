@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import { test, check } from './fixtures/index.ts';
 import { AMP_ENTITY_G_RE, ENDPOINT_ATTR_RE } from './fixtures/re.ts';
-import { region_mac_message, sign } from '../packages/ogygia/dist/server/hmac.js';
+import { region_mac_message, sign } from '../packages/core/dist/server/hmac.js';
 
 const ENV_SECRET_RE = /^OGYGIA_SECRET=(.+)$/m;
 const ENV_FILE = new URL('../apps/playground/.env', import.meta.url);

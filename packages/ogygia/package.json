@@ -2,9 +2,6 @@
 	"name": "ogygia",
 	"version": "0.10.2",
 	"type": "module",
-	"sideEffects": [
-		"**/*.css"
-	],
 	"description": "Astro-style SSR islands for SvelteKit (no Kit patches)",
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
@@ -23,12 +20,12 @@
 			"default": "./src/index.ts"
 		},
 		"./vite": {
-			"types": "./dist/vite/index.d.ts",
-			"default": "./dist/vite/index.js"
+			"types": "./dist/vite.d.ts",
+			"default": "./dist/vite.js"
 		},
 		"./runtime": {
-			"types": "./dist/runtime/index.d.ts",
-			"default": "./src/runtime/index.ts"
+			"types": "./dist/runtime.d.ts",
+			"default": "./src/runtime.ts"
 		},
 		"./hooks": {
 			"types": "./dist/hooks.d.ts",
@@ -44,49 +41,49 @@
 			"default": "./src/internal.ts"
 		},
 		"./internal/server": {
-			"svelte": "./src/internal-server.ts",
-			"types": "./dist/internal-server.d.ts",
-			"default": "./src/internal-server.ts"
+			"svelte": "./src/internal/server.ts",
+			"types": "./dist/internal/server.d.ts",
+			"default": "./src/internal/server.ts"
 		},
 		"./internal/instruments": {
-			"svelte": "./src/internal-instruments.ts",
-			"types": "./dist/internal-instruments.d.ts",
-			"default": "./src/internal-instruments.ts"
+			"svelte": "./src/internal/instruments.ts",
+			"types": "./dist/internal/instruments.d.ts",
+			"default": "./src/internal/instruments.ts"
 		},
 		"./internal/register": {
-			"svelte": "./src/internal-register.ts",
-			"types": "./dist/internal-register.d.ts",
-			"default": "./src/internal-register.ts"
+			"svelte": "./src/internal/register.ts",
+			"types": "./dist/internal/register.d.ts",
+			"default": "./src/internal/register.ts"
 		},
 		"./internal/compiler-ids": {
-			"svelte": "./src/compiler/ids.ts",
-			"types": "./dist/compiler/ids.d.ts",
-			"default": "./src/compiler/ids.ts"
+			"svelte": "./src/internal/compiler-ids.ts",
+			"types": "./dist/internal/compiler-ids.d.ts",
+			"default": "./src/internal/compiler-ids.ts"
 		},
 		"./internal/region-core": {
-			"types": "./dist/region-core.d.ts",
-			"default": "./dist/region-core.js"
+			"types": "./dist/internal/region-core.d.ts",
+			"default": "./dist/internal/region-core.js"
 		},
 		"./internal/reconcile": {
-			"svelte": "./src/internal-reconcile.ts",
-			"types": "./dist/internal-reconcile.d.ts",
-			"default": "./src/internal-reconcile.ts"
+			"svelte": "./src/internal/reconcile.ts",
+			"types": "./dist/internal/reconcile.d.ts",
+			"default": "./src/internal/reconcile.ts"
 		},
 		"./internal/compiler": {
-			"types": "./dist/compiler/index.d.ts",
-			"default": "./dist/compiler/index.js"
+			"types": "./dist/internal/compiler.d.ts",
+			"default": "./dist/internal/compiler.js"
 		},
 		"./server": {
-			"types": "./dist/hooks.d.ts",
-			"default": "./src/hooks.ts"
+			"types": "./dist/server.d.ts",
+			"default": "./src/server.ts"
 		},
 		"./markup": {
 			"types": "./dist/markup.d.ts",
 			"default": "./src/markup.ts"
 		},
 		"./plugin": {
-			"types": "./dist/plugin/index.d.ts",
-			"default": "./src/plugin/index.ts"
+			"types": "./dist/plugin.d.ts",
+			"default": "./src/plugin.ts"
 		},
 		"./plugin/utils": {
 			"types": "./dist/plugin/utils.d.ts",
@@ -105,27 +102,27 @@
 			"default": "./src/plugin/client.ts"
 		},
 		"./devtools": {
-			"types": "./dist/events/index.d.ts",
-			"default": "./src/events/index.ts"
+			"types": "./dist/devtools.d.ts",
+			"default": "./src/devtools.ts"
 		},
 		"./events": {
-			"types": "./dist/events/index.d.ts",
-			"default": "./src/events/index.ts"
+			"types": "./dist/events.d.ts",
+			"default": "./src/events.ts"
 		},
 		"./insights": {
-			"types": "./dist/insights/index.d.ts",
-			"default": "./src/insights/index.ts"
+			"types": "./dist/insights.d.ts",
+			"default": "./src/insights.ts"
 		},
 		"./types": {
 			"types": "./ambient.d.ts"
 		},
 		"./internal/compiler-browser": {
-			"types": "./dist/compiler/browser.d.ts",
-			"default": "./dist/compiler/browser.js"
+			"types": "./dist/internal/compiler-browser.d.ts",
+			"default": "./dist/internal/compiler-browser.js"
 		},
 		"./internal/compiler-browser-full": {
-			"types": "./dist/compiler/browser-full.d.ts",
-			"default": "./dist/compiler/browser-full.js"
+			"types": "./dist/internal/compiler-browser-full.d.ts",
+			"default": "./dist/internal/compiler-browser-full.js"
 		}
 	},
 	"bin": {
@@ -140,20 +137,12 @@
 	],
 	"scripts": {
 		"build": "tsdown",
-		"test": "vitest run",
-		"test:node": "vitest run --project node",
-		"test:browser": "vitest run --project browser",
-		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json && vitest run && pnpm run lint",
+		"check": "tsc -p .",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
-		"verify:package": "node scripts/verify-package.ts"
+		"verify:package": "node ../core/scripts/verify-package.ts ."
 	},
 	"dependencies": {
-		"devalue": "^5.9.3",
-		"esm-env": "^1.2.2",
-		"estree-walker": "^3.0.3",
-		"magic-string": "^1.4.5",
-		"tinyglobby": "^0.2.17"
+		"@ogygia/core": "workspace:*"
 	},
 	"peerDependencies": {
 		"@sveltejs/kit": ">=2.70.2 <4",
@@ -167,22 +156,10 @@
 		}
 	},
 	"devDependencies": {
-		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"@ogygia/tooling": "workspace:*",
 		"@types/node": "^26.1.2",
-		"@vitest/browser": "4.1.10",
-		"@vitest/browser-playwright": "4.1.10",
-		"oxlint": "^1.77.0",
-		"rolldown": ">=1.0.0",
-		"sass-embedded": "^1.104.1",
-		"svelte": "5.56.8",
-		"svelte-check": "^4.7.4",
-		"svelte2tsx": "^0.7.60",
 		"tsdown": "^0.22.14",
-		"typescript": "^6.0.3",
-		"valibot": "^1.4.2",
-		"vite": "^8.3.5",
-		"vitest": "^4.1.10"
+		"typescript": "^6.0.3"
 	},
 	"publishConfig": {
 		"exports": {
@@ -192,12 +169,12 @@
 				"default": "./dist/index.js"
 			},
 			"./vite": {
-				"types": "./dist/vite/index.d.ts",
-				"default": "./dist/vite/index.js"
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
 			},
 			"./runtime": {
-				"types": "./dist/runtime/index.d.ts",
-				"default": "./dist/runtime/index.js"
+				"types": "./dist/runtime.d.ts",
+				"default": "./dist/runtime.js"
 			},
 			"./hooks": {
 				"types": "./dist/hooks.d.ts",
@@ -213,46 +190,46 @@
 				"default": "./dist/internal.js"
 			},
 			"./internal/server": {
-				"types": "./dist/internal-server.d.ts",
-				"svelte": "./dist/internal-server.js",
-				"default": "./dist/internal-server.js"
+				"types": "./dist/internal/server.d.ts",
+				"svelte": "./dist/internal/server.js",
+				"default": "./dist/internal/server.js"
 			},
 			"./internal/instruments": {
-				"types": "./dist/internal-instruments.d.ts",
-				"svelte": "./dist/internal-instruments.js",
-				"default": "./dist/internal-instruments.js"
+				"types": "./dist/internal/instruments.d.ts",
+				"svelte": "./dist/internal/instruments.js",
+				"default": "./dist/internal/instruments.js"
 			},
 			"./internal/register": {
-				"types": "./dist/internal-register.d.ts",
-				"svelte": "./dist/internal-register.js",
-				"default": "./dist/internal-register.js"
+				"types": "./dist/internal/register.d.ts",
+				"svelte": "./dist/internal/register.js",
+				"default": "./dist/internal/register.js"
 			},
 			"./internal/compiler-ids": {
-				"types": "./dist/compiler/ids.d.ts",
-				"svelte": "./dist/compiler/ids.js",
-				"default": "./dist/compiler/ids.js"
+				"types": "./dist/internal/compiler-ids.d.ts",
+				"svelte": "./dist/internal/compiler-ids.js",
+				"default": "./dist/internal/compiler-ids.js"
 			},
 			"./internal/region-core": {
-				"types": "./dist/region-core.d.ts",
-				"svelte": "./dist/region-core.js",
-				"default": "./dist/region-core.js"
+				"types": "./dist/internal/region-core.d.ts",
+				"svelte": "./dist/internal/region-core.js",
+				"default": "./dist/internal/region-core.js"
 			},
 			"./internal/reconcile": {
-				"types": "./dist/internal-reconcile.d.ts",
-				"svelte": "./dist/internal-reconcile.js",
-				"default": "./dist/internal-reconcile.js"
+				"types": "./dist/internal/reconcile.d.ts",
+				"svelte": "./dist/internal/reconcile.js",
+				"default": "./dist/internal/reconcile.js"
 			},
 			"./server": {
-				"types": "./dist/hooks.d.ts",
-				"default": "./dist/hooks.js"
+				"types": "./dist/server.d.ts",
+				"default": "./dist/server.js"
 			},
 			"./markup": {
 				"types": "./dist/markup.d.ts",
 				"default": "./dist/markup.js"
 			},
 			"./plugin": {
-				"types": "./dist/plugin/index.d.ts",
-				"default": "./dist/plugin/index.js"
+				"types": "./dist/plugin.d.ts",
+				"default": "./dist/plugin.js"
 			},
 			"./plugin/utils": {
 				"types": "./dist/plugin/utils.d.ts",
@@ -271,31 +248,31 @@
 				"default": "./dist/plugin/client.js"
 			},
 			"./devtools": {
-				"types": "./dist/events/index.d.ts",
-				"default": "./dist/events/index.js"
+				"types": "./dist/devtools.d.ts",
+				"default": "./dist/devtools.js"
 			},
 			"./events": {
-				"types": "./dist/events/index.d.ts",
-				"default": "./dist/events/index.js"
+				"types": "./dist/events.d.ts",
+				"default": "./dist/events.js"
 			},
 			"./insights": {
-				"types": "./dist/insights/index.d.ts",
-				"default": "./dist/insights/index.js"
+				"types": "./dist/insights.d.ts",
+				"default": "./dist/insights.js"
 			},
 			"./internal/compiler": {
-				"types": "./dist/compiler/index.d.ts",
-				"default": "./dist/compiler/index.js"
+				"types": "./dist/internal/compiler.d.ts",
+				"default": "./dist/internal/compiler.js"
 			},
 			"./types": {
 				"types": "./ambient.d.ts"
 			},
 			"./internal/compiler-browser": {
-				"types": "./dist/compiler/browser.d.ts",
-				"default": "./dist/compiler/browser.js"
+				"types": "./dist/internal/compiler-browser.d.ts",
+				"default": "./dist/internal/compiler-browser.js"
 			},
 			"./internal/compiler-browser-full": {
-				"types": "./dist/compiler/browser-full.d.ts",
-				"default": "./dist/compiler/browser-full.js"
+				"types": "./dist/internal/compiler-browser-full.d.ts",
+				"default": "./dist/internal/compiler-browser-full.js"
 			}
 		}
 	}

@@ -1,0 +1,16 @@
+{
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"declaration": true,
+		"isolatedDeclarations": true,
+		"emitDeclarationOnly": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"verbatimModuleSyntax": true,
+		"allowImportingTsExtensions": true,
+		"types": ["node"]
+	},
+	"include": ["src"]
+}

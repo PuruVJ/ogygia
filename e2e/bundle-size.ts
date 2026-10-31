@@ -28,10 +28,10 @@ import { rolldown } from 'rolldown';
 import {
 	generateRuntimeEntrySource,
 	resolveFeatures
-} from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
-import type { RuntimeMarks } from '../packages/ogygia/dist/compiler/link/runtime-entry.js';
+} from '../packages/core/dist/compiler/link/runtime-entry.js';
+import type { RuntimeMarks } from '../packages/core/dist/compiler/link/runtime-entry.js';
 
-const RUNTIME_DIR = fileURLToPath(new URL('../packages/ogygia/dist/runtime', import.meta.url));
+const RUNTIME_DIR = fileURLToPath(new URL('../packages/core/dist/runtime', import.meta.url));
 const SNAPSHOT = fileURLToPath(new URL('./bundle-size.snapshot.json', import.meta.url));
 /** A profile may grow this much over its snapshot before the gate fails. */
 const TOLERANCE = 0.02;

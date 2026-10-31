@@ -8,7 +8,7 @@
  */
 import { version } from '$app/env';
 import type { RequestEvent } from '@sveltejs/kit';
-import type { ServerApp } from 'ogygia/plugin';
+import type { ServerApp } from '@ogygia/core/plugin';
 import { current_federation } from './registry.ts';
 import { begin_source_capture, broadcast_thaw } from './federate.ts';
 import { set_hole_signer } from './hole.ts';

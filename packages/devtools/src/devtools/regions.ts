@@ -3,11 +3,11 @@
  * the compiler already emits, resource-timing byte lookups, and event queries over the bus buffer.
  * No Svelte, no styling: the `.svelte` components own all presentation.
  */
-import { snapshot } from 'ogygia/events';
-import { props_sidecar_of } from 'ogygia/internal/instruments';
-import { tool_made } from 'ogygia/internal/instruments';
-import type { DevtoolsEvent } from 'ogygia/events';
-import type { IslandHazard } from 'ogygia/insights';
+import { snapshot } from '@ogygia/core/events';
+import { props_sidecar_of } from '@ogygia/core/internal/instruments';
+import { tool_made } from '@ogygia/core/internal/instruments';
+import type { DevtoolsEvent } from '@ogygia/core/events';
+import type { IslandHazard } from '@ogygia/core/insights';
 
 // ── regexes
 const JS_EXT_RE = /\.js$/;

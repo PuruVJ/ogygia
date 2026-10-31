@@ -13,8 +13,8 @@ import {
 	type CtxLike,
 	type FlagSource
 } from '../src/index.ts';
-import type { StandardSchemaV1 } from 'ogygia/plugin/utils';
-import { startPlugin } from 'ogygia/plugin/testing';
+import type { StandardSchemaV1 } from '@ogygia/core/plugin/utils';
+import { startPlugin } from '@ogygia/core/plugin/testing';
 import server from '../src/server.ts';
 
 // the plugin, started: a flag read records its decision as a request fact through its app

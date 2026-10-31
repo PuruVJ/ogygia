@@ -15,7 +15,7 @@
 	 * Server-pass component: the registry's `with { region: 'raw' }` bindings resolve on the server
 	 * (where their signer lives), so `<Blocks>` renders in the SSR pass like every content body.
 	 */
-	import { Region } from 'ogygia';
+	import { Region } from '@ogygia/core';
 	import Self from './Blocks.svelte';
 	import { resolve_block_tree } from './blocks.ts';
 	import type { BlockNode, BlockRegistry, BlockSchedule, ResolvedBlockNode } from './blocks.ts';

@@ -13,7 +13,7 @@
 	 *   <DocsShell {site}>{@render children()}</DocsShell>
 	 */
 	import { page } from '$app/state';
-	import { script } from 'ogygia';
+	import { script } from '@ogygia/core';
 	import { set_shell_context } from '../context.ts';
 	import { mountBase, type Site, type SiteMeta } from '../site.ts';
 	// KEPT island: the live sidebar (DOM + mounted app) rides the body-swap across nav instead of

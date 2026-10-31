@@ -12,9 +12,9 @@
  * Devtools' own UI lives in a shadow root and never shows here. Runs on demand (the Page tab), not
  * on a hot path.
  */
-import { find_unscoped, unscoped_finding, type UnscopedStyles } from 'ogygia/internal/instruments';
-import { tool_fetch, tool_made } from 'ogygia/internal/instruments';
-import { paint_blocker } from 'ogygia/internal/instruments';
+import { find_unscoped, unscoped_finding, type UnscopedStyles } from '@ogygia/core/internal/instruments';
+import { tool_fetch, tool_made } from '@ogygia/core/internal/instruments';
+import { paint_blocker } from '@ogygia/core/internal/instruments';
 
 export interface SheetRow {
 	/** the file name, or `inline <style>` */

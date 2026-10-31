@@ -21,7 +21,7 @@
 		latest_event,
 		region_props_sidecar
 	} from './regions.ts';
-	import { snapshot } from 'ogygia/events';
+	import { snapshot } from '@ogygia/core/events';
 	import { read_page } from './page.ts';
 	import { profile_for, profiles_version, island_row } from './profile-store.ts';
 	import { get_last_session, last_session_version } from './session.ts';

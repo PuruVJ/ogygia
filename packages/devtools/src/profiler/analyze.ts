@@ -433,7 +433,9 @@ const SVELTE_MODULE_EXT_RE = /\.svelte\.ts$/;
 /** A bundler's collision suffix (`Header$1`, `Header$2`): two components with one basename in
  *  one chunk. Stripped for naming and matching — the frame is still the `Header` component. */
 const BUNDLER_SUFFIX_RE = /\$\d+$/;
-const OGYGIA_OWN_RE = /\/ogygia\/(?:src|dist)\//;
+/** ogygia's own files: the `ogygia` package and the `@ogygia/core` it re-exports (a checkout's
+ *  `packages/core`), source or build */
+const OGYGIA_OWN_RE = /\/(?:ogygia|@ogygia\/core|packages\/core)\/(?:src|dist)\//;
 /** ogygia's own wrapper components. The app's Vite compiles them into the app's chunks (a
  *  `.svelte` from a dependency is compiled by the consumer), so in a production profile they sit
  *  at a chunk URL with the component's name and no `.svelte` path to vouch for them — and every
@@ -542,6 +544,9 @@ export function join_source(chunk: string, source: string): string {
 	return out.join('/');
 }
 
+/** ogygia under the name its users know: `@ogygia/core` is what the `ogygia` package re-exports */
+const ogygia_named = (pkg: string | undefined): string | undefined => (pkg === '@ogygia/core' ? 'ogygia' : pkg);
+
 function package_of(url: string): string | undefined {
 	const i = url.lastIndexOf('node_modules/');
 	if (i === -1) return undefined;
@@ -550,8 +555,8 @@ function package_of(url: string): string | undefined {
 	// THE DEV SERVER'S PRE-BUNDLED DEPENDENCIES (`node_modules/.vite/deps_ssr/svelte_internal_server.js`,
 	// `@acme_ui.js`): the package is in the file's name, its `/` written `_` — Svelte's own runtime
 	// read as a package called `.vite` was a library the app's line chose
-	if (parts[0] === '.vite' && parts[2]) return prebundled_package(parts[2]);
-	if (parts[0]?.startsWith('@') && parts[1]) return `${parts[0]}/${parts[1]}`;
+	if (parts[0] === '.vite' && parts[2]) return ogygia_named(prebundled_package(parts[2]));
+	if (parts[0]?.startsWith('@') && parts[1]) return ogygia_named(`${parts[0]}/${parts[1]}`);
 	return parts[0] || undefined;
 }
 
@@ -598,7 +603,7 @@ export function categorize(frame: CallFrame): { category: FrameCategory; pkg?: s
 	const pkg = package_of(url);
 	if (pkg === 'svelte') return { category: 'svelte', pkg };
 	if (pkg) return { category: 'dependency', pkg };
-	// ogygia's own runtime reached through a workspace link or a sourcemap (`packages/ogygia/src/…`,
+	// ogygia's own runtime reached through a workspace link or a sourcemap (`packages/core/src/…`,
 	// no node_modules segment): its wrappers (Region.svelte, the boundaries) are the library, not
 	// the app's components — they would otherwise top the Components table on every island page.
 	if (OGYGIA_OWN_RE.test(url)) return { category: 'dependency', pkg: 'ogygia' };

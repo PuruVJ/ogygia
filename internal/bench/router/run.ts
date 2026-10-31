@@ -92,7 +92,7 @@ const INIT = `(() => {
 if (doBuild) {
 	banner('Building library + playground');
 	const ok =
-		spawnSync('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/ogygia'), stdio: 'inherit' }).status === 0 &&
+		spawnSync('node', ['node_modules/tsdown/dist/run.mjs'], { cwd: join(repo, 'packages/core'), stdio: 'inherit' }).status === 0 &&
 		spawnSync('node', ['node_modules/vite/bin/vite.js', 'build'], { cwd: join(repo, 'apps/playground'), stdio: 'inherit' }).status === 0;
 	if (!ok) process.exit(1);
 } else if (!existsSync(join(repo, 'apps/playground/.svelte-kit/output/server'))) {
