@@ -1,5 +1,6 @@
 /**
- * The LEAN browser compiler surface (the Observatory's analyze worker). Re-exports only the host
+ * The LEAN compiler surface (the Observatory's analyze worker, and first-party plugins' macros in
+ * node). Re-exports only the host
  * transform + the ids/parse/host seams — deliberately NOT the full driver, so importing this doesn't
  * drag `Compiler` / `Program` / `CompileCtx` (and their large graph) into a caller that only needs the
  * per-file transform. The FULL driver — for the rolldown-browser bundling engine — lives in the
@@ -15,8 +16,23 @@ export {
 	CLIENT_BINDING_STUB
 } from './region/transform.js';
 export { islandVirtualId } from './ids.js';
-export { set_parser, type RawParse, type ParseResult } from './parse/oxc.js';
-export { set_host, type CompilerHost } from './host.js';
+export { set_parser, parse_module, type RawParse, type ParseResult } from './parse/oxc.js';
+export { set_host, fs, path, createHash, type CompilerHost } from './host.js';
+// The building blocks of an `import.meta.og.*` macro, for first-party plugins' macros (content's
+// `code` / `md` / `loader` / `regions`): the call scanner, the member matcher, and the build cache.
+// Host-seamed like everything here, so they run in node (the default host) and in the Observatory.
+export {
+	find_og_calls,
+	split_first_string,
+	og_js_regions,
+	is_js_module,
+	type OgCall,
+	type JsRegion
+} from './parse/scan.js';
+export { og_member } from './macros/wire.js';
+export { BuildCache, configure_build_cache, __set_build_cache_root } from '../build-cache.js';
+// The content-CSS key the markdown preprocessor bakes and the build's CSS emit reads back.
+export { content_css_key } from '../plugin/utils.js';
 // The same dedent the `import.meta.og.code` macro uses — pure, browser-safe. The Observatory uses it so
 // preset sources can sit naturally-indented in the source file (the common indent is stripped at load).
 export { dedent } from './macros/dedent.js';

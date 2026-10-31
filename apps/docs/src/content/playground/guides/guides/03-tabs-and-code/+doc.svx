@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import { TabGroup, Tab } from 'ogygia/content';
+	import { TabGroup, Tab } from '@ogygia/content';
 </script>
 
 Documentation lives and dies by its code samples. ogygia gives you tabbed panels for showing the same thing three ways, build-time highlighting for a dozen languages, and a copy button on every block. This page shows all of it.
@@ -152,7 +152,7 @@ pnpm dev --host --port 4321
 ### TypeScript
 
 ```ts
-import { content, markdown } from 'ogygia/content';
+import { content, markdown } from '@ogygia/content';
 import { z } from 'zod';
 
 export const guides = content({
@@ -232,7 +232,7 @@ Real routes are longer than a snippet. Highlighting scales fine — here is a fu
 
 ```svelte
 <script lang="ts">
-	import { Doc, SideNav, OnThisPage } from 'ogygia/content';
+	import { Doc, SideNav, OnThisPage } from '@ogygia/content';
 	import { page } from '$app/state';
 
 	let { data } = $props();

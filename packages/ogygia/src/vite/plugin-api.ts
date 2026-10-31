@@ -15,6 +15,7 @@
  */
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import type { Plugin as VitePlugin } from 'vite';
 import type { ServerRealm } from '../compiler/link/caps.js';
 
 /** What an app puts in `ogygia({ plugins })` — the value a plugin's factory returns. */
@@ -26,8 +27,47 @@ export interface OgygiaPlugin<Options = unknown> {
 	options?: Options;
 	/** Run before (`'pre'`) or after (`'post'`) the other plugins, in every realm. */
 	enforce?: 'pre' | 'post';
+	/** Vite plugins this plugin brings (ogygia's own plugin list carries them, before its own). */
+	vite?: VitePlugin[];
 	/** Build-time contributions, with the build context. */
 	build?(b: BuildContext): void;
+}
+
+/** A `import.meta.og.<name>` macro: rewrites a module that contains the marker (it is called only
+ *  then), before the island transform or region minting see it. Returns the new code (the same
+ *  string when nothing changed). */
+export type MacroHandler = (code: string, m: MacroContext) => string | Promise<string>;
+
+/** What a macro knows about the module it rewrites. */
+export interface MacroContext {
+	/** The module id, query stripped. */
+	readonly id: string;
+	/** The id relative to the app root, POSIX (a stable identity for stamps). */
+	readonly rel: string;
+	readonly root: string;
+	/** Markup extensions whose `<script>` blocks hold the macro calls (`.svelte`). */
+	readonly markupExts: readonly string[];
+}
+
+/** A source format that becomes Svelte only through a preprocessor (markdown → Svelte): how its
+ *  islands and its modules' own scoped CSS reach the build. */
+export interface MarkupSource {
+	/** The format's file extensions (`['.svx', '.md']`). */
+	extensions: readonly string[];
+	/** Discover the format's islands up front (build start, dev included): read each file, turn it
+	 *  into Svelte, and hand that to `transform` so its islands are registered before chunks emit. */
+	scan?(ctx: { root: string; readFile(abs: string): string | null }): void | Promise<void>;
+	/** Modules that carry their OWN scoped `<style>`, absolute path → their post-preprocess Svelte
+	 *  source: the build compiles each one's CSS and ships it as a client asset (the module itself
+	 *  only ever renders on the server). The plugin keeps filling this map; the build reads it late. */
+	styles?: ReadonlyMap<string, string>;
+}
+
+/** What the build hands back for a markup source: run the island transform on preprocessed Svelte. */
+export interface MarkupIslands {
+	/** Rewrite the marked imports in already-preprocessed Svelte and register its islands. The code,
+	 *  or null when nothing changed. */
+	transform(source: string, filename: string): string | null;
 }
 
 /** The build, as one plugin sees it (handed to `build`). */
@@ -44,6 +84,12 @@ export interface BuildContext {
 	 *  them and wake them through its own runtime (fragment federation). Off by default — they cost
 	 *  every island ~185 B gz and a preload. */
 	foreignHydrate(): void;
+	/** An `import.meta.og.<name>(…)` construct this plugin compiles (`'code'`, `'loader'`). Plugin
+	 *  macros run after core's own (`wire`, `$`, `source`, `store`) and before `bake`, in plugin order. */
+	macro(name: string, handler: MacroHandler): void;
+	/** A source format that becomes Svelte through a preprocessor (markdown): register it, get the
+	 *  island transform to call from that preprocessor. */
+	markup(source: MarkupSource): MarkupIslands;
 }
 
 /** Typed identity: a plugin. */
@@ -62,6 +108,27 @@ export interface ResolvedPlugins {
 	route_options: string[];
 	/** a plugin asked for island entries' foreign-hydrate exports */
 	foreign_hydrate: boolean;
+	/** plugin macros, in plugin order */
+	macros: { name: string; handler: MacroHandler }[];
+	/** markup sources (a preprocessor format with islands) */
+	markup: MarkupSource[];
+}
+
+const MACRO_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
+/** core's own `import.meta.og.*` constructs: a plugin may never claim one */
+const CORE_MACROS = new Set(['wire', '$', 'source', 'store', 'bake']);
+
+/** Collect each plugin's Vite plugins, in plugin order (`ogygia()` places them before its own). */
+export function plugin_vite_plugins(plugins: readonly OgygiaPlugin[]): VitePlugin[] {
+	return order(plugins).flatMap((p) => p.vite ?? []);
+}
+
+function order(plugins: readonly OgygiaPlugin[]): OgygiaPlugin[] {
+	return [
+		...plugins.filter((p) => p.enforce === 'pre'),
+		...plugins.filter((p) => p.enforce !== 'pre' && p.enforce !== 'post'),
+		...plugins.filter((p) => p.enforce === 'post')
+	];
 }
 
 const ROUTE_OPTION_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
@@ -120,17 +187,20 @@ function package_resolves(req: NodeJS.Require, name: string): boolean {
 
 /**
  * When the app's root and mode are known (configResolved): order the plugins (`enforce`), find their
- * realms by name, run their `build` hooks.
+ * realms by name, run their `build` hooks. `markup_transform` is the configured compiler's island
+ * transform for preprocessed markup (what `b.markup()` hands back).
  */
-export function resolve_plugins(plugins: readonly OgygiaPlugin[], root: string, dev: boolean): ResolvedPlugins {
-	const ordered = [
-		...plugins.filter((p) => p.enforce === 'pre'),
-		...plugins.filter((p) => p.enforce !== 'pre' && p.enforce !== 'post'),
-		...plugins.filter((p) => p.enforce === 'post')
-	];
+export function resolve_plugins(
+	plugins: readonly OgygiaPlugin[],
+	root: string,
+	dev: boolean,
+	markup_transform: MarkupIslands['transform'] = () => null
+): ResolvedPlugins {
+	const ordered = order(plugins);
 	const req = createRequire(path.join(root, 'package.json'));
-	const out: ResolvedPlugins = { servers: [], route_options: [], foreign_hydrate: false };
+	const out: ResolvedPlugins = { servers: [], route_options: [], foreign_hydrate: false, macros: [], markup: [] };
 	const option_owner = new Map<string, string>();
+	const macro_owner = new Map<string, string>();
 	for (const plugin of ordered) {
 		if (!package_resolves(req, plugin.name))
 			throw new Error(`[ogygia] plugin \`${plugin.name}\`: no package by that name resolves from ${root} — its name must be its package name.`);
@@ -152,6 +222,19 @@ export function resolve_plugins(plugins: readonly OgygiaPlugin[], root: string, 
 			},
 			foreignHydrate() {
 				out.foreign_hydrate = true;
+			},
+			macro(name, handler) {
+				if (!MACRO_NAME_RE.test(name) || CORE_MACROS.has(name))
+					throw new Error(`[ogygia] plugin \`${plugin.name}\`: macro \`import.meta.og.${name}\` must be a camelCase name core does not own.`);
+				const owner = macro_owner.get(name);
+				if (owner)
+					throw new Error(`[ogygia] macro \`import.meta.og.${name}\` is claimed by both \`${owner}\` and \`${plugin.name}\`.`);
+				macro_owner.set(name, plugin.name);
+				out.macros.push({ name, handler });
+			},
+			markup(source) {
+				out.markup.push(source);
+				return { transform: markup_transform };
 			}
 		});
 	}

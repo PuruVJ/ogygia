@@ -41,7 +41,7 @@ async function bundle(md: string, extraFiles: Record<string, string> = {}) {
 	const b = await rolldown({
 		input: '/repl/src/routes/+page.md',
 		plugins: [ws, markdownPlugin({ generate: 'client' }), sveltePlugin({ generate: 'client' }), cdnPlugin({ fetchTimeout: 8000 })],
-		external: (id) => /^svelte(\/|$)/.test(id) || /^ogygia(\/|$)/.test(id),
+		external: (id) => /^svelte(\/|$)/.test(id) || /^(ogygia|@ogygia\/[^/]+)(\/|$)/.test(id),
 		cwd: '/', onLog() {}
 	});
 	const { output } = await b.generate({ format: 'cjs', exports: 'named' });
@@ -66,7 +66,7 @@ async function main() {
 	// (note→info, caution→warning), so assert the resolved class per kind.
 	for (const [kind, cls] of [['tip', 'tip'], ['warning', 'warning'], ['danger', 'danger'], ['info', 'info'], ['important', 'important'], ['note', 'info'], ['caution', 'warning']]) {
 		const src = await svelteFor(`::: ${kind}\nbody\n:::\n`);
-		ok(`admonition ::: ${kind} → og-admonition-${cls} (no import)`, new RegExp(`og-admonition-${cls}`).test(src) && !/from 'ogygia/.test(src));
+		ok(`admonition ::: ${kind} → og-admonition-${cls} (no import)`, new RegExp(`og-admonition-${cls}`).test(src) && !/from '@?ogygia/.test(src));
 	}
 	// collapsible details admonition (with title)
 	{
@@ -108,7 +108,7 @@ async function main() {
 	// tabs / code-group inject the ogygia island wrappers (kept external, passthrough at mount)
 	{
 		const src = await svelteFor(`::: tabs\n== A\nfoo\n== B\nbar\n:::\n`);
-		ok('::: tabs → TabGroup/Tab from ogygia/content', /import \{ TabGroup, Tab \} from 'ogygia\/content'/.test(src) && /<TabGroup/.test(src));
+		ok('::: tabs → TabGroup/Tab from @ogygia/content', /import \{ TabGroup, Tab \} from '@ogygia\/content'/.test(src) && /<TabGroup/.test(src));
 	}
 	// resilience: empty + frontmatter-only + a lone heading all produce valid, compilable svelte
 	for (const [label, md] of [['empty', ''], ['frontmatter-only', '---\ntitle: T\n---\n'], ['heading-only', '# H\n'], ['html-in-md', '<div>raw</div>\n\n# After\n']]) {
@@ -121,10 +121,10 @@ async function main() {
 		const code = await bundle(`# Live\n\n::: tip\nhi\n:::\n\n\`\`\`js\nconst a=1;\n\`\`\`\n`);
 		ok('full bundle: mountable module with admonition + shiki inlined', code.length > 0 && /og-admonition/.test(code) && /shiki/.test(code));
 	}
-	// full bundle with tabs keeps ogygia/content external (require, not CDN-fetched)
+	// full bundle with tabs keeps @ogygia/content external (require, not CDN-fetched)
 	{
 		const code = await bundle(`::: tabs\n== A\naaa\n== B\nbbb\n:::\n`);
-		ok('full bundle: tabs keep ogygia/content external (require, not fetched)', /require\(["']ogygia\/content["']\)/.test(code));
+		ok('full bundle: tabs keep @ogygia/content external (require, not fetched)', /require\(["']@ogygia\/content["']\)/.test(code));
 	}
 	// full bundle: a content page importing a workspace component (island dial stripped → plain import)
 	{

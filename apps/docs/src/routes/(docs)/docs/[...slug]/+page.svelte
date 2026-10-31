@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/content';
-	import type { PageView } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
+	import type { PageView } from '@ogygia/content';
 	import type { DocData } from '$lib/collections.server';
 	import * as docs from '$lib/docs.remote';
 	import PageHead from '$lib/PageHead.svelte';

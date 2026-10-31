@@ -9,7 +9,7 @@
  * rewrites it to a typed `const`, `import('./$types').X` types collect into `import type`
  * statements, and casts become `as`.
  */
-import type { Fence, Variant, VariantGenerator } from 'ogygia/content/markdown';
+import type { Fence, Variant, VariantGenerator } from '@ogygia/content/markdown';
 import type TS from 'typescript';
 import type MagicStringT from 'magic-string';
 

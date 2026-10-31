@@ -246,20 +246,23 @@ export default {
 	// `containers`/`tabs`/`themes` and watch the preview recompile (see repl-config.ts + apply_content_config).
 	const VITE_CONFIG_CONTENT = `import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
-import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+import { content } from '@ogygia/content/vite';
+import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 
 export default {
 	plugins: [
 		ogygia({
-			content: {
-				markdown: {
-					containers: true,      // ::: tip / warning / danger callouts
-					tabs: true,            // ::: tabs and ::: code-group
-					headingAnchors: true,  // hover permalink on each heading
-					themes: { light: 'github-light', dark: 'github-dark' },
-					code: { transformers: [diff_markers(), inline_markers()] },
-				},
-			},
+			plugins: [
+				content({
+					markdown: {
+						containers: true,      // ::: tip / warning / danger callouts
+						tabs: true,            // ::: tabs and ::: code-group
+						headingAnchors: true,  // hover permalink on each heading
+						themes: { light: 'github-light', dark: 'github-dark' },
+						code: { transformers: [diff_markers(), inline_markers()] },
+					},
+				}),
+			],
 		}),
 		sveltekit(),
 	],
@@ -513,7 +516,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 `
 		},
 		// A CONTENT page — the real ogygia markdown pipeline (mdsvex + Shiki + admonitions), live in-browser.
-		// Includes a vite.config.ts: edit its `content.markdown` options to reconfigure the preview.
+		// Includes a vite.config.ts: edit its `content({ markdown })` options to reconfigure the preview.
 		content: {
 			'vite.config.ts': VITE_CONFIG_CONTENT,
 			'src/routes/+layout.ts': LAYOUT_CSR,
@@ -1023,7 +1026,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		add('svelte/motion', import('svelte/motion'));
 	}
 	// ogygia's runtime is EXTERNAL in the worker bundle. The content pipeline injects `import { TabGroup,
-	// Tab } from 'ogygia/content'` for `::: tabs` / `::: code-group` — but those are ISLANDS (children cross
+	// Tab } from '@ogygia/content'` for `::: tabs` / `::: code-group` — but those are ISLANDS (children cross
 	// via the region bridge), so mounting the host's real ones in the plain live mount fails. Hand the eval
 	// a passthrough (renders children + label) for ANY ogygia named import → content shows stacked instead
 	// of crashing. The real, interactive version lives in the preview's "islands" mode.
@@ -1197,7 +1200,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 		// ogygia runtime (external): content wrappers (TabGroup/Tab/…) → a children-rendering passthrough so
 		// the live mount shows their content instead of crashing on the island region bridge.
 		if (spec === 'ogygia/internal') return ogygia_internal_module;
-		if (spec === 'ogygia' || spec.startsWith('ogygia/')) return ogygia_passthrough;
+		if (spec === 'ogygia' || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) return ogygia_passthrough;
 		return {};
 	}
 	/** Eval a CJS module string with our svelte-providing require; returns its exports. The `console` param

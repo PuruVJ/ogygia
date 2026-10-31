@@ -120,15 +120,19 @@ describe('site init — svelte.config project', () => {
 
 		// svelte.config: preprocess MERGED (not clobbered), extensions + async added
 		const sc = read(dir, 'svelte.config.js');
-		expect(sc).toMatch(/preprocess:\s*\[vitePreprocess\(\),\s*\.\.\.ogygia\.preprocess\(\)\]/);
-		expect(sc).toMatch(/extensions:\s*ogygia\.extensions\(\)/);
+		expect(sc).toMatch(/preprocess:\s*\[vitePreprocess\(\),\s*\.\.\.preprocess\(\)\]/);
+		expect(sc).toMatch(/extensions:\s*extensions\(\)/);
+		expect(sc).toMatch(/import \{ preprocess, extensions \} from ['"]@ogygia\/content\/vite['"]/);
 		expect(sc).toMatch(/compilerOptions:[\s\S]*experimental:[\s\S]*async:\s*true/);
 		expect(sc).toContain('adapter()'); // the user's adapter survived
 
 		// vite.config: the ogygia() plugin, but NO args added to sveltekit() (that would drop async)
 		const vc = read(dir, 'vite.config.ts');
-		expect(vc).toMatch(/ogygia\(\{\s*content:\s*\{\s*markdown:/);
+		expect(vc).toMatch(/ogygia\(\{\s*plugins:\s*\[\s*content\(\{\s*markdown:/);
+		expect(vc).toMatch(/import \{ content \} from ['"]@ogygia\/content\/vite['"]/);
 		expect(vc).toMatch(/sveltekit\(\)/);
+		// the content package is a dependency next to ogygia
+		expect(JSON.parse(read(dir, 'package.json')).dependencies).toHaveProperty('@ogygia/content');
 
 		// the layout mounts the docs shell at the root base
 		expect(read(dir, 'src/routes/+layout.svelte')).toMatch(
@@ -147,8 +151,8 @@ describe('site init — vite.config project', () => {
 		expect(status).toBe(0);
 		const vc = read(dir, 'vite.config.ts');
 		// extensions/preprocess/compilerOptions land inside sveltekit({ … }) here
-		expect(vc).toMatch(/extensions:\s*ogygia\.extensions\(\)/);
-		expect(vc).toMatch(/ogygia\.preprocess\(\)/);
+		expect(vc).toMatch(/extensions:\s*extensions\(\)/);
+		expect(vc).toMatch(/\.\.\.preprocess\(\)/);
 		expect(vc).toMatch(/async:\s*true/);
 	});
 });
@@ -177,7 +181,7 @@ describe('site init — existing layout', () => {
 	it('recognises an existing ogygia shell as redeemable and keeps it (no --force needed)', () => {
 		const shell = [
 			'<script lang="ts">',
-			"\timport DocsShell from 'ogygia/content/docs-shell';",
+			"\timport DocsShell from '@ogygia/content/docs-shell';",
 			"\timport { site } from '$lib/docs';",
 			'\tlet { children } = $props();',
 			'</script>',

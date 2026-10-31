@@ -46,10 +46,6 @@ export default defineConfig([
 				'devalue',
 				'magic-string',
 				'estree-walker',
-				// content deps / optional peers
-				'yaml',
-				'mdsvex',
-				'shiki',
 				'vite',
 				// lazy optional peer of js_to_ts() — bundling would freeze a store path (it once
 				// resolved to typescript/lib/version.js and shipped a ts with no ScriptTarget)

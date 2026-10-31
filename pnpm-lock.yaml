@@ -57,6 +57,9 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typescript@6.0.3)
     devDependencies:
+      '@ogygia/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@sveltejs/adapter-node':
         specifier: ^5.5.7
         version: 5.5.7(@sveltejs/kit@2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))
@@ -163,6 +166,9 @@ importers:
       '@fontsource-variable/inter':
         specifier: ^5.3.0
         version: 5.3.0
+      '@ogygia/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@sveltejs/adapter-vercel':
         specifier: ^6.3.4
         version: 6.3.4(@sveltejs/kit@2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.2.0(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(rollup@4.62.4)(supports-color@8.1.1)
@@ -229,6 +235,9 @@ importers:
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
+      '@ogygia/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@ogygia/flags':
         specifier: workspace:*
         version: link:../../packages/flags
@@ -364,6 +373,9 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typescript@6.0.3)
     devDependencies:
+      '@ogygia/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@shikijs/twoslash':
         specifier: 3.23.0
         version: 3.23.0(supports-color@8.1.1)(typescript@6.0.3)
@@ -648,6 +660,52 @@ importers:
         specifier: ^3.5.13
         version: 3.5.41(typescript@6.0.3)
 
+  packages/content:
+    dependencies:
+      '@orama/orama':
+        specifier: ^3.1.18
+        version: 3.1.18
+      bits-ui:
+        specifier: ^2.18.1
+        version: 2.18.1(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)
+      mdsvex:
+        specifier: ^0.12.8
+        version: 0.12.8(svelte@5.56.8)
+    devDependencies:
+      '@ogygia/tooling':
+        specifier: workspace:*
+        version: link:../tooling
+      '@sveltejs/kit':
+        specifier: ^2.70.0
+        version: 2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.2.0
+        version: 7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+      ogygia:
+        specifier: workspace:*
+        version: link:../ogygia
+      shiki:
+        specifier: ^4.4.1
+        version: 4.4.3
+      svelte:
+        specifier: 5.56.8
+        version: 5.56.8
+      tsdown:
+        specifier: ^0.22.14
+        version: 0.22.14(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@6.0.3)
+      vite:
+        specifier: ^8.3.5
+        version: 8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@26.1.2)(@vitest/browser-playwright@4.1.10)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))
+
   packages/federation:
     devDependencies:
       '@ogygia/flags':
@@ -748,9 +806,6 @@ importers:
       '@ogygia/tsdown-plugin-svelte':
         specifier: workspace:*
         version: link:../tsdown-plugin-svelte
-      '@orama/orama':
-        specifier: ^3.1.18
-        version: 3.1.18
       '@sveltejs/sv-utils':
         specifier: ^0.3.3
         version: 0.3.3
@@ -766,12 +821,6 @@ importers:
       '@vitest/browser-playwright':
         specifier: 4.1.10
         version: 4.1.10(playwright@1.62.1)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0))(vitest@4.1.10)
-      bits-ui:
-        specifier: ^2.18.1
-        version: 2.18.1(@internationalized/date@3.12.3)(@sveltejs/kit@2.70.2(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)(typescript@6.0.3)(vite@8.3.5(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(sass-embedded@1.104.1)(sass@1.104.1)(yaml@2.9.0)))(svelte@5.56.8)
-      mdsvex:
-        specifier: ^0.12.8
-        version: 0.12.8(svelte@5.56.8)
       oxlint:
         specifier: ^1.77.0
         version: 1.77.0
@@ -781,9 +830,6 @@ importers:
       sass-embedded:
         specifier: ^1.104.1
         version: 1.104.1
-      shiki:
-        specifier: ^4.4.1
-        version: 4.4.1
       svelte:
         specifier: 5.56.8
         version: 5.56.8
@@ -7707,7 +7753,7 @@ snapshots:
       '@changesets/errors': 1.0.0
       '@changesets/types': 7.0.0
       '@manypkg/get-packages': 3.1.0
-      picomatch: 4.0.5
+      picomatch: 4.0.7
       tinyexec: 1.3.0
 
   '@changesets/parse@1.0.0':
@@ -9436,7 +9482,7 @@ snapshots:
       '@iconify-json/carbon': 1.2.25
       '@iconify-json/ph': 1.2.2
       '@iconify-json/svg-spinners': 1.2.4
-      '@shikijs/engine-javascript': 4.4.1
+      '@shikijs/engine-javascript': 4.4.3
       '@shikijs/magic-move': 4.4.3(shiki@4.4.3)(svelte@5.56.8)(vue@3.5.41(typescript@6.0.3))
       '@shikijs/monaco': 4.4.3
       '@shikijs/vitepress-twoslash': 4.4.3(@nuxt/kit@3.21.11)(supports-color@8.1.1)(typescript@6.0.3)
@@ -11179,7 +11225,7 @@ snapshots:
   css-tree@3.2.1:
     dependencies:
       mdn-data: 2.27.1
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   cssesc@3.0.0: {}
 

@@ -5,7 +5,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { js_to_ts } from '../src/lib/markdown/js-to-ts.ts';
-import type { Fence, Variant } from 'ogygia/content/markdown';
+import type { Fence, Variant } from '@ogygia/content/markdown';
 
 const gen = js_to_ts();
 beforeAll(() => gen.ready!());

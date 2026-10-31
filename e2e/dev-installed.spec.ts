@@ -37,7 +37,7 @@ function real(name: string): string {
 
 const FILES: Record<string, string> = {
 	'package.json': '{ "name": "installed-app", "private": true, "type": "module" }\n',
-	'svelte.config.js': "import { ogygia } from 'ogygia/vite';\nexport default { extensions: ogygia.extensions(), preprocess: [...ogygia.preprocess()], kit: {} };\n",
+	'svelte.config.js': 'export default { kit: {} };\n',
 	// (devtools on, the way an app turns it on in dev: its dock's packages must be found up front)
 	'vite.config.js': "import { sveltekit } from '@sveltejs/kit/vite';\nimport { ogygia } from 'ogygia/vite';\nexport default { plugins: [ogygia({ devtools: true }), sveltekit()] };\n",
 	'src/app.html': '<!doctype html><html><head><meta charset="utf-8" />%sveltekit.head%</head><body><div>%sveltekit.body%</div></body></html>\n',

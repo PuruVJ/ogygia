@@ -9,7 +9,7 @@
  * `import.meta.glob` itself and builds a source with `defineSource`. Exactly how `markdown()`/`json()`
  * are made — one level up, for a spec instead of a file.
  */
-import { defineSource, titleCase, type GlobMap, type GroupMeta, type RawSource } from 'ogygia/content';
+import { defineSource, titleCase, type GlobMap, type GroupMeta, type RawSource } from '@ogygia/content';
 
 // ── the shapes an operation entry carries (all structured DATA; the page renders it) ──
 

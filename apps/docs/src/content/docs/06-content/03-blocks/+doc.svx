@@ -62,7 +62,7 @@ Nodes nest through `children`: a `Grid` holds `Feature`s, a section holds a grid
 `blocks()` is a content source. Point a collection at your page JSON, and the `body` of each entry is the rendered tree:
 
 ```ts
-import { content, blocks } from 'ogygia/content';
+import { content, blocks } from '@ogygia/content';
 import { registry } from '$lib/blocks';
 
 export const pages = content({
@@ -101,7 +101,7 @@ The content source is the recommended path. But when you already hold a tree (a 
 <!-- yours to keep and tweak -->
 <script>
   import { Region } from 'ogygia';
-  import { blocks } from 'ogygia/content';
+  import { blocks } from '@ogygia/content';
   import Self from './BlockTree.svelte';
 
   let { tree, registry, nodes } = $props();
@@ -125,8 +125,8 @@ That is the full thing. `blocks.resolve` does the `type → region` walk, and sk
 Builder is headless: it serves your pages as JSON over an HTTP API. Write a **loader** that fetches it, and render through `blocks()`. Copy this, drop in your public key, and you have a Builder-driven site:
 
 ```ts title=src/lib/builder.ts
-import { content, blocks, mapRaw } from 'ogygia/content';
-import type { RawSource } from 'ogygia/content';
+import { content, blocks, mapRaw } from '@ogygia/content';
+import type { RawSource } from '@ogygia/content';
 import { registry } from './blocks';
 
 const KEY = 'YOUR_BUILDER_PUBLIC_KEY';

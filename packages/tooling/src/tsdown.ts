@@ -11,7 +11,9 @@ const SHARED: (string | RegExp)[] = [
 	'esm-env',
 	/^node:/,
 	/^virtual:/,
-	/^\$app\//
+	/^\$app\//,
+	// components ship as preprocessed source beside the JS (the svelte pass): the app compiles them
+	/\.svelte$/
 ];
 
 export interface LibraryOptions extends Omit<UserConfig, 'entry' | 'deps'> {

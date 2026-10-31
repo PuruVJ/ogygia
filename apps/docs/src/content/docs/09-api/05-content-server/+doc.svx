@@ -1,8 +1,8 @@
 ---
-title: ogygia/content/server
+title: '@ogygia/content/remote'
 summary: The wire layer — remotes over collections and sites.
 ---
 
 Auto-generated from the package's own `.d.ts` on every build — signatures, JSDoc, and examples straight from the source.
 
-> MODULE: ogygia/content/server
+> MODULE: @ogygia/content/remote

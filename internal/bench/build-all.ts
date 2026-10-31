@@ -12,6 +12,7 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 // prebuilt-dist branch below is what runs, so this path only matters for a local `pnpm bench`.)
 const REPO = join(ROOT, '..', '..');
 const OGY = join(REPO, 'packages', 'ogygia');
+const CONTENT = join(REPO, 'packages', 'content');
 const TARBALLS = join(ROOT, '.tarballs');
 
 const run = (cmd, args, opts = {}) => {
@@ -40,27 +41,33 @@ console.log('▸ build + pack ogygia');
 // (the hermetic image copies it in — building ogygia standalone needs tsdown's whole toolchain,
 // which isn't worth reinstalling), pack that. Only as a last resort install + build standalone.
 if (existsSync(join(REPO, 'pnpm-workspace.yaml')) && existsSync(join(REPO, 'node_modules'))) {
-	run('pnpm', ['--filter', 'ogygia', 'build'], { cwd: REPO });
-} else if (existsSync(join(OGY, 'dist', 'index.js'))) {
+	run('pnpm', ['--filter', 'ogygia', '--filter', '@ogygia/content', 'build'], { cwd: REPO });
+} else if (existsSync(join(OGY, 'dist', 'index.js')) && existsSync(join(CONTENT, 'dist', 'vite', 'index.js'))) {
 	console.log('  using prebuilt dist (skip standalone rebuild)');
 } else {
 	pnpmInstall(OGY, process.env);
 	run('pnpm', ['run', 'build'], { cwd: OGY });
+	pnpmInstall(CONTENT, process.env);
+	run('pnpm', ['run', 'build'], { cwd: CONTENT });
 }
 rmSync(TARBALLS, { recursive: true, force: true });
 mkdirSync(TARBALLS, { recursive: true });
-const pack = spawnSync('pnpm', ['pack', '--pack-destination', TARBALLS], {
-	cwd: OGY,
-	encoding: 'utf8'
-});
-if (pack.status !== 0) throw new Error('ogygia pack failed');
-const tgzLine = pack.stdout.trim().split('\n').pop().trim();
-const tarball = tgzLine.startsWith('/') ? tgzLine : join(TARBALLS, tgzLine.split('/').pop());
-console.log(`  packed → ${tarball}`);
+// The bench app takes ogygia and its content package (markdown posts) — both packed, published shape.
+const packTo = (cwd, name) => {
+	const pack = spawnSync('pnpm', ['pack', '--pack-destination', TARBALLS], { cwd, encoding: 'utf8' });
+	if (pack.status !== 0) throw new Error(`${name} pack failed`);
+	const tgzLine = pack.stdout.trim().split('\n').pop().trim();
+	const tarball = tgzLine.startsWith('/') ? tgzLine : join(TARBALLS, tgzLine.split('/').pop());
+	console.log(`  packed → ${tarball}`);
+	return tarball;
+};
+const tarball = packTo(OGY, 'ogygia');
+const contentTarball = packTo(CONTENT, '@ogygia/content');
 
 const ogygiaApp = join(ROOT, 'frameworks', 'ogygia');
 const pkg = JSON.parse(readFileSync(join(ogygiaApp, 'package.json'), 'utf8'));
 pkg.dependencies.ogygia = `file:${tarball}`;
+pkg.dependencies['@ogygia/content'] = `file:${contentTarball}`;
 writeFileSync(join(ogygiaApp, 'package.json'), JSON.stringify(pkg, null, '\t') + '\n');
 
 function installAndBuild(name, { bun = false } = {}) {

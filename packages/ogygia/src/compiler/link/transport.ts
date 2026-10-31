@@ -43,7 +43,7 @@ export function kit_transport_module(app_crosses_wire: boolean, transport_spec: 
 // direction anyway (an unused codec is bytes; a missed one breaks decode). Regexes are module-level.
 const OGYGIA_WIRE_NAMED = /import\s+(?:type\s+)?\{([\s\S]*?)\}\s*from\s*['"]ogygia['"]/g;
 const WIRE_API = /\b(?:region|Region|site)\b/;
-const OGYGIA_CONTENT_IMPORT = /from\s*['"]ogygia\/content(?:\/[a-z-]+)?['"]/;
+const OGYGIA_CONTENT_IMPORT = /from\s*['"]@ogygia\/content(?:\/[a-z-]+)?['"]/;
 const OGYGIA_NS_IMPORT = /import\s*\*\s*as\s+(\w+)\s*from\s*['"]ogygia['"]/;
 const NS_WIRE_USAGE = /\b(\w+)\.(?:region|Region|site)\b/g;
 

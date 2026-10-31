@@ -6,12 +6,9 @@
 import type { ImportKeys } from '../compiler/region/transform.js';
 import type { DebarrelOptions } from '../compiler/debarrel/options.js';
 import type { ProfilerOptions } from '../profiler/index.js';
-import type { ContentPluginOptions } from '../content/vite/plugin.js';
-import type { MarkdownOptions } from '../content/markdown/index.js';
 import type { OgygiaPlugin } from './plugin-api.js';
 
 // ── regexes
-const IDENT_NAME_RE = /^[\w-]+$/;
 
 /**
  * Named strategy bundle referenced from source via `with { preset: 'name' }`
@@ -116,17 +113,6 @@ export interface RegionsOptions {
 }
 
 /**
- * A named CONTENT preset — a partial content-config referenced by a literal `preset: 'name'` on a
- * loader macro (`import.meta.og.loader.folder('../docs', { preset: 'name' })`). The referencing
- * collection's files compile as their own module VARIANTS (`?og_preset=name`), so the same file
- * used by another collection under another preset renders independently — never a conflict.
- */
-export interface ContentPreset {
-	/** Markdown options merged over `content.markdown` (per setting key — depth-2 replace). */
-	markdown?: MarkdownOptions;
-}
-
-/**
  * Options for the {@link ogygia} Vite plugin — one top-level key per subsystem, each subsystem
  * `defaults + its own presets`.
  *
@@ -173,17 +159,6 @@ export interface OgygiaOptions {
 	 * injects the app default but a page that sets its own meta wins.
 	 */
 	router?: boolean | { viewTransitions?: boolean; forms?: boolean; serverDelta?: boolean };
-
-	/**
-	 * The content subsystem. `markdown` configures the mdsvex preprocessor (themes, remark plugins,
-	 * heading ids…) — the defaults for every markdown file. `presets` are named variants a loader
-	 * macro opts a whole collection into (`{ preset: 'name' }`); requires `markdown` to be set (the
-	 * defaults are the base every preset merges over). The rest are dev HMR options.
-	 */
-	content?: ContentPluginOptions & {
-		markdown?: MarkdownOptions;
-		presets?: Record<string, ContentPreset>;
-	};
 
 	/**
 	 * Rename the import-attribute keys claimed by the transform.
@@ -274,7 +249,9 @@ const LEGACY_OPTION_RENAMES: Record<string, string> = {
 		'`continuity` is gone — form continuity rides the router. Write `router: { forms: false }` to disable it.',
 	regionTtl: '`regionTtl` moved into the regions subsystem — write `regions: { ttl: … }`.',
 	freeze:
-		'`freeze` is a plugin now — install `@ogygia/freeze` and write `plugins: [freeze({ ttl, default })]` (from `@ogygia/freeze/vite`).'
+		'`freeze` is a plugin now — install `@ogygia/freeze` and write `plugins: [freeze({ ttl, default })]` (from `@ogygia/freeze/vite`).',
+	content:
+		'`content` is a plugin now — install `@ogygia/content` and write `plugins: [content({ markdown, presets })]` (from `@ogygia/content/vite`); the svelte config takes `preprocess()` / `extensions()` from there too.'
 };
 
 /** The v3 rename map: a legacy key errors with its new spelling, never silently no-ops. */
@@ -319,40 +296,6 @@ export function validate_region_presets(presets: Record<string, unknown>): void 
 			if (!REGION_PRESET_KEYS.has(k)) {
 				throw new Error(
 					`[ogygia] regions.presets.${name}: unknown key \`${k}\`. A regions preset takes ${[...REGION_PRESET_KEYS].join(', ')}.`
-				);
-			}
-		}
-	}
-}
-
-/**
- * Config-time content-preset validation — closed vocabulary (only `markdown`), non-empty, identifier
- * names, and `content.markdown` required (the defaults are the base every preset merges over).
- */
-export function validate_content_presets(
-	content_presets: Record<string, unknown>,
-	has_markdown: boolean
-): void {
-	if (!has_markdown) {
-		throw new Error(
-			'[ogygia] content.presets requires content.markdown — the defaults are the base every preset merges over (an empty `markdown: {}` is fine).'
-		);
-	}
-	for (const [name, bag] of Object.entries(content_presets)) {
-		if (!IDENT_NAME_RE.test(name)) {
-			throw new Error(
-				`[ogygia] content.presets: '${name}' — preset names are identifiers ([A-Za-z0-9_-]).`
-			);
-		}
-		if (!bag || typeof bag !== 'object' || Object.keys(bag).length === 0) {
-			throw new Error(
-				`[ogygia] content.presets.${name} is empty — a preset with nothing is a mistake.`
-			);
-		}
-		for (const k of Object.keys(bag)) {
-			if (k !== 'markdown') {
-				throw new Error(
-					`[ogygia] content.presets.${name}: unknown key \`${k}\`. A content preset takes \`markdown\`.`
 				);
 			}
 		}

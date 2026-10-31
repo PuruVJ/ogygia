@@ -5,7 +5,7 @@
 	// home); actions hard-right. On docs it's passed to DocsShell as the `header` snippet (with
 	// `tools={null}`), so the sidebar carries only the nav.
 	import Logo from '$lib/Logo.svelte';
-	import { Search, ThemeToggle } from 'ogygia/content';
+	import { Search, ThemeToggle } from '@ogygia/content';
 	// Named barrel imports → asRegion turns each into its own island (Search's ⌘K palette lazy-loads on
 	// first intent; ThemeToggle writes data-theme + the og-theme key).
 	const SearchBox = import.meta.og.asRegion(Search, { wake: 'idle' });

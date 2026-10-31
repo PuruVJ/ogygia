@@ -128,7 +128,7 @@ const cart = new Cart();
 
 export const contentCollectionCode = import.meta.og.code(
 	`// collections.server.ts — one server-only definition
-import { content } from 'ogygia/content';
+import { content } from '@ogygia/content';
 
 export const docs = content({
   loader: import.meta.og.loader.markdown('./docs/**/*.svx'),
@@ -159,7 +159,7 @@ and a live island, right in the copy:
 
 export const contentJsonCode = import.meta.og.code(
 	`// typed data, not just prose — JSON through the same API
-import { content } from 'ogygia/content';
+import { content } from '@ogygia/content';
 import * as v from 'valibot';
 
 export const authors = content({
@@ -189,7 +189,7 @@ export const feed = withRemotes(press).live.list({ map: (e) => e.data });`,
 
 export const siteCode = import.meta.og.code(
 	`// site.server.ts — the WHOLE site config
-import { content, fields, site, links } from 'ogygia/content';
+import { content, fields, site, links } from '@ogygia/content';
 
 export const guides = content({
   loader: import.meta.og.loader.folder('../content/guides'),
@@ -206,7 +206,7 @@ export const docs = site({
 
 export const dimensionsCode = import.meta.og.code(
 	`// versioning and translations are the same primitive: dimensions
-import { site, dimensions } from 'ogygia/content';
+import { site, dimensions } from '@ogygia/content';
 
 export const docs = site({
   outline: dimensions({
@@ -228,8 +228,8 @@ export const docs = site({
 export const composeCode = import.meta.og.code(
 	`<!-- DocsShell is a composition. Keep it, swap one region: -->
 <script>
-  import DocsShell from 'ogygia/content/docs-shell';
-  import { Search, ThemeToggle } from 'ogygia/content';
+  import DocsShell from '@ogygia/content/docs-shell';
+  import { Search, ThemeToggle } from '@ogygia/content';
 </script>
 
 <DocsShell {meta} base="/docs">

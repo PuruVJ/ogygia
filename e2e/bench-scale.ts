@@ -12,7 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { transformHost } from '../packages/ogygia/dist/compiler/region/transform.js';
 import { CTX_EXTRA } from './_ctx-extra.ts';
-import { content } from '../packages/ogygia/dist/content/factory.js';
+import { content } from '../packages/content/dist/factory.js';
 
 // A minimal in-memory Source (the only shape `content({ loader })` accepts): `refs()` (metadata rows)
 // + `get()` (one full entry). The lib no longer ships a `fromArray`; this local fixture builds one.

@@ -10,6 +10,7 @@ import { fs } from './host.js';
 import { strip_bom } from './bom.js';
 import { islandVirtualId } from './ids.js';
 import type { ServerRealm } from './link/caps.js';
+import type { PluginMacro } from './macros/pipeline.js';
 import {
 	islandChunkFileName,
 	islandPublicUrl,
@@ -75,8 +76,8 @@ export interface CompileCtxInit {
 	import_keys: ImportKeys;
 	/** Resolved Vite aliases (used by the `bake` macro to bundle the imports a baked fn touches). */
 	resolve_alias: unknown[];
-	/** The app's markdown config (used by the `code`/`md` macros), or `null` when content is off. */
-	markdown_config: unknown;
+	/** The plugins' `import.meta.og.*` macros (`b.macro`), in plugin order. Optional (default none). */
+	macros?: readonly PluginMacro[];
 	/** ogygia's own package root — the `auto_brand` macro skips ogygia source (it can't self-register). */
 	pkg_root: string;
 
@@ -108,8 +109,6 @@ export interface CompileCtxInit {
 	app_shims: Record<string, string>;
 	/** `command === 'build'` — gates the transform-time deterministic island-chunk emit. */
 	is_build: boolean;
-	/** Configured content presets (name → merged config), or `null` when content is off. */
-	content_presets: Record<string, unknown> | null;
 	/** Devtools instruments compiled in (`ogygia({ devtools: true })`). Bakes the standalone dock
 	 *  boot for csr=true pages into `virtual:ogygia/devtools-boot-url`. */
 	devtools: boolean;
@@ -131,7 +130,7 @@ export class CompileCtx {
 	readonly presets: Record<string, unknown>;
 	readonly import_keys: ImportKeys;
 	readonly resolve_alias: unknown[];
-	readonly markdown_config: unknown;
+	readonly macros: readonly PluginMacro[];
 	readonly pkg_root: string;
 	readonly build_secret: string;
 	readonly rate_limit: { max: number; windowMs: number };
@@ -148,7 +147,6 @@ export class CompileCtx {
 	readonly client_binding_stub_file: string;
 	readonly app_shims: Record<string, string>;
 	readonly is_build: boolean;
-	readonly content_presets: Record<string, unknown> | null;
 	readonly devtools: boolean;
 	/** `with { … }` hint matcher — a node_modules `.svelte` is only transformed when it carries one
 	 *  (so a library can declare its own islands). Built once from the resolved import keys. */
@@ -175,7 +173,7 @@ export class CompileCtx {
 		this.presets = init.presets;
 		this.import_keys = init.import_keys;
 		this.resolve_alias = init.resolve_alias;
-		this.markdown_config = init.markdown_config;
+		this.macros = init.macros ?? [];
 		this.pkg_root = init.pkg_root;
 		this.build_secret = init.build_secret;
 		this.rate_limit = init.rate_limit;
@@ -192,7 +190,6 @@ export class CompileCtx {
 		this.client_binding_stub_file = init.client_binding_stub_file;
 		this.app_shims = init.app_shims;
 		this.is_build = init.is_build;
-		this.content_presets = init.content_presets;
 		this.devtools = init.devtools;
 		const hint_keys = Object.values(init.import_keys).filter(
 			(v) => typeof v === 'string'

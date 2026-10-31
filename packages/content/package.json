@@ -1,0 +1,122 @@
+{
+	"name": "@ogygia/content",
+	"private": true,
+	"version": "0.10.1",
+	"description": "Content for ogygia: collections, markdown with Shiki, docs and blog shells, search, and the content macros",
+	"type": "module",
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
+		"directory": "packages/content"
+	},
+	"keywords": ["ogygia", "sveltekit", "content", "markdown", "mdsvex", "shiki", "docs"],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"svelte": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./remote": {
+			"types": "./dist/remote.d.ts",
+			"svelte": "./src/remote.ts",
+			"default": "./src/remote.ts"
+		},
+		"./markdown": {
+			"types": "./dist/markdown/index.d.ts",
+			"default": "./dist/markdown/index.js"
+		},
+		"./vite": {
+			"types": "./dist/vite/index.d.ts",
+			"default": "./dist/vite/index.js"
+		},
+		"./slot": {
+			"types": "./dist/site/components/SiteSlot.svelte.d.ts",
+			"svelte": "./src/site/components/SiteSlot.svelte",
+			"default": "./src/site/components/SiteSlot.svelte"
+		},
+		"./docs-shell": {
+			"types": "./dist/site/components/DocsShell.svelte.d.ts",
+			"svelte": "./src/site/components/DocsShell.svelte",
+			"default": "./src/site/components/DocsShell.svelte"
+		},
+		"./theme.css": "./src/site/theme.css",
+		"./shell.css": "./src/site/shell.css",
+		"./themes/*": "./src/site/themes/*",
+		"./types": {
+			"types": "./ambient.d.ts"
+		}
+	},
+	"files": ["dist", "ambient.d.ts", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && vitest run",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@orama/orama": "^3.1.18",
+		"bits-ui": "^2.18.1",
+		"mdsvex": "^0.12.8"
+	},
+	"peerDependencies": {
+		"@sveltejs/kit": ">=2.70.2 <4",
+		"ogygia": "workspace:^",
+		"shiki": "^3.0.0 || ^4.0.0",
+		"svelte": "^5.56.8",
+		"vite": "^8.2.4"
+	},
+	"devDependencies": {
+		"@ogygia/tooling": "workspace:*",
+		"@sveltejs/kit": "^2.70.0",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"ogygia": "workspace:*",
+		"shiki": "^4.4.1",
+		"svelte": "5.56.8",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"valibot": "^1.4.2",
+		"vite": "^8.3.5",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"svelte": "./dist/index.js",
+				"default": "./dist/index.js"
+			},
+			"./remote": {
+				"types": "./dist/remote.d.ts",
+				"svelte": "./dist/remote.js",
+				"default": "./dist/remote.js"
+			},
+			"./markdown": {
+				"types": "./dist/markdown/index.d.ts",
+				"default": "./dist/markdown/index.js"
+			},
+			"./vite": {
+				"types": "./dist/vite/index.d.ts",
+				"default": "./dist/vite/index.js"
+			},
+			"./slot": {
+				"types": "./dist/site/components/SiteSlot.svelte.d.ts",
+				"svelte": "./dist/site/components/SiteSlot.svelte",
+				"default": "./dist/site/components/SiteSlot.svelte"
+			},
+			"./docs-shell": {
+				"types": "./dist/site/components/DocsShell.svelte.d.ts",
+				"svelte": "./dist/site/components/DocsShell.svelte",
+				"default": "./dist/site/components/DocsShell.svelte"
+			},
+			"./theme.css": "./dist/site/theme.css",
+			"./shell.css": "./dist/site/shell.css",
+			"./themes/*": "./dist/site/themes/*",
+			"./types": {
+				"types": "./ambient.d.ts"
+			}
+		}
+	}
+}

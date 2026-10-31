@@ -306,8 +306,30 @@ Core rename goes LAST: many build paths key off the package name `ogygia`.
     `ogygia/internal`); route options are core (`plugin/routes.ts`, compiler `page_route_options`).
   - LEFT FOR LATER ROUNDS: docs pages still say `ogygia({ freeze })`, `ogygia/flag`, `ogygia/freeze`
     (one docs pass at the end); client-hook DCE lands with the first client realm (devtools).
+  - DEPENDENCIES (user, 2026-10-31): each package owns its own. A core optional peer that only one
+    feature used becomes a REGULAR dependency of that plugin package (installing the plugin means
+    using it): content → mdsvex, shiki, @orama/orama, bits-ui; devtools → @neodrag/svelte. They leave
+    core's package.json with the feature.
   - TODO (user, 2026-10-31): RENAME freeze. "Elegant, punchy, but conveys no meaning." Nobody uses
     it yet, so the rename is free: package, plugin, `export const freeze`, the docs. Not now.
+- R5 41908d93 FEDERATION (`@ogygia/federation`), e2e 352/352.
+- R6 CONTENT (`@ogygia/content`):
+  - CORE gives: `b.macro(name, handler)` (content's `code` / `md` / `loader` / `regions`; core keeps
+    wire/$/source/store/bake), `b.markup({ extensions, scan, styles })` → the island transform for
+    preprocessed markup (replaces core's island bridge), the plugin's `vite` field. Macro building
+    blocks (scanner, parser, host fs/path/hash, build cache, content CSS key) come from
+    `ogygia/internal/compiler-browser` — host-seamed, so they run in node AND the Observatory.
+    `prebaked_region` joins `ogygia/internal`.
+  - CONTENT owns: its bridge (`Symbol.for('ogygia.content-bridge.v1')`: markdown config, presets, the
+    transform, scan, style sources), the preset tagging pre-transform, the collection-placement and
+    loader-in-component warnings, dev HMR. `content({ markdown, presets, watchDirs, hmrDebounceMs })`
+    from `@ogygia/content/vite`, plus the svelte config's `preprocess()` / `extensions()` there.
+  - `./server` is a RESERVED realm subpath (a plugin's server half, found by name), so content's
+    user-facing remote layer moved: `ogygia/content/server` → `@ogygia/content/remote`.
+  - Deps moved: mdsvex, shiki, @orama/orama, bits-ui are content's regular dependencies; gone from core.
+  - KNOWN COUPLING (follow-up): core's Kit-transport detector still names `@ogygia/content` (a content
+    import can put a held region on Kit's wire). Fold into the plugin API (a plugin declares the
+    modules whose imports cross the wire) when the next plugin needs it.
 
 ## Performance rules (the bar every step must pass)
 

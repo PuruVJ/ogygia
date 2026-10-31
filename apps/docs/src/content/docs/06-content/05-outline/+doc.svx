@@ -18,7 +18,7 @@ Give `site()` an outline when a site is more than one flat list: several collect
 The simplest outline is a collection. When that collection is a [`folder()`](/docs/content/collections), its filenames already carry structure, and the outline reads it as data:
 
 ```ts
-import { site } from 'ogygia/content';
+import { site } from '@ogygia/content';
 import { guides } from './collections.server';
 
 export const docs = site({ outline: guides });
@@ -31,7 +31,7 @@ export const docs = site({ outline: guides });
 When you want to arrange by hand, `outline()` takes a list. Each form composes with each other form:
 
 ```ts
-import { outline, pick, site } from 'ogygia/content';
+import { outline, pick, site } from '@ogygia/content';
 
 export const docs = site({
 	outline: outline([
@@ -80,7 +80,7 @@ Structure comes from filenames through a **convention**, passed to `folder()`. T
 ::: code-group
 
 ```ts [docs — numbered()]
-import { folder, numbered } from 'ogygia/content';
+import { folder, numbered } from '@ogygia/content';
 
 // NN- prefixes order siblings, +meta.json labels the section
 export const docs = folder(
@@ -91,7 +91,7 @@ export const docs = folder(
 ```
 
 ```ts [blog — dated()]
-import { folder, dated } from 'ogygia/content';
+import { folder, dated } from '@ogygia/content';
 
 // YYYY-MM-DD-slug orders chronologically, date stripped from the URL
 export const posts = folder(
@@ -110,7 +110,7 @@ export const posts = folder(
 Past the tree, the outline knows how to **resolve** a slug to its entry, and how to enumerate each address. Downstream read functions use this directly: `docs.entries()` for prerender inputs, `docs.page(slug)` to resolve one page, `switcher()` on a [dimensioned](/docs/content/dimensions) site. When you build custom chrome, `hrefOf(base, slug)` is the one sanctioned way to turn an address into a link. It is what keeps a site correct under each mount prefix:
 
 ```ts
-import { hrefOf } from 'ogygia/content';
+import { hrefOf } from '@ogygia/content';
 
 hrefOf('/docs', 'routing');   // '/docs/routing'
 hrefOf('', 'routing');        // '/routing'

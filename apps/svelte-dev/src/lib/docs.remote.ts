@@ -6,7 +6,7 @@
  * (Search is NOT a remote — the static path: prerendered `/docs/search.json` + the on-device Orama
  * worker in the Search UI, with `/docs/search` as the no-JS fallback page.)
  */
-import { remotes } from 'ogygia/content/server';
+import { remotes } from '@ogygia/content/remote';
 import { docs } from './site.server';
 
 export const { nav, page } = remotes(docs, { base: '/docs' });

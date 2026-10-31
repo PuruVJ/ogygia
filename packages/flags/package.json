@@ -9,7 +9,7 @@
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/flags"
 	},
 	"keywords": ["ogygia", "sveltekit", "feature-flags", "ab-testing", "openfeature"],

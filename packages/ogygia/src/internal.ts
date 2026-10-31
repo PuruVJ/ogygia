@@ -35,3 +35,5 @@ export { __tag_context } from './context-bridge.js';
 // an island; `og_html_region` is what `import.meta.og.code()`/`.md()` inline at build.
 export { og_portable } from './region-snippet.js';
 export { og_html_region } from './region.js';
+// What content's markdown format makes of a body baked at compile time (`@ogygia/content`).
+export { prebaked_region } from './region.js';

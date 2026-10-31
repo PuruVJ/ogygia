@@ -6,7 +6,7 @@
  * Registry marks: static blocks are `region: 'raw'` (HTML only, zero JS); the counter bakes
  * `wake: 'load'` (pages naming it pull exactly one hydrate chunk).
  */
-import { content, blocks } from 'ogygia/content';
+import { content, blocks } from '@ogygia/content';
 import Hero from './Hero.svelte' with { region: 'raw' };
 import Grid from './Grid.svelte' with { region: 'raw' };
 import Feature from './Feature.svelte' with { region: 'raw' };

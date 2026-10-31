@@ -71,31 +71,6 @@
 			"types": "./dist/compiler/index.d.ts",
 			"default": "./dist/compiler/index.js"
 		},
-		"./content": {
-			"types": "./dist/content/index.d.ts",
-			"svelte": "./src/content/index.ts",
-			"default": "./src/content/index.ts"
-		},
-		"./content/server": {
-			"types": "./dist/content/server.d.ts",
-			"svelte": "./src/content/server.ts",
-			"default": "./src/content/server.ts"
-		},
-		"./content/markdown": {
-			"types": "./dist/content/markdown/index.d.ts",
-			"default": "./dist/content/markdown/index.js"
-		},
-		"./content/vite": {
-			"types": "./dist/content/vite/index.d.ts",
-			"default": "./dist/content/vite/index.js"
-		},
-		"./content/theme.css": "./src/content/site/theme.css",
-		"./content/themes/*": "./src/content/site/themes/*",
-		"./content/slot": {
-			"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
-			"svelte": "./src/content/site/components/SiteSlot.svelte",
-			"default": "./src/content/site/components/SiteSlot.svelte"
-		},
 		"./server": {
 			"types": "./dist/hooks.d.ts",
 			"default": "./src/hooks.ts"
@@ -159,12 +134,6 @@
 		"./types": {
 			"types": "./ambient.d.ts"
 		},
-		"./content/shell.css": "./src/content/site/shell.css",
-		"./content/docs-shell": {
-			"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
-			"svelte": "./src/content/site/components/DocsShell.svelte",
-			"default": "./src/content/site/components/DocsShell.svelte"
-		},
 		"./internal/compiler-browser": {
 			"types": "./dist/compiler/browser.d.ts",
 			"default": "./dist/compiler/browser.js"
@@ -204,27 +173,14 @@
 	},
 	"peerDependencies": {
 		"@neodrag/svelte": "3.0.0-next.12",
-		"@orama/orama": "^3.0.0",
 		"@playwright/test": "^1.62.0",
 		"@sveltejs/kit": ">=2.70.2 <4",
-		"bits-ui": "^2.0.0",
-		"mdsvex": "^0.12.0",
 		"playwright": "^1.62.0",
 		"rolldown": ">=1.0.0",
-		"shiki": "^3.0.0 || ^4.0.0",
 		"svelte": "^5.56.8",
 		"vite": "^8.2.4"
 	},
 	"peerDependenciesMeta": {
-		"@orama/orama": {
-			"optional": true
-		},
-		"bits-ui": {
-			"optional": true
-		},
-		"mdsvex": {
-			"optional": true
-		},
 		"playwright": {
 			"optional": true
 		},
@@ -233,26 +189,19 @@
 		},
 		"rolldown": {
 			"optional": true
-		},
-		"shiki": {
-			"optional": true
 		}
 	},
 	"devDependencies": {
 		"@neodrag/svelte": "3.0.0-next.12",
 		"@ogygia/tsdown-plugin-svelte": "workspace:*",
-		"@orama/orama": "^3.1.18",
 		"@sveltejs/sv-utils": "^0.3.3",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^26.1.2",
 		"@vitest/browser": "4.1.10",
 		"@vitest/browser-playwright": "4.1.10",
-		"bits-ui": "^2.18.1",
-		"mdsvex": "^0.12.8",
 		"oxlint": "^1.77.0",
 		"rolldown": ">=1.0.0",
 		"sass-embedded": "^1.104.1",
-		"shiki": "^4.4.1",
 		"svelte": "5.56.8",
 		"svelte-check": "^4.7.4",
 		"svelte2tsx": "^0.7.60",
@@ -314,26 +263,6 @@
 				"types": "./dist/internal-reconcile.d.ts",
 				"svelte": "./dist/internal-reconcile.js",
 				"default": "./dist/internal-reconcile.js"
-			},
-			"./content": {
-				"types": "./dist/content/index.d.ts",
-				"svelte": "./dist/content/index.js",
-				"default": "./dist/content/index.js"
-			},
-			"./content/markdown": {
-				"types": "./dist/content/markdown/index.d.ts",
-				"default": "./dist/content/markdown/index.js"
-			},
-			"./content/vite": {
-				"types": "./dist/content/vite/index.d.ts",
-				"default": "./dist/content/vite/index.js"
-			},
-			"./content/theme.css": "./dist/content/site/theme.css",
-			"./content/themes/*": "./dist/content/site/themes/*",
-			"./content/slot": {
-				"types": "./dist/content/site/components/SiteSlot.svelte.d.ts",
-				"svelte": "./dist/content/site/components/SiteSlot.svelte",
-				"default": "./dist/content/site/components/SiteSlot.svelte"
 			},
 			"./server": {
 				"types": "./dist/hooks.d.ts",
@@ -399,19 +328,8 @@
 				"types": "./dist/compiler/index.d.ts",
 				"default": "./dist/compiler/index.js"
 			},
-			"./content/server": {
-				"types": "./dist/content/server.d.ts",
-				"svelte": "./dist/content/server.js",
-				"default": "./dist/content/server.js"
-			},
 			"./types": {
 				"types": "./ambient.d.ts"
-			},
-			"./content/shell.css": "./dist/content/site/shell.css",
-			"./content/docs-shell": {
-				"types": "./dist/content/site/components/DocsShell.svelte.d.ts",
-				"svelte": "./dist/content/site/components/DocsShell.svelte",
-				"default": "./dist/content/site/components/DocsShell.svelte"
 			},
 			"./internal/compiler-browser": {
 				"types": "./dist/compiler/browser.d.ts",

@@ -7,7 +7,7 @@ related:
 ---
 
 <script>
-	import { TabGroup, Tab } from 'ogygia/content';
+	import { TabGroup, Tab } from '@ogygia/content';
 	import Counter from '$lib/playground/demos/Counter.svelte' with { wake: 'visible' };
 	import Stopwatch from '$lib/playground/demos/Stopwatch.svelte' with { wake: 'visible' };
 	import Palette from '$lib/playground/demos/Palette.svelte' with { wake: 'visible' };
@@ -120,7 +120,7 @@ git commit -m "docs: add kitchen sink"
 ### TypeScript
 
 ```ts
-import { content, markdown, json } from 'ogygia/content';
+import { content, markdown, json } from '@ogygia/content';
 import { z } from 'zod';
 
 export const guides = content({

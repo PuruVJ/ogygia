@@ -19,10 +19,11 @@ import { cdnPlugin, makeCdnCache, CSS_MODULE, css_inject_module } from './repl/c
 import { sveltePlugin } from './repl/svelte-plugin.ts';
 import { markdownPlugin, md_to_svelte, md_to_svelte_islands, MD_MODULE, configure_content } from './repl/markdown-plugin.ts';
 import { parse_config_markdown, parse_config, type ConfigNote } from './repl/repl-config.ts';
+import { snippet_macros, type MarkdownOptions } from '@ogygia/content/markdown';
 import { make_browser_host } from './repl/browser-host.ts';
 import { resolve_file } from './repl/resolve-file.ts';
 import { make_ogygia_server_module, make_ogygia_internal_module } from './repl/og-server.ts';
-import type { ReplDriver, DriverRegion, DriverCodecs, DriverManifests, DriverCsrSummary } from './repl/full-driver.ts';
+import type { ReplDriver, ReplMacros, DriverRegion, DriverCodecs, DriverManifests, DriverCsrSummary } from './repl/full-driver.ts';
 
 // The FULL ogygia compiler driver (complete macros + transportable manifests + csr legs). Loaded
 // lazily inside the `drivetest` handler — a static import would drag the whole driver graph onto the
@@ -461,7 +462,7 @@ function execute(files: Record<string, string>, entry: string, islandInfo?: Isla
 				// regions render inline, zero JS) from 'ogygia', og_html_region from 'ogygia/internal'.
 				// Everything else (content wrappers TabGroup/Tab/… — islands) falls back to a passthrough
 				// (children + optional label, stacked) so a `::: tabs` page shows its content, not a crash.
-				if (spec === 'ogygia' || spec.startsWith('ogygia/')) {
+				if (spec === 'ogygia' || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) {
 					const Passthrough = ($$renderer: { push: (s: string) => void }, props?: Record<string, unknown>) => {
 						if (props?.label) $$renderer.push(`<div class="repl-passthrough-label">${esc(String(props.label))}</div>`);
 						const kids = props?.children;
@@ -781,7 +782,7 @@ function config_source(files: Record<string, string>): string | null {
 	return files['vite.config.ts'] ?? files['vite.config.js'] ?? files['vite.config.mjs'] ?? null;
 }
 
-/** Configure the content pipeline from a workspace `vite.config.*`'s `ogygia({ content: { markdown } })`
+/** Configure the content pipeline from a workspace `vite.config.*`'s `content({ markdown })` plugin
  *  — the REPL user tunes the preview exactly as a real project does. Idempotent per config signature. */
 function apply_content_config(files: Record<string, string>): void {
 	const src = config_source(files);
@@ -795,6 +796,14 @@ function config_notes(files: Record<string, string>): ConfigNote[] {
 	return src ? parse_config(src).notes : [];
 }
 
+/** The content plugin's `import.meta.og.code` / `.md` macros, built with the workspace's markdown config
+ *  (as `content({ markdown })` registers them in a build). */
+function repl_macros(files: Record<string, string>): ReplMacros {
+	const src = config_source(files);
+	const markdown = (src ? parse_config_markdown(src) : null) as MarkdownOptions | null;
+	return snippet_macros(() => markdown);
+}
+
 /** Run the REAL module-macro passes (`import.meta.og.wire` + `.code`/`.md`) over the workspace BEFORE
  *  either the transform or the svelte compile sees it — exactly as a real build does (the compiler owns
  *  the passes; the REPL just calls them). `.code`/`.md` bake through the app's own Shiki/mdsvex config
@@ -803,8 +812,7 @@ async function macro_files(files: Record<string, string>): Promise<Record<string
 	// Only spin up the parser + run the passes when a macro marker is actually present anywhere.
 	if (!Object.values(files).some((s) => s.includes('import.meta.og.'))) return files;
 	await ensure_oxc(); // the macro passes parse with the oxc/WASM parser — install it before they run
-	const cfg_src = config_source(files);
-	const md_cfg = (cfg_src ? parse_config_markdown(cfg_src) : null) as Parameters<typeof run_browser_macros>[2];
+	const macros = repl_macros(files);
 	let changed = false;
 	const out: Record<string, string> = { ...files };
 	for (const name of Object.keys(files)) {
@@ -812,7 +820,7 @@ async function macro_files(files: Record<string, string>): Promise<Record<string
 		// Fast skip: only .svelte/.ts/.js hosts, and only when a macro marker is actually present.
 		if (!/\.(svelte|ts|js)$/.test(name) || !src.includes('import.meta.og.')) continue;
 		try {
-			const { code, touched } = await run_browser_macros(src, '/repl/' + name.replace(/^\/+/, ''), md_cfg);
+			const { code, touched } = await run_browser_macros(src, '/repl/' + name.replace(/^\/+/, ''), macros);
 			if (touched) {
 				out[name] = code;
 				changed = true;
@@ -994,11 +1002,7 @@ async function analyze(files: Record<string, string>, active: string): Promise<A
 			await ensure_oxc();
 			const driver = await get_repl_driver();
 			driver.install((id, code) => oxc_mod!.parseSync(id, code));
-			const md_for_driver = (() => {
-				const s = config_source(original_files);
-				return s ? parse_config_markdown(s) : null;
-			})();
-			const dr = await driver.analyze(original_files, md_for_driver, active);
+			const dr = await driver.analyze(original_files, repl_macros(original_files), active);
 			if (!dr.error && dr.ssr != null) {
 				real = true;
 				realCode = dr.ssr;
@@ -1124,7 +1128,7 @@ const SVELTE_EXTERNAL_ID = /^svelte(\/|$)/;
 // ogygia's own runtime (TabGroup/Tab for content tabs, app helpers, …) is EXTERNAL — the host page IS an
 // ogygia app, so the main thread hands the eval its OWN already-compiled ogygia modules (bundle_require).
 // Never CDN-fetch `ogygia` (the published npm build is a different version + won't recompile in the REPL).
-const OGYGIA_EXTERNAL_ID = /^ogygia(\/|$)/;
+const OGYGIA_EXTERNAL_ID = /^(ogygia|@ogygia\/[^/]+)(\/|$)/;
 // rolldown paints errors with ANSI color + a box-drawing source frame — strip both for the REPL readout.
 const ANSI = /\x1b\[[0-9;]*m/g;
 const BUILD_FAILED = /^Build failed with \d+ errors?:\s*/;
@@ -1151,11 +1155,7 @@ async function driver_render(
 	await ensure_oxc();
 	const driver = await get_repl_driver();
 	driver.install((id, code) => oxc_mod!.parseSync(id, code));
-	const md = (() => {
-		const s = config_source(files);
-		return s ? parse_config_markdown(s) : null;
-	})();
-	const dr = await driver.ssr_leg(files, md, entry); // SSR-only — the preview never needs client/csr legs
+	const dr = await driver.ssr_leg(files, repl_macros(files), entry); // SSR-only — the preview never needs client/csr legs
 	if (dr.error || dr.ssr == null || !dr.regions) return { ok: false, error: dr.error ?? 'no driver output' };
 	const regionByVpath = new Map(dr.regions.map((r) => [r.vpath, r]));
 	const cache = new Map<string, Record<string, unknown>>();
@@ -1189,7 +1189,7 @@ async function driver_render(
 			});
 		}
 		// Any other ogygia virtual (transportables/fn-manifest/…) → side-effect no-op in the preview.
-		if (spec.startsWith('virtual:ogygia/') || spec.startsWith('ogygia/')) return {};
+		if (spec.startsWith('virtual:ogygia/') || spec.startsWith('ogygia/') || spec.startsWith('@ogygia/')) return {};
 		// A workspace component (the region binding + wrapper import it by its `/repl/…` absolute path).
 		const key = spec.replace(/^\/repl\//, '').replace(/^\/+/, '');
 		const file = files[key] != null ? key : resolve_file(spec, files);
@@ -1351,8 +1351,7 @@ self.onmessage = (e: MessageEvent<InMsg>) => {
 			await ensure_oxc();
 			const driver = await get_repl_driver();
 			driver.install((id, code) => oxc_mod!.parseSync(id, code));
-			const md = (() => { const s = config_source(msg.files); return s ? parse_config_markdown(s) : null; })();
-			const result = await driver.analyze(msg.files, md, msg.entry);
+			const result = await driver.analyze(msg.files, repl_macros(msg.files), msg.entry);
 			self.postMessage({ id: msg.id, type: 'drivetest', result });
 		})().catch((e) => self.postMessage({ id: msg.id, type: 'drivetest', result: { error: e instanceof Error ? e.message : String(e), stack: e instanceof Error ? e.stack : undefined, ssr: null, client: null, csrTrue: null } }));
 		return;

@@ -9,24 +9,14 @@
  * WIPED the host's real wrapper registration — the cold build then failed to resolve
  * `virtual:ogygia/wrapper/<hash>.svelte` (client) or leaked it raw into the server bundle
  * (`ERR_UNSUPPORTED_ESM_URL_SCHEME: virtual:` at prerender).
+ *
+ * This file holds the compiler half (the server-island host legs). The markup-preprocessor half
+ * (content files only, never a `.svelte`) lives with the content plugin:
+ * packages/content/test/island-ownership.test.ts.
  */
-import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import fs from 'node:fs';
-import os from 'node:os';
+import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { ogygiaPreprocess } from '../src/content/markdown/index.js';
-import { islandBridge } from '../src/vite/island-bridge.js';
 import { transformHost } from '../src/compiler/region/transform.js';
-import { __set_build_cache_root } from '../src/build-cache.js';
-
-// The markup hook now consults the doc-level markup cache — isolate it, or a previous run's
-// entry short-circuits before the bridge is consulted.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'og-ownership-'));
-__set_build_cache_root(tmp);
-afterAll(() => {
-	__set_build_cache_root(undefined);
-	fs.rmSync(tmp, { recursive: true, force: true });
-});
 
 // A csr=false route host: a marked server island with a fallback snippet child.
 const ROUTE_HOST = `<script lang="ts">
@@ -44,46 +34,6 @@ const PLUGIN_OUTPUT = ROUTE_HOST.replace(
 	`import DeferredHole from './DeferredHole.svelte' with { render: 'deferred' };`,
 	`import DeferredHole from 'virtual:ogygia/client-binding-stub';`
 );
-
-const prev_transform = islandBridge.transform;
-afterEach(() => {
-	islandBridge.transform = prev_transform;
-});
-
-describe('island-transform ownership', () => {
-	it('the markup hook does NOT island-transform a .svelte (no bridge call, no phantom)', async () => {
-		const calls: string[] = [];
-		islandBridge.transform = (content, filename) => {
-			calls.push(filename);
-			return null;
-		};
-		const pp = ogygiaPreprocess({});
-		const out = await pp.markup!({
-			content: PLUGIN_OUTPUT,
-			filename: '/app/src/routes/demo/deferred/+page.svelte'
-		});
-		// Non-content: untouched (undefined = "no change"), and the bridge was never consulted —
-		// a bridge call here is exactly the phantom-registration path that wiped the wrapper.
-		expect(out).toBeUndefined();
-		expect(calls).toEqual([]);
-	});
-
-	it('the markup hook still island-transforms CONTENT files through the bridge', async () => {
-		const calls: string[] = [];
-		islandBridge.transform = (content, filename) => {
-			calls.push(filename);
-			return null; // no islands — markup continues with mdsvex output
-		};
-		const pp = ogygiaPreprocess({});
-		const out = await pp.markup!({
-			content: '# hello\n\nsome prose\n',
-			filename: '/app/src/content/docs/x/+doc.svx'
-		});
-		expect(out).toBeDefined(); // content compiled
-		expect(calls.length).toBe(1); // bridge consulted exactly once, for the content file
-		expect(calls[0]).toContain('+doc.svx');
-	});
-});
 
 describe('server-island host legs (the compiler contract the registry depends on)', () => {
 	const ctx = {

@@ -1,5 +1,5 @@
-// Unit coverage for the REPL's vite.config parser — extracting the safe `ogygia({ content: { markdown } })`
-// options and degrading gracefully on imports / unknowns / malformed input. Run: `node repl-config.test.ts`.
+// Unit coverage for the REPL's vite.config parser — extracting the safe `content({ markdown })` (or the
+// older `ogygia({ content: { markdown } })`) options and degrading gracefully on imports / unknowns / malformed input. Run: `node repl-config.test.ts`.
 import { parse_config_markdown, parse_config, extract_call_object } from './repl-config.ts';
 
 let pass = 0;
@@ -22,7 +22,7 @@ ok('extract: call with no object arg → null', extract_call_object('ogygia(foo)
 // ── parse_config_markdown ────────────────────────────────────────────────────────────────────────
 const full = `import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
-import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 import customTheme from './theme.json';
 export default { plugins: [ ogygia({
   content: { markdown: {
@@ -48,6 +48,16 @@ export default { plugins: [ ogygia({
 {
 	const c = parse_config_markdown(`ogygia({ content: { markdown: { code: { transformers: [diff_markers(), myCustom()] } } } })`);
 	ok('custom transformer dropped, diff kept', c && c.code?.transformers?.length === 1);
+}
+// the plugin shape: `ogygia({ plugins: [content({ markdown })] })`
+{
+	const c = parse_config_markdown(`import { content } from '@ogygia/content/vite';
+export default { plugins: [ ogygia({ router: false, plugins: [flags(), content({ markdown: { tabs: false, themes: { light: 'nord' } } })] }), sveltekit() ] };`);
+	ok('plugin shape: content({ markdown }) read', c && c.tabs === false && c.themes?.light === 'nord');
+	const n = parse_config(`ogygia({ plugins: [content({ markdown: { tabs: true } })] })`).notes;
+	ok('plugin shape: valid config → no notes', n.length === 0, JSON.stringify(n));
+	const n2 = parse_config(`ogygia({ plugins: [content({ markdown: { flurb: true } })] })`).notes;
+	ok('plugin shape: unknown markdown key → warn', n2.some((x) => x.level === 'warn' && /markdown\.flurb.*ignored/.test(x.message)));
 }
 // top-level `markdown` (not under content) also read
 {

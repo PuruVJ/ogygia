@@ -5,8 +5,8 @@
  * directly under it — category → page, no third level. A `dimensions()` wrap adds a version × locale
  * switcher (the default v2 · en corpus is rich; v1 / hi are thin, to demo the header dropdowns).
  */
-import { content } from 'ogygia/content';
-import { dimensions, outline, site } from 'ogygia/content';
+import { content } from '@ogygia/content';
+import { dimensions, outline, site } from '@ogygia/content';
 import * as v from 'valibot';
 import { openapi } from './openapi';
 

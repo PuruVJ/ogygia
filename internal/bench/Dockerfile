@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends unzip curl ca-c
 WORKDIR /repo
 
 COPY packages/ogygia /repo/packages/ogygia
+COPY packages/content /repo/packages/content
 COPY package.json pnpm-workspace.yaml /repo/
 COPY bench /repo/bench
 

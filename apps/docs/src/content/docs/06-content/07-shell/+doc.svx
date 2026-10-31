@@ -19,7 +19,7 @@ Use `DocsShell` when you want a docs layout that operates in one import, and `Bl
 
 ```svelte
 <script>
-	import { Frame } from 'ogygia/content';
+	import { Frame } from '@ogygia/content';
 	import { docs } from '$lib/site.server';   // in a csr=false layout, server-only is fine
 	import MyHeader from '$lib/MyHeader.svelte';
 </script>
@@ -35,9 +35,9 @@ The shells are **compositions of Frame and the public bricks**, not privileged c
 
 ```svelte [DocsShell]
 <script>
-	import DocsShell from 'ogygia/content/docs-shell';
-	import 'ogygia/content/theme.css';   // the design language (tokens + element styles)
-	import 'ogygia/content/shell.css';   // shell layout (header + sidebar + grid + mobile chrome)
+	import DocsShell from '@ogygia/content/docs-shell';
+	import '@ogygia/content/theme.css';   // the design language (tokens + element styles)
+	import '@ogygia/content/shell.css';   // shell layout (header + sidebar + grid + mobile chrome)
 	import { meta } from '$lib/site.remote';
 	let { children } = $props();
 
@@ -51,9 +51,9 @@ The shells are **compositions of Frame and the public bricks**, not privileged c
 
 ```svelte [BlogShell]
 <script>
-	import { BlogShell } from 'ogygia/content';
-	import 'ogygia/content/theme.css';
-	import 'ogygia/content/shell.css';
+	import { BlogShell } from '@ogygia/content';
+	import '@ogygia/content/theme.css';
+	import '@ogygia/content/shell.css';
 	let { children } = $props();
 </script>
 
@@ -80,12 +80,12 @@ They are separate imports. Thus you can keep the tokens and swap the layout, or 
 .og-sidebar { border-right: 1px dashed var(--og-line); }
 ```
 
-Alternate token themes live under `ogygia/content/themes/*`. Swap the import. Keep all else:
+Alternate token themes live under `@ogygia/content/themes/*`. Swap the import. Keep all else:
 
 ```svelte
 <script>
-	import 'ogygia/content/themes/thalassa.css';   // or alexandria, daidalos, nephele, …
-	import 'ogygia/content/shell.css';
+	import '@ogygia/content/themes/thalassa.css';   // or alexandria, daidalos, nephele, …
+	import '@ogygia/content/shell.css';
 </script>
 ```
 
@@ -108,7 +108,7 @@ The article layout operates with only a view. No shell is required:
 
 ```svelte
 <script>
-	import { Doc } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
 	import * as docs from '$lib/site.remote';
 
 	const view = await docs.page(slug);

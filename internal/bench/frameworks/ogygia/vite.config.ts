@@ -2,6 +2,7 @@ import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { ogygia } from 'ogygia/vite';
+import { content, preprocess, extensions } from '@ogygia/content/vite';
 import { defineConfig } from 'vite';
 
 // Islands in .md need ogygia's markdown preprocessor (runs after mdsvex) so `with { wake }`
@@ -9,7 +10,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [
 		ogygia({
-			content: { markdown: {} },
+			plugins: [content({ markdown: {} })],
 			// The benchmark is a single blog page that never navigates — measure the islands runtime
 			// only (apples-to-apples with Astro/Mochi, which ship no router). The SPA router is on by
 			// default; `false` tree-shakes it out.
@@ -17,8 +18,8 @@ export default defineConfig({
 		}),
 		sveltekit({
 			adapter: adapter({ strict: true }),
-			extensions: ogygia.extensions(),
-			preprocess: [vitePreprocess(), ...(await ogygia.preprocess())],
+			extensions: extensions(),
+			preprocess: [vitePreprocess(), ...preprocess()],
 			prerender: { entries: ['*', '/posts/small', '/posts/medium', '/posts/large'] },
 			compilerOptions: {
 				runes: ({ filename }) =>

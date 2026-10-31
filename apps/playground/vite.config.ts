@@ -1,6 +1,7 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { ogygia } from 'ogygia/vite';
 import { flags } from '@ogygia/flags/vite';
+import { content } from '@ogygia/content/vite';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -27,7 +28,10 @@ export default defineConfig({
 			// /as-region and /ts-registry fixtures are that shape; with this on, the build is the test.
 			barrels: true,
 			// Plugins (internal/notes/packages.md): every e2e request runs through the plugin stages.
-			plugins: [flags()],
+			// content: the markdown pipeline (stock defaults) so the `.svx` fixture behind
+			// e2e/content-css compiles — that check guards content-body scoped CSS shipping to a
+			// csr=false page.
+			plugins: [flags(), content({ markdown: {} })],
 			// The SSR profiler — configured ONLY here. Builds its UI islands + auto-mounts in
 			// ogygia.handle() (no profiler() hook). Secret from OGYGIA_PROFILER_SECRET env at runtime.
 			// (+ the background recorders, exercised by the hell page: a trap for any request over 400 ms,
@@ -35,9 +39,6 @@ export default defineConfig({
 			// serverTiming on in the built preview too: the hell page's own API routes then answer the
 			// profiler's nested-trace ask, so the waterfall shows "inside the upstream"
 			profiler: { trap: { over: 400, keep: 3 }, sample: { every: 20, window: 1000 }, serverTiming: true },
-			// Markdown content pipeline (stock defaults) so the `.svx` fixture behind e2e/content-css
-			// compiles — that check guards content-body scoped CSS shipping to a csr=false page.
-			content: { markdown: {} },
 			// DEVTOOLS event layer — OFF by default (so the suite + bundle-size snapshot stay honest and
 			// e2e/devtools.ts proves tree-shaking); flip on with OGYGIA_DEVTOOLS=1 to run the event-driven
 			// proof-of-value build. Env-gated, not always-on, precisely so the default build ships nothing.

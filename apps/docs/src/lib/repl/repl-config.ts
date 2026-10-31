@@ -1,6 +1,7 @@
 /**
- * Parse the `ogygia({ content: { markdown } })` options out of a workspace `vite.config.ts`, so a REPL
- * user configures the markdown preview exactly as a real ogygia project does. Only the SAFE, in-browser
+ * Parse the `ogygia({ plugins: [content({ markdown })] })` options out of a workspace `vite.config.ts`
+ * (the older `ogygia({ content: { markdown } })` spelling is read too), so a REPL user configures the
+ * markdown preview exactly as a real ogygia project does. Only the SAFE, in-browser
  * subset is applied (containers/tabs/heading-anchors/themes-by-name/diff+inline transformers); anything
  * that needs imports (a theme object, a custom transformer, loaders/router/regions) degrades to nothing
  * rather than misleading — the preset's vite.config comment says as much.
@@ -9,7 +10,19 @@
  * real functions, every OTHER free identifier (an imported theme, `sveltekit`, …) resolves to an inert
  * stub, so the eval can't touch anything or throw on an unknown import.
  */
-import { diff_markers, inline_markers } from 'ogygia/content/markdown';
+import { diff_markers, inline_markers } from '@ogygia/content/markdown';
+
+/** Tags the options a sandboxed `content({ … })` call (the `@ogygia/content/vite` plugin) was given. */
+const CONTENT_PLUGIN = Symbol('content-plugin');
+
+/** The content options of an evaluated `ogygia({…})` config: the `content({ … })` entry in `plugins`,
+ *  else the older top-level `content` key. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function content_options(cfg: any): any {
+	if (Array.isArray(cfg?.plugins))
+		for (const p of cfg.plugins) if (p && typeof p === 'object' && CONTENT_PLUGIN in p) return p[CONTENT_PLUGIN];
+	return cfg?.content;
+}
 
 /** The safe markdown options the REPL reads from a config (mirrors ogygia's MarkdownOptions subset). */
 export interface ReplMarkdownConfig {
@@ -152,15 +165,17 @@ function diagnose(cfg: any): ConfigNote[] {
 	if (!cfg || typeof cfg !== 'object') return notes;
 	try {
 		// Top-level ogygia keys other than `content` are build-time and don't affect a single-page preview.
+		// (`plugins` carries the `content({ … })` entry, read below; its other plugins are build-time.)
 		for (const k of Object.keys(cfg)) {
-			if (k === 'content' || k === 'markdown') continue;
+			if (k === 'content' || k === 'markdown' || k === 'plugins') continue;
 			notes.push({
 				level: 'info',
 				message: `ogygia({ ${k} }) doesn't affect the preview.`,
 				hint: `The preview reads only content.markdown. ${k} (loaders, router, regions, images, …) runs in a real build.`
 			});
 		}
-		const content = cfg.content && typeof cfg.content === 'object' ? cfg.content : undefined;
+		const opts = content_options(cfg);
+		const content = opts && typeof opts === 'object' ? opts : undefined;
 		if (content) {
 			for (const k of Object.keys(content)) {
 				if (k === 'markdown') continue;
@@ -238,7 +253,8 @@ export function parse_config(configSrc: string): { markdown: ReplMarkdownConfig 
 	if (!objSrc) return { markdown: null, notes: [] };
 	const stub = (): undefined => undefined;
 	const helpers: Record<string, unknown> = {
-		diff_markers, inline_markers, diffMarkers: diff_markers, inlineMarkers: inline_markers
+		diff_markers, inline_markers, diffMarkers: diff_markers, inlineMarkers: inline_markers,
+		content: (options?: unknown) => ({ [CONTENT_PLUGIN]: options ?? {} })
 	};
 	const sandbox = new Proxy(helpers, {
 		has: () => true, // trap EVERY free-variable lookup so an unknown import can't reach the real scope
@@ -264,7 +280,7 @@ export function parse_config(configSrc: string): { markdown: ReplMarkdownConfig 
 	// Reads below can still throw lazily (a getter / Proxy). Any of it → defaults, plus a clear note.
 	try {
 		const notes = diagnose(cfg);
-		const md = cfg?.content?.markdown ?? cfg?.markdown;
+		const md = content_options(cfg)?.markdown ?? cfg?.markdown;
 		const markdown = md && typeof md === 'object' ? sanitize(md) : null;
 		return { markdown, notes };
 	} catch {

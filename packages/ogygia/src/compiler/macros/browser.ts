@@ -1,9 +1,9 @@
 /**
  * The BROWSER-safe subset of the module-macro pipeline ({@link ./pipeline.ts}), for a REPL that runs the
- * real compiler in-browser (the Observatory). It runs `import.meta.og.wire` and `import.meta.og.code` /
- * `.md` — the same passes, over the same parser, with the same Shiki/mdsvex renderers as a real build.
+ * real compiler in-browser (the Observatory) — the same passes, over the same parser, as a real build.
  *
- * It runs `import.meta.og.wire`, `.$` / `.store`, and `.code` / `.md`. It deliberately OMITS only
+ * It runs `import.meta.og.wire`, `.$` / `.store`, and the plugins' macros it is handed (content's `.code`
+ * / `.md`, with the same Shiki/mdsvex renderers as a build). It deliberately OMITS only
  * `bake` — which runs `fn` at build via a mini rolldown bundle + `node:url` module eval (Node-only) —
  * so `run_module_macros` (which statically imports the node-only `bake` pass) stays out of the browser
  * bundle; this is the narrow, node-free slice the REPL needs. Keep the pass order in sync with pipeline.ts.
@@ -16,22 +16,20 @@
 import { rewrite_wire } from './wire.js';
 import { rewrite_dollar } from './dollar.js';
 import { rewrite_store } from './store.js';
-import { rewrite_code } from './code.js';
-import { render_snippet } from '../../content/markdown/snippet.js';
-import { render_markdown } from '../../content/markdown/render-md.js';
-import type { MarkdownOptions } from '../../content/markdown/index.js';
+import type { PluginMacro } from './pipeline.js';
 
 const MARKUP_EXTS = ['.svelte'] as const;
 
 /**
- * Run the browser-safe macro passes over one module. `source` is the current text; `markdownConfig` is
- * the app's markdown config (drives `.code`/`.md` themes + transformers), or `null`. Returns the
- * rewritten code and whether anything changed — the caller invalidates its own sourcemap on `touched`.
+ * Run the browser-safe macro passes over one module. `source` is the current text; `macros` are the
+ * plugins' browser-safe macros (content's `code` / `md`, built with the app's markdown config).
+ * Returns the rewritten code and whether anything changed — the caller invalidates its own sourcemap
+ * on `touched`.
  */
 export async function run_browser_macros(
 	source: string,
 	id: string,
-	markdownConfig: MarkdownOptions | null
+	macros: readonly PluginMacro[] = []
 ): Promise<{ code: string; touched: boolean }> {
 	let out = source;
 	let touched = false;
@@ -67,14 +65,11 @@ export async function run_browser_macros(
 		}
 	}
 
-	// `import.meta.og.code(src, lang, meta?)` / `.md(text)` → an inline pure-HTML region baked through
-	// the app's own Shiki fence + mdsvex pipeline, inlined as `og_html_region("…")`. Async (Shiki).
-	if (out.includes('import.meta.og.code') || out.includes('import.meta.og.md')) {
-		const rewritten = await rewrite_code(out, id, MARKUP_EXTS, async (call) =>
-			call.kind === 'md'
-				? render_markdown(markdownConfig, call.source)
-				: (await render_snippet(markdownConfig, call.source, call.lang, call.meta)).html
-		);
+	// The plugins' macros (content's `code` / `md`: an inline pure-HTML region baked through the app's
+	// own Shiki fence + mdsvex pipeline). Same order as the build's pipeline.
+	for (const macro of macros) {
+		if (!out.includes('import.meta.og.' + macro.name)) continue;
+		const rewritten = await macro.handler(out, { id, rel: id, root: '/', markupExts: MARKUP_EXTS });
 		if (rewritten !== out) {
 			out = rewritten;
 			touched = true;

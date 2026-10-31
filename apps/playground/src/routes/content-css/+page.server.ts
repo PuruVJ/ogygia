@@ -5,7 +5,7 @@
 //
 // The collection lives in this server-only module (`+page.server.ts`), so its eager glob never drags
 // the corpus into a client bundle — the exact stress the fix must survive.
-import { content, markdown } from 'ogygia/content';
+import { content, markdown } from '@ogygia/content';
 
 const docs = content({
 	loader: markdown(import.meta.glob('../../content/content-css/**/+doc.svx', { eager: true }))

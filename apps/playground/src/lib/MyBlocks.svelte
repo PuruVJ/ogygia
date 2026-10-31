@@ -3,7 +3,7 @@
 	// region nodes (server-side, where the signing key lives); this just renders them through <Region>
 	// and recurses into children. Copy it, rename it, tweak the markup — it's yours.
 	import { Region } from 'ogygia';
-	import { blocks, type ResolvedBlockNode } from 'ogygia/content';
+	import { blocks, type ResolvedBlockNode } from '@ogygia/content';
 	import Self from './MyBlocks.svelte';
 
 	let {

@@ -14,17 +14,19 @@ import { rewrite_wire } from './wire.js';
 import { rewrite_dollar } from './dollar.js';
 import { rewrite_source } from './source.js';
 import { rewrite_store, auto_brand_stores } from './store.js';
-import { rewrite_code } from './code.js';
 // `bake` is imported LAZILY (only inside the marker guard below) — its two dynamic imports
 // (`import('rolldown')` + a `pathToFileURL(...)` module eval) are Node-only, and keeping bake.js out of
 // the STATIC graph is what lets the whole driver bundle into a browser worker (the Observatory) without
 // Vite's dep-optimizer double-declaring `__vite__injectQuery`. A build that uses no `import.meta.og.bake`
 // never loads bake.js (or rolldown) at all.
 import type { AliasEntry } from './bake.js';
-import { render_snippet } from '../../content/markdown/snippet.js';
-import { render_markdown } from '../../content/markdown/render-md.js';
-import type { MarkdownOptions } from '../../content/markdown/index.js';
 import type { Profiler } from '../driver.js';
+
+/** A plugin's `import.meta.og.<name>` macro (registered with `b.macro`). */
+export interface PluginMacro {
+	name: string;
+	handler: (code: string, m: { id: string; rel: string; root: string; markupExts: readonly string[] }) => string | Promise<string>;
+}
 
 // ── regexes
 const EXPORT_CONST_RE = /export\s+const/;
@@ -35,12 +37,12 @@ export interface MacroPipelineCtx {
 	root: string;
 	/** Resolved Vite aliases the `bake` pass hands to its mini-bundler. */
 	resolveAlias: unknown[];
-	/** The app's markdown config, or `null` when content is off. */
-	markdownConfig: MarkdownOptions | null;
 	/** ogygia's own package root — auto-brand skips ogygia source. */
 	pkgRoot: string;
 	/** Filled with every `import.meta.og.$` hoist (tag → factory source) for the fn-manifest emit. */
 	dollarHoists: Map<string, string>;
+	/** The plugins' macros, in plugin order (after core's, before `bake`). */
+	macros?: readonly PluginMacro[];
 }
 
 /**
@@ -116,21 +118,19 @@ export async function run_module_macros(
 		}
 	}
 
-	// `import.meta.og.code(source, lang, meta?)` — a highlighted snippet, baked to a static
-	// region through the app's own Shiki fence pipeline (same themes/transformers/meta parsers)
-	// and inlined as `og_html_region("…")`. Async (Shiki). Runs before the island transform so
-	// the injected `og_html_region` import + region value flow through normally. The renderer is
-	// dynamically imported so a build without any `code()` call never loads Shiki here.
-	if (out.includes('import.meta.og.code') || out.includes('import.meta.og.md')) {
-		const md_cfg = ctx.markdownConfig;
-		const rewritten = await rewrite_code(out, id, CONSTRUCT_MARKUP_EXTS, async (call) => {
-			if (call.kind === 'md') return render_markdown(md_cfg, call.source);
-			const region = await render_snippet(md_cfg, call.source, call.lang, call.meta);
-			return region.html;
-		});
-		if (rewritten !== out) {
-			out = rewritten;
-			touched = true;
+	// The PLUGINS' macros (`b.macro`: content's `code` / `md` / `loader` / `regions`), in plugin
+	// order — each called only when its marker is present. Before the island transform, so whatever a
+	// macro injects (a region value, region imports) flows through it like hand-written code.
+	if (ctx.macros?.length) {
+		let rel: string | undefined;
+		for (const macro of ctx.macros) {
+			if (!out.includes('import.meta.og.' + macro.name)) continue;
+			rel ??= path.relative(ctx.root, id.split('?')[0]).split(path.sep).join('/');
+			const rewritten = await macro.handler(out, { id: id.split('?')[0], rel, root: ctx.root, markupExts: CONSTRUCT_MARKUP_EXTS });
+			if (rewritten !== out) {
+				out = rewritten;
+				touched = true;
+			}
 		}
 	}
 

@@ -230,20 +230,24 @@ On a **deferred hole**, `maxAge: 60` means 60 **seconds**: it becomes an HTTP `m
 
 ### `content`
 
-Set on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` / `.md` content collections. See [Content collections](/docs/content/collections).
+Set on the markdown pipeline (mdsvex + Shiki + heading collection) for `.svx` / `.md` content collections, with the `content()` plugin from `@ogygia/content/vite`. See [Content collections](/docs/content/collections).
 
 ```ts
-ogygia({ content: { markdown: {} } })
+import { content } from '@ogygia/content/vite';
+
+ogygia({ plugins: [content({ markdown: {} })] })
 ```
 
-**`content.presets`** are named markdown variants, with the same grammar as the presets of each subsystem. A [loader macro](/docs/macros/loaders) opts a full collection in with `{ preset: 'name' }`. The files of that collection compile through the config of the preset, merged over `content.markdown` (per setting key). Under the hood, each opted-in file is its own module *variant*. Thus the same file used by another collection (under another preset, or none) renders independently. There is nothing to conflict.
+**`presets`** are named markdown variants, with the same grammar as the presets of each subsystem. A [loader macro](/docs/macros/loaders) opts a full collection in with `{ preset: 'name' }`. The files of that collection compile through the config of the preset, merged over `markdown` (per setting key). Under the hood, each opted-in file is its own module *variant*. Thus the same file used by another collection (under another preset, or none) renders independently. There is nothing to conflict.
 
 ```ts
 ogygia({
-  content: {
-    markdown: { overrides: true },                      // the defaults
-    presets: { plain: { markdown: { overrides: false } } }  // a named variant
-  }
+  plugins: [
+    content({
+      markdown: { overrides: true },                      // the defaults
+      presets: { plain: { markdown: { overrides: false } } }  // a named variant
+    })
+  ]
 })
 ```
 
@@ -331,10 +335,10 @@ Island-safe replacements for `$app/navigation` (a csr=false page has no Kit clie
 
 Prefer these over `$app/navigation` inside islands. See [SPA router](/docs/app/spa-router).
 
-## `ogygia/content`
+## `@ogygia/content`
 
 ```ts
-import { content, markdown, json, blocks, glob, mapRaw } from 'ogygia/content';
+import { content, markdown, json, blocks, glob, mapRaw } from '@ogygia/content';
 ```
 
 | Export | What it is |
@@ -343,6 +347,6 @@ import { content, markdown, json, blocks, glob, mapRaw } from 'ogygia/content';
 | `markdown` · `json` · `blocks` | Source builders: `content({ loader: markdown(import.meta.glob(…)) })`. `markdown` provides `meta.headings`. |
 | `blocks.resolve(tree, registry)` | Server-side helper: turns a block tree that you hold into region nodes, for a no-collection recomposer recipe. See [Blocks](/docs/content/blocks). |
 | `glob` · `mapRaw` · `defineSource` | Source primitives to build custom loaders (a CMS, an API). See [Content collections](/docs/content/collections). |
-| `parseSchema` | Lower-level helper. `parseFrontmatter` lives on `ogygia/content/markdown`. |
+| `parseSchema` | Lower-level helper. `parseFrontmatter` lives on `@ogygia/content/markdown`. |
 
 An entry is `{ id, data, meta, body, rel, backlinks }`: `data` (schema output), `meta` (source-derived, for example `{ headings }`), `body` (a held region). Types: `Entry`, `ContentEntry`, `ContentHandle`, `Source`, `Heading`, `SchemaLike`.

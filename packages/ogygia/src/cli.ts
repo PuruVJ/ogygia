@@ -32,7 +32,8 @@ import {
 const JSON_INDENT_RE = /\n(\t| +)/;
 const TRAILING_LFS_RE = /\n*$/;
 const BACKSLASH_G = /\\/g;
-const CONTENT_SHELL_IMPORT_RE = /from ['"]ogygia\/content(\/docs-shell)?['"]/;
+// (the unscoped spelling is a layout an older CLI wrote — still ours)
+const CONTENT_SHELL_IMPORT_RE = /from ['"]@?ogygia\/content(\/docs-shell)?['"]/;
 
 const require = createRequire(import.meta.url);
 // This CLI ships inside `ogygia`, so our own version IS the version to pin the user's dependency to.
@@ -186,10 +187,13 @@ function preflight(): Preflight {
 	return { pkg, pkgRaw, viteConfig, ext };
 }
 
-/** Add `ogygia@^version` to dependencies (idempotent). */
-function addOgygiaDep(pf: Preflight): void {
-	if (!pf.pkg.dependencies?.['ogygia']) {
-		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}), ogygia: `^${version}` };
+/** Add `ogygia@^version` (and `@ogygia/content@^version` for markdown) to dependencies (idempotent). */
+function addOgygiaDep(pf: Preflight, markdown: boolean): void {
+	const wanted = markdown ? ['ogygia', '@ogygia/content'] : ['ogygia'];
+	const missing = wanted.filter((name) => !pf.pkg.dependencies?.[name]);
+	if (missing.length) {
+		pf.pkg.dependencies = { ...(pf.pkg.dependencies ?? {}) };
+		for (const name of missing) pf.pkg.dependencies[name] = `^${version}`;
 		const indent = JSON_INDENT_RE.exec(pf.pkgRaw)?.[1] ?? '\t';
 		saveFile(cwd, 'package.json', JSON.stringify(pf.pkg, null, indent) + '\n');
 	}
@@ -212,25 +216,25 @@ const svFileApi = {
 function wireSvelteConfig(asyncCompiler: boolean): void {
 	svelteConfig.edit({ sv: svFileApi, cwd }, ({ ast, js, property, override }) => {
 		js.imports.addNamed(ast, { from: '@sveltejs/vite-plugin-svelte', imports: ['vitePreprocess'] });
-		js.imports.addNamed(ast, { from: 'ogygia/vite', imports: ['ogygia'] });
+		js.imports.addNamed(ast, { from: '@ogygia/content/vite', imports: ['preprocess', 'extensions'] });
 
-		// extensions — create `ogygia.extensions()` if absent; if an array is already there, spread ours in.
-		const extFallback = js.common.parseExpression('ogygia.extensions()');
+		// extensions — create `extensions()` if absent; if an array is already there, spread ours in.
+		const extFallback = js.common.parseExpression('extensions()');
 		const ext = property('extensions', { fallback: extFallback });
 		if (ext !== extFallback && ext.type === 'ArrayExpression') {
-			ext.elements.push(js.common.createSpread(js.common.parseExpression('ogygia.extensions()')));
+			ext.elements.push(js.common.createSpread(js.common.parseExpression('extensions()')));
 		}
 
-		// preprocess — must include `...ogygia.preprocess()`. Merge into an array; wrap a lone value.
-		const ppFallback = js.common.parseExpression('[vitePreprocess(), ...ogygia.preprocess()]');
+		// preprocess — must include `...preprocess()`. Merge into an array; wrap a lone value.
+		const ppFallback = js.common.parseExpression('[vitePreprocess(), ...preprocess()]');
 		const pp = property('preprocess', { fallback: ppFallback });
 		if (pp !== ppFallback) {
-			const spread = js.common.createSpread(js.common.parseExpression('ogygia.preprocess()'));
+			const spread = js.common.createSpread(js.common.parseExpression('preprocess()'));
 			if (pp.type === 'ArrayExpression') {
 				pp.elements.push(spread);
 			} else {
-				// `[ <existing>, ...ogygia.preprocess() ]` — parse a well-formed array, drop in the existing.
-				const arr = js.common.parseExpression('[0, ...ogygia.preprocess()]') as AnyNode;
+				// `[ <existing>, ...preprocess() ]` — parse a well-formed array, drop in the existing.
+				const arr = js.common.parseExpression('[0, ...preprocess()]') as AnyNode;
 				arr.elements[0] = pp;
 				override({ preprocess: arr });
 			}
@@ -256,8 +260,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	const { viteConfig, ext } = pf;
 
 	// 1. Dependency — pinned to this CLI's own (matching) version.
-	addOgygiaDep(pf);
+	addOgygiaDep(pf, markdown);
 	stdout.write(`  ${ok('✓')} dependency ${dim(`ogygia@^${version}`)}\n`);
+	if (markdown) stdout.write(`  ${ok('✓')} dependency ${dim(`@ogygia/content@^${version}`)}\n`);
 
 	// 2. vite.config — the ogygia() plugin BEFORE sveltekit() (mode: 'prepend'). Compiler/preprocess
 	//    options do NOT go here — passing args to `sveltekit()` silently drops svelte.config settings
@@ -266,8 +271,9 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 		viteConfig,
 		transforms.script(({ ast, js }) => {
 			js.imports.addNamed(ast, { from: 'ogygia/vite', imports: ['ogygia'] });
+			if (markdown) js.imports.addNamed(ast, { from: '@ogygia/content/vite', imports: ['content'] });
 			js.vite.addPlugin(ast, {
-				code: markdown ? 'ogygia({ content: { markdown: {} } })' : 'ogygia()',
+				code: markdown ? 'ogygia({ plugins: [content({ markdown: {} })] })' : 'ogygia()',
 				mode: 'prepend'
 			});
 		})
@@ -346,14 +352,18 @@ function wireOgygia(pf: Preflight, markdown: boolean, asyncCompiler = false): vo
 	});
 
 	// 5. Ambient types — one reference line so `svelte-check` / `tsc` resolve the `virtual:ogygia/*`
-	//    modules the shipped source imports. TS projects only; never clobber an existing file.
+	//    modules the shipped source imports (and content's `import.meta.og.*` macros when markdown is
+	//    on). TS projects only; never clobber an existing file.
 	if (ext === 'ts') {
-		editFile('src/ogygia.d.ts', (c) =>
-			c.includes('ogygia/types')
-				? c
-				: (c.trim() ? c.replace(TRAILING_LFS_RE, '\n\n') : '') +
-					'/// <reference types="ogygia/types" />\n'
-		);
+		const refs = ['ogygia/types', ...(markdown ? ['@ogygia/content/types'] : [])];
+		editFile('src/ogygia.d.ts', (c) => {
+			const missing = refs.filter((r) => !c.includes(`"${r}"`));
+			if (!missing.length) return c;
+			return (
+				(c.trim() ? c.replace(TRAILING_LFS_RE, '\n\n') : '') +
+				missing.map((r) => `/// <reference types="${r}" />\n`).join('')
+			);
+		});
 		stdout.write(`  ${ok('✓')} src/ogygia.d.ts ${dim('(types)')}\n`);
 	}
 }
@@ -510,7 +520,7 @@ async function site_init(): Promise<void> {
 	// The site — nav, doc resolver, search, sitemap/llms/raw, prev/next. Never clobbered without --force.
 	place(
 		'src/lib/docs.ts',
-		`import { content, outline, site } from 'ogygia/content';
+		`import { content, outline, site } from '@ogygia/content';
 
 // A docs collection: every file under \`src/content/docs\` becomes a page. Its id is the path below
 // \`content/docs\` without the extension, so \`guides/deploy.svx\` is served at \`/guides/deploy\`.
@@ -582,7 +592,7 @@ export const entries = docs.entries;
 		rd('[...slug]/+page.svelte'),
 		`<script lang="ts">
 	import { page } from '$app/state';
-	import { Doc } from 'ogygia/content';
+	import { Doc } from '@ogygia/content';
 	import { docs } from '$lib/docs';
 
 	// csr=false: the body renders in this route's SSR pass, so islands inside the .svx hydrate.
@@ -643,11 +653,11 @@ export const prerender = true;
 	//  · a DIFFERENT layout you wrote  → never clobber without opt-in: `--force`, or a "yes" at the
 	//    interactive prompt. `-y` (accept safe defaults) does NOT clobber — it aborts with guidance.
 	const layoutBody = `<script lang="ts">
-	import DocsShell from 'ogygia/content/docs-shell';
+	import DocsShell from '@ogygia/content/docs-shell';
 	// Styling is opt-in — import the stock look here, or delete these two lines and bring your own
 	// CSS against the \`.og-*\` hooks.
-	import 'ogygia/content/theme.css';
-	import 'ogygia/content/shell.css';
+	import '@ogygia/content/theme.css';
+	import '@ogygia/content/shell.css';
 	import { docs } from '$lib/docs';
 
 	let { children } = $props();
@@ -737,7 +747,7 @@ export const load = async ({ url }) => {
 	place(
 		rd('search/+page.svelte'),
 		`<script lang="ts">
-	import { SearchPage } from 'ogygia/content';
+	import { SearchPage } from '@ogygia/content';
 	let { data } = $props();
 </script>
 

@@ -11,6 +11,7 @@
 		"test": "vitest run"
 	},
 	"devDependencies": {
+		"@ogygia/content": "workspace:*",
 		"@shikijs/twoslash": "3.23.0",
 		"@sveltejs/adapter-vercel": "^6.3.4",
 		"@sveltejs/kit": "^2.70.2",

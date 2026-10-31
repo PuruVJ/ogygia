@@ -5,12 +5,10 @@ import { isMainThread } from 'node:worker_threads';
 import { loadEnv, type Plugin, type Rolldown, type ViteDevServer } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import { configure_build_cache } from '../build-cache.js';
-import { islandBridge, content_css_key } from './island-bridge.js';
+import { content_css_key } from '../plugin/utils.js';
 import { island_sourcemaps_plugin } from './sourcemaps.js';
 import { server_sourcemaps_plugin } from './server-sourcemaps.js';
 import { install_dev_client_maps, install_dev_maps, install_dev_page_keys } from './dev-maps.js';
-import { content as contentHmrPlugin, type ContentPluginOptions } from '../content/vite/plugin.js';
-import { ogygiaPresetPreprocess } from '../content/markdown/index.js';
 import {
 	is_island_path,
 	normalize_import_keys,
@@ -37,21 +35,14 @@ export type { ImportKeys } from '../compiler/region/transform.js';
 export { debarrel } from '../compiler/debarrel/plugin.js';
 // the BUILD side of a plugin (design: internal/notes/packages.md, plugin API v2)
 export { definePlugin } from './plugin-api.js';
-export type { OgygiaPlugin, BuildContext } from './plugin-api.js';
+export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupIslands } from './plugin-api.js';
 export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.js';
-export type {
-	OgygiaPreset,
-	OgygiaRateLimit,
-	RegionsOptions,
-	ContentPreset,
-	OgygiaOptions
-} from './options.js';
-import { check_plugins, resolve_plugins } from './plugin-api.js';
+export type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.js';
+import { check_plugins, plugin_vite_plugins, resolve_plugins, type ResolvedPlugins } from './plugin-api.js';
 import type { ServerRealm } from '../compiler/link/caps.js';
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
-	validate_content_presets,
 	resolve_options
 } from './options.js';
 import {
@@ -166,13 +157,7 @@ import {
 	RUNTIME_HASH
 } from './paths.js';
 
-import type {
-	OgygiaPreset,
-	OgygiaRateLimit,
-	RegionsOptions,
-	ContentPreset,
-	OgygiaOptions
-} from './options.js';
+import type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.js';
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;
@@ -218,6 +203,8 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	let server_plugins: ServerRealm[] = [];
 	let route_options: string[] = [];
 	let foreign_hydrate = false;
+	let macros: ResolvedPlugins['macros'] = [];
+	let markup: ResolvedPlugins['markup'] = [];
 	const import_keys = normalize_import_keys(options.importKeys);
 	// `ogygia({ profiler })` — the profiler is configured ONLY here. Normalized to a config object (or
 	// null when off) and baked into `virtual:ogygia/profiler-config`; `ogygia.handle()` reads it and
@@ -254,19 +241,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 			dirs: [real_posix(PROFILER_UI_DIR)],
 			files: [real_posix(PROFILER_ROUTER_MODULE)]
 		});
-	}
-
-	// Publish the markdown config so a value-free `markdown()` in the svelte config reads it — all
-	// content/markdown config stays here in the one plugin. `standalone` re-invokes this factory for
-	// its throwaway client build; don't let that clobber the real config with `null`.
-	if (!standalone && options.content?.markdown) {
-		islandBridge.markdownConfig = options.content.markdown as Record<string, unknown>;
-	}
-	// Content presets — validated (closed vocabulary, non-empty, base required) and published for the
-	// loader macros (name check at the use site) + the preprocessor (merged config per variant).
-	if (!standalone && options.content?.presets) {
-		validate_content_presets(options.content.presets, !!options.content?.markdown);
-		islandBridge.contentPresets = options.content.presets as typeof islandBridge.contentPresets;
 	}
 
 	// Router / rate-limit / session / ttl / continuity / server-delta → the flat config (pure derivation).
@@ -414,20 +388,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 		});
 	};
 
-	// Preprocessor bridge: `.svx` / `.md` islands are rewritten by a preprocessor (composed into
-	// `markdown()`) that runs AFTER mdsvex, then handed back to this plugin's registry — the driver's
-	// `transform_content_island` does the transform + registration.
-	//
-	// `islandBridge` is a MODULE singleton, but Kit evaluates the Vite config more than once (a second,
-	// throwaway plugin instance for its SSR environment). If the factory body claimed the bridge, the
-	// LAST instance created would win — even one whose `configResolved` never runs, leaving `root`
-	// undefined and every content-island transform crashing on `path.join(root, …)`. So the bridge is
-	// claimed in `configResolved` instead: only an instance Vite actually configures (root set) owns it.
-	const claim_island_bridge = () => {
-		islandBridge.transform = (source: string, filename: string) =>
-			compiler.transform_content_island(source, filename);
-	};
-
 	const invalidate_module_id = (server: ViteDevServer, id: string) => {
 		const mod = server.moduleGraph.getModuleById(id);
 		if (mod) server.moduleGraph.invalidateModule(mod);
@@ -465,9 +425,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					})
 				]
 			: []),
-		// Content-collection dev HMR (full reload when a `src/content` file changes). Inert when the
-		// app doesn't use content collections. Folded in so `ogygia()` is the only plugin to add.
-		contentHmrPlugin(options.content),
+		// The plugins' own Vite plugins (`vite` on a plugin: content's dev reload and pre-transforms),
+		// ahead of ogygia's own, so `ogygia()` stays the only plugin an app adds.
+		...plugin_vite_plugins(app_plugins),
 		{
 			name: 'ogygia',
 			enforce: 'pre',
@@ -671,8 +631,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// node_modules/.ogygia — point it before anything derives.
 				configure_build_cache(root);
 				libDir = path.join(root, 'src', 'lib');
-				// Claim the content-island preprocessor bridge for THIS (configured) instance — root is set.
-				claim_island_bridge();
 				is_dev = config.command === 'serve';
 				is_build = config.command === 'build';
 				is_ssr = !!config.build?.ssr;
@@ -715,7 +673,14 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					resolve_kit_paths(root));
 
 				// PLUGINS: their realms, found by name, and their `build` hooks (now that root + mode exist)
-				({ servers: server_plugins, route_options, foreign_hydrate } = resolve_plugins(app_plugins, root, is_dev));
+				// (`b.markup()` hands back THIS configured instance's island transform: Kit evaluates the Vite
+				// config more than once, and only an instance Vite actually configures has a root)
+				({ servers: server_plugins, route_options, foreign_hydrate, macros, markup } = resolve_plugins(
+					app_plugins,
+					root,
+					is_dev,
+					(source, filename) => compiler.transform_content_island(source, filename)
+				));
 
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
@@ -737,7 +702,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						presets,
 						import_keys,
 						resolve_alias,
-						markdown_config: islandBridge.markdownConfig ?? null,
+						macros,
 						// (the id prefix, not the native path: every consumer `startsWith`s a module id)
 						pkg_root: PKG_ROOT_ID,
 						build_secret,
@@ -755,8 +720,6 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						client_binding_stub_file: CLIENT_BINDING_STUB_FILE,
 						app_shims: APP_SHIMS,
 						is_build,
-						content_presets:
-							(islandBridge.contentPresets as Record<string, unknown> | undefined) ?? null,
 						devtools: devtools_effective
 					})
 				);
@@ -817,20 +780,20 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 				// to emit chunks; the SSR build needs them for the server manifest. Kit builds SSR FIRST,
 				// so if we only scanned in the client leg the SSR manifest would miss `.svx`/`.md` SERVER
 				// islands (defer / deferred regions) and their signed endpoint would 403. `prescan` reads
-				// `.svelte`/`.ts`; `islandBridge.scan` (set by a preprocessor package like ogygia/content)
+				// `.svelte`/`.ts`; each markup source's `scan` (`b.markup()`: content's markdown)
 				// contributes islands from markdown, which becomes Svelte only after that preprocessor.
 				// Discover content (`.svx`/`.md`) islands up front in DEV too, not only build. A server
 				// (`render: deferred`) island in a content file is registered lazily when its page SSRs —
 				// but its signed endpoint is a SEPARATE request that imports the server manifest, and if
 				// the island hasn't registered yet the manifest lacks its id → 403 (NOT_IN_MANIFEST). That
 				// made content deferred holes flaky in dev (they worked only when the page-SSR registration
-				// happened to win the race). `islandBridge.scan` walks the markdown corpus and registers
+				// happened to win the race). A markup `scan` walks the markdown corpus and registers
 				// every island before the first request, so the manifest is complete when any endpoint is
 				// hit. Idempotent via `content_scanned`; a no-op for apps without a content preprocessor.
 				if (!content_scanned) {
 					content_scanned = true;
 					compiler.prescan();
-					await islandBridge.scan?.({ root, readFile });
+					for (const source of markup) await source.scan?.({ root, readFile });
 				}
 
 				if (is_build && !server_leg) {
@@ -959,9 +922,10 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					// no chunk, no corpus in the client graph. Region.svelte links it via the handoff
 					// (writeBundle maps content_css_key → the emitted `.css` by referenceId).
 					content_css_refs.clear();
-					if (islandBridge.contentStyleSources.size) {
+					const styles = markup.flatMap((m) => (m.styles ? [...m.styles] : []));
+					if (styles.length) {
 						const { compile } = await import('svelte/compiler');
-						for (const [abs, source] of islandBridge.contentStyleSources) {
+						for (const [abs, source] of styles) {
 							try {
 								const { css } = compile(source, {
 									filename: abs,
@@ -1621,40 +1585,9 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	];
 }
 
-/**
- * ogygia's svelte preprocessor. Spread into the svelte config's `preprocess`:
- *
- * ```js
- * extensions: ogygia.extensions(),
- * preprocess: [vitePreprocess(), ...ogygia.preprocess()],
- * ```
- *
- * Synchronous (no `await`) — returns the markdown preprocessor when `ogygia({ content: { markdown } })`
- * is set, otherwise an empty array. mdsvex (an optional peer) loads lazily on first use, so this is
- * safe to import and call even without it installed.
- *
- * `ogygia({ content: { markdown } })` must appear earlier in the plugins array so its config is
- * registered before this reads it (it does, being before `sveltekit()`).
- */
+// (the svelte config's markdown preprocessor and extensions — formerly `ogygia.preprocess()` /
+// `ogygia.extensions()` — belong to the content plugin: `@ogygia/content/vite`)
 // NOTE(deferred-types, 2026-09-01): a preprocessor that rewrote `render:'deferred'` imports to
 // type the reserved `ogygiaFallback` snippet was built and REVERTED — svelte-check/language-tools
 // type the ORIGINAL source and ignore script preprocessors' output for diagnostics (probe-proven),
 // so no preprocessor can augment call-site types. Server islands hand-declare the prop instead.
-function ogygia_preprocess(): PreprocessorGroup[] {
-	return islandBridge.markdownConfig ? [ogygiaPresetPreprocess()] : [];
-}
-
-/**
- * The full svelte `extensions` list — pass it straight through: `extensions: ogygia.extensions()`.
- * Always includes `.svelte`; adds `.svx` / `.md` when `ogygia({ content: { markdown } })` is set.
- */
-function ogygia_extensions(): string[] {
-	return islandBridge.markdownConfig ? ['.svelte', '.svx', '.md'] : ['.svelte'];
-}
-
-export declare namespace ogygia {
-	export var preprocess: typeof ogygia_preprocess;
-	export var extensions: typeof ogygia_extensions;
-}
-ogygia.preprocess = ogygia_preprocess;
-ogygia.extensions = ogygia_extensions;

@@ -10,7 +10,7 @@
 	"homepage": "https://ogygia.puruvj.dev",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"url": "git+https://github.com/ogygiajs/ogygia.git",
 		"directory": "packages/freeze"
 	},
 	"keywords": ["ogygia", "sveltekit", "cache", "cdn", "esi"],

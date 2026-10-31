@@ -9,7 +9,7 @@
  * state-management page). Runs before variants, so the JS→TS converter and the highlighter both see
  * clean source, and the copy button copies what's on screen.
  */
-import type { Fence, MetaParser } from 'ogygia/content/markdown';
+import type { Fence, MetaParser } from '@ogygia/content/markdown';
 
 /** The twoslash directives present in the corpus (checked: @filename ×140, @errors ×69,
  *  @noErrors ×41, @lib ×2). A conservative allowlist — real code comments like
