@@ -8,8 +8,8 @@
  * On a host that runs one request per instance (AWS Lambda) nothing ever queues: the table still
  * shows each hole's render and cache, and the summary stays silent.
  */
-import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.js';
-import type { RequestEntry } from './report.js';
+import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.ts';
+import type { RequestEntry } from './report.ts';
 
 export interface HoleSlotRow {
 	id: string;

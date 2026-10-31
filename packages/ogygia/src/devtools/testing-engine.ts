@@ -3,21 +3,21 @@
  * on the first call, like the dock: plain JSON out (no elements, no WeakRefs), so a test can assert
  * on it and attach it to its report.
  */
-import { read_page, unmeasured, type PageView } from './page.js';
-import { hydration_report, hydration_rows } from './hydration.js';
-import { start_session, recording, set_last_session, session_names } from './session.js';
-import { analyze_session, session_timeline, type Ref, type SessionFinding, type SessionReport, type TimelineItem, type TimelineLane } from './session-insights.js';
-import { region_name_by_fp } from './regions.js';
-import { snapshot } from './bus.js';
-import { ensure_region_names } from './names.js';
-import { TESTING_ENGINE_VERSION } from './testing-version.js';
-import { nearest_attr } from '../runtime/nearest-attr.js';
-import { charge, own_cost } from '../runtime/own-cost.js';
-import { apply_attr_rules, type AttrRule } from './attr-rules.js';
-import { testing_lean } from './switch.js';
-import type { PageFinding, PageReport } from './page-insights.js';
-import type { CpuSummary } from './cpu.js';
-import type { BeaconPage, AttrChange } from '../runtime/beacon.js';
+import { read_page, unmeasured, type PageView } from './page.ts';
+import { hydration_report, hydration_rows } from './hydration.ts';
+import { start_session, recording, set_last_session, session_names } from './session.ts';
+import { analyze_session, session_timeline, type Ref, type SessionFinding, type SessionReport, type TimelineItem, type TimelineLane } from './session-insights.ts';
+import { region_name_by_fp } from './regions.ts';
+import { snapshot } from './bus.ts';
+import { ensure_region_names } from './names.ts';
+import { TESTING_ENGINE_VERSION } from './testing-version.ts';
+import { nearest_attr } from '../runtime/nearest-attr.ts';
+import { charge, own_cost } from '../runtime/own-cost.ts';
+import { apply_attr_rules, type AttrRule } from './attr-rules.ts';
+import { testing_lean } from './switch.ts';
+import type { PageFinding, PageReport } from './page-insights.ts';
+import type { CpuSummary } from './cpu.ts';
+import type { BeaconPage, AttrChange } from '../runtime/beacon.ts';
 
 type EngineStamp = { version: number; lean: boolean };
 type HydrationIsland = ReturnType<typeof hydration_report>['islands'][number];

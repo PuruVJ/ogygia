@@ -16,7 +16,7 @@
  * module `metadata` export. The `mdsvex` format adapter lifts it back off `metadata` so it never
  * pollutes validated `data`.
  */
-import type { Heading } from '../index.js';
+import type { Heading } from '../index.ts';
 
 const SLUG_STRIP_NON_ALNUM = /[^\p{L}\p{N} \-_]/gu;
 const SLUG_WS_UNDER = /[\s_]+/g;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkBudget, ogygiaMatchers, compare, toMarkdown, createOgygia, type OgygiaReport } from '../src/testing/index.js';
+import { checkBudget, ogygiaMatchers, compare, toMarkdown, createOgygia, type OgygiaReport } from '../src/testing/index.ts';
 
 const page = {
 	kind: 'page',

@@ -3,13 +3,13 @@
 // purge, cloudflare KV sentinel-key tag index). The macro + runtime themselves are core's
 // (packages/ogygia/test/source.test.ts).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { __og_source, fingerprint_args, source_tag, set_source_recorder } from '../../ogygia/src/source.js';
-import { configure, reset_for_tests, freeze_put, freeze_get, invalidate } from '../src/registry.js';
-import { memory_store } from '../src/memory-store.js';
-import { upstash } from '../src/adapters/upstash.js';
-import { cloudflare } from '../src/adapters/cloudflare.js';
-import { cloudflareKv, type KvNamespaceLike } from '../src/adapters/cloudflare-kv.js';
-import type { FreezeEntry, EdgeAdapter } from '../src/types.js';
+import { __og_source, fingerprint_args, source_tag, set_source_recorder } from '../../ogygia/src/source.ts';
+import { configure, reset_for_tests, freeze_put, freeze_get, invalidate } from '../src/registry.ts';
+import { memory_store } from '../src/memory-store.ts';
+import { upstash } from '../src/adapters/upstash.ts';
+import { cloudflare } from '../src/adapters/cloudflare.ts';
+import { cloudflareKv, type KvNamespaceLike } from '../src/adapters/cloudflare-kv.ts';
+import type { FreezeEntry, EdgeAdapter } from '../src/types.ts';
 
 const page_entry = (): FreezeEntry => ({
 	kind: 'page',

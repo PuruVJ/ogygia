@@ -11,7 +11,7 @@
  * logic: a changed input is a different address, stale entries just sit until pruned.
  */
 import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
-import { RegionStore, type SerializedRegion } from '../region-store.js';
+import { RegionStore, type SerializedRegion } from '../region-store.ts';
 
 /** @deprecated Old name — a fence's cached form IS a {@link SerializedRegion}. */
 export type FenceRegion = SerializedRegion;

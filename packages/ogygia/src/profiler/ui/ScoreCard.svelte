@@ -4,7 +4,7 @@
 	// stability, responsiveness) each on its own bar with the points it cost, what was left out, and
 	// the single biggest win to take first. Pure presentation — the number comes from page_score
 	// (score.ts). Colour by score so the eye lands on the red bar.
-	import type { PageScore } from '../score.js';
+	import type { PageScore } from '../score.ts';
 
 	let { score }: { score: PageScore } = $props();
 

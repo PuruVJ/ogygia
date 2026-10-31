@@ -8,7 +8,8 @@
 		"noEmit": true,
 		"declaration": true,
 		"isolatedDeclarations": true,
-		"verbatimModuleSyntax": true
+		"verbatimModuleSyntax": true,
+		"allowImportingTsExtensions": true
 	},
 	"include": ["src"]
 }

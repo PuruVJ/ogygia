@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { categorize, learn_script_urls, sourcemap_resolver, with_script_url } from '../src/profiler/analyze.js';
-import { file_of } from '../src/profiler/frames.js';
+import { categorize, learn_script_urls, sourcemap_resolver, with_script_url } from '../src/profiler/analyze.ts';
+import { file_of } from '../src/profiler/frames.ts';
 
 // THE PROFILER ON THE DEV SERVER: Vite runs each server module as transformed code made from a string
 // (`new AsyncFunction(code)` with a `//# sourceURL`), and pre-bundles dependencies into `.vite/`.

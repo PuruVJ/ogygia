@@ -5,7 +5,7 @@
 // `morph` was selected only for live / morph / router, so a defer-only app shipped no `slots.morph`
 // and every hole took the `replaceChildren` floor.
 import { describe, expect, it } from 'vitest';
-import { resolveFeatures, type RuntimeMarks } from '../src/compiler/link/runtime-entry.js';
+import { resolveFeatures, type RuntimeMarks } from '../src/compiler/link/runtime-entry.ts';
 
 const marks = (m: Partial<RuntimeMarks>): RuntimeMarks => ({ complete: true, ...m }) as RuntimeMarks;
 

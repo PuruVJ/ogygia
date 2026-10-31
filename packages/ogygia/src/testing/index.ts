@@ -35,13 +35,13 @@
  * for `baseURL`, or without one for the origin of the first page the test opens).
  * `profile()` needs `ogygia({ profiler: true })` (and its key on a build).
  */
-import type { PageFinding, RatedVital, IslandRow } from '../devtools/page-insights.js';
-import type { SessionReport } from '../devtools/session-insights.js';
-import type { HydrationStatus } from '../devtools/hydration.js';
-import type { HtmlDiff } from '../devtools/html-diff.js';
-import { assets_diff } from '../profiler/page-assets.js';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN } from '../devtools/switch.js';
-import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.js';
+import type { PageFinding, RatedVital, IslandRow } from '../devtools/page-insights.ts';
+import type { SessionReport } from '../devtools/session-insights.ts';
+import type { HydrationStatus } from '../devtools/hydration.ts';
+import type { HtmlDiff } from '../devtools/html-diff.ts';
+import { assets_diff } from '../profiler/page-assets.ts';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, TESTING_COOKIE, TESTING_LEAN } from '../devtools/switch.ts';
+import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.ts';
 import type { TestType, Expect, Page, Route, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions } from '@playwright/test';
 
 // ── the reports (plain JSON, as the page hands them over) ──

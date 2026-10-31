@@ -2,7 +2,7 @@
 // wrapper (fingerprint, id stamp, receipt tag). What a plugin does with the receipts (freeze's
 // reverse index) is tested in that plugin.
 import { describe, it, expect, afterEach } from 'vitest';
-import { rewrite_source } from '../src/compiler/macros/source.js';
+import { rewrite_source } from '../src/compiler/macros/source.ts';
 import {
 	__og_source,
 	fingerprint_args,
@@ -11,7 +11,7 @@ import {
 	set_source_recorder,
 	set_source_observer,
 	SOURCE_ID
-} from '../src/source.js';
+} from '../src/source.ts';
 
 const MARKUP: readonly string[] = ['.svelte'];
 

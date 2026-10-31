@@ -9,7 +9,7 @@
 	 * browser kept ("the browser is the database"); when the backend lands, the router fills `server`
 	 * and the two lists merge — nothing else here changes. `live` is the same seam for a status feed.
 	 */
-	import { list_reports } from './store.js';
+	import { list_reports } from './store.ts';
 	import ThemeSwitch from './ThemeSwitch.svelte';
 
 	let { base, current = null }: { base: string; current?: string | null } = $props();

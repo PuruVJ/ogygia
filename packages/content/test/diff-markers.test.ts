@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { highlight } from '../src/markdown/shiki.js';
-import { diff_markers } from '../src/markdown/diff.js';
+import { highlight } from '../src/markdown/shiki.ts';
+import { diff_markers } from '../src/markdown/diff.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The `+++` / `---` fence dialect (svelte.dev's "change this code" prose form):

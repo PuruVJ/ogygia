@@ -5,8 +5,8 @@
  * (cpu.ts, with each interaction as its own window); long animation frames name the script when
  * the sampler could not run.
  */
-import { analyze_cpu, fn_label, is_trace, type CpuSummary } from './cpu.js';
-import type { SessionData } from './session.js';
+import { analyze_cpu, fn_label, is_trace, type CpuSummary } from './cpu.ts';
+import type { SessionData } from './session.ts';
 
 export type Ref = { kind: 'interaction'; i: number } | { kind: 'click'; i: number } | { kind: 'shift'; i: number } | { kind: 'island'; fp: string };
 

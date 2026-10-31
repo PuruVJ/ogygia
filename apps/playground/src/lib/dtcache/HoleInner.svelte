@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The island inside the hole's answer: stamps which build's code woke it.
-	import { VERSION } from './version.js';
+	import { VERSION } from './version.ts';
 	let ran = $state('');
 	$effect(() => {
 		ran = VERSION;

@@ -7,8 +7,8 @@
 	 * parent frame, so the devtools tab can offer "open in new tab".
 	 */
 	import { onMount } from 'svelte';
-	import { fake_progress } from './fake-progress.svelte.js';
-	import { put_report } from './store.js';
+	import { fake_progress } from './fake-progress.svelte.ts';
+	import { put_report } from './store.ts';
 
 	// ── regexes
 	const NON_WORD_G = /\W+/g;

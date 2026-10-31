@@ -14,8 +14,8 @@
  * only islands whose host is in it. No handoff (standalone builds, a client-only build) → emit all,
  * the previous behaviour.
  */
-import { path } from '../host.js';
-import { host_key } from '../program.js';
+import { path } from '../host.ts';
+import { host_key } from '../program.ts';
 
 export const SSR_HOSTS_HANDOFF = 'og-ssr-hosts.json';
 

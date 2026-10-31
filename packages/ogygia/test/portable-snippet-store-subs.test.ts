@@ -7,7 +7,7 @@
 // the exact failure a consumer hit in CI (se-web-platform contentPreview page).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
-import { transformHost } from '../src/compiler/region/transform.js';
+import { transformHost } from '../src/compiler/region/transform.ts';
 
 const ctx = {
 	root: '/app',

@@ -32,7 +32,7 @@ shadow boundary keeps it from the dock — a built dock opened unstyled. -->
 	import { onMount } from 'svelte';
 	import BoundaryOverlay from './BoundaryOverlay.svelte';
 	import IslandDetail from './IslandDetail.svelte';
-	import { to_trace } from './sinks.js';
+	import { to_trace } from './sinks.ts';
 	import { Draggable } from '@neodrag/svelte';
 	import { Resizable, RESIZE_EDGES } from '@neodrag/svelte/resize';
 

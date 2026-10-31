@@ -10,8 +10,8 @@
 	 * Transition, how many deferred holes were single-flighted), and a short history. Reads
 	 * nav.start/finish/reconcile/batch off the bus. The decision-based counterpart to the Timeline.
 	 */
-	import { snapshot } from './bus.js';
-	import { region_name, region_name_by_fp } from './regions.js';
+	import { snapshot } from './bus.ts';
+	import { region_name, region_name_by_fp } from './regions.ts';
 
 	let { tick = 0 } = $props();
 

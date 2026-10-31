@@ -9,9 +9,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as devalue from 'devalue';
 import type { RequestEvent } from '@sveltejs/kit';
-import { data_url_of, look_up_page, PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from '../src/server/page-facts.js';
-import { configure_render_page, page_url_of, prepare_render_page, render_page, renders_for_a_page } from '../src/server/render-page.js';
-import { configure_islands_endpoint } from '../src/server/endpoint.js';
+import { data_url_of, look_up_page, PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from '../src/server/page-facts.ts';
+import { configure_render_page, page_url_of, prepare_render_page, render_page, renders_for_a_page } from '../src/server/render-page.ts';
+import { configure_islands_endpoint } from '../src/server/endpoint.ts';
 
 /** Kit's data answer: one `data` line (each node devalue-flattened), then a `chunk` line per promise. */
 function kit_data(nodes: (Record<string, unknown> | null)[], chunks: string[] = []): string {

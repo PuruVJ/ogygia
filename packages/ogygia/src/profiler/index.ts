@@ -46,11 +46,11 @@ import {
 	type HeapAllocator,
 	type HeapNode,
 	type SourceMapResolver
-} from './analyze.js';
-import { route_dirs as route_folders } from './route-files.js';
-import type { CallerSite, NetCall, NetContext } from './net.js';
-import { TRACE_HEADER, encode_trace } from './net.js';
-import type { IoOp } from './async-io.js';
+} from './analyze.ts';
+import { route_dirs as route_folders } from './route-files.ts';
+import type { CallerSite, NetCall, NetContext } from './net.ts';
+import { TRACE_HEADER, encode_trace } from './net.ts';
+import type { IoOp } from './async-io.ts';
 import {
 	report_json,
 	report_dump,
@@ -60,8 +60,8 @@ import {
 	type ReportMeta,
 	type RequestEntry,
 	type RouteAgg
-} from './report.js';
-import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.js';
+} from './report.ts';
+import { ogp_encode, ogp_decode, is_ogp, recover_ogp_bytes } from './crypto.ts';
 import {
 	AFTER_LOGIN_PARAM,
 	SESSION_COOKIE,
@@ -69,7 +69,7 @@ import {
 	raw_cookie_values,
 	session_cookie_values,
 	type CookieDiagnosis
-} from './session-cookie.js';
+} from './session-cookie.ts';
 
 /** Set on the login page's URL when a login just succeeded and the session still did not arrive. */
 const LOGIN_FAILED_PARAM = 'session';
@@ -84,17 +84,17 @@ import {
 	type ClientIslandStat,
 	type ClientMarkStat,
 	type PageVitals
-} from './report.js';
-import { load_lane_of } from './timeline.js';
-import { parse_visit, merge_visits, type Visit } from './visit.js';
-import { hole_slots } from './hole-slots.js';
-import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.js';
-import { byte_strip, type ByteStrip } from './byte-strip.js';
-import { stream_tail } from './stream-tail.js';
-import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.js';
-import { BEACON_STANDALONE_TAG } from './beacon-standalone.js';
-import { build_river, load_return_keys, seed_key_bytes, type River } from './river.js';
-import { SinkBuffer, type SinkRow } from './sink.js';
+} from './report.ts';
+import { load_lane_of } from './timeline.ts';
+import { parse_visit, merge_visits, type Visit } from './visit.ts';
+import { hole_slots } from './hole-slots.ts';
+import { client_windows, interaction_windows, type ClientWindows, type InteractionCpu } from './client-windows.ts';
+import { byte_strip, type ByteStrip } from './byte-strip.ts';
+import { stream_tail } from './stream-tail.ts';
+import { weigh_assets, assets_diff, type PageAssets, type Weight, type AssetRef } from './page-assets.ts';
+import { BEACON_STANDALONE_TAG } from './beacon-standalone.ts';
+import { build_river, load_return_keys, seed_key_bytes, type River } from './river.ts';
+import { SinkBuffer, type SinkRow } from './sink.ts';
 import {
 	attribute_gc,
 	heap_sites,
@@ -103,37 +103,37 @@ import {
 	type AllocSlice,
 	type GcAttribution,
 	type GcEvent
-} from './gc.js';
-import type { Retained, RetainedSite } from './insights.js';
-import { alloc_timeline, type AllocTimeline, type HeapSample } from './alloc.js';
-import { contention, type Contention } from './contention.js';
+} from './gc.ts';
+import type { Retained, RetainedSite } from './insights.ts';
+import { alloc_timeline, type AllocTimeline, type HeapSample } from './alloc.ts';
+import { contention, type Contention } from './contention.ts';
 import {
 	build_lineage,
 	data_reads,
 	data_prop_names,
 	whole_read_line,
 	type Lineage
-} from './lineage.js';
-import { build_ledger, pkg_of, type LedgerLine } from './ledger.js';
-import { at_line, build_drill, call_group, tag_fills, type DrillNode } from './drill.js';
-import { forecast_of, type Forecast } from './forecast.js';
-import { site_fixes } from './site-fixes.js';
-import { may_be_chunk, module_category, module_lookup } from './module-map.js';
+} from './lineage.ts';
+import { build_ledger, pkg_of, type LedgerLine } from './ledger.ts';
+import { at_line, build_drill, call_group, tag_fills, type DrillNode } from './drill.ts';
+import { forecast_of, type Forecast } from './forecast.ts';
+import { site_fixes } from './site-fixes.ts';
+import { may_be_chunk, module_category, module_lookup } from './module-map.ts';
 import {
 	embedded_files,
 	embedded_chunk,
 	embedded_map_of,
 	embedded_source,
 	load_embedded_maps
-} from './embedded-maps.js';
-import { module_imports, route_imports } from './route-imports.js';
-import { app_relative } from './app-path.js';
-import { fnv1a32 } from '../runtime/hash.js';
-import { mark_personal } from '../server/personal-response.js';
-import { attr_sites, doc_diff } from './doc-diff.js';
-import { almost_same_document_pattern } from './patterns.js';
-import { hydration_hazards } from './hydration-hazards.js';
-import type { IslandHazard } from './report.js';
+} from './embedded-maps.ts';
+import { module_imports, route_imports } from './route-imports.ts';
+import { app_relative } from './app-path.ts';
+import { fnv1a32 } from '../runtime/hash.ts';
+import { mark_personal } from '../server/personal-response.ts';
+import { attr_sites, doc_diff } from './doc-diff.ts';
+import { almost_same_document_pattern } from './patterns.ts';
+import { hydration_hazards } from './hydration-hazards.ts';
+import type { IslandHazard } from './report.ts';
 import {
 	constant_work,
 	each_blocks,
@@ -147,7 +147,7 @@ import {
 	parent_use,
 	tokens,
 	type FormatterRewriteOptions
-} from './source-scan.js';
+} from './source-scan.ts';
 import {
 	find_cold_caches,
 	find_patterns,
@@ -172,7 +172,7 @@ import {
 	type Pattern,
 	type WaitCall,
 	type WholeReader
-} from './patterns.js';
+} from './patterns.ts';
 
 /** I/O resources a line can wait on one after another, as a readable target. Timers and ticks
  *  are left out: a timer awaited per turn is the `yield-per-item` pattern, read from the code. */
@@ -206,30 +206,30 @@ async function read_timed(
 	text += dec.decode();
 	return { text, chunks };
 }
-import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.js';
-import { engine_of, vital_parts, type PageInput } from '../devtools/page-insights.js';
-import { label_call, phase_of_frame } from './timeline.js';
-import { gzip_large } from './compress.js';
-import { io_kind, mark_left_each_run } from './async-io.js';
+import { compare_reports, island_files_diff, page_history, vitals_moved, type Since } from './compare.ts';
+import { engine_of, vital_parts, type PageInput } from '../devtools/page-insights.ts';
+import { label_call, phase_of_frame } from './timeline.ts';
+import { gzip_large } from './compress.ts';
+import { io_kind, mark_left_each_run } from './async-io.ts';
 import {
 	hole_stats_of,
 	request_stats_of,
 	set_batch_hole_listener,
 	set_request_stats_detail,
 	type BatchHoleStats
-} from '../server/request-stats.js';
+} from '../server/request-stats.ts';
 import { chunkBarrels, chunkContents, chunkDuplicates, chunkHeavy, islandHazards, islandPageKeys, islandPageWhy } from 'virtual:ogygia/island-deps';
-import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.js';
-import { register_profiler_file } from './frames.js';
+import { set_span_recorder, type SpanRecord, type SpanRecorder } from './span.ts';
+import { register_profiler_file } from './frames.ts';
 
 // The span recorder's `begin` lives in this file: skip its frame when finding a span's caller.
 register_profiler_file();
-import { error, type Router, type Ctx as RouteCtx } from '../router/index.js';
-import { app_asset_rel, client_dir_candidates, client_file_finder } from './client-files.js';
-import { is_http_error, is_redirect } from '../router/respond.js';
-import { build_profiler_router } from './profiler-router.js';
-import { detect_dev } from './env.js';
-import { refresh_target } from './refresh-stub.js';
+import { error, type Router, type Ctx as RouteCtx } from '../router/index.ts';
+import { app_asset_rel, client_dir_candidates, client_file_finder } from './client-files.ts';
+import { is_http_error, is_redirect } from '../router/respond.ts';
+import { build_profiler_router } from './profiler-router.ts';
+import { detect_dev } from './env.ts';
+import { refresh_target } from './refresh-stub.ts';
 
 export interface ProfilerOptions {
 	/**
@@ -321,7 +321,7 @@ export interface ProfilerOptions {
 	 * team shares one list. The store is dual-written: memory stays the hot cache, the store the
 	 * source of truth.
 	 */
-	store?: import('./storage/index.js').ProfilerStore;
+	store?: import('./storage/index.ts').ProfilerStore;
 }
 
 /** One always-on sampling window's fold: the hot functions and how much time it covered. */
@@ -956,7 +956,7 @@ class Profiler {
 	#page_waiting = 0;
 	/** the durable report store (SQLite/Redis/Postgres/custom), when configured — else null and the
 	 *  in-memory map is all there is (the prior behaviour) */
-	#store: import('./storage/index.js').ProfilerStore | null = null;
+	#store: import('./storage/index.ts').ProfilerStore | null = null;
 	#als: import('node:async_hooks').AsyncLocalStorage<Ctx> | null = null;
 	#init_done: Promise<void> | null = null;
 	/** Re-assert the `globalThis.fetch` patch before a profile (self-heal if it was replaced). */
@@ -1264,7 +1264,7 @@ class Profiler {
 						kept_answer,
 						drop_answers,
 						answer_diff
-					} = await import('./net.js');
+					} = await import('./net.ts');
 					this.#wrap_event_fetch = wrap_event_fetch;
 					this.#kept = {
 						keep: keep_answers,
@@ -1426,7 +1426,7 @@ class Profiler {
 		this.#window_net = [];
 		// capture the calling stack of each outbound I/O call for the duration of
 		// the window (off otherwise — it costs a stack per call)
-		const netmod = await import('./net.js').catch(() => null);
+		const netmod = await import('./net.ts').catch(() => null);
 		if (!opts.light) netmod?.set_stack_capture(true);
 		// SPANS (`span()` / `tag()` from ogygia/profiler): recorded only while this window runs.
 		// A span rides the same async context as the fetch patch — the request it belongs to, and
@@ -1478,7 +1478,7 @@ class Profiler {
 			}
 		};
 		set_span_recorder(span_recorder);
-		const iomod = opts.light ? null : await import('./async-io.js').catch(() => null);
+		const iomod = opts.light ? null : await import('./async-io.ts').catch(() => null);
 		let io_rec = iomod ? await iomod.record_async_io() : null;
 
 		let heap_head: HeapNode | null = null;
@@ -2704,7 +2704,7 @@ class Profiler {
 		};
 		const html = await load(page_url);
 		if (html === null) return new Response('Could not render the report page.', { status: 502 });
-		const { build_standalone } = await import('./standalone.js');
+		const { build_standalone } = await import('./standalone.ts');
 		try {
 			const out = await build_standalone(html, { page_url, load });
 			return new Response(out, {
@@ -6702,6 +6702,6 @@ function imported_from(src: string, name: string, file: string): string | undefi
 	return undefined;
 }
 
-export type { Analysis, CpuProfile, HeapAllocator } from './analyze.js';
-export type { NetCall } from './net.js';
-export type { ReportMeta, RequestEntry } from './report.js';
+export type { Analysis, CpuProfile, HeapAllocator } from './analyze.ts';
+export type { NetCall } from './net.ts';
+export type { ReportMeta, RequestEntry } from './report.ts';

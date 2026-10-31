@@ -19,14 +19,14 @@
  * To mint the Kit remotes that cross the wire (`list` / `live.*`), wrap it with `withRemotes()` from
  * `@ogygia/content/remote` inside a `.remote.ts`.
  */
-import type { ContentRef, ContentRelations, Entry, SchemaLike } from './index.js';
-import type { GroupMeta, Source } from './source.js';
+import type { ContentRef, ContentRelations, Entry, SchemaLike } from './index.ts';
+import type { GroupMeta, Source } from './source.ts';
 import {
 	Collection,
 	COLLECTION,
 	type CollectionBaseOptions,
 	type ReadContext
-} from './collection-base.js';
+} from './collection-base.ts';
 
 /** Extract a Standard Schema's output type (valibot / zod / arktype). Falls back to a loose record. */
 type SchemaData<S> = S extends {

@@ -6,8 +6,8 @@
  * still runs. Pure over a lookup function and a code string; sourcemap via magic-string.
  */
 import MagicString from 'magic-string';
-import type { ExportMap, Leaf } from './barrel.js';
-import { analyze_imports, type ImportDecl, type ImportSpec } from './parse.js';
+import type { ExportMap, Leaf } from './barrel.ts';
+import { analyze_imports, type ImportDecl, type ImportSpec } from './parse.ts';
 
 export interface RewriteMove {
 	barrel: string;

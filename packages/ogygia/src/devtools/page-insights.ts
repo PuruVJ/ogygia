@@ -9,16 +9,16 @@
  * Thresholds are the public web-vitals ones; the island ones are chosen so a healthy page shows
  * none (the lab page's decoys hold that line).
  */
-import { without_comments as strip_comments, without_runtime_marks } from '../runtime/beacon.js';
-import type { RegionRefusal } from '../runtime/region-endpoint-url.js';
-import { hazard_fix, hazard_words, type IslandHazard } from '../profiler/hydration-hazards.js';
+import { without_comments as strip_comments, without_runtime_marks } from '../runtime/beacon.ts';
+import type { RegionRefusal } from '../runtime/region-endpoint-url.ts';
+import { hazard_fix, hazard_words, type IslandHazard } from '../profiler/hydration-hazards.ts';
 
 /** markup as a visitor's eyes compare it: no comments (Svelte's re-anchored block markers), no
  *  marks the runtime itself set on the regions inside */
 const without_comments = (html: string): string => without_runtime_marks(strip_comments(html));
-import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.js';
-import { fn_label, fn_label as label_of, type CpuFn, type CpuSummary } from './cpu.js';
-import { third_party, third_party_findings, type ThirdParty } from './third-party.js';
+import { REGION_RENDER_CONCURRENCY } from '../runtime/concurrency.ts';
+import { fn_label, fn_label as label_of, type CpuFn, type CpuSummary } from './cpu.ts';
+import { third_party, third_party_findings, type ThirdParty } from './third-party.ts';
 
 export interface PageIsland {
 	fp: string;

@@ -14,10 +14,10 @@
 		kb,
 		region_name,
 		region_transitive
-	} from './regions.js';
+	} from './regions.ts';
 
-	import { page_ledger } from './ledger-dom.js';
-	import { profile_for, profiles_version } from './profile-store.js';
+	import { page_ledger } from './ledger-dom.ts';
+	import { profile_for, profiles_version } from './profile-store.ts';
 
 	let { tick = 0 } = $props();
 	const IS_DEV = !!(import.meta.env && import.meta.env.DEV);

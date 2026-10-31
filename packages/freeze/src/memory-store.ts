@@ -4,8 +4,8 @@
  * `configure()`): single-instance adapter-node. Replicas / serverless want tier 2 (valkey /
  * upstash) — a per-instance LRU there means per-instance misses AND invalidation blind spots.
  */
-import type { FreezeEntry, FreezePutOptions, FreezeStore } from './types.js';
-import { normalize_prefix, subtree_prefix } from './key.js';
+import type { FreezeEntry, FreezePutOptions, FreezeStore } from './types.ts';
+import { normalize_prefix, subtree_prefix } from './key.ts';
 import { SizedLru } from 'ogygia/plugin/utils';
 
 /** Resident budget for frozen pages (a stored page can be multi-MB; a count alone bounds nothing). */

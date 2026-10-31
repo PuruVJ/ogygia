@@ -13,7 +13,7 @@
  * declaration wins; ogygia strips it before Kit sees it).
  */
 import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
-import type { FreezeServerOptions } from './server.js';
+import type { FreezeServerOptions } from './server.ts';
 
 export interface FreezeOptions {
 	/** TTL backstop in seconds (default 86400, clamped to [1, 86400]): nothing is stale forever. */

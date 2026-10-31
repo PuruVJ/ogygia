@@ -11,7 +11,7 @@
  * a plugin package beside core) must share the seam.
  */
 // The house hash — runtime/hash.ts owns FNV-1a (region fps, flag buckets); never re-rolled.
-import { fnv1a } from './runtime/hash.js';
+import { fnv1a } from './runtime/hash.ts';
 
 interface SourceSlots {
 	recorder: ((tag: string) => void) | null;

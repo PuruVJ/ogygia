@@ -2,9 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { load_kit_dirs } from '../src/vite/kit-dirs.js';
-import { kit_dirs, set_kit_dirs, keep_client_dir, KEEP_CLIENT_DIR } from '../src/compiler/kit.js';
-import { islandDepsHandoffPath, island_deps_module } from '../src/compiler/link/island-deps.js';
+import { load_kit_dirs } from '../src/vite/kit-dirs.ts';
+import { kit_dirs, set_kit_dirs, keep_client_dir, KEEP_CLIENT_DIR } from '../src/compiler/kit.ts';
+import { islandDepsHandoffPath, island_deps_module } from '../src/compiler/link/island-deps.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ogygia must follow the app's `kit.files.routes` and `kit.outDir`, not assume `src/routes` and

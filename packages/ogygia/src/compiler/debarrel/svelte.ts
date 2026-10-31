@@ -7,8 +7,8 @@
  */
 import MagicString from 'magic-string';
 import { parse } from 'svelte/compiler';
-import { blank_styles } from '../blank-styles.js';
-import { rewrite_imports, type Lookup, type RewriteMove, type RewritePolicy, type RewriteResult } from './rewrite.js';
+import { blank_styles } from '../blank-styles.ts';
+import { rewrite_imports, type Lookup, type RewriteMove, type RewritePolicy, type RewriteResult } from './rewrite.ts';
 
 type SvelteAst = ReturnType<typeof parse>;
 type Script = NonNullable<SvelteAst['instance']>;

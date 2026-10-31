@@ -24,12 +24,12 @@
  *  4. LINKING (render): `render_page` looks up the components it actually renders, claims through
  *     `claim_region_css` (deduped with held-region links), and hands `document()` the head tags.
  */
-import { fs, path } from '../host.js';
+import { fs, path } from '../host.ts';
 import {
 	collectFoucCssReachable,
 	compileFoucScopedCss,
 	resolveFoucImportSpec
-} from '../fouc-css.js';
+} from '../fouc-css.ts';
 
 const PATH_SEP = /[/\\]/;
 const SVELTE_RE = /\.svelte$/;

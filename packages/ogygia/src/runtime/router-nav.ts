@@ -11,25 +11,25 @@
  * two `'*'` walks and a seed parse inside `startViewTransition`, on the frame the transition
  * captures.
  */
-import { PageCache } from './page-cache.js';
-import { boot_link, router_link, slots } from './slots.js';
-import { dispose_scope } from '../ref.js';
+import { PageCache } from './page-cache.ts';
+import { boot_link, router_link, slots } from './slots.ts';
+import { dispose_scope } from '../ref.ts';
 import {
 	NO_RECONCILE_SELECTOR,
 	reconcile_body,
 	stamp_region_keys,
 	swap_body
-} from './reconcile.js';
+} from './reconcile.ts';
 import {
 	apply_soft_invalidate_doc,
 	finish_spa_document,
 	page_seed_of,
 	prepare_spa_document
-} from './seeds.js';
-import type { SpaRouter } from './router.js';
-import { spa_html_cacheable } from './spa-cacheable.js';
-import { pin_region_urls } from './entry-locations.js';
-import { emit as dt_emit } from '../devtools/bus.js';
+} from './seeds.ts';
+import type { SpaRouter } from './router.ts';
+import { spa_html_cacheable } from './spa-cacheable.ts';
+import { pin_region_urls } from './entry-locations.ts';
+import { emit as dt_emit } from '../devtools/bus.ts';
 
 // What this lazy chunk uses from the boot and from the router, handed over through the registry — it
 // never imports a boot module (./slots.ts `BootLink`: a module both import is split out of the runtime

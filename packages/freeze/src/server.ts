@@ -28,11 +28,11 @@ import {
 	join_flight,
 	self_evict,
 	type FlightOutcome
-} from './registry.js';
-import { observe_event, type Observation } from './observe.js';
-import { esi_rewrite, stitch_html, stitch_modes } from './stitch.js';
-import { set_freeze_app } from './app.js';
-import type { FreezeEntry } from './types.js';
+} from './registry.ts';
+import { observe_event, type Observation } from './observe.ts';
+import { esi_rewrite, stitch_html, stitch_modes } from './stitch.ts';
+import { set_freeze_app } from './app.ts';
+import type { FreezeEntry } from './types.ts';
 
 /** The plugin's serializable policy (`freeze({ ttl, default })`, normalized by the factory). */
 export interface FreezeServerOptions {

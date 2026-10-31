@@ -3,7 +3,7 @@
  * a count alone bounds nothing).
  */
 import { describe, it, expect } from 'vitest';
-import { memory_store } from '../src/memory-store.js';
+import { memory_store } from '../src/memory-store.ts';
 
 describe('freeze memory store is byte-bounded', () => {
 	it('a run of multi-MB pages stays under the budget; the newest survive', async () => {

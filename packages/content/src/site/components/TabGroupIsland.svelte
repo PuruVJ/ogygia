@@ -14,8 +14,8 @@
 	 */
 	import { untrack } from 'svelte';
 	import { on } from 'svelte/events';
-	import { roving } from './roving.js';
-	import { tab_group, hydrate_group } from './tab-groups.svelte.js';
+	import { roving } from './roving.ts';
+	import { tab_group, hydrate_group } from './tab-groups.svelte.ts';
 	import type { Snippet } from 'svelte';
 
 	let { group = 'tabs', children }: { group?: string; children: Snippet } = $props();

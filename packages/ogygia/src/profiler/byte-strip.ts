@@ -6,7 +6,7 @@
  * system rendered, and plain markup. Pure: a string in, ordered segments out. The report draws
  * the strip with the time each byte left the server and the time the browser had it.
  */
-import { scanRegions } from '../server/split-regions.js';
+import { scanRegions } from '../server/split-regions.ts';
 
 export type StripKind =
 	| 'head'
@@ -48,7 +48,7 @@ export interface ByteStrip {
 	 *  present when the page streamed in more than one chunk */
 	chunks?: { end: number; t: number }[];
 	/** what held the document open after its early part (stream-tail.ts), when it paused long */
-	tail?: import('./stream-tail.js').StreamTail;
+	tail?: import('./stream-tail.ts').StreamTail;
 }
 
 /** When a byte left the server, from the chunk stamps: the chunk that carried it. */

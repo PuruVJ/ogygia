@@ -32,10 +32,10 @@
  * unparseable file simply doesn't transform (the marker then fails at runtime loudly, since
  * `import.meta.og` is undefined without the transform).
  */
-import { og_js_regions } from '../parse/scan.js';
-import { match_close } from '../parse/scan.js';
-import { parse_module } from '../parse/oxc.js';
-import { og_member } from './wire.js';
+import { og_js_regions } from '../parse/scan.ts';
+import { match_close } from '../parse/scan.ts';
+import { parse_module } from '../parse/oxc.ts';
+import { og_member } from './wire.ts';
 
 // ── regexes
 const SERVER_MODULE_RE = /\.server(\.|$|\/)/;

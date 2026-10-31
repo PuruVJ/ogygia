@@ -19,7 +19,7 @@
  *
  * See internal/notes/router-v2.md for the full design + the Kit ↔ v2 dictionary.
  */
-export { routes, when, type Router, type RoutesOptions } from './router.js';
+export { routes, when, type Router, type RoutesOptions } from './router.ts';
 export {
 	load,
 	action,
@@ -41,10 +41,10 @@ export {
 	type PageDef,
 	type PageServer,
 	type RouteTable
-} from './define.js';
-export { redirect, error, fail, type ActionFailure } from './respond.js';
-export type { Ctx } from './ctx.js';
-export type { InferMap } from './infer.js';
+} from './define.ts';
+export { redirect, error, fail, type ActionFailure } from './respond.ts';
+export type { Ctx } from './ctx.ts';
+export type { InferMap } from './infer.ts';
 export type {
 	StandardSchemaV1,
 	InferOutput,
@@ -52,12 +52,12 @@ export type {
 	HrefArgs,
 	HrefParams,
 	Simplify
-} from './view.js';
-export { compile, match_path, type CompiledPattern } from './match.js';
-export { anonymousVisitor, type AnonymousVisitorOptions } from './visitor.js';
-export { api, ApiError, type ApiClient, type ApiClientOptions } from './client-api.js';
+} from './view.ts';
+export { compile, match_path, type CompiledPattern } from './match.ts';
+export { anonymousVisitor, type AnonymousVisitorOptions } from './visitor.ts';
+export { api, ApiError, type ApiClient, type ApiClientOptions } from './client-api.ts';
 
 // (fragment federation — `federate()`, `mount()`, `user` — is its own plugin: `@ogygia/federation`)
 // For plugins that build on the router:
-export { is_http_error as isHttpError } from './respond.js';
-export type { ComponentPick } from './define.js';
+export { is_http_error as isHttpError } from './respond.ts';
+export type { ComponentPick } from './define.ts';

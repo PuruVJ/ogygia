@@ -9,8 +9,8 @@
  *
  * Only DIFFS are stored (default → nothing), bounded page count, so this stays cheap.
  */
-import { element_address, resolve_address } from './interaction.js';
-import { slots } from './slots.js';
+import { element_address, resolve_address } from './interaction.ts';
+import { slots } from './slots.ts';
 
 /** Feature entry: enable form-field survival across SPA nav (unless the build disabled it). */
 export function install(): void {

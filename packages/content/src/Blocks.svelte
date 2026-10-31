@@ -17,8 +17,8 @@
 	 */
 	import { Region } from 'ogygia';
 	import Self from './Blocks.svelte';
-	import { resolve_block_tree } from './blocks.js';
-	import type { BlockNode, BlockRegistry, BlockSchedule, ResolvedBlockNode } from './blocks.js';
+	import { resolve_block_tree } from './blocks.ts';
+	import type { BlockNode, BlockRegistry, BlockSchedule, ResolvedBlockNode } from './blocks.ts';
 
 	// `tree` + `registry` is the public API. `nodes` is the resolved channel — how a `blocks()` body
 	// and recursion feed already-resolved regions back in; you rarely pass it yourself.

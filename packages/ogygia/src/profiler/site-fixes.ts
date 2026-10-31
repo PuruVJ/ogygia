@@ -4,7 +4,7 @@
 // fixing it gives back per render on each page, and in all. What only one page has is that page's
 // report's business; this lists the lines two or more pages share.
 
-import type { Pattern, PatternKind } from './patterns.js';
+import type { Pattern, PatternKind } from './patterns.ts';
 
 export interface SiteFix {
 	kind: PatternKind;

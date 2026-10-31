@@ -17,8 +17,8 @@
 // `watch`/`notify` primitive, keyed `frame:<address>`. This module keeps only fetch orchestration
 // (ticket, inflight, reserve, evict). No DOM, no Svelte. Unit-tested in test/frame-store.test.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-import type { Frame } from '../frame.js';
-import { watch, notify, watcher_count } from '../ref-watch.js';
+import type { Frame } from '../frame.ts';
+import { watch, notify, watcher_count } from '../ref-watch.ts';
 
 export type FrameFetcher = (signal: AbortSignal) => Promise<string>;
 

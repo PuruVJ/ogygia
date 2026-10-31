@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Island A: receives the transportable instance as a PROP and mutates it.
-	import { SharedCounter } from './counter-object.svelte.js';
-	import { AliasProbe } from './alias-probe.svelte.js';
+	import { SharedCounter } from './counter-object.svelte.ts';
+	import { AliasProbe } from './alias-probe.svelte.ts';
 
 	let { counter, probe }: { counter: SharedCounter; probe?: AliasProbe } = $props();
 </script>

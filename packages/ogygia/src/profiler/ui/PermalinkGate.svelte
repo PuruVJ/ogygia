@@ -8,12 +8,12 @@
 	 */
 	import Shell from './Shell.svelte';
 	import ReportBody from './ReportBody.svelte';
-	import { decode_permalink } from './permalink.js';
-	import { get_report, list_reports } from './store.js';
-	import { page_history } from '../compare.js';
-	import type { Analysis } from '../analyze.js';
-	import type { ReportMeta, ReportExtras } from '../report.js';
-	import type { PageHistory } from '../profiler-router.js';
+	import { decode_permalink } from './permalink.ts';
+	import { get_report, list_reports } from './store.ts';
+	import { page_history } from '../compare.ts';
+	import type { Analysis } from '../analyze.ts';
+	import type { ReportMeta, ReportExtras } from '../report.ts';
+	import type { PageHistory } from '../profiler-router.ts';
 
 	// ── regexes
 	const LEADING_HASH_RE = /^#/;

@@ -7,9 +7,9 @@
 	 * URLs too low, so links are disabled there; Chromium/Firefox go up to ~1.5 MB, with a Safari-
 	 * recipient disclaimer past the universal-safe size. No `$effect`; all state moves on click/submit.
 	 */
-	import { encode_permalink, is_webkit_capped, MAX_PERMALINK_CHARS } from './permalink.js';
-	import { get_report } from './store.js';
-	import { report_request } from './report-request.js';
+	import { encode_permalink, is_webkit_capped, MAX_PERMALINK_CHARS } from './permalink.ts';
+	import { get_report } from './store.ts';
+	import { report_request } from './report-request.ts';
 
 	let { id, base, ogpB64 = '' }: { id: string; base: string; ogpB64?: string } = $props();
 

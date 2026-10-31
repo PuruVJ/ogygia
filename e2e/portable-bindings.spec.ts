@@ -138,7 +138,7 @@ import WakeX2 from './X.svelte' with { wake: 'visible' };
 export const registry = [RawX, WakeX, LoadY, WakeX2];
 `;
 		const rt = transformTsRegions(tsSrc, '/app/src/lib/registry.ts', ctx)!;
-		const islands = rt.islands as Array<Record<string, unknown>>;
+		const islands = rt.islands as unknown as Array<Record<string, unknown>>;
 		const byId = new Map(islands.map((i) => [i.id as string, i]));
 
 		// WakeX + WakeX2 are the same component+schedule → ONE island. Distinct: RawX, WakeX, LoadY.

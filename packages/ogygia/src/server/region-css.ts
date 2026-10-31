@@ -10,7 +10,7 @@
  * value, and the router keys a head `<style>` on it across swaps.
  */
 import { islandCssInline } from 'virtual:ogygia/island-deps';
-import { escape_attr as attr } from '../escape.js';
+import { escape_attr as attr } from '../escape.ts';
 
 /**
  * @param href the handoff's public href (the `islandCss()` value — the inline lookup key)

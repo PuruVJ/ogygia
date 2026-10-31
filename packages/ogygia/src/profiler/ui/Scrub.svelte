@@ -6,9 +6,9 @@
 	 * the stack at this instant". Every other table in the report is an aggregate over the whole
 	 * window; this is the same data, sliced where the eye lands. A `wake:'load'` island.
 	 */
-	import type { StackIndex } from '../analyze.js';
-	import { density, range_hot, stack_at, type RangeSummary, type StackAt } from '../stacks.js';
-	import { fmt_ms, CATEGORY_COLOR } from './format.js';
+	import type { StackIndex } from '../analyze.ts';
+	import { density, range_hot, stack_at, type RangeSummary, type StackAt } from '../stacks.ts';
+	import { fmt_ms, CATEGORY_COLOR } from './format.ts';
 
 	let { stacks, marks = [] }: { stacks: StackIndex; marks?: { t: number; label: string }[] } = $props();
 

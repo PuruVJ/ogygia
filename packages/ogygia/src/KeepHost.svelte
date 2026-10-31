@@ -5,7 +5,7 @@
 	// as NestedProvider mirrors it). LiveHost has no `{#if}`: it hydrates a live region's render()
 	// output, and a kept island hydrated through it met the server's `[0` branch marker where it
 	// expected the component's own, discarding the server DOM on every load. NOT part of the public API.
-	import { setNested } from './context.js';
+	import { setNested } from './context.ts';
 	import type { Component as SvelteComponent } from 'svelte';
 
 	let {

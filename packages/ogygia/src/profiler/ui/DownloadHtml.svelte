@@ -5,7 +5,7 @@
 	 * instance answers can build the file: on a serverless host the one that made the report is
 	 * usually gone, and a plain link by id 404s.
 	 */
-	import { report_request } from './report-request.js';
+	import { report_request } from './report-request.ts';
 
 	let {
 		base,

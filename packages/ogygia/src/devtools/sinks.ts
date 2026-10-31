@@ -3,8 +3,8 @@
  * listener over {@link ./bus.js the bus}; none touches framework internals. Load only what you use —
  * the REPL wants `postMessage`, our e2e wants the `window` hook, a bug report wants a trace.
  */
-import { add_sink, snapshot, clear, ingest, type DevtoolsSink } from './bus.js';
-import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './schema.js';
+import { add_sink, snapshot, clear, ingest, type DevtoolsSink } from './bus.ts';
+import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent } from './schema.ts';
 
 /** The global the {@link install_window_sink window sink} publishes. Distinct from the compile-time
  *  `__OGYGIA_DEVTOOLS__` define (a bare identifier the bundler replaces) — this is a real runtime

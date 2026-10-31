@@ -3,7 +3,7 @@
 
 <script module>
 	/** the last session's data + report, kept across tab switches (not across reloads) */
-	let last = $state(/** @type {{ data: import('./session.js').SessionData; report: import('./session-insights.js').SessionReport } | null} */ (null));
+	let last = $state(/** @type {{ data: import('./session.ts').SessionData; report: import('./session-insights.ts').SessionReport } | null} */ (null));
 </script>
 
 <script>
@@ -16,14 +16,14 @@
 	 * Engine: session.ts; analysis: session-insights.ts.
 	 */
 	import { onMount } from 'svelte';
-	import { start_session, recording, set_last_session, session_names } from './session.js';
-	import { run_profile, slim_profile } from './profile-store.js';
-	import { analyze_session, session_timeline } from './session-insights.js';
-	import { region_name_by_fp } from './regions.js';
-	import { unmeasured } from './page.js';
+	import { start_session, recording, set_last_session, session_names } from './session.ts';
+	import { run_profile, slim_profile } from './profile-store.ts';
+	import { analyze_session, session_timeline } from './session-insights.ts';
+	import { region_name_by_fp } from './regions.ts';
+	import { unmeasured } from './page.ts';
 	// (what this browser cannot measure: a session's silence on those is not a clean bill)
 	const limits = unmeasured(typeof Profiler === 'undefined' ? 'unsupported' : null);
-	import { highlight, clear_highlight } from './highlight.js';
+	import { highlight, clear_highlight } from './highlight.ts';
 
 	let { tick = 0 } = $props();
 
@@ -44,7 +44,7 @@
 	let profiler_here = $state(false);
 	let with_server = $state(true);
 	let server_note = $state('');
-	let server_window = $state(/** @type {import('./profile-store.js').SlimProfile & { window?: any } | null} */ (null));
+	let server_window = $state(/** @type {import('./profile-store.ts').SlimProfile & { window?: any } | null} */ (null));
 	/** @type {Promise<boolean> | null} */
 	let probe = null;
 	const probe_profiler = () =>
@@ -152,7 +152,7 @@
 	}
 
 	// CLIENT → SERVER in one click: a slow request found in the session, profiled on the server
-	let server = $state(/** @type {Record<string, { busy?: boolean; error?: string; p?: import('./profile-store.js').SlimProfile }>} */ ({}));
+	let server = $state(/** @type {Record<string, { busy?: boolean; error?: string; p?: import('./profile-store.ts').SlimProfile }>} */ ({}));
 	async function profile_request(url) {
 		const u = new URL(url);
 		const path = u.pathname + u.search;

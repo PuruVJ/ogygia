@@ -14,8 +14,8 @@
 	 */
 	import { onMount } from 'svelte';
 	import { on } from 'svelte/events';
-	import { get_shell_context } from '../context.js';
-	import type { SearchHit } from '../search.js';
+	import { get_shell_context } from '../context.ts';
+	import type { SearchHit } from '../search.ts';
 	import type SearchPaletteT from './SearchPalette.svelte';
 
 	// ── regexes

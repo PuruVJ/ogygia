@@ -5,11 +5,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { routes, when } from 'ogygia/router';
 import { startPlugin } from 'ogygia/plugin/testing';
-import { mount } from '../src/mount.js';
-import { make_peer } from '../src/peer.js';
-import { flag, decide } from '../../flags/src/index.js';
-import flags_server from '../../flags/src/server.js';
-import { facts_of } from '../../ogygia/src/plugin/facts.js';
+import { mount } from '../src/mount.ts';
+import { make_peer } from '../src/peer.ts';
+import { flag, decide } from '../../flags/src/index.ts';
+import flags_server from '../../flags/src/server.ts';
+import { facts_of } from '../../ogygia/src/plugin/facts.ts';
 
 // a flag read records its decision as a request fact through the started plugin
 startPlugin(flags_server, { name: '@ogygia/flags' });

@@ -15,7 +15,7 @@
  * render can be up to `MAX_REGION_BODY`, 2 MB) and in entries, TTL-expiring, so it can't grow
  * unbounded across a long-lived server process (server/sized-lru.ts).
  */
-import { SizedLru } from './sized-lru.js';
+import { SizedLru } from './sized-lru.ts';
 
 /** Resident budget for cached region HTML. */
 const MAX_BYTES = 64 * 1024 * 1024;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mark_personal } from '../src/server/personal-response.js';
+import { mark_personal } from '../src/server/personal-response.ts';
 
 describe('mark_personal', () => {
 	it('a page made for one browser leaves every shared cache, whatever the app set', () => {

@@ -23,10 +23,10 @@
  */
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
-import { blank_styles } from './blank-styles.js';
-import { strip_bom } from './bom.js';
+import { blank_styles } from './blank-styles.ts';
+import { strip_bom } from './bom.ts';
 // the runtime's reader and this writer share the constants
-import { HTML_PARENT_ATTR, OPAQUE_ATTR } from '../runtime/ownership.js';
+import { HTML_PARENT_ATTR, OPAQUE_ATTR } from '../runtime/ownership.ts';
 
 /** A cheap presence test before parsing: one of the three shapes could be in this file. */
 const MAY_STAMP_RE =

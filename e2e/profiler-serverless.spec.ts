@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn_server, type SpawnedServer } from './fixtures/servers.js';
+import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const PORT = 3071;
 const ORIGIN = `http://localhost:${PORT}`;

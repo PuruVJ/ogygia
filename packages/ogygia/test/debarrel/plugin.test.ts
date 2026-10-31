@@ -8,9 +8,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { build, createServer, type Plugin, type Rollup } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { fixture, type Fixture } from './_fixture.js';
-import { debarrel } from '../../src/compiler/debarrel/plugin.js';
-import { ogygia } from '../../src/vite/index.js';
+import { fixture, type Fixture } from './_fixture.ts';
+import { debarrel } from '../../src/compiler/debarrel/plugin.ts';
+import { ogygia } from '../../src/vite/index.ts';
 
 let f: Fixture;
 afterEach(() => f?.dispose());
@@ -53,7 +53,7 @@ const build_ids = async (cfg: ReturnType<typeof config>) => {
 
 describe('which ids are importers', () => {
 	it('the script only: a style sub-module or a raw/url/worker request is not the component', async () => {
-		const { is_script_request } = await import('../../src/compiler/debarrel/plugin.js');
+		const { is_script_request } = await import('../../src/compiler/debarrel/plugin.ts');
 		expect(is_script_request('/x/Foo.svelte')).toBe(true);
 		expect(is_script_request('/x/Foo.svelte?v=123')).toBe(true); // a cache query on the real module
 		expect(is_script_request('/x/Foo.svelte?og-region=1')).toBe(true);
@@ -265,7 +265,7 @@ describe('ogygia({ barrels }) wiring', () => {
 
 describe('the report names the components it had to skip', () => {
 	it('skipped components are counted and listed, with or without rewrites', async () => {
-		const { format_report } = await import('../../src/compiler/debarrel/plugin.js');
+		const { format_report } = await import('../../src/compiler/debarrel/plugin.ts');
 		const base = { files: 10, importers: 0, imports: 0, names: 0, first_ms: 0, last_ms: 100, barrels: new Map(), skipped: new Set(['/app/src/A.svelte', '/app/src/B.svelte']) };
 		const none = format_report(base, '/app', 8);
 		expect(none).toContain('2 components skipped (could not be parsed; their imports stay on their barrels): src/A.svelte, src/B.svelte');

@@ -4,7 +4,7 @@
  * cheap — a range query walks the samples once and each sample's stack once — so the report's
  * scrubber can answer while the mouse moves. No regex: the labels are compared as they are.
  */
-import type { StackIndex, FrameCategory } from './analyze.js';
+import type { StackIndex, FrameCategory } from './analyze.ts';
 
 export interface RangeRow {
 	/** the frame's name */

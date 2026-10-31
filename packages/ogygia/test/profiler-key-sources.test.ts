@@ -11,8 +11,8 @@ import {
 	needs_previous,
 	parent_use,
 	promise_all_rewrite
-} from '../src/profiler/source-scan.js';
-import { tag_fills, unread_rows, type DrillNode } from '../src/profiler/drill.js';
+} from '../src/profiler/source-scan.ts';
+import { tag_fills, unread_rows, type DrillNode } from '../src/profiler/drill.ts';
 
 // Which lines of a load feed each key it returns: a wait on one of them was for that key.
 

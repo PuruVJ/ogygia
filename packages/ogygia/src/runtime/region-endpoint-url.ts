@@ -1,6 +1,6 @@
-import { preload_island_graph } from './island-graph-preload.js';
-import { fetch_priority_of, load_slot, type LoadClass } from './load-scheduler.js';
-import { entry_location } from './entry-locations.js';
+import { preload_island_graph } from './island-graph-preload.ts';
+import { fetch_priority_of, load_slot, type LoadClass } from './load-scheduler.ts';
+import { entry_location } from './entry-locations.ts';
 
 /** Hoisted (hot paths — connectedCallback/hydrate run per region); shared with core's
  *  foreign-origin checks. */

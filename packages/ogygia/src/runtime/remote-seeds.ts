@@ -6,9 +6,9 @@
  * only `seeds.ts` (hydrate core) reads the slot, and the decoder imports the APP's transport codecs
  * (its own `src/hooks.ts`), which reach Svelte.
  */
-import { slots } from './slots.js';
-import { seed_query_responses } from '../shims/kit-remote/client-stub.js';
-import { clear_remote_seeds, clear_remote_instances } from '../shims/kit-remote/remote-cache.js';
+import { slots } from './slots.ts';
+import { seed_query_responses } from '../shims/kit-remote/client-stub.ts';
+import { clear_remote_seeds, clear_remote_instances } from '../shims/kit-remote/remote-cache.ts';
 
 /** Feature entry: fill the `remoteSeeds` slot. */
 export function install(): void {

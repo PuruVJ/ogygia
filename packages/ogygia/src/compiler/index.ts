@@ -22,12 +22,12 @@
  *
  * Exposed to consumers as `ogygia/internal/compiler` (internal, not a stable public API).
  */
-export * from './region/transform.js';
+export * from './region/transform.ts';
 // The parser DI seam — a browser build (the Observatory) injects rolldown-browser's oxc here.
-export { set_parser, type RawParse } from './parse/oxc.js';
-export * from './fouc-css.js';
-export * from './free-vars.js';
-export { Compiler, type Profiler } from './driver.js';
-export { Program, strip_id, host_key } from './program.js';
-export { CompileCtx, type CompileCtxInit } from './ctx.js';
-export * from './ids.js';
+export { set_parser, type RawParse } from './parse/oxc.ts';
+export * from './fouc-css.ts';
+export * from './free-vars.ts';
+export { Compiler, type Profiler } from './driver.ts';
+export { Program, strip_id, host_key } from './program.ts';
+export { CompileCtx, type CompileCtxInit } from './ctx.ts';
+export * from './ids.ts';

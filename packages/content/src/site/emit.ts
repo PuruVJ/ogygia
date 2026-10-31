@@ -7,7 +7,7 @@
  * (Per-page raw `.md` / `llms-full.txt` need the entry SOURCE text, which the content pillar does not
  * retain — it stores compiled bodies. That waits on a raw-source companion; it is not here yet.)
  */
-import type { NavItem, NavLeaf, NavTree } from './types.js';
+import type { NavItem, NavLeaf, NavTree } from './types.ts';
 
 // ── regexes
 const FRONTMATTER_BLOCK_RE = /^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/;

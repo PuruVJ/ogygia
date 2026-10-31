@@ -4,7 +4,7 @@
 // build), wake from the identity fetched fresh. The SSR HTML is the Counter island from setup.ts.
 import { expect, inject, test } from 'vitest';
 import { page } from 'vitest/browser';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const COUNTER = '/test/browser/fixtures/Counter.svelte';
 const HYDRATED = 'ogygia-region[data-hydrated]';

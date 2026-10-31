@@ -1,9 +1,9 @@
-import { frameAddress } from '../frame.js';
-import { kit_hydrates_page } from './kit-boot.js';
-import { init_shadow_registries, parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.js';
-import { wire_classes_for } from './wire-classes.js';
-import { mark_region_changed, region_changed, unwatch_region, watch_region } from './drift-watch.js';
-import { runtime_session } from './session.js';
+import { frameAddress } from '../frame.ts';
+import { kit_hydrates_page } from './kit-boot.ts';
+import { init_shadow_registries, parse_region_html, restore_adopt_sheets, restore_markup } from './parse-html.ts';
+import { wire_classes_for } from './wire-classes.ts';
+import { mark_region_changed, region_changed, unwatch_region, watch_region } from './drift-watch.ts';
+import { runtime_session } from './session.ts';
 import {
 	capability_expired,
 	renewal_url,
@@ -14,8 +14,8 @@ import {
 	island_module_url,
 	RegionAnswerRefused,
 	deny_of
-} from './region-endpoint-url.js';
-import { island_entry_of, import_entry, on_entry_fallback, pin_region_urls } from './entry-locations.js';
+} from './region-endpoint-url.ts';
+import { island_entry_of, import_entry, on_entry_fallback, pin_region_urls } from './entry-locations.ts';
 import {
 	is_awake,
 	is_deferred,
@@ -24,12 +24,12 @@ import {
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
 	region_schedule
-} from './region-attrs.js';
-import { slots } from './slots.js';
-import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.js';
-import { PAGE_FACTS_SELECTOR } from '../page-facts-script.js';
-import { NAV_HANDLE_KEY, mpa_nav, publish_nav } from './nav-handle.js';
-import { link_boot } from './boot-link.js';
+} from './region-attrs.ts';
+import { slots } from './slots.ts';
+import { KEEP_FALLBACK_HTML } from '../keep-fallback-marker.ts';
+import { PAGE_FACTS_SELECTOR } from '../page-facts-script.ts';
+import { NAV_HANDLE_KEY, mpa_nav, publish_nav } from './nav-handle.ts';
+import { link_boot } from './boot-link.ts';
 import {
 	background_start,
 	hydrate_settled,
@@ -38,23 +38,23 @@ import {
 	register_region,
 	unregister_region,
 	yield_task
-} from './schedule.js';
-import { once_visible } from './observe.js';
-import { preload_island_graph } from './island-graph-preload.js';
-import { fetch_priority_of, load_slot, viewport_class, type LoadClass } from './load-scheduler.js';
-import { connected_regions } from './connected.js';
-import { restore_props_sidecar } from './sidecar.js';
-import { hole_facts_of } from './hole-facts.js';
-import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_hole_fetched } from './beacon.js';
-import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.js';
-import type { IslandHandle, IslandModule } from './hydrate-core.js';
-import { emit as dt_emit } from '../devtools/bus.js';
+} from './schedule.ts';
+import { once_visible } from './observe.ts';
+import { preload_island_graph } from './island-graph-preload.ts';
+import { fetch_priority_of, load_slot, viewport_class, type LoadClass } from './load-scheduler.ts';
+import { connected_regions } from './connected.ts';
+import { restore_props_sidecar } from './sidecar.ts';
+import { hole_facts_of } from './hole-facts.ts';
+import { beacon_hydrated, beacon_watch, beacon_failed, beacon_warning, beacon_hole_failed, beacon_hole_answered, beacon_entry_fallback, beacon_hole_fetched } from './beacon.ts';
+import { set_hydrating, tap_svelte_warnings, on_svelte_warning } from './svelte-warnings.ts';
+import type { IslandHandle, IslandModule } from './hydrate-core.ts';
+import { emit as dt_emit } from '../devtools/bus.ts';
 import {
 	install_window_sink as dt_install_window_sink,
 	ingest_server_events as dt_ingest_server
-} from '../devtools/sinks.js';
-import { install_devtools_ui as dt_install_ui } from '../devtools/ui.js';
-import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../devtools/leftovers.js';
+} from '../devtools/sinks.ts';
+import { install_devtools_ui as dt_install_ui } from '../devtools/ui.ts';
+import { watch_leftovers as dt_watch_leftovers, leftover_island_seen as dt_island_seen, leftover_island_gone as dt_island_gone } from '../devtools/leftovers.ts';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (the proven DCE pattern): when off, every
 // `if (DEVTOOLS) dt_emit({…})` folds to `if (false)` and the whole devtools graph tree-shakes away.
@@ -148,7 +148,7 @@ function now_ms(): number {
  * `loaded_core` is the synchronous view once it has arrived (a kept island's props absorb runs
  * inside the reconciler, synchronously, and only ever for an island that already hydrated).
  */
-type HydrateCore = typeof import('./hydrate-core.js');
+type HydrateCore = typeof import('./hydrate-core.ts');
 let core_promise: Promise<HydrateCore> | null = null;
 let loaded_core: HydrateCore | null = null;
 function hydrate_core(): Promise<HydrateCore> {
@@ -156,7 +156,7 @@ function hydrate_core(): Promise<HydrateCore> {
 		// in a task of its own: the import's synchronous start (the bundler's preload of the chunk's
 		// ~20 dependencies) ran inside the first island's start, one long task with it
 		core_promise = yield_task()
-			.then(() => import('./hydrate-core.js'))
+			.then(() => import('./hydrate-core.ts'))
 			.then((m) => (loaded_core = m));
 	}
 	return core_promise;

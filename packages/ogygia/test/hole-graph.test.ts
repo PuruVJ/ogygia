@@ -1,9 +1,9 @@
 // A hole's answer carries the island graph its islands wrote into the render's head, as ONE script
 // with root-absolute URLs (the answer lands in a page at any depth).
 import { expect, test } from 'vitest';
-import { hole_graph_script, hole_head, head_region_css } from '../src/server/hole-graph.js';
-import { island_graph_script } from '../src/server/document-tail.js';
-import { decode_island_graph, decode_island_locations } from '../src/island-graph.js';
+import { hole_graph_script, hole_head, head_region_css } from '../src/server/hole-graph.ts';
+import { island_graph_script } from '../src/server/document-tail.ts';
+import { decode_island_graph, decode_island_locations } from '../src/island-graph.ts';
 
 const base = new URL('https://a.test/__ogygia__?id=x');
 

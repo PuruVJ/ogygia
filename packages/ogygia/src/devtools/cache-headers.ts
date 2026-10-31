@@ -6,9 +6,9 @@
  * The browser's timing API does not expose response headers, so this asks the server once for each
  * file's (a HEAD request, past the cache) when the Page tab opens. Off a build (no `src`): nothing.
  */
-import { all_regions, region_name } from './regions.js';
-import type { StylesFinding } from './styles.js';
-import { tool_fetch, tool_made } from '../tool-fetches.js';
+import { all_regions, region_name } from './regions.ts';
+import type { StylesFinding } from './styles.ts';
+import { tool_fetch, tool_made } from '../tool-fetches.ts';
 
 export interface CacheProbe {
 	url: string;

@@ -5,7 +5,7 @@
  * classified here on purpose: a wrong "pure" would drop code the app runs.
  */
 import { describe, expect, it } from 'vitest';
-import { analyze_exports, analyze_imports } from '../../src/compiler/debarrel/parse.js';
+import { analyze_exports, analyze_imports } from '../../src/compiler/debarrel/parse.ts';
 
 const TS = '/app/x.ts';
 const JS = '/app/x.js';

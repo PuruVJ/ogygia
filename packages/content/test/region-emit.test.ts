@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { try_region_emit, unescape_svelte } from '../src/markdown/region-emit.js';
-import { escape_svelte, fence_embed } from '../src/markdown/shiki.js';
+import { try_region_emit, unescape_svelte } from '../src/markdown/region-emit.ts';
+import { escape_svelte, fence_embed } from '../src/markdown/shiki.ts';
 
 /** A compiled-module skeleton: module script (metadata) + template markup. */
 const mod = (template: string, script = `export const metadata = {"title":"X"};`) =>

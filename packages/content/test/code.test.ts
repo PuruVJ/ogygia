@@ -6,7 +6,7 @@ import {
 	run_variants,
 	type Fence,
 	type VariantGenerator
-} from '../src/markdown/code.js';
+} from '../src/markdown/code.ts';
 
 const fence = (over: Partial<Fence> = {}): Fence => ({
 	lang: 'js',

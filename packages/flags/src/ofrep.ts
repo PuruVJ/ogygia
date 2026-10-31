@@ -8,7 +8,7 @@
  *   import { ofrep } from '@ogygia/flags/openfeature';
  *   decide({ source: ofrep({ url: 'http://flagd:8016' }) });
  */
-import type { FlagSource, FlagQuery, Resolved, CtxLike } from './index.js';
+import type { FlagSource, FlagQuery, Resolved, CtxLike } from './index.ts';
 
 // ── regexes
 const TRAILING_SLASH_RE = /\/$/;

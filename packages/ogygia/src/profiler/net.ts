@@ -9,7 +9,7 @@
  */
 
 import type { AsyncLocalStorage } from 'node:async_hooks';
-import { may_be_chunk, module_category, module_lookup } from './module-map.js';
+import { may_be_chunk, module_category, module_lookup } from './module-map.ts';
 
 // ── regexes
 // (Kit's server runtime is bundled into the app's output chunks, outside node_modules — its
@@ -178,7 +178,7 @@ export function set_stack_capture(on: boolean): void {
 
 // The profiler's own module files (frames.ts): registered at load so a caller lookup skips them
 // whatever the bundler named them. Re-exported for the other profiler modules.
-import { call_sites, file_of, register_profiler_file, is_profiler_file } from './frames.js';
+import { call_sites, file_of, register_profiler_file, is_profiler_file } from './frames.ts';
 export { register_profiler_file };
 register_profiler_file();
 

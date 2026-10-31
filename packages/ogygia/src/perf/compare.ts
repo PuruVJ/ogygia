@@ -4,7 +4,7 @@
  * fail on 1 ms of noise) and absolute caps where a number has a hard meaning (the seed must stay
  * under N KB). A page that is new (no baseline) is measured against the caps only.
  */
-import type { PageSnapshot, PerfSnapshot } from './measure.js';
+import type { PageSnapshot, PerfSnapshot } from './measure.ts';
 
 export interface Budget {
 	/** the median render may grow this much, percent (default 8) */

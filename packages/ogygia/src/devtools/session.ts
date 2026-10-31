@@ -11,9 +11,9 @@
  *  - the devtools bus: islands woken, hydrations, failures, recoveries, navigations, hole fetches.
  * Elements are kept by WeakRef so the tab can point at them without holding the page alive.
  */
-import { add_sink, snapshot } from './bus.js';
-import { all_regions, region_name } from './regions.js';
-import type { DevtoolsEvent } from './schema.js';
+import { add_sink, snapshot } from './bus.ts';
+import { all_regions, region_name } from './regions.ts';
+import type { DevtoolsEvent } from './schema.ts';
 
 export interface SessionInteraction {
 	t: number;

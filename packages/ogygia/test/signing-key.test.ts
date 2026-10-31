@@ -11,7 +11,7 @@ vi.mock('virtual:ogygia/sign', () => ({
 	region_mac_message: (...parts: unknown[]) => parts.join('|')
 }));
 
-const { signing_key, key_fingerprint, reset_signing_key } = await import('../src/server/signing-key.js');
+const { signing_key, key_fingerprint, reset_signing_key } = await import('../src/server/signing-key.ts');
 
 const WARNED = Symbol.for('ogygia.build-key-warned');
 const g = globalThis as Record<symbol, unknown>;

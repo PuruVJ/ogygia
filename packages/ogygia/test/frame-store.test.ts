@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import * as frames from '../src/runtime/frame-store.js';
+import * as frames from '../src/runtime/frame-store.ts';
 
 afterEach(() => frames._reset());
 

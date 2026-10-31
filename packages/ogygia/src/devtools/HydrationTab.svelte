@@ -11,9 +11,9 @@
 	 * (html-diff.ts). Hover a row: the island lights up. Sources: the bus (failed / recovered /
 	 * healed events), the beacon's before/after markup, the element's `data-og-recovered` reason.
 	 */
-	import { hydration_rows, STATUS_RANK as RANK } from './hydration.js';
-	import { html_diff } from './html-diff.js';
-	import { highlight, clear_highlight } from './highlight.js';
+	import { hydration_rows, STATUS_RANK as RANK } from './hydration.ts';
+	import { html_diff } from './html-diff.ts';
+	import { highlight, clear_highlight } from './highlight.ts';
 	import { onMount } from 'svelte';
 
 	let { tick = 0, selected = $bindable(null) } = $props();

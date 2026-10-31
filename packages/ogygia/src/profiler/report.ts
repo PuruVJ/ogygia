@@ -5,21 +5,21 @@
  * components in `./ui/` (rendered through `document()`); this file is pure, testable logic.
  */
 
-import type { Analysis, FrameStat, HeapAllocator } from './analyze.js';
-import { another_routes_file } from './route-files.js';
-import { sequential_ms, type NetCall } from './net.js';
-import type { Visit } from './visit.js';
-import { browser_findings, browser_page_report } from './browser-findings.js';
-import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.js';
-import { compare as fp_compare } from '../devtools/fp-drift.js';
-import type { ClientWindows, InteractionCpu } from './client-windows.js';
-import type { ByteStrip } from './byte-strip.js';
-import { runtime_scripts, type PageAssets, type RuntimeScripts } from './page-assets.js';
-import { unscoped_finding } from '../unscoped-css.js';
-import type { River } from './river.js';
-import type { GcAttribution } from './gc.js';
-import { sync_io, memo_candidates, span_values, type Retained } from './insights.js';
-import { page_score, fmt_bytes, type ScoreInputs, type ScoreAssets, type PageScore } from './score.js';
+import type { Analysis, FrameStat, HeapAllocator } from './analyze.ts';
+import { another_routes_file } from './route-files.ts';
+import { sequential_ms, type NetCall } from './net.ts';
+import type { Visit } from './visit.ts';
+import { browser_findings, browser_page_report } from './browser-findings.ts';
+import { DOM_LARGE, browser_of, engine_of, explain_held_open, inline_threshold_tune, late_found, lcp_font, lcp_rivals, vital_parts, type HeldOpen } from '../devtools/page-insights.ts';
+import { compare as fp_compare } from '../devtools/fp-drift.ts';
+import type { ClientWindows, InteractionCpu } from './client-windows.ts';
+import type { ByteStrip } from './byte-strip.ts';
+import { runtime_scripts, type PageAssets, type RuntimeScripts } from './page-assets.ts';
+import { unscoped_finding } from '../unscoped-css.ts';
+import type { River } from './river.ts';
+import type { GcAttribution } from './gc.ts';
+import { sync_io, memo_candidates, span_values, type Retained } from './insights.ts';
+import { page_score, fmt_bytes, type ScoreInputs, type ScoreAssets, type PageScore } from './score.ts';
 
 /** a file's name from its URL, for a score detail line */
 function asset_name(url: string): string {
@@ -27,25 +27,25 @@ function asset_name(url: string): string {
 	const path = q === -1 ? url : url.slice(0, q);
 	return path.slice(path.lastIndexOf('/') + 1) || path;
 }
-import type { AllocTimeline } from './alloc.js';
-import type { Contention } from './contention.js';
-import type { Lineage } from './lineage.js';
-import type { LedgerLine } from './ledger.js';
-import { unread_rows, type DrillNode } from './drill.js';
-import type { HeapGrowth, Pattern } from './patterns.js';
-import { render_steps } from './steps.js';
-import { own_requests } from './own-requests.js';
+import type { AllocTimeline } from './alloc.ts';
+import type { Contention } from './contention.ts';
+import type { Lineage } from './lineage.ts';
+import type { LedgerLine } from './ledger.ts';
+import { unread_rows, type DrillNode } from './drill.ts';
+import type { HeapGrowth, Pattern } from './patterns.ts';
+import { render_steps } from './steps.ts';
+import { own_requests } from './own-requests.ts';
 export { own_requests };
-import { io_kind, type IoOp } from './async-io.js';
-import { chain_steps, PHASE_LABEL } from './timeline.js';
+import { io_kind, type IoOp } from './async-io.ts';
+import { chain_steps, PHASE_LABEL } from './timeline.ts';
 import type {
 	HoleRequestStats,
 	HoleStat,
 	IslandStat,
 	OgygiaRequestStats
-} from '../server/request-stats.js';
-import type { SpanRecord } from './span.js';
-import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.js';
+} from '../server/request-stats.ts';
+import type { SpanRecord } from './span.ts';
+import { TESTING_ENGINE_VERSION } from '../devtools/testing-version.ts';
 
 export type { OgygiaRequestStats, SpanRecord, HoleRequestStats, IslandStat };
 
@@ -334,7 +334,7 @@ export interface ColdStart {
 	ms: number;
 	busy_ms: number;
 	/** self ms per file in the cold render, heaviest first */
-	files: { file: string; category: import('./analyze.js').FrameCategory; ms: number }[];
+	files: { file: string; category: import('./analyze.ts').FrameCategory; ms: number }[];
 	/** the cold render's CPU by owner, grouped as the drill-down's rows are (a package, `node core`,
 	 *  a function, a component): what each row cost cold */
 	owners?: { label: string; ms: number }[];
@@ -410,7 +410,7 @@ export interface ReportMeta {
 	 *  build wrote, served before the app (a prerendered page) */
 	run_static?: true;
 	/** page mode, when the renders' documents differ: what changes between the first and the last */
-	doc_diff?: import('./doc-diff.js').DocDiff;
+	doc_diff?: import('./doc-diff.ts').DocDiff;
 	/** page mode: a plain note when the run plan was trimmed to fit the serverless budget */
 	budget_note?: string;
 	/** page mode: the server's heap was nearly full, so these renders were not made (one more could
@@ -470,7 +470,7 @@ export interface GcSummary {
 }
 
 /** a line of an island's own component that draws differently in the browser, with its file */
-import { hazard_words, hazard_fix, type IslandHazard } from './hydration-hazards.js';
+import { hazard_words, hazard_fix, type IslandHazard } from './hydration-hazards.ts';
 export type { IslandHazard };
 export { hazard_words, hazard_fix };
 
@@ -559,7 +559,7 @@ export interface ReportExtras {
 	/** one render's time as a tree that adds up: phase → owner / call → line (drill.ts) */
 	drill?: DrillNode;
 	/** one render after every fix named, estimated without counting a saving twice */
-	forecast?: import('./forecast.js').Forecast;
+	forecast?: import('./forecast.ts').Forecast;
 	/** a few more renders with a full collection after each: does the heap keep growing? */
 	growth?: HeapGrowth;
 }
@@ -3047,7 +3047,7 @@ export function cold_rows(
 	meta: ReportMeta
 ): {
 	file: string;
-	category: import('./analyze.js').FrameCategory;
+	category: import('./analyze.ts').FrameCategory;
 	cold_ms: number;
 	warm_ms: number;
 	extra_ms: number;
@@ -3633,19 +3633,19 @@ export type ReportJson = {
 	};
 	score: PageScore;
 	findings: Finding[];
-	budget: { label: string; category: import('./analyze.js').FrameCategory; ms: number; pct: number }[];
+	budget: { label: string; category: import('./analyze.ts').FrameCategory; ms: number; pct: number }[];
 	timeline: {
 		window_ms: number;
 		cpu_ms: number;
 		wait_ms: number;
 		unaccounted_ms: number;
-		phases: { phase: import('./timeline.js').Phase; label: string; cpu_ms: number; wait_ms: number }[];
+		phases: { phase: import('./timeline.ts').Phase; label: string; cpu_ms: number; wait_ms: number }[];
 		steps: {
 			at_ms: number;
 			ms: number;
 			pct: number;
 			kind: 'wait' | 'cpu' | 'gap';
-			phase: import('./timeline.js').Phase;
+			phase: import('./timeline.ts').Phase;
 			what: string;
 			detail: string | null;
 			file: string | null;
@@ -3655,7 +3655,7 @@ export type ReportJson = {
 						ms: number;
 						caller?: string;
 						callers?: string[];
-						timings?: import('./timeline.js').TimelineCall['timings'];
+						timings?: import('./timeline.ts').TimelineCall['timings'];
 						body_ms?: number;
 				  }[]
 				| null;
@@ -3672,8 +3672,8 @@ export type ReportJson = {
 			wait_ms: number;
 			awaited_parent: boolean;
 		}[];
-		chain: import('./timeline.js').LoadChain | null;
-		awaits: import('./timeline.js').AwaitEdge[];
+		chain: import('./timeline.ts').LoadChain | null;
+		awaits: import('./timeline.ts').AwaitEdge[];
 	} | null;
 	spans: SpanRow[];
 	paths: {
@@ -3681,7 +3681,7 @@ export type ReportJson = {
 			name: string;
 			file: string;
 			line: number;
-			category: import('./analyze.js').FrameCategory;
+			category: import('./analyze.ts').FrameCategory;
 			total_ms: number;
 			calls: number | null;
 		};
@@ -3692,11 +3692,11 @@ export type ReportJson = {
 			name: string;
 			file: string;
 			line: number;
-			category: import('./analyze.js').FrameCategory;
+			category: import('./analyze.ts').FrameCategory;
 			package: string | null;
 			ms: number;
 		}[];
-		tree: import('./analyze.js').PathNode;
+		tree: import('./analyze.ts').PathNode;
 	}[];
 	ogygia: {
 		island_rows: {
@@ -3725,9 +3725,9 @@ export type ReportJson = {
 			js_bytes: number | null;
 			js_only_bytes: number | null;
 			modules: string[];
-			interactivity: import('../server/request-stats.js').IslandInteractivity | null;
+			interactivity: import('../server/request-stats.ts').IslandInteractivity | null;
 		}[];
-		seed: { keys: import('../server/request-stats.js').SeedKeyStat[]; whole_by: string[] } | null;
+		seed: { keys: import('../server/request-stats.ts').SeedKeyStat[]; whole_by: string[] } | null;
 		hole_rows: {
 			id: string;
 			component: string | null;
@@ -3769,7 +3769,7 @@ export type ReportJson = {
 		runs_ms: number[] | null;
 		hot_lines: { line: number; ms: number }[] | null;
 		source: { start: number; lines: string[] } | null;
-		callees: import('./analyze.js').Callee[] | null;
+		callees: import('./analyze.ts').Callee[] | null;
 		stacks: { ms: number; frames: string[] }[];
 	}[];
 	hot_functions: {
@@ -3780,7 +3780,7 @@ export type ReportJson = {
 		path: string;
 		line: number;
 		column: number | null;
-		category: import('./analyze.js').FrameCategory;
+		category: import('./analyze.ts').FrameCategory;
 		package: string | null;
 		self_ms: number;
 		total_ms: number;
@@ -3788,9 +3788,9 @@ export type ReportJson = {
 		stacks: { ms: number; frames: string[] }[];
 		hot_lines: { line: number; ms: number }[] | null;
 		source: { start: number; lines: string[] } | null;
-		callees: import('./analyze.js').Callee[] | null;
+		callees: import('./analyze.ts').Callee[] | null;
 	}[];
-	files: { file: string; category: import('./analyze.js').FrameCategory; self_ms: number; pct_busy: number }[];
+	files: { file: string; category: import('./analyze.ts').FrameCategory; self_ms: number; pct_busy: number }[];
 	network: {
 		count: number;
 		total_ms: number;
@@ -3813,8 +3813,8 @@ export type ReportJson = {
 			route: string | null;
 			caller: string | null;
 			callers: string[] | null;
-			server_timing: import('./net.js').ServerTiming[] | null;
-			trace: import('./net.js').UpstreamTrace | null;
+			server_timing: import('./net.ts').ServerTiming[] | null;
+			trace: import('./net.ts').UpstreamTrace | null;
 			headers: Record<string, string> | null;
 			error: string | null;
 		}[];
@@ -3825,7 +3825,7 @@ export type ReportJson = {
 		busy_ms: number;
 		files: {
 			file: string;
-			category: import('./analyze.js').FrameCategory;
+			category: import('./analyze.ts').FrameCategory;
 			cold_ms: number;
 			warm_ms: number;
 			extra_ms: number;
@@ -3839,15 +3839,15 @@ export type ReportJson = {
 						name: string;
 						file: string;
 						line: number;
-						category: import('./analyze.js').FrameCategory;
+						category: import('./analyze.ts').FrameCategory;
 						package: string | null;
 						self_ms: number;
 						total_ms: number;
 					}[];
 					by_island?:
-						| { fp: string; name: string | null; ms: number; top: import('./client-windows.js').WindowFn[] }[]
+						| { fp: string; name: string | null; ms: number; top: import('./client-windows.ts').WindowFn[] }[]
 						| undefined;
-					outside_islands?: { ms: number; top: import('./client-windows.js').WindowFn[] } | undefined;
+					outside_islands?: { ms: number; top: import('./client-windows.ts').WindowFn[] } | undefined;
 					at: number;
 					sampled_ms: number;
 					busy_ms: number;
@@ -3863,7 +3863,7 @@ export type ReportJson = {
 					cls_by_island: { [k: string]: number };
 					resource_totals?: { type: string; count: number; transfer: number; size: number }[] | undefined;
 					at: number;
-					nav: import('./visit.js').VisitNav;
+					nav: import('./visit.ts').VisitNav;
 					paints: {
 						fcp?: number;
 						lcp?: number;
@@ -3890,12 +3890,12 @@ export type ReportJson = {
 	replay: { url: string; path: string; headers: string[] } | null;
 	assets: ReportJsonAssets | { missing: string } | null;
 	strip: {
-		tail?: import('./stream-tail.js').StreamTail | undefined;
+		tail?: import('./stream-tail.ts').StreamTail | undefined;
 		chunks?: { end: number; t: number }[] | undefined;
 		total: number;
-		by_kind: Partial<Record<import('./byte-strip.js').StripKind, number>>;
+		by_kind: Partial<Record<import('./byte-strip.ts').StripKind, number>>;
 		shadow_count: number;
-		segments: import('./byte-strip.js').StripSegment[];
+		segments: import('./byte-strip.ts').StripSegment[];
 	} | null;
 	river: River | null;
 	memory: {
@@ -3921,7 +3921,7 @@ export type ReportJson = {
 				name: string;
 				file: string;
 				line: number;
-				category: import('./analyze.js').FrameCategory;
+				category: import('./analyze.ts').FrameCategory;
 				component: string | null;
 				via: string | null;
 				allocated_bytes: number;
@@ -3949,7 +3949,7 @@ export type ReportJson = {
 			name: string;
 			file: string;
 			line: number;
-			category: import('./analyze.js').FrameCategory;
+			category: import('./analyze.ts').FrameCategory;
 			self_bytes: number;
 			total_bytes: number;
 		}[];
@@ -3960,13 +3960,13 @@ export type ReportJson = {
 		name: string;
 		file: string;
 		line: number;
-		category: import('./analyze.js').FrameCategory;
+		category: import('./analyze.ts').FrameCategory;
 		self_ms: number;
 		count: number;
 		reasons: Record<string, number>;
 	}[];
 	sync_io: { name: string; module: string; self_ms: number; total_ms: number; calls: number | null; callers: string[] }[];
-	memo_candidates: import('./insights.js').MemoCandidate[];
+	memo_candidates: import('./insights.ts').MemoCandidate[];
 	promises: { count: number; per_render: number; top: { caller: string; share: number }[] } | null;
 	retained: {
 		total_bytes: number;
@@ -3981,11 +3981,11 @@ export type ReportJson = {
 			share: number;
 		}[];
 	} | null;
-	steps: import('./steps.js').RenderSteps | null;
+	steps: import('./steps.ts').RenderSteps | null;
 	stacks: {
 		window_ms: number;
 		raw_samples: number;
-		frames: { name: string; file: string | null; category: import('./analyze.js').FrameCategory; parent: number }[];
+		frames: { name: string; file: string | null; category: import('./analyze.ts').FrameCategory; parent: number }[];
 		t_ms: number[];
 		d_ms: number[];
 		leaf: number[];
@@ -4011,7 +4011,7 @@ export type ReportJson = {
 		busy_share: number;
 		inflight_at_start: number[];
 		per_window: { n: number; overlap_ms: number; cpu_max_ms: number }[];
-		requests: import('./contention.js').ContendingRequest[];
+		requests: import('./contention.ts').ContendingRequest[];
 		note: string;
 	} | null;
 	lineage: {
@@ -4020,10 +4020,10 @@ export type ReportJson = {
 			from: string | null;
 			shipped_bytes: number;
 			load_wait_ms: number | null;
-			verdict: import('./lineage.js').KeyVerdict;
+			verdict: import('./lineage.ts').KeyVerdict;
 			readers: { name: string; island: boolean }[];
 		}[];
-		components: import('./lineage.js').LineageComponent[];
+		components: import('./lineage.ts').LineageComponent[];
 		unread: string[];
 		server_only: string[];
 		notes: string[];
@@ -4033,11 +4033,11 @@ export type ReportJson = {
 		| {
 				save_per_render_ms: number;
 				cost_per_render_ms: number;
-				kind: import('./patterns.js').PatternKind;
+				kind: import('./patterns.ts').PatternKind;
 				title: string;
 				fix: string;
 				example?: { before: string; after: string };
-				sites: import('./patterns.js').PatternSite[];
+				sites: import('./patterns.ts').PatternSite[];
 				cost_ms: number;
 				alloc_bytes: number;
 				save_ms: number;
@@ -4053,8 +4053,8 @@ export type ReportJson = {
 		| null;
 	growth: HeapGrowth | null;
 	drill: DrillNode | null;
-	forecast: import('./forecast.js').Forecast | null;
-	span_values: import('./insights.js').SpanValueRow[];
+	forecast: import('./forecast.ts').Forecast | null;
+	span_values: import('./insights.ts').SpanValueRow[];
 	waiting: { caller: string; kind: string; count: number; wait_ms: number }[];
 	user_timings: { name: string; count: number; total_ms: number; avg_ms: number; max_ms: number }[];
 	requests: {
@@ -4113,7 +4113,7 @@ type ReportJsonAssets = {
 		lazy?: boolean | undefined;
 		blocking?: boolean | undefined;
 		url: string;
-		kind: import('./page-assets.js').AssetKind;
+		kind: import('./page-assets.ts').AssetKind;
 		via:
 			| 'script'
 			| 'img'

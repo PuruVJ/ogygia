@@ -1,5 +1,5 @@
 import * as ogygia from 'ogygia';
-import { SharedCounter } from './counter-object.svelte.js';
+import { SharedCounter } from './counter-object.svelte.ts';
 
 /**
  * Cross-island context matrix. `roomCtx` carries a live transportable (`SharedCounter`) shared

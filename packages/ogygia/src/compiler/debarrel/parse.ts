@@ -4,7 +4,7 @@
  * barrel. The id's extension picks the dialect, like everywhere else in the compiler; a Svelte
  * script block is parsed under a synthetic `<file>.svelte.ts` / `.svelte.js` id.
  */
-import { parse_module } from '../parse/oxc.js';
+import { parse_module } from '../parse/oxc.ts';
 
 export interface ImportSpec {
 	/** `default` | `namespace` | `named` */

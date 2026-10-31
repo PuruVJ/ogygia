@@ -3,8 +3,8 @@
 // navigation; otherwise to the ogygia router. A customer's chips inside a live island on a Kit page
 // called `goto()` and reached the ogygia router, which does not own that document — a full reload.
 import { afterEach, expect, test, vi } from 'vitest';
-import * as shim from '../../src/shims/app-navigation.js';
-import { query_map, live_query_map } from '../../src/shims/kit-remote/remote-cache.js';
+import * as shim from '../../src/shims/app-navigation.ts';
+import { query_map, live_query_map } from '../../src/shims/kit-remote/remote-cache.ts';
 
 const KEY = Symbol.for('ogygia.kit-page');
 const scope = globalThis as unknown as Record<symbol, unknown>;

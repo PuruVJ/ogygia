@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as v from 'valibot';
-import { content, enrich, glob, markdown, json } from '../src/index.js';
-import type { Source, SourceEntry } from '../src/index.js';
-import { parseFrontmatter } from '../src/markdown/frontmatter.js';
-import { withRemotes } from '../src/remote.js';
-import { content_hmr as contentPlugin, invalidateModuleTree } from '../src/vite/hmr.js';
+import { content, enrich, glob, markdown, json } from '../src/index.ts';
+import type { Source, SourceEntry } from '../src/index.ts';
+import { parseFrontmatter } from '../src/markdown/frontmatter.ts';
+import { withRemotes } from '../src/remote.ts';
+import { content_hmr as contentPlugin, invalidateModuleTree } from '../src/vite/hmr.ts';
 import type { ModuleNode, ViteDevServer } from 'vite';
 
 const REGION_BRAND = Symbol.for('ogygia.region');

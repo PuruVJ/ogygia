@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { transform_tabs, has_tabs } from '../src/markdown/tabs.js';
+import { transform_tabs, has_tabs } from '../src/markdown/tabs.ts';
 
 /** Backtick fence helper — keeps the test source readable (no escaping a wall of backticks). */
 const F = '```';

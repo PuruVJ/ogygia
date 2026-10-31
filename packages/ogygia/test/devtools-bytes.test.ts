@@ -1,7 +1,7 @@
 // The exact byte ledger: each file counted once on the page, each island's "only it" is what no
 // other island needs, the runtime kept apart, a file not loaded yet is cold (not zero).
 import { expect, test } from 'vitest';
-import { byte_ledger } from '../src/devtools/bytes.js';
+import { byte_ledger } from '../src/devtools/bytes.ts';
 
 const u = (f: string) => `http://x/_app/${f}`;
 const graph = new Map([
@@ -35,7 +35,7 @@ test('each file once, what only each island needs, the shared files with their u
 });
 
 test("an island's id from a dev entry and from a built one (the names key the bare id)", async () => {
-	const { island_id } = await import('../src/devtools/regions.js');
+	const { island_id } = await import('../src/devtools/regions.ts');
 	expect(island_id('/@id/__x00__virtual:ogygia/island/415a42fa7fbd.js')).toBe('415a42fa7fbd');
 	expect(island_id('./_app/immutable/og-region.24fa20edb0cb.js')).toBe('24fa20edb0cb');
 	expect(island_id('https://cdn.example/_app/immutable/og-region.24fa20edb0cb.js?v=1')).toBe('24fa20edb0cb');

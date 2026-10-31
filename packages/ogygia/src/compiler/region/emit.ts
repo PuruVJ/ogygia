@@ -8,7 +8,7 @@
  *   - the BINDING legs (`make_region_binding` / `wrapper_attach_binding` / `make_wake_island`) — the
  *     leg-split descriptor (SSR carries the signer + server render; client is metadata-only).
  */
-import { regionBindingVirtualId, lazyEntryVirtualId } from '../ids.js';
+import { regionBindingVirtualId, lazyEntryVirtualId } from '../ids.ts';
 
 /**
  * Source of the generated `__renderHtml(props)` for a binding's SSR leg. The returned HTML must be

@@ -3,7 +3,7 @@
  * line (the served, compiled code's) to the source's through the module's inline map.
  */
 import { describe, it, expect } from 'vitest';
-import { lines_of_map } from '../src/devtools/source-lines.js';
+import { lines_of_map } from '../src/devtools/source-lines.ts';
 
 describe('lines_of_map', () => {
 	it('each served line → the source line of its first segment', () => {

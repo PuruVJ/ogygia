@@ -7,8 +7,8 @@
  * stream a `<script>__ogygia_page_resolve(id, ok, encoded)</script>` chunk that resolves it live.
  */
 import { stringify } from 'devalue';
-import { PAGE_DEFER_KEY, PAGE_SETTLED_KEY } from '../page-defer.js';
-import { escape_script_text } from '../escape.js';
+import { PAGE_DEFER_KEY, PAGE_SETTLED_KEY } from '../page-defer.ts';
+import { escape_script_text } from '../escape.ts';
 
 // Bounds runaway recursion on a pathological/cyclic PLAIN structure only — promises are handled
 // before this cap applies (see the walkers), so a deeply-nested load promise is never abandoned.

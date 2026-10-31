@@ -6,7 +6,7 @@
  * Messages in:  { type: 'load', url } | { type: 'query', id, q, base, limit }
  * Messages out: { type: 'ready' } | { type: 'error', message } | { type: 'result', id, hits }
  */
-import { orama_engine, type SearchIndex } from './search.js';
+import { orama_engine, type SearchIndex } from './search.ts';
 
 let index_p: Promise<SearchIndex> | null = null;
 

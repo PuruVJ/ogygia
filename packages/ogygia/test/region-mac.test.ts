@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { sign, verify, region_mac_message } from '../src/server/hmac.js';
-import { encode_region_props } from '../src/server/region-props.js';
-import { MAX_REGION_PROPS_LEN } from '../src/server/endpoint.js';
-import { html_has_kit_bootstrap } from '../src/runtime/kit-boot.js';
-import { RuntimeSession } from '../src/runtime/session.js';
-import { islandId } from '../src/compiler/region/transform.js';
+import { sign, verify, region_mac_message } from '../src/server/hmac.ts';
+import { encode_region_props } from '../src/server/region-props.ts';
+import { MAX_REGION_PROPS_LEN } from '../src/server/endpoint.ts';
+import { html_has_kit_bootstrap } from '../src/runtime/kit-boot.ts';
+import { RuntimeSession } from '../src/runtime/session.ts';
+import { islandId } from '../src/compiler/region/transform.ts';
 
 describe('region_mac_message', () => {
 	const secret = 'test-secret-key-16b';

@@ -2,7 +2,7 @@
 // carries `x-ogygia-deny`; a 403 without it came from something in front of the handle (a bot
 // wall at the CDN), and must not read as ogygia's refusal — or the field chases ogygia for it.
 import { describe, it, expect, beforeAll } from 'vitest';
-import { deny_of, NOT_OGYGIA_403 } from '../src/runtime/region-endpoint-url.js';
+import { deny_of, NOT_OGYGIA_403 } from '../src/runtime/region-endpoint-url.ts';
 
 beforeAll(() => {
 	(globalThis as { location?: unknown }).location ??= { href: 'https://a.test/page' };

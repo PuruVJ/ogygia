@@ -4,17 +4,17 @@ import crypto from 'node:crypto';
 import { isMainThread } from 'node:worker_threads';
 import { loadEnv, type Plugin, type Rolldown, type ViteDevServer } from 'vite';
 import type { PreprocessorGroup } from 'svelte/compiler';
-import { configure_build_cache } from '../build-cache.js';
-import { content_css_key } from '../plugin/utils.js';
-import { island_sourcemaps_plugin } from './sourcemaps.js';
-import { server_sourcemaps_plugin } from './server-sourcemaps.js';
-import { install_dev_client_maps, install_dev_maps, install_dev_page_keys } from './dev-maps.js';
+import { configure_build_cache } from '../build-cache.ts';
+import { content_css_key } from '../plugin/utils.ts';
+import { island_sourcemaps_plugin } from './sourcemaps.ts';
+import { server_sourcemaps_plugin } from './server-sourcemaps.ts';
+import { install_dev_client_maps, install_dev_maps, install_dev_page_keys } from './dev-maps.ts';
 import {
 	is_island_path,
 	normalize_import_keys,
 	asRegionLocals,
 	type ImportKeys
-} from '../compiler/region/transform.js';
+} from '../compiler/region/transform.ts';
 
 export {
 	normalize_import_keys,
@@ -28,23 +28,23 @@ export {
 	regionId,
 	regionIdentity,
 	strategyKey
-} from '../compiler/region/transform.js';
-export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.js';
-export type { ImportKeys } from '../compiler/region/transform.js';
+} from '../compiler/region/transform.ts';
+export { rewrite_lake_import_to_placeholder } from '../compiler/region/emit.ts';
+export type { ImportKeys } from '../compiler/region/transform.ts';
 // The debarrel pass as a standalone plugin for any Vite app (inside ogygia it rides `barrels`).
-export { debarrel } from '../compiler/debarrel/plugin.js';
+export { debarrel } from '../compiler/debarrel/plugin.ts';
 // the BUILD side of a plugin (design: internal/notes/packages.md, plugin API v2)
-export { definePlugin } from './plugin-api.js';
-export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupIslands } from './plugin-api.js';
-export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.js';
-export type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.js';
-import { check_plugins, plugin_vite_plugins, resolve_plugins, type ResolvedPlugins } from './plugin-api.js';
-import type { ServerRealm } from '../compiler/link/caps.js';
+export { definePlugin } from './plugin-api.ts';
+export type { OgygiaPlugin, BuildContext, MacroHandler, MacroContext, MarkupSource, MarkupIslands } from './plugin-api.ts';
+export type { DebarrelOptions, Matcher as DebarrelMatcher } from '../compiler/debarrel/options.ts';
+export type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.ts';
+import { check_plugins, plugin_vite_plugins, resolve_plugins, type ResolvedPlugins } from './plugin-api.ts';
+import type { ServerRealm } from '../compiler/link/caps.ts';
 import {
 	assert_no_legacy_options,
 	validate_region_presets,
 	resolve_options
-} from './options.js';
+} from './options.ts';
 import {
 	clientBuildWillSkip,
 	hasAnyCsrFalseRoute,
@@ -57,14 +57,14 @@ import {
 	strip_route_options,
 	kit_dirs,
 	kit_inline_style_threshold
-} from '../compiler/kit.js';
-import { load_kit_dirs } from './kit-dirs.js';
-import { write_module_map } from './module-map.js';
-import { fill_profiler_maps } from './profiler-maps.js';
-import { debarrel } from '../compiler/debarrel/plugin.js';
-import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.js';
-import { RENEW_WINDOW_SEC } from '../server/shared-cache.js';
-import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.js';
+} from '../compiler/kit.ts';
+import { load_kit_dirs } from './kit-dirs.ts';
+import { write_module_map } from './module-map.ts';
+import { fill_profiler_maps } from './profiler-maps.ts';
+import { debarrel } from '../compiler/debarrel/plugin.ts';
+import { DEFAULT_REGION_TTL_SEC } from '../server/endpoint.ts';
+import { RENEW_WINDOW_SEC } from '../server/shared-cache.ts';
+import { derive_id_salt, secret_has_min_entropy, MIN_SECRET_BYTES } from '../server/hmac.ts';
 import {
 	buildFoucCssModuleSource,
 	collectFoucCssReachable,
@@ -72,32 +72,32 @@ import {
 	foucRelFromId,
 	isFoucCssId,
 	isFoucScopedId
-} from '../compiler/fouc-css.js';
+} from '../compiler/fouc-css.ts';
 
-import { preprocess_component_for_css } from './style-preprocess.js';
+import { preprocess_component_for_css } from './style-preprocess.ts';
 import {
 	needs_csr_false_full_reload,
 	needs_island_entry_full_reload
-} from '../compiler/dev/hmr.js';
-import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.js';
-import { island_subgraph_bytes } from '../compiler/dev/region-bytes.js';
+} from '../compiler/dev/hmr.ts';
+import { derive_css_scope_owners, type DevGraphModule } from '../compiler/dev/css-scope.ts';
+import { island_subgraph_bytes } from '../compiler/dev/region-bytes.ts';
 import {
 	collectIslandDepModulepreloads,
 	collect_inline_css,
 	remote_hash_of,
 	summarize_chunk_contents
-} from '../compiler/link/island-deps.js';
-import { report_seed_shaping } from '../compiler/link/build-output.js';
-import { follow_pending_page_calls } from '../compiler/link/page-keys.js';
-import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.js';
-import { ssr_hosts_handoff_path, parse_ssr_hosts } from '../compiler/link/emit-gate.js';
-import { router_css_key } from '../compiler/link/router-css.js';
-import { Program, strip_id } from '../compiler/program.js';
-import { Compiler } from '../compiler/driver.js';
-import { CompileCtx, type PackageScan } from '../compiler/ctx.js';
-import { discover_package_files } from './package-files.js';
-import { async_twin_redirect, svelte_async_enabled } from './late-island.js';
-import { flags_manifest } from '../compiler/flags.js';
+} from '../compiler/link/island-deps.ts';
+import { report_seed_shaping } from '../compiler/link/build-output.ts';
+import { follow_pending_page_calls } from '../compiler/link/page-keys.ts';
+import { warn_content_leaks, emit_island_deps_handoff } from '../compiler/link/build-output.ts';
+import { ssr_hosts_handoff_path, parse_ssr_hosts } from '../compiler/link/emit-gate.ts';
+import { router_css_key } from '../compiler/link/router-css.ts';
+import { Program, strip_id } from '../compiler/program.ts';
+import { Compiler } from '../compiler/driver.ts';
+import { CompileCtx, type PackageScan } from '../compiler/ctx.ts';
+import { discover_package_files } from './package-files.ts';
+import { async_twin_redirect, svelte_async_enabled } from './late-island.ts';
+import { flags_manifest } from '../compiler/flags.ts';
 import {
 	V_KIT_WIRE,
 	V_ROUTER_CSS,
@@ -105,7 +105,7 @@ import {
 	V_ROUTE_OPTIONS,
 	RESOLVED,
 	V_SERVER_MANIFEST
-} from '../compiler/ids.js';
+} from '../compiler/ids.ts';
 
 // Kit's generated CLIENT app entry — Kit 2 dev serves `generated/client/app.js` and the build inputs
 // `generated/client-optimized/app.js`; Kit 3 nests both under `generated/dev/` and `generated/build/`
@@ -155,9 +155,9 @@ import {
 	RUNTIME_DIR,
 	REGION_ENDPOINT_MODULE,
 	RUNTIME_HASH
-} from './paths.js';
+} from './paths.ts';
 
-import type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.js';
+import type { OgygiaPreset, OgygiaRateLimit, RegionsOptions, OgygiaOptions } from './options.ts';
 
 /** css-ish file the dev bridge manages (mirrors the bridge's glob). */
 const DEV_CSS_FILE_RE = /\.(css|scss|sass|less|styl)$/;

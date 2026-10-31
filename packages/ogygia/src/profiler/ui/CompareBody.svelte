@@ -5,8 +5,8 @@
 	 * page) or one computed in the browser from the store (LocalCompare island). A positive delta
 	 * is a regression (b slower than a) and reads red.
 	 */
-	import { fmt_ms } from './format.js';
-	import type { Comparison } from '../compare.js';
+	import { fmt_ms } from './format.ts';
+	import type { Comparison } from '../compare.ts';
 
 	let { base, cmp }: { base: string; cmp: Comparison } = $props();
 

@@ -3,14 +3,14 @@
 // idle / pagehide), keyed by its server-minted fingerprint; an island with no fingerprint (a
 // standalone render) and a page without the tag send nothing.
 import { expect, inject, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
-import { _reset_beacon, _beacon_state } from '../../src/runtime/beacon.js';
+import { bootDev } from '../../src/runtime/full.ts';
+import { _reset_beacon, _beacon_state } from '../../src/runtime/beacon.ts';
 
 const inject_html = (key: 'counter_json_lane_ssr_b64' | 'heavy_schedule_ssr_b64') =>
 	decodeURIComponent(escape(atob(inject(key))));
 
 test('a fingerprinted island reports its hydration timing to the profiler beacon, batched, by fingerprint', async () => {
-	await Promise.all([import('/test/browser/fixtures/Counter.svelte'), import('../../src/runtime/hydrate-core.js')]);
+	await Promise.all([import('/test/browser/fixtures/Counter.svelte'), import('../../src/runtime/hydrate-core.ts')]);
 	_reset_beacon();
 	const meta = document.createElement('meta');
 	meta.name = 'ogygia-profiler-beacon';
@@ -91,7 +91,7 @@ test('a fingerprinted island reports its hydration timing to the profiler beacon
 });
 
 test('islands without a fingerprint (a standalone render) queue nothing', async () => {
-	await Promise.all([import('/test/browser/fixtures/Heavy.svelte'), import('../../src/runtime/hydrate-core.js')]);
+	await Promise.all([import('/test/browser/fixtures/Heavy.svelte'), import('../../src/runtime/hydrate-core.ts')]);
 	_reset_beacon();
 	const meta = document.createElement('meta');
 	meta.name = 'ogygia-profiler-beacon';

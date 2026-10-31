@@ -3,7 +3,7 @@
 // end to end (e2e/wake-gate.spec.ts holds a deferred script); here: a parsed document resolves in the
 // task AFTER the next frame, never in the frame's own callbacks, and late callers pass straight through.
 import { beforeEach, expect, test } from 'vitest';
-import { after_document_painted, reset_document_painted } from '../../src/runtime/schedule.js';
+import { after_document_painted, reset_document_painted } from '../../src/runtime/schedule.ts';
 
 beforeEach(() => reset_document_painted());
 

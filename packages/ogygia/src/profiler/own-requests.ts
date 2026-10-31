@@ -1,4 +1,4 @@
-import type { ReportMeta, RequestEntry } from './report.js';
+import type { ReportMeta, RequestEntry } from './report.ts';
 
 /**
  * THE PROFILED PAGE'S OWN REQUESTS among every request the window saw: a page profile's renders

@@ -4,16 +4,16 @@
  * stepper, and the spans' values. Pure modules, exercised with hand-built inputs.
  */
 import { describe, expect, it } from 'vitest';
-import { analyze, build_stack_index, type CpuProfile } from '../src/profiler/analyze.js';
-import { range_hot, stack_at, density } from '../src/profiler/stacks.js';
-import { alloc_timeline } from '../src/profiler/alloc.js';
-import { contention } from '../src/profiler/contention.js';
-import { data_reads, data_prop_names, build_lineage } from '../src/profiler/lineage.js';
-import { render_steps } from '../src/profiler/steps.js';
-import { span_values } from '../src/profiler/insights.js';
-import type { RequestEntry } from '../src/profiler/report.js';
-import type { Timeline } from '../src/profiler/timeline.js';
-import type { SpanRecord } from '../src/profiler/span.js';
+import { analyze, build_stack_index, type CpuProfile } from '../src/profiler/analyze.ts';
+import { range_hot, stack_at, density } from '../src/profiler/stacks.ts';
+import { alloc_timeline } from '../src/profiler/alloc.ts';
+import { contention } from '../src/profiler/contention.ts';
+import { data_reads, data_prop_names, build_lineage } from '../src/profiler/lineage.ts';
+import { render_steps } from '../src/profiler/steps.ts';
+import { span_values } from '../src/profiler/insights.ts';
+import type { RequestEntry } from '../src/profiler/report.ts';
+import type { Timeline } from '../src/profiler/timeline.ts';
+import type { SpanRecord } from '../src/profiler/span.ts';
 
 // a profile: (root) → load (routes/x/+page.server.ts) → fetchData ; (root) → Page.svelte → Card.svelte
 function profile(): CpuProfile {

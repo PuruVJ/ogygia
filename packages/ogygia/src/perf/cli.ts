@@ -13,10 +13,10 @@ import { spawn, execSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { measure, type PerfSnapshot } from './measure.js';
-import { verdict, type Budget } from './compare.js';
-import { markdown, summary } from './report.js';
-import { bisect } from './bisect.js';
+import { measure, type PerfSnapshot } from './measure.ts';
+import { verdict, type Budget } from './compare.ts';
+import { markdown, summary } from './report.ts';
+import { bisect } from './bisect.ts';
 
 function arg(argv: string[], name: string): string | undefined {
 	const i = argv.indexOf(name);

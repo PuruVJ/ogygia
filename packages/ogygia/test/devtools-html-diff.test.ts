@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tokenize, html_diff } from '../src/devtools/html-diff.js';
+import { tokenize, html_diff } from '../src/devtools/html-diff.ts';
 
 describe('tokenize', () => {
 	it('tags and text, comments out, whitespace folded', () => {

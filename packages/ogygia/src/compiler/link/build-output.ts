@@ -5,8 +5,8 @@
  * over the finished bundle + the app root (fs is the only side effect); the adapter owns only the
  * Vite `this.getFileName` resolution and the trigger.
  */
-import { fs, path } from '../host.js';
-import { islandDepsHandoffPath } from './island-deps.js';
+import { fs, path } from '../host.ts';
+import { islandDepsHandoffPath } from './island-deps.ts';
 
 const CORPUS_RE = /\.(svx|md)(\?|$)/;
 /** A `?…type=style…` / `lang.css` sub-import id — a CSS face, never a corpus JS leak. */

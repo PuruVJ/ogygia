@@ -21,9 +21,9 @@ import {
 	title_case,
 	type Convention,
 	type MetaDecoration
-} from './convention.js';
-import { markdown } from './formats.js';
-import type { GlobMap, RawRecord, RawSource, Source } from './source.js';
+} from './convention.ts';
+import { markdown } from './formats.ts';
+import type { GlobMap, RawRecord, RawSource, Source } from './source.ts';
 
 const BACKSLASH = /\\/g;
 const norm = (k: string) => k.replace(BACKSLASH, '/').split('?')[0];

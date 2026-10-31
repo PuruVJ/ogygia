@@ -7,7 +7,7 @@
  * Browser-only (instantiates a `Worker`). Build once (fetch + index), then `query()` is a worker
  * round-trip — sub-millisecond for docs-scale corpora.
  */
-import type { SearchHit } from './search.js';
+import type { SearchHit } from './search.ts';
 
 // ── regexes
 const TRAILING_SLASHES_RE = /\/+$/;

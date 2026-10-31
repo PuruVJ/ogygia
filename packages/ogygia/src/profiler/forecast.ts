@@ -6,11 +6,11 @@
 // reads is deleted outright, and any pattern inside it is moot. Keeping a service's answer for
 // later renders is told apart: it trades freshness for time, a decision the code fixes do not need.
 
-import type { DrillNode } from './drill.js';
-import type { Pattern, PatternKind } from './patterns.js';
-import type { CallStack } from './analyze.js';
-import { tokens } from './source-scan.js';
-import { saving_of } from './saving.js';
+import type { DrillNode } from './drill.ts';
+import type { Pattern, PatternKind } from './patterns.ts';
+import type { CallStack } from './analyze.ts';
+import { tokens } from './source-scan.ts';
+import { saving_of } from './saving.ts';
 
 export { saving_of };
 

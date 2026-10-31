@@ -6,7 +6,7 @@
  * Why not just import the router: island code is bundled apart from the runtime (an island chunk
  * can load on a csr=true page where the runtime never boots). A runtime module island code imports
  * is SHARED between the two graphs, so the bundler must keep it out of the runtime chunk — and with
- * it everything that module's own lazy chunks need. One `import … from '../runtime/router.js'` in the
+ * it everything that module's own lazy chunks need. One `import … from '../runtime/router.ts'` in the
  * navigation shim split the runtime's boot into a dozen files. So island code reads this handle
  * from the global realm (the same pattern as the Kit page bridge, `Symbol.for('ogygia.kit-page')`),
  * and `test/runtime-boot-svelte-free.test.ts` pins that no island-side module imports a boot module.
@@ -20,8 +20,8 @@
  * Island code reads it as `globalThis[Symbol.for('ogygia.nav')]` (the key is repeated there on
  * purpose: importing {@link NAV_HANDLE_KEY} would be the very edge this module exists to avoid).
  */
-import { speculate_url } from './speculate-hint.js';
-import type { AfterNavigateCallback, BeforeNavigateCallback } from './router.js';
+import { speculate_url } from './speculate-hint.ts';
+import type { AfterNavigateCallback, BeforeNavigateCallback } from './router.ts';
 
 export const NAV_HANDLE_KEY: unique symbol = Symbol.for('ogygia.nav');
 
@@ -67,8 +67,8 @@ export function mpa_nav(): NavHandle {
 			return Promise.resolve();
 		},
 		// No SPA cache to bust, but the page's seeds can still refresh in place.
-		invalidate: () => import('./router-nav.js').then((n) => n.invalidate_all()),
-		invalidateAll: () => import('./router-nav.js').then((n) => n.invalidate_all()),
+		invalidate: () => import('./router-nav.ts').then((n) => n.invalidate_all()),
+		invalidateAll: () => import('./router-nav.ts').then((n) => n.invalidate_all()),
 		preloadData(url) {
 			speculate_url(url, 'prerender');
 			return Promise.resolve({ type: 'loaded' as const, status: 200, data: {} });

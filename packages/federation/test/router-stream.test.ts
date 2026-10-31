@@ -6,8 +6,8 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { routes, page } from 'ogygia/router';
-import { mount } from '../src/mount.js';
-import { make_peer } from '../src/peer.js';
+import { mount } from '../src/mount.ts';
+import { make_peer } from '../src/peer.ts';
 
 const peer = (o = {}) => make_peer('cms', { origin: 'http://mfe.test', ...o }, 'shell');
 

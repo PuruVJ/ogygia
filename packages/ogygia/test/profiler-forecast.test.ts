@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { forecast_of } from '../src/profiler/forecast.js';
-import type { Pattern } from '../src/profiler/patterns.js';
-import type { DrillNode } from '../src/profiler/drill.js';
+import { forecast_of } from '../src/profiler/forecast.ts';
+import type { Pattern } from '../src/profiler/patterns.ts';
+import type { DrillNode } from '../src/profiler/drill.ts';
 
 // One render after every fix: a saving is never counted twice.
 

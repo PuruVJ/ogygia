@@ -11,7 +11,7 @@
  * allocator gets the pause time it is responsible for, and the report can say "this 40 ms of GC
  * is toProductVM's structuredClone in ProductCard", which no table of allocators can. Pure.
  */
-import { categorize, clean_url, component_name_from_file, strip_bundler_suffix, with_script_url, type FrameCategory, type HeapNode } from './analyze.js';
+import { categorize, clean_url, component_name_from_file, strip_bundler_suffix, with_script_url, type FrameCategory, type HeapNode } from './analyze.ts';
 
 export interface GcEvent {
 	/** ms on the profile's clock (from the window's start) */

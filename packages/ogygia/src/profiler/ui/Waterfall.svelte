@@ -6,8 +6,8 @@
 	 * toggled by click / Escape (see reactivity-dom-preferences). Styles live in style.ts (the shipped
 	 * profiler UI uses one global sheet, not scoped CSS — see style.ts).
 	 */
-	import { fmt_ms, fmt_bytes } from './format.js';
-	import type { WfRow, WfCall } from './report-data.js';
+	import { fmt_ms, fmt_bytes } from './format.ts';
+	import type { WfRow, WfCall } from './report-data.ts';
 
 	let { rows }: { rows: WfRow[] } = $props();
 	let selected = $state<WfCall | null>(null);

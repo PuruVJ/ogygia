@@ -10,8 +10,8 @@
 	 */
 	import { page } from '$app/state';
 	import { script } from 'ogygia';
-	import { set_shell_context } from '../context.js';
-	import { mountBase } from '../site.js';
+	import { set_shell_context } from '../context.ts';
+	import { mountBase } from '../site.ts';
 	import Search from './Search.svelte' with { wake: 'idle' };
 	import ThemeToggle from './ThemeToggle.svelte' with { wake: 'load' };
 	import type { Snippet } from 'svelte';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pick_fields } from '../src/profiler/index.js';
+import { pick_fields } from '../src/profiler/index.ts';
 
 describe('pick_fields (a compact profile)', () => {
 	const report = { schema: 's', version: 1, engine: { version: 3 }, id: 'x', target: {}, links: {}, findings: [1], stacks: 'big', hot_functions: 'big', summary: { busy_ms: 1 } };

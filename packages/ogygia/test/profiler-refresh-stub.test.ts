@@ -1,7 +1,7 @@
 // A prerendered route that redirects is written as a page: a meta refresh (and a script) answered
 // 200. The profiler follows it as the redirect it is, to the page its visitors land on.
 import { expect, test } from 'vitest';
-import { refresh_target } from '../src/profiler/refresh-stub.js';
+import { refresh_target } from '../src/profiler/refresh-stub.ts';
 
 const origin = 'http://127.0.0.1:4192';
 

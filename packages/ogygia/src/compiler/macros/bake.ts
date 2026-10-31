@@ -15,13 +15,13 @@
  * (JSON + Date/Map/Set/RegExp/BigInt/…): a function or Promise in the result is a build error. Both
  * violations surface as build-voice errors naming the file and line. Node-only.
  */
-import { fs, path } from '../host.js';
+import { fs, path } from '../host.ts';
 import { pathToFileURL } from 'node:url';
 import { uneval } from 'devalue';
-import { og_member } from './wire.js';
-import { parse_module } from '../parse/oxc.js';
-import { og_js_regions } from '../parse/scan.js';
-import { BuildCache } from '../../build-cache.js';
+import { og_member } from './wire.ts';
+import { parse_module } from '../parse/oxc.ts';
+import { og_js_regions } from '../parse/scan.ts';
+import { BuildCache } from '../../build-cache.ts';
 
 // ── regexes
 const REGEX_SPECIAL_G = /[.*+?^${}()|[\]\\]/g;

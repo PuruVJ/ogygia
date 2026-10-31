@@ -5,8 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parse } from 'devalue';
-import { document } from '../src/document.js';
-import { region } from '../src/region.js';
+import { document } from '../src/document.ts';
+import { region } from '../src/region.ts';
 import Tiny from './_fixtures/Tiny.svelte';
 
 const SEED_RE = /<script type="application\/ogygia-page" data-ogygia-page([^>]*)>([^<]*)<\/script>/;

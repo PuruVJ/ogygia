@@ -4,7 +4,7 @@
  * is the harness's (relative + `$lib` + a fake node_modules with `exports`).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { fixture, type Fixture } from './_fixture.js';
+import { fixture, type Fixture } from './_fixture.ts';
 
 let f: Fixture;
 afterEach(() => f?.dispose());

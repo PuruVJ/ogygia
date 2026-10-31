@@ -13,7 +13,7 @@
  * as before.
  */
 
-import { walk_enters } from './ownership.js';
+import { walk_enters } from './ownership.ts';
 
 const REGION = 'ogygia-region';
 const changed = new WeakSet<Element>();

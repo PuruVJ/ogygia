@@ -90,8 +90,8 @@ interface HubRegistry {
 	keep_owner: Map<string, string>;
 }
 
-import { emit as dt_emit } from './devtools/bus.js';
-import { batch, notify, watchers } from './ref-watch.js';
+import { emit as dt_emit } from './devtools/bus.ts';
+import { batch, notify, watchers } from './ref-watch.ts';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -399,7 +399,7 @@ export function resolve(ref: Ref, scope_or_remember: boolean | Scope): unknown {
 
 // WATCH / NOTIFY / BATCH live in ref-watch.ts (the boot needs only them, never the whole hub);
 // re-exported here so the hub stays the one import for everything identity.
-export { watch, notify, batch, watcher_count } from './ref-watch.js';
+export { watch, notify, batch, watcher_count } from './ref-watch.ts';
 
 /** Resolve a bag of refs as one transaction (sugar over {@link batch}). */
 export function resolve_batch(refs: readonly Ref[], scope: boolean | Scope): unknown[] {

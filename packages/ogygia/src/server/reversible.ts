@@ -25,7 +25,7 @@
  * Pure string work over one tokenizer pass each (indexOf-driven, no regex, no DOM): it runs on every
  * response of an app that configures a transform.
  */
-import { escape_amp_quot } from '../escape.js';
+import { escape_amp_quot } from '../escape.ts';
 
 // ─── tokenizer ─────────────────────────────────────────────────────────────────────────────────────
 

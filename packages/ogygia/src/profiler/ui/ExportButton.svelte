@@ -6,7 +6,7 @@
 	 * server holds the key): the kept copy rides to whichever instance answers, and it encrypts it
 	 * (report-request.ts). No key in the browser either way.
 	 */
-	import { page_ogp, report_request } from './report-request.js';
+	import { page_ogp, report_request } from './report-request.ts';
 
 	let { id, ogpB64 = '', base = '' }: { id: string; ogpB64?: string; base?: string } = $props();
 	let busy = $state(false);

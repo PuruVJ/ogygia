@@ -3,7 +3,7 @@
 // page's copy of an island's content is retired, never the island's; a stylesheet link is never
 // retired. End to end, with a real island and a real navigation: e2e/head-ownership.spec.ts.
 import { beforeEach, expect, test } from 'vitest';
-import { RuntimeSession } from '../../src/runtime/session.js';
+import { RuntimeSession } from '../../src/runtime/session.ts';
 
 const LD = '<script type="application/ld+json">{"@type":"BreadcrumbList"}</script>';
 const SERVER_HEAD =

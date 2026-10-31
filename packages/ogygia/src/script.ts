@@ -22,7 +22,7 @@
  * browser globals only — no imports, no closed-over variables (they do not exist in the browser).
  * Pass what it needs as `args`; they are JSON-serialized and handed to it in order.
  */
-import { escape_attr, escape_script_text } from './escape.js';
+import { escape_attr, escape_script_text } from './escape.ts';
 
 /** A JSON value (what `args` and the data payloads carry). */
 export type ScriptJson = string | number | boolean | null | ScriptJson[] | { [key: string]: ScriptJson | undefined };

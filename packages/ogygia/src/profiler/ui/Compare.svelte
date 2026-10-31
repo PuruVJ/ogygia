@@ -8,7 +8,7 @@
 	import Shell from './Shell.svelte';
 	import CompareBody from './CompareBody.svelte';
 	import LocalCompare from './LocalCompare.svelte' with { wake: 'load' };
-	import type { ProfilerRoutes } from '../profiler-router.js';
+	import type { ProfilerRoutes } from '../profiler-router.ts';
 
 	let { data }: ProfilerRoutes['/compare/[a]/[b]'] = $props();
 	const { base, cmp, a, b } = $derived(data);

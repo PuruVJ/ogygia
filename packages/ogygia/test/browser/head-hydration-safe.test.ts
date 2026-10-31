@@ -7,7 +7,7 @@
 // of the fragile walk — while leaving every rendered head ELEMENT (and any comment that is not a paired
 // Svelte marker) exactly where it was.
 import { beforeEach, expect, test } from 'vitest';
-import { neutralize_head_hydration_markers } from '../../src/runtime/hydrate-core.js';
+import { neutralize_head_hydration_markers } from '../../src/runtime/hydrate-core.ts';
 
 const HASH = 'svelte-1abc23';
 

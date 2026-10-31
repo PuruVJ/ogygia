@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { site_fixes } from '../src/profiler/site-fixes.js';
-import type { Pattern } from '../src/profiler/patterns.js';
+import { site_fixes } from '../src/profiler/site-fixes.ts';
+import type { Pattern } from '../src/profiler/patterns.ts';
 
 // A slow line in a shared helper, added up over every page whose latest report names it.
 

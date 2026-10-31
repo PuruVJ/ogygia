@@ -6,9 +6,9 @@
 import { describe, it, expect } from 'vitest';
 import { get, writable } from 'svelte/store';
 import { parse, stringify } from 'devalue';
-import { __register_fn, fn_handle } from '../src/fn-transport.js';
-import { REF_WIRE_KEY, ref_reducer, ref_reviver, resolve } from '../src/ref.js';
-import { register_store_kind } from '../src/store-transport.js';
+import { __register_fn, fn_handle } from '../src/fn-transport.ts';
+import { REF_WIRE_KEY, ref_reducer, ref_reviver, resolve } from '../src/ref.ts';
+import { register_store_kind } from '../src/store-transport.ts';
 register_store_kind(); // a bound capture below is a store — its kind must be registered in THIS graph
 
 const FAMILIES = new Set(['fn', 'store']);
@@ -73,14 +73,14 @@ describe('fn kind (og.$ runtime half)', () => {
 
 describe('og.$ boundary assertion runtime (__og_boundary) + fn as island prop', () => {
 	it("legal values pass through untouched (mark-don't-wrap)", async () => {
-		const { __og_boundary } = await import('../src/boundary.js');
+		const { __og_boundary } = await import('../src/boundary.ts');
 		const store = writable(1);
 		expect(__og_boundary(store, 'x.ts:1')).toBe(store);
 		expect(__og_boundary({ a: 1 }, 'x.ts:2')).toEqual({ a: 1 });
 	});
 
 	it('a refusal throws AT THE MARK with the site', async () => {
-		const { __og_boundary } = await import('../src/boundary.js');
+		const { __og_boundary } = await import('../src/boundary.ts');
 		expect(() =>
 			__og_boundary({ el: { nodeType: 1, nodeName: 'DIV' } }, 'src/routes/p.svelte:9')
 		).toThrow(/src\/routes\/p\.svelte:9.*DOM node/s);
@@ -88,13 +88,13 @@ describe('og.$ boundary assertion runtime (__og_boundary) + fn as island prop', 
 	});
 
 	it('an og.$ fn crosses as an ISLAND PROP (fn family; snippet kind must not freeze it)', async () => {
-		const { encode_region_props } = await import('../src/server/region-props.js');
+		const { encode_region_props } = await import('../src/server/region-props.ts');
 		__register_fn('test/prop#$0', (p: number) => (n: number) => n + p);
 		const live = fn_handle('test/prop#$0', [10]);
 		const payload = encode_region_props({ adder: live, label: 'x' });
 		expect(payload).not.toBeNull(); // crossed — not frozen, not rejected
-		const { B64Url } = await import('../src/server/payload.js');
-		const { REF_WIRE_KEY, ref_reviver } = await import('../src/ref.js');
+		const { B64Url } = await import('../src/server/payload.ts');
+		const { REF_WIRE_KEY, ref_reviver } = await import('../src/ref.ts');
 		const props = parse(B64Url.decode(payload!), {
 			[REF_WIRE_KEY]: ref_reviver(true) as (d: never) => unknown
 		}) as {

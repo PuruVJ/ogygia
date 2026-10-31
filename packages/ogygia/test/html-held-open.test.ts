@@ -7,11 +7,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'devalue';
-import { stage_deferred, defer_reducer, resolve_script } from '../src/server/page-stream.js';
-import { PAGE_DEFER_GLOBAL, PAGE_DEFER_KEY } from '../src/page-defer.js';
-import { analyze_page, defer_keys, explain_held_open, type PageInput } from '../src/devtools/page-insights.js';
-import { byte_strip } from '../src/profiler/byte-strip.js';
-import { stream_tail } from '../src/profiler/stream-tail.js';
+import { stage_deferred, defer_reducer, resolve_script } from '../src/server/page-stream.ts';
+import { PAGE_DEFER_GLOBAL, PAGE_DEFER_KEY } from '../src/page-defer.ts';
+import { analyze_page, defer_keys, explain_held_open, type PageInput } from '../src/devtools/page-insights.ts';
+import { byte_strip } from '../src/profiler/byte-strip.ts';
+import { stream_tail } from '../src/profiler/stream-tail.ts';
 
 const never = new Promise(() => {});
 const staged = stage_deferred({ title: 'lab', reviews: never, more: { stock: never } }, 0).staged;

@@ -22,7 +22,7 @@
 // the Node `vite` package here dragged the whole of vite onto the compiler's hot path, which is what
 // kept the FULL driver out of a browser worker (the Observatory). `set_parser` already installs the
 // sync oxc parser in every realm (Node default; the worker installs rolldown-browser's).
-import { parse_module } from '../parse/oxc.js';
+import { parse_module } from '../parse/oxc.ts';
 
 const CLASS_KW = /\bclass\b/;
 // A real (pre-transform) wire codec member: `static <name> = import.meta.og.wire(…)`. Tight on

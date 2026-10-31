@@ -15,9 +15,9 @@
  * export const transport = { ...ogygiaTransport };
  * ```
  */
-import { REGION_BRAND } from './region-brand.js';
-import { frameAddress } from './frame.js';
-import { ticket, write } from './runtime/frame-store.js';
+import { REGION_BRAND } from './region-brand.ts';
+import { frameAddress } from './frame.ts';
+import { ticket, write } from './runtime/frame-store.ts';
 import {
 	register_kind,
 	mint,
@@ -26,11 +26,11 @@ import {
 	ref_reviver,
 	REF_WIRE_KEY,
 	type Ref
-} from './ref.js';
-import { register_wire_kind } from './live-transport.js';
-import { register_store_kind, register_derived_kind } from './store-transport.js';
-import { register_snippet_kind } from './region-snippet.js';
-import { register_fn_kind } from './fn-transport.js';
+} from './ref.ts';
+import { register_wire_kind } from './live-transport.ts';
+import { register_store_kind, register_derived_kind } from './store-transport.ts';
+import { register_snippet_kind } from './region-snippet.ts';
+import { register_fn_kind } from './fn-transport.ts';
 
 type EncodedRegion = {
 	i: string; // id

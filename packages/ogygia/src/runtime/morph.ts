@@ -59,7 +59,7 @@
  * subtrees are created with the correct namespace. The morph-vs-replace test compares `namespaceURI`
  * as well as `tagName`, so an HTML `<a>` is never morphed into an SVG `<a>`.
  */
-import { slots } from './slots.js';
+import { slots } from './slots.ts';
 import {
 	attributes_writer,
 	is_declared_foreign,
@@ -71,7 +71,7 @@ import {
 	render_made,
 	REGION_RENDER_ATTRS,
 	slots_light_dom
-} from './ownership.js';
+} from './ownership.ts';
 
 // DOM spec constants by VALUE (they are frozen: 1/3/8 forever) — referencing the `Node` global
 // at module scope made every importer of this file require a DOM at IMPORT time, which broke

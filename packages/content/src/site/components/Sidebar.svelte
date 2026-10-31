@@ -7,10 +7,10 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { get_shell_context } from '../context.js';
-	import { roving } from './roving.js';
-	import type { Site } from '../site.js';
-	import type { NavLeaf, NavTree } from '../types.js';
+	import { get_shell_context } from '../context.ts';
+	import { roving } from './roving.ts';
+	import type { Site } from '../site.ts';
+	import type { NavLeaf, NavTree } from '../types.ts';
 
 	// ── regexes
 	const NON_IDENT_CHARS_G = /[^a-zA-Z0-9_-]+/g;

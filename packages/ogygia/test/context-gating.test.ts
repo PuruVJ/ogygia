@@ -8,8 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	context_string_keys,
 	source_uses_ogygia_context
-} from '../src/compiler/link/context-detect.js';
-import { resolveFeatures } from '../src/compiler/link/runtime-entry.js';
+} from '../src/compiler/link/context-detect.ts';
+import { resolveFeatures } from '../src/compiler/link/runtime-entry.ts';
 
 describe('source_uses_ogygia_context — a provider is detected', () => {
 	it.each([

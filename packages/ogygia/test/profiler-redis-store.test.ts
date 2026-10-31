@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redisStore } from '../src/profiler/storage/redis.js';
+import { redisStore } from '../src/profiler/storage/redis.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The Redis store against two in-memory clients shaped like node-redis (camelCase, options objects)

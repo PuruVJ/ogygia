@@ -12,7 +12,7 @@
 // is why every earlier snippet fixture (all `$lib`) sailed through.
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
-import { transformHost } from '../src/compiler/region/transform.js';
+import { transformHost } from '../src/compiler/region/transform.ts';
 
 // ── regexes
 /** Any `<something>/virtual:ogygia/<Name>.svelte` — the phantom path the bug used to bake. */

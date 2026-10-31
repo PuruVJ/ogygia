@@ -2,8 +2,8 @@
 	// PICK YOUR FIXES: the forecast's parts as a checklist — tick the ones you will make, and the
 	// render after them is counted the forecast's way (each saving once, each resource capped by
 	// what the render used), right here in the browser. A fix another covers comes with it.
-	import { saving_of } from '../saving.js';
-	import { fmt_ms } from './format.js';
+	import { saving_of } from '../saving.ts';
+	import { fmt_ms } from './format.ts';
 
 	type Part = { title: string; kind: string; ms: number; wait: boolean; with?: string[] };
 	let { parts, now_ms, caps }: { parts: Part[]; now_ms: number; caps?: { wait?: number; cpu?: number } } = $props();

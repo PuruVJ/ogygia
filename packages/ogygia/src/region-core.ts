@@ -5,4 +5,4 @@
  * instead of the `ogygia` / `ogygia/internal` barrels. `region()` on a plain component takes the inline
  * path (no signer, no node:crypto) — see region.ts — so held-raw regions render as zero-JS server HTML.
  */
-export { region, isRegion, og_html_region } from './region.js';
+export { region, isRegion, og_html_region } from './region.ts';

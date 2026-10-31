@@ -7,8 +7,8 @@
  * world: dispatch would answer from the table, never from a Kit page.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { routes, page, layout } from '../src/router/index.js';
-import { route_option, clear_route_options, set_page_route_options } from '../src/plugin/routes.js';
+import { routes, page, layout } from '../src/router/index.ts';
+import { route_option, clear_route_options, set_page_route_options } from '../src/plugin/routes.ts';
 
 const C = (() => null) as never;
 const freeze = (path: string) => route_option('freeze', null, path);

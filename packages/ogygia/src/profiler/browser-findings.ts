@@ -9,11 +9,11 @@
  * Findings the report already makes its own way are left to it: a recovery (hydration-mismatch),
  * an island that never woke (never-hydrated), the vitals, the render-blocking files.
  */
-import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.js';
-import type { CodeKind, CpuFn, CpuSummary } from '../devtools/cpu.js';
-import type { FrameCategory } from './analyze.js';
-import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.js';
-import type { Visit } from './visit.js';
+import { analyze_page, browser_of, type HeldOpen, type PageInput, type PageReport, type RegionFact } from '../devtools/page-insights.ts';
+import type { CodeKind, CpuFn, CpuSummary } from '../devtools/cpu.ts';
+import type { FrameCategory } from './analyze.ts';
+import type { ClientWindows, InteractionCpu, WindowFn } from './client-windows.ts';
+import type { Visit } from './visit.ts';
 
 /** codes the report makes from its own data (render-blocking only when it weighed the page's files:
  *  the report.ts caller drops the browser's then — on a dev server it weighs nothing, and the

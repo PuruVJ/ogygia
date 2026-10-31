@@ -20,32 +20,32 @@
 	 * collapsed into this file.
 	 */
 	import { untrack, getContext, getAllContexts, setContext, createRawSnippet, mount, unmount } from 'svelte';
-	import { KIT_REQUEST_CONTEXT, kit_page_version, kit_request_event } from './server/kit-context.js';
+	import { KIT_REQUEST_CONTEXT, kit_page_version, kit_request_event } from './server/kit-context.ts';
 	import { stringify } from 'devalue';
 	import hmrUrl from 'virtual:ogygia/dev-hmr-url';
 	import { islandDeps, islandCss, contentCss, islandReadsPage, islandPageKeys, islandRemotes, islandInteractivity, entryLocation } from 'virtual:ogygia/island-deps';
-	import { runtime_bootstrap } from './server/entry-location.js';
+	import { runtime_bootstrap } from './server/entry-location.ts';
 	import { makeRegionEndpoint, mintServerIsland, known_region_fps, islandFingerprint, holeCss } from 'virtual:ogygia/region-endpoint';
-	import { fingerprint_of, hole_copy_of } from './runtime/hash.js';
+	import { fingerprint_of, hole_copy_of } from './runtime/hash.ts';
 	// Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike (kit-paths.ts)
-	import { kit_asset as asset } from './kit-paths.js';
+	import { kit_asset as asset } from './kit-paths.ts';
 	import { building } from '$app/env';
 	import { page } from '$app/state';
-	import { record_page } from './page-seed-registry.js';
-	import { document_tail, island_graph_script, modulepreload_tag } from './server/document-tail.js';
-	import { plan_props_wire, props_sidecar } from './server/props-wire.js';
-	import { region_css_tag } from './server/region-css.js';
-	import { escape_amp, escape_amp_quot, escape_attr } from './escape.js';
-	import { isNested, setNested, isInLake, isInLiveSnippet, setInLiveSnippet, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.js';
-	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.js';
-	import { isRegion } from './region.js';
+	import { record_page } from './page-seed-registry.ts';
+	import { document_tail, island_graph_script, modulepreload_tag } from './server/document-tail.ts';
+	import { plan_props_wire, props_sidecar } from './server/props-wire.ts';
+	import { region_css_tag } from './server/region-css.ts';
+	import { escape_amp, escape_amp_quot, escape_attr } from './escape.ts';
+	import { isNested, setNested, isInLake, isInLiveSnippet, setInLiveSnippet, setHoleInline, documentIsCsrTrue, claimRuntimeEmit, claim_region_css, claim_kit_island } from './context.ts';
+	import { prepare_region_props, slot_pointer, slot_marker_open, SLOT_MARKER_CLOSE, next_slot_id } from './region-snippet.ts';
+	import { isRegion } from './region.ts';
 	// (LateIslandAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
 	import LateIsland from './LateIsland.svelte';
 	// (PromiseRegionAwait.svelte in its place where the app runs Svelte's async mode: vite/late-island.ts)
 	import PromiseRegion from './PromiseRegion.svelte';
 	import LakeBoundary from './LakeBoundary.svelte';
 	import SlotBoundary from './SlotBoundary.svelte';
-	import { record_server_event } from './devtools/server-registry.js';
+	import { record_server_event } from './devtools/server-registry.ts';
 
 	// DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 	const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
@@ -55,7 +55,7 @@
 	 * wrappers) passes only the `__*` internals — so `<Region of={value} />` type-checks for consumers
 	 * without the internal props.
 	 * @type {{
-	 *   of?: import('./region.js').RegionValue | Promise<import('./region.js').RegionValue>;
+	 *   of?: import('./region.ts').RegionValue | Promise<import('./region.ts').RegionValue>;
 	 *   placeholder?: import('svelte').Snippet;
 	 *   children?: import('svelte').Snippet;
 	 *   __mode?: 'island' | 'server' | 'lake'; __baked?: boolean;
@@ -180,7 +180,7 @@
 	// there, and what it resolves to comes back here as a value. Region renders values.
 	// What every held branch below renders: a value resolves synchronously (SSR renders it in this
 	// same pass — blocks/SDUI never see a placeholder).
-	const resolved = $derived(of_is_promise ? undefined : /** @type {import('./region.js').RegionValue | undefined} */ (of));
+	const resolved = $derived(of_is_promise ? undefined : /** @type {import('./region.ts').RegionValue | undefined} */ (of));
 	// A LIVE region (a wire value with HTML, a deferred hole) is the runtime's to paint, on a Kit-hydrated
 	// page too; so is the one a promise will resolve to.
 	// svelte-ignore state_referenced_locally
@@ -192,7 +192,7 @@
 	// them once is intentional — not a missed reactive capture. A Promise `of` is never a dual here:
 	// a promise resolves to a wire value (deferred) — only a same-pass VALUE can be a dual.
 	// svelte-ignore state_referenced_locally
-	const of_init = of_is_promise ? undefined : /** @type {import('./region.js').RegionValue | undefined} */ (of);
+	const of_init = of_is_promise ? undefined : /** @type {import('./region.ts').RegionValue | undefined} */ (of);
 	const held_dual_island = !!(of_init && of_init.kind === 'dual' && of_init.hydrate);
 	// svelte-ignore state_referenced_locally
 	const is_island = __mode === 'island' || held_dual_island;
@@ -282,7 +282,7 @@
 	// Normalized island inputs, from placement props OR a held dual. `as_dual` is the type-narrowed
 	// reactive read of the dual value (a Promise `of` never lands here — see `held_dual_island`).
 	const as_dual = $derived(
-		/** @type {import('./region.js').DualRegion | undefined} */ (
+		/** @type {import('./region.ts').DualRegion | undefined} */ (
 			held_dual_island && resolved?.kind === 'dual' ? resolved : undefined
 		)
 	);
@@ -899,7 +899,7 @@
 			hydrateMargin: f.hydrateMargin
 		});
 	}
-	/** @param {import('./region.js').DeferredRegion} f */
+	/** @param {import('./region.ts').DeferredRegion} f */
 	function identity(f) {
 		try {
 			return f.id + ' ' + stringify_devalue(f.props);
@@ -1012,11 +1012,11 @@
 	     children) shows until the styled HTML paints. -->
 	{#if __baked}{@render baked_adopt()}{:else}<ogygia-region live {@attach apply_live}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region>{/if}
 {:else if resolved}
-	{@const d = /** @type {import('./region.js').DeferredRegion} */ (resolved)}
+	{@const d = /** @type {import('./region.ts').DeferredRegion} */ (resolved)}
 	{#key identity(d)}
 		<ogygia-region entry={d.module || ''} render="defer" when="load" wake={d.hydrate || undefined} hydrate-margin={d.hydrateMargin || undefined} endpoint={d.url} src={location_of(d.module || '') || undefined}>{#if placeholder}{@render placeholder()}{:else if children}{@render children()}{/if}</ogygia-region><!-- svelte-ignore hydration_html_changed -->{@html held_props_script}
 	{/key}
 {:else if of_is_promise}
 	<!-- A promise `of`: the region owns the whole wait — PromiseRegion decides how it waits. -->
-	<PromiseRegion of={/** @type {Promise<import('./region.js').RegionValue>} */ (of)} {placeholder} {children} />
+	<PromiseRegion of={/** @type {Promise<import('./region.ts').RegionValue>} */ (of)} {placeholder} {children} />
 {/if}

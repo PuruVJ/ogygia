@@ -4,9 +4,9 @@
  * island's hashed dependency chunks (Vite's auto graph does not cover `@vite-ignore` `import(entry)`).
  * Pure over the bundle it is handed. Covered by unit tests.
  */
-import { path } from '../host.js';
-import { merge_page_keys, type PageKeys } from './page-keys.js';
-import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.js';
+import { path } from '../host.ts';
+import { merge_page_keys, type PageKeys } from './page-keys.ts';
+import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.ts';
 
 /** Deterministic island facade filename (content-hashed Vite deps are separate). */
 const ISLAND_FACADE_RE = /(?:^|\/)og-region\.[0-9a-f]+\.js$/;

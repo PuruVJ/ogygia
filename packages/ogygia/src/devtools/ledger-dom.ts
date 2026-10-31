@@ -4,11 +4,11 @@
  * — handed to the pure `byte_ledger` (bytes.ts). Null off a build (the dev server writes no graph).
  * Shared by the Bytes tab and an island's detail card.
  */
-import { ISLAND_GRAPH_ATTR, decode_island_graph } from '../island-graph.js';
-import { byte_ledger, type Ledger } from './bytes.js';
-import { dynamic_imports, static_imports } from '../profiler/page-assets.js';
-import { all_regions, region_name } from './regions.js';
-import { tool_fetch, tool_made } from '../tool-fetches.js';
+import { ISLAND_GRAPH_ATTR, decode_island_graph } from '../island-graph.ts';
+import { byte_ledger, type Ledger } from './bytes.ts';
+import { dynamic_imports, static_imports } from '../profiler/page-assets.ts';
+import { all_regions, region_name } from './regions.ts';
+import { tool_fetch, tool_made } from '../tool-fetches.ts';
 
 const abs = (href: string | null | undefined): string | null => {
 	if (!href) return null;

@@ -7,7 +7,7 @@
  * (which reads the `dash` peer) is fine: router.ts uses `dash` lazily, inside a load.
  */
 import { federate } from '@ogygia/federation';
-import { cms_router } from './router.js';
+import { cms_router } from './router.ts';
 import { env } from '$env/dynamic/private';
 
 export const { dash } = federate({

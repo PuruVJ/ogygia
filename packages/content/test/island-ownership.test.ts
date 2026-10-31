@@ -18,8 +18,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
-import { ogygiaPreprocess } from '../src/markdown/index.js';
-import { bridge } from '../src/bridge.js';
+import { ogygiaPreprocess } from '../src/markdown/index.ts';
+import { bridge } from '../src/bridge.ts';
 
 // The markup hook now consults the doc-level markup cache — isolate it, or a previous run's
 // entry short-circuits before the bridge is consulted.

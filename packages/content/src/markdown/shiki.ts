@@ -13,9 +13,9 @@ const DOUBLE_QUOTE_G = /"/g;
  */
 
 import type { ShikiTransformer } from 'shiki';
-import { render_fence, default_pipeline, type CodePipeline } from './code-render.js';
-import { fence_key, fence_cache_get, fence_cache_set } from './fence-cache.js';
-import type { SerializedRegion } from '../region-store.js';
+import { render_fence, default_pipeline, type CodePipeline } from './code-render.ts';
+import { fence_key, fence_cache_get, fence_cache_set } from './fence-cache.ts';
+import type { SerializedRegion } from '../region-store.ts';
 
 /** A Shiki bundled theme name, or a theme object (e.g. `ThemeRegistrationResolved`). */
 export type MarkdownThemeInput = string | { name?: string };

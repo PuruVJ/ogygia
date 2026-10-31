@@ -21,8 +21,8 @@ import {
 	hasAnyCsrTrueRoute,
 	read_csr,
 	clear_route_csr_cache
-} from '../src/compiler/kit.js';
-import { transformHost } from '../src/compiler/region/transform.js';
+} from '../src/compiler/kit.ts';
+import { transformHost } from '../src/compiler/region/transform.ts';
 
 /** Write a route tree: { 'content/[...slug]/+page.ts': 'export const csr = false;' }. */
 function tree(files: Record<string, string>): string {

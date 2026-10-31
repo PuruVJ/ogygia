@@ -6,10 +6,10 @@
 	 * island that is expensive in several ways at once. A `wake:'load'` island; click a column to
 	 * sort by it.
 	 */
-	import type { IslandRow } from './report-data.js';
-	import type { Visit } from '../visit.js';
-	import { fmt_bytes, fmt_ms } from './format.js';
-	import { pressable } from './press.js';
+	import type { IslandRow } from './report-data.ts';
+	import type { Visit } from '../visit.ts';
+	import { fmt_bytes, fmt_ms } from './format.ts';
+	import { pressable } from './press.ts';
 
 	let { rows, visit = null }: { rows: IslandRow[]; visit?: Visit | null } = $props();
 

@@ -2,11 +2,11 @@
 // when REDIS_URL is set), observed purity, single-flight + fan-out, and the two edge adapters'
 // REAL request shapes (signing included) captured through a stubbed fetch.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { freeze_key, normalize_prefix, prefix_tags, PREFIX_TAG_DEPTH } from '../src/key.js';
-import { memory_store } from '../src/memory-store.js';
-import { valkey, type ValkeyLike } from '../src/adapters/valkey.js';
-import { akamai } from '../src/adapters/akamai.js';
-import { cloudfront } from '../src/adapters/cloudfront.js';
+import { freeze_key, normalize_prefix, prefix_tags, PREFIX_TAG_DEPTH } from '../src/key.ts';
+import { memory_store } from '../src/memory-store.ts';
+import { valkey, type ValkeyLike } from '../src/adapters/valkey.ts';
+import { akamai } from '../src/adapters/akamai.ts';
+import { cloudfront } from '../src/adapters/cloudfront.ts';
 import {
 	configure,
 	reset_for_tests,
@@ -16,10 +16,10 @@ import {
 	begin_flight,
 	invalidate,
 	invalidateWhere
-} from '../src/registry.js';
-import { observe_event } from '../src/observe.js';
-import { find_stitch_holes, stitch_html } from '../src/stitch.js';
-import type { FreezeEntry, FreezeStore, EdgeAdapter } from '../src/types.js';
+} from '../src/registry.ts';
+import { observe_event } from '../src/observe.ts';
+import { find_stitch_holes, stitch_html } from '../src/stitch.ts';
+import type { FreezeEntry, FreezeStore, EdgeAdapter } from '../src/types.ts';
 
 const page_entry = (html = '<html>x</html>'): FreezeEntry => ({
 	kind: 'page',

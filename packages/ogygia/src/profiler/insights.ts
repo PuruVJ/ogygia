@@ -4,10 +4,10 @@
  * the same thing many times per render (memoization candidates), and a WHAT-IF model over the
  * causality graph of the waits: the render's wall time with a call parallelized, cached or removed.
  */
-import type { Analysis, FrameStat } from './analyze.js';
-import type { AwaitNode, AwaitEdge } from './timeline.js';
-import type { GcMaker } from './gc.js';
-import type { SpanRecord } from './span.js';
+import type { Analysis, FrameStat } from './analyze.ts';
+import type { AwaitNode, AwaitEdge } from './timeline.ts';
+import type { GcMaker } from './gc.ts';
+import type { SpanRecord } from './span.ts';
 
 // ── sync I/O ─────────────────────────────────────────────────────────────────────────────────
 

@@ -22,8 +22,8 @@
  */
 
 import { get, writable, derived } from 'svelte/store';
-import { wire } from './live-transport.js';
-import { register_kind, mint, resolve, type Ref } from './ref.js';
+import { wire } from './live-transport.ts';
+import { register_kind, mint, resolve, type Ref } from './ref.ts';
 
 /** Brand on an `og_derived` store: the RECIPE (sources + formula) it was made from. */
 const DERIVED_BRAND = Symbol.for('ogygia.derived');

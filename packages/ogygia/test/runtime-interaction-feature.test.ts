@@ -1,7 +1,7 @@
 // The interaction capture ships for every island that hydrates on the client: a scheduled one
 // (`load` / `idle` / `visible` / media) is armed until it is live, so a click before then is replayed.
 import { describe, it, expect } from 'vitest';
-import { resolveFeatures } from '../src/compiler/link/runtime-entry.js';
+import { resolveFeatures } from '../src/compiler/link/runtime-entry.ts';
 
 const has = (hydrate: string[]) => resolveFeatures({ complete: true, hydrate }).includes('interaction');
 

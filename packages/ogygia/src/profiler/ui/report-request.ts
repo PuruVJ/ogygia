@@ -6,7 +6,7 @@
  * (IndexedDB), gzipped. Request bodies are capped (512 KB by default on adapter-node), so a report
  * is never sent as raw JSON. With neither, a plain GET by id (a server that still holds it).
  */
-import { get_report } from './store.js';
+import { get_report } from './store.ts';
 
 /** the element the report page carries its `.ogp` bytes in, ONCE (base64): every button reads it
  *  here at click time instead of taking a copy as a prop (five buttons held 1.2 MB of copies) */

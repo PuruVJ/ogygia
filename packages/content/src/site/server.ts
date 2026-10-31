@@ -18,10 +18,10 @@
  *    dynamic-site path — distinct from the prerendered `search.json` + worker (the static path).
  */
 import { prerender, query } from '$app/server';
-import type { ContentMode } from '../remote.js';
-import type { Site, SiteMeta } from './site.js';
-import type { SearchHit } from './search.js';
-import type { PageView, NavTree } from './types.js';
+import type { ContentMode } from '../remote.ts';
+import type { Site, SiteMeta } from './site.ts';
+import type { SearchHit } from './search.ts';
+import type { PageView, NavTree } from './types.ts';
 
 /** Minimal Standard Schema string validator (avoids a valibot dep in the library). */
 const string_arg = {

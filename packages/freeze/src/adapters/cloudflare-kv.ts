@@ -11,8 +11,8 @@
  *
  *   freeze.configure({ store: cloudflareKv(platform.env.FREEZE) });
  */
-import type { FreezeStore } from '../types.js';
-import { normalize_prefix, subtree_prefix } from '../key.js';
+import type { FreezeStore } from '../types.ts';
+import { normalize_prefix, subtree_prefix } from '../key.ts';
 
 const KEY_NS = 'og:a:';
 const TAG_NS = 'og:t:';

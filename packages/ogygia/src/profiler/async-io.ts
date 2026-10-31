@@ -13,8 +13,8 @@
  * reports those with URL + status, and undici keep-alive would inflate socket
  * lifetimes here anyway.
  */
-import { nearest_app_site, register_profiler_file, type CallerSite } from './net.js';
-import { call_sites, file_of, is_profiler_file } from './frames.js';
+import { nearest_app_site, register_profiler_file, type CallerSite } from './net.ts';
+import { call_sites, file_of, is_profiler_file } from './frames.ts';
 
 // so this module's own frames (the AsyncHook.init callback) are skipped when we
 // blame a caller, regardless of how the bundler renamed this file

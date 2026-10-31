@@ -6,10 +6,10 @@
  * content-addressed fence cache. So a snippet in a `.svelte` and the same snippet in a `.svx` fence
  * render byte-for-byte the same, and each renders once across a whole build.
  */
-import { configure_shiki, fence_config_key, render_code_region } from './shiki.js';
-import { default_pipeline, type CodePipeline } from './code-render.js';
-import type { MarkdownOptions } from './index.js';
-import type { SerializedRegion } from '../region-store.js';
+import { configure_shiki, fence_config_key, render_code_region } from './shiki.ts';
+import { default_pipeline, type CodePipeline } from './code-render.ts';
+import type { MarkdownOptions } from './index.ts';
+import type { SerializedRegion } from '../region-store.ts';
 
 /** Resolve the fence environment (`cfg`, `pipe`, `config_key`) from the app's markdown options —
  *  the same assembly `ogygiaPreprocess()` does, so snippets and fences share one configuration. */

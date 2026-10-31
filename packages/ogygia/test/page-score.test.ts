@@ -3,7 +3,7 @@
 // fairness case that started the rework: a page with NO islands that ships 6 MB of JS must score
 // far below a lean islands page, not 100.
 import { describe, test, expect } from 'vitest';
-import { page_score, curve, CURVES, type ScoreInputs, type ScoreAssets } from '../src/profiler/score.js';
+import { page_score, curve, CURVES, type ScoreInputs, type ScoreAssets } from '../src/profiler/score.ts';
 
 const KB = 1024;
 const MB = 1024 * KB;

@@ -7,9 +7,9 @@
 // block comment). The answer's full panel was inserted beside the stale empty one, which painted over
 // it: a blank mega-menu panel for one user group.
 import { afterEach, expect, test } from 'vitest';
-import { parse_region_html } from '../../src/runtime/parse-html.js';
-import { morph_children } from '../../src/runtime/morph.js';
-import { mark_render_made, render_made } from '../../src/runtime/ownership.js';
+import { parse_region_html } from '../../src/runtime/parse-html.ts';
+import { morph_children } from '../../src/runtime/morph.ts';
+import { mark_render_made, render_made } from '../../src/runtime/ownership.ts';
 
 // a design-system upgrade: re-appends its element children (comments stay behind), and adds a node
 // of its own

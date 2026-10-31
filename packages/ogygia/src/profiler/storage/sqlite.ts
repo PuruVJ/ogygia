@@ -9,7 +9,7 @@
  *   ogygia.profiler({ store: sqliteStore('.ogygia/profiles.db') });
  */
 import { createRequire } from 'node:module';
-import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.js';
+import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.ts';
 
 /** browser visits kept per page (the profiler reads the latest ten) */
 const MAX_VISITS_PER_PAGE = 20;

@@ -12,8 +12,8 @@
  * as before: those values decode synchronously whenever they arrive. Each module loads once.
  */
 import { wire_loaders, wire_all } from 'virtual:ogygia/transportables';
-import { props_sidecar_of } from './sidecar.js';
-import { yield_task } from './schedule.js';
+import { props_sidecar_of } from './sidecar.ts';
+import { yield_task } from './schedule.ts';
 
 const loaders = wire_loaders as Record<string, () => Promise<unknown>>;
 const paths = Object.keys(loaders);

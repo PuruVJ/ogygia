@@ -11,10 +11,10 @@ import {
 	stringify_props,
 	WIRE_FORMAT_ATTR,
 	WIRE_FORMAT_JSON
-} from '../src/server/props-wire.js';
-import { analyze, index_seed, SEED_REF_KEY, seed_ref_reviver } from '../src/seed-refs.js';
-import { fingerprint_of } from '../src/runtime/hash.js';
-import { island_fingerprint } from '../src/server/fingerprint.js';
+} from '../src/server/props-wire.ts';
+import { analyze, index_seed, SEED_REF_KEY, seed_ref_reviver } from '../src/seed-refs.ts';
+import { fingerprint_of } from '../src/runtime/hash.ts';
+import { island_fingerprint } from '../src/server/fingerprint.ts';
 
 describe('island_fingerprint · the server-minted data-og-fp', () => {
 	it('is 16 hex chars, deterministic, and moves with either input', () => {

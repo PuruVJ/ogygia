@@ -4,9 +4,9 @@
  * element's ADDRESS (hydration may have replaced the nodes). Loaded when the first interaction
  * island arms; never part of the boot.
  */
-import type { FieldSnapshot, QueuedClick } from './interaction.js';
-import { interaction_link } from './slots.js';
-import { emit as dt_emit } from '../devtools/bus.js';
+import type { FieldSnapshot, QueuedClick } from './interaction.ts';
+import { interaction_link } from './slots.ts';
+import { emit as dt_emit } from '../devtools/bus.ts';
 
 // Interaction's resolver, handed over through the registry — this lazy chunk never imports a boot
 // module (./slots.ts `BootLink`).

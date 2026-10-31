@@ -4,10 +4,10 @@
  * over commits with noise, skips and an empty range.
  */
 import { describe, expect, it } from 'vitest';
-import { measure, snapshot_page, type PerfSnapshot, type ReportLike } from '../src/perf/measure.js';
-import { verdict, DEFAULT_BUDGET } from '../src/perf/compare.js';
-import { markdown, summary } from '../src/perf/report.js';
-import { bisect } from '../src/perf/bisect.js';
+import { measure, snapshot_page, type PerfSnapshot, type ReportLike } from '../src/perf/measure.ts';
+import { verdict, DEFAULT_BUDGET } from '../src/perf/compare.ts';
+import { markdown, summary } from '../src/perf/report.ts';
+import { bisect } from '../src/perf/bisect.ts';
 
 const report = (over: Partial<ReportLike> = {}): ReportLike => ({
 	node: 'v26',

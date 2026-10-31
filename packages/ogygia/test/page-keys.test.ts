@@ -3,7 +3,7 @@
 // or from the playground fixtures. The contract: literal keys → the set; anything the analysis
 // cannot pin → 'all'; no page import → null.
 import { describe, expect, it } from 'vitest';
-import { page_data_keys, merge_page_keys } from '../src/compiler/link/page-keys.js';
+import { page_data_keys, merge_page_keys } from '../src/compiler/link/page-keys.ts';
 
 const ts = (code: string) => {
 	const r = page_data_keys(code, '/app/x.ts', 'script');
@@ -142,7 +142,7 @@ describe('page_data_keys — the demented cases', () => {
 		expect(svelte(`<script>\n\timport { page } from '$app/state';\n</script>\n<p>{fmt(page)}</p>`)).toBe('all');
 	});
 	it('a reason names the construct and the line', async () => {
-		const { page_data_keys_answer } = await import('../src/compiler/link/page-keys.js');
+		const { page_data_keys_answer } = await import('../src/compiler/link/page-keys.ts');
 		const a = page_data_keys_answer(`import { page } from '$app/state';\nconst a = 1;\nexport const x = helper(page.data);`, '/app/x.ts', 'script');
 		expect(a.keys).toBe('all');
 		expect(a.reason?.line).toBe(3);
@@ -163,13 +163,13 @@ describe('page_data_keys — call following', () => {
 		expect(ts(`import { page } from '$app/state';\nfunction leak(p) { return send(p); }\nexport const c = leak(page);`)).toBe('all');
 	});
 	it('an imported helper is recorded as pending, the rest of the module still pinned', async () => {
-		const { page_data_keys_answer } = await import('../src/compiler/link/page-keys.js');
+		const { page_data_keys_answer } = await import('../src/compiler/link/page-keys.ts');
 		const a = page_data_keys_answer(`import { page } from '$app/state';\nimport { getParams } from '@app/common/utils';\nexport const p = getParams(page); export const l = page.data._locale;`, '/app/x.ts', 'script');
 		expect(a.keys).toEqual(new Set(['_locale']));
 		expect(a.pending).toEqual([{ specifier: '@app/common/utils', imported: 'getParams', arg: 0, line: 3 }]);
 	});
 	it('summarize_export: what the helper reads of its page parameter', async () => {
-		const { summarize_export } = await import('../src/compiler/link/page-keys.js');
+		const { summarize_export } = await import('../src/compiler/link/page-keys.ts');
 		expect(summarize_export(`export function getParams(page) { const s = page.url.searchParams; return page.url.search.length > 1 ? s : {}; }`, '/pkg/routing.ts', 'script', 'getParams', 0)).toEqual(new Set());
 		expect(summarize_export(`export const url = (p, base) => base + p.data.origin;`, '/pkg/url.ts', 'script', 'url', 0)).toEqual(new Set(['origin']));
 		expect(summarize_export(`export function isActive(route, p) { return p.url.pathname.startsWith(route) && p.data.flags.nav; }`, '/pkg/nav.ts', 'script', 'isActive', 1)).toEqual(new Set(['flags']));
@@ -178,7 +178,7 @@ describe('page_data_keys — call following', () => {
 		expect(summarize_export(`export const x = 1;`, '/pkg/none.ts', 'script', 'getParams', 0)).toBe('all');
 	});
 	it('summarize_export: a barrel re-export says where to follow', async () => {
-		const { summarize_export } = await import('../src/compiler/link/page-keys.js');
+		const { summarize_export } = await import('../src/compiler/link/page-keys.ts');
 		expect(summarize_export(`export { getParams } from './routing';\nexport * from './misc';`, '/pkg/utils.ts', 'script', 'getParams', 0)).toEqual({ follow: ['./routing'], imported: 'getParams' });
 		expect(summarize_export(`export * from './a';\nexport * from './b';`, '/pkg/utils.ts', 'script', 'getParams', 0)).toEqual({ follow: ['./a', './b'], imported: 'getParams' });
 		expect(summarize_export(`import { getParams as gp } from './routing';\nexport { gp as getParams };`, '/pkg/utils.ts', 'script', 'getParams', 0)).toEqual({ follow: ['./routing'], imported: 'getParams' });
@@ -204,7 +204,7 @@ describe('follow_pending_page_calls', () => {
 	const program = () => ({ page_keys: new Map<string, any>(), page_key_reasons: new Map<string, any>(), page_pending: new Map<string, any>() });
 
 	it('follows getParams(page) through a barrel to its url-only reader; url(page) adds its key', async () => {
-		const { follow_pending_page_calls } = await import('../src/compiler/link/page-keys.js');
+		const { follow_pending_page_calls } = await import('../src/compiler/link/page-keys.ts');
 		const p = program();
 		p.page_keys.set('/app/A.svelte', new Set(['_locale']));
 		p.page_pending.set('/app/A.svelte', [
@@ -217,7 +217,7 @@ describe('follow_pending_page_calls', () => {
 		expect(p.page_pending.size).toBe(0);
 	});
 	it('an `export *` fan-out is searched; a helper that hands the page on → all with a reason', async () => {
-		const { follow_pending_page_calls } = await import('../src/compiler/link/page-keys.js');
+		const { follow_pending_page_calls } = await import('../src/compiler/link/page-keys.ts');
 		const p = program();
 		p.page_keys.set('/app/B.ts', new Set());
 		p.page_pending.set('/app/B.ts', [{ specifier: './pkg/star', imported: 'getParams', arg: 0, line: 2 }]);
@@ -232,7 +232,7 @@ describe('follow_pending_page_calls', () => {
 		expect(q.page_key_reasons.get('/app/C.ts')?.why).toContain('leak(…)');
 	});
 	it('an unresolvable specifier → all, named in the reason', async () => {
-		const { follow_pending_page_calls } = await import('../src/compiler/link/page-keys.js');
+		const { follow_pending_page_calls } = await import('../src/compiler/link/page-keys.ts');
 		const p = program();
 		p.page_keys.set('/app/D.ts', new Set());
 		p.page_pending.set('/app/D.ts', [{ specifier: 'nowhere', imported: 'f', arg: 0, line: 1 }]);
@@ -244,7 +244,7 @@ describe('follow_pending_page_calls', () => {
 
 describe('page_data_keys — safe built-ins', () => {
 	it('Object.keys(page) reads names only; isEmpty(page) from a library still hands the page on', async () => {
-		const { summarize_export } = await import('../src/compiler/link/page-keys.js');
+		const { summarize_export } = await import('../src/compiler/link/page-keys.ts');
 		expect(summarize_export(`export function getParams(page) { if (Object.keys(page).length < 1) return {}; return page.url.search; }`, '/pkg/r.ts', 'script', 'getParams', 0)).toEqual(new Set());
 		expect(summarize_export(`import { isEmpty } from 'lodash-es';\nexport function getParams(page) { if (isEmpty(page)) return {}; return page.url.search; }`, '/pkg/r.ts', 'script', 'getParams', 0)).toBe('all');
 	});
@@ -260,7 +260,7 @@ describe('page_data_keys — guards and subscribers', () => {
 
 describe('page_data_keys — the PENDING13 shape', () => {
 	it('`if (!page?.url) return` keeps a helper summarizable as url/params-only', async () => {
-		const { summarize_export } = await import('../src/compiler/link/page-keys.js');
+		const { summarize_export } = await import('../src/compiler/link/page-keys.ts');
 		expect(summarize_export(`export function getParams(page) { let r = {}; if (!page?.url) return r; const s = page?.url?.search || ''; const o = page?.params; if (o && Object.keys(o).length > 0) r = { ...r, ...o }; return r; }`, '/app/routing.ts', 'script', 'getParams', 0)).toEqual(new Set());
 	});
 });

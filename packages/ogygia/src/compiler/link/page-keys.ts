@@ -17,9 +17,9 @@
  * doubt goes to `'all'`.
  */
 import { parse } from 'svelte/compiler';
-import { fs } from '../host.js';
-import { parse_module } from '../parse/oxc.js';
-import { blank_styles } from '../blank-styles.js';
+import { fs } from '../host.ts';
+import { parse_module } from '../parse/oxc.ts';
+import { blank_styles } from '../blank-styles.ts';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Node = Record<string, any>;

@@ -5,7 +5,7 @@
  * function named `flag`), svelte script-block line offsets, and the manifest's dedupe+sort.
  */
 import { describe, it, expect } from 'vitest';
-import { collect_flag_sites, flags_manifest } from '../src/compiler/flags.js';
+import { collect_flag_sites, flags_manifest } from '../src/compiler/flags.ts';
 
 describe('collect_flag_sites — AST binding resolution', () => {
 	it('counts calls through named imports, with names and lines', () => {

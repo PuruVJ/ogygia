@@ -17,13 +17,13 @@
  * here runs on the hydration path itself: samples are batched and sent on idle or when the page
  * hides.
  */
-import { hole_copy_of } from './hash.js';
-import type { RegionRefusal } from './region-endpoint-url.js';
-import { tool_made } from '../tool-fetches.js';
-import { paint_blocker } from './render-blocking.js';
-import { critical_outcome, type CriticalOutcome } from './load-scheduler.js';
-import { devtools_switched_on } from '../devtools/switch.js';
-import { charge, metered } from './own-cost.js';
+import { hole_copy_of } from './hash.ts';
+import type { RegionRefusal } from './region-endpoint-url.ts';
+import { tool_made } from '../tool-fetches.ts';
+import { paint_blocker } from './render-blocking.ts';
+import { critical_outcome, type CriticalOutcome } from './load-scheduler.ts';
+import { devtools_switched_on } from '../devtools/switch.ts';
+import { charge, metered } from './own-cost.ts';
 
 interface Sample {
 	fp: string;

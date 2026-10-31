@@ -5,7 +5,7 @@
 // items). `anchor_of` reads the composed path instead. Regression: the PES product page's "show
 // all" back link and breadcrumb reloaded the document on ogygia while Kit swapped in place.
 import { expect, test } from 'vitest';
-import { anchor_of, reload_opt_out } from '../../src/runtime/router.js';
+import { anchor_of, reload_opt_out } from '../../src/runtime/router.ts';
 
 /** Click `target`; run `anchor_of` INSIDE the document-level listener, as the router does — the
  *  composed path is only readable while the event dispatches. Prevented there too: a real anchor

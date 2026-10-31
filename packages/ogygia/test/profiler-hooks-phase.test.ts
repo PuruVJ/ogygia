@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { handle_parts } from '../src/profiler/source-scan.js';
-import { phase_of_stack } from '../src/profiler/timeline.js';
+import { handle_parts } from '../src/profiler/source-scan.ts';
+import { phase_of_stack } from '../src/profiler/timeline.ts';
 
 const reader = (text: string) => (_p: string, a: number, b: number) => {
 	const lines = text.split('\n');

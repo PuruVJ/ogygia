@@ -13,10 +13,10 @@ vi.mock('virtual:ogygia/sign', () => ({
 	region_mac_message: (...parts: unknown[]) => parts.join('|')
 }));
 
-const { configure_islands_endpoint, islands_endpoint, DEFAULT_ISLANDS_ENDPOINT } = await import('../src/server/endpoint.js');
-const { mintServerIsland, makeRegionEndpoint } = await import('../src/server/region-endpoint.js');
-const { renders_for_a_page } = await import('../src/server/render-page.js');
-const { mpaSpeculationRules } = await import('../src/compiler/link/speculation.js');
+const { configure_islands_endpoint, islands_endpoint, DEFAULT_ISLANDS_ENDPOINT } = await import('../src/server/endpoint.ts');
+const { mintServerIsland, makeRegionEndpoint } = await import('../src/server/region-endpoint.ts');
+const { renders_for_a_page } = await import('../src/server/render-page.ts');
+const { mpaSpeculationRules } = await import('../src/compiler/link/speculation.ts');
 
 afterEach(() => configure_islands_endpoint(undefined));
 

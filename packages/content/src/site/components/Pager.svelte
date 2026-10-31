@@ -3,7 +3,7 @@
 	 * Sequential previous/next — a pure function of a `PageView`'s trail (outline reading order).
 	 * A lone next stays right; `.og-pager` hooks for CSS.
 	 */
-	import type { PageView } from '../types.js';
+	import type { PageView } from '../types.ts';
 
 	let {
 		trail,

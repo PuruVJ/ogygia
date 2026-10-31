@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { get, writable, derived } from 'svelte/store';
 import { parse, stringify } from 'devalue';
-import { rewrite_store, auto_brand_stores } from '../src/compiler/macros/store.js';
+import { rewrite_store, auto_brand_stores } from '../src/compiler/macros/store.ts';
 import {
 	__og_store,
 	__register_store_factory,
@@ -16,9 +16,9 @@ import {
 	is_store,
 	og_derived,
 	register_derived_kind
-} from '../src/store-transport.js';
-import { __register_fn, fn_handle } from '../src/fn-transport.js';
-import { REF_WIRE_KEY, ref_reducer, ref_reviver } from '../src/ref.js';
+} from '../src/store-transport.ts';
+import { __register_fn, fn_handle } from '../src/fn-transport.ts';
+import { REF_WIRE_KEY, ref_reducer, ref_reviver } from '../src/ref.ts';
 
 const SVELTE = ['.svelte'];
 const run = (src: string, id = 'src/lib/cart.ts') => rewrite_store(src, id, id, SVELTE);

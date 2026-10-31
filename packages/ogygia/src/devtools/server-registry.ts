@@ -15,7 +15,7 @@
  * `window.__ogygia_devtools` stream — so a region's server render and its client wake sit in one
  * timeline, correlated by fingerprint.
  */
-import type { DevtoolsEventInput } from './schema.js';
+import type { DevtoolsEventInput } from './schema.ts';
 
 // DEVTOOLS gate (the SSR bundle has the `__OGYGIA_DEVTOOLS__` define; the client has it too but the
 // recorder is never installed there, so `record_server_event` no-ops). Off → this whole file DCEs.

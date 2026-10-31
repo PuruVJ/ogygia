@@ -10,7 +10,7 @@ afterEach(() => {
 
 async function with_kit(asset: (f: string) => string) {
 	vi.doMock('$app/paths', () => ({ asset }));
-	return (await import('../src/kit-paths.js')).kit_asset;
+	return (await import('../src/kit-paths.ts')).kit_asset;
 }
 
 describe('kit_asset', () => {

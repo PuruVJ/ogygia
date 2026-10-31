@@ -3,7 +3,7 @@
 // address: an island imported `/a/b/_app/…` (a redirect to an HTML page), and a hole's key changed
 // with the page's depth. Pinned once, at the address that wrote them, they read the same everywhere.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { pin_region_urls } from '../src/runtime/entry-locations.js';
+import { pin_region_urls } from '../src/runtime/entry-locations.ts';
 
 const g = globalThis as Record<string, unknown>;
 let had_location: unknown;

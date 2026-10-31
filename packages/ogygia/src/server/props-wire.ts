@@ -30,13 +30,13 @@
  * the client.
  */
 import { stringify } from 'devalue';
-import { escape_script_text } from '../escape.js';
-import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
-import { register_wire_kind } from '../live-transport.js';
-import { register_store_kind, register_derived_kind } from '../store-transport.js';
-import { register_snippet_kind } from '../region-snippet.js';
-import { register_fn_kind } from '../fn-transport.js';
-import { analyze, json_culprit, plan_seed_refs, SEED_REF_KEY, type SeedIndex } from '../seed-refs.js';
+import { escape_script_text } from '../escape.ts';
+import { REF_WIRE_KEY, ref_reducer } from '../ref.ts';
+import { register_wire_kind } from '../live-transport.ts';
+import { register_store_kind, register_derived_kind } from '../store-transport.ts';
+import { register_snippet_kind } from '../region-snippet.ts';
+import { register_fn_kind } from '../fn-transport.ts';
+import { analyze, json_culprit, plan_seed_refs, SEED_REF_KEY, type SeedIndex } from '../seed-refs.ts';
 
 /** The sidecar attribute naming a non-devalue payload format; absent = devalue. */
 export const WIRE_FORMAT_ATTR = 'data-og-format';

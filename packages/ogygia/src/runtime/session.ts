@@ -2,8 +2,8 @@
  * Document-scoped runtime session: lake caches, seed flags, kit-page probe, server-island gate.
  * Cleared on SPA body swap via `reset()` so connecting regions never see the previous page.
  */
-import { ConcurrencyGate } from './concurrency.js';
-import { FROZEN_SELECTOR } from './region-attrs.js';
+import { ConcurrencyGate } from './concurrency.ts';
+import { FROZEN_SELECTOR } from './region-attrs.ts';
 
 /** Soft cap on lake cache entries (unique lake ids). Evict oldest insertion on overflow. */
 const LAKE_CACHE_MAX = 64;

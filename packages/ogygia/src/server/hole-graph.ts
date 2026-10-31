@@ -15,8 +15,8 @@
  * URLs are made root-absolute (the graph here, the CSS tags by the answer's own absolutizing pass):
  * the answer lands in a page at any depth, and a `./_app/…` resolved there would 404. indexOf only.
  */
-import { ISLAND_GRAPH_ATTR, decode_island_graph, decode_island_locations } from '../island-graph.js';
-import { island_graph_script } from './document-tail.js';
+import { ISLAND_GRAPH_ATTR, decode_island_graph, decode_island_locations } from '../island-graph.ts';
+import { island_graph_script } from './document-tail.ts';
 
 function root_absolute(value: string, base: URL): string {
 	if (!value.startsWith('./') && !value.startsWith('../')) return value;

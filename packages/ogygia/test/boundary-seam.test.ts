@@ -15,10 +15,10 @@ import {
 	__register_store_factory,
 	mark_store,
 	is_store
-} from '../src/store-transport.js';
-import { classify_boundary, boundary_problems } from '../src/boundary.js';
-import { serialize_provided_context, serialize_context } from '../src/context-bridge.js';
-import { REF_WIRE_KEY, ref_reviver } from '../src/ref.js';
+} from '../src/store-transport.ts';
+import { classify_boundary, boundary_problems } from '../src/boundary.ts';
+import { serialize_provided_context, serialize_context } from '../src/context-bridge.ts';
+import { REF_WIRE_KEY, ref_reviver } from '../src/ref.ts';
 
 /** The seams now emit ONE hub key — parse their output the way an island does. */
 const parse_seam = (text: string) =>

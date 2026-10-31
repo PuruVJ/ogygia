@@ -47,9 +47,9 @@
  * attributes, never light DOM. All three are also exported, Kit-free, from `ogygia/markup`, for the
  * non-SvelteKit half of a monorepo where these SSR passes usually live.
  */
-import { escape_amp_quot } from '../escape.js';
+import { escape_amp_quot } from '../escape.ts';
 // (the regex `\s` the attribute rules were written in — wider than the tag scan's HTML whitespace)
-import { is_space as is_re_space } from './html-scan.js';
+import { is_space as is_re_space } from './html-scan.ts';
 
 export type RegionKind = 'island' | 'lake' | 'hole';
 

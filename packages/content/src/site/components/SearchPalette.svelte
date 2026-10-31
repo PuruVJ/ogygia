@@ -9,8 +9,8 @@
 	import { onMount } from 'svelte';
 	import { on } from 'svelte/events';
 	import { Command, Dialog } from 'bits-ui';
-	import { search as search_handle, type SearchClient } from '../search-client.js';
-	import type { SearchHit } from '../search.js';
+	import { search as search_handle, type SearchClient } from '../search-client.ts';
+	import type { SearchHit } from '../search.ts';
 
 	let {
 		base = '',

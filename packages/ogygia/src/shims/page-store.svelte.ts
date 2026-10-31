@@ -83,7 +83,7 @@ export class PageState {
 // updated one instance while an island read the other → stale `page.url`/`params` after SPA nav
 // (e.g. a sidebar's active link stuck on the old page in dev). A `globalThis` + `Symbol.for` handle
 // is one instance regardless of how many times the module is evaluated. PAGE-STATE-SINGLETON.
-import { foreign_hydrate } from '../current-region.js';
+import { foreign_hydrate } from '../current-region.ts';
 
 const PAGE_STATE_KEY = Symbol.for('ogygia.page-state');
 const global_scope = globalThis as unknown as Record<symbol, PageState | undefined>;

@@ -7,12 +7,12 @@
 // a backdrop + appends a suggestions pane to its own light DOM. The repair recursed down to the widget
 // and morphed IT as the morph root (whose ownership was never checked), stripping both nodes.
 import { expect, test, afterEach } from 'vitest';
-import { repair_if_drifted, sequence_differs } from '../../src/runtime/hydrate-core.js';
-import { parse_region_html } from '../../src/runtime/parse-html.js';
-import { install as install_morph, morph_children } from '../../src/runtime/morph.js';
-import { link_boot } from '../../src/runtime/boot-link.js';
-import { owner_of } from '../../src/runtime/ownership.js';
-import { watch_region, unwatch_region, region_changed } from '../../src/runtime/drift-watch.js';
+import { repair_if_drifted, sequence_differs } from '../../src/runtime/hydrate-core.ts';
+import { parse_region_html } from '../../src/runtime/parse-html.ts';
+import { install as install_morph, morph_children } from '../../src/runtime/morph.ts';
+import { link_boot } from '../../src/runtime/boot-link.ts';
+import { owner_of } from '../../src/runtime/ownership.ts';
+import { watch_region, unwatch_region, region_changed } from '../../src/runtime/drift-watch.ts';
 
 link_boot();
 install_morph();

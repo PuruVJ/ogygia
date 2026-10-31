@@ -7,11 +7,11 @@
  * the Kit dictionary live in internal/notes/router-v2.md.
  */
 import type { Component } from 'svelte';
-import type { Ctx } from './ctx.js';
-import type { Params } from './view.js';
-import type { StandardSchemaV1 } from './view.js';
+import type { Ctx } from './ctx.ts';
+import type { Params } from './view.ts';
+import type { StandardSchemaV1 } from './view.ts';
 
-import type { InferOutput } from './view.js';
+import type { InferOutput } from './view.ts';
 
 /** A per-request component chooser for `page()` — what `flag.pick({ … })` returns
  *  (`page(hero.pick({ control: A, bold: B }))`). Branded, not a bare function, because Svelte 5

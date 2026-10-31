@@ -11,7 +11,7 @@
  * clearing the cookie. GDPR-wise it is a functional identifier; consult your own counsel.
  */
 import { randomUUID } from 'node:crypto';
-import type { Ctx, Visitor } from './ctx.js';
+import type { Ctx, Visitor } from './ctx.ts';
 
 export interface AnonymousVisitorOptions {
 	/** Cookie name (default `og-vid` — the same one experiment()'s fallback chain reads). */

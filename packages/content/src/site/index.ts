@@ -16,7 +16,7 @@
  * export const site = site(outline([{ label: 'Guides', items: guides, meta }]), { prevNext: 'graph' });
  * ```
  */
-export { outline, pick, href_of as hrefOf } from './outline.js';
+export { outline, pick, href_of as hrefOf } from './outline.ts';
 export type {
 	Outline,
 	OutlineSpec,
@@ -28,13 +28,13 @@ export type {
 	Selection,
 	Collection,
 	TrailScope
-} from './outline.js';
+} from './outline.ts';
 
-export { site, mountBase } from './site.js';
-export type { SiteData, SiteMeta, ReadContext } from './site.js';
-export { fields } from './fields.js';
-export type { PageFields, PostFields, ChangeFields, BlogPostRef } from './fields.js';
-export { dimensions, is_dimensioned as isDimensioned } from './dimensions.js';
+export { site, mountBase } from './site.ts';
+export type { SiteData, SiteMeta, ReadContext } from './site.ts';
+export { fields } from './fields.ts';
+export type { PageFields, PostFields, ChangeFields, BlogPostRef } from './fields.ts';
+export { dimensions, is_dimensioned as isDimensioned } from './dimensions.ts';
 export type {
 	Axis,
 	Coordinate,
@@ -43,7 +43,7 @@ export type {
 	Switcher,
 	SwitcherAxis,
 	Fallback
-} from './dimensions.js';
+} from './dimensions.ts';
 export type {
 	Site,
 	SiteOptions,
@@ -51,9 +51,9 @@ export type {
 	EmitOptions,
 	LlmsEmitOptions,
 	RawEmit
-} from './site.js';
-export { links } from './checks.js';
-export type { Check, Finding, Severity, CheckContext, LinkOptions } from './checks.js';
+} from './site.ts';
+export { links } from './checks.ts';
+export type { Check, Finding, Severity, CheckContext, LinkOptions } from './checks.ts';
 
 export {
 	orama_engine as oramaEngine,
@@ -61,7 +61,7 @@ export {
 	split_sections as splitSections,
 	strip_prose as stripProse,
 	create_search as createSearch
-} from './search.js';
+} from './search.ts';
 export type {
 	SearchDoc,
 	SearchHit,
@@ -69,16 +69,16 @@ export type {
 	SearchIndex,
 	SearchOptions,
 	SearchBrain
-} from './search.js';
-export { search } from './search-client.js';
-export type { SearchClient, SearchClientOptions } from './search-client.js';
+} from './search.ts';
+export { search } from './search-client.ts';
+export type { SearchClient, SearchClientOptions } from './search-client.ts';
 
 // ── chrome: every component, one barrel (see ./components/index.ts — modern bundlers tree-shake
 // barrels; import a brick, ship a brick). Styling is an EXPLICIT import:
 // `import '@ogygia/content/theme.css'` — skip it for zero CSS.
-export * from './components/index.js';
-export { get_shell_context as getShellContext } from './context.js';
-export type { ShellContext } from './context.js';
+export * from './components/index.ts';
+export { get_shell_context as getShellContext } from './context.ts';
+export type { ShellContext } from './context.ts';
 
 export type {
 	NavTree,
@@ -92,4 +92,4 @@ export type {
 	PrevNext,
 	BaseOption,
 	Resolved
-} from './types.js';
+} from './types.ts';

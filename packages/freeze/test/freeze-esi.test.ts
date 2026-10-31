@@ -4,7 +4,7 @@
  * while the shell stays edge-cached; one `stitch="serve"` hole taints the page to origin-serve.
  */
 import { describe, it, expect } from 'vitest';
-import { find_stitch_holes, stitch_modes, esi_rewrite } from '../src/stitch.js';
+import { find_stitch_holes, stitch_modes, esi_rewrite } from '../src/stitch.ts';
 
 const hole = (mode: '' | 'serve' | 'edge', endpoint: string, inner = 'fb') =>
 	`<ogygia-region entry="" render="defer" when="load"${

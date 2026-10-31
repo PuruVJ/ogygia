@@ -3,7 +3,7 @@
 	// hole's server render never holds it — what it shows must still arrive styled. It takes its
 	// components by name from a workspace package's TypeScript barrel and from a local barrel.
 	import { KitPanel, KitFooter } from 'repro-hole-css-kit/components';
-	import { LocalBadge } from './index.js';
+	import { LocalBadge } from './index.ts';
 
 	let open = $state(false);
 </script>

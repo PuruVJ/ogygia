@@ -24,7 +24,7 @@ import {
 	type GlobMap,
 	type RawSource,
 	type Source
-} from './source.js';
+} from './source.ts';
 
 /** One node in a block tree: a `type` naming a registered block, its `props`, and nested `children`.
  * A block's wake schedule is baked into its registry import (`with { wake: 'load' }`) or decided by a

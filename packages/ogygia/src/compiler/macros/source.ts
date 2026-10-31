@@ -16,9 +16,9 @@
  * Anything else — un-exported, nested, bare access, argument-less — is a BUILD ERROR naming the
  * file and line (the wire/asRegion macro laws).
  */
-import { og_js_regions, find_og_calls, type JsRegion } from '../parse/scan.js';
-import { parse_module } from '../parse/oxc.js';
-import { og_member } from './wire.js';
+import { og_js_regions, find_og_calls, type JsRegion } from '../parse/scan.ts';
+import { parse_module } from '../parse/oxc.ts';
+import { og_member } from './wire.ts';
 
 // ── regexes
 const EXPORT_CONST_TAIL_RE = /\bexport\s+const\s+([A-Za-z_$][\w$]*)\s*=\s*$/;

@@ -6,8 +6,8 @@
 	 * keeps a fresh recording before opening it; this covers reports opened any other way (a header
 	 * profile's link, a trap catch on the dashboard, an upload).
 	 */
-	import { get_report, put_report } from './store.js';
-	import { report_request } from './report-request.js';
+	import { get_report, put_report } from './store.ts';
+	import { report_request } from './report-request.ts';
 
 	let { base, id, ogpB64 = '' }: { base: string; id: string; ogpB64?: string } = $props();
 	let state_ = $state<'checking' | 'kept' | 'keeping' | 'failed' | 'none'>('checking');

@@ -7,7 +7,7 @@ import {
 	fence_cache_get,
 	fence_cache_set,
 	__set_fence_cache_dir
-} from '../src/markdown/fence-cache.js';
+} from '../src/markdown/fence-cache.ts';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'og-fence-'));
 __set_fence_cache_dir(tmp);

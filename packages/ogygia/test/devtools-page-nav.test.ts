@@ -1,9 +1,9 @@
 // After an in-app navigation the beacon's visit holds both pages on one clock: the Page tab cuts
 // its report to what happened since the navigation, shifted to start there.
 import { describe, it, expect } from 'vitest';
-import { since_nav } from '../src/devtools/page.js';
-import { analyze_page } from '../src/devtools/page-insights.js';
-import type { BeaconPage } from '../src/runtime/beacon.js';
+import { since_nav } from '../src/devtools/page.ts';
+import { analyze_page } from '../src/devtools/page-insights.ts';
+import type { BeaconPage } from '../src/runtime/beacon.ts';
 
 const page: BeaconPage = {
 	vitals: { lcp: 5000, fcp: 400, ttfb: 90 },

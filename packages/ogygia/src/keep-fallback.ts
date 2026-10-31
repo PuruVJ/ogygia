@@ -8,7 +8,7 @@
  * fallback DOM as it is and marks the region done — no swap, no stylesheet wait, no bytes. Server
  * only: it throws a branded signal the handle recognises; in the browser a hole never renders.
  */
-import { isHoleInline } from './context.js';
+import { isHoleInline } from './context.ts';
 
 const KEEP = Symbol.for('ogygia.keep-fallback');
 
@@ -19,7 +19,7 @@ export const KEEP_FALLBACK_INLINE_MESSAGE: string =
 	'and its fallback never shows. Move the island out of the enclosing island (into the page, a layout, or a lake), ' +
 	'or drop keepFallback() from a component that can render inline.';
 
-export { KEEP_FALLBACK_HTML } from './keep-fallback-marker.js';
+export { KEEP_FALLBACK_HTML } from './keep-fallback-marker.ts';
 
 export class KeepFallbackSignal extends Error {
 	constructor() {

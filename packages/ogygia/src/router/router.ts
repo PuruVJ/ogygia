@@ -8,14 +8,14 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import type { Component } from 'svelte';
-import { document } from '../document.js';
-import { escape_text } from '../escape.js';
-import { region } from '../region.js';
+import { document } from '../document.ts';
+import { escape_text } from '../escape.ts';
+import { region } from '../region.ts';
 import LayoutChain from './LayoutChain.svelte';
 import RawHtml from '../RawHtml.svelte';
-import { compile_all, match_path, fill, type CompiledPattern } from './match.js';
-import { register_route_options } from '../plugin/routes.js';
-import { make_ctx, type Ctx, type Visitor } from './ctx.js';
+import { compile_all, match_path, fill, type CompiledPattern } from './match.ts';
+import { register_route_options } from '../plugin/routes.ts';
+import { make_ctx, type Ctx, type Visitor } from './ctx.ts';
 import {
 	compile_endpoint,
 	is_page,
@@ -28,9 +28,9 @@ import {
 	type PageDef,
 	type PageHtmlView,
 	type RouteTable
-} from './define.js';
-import type { InferMap } from './infer.js';
-import type { StandardSchemaV1, HrefArgs } from './view.js';
+} from './define.ts';
+import type { InferMap } from './infer.ts';
+import type { StandardSchemaV1, HrefArgs } from './view.ts';
 import {
 	error,
 	finalize,
@@ -42,9 +42,9 @@ import {
 	not_found,
 	options_response,
 	redirect_response
-} from './respond.js';
-import { router_css_head } from './css-head.js';
-import { open_late_scope, take_late_regions } from '../late-region-registry.js';
+} from './respond.ts';
+import { router_css_head } from './css-head.ts';
+import { open_late_scope, take_late_regions } from '../late-region-registry.ts';
 import {
 	is_stream_slot,
 	bake_yield,
@@ -54,7 +54,7 @@ import {
 	late_region_chunks,
 	merge_chunks,
 	PAGE_SLOT_ID
-} from './stream.js';
+} from './stream.ts';
 
 export interface RoutesOptions {
 	/** Mount prefix, stripped before matching. Required for a library that owns a subtree. */

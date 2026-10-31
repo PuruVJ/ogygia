@@ -12,7 +12,7 @@
 	 */
 	import { parse } from 'devalue';
 	import { onDestroy } from 'svelte';
-	import { highlight, clear_highlight } from './highlight.js';
+	import { highlight, clear_highlight } from './highlight.ts';
 	import {
 		region_info,
 		region_name,
@@ -20,13 +20,13 @@
 		chunk_bytes,
 		latest_event,
 		region_props_sidecar
-	} from './regions.js';
-	import { snapshot } from './bus.js';
-	import { read_page } from './page.js';
-	import { profile_for, profiles_version, island_row } from './profile-store.js';
-	import { get_last_session, last_session_version } from './session.js';
+	} from './regions.ts';
+	import { snapshot } from './bus.ts';
+	import { read_page } from './page.ts';
+	import { profile_for, profiles_version, island_row } from './profile-store.ts';
+	import { get_last_session, last_session_version } from './session.ts';
 	import PropsTree from './PropsTree.svelte';
-	import { island_ledger } from './ledger-dom.js';
+	import { island_ledger } from './ledger-dom.ts';
 
 	let { el, tick = 0, onclose } = $props();
 

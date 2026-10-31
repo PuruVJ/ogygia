@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ogygiaTransport } from '../src/transport.js';
-import { REGION_BRAND } from '../src/region.js';
+import { ogygiaTransport } from '../src/transport.ts';
+import { REGION_BRAND } from '../src/region.ts';
 
 const { encode, decode } = ogygiaTransport.Region;
 
@@ -50,7 +50,7 @@ describe('transport — HTML-baked inline tickets', () => {
 
 describe('region() inline awaitability', () => {
 	it('region(C, props) is thenable, and `then` is non-enumerable (devalue/spread never see it)', async () => {
-		const { region } = await import('../src/region.js');
+		const { region } = await import('../src/region.ts');
 		const r = region((() => {}) as never, {} as never);
 		expect(typeof (r as { then?: unknown }).then).toBe('function');
 		expect(Object.keys(r)).not.toContain('then');
@@ -63,7 +63,7 @@ describe('region() inline awaitability', () => {
 describe('ogygiaTransport OgygiaRef entry — symmetry (hub v2 phase Y)', () => {
 	it("a store crosses Kit's transport by identity (page.data / remote can carry one)", async () => {
 		const { writable, get } = await import('svelte/store');
-		const { register_store_kind } = await import('../src/store-transport.js');
+		const { register_store_kind } = await import('../src/store-transport.ts');
 		register_store_kind();
 		const entry = (
 			ogygiaTransport as Record<

@@ -12,12 +12,12 @@ import type {
 	FreezeStore,
 	FreezeRuntimeConfig,
 	EdgeAdapter
-} from './types.js';
-import { memory_store } from './memory-store.js';
-import { normalize_prefix } from './key.js';
+} from './types.ts';
+import { memory_store } from './memory-store.ts';
+import { normalize_prefix } from './key.ts';
 import type { DevtoolsEventInput } from 'ogygia/plugin';
 import { sourceTag } from 'ogygia/plugin/utils';
-import { freeze_app } from './app.js';
+import { freeze_app } from './app.ts';
 
 /** A server event into the current request's devtools stream (a no-op unless devtools is on). */
 function record(event: DevtoolsEventInput): void {

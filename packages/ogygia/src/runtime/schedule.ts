@@ -22,7 +22,7 @@
  * observer must not stall hydration), so the boot's first island is the right one, not merely the
  * first one.
  */
-import { observe } from './observe.js';
+import { observe } from './observe.ts';
 
 type Turn = { el: Element; order: number; queued_at: number; resolve: () => void };
 

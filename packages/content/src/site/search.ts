@@ -13,9 +13,9 @@
  * The default engine is **Orama** (optional peer, lazy-loaded). The adapter contract is tiny, so an
  * engine swap (MiniSearch, FlexSearch, custom) is a one-line `engine:` option.
  */
-import type { Heading, LinkRef } from '../index.js';
-import { href_of, type Collection, type Outline } from './outline.js';
-import { is_dimensioned } from './dimensions.js';
+import type { Heading, LinkRef } from '../index.ts';
+import { href_of, type Collection, type Outline } from './outline.ts';
+import { is_dimensioned } from './dimensions.ts';
 
 // ── regexes
 const FRONTMATTER_BLOCK_RE = /^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/;

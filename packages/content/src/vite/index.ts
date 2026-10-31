@@ -18,15 +18,15 @@ import path from 'node:path';
 import type { PreprocessorGroup } from 'svelte/compiler';
 import type { Plugin as VitePlugin } from 'vite';
 import { definePlugin, type OgygiaPlugin } from 'ogygia/vite';
-import { bridge } from '../bridge.js';
-import { ogygiaPresetPreprocess, type MarkdownOptions } from '../markdown/index.js';
-import { snippet_macros } from '../macros/snippets.js';
-import { rewrite_loaders } from '../macros/loaders.js';
-import { rewrite_regions } from '../macros/regions.js';
-import { materialize } from '../macros/git.js';
-import { content_hmr, type ContentHmrOptions } from './hmr.js';
+import { bridge } from '../bridge.ts';
+import { ogygiaPresetPreprocess, type MarkdownOptions } from '../markdown/index.ts';
+import { snippet_macros } from '../macros/snippets.ts';
+import { rewrite_loaders } from '../macros/loaders.ts';
+import { rewrite_regions } from '../macros/regions.ts';
+import { materialize } from '../macros/git.ts';
+import { content_hmr, type ContentHmrOptions } from './hmr.ts';
 
-export { invalidateModuleTree } from './hmr.js';
+export { invalidateModuleTree } from './hmr.ts';
 export type { ContentHmrOptions };
 
 // ── regexes

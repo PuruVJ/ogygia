@@ -9,8 +9,8 @@
  * this exact signing/requesting code, not a mock of it.
  */
 import { createHmac, createHash } from 'node:crypto';
-import type { EdgeAdapter } from '../types.js';
-import { normalize_prefix } from '../key.js';
+import type { EdgeAdapter } from '../types.ts';
+import { normalize_prefix } from '../key.ts';
 
 // ── regexes
 const DASH_COLON_G = /[-:]/g;

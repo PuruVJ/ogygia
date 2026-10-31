@@ -13,13 +13,13 @@
  * filename so hashes match SSR.
  */
 
-import { fs, path } from './host.js';
+import { fs, path } from './host.ts';
 import { compile, parse } from 'svelte/compiler';
 import { walk } from 'estree-walker';
-import { unscoped_marker } from '../unscoped-css.js';
-import { blank_styles } from './blank-styles.js';
-import { BarrelIndex } from './debarrel/barrel.js';
-import { analyze_exports, analyze_imports } from './debarrel/parse.js';
+import { unscoped_marker } from '../unscoped-css.ts';
+import { blank_styles } from './blank-styles.ts';
+import { BarrelIndex } from './debarrel/barrel.ts';
+import { analyze_exports, analyze_imports } from './debarrel/parse.ts';
 
 export const FOUC_CSS_PREFIX = 'virtual:ogygia/fouc-css/';
 export const FOUC_SCOPED_PREFIX = 'virtual:ogygia/fouc-scoped/';

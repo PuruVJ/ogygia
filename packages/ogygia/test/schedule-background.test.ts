@@ -6,7 +6,7 @@
  * 'background', and falls back to a macrotask when postTask is unavailable or rejects the priority.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { background_start } from '../src/runtime/schedule.js';
+import { background_start } from '../src/runtime/schedule.ts';
 
 type Sched = { postTask?: (cb: () => void, o?: { priority?: string }) => unknown };
 const g = globalThis as { scheduler?: Sched };

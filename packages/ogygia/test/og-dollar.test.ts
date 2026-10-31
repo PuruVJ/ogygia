@@ -4,8 +4,8 @@
  * and the strict-position build errors.
  */
 import { describe, it, expect } from 'vitest';
-import { rewrite_dollar } from '../src/compiler/macros/dollar.js';
-import { __register_fn, fn_handle } from '../src/fn-transport.js';
+import { rewrite_dollar } from '../src/compiler/macros/dollar.ts';
+import { __register_fn, fn_handle } from '../src/fn-transport.ts';
 
 const SVELTE = ['.svelte'];
 const run = (src: string, id = 'src/routes/x.ts') => rewrite_dollar(src, id, id, SVELTE);

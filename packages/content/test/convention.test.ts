@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
-import { content, folder, json } from '../src/index.js';
-import type { GlobMap } from '../src/index.js';
-import { outline } from '../src/site/outline.js';
-import { numbered, type Convention } from '../src/convention.js';
+import { content, folder, json } from '../src/index.ts';
+import type { GlobMap } from '../src/index.ts';
+import { outline } from '../src/site/outline.ts';
+import { numbered, type Convention } from '../src/convention.ts';
 
 const schema = v.object({ title: v.string() });
 

@@ -5,7 +5,7 @@
  * output. (The wire half of this suite lives in core's og-transform-stress.test.ts.)
  */
 import { describe, expect, it } from 'vitest';
-import { rewrite_loaders, find_loader_calls } from '../src/macros/loaders.js';
+import { rewrite_loaders, find_loader_calls } from '../src/macros/loaders.ts';
 
 /** A rewrite must never leave a live marker behind, and never unbalance braces/parens. */
 function balanced(s: string): boolean {

@@ -5,9 +5,9 @@
 	 * node bar are the hot time that flowed through; hot functions are lit, the rest of the chain
 	 * dimmed. Hover a node for its time, click it to jump to its row. A `wake:'load'` island.
 	 */
-	import type { PathGroup, PathNode } from '../analyze.js';
-	import { fmt_ms, fmt_pct, CATEGORY_COLOR } from './format.js';
-	import { row_href } from './row-anchor.svelte.js';
+	import type { PathGroup, PathNode } from '../analyze.ts';
+	import { fmt_ms, fmt_pct, CATEGORY_COLOR } from './format.ts';
+	import { row_href } from './row-anchor.svelte.ts';
 
 	let { paths, busy, fns }: { paths: PathGroup[]; busy: number; fns?: string[] } = $props();
 	// a middle frame (a library's renderer with no time of its own) may have no functions-table row

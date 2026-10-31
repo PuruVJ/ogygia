@@ -9,8 +9,8 @@
  * `baseUrl` override points the SAME adapter at a harness emulator — the real request/auth
  * shape is what gets exercised.
  */
-import type { FreezeMeta, EdgeAdapter } from '../types.js';
-import { prefix_tags, normalize_prefix } from '../key.js';
+import type { FreezeMeta, EdgeAdapter } from '../types.ts';
+import { prefix_tags, normalize_prefix } from '../key.ts';
 
 // ── regexes
 const TRAILING_SLASHES_RE = /\/+$/;

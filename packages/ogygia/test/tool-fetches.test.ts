@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { tool_fetch, tool_made } from '../src/tool-fetches.js';
+import { tool_fetch, tool_made } from '../src/tool-fetches.ts';
 
 const entry = (name: string, startTime: number, initiatorType = 'fetch') => ({ name, startTime, initiatorType }) as PerformanceResourceTiming;
 

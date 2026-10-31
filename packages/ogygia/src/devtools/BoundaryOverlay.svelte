@@ -21,7 +21,7 @@
 		latest_event,
 		region_name,
 		region_transitive
-	} from './regions.js';
+	} from './regions.ts';
 
 	let {
 		overlay = false,

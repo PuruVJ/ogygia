@@ -5,10 +5,10 @@
 //
 // The map is module state shared by every test in this file: each test uses its own URLs.
 import { describe, expect, test } from 'vitest';
-import { entry_location, import_entry, island_entry_of, note_entry_location, on_entry_fallback } from '../../src/runtime/entry-locations.js';
-import { island_module_url, warm_island_module, is_warmed_module } from '../../src/runtime/region-endpoint-url.js';
-import { register_island_graph } from '../../src/runtime/island-graph-preload.js';
-import { encode_island_graph } from '../../src/island-graph.js';
+import { entry_location, import_entry, island_entry_of, note_entry_location, on_entry_fallback } from '../../src/runtime/entry-locations.ts';
+import { island_module_url, warm_island_module, is_warmed_module } from '../../src/runtime/region-endpoint-url.ts';
+import { register_island_graph } from '../../src/runtime/island-graph-preload.ts';
+import { encode_island_graph } from '../../src/island-graph.ts';
 
 const LOCATED = '/test/browser/fixtures/entry-located.ts';
 const IDENTITY = '/test/browser/fixtures/entry-identity.ts';

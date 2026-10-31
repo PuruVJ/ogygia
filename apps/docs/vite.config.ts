@@ -7,8 +7,8 @@ import { diff_markers, inline_markers } from '@ogygia/content/markdown';
 import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
 import { observatoryNodeShims } from './observatory-node-shims';
-import { load_ogygia_themes } from './src/lib/code/shiki-themes.js';
-import { remarkChangelog } from './src/lib/remark-changelog.js';
+import { load_ogygia_themes } from './src/lib/code/shiki-themes.ts';
+import { remarkChangelog } from './src/lib/remark-changelog.ts';
 import { expandApi, expandApiCacheKey, expandApiDependencies } from './src/lib/api-ref/expand-api.ts';
 
 const require = createRequire(import.meta.url);

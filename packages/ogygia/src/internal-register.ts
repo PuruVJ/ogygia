@@ -14,11 +14,11 @@
  * on a pure transport/context/boundary leaf that reaches neither `Region` nor `$app/*`, so importing
  * this seam is safe in every realm. (The worker's SSR eval + live preview provide these to user code.)
  */
-export { __register_transportable } from './live-transport.js';
-export { __tag_context } from './context-bridge.js';
+export { __register_transportable } from './live-transport.ts';
+export { __tag_context } from './context-bridge.ts';
 // The server-router CSS registry — imported by the GENERATED `virtual:ogygia/router-css` (never by
 // user code). Region-free leaf (a WeakMap module), so it keeps this seam safe in every realm.
-export { register_router_css, register_router_css_paths } from './router-css.js';
-export { __og_$ } from './fn-transport.js';
-export { __og_store } from './store-transport.js';
-export { __og_boundary } from './boundary.js';
+export { register_router_css, register_router_css_paths } from './router-css.ts';
+export { __og_$ } from './fn-transport.ts';
+export { __og_store } from './store-transport.ts';
+export { __og_boundary } from './boundary.ts';

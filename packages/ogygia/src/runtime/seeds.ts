@@ -27,12 +27,12 @@
  * never blanked: a region can read it again — an island moved by its host's snippet adoption
  * disconnects, reconnects and hydrates anew (the island-children shape).
  */
-import { parse_wire_text, wire_is_json } from './wire-format.js';
-import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.js';
-import { kit_bridge } from '../shims/kit-bridge.js';
-import { install_page_defer, page_defer_revivers } from './page-defer.js';
-import { transport_decoders } from './app-transport.js';
-import { boot_link, slots } from './slots.js';
+import { parse_wire_text, wire_is_json } from './wire-format.ts';
+import { page_state, set_page, reset_page, type PageSnapshot } from '../shims/page-store.svelte.ts';
+import { kit_bridge } from '../shims/kit-bridge.ts';
+import { install_page_defer, page_defer_revivers } from './page-defer.ts';
+import { transport_decoders } from './app-transport.ts';
+import { boot_link, slots } from './slots.ts';
 
 // The boot's session and hint-set reset, handed over through the registry — this lazy module (the
 // hydrate core's and the navigation's) never imports a boot module (./slots.ts `BootLink`).

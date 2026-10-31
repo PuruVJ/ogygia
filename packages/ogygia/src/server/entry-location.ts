@@ -11,7 +11,7 @@
  */
 import runtime_url from 'virtual:ogygia/runtime-url';
 import { entryLocation, islandDeps } from 'virtual:ogygia/island-deps';
-import { runtime_bootstrap_tags } from './document-tail.js';
+import { runtime_bootstrap_tags } from './document-tail.ts';
 
 /** The file an entry is loaded from: its content-hashed location, else the identity itself. */
 export function entry_src(identity: string): string {

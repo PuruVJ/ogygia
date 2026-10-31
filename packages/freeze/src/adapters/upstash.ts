@@ -6,8 +6,8 @@
  *   freeze.configure({ store: upstash({ url: env.UPSTASH_REDIS_REST_URL,
  *                                          token: env.UPSTASH_REDIS_REST_TOKEN }) });
  */
-import type { FreezeStore } from '../types.js';
-import { normalize_prefix, subtree_prefix } from '../key.js';
+import type { FreezeStore } from '../types.ts';
+import { normalize_prefix, subtree_prefix } from '../key.ts';
 
 // ── regexes
 const GLOB_ACTIVE_G = /[*?[\]\\]/g;

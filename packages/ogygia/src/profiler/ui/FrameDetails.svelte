@@ -5,8 +5,8 @@
 	 * themselves) and HOW it was reached (its heaviest call stacks, nearest caller first).
 	 * Rendered inside the table islands; plain markup.
 	 */
-	import type { FrameStat } from '../analyze.js';
-	import { fmt_ms, CATEGORY_LABEL } from './format.js';
+	import type { FrameStat } from '../analyze.ts';
+	import { fmt_ms, CATEGORY_LABEL } from './format.ts';
 
 	let {
 		f,

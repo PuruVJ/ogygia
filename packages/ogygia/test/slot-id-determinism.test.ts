@@ -4,8 +4,8 @@
  * hole never collides with the page's own markers, and off-request the process counter stands in.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { next_slot_id } from '../src/region-snippet.js';
-import { set_kit_event_reader } from '../src/server/kit-context.js';
+import { next_slot_id } from '../src/region-snippet.ts';
+import { set_kit_event_reader } from '../src/server/kit-context.ts';
 
 // the handle installs this reader in an app; here each test installs its own request
 const set_request_event_stub = (fn: (() => unknown) | null) => set_kit_event_reader(fn);

@@ -25,8 +25,8 @@
  * };
  * ```
  */
-import type { CallerSite } from './net.js';
-import { register_profiler_file } from './frames.js';
+import type { CallerSite } from './net.ts';
+import { register_profiler_file } from './frames.ts';
 
 // This file's frames are the profiler's, not the app's: the caller of a span is the frame ABOVE
 // `span()`. Registered by identity because a workspace link bundles this file into the app's

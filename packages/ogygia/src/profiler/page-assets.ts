@@ -11,7 +11,7 @@
  * imports, bounded in time and count). The score (score.ts) reads the totals.
  */
 
-import { find_unscoped, type UnscopedStyles } from '../unscoped-css.js';
+import { find_unscoped, type UnscopedStyles } from '../unscoped-css.ts';
 
 export type AssetKind = 'script' | 'style' | 'font' | 'image' | 'other';
 

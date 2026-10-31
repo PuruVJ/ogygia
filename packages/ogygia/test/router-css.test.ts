@@ -9,12 +9,12 @@ import {
 	router_css_roots,
 	router_css_module,
 	router_css_key
-} from '../src/compiler/link/router-css.js';
+} from '../src/compiler/link/router-css.ts';
 import {
 	register_router_css,
 	register_router_css_paths,
 	router_css_of
-} from '../src/router-css.js';
+} from '../src/router-css.ts';
 
 const ROOT = '/app';
 const LIB = '/app/src/lib';

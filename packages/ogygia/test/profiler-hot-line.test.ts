@@ -2,7 +2,7 @@
 // its code, and — when V8 inlined a call there — the function called. Builtins and methods are the
 // line's own work, never the one to "look inside".
 import { expect, test } from 'vitest';
-import { hot_line_of } from '../src/profiler/report.js';
+import { hot_line_of } from '../src/profiler/report.ts';
 
 const src = (start: number, lines: string[]) => ({ start, lines });
 

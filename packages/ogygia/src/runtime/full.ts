@@ -9,13 +9,13 @@
  * Exposed as an explicit FUNCTION, not a top-level side effect: the compiler always calls it, so the
  * boot never depends on a bundler honouring `sideEffects` to survive tree-shaking / dep-prebundling.
  */
-import { boot } from './core.js';
-import * as frames from './frames.js';
-import * as lakes from './lakes.js';
-import * as morph from './morph.js';
-import * as interaction from './interaction.js';
-import * as forms from './form-continuity.js';
-import * as router from './router.js';
+import { boot } from './core.ts';
+import * as frames from './frames.ts';
+import * as lakes from './lakes.ts';
+import * as morph from './morph.ts';
+import * as interaction from './interaction.ts';
+import * as forms from './form-continuity.ts';
+import * as router from './router.ts';
 
 /** Boot the kitchen-sink runtime (all boot-phase features). Idempotent via {@link ./core.js boot}. */
 export function bootDev(): void {

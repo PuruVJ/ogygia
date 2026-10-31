@@ -5,8 +5,8 @@
 	 * render we are, the CPU so far, and the stack at the step's middle. A slider and two keys
 	 * (← →) instead of a chart, for the reader who wants to walk it. A `wake:'load'` island.
 	 */
-	import type { RenderSteps, RenderStep } from '../steps.js';
-	import { fmt_ms, CATEGORY_COLOR } from './format.js';
+	import type { RenderSteps, RenderStep } from '../steps.ts';
+	import { fmt_ms, CATEGORY_COLOR } from './format.ts';
 
 	let { steps }: { steps: RenderSteps } = $props();
 

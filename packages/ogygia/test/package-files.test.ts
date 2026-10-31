@@ -8,11 +8,11 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { vi } from 'vitest';
-import { discover_package_files } from '../src/vite/package-files.js';
-import { CompileCtx, type CompileCtxInit, type PackageScan } from '../src/compiler/ctx.js';
-import { Compiler } from '../src/compiler/driver.js';
-import { Program } from '../src/compiler/program.js';
-import { normalize_import_keys } from '../src/compiler/region/transform.js';
+import { discover_package_files } from '../src/vite/package-files.ts';
+import { CompileCtx, type CompileCtxInit, type PackageScan } from '../src/compiler/ctx.ts';
+import { Compiler } from '../src/compiler/driver.ts';
+import { Program } from '../src/compiler/program.ts';
+import { normalize_import_keys } from '../src/compiler/region/transform.ts';
 
 let app: string;
 

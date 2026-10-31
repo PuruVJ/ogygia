@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render_profile } from '../src/mcp.js';
+import { render_profile } from '../src/mcp.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The MCP digest of a profile is what an agent reads to fix the code: the slow patterns (with the

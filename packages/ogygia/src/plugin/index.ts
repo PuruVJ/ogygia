@@ -18,13 +18,13 @@
  * context live in `ogygia/plugin/utils`.
  */
 import type { RequestEvent } from '@sveltejs/kit';
-import type { RequestFacts } from './facts.js';
-import type { Ask, Notify, ServerHooks } from './hooks.js';
-import type { DevtoolsEventInput } from '../devtools/schema.js';
+import type { RequestFacts } from './facts.ts';
+import type { Ask, Notify, ServerHooks } from './hooks.ts';
+import type { DevtoolsEventInput } from '../devtools/schema.ts';
 
-export type { RequestFacts } from './facts.js';
-export type { ServerHooks } from './hooks.js';
-export type { DevtoolsEventInput } from '../devtools/schema.js';
+export type { RequestFacts } from './facts.ts';
+export type { ServerHooks } from './hooks.ts';
+export type { DevtoolsEventInput } from '../devtools/schema.ts';
 
 /** The server process, as one plugin sees it (handed to `setup`, and on every `ctx.app`). */
 export interface ServerApp<Options = undefined> {
@@ -108,10 +108,10 @@ export const STORED_DOCUMENT_META = '<meta name="ogygia-freeze" content="hit">';
 // ── region values a plugin's server code makes
 /** A region value holding finished HTML (rendered as-is, no island); and `region(Component, props)`
  *  itself (the same as `ogygia`'s, without loading the whole front door). */
-export { og_html_region as htmlRegion, region } from '../region.js';
+export { og_html_region as htmlRegion, region } from '../region.ts';
 
-import { REGION_BRAND } from '../region-brand.js';
-import type { DeferredRegion } from '../region.js';
+import { REGION_BRAND } from '../region-brand.ts';
+import type { DeferredRegion } from '../region.ts';
 
 /** A deferred region value whose HTML the browser fetches from `url` (a capability the plugin minted,
  *  `''` for an inert one). HTML only: whatever islands the answer carries wake themselves. */

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { build_drill, call_group, tag_fills, type DrillNode } from '../src/profiler/drill.js';
-import { owner_of_stack, type Timeline } from '../src/profiler/timeline.js';
-import type { LedgerLine } from '../src/profiler/ledger.js';
-import { drill_deltas, order_of } from '../src/profiler/compare.js';
+import { build_drill, call_group, tag_fills, type DrillNode } from '../src/profiler/drill.ts';
+import { owner_of_stack, type Timeline } from '../src/profiler/timeline.ts';
+import type { LedgerLine } from '../src/profiler/ledger.ts';
+import { drill_deltas, order_of } from '../src/profiler/compare.ts';
 
 // One render's time as a tree that adds up at every level: phase → who held it → the line.
 

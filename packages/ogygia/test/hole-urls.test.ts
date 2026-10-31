@@ -3,7 +3,7 @@
 // site header: an interaction island inside a hole (`entry="./_app/immutable/og-region.…js"`) loaded
 // from `/docs/guides/_app/…` and died on the first click.
 import { describe, it, expect } from 'vitest';
-import { absolutize_hole_html } from '../src/server/hole-urls.js';
+import { absolutize_hole_html } from '../src/server/hole-urls.ts';
 
 const base = new URL('http://localhost/__ogygia__?id=abc&props=e30&exp=1&sig=s');
 

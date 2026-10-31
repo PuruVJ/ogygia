@@ -6,7 +6,7 @@
 // every hole stayed on its fallback, with no request at all.
 import { beforeEach, expect, test } from 'vitest';
 import { userEvent } from 'vitest/browser';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 /**
  * Park the REAL pointer in the bottom-right corner before every test. An on-demand hole warms on

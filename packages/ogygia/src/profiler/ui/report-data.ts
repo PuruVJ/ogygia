@@ -4,15 +4,15 @@
  * memory sparkline). Kept out of the .svelte file so it stays plain, testable logic; the component
  * just renders what these return. Findings/sequential/io-kind are reused from their existing homes.
  */
-import type { Analysis, FrameCategory, GroupStat } from '../analyze.js';
-import type { NetCall, UpstreamTrace } from '../net.js';
-import type { IoOp } from '../async-io.js';
-import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.js';
-import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.js';
-import { hazard_words } from '../hydration-hazards.js';
-import type { HoleStat, IslandStat, SeedKeyStat } from '../../server/request-stats.js';
-import { io_kind } from '../async-io.js';
-import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.js';
+import type { Analysis, FrameCategory, GroupStat } from '../analyze.ts';
+import type { NetCall, UpstreamTrace } from '../net.ts';
+import type { IoOp } from '../async-io.ts';
+import type { ClientIslandStat, MemSample, ReportExtras, ReportMeta, RequestEntry } from '../report.ts';
+import { group_islands, hole_economics, island_js_bytes, island_js_unique, island_name, island_rows_of } from '../report.ts';
+import { hazard_words } from '../hydration-hazards.ts';
+import type { HoleStat, IslandStat, SeedKeyStat } from '../../server/request-stats.ts';
+import { io_kind } from '../async-io.ts';
+import { CATEGORY_LABEL, CATEGORY_COLOR, fmt_bytes } from './format.ts';
 
 // ── the ogygia side of a page: islands, the seed, the holes ─────────────────────────────────
 

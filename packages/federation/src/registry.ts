@@ -5,7 +5,7 @@
  * PAGE-STATE-SINGLETON law (dist entries can double-evaluate a module); a second `federate()` call
  * (dev re-evaluation of the module that owns it) REPLACES the previous one.
  */
-import type { Federation } from './types.js';
+import type { Federation } from './types.ts';
 
 const SLOT = Symbol.for('ogygia.federation');
 

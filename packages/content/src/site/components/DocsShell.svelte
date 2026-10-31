@@ -14,8 +14,8 @@
 	 */
 	import { page } from '$app/state';
 	import { script } from 'ogygia';
-	import { set_shell_context } from '../context.js';
-	import { mountBase, type Site, type SiteMeta } from '../site.js';
+	import { set_shell_context } from '../context.ts';
+	import { mountBase, type Site, type SiteMeta } from '../site.ts';
 	// KEPT island: the live sidebar (DOM + mounted app) rides the body-swap across nav instead of
 	// re-rendering, so its active-marker element persists and can GLIDE to the new row. `nav`/`base` are
 	// plain serializable data, so they cross the island boundary cleanly.
@@ -31,7 +31,7 @@
 	// `hydration_html_changed` warning, but its relocation currently throws a HierarchyRequestError on
 	// hydrate — the Sheet backdrop + portable `actions` snippet aren't keep-safe yet. Left re-hydrating.
 	import ShellBar from './ShellBar.svelte' with { wake: 'load' };
-	import type { NavTree } from '../types.js';
+	import type { NavTree } from '../types.ts';
 	import type { Snippet } from 'svelte';
 
 	type ShellProps = {

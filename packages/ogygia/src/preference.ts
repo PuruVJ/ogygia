@@ -15,7 +15,7 @@
  * // CSS: :root[data-pref-code-language="js"] [data-variant="ts"] { display: none }
  * ```
  */
-import { script } from './script.js';
+import { script } from './script.ts';
 
 /** A preference declaration: its name, allowed values, and default (which must be one of the values). */
 export type PreferenceSpec = {

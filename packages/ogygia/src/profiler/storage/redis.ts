@@ -14,7 +14,7 @@
  * last day of recordings. The index sets drop an expired report's id the next time they are read or
  * pruned, so they do not grow with every report that expired.
  */
-import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.js';
+import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.ts';
 
 /** The subset of a Redis client this store uses — node-redis and ioredis both satisfy it (their
  *  method names differ in case, and a few calls take options objects on one and arguments on the

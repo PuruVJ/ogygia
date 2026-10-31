@@ -14,8 +14,8 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compileFoucScopedCss } from '../src/compiler/fouc-css.js';
-import { preprocess_component_for_css } from '../src/vite/style-preprocess.js';
+import { compileFoucScopedCss } from '../src/compiler/fouc-css.ts';
+import { preprocess_component_for_css } from '../src/vite/style-preprocess.ts';
 
 // The ogygia package root — where `sass-embedded` (a devDependency) resolves, the way the real plugin
 // resolves sass from the app root.
@@ -47,7 +47,7 @@ describe('fouc-scoped CSS: a lake/island keeps Svelte scoping and never leaks gl
 	});
 
 	it('a fallback that ships unscoped says so in the CSS, with the file name only', async () => {
-		const { find_unscoped } = await import('../src/unscoped-css.js');
+		const { find_unscoped } = await import('../src/unscoped-css.ts');
 		const css = compileFoucScopedCss(abs, SCSS);
 		expect(find_unscoped(css)).toEqual([{ file: 'Header.svelte', why: expect.any(String) }]);
 		expect(css).not.toContain(pkg_root); // never the build machine's path

@@ -14,13 +14,13 @@
 import { getContext, setContext as svelte_set_context } from 'svelte';
 import { parse, stringify } from 'devalue';
 import { DEV } from 'esm-env';
-import { REF_WIRE_KEY, ref_reducer, ref_reviver, batch } from './ref.js';
+import { REF_WIRE_KEY, ref_reducer, ref_reviver, batch } from './ref.ts';
 // PULL-registration: kinds register inside the seam functions below (idempotent, tree-shake-proof,
 // and the modules stay free of import-time side effects).
-import { register_wire_kind } from './live-transport.js';
-import { register_store_kind, register_derived_kind } from './store-transport.js';
-import { register_snippet_kind } from './region-snippet.js';
-import { register_fn_kind, is_branded_fn } from './fn-transport.js';
+import { register_wire_kind } from './live-transport.ts';
+import { register_store_kind, register_derived_kind } from './store-transport.ts';
+import { register_snippet_kind } from './region-snippet.ts';
+import { register_fn_kind, is_branded_fn } from './fn-transport.ts';
 
 function ensure_ctx_kinds(): void {
 	register_wire_kind();
@@ -29,9 +29,9 @@ function ensure_ctx_kinds(): void {
 	register_fn_kind();
 	register_derived_kind();
 }
-import { boundary_problems, format_boundary_finding } from './boundary.js';
-import { PAGE_CTX_MARKER, record_ctx, type SetContextOptions } from './context-registry.js';
-import { escape_script_text } from './escape.js';
+import { boundary_problems, format_boundary_finding } from './boundary.ts';
+import { PAGE_CTX_MARKER, record_ctx, type SetContextOptions } from './context-registry.ts';
+import { escape_script_text } from './escape.ts';
 
 /** The `<Provide>` seam carries classes, stores AND snippets (a snippet freezes/travels live). */
 const PROVIDE_FAMILIES = new Set(['wire', 'store', 'snippet', 'fn', 'derived']);

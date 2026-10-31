@@ -6,6 +6,6 @@
  *
  * This is a plain RE-EXPORT, not a side-effect import — the boot is an explicit `bootDev()` call the
  * compiler emits, so it can never be tree-shaken (or dropped by Vite's dep prebundler) the way a bare
- * `import './full.js'` could. Manual (no-plugin) users call `bootDev()` themselves.
+ * `import './full.ts'` could. Manual (no-plugin) users call `bootDev()` themselves.
  */
-export { bootDev } from './full.js';
+export { bootDev } from './full.ts';

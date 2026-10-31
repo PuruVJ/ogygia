@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
-import { content } from '../src/index.js';
-import type { Heading, Source, SourceEntry } from '../src/index.js';
-import { site as siteRaw } from '../src/site/site.js';
-import { dimensions, is_dimensioned } from '../src/site/dimensions.js';
-import type { NavGroup, NavLeaf, NavTree } from '../src/site/types.js';
+import { content } from '../src/index.ts';
+import type { Heading, Source, SourceEntry } from '../src/index.ts';
+import { site as siteRaw } from '../src/site/site.ts';
+import { dimensions, is_dimensioned } from '../src/site/dimensions.ts';
+import type { NavGroup, NavLeaf, NavTree } from '../src/site/types.ts';
 
 type Meta = { headings: Heading[] };
 

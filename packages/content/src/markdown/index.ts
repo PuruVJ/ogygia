@@ -17,36 +17,36 @@
 import type { MdsvexOptions } from 'mdsvex';
 import type { PreprocessorGroup, Processed } from 'svelte/compiler';
 import { BuildCache, content_css_key } from 'ogygia/internal/compiler-browser';
-import { bridge } from '../bridge.js';
-import { RegionStore } from '../region-store.js';
-import { remarkHeadingId } from './remark-heading-id.js';
-import { remarkHeadings, type RemarkHeadingsOptions } from './remark-headings.js';
-import { remarkLinks } from './remark-links.js';
-import { remarkCodeIds } from './remark-code-ids.js';
-import { transform_containers } from './containers.js';
-import { transform_tabs } from './tabs.js';
-import { rehypeHeadingAnchors } from './rehype-heading-anchors.js';
-import { parse_yaml } from './frontmatter.js';
-import { try_region_emit } from './region-emit.js';
-import { DEFAULT_OVERRIDE_TAGS, rehypeOverrides, SLOT_TAG } from './rehype-overrides.js';
+import { bridge } from '../bridge.ts';
+import { RegionStore } from '../region-store.ts';
+import { remarkHeadingId } from './remark-heading-id.ts';
+import { remarkHeadings, type RemarkHeadingsOptions } from './remark-headings.ts';
+import { remarkLinks } from './remark-links.ts';
+import { remarkCodeIds } from './remark-code-ids.ts';
+import { transform_containers } from './containers.ts';
+import { transform_tabs } from './tabs.ts';
+import { rehypeHeadingAnchors } from './rehype-heading-anchors.ts';
+import { parse_yaml } from './frontmatter.ts';
+import { try_region_emit } from './region-emit.ts';
+import { DEFAULT_OVERRIDE_TAGS, rehypeOverrides, SLOT_TAG } from './rehype-overrides.ts';
 import {
 	configure_shiki,
 	create_mdsvex_highlighter,
 	type MarkdownShikiOptions,
 	type MarkdownThemePair
-} from './shiki.js';
+} from './shiki.ts';
 
 export type { MarkdownShikiOptions, MarkdownThemePair, RemarkHeadingsOptions };
 import type { ShikiTransformer } from 'shiki';
-import type { MetaParser, VariantGenerator } from './code.js';
-import { default_pipeline } from './code-render.js';
-export { infostring, slash_meta } from './code.js';
-export { diff_markers } from './diff.js';
-export { inline_markers } from './inline-markers.js';
-export type { InlineMarkerOptions } from './inline-markers.js';
-export type { Fence, MetaParser, VariantGenerator, Variant } from './code.js';
+import type { MetaParser, VariantGenerator } from './code.ts';
+import { default_pipeline } from './code-render.ts';
+export { infostring, slash_meta } from './code.ts';
+export { diff_markers } from './diff.ts';
+export { inline_markers } from './inline-markers.ts';
+export type { InlineMarkerOptions } from './inline-markers.ts';
+export type { Fence, MetaParser, VariantGenerator, Variant } from './code.ts';
 // the `code` / `md` macros, for an in-browser compiler (the Observatory) — the plugin's own pair
-export { snippet_macros, type SnippetMacro } from '../macros/snippets.js';
+export { snippet_macros, type SnippetMacro } from '../macros/snippets.ts';
 
 // ── regexes
 const BACKSLASH_G = /\\/g;
@@ -73,13 +73,13 @@ export type CodeOptions = {
 	 */
 	cacheSalt?: string;
 };
-export type { Heading } from '../index.js';
-export { highlight, escape_svelte, wrap_html, normalize_shiki } from './shiki.js';
-export { remarkHeadingId } from './remark-heading-id.js';
-export { remarkHeadings, slugify } from './remark-headings.js';
-export { remarkLinks } from './remark-links.js';
-export { parseFrontmatter } from './frontmatter.js';
-export type { FrontmatterResult } from './frontmatter.js';
+export type { Heading } from '../index.ts';
+export { highlight, escape_svelte, wrap_html, normalize_shiki } from './shiki.ts';
+export { remarkHeadingId } from './remark-heading-id.ts';
+export { remarkHeadings, slugify } from './remark-headings.ts';
+export { remarkLinks } from './remark-links.ts';
+export { parseFrontmatter } from './frontmatter.ts';
+export type { FrontmatterResult } from './frontmatter.ts';
 
 /** One unified plugin entry (a plugin, or a `[plugin, options]` tuple), as mdsvex accepts them. */
 type UnifiedEntry = NonNullable<MdsvexOptions['remarkPlugins']>[number];

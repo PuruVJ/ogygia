@@ -10,10 +10,10 @@
  * drop its SWR copies). Fire and forget — a peer that is down never fails a publish.
  */
 import { defineServer, type ServerPlugin } from 'ogygia/plugin';
-import { set_fed_app } from './app.js';
-import { install_federation, serve_federation } from './serve.js';
-import { current_federation } from './registry.js';
-import { broadcast_thaw } from './federate.js';
+import { set_fed_app } from './app.ts';
+import { install_federation, serve_federation } from './serve.ts';
+import { current_federation } from './registry.ts';
+import { broadcast_thaw } from './federate.ts';
 
 const server: ServerPlugin = defineServer({
 	setup(app) {

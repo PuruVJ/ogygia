@@ -2,8 +2,8 @@
 // main-thread time, the scripts other scripts loaded, and the islands they could have edited. And
 // an island's children slot the server never filled.
 import { expect, test } from 'vitest';
-import { kind_of_host, third_party, third_party_findings } from '../src/devtools/third-party.js';
-import { analyze_page } from '../src/devtools/page-insights.js';
+import { kind_of_host, third_party, third_party_findings } from '../src/devtools/third-party.ts';
+import { analyze_page } from '../src/devtools/page-insights.ts';
 
 const res = (url: string, start: number, end: number, extra: Record<string, unknown> = {}) => ({ url, type: 'script', start, end, size: 20_000, transfer: 7000, ...extra });
 const resources = [

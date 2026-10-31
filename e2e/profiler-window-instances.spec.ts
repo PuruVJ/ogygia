@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn_server, type SpawnedServer } from './fixtures/servers.js';
+import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const KEY = 'e2e-window';
 const app = fileURLToPath(new URL('../apps/playground', import.meta.url));

@@ -8,8 +8,8 @@ import {
 	strip_route_options,
 	is_route_option_file,
 	clear_route_csr_cache
-} from '../src/compiler/kit.js';
-import { route_option, set_page_route_options, clear_route_options } from '../src/plugin/routes.js';
+} from '../src/compiler/kit.ts';
+import { route_option, set_page_route_options, clear_route_options } from '../src/plugin/routes.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ROUTE OPTIONS in Kit's file world — a plugin's `export const <name> = true|false` in a page/layout

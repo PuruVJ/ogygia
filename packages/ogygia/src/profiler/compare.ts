@@ -4,18 +4,18 @@
  * size of the change. Both reports are whatever is in the store: two page profiles of one route
  * are the intended pair, but any two work (the summary says what each is).
  */
-import type { Analysis } from './analyze.js';
-import type { ReportMeta } from './report.js';
-import { own_requests } from './own-requests.js';
-import type { VitalMove } from '../devtools/page-insights.js';
-import type { GcAttribution } from './gc.js';
-import type { Pattern, PatternKind } from './patterns.js';
-import type { LedgerLine } from './ledger.js';
-import { at_line, type DrillNode } from './drill.js';
-import type { Forecast } from './forecast.js';
+import type { Analysis } from './analyze.ts';
+import type { ReportMeta } from './report.ts';
+import { own_requests } from './own-requests.ts';
+import type { VitalMove } from '../devtools/page-insights.ts';
+import type { GcAttribution } from './gc.ts';
+import type { Pattern, PatternKind } from './patterns.ts';
+import type { LedgerLine } from './ledger.ts';
+import { at_line, type DrillNode } from './drill.ts';
+import type { Forecast } from './forecast.ts';
 // (the arithmetic alone: compare runs in the browser too, and the forecast module reads sources)
-import { saving_of } from './saving.js';
-import { PHASE_LABEL, type Phase } from './timeline.js';
+import { saving_of } from './saving.ts';
+import { PHASE_LABEL, type Phase } from './timeline.ts';
 
 export interface DeltaRow {
 	/** the identity both sides were matched on (unique in its list: what a view keys rows by —
@@ -263,7 +263,7 @@ export interface Since {
 		moved: { key: string; label: string; a: number; b: number }[];
 	};
 	/** what changed in the page's JS between the two builds (both weighed): the files behind a JS move */
-	assets?: import('./page-assets.js').AssetsDiff;
+	assets?: import('./page-assets.ts').AssetsDiff;
 	/** the browser's findings fixed and new (both reports with a visit), as `code (islands)` */
 	browser?: { fixed: string[]; added: string[] };
 	/** which islands changed file between the two builds (what a returning visitor downloads again) */
@@ -274,7 +274,7 @@ export interface Since {
 }
 
 // (the vitals that moved: ONE rule, shared with the Page tab's "since your last load")
-export { vitals_moved, type VitalMove } from '../devtools/page-insights.js';
+export { vitals_moved, type VitalMove } from '../devtools/page-insights.ts';
 
 /**
  * WHAT A DEPLOY COSTS A RETURNING VISITOR. Each island's file is named by its content, so between two

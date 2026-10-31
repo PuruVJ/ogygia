@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { gunzipSync } from 'node:zlib';
-import { GZIP_OVER_BYTES, gzip_large } from '../src/profiler/compress.js';
+import { GZIP_OVER_BYTES, gzip_large } from '../src/profiler/compress.ts';
 
 // A big profiler answer goes out gzipped (AWS Lambda caps a response at 6 MB before any CDN
 // compresses it); small ones, binary ones, already-encoded ones and the profiler's own in-process

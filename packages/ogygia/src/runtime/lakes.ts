@@ -1,4 +1,4 @@
-import { relocate_trailing_empty_comments } from './lake-anchors.js';
+import { relocate_trailing_empty_comments } from './lake-anchors.ts';
 import {
 	FROZEN_SELECTOR,
 	document_is_freeze,
@@ -8,9 +8,9 @@ import {
 	region_max_age_ms,
 	region_on_expire,
 	region_remount
-} from './region-attrs.js';
-import { runtime_session } from './session.js';
-import { slots, type LakeArm, type LiftedLake } from './slots.js';
+} from './region-attrs.ts';
+import { runtime_session } from './session.ts';
+import { slots, type LakeArm, type LiftedLake } from './slots.ts';
 
 /** Feature entry: fill the `lakes` slot so core lifts/restores frozen regions. */
 export function install(): void {

@@ -9,9 +9,9 @@
  * its ancestors + own. See internal/notes/router-v2.md.
  */
 import type { Snippet } from 'svelte';
-import type { LoadDef, LayoutDef, PageDef, RouteTable, VerbEntry } from './define.js';
-import type { ActionFailure } from './respond.js';
-import type { Params, Simplify, StandardSchemaV1, InferOutput } from './view.js';
+import type { LoadDef, LayoutDef, PageDef, RouteTable, VerbEntry } from './define.ts';
+import type { ActionFailure } from './respond.ts';
+import type { Params, Simplify, StandardSchemaV1, InferOutput } from './view.ts';
 
 type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (
 	k: infer I

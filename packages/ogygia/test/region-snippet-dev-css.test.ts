@@ -5,8 +5,8 @@
 // into <head>, so the boot rescue imports it and the scoped <style> injects. (Rendered IN PLACE — not
 // crossing — the snippet is the host's own and wears the host's scope: nothing to thread.)
 import { it, expect } from 'vitest';
-import { og_portable } from '../src/region-snippet.js';
-import { PORTABLE_FORM } from '../src/portable-form.js';
+import { og_portable } from '../src/region-snippet.ts';
+import { PORTABLE_FORM } from '../src/portable-form.ts';
 
 // A hand-written server component (svelte/server calls `(payload, props) => void`); no-op body.
 const Entry = ((_$$renderer: unknown, _$$props: unknown) => {}) as never;

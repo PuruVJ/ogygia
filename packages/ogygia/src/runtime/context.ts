@@ -10,8 +10,8 @@
  *
  * A HYDRATE-phase feature (link/runtime-entry.ts): installed by the hydrate core, never the boot.
  */
-import { collect_provided_context } from '../context-bridge.js';
-import { slots } from './slots.js';
+import { collect_provided_context } from '../context-bridge.ts';
+import { slots } from './slots.ts';
 
 export function install(): void {
 	slots.context = collect_provided_context;

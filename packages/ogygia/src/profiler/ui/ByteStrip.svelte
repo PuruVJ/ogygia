@@ -5,8 +5,8 @@
 	 * browser's visit is known, the time it arrived. A `wake:'load'` island: hover a segment, click
 	 * a kind in the legend to light only that kind.
 	 */
-	import { arrival_ms, left_at, type ByteStrip, type StripKind, type StripSegment } from '../byte-strip.js';
-	import { fmt_bytes, fmt_ms } from './format.js';
+	import { arrival_ms, left_at, type ByteStrip, type StripKind, type StripSegment } from '../byte-strip.ts';
+	import { fmt_bytes, fmt_ms } from './format.ts';
 
 	let {
 		strip,

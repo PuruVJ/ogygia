@@ -20,12 +20,12 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import * as devalue from 'devalue';
-import { islands_endpoint } from './endpoint.js';
-import type { KitPage } from './kit-context.js';
-import type { PageSnapshot } from '../page-seed-registry.js';
-import { look_up_page, type PageFacts } from './page-facts.js';
-import { merge_seed_ask, shape_page_data, type SeedAsk, type SeedKeys } from './seed-shape.js';
-import { PAGE_FACTS_SCRIPT_TYPE } from '../page-facts-script.js';
+import { islands_endpoint } from './endpoint.ts';
+import type { KitPage } from './kit-context.ts';
+import type { PageSnapshot } from '../page-seed-registry.ts';
+import { look_up_page, type PageFacts } from './page-facts.ts';
+import { merge_seed_ask, shape_page_data, type SeedAsk, type SeedKeys } from './seed-shape.ts';
+import { PAGE_FACTS_SCRIPT_TYPE } from '../page-facts-script.ts';
 
 type Transport = Record<string, { decode: (v: unknown) => unknown; encode: (v: unknown) => unknown }>;
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { server_sourcemaps_plugin } from '../src/vite/server-sourcemaps.js';
+import { server_sourcemaps_plugin } from '../src/vite/server-sourcemaps.ts';
 
 // With the profiler on, the server build writes hidden sourcemaps; the client build writes them too
 // and moves every one off its output (the profiler's server module keeps the app's: profiler-maps.ts).

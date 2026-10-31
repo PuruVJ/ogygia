@@ -7,7 +7,7 @@
  * audit time, where the mount base is known. Best-effort by design: markdown `link` nodes only —
  * raw `<a>` HTML and component `href` props are invisible to the mdast pass.
  */
-import type { LinkRef } from '../index.js';
+import type { LinkRef } from '../index.ts';
 
 type MdNode = {
 	type?: string;

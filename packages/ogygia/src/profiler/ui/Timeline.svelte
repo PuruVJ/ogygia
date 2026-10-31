@@ -6,9 +6,9 @@
 	 * that set the wall time, with the "awaits in a row" callouts. Solid = CPU, coloured by owner;
 	 * striped = waiting; dark = nothing recorded.
 	 */
-	import { chain_steps, coalesce, PHASE_LABEL, type Timeline, type ViewSegment } from '../timeline.js';
-	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
-	import { pressable } from './press.js';
+	import { chain_steps, coalesce, PHASE_LABEL, type Timeline, type ViewSegment } from '../timeline.ts';
+	import { fmt_ms, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.ts';
+	import { pressable } from './press.ts';
 
 	let {
 		t,

@@ -12,7 +12,7 @@
  * moment it connects, by identity — never by position — and fetches exactly as the SSR element
  * would have. Read lazily, parsed once per document.
  */
-import { HOLES_SCRIPT_TYPE } from '../holes-record.js';
+import { HOLES_SCRIPT_TYPE } from '../holes-record.ts';
 
 export type HoleFacts = {
 	/** The signed capability URL the server minted. */

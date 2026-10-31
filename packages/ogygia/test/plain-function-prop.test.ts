@@ -3,7 +3,7 @@
 // can't cross an island boundary", which is wrong when the author passed a callback, not a snippet.
 // The error must lead with "function", name the prop, and put the plain-function case first.
 import { describe, expect, it } from 'vitest';
-import { prepare_region_props } from '../src/region-snippet.js';
+import { prepare_region_props } from '../src/region-snippet.ts';
 
 describe('a plain function passed as an island prop', () => {
 	it('errors as a FUNCTION (not a snippet), naming the prop and the callback case', () => {

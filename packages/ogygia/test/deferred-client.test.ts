@@ -10,7 +10,7 @@ import {
 	phase2_hydrate_schedule,
 	region_hydrate_schedule,
 	region_schedule
-} from '../src/runtime/region-attrs.js';
+} from '../src/runtime/region-attrs.ts';
 
 class FakeEl {
 	constructor(readonly attrs: Record<string, string> = {}) {}

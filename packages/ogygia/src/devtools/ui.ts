@@ -15,8 +15,8 @@
  * The switch's cookie also starts the rest, for that browser only: the server writes its event
  * side-channel and the page is measured from the start (runtime/beacon.ts).
  */
-import { devtools_switched_on, switch_in_url, testing_lean, without_switch, write_switch } from './switch.js';
-import { TESTING_ENGINE_VERSION } from './testing-version.js';
+import { devtools_switched_on, switch_in_url, testing_lean, without_switch, write_switch } from './switch.ts';
+import { TESTING_ENGINE_VERSION } from './testing-version.ts';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 const LAZY = typeof __OGYGIA_DEVTOOLS_LAZY__ !== 'undefined' ? __OGYGIA_DEVTOOLS_LAZY__ : false;
@@ -56,7 +56,7 @@ function mount_launcher(opts?: { csr_true?: boolean }): void {
 	// a session the page before was recording (a full page load mid-session) goes on here — the
 	// recorder loads only then (the key: session.ts SAVED_KEY)
 	try {
-		if (sessionStorage.getItem('ogygia:devtools:session')) void import('./session.js').then((m) => m.resume_session_if_any());
+		if (sessionStorage.getItem('ogygia:devtools:session')) void import('./session.ts').then((m) => m.resume_session_if_any());
 	} catch {
 		// no storage
 	}
@@ -82,7 +82,7 @@ function mount_launcher(opts?: { csr_true?: boolean }): void {
 	const load = () => {
 		if (loading) return;
 		loading = true;
-		void import('./ui-app.js').then((m) => {
+		void import('./ui-app.ts').then((m) => {
 			button?.remove();
 			if (on_key) removeEventListener('keydown', on_key);
 			m.mount_app(root, { csr_true, start_open: want_open, ...(LAZY ? { hide: devtools_off } : {}) });
@@ -157,11 +157,11 @@ declare global {
 function install_testing_api(): void {
 	if (window.__ogygia_testing) return;
 	// the engine's own files, as they load (`page().self.bytes`): the resources fetched while its import ran
-	let loading: Promise<typeof import('./testing-engine.js')> | null = null;
+	let loading: Promise<typeof import('./testing-engine.ts')> | null = null;
 	const engine = () =>
 		(loading ??= (async () => {
 			const from = performance.now();
-			const m = await import('./testing-engine.js');
+			const m = await import('./testing-engine.ts');
 			m.note_engine_files(from, performance.now());
 			return m;
 		})());

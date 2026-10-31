@@ -4,7 +4,7 @@ import {
 	region_changed,
 	unwatch_region,
 	watch_region
-} from '../../src/runtime/drift-watch.js';
+} from '../../src/runtime/drift-watch.ts';
 
 function region(html: string): HTMLElement {
 	const el = document.createElement('ogygia-region');

@@ -4,7 +4,7 @@
 // runtime's. A baked region's were handed to Kit (`data-kit-hydrated`) whenever they woke before the
 // region's first `applyLive` had marked it a hole — a field header's islands, 7 of 8, stayed inert.
 import { afterEach, expect, test } from 'vitest';
-import { ours_on_kit_document } from '../../src/runtime/region-attrs.js';
+import { ours_on_kit_document } from '../../src/runtime/region-attrs.ts';
 
 afterEach(() => {
 	document.body.innerHTML = '';

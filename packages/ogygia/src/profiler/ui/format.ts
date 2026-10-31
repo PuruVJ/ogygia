@@ -3,8 +3,8 @@
  * into HTML strings; the components import them and interpolate in `{}` (Svelte auto-escapes, so the
  * old `esc()` is gone). Pure functions / constants — no DOM, safe on the server render.
  */
-import type { FrameCategory } from '../analyze.js';
-import type { ReportMeta } from '../report.js';
+import type { FrameCategory } from '../analyze.ts';
+import type { ReportMeta } from '../report.ts';
 
 /** ms with sensible precision: whole numbers over 100, one dp over 10, two dp below. */
 export const fmt_ms = (n: number): string =>

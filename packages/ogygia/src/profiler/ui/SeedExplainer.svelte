@@ -5,10 +5,10 @@
 	 * or because some island reads page.data whole. A dropped key shows too, so the shaping is
 	 * visible. A finding links here by `#seed=<key>`.
 	 */
-	import type { SeedRow } from './report-data.js';
-	import { fmt_bytes } from './format.js';
-	import { row_id, follow_hash } from './row-anchor.svelte.js';
-	import { pressable } from './press.js';
+	import type { SeedRow } from './report-data.ts';
+	import { fmt_bytes } from './format.ts';
+	import { row_id, follow_hash } from './row-anchor.svelte.ts';
+	import { pressable } from './press.ts';
 
 	let { rows, whole_by, total, seed_bytes }: { rows: SeedRow[]; whole_by: string[]; total: number; seed_bytes: number } = $props();
 	let picked = $state<string | null>(null);

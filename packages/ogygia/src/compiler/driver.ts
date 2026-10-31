@@ -9,8 +9,8 @@
  * The transform cache is content-keyed (`hit.code === source`), so a changed source misses and
  * recomputes on its own; the linker's `unregister_host` deliberately does NOT clear it.
  */
-import { fs, path, createHash } from './host.js';
-import { fnv1a32 } from '../runtime/hash.js';
+import { fs, path, createHash } from './host.ts';
+import { fnv1a32 } from '../runtime/hash.ts';
 // `performance` is a global in both Node (≥16) and the browser — no import, so the driver graph loads
 // in the browser compiler (Observatory REPL) without pulling node:perf_hooks.
 const performance = globalThis.performance;
@@ -21,39 +21,39 @@ import {
 	ISLAND_DIR,
 	is_island_path,
 	CLIENT_BINDING_STUB
-} from './region/transform.js';
+} from './region/transform.ts';
 import {
 	routeCsrIsFalse,
 	routeCsrIsTrue,
 	hasAnyCsrTrueRoute,
 	clean_stale_ogygia_dirs,
 	kit_dirs
-} from './kit.js';
-import { run_module_macros } from './macros/pipeline.js';
-import { is_script_request } from './script-request.js';
+} from './kit.ts';
+import { run_module_macros } from './macros/pipeline.ts';
+import { is_script_request } from './script-request.ts';
 import {
 	generateHydrateFeaturesSource,
 	generateRuntimeEntrySource,
 	resolveFeatures
-} from './link/runtime-entry.js';
+} from './link/runtime-entry.ts';
 import {
 	resolveFoucImportSpec,
 	FOUC_CSS_PREFIX,
 	FOUC_SCOPED_PREFIX,
 	type FoucAlias
-} from './fouc-css.js';
+} from './fouc-css.ts';
 import {
 	moduleHasTransportable,
 	svelteModuleHasTransportable,
 	appendSvelteModuleRegistrations,
 	appendTransportRegistrations
-} from './content/transportables.js';
-import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT, FOREIGN_HYDRATE_MARK } from './region/emit.js';
-import { island_deps_module } from './link/island-deps.js';
-import { island_shim_source, runtime_shim_source } from './link/entry-shim.js';
-import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.js';
-import { collect_flag_sites, FLAGS_SPEC } from './flags.js';
-import { router_css_roots, router_css_module } from './link/router-css.js';
+} from './content/transportables.ts';
+import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT, FOREIGN_HYDRATE_MARK } from './region/emit.ts';
+import { island_deps_module } from './link/island-deps.ts';
+import { island_shim_source, runtime_shim_source } from './link/entry-shim.ts';
+import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.ts';
+import { collect_flag_sites, FLAGS_SPEC } from './flags.ts';
+import { router_css_roots, router_css_module } from './link/router-css.ts';
 import {
 	secret_module,
 	sign_module,
@@ -64,18 +64,18 @@ import {
 	region_ttl_module,
 	route_csr_module,
 	route_options_module
-} from './link/caps.js';
-import { router_config_module } from './link/router-config.js';
+} from './link/caps.ts';
+import { router_config_module } from './link/router-config.ts';
 import {
 	transport_module,
 	transportables_module,
 	kit_transport_module,
 	source_crosses_wire
-} from './link/transport.js';
-import { server_manifest_module, server_island_ids, PAGE_DATA_READS_TOKEN } from './link/server-manifest.js';
-import { manifest_module } from './link/manifest.js';
-import { dev_hmr_client_source } from './dev/dev-hmr.js';
-import { same_module_path, island_vpaths_affected_by_file } from './dev/hmr.js';
+} from './link/transport.ts';
+import { server_manifest_module, server_island_ids, PAGE_DATA_READS_TOKEN } from './link/server-manifest.ts';
+import { manifest_module } from './link/manifest.ts';
+import { dev_hmr_client_source } from './dev/dev-hmr.ts';
+import { same_module_path, island_vpaths_affected_by_file } from './dev/hmr.ts';
 import {
 	RESOLVED,
 	V_RUNTIME_URL,
@@ -110,9 +110,9 @@ import {
 	V_TRANSPORTABLES,
 	V_TRANSPORTABLES_EAGER,
 	V_ROUTE_OPTIONS
-} from './ids.js';
-import { strip_id, host_key } from './program.js';
-import { mentions_page_store, page_data_keys_answer } from './link/page-keys.js';
+} from './ids.ts';
+import { strip_id, host_key } from './program.ts';
+import { mentions_page_store, page_data_keys_answer } from './link/page-keys.ts';
 import {
 	export_names,
 	is_registry_stub_id,
@@ -122,12 +122,12 @@ import {
 	registry_stub_names,
 	registry_stub_source,
 	static_script_specs
-} from './link/registry-stub.js';
-import { island_host_loaded } from './link/emit-gate.js';
-import { stamp_opaque } from './ownership-stamps.js';
-import { strip_bom } from './bom.js';
-import type { Program, RegisterResult } from './program.js';
-import type { CompileCtx } from './ctx.js';
+} from './link/registry-stub.ts';
+import { island_host_loaded } from './link/emit-gate.ts';
+import { stamp_opaque } from './ownership-stamps.ts';
+import { strip_bom } from './bom.ts';
+import type { Program, RegisterResult } from './program.ts';
+import type { CompileCtx } from './ctx.ts';
 
 /** A file-local transform result: the Vite `{ code, map }` plus the descriptors the linker registers. */
 type TransformResult = RegisterResult & { code: string; map: unknown };

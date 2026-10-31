@@ -6,8 +6,8 @@
 	 * LAYER CAKE (per route, where the time went: CPU, waiting on calls, the rest). A `wake:'load'`
 	 * island; `from` is a URL the rows are read from in this browser (the sink you own).
 	 */
-	import { parse_sink, cloud_points, layer_cake, hot_for_range, type SinkRow, type CloudPoint } from '../sink.js';
-	import { fmt_ms } from './format.js';
+	import { parse_sink, cloud_points, layer_cake, hot_for_range, type SinkRow, type CloudPoint } from '../sink.ts';
+	import { fmt_ms } from './format.ts';
 
 	let {
 		base,

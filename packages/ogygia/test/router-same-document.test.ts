@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { same_document_link } from '../src/runtime/router.js';
+import { same_document_link } from '../src/runtime/router.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A click on a link to the CURRENT document. Regression: a web-component link (`<x-link>`)

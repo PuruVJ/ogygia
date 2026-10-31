@@ -17,9 +17,9 @@ import {
 	PAGE_SETTLED_KEY,
 	PAGE_DEFER_GLOBAL,
 	PAGE_DEFER_REGISTRY_KEY
-} from '../page-defer.js';
+} from '../page-defer.ts';
 
-export { PAGE_DEFER_BOOTSTRAP } from '../page-defer.js';
+export { PAGE_DEFER_BOOTSTRAP } from '../page-defer.ts';
 
 type Deferred = {
 	promise: Promise<unknown>;

@@ -3,7 +3,7 @@
 // class instance's, random per render by design).
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'devalue';
-import { compare, props_diff } from '../src/devtools/fp-drift.js';
+import { compare, props_diff } from '../src/devtools/fp-drift.ts';
 
 describe('fp drift', () => {
 	it('names the prop that differs (JSON lane): a nested path, the two values', () => {
