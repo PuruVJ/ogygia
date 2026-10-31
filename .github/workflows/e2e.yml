@@ -34,9 +34,12 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      # first, and fast: an unformatted file fails here, not after the suites
+      # first, and fast: an unformatted file or a lint error fails here, not after the suites
       - name: Format check (oxfmt)
         run: pnpm run format:check
+
+      - name: Lint (oxlint)
+        run: pnpm run lint
 
       # turbo's local cache: a package whose inputs did not change replays its build, check and e2e
       - name: Turbo cache

@@ -1,0 +1,16 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	"plugins": ["typescript", "unicorn", "oxc"],
+	"categories": { "correctness": "error" },
+	"rules": {
+		"typescript/no-explicit-any": "error"
+	},
+	"ignorePatterns": [
+		"**/dist/**",
+		"**/build/**",
+		"**/.svelte-kit/**",
+		"**/.vercel/**",
+		"svelte/**",
+		"kit/**"
+	]
+}

@@ -29,7 +29,8 @@
 		"ci:version": "changeset version",
 		"ci:release": "changeset publish",
 		"format": "oxfmt .",
-		"format:check": "oxfmt --check ."
+		"format:check": "oxfmt --check .",
+		"lint": "oxlint"
 	},
 	"devDependencies": {
 		"@changesets/changelog-github": "^1.0.1",
@@ -38,6 +39,7 @@
 		"@types/node": "catalog:",
 		"axe-core": "catalog:",
 		"oxfmt": "^0.75.0",
+		"oxlint": "^1.90.0",
 		"playwright": "catalog:",
 		"rolldown": "catalog:",
 		"turbo": "^2.11.10",
