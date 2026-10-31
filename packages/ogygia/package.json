@@ -122,7 +122,7 @@
 		}
 	},
 	"bin": {
-		"ogygia": "./dist/cli.mjs"
+		"ogygia": "./src/cli.ts"
 	},
 	"files": [
 		"dist",
@@ -159,6 +159,9 @@
 		"typescript": "catalog:"
 	},
 	"publishConfig": {
+		"bin": {
+			"ogygia": "./dist/cli.mjs"
+		},
 		"exports": {
 			".": {
 				"types": "./dist/index.d.ts",
