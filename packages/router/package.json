@@ -1,6 +1,6 @@
 {
 	"name": "@ogygia/router",
-	"version": "0.10.2",
+	"version": "0.11.0",
 	"description": "The server router for ogygia: Kit's routing model as values (routes, layouts, loads, actions, endpoints, streamed pages), with a typed fetch client",
 	"type": "module",
 	"license": "MIT",
