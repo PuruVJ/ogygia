@@ -1,5 +1,11 @@
 # @ogygia/tsdown-plugin-svelte
 
+## 1.0.1
+
+### Patch Changes
+
+- [#65](https://github.com/ogygiajs/ogygia/pull/65) [`87e9b21`](https://github.com/ogygiajs/ogygia/commit/87e9b213f3b63da4898f402a29cbc57af4aaa75d) Thanks [@PuruVJ](https://github.com/PuruVJ)! - The repository now lives at github.com/ogygiajs/ogygia; package links point there.
+
 ## 1.0.0
 
 ### Major Changes
