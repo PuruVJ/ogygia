@@ -5,7 +5,7 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import type { RequestContext, ServerApp, ServerPlugin } from './index.js';
-import { facts_of, mark_per_visitor, type RequestFacts } from './facts.js';
+import { current_facts, facts_of, mark_per_visitor, type RequestFacts } from './facts.js';
 import { ask, notify, register_hooks } from './hooks.js';
 import { route_option } from './routes.js';
 import { record_server_event } from '../devtools/server-registry.js';
@@ -23,8 +23,14 @@ export interface LivePlugin {
 	app: ServerApp<unknown>;
 }
 
+/** The app's signer, handed in by the handle (it holds the region key). */
+export interface AppSigner {
+	sign(message: string): string;
+	verify(message: string, signature: string): boolean;
+}
+
 /** Make each plugin live, in order: app, shared hooks, `setup`. */
-export function start_plugins(entries: readonly ServerPluginEntry[]): LivePlugin[] {
+export function start_plugins(entries: readonly ServerPluginEntry[], signer: AppSigner): LivePlugin[] {
 	return entries.map(({ name, options, server }) => {
 		const warned = new Set<string>();
 		const app: ServerApp<unknown> = {
@@ -33,6 +39,9 @@ export function start_plugins(entries: readonly ServerPluginEntry[]): LivePlugin
 			notify,
 			ask,
 			facts: facts_of,
+			current: current_facts,
+			sign: signer.sign,
+			verify: signer.verify,
 			devtools: record_server_event,
 			warn(message) {
 				if (warned.has(message)) return;

@@ -2,7 +2,8 @@
  * The shell's OWN v2 router — the headline API: a whole remote app mounted under shell
  * chrome with ONE table entry, identity + experiments declared ONCE at the table.
  */
-import { routes, layout, mount } from 'ogygia/router';
+import { routes, layout } from 'ogygia/router';
+import { mount } from '@ogygia/federation';
 import { cms, session } from './federation.server.js';
 import ShellChrome from './ShellChrome.svelte';
 import ShellError from './ShellError.svelte';

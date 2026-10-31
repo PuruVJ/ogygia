@@ -1,0 +1,66 @@
+{
+	"name": "@ogygia/federation",
+	"private": true,
+	"version": "0.10.1",
+	"description": "Fragment federation for ogygia: apps share pages and widgets as signed region values, with cross-app thaw",
+	"type": "module",
+	"sideEffects": false,
+	"license": "MIT",
+	"author": "Puru Vijayvargia <devpuruvj@gmail.com>",
+	"homepage": "https://ogygia.puruvj.dev",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/PuruVJ/ogygia.git",
+		"directory": "packages/federation"
+	},
+	"keywords": ["ogygia", "sveltekit", "microfrontends", "federation", "fragments"],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./src/index.ts"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"default": "./src/server.ts"
+		},
+		"./vite": {
+			"types": "./dist/vite.d.ts",
+			"default": "./dist/vite.js"
+		}
+	},
+	"files": ["dist", "README.md"],
+	"scripts": {
+		"build": "tsdown",
+		"check": "tsc -p . && tsc -p test && vitest run",
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"ogygia": "workspace:^"
+	},
+	"devDependencies": {
+		"@ogygia/flags": "workspace:*",
+		"@ogygia/tooling": "workspace:*",
+		"@sveltejs/kit": "^2.70.0",
+		"ogygia": "workspace:*",
+		"tsdown": "^0.22.14",
+		"typescript": "^6.0.3",
+		"vitest": "^4.1.10"
+	},
+	"publishConfig": {
+		"access": "public",
+		"exports": {
+			".": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			},
+			"./server": {
+				"types": "./dist/server.d.ts",
+				"default": "./dist/server.js"
+			},
+			"./vite": {
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
+			}
+		}
+	}
+}

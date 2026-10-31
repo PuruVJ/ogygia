@@ -60,6 +60,9 @@ export interface CompileCtxInit {
 	/** Route options the plugins declare (`compile.routeOptions`) — stripped from route files and
 	 *  baked into `virtual:ogygia/route-options`. Optional (default none). */
 	route_options?: readonly string[];
+	/** A plugin asked island entries to keep their foreign-hydrate exports (`b.foreignHydrate()`:
+	 *  another app's runtime wakes this app's islands). Optional (default off). */
+	foreign_hydrate?: boolean;
 	/** Dependency packages that DECLARED their ogygia compile surface (`"ogygia": { "files": […] }`
 	 *  in THEIR package.json) — prescanned + transformed like app source, node_modules gates lifted
 	 *  for exactly these paths. Optional (default none): standalone/browser hosts have no
@@ -121,6 +124,7 @@ export class CompileCtx {
 	readonly profiler_config: Record<string, unknown> | null;
 	readonly server_plugins: readonly ServerRealm[];
 	readonly route_options: readonly string[];
+	readonly foreign_hydrate: boolean;
 	readonly is_dev: boolean;
 	readonly id_salt: string;
 	readonly visibleMargin: string | undefined;
@@ -164,6 +168,7 @@ export class CompileCtx {
 		this.profiler_config = init.profiler_config;
 		this.server_plugins = init.server_plugins ?? [];
 		this.route_options = init.route_options ?? [];
+		this.foreign_hydrate = init.foreign_hydrate ?? false;
 		this.is_dev = init.is_dev;
 		this.id_salt = init.id_salt;
 		this.visibleMargin = init.visibleMargin;

@@ -1,15 +1,18 @@
 {
 	"name": "@ogygia/tooling",
 	"private": true,
-	"description": "Shared build config for the ogygia packages. Each package's tsdown.config.ts calls library().",
+	"description": "Shared build and test config for the ogygia packages: each package's tsdown.config.ts calls library(), its vitest.config.ts pluginTests().",
 	"type": "module",
 	"exports": {
-		"./tsdown": "./tsdown.ts"
+		"./tsdown": "./src/tsdown.ts",
+		"./vitest": "./src/vitest.ts"
 	},
 	"dependencies": {
-		"@ogygia/tsdown-plugin-svelte": "workspace:*"
+		"@ogygia/tsdown-plugin-svelte": "workspace:*",
+		"@sveltejs/vite-plugin-svelte": "^7.2.0"
 	},
 	"peerDependencies": {
-		"tsdown": "^0.22.14"
+		"tsdown": "^0.22.14",
+		"vitest": "^4.1.10"
 	}
 }

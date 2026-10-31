@@ -6,8 +6,8 @@
  * cross-app THAW notices so a publish or a deploy on one team thaws the frozen pages of every
  * team that baked its fragments.
  */
-import type { RegionValue } from '../region.js';
-import type { Router } from '../router/router.js';
+import type { RegionValue } from 'ogygia';
+import type { Router } from 'ogygia/router';
 import type { Claims } from './wire.js';
 
 /** Visitor claims resolver — `federate({ visitor })`. Reads the LIVE event (cookies, locals);

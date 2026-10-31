@@ -6,21 +6,25 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { generateKeyPairSync } from 'node:crypto';
-import { make_peer } from '../src/federation/peer.js';
-import { federate } from '../src/federation/federate.js';
-import { mount } from '../src/federation/mount.js';
-import { mint_hole, set_hole_signer } from '../src/federation/hole.js';
-import { sign_headers, verify_signed_request, lift_document } from '../src/federation/wire.js';
-import { set_federation } from '../src/federation/registry.js';
-import { set_source_observer } from '../src/source.js';
-import { routes } from '../src/router/index.js';
-// (federation's flag carry; moves with federation into its package)
+import { make_peer } from '../src/peer.js';
+import { federate } from '../src/federate.js';
+import { mount } from '../src/mount.js';
+import { mint_hole, set_hole_signer } from '../src/hole.js';
+import { sign_headers, verify_signed_request, lift_document } from '../src/wire.js';
+import { set_federation } from '../src/registry.js';
+import fed_server from '../src/server.js';
+import { routes } from 'ogygia/router';
+import { startPlugin } from 'ogygia/plugin/testing';
+// (core internals a test drives: the running code's request)
+import { facts_of, set_current_request } from '../../ogygia/src/plugin/facts.js';
+// federation's flag carry
 import { flag } from '../../flags/src/index.js';
 import flags_server from '../../flags/src/server.js';
-import { startPlugin } from '../src/plugin/testing.js';
 
-// a flag read records its decision as a request fact through the started plugin
+// both plugins, started: a flag read records its decision as a request fact; federation reads the
+// facts and signs with the app's key through its app
 startPlugin(flags_server, { name: '@ogygia/flags' });
+startPlugin(fed_server, { name: '@ogygia/federation' });
 
 const CLAIMS = Symbol.for('ogygia.claims.v1');
 const doc_json = (extra: Record<string, unknown> = {}, status = 200) =>
@@ -29,7 +33,7 @@ const doc_json = (extra: Record<string, unknown> = {}, status = 200) =>
 afterEach(() => {
 	vi.unstubAllGlobals();
 	set_federation(null);
-	set_source_observer(null);
+	set_current_request(null);
 	set_hole_signer(null);
 });
 
@@ -292,8 +296,10 @@ describe('federate() — registration + fail-closed', () => {
 
 describe('remote regions', () => {
 	it('a static remote page bakes its HTML and adopts the fragment’s tags into the capture', async () => {
-		const seen: string[] = [];
-		set_source_observer((t) => seen.push(t));
+		// the render's request, collecting its data-source receipts (a store or an expose asked)
+		const request = new Request('http://shell/x');
+		set_current_request(() => request);
+		const seen: string[] = (facts_of(request).sources = []);
 		vi.stubGlobal(
 			'fetch',
 			async () =>

@@ -293,6 +293,7 @@ const server: ServerPlugin<FreezeServerOptions, State> = defineServer<FreezeServ
 		state.settle = begin_flight(path);
 		state.obs = observe_event(event, facts);
 		facts.storable = true;
+		facts.sources ??= []; // keep the render's data-source receipts: the page's reverse index
 	},
 
 	async response(ctx, response) {

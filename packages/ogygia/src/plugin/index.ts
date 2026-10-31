@@ -38,6 +38,12 @@ export interface ServerApp<Options = undefined> {
 	readonly ask: Ask;
 	/** A request's facts (made on first touch) — for the plugin's own code outside a hook. */
 	facts(request: Request): RequestFacts;
+	/** The facts of the request the running code belongs to (a load, a render), or null outside one. */
+	current(): RequestFacts | null;
+	/** Sign `message` with the app's region key (HMAC): a capability only this app can mint. */
+	sign(message: string): string;
+	/** Check a signature `sign` made (constant-time). */
+	verify(message: string, signature: string): boolean;
 	/** Record a server-realm event into the current request's devtools stream (a no-op unless
 	 *  devtools is on for that browser). */
 	devtools(event: DevtoolsEventInput): void;
@@ -98,3 +104,17 @@ export function defineServer<Options = undefined, State = undefined>(
 /** Stamped into a document served FROM a store (not the render that just happened): the browser
  *  runtime then treats `render: 'live'` lakes as stale on first mount and revalidates them. */
 export const STORED_DOCUMENT_META = '<meta name="ogygia-freeze" content="hit">';
+
+// ── region values a plugin's server code makes
+/** A region value holding finished HTML (rendered as-is, no island); and `region(Component, props)`
+ *  itself (the same as `ogygia`'s, without loading the whole front door). */
+export { og_html_region as htmlRegion, region } from '../region.js';
+
+import { REGION_BRAND } from '../region-brand.js';
+import type { DeferredRegion } from '../region.js';
+
+/** A deferred region value whose HTML the browser fetches from `url` (a capability the plugin minted,
+ *  `''` for an inert one). HTML only: whatever islands the answer carries wake themselves. */
+export function deferredRegion(id: string, url: string): DeferredRegion {
+	return { [REGION_BRAND]: true, kind: 'deferred', id, props: {}, url, module: '' };
+}

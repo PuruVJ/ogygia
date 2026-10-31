@@ -6,14 +6,13 @@
  * This is the v2 replacement for the v1 `expose()` / `catalog()` / `proxy()` route files: the
  * handle owns all of it, so a `federate()` in hooks.server.ts is the whole wiring.
  */
-import { sign, verify } from 'virtual:ogygia/sign';
-import { signing_key } from '../server/signing-key.js';
 import { version } from '$app/env';
 import type { RequestEvent } from '@sveltejs/kit';
-import { ask, notify } from '../plugin/hooks.js';
+import type { ServerApp } from 'ogygia/plugin';
 import { current_federation } from './registry.js';
-import { begin_source_capture, end_source_capture, broadcast_thaw } from './federate.js';
+import { begin_source_capture, broadcast_thaw } from './federate.js';
 import { set_hole_signer } from './hole.js';
+import { fed_app } from './app.js';
 import {
 	verify_signed_request,
 	attach_claims,
@@ -46,11 +45,11 @@ function inbound_verify(fed: Federation): VerifyConfig {
 const hole_message = (peer: string, kind: string, target: string, search: string, exp: number) =>
 	`frag.${peer}.${kind}.${target}.${search}.${exp}`;
 
-/** Install the hole signer (the handle holds the region secret). Idempotent. */
-export function install_federation(): void {
+/** Install the hole signer: the app's own region key signs it (`app.sign`). Idempotent. */
+export function install_federation(app: ServerApp): void {
 	set_hole_signer(({ peer, kind, target, search }) => {
 		const exp = Date.now() + HOLE_TTL_MS;
-		const sig = sign(signing_key().secret, hole_message(peer, kind, target, search ?? '', exp));
+		const sig = app.sign(hole_message(peer, kind, target, search ?? '', exp));
 		const q = new URLSearchParams({
 			peer,
 			kind,
@@ -73,7 +72,7 @@ async function maybe_deploy_thaw(fed: Federation): Promise<void> {
 	deploy_checked = true;
 	if (!fed.expose && fed.widgets.size === 0) return; // only producers matter
 	try {
-		const seen = await ask.lastBuild(version);
+		const seen = await fed_app()?.ask.lastBuild(version);
 		if (seen !== undefined && seen !== version)
 			await broadcast_thaw(fed, { id: crypto.randomUUID(), hop: 0, tags: 'all' });
 	} catch {
@@ -135,12 +134,13 @@ async function serve_expose(fed: Federation, event: RequestEvent): Promise<Respo
 	fwd.headers.set('traceparent', trace.traceparent);
 	attach_claims(fwd, claims);
 
-	const sources = begin_source_capture();
+	const capture = begin_source_capture(request);
+	const sources = capture.sources;
 	let res: Response | null;
 	try {
 		res = await fed.expose.fetch(fwd, event);
 	} finally {
-		end_source_capture();
+		capture.end();
 	}
 
 	const doc = (d: Record<string, unknown>) => {
@@ -195,12 +195,13 @@ async function serve_widget(fed: Federation, event: RequestEvent, name: string):
 	const props: Record<string, string> = {};
 	for (const [k, v] of url.searchParams) props[k] = v;
 
-	const sources = begin_source_capture();
+	const capture = begin_source_capture(request);
+	const sources = capture.sources;
 	let baked: { html: string | null };
 	try {
 		baked = await def.make(props, { user, request, url });
 	} finally {
-		end_source_capture();
+		capture.end();
 	}
 	if (baked?.html == null) return json_error(500, 'fragment did not bake');
 	const ms = Math.round((performance.now() - t0) * 10) / 10;
@@ -229,7 +230,7 @@ async function serve_hole(fed: Federation, event: RequestEvent): Promise<Respons
 	const exp = Number(p.get('exp') ?? '0');
 	const sig = p.get('sig') ?? '';
 	if (!Number.isFinite(exp) || exp < Date.now()) return new Response('gone', { status: 410 });
-	if (!verify(signing_key().secret, hole_message(peer_name, kind, target, search, exp), sig))
+	if (!fed_app()?.verify(hole_message(peer_name, kind, target, search, exp), sig))
 		return new Response('forbidden', { status: 403 });
 	const peer = fed.peers.get(peer_name);
 	if (!peer) return new Response('unknown peer', { status: 404 });
@@ -312,10 +313,10 @@ async function serve_thaw(fed: Federation, event: RequestEvent): Promise<Respons
 	// map the sender's tags into THIS app's namespace (how its peer handle filed the pages)
 	const local = map_thaw_tags(sender_name, notice.tags ?? []);
 	if (local.length) {
-		await notify.invalidate(local); // this app's own stored pages
+		await fed_app()?.notify.invalidate(local); // this app's own stored pages
 		sender.drop(new Set(local)); // this app's cached documents from that peer
 	} else if (notice.tags === 'all') {
-		await notify.invalidate([`a:${sender_name}`]);
+		await fed_app()?.notify.invalidate([`a:${sender_name}`]);
 		sender.drop('all');
 	}
 

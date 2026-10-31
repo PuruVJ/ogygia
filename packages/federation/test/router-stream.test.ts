@@ -5,8 +5,9 @@
  * buffer to the FINAL yield. mount({ stream }) is the sugar: fallback → doc | offline card.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { routes, page, mount } from '../src/router/index.js';
-import { make_peer } from '../src/federation/peer.js';
+import { routes, page } from 'ogygia/router';
+import { mount } from '../src/mount.js';
+import { make_peer } from '../src/peer.js';
 
 const peer = (o = {}) => make_peer('cms', { origin: 'http://mfe.test', ...o }, 'shell');
 
@@ -54,8 +55,8 @@ describe('page(async function*) — the streamed slot', () => {
 
 	it('yields REAL regions — async generators auto-await them, the resolved shapes must bake', async () => {
 		// the exact gap that let e2e fail while string-only tests stayed green
-		const { og_html_region, region } = await import('../src/region.js');
-		const { default: RawHtml } = await import('../src/RawHtml.svelte');
+		const { htmlRegion: og_html_region, region } = await import('ogygia/plugin');
+		const { default: RawHtml } = await import('../../ogygia/src/RawHtml.svelte');
 		const app2 = routes({
 			'/s': page(async function* () {
 				yield og_html_region('<p data-first>inline region</p>'); // resolves via its own bake
@@ -140,8 +141,8 @@ describe('mount({ stream: true }) — the sugar', () => {
 
 	it('a COMPONENT fallback bakes as an inline region into the flushed part', async () => {
 		vi.stubGlobal('fetch', async () => new Response(doc_json('late-body')));
-		const { default: RawHtml } = await import('../src/RawHtml.svelte');
-		const app = routes({
+		const { default: RawHtml } = await import('../../ogygia/src/RawHtml.svelte');
+const app = routes({
 			'/cms/[...rest]': mount(peer(), {
 				stream: { fallback: RawHtml as never }
 			})

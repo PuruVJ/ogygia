@@ -26,7 +26,8 @@ export interface RequestFacts {
 	/** An app transform renders this router-fetched page as an ANSWER, a form a store keyed by path
 	 *  does not hold. */
 	answerForm: boolean;
-	/** Data-source receipts (`s:<id>:<fp>`) filed while `storable`; null otherwise. */
+	/** Data-source receipts (`s:<id>:<fp>`) the render filed — collected only once a plugin asks for
+	 *  them by setting a list here (a storable render's reverse index, a fragment's provenance). */
 	sources: string[] | null;
 	/** Every flag decided for this request (name → variant): federation carries them as claims. */
 	assignments: Record<string, string>;

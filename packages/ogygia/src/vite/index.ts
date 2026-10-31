@@ -217,6 +217,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 	const app_plugins = standalone ? [] : check_plugins(options.plugins);
 	let server_plugins: ServerRealm[] = [];
 	let route_options: string[] = [];
+	let foreign_hydrate = false;
 	const import_keys = normalize_import_keys(options.importKeys);
 	// `ogygia({ profiler })` — the profiler is configured ONLY here. Normalized to a config object (or
 	// null when off) and baked into `virtual:ogygia/profiler-config`; `ogygia.handle()` reads it and
@@ -714,7 +715,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 					resolve_kit_paths(root));
 
 				// PLUGINS: their realms, found by name, and their `build` hooks (now that root + mode exist)
-				({ servers: server_plugins, route_options } = resolve_plugins(app_plugins, root, is_dev));
+				({ servers: server_plugins, route_options, foreign_hydrate } = resolve_plugins(app_plugins, root, is_dev));
 
 				// Bind the driver's resolved compile context — now that root/base/libDir/dev + id_salt are
 				// known. Every run_transform runs after this (buildStart prescan / the transform hook), so
@@ -729,6 +730,7 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 						profiler_config,
 						server_plugins,
 						route_options,
+						foreign_hydrate,
 						is_dev,
 						id_salt,
 						visibleMargin,

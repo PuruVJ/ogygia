@@ -136,10 +136,6 @@
 			"types": "./dist/router/client-api.d.ts",
 			"default": "./src/router/client-api.ts"
 		},
-		"./federation": {
-			"types": "./dist/federation/index.d.ts",
-			"default": "./src/federation/index.ts"
-		},
 		"./plugin": {
 			"types": "./dist/plugin/index.d.ts",
 			"default": "./src/plugin/index.ts"
@@ -378,10 +374,6 @@
 			"./router/client": {
 				"types": "./dist/router/client-api.d.ts",
 				"default": "./dist/router/client-api.js"
-			},
-			"./federation": {
-				"types": "./dist/federation/index.d.ts",
-				"default": "./dist/federation/index.js"
 			},
 			"./plugin": {
 				"types": "./dist/plugin/index.d.ts",

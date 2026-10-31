@@ -52,9 +52,6 @@ import { rewrite_loaders } from './content/loaders.js';
 import { rewrite_regions } from './content/regions.js';
 import { materialize } from './content/git.js';
 import { rewrite_lake_import_to_placeholder, APP_SHIM_IMPORT, FOREIGN_HYDRATE_MARK } from './region/emit.js';
-
-/** the import that makes an app a federation participant (its island entries keep the foreign-hydrate exports) */
-const FEDERATION_SPEC = 'ogygia/federation';
 import { island_deps_module } from './link/island-deps.js';
 import { island_shim_source, runtime_shim_source } from './link/entry-shim.js';
 import { context_string_keys, source_uses_ogygia_context } from './link/context-detect.js';
@@ -294,14 +291,6 @@ export class Compiler {
 	readonly dollar_hoists: Map<string, string> = new Map();
 	/** `prescan()` is once-per-session — guarded so the adapter can call it from any hook. */
 	#scanned = false;
-
-	/** Does the app federate (any module imports `ogygia/federation`)? Then its island entries keep the
-	 *  foreign-hydrate exports another app's runtime wakes them through. Read off the prescan. */
-	#federates(): boolean {
-		this.prescan();
-		for (const specs of this.program.module_specs.values()) if (specs.includes(FEDERATION_SPEC)) return true;
-		return false;
-	}
 
 	/**
 	 * DEV: the server-island ids the last emitted `virtual:ogygia/server-manifest` carried. A HOST edit
@@ -1321,11 +1310,12 @@ export class Compiler {
 			// A wake island's WRAPPER is leg-split too: the client leg imports its component through
 			// the lazy module (emit.ts `island_wrapper_client_source`), the SSR leg the real entry.
 			let src = !ssr && srcEntry.clientSource ? srcEntry.clientSource : srcEntry.source!;
-			// An island entry's FOREIGN-HYDRATE exports (fragment federation) exist for another app's
-			// runtime: never on the server, and never in an app that does not federate (every island
-			// of every other app carried them, and their imports: ~185 B gz and a preload each).
+			// An island entry's FOREIGN-HYDRATE exports exist for another app's runtime: never on the
+			// server, and only when a plugin asks for them (`b.foreignHydrate()`: federation). Every
+			// island of every other app carried them otherwise, and their imports: ~185 B gz and a
+			// preload each.
 			const foreign = src.indexOf(FOREIGN_HYDRATE_MARK);
-			if (foreign !== -1 && (ssr || !this.#federates())) src = src.slice(0, foreign);
+			if (foreign !== -1 && (ssr || !ctx.foreign_hydrate)) src = src.slice(0, foreign);
 			// CLIENT build: rewrite `$app/*` in the GENERATED virtual source to absolute
 			// shim paths (defense in depth alongside resolveId island-graph shimming).
 			// SSR keeps the real Kit modules (correct server-rendered page.data).

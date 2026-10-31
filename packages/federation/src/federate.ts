@@ -7,8 +7,7 @@
  * Called at server module-eval (in or under hooks.server.ts). The handle reads the registration
  * back to serve `/og/fragment/*`, `/og/thaw`, and the deferred remote-region holes.
  */
-import { set_source_observer } from '../source.js';
-import { register_hooks } from '../plugin/hooks.js';
+import { fed_app } from './app.js';
 import { make_peer } from './peer.js';
 import { set_federation, current_federation } from './registry.js';
 import {
@@ -22,24 +21,21 @@ import type { FederateConfig, Federation, Peer, PeerConfig, Widget, WidgetDef } 
 
 const HOP_MAX = 4;
 
-/** A live source observer bound to the CURRENT expose render — the handle sets it per request so a
- *  fragment reports the receipts (`og.source`) its render consumed. Rides a module-local ref set/
- *  cleared around each render (the handle serializes exposes; this is not shared across a stream). */
-let active_sources: Set<string> | null = null;
-export function begin_source_capture(): Set<string> {
-	active_sources = new Set();
-	return active_sources;
-}
-export function end_source_capture(): void {
-	active_sources = null;
-}
-
-let off_thaw: (() => void) | null = null;
-let observer_installed = false;
-function ensure_source_observer(): void {
-	if (observer_installed) return;
-	observer_installed = true;
-	set_source_observer((tag) => active_sources?.add(tag));
+/** Collect the data-source receipts (`og.source`) an expose render files, so the fragment reports
+ *  what it read: the request's `sources` fact is a fresh list for the render, then restored. */
+export function begin_source_capture(request: Request): { readonly sources: Set<string>; end(): void } {
+	const facts = fed_app()?.facts(request);
+	const saved = facts ? facts.sources : null;
+	if (facts) facts.sources = [];
+	const sources = new Set<string>();
+	return {
+		sources,
+		end() {
+			if (!facts) return;
+			for (const tag of facts.sources ?? []) sources.add(tag);
+			facts.sources = saved ? [...saved, ...sources] : saved;
+		}
+	};
 }
 
 /**
@@ -93,22 +89,8 @@ export function federate<P extends Record<string, PeerConfig>>(
 		deploy: config.deploy ?? 'auto'
 	};
 	set_federation(fed);
-	ensure_source_observer();
-
-	// THAW: every invalidation of THIS app's stored pages (the shared `invalidated` hook a store
-	// plugin calls) tells the peers that baked its fragments. A peer is notified whether or not it
-	// has a key (a pure consumer still needs to drop its SWR copies); signing only happens when this
-	// app has a private key. One implementation per process: a re-run of federate() replaces it.
-	// Fire and forget — a peer that is down never fails a publish (the TTL backstop holds).
-	off_thaw?.();
-	off_thaw = register_hooks({
-		invalidated(tags: string[] | 'all') {
-			void broadcast_thaw(fed, { id: crypto.randomUUID(), hop: 0, tags }).catch((e) => {
-				console.warn('[ogygia] federation: thaw notice to peers failed —', e);
-			});
-		}
-	});
-
+	// (THAW: the server realm implements the shared `invalidated` hook — every invalidation of this
+	// app's stored pages tells the peers that baked its fragments: server.ts)
 	return out;
 }
 

@@ -5,11 +5,8 @@
  * `mount()` — the wire behavior (status/redirect/form translation, canary, streaming) is unchanged;
  * it just takes a `Peer` instead of a `client()`.
  */
-import { page } from '../router/define.js';
-import type { PageDef, ComponentPick } from '../router/define.js';
-import type { Ctx } from '../router/ctx.js';
-import { redirect } from '../router/respond.js';
-import { facts_of } from '../plugin/facts.js';
+import { page, redirect, type PageDef, type ComponentPick, type Ctx } from 'ogygia/router';
+import { fed_app } from './app.js';
 import { child_traceparent, type Claims, type FragmentDocument } from './wire.js';
 import type { Peer } from './types.js';
 
@@ -25,8 +22,8 @@ export interface MountOptions {
 /** The on-behalf-of claims for a hop: the table's ONE identity + auto-carried flag decisions. */
 function claims_for(c: Ctx, user_override?: (c: Ctx) => Claims | undefined): Claims | undefined {
 	const base = user_override ? user_override(c) : (c.visitor as Claims | undefined);
-	const buckets = facts_of(c.request).assignments;
-	if (Object.keys(buckets).length === 0) return base;
+	const buckets = fed_app()?.facts(c.request).assignments;
+	if (!buckets || Object.keys(buckets).length === 0) return base;
 	return {
 		...base,
 		experiments: { ...buckets, ...((base?.experiments as object | undefined) ?? {}) }
@@ -69,7 +66,7 @@ function mount_fn(
 		const stream_slot = async function* (c: Ctx) {
 			if (typeof fb === 'string') yield fb;
 			else {
-				const { region } = await import('../region-core.js');
+				const { region } = await import('ogygia/plugin');
 				yield region(fb as never, {});
 			}
 			const peer = resolve_peer(c);

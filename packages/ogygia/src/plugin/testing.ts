@@ -8,8 +8,20 @@
  */
 import type { RequestEvent } from '@sveltejs/kit';
 import type { RequestContext, ServerApp, ServerPlugin } from './index.js';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { facts_of } from './facts.js';
-import { request_contexts, start_plugins } from './server.js';
+import { request_contexts, start_plugins, type AppSigner } from './server.js';
+
+/** A real HMAC under a key made for this test process. */
+const TEST_KEY = randomBytes(32);
+const TEST_SIGNER: AppSigner = {
+	sign: (message) => createHmac('sha256', TEST_KEY).update(message).digest('base64url'),
+	verify(message, signature) {
+		const want = Buffer.from(createHmac('sha256', TEST_KEY).update(message).digest('base64url'));
+		const got = Buffer.from(signature);
+		return want.length === got.length && timingSafeEqual(want, got);
+	}
+};
 
 export interface StartedPlugin<Options, State> {
 	app: ServerApp<Options>;
@@ -21,7 +33,7 @@ export function startPlugin<Options = undefined, State = undefined>(
 	server: ServerPlugin<Options, State>,
 	{ name = 'test-plugin', options }: { name?: string; options?: Options } = {}
 ): StartedPlugin<Options, State> {
-	const [live] = start_plugins([{ name, options, server: server as ServerPlugin<unknown, unknown> }]);
+	const [live] = start_plugins([{ name, options, server: server as ServerPlugin<unknown, unknown> }], TEST_SIGNER);
 	return {
 		app: live.app as ServerApp<Options>,
 		ctx(request, event = {}) {

@@ -3,13 +3,13 @@
 // without), a boolean flag() slots straight in as the gate, and the same `pick` verb that chooses
 // components and values chooses INFRASTRUCTURE (mount(v2.pick({ off, on }))).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { routes, when, mount } from '../src/router/index.js';
-import { make_peer } from '../src/federation/peer.js';
-// (the router's own flag integration; moves with the router into its package)
+import { routes, when } from 'ogygia/router';
+import { startPlugin } from 'ogygia/plugin/testing';
+import { mount } from '../src/mount.js';
+import { make_peer } from '../src/peer.js';
 import { flag, decide } from '../../flags/src/index.js';
 import flags_server from '../../flags/src/server.js';
-import { facts_of } from '../src/plugin/facts.js';
-import { startPlugin } from '../src/plugin/testing.js';
+import { facts_of } from '../../ogygia/src/plugin/facts.js';
 
 // a flag read records its decision as a request fact through the started plugin
 startPlugin(flags_server, { name: '@ogygia/flags' });

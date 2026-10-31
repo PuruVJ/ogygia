@@ -61,11 +61,6 @@ import {
 } from './server/render-page.js';
 import { absolutize_hole_html } from './server/hole-urls.js';
 import { KEEP_FALLBACK_HTML, is_keep_fallback } from './keep-fallback.js';
-import { serve_federation, install_federation } from './federation/serve.js';
-
-// Install the deferred-hole signer once (it holds the region secret); a no-op until a `federate()`
-// registers. Cheap and idempotent, at module eval like the other seams.
-install_federation();
 import { set_source_recorder } from './source.js';
 import { building, dev } from '$app/env';
 import runtime_url from 'virtual:ogygia/runtime-url';
@@ -81,7 +76,7 @@ import { B64Url } from './server/payload.js';
 import { REF_WIRE_KEY, ref_reviver } from './ref.js';
 import { plugins as plugin_entries } from 'virtual:ogygia/server-plugins';
 import type { RequestContext } from './plugin/index.js';
-import { facts_of, mark_per_visitor, set_current_request, type RequestFacts } from './plugin/facts.js';
+import { current_facts, facts_of, mark_per_visitor, set_current_request, type RequestFacts } from './plugin/facts.js';
 import { request_contexts, start_plugins } from './plugin/server.js';
 // PULL-registration at decode time (idempotent; no import-time side effects).
 import { register_wire_kind } from './live-transport.js';
@@ -371,17 +366,22 @@ set_late_taker(() => {
 // and the data-source recorder find the running code's request the way the bag does — through
 // Kit's request store.
 set_current_request(() => (try_get_request_store() as { event?: RequestEvent } | undefined)?.event?.request);
-// DATA SOURCES: every `__og_source`-wrapped call during a storable render files its
-// `(id, fingerprint)` tag with the facts — stored with the page as the invalidation reverse index.
+// DATA SOURCES: every `__og_source`-wrapped call files its `(id, fingerprint)` tag with the running
+// request's facts — when a plugin asked for them (`facts.sources` set to a list: a storable render's
+// invalidation reverse index, a federated fragment reporting what it read).
 set_source_recorder((tag) => {
-	const facts = bag_of()?.facts;
-	if (facts?.storable) (facts.sources ??= []).push(tag);
+	current_facts()?.sources?.push(tag);
 });
 // ROUTE OPTIONS: each Kit page's declared plugin options, baked by the compiler
 set_page_route_options(route_options);
 // PLUGINS (`ogygia({ plugins })`): each one's server half, live — its app made, its shared hooks
 // registered, its `setup` run — once, when this module loads.
-const plugins = start_plugins(plugin_entries);
+// Their `app.sign` / `app.verify` use the region key, read at first use (an env the host fills after
+// module eval still counts).
+const plugins = start_plugins(plugin_entries, {
+	sign: (message) => sign(signing_key().secret, message),
+	verify: (message, signature) => verify(signing_key().secret, message, signature)
+});
 // DEVTOOLS: per-request event buffers, keyed off the request bag by a side WeakMap so RequestBag stays
 // pristine (and free) when devtools is off. GC'd with the bag; never a global ring (which would mix
 // concurrent SSR requests). Unreferenced ⇒ tree-shaken when the gate is off.
@@ -788,11 +788,6 @@ class OgygiaHandle {
 		ctxs: readonly RequestContext<unknown, unknown>[],
 		facts: RequestFacts
 	): Promise<Response> {
-		// FRAGMENT FEDERATION: a `federate()` in hooks.server.ts serves `/og/fragment/*`, `/og/thaw`,
-		// and the deferred-hole endpoint straight from the handle (no route files). Null = not a
-		// federation path → fall through. Above the freeze/page split: these are their own protocol.
-		const fed_res = await serve_federation(event);
-		if (fed_res) return fed_res;
 		// Compare against the DECODED request pathname so the percent-encoded UTF-8 the browser
 		// sends matches our raw-emoji literal regardless of how Kit hands us the URL. Suffix match
 		// (not `===`) so it works under any `paths.base` without needing the base at all: the request

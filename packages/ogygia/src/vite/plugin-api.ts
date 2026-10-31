@@ -40,6 +40,10 @@ export interface BuildContext {
 	 *  option file, cascaded like `csr`): stripped before Kit sees the file, read back on the server
 	 *  with `ctx.routeOption(name)`. */
 	routeOption(name: string): void;
+	/** Keep the foreign-hydrate exports on this app's island entries: another app's page may host
+	 *  them and wake them through its own runtime (fragment federation). Off by default — they cost
+	 *  every island ~185 B gz and a preload. */
+	foreignHydrate(): void;
 }
 
 /** Typed identity: a plugin. */
@@ -56,6 +60,8 @@ export interface ResolvedPlugins {
 	servers: ServerRealm[];
 	/** every route option any plugin reads */
 	route_options: string[];
+	/** a plugin asked for island entries' foreign-hydrate exports */
+	foreign_hydrate: boolean;
 }
 
 const ROUTE_OPTION_NAME_RE = /^[a-z][A-Za-z0-9]*$/;
@@ -123,7 +129,7 @@ export function resolve_plugins(plugins: readonly OgygiaPlugin[], root: string, 
 		...plugins.filter((p) => p.enforce === 'post')
 	];
 	const req = createRequire(path.join(root, 'package.json'));
-	const out: ResolvedPlugins = { servers: [], route_options: [] };
+	const out: ResolvedPlugins = { servers: [], route_options: [], foreign_hydrate: false };
 	const option_owner = new Map<string, string>();
 	for (const plugin of ordered) {
 		if (!package_resolves(req, plugin.name))
@@ -143,6 +149,9 @@ export function resolve_plugins(plugins: readonly OgygiaPlugin[], root: string, 
 					option_owner.set(name, plugin.name);
 					out.route_options.push(name);
 				}
+			},
+			foreignHydrate() {
+				out.foreign_hydrate = true;
 			}
 		});
 	}

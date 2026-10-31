@@ -6,7 +6,7 @@
  * `expose: cms_router` is the whole app served as fragments. The cyclic import with router.ts
  * (which reads the `dash` peer) is fine: router.ts uses `dash` lazily, inside a load.
  */
-import { federate } from 'ogygia/federation';
+import { federate } from '@ogygia/federation';
 import { cms_router } from './router.js';
 import { env } from '$env/dynamic/private';
 

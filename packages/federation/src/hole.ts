@@ -9,8 +9,8 @@
  * PAGE-STATE-SINGLETON law. On the client (or a server with no federation handle) the seam is
  * unset and the mint degrades to an empty inert region rather than throwing.
  */
-import { REGION_BRAND } from '../region-brand.js';
-import type { DeferredRegion } from '../region.js';
+import type { DeferredRegion } from 'ogygia';
+import { deferredRegion } from 'ogygia/plugin';
 import type { Claims } from './wire.js';
 
 /** What the handle installs: sign a hole and return its fetch URL, or null if it cannot. */
@@ -44,14 +44,7 @@ export function mint_hole(
 	claims?: Claims
 ): DeferredRegion {
 	const url = slot.signer?.({ peer, kind, target, search, claims }) ?? '';
-	return {
-		[REGION_BRAND]: true,
-		kind: 'deferred',
-		id: `frag:${peer}:${target}`,
-		props: {},
-		url,
-		// A remote fragment brings its OWN islands (they wake themselves once the HTML swaps in);
-		// the hole itself is HTML-only, so no hydrate module of its own.
-		module: ''
-	};
+	// A remote fragment brings its OWN islands (they wake themselves once the HTML swaps in); the hole
+	// itself is HTML-only, so no hydrate module of its own.
+	return deferredRegion(`frag:${peer}:${target}`, url);
 }

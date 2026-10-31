@@ -27,7 +27,7 @@ describe('freeze() — the vite value', () => {
 
 	it('its build hook registers the `freeze` route option', () => {
 		const names: string[] = [];
-		freezePlugin().build!({ root: '/', dev: true, routeOption: (n) => void names.push(n) });
+		freezePlugin().build!({ root: '/', dev: true, routeOption: (n) => void names.push(n), foreignHydrate: () => {} });
 		expect(names).toEqual(['freeze']);
 	});
 });
