@@ -9,7 +9,7 @@
 	 * view — so the roster is a live index into the page, not just a static table. The overlay itself is
 	 * drawn by BoundaryOverlay (a sibling under the root app); this tab controls it and mirrors it.
 	 */
-	import { all_regions, region_name, region_transitive } from './regions.js';
+	import { all_regions, region_name, region_transitive } from './regions.ts';
 
 	let {
 		tick = 0,

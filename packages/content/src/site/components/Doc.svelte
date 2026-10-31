@@ -12,8 +12,8 @@
 	// Island so the copy buttons re-attach after every SPA navigation (the observer version died with
 	// the old `.og-body`). No props cross the boundary.
 	import CodeChrome from './CodeChrome.svelte' with { wake: 'load' };
-	import { get_shell_context } from '../context.js';
-	import type { PageView, NavRef } from '../types.js';
+	import { get_shell_context } from '../context.ts';
+	import type { PageView, NavRef } from '../types.ts';
 
 	let {
 		view,

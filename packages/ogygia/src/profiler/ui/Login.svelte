@@ -2,7 +2,7 @@
 	/** The locked-profiler gate. Static shell + the reactive LoginForm island. Ports render_login. */
 	import Shell from './Shell.svelte';
 	import LoginForm from './LoginForm.svelte' with { wake: 'load' };
-	import type { ProfilerRoutes } from '../profiler-router.js';
+	import type { ProfilerRoutes } from '../profiler-router.ts';
 	let { data }: ProfilerRoutes['/login'] = $props();
 	const { base, next, session_problem } = $derived(data);
 </script>

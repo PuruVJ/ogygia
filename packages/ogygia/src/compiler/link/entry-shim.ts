@@ -10,7 +10,7 @@
  * and every island load would cost two requests. As an asset, the island has one entry, its location
  * IS its code, and the shim is a static re-export by relative path.
  */
-import { path } from '../host.js';
+import { path } from '../host.ts';
 
 /** The specifier from the shim's file to the hashed file (both output-relative paths). */
 function relative_specifier(from_file: string, to_file: string): string {

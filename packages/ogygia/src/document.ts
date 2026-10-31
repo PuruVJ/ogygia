@@ -25,19 +25,19 @@ import { render } from 'svelte/server';
 import { stringify } from 'devalue';
 import type { Component } from 'svelte';
 import Region from './Region.svelte';
-import { PageSeed } from './server/page-seed.js';
-import { page_seed_reducers } from './server/page-stream.js';
-import { analyze } from './seed-refs.js';
-import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
+import { PageSeed } from './server/page-seed.ts';
+import { page_seed_reducers } from './server/page-stream.ts';
+import { analyze } from './seed-refs.ts';
+import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.ts';
 import runtime_url from 'virtual:ogygia/runtime-url';
-import { runtime_bootstrap } from './server/entry-location.js';
-import { current_facts } from './plugin/facts.js';
+import { runtime_bootstrap } from './server/entry-location.ts';
+import { current_facts } from './plugin/facts.ts';
 import { try_get_request_store } from '@sveltejs/kit/internal/server';
-import { kit_render_context, type KitPage } from './server/kit-context.js';
-import { open_ask_scope, read_seed_ask, record_page } from './page-seed-registry.js';
-import { shape_page_data } from './server/seed-shape.js';
+import { kit_render_context, type KitPage } from './server/kit-context.ts';
+import { open_ask_scope, read_seed_ask, record_page } from './page-seed-registry.ts';
+import { shape_page_data } from './server/seed-shape.ts';
 
-import { escape_text } from './escape.js';
+import { escape_text } from './escape.ts';
 const TITLE_TAG_RE = /<title[\s>]/i;
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 import {
@@ -49,8 +49,8 @@ import {
 	page_declares_runtime_script,
 	page_declares_dev_hmr_script,
 	runtime_first
-} from './server/head-presence.js';
-import type { RegionValue } from './region.js';
+} from './server/head-presence.ts';
+import type { RegionValue } from './region.ts';
 
 export interface DocumentOptions {
 	/** `<title>` — used only when no component set one via `<svelte:head>` (the component wins). */

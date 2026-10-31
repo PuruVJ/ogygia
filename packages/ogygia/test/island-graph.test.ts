@@ -7,11 +7,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
-import { set_island_deps } from './_stubs/virtual-island-deps.js';
-import { island_deps_module } from '../src/compiler/link/island-deps.js';
-import { decode_island_graph, encode_island_graph } from '../src/island-graph.js';
-import { DocumentTail, island_graph_script } from '../src/server/document-tail.js';
-import { assert_no_legacy_options } from '../src/vite/options.js';
+import { set_island_deps } from './_stubs/virtual-island-deps.ts';
+import { island_deps_module } from '../src/compiler/link/island-deps.ts';
+import { decode_island_graph, encode_island_graph } from '../src/island-graph.ts';
+import { DocumentTail, island_graph_script } from '../src/server/document-tail.ts';
+import { assert_no_legacy_options } from '../src/vite/options.ts';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 

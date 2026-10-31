@@ -4,7 +4,7 @@
  * sends `no-cache`, or a short `max-age`, makes returning visitors download them again.
  */
 import { describe, it, expect } from 'vitest';
-import { cached_long, cache_findings } from '../src/devtools/cache-headers.js';
+import { cached_long, cache_findings } from '../src/devtools/cache-headers.ts';
 
 describe('cached_long: does this cache-control keep the file long enough', () => {
 	it('what SvelteKit sends, and other long policies', () => {

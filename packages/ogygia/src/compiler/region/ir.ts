@@ -9,7 +9,7 @@
  * fused), so the node-bearing fields stay loosely typed via `SvelteNode` — the same shape the fused
  * `transformHost` always used.
  */
-import type { ImportKeys } from './transform.js';
+import type { ImportKeys } from './transform.ts';
 
 /** A Svelte / ESTree node as the front-end walks it — dynamic access, loosely typed by design. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

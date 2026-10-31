@@ -14,16 +14,16 @@
  */
 import { error, redirect } from '@sveltejs/kit';
 import type { Component } from 'svelte';
-import type { Entry, ContentRef } from '../index.js';
+import type { Entry, ContentRef } from '../index.ts';
 import {
 	format_findings,
 	run_page_checks,
 	run_site_checks,
 	type Check,
 	type Finding
-} from './checks.js';
-import { build_llms, build_rss, build_sitemap, strip_frontmatter } from './emit.js';
-import type { RssItem } from './emit.js';
+} from './checks.ts';
+import { build_llms, build_rss, build_sitemap, strip_frontmatter } from './emit.ts';
+import type { RssItem } from './emit.ts';
 import {
 	href_of,
 	outline,
@@ -32,16 +32,16 @@ import {
 	type OutlineSpec,
 	type OutlineOptions,
 	type TrailScope
-} from './outline.js';
-import { is_dimensioned, type Switcher } from './dimensions.js';
+} from './outline.ts';
+import { is_dimensioned, type Switcher } from './dimensions.ts';
 import {
 	build_docs,
 	create_search,
 	orama_engine,
 	type SearchBrain,
 	type SearchEngine
-} from './search.js';
-import type { BaseOption, PageView, Heading, NavRef, NavTree, PrevNext } from './types.js';
+} from './search.ts';
+import type { BaseOption, PageView, Heading, NavRef, NavTree, PrevNext } from './types.ts';
 
 // ── regexes
 const TRAILING_SLASHES_RE = /\/+$/;

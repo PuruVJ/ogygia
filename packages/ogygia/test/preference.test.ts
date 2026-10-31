@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { preference } from '../src/preference.js';
+import { preference } from '../src/preference.ts';
 
 describe('preference()', () => {
 	it('rejects a default that is not one of the values', () => {

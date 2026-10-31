@@ -7,9 +7,9 @@
 	 * the merge happens here, never on an instance that may be gone). The critical path is the
 	 * highlighted thread through the lanes.
 	 */
-	import { one_clock, type Visit, type ClockBar } from '../visit.js';
-	import { latest_visit } from './store.js';
-	import { fmt_ms } from './format.js';
+	import { one_clock, type Visit, type ClockBar } from '../visit.ts';
+	import { latest_visit } from './store.ts';
+	import { fmt_ms } from './format.ts';
 
 	let {
 		server,

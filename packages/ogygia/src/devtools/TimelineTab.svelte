@@ -7,9 +7,9 @@
 	 * hydrate.start→done bar per region. Server events are excluded on purpose — their clock is a
 	 * different origin. The track width follows the window (bind:clientWidth), so it never overflows.
 	 */
-	import { snapshot } from './bus.js';
-	import { last_nav } from './page.js';
-	import { region_name, region_name_by_fp } from './regions.js';
+	import { snapshot } from './bus.ts';
+	import { last_nav } from './page.ts';
+	import { region_name, region_name_by_fp } from './regions.ts';
 
 	let { tick = 0 } = $props();
 

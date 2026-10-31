@@ -2,7 +2,7 @@
 // two builds' svelte runtimes must never see each other's live values. Reactive proxies
 // degrade to snapshots; functions/class instances throw AT THE WRITE SITE.
 import { describe, it, expect } from 'vitest';
-import { SharedState } from '../src/shared-state.js';
+import { SharedState } from '../src/shared-state.ts';
 
 describe('SharedState membrane (devalue snapshot-on-write)', () => {
 	it('plain data round-trips, devalue vocabulary included', () => {
@@ -57,7 +57,7 @@ describe('SharedState membrane (devalue snapshot-on-write)', () => {
 
 describe('foreign island props membrane', () => {
 	it('a wired ref in a foreign sidecar is rejected loudly, never revived cross-build', async () => {
-		const { foreign_region_prop_revivers } = await import('../src/runtime/foreign-props.js');
+		const { foreign_region_prop_revivers } = await import('../src/runtime/foreign-props.ts');
 		const revivers = foreign_region_prop_revivers();
 		expect(() => revivers.OgygiaRef({} as never)).toThrow(/build boundary.*plain data/s);
 	});

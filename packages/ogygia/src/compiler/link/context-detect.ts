@@ -14,7 +14,7 @@
  * — instead follows the import binding through the AST, see `get_context_string_keys` below; a text
  * scan there would count an unrelated `getContext`.)
  */
-import { parse_roots } from './page-keys.js';
+import { parse_roots } from './page-keys.ts';
 
 /** Loose AST node — the parser hands ESTree-ish objects; positions/back-refs are skipped by the walk. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

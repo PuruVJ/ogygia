@@ -32,9 +32,9 @@ import {
 	transformTsRegions,
 	normalize_import_keys,
 	wrapperVirtualId
-} from '../src/compiler/region/transform.js';
-import { Program } from '../src/compiler/program.js';
-import { resolveFeatures } from '../src/compiler/link/runtime-entry.js';
+} from '../src/compiler/region/transform.ts';
+import { Program } from '../src/compiler/program.ts';
+import { resolveFeatures } from '../src/compiler/link/runtime-entry.ts';
 
 const ctx = {
 	root: '/app',

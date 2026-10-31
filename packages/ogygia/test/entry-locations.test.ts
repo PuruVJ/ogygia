@@ -17,13 +17,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
-import { island_shim_source, runtime_shim_source } from '../src/compiler/link/entry-shim.js';
-import { collectIslandDepModulepreloads, island_deps_module } from '../src/compiler/link/island-deps.js';
-import { decode_island_graph, decode_island_locations, encode_island_graph } from '../src/island-graph.js';
-import { DocumentTail, island_graph_script } from '../src/server/document-tail.js';
-import { entry_src, runtime_bootstrap } from '../src/server/entry-location.js';
-import { plan_props_wire } from '../src/server/props-wire.js';
-import { set_entry_locations, set_island_deps } from './_stubs/virtual-island-deps.js';
+import { island_shim_source, runtime_shim_source } from '../src/compiler/link/entry-shim.ts';
+import { collectIslandDepModulepreloads, island_deps_module } from '../src/compiler/link/island-deps.ts';
+import { decode_island_graph, decode_island_locations, encode_island_graph } from '../src/island-graph.ts';
+import { DocumentTail, island_graph_script } from '../src/server/document-tail.ts';
+import { entry_src, runtime_bootstrap } from '../src/server/entry-location.ts';
+import { plan_props_wire } from '../src/server/props-wire.ts';
+import { set_entry_locations, set_island_deps } from './_stubs/virtual-island-deps.ts';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
@@ -249,7 +249,7 @@ describe('Region writes the identity as `entry` and the location as `src`', () =
 // ── the router's next-page warm reads both off the fetched HTML ───────────────────────────────────
 describe("the router's warm scan: identity and location off an open tag", () => {
 	it('reads each attribute exactly, never a longer name that ends the same', async () => {
-		const { tag_attr } = await import('../src/runtime/router-nav.js');
+		const { tag_attr } = await import('../src/runtime/router-nav.ts');
 		const attrs = ' entry="./_app/immutable/og-region.aaaaaaaaaaaa.js" data-src="./nope.js" src="./_app/immutable/chunks/Loc.js" wake="load"';
 		expect(tag_attr(attrs, 'entry')).toBe('./_app/immutable/og-region.aaaaaaaaaaaa.js');
 		expect(tag_attr(attrs, 'src')).toBe('./_app/immutable/chunks/Loc.js');

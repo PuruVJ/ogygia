@@ -1,7 +1,7 @@
 // The page's weight: every file the document loads at start, found in the HTML (string scanning)
 // and weighed through the app, following each module's static imports.
 import { describe, test, expect } from 'vitest';
-import { scan_assets, static_imports, dynamic_imports, tag_attrs, weigh_assets, runtime_scripts, type Weight } from '../src/profiler/page-assets.js';
+import { scan_assets, static_imports, dynamic_imports, tag_attrs, weigh_assets, runtime_scripts, type Weight } from '../src/profiler/page-assets.ts';
 
 const KIT_PAGE = `<!doctype html><html><head>
 <link href="./_app/immutable/assets/0.abc.css" rel="stylesheet">

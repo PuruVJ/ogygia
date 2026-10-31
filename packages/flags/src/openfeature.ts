@@ -12,9 +12,9 @@
  *   import { openfeature } from '@ogygia/flags/openfeature';
  *   decide({ source: openfeature(OpenFeature.getClient()) });
  */
-import type { FlagSource, FlagQuery, Resolved, CtxLike } from './index.js';
+import type { FlagSource, FlagQuery, Resolved, CtxLike } from './index.ts';
 
-export { ofrep, type OfrepOptions } from './ofrep.js';
+export { ofrep, type OfrepOptions } from './ofrep.ts';
 
 /** The slice of the OpenFeature server `Client` we use — structural, so any SDK version fits. */
 export interface OpenFeatureClientLike {

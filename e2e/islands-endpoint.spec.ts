@@ -5,7 +5,7 @@
 // still minted `/__ogygia__?…` and every hole was empty.
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { spawn_server, type SpawnedServer } from './fixtures/servers.js';
+import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const PORT = 4187;
 const base = `http://127.0.0.1:${PORT}`;

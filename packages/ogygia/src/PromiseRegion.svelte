@@ -13,14 +13,14 @@
 	 * so the old content morphs instead of flashing through empty.
 	 */
 	import Region from './Region.svelte';
-	import { register_late_region } from './late-region-registry.js';
+	import { register_late_region } from './late-region-registry.ts';
 
-	/** @type {{ of: Promise<import('./region.js').RegionValue>, placeholder?: import('svelte').Snippet, children?: import('svelte').Snippet }} */
+	/** @type {{ of: Promise<import('./region.ts').RegionValue>, placeholder?: import('svelte').Snippet, children?: import('svelte').Snippet }} */
 	let { of, placeholder, children } = $props();
 
 	// svelte-ignore state_referenced_locally
 	const late_slot = typeof window === 'undefined' ? register_late_region(of) : null;
-	/** @type {import('./region.js').RegionValue | undefined} */
+	/** @type {import('./region.ts').RegionValue | undefined} */
 	let awaited = $state(undefined);
 	$effect(() => {
 		const p = of;

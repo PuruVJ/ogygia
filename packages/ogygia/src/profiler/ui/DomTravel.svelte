@@ -5,9 +5,9 @@
 	 * on a page-shaped map with the island that moved. Browser-only data: the beacon keeps the
 	 * snapshots in this browser's store (they are big), never on the server. A `wake:'load'` island.
 	 */
-	import { html_diff, shift_boxes, type HtmlDiff } from '../dom-diff.js';
-	import { latest_visit, type StoredVisit } from './store.js';
-	import type { Visit } from '../visit.js';
+	import { html_diff, shift_boxes, type HtmlDiff } from '../dom-diff.ts';
+	import { latest_visit, type StoredVisit } from './store.ts';
+	import type { Visit } from '../visit.ts';
 
 	let { page, names = {}, visit = null }: { page: string; names?: Record<string, string>; visit?: Visit | null } = $props();
 

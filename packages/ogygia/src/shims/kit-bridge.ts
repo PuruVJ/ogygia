@@ -12,7 +12,7 @@
  * A plain module, no runes: what only needs the thread (`ogygia/app`'s navigation, `$app/navigation`)
  * must load anywhere — in plain node too — without the reactive page store (page-store.svelte.ts).
  */
-import type { PageSnapshot } from './page-store.svelte.js';
+import type { PageSnapshot } from './page-store.svelte.ts';
 
 /** Kit's real `$app/navigation`, as published by the thread — the `$app/navigation` shim (and
  *  `ogygia/app`) delegate every call here on a Kit-booted document. Typed loosely on purpose: the

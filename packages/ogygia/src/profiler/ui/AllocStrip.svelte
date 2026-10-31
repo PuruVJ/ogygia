@@ -4,8 +4,8 @@
 	 * pauses as drops, the one window the report explains lit, and the fastest-growing
 	 * stretches listed with what the CPU was running then. Static: nothing to click.
 	 */
-	import type { AllocTimeline } from '../alloc.js';
-	import { fmt_ms, CATEGORY_COLOR } from './format.js';
+	import type { AllocTimeline } from '../alloc.ts';
+	import { fmt_ms, CATEGORY_COLOR } from './format.ts';
 
 	let { alloc, gc = [] }: { alloc: AllocTimeline; gc?: { t: number; ms: number; kind: string }[] } = $props();
 

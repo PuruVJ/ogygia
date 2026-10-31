@@ -12,9 +12,9 @@
 	 */
 	import type { Component, Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { set_shell_context } from '../context.js';
-	import { mountBase, type Site } from '../site.js';
-	import type { NavTree } from '../types.js';
+	import { set_shell_context } from '../context.ts';
+	import { mountBase, type Site } from '../site.ts';
+	import type { NavTree } from '../types.ts';
 	// Island, NOT a plain import: the default sidebar loads its code only when it actually renders —
 	// a `sidebar` override drops it — and it comes alive on a csr=false page (roving focus, active
 	// marker) instead of shipping as dead SSR HTML. Mirrors DocsShell. Islands are isolated hydration

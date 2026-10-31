@@ -8,9 +8,9 @@
 import { afterEach, beforeEach, expect, inject, test } from 'vitest';
 import { page } from 'vitest/browser';
 import { hydrate, unmount } from 'svelte';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 import LakeKitHost from './fixtures/LakeKitHost.svelte';
-import { publish_kit_page, unpublish_kit_page } from './_kit-thread.svelte.js';
+import { publish_kit_page, unpublish_kit_page } from './_kit-thread.svelte.ts';
 
 // Kit's client entry publishes its page thread BEFORE Kit hydrates; an island of ours on a Kit
 // document waits for that thread (kit-page-thread.ts), so a faithful Kit document carries it.

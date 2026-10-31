@@ -6,7 +6,7 @@ import {
 	normalize_shiki,
 	remarkHeadingId,
 	wrap_html
-} from '../src/markdown/index.js';
+} from '../src/markdown/index.ts';
 
 describe('markdown preset', () => {
 	it('exposes .svx / .md extensions', () => {
@@ -359,8 +359,8 @@ describe('tab component injection (plain barrel)', () => {
 
 describe('content preset dispatch (v3 config surface)', () => {
 	it('routes a marker-tagged variant through the preset pipeline, unmarked through the default', async () => {
-		const { bridge: islandBridge } = await import('../src/bridge.js');
-		const { ogygiaPresetPreprocess } = await import('../src/markdown/index.js');
+		const { bridge: islandBridge } = await import('../src/bridge.ts');
+		const { ogygiaPresetPreprocess } = await import('../src/markdown/index.ts');
 		const saved = {
 			markdownConfig: islandBridge.markdownConfig,
 			contentPresets: islandBridge.contentPresets,
@@ -393,8 +393,8 @@ describe('content preset dispatch (v3 config surface)', () => {
 	});
 
 	it('unknown preset on a variant errors listing the configured names', async () => {
-		const { bridge: islandBridge } = await import('../src/bridge.js');
-		const { ogygiaPresetPreprocess } = await import('../src/markdown/index.js');
+		const { bridge: islandBridge } = await import('../src/bridge.ts');
+		const { ogygiaPresetPreprocess } = await import('../src/markdown/index.ts');
 		const saved = {
 			markdownConfig: islandBridge.markdownConfig,
 			contentPresets: islandBridge.contentPresets,

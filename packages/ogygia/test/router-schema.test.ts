@@ -5,9 +5,9 @@
  * runtime dispatch of the body schema + a manual params/search validate via an endpoint.
  */
 import { describe, it, expect } from 'vitest';
-import { routes, page, POST } from '../src/router/index.js';
+import { routes, page, POST } from '../src/router/index.ts';
 import type { Component } from 'svelte';
-import type { StandardSchemaV1 } from '../src/router/view.js';
+import type { StandardSchemaV1 } from '../src/router/view.ts';
 
 const req = (path: string, init?: RequestInit) => new Request('http://x' + path, init);
 

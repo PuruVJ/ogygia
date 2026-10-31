@@ -5,7 +5,7 @@
 	// (its CSS: the island's own chunk sheet, carried in the hole's answer).
 	import type { Snippet } from 'svelte';
 	import { KitHeading } from 'repro-hole-css-kit/components';
-	import { LocalTitle } from './index.js';
+	import { LocalTitle } from './index.ts';
 	import HoleMenu from './HoleMenu.svelte' with { wake: 'load' };
 	let { ogygiaFallback }: { ogygiaFallback?: Snippet } = $props();
 </script>

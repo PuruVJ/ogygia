@@ -6,9 +6,9 @@
  * This exercises the server leg (BROWSER is false in a node test), mirroring kit-island-stamp's setup.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { set_request_event_stub } from './_stubs/virtual-request-event.js';
-import { csr_true_routes } from './_stubs/virtual-route-csr.js';
-import { isOgygiaPage } from '../src/context.js';
+import { set_request_event_stub } from './_stubs/virtual-request-event.ts';
+import { csr_true_routes } from './_stubs/virtual-route-csr.ts';
+import { isOgygiaPage } from '../src/context.ts';
 
 /** Simulate one request on a route, its leaf page csr=true or not, and read `isOgygiaPage()`. */
 function on_route(route_id: string, csr_true: boolean): boolean {

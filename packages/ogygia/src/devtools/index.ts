@@ -16,7 +16,7 @@ export {
 	configure,
 	ingest,
 	type DevtoolsSink
-} from './bus.js';
+} from './bus.ts';
 
 export {
 	install_window_sink,
@@ -26,9 +26,9 @@ export {
 	to_trace,
 	type DevtoolsWindowHook,
 	type DevtoolsTrace
-} from './sinks.js';
+} from './sinks.ts';
 
-export { install_devtools_ui } from './ui.js';
+export { install_devtools_ui } from './ui.ts';
 
 export {
 	DEVTOOLS_SCHEMA_VERSION,
@@ -42,4 +42,4 @@ export {
 	type RuntimeEventInput,
 	type HubEventInput,
 	type NavEventInput
-} from './schema.js';
+} from './schema.ts';

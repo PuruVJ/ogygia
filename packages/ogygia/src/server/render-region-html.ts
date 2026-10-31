@@ -11,8 +11,8 @@
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import { islandCss } from 'virtual:ogygia/island-deps';
-import { region_css_tags } from './html-scan.js';
-import { kit_page_facts_tail, kit_page_ready, kit_render_context } from './kit-context.js';
+import { region_css_tags } from './html-scan.ts';
+import { kit_page_facts_tail, kit_page_ready, kit_render_context } from './kit-context.ts';
 
 const REGION_CSS_ATTR = 'data-ogygia-region-css';
 /** context.ts's LAKE key (`isInLake`), by its global name — context.ts reaches virtual modules. */

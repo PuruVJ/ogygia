@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolve_block_tree } from '../src/blocks.js';
+import { resolve_block_tree } from '../src/blocks.ts';
 import { isRegion } from 'ogygia';
 import type { Component } from 'svelte';
 

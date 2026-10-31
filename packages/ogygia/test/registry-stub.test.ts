@@ -13,7 +13,7 @@ import {
 	registry_client_source,
 	static_script_specs,
 	REGISTRY_CLIENT_QUERY
-} from '../src/compiler/link/registry-stub.js';
+} from '../src/compiler/link/registry-stub.ts';
 
 const REGISTRY = `
 import Hero from './Hero.svelte' with { wake: 'visible' };

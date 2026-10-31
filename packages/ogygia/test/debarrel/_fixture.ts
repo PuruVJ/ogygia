@@ -17,9 +17,9 @@ import {
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { BarrelIndex, type Host } from '../../src/compiler/debarrel/barrel.js';
-import { rewrite_module, type Lookup, type RewritePolicy } from '../../src/compiler/debarrel/rewrite.js';
-import { rewrite_svelte } from '../../src/compiler/debarrel/svelte.js';
+import { BarrelIndex, type Host } from '../../src/compiler/debarrel/barrel.ts';
+import { rewrite_module, type Lookup, type RewritePolicy } from '../../src/compiler/debarrel/rewrite.ts';
+import { rewrite_svelte } from '../../src/compiler/debarrel/svelte.ts';
 
 export type HostOverrides = Partial<Host> & { packages?: string[] };
 

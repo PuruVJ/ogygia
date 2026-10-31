@@ -3,8 +3,8 @@
  * attributes and type modifiers preserved, sourcemaps, the mark-skip policy, and the cursed spellings.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { fixture, type Fixture } from './_fixture.js';
-import { rewrite_module } from '../../src/compiler/debarrel/rewrite.js';
+import { fixture, type Fixture } from './_fixture.ts';
+import { rewrite_module } from '../../src/compiler/debarrel/rewrite.ts';
 
 let f: Fixture;
 afterEach(() => f?.dispose());

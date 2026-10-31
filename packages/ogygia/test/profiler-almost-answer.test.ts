@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { varied_answers, find_same_answers } from '../src/profiler/patterns.js';
+import { varied_answers, find_same_answers } from '../src/profiler/patterns.ts';
 
 // An answer the same every render but for a stamp (a generation time, a request id): as cacheable as
 // an unchanging one.

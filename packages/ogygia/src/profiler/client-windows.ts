@@ -8,8 +8,8 @@
  * Both clocks are the page's `performance.now()`: the trace's sample times and the visit's island
  * times line up without conversion.
  */
-import type { Analysis, CpuProfile, FrameCategory } from './analyze.js';
-import type { Visit } from './visit.js';
+import type { Analysis, CpuProfile, FrameCategory } from './analyze.ts';
+import type { Visit } from './visit.ts';
 
 export interface WindowFn {
 	name: string;

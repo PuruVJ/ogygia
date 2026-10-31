@@ -8,7 +8,7 @@
 // the shell id, so the opened element keeps its identity (shadow root + open state) and the answer's
 // deeper links graft under it. This pins that, and that the plain-fallback (nothing-to-keep) hole fills.
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const ENDPOINT = '/__ogygia__?id=deadbeef1234&props=W3t9XQ&exp=9999999999&sig=stub';
 // A distinct id: the runtime keys a hole's fetch/frame by the endpoint id, so a second hole reusing

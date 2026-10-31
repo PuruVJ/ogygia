@@ -7,9 +7,9 @@
 	 */
 	import { Region } from 'ogygia';
 	import CodeChrome from './CodeChrome.svelte' with { wake: 'load' };
-	import { get_shell_context } from '../context.js';
-	import type { PageView } from '../types.js';
-	import type { PostFields } from '../fields.js';
+	import { get_shell_context } from '../context.ts';
+	import type { PageView } from '../types.ts';
+	import type { PostFields } from '../fields.ts';
 	import type { Snippet } from 'svelte';
 
 	let {

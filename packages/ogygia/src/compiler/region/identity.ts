@@ -7,7 +7,7 @@
  *   regionIdentity — posix component path ⊕ strategyKey (cross-host stable identity)
  *   regionId       — hash(identity, optional prod salt) → the 12-char content-hashed id
  */
-import { createHash } from '../host.js';
+import { createHash } from '../host.ts';
 
 const PATH_SEP = /[/\\]/;
 

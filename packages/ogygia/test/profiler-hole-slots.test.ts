@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { hole_slots } from '../src/profiler/hole-slots.js';
-import type { RequestEntry } from '../src/profiler/report.js';
+import { hole_slots } from '../src/profiler/hole-slots.ts';
+import type { RequestEntry } from '../src/profiler/report.ts';
 
 const req = (ms: number, hole?: RequestEntry['hole'], og?: RequestEntry['og']): RequestEntry =>
 	({ ts: 0, method: 'GET', path: '/x', route: null, status: 200, ms, cpu_ms: 0, inflight: 0, net_ms: 0, net_count: 0, ...(hole ? { hole } : {}), ...(og ? { og } : {}) }) as RequestEntry;

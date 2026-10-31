@@ -13,8 +13,8 @@
 	import { on } from 'svelte/events';
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { roving } from './roving.js';
-	import type { Heading } from '../types.js';
+	import { roving } from './roving.ts';
+	import type { Heading } from '../types.ts';
 
 	let {
 		headings,

@@ -3,8 +3,8 @@
 // "the page behaves the same with and without ogygia": monitoring / third-party bootstraps in
 // hooks.client load either way. The csr fact is read off `<meta name="ogygia-csr">` (KitBoot).
 import { expect, test, afterEach } from 'vitest';
-import { run_app_client_hooks } from '../../src/runtime/client-hooks.js';
-import { runtime_session } from '../../src/runtime/session.js';
+import { run_app_client_hooks } from '../../src/runtime/client-hooks.ts';
+import { runtime_session } from '../../src/runtime/session.ts';
 
 function set_csr(value: 'true' | 'false' | null): void {
 	// (the runtime reads the fact once per document and caches it; these tests flip it in one document)

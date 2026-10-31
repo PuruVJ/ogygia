@@ -8,9 +8,9 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { rewrite_code, type CodeCall } from '../src/macros/code.js';
-import { rewrite_regions } from '../src/macros/regions.js';
-import { rewrite_loaders } from '../src/macros/loaders.js';
+import { rewrite_code, type CodeCall } from '../src/macros/code.ts';
+import { rewrite_regions } from '../src/macros/regions.ts';
+import { rewrite_loaders } from '../src/macros/loaders.ts';
 import { __set_build_cache_root, run_browser_macros } from 'ogygia/internal/compiler-browser';
 
 const MARKUP = ['.svelte'] as const;

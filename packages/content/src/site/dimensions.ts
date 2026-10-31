@@ -25,8 +25,8 @@ import {
 	type OutlineSpec,
 	type ReadContext,
 	type TrailScope
-} from './outline.js';
-import type { NavRef, NavTree } from './types.js';
+} from './outline.ts';
+import type { NavRef, NavTree } from './types.ts';
 
 // ── regexes
 const EDGE_SLASHES_G = /^\/+|\/+$/g;

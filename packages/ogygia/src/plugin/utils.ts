@@ -4,16 +4,16 @@
  */
 
 /** Sticky 32-bit FNV-1a — uniform and deterministic, not cryptographic. */
-export { fnv1a32 } from '../runtime/hash.js';
+export { fnv1a32 } from '../runtime/hash.ts';
 /** An attribute value with `&` and `"` escaped (unchanged, uncopied, when it has neither). */
-export { escape_amp_quot as escapeAttr } from '../escape.js';
+export { escape_amp_quot as escapeAttr } from '../escape.ts';
 /** A byte- and count-bounded LRU map (a process-local cache that can never grow without bound). */
-export { SizedLru } from '../server/sized-lru.js';
+export { SizedLru } from '../server/sized-lru.ts';
 /** The receipt tag one `(source, args)` call files, or null for a function not declared with
  *  `import.meta.og.source`. */
-export { source_tag_of as sourceTag } from '../source.js';
+export { source_tag_of as sourceTag } from '../source.ts';
 /** The Standard Schema interface (standardschema.dev): validate a value with any schema library. */
-export type { StandardSchemaV1 } from '../router/view.js';
+export type { StandardSchemaV1 } from '../router/view.ts';
 
 const BACKSLASHES = /\\/g;
 const LEADING_SLASH = /^\//;

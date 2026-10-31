@@ -5,9 +5,9 @@
  * stack index, the stack at its middle, so the report can be stepped through like a debugger
  * instead of read as a chart. Pure over the timeline (timeline.ts) and the index (analyze.ts).
  */
-import type { Segment, Timeline } from './timeline.js';
-import type { StackIndex } from './analyze.js';
-import { stack_at } from './stacks.js';
+import type { Segment, Timeline } from './timeline.ts';
+import type { StackIndex } from './analyze.ts';
+import { stack_at } from './stacks.ts';
 
 export interface RenderStep {
 	i: number;

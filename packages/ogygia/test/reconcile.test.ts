@@ -2,7 +2,7 @@
  * Reconciler R0 — region signature + props-fingerprint (the pure identity core).
  */
 import { describe, it, expect } from 'vitest';
-import { fnv1a, endpoint_key, signature_of, fingerprint_of } from '../src/runtime/reconcile.js';
+import { fnv1a, endpoint_key, signature_of, fingerprint_of } from '../src/runtime/reconcile.ts';
 
 describe('fnv1a', () => {
 	it('is deterministic and change-sensitive', () => {
@@ -62,7 +62,7 @@ import {
 	NO_RECONCILE_SELECTOR,
 	stamp_region_keys,
 	region_props_text
-} from '../src/runtime/reconcile.js';
+} from '../src/runtime/reconcile.ts';
 
 const hasDOM = typeof document !== 'undefined';
 (hasDOM ? describe : describe.skip)('R1 stamping + shadow guard', () => {

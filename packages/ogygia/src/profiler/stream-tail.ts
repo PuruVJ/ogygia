@@ -7,9 +7,9 @@
  * resolve script in the tail is named by the `page.data` key its id stands for (page-insights
  * `defer_keys`, the Page tab's own reading). Pure; indexOf only.
  */
-import { PAGE_DEFER_GLOBAL, PAGE_DEFER_KEY } from '../page-defer.js';
-import { defer_keys } from '../devtools/page-insights.js';
-import { left_at, type ByteStrip, type StripKind } from './byte-strip.js';
+import { PAGE_DEFER_GLOBAL, PAGE_DEFER_KEY } from '../page-defer.ts';
+import { defer_keys } from '../devtools/page-insights.ts';
+import { left_at, type ByteStrip, type StripKind } from './byte-strip.ts';
 
 export interface StreamTail {
 	/** the early part: its last byte left the server at `early_ms` (ms into the render) */

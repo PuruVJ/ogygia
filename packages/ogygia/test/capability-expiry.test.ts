@@ -5,7 +5,7 @@
  * bounded: at least ttl/2, at most ttl.
  */
 import { describe, expect, it } from 'vitest';
-import { capability_expiry, PRERENDER_REGION_TTL_SEC } from '../src/server/endpoint.js';
+import { capability_expiry, PRERENDER_REGION_TTL_SEC } from '../src/server/endpoint.ts';
 
 describe('capability_expiry', () => {
 	const ttl = 3600;

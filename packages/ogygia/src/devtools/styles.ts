@@ -12,9 +12,9 @@
  * Devtools' own UI lives in a shadow root and never shows here. Runs on demand (the Page tab), not
  * on a hot path.
  */
-import { find_unscoped, unscoped_finding, type UnscopedStyles } from '../unscoped-css.js';
-import { tool_fetch, tool_made } from '../tool-fetches.js';
-import { paint_blocker } from '../runtime/render-blocking.js';
+import { find_unscoped, unscoped_finding, type UnscopedStyles } from '../unscoped-css.ts';
+import { tool_fetch, tool_made } from '../tool-fetches.ts';
+import { paint_blocker } from '../runtime/render-blocking.ts';
 
 export interface SheetRow {
 	/** the file name, or `inline <style>` */

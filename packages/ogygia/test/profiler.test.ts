@@ -11,8 +11,8 @@ import {
 	type Analysis,
 	type CpuProfile,
 	type HeapNode
-} from '../src/profiler/analyze.js';
-import { sequential_ms, type NetCall } from '../src/profiler/net.js';
+} from '../src/profiler/analyze.ts';
+import { sequential_ms, type NetCall } from '../src/profiler/net.ts';
 import {
 	build_timeline,
 	chain_steps,
@@ -20,7 +20,7 @@ import {
 	phase_of_stack,
 	label_call,
 	load_lane_of
-} from '../src/profiler/timeline.js';
+} from '../src/profiler/timeline.ts';
 import {
 	n_plus_one,
 	path_template,
@@ -33,7 +33,7 @@ import {
 	type IslandStat,
 	type RequestEntry,
 	type ReportMeta
-} from '../src/profiler/report.js';
+} from '../src/profiler/report.ts';
 import {
 	parse_server_timing,
 	app_call_chain,
@@ -41,8 +41,8 @@ import {
 	encode_trace,
 	wrap_event_fetch,
 	set_stack_capture
-} from '../src/profiler/net.js';
-import { compare_reports, page_history } from '../src/profiler/compare.js';
+} from '../src/profiler/net.ts';
+import { compare_reports, page_history } from '../src/profiler/compare.ts';
 import {
 	span,
 	tag,
@@ -51,27 +51,27 @@ import {
 	type SpanRecord,
 	type SpanRecorder,
 	type SpanAttrs
-} from '../src/profiler/span.js';
-import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name, browser_of, with_hidden_filled } from '../src/profiler/report.js';
-import { build_standalone } from '../src/profiler/standalone.js';
-import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.js';
-import { io_kind } from '../src/profiler/async-io.js';
-import { raw_cookie_values } from '../src/profiler/session-cookie.js';
-import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.js';
-import { parse_visit } from '../src/profiler/visit.js';
-import { budget_segments, build_treemap, island_rows, waiting_rows } from '../src/profiler/ui/report-data.js';
+} from '../src/profiler/span.ts';
+import { span_rows, fair_shares, lake_saving, inline_threshold_tune, remote_function_name, browser_of, with_hidden_filled } from '../src/profiler/report.ts';
+import { build_standalone } from '../src/profiler/standalone.ts';
+import { profiler, route_prerendered, self_profile_to_cpuprofile } from '../src/profiler/index.ts';
+import { io_kind } from '../src/profiler/async-io.ts';
+import { raw_cookie_values } from '../src/profiler/session-cookie.ts';
+import { report_json, report_dump, is_dump, derive_findings } from '../src/profiler/report.ts';
+import { parse_visit } from '../src/profiler/visit.ts';
+import { budget_segments, build_treemap, island_rows, waiting_rows } from '../src/profiler/ui/report-data.ts';
 import type { RequestEvent } from '@sveltejs/kit';
-import { set_chunk_contents } from './_stubs/virtual-island-deps.js';
+import { set_chunk_contents } from './_stubs/virtual-island-deps.ts';
 import {
 	app_asset_rel,
 	client_dir_candidates,
 	client_file_finder
-} from '../src/profiler/client-files.js';
+} from '../src/profiler/client-files.ts';
 
 // The profiler reads dev-vs-prod from `detect_dev()` (a compile-time constant under Vite). Mock it
 // through a switch so ONE test can run the production request path (idle requests unattributed).
 const dev_switch = vi.hoisted(() => ({ dev: true }));
-vi.mock('../src/profiler/env.js', () => ({ detect_dev: () => dev_switch.dev }));
+vi.mock('../src/profiler/env.ts', () => ({ detect_dev: () => dev_switch.dev }));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The SSR profiler. The analyzer turns a raw V8 .cpuprofile into readable
@@ -474,7 +474,7 @@ describe('page-mode honesty findings (redirect / not-a-render / budget)', () => 
 	});
 
 	it("each island's own JS: shared chunks counted once, where no other island uses them", async () => {
-		const { island_js_unique } = await import('../src/profiler/report.js');
+		const { island_js_unique } = await import('../src/profiler/report.ts');
 		const row = (entry: string, wake: string, module_url: string, hints: string[]) => ({ entry, wake, module_url, hints }) as never;
 		const rows = [row('A', 'load', '/a.js', ['/svelte.js', '/big-a.js']), row('B', 'visible', '/b.js', ['/svelte.js']), row('L', 'none', '/l.js', ['/big-a.js'])];
 		const w = { '/a.js': 1000, '/svelte.js': 40_000, '/big-a.js': 300_000, '/b.js': 800, '/l.js': 500 };
@@ -1237,7 +1237,7 @@ describe('timeline (critical path + phases)', () => {
 			t1: number,
 			kind: 'cpu' | 'wait',
 			label: string
-		): import('../src/profiler/timeline.js').Segment => ({
+		): import('../src/profiler/timeline.ts').Segment => ({
 			t0,
 			t1,
 			kind,
@@ -2754,7 +2754,7 @@ describe('the accuracy round: hot lines, server-timing, call paths, cold start, 
 
 	it("the caller skip list: Kit's bundled runtime frames are the framework, not the app", async () => {
 		// the regex is private; the behaviour shows through nearest_app_site on synthetic file names
-		const { nearest_app_site } = await import('../src/profiler/net.js');
+		const { nearest_app_site } = await import('../src/profiler/net.ts');
 		const site = nearest_app_site();
 		expect(site?.file).toContain('profiler.test.ts');
 		expect(site?.file).not.toMatch(/[/\\]runtime[/\\](?:server|app)[/\\]/);
@@ -5090,7 +5090,7 @@ describe('profiler handle', () => {
 		});
 		expect(res.headers.get('Server-Timing') ?? '').toContain('net;desc="outbound (1)"');
 		// idempotent: wrapping the wrapper hands it back
-		const { wrap_event_fetch } = await import('../src/profiler/net.js');
+		const { wrap_event_fetch } = await import('../src/profiler/net.ts');
 		const once = wrap_event_fetch(inner);
 		expect(wrap_event_fetch(once)).toBe(once);
 	});
@@ -5134,7 +5134,7 @@ describe('profiler handle', () => {
 	// THE BEACON: an authed document gets the meta tag; the runtime POSTs its hydration timings to
 	// `/beacon`; the report joins them to its island rows by fingerprint. Dev here (open UI).
 	it('beacon: the tag rides an authed document, /beacon is bounded, the report joins by fingerprint', async () => {
-		const { record_request_stats } = await import('../src/server/request-stats.js');
+		const { record_request_stats } = await import('../src/server/request-stats.ts');
 		const handle = profiler({ secret: 'prof-key' });
 		// a document request gets the tag at the end of <head>; a fetch (no document dest) does not
 		// (dev: the tag needs no flag cookie; production reads `og_profiler_beacon`, set at login)

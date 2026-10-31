@@ -9,8 +9,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { FrameCategory } from './analyze.js';
-import { embedded_module_at } from './embedded-maps.js';
+import type { FrameCategory } from './analyze.ts';
+import { embedded_module_at } from './embedded-maps.ts';
 
 const MODULE_MAP_FILE = 'ogygia-modules.json';
 

@@ -4,8 +4,8 @@
 // then sat out the scheduler's whole 48 ms snapshot wait (62–84 ms late on a scroll, with nothing
 // ahead of it). Both must hear every change, and one leaving must not silence the other.
 import { expect, test } from 'vitest';
-import { observe, once_visible } from '../../src/runtime/observe.js';
-import { hydrate_turn, register_region, unregister_region } from '../../src/runtime/schedule.js';
+import { observe, once_visible } from '../../src/runtime/observe.ts';
+import { hydrate_turn, register_region, unregister_region } from '../../src/runtime/schedule.ts';
 
 const box = () => {
 	const el = document.createElement('div');

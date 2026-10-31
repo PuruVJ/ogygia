@@ -6,11 +6,11 @@
 	 * runtime's beacon). Sortable; a row opens to its modules with bytes, its seed keys, the devalue
 	 * culprit, and the one line of advice the numbers support. A finding links here by `#island=`.
 	 */
-	import type { IslandRow } from './report-data.js';
-	import { fmt_ms, fmt_bytes, ink_on } from './format.js';
-	import { sortable } from './sort.svelte.js';
-	import { pressable } from './press.js';
-	import { row_id, follow_hash } from './row-anchor.svelte.js';
+	import type { IslandRow } from './report-data.ts';
+	import { fmt_ms, fmt_bytes, ink_on } from './format.ts';
+	import { sortable } from './sort.svelte.ts';
+	import { pressable } from './press.ts';
+	import { row_id, follow_hash } from './row-anchor.svelte.ts';
 
 	let { rows, hasJs, hasClient }: { rows: IslandRow[]; hasJs: boolean; hasClient: boolean } = $props();
 

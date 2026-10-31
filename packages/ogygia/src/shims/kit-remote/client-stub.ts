@@ -2,7 +2,7 @@
 // Provides exactly what those modules read — WITHOUT pulling Kit's router graph.
 import { parse } from 'devalue';
 import { transport, encoders, decoders } from 'virtual:ogygia/transport';
-import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.js';
+import { query_responses, prerender_responses, query_map, live_query_map } from './remote-cache.ts';
 
 export { query_responses, prerender_responses, query_map, live_query_map };
 
@@ -11,7 +11,7 @@ export const app: { hooks: { transport: typeof transport }; decoders: typeof dec
 // ogygia runtime's handle on one ogygia owns, the browser with neither. A remote form's redirect or
 // refresh inside an island on a Kit page then goes through Kit, never a full reload. (`_goto`'s
 // options — Kit 2's `invalidateAll`, Kit 3's `refreshAll` — pass through to Kit's own `goto`.)
-export { goto, goto as _goto, invalidateAll, refreshAll } from '../app-navigation.js';
+export { goto, goto as _goto, invalidateAll, refreshAll } from '../app-navigation.ts';
 export function set_nearest_error_page(): void {}
 /** Kit 3: a remote call's error, as the page shows it — an `error()`'s own body, else a 500. There
  *  are no client hooks to consult (the island world has no Kit client). */

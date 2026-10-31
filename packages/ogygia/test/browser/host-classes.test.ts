@@ -2,7 +2,7 @@
 // `class` whole): runtime/host-classes.ts, against the tokens the restorer recorded as Svelte's.
 import { afterEach, expect, test } from 'vitest';
 import { hydrate } from 'svelte';
-import { keep_host_classes, note_host_classes, SVELTE_CLASS } from '../../src/runtime/host-classes.js';
+import { keep_host_classes, note_host_classes, SVELTE_CLASS } from '../../src/runtime/host-classes.ts';
 import HostClass from './fixtures/HostClass.svelte';
 
 afterEach(() => {

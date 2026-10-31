@@ -29,9 +29,9 @@
  * `<script>` block for `.svelte`), with a string scanner as the fallback for source that doesn't
  * parse mid-edit — so the marker in a comment or string is never rewritten.
  */
-import { og_js_regions, type JsRegion } from '../parse/scan.js';
-import { find_og_calls } from '../parse/scan.js';
-import { parse_module } from '../parse/oxc.js';
+import { og_js_regions, type JsRegion } from '../parse/scan.ts';
+import { find_og_calls } from '../parse/scan.ts';
+import { parse_module } from '../parse/oxc.ts';
 
 // ── regexes
 const STATIC_WIRE_TAIL_RE = /\bstatic\s+wire\s*=\s*$/;

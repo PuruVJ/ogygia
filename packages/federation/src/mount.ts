@@ -6,9 +6,9 @@
  * it just takes a `Peer` instead of a `client()`.
  */
 import { page, redirect, type PageDef, type ComponentPick, type Ctx } from 'ogygia/router';
-import { fed_app } from './app.js';
-import { child_traceparent, type Claims, type FragmentDocument } from './wire.js';
-import type { Peer } from './types.js';
+import { fed_app } from './app.ts';
+import { child_traceparent, type Claims, type FragmentDocument } from './wire.ts';
+import type { Peer } from './types.ts';
 
 export interface MountOptions {
 	/** OVERRIDE the visitor claims for this mount. Default: the federation's `visitor` as it

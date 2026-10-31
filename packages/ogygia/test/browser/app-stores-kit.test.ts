@@ -4,8 +4,8 @@
 // Kit's page updates, and an unchanged page is not passed on twice.
 import { afterEach, expect, test } from 'vitest';
 import { flushSync } from 'svelte';
-import { page, getStores } from '../../src/shims/app-stores.js';
-import { publish_kit_page_deferred, unpublish_kit_page } from './_kit-thread.svelte.js';
+import { page, getStores } from '../../src/shims/app-stores.ts';
+import { publish_kit_page_deferred, unpublish_kit_page } from './_kit-thread.svelte.ts';
 
 afterEach(unpublish_kit_page);
 

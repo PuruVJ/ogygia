@@ -10,9 +10,9 @@ import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
-import { region_css_tag } from '../src/server/region-css.js';
-import { set_island_css, set_inline_css } from './_stubs/virtual-island-deps.js';
-import { set_request_event_stub } from './_stubs/virtual-request-event.js';
+import { region_css_tag } from '../src/server/region-css.ts';
+import { set_island_css, set_inline_css } from './_stubs/virtual-island-deps.ts';
+import { set_request_event_stub } from './_stubs/virtual-request-event.ts';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 const ENTRY = '/islands/tiny.js';

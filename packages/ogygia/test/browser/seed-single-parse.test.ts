@@ -5,18 +5,18 @@
 //   2. a reconcile navigation: the next page's island resolves its reference against the NEXT
 //      page's seed — the stale-reference regression (a per-element cache the morph reused).
 import { beforeEach, expect, inject, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 import {
 	PAGE_SEED_SELECTOR,
 	apply_soft_invalidate_doc,
 	page_seed_of,
 	prepare_spa_document,
 	seed_parse_count
-} from '../../src/runtime/seeds.js';
-import { reconcile_body, stamp_region_keys } from '../../src/runtime/reconcile.js';
-import { morph_children } from '../../src/runtime/morph.js';
-import { page_state } from '../../src/shims/page-store.svelte.js';
-import { link_boot } from '../../src/runtime/boot-link.js';
+} from '../../src/runtime/seeds.ts';
+import { reconcile_body, stamp_region_keys } from '../../src/runtime/reconcile.ts';
+import { morph_children } from '../../src/runtime/morph.ts';
+import { page_state } from '../../src/shims/page-store.svelte.ts';
+import { link_boot } from '../../src/runtime/boot-link.ts';
 
 // Some checks below drive the seeds / reconcile modules before (or without) a boot: link the boot
 // helpers they reach through the registry (runtime/slots.ts `BootLink`), as the boot would.

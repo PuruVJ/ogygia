@@ -5,7 +5,7 @@ import {
 	type NodeLike,
 	type FragmentLike,
 	type ParentLike
-} from '../src/runtime/lake-anchors.js';
+} from '../src/runtime/lake-anchors.ts';
 
 function comment(data: string): NodeLike {
 	return { nodeType: 8, data };

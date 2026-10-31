@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { highlight } from '../src/markdown/shiki.js';
-import { inline_markers } from '../src/markdown/inline-markers.js';
+import { highlight } from '../src/markdown/shiki.ts';
+import { inline_markers } from '../src/markdown/inline-markers.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The `+++added+++` / `---removed---` INLINE dialect (svelte.dev's span-level marks),

@@ -9,11 +9,13 @@
  *   - standalone `.css` files are copied as they are.
  *   - `.svelte.d.ts` types are generated beside each component with svelte2tsx (the engine
  *     svelte-package uses). tsdown stays in charge of the `.ts` declarations.
+ *   - relative `./x.ts` imports in both (a source written with real extensions) become `./x.js`,
+ *     the built modules they sit beside.
  *
  * Assets are emitted in `buildStart` and types copied in `writeBundle`, so tsdown's `clean` never
  * wipes them.
  */
-import { cpSync, existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { preprocess, type PreprocessorGroup } from 'svelte/compiler';
@@ -46,6 +48,14 @@ interface EmitContext {
 /** the path of `abs` inside `dir`, with forward slashes */
 const rel_to = (dir: string, abs: string) => relative(dir, abs).split('\\').join('/');
 
+const RELATIVE_TS_SPECIFIER = /(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])(\.{1,2}\/[^'"\n]+?)\.ts\2/g;
+
+/** A shipped component sits beside the BUILT modules: its relative `./x.ts` imports (static, dynamic,
+ *  or a JSDoc `import('./x.ts')` type) name `./x.js`, the way tsdown rewrites the `.ts` sources. */
+export function js_specifiers(source: string): string {
+	return source.replace(RELATIVE_TS_SPECIFIER, '$1$2$3.js$2');
+}
+
 async function default_preprocess(): Promise<PreprocessorGroup> {
 	try {
 		const { vitePreprocess } = await import('@sveltejs/vite-plugin-svelte');
@@ -71,7 +81,7 @@ export function svelte(options: SvelteOptions = {}) {
 				let source = readFileSync(abs, 'utf8');
 				if (abs.endsWith('.svelte')) {
 					({ code: source } = await preprocess(source, pre, { filename: abs }));
-					source = strip_markup_ts(source, abs);
+					source = js_specifiers(strip_markup_ts(source, abs));
 				}
 				this.emitFile({ type: 'asset', fileName, source });
 			}
@@ -106,7 +116,7 @@ export function svelte(options: SvelteOptions = {}) {
 					if (!existsSync(from)) continue;
 					const to = join(out, rel);
 					mkdirSync(dirname(to), { recursive: true });
-					cpSync(from, to);
+					writeFileSync(to, js_specifiers(readFileSync(from, 'utf8')));
 				}
 			} finally {
 				rmSync(tmp, { recursive: true, force: true });

@@ -11,7 +11,7 @@ import {
 	region_remount,
 	region_schedule,
 	region_ssr_truncated
-} from '../src/runtime/region-attrs.js';
+} from '../src/runtime/region-attrs.ts';
 
 /** Minimal Element-like for attribute helpers (no DOM env). */
 class FakeEl {

@@ -16,7 +16,7 @@
  * name unresolved and marks its own map PROVISIONAL, so the map is served once but not cached, and
  * the next importer rebuilds it against the finished neighbour.
  */
-import { analyze_exports, type ModuleShape } from './parse.js';
+import { analyze_exports, type ModuleShape } from './parse.ts';
 
 export interface Host {
 	/** The module's source, or null when it cannot be read (virtual, binary, missing). */

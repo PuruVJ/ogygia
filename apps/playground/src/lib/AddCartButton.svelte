@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Island A. Writes to the shared cart. Separate bundle from CartBadge.
-	import { cart } from './cart.svelte.js';
+	import { cart } from './cart.svelte.ts';
 	let n = $state(0);
 </script>
 

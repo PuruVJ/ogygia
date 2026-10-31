@@ -4,14 +4,14 @@
  * the DOM diff and shift boxes, and the sink's rows and aggregations.
  */
 import { describe, expect, it } from 'vitest';
-import { byte_strip, arrival_ms } from '../src/profiler/byte-strip.js';
-import { parse_visit, one_clock, merge_visits, type Visit } from '../src/profiler/visit.js';
-import { build_river, load_return_keys, seed_key_bytes } from '../src/profiler/river.js';
-import { html_diff, tokenize_html, shift_boxes } from '../src/profiler/dom-diff.js';
-import { SinkBuffer, parse_sink, cloud_points, layer_cake, hot_for_range, type SinkRow } from '../src/profiler/sink.js';
-import { heap_sites, slice_delta, attribute_gc, gc_kind } from '../src/profiler/gc.js';
-import { analyze } from '../src/profiler/analyze.js';
-import { sync_io, memo_candidates, simulate_awaits } from '../src/profiler/insights.js';
+import { byte_strip, arrival_ms } from '../src/profiler/byte-strip.ts';
+import { parse_visit, one_clock, merge_visits, type Visit } from '../src/profiler/visit.ts';
+import { build_river, load_return_keys, seed_key_bytes } from '../src/profiler/river.ts';
+import { html_diff, tokenize_html, shift_boxes } from '../src/profiler/dom-diff.ts';
+import { SinkBuffer, parse_sink, cloud_points, layer_cake, hot_for_range, type SinkRow } from '../src/profiler/sink.ts';
+import { heap_sites, slice_delta, attribute_gc, gc_kind } from '../src/profiler/gc.ts';
+import { analyze } from '../src/profiler/analyze.ts';
+import { sync_io, memo_candidates, simulate_awaits } from '../src/profiler/insights.ts';
 
 describe('byte strip', () => {
 	const doc =

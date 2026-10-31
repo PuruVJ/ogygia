@@ -13,10 +13,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
-import { set_request_event_stub } from './_stubs/virtual-request-event.js';
-import { csr_true_routes, error_csr_true_routes } from './_stubs/virtual-route-csr.js';
-import { page } from './_stubs/app-state.js';
-import { documentIsCsrTrue } from '../src/context.js';
+import { set_request_event_stub } from './_stubs/virtual-request-event.ts';
+import { csr_true_routes, error_csr_true_routes } from './_stubs/virtual-route-csr.ts';
+import { page } from './_stubs/app-state.ts';
+import { documentIsCsrTrue } from '../src/context.ts';
 import LakeKitHost from './_fixtures/LakeKitHost.svelte';
 import LakeKitInner from './_fixtures/LakeKitInner.svelte';
 

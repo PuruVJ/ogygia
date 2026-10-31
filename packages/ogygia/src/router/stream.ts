@@ -20,7 +20,7 @@
  * Streaming's honest trades (documented): status/title/headers flush with the first yield — a
  * late error can't change an already-sent 200, and Server-Timing set after the flush is lost.
  */
-import { escape_text } from '../escape.js';
+import { escape_text } from '../escape.ts';
 
 /** The slot id for the page position (one streamed slot per page in v1). */
 export const PAGE_SLOT_ID = 'pg';

@@ -15,7 +15,7 @@ import {
 	type Fence,
 	type MetaParser,
 	type VariantGenerator
-} from './code.js';
+} from './code.ts';
 
 // ── regexes
 const AMP_G = /&/g;

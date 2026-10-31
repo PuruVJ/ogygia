@@ -95,7 +95,7 @@ export type SchemaLike = {
 };
 
 // ── the source axis ──
-export { glob, defineSource, toRawSource, mapRaw, enrich } from './source.js';
+export { glob, defineSource, toRawSource, mapRaw, enrich } from './source.ts';
 export type {
 	Source,
 	SourceRef,
@@ -107,14 +107,14 @@ export type {
 	GlobMap,
 	GroupMeta,
 	SourceChanges
-} from './source.js';
+} from './source.ts';
 
 // ── format source-builders (all live on `@ogygia/content`) ──
-export { markdown, json } from './formats.js';
-export type { MarkdownMeta } from './formats.js';
+export { markdown, json } from './formats.ts';
+export type { MarkdownMeta } from './formats.ts';
 // `folder()` — the filesystem-convention preset (one glob of `{+doc.svx,+meta.json}` → a full source).
-export { folder } from './folder.js';
-export type { FolderOptions } from './folder.js';
+export { folder } from './folder.ts';
+export type { FolderOptions } from './folder.ts';
 
 // The filename convention it runs on (moved here from ogygia — ordering is generic corpus knowledge).
 export {
@@ -124,28 +124,28 @@ export {
 	title_case as titleCase,
 	strip_order_prefix as stripOrderPrefix,
 	order_of as orderOf
-} from './convention.js';
-export type { Convention, NumberedOptions, MetaDecoration } from './convention.js';
+} from './convention.ts';
+export type { Convention, NumberedOptions, MetaDecoration } from './convention.ts';
 // `blocks()` is the content source; `blocks.resolve(tree, registry)` is the no-collection recipe
 // helper (`type → region`, server-side). Both live on the one `blocks` export.
-export { blocks } from './blocks.js';
+export { blocks } from './blocks.ts';
 export type {
 	BlockNode,
 	BlockRegistry,
 	BlockSource,
 	ResolvedBlockNode,
 	BlockSchedule
-} from './blocks.js';
+} from './blocks.ts';
 
 // ── the collection ──
-export { content } from './factory.js';
-export type { ContentHandle, ContentOptions } from './factory.js';
+export { content } from './factory.ts';
+export type { ContentHandle, ContentOptions } from './factory.ts';
 
-export { parseSchema } from './schema.js';
+export { parseSchema } from './schema.ts';
 
 // Remote types live in the server-only `@ogygia/content/remote` module; re-export TYPES here
 // (type-only, fully erased — never pulls `$app/server` into a browser graph).
-export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './remote.js';
+export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './remote.ts';
 
 // The `import.meta.og.*` ambient types (loader.*, wire, …) live in the package-root
 // `ambient.d.ts`, surfaced to apps via the `ogygia/types` reference every scaffold carries — ONE
@@ -153,4 +153,4 @@ export type { ContentMode, GetRemote, ListRemote, WithRemotes } from './remote.j
 
 // ── the site layer ── outline → site → shell components. One barrel: data layer + site brains
 // + chrome all surface from `@ogygia/content` (bundlers tree-shake what a given app doesn't touch).
-export * from './site/index.js';
+export * from './site/index.ts';

@@ -25,13 +25,13 @@
 import { createRawSnippet, getAllContexts, hydrate, unmount, type Component, type Snippet } from 'svelte';
 import { render as ssr_render } from 'svelte/server';
 import { BROWSER, DEV } from 'esm-env';
-import { register_kind, mint } from './ref.js';
-import { kit_render_context, kit_request_event } from './server/kit-context.js';
-import { islands_endpoint } from './server/endpoint.js';
-import { PORTABLE_FORM, with_portable_forms } from './portable-form.js';
-import { analyze } from './seed-refs.js';
-import { fnv1a, fnv1a32 } from './runtime/hash.js';
-import { import_entry } from './runtime/entry-locations.js';
+import { register_kind, mint } from './ref.ts';
+import { kit_render_context, kit_request_event } from './server/kit-context.ts';
+import { islands_endpoint } from './server/endpoint.ts';
+import { PORTABLE_FORM, with_portable_forms } from './portable-form.ts';
+import { analyze } from './seed-refs.ts';
+import { fnv1a, fnv1a32 } from './runtime/hash.ts';
+import { import_entry } from './runtime/entry-locations.ts';
 
 /**
  * A hand-written SERVER component that renders a bare snippet: svelte has no public API to

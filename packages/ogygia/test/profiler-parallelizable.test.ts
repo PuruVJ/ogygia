@@ -3,7 +3,7 @@
 // of 1 s waits in some runs and not others (the server answering the page's own call ran 3–9 ms in
 // between), so a 2.2 s finding came and went between two profiles of the same code.
 import { expect, test } from 'vitest';
-import { find_parallelizable, type Segment, type Timeline } from '../src/profiler/timeline.js';
+import { find_parallelizable, type Segment, type Timeline } from '../src/profiler/timeline.ts';
 
 const wait = (t0: number, t1: number, label: string): Segment => ({ t0, t1, kind: 'wait', label, category: 'idle' as Segment['category'], phase: 'load' as Segment['phase'], calls: [{ label, ms: t1 - t0 }] });
 const cpu = (t0: number, t1: number): Segment => ({ t0, t1, kind: 'cpu', label: 'handle', category: 'app' as Segment['category'], phase: 'load' as Segment['phase'] });

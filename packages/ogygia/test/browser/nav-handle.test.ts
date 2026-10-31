@@ -4,8 +4,8 @@
 // become Speculation Rules hints; invalidateAll is still the soft seed refresh), and the router
 // feature's install replaces it with the SPA router's API.
 import { afterEach, expect, test } from 'vitest';
-import { boot } from '../../src/runtime/core.js';
-import * as router from '../../src/runtime/router.js';
+import { boot } from '../../src/runtime/core.ts';
+import * as router from '../../src/runtime/router.ts';
 
 const NAV = Symbol.for('ogygia.nav');
 const scope = globalThis as unknown as Record<symbol, Record<string, unknown> | undefined>;

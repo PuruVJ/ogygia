@@ -4,7 +4,7 @@
  * record). The first window to end must not turn detail off under the other.
  */
 import { describe, it, expect } from 'vitest';
-import { request_stats_detailed, set_request_stats_detail } from '../src/server/request-stats.js';
+import { request_stats_detailed, set_request_stats_detail } from '../src/server/request-stats.ts';
 
 describe('set_request_stats_detail', () => {
 	it('stays on while any window records; overlapping windows end in any order', () => {

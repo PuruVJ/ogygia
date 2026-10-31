@@ -13,9 +13,9 @@
  * eval (`node:url`), the `.git()` loader (`child_process`) — load inertly in a browser build and are
  * unreachable on the REPL compile path.
  */
-export { Compiler, type Profiler } from './driver.js';
-export { Program, strip_id, host_key, type RegisterResult } from './program.js';
-export { CompileCtx, type CompileCtxInit } from './ctx.js';
+export { Compiler, type Profiler } from './driver.ts';
+export { Program, strip_id, host_key, type RegisterResult } from './program.ts';
+export { CompileCtx, type CompileCtxInit } from './ctx.ts';
 export {
 	set_host,
 	type CompilerHost,
@@ -25,15 +25,15 @@ export {
 	type HostHasher,
 	type HostStats,
 	type HostDirent
-} from './host.js';
-export { set_parser, type RawParse, type ParseResult } from './parse/oxc.js';
+} from './host.ts';
+export { set_parser, type RawParse, type ParseResult } from './parse/oxc.ts';
 export {
 	transformHost,
 	transformTsRegions,
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB
-} from './region/transform.js';
-export { islandVirtualId } from './ids.js';
+} from './region/transform.ts';
+export { islandVirtualId } from './ids.ts';
 // NOTE: the manifest virtual-id vocabulary (`RESOLVED` / `V_TRANSPORTABLES` / …) is NOT re-exported here.
-// Vite's dep-optimizer drops a `export { X } from './ids.js'` re-export when it prebundles this entry, so
+// Vite's dep-optimizer drops a `export { X } from './ids.ts'` re-export when it prebundles this entry, so
 // a browser driver reads them from the source-served `ogygia/internal/compiler-ids` entry instead.

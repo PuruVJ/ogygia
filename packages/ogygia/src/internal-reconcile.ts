@@ -7,5 +7,5 @@
  *
  * @internal
  */
-export { reconcile_body } from './runtime/reconcile.js';
-export { morph_children } from './runtime/morph.js';
+export { reconcile_body } from './runtime/reconcile.ts';
+export { morph_children } from './runtime/morph.ts';

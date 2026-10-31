@@ -7,7 +7,7 @@
 // root renders its light DOM itself and may relocate it: its arrangement stands (an identical answer
 // moves nothing), as before.
 import { afterEach, expect, test } from 'vitest';
-import { morph_children } from '../../src/runtime/morph.js';
+import { morph_children } from '../../src/runtime/morph.ts';
 
 class SlottingMenu extends HTMLElement {
 	constructor() {

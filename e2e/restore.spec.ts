@@ -7,7 +7,7 @@
 // runtime, and nothing of ogygia's marking is left in the DOM.
 import { expect, test } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { spawn_server, type SpawnedServer } from './fixtures/servers.js';
+import { spawn_server, type SpawnedServer } from './fixtures/servers.ts';
 
 const PORT = 4186;
 const base = `http://127.0.0.1:${PORT}`;

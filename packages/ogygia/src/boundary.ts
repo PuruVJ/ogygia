@@ -11,8 +11,8 @@
  * by shape, DOM by nodeType) so it costs nothing to import server-side.
  */
 
-import { is_store, is_derived_like } from './store-transport.js';
-import { wire } from './live-transport.js';
+import { is_store, is_derived_like } from './store-transport.ts';
+import { wire } from './live-transport.ts';
 
 export interface BoundaryFinding {
 	/** What the seam will do with this leaf. */

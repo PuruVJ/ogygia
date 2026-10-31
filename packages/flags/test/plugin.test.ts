@@ -3,9 +3,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { startPlugin } from 'ogygia/plugin/testing';
-import { flags } from '../src/vite.js';
-import server from '../src/server.js';
-import { decide, flag } from '../src/index.js';
+import { flags } from '../src/vite.ts';
+import server from '../src/server.ts';
+import { decide, flag } from '../src/index.ts';
 
 const { app, ctx } = startPlugin(server, { name: '@ogygia/flags' });
 

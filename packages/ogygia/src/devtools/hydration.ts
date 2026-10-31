@@ -3,10 +3,10 @@
  * before-and-after markup (changed), the element (`data-og-recovered`, `data-hydrated`). Shared by
  * the Hydration tab and the testing API (`window.__ogygia_testing.hydration()`).
  */
-import { snapshot } from './bus.js';
-import { beacon_page, type AttrChange } from '../runtime/beacon.js';
-import { all_regions, region_name } from './regions.js';
-import { html_diff, type HtmlDiff } from './html-diff.js';
+import { snapshot } from './bus.ts';
+import { beacon_page, type AttrChange } from '../runtime/beacon.ts';
+import { all_regions, region_name } from './regions.ts';
+import { html_diff, type HtmlDiff } from './html-diff.ts';
 
 export type HydrationStatus = 'failed' | 'recovered' | 'healed' | 'changed' | 'asleep' | 'clean';
 export const STATUS_RANK: Record<HydrationStatus, number> = { failed: 0, recovered: 1, healed: 2, changed: 3, asleep: 4, clean: 5 };

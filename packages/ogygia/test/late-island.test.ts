@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { compile } from 'svelte/compiler';
-import { async_twin_redirect, svelte_async_enabled, ASYNC_TWINS } from '../src/vite/late-island.js';
+import { async_twin_redirect, svelte_async_enabled, ASYNC_TWINS } from '../src/vite/late-island.ts';
 
 const read = (f: string) => readFileSync(fileURLToPath(new URL(`../src/${f}`, import.meta.url)), 'utf8');
 

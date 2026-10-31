@@ -13,9 +13,9 @@ import {
 	note_cache_control,
 	renewable_expiry,
 	shared_cache_lifetime
-} from '../src/server/shared-cache.js';
-import { PRERENDER_REGION_TTL_SEC, capability_expiry } from '../src/server/endpoint.js';
-import { capability_expired, renewal_url } from '../src/runtime/region-endpoint-url.js';
+} from '../src/server/shared-cache.ts';
+import { PRERENDER_REGION_TTL_SEC, capability_expiry } from '../src/server/endpoint.ts';
+import { capability_expired, renewal_url } from '../src/runtime/region-endpoint-url.ts';
 
 describe('shared_cache_lifetime: how long shared caches may serve the document', () => {
 	it('s-maxage + stale-while-revalidate (the field header: 8 days)', () => {

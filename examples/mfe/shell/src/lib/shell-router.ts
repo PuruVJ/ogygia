@@ -4,7 +4,7 @@
  */
 import { routes, layout } from 'ogygia/router';
 import { mount } from '@ogygia/federation';
-import { cms, session } from './federation.server.js';
+import { cms, session } from './federation.server.ts';
 import ShellChrome from './ShellChrome.svelte';
 import ShellError from './ShellError.svelte';
 

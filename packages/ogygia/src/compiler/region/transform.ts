@@ -1,13 +1,13 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
 import type { SourceMap } from 'magic-string';
-import type { IslandDescriptor } from '../program.js';
-import { createHash } from '../host.js';
-import { foucCssVirtualId } from '../fouc-css.js';
-import { collectCaptureInfo } from '../free-vars.js';
-import { parse_module } from '../parse/oxc.js';
-import { strategyKey, regionIdentity, regionId } from './identity.js';
-import { regionBindingVirtualId } from '../ids.js';
+import type { IslandDescriptor } from '../program.ts';
+import { createHash } from '../host.ts';
+import { foucCssVirtualId } from '../fouc-css.ts';
+import { collectCaptureInfo } from '../free-vars.ts';
+import { parse_module } from '../parse/oxc.ts';
+import { strategyKey, regionIdentity, regionId } from './identity.ts';
+import { regionBindingVirtualId } from '../ids.ts';
 import {
 	component_import_line,
 	island_entry_source,
@@ -16,10 +16,10 @@ import {
 	lake_wrapper_source,
 	make_region_binding,
 	make_wake_island
-} from './emit.js';
-import type { FileIR, SvelteNode, HostImport, RegionMark } from './ir.js';
+} from './emit.ts';
+import type { FileIR, SvelteNode, HostImport, RegionMark } from './ir.ts';
 import type * as NodePath from 'node:path';
-import { blank_styles } from '../blank-styles.js';
+import { blank_styles } from '../blank-styles.ts';
 
 /** A host the parser still cannot read keeps its region imports as plain imports (no island):
  *  said once per file, never skipped in silence. The Svelte compiler reports the error itself. */
@@ -106,7 +106,7 @@ const IMPORT_ATTR_PAIR_G = /([A-Za-z_$][\w$]*|'[^']*'|"[^"]*")\s*:\s*('[^']*'|"[
 const HELD_IMPORT_G =
 	/import\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2\s+with\s*\{([^}]*)\}\s*;?/g;
 
-export { foucCssVirtualId } from '../fouc-css.js';
+export { foucCssVirtualId } from '../fouc-css.ts';
 
 export const ISLAND_DIR = '.ogygia';
 

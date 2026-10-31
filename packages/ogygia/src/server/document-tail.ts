@@ -31,12 +31,12 @@
  * Universal module: imported by Region.svelte on both legs, so no Node imports here. On the client
  * the reader is never installed and `document_tail()` is `null`.
  */
-import type { SeedIndex } from '../seed-refs.js';
-import { escape_script_text } from '../escape.js';
-import { HOLES_SCRIPT_TYPE } from '../holes-record.js';
-import { ISLAND_GRAPH_ATTR, encode_island_graph } from '../island-graph.js';
-import { props_sidecar, type WireText } from './props-wire.js';
-import type { HoleStat, IslandInteractivity, IslandStat } from './request-stats.js';
+import type { SeedIndex } from '../seed-refs.ts';
+import { escape_script_text } from '../escape.ts';
+import { HOLES_SCRIPT_TYPE } from '../holes-record.ts';
+import { ISLAND_GRAPH_ATTR, encode_island_graph } from '../island-graph.ts';
+import { props_sidecar, type WireText } from './props-wire.ts';
+import type { HoleStat, IslandInteractivity, IslandStat } from './request-stats.ts';
 
 /** What the tail needs of a props plan (server/props-wire.ts `PropsWire`, or a test's stand-in). */
 export interface SidecarWire {

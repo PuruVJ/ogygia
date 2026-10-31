@@ -9,13 +9,13 @@ import {
 	git_checkout_dir,
 	read_sha,
 	write_sha
-} from '../src/macros/git.js';
+} from '../src/macros/git.ts';
 import {
 	find_loader_calls,
 	rewrite_loaders,
 	expand_braces,
 	loader_patterns
-} from '../src/macros/loaders.js';
+} from '../src/macros/loaders.ts';
 import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
 
 describe('parse_git_spec', () => {

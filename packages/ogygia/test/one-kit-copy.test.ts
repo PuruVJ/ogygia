@@ -5,7 +5,7 @@
 // it the day the app's Kit moved to 3.1.0 and ogygia's peer stayed on 3.0.1).
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { ogygia } from '../src/vite/index.js';
+import { ogygia } from '../src/vite/index.ts';
 
 const playground = fileURLToPath(new URL('../../../apps/playground', import.meta.url));
 

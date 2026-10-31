@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { fix_check_of, line_deltas, pattern_deltas, still_there } from '../src/profiler/compare.js';
-import { link_patterns } from '../src/profiler/report.js';
-import type { Pattern } from '../src/profiler/patterns.js';
-import type { FrameStat } from '../src/profiler/analyze.js';
-import type { LedgerLine } from '../src/profiler/ledger.js';
+import { fix_check_of, line_deltas, pattern_deltas, still_there } from '../src/profiler/compare.ts';
+import { link_patterns } from '../src/profiler/report.ts';
+import type { Pattern } from '../src/profiler/patterns.ts';
+import type { FrameStat } from '../src/profiler/analyze.ts';
+import type { LedgerLine } from '../src/profiler/ledger.ts';
 import {
 	cache_rules,
 	counted_sync_io,
@@ -22,7 +22,7 @@ import {
 	tokens,
 	wait_save_on_path,
 	type WaitCall
-} from '../src/profiler/patterns.js';
+} from '../src/profiler/patterns.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PATTERNS: known slow shapes, recognised on the costly lines and backed by what was measured.
@@ -2386,7 +2386,7 @@ describe('a whole function inlined into a line that runs once', () => {
 
 describe('compare: an unchanged render makes CPU moves "shifted"', () => {
 	it('within the runs’ spread, fixed/worse CPU rows become shifted; waits and kept memory keep their verdicts', async () => {
-		const { mark_shifted } = await import('../src/profiler/compare.js');
+		const { mark_shifted } = await import('../src/profiler/compare.ts');
 		const cmp = {
 			render_same: { a_ms: 450, b_ms: 446, noise_ms: 30 },
 			patterns: [

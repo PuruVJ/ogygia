@@ -13,10 +13,10 @@ import {
 	type FrameInfo,
 	type Timeline,
 	type TimelineInput
-} from './timeline.js';
-import { handle_parts } from './source-scan.js';
-import { another_routes_file } from './route-files.js';
-import { app_relative } from './app-path.js';
+} from './timeline.ts';
+import { handle_parts } from './source-scan.ts';
+import { another_routes_file } from './route-files.ts';
+import { app_relative } from './app-path.ts';
 
 export interface CallFrame {
 	functionName: string;
@@ -487,7 +487,7 @@ const is_component_name = (name: string): boolean =>
  * a non-component file. */
 // (which route a file is, and whether another visitor's: route-files.ts — re-exported, the tests and
 // the CPU analysis read them from here)
-export { route_file_of, route_dirs, another_routes_file } from './route-files.js';
+export { route_file_of, route_dirs, another_routes_file } from './route-files.ts';
 
 export function component_name_from_file(url: string): string | undefined {
 	const m = SVELTE_BASENAME_RE.exec(url);

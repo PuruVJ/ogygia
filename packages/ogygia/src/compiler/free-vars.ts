@@ -1,5 +1,5 @@
 import { walk } from 'estree-walker';
-import type { SvelteNode } from './region/ir.js';
+import type { SvelteNode } from './region/ir.ts';
 
 /**
  * Free-variable analysis over a Svelte 5 template subtree.

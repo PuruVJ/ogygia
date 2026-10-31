@@ -4,8 +4,8 @@
 	 * click the top bar to zoom back out; hover for detail. Zoom + tooltip are `$state`; the canvas
 	 * redraws in an `$effect` on zoom/resize. `rects` (hit regions) is plain, rebuilt each draw.
 	 */
-	import type { FlameNode } from '../analyze.js';
-	import { CATEGORY_COLOR } from './format.js';
+	import type { FlameNode } from '../analyze.ts';
+	import { CATEGORY_COLOR } from './format.ts';
 
 	let { flame }: { flame: FlameNode } = $props();
 

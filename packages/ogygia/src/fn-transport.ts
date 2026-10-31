@@ -24,7 +24,7 @@
  * DOES reunite; then every rebound copy sees the same live state.
  */
 
-import { register_kind, mint, resolve, type Ref } from './ref.js';
+import { register_kind, mint, resolve, type Ref } from './ref.ts';
 
 /** Brand on a live handle: carries `{ t, d }` so encode is a field read, not an analysis. */
 const FN_BRAND = Symbol.for('ogygia.fn');

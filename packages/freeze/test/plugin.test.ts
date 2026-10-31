@@ -5,11 +5,11 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { startPlugin } from 'ogygia/plugin/testing';
-import { register_hooks, ask } from '../../ogygia/src/plugin/hooks.js';
-import { freeze as freezePlugin } from '../src/vite.js';
-import server, { type FreezeServerOptions } from '../src/server.js';
-import { freeze } from '../src/index.js';
-import { reset_for_tests } from '../src/registry.js';
+import { register_hooks, ask } from '../../ogygia/src/plugin/hooks.ts';
+import { freeze as freezePlugin } from '../src/vite.ts';
+import server, { type FreezeServerOptions } from '../src/server.ts';
+import { freeze } from '../src/index.ts';
+import { reset_for_tests } from '../src/registry.ts';
 
 // The server half reads Kit's `$app/env`; outside an app, nothing is building and this is no dev server.
 vi.mock('$app/env', () => ({ building: false, dev: false }));

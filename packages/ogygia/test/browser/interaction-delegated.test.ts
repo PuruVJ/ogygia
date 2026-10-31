@@ -3,7 +3,7 @@
 // region are what its own capture listeners gave it: first event wakes (once), clicks before the
 // island is live are canceled and queued, the pointer crossing in warms once, disarm forgets it.
 import { expect, test } from 'vitest';
-import { arm_interaction } from '../../src/runtime/interaction.js';
+import { arm_interaction } from '../../src/runtime/interaction.ts';
 
 const region = (id: string, inner = '<button>go</button>') =>
 	`<ogygia-region id="${id}" wake="interaction" entry="/x.js">${inner}</ogygia-region>`;

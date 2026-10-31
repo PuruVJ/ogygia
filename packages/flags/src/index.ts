@@ -16,7 +16,7 @@
  */
 import { BROWSER, DEV } from 'esm-env';
 import { fnv1a32, type StandardSchemaV1 } from 'ogygia/plugin/utils';
-import { flags_app } from './app.js';
+import { flags_app } from './app.ts';
 
 export type CtxLike = {
 	request: Request;

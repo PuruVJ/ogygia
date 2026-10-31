@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { attr_sites, doc_diff } from '../src/profiler/doc-diff.js';
+import { attr_sites, doc_diff } from '../src/profiler/doc-diff.ts';
 
 // What changes between two renders of one page, grouped by what it is.
 

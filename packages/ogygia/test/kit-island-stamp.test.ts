@@ -9,9 +9,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render } from 'svelte/server';
 import type { Component } from 'svelte';
-import { set_request_event_stub } from './_stubs/virtual-request-event.js';
-import { csr_true_routes } from './_stubs/virtual-route-csr.js';
-import { documentIsCsrTrue } from '../src/context.js';
+import { set_request_event_stub } from './_stubs/virtual-request-event.ts';
+import { csr_true_routes } from './_stubs/virtual-route-csr.ts';
+import { documentIsCsrTrue } from '../src/context.ts';
 import KitIslandHost from './_fixtures/KitIslandHost.svelte';
 
 const host = KitIslandHost as unknown as Component;

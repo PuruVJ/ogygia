@@ -4,7 +4,7 @@
 // links the page already has for that href — so two holes sharing a sheet, or a page that already
 // linked it, never stack copies.
 import { expect, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const A = '/__ogygia__?id=abcabcabc001&props=W3t9XQ&exp=9999999999&sig=stub';
 const B = '/__ogygia__?id=abcabcabc002&props=W3t9XQ&exp=9999999999&sig=stub';

@@ -5,8 +5,8 @@
 	 * empty a minute later. Each opens at its `/report/<id>` (the page falls back to the store when
 	 * the server has forgotten it); two of the same page compare.
 	 */
-	import { list_reports, delete_report, type StoredDump } from './store.js';
-	import { fmt_ms } from './format.js';
+	import { list_reports, delete_report, type StoredDump } from './store.ts';
+	import { fmt_ms } from './format.ts';
 
 	let { base, server_ids = [] }: { base: string; server_ids?: string[] } = $props();
 	let rows = $state<Omit<StoredDump, 'dump'>[]>([]);

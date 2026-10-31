@@ -1,6 +1,6 @@
 /* Type-level guard for `script()`: the combinations a browser silently ignores are refused, and
  * `args` follow `run`'s parameters. tsc-only (no runtime). */
-import { script } from '../src/script.js';
+import { script } from '../src/script.ts';
 
 // accepted
 script(() => 0);

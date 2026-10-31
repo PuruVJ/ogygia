@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import type { Plugin } from 'vite';
-import { strip_id, type Program } from '../compiler/program.js';
+import { strip_id, type Program } from '../compiler/program.ts';
 
 /**
  * Rewrite vite-plugin-svelte island sourcemap `sources` so Vite treats them as virtual.

@@ -6,7 +6,7 @@
 	// same values in the server pass). Values must be SERIALIZABLE (devalue + ogygia codecs): plain
 	// data, `[ogygia.wire]` live values, region snippets — never a function or a live store.
 	import { setContext } from 'svelte';
-	import { serialize_context } from './context-bridge.js';
+	import { serialize_context } from './context-bridge.ts';
 	import type { Snippet } from 'svelte';
 
 	let {

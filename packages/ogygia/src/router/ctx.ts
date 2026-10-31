@@ -6,8 +6,8 @@
  * loads/handlers Kit-shaped). `c.params` is typed from the route pattern.
  */
 import type { RequestEvent } from '@sveltejs/kit';
-import type { Simplify } from './view.js';
-import { json_response, redirect_response } from './respond.js';
+import type { Simplify } from './view.ts';
+import { json_response, redirect_response } from './respond.ts';
 
 /** The visitor's identity — plain claims (`sub`, roles, whatever the app's session carries). */
 export type Visitor = Record<string, unknown> & { sub?: string };

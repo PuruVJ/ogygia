@@ -4,13 +4,13 @@
  * `window.__ogygia_page()` (dev-only, devtools builds) so the planted-problem answer key and e2e
  * read the same report the tab shows without opening the panel.
  */
-import { beacon_page, hole_request_times, is_headless } from '../runtime/beacon.js';
-import { tool_fetch } from '../tool-fetches.js';
-import { snapshot } from './bus.js';
-import { page_ledger } from './ledger-dom.js';
-import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.js';
-import { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.js';
-import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.js';
+import { beacon_page, hole_request_times, is_headless } from '../runtime/beacon.ts';
+import { tool_fetch } from '../tool-fetches.ts';
+import { snapshot } from './bus.ts';
+import { page_ledger } from './ledger-dom.ts';
+import { all_regions, region_name, region_names, region_props_sidecar, region_transitive } from './regions.ts';
+import { compare as fp_compare, type FpDrift, type KeptIsland } from './fp-drift.ts';
+import { leftover_state, owned_leftovers, owned_scroll_listeners, scroll_listeners, unload_listeners } from './leftovers.ts';
 
 const FPS_KEY = 'ogygia:devtools:fps';
 /** props text kept per island (a longer one is compared by its fingerprint alone) */
@@ -49,14 +49,14 @@ function fp_drift(nav = 0): FpDrift[] {
 	fps_memo = { at, drift };
 	return drift;
 }
-import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.js';
-import { profile_for } from './profile-store.js';
-import type { BeaconPage } from '../runtime/beacon.js';
-import { analyze_cpu, is_trace, type CpuSummary } from './cpu.js';
-import { with_source_lines } from './source-lines.js';
-import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.js';
-import { PAGE_DEFER_KEY, PAGE_DEFER_REGISTRY_KEY } from '../page-defer.js';
-import { PAGE_SEED_SELECTOR } from '../runtime/seeds.js';
+import { analyze_page, browser_of, defer_keys, prebundled_names, dev_compile_ms, vital_parts, type HeldOpen, type PartedVital, type VitalPart, type Failure, type HoleBatch, type HoleFailure, type RestoreEvent, type HoleWait, type InteractionCpuInput, type IslandCode, type PageInput, type PageReport, type RegionFact, type ServerProfileBrief } from './page-insights.ts';
+import { profile_for } from './profile-store.ts';
+import type { BeaconPage } from '../runtime/beacon.ts';
+import { analyze_cpu, is_trace, type CpuSummary } from './cpu.ts';
+import { with_source_lines } from './source-lines.ts';
+import { since_load, type LoadSnapshot, type SinceLoad } from './since-load.ts';
+import { PAGE_DEFER_KEY, PAGE_DEFER_REGISTRY_KEY } from '../page-defer.ts';
+import { PAGE_SEED_SELECTOR } from '../runtime/seeds.ts';
 
 export interface PageView {
 	page: BeaconPage;
@@ -824,11 +824,11 @@ declare global {
 	interface Window {
 		__ogygia_page?: () => PageView | null;
 		/** the Record tab's last session report (tests read what the tab shows) */
-		__ogygia_session?: import('./session-insights.js').SessionReport;
+		__ogygia_session?: import('./session-insights.ts').SessionReport;
 		/** the Page tab's styles check, run fresh (tests read what the tab shows) */
-		__ogygia_styles?: () => Promise<{ report: import('./styles.js').StylesReport; findings: import('./styles.js').StylesFinding[] }>;
+		__ogygia_styles?: () => Promise<{ report: import('./styles.ts').StylesReport; findings: import('./styles.ts').StylesFinding[] }>;
 		/** the Page tab's cache check (how the host caches the content-named files), run fresh */
-		__ogygia_cache?: () => Promise<{ probes: import('./cache-headers.js').CacheProbe[]; findings: import('./styles.js').StylesFinding[] }>;
+		__ogygia_cache?: () => Promise<{ probes: import('./cache-headers.ts').CacheProbe[]; findings: import('./styles.ts').StylesFinding[] }>;
 	}
 }
 
@@ -837,14 +837,14 @@ export function install_page_hook(): void {
 	if (typeof window !== 'undefined') watch_url();
 	if (typeof window !== 'undefined' && !window.__ogygia_styles)
 		window.__ogygia_styles = async () => {
-			const { read_styles, scan_unscoped, styles_findings } = await import('./styles.js');
+			const { read_styles, scan_unscoped, styles_findings } = await import('./styles.ts');
 			const report = read_styles(document, { match: true });
 			report.unscoped = await scan_unscoped(document);
 			return { report, findings: styles_findings(report) };
 		};
 	if (typeof window !== 'undefined' && !window.__ogygia_cache)
 		window.__ogygia_cache = async () => {
-			const { probe_cache, cache_findings } = await import('./cache-headers.js');
+			const { probe_cache, cache_findings } = await import('./cache-headers.ts');
 			const probes = await probe_cache(document);
 			return { probes, findings: cache_findings(probes) };
 		};

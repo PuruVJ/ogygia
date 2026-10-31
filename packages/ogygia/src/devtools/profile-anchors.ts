@@ -10,7 +10,7 @@
  * A cost with nothing on the page is left out. The element lookups are one pass over the page, cached
  * per profile and invalidated by the caller (the tick).
  */
-import type { SlimProfile } from './profile-store.js';
+import type { SlimProfile } from './profile-store.ts';
 
 export interface Anchor {
 	key: string;

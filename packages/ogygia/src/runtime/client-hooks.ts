@@ -12,7 +12,7 @@
  * Fire-and-forget and after paint: a failing `init` warns but never blocks island hydration, and the
  * dynamic import means the file (and its deps) load only where Kit didn't — never on a csr=true page.
  */
-import { kit_hydrates_page } from './kit-boot.js';
+import { kit_hydrates_page } from './kit-boot.ts';
 
 type ClientHooksModule = { init?: (input?: unknown) => unknown };
 

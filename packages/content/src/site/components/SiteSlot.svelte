@@ -9,7 +9,7 @@
 	 * Built-in default: `a → Link` (id-form + redirect-aware links for plain markdown, zero config).
 	 */
 	import type { Component, Snippet } from 'svelte';
-	import { get_shell_context } from '../context.js';
+	import { get_shell_context } from '../context.ts';
 	import Link from './Link.svelte';
 
 	let { tag, children, ...rest }: { tag: string; children?: Snippet } & Record<string, unknown> = $props();

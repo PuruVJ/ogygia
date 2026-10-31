@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { matchable, split_selectors, styles_findings, type StylesReport } from '../src/devtools/styles.js';
-import { find_unscoped, unscoped_finding, unscoped_marker } from '../src/unscoped-css.js';
-import { weigh_assets } from '../src/profiler/page-assets.js';
+import { matchable, split_selectors, styles_findings, type StylesReport } from '../src/devtools/styles.ts';
+import { find_unscoped, unscoped_finding, unscoped_marker } from '../src/unscoped-css.ts';
+import { weigh_assets } from '../src/profiler/page-assets.ts';
 
 describe('the unscoped-fallback marker', () => {
 	it('carries the file name only and the reason, and reads back', () => {

@@ -6,7 +6,7 @@
  * Its own module so the boot-time reconciler and the lazily loaded hydrate core share one map
  * without either importing the other.
  */
-import { set_resolve_sink } from '../ref.js';
+import { set_resolve_sink } from '../ref.ts';
 
 const owned_ids = new WeakMap<Element, Set<string>>();
 

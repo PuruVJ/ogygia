@@ -7,6 +7,6 @@
  * @internal
  */
 /** Signer for deferred regions — SSR-only (the client region binding never imports this). */
-export { makeRegionEndpoint } from './server/region-endpoint.js';
+export { makeRegionEndpoint } from './server/region-endpoint.ts';
 /** A held region's server render to HTML — the one copy every region binding calls. */
-export { render_region_html } from './server/render-region-html.js';
+export { render_region_html } from './server/render-region-html.ts';

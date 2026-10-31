@@ -12,7 +12,7 @@
 	},
 	"devDependencies": {
 		"@ogygia/content": "workspace:*",
-		"@shikijs/twoslash": "3.23.0",
+		"@shikijs/twoslash": "^4.5.0",
 		"@sveltejs/adapter-vercel": "^6.3.4",
 		"@sveltejs/kit": "^2.70.2",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
@@ -38,7 +38,7 @@
 		"mdast-util-from-markdown": "^2.0.2",
 		"mdsvex": "^0.12.8",
 		"ogygia": "workspace:*",
-		"shiki": "^3.9.1",
+		"shiki": "^4.4.1",
 		"valibot": "^1.4.2"
 	}
 }

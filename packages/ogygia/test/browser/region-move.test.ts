@@ -7,7 +7,7 @@
 // elements was sometimes fetched twice — the move aborted its in-flight request, the reconnect
 // re-armed its idle wake, and a second request went out 250–740 ms later.
 import { expect, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const ENDPOINT = '/__ogygia__?id=feedface0002&props=W3t9XQ&exp=9999999999&sig=stub';
 

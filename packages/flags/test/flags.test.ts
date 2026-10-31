@@ -12,10 +12,10 @@ import {
 	prime_flags,
 	type CtxLike,
 	type FlagSource
-} from '../src/index.js';
+} from '../src/index.ts';
 import type { StandardSchemaV1 } from 'ogygia/plugin/utils';
 import { startPlugin } from 'ogygia/plugin/testing';
-import server from '../src/server.js';
+import server from '../src/server.ts';
 
 // the plugin, started: a flag read records its decision as a request fact through its app
 const { app } = startPlugin(server, { name: '@ogygia/flags' });

@@ -1,9 +1,9 @@
 <script lang="ts">
 	/** Waiting-by-function table — a `wake:'load'` island with reactive sort (count / wait ms). Where
 	 *  the server WAITED (not computed), attributed to the function that started the I/O. */
-	import { fmt_ms, kind_color } from './format.js';
-	import { sortable } from './sort.svelte.js';
-	import { pressable } from './press.js';
+	import { fmt_ms, kind_color } from './format.ts';
+	import { sortable } from './sort.svelte.ts';
+	import { pressable } from './press.ts';
 
 	type Row = { caller: string; kind: string; count: number; ms: number; open: number };
 	let { rows, maxMs }: { rows: Row[]; maxMs: number } = $props();

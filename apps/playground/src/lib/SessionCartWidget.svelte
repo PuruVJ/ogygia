@@ -2,7 +2,7 @@
 	// Reads the session cart from a prop. The SAME live instance arrives on every page (continuity),
 	// so its count + the last user item persist across navigation; serverStamp shows it was a fresh
 	// server render that merged into the live object.
-	import type { SessionCart } from './session-cart.svelte.js';
+	import type { SessionCart } from './session-cart.svelte.ts';
 
 	let { cart, page }: { cart: SessionCart; page: string } = $props();
 	let n = $state(0);

@@ -5,10 +5,10 @@
 	 * which reads both dumps from this browser's store, runs the same pure comparison, and renders
 	 * the same body.
 	 */
-	import { get_report } from './store.js';
-	import { compare_reports, type Comparison } from '../compare.js';
-	import { derive_findings, type ReportMeta, type ReportExtras } from '../report.js';
-	import type { Analysis } from '../analyze.js';
+	import { get_report } from './store.ts';
+	import { compare_reports, type Comparison } from '../compare.ts';
+	import { derive_findings, type ReportMeta, type ReportExtras } from '../report.ts';
+	import type { Analysis } from '../analyze.ts';
 	import CompareBody from './CompareBody.svelte';
 
 	let { base, a, b }: { base: string; a: string; b: string } = $props();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { analyze_cpu, clean_file, kind_of, fn_label, type SelfProfileTrace } from '../src/devtools/cpu.js';
+import { analyze_cpu, clean_file, kind_of, fn_label, type SelfProfileTrace } from '../src/devtools/cpu.ts';
 
 const PAGE = 'http://127.0.0.1:4183/dt-lab';
 const R = {

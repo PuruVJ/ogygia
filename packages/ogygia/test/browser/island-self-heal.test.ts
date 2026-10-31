@@ -8,7 +8,7 @@
 // connected with; on a mismatch the runtime puts it back and hydrates THAT.
 import { beforeEach, expect, inject, test } from 'vitest';
 import { userEvent } from 'vitest/browser';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const decode = (key: 'counter_ssr_b64') => decodeURIComponent(escape(atob(inject(key))));
 

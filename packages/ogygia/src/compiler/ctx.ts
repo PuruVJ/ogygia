@@ -6,17 +6,17 @@
  * back into the Vite adapter — which is what keeps the driver bundler-agnostic (a future REPL feeds
  * a `CompileCtx` + source and gets the same lowering, no Vite in sight).
  */
-import { fs } from './host.js';
-import { strip_bom } from './bom.js';
-import { islandVirtualId } from './ids.js';
-import type { ServerRealm } from './link/caps.js';
-import type { PluginMacro } from './macros/pipeline.js';
+import { fs } from './host.ts';
+import { strip_bom } from './bom.ts';
+import { islandVirtualId } from './ids.ts';
+import type { ServerRealm } from './link/caps.ts';
+import type { PluginMacro } from './macros/pipeline.ts';
 import {
 	islandChunkFileName,
 	islandPublicUrl,
 	wrapperVirtualId,
 	type ImportKeys
-} from './region/transform.js';
+} from './region/transform.ts';
 
 /** One dependency package's declared compile surface (`"ogygia": { "files": […] }` in ITS
  *  package.json) — produced by the plugin's discovery (`vite/package-files.ts`), consumed here

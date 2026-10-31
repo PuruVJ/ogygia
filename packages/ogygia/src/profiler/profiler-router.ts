@@ -21,11 +21,11 @@
 // page components router-css roots with no hand-seeding (the old extra_router_modules special case).
 // Same module either way — the svelte export condition resolves it back into this build's source.
 import { routes, page, error, type Ctx, type PageDef, type Router } from 'ogygia/router';
-import type { AnyComponent } from '../router/define.js';
-import type { Analysis } from './analyze.js';
-import type { ReportExtras, ReportMeta, RequestEntry, RouteAgg } from './report.js';
+import type { AnyComponent } from '../router/define.ts';
+import type { Analysis } from './analyze.ts';
+import type { ReportExtras, ReportMeta, RequestEntry, RouteAgg } from './report.ts';
 // Type-only (erased) — index.ts value-imports THIS module, so a value import back would cycle.
-import type { StoredReport, SampledSummary, TrapStatus } from './index.js';
+import type { StoredReport, SampledSummary, TrapStatus } from './index.ts';
 import Dashboard from './ui/Dashboard.svelte';
 import Report from './ui/Report.svelte';
 import Run from './ui/Run.svelte';
@@ -34,8 +34,8 @@ import Upload from './ui/Upload.svelte';
 import Message from './ui/Message.svelte';
 import Compare from './ui/Compare.svelte';
 import Site from './ui/Site.svelte';
-import type { Comparison } from './compare.js';
-import type { SinkRow } from './sink.js';
+import type { Comparison } from './compare.ts';
+import type { SinkRow } from './sink.ts';
 
 /** Prop-erased component refs — see the file header. Referenced as `V.Dashboard` in the table so
  *  `$infer` never resolves a component's own (self-referential) props. Real types survive on `data`. */
@@ -77,9 +77,9 @@ export interface ProfilerDeps {
 		/** report id → its biggest slow pattern (what to fix first) and how many more it found */
 		top_fix: Record<string, { title: string; save_ms: number; wait: boolean; more: number }>;
 		/** the lines that slow two or more profiled pages, what fixing each gives back per page and in all */
-		site_fixes: import('./site-fixes.js').SiteFix[];
+		site_fixes: import('./site-fixes.ts').SiteFix[];
 		/** the holes the server rendered: render, cache, and who held the render slots others waited for */
-		holes: import('./hole-slots.js').HoleSlots | null;
+		holes: import('./hole-slots.ts').HoleSlots | null;
 		recording: boolean;
 		dev: boolean;
 		rss_mb: number;
@@ -152,7 +152,7 @@ export interface ProfilerDeps {
 		history: PageHistory | null;
 		prev: string | null;
 		/** against the previous profile of this page, when this server still holds it */
-		since: import('./compare.js').Since | null;
+		since: import('./compare.ts').Since | null;
 		/** recorded on a dev server — the source peek is available */
 		dev: boolean;
 	}>;

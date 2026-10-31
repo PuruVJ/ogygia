@@ -5,7 +5,7 @@
  * nothing is announced then.
  */
 import type { ServerApp } from 'ogygia/plugin';
-import type { FreezeServerOptions } from './server.js';
+import type { FreezeServerOptions } from './server.ts';
 
 let current: ServerApp<FreezeServerOptions> | null = null;
 

@@ -3,7 +3,7 @@
 // as the app's code — a 148 ms "app code" function on a customer's large page. Called straight
 // from `render_response`, it is Kit's.
 import { describe, expect, it } from 'vitest';
-import { analyze, type CpuProfile } from '../src/profiler/analyze.js';
+import { analyze, type CpuProfile } from '../src/profiler/analyze.ts';
 
 const frame = (functionName: string, url = '', lineNumber = 0) => ({ functionName, url, lineNumber, columnNumber: 0 });
 

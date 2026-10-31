@@ -14,11 +14,11 @@
  * Pure: the host hands in the analysed functions, the GC makers and retained sites (each carrying
  * `at`, the app line it is charged to) and a reader for a source line.
  */
-import type { FrameStat, FrameCategory } from './analyze.js';
-import type { GcMaker } from './gc.js';
-import type { RetainedSite } from './insights.js';
-import { calls_name, function_body, import_aliases, REGEXP_FRAME, tokens } from './source-scan.js';
-import { app_relative } from './app-path.js';
+import type { FrameStat, FrameCategory } from './analyze.ts';
+import type { GcMaker } from './gc.ts';
+import type { RetainedSite } from './insights.ts';
+import { calls_name, function_body, import_aliases, REGEXP_FRAME, tokens } from './source-scan.ts';
+import { app_relative } from './app-path.ts';
 
 export interface LedgerLine {
 	/** the resolved source path (the join key, with `line`) */

@@ -18,7 +18,7 @@
 	 *
 	 * The `<Search>` trigger links here, so the ⌘K palette is a pure enhancement over this page.
 	 */
-	import type { SearchHit } from '../search.js';
+	import type { SearchHit } from '../search.ts';
 
 	let {
 		q = '',

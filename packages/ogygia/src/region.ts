@@ -8,20 +8,20 @@
  *   (nothing prepared a chunk for it). SDUI composed in place.
  * - **dual** — a component imported `with { region: 'raw' }`. Server-side it holds BOTH the real
  *   component (renders inline, first paint) AND everything needed to sign a capability. Rendered in
- *   the same pass → inline. Serialized to the client → the {@link import('./hooks.js').ogygiaTransport}
+ *   the same pass → inline. Serialized to the client → the {@link import('./hooks.ts').ogygiaTransport}
  *   strips the component and signs a ticket, so it arrives as `deferred`.
  * - **deferred** — what a dual region becomes across the wire: a signed ticket the runtime fetches
  *   and (if interactive) hydrates. No component.
  */
 import type { Component } from 'svelte';
-import { region_snippet } from './region-snippet.js';
-import { with_portable_forms } from './portable-form.js';
+import { region_snippet } from './region-snippet.ts';
+import { with_portable_forms } from './portable-form.ts';
 import RawHtml from './RawHtml.svelte';
 
 /** Brand so the transport can recognize a region without false-matching plain objects. */
-import { REGION_BRAND } from './region-brand.js';
-import { kit_page_facts_tail, kit_page_ready, kit_render_context } from './server/kit-context.js';
-import { region_css_tags } from './server/html-scan.js';
+import { REGION_BRAND } from './region-brand.ts';
+import { kit_page_facts_tail, kit_page_ready, kit_render_context } from './server/kit-context.ts';
+import { region_css_tags } from './server/html-scan.ts';
 
 /** context.ts's LAKE key (`isInLake`), by its global name — context.ts reaches virtual modules. */
 const LAKE_SUBTREE_KEY = Symbol.for('ogygia.lake-subtree');

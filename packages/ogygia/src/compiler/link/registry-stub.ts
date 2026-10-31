@@ -28,7 +28,7 @@
  * imports stay out, which is the leak this module exists for.
  */
 import { walk } from 'estree-walker';
-import { parse_module } from '../parse/oxc.js';
+import { parse_module } from '../parse/oxc.ts';
 
 export const REGISTRY_STUB_PREFIX = 'virtual:ogygia/registry-stub/';
 

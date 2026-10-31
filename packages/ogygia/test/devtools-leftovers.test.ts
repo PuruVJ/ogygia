@@ -1,7 +1,7 @@
 // What an island left running after it left the page (devtools/leftovers.ts): the stack read with no
 // regex, the owner by location or (dev) by name, and left behind only when no copy alive now made it.
 import { describe, expect, it } from 'vitest';
-import { owned_leftovers, owned_scroll_listeners, stack_files, type LeftoverIsland, type LeftoverReg, type ScrollReg } from '../src/devtools/leftovers.js';
+import { owned_leftovers, owned_scroll_listeners, stack_files, type LeftoverIsland, type LeftoverReg, type ScrollReg } from '../src/devtools/leftovers.ts';
 
 describe('leftovers', () => {
 	it('reads each frame’s file: Chrome, Firefox/Safari, no position, no query', () => {

@@ -6,9 +6,9 @@
 	 * did the waiting. Parallel calls read as stacked boxes with no arrow between them. Hover a box
 	 * or an arrow for the detail. A `wake:'load'` island.
 	 */
-	import type { AwaitNode, AwaitEdge } from '../timeline.js';
-	import { fmt_ms } from './format.js';
-	import { simulate_awaits, type WhatIf } from '../insights.js';
+	import type { AwaitNode, AwaitEdge } from '../timeline.ts';
+	import { fmt_ms } from './format.ts';
+	import { simulate_awaits, type WhatIf } from '../insights.ts';
 
 	let { nodes, edges, window_ms }: { nodes: AwaitNode[]; edges: AwaitEdge[]; window_ms: number } = $props();
 

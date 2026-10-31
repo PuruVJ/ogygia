@@ -5,7 +5,7 @@ import {
 	page_declares_dev_hmr_script,
 	page_declares_speculation_rules,
 	runtime_first
-} from '../src/server/head-presence.js';
+} from '../src/server/head-presence.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The `handle()` transform skips injecting a head tag the page already carries. These predicates

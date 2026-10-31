@@ -2,7 +2,7 @@
 // still open, in every run — never a process-wide timer started once, a short or unref'd timeout, or
 // a single render.
 import { expect, test } from 'vitest';
-import { mark_left_each_run, type IoOp } from '../src/profiler/async-io.js';
+import { mark_left_each_run, type IoOp } from '../src/profiler/async-io.ts';
 
 const runs = [
 	{ start: 0, end: 100 },

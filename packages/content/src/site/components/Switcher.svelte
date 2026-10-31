@@ -10,7 +10,7 @@
 	 * so the picker stays live after a body-swap.
 	 */
 	import { DropdownMenu } from 'bits-ui';
-	import type { Switcher } from '../dimensions.js';
+	import type { Switcher } from '../dimensions.ts';
 
 	// Navigate through the island-side navigation shim (the running runtime's navigation handle — the
 	// SPA router when on), imported lazily on select so it never loads during this island's SSR. Never

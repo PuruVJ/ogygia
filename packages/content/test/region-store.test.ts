@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { RegionStore } from '../src/region-store.js';
+import { RegionStore } from '../src/region-store.ts';
 import { __set_build_cache_root } from 'ogygia/internal/compiler-browser';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'og-region-store-'));

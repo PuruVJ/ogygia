@@ -15,7 +15,7 @@
 // content/markdown pipeline that rides it — loads in a BROWSER realm (the Observatory REPL) with no
 // node shims. The host defaults to Node, so the shipped Vite plugin is byte-identical + full-speed; a
 // browser installs a virtual host + calls `__set_build_cache_root(null)` to disable the on-disk cache.
-import { fs, path } from './compiler/host.js';
+import { fs, path } from './compiler/host.ts';
 
 // The shared root — module state, not part of any store's surface. Resolved lazily; before any
 // configure it falls back to `process.cwd()`.

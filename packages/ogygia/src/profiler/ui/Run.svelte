@@ -3,7 +3,7 @@
 	 *  profile request. Served through document() like every other profiler view. */
 	import Shell from './Shell.svelte';
 	import RunView from './RunView.svelte' with { wake: 'load' };
-	import type { ProfilerRoutes } from '../profiler-router.js';
+	import type { ProfilerRoutes } from '../profiler-router.ts';
 	let { data }: ProfilerRoutes['/run'] = $props();
 	const { base, path, runs, format, against } = $derived(data);
 </script>

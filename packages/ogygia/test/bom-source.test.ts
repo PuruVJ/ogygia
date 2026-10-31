@@ -12,8 +12,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { compile } from 'svelte/compiler';
 import { Compiler, Program, CompileCtx, normalize_import_keys } from '../dist/compiler/index.js';
-import { stamp_opaque } from '../src/compiler/ownership-stamps.js';
-import { strip_bom } from '../src/compiler/bom.js';
+import { stamp_opaque } from '../src/compiler/ownership-stamps.ts';
+import { strip_bom } from '../src/compiler/bom.ts';
 
 const BOM = '﻿';
 const COMPONENT =

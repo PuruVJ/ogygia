@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { transformHost } from '../src/compiler/region/transform.js';
+import { transformHost } from '../src/compiler/region/transform.ts';
 
 // A csr=false route host: a marked server island with a fallback snippet child.
 const ROUTE_HOST = `<script lang="ts">

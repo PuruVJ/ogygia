@@ -5,14 +5,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { check_plugins, definePlugin, resolve_plugins } from '../src/vite/plugin-api.js';
-import { server_plugins_module, route_options_module } from '../src/compiler/link/caps.js';
-import { defineServer } from '../src/plugin/index.js';
-import { facts_of, mark_per_visitor } from '../src/plugin/facts.js';
-import { ask, notify, register_hooks } from '../src/plugin/hooks.js';
-import { clear_route_options, register_route_options, route_option, set_page_route_options } from '../src/plugin/routes.js';
-import { strip_route_options } from '../src/compiler/kit.js';
-import { startPlugin } from '../src/plugin/testing.js';
+import { check_plugins, definePlugin, resolve_plugins } from '../src/vite/plugin-api.ts';
+import { server_plugins_module, route_options_module } from '../src/compiler/link/caps.ts';
+import { defineServer } from '../src/plugin/index.ts';
+import { facts_of, mark_per_visitor } from '../src/plugin/facts.ts';
+import { ask, notify, register_hooks } from '../src/plugin/hooks.ts';
+import { clear_route_options, register_route_options, route_option, set_page_route_options } from '../src/plugin/routes.ts';
+import { strip_route_options } from '../src/compiler/kit.ts';
+import { startPlugin } from '../src/plugin/testing.ts';
 
 /** The repo's playground: it depends on `@ogygia/flags`, which has a `./server` realm. */
 const PLAYGROUND = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../apps/playground');

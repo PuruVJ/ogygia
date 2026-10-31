@@ -1,6 +1,6 @@
 <script lang="ts">
 	// A second island on the same shared chunk (version.ts): both entries must move when it moves.
-	import { VERSION } from './version.js';
+	import { VERSION } from './version.ts';
 	let ran = $state('');
 	$effect(() => {
 		ran = VERSION;

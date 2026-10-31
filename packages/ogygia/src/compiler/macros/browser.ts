@@ -13,10 +13,10 @@
  * (see the Observatory's `ogygia/internal` module). The build's fn/store MANIFEST (the cross-island decode
  * fallback the driver emits from the hoists) is not needed here — the preview is one tree.
  */
-import { rewrite_wire } from './wire.js';
-import { rewrite_dollar } from './dollar.js';
-import { rewrite_store } from './store.js';
-import type { PluginMacro } from './pipeline.js';
+import { rewrite_wire } from './wire.ts';
+import { rewrite_dollar } from './dollar.ts';
+import { rewrite_store } from './store.ts';
+import type { PluginMacro } from './pipeline.ts';
 
 const MARKUP_EXTS = ['.svelte'] as const;
 

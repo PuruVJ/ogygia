@@ -4,10 +4,10 @@
 	 * "profile a page" form. Static server render — no island; it's a data snapshot. Ports report.ts's
 	 * render_dashboard.
 	 */
-	import { fmt_ms, label_of } from './format.js';
+	import { fmt_ms, label_of } from './format.ts';
 	import Shell from './Shell.svelte';
 	import LocalReports from './LocalReports.svelte' with { wake: 'load' };
-	import type { ProfilerRoutes } from '../profiler-router.js';
+	import type { ProfilerRoutes } from '../profiler-router.ts';
 	let { data }: ProfilerRoutes['/'] = $props();
 	const { base, recent, routes, reports, top_fix, site_fixes, holes, recording, dev, rss_mb, inflight, history, by, tag_keys, trap, sampled, background_note } = $derived(data);
 	const sampled_max = $derived(Math.max(...(sampled?.functions.map((f) => f.self_ms) ?? [0]), 0.01));

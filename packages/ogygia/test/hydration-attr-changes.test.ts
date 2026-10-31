@@ -2,8 +2,8 @@
 // setting its own as it upgrades, an empty inline style) or markup (text or elements differ). And a
 // test can leave chosen attribute changes out.
 import { describe, it, expect } from 'vitest';
-import { attr_changes } from '../src/runtime/beacon.js';
-import { apply_attr_rules } from '../src/devtools/attr-rules.js';
+import { attr_changes } from '../src/runtime/beacon.ts';
+import { apply_attr_rules } from '../src/devtools/attr-rules.ts';
 
 describe('attr_changes', () => {
 	it('each attribute a custom element set, added, removed or changed', () => {

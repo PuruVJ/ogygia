@@ -6,9 +6,9 @@
  * content plugin (packages/content/test/config-surface.test.ts).
  */
 import { describe, it, expect } from 'vitest';
-import { ogygia } from '../src/vite/index.js';
-import { resolve_options } from '../src/vite/options.js';
-import { region_ttl_module } from '../src/compiler/link/caps.js';
+import { ogygia } from '../src/vite/index.ts';
+import { resolve_options } from '../src/vite/options.ts';
+import { region_ttl_module } from '../src/compiler/link/caps.ts';
 
 describe('legacy option renames — errors with the new spelling, never silent aliasing', () => {
 	it('rejects top-level visible', () => {

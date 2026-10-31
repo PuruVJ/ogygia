@@ -10,7 +10,7 @@
  * Everything else in the head passes through byte-identical.
  */
 import { describe, expect, it } from 'vitest';
-import { dedupe_head_links } from '../src/server/head-presence.js';
+import { dedupe_head_links } from '../src/server/head-presence.ts';
 
 const hint = (href: string) => `<link rel="modulepreload" href="${href}">`;
 const low = (href: string) => `<link rel="modulepreload" href="${href}" fetchpriority="low">`;

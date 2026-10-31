@@ -3,8 +3,8 @@
 // where equal descriptors truly are the same snippet: a slot by its id, frozen HTML by its hash, a
 // live snippet only when its props are JSON-exact. A store keeps a random id (identity matters).
 import { describe, expect, it } from 'vitest';
-import { mint, resolve } from '../src/ref.js';
-import { register_snippet_kind, slot_pointer } from '../src/region-snippet.js';
+import { mint, resolve } from '../src/ref.ts';
+import { register_snippet_kind, slot_pointer } from '../src/region-snippet.ts';
 
 register_snippet_kind();
 const branded = (d: object) => {

@@ -7,8 +7,8 @@ import {
 	preload_island_graph,
 	register_island_graph,
 	reset_island_graph
-} from '../../src/runtime/island-graph-preload.js';
-import { island_graph_script } from '../../src/server/document-tail.js';
+} from '../../src/runtime/island-graph-preload.ts';
+import { island_graph_script } from '../../src/server/document-tail.ts';
 
 const ours = () =>
 	[...document.head.querySelectorAll(`link[${GRAPH_PRELOAD_ATTR}]`)].map((l) => new URL((l as HTMLLinkElement).href).pathname);

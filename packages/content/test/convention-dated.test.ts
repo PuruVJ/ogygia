@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dated, date_of } from '../src/convention.js';
+import { dated, date_of } from '../src/convention.ts';
 
 describe('date_of', () => {
 	it('reads a valid date prefix', () => {

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { parse, stringify } from 'devalue';
-import { analyze } from '../src/seed-refs.js';
+import { analyze } from '../src/seed-refs.ts';
 import {
 	stage_deferred,
 	settle_deferred,
@@ -16,17 +16,17 @@ import {
 	DeferRef,
 	SettledRef,
 	resolve_script
-} from '../src/server/page-stream.js';
+} from '../src/server/page-stream.ts';
 import {
 	create_deferred,
 	install_page_defer,
 	page_defer_revivers
-} from '../src/runtime/page-defer.js';
+} from '../src/runtime/page-defer.ts';
 import {
 	PAGE_DEFER_GLOBAL,
 	PAGE_DEFER_REGISTRY_KEY,
 	PAGE_DEFER_BOOTSTRAP
-} from '../src/page-defer.js';
+} from '../src/page-defer.ts';
 
 const g = globalThis as unknown as Record<PropertyKey, unknown>;
 

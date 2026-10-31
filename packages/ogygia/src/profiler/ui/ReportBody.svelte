@@ -9,8 +9,8 @@
 	 * network), then the raw tables everything above is an aggregate of. Nothing is left out; the
 	 * raw numbers come last.
 	 */
-	import { derive_findings, span_rows, cold_rows, page_score_of } from '../report.js';
-	import { fmt_ms, fmt_pct, fmt_bytes, label_of, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
+	import { derive_findings, span_rows, cold_rows, page_score_of } from '../report.ts';
+	import { fmt_ms, fmt_pct, fmt_bytes, label_of, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.ts';
 	import {
 		build_treemap,
 		treemap_legend,
@@ -23,7 +23,7 @@
 		seed_rows,
 		hole_rows,
 		spark as build_spark
-	} from './report-data.js';
+	} from './report-data.ts';
 	import IslandsTable from './IslandsTable.svelte' with { wake: 'load' };
 	import Paths from './Paths.svelte' with { wake: 'load' };
 	import Awaits from './Awaits.svelte' with { wake: 'load' };
@@ -48,8 +48,8 @@
 	import Ledger from './Ledger.svelte';
 	import Patterns from './Patterns.svelte';
 	import Drill from './Drill.svelte';
-	import { unread_rows } from '../drill.js';
-	import { PATTERN_LABEL, fix_impact } from '../patterns.js';
+	import { unread_rows } from '../drill.ts';
+	import { PATTERN_LABEL, fix_impact } from '../patterns.ts';
 	import OnThisPage from './OnThisPage.svelte' with { wake: 'load' };
 	import OneClock from './OneClock.svelte' with { wake: 'load' };
 	import ByteStrip from './ByteStrip.svelte' with { wake: 'load' };
@@ -58,16 +58,16 @@
 	import DomTravel from './DomTravel.svelte' with { wake: 'load' };
 	import KeepLocal from './KeepLocal.svelte' with { wake: 'load' };
 	import DownloadHtml from './DownloadHtml.svelte' with { wake: 'load' };
-	import { OGP_ELEMENT_ID } from './report-request.js';
-	import { island_rows_of, island_name } from '../report.js';
-	import { PHASE_LABEL } from '../timeline.js';
-	import { sync_io, memo_candidates, span_values } from '../insights.js';
-	import { render_steps } from '../steps.js';
-	import { row_href } from './row-anchor.svelte.js';
-	import type { Since } from '../compare.js';
-	import type { Analysis } from '../analyze.js';
-	import type { ReportMeta, ReportExtras } from '../report.js';
-	import type { PageHistory } from '../profiler-router.js';
+	import { OGP_ELEMENT_ID } from './report-request.ts';
+	import { island_rows_of, island_name } from '../report.ts';
+	import { PHASE_LABEL } from '../timeline.ts';
+	import { sync_io, memo_candidates, span_values } from '../insights.ts';
+	import { render_steps } from '../steps.ts';
+	import { row_href } from './row-anchor.svelte.ts';
+	import type { Since } from '../compare.ts';
+	import type { Analysis } from '../analyze.ts';
+	import type { ReportMeta, ReportExtras } from '../report.ts';
+	import type { PageHistory } from '../profiler-router.ts';
 	// The report renderer, fed the fields directly — from the server (a logged-in `/report/[id]`) OR
 	// from a decrypted share-link `#fragment` (PermalinkGate). One body, two sources.
 	let {
@@ -329,7 +329,7 @@
 			if (s.fn) linked.add(s.fn);
 			for (const v of s.via ?? []) if (v.fn) linked.add(v.fn);
 		}
-	const walk_path = (n: import('../analyze.js').PathNode) => {
+	const walk_path = (n: import('../analyze.ts').PathNode) => {
 		if (n.key && n.category !== 'component') linked.add(n.key);
 		for (const c of n.children) walk_path(c);
 	};

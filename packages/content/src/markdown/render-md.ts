@@ -11,8 +11,8 @@
  * real component is for. Same contract the `.md` region path already enforces.
  */
 import type { PreprocessorGroup } from 'svelte/compiler';
-import { ogygiaPreprocess, type MarkdownOptions } from './index.js';
-import { try_region_emit } from './region-emit.js';
+import { ogygiaPreprocess, type MarkdownOptions } from './index.ts';
+import { try_region_emit } from './region-emit.ts';
 
 // One preprocessor group per markdown-config object (mdsvex init is heavy; the config is stable).
 const groups = new WeakMap<object, PreprocessorGroup>();

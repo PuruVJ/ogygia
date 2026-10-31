@@ -4,7 +4,7 @@
  * schema 400s, finalize()'s plain-return serialization and 204-on-null.
  */
 import { describe, it, expect } from 'vitest';
-import { routes, GET, POST, api, ApiError, type StandardSchemaV1 } from '../src/router/index.js';
+import { routes, GET, POST, api, ApiError, type StandardSchemaV1 } from '../src/router/index.ts';
 
 const Body: StandardSchemaV1<{ title: string }> = {
 	'~standard': {

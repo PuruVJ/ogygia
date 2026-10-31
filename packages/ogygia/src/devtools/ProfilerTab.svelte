@@ -12,9 +12,9 @@
 	 * the rest of devtools, so the profiler answers without a key.
 	 */
 	import { onMount } from 'svelte';
-	import { run_profile, profile_for, profiles_version } from './profile-store.js';
-	import { page_anchors } from './profile-anchors.js';
-	import { highlight, clear_highlight } from './highlight.js';
+	import { run_profile, profile_for, profiles_version } from './profile-store.ts';
+	import { page_anchors } from './profile-anchors.ts';
+	import { highlight, clear_highlight } from './highlight.ts';
 
 	let { tick = 0, focus = $bindable(null), selected = $bindable(null) } = $props();
 

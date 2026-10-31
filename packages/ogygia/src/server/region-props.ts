@@ -3,15 +3,15 @@
  * No virtual imports — safe to unit-test and share between mint paths.
  */
 import { stringify } from 'devalue';
-import { B64Url } from './payload.js';
-import { MAX_REGION_PROPS_LEN } from './endpoint.js';
-import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
+import { B64Url } from './payload.ts';
+import { MAX_REGION_PROPS_LEN } from './endpoint.ts';
+import { REF_WIRE_KEY, ref_reducer } from '../ref.ts';
 // PULL-registration inside the function below (idempotent; no import-time side effects).
-import { register_wire_kind } from '../live-transport.js';
-import { register_store_kind } from '../store-transport.js';
-import { register_snippet_kind } from '../region-snippet.js';
-import { register_fn_kind } from '../fn-transport.js';
-import { register_derived_kind } from '../store-transport.js';
+import { register_wire_kind } from '../live-transport.ts';
+import { register_store_kind } from '../store-transport.ts';
+import { register_snippet_kind } from '../region-snippet.ts';
+import { register_fn_kind } from '../fn-transport.ts';
+import { register_derived_kind } from '../store-transport.ts';
 
 /** Ensure the island-prop kinds are registered (called per encode; Map.has-cheap). */
 export function ensure_prop_kinds(): void {

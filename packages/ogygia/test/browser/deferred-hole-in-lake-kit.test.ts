@@ -6,7 +6,7 @@
 // a lake never fetched on a csr=true page (it stayed on its fallback with no request), so its
 // server-primed content never arrived.
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const ENDPOINT = '/__ogygia__?id=deadbeef0001&props=W3t9XQ&exp=9999999999&sig=stub';
 const ANSWER = '<div data-testid="hole-content">FILLED</div>';

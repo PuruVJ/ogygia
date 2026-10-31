@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { rewrite_regions, region_key } from '../src/macros/regions.js';
+import { rewrite_regions, region_key } from '../src/macros/regions.ts';
 
 let dir: string;
 let registry_id: string;

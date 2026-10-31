@@ -7,7 +7,7 @@
 	// It also MARKS the subtree as a lake's inside: on a Kit-hydrated (csr=true) document the lake is
 	// adopted as opaque DOM, so a waking region inside it must still emit its real `<ogygia-region>`
 	// (Region reads `isInLake()` to skip its csr=true inline degradation there).
-	import { setNested, setInLake } from './context.js';
+	import { setNested, setInLake } from './context.ts';
 	let { children } = $props();
 	setNested(false);
 	setInLake();

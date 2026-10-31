@@ -2,7 +2,7 @@
 // after the document anyway, and each throws `__sveltekit_… is not defined` (no Kit client here).
 // The handle drops exactly those chunks; the document and every other chunk pass untouched.
 import { describe, it, expect } from 'vitest';
-import { drop_dead_kit_resolves } from '../src/server/dead-kit-resolves.js';
+import { drop_dead_kit_resolves } from '../src/server/dead-kit-resolves.ts';
 
 function streamed(chunks: string[]): Response {
 	const enc = new TextEncoder();

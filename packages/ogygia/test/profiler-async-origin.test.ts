@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, type CpuProfile } from '../src/profiler/analyze.js';
+import { analyze, type CpuProfile } from '../src/profiler/analyze.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ASYNC ORIGINS: a library's continuation after an `await` runs with no app frame on its stack.

@@ -6,7 +6,7 @@
  */
 import type { Component } from 'svelte';
 import { getContext, setContext } from 'svelte';
-import type { Site } from './site.js';
+import type { Site } from './site.ts';
 
 const KEY = Symbol.for('ogygia.content.shell');
 

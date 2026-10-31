@@ -3,7 +3,7 @@
 	// `import type` — proving the transportables manifest registers Cart's codec on the client
 	// without this island importing the class as a value. If liveness works, clicks in
 	// TransportWriter repaint this island.
-	import type { SharedCounter } from './counter-object.svelte.js';
+	import type { SharedCounter } from './counter-object.svelte.ts';
 
 	let { counter }: { counter: SharedCounter } = $props();
 </script>

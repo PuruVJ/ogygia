@@ -16,11 +16,11 @@ import {
 	__register_store_factory,
 	mark_store,
 	is_store
-} from '../src/store-transport.js';
-import { classify_boundary } from '../src/boundary.js';
-import { serialize_provided_context } from '../src/context-bridge.js';
-import { set_ctx_recorder, record_ctx } from '../src/context-registry.js';
-import { REF_WIRE_KEY, ref_reviver } from '../src/ref.js';
+} from '../src/store-transport.ts';
+import { classify_boundary } from '../src/boundary.ts';
+import { serialize_provided_context } from '../src/context-bridge.ts';
+import { set_ctx_recorder, record_ctx } from '../src/context-registry.ts';
+import { REF_WIRE_KEY, ref_reviver } from '../src/ref.ts';
 
 const enc = (v: unknown) => stringify(v, { [STORE_WIRE_KEY]: reduce_store });
 const dec_client = (s: string) =>

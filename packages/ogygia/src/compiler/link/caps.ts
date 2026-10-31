@@ -10,7 +10,7 @@ import {
 	errorCsrTrueRouteIds,
 	page_route_options,
 	rootLayoutCsrTrue
-} from '../kit.js';
+} from '../kit.ts';
 
 /**
  * `virtual:ogygia/secret` — SERVER only: the per-build random key material and whether the BUILD

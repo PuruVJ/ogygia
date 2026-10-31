@@ -9,6 +9,6 @@ export const holeCss = (): string[] => [];
 // `data-og-fp` and on sidecar ids keyed by it. The universal lane hash stands in for the server's
 // native digest (server/fingerprint.ts needs `node:crypto`, and this stub loads in the browser
 // project too); the format and the determinism are what the tests read.
-import { fingerprint_of } from '../../src/runtime/hash.js';
+import { fingerprint_of } from '../../src/runtime/hash.ts';
 export const islandFingerprint = (entry: string, canonical: string): string =>
 	fingerprint_of(entry, '', canonical);

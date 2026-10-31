@@ -9,8 +9,8 @@
  * some of the other's CPU. The per-request estimate is therefore an UPPER BOUND, capped at the
  * overlap itself, and labelled so.
  */
-import type { RequestEntry } from './report.js';
-import { islands_endpoint } from '../server/endpoint.js';
+import type { RequestEntry } from './report.ts';
+import { islands_endpoint } from '../server/endpoint.ts';
 
 export interface ContendingRequest {
 	method: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { app_relative } from '../src/profiler/app-path.js';
-import { short_source } from '../src/profiler/ledger.js';
+import { app_relative } from '../src/profiler/app-path.ts';
+import { short_source } from '../src/profiler/ledger.ts';
 
 // One app's files read one way, from the app's folder, whatever their depth.
 

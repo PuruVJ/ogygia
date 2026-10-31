@@ -23,7 +23,7 @@
  *
  * Pure: no Node imports, no DOM. `analyze` calls it with the frame table it already resolved.
  */
-import type { CpuProfile, FrameCategory } from './analyze.js';
+import type { CpuProfile, FrameCategory } from './analyze.ts';
 
 export type Phase = 'hooks' | 'load' | 'remote' | 'render' | 'ogygia' | 'kit' | 'other';
 

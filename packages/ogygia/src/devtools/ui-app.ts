@@ -6,8 +6,8 @@
  */
 import { mount } from 'svelte';
 import Devtools from './Devtools.svelte';
-import { install_page_hook } from './page.js';
-import { set_highlight_root } from './highlight.js';
+import { install_page_hook } from './page.ts';
+import { set_highlight_root } from './highlight.ts';
 import { names as built_names } from 'virtual:ogygia/devtools-meta';
 
 export function mount_app(root: ShadowRoot, opts: { csr_true: boolean; start_open: boolean; hide?: () => void }): void {

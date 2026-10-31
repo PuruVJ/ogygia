@@ -23,11 +23,11 @@ import {
 	islandVirtualId,
 	wrapperVirtualId,
 	CLIENT_BINDING_STUB
-} from './compiler/index.js';
-import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.js';
-import { ogp_decode, is_ogp } from './profiler/crypto.js';
-import { report_json, is_dump } from './profiler/report.js';
-import { fix_impact } from './profiler/patterns.js';
+} from './compiler/index.ts';
+import { collect_flag_sites, flags_manifest, type FlagSite } from './compiler/flags.ts';
+import { ogp_decode, is_ogp } from './profiler/crypto.ts';
+import { report_json, is_dump } from './profiler/report.ts';
+import { fix_impact } from './profiler/patterns.ts';
 
 // ── regexes
 const TRAILING_SLASH_RE = /\/$/;
@@ -780,7 +780,7 @@ type ProfileReport = {
 	/** one render's critical path: its waiting caps what the wait fixes together take off */
 	timeline?: { wait_ms?: number } | null;
 	/** one render after every fix named, overlapping fixes counted once (forecast.ts) */
-	forecast?: import('./profiler/forecast.js').Forecast | null;
+	forecast?: import('./profiler/forecast.ts').Forecast | null;
 	summary?: {
 		verdict?: string;
 		window_ms?: number;

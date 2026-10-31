@@ -6,20 +6,20 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { generateKeyPairSync } from 'node:crypto';
-import { make_peer } from '../src/peer.js';
-import { federate } from '../src/federate.js';
-import { mount } from '../src/mount.js';
-import { mint_hole, set_hole_signer } from '../src/hole.js';
-import { sign_headers, verify_signed_request, lift_document } from '../src/wire.js';
-import { set_federation } from '../src/registry.js';
-import fed_server from '../src/server.js';
+import { make_peer } from '../src/peer.ts';
+import { federate } from '../src/federate.ts';
+import { mount } from '../src/mount.ts';
+import { mint_hole, set_hole_signer } from '../src/hole.ts';
+import { sign_headers, verify_signed_request, lift_document } from '../src/wire.ts';
+import { set_federation } from '../src/registry.ts';
+import fed_server from '../src/server.ts';
 import { routes } from 'ogygia/router';
 import { startPlugin } from 'ogygia/plugin/testing';
 // (core internals a test drives: the running code's request)
-import { facts_of, set_current_request } from '../../ogygia/src/plugin/facts.js';
+import { facts_of, set_current_request } from '../../ogygia/src/plugin/facts.ts';
 // federation's flag carry
-import { flag } from '../../flags/src/index.js';
-import flags_server from '../../flags/src/server.js';
+import { flag } from '../../flags/src/index.ts';
+import flags_server from '../../flags/src/server.ts';
 
 // both plugins, started: a flag read records its decision as a request fact; federation reads the
 // facts and signs with the app's key through its app

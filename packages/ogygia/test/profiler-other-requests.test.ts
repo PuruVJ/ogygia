@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyze, another_routes_file, route_dirs, route_file_of, type CpuProfile } from '../src/profiler/analyze.js';
+import { analyze, another_routes_file, route_dirs, route_file_of, type CpuProfile } from '../src/profiler/analyze.ts';
 
 // The sampler hears the whole process: another visitor's page answered while the profiled one
 // rendered must not read as the profiled page's code.

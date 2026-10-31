@@ -3,7 +3,7 @@
  * Must NOT treat ogygia side-channel scripts as evidence — their payloads can reflect
  * attacker-controlled URL substrings like `__sveltekit_` (P0).
  */
-import { runtime_session } from './session.js';
+import { runtime_session } from './session.ts';
 
 export class KitBoot {
 	static #ASSIGN = /__sveltekit_\w+\s*=/;

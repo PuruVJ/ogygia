@@ -6,8 +6,8 @@
  * lives with the content plugin: packages/content/test/loaders-stress.test.ts.)
  */
 import { describe, expect, it } from 'vitest';
-import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
-import { og_js_regions } from '../src/compiler/parse/scan.js';
+import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.ts';
+import { og_js_regions } from '../src/compiler/parse/scan.ts';
 
 const MARKUP = ['.svelte'] as const;
 const CODEC = `{ encode: (c) => c.v, decode: (v) => new C(v) }`;

@@ -21,12 +21,12 @@
  */
 import { readFileSync, statSync } from 'node:fs';
 import { searchForWorkspaceRoot, type Plugin } from 'vite';
-import { BarrelIndex, type ExportMap, type Host } from './barrel.js';
-import { matches_any, normalize_options, type DebarrelOptions } from './options.js';
-import { rewrite_module, type RewritePolicy } from './rewrite.js';
-import { rewrite_svelte } from './svelte.js';
-import { is_script_request } from '../script-request.js';
-import { strip_bom } from '../bom.js';
+import { BarrelIndex, type ExportMap, type Host } from './barrel.ts';
+import { matches_any, normalize_options, type DebarrelOptions } from './options.ts';
+import { rewrite_module, type RewritePolicy } from './rewrite.ts';
+import { rewrite_svelte } from './svelte.ts';
+import { is_script_request } from '../script-request.ts';
+import { strip_bom } from '../bom.ts';
 
 const IMPORTER_RE = /\.(?:[cm]?[jt]sx?|svelte|svelte\.[jt]s)$/;
 

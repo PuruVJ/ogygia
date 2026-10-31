@@ -6,7 +6,7 @@
 	 * (`<ogygia-region>` + payload) so the runtime can wake it independently after the parent ADOPTS the
 	 * slot DOM. Server-only in practice (the client adopts, never re-renders slot children).
 	 */
-	import { setNested } from './context.js';
+	import { setNested } from './context.ts';
 	import type { Snippet } from 'svelte';
 
 	let { children }: { children?: Snippet } = $props();

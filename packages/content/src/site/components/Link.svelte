@@ -7,8 +7,8 @@
 	 * untouched. Outside a `<Shell>` (no context) bare hrefs pass through too — audit still checks them.
 	 */
 	import type { Snippet } from 'svelte';
-	import { get_shell_context } from '../context.js';
-	import { href_of } from '../outline.js';
+	import { get_shell_context } from '../context.ts';
+	import { href_of } from '../outline.ts';
 
 	// ── regexes
 	const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { report_seed_shaping } from '../src/compiler/link/build-output.js';
+import { report_seed_shaping } from '../src/compiler/link/build-output.ts';
 
 // The build's seed report names, per island that ships all of page.data, the modules to blame —
 // the handoff carries them so the profiler can point at that line.

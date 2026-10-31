@@ -18,8 +18,8 @@
  * ```
  */
 import { prerender, query } from '$app/server';
-import type { ContentRef, Entry } from './index.js';
-import { Collection, COLLECTION } from './collection-base.js';
+import type { ContentRef, Entry } from './index.ts';
+import { Collection, COLLECTION } from './collection-base.ts';
 
 export type ContentMode = 'prerender' | 'query';
 
@@ -155,4 +155,4 @@ export function withRemotes<T extends Record<string, unknown> = Record<string, u
 }
 
 // ── the site layer's server half ── `remotes(site)` minting (Kit query()/prerender wiring).
-export * from './site/server.js';
+export * from './site/server.ts';

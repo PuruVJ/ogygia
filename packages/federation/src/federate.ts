@@ -7,17 +7,17 @@
  * Called at server module-eval (in or under hooks.server.ts). The handle reads the registration
  * back to serve `/og/fragment/*`, `/og/thaw`, and the deferred remote-region holes.
  */
-import { fed_app } from './app.js';
-import { make_peer } from './peer.js';
-import { set_federation, current_federation } from './registry.js';
+import { fed_app } from './app.ts';
+import { make_peer } from './peer.ts';
+import { set_federation, current_federation } from './registry.ts';
 import {
 	sign_headers,
 	THAW_PATH,
 	type Claims,
 	type FragmentDocument,
 	type WidgetDocument
-} from './wire.js';
-import type { FederateConfig, Federation, Peer, PeerConfig, Widget, WidgetDef } from './types.js';
+} from './wire.ts';
+import type { FederateConfig, Federation, Peer, PeerConfig, Widget, WidgetDef } from './types.ts';
 
 const HOP_MAX = 4;
 

@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { globSync } from 'tinyglobby';
-import type { PackageScan } from '../compiler/ctx.js';
+import type { PackageScan } from '../compiler/ctx.ts';
 
 export type { PackageScan };
 

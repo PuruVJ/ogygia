@@ -9,9 +9,9 @@ import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { rewrite_bake } from '../src/compiler/macros/bake.js';
-import { rewrite_wire } from '../src/compiler/macros/wire.js';
-import { __set_build_cache_root } from '../src/build-cache.js';
+import { rewrite_bake } from '../src/compiler/macros/bake.ts';
+import { rewrite_wire } from '../src/compiler/macros/wire.ts';
+import { __set_build_cache_root } from '../src/build-cache.ts';
 
 const MARKUP = ['.svelte'] as const;
 

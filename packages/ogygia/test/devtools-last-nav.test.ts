@@ -6,9 +6,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 (globalThis as unknown as { __OGYGIA_DEVTOOLS__: boolean }).__OGYGIA_DEVTOOLS__ = true;
 
-const { ingest, clear, configure } = await import('../src/devtools/bus.js');
-const { last_nav } = await import('../src/devtools/page.js');
-import type { DevtoolsEvent } from '../src/devtools/schema.js';
+const { ingest, clear, configure } = await import('../src/devtools/bus.ts');
+const { last_nav } = await import('../src/devtools/page.ts');
+import type { DevtoolsEvent } from '../src/devtools/schema.ts';
 
 let seq = 0;
 const ev = (name: 'nav.start' | 'nav.finish', t: number, to: string) =>

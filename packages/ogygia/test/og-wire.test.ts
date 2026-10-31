@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.js';
+import { rewrite_wire, WIRE_EXPR } from '../src/compiler/macros/wire.ts';
 import {
 	wire,
 	__register_transportable,
 	reduce_transportable,
 	revive_transportable
-} from '../src/live-transport.js';
+} from '../src/live-transport.ts';
 import {
 	moduleHasTransportable,
 	appendTransportRegistrations
-} from '../src/compiler/content/transportables.js';
+} from '../src/compiler/content/transportables.ts';
 
 const MARKUP = ['.svelte'] as const;
 const CODEC = `{ encode: (c) => c.v, decode: (v) => new C(v) }`;

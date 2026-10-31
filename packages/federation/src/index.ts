@@ -6,9 +6,9 @@
  * team thaws the frozen pages of every team that baked its fragments. Design:
  * internal/notes/federation.md.
  */
-export { federate } from './federate.js';
-export { mount, type MountOptions, type KitMountOptions } from './mount.js';
-export { user, sign_headers, child_traceparent, verify_signed_request } from './wire.js';
+export { federate } from './federate.ts';
+export { mount, type MountOptions, type KitMountOptions } from './mount.ts';
+export { user, sign_headers, child_traceparent, verify_signed_request } from './wire.ts';
 export type {
 	FederateConfig,
 	PeerConfig,
@@ -17,5 +17,5 @@ export type {
 	Widget,
 	WidgetInfo,
 	VisitorResolver
-} from './types.js';
-export type { Claims, FragmentDocument, WidgetDocument, VerifyConfig } from './wire.js';
+} from './types.ts';
+export type { Claims, FragmentDocument, WidgetDocument, VerifyConfig } from './wire.ts';

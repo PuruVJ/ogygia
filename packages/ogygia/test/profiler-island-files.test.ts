@@ -4,7 +4,7 @@
  * again). Islands keyed by identity, files by location.
  */
 import { describe, it, expect } from 'vitest';
-import { island_files_diff } from '../src/profiler/compare.js';
+import { island_files_diff } from '../src/profiler/compare.ts';
 
 const id = (n: string) => `/_app/immutable/og-region.${n}.js`;
 const row = (n: string, hash: string, name = n) => ({ entry: id(n), name, module_url: `/_app/immutable/og-region.${n}.${hash}.js` });

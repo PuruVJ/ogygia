@@ -6,7 +6,7 @@
 	 * card. No brains here; the ordering is done for you but you can pre-sort and pass `group={false}`.
 	 */
 	import type { Snippet } from 'svelte';
-	import type { BlogPostRef } from '../fields.js';
+	import type { BlogPostRef } from '../fields.ts';
 
 	let {
 		posts,

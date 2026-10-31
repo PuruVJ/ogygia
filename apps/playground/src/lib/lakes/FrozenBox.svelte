@@ -4,7 +4,7 @@
 	// inline; the runtime lifts/restores its DOM around the parent hydrate. Its own button is INERT
 	// (frozen, no JS). It contains a region-in-freeze (InnerLive) which DOES self-hydrate.
 	import InnerLive from './InnerLive.svelte' with { wake: 'load' };
-	import { next_stamp } from './stamp.js';
+	import { next_stamp } from './stamp.ts';
 
 	// Distinctive string the lakes suite greps for — it must appear in NO emitted client chunk.
 	const FROZEN_MARKER = 'FROZEN_LAKE_CODE_MARKER_9f3a';

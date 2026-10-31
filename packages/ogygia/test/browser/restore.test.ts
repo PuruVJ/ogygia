@@ -5,10 +5,10 @@
 // in an answer's inert fragment (sheets adopted after the insertion), and never into a root a
 // component's constructor made.
 import { afterEach, expect, test } from 'vitest';
-import { check_script, transformMarkup } from '../../src/server/reversible.js';
-import { restore, restore_adopt } from '../../src/runtime/restore.js';
-import { fake_scoped } from '../fixtures/fake-scoped-render.js';
-import { init_shadow_registries } from '../../src/runtime/parse-html.js';
+import { check_script, transformMarkup } from '../../src/server/reversible.ts';
+import { restore, restore_adopt } from '../../src/runtime/restore.ts';
+import { fake_scoped } from '../fixtures/fake-scoped-render.ts';
+import { init_shadow_registries } from '../../src/runtime/parse-html.ts';
 
 const SHEET = '<template data-og-head="demo-card.shadow">b{color:rgb(255, 0, 0)}</template>';
 const island = (inner: string) => `<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;

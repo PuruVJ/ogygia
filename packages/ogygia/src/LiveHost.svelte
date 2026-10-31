@@ -5,7 +5,7 @@
 	// NestedProvider, its props are `$state` and it exposes `setProps` — so a live tick updates the
 	// MOUNTED component reactively instead of tearing it down and re-hydrating. Focus and local island
 	// state survive; Svelte reconciles the view. NOT part of the public API.
-	import { setNested } from './context.js';
+	import { setNested } from './context.ts';
 	import type { Component as SvelteComponent } from 'svelte';
 
 	let {

@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import * as v from 'valibot';
-import { content } from '../src/index.js';
-import type { Heading, Source, SourceEntry } from '../src/index.js';
+import { content } from '../src/index.ts';
+import type { Heading, Source, SourceEntry } from '../src/index.ts';
 // Import from the submodules, not the barrel — the barrel re-exports `.svelte` chrome that vitest
 // (no svelte plugin here) can't parse.
-import { outline, pick } from '../src/site/outline.js';
-import { site as siteRaw, mountBase } from '../src/site/site.js';
-import { links } from '../src/site/checks.js';
-import type { NavGroup, NavLeaf, NavTree } from '../src/site/types.js';
+import { outline, pick } from '../src/site/outline.ts';
+import { site as siteRaw, mountBase } from '../src/site/site.ts';
+import { links } from '../src/site/checks.ts';
+import type { NavGroup, NavLeaf, NavTree } from '../src/site/types.ts';
 
 // Test shim: keep the positional call style in the fixtures; the real API is `mint_site({ outline, …opts })`.
 const mint_site = (
 	outlineArg: Parameters<typeof siteRaw>[0]['outline'],
 	opts: Partial<Parameters<typeof siteRaw>[0]> = {}
 ) => siteRaw({ outline: outlineArg, ...opts });
-import { remarkLinks } from '../src/markdown/remark-links.js';
-import { rehypeOverrides, SLOT_TAG } from '../src/markdown/rehype-overrides.js';
+import { remarkLinks } from '../src/markdown/remark-links.ts';
+import { rehypeOverrides, SLOT_TAG } from '../src/markdown/rehype-overrides.ts';
 import {
 	build_docs,
 	orama_engine,
 	split_sections,
 	strip_prose
-} from '../src/site/search.js';
+} from '../src/site/search.ts';
 
 type Meta = { headings: Heading[] };
 
@@ -772,7 +772,7 @@ describe('remarkLinks collector', () => {
 
 describe('build_rss', () => {
 	it('emits sorted RSS 2.0 with absolutized links', async () => {
-		const { build_rss } = await import('../src/site/emit.js');
+		const { build_rss } = await import('../src/site/emit.ts');
 		const xml = build_rss('https://example.dev', {
 			title: 'Feed <T>',
 			description: 'desc',

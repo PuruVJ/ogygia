@@ -21,7 +21,7 @@
  * scans (a tag walk, a rare-needle-first search), the engine's compiled matcher was 2–4× faster on
  * real heads, allocation-free either way. `dedupe_head_links` is hand-written: it won.
  */
-import { is_word } from './html-scan.js';
+import { is_word } from './html-scan.ts';
 
 /** A real `<meta name="ogygia-router" …>` element — a page opting a route out of view transitions. */
 const ROUTER_META_RE = /<meta\b[^>]*\bname=["']ogygia-router["']/i;

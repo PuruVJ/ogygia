@@ -16,8 +16,8 @@ import {
 	preload_urls,
 	reset_load_scheduler,
 	viewport_class
-} from '../../src/runtime/load-scheduler.js';
-import { reset_document_painted } from '../../src/runtime/schedule.js';
+} from '../../src/runtime/load-scheduler.ts';
+import { reset_document_painted } from '../../src/runtime/schedule.ts';
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 

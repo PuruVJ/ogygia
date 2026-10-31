@@ -10,7 +10,7 @@ import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import KeepHole from './_fixtures/KeepHole.svelte';
 import HostWithHole from './_fixtures/HostWithHole.svelte';
-import { is_keep_fallback, KEEP_FALLBACK_INLINE_MESSAGE } from '../src/keep-fallback.js';
+import { is_keep_fallback, KEEP_FALLBACK_INLINE_MESSAGE } from '../src/keep-fallback.ts';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 // `render()`'s body is a LAZY getter — the component runs on first read.

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { sourcemap_resolver, type FrameStat } from '../src/profiler/analyze.js';
-import { build_ledger, confirmed, grows_between, grows_of, short_source } from '../src/profiler/ledger.js';
-import type { GcMaker } from '../src/profiler/gc.js';
-import type { RetainedSite } from '../src/profiler/insights.js';
+import { sourcemap_resolver, type FrameStat } from '../src/profiler/analyze.ts';
+import { build_ledger, confirmed, grows_between, grows_of, short_source } from '../src/profiler/ledger.ts';
+import type { GcMaker } from '../src/profiler/gc.ts';
+import type { RetainedSite } from '../src/profiler/insights.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE LINE LEDGER: every cost the profiler measured, joined on the app line a person edits.

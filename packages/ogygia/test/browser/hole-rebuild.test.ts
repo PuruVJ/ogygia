@@ -7,8 +7,8 @@
 // address, and a hydrating hole's props sidecar. e2e/hole-kit-rebuild runs the real thing; this
 // pins the runtime half with the record + the rebuilt element alone.
 import { expect, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
-import { props_sidecar_of } from '../../src/runtime/sidecar.js';
+import { bootDev } from '../../src/runtime/full.ts';
+import { props_sidecar_of } from '../../src/runtime/sidecar.ts';
 
 const ENDPOINT = '/__ogygia__?id=feedface0001&props=W3t9XQ&exp=9999999999&sig=stub';
 const IDENTITY = 'a1b2c3d4e5f60718';

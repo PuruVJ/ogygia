@@ -4,7 +4,7 @@
 	 *  the browser reads. */
 	import Shell from './Shell.svelte';
 	import SiteView from './SiteView.svelte' with { wake: 'load' };
-	import type { ProfilerRoutes } from '../profiler-router.js';
+	import type { ProfilerRoutes } from '../profiler-router.ts';
 	let { data }: ProfilerRoutes['/site'] = $props();
 	const { base, rows, from, sink, ephemeral } = $derived(data);
 </script>

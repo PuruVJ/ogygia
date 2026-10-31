@@ -4,7 +4,7 @@
  * file base64-encoded. Both leave the raw bytes recoverable; a real `.ogp` is passed through untouched.
  */
 import { describe, expect, it } from 'vitest';
-import { is_ogp, recover_ogp_bytes } from '../src/profiler/crypto.js';
+import { is_ogp, recover_ogp_bytes } from '../src/profiler/crypto.ts';
 
 // A minimally-valid `.ogp` shape: the 'OGP1' magic + enough bytes to clear is_ogp's length gate (>44).
 const ogp = new Uint8Array([

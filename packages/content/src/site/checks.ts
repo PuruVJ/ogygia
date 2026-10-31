@@ -9,9 +9,9 @@
  * Structural invariants (orphans, slug collisions, `NN-` verification) are NOT checks — they are
  * always-on build errors in the outline/`folder()`. Checks are opt-in POLICY.
  */
-import type { LinkRef } from '../index.js';
-import { href_of, type Outline } from './outline.js';
-import type { ReadContext } from './site.js';
+import type { LinkRef } from '../index.ts';
+import { href_of, type Outline } from './outline.ts';
+import type { ReadContext } from './site.ts';
 
 /** How loud a finding is: `'error'` fails the build (load throws); `'warn'` logs in dev. */
 export type Severity = 'error' | 'warn';

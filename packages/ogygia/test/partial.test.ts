@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Component } from 'svelte';
-import { region, isRegion, REGION_BRAND } from '../src/region.js';
-import { ogygiaTransport } from '../src/transport.js';
+import { region, isRegion, REGION_BRAND } from '../src/region.ts';
+import { ogygiaTransport } from '../src/transport.ts';
 
 const A = (() => {}) as unknown as Component<{ x: number }>;
 

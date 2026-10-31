@@ -4,9 +4,9 @@
 // hydrate (`set_foreign_hydrate`) and the shims warn ONCE per island entry when a per-page field
 // (data / params / route / form / error) is read; `url` / `status` / `state` stay silent.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { set_foreign_hydrate } from '../src/current-region.js';
-import { page } from '../src/shims/app-state.svelte.js';
-import { page as page_store } from '../src/shims/app-stores.js';
+import { set_foreign_hydrate } from '../src/current-region.ts';
+import { page } from '../src/shims/app-state.svelte.ts';
+import { page as page_store } from '../src/shims/app-stores.ts';
 
 const CMS = 'https://cms.internal';
 /** Distinct entries per test: the warning is once-per-entry for the life of the module. */

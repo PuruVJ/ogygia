@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { slim_profile, island_row, run_profile } from '../src/devtools/profile-store.js';
+import { slim_profile, island_row, run_profile } from '../src/devtools/profile-store.ts';
 
 const report = {
 	id: 'abc123',

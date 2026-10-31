@@ -16,7 +16,7 @@
 	import Sidebar from './Sidebar.svelte';
 	import ThemeToggle from './ThemeToggle.svelte';
 	import Search from './Search.svelte';
-	import type { NavTree } from '../types.js';
+	import type { NavTree } from '../types.ts';
 
 	let {
 		nav,

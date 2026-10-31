@@ -28,8 +28,8 @@
  * whenever the module actually parses — which, for the `.server.ts` files loaders live in, is always.
  */
 import { find_og_calls, split_first_string, parse_module, type OgCall } from 'ogygia/internal/compiler-browser';
-import { parse_git_spec, git_glob_pattern, type GitSpec } from './git.js';
-import { bridge } from '../bridge.js';
+import { parse_git_spec, git_glob_pattern, type GitSpec } from './git.ts';
+import { bridge } from '../bridge.ts';
 
 const PREFIX = 'import.meta.og.loader.';
 

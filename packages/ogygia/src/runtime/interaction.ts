@@ -42,9 +42,9 @@
  * pointer reaches an armed island or input lands — off the boot path, ahead of the replay.
  */
 
-import { slots } from './slots.js';
-import { warm_island_module } from './region-endpoint-url.js';
-import { island_entry_of } from './entry-locations.js';
+import { slots } from './slots.ts';
+import { warm_island_module } from './region-endpoint-url.ts';
+import { island_entry_of } from './entry-locations.ts';
 
 /** Feature entry: fill the `interaction` slot — wake a cold island on first use, warm on hover. */
 export function install(): void {
@@ -133,13 +133,13 @@ const armed = new Map<Element, Armed>();
 let installed = false;
 
 /** THE REPLAY HALF, loaded once, when the first region arms. */
-type Replay = typeof import('./interaction-replay.js');
+type Replay = typeof import('./interaction-replay.ts');
 let replay_promise: Promise<Replay> | null = null;
 function replay(): Promise<Replay> {
 	// Link what the replay chunk uses from this module right where the chunk is loaded, so whoever
 	// loads it (the feature's arm, or a direct `arm_interaction`) has linked it (./slots.ts `BootLink`).
 	slots.interaction_link ??= { resolve_address };
-	return (replay_promise ??= import('./interaction-replay.js'));
+	return (replay_promise ??= import('./interaction-replay.ts'));
 }
 
 /** The nearest ARMED region above an event's target (past nested regions that are not armed), never

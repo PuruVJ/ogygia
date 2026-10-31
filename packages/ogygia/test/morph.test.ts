@@ -2,10 +2,10 @@
 // repo ships no jsdom/happy-dom on purpose. The shim import MUST come first: it installs
 // `globalThis.Node` / `globalThis.document`, which `morph.ts` reads at module load.
 import { describe, test, expect, beforeEach } from 'vitest';
-import { document, el, frag, DomElement, NS_SVG } from './_stubs/dom.js';
-import { morph_children, install } from '../src/runtime/morph.js';
-import { swap_body } from '../src/runtime/reconcile.js';
-import { slots } from '../src/runtime/slots.js';
+import { document, el, frag, DomElement, NS_SVG } from './_stubs/dom.ts';
+import { morph_children, install } from '../src/runtime/morph.ts';
+import { swap_body } from '../src/runtime/reconcile.ts';
+import { slots } from '../src/runtime/slots.ts';
 
 beforeEach(() => {
 	document._active = null;

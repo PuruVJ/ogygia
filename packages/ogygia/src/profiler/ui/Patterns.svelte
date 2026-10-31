@@ -4,9 +4,9 @@
 	 * biggest estimated win first. Each says what is happening, the numbers behind it, every place
 	 * it happens (with the code), and what to do. Static markup; the example sits in a <details>.
 	 */
-	import type { Pattern } from '../patterns.js';
-	import { fmt_ms, fmt_bytes } from './format.js';
-	import { row_href } from './row-anchor.svelte.js';
+	import type { Pattern } from '../patterns.ts';
+	import { fmt_ms, fmt_bytes } from './format.ts';
+	import { row_href } from './row-anchor.svelte.ts';
 
 	// `renders`: how many renders the CPU numbers add up (page mode); a wait pattern is one render's
 	let { patterns, busy_ms = 0, renders = 1, fns }: { patterns: Pattern[]; busy_ms?: number; renders?: number; fns?: string[] } = $props();

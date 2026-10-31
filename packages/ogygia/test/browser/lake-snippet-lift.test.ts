@@ -4,8 +4,8 @@
 // content and the snippet's hydrate then mismatched. It stays in place — settled and remembered all the
 // same — while a lake inside a FROZEN snippet (adopted HTML nothing hydrates) is the host's as before.
 import { expect, test } from 'vitest';
-import { lift, restore } from '../../src/runtime/lakes.js';
-import { runtime_session } from '../../src/runtime/session.js';
+import { lift, restore } from '../../src/runtime/lakes.ts';
+import { runtime_session } from '../../src/runtime/session.ts';
 
 test('a live snippet’s lake is left in place by its host’s lift and settled by its restore', () => {
 	document.body.innerHTML =

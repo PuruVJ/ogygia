@@ -2,7 +2,7 @@
  * Build a signed region capability URL (same shape as server-island holes).
  * Used by Region's lake branch for `render: 'live'`. Client build gets a stub that returns ''.
  */
-import { signing_key } from './signing-key.js';
+import { signing_key } from './signing-key.ts';
 import { sessionCookie } from 'virtual:ogygia/session-cookie';
 import { regionTtl } from 'virtual:ogygia/region-ttl';
 import { sign, region_mac_message } from 'virtual:ogygia/sign';
@@ -11,18 +11,18 @@ import { sign, region_mac_message } from 'virtual:ogygia/sign';
 import { resolve } from '$app/paths';
 import { building } from '$app/env';
 import { getRequestEvent } from 'virtual:ogygia/request-event';
-import { islands_endpoint, MAX_REGION_PROPS_LEN, capability_expiry } from './endpoint.js';
-import { current_facts } from '../plugin/facts.js';
-import { document_shared_lifetime, mint_ttl_sec } from './shared-cache.js';
-import { encode_region_props } from './region-props.js';
+import { islands_endpoint, MAX_REGION_PROPS_LEN, capability_expiry } from './endpoint.ts';
+import { current_facts } from '../plugin/facts.ts';
+import { document_shared_lifetime, mint_ttl_sec } from './shared-cache.ts';
+import { encode_region_props } from './region-props.ts';
 import { stringify } from 'devalue';
-import { record_server_event } from '../devtools/server-registry.js';
+import { record_server_event } from '../devtools/server-registry.ts';
 
 // DEVTOOLS gate — server realm; off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
-import { B64Url } from './payload.js';
-import { REF_WIRE_KEY, ref_reducer } from '../ref.js';
-import { ensure_prop_kinds } from './region-props.js';
+import { B64Url } from './payload.ts';
+import { REF_WIRE_KEY, ref_reducer } from '../ref.ts';
+import { ensure_prop_kinds } from './region-props.ts';
 import { island_url, island_render } from 'virtual:ogygia/server-manifest';
 import { islandCss } from 'virtual:ogygia/island-deps';
 
@@ -167,7 +167,7 @@ export function makeRegionEndpoint(entry: string, props: Record<string, unknown>
 	return mint_region_capability(entry, payload);
 }
 
-export { encode_region_props } from './region-props.js';
+export { encode_region_props } from './region-props.ts';
 /** The island `data-og-fp` (server/fingerprint.ts) — Region.svelte reaches it through this
  *  client-stubbed virtual, so the native digest never enters the client graph. */
-export { island_fingerprint as islandFingerprint } from './fingerprint.js';
+export { island_fingerprint as islandFingerprint } from './fingerprint.ts';

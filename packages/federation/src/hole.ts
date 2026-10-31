@@ -11,7 +11,7 @@
  */
 import type { DeferredRegion } from 'ogygia';
 import { deferredRegion } from 'ogygia/plugin';
-import type { Claims } from './wire.js';
+import type { Claims } from './wire.ts';
 
 /** What the handle installs: sign a hole and return its fetch URL, or null if it cannot. */
 export type HoleSigner = (spec: {

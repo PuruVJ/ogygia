@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import { compile } from 'svelte/compiler';
-import { transformHost } from '../src/compiler/region/transform.js';
+import { transformHost } from '../src/compiler/region/transform.ts';
 
 const ctx = {
 	root: '/app',

@@ -2,10 +2,10 @@
 // `join_batch`); a lone hole and a hole whose request the HTML already started (its parse-time
 // `<link rel="preload" as="fetch">`) do not.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { join_batch } from '../../src/runtime/frame-nav.js';
-import { _reset, ensure, peek } from '../../src/runtime/frame-store.js';
-import { frameAddress } from '../../src/frame.js';
-import { build_parcel, done_parcel } from '../../src/server/stream-regions.js';
+import { join_batch } from '../../src/runtime/frame-nav.ts';
+import { _reset, ensure, peek } from '../../src/runtime/frame-store.ts';
+import { frameAddress } from '../../src/frame.ts';
+import { build_parcel, done_parcel } from '../../src/server/stream-regions.ts';
 
 // (the address is the call — id + props — so each hole gets its own props)
 const ep = (sig: string) => `/__ogygia__?id=aaaaaaaaaaaa&props=${sig}&exp=9999999999&sig=${sig}`;

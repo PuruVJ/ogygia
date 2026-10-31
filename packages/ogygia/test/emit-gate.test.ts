@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-import { island_host_loaded, parse_ssr_hosts, ssr_hosts_handoff_path } from '../src/compiler/link/emit-gate.js';
-import { host_key } from '../src/compiler/program.js';
+import { island_host_loaded, parse_ssr_hosts, ssr_hosts_handoff_path } from '../src/compiler/link/emit-gate.ts';
+import { host_key } from '../src/compiler/program.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The client-leg island emit gate. The prescan registers every marked import under src/ (both legs,

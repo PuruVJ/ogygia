@@ -14,7 +14,7 @@
  * component was never loaded) has no subgraph in the graph yet — it simply doesn't appear here until
  * it wakes. Pure over the nodes it's handed; reads, never mutates.
  */
-import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.js';
+import { hydration_hazards, type IslandHazard } from '../../profiler/hydration-hazards.ts';
 
 /** Structural shape of a Vite dev module-graph node (the fields the byte walk reads). */
 export type ByteGraphModule = {

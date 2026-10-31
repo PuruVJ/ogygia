@@ -4,7 +4,7 @@
 // island wake.
 import { expect, inject, test } from 'vitest';
 import { page } from 'vitest/browser';
-import { bootDev } from '../../src/runtime/full.js';
+import { bootDev } from '../../src/runtime/full.ts';
 
 const HYDRATED = 'ogygia-region[data-hydrated]';
 

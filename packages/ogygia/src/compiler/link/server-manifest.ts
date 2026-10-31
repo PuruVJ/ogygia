@@ -5,7 +5,7 @@
  * build (unlike the client manifest, which dev fills from URLs); the client build gets an empty map.
  * A whole-program emitter: it reads the Program's descriptor registry.
  */
-import type { Program } from '../program.js';
+import type { Program } from '../program.ts';
 
 /** The SERVER-island ids the manifest carries right now (deferred / server-picked regions). */
 export function server_island_ids(program: Program): string[] {

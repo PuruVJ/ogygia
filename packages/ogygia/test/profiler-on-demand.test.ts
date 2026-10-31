@@ -5,7 +5,7 @@
  * request. `skip === true` means "go straight to the core handle; do not import/parse/init the profiler".
  */
 import { describe, it, expect } from 'vitest';
-import { profiler_demand_skip } from '../src/profiler/on-demand.js';
+import { profiler_demand_skip } from '../src/profiler/on-demand.ts';
 
 const P = '/__profiler';
 

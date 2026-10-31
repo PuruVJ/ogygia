@@ -9,19 +9,19 @@
 	 * waterfall of every island's wake (module → turn → hydrate, against FCP / LCP / DCL / load), the
 	 * files that blocked the first paint, and the bytes by type. The analysis is page-insights.ts.
 	 */
-	import { read_page, cpu_of, summary_lines } from './page.js';
-	import { first_difference, rate } from './page-insights.js';
-	import { beacon_record_cpu } from '../runtime/beacon.js';
-	import { read_styles, scan_unscoped, styles_findings } from './styles.js';
-	import { hole_segments, HOLE_SEG_LABEL } from './hole-segments.js';
-	import { cache_findings, probe_cache } from './cache-headers.js';
+	import { read_page, cpu_of, summary_lines } from './page.ts';
+	import { first_difference, rate } from './page-insights.ts';
+	import { beacon_record_cpu } from '../runtime/beacon.ts';
+	import { read_styles, scan_unscoped, styles_findings } from './styles.ts';
+	import { hole_segments, HOLE_SEG_LABEL } from './hole-segments.ts';
+	import { cache_findings, probe_cache } from './cache-headers.ts';
 
 	let { tick = 0, focus = $bindable(null), selected = $bindable(null) } = $props();
 
 	// THE PAGE'S STYLES: read once the tab opens (selectors tried against the page, the build's
 	// unscoped markers fetched from the cache), after each in-app navigation, and on "check again" —
 	// not on every tick
-	let styles = $state(/** @type {import('./styles.js').StylesReport | null} */ (null));
+	let styles = $state(/** @type {import('./styles.ts').StylesReport | null} */ (null));
 	let styles_busy = $state(false);
 	async function check_styles() {
 		styles_busy = true;
@@ -35,7 +35,7 @@
 		styles_busy = false;
 	}
 	// HOW THE HOST CACHES THE ISLANDS' FILES (cache-headers.ts): asked once per page, beside the styles
-	let cache = $state(/** @type {import('./cache-headers.js').CacheProbe[] | null} */ (null));
+	let cache = $state(/** @type {import('./cache-headers.ts').CacheProbe[] | null} */ (null));
 	async function check_cache() {
 		try {
 			cache = await probe_cache(document);

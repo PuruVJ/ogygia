@@ -23,11 +23,11 @@ import {
 	seed_ref_reviver,
 	set_measure_memo_reader,
 	type MeasureMemo
-} from '../src/seed-refs.js';
+} from '../src/seed-refs.ts';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';
-import { DocumentTail, set_tail_reader } from '../src/server/document-tail.js';
+import { DocumentTail, set_tail_reader } from '../src/server/document-tail.ts';
 import { page } from '$app/state';
 
 const big = (label: string, n = 4) => ({

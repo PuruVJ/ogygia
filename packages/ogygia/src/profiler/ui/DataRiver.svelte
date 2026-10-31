@@ -5,8 +5,8 @@
 	 * carries and who reads it). A key that no island reads ends in red: fetched and shipped for no
 	 * one. A `wake:'load'` island; hover a band or a node.
 	 */
-	import type { River, RiverNode, RiverLink } from '../river.js';
-	import { fmt_bytes, fmt_ms } from './format.js';
+	import type { River, RiverNode, RiverLink } from '../river.ts';
+	import { fmt_bytes, fmt_ms } from './format.ts';
 
 	let { river }: { river: River } = $props();
 

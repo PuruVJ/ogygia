@@ -3,15 +3,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { fill_profiler_maps } from '../src/vite/profiler-maps.js';
-import { PROFILER_MAPS_PLACEHOLDER } from '../src/compiler/ids.js';
+import { fill_profiler_maps } from '../src/vite/profiler-maps.ts';
+import { PROFILER_MAPS_PLACEHOLDER } from '../src/compiler/ids.ts';
 import {
 	embedded_files,
 	embedded_key,
 	embedded_source,
 	GZ_PREFIX,
 	load_embedded_maps
-} from '../src/profiler/embedded-maps.js';
+} from '../src/profiler/embedded-maps.ts';
 
 // a build's embedded maps: the app's own file, a workspace package's `src/` (reached by `../`), a
 // dependency
@@ -39,8 +39,8 @@ vi.mock('virtual:ogygia/profiler-maps', () => ({
 		}
 	})
 }));
-import { module_imports, route_imports } from '../src/profiler/route-imports.js';
-import { sourcemap_resolver } from '../src/profiler/analyze.js';
+import { module_imports, route_imports } from '../src/profiler/route-imports.ts';
+import { sourcemap_resolver } from '../src/profiler/analyze.ts';
 
 // The profiler's maps travel inside the code, so any adapter ships them; a map that points at another
 // built file is followed one step further.

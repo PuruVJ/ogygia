@@ -4,14 +4,14 @@
 // before any inline-script probe, and the shared IntersectionObserver.
 import { beforeEach, expect, inject, test } from 'vitest';
 import { page } from 'vitest/browser';
-import { bootDev } from '../../src/runtime/full.js';
-import { props_sidecar_of } from '../../src/runtime/sidecar.js';
-import { parse_sidecar_text, prepare_spa_document } from '../../src/runtime/seeds.js';
-import { KitBoot, kit_hydrates_page } from '../../src/runtime/kit-boot.js';
-import { observe, observer_count, once_visible } from '../../src/runtime/observe.js';
-import { page_state } from '../../src/shims/page-store.svelte.js';
-import { runtime_session } from '../../src/runtime/session.js';
-import { link_boot } from '../../src/runtime/boot-link.js';
+import { bootDev } from '../../src/runtime/full.ts';
+import { props_sidecar_of } from '../../src/runtime/sidecar.ts';
+import { parse_sidecar_text, prepare_spa_document } from '../../src/runtime/seeds.ts';
+import { KitBoot, kit_hydrates_page } from '../../src/runtime/kit-boot.ts';
+import { observe, observer_count, once_visible } from '../../src/runtime/observe.ts';
+import { page_state } from '../../src/shims/page-store.svelte.ts';
+import { runtime_session } from '../../src/runtime/session.ts';
+import { link_boot } from '../../src/runtime/boot-link.ts';
 
 // Some checks below drive the seeds module before (or without) a boot: link the boot helpers it
 // reaches through the registry (runtime/slots.ts `BootLink`), as the boot would.

@@ -7,7 +7,7 @@
  * Two typed axes: `data` (authored, schema-validated) and `meta` (format-derived, typed here).
  */
 import type { Component } from 'svelte';
-import type { Heading, LinkRef } from './index.js';
+import type { Heading, LinkRef } from './index.ts';
 import { region } from 'ogygia';
 import { prebaked_region } from 'ogygia/internal';
 import {
@@ -17,7 +17,7 @@ import {
 	type GlobMap,
 	type RawSource,
 	type Source
-} from './source.js';
+} from './source.ts';
 
 type Input<V> = GlobMap | RawSource<V>;
 export type BuilderOpts = { id?: (key: string) => string };

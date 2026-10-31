@@ -7,8 +7,8 @@
  * the longest lifetime among its members; members of expired entries are harmless — deleting a
  * gone key is a no-op).
  */
-import type { FreezeStore } from '../types.js';
-import { normalize_prefix, subtree_prefix } from '../key.js';
+import type { FreezeStore } from '../types.ts';
+import { normalize_prefix, subtree_prefix } from '../key.ts';
 
 // ── regexes
 const GLOB_ACTIVE_G = /[*?[\]\\]/g;

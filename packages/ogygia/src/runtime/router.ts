@@ -11,10 +11,10 @@
  * merge, body reconcile, seeds, a11y) is ./router-nav.ts, loaded on the first prefetch or
  * intercepted click. A visitor who never leaves the page never downloads it.
  */
-import { kit_hydrates_page } from './kit-boot.js';
-import { slots } from './slots.js';
-import { publish_nav } from './nav-handle.js';
-import { nearest_attr } from './nearest-attr.js';
+import { kit_hydrates_page } from './kit-boot.ts';
+import { slots } from './slots.ts';
+import { publish_nav } from './nav-handle.ts';
+import { nearest_attr } from './nearest-attr.ts';
 
 const WS = /\s+/;
 
@@ -204,7 +204,7 @@ function on_idle(fn: () => void, timeout = 1000) {
 }
 
 /** THE NAVIGATION (./router-nav.ts), loaded once, on first use. */
-type Nav = typeof import('./router-nav.js');
+type Nav = typeof import('./router-nav.ts');
 let nav_promise: Promise<Nav> | null = null;
 let loaded_nav: Nav | null = null;
 function nav(): Promise<Nav> {
@@ -212,7 +212,7 @@ function nav(): Promise<Nav> {
 	// (./slots.ts `BootLink`: it never imports this module, or both would be split out of the runtime).
 	slots.router_link ??= { document_key, jump_to_hash, push_state, replace_state };
 	if (!nav_promise)
-		nav_promise = import('./router-nav.js').then(
+		nav_promise = import('./router-nav.ts').then(
 			(m) => (loaded_nav = m),
 			(err) => {
 				nav_promise = null; // a failed load is retried by the next navigation, not cached

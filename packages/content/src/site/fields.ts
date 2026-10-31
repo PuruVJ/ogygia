@@ -12,7 +12,7 @@
  * Hand-written Standard Schema (the `string_arg` precedent in `server.ts`) so ogygia pulls no
  * valibot/zod dependency. Each returns `{ value }` or `{ issues }`.
  */
-import type { SchemaLike } from '../index.js';
+import type { SchemaLike } from '../index.ts';
 
 /** What every ogygia surface reads off a page. `title` is required; the rest carry blessed defaults. */
 export type PageFields = {

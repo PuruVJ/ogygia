@@ -8,7 +8,7 @@
  */
 import type { RegionValue } from 'ogygia';
 import type { Router } from 'ogygia/router';
-import type { Claims } from './wire.js';
+import type { Claims } from './wire.ts';
 
 /** Visitor claims resolver — `federate({ visitor })`. Reads the LIVE event (cookies, locals);
  *  runs on the shell for every hop, including hole-time fetches of deferred remote regions. */
@@ -114,7 +114,7 @@ export interface Peer {
 		search: string,
 		claims?: Claims,
 		traceparent?: string
-	): Promise<import('./wire.js').FragmentDocument>;
+	): Promise<import('./wire.ts').FragmentDocument>;
 	/** Transport: a mutation document — bypasses and invalidates the cache. */
 	postDoc(
 		path: string,
@@ -123,13 +123,13 @@ export interface Peer {
 		content_type: string,
 		claims?: Claims,
 		traceparent?: string
-	): Promise<import('./wire.js').FragmentDocument>;
+	): Promise<import('./wire.ts').FragmentDocument>;
 	/** Transport: a raw widget document. */
 	widgetDoc(
 		name: string,
 		props?: Record<string, string>,
 		opts?: { claims?: Claims; traceparent?: string }
-	): Promise<import('./wire.js').WidgetDocument>;
+	): Promise<import('./wire.ts').WidgetDocument>;
 	/** Thaw: drop cached documents carrying any of these tags (`'all'` = every entry). */
 	drop(tags: ReadonlySet<string> | 'all'): void;
 }

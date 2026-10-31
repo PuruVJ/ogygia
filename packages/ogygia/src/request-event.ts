@@ -25,7 +25,7 @@
  * ```
  */
 import { getContext } from 'svelte';
-import { KIT_REQUEST_CONTEXT, kit_request_event } from './server/kit-context.js';
+import { KIT_REQUEST_CONTEXT, kit_request_event } from './server/kit-context.ts';
 
 export function requestEvent<E = unknown>(): E | null {
 	try {

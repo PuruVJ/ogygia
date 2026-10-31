@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parse_yaml } from '../src/markdown/frontmatter.js';
+import { parse_yaml } from '../src/markdown/frontmatter.ts';
 
 describe('parse_yaml — empty & trivial', () => {
 	it('empty string → {}', () => {

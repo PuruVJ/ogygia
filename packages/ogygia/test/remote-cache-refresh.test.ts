@@ -2,7 +2,7 @@
 // remote queries and reconnects its live ones. From #38 (Kit 3: `refreshAll` missing from the
 // kit-remote client stub).
 import { describe, expect, it } from 'vitest';
-import { remote_cache, refresh_remote_instances } from '../src/shims/kit-remote/remote-cache.js';
+import { remote_cache, refresh_remote_instances } from '../src/shims/kit-remote/remote-cache.ts';
 
 describe('remote_cache.refresh_instances', () => {
 	it('calls refresh and reconnect on live instances', async () => {

@@ -6,16 +6,16 @@
 // (never a cookie value).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RequestEvent } from '@sveltejs/kit';
-import { profiler } from '../src/profiler/index.js';
+import { profiler } from '../src/profiler/index.ts';
 import {
 	AFTER_LOGIN_PARAM,
 	describe_cookie_diagnosis,
 	raw_cookie_values
-} from '../src/profiler/session-cookie.js';
+} from '../src/profiler/session-cookie.ts';
 
 // production auth (dev opens the profiler without a key)
 const dev_switch = vi.hoisted(() => ({ dev: true }));
-vi.mock('../src/profiler/env.js', () => ({ detect_dev: () => dev_switch.dev }));
+vi.mock('../src/profiler/env.ts', () => ({ detect_dev: () => dev_switch.dev }));
 
 const SECRET = 'prof-key';
 const BIG_JAR = Array.from({ length: 40 }, (_, i) => `app_cookie_${i}=${'x'.repeat(180)}`).join(

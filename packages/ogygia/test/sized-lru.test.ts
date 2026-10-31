@@ -4,13 +4,13 @@
  * two stores' behaviour on top of it (a multi-MB entry can never blow the budget).
  */
 import { describe, expect, it, beforeEach } from 'vitest';
-import { SizedLru } from '../src/server/sized-lru.js';
+import { SizedLru } from '../src/server/sized-lru.ts';
 import {
 	render_cache_clear,
 	render_cache_get,
 	render_cache_set,
 	render_cache_stats
-} from '../src/server/render-cache.js';
+} from '../src/server/render-cache.ts';
 
 describe('SizedLru', () => {
 	it('bounds bytes: the least recently used entries evict until the new one fits', () => {

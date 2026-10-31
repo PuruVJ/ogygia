@@ -10,9 +10,9 @@ import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';
-import { DocumentTail, set_tail_reader, document_tail, props_preview } from '../src/server/document-tail.js';
-import { decode_island_graph } from '../src/island-graph.js';
-import { set_island_deps } from './_stubs/virtual-island-deps.js';
+import { DocumentTail, set_tail_reader, document_tail, props_preview } from '../src/server/document-tail.ts';
+import { decode_island_graph } from '../src/island-graph.ts';
+import { set_island_deps } from './_stubs/virtual-island-deps.ts';
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 const kit_pass = KitPagePass as unknown as Component<Record<string, unknown>>;

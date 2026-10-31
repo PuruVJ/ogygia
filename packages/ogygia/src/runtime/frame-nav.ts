@@ -9,11 +9,11 @@
 // This is Ryan's test made concrete: request new server-component data on navigation, flush part of
 // the response, let the rest come in as the server's async settles.
 // ─────────────────────────────────────────────────────────────────────────────
-import { frameAddress } from '../frame.js';
-import { is_idle, reserve, release, ticket, write } from './frame-store.js';
-import { emit as dt_emit } from '../devtools/bus.js';
+import { frameAddress } from '../frame.ts';
+import { is_idle, reserve, release, ticket, write } from './frame-store.ts';
+import { emit as dt_emit } from '../devtools/bus.ts';
 
-import { beacon_hole_batch_missed } from './beacon.js';
+import { beacon_hole_batch_missed } from './beacon.ts';
 
 // DEVTOOLS gate — module-local const from the Vite `define` (proven DCE pattern); off → folds out.
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;

@@ -12,7 +12,7 @@
  * as `jsonb`, so a hosted dashboard can query inside it (`dump->'meta'->>'page'`) without shipping
  * the whole blob.
  */
-import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.js';
+import type { ProfilerStore, ProfilerRecord, ProfilerSummary, ProfilerVisitRecord } from './index.ts';
 
 /** browser visits kept per page (the profiler reads the latest ten) */
 const MAX_VISITS_PER_PAGE = 20;

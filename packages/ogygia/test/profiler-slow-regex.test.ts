@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { FrameStat } from '../src/profiler/analyze.js';
-import { build_ledger } from '../src/profiler/ledger.js';
-import { find_patterns } from '../src/profiler/patterns.js';
-import { backtracks, regex_literals } from '../src/profiler/source-scan.js';
+import type { FrameStat } from '../src/profiler/analyze.ts';
+import { build_ledger } from '../src/profiler/ledger.ts';
+import { find_patterns } from '../src/profiler/patterns.ts';
+import { backtracks, regex_literals } from '../src/profiler/source-scan.ts';
 
 // A regular expression slow to RUN: V8 profiles a compiled pattern as its own code (`RegExp: …`),
 // charged to the line that runs it, and named for what it is.

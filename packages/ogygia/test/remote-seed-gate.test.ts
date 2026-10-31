@@ -13,7 +13,7 @@ import {
 	remote_seed_wanted,
 	collect_remote_seed,
 	type ImplicitRemote
-} from '../src/server/remote-seed-gate.js';
+} from '../src/server/remote-seed-gate.ts';
 
 const key = (id: string, payload: string) => `${id}/${payload}`;
 const BAKED = Symbol.for('ogygia.baked-marker');

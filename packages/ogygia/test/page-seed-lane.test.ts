@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parse } from 'devalue';
-import { PageSeed } from '../src/server/page-seed.js';
+import { PageSeed } from '../src/server/page-seed.ts';
 
 const page = (data: unknown, error: unknown = null) => ({
 	url: { href: 'http://x/?q=<a>' },

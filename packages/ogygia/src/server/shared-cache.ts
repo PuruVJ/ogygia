@@ -20,7 +20,7 @@
  * (hooks.js) records and the mint (server/region-endpoint.js) reads, and dist entries can each carry
  * their own evaluation of this module — a module-local map would split the seam.
  */
-import { PRERENDER_REGION_TTL_SEC } from './endpoint.js';
+import { PRERENDER_REGION_TTL_SEC } from './endpoint.ts';
 
 /** The default for how long after expiry a capability can still be renewed
  *  (`regions.maxPageAge`): the longest a stale document is expected to live in a shared cache (a

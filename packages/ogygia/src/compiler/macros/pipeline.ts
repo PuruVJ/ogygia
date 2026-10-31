@@ -7,20 +7,20 @@
  * in sight. Pure over `(source, id, ctx)` apart from the `dollarHoists` map it fills and the profiler
  * timing it records; returns `{ code, touched }` (the caller invalidates its own sourcemap on touch).
  */
-import { path } from '../host.js';
+import { path } from '../host.ts';
 // Global in both Node (≥16) and the browser — no import, so this module loads in the browser compiler.
 const performance = globalThis.performance;
-import { rewrite_wire } from './wire.js';
-import { rewrite_dollar } from './dollar.js';
-import { rewrite_source } from './source.js';
-import { rewrite_store, auto_brand_stores } from './store.js';
+import { rewrite_wire } from './wire.ts';
+import { rewrite_dollar } from './dollar.ts';
+import { rewrite_source } from './source.ts';
+import { rewrite_store, auto_brand_stores } from './store.ts';
 // `bake` is imported LAZILY (only inside the marker guard below) — its two dynamic imports
 // (`import('rolldown')` + a `pathToFileURL(...)` module eval) are Node-only, and keeping bake.js out of
 // the STATIC graph is what lets the whole driver bundle into a browser worker (the Observatory) without
 // Vite's dep-optimizer double-declaring `__vite__injectQuery`. A build that uses no `import.meta.og.bake`
 // never loads bake.js (or rolldown) at all.
-import type { AliasEntry } from './bake.js';
-import type { Profiler } from '../driver.js';
+import type { AliasEntry } from './bake.ts';
+import type { Profiler } from '../driver.ts';
 
 /** A plugin's `import.meta.og.<name>` macro (registered with `b.macro`). */
 export interface PluginMacro {
@@ -140,7 +140,7 @@ export async function run_module_macros(
 	// Runs before the island transform so downstream sees plain data, not a call.
 	if (out.includes('import.meta.og.bake')) {
 		const __bk = profiler.P ? performance.now() : 0;
-		const { rewrite_bake } = await import('./bake.js'); // lazy — keeps bake's node-only graph out of the worker
+		const { rewrite_bake } = await import('./bake.ts'); // lazy — keeps bake's node-only graph out of the worker
 		const rewritten = await rewrite_bake(out, id, {
 			alias: ctx.resolveAlias as AliasEntry[],
 			root: ctx.root,

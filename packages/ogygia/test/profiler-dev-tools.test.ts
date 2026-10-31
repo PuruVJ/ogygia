@@ -2,7 +2,7 @@
 // (profiler/report.ts `dev_tool_caller`): a sampled origin in a dev tool's package — never the app's
 // line, never a runtime library the build keeps.
 import { expect, test } from 'vitest';
-import { dev_tool_caller, mostly_waited } from '../src/profiler/report.js';
+import { dev_tool_caller, mostly_waited } from '../src/profiler/report.ts';
 
 test('mostly waiting is read off one render, not the window the profiler idled in', () => {
 	// a page rendering in 0.4 ms: the window was idle between renders, the render waited on nothing

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rewrite_code, type CodeCall } from '../src/macros/code.js';
+import { rewrite_code, type CodeCall } from '../src/macros/code.ts';
 import { dedent } from 'ogygia/internal/compiler-browser';
 
 const MARKUP = ['.svelte'] as const;

@@ -2,12 +2,12 @@
 	/** Components table — a `wake:'load'` island with reactive column sort (was TABLE_SORT_JS + the
 	 *  string row builder). Sorts by self/total/per-call/alloc; a row expands to the component's
 	 *  full location and the call stacks that rendered it. */
-	import type { FrameStat } from '../analyze.js';
-	import { fmt_ms, fmt_dur, fmt_pct, fmt_bytes, CATEGORY_COLOR } from './format.js';
-	import { sortable } from './sort.svelte.js';
-	import { pressable } from './press.js';
+	import type { FrameStat } from '../analyze.ts';
+	import { fmt_ms, fmt_dur, fmt_pct, fmt_bytes, CATEGORY_COLOR } from './format.ts';
+	import { sortable } from './sort.svelte.ts';
+	import { pressable } from './press.ts';
 	import FrameDetails from './FrameDetails.svelte';
-	import { row_id, follow_hash } from './row-anchor.svelte.js';
+	import { row_id, follow_hash } from './row-anchor.svelte.ts';
 
 	type Row = FrameStat & { per: number; count: number; alloc: number | null };
 	let {

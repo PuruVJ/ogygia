@@ -8,7 +8,7 @@ import {
 	liftRegions,
 	restoreRegions,
 	type RegionSpan
-} from '../src/server/split-regions.js';
+} from '../src/server/split-regions.ts';
 
 const kinds = (html: string) => [...scanRegions(html)].map((r) => r.kind);
 const one = (html: string): RegionSpan => {

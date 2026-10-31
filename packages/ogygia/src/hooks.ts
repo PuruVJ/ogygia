@@ -27,20 +27,20 @@ import * as devalue from 'devalue';
 import { islands as island_modules, island_url, island_name, island_reads_page_data, render_island } from 'virtual:ogygia/server-manifest';
 import { islandCss, islandDeps, fnManifest } from 'virtual:ogygia/island-deps';
 import { create_remote_key } from 'virtual:ogygia/kit-wire';
-import { REGION_BRAND } from './region-brand.js';
-import { signing_key } from './server/signing-key.js';
+import { REGION_BRAND } from './region-brand.ts';
+import { signing_key } from './server/signing-key.ts';
 import { rateLimit as rate_limit_cfg } from 'virtual:ogygia/rate-limit';
 import { sessionCookie as session_cookie } from 'virtual:ogygia/session-cookie';
 import { enabled as router_enabled, viewTransitions as router_view_transitions } from 'virtual:ogygia/router-config';
-import { mpaSpeculationRules } from './compiler/link/speculation.js';
+import { mpaSpeculationRules } from './compiler/link/speculation.ts';
 import { profilerConfig } from 'virtual:ogygia/profiler-config';
 /** DEMAND-ONLY profiler: gate the profiler import behind a request to its path. Both read off the plain
  *  config object — no profiler code loaded to decide. `path` mirrors ProfilerOptions.path (default). */
 const PROFILER_ON_DEMAND = !!(profilerConfig as { onDemand?: boolean } | null)?.onDemand;
 const PROFILER_UI_PATH = (profilerConfig as { path?: string } | null)?.path || '/__profiler';
-import { profiler_demand_skip } from './profiler/on-demand.js';
+import { profiler_demand_skip } from './profiler/on-demand.ts';
 import { route_options } from 'virtual:ogygia/route-options';
-import { set_page_route_options } from './plugin/routes.js';
+import { set_page_route_options } from './plugin/routes.ts';
 import {
 	set_kit_page_reader,
 	set_kit_event_reader,
@@ -48,8 +48,8 @@ import {
 	kit_page_ready,
 	kit_page_facts_tail,
 	kit_render_context
-} from './server/kit-context.js';
-import { PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from './server/page-facts.js';
+} from './server/kit-context.ts';
+import { PAGE_FACTS_HEADER, PAGE_FACTS_ROUTE_HEADER } from './server/page-facts.ts';
 import {
 	configure_render_page,
 	note_render_page_ask,
@@ -58,31 +58,31 @@ import {
 	render_page,
 	render_page_facts_script,
 	render_page_version
-} from './server/render-page.js';
-import { absolutize_hole_html } from './server/hole-urls.js';
-import { KEEP_FALLBACK_HTML, is_keep_fallback } from './keep-fallback.js';
-import { set_source_recorder } from './source.js';
+} from './server/render-page.ts';
+import { absolutize_hole_html } from './server/hole-urls.ts';
+import { KEEP_FALLBACK_HTML, is_keep_fallback } from './keep-fallback.ts';
+import { set_source_recorder } from './source.ts';
 import { building, dev } from '$app/env';
 import runtime_url from 'virtual:ogygia/runtime-url';
 import dev_hmr_url from 'virtual:ogygia/dev-hmr-url';
 // Kit's `asset()`, taking ogygia's base-less `/…` URLs on Kit 2 and Kit 3 alike
-import { kit_asset as asset } from './kit-paths.js';
+import { kit_asset as asset } from './kit-paths.ts';
 import devtools_boot_url from 'virtual:ogygia/devtools-boot-url';
-import { sign, verify, region_mac_message } from './server/hmac.js';
-import { note_cache_control, renewable_expiry } from './server/shared-cache.js';
+import { sign, verify, region_mac_message } from './server/hmac.ts';
+import { note_cache_control, renewable_expiry } from './server/shared-cache.ts';
 import { regionTtl, renewWindow } from 'virtual:ogygia/region-ttl';
-import { render_cache_key, cached_render } from './server/render-cache.js';
-import { B64Url } from './server/payload.js';
-import { REF_WIRE_KEY, ref_reviver } from './ref.js';
+import { render_cache_key, cached_render } from './server/render-cache.ts';
+import { B64Url } from './server/payload.ts';
+import { REF_WIRE_KEY, ref_reviver } from './ref.ts';
 import { plugins as plugin_entries } from 'virtual:ogygia/server-plugins';
-import type { RequestContext } from './plugin/index.js';
-import { current_facts, facts_of, mark_per_visitor, set_current_request, type RequestFacts } from './plugin/facts.js';
-import { request_contexts, start_plugins } from './plugin/server.js';
+import type { RequestContext } from './plugin/index.ts';
+import { current_facts, facts_of, mark_per_visitor, set_current_request, type RequestFacts } from './plugin/facts.ts';
+import { request_contexts, start_plugins } from './plugin/server.ts';
 // PULL-registration at decode time (idempotent; no import-time side effects).
-import { register_wire_kind } from './live-transport.js';
-import { register_store_kind, register_derived_kind } from './store-transport.js';
-import { register_snippet_kind } from './region-snippet.js';
-import { register_fn_kind } from './fn-transport.js';
+import { register_wire_kind } from './live-transport.ts';
+import { register_store_kind, register_derived_kind } from './store-transport.ts';
+import { register_snippet_kind } from './region-snippet.ts';
+import { register_fn_kind } from './fn-transport.ts';
 import {
 	configure_islands_endpoint,
 	islands_endpoint,
@@ -90,8 +90,8 @@ import {
 	is_region_id,
 	is_region_ttl,
 	capability_expiry
-} from './server/endpoint.js';
-import { build_parcel, done_parcel } from './server/stream-regions.js';
+} from './server/endpoint.ts';
+import { build_parcel, done_parcel } from './server/stream-regions.ts';
 import {
 	page_declares_router_meta,
 	page_declares_runtime_script,
@@ -99,39 +99,39 @@ import {
 	page_declares_speculation_rules,
 	dedupe_head_links,
 	runtime_first
-} from './server/head-presence.js';
-import { locate, assemble } from './server/document-assembly.js';
-import { error_route_is_csr_true, route_is_csr_true } from './context.js';
-import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.js';
-import { html_has_kit_bootstrap } from './runtime/kit-boot.js';
-import { check_script, mark, settle, STAND_IN_CSS, type TransformKind } from './server/reversible.js';
-import { hole_head } from './server/hole-graph.js';
-import { restore, restore_adopt } from './runtime/restore.js';
-import { RateLimiter } from './server/rate-limit.js';
-import { PageSeed } from './server/page-seed.js';
-import { analyze, index_seed, set_measure_memo_reader, type MeasureMemo } from './seed-refs.js';
-import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.js';
+} from './server/head-presence.ts';
+import { locate, assemble } from './server/document-assembly.ts';
+import { error_route_is_csr_true, route_is_csr_true } from './context.ts';
+import { merge_seed_ask, shape_page_data, type SeedKeys } from './server/seed-shape.ts';
+import { html_has_kit_bootstrap } from './runtime/kit-boot.ts';
+import { check_script, mark, settle, STAND_IN_CSS, type TransformKind } from './server/reversible.ts';
+import { hole_head } from './server/hole-graph.ts';
+import { restore, restore_adopt } from './runtime/restore.ts';
+import { RateLimiter } from './server/rate-limit.ts';
+import { PageSeed } from './server/page-seed.ts';
+import { analyze, index_seed, set_measure_memo_reader, type MeasureMemo } from './seed-refs.ts';
+import { WIRE_FORMAT_ATTR, WIRE_FORMAT_JSON } from './server/props-wire.ts';
 import {
 	stage_deferred,
 	settle_deferred,
 	resolve_script,
 	page_seed_reducers,
 	type Deferred
-} from './server/page-stream.js';
-import { PAGE_DEFER_BOOTSTRAP, PAGE_DEFER_GLOBAL } from './page-defer.js';
-import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.js';
+} from './server/page-stream.ts';
+import { PAGE_DEFER_BOOTSTRAP, PAGE_DEFER_GLOBAL } from './page-defer.ts';
+import { ConcurrencyGate, REGION_RENDER_CONCURRENCY } from './runtime/concurrency.ts';
 import { createHash } from 'node:crypto';
 import { stringify } from 'devalue';
-import { serialize_provided_context } from './context-bridge.js';
-import { escape_script_text } from './escape.js';
-import { hole_copy_key } from './runtime/hash.js';
-import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.js';
-import { set_ask_scope_opener, set_page_recorder, set_seed_ask_reader, type PageSnapshot } from './page-seed-registry.js';
-import { collect_remote_seed } from './server/remote-seed-gate.js';
-import { DocumentTail, set_tail_reader } from './server/document-tail.js';
-import { runtime_bootstrap } from './server/entry-location.js';
-import { region_css_tag } from './server/region-css.js';
-import { set_late_recorder, set_late_scope_opener, set_late_taker, type LateRegion } from './late-region-registry.js';
+import { serialize_provided_context } from './context-bridge.ts';
+import { escape_script_text } from './escape.ts';
+import { hole_copy_key } from './runtime/hash.ts';
+import { PAGE_CTX_MARKER, set_ctx_recorder } from './context-registry.ts';
+import { set_ask_scope_opener, set_page_recorder, set_seed_ask_reader, type PageSnapshot } from './page-seed-registry.ts';
+import { collect_remote_seed } from './server/remote-seed-gate.ts';
+import { DocumentTail, set_tail_reader } from './server/document-tail.ts';
+import { runtime_bootstrap } from './server/entry-location.ts';
+import { region_css_tag } from './server/region-css.ts';
+import { set_late_recorder, set_late_scope_opener, set_late_taker, type LateRegion } from './late-region-registry.ts';
 import {
 	record_request_stats,
 	record_hole_stats,
@@ -139,14 +139,14 @@ import {
 	has_batch_hole_listener,
 	request_stats_detailed,
 	type SeedKeyStat
-} from './server/request-stats.js';
-import { json_culprit } from './seed-refs.js';
-import type { SeedAsk } from './server/seed-shape.js';
-import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.js';
-import { drop_dead_kit_resolves } from './server/dead-kit-resolves.js';
-import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.js';
-import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, TESTING_COOKIE, TESTING_LEAN, TESTING_PARAM, switch_in_url } from './devtools/switch.js';
-import { mark_personal } from './server/personal-response.js';
+} from './server/request-stats.ts';
+import { json_culprit } from './seed-refs.ts';
+import type { SeedAsk } from './server/seed-shape.ts';
+import { set_server_devtools_recorder, record_server_event } from './devtools/server-registry.ts';
+import { drop_dead_kit_resolves } from './server/dead-kit-resolves.ts';
+import { DEVTOOLS_SCHEMA_VERSION, type DevtoolsEvent, type DevtoolsEventInput } from './devtools/schema.ts';
+import { DEVTOOLS_COOKIE, DEVTOOLS_ON, SWITCH_COOKIE_OPTIONS, TESTING_COOKIE, TESTING_LEAN, TESTING_PARAM, switch_in_url } from './devtools/switch.ts';
+import { mark_personal } from './server/personal-response.ts';
 
 /** Is devtools on for this request's browser (a devtools BUILD): the URL's `?og-devtools=on|off`
  *  wins and is written to the response's cookie, else the cookie (devtools/switch.ts). */
@@ -194,7 +194,7 @@ type RequestBag = {
 	seed_wanted: boolean;
 	/** SEED SHAPING: the union of the regions' asks — the `page.data` keys to ship, or `'all'`
 	 *  (some region's reads could not be pinned). `null` until a region asks (then `seed_wanted`). */
-	seed_keys: import('./server/seed-shape.js').SeedKeys | null;
+	seed_keys: import('./server/seed-shape.ts').SeedKeys | null;
 	/** each region's own ask, by entry — the seed explainer's "who reads what" (detail only) */
 	seed_asks: Map<string, SeedAsk> | null;
 	/** The remote modules (Kit id-hashes) some region's client code on this page can call — the
@@ -702,10 +702,10 @@ class OgygiaHandle {
 		if (this.#profiler !== undefined) return this.#profiler;
 		if (!profilerConfig) return (this.#profiler = null);
 		try {
-			const { profiler } = await import('./profiler/index.js');
+			const { profiler } = await import('./profiler/index.ts');
 			// a runtime store (set via `setProfilerStore` in hooks.server.ts) — a live DB object the
 			// build-time config could not carry; merged over the serializable config here
-			const { getProfilerStore } = await import('./profiler/storage/index.js').catch(() => ({ getProfilerStore: () => undefined }));
+			const { getProfilerStore } = await import('./profiler/storage/index.ts').catch(() => ({ getProfilerStore: () => undefined }));
 			const store = getProfilerStore();
 			this.#profiler = profiler({ ...(profilerConfig as Parameters<typeof profiler>[0]), ...(store ? { store } : {}) });
 		} catch {
@@ -1395,7 +1395,7 @@ class OgygiaHandle {
 	 */
 	explain_seed(
 		data: unknown,
-		seed_keys: import('./server/seed-shape.js').SeedKeys | null,
+		seed_keys: import('./server/seed-shape.ts').SeedKeys | null,
 		bag: RequestBag
 	): { keys: SeedKeyStat[]; whole_by: string[] } {
 		// islands by their component name (the tail's rows carry it); an entry no row names keeps
@@ -2076,9 +2076,9 @@ export interface OgygiaHandleOptions {
 // Also surfaced here so `import * as ogygia from 'ogygia/server'` has `ogygia.transport` — but the
 // actual Kit transport hook must live in the UNIVERSAL hooks (client needs decode), so wire it
 // from `'ogygia'` in src/hooks.ts, not here.
-export { ogygiaTransport as transport } from './transport.js';
+export { ogygiaTransport as transport } from './transport.ts';
 // `document()` — render a held region into a complete ogygia document (a `Response`). Server-only.
-export { document, type DocumentOptions } from './document.js';
+export { document, type DocumentOptions } from './document.ts';
 // The region round-trip for an app that runs a third-party SSR/hydration pass over the document and
 // must not reshape island bytes: `scanRegions()` walks the `<ogygia-region>` subtrees;
 // `liftRegions()` / `restoreRegions()` take them out and splice them back (marks merged). Also on
@@ -2091,7 +2091,7 @@ export {
 	type RegionKind,
 	type LiftedRegion,
 	type LiftResult
-} from './server/split-regions.js';
+} from './server/split-regions.ts';
 
 export function handle(options: OgygiaHandleOptions = {}): Handle {
 	const instance = new OgygiaHandle(options);

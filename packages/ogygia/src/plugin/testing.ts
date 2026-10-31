@@ -7,10 +7,10 @@
  *   await server.request?.(ctx(new Request('http://x/')));
  */
 import type { RequestEvent } from '@sveltejs/kit';
-import type { RequestContext, ServerApp, ServerPlugin } from './index.js';
+import type { RequestContext, ServerApp, ServerPlugin } from './index.ts';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { facts_of } from './facts.js';
-import { request_contexts, start_plugins, type AppSigner } from './server.js';
+import { facts_of } from './facts.ts';
+import { request_contexts, start_plugins, type AppSigner } from './server.ts';
 
 /** A real HMAC under a key made for this test process. */
 const TEST_KEY = randomBytes(32);

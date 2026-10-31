@@ -19,12 +19,12 @@ export {
 	type RegionSpan,
 	type LiftedRegion,
 	type LiftResult
-} from './server/split-regions.js';
+} from './server/split-regions.ts';
 export {
 	transformMarkup,
 	localizeMarks,
 	check_script as checkScript,
 	type Settled,
 	type TransformKind
-} from './server/reversible.js';
-export { restore } from './runtime/restore.js';
+} from './server/reversible.ts';
+export { restore } from './runtime/restore.ts';

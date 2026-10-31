@@ -11,7 +11,7 @@
  * ogygia URL against the endpoint request URL and emit it root-absolute (Kit `base` included).
  * Absolute (`/…`) and scheme'd (foreign federation entries) values are left alone.
  */
-import { escape_amp } from '../escape.js';
+import { escape_amp } from '../escape.ts';
 
 // The attribute sites ogygia writes URLs into hole HTML: an `<ogygia-region>`'s `entry` / `src` /
 // `endpoint`, a region-css `<link>`'s `href`, an inlined region sheet's `data-ogygia-region-css`

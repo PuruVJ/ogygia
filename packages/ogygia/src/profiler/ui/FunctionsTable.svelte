@@ -1,12 +1,12 @@
 <script lang="ts">
 	/** Hot-functions table — a `wake:'load'` island with reactive column sort, a name/file filter,
 	 *  and an expandable row per function (full location + its heaviest call stacks). */
-	import type { FrameStat } from '../analyze.js';
-	import { fmt_ms, fmt_dur, fmt_bytes, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.js';
-	import { sortable } from './sort.svelte.js';
-	import { pressable } from './press.js';
+	import type { FrameStat } from '../analyze.ts';
+	import { fmt_ms, fmt_dur, fmt_bytes, CATEGORY_COLOR, CATEGORY_LABEL, ink_on } from './format.ts';
+	import { sortable } from './sort.svelte.ts';
+	import { pressable } from './press.ts';
 	import FrameDetails from './FrameDetails.svelte';
-	import { row_id, follow_hash } from './row-anchor.svelte.js';
+	import { row_id, follow_hash } from './row-anchor.svelte.ts';
 
 	type Row = FrameStat & { per: number; count: number; alloc: number | null };
 	let {

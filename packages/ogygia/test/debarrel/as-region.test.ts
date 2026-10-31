@@ -7,9 +7,9 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { fixture, type Fixture } from './_fixture.js';
-import { transformTsRegions, asRegionLocals } from '../../src/compiler/region/transform.js';
-import { ogygia } from '../../src/vite/index.js';
+import { fixture, type Fixture } from './_fixture.ts';
+import { transformTsRegions, asRegionLocals } from '../../src/compiler/region/transform.ts';
+import { ogygia } from '../../src/vite/index.ts';
 
 let f: Fixture;
 afterEach(() => f?.dispose());

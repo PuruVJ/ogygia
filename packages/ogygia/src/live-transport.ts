@@ -28,14 +28,14 @@
  * (build tag → class) and the codec protocol.
  */
 
-import { slots } from './runtime/slots.js';
+import { slots } from './runtime/slots.ts';
 // EXPLICIT kind registration (never bare side-effect imports — the package marks JS
 // side-effect-free, so a bundler tree-shakes those and the kind silently vanishes
 // from client bundles; a CALLED import cannot be dropped).
-import { register_snippet_kind } from './region-snippet.js';
-import { register_store_kind, register_derived_kind } from './store-transport.js';
-import { register_fn_kind } from './fn-transport.js';
-import { register_kind, mint, resolve, REF_WIRE_KEY, type Ref } from './ref.js';
+import { register_snippet_kind } from './region-snippet.ts';
+import { register_store_kind, register_derived_kind } from './store-transport.ts';
+import { register_fn_kind } from './fn-transport.ts';
+import { register_kind, mint, resolve, REF_WIRE_KEY, type Ref } from './ref.ts';
 
 /** Feature entry: register every props-seam kind, then fill the `wire` slot so core resolves
  *  ANY transportable kind from `data-ogygia-props` through the one hub key. */

@@ -5,8 +5,8 @@
 // injects the scoped <style> — the same rescue region_fragment runs for a fetched answer, here for
 // the links the SSR baked onto the page. Simulated with a data: module that appends a known style.
 import { expect, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
-import { island_module_url } from '../../src/runtime/region-endpoint-url.js';
+import { bootDev } from '../../src/runtime/full.ts';
+import { island_module_url } from '../../src/runtime/region-endpoint-url.ts';
 
 // Strips the document's filename so what is left is its directory (for a relative href).
 const FILENAME_TAIL_RE = /[^/]*$/;

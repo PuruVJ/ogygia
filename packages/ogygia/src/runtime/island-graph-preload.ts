@@ -14,9 +14,9 @@
  * next: nothing to invalidate. A router warm reads the NEXT page's graph out of its fetched HTML
  * (`register_island_graph`) before that page is in the DOM.
  */
-import { ISLAND_GRAPH_ATTR, decode_island_graph, decode_island_locations } from '../island-graph.js';
-import { note_entry_location } from './entry-locations.js';
-import { runtime_session } from './session.js';
+import { ISLAND_GRAPH_ATTR, decode_island_graph, decode_island_locations } from '../island-graph.ts';
+import { note_entry_location } from './entry-locations.ts';
+import { runtime_session } from './session.ts';
 
 const GRAPH_SELECTOR = `script[${ISLAND_GRAPH_ATTR}]`;
 const MODULEPRELOAD_SELECTOR = 'link[rel="modulepreload"]';

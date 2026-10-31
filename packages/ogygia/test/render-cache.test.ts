@@ -9,7 +9,7 @@ import {
 	render_cache_set,
 	render_cache_clear,
 	cached_render
-} from '../src/server/render-cache.js';
+} from '../src/server/render-cache.ts';
 
 beforeEach(() => render_cache_clear());
 

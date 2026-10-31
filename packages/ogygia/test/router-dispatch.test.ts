@@ -5,7 +5,7 @@
  * spine through endpoints and loads (no runtime needed).
  */
 import { describe, it, expect } from 'vitest';
-import { routes, load, redirect, error } from '../src/router/index.js';
+import { routes, load, redirect, error } from '../src/router/index.ts';
 
 const req = (path: string, init?: RequestInit) => new Request('http://x' + path, init);
 
@@ -159,7 +159,7 @@ describe('loads — memoization + parent-sharing (no waterfall, no waste)', () =
 
 describe('entries — prerender param sets for dynamic patterns', () => {
 	it('fills declared entries into the crawl list; undeclared dynamics are skipped', async () => {
-		const { page } = await import('../src/router/index.js');
+		const { page } = await import('../src/router/index.ts');
 		const { default: RawHtml } = await import('../src/RawHtml.svelte');
 		const app = routes(
 			{

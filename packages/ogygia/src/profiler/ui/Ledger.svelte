@@ -5,10 +5,10 @@
 	 * bytes kept alive). The tables below rank functions; this ranks the line a person edits.
 	 * Static markup: the first rows show, the rest sit in a <details>.
 	 */
-	import type { LedgerLine } from '../ledger.js';
-	import { PATTERN_LABEL, type Pattern } from '../patterns.js';
-	import { fmt_ms, fmt_bytes } from './format.js';
-	import { row_href } from './row-anchor.svelte.js';
+	import type { LedgerLine } from '../ledger.ts';
+	import { PATTERN_LABEL, type Pattern } from '../patterns.ts';
+	import { fmt_ms, fmt_bytes } from './format.ts';
+	import { row_href } from './row-anchor.svelte.ts';
 
 	let { lines, patterns = [], shown = 8, renders = 1, fns }: { lines: LedgerLine[]; patterns?: Pattern[]; shown?: number; renders?: number; fns?: string[] } = $props();
 	// a line links to its function's row only when the functions table has that row

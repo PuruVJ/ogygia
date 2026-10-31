@@ -4,8 +4,8 @@
  * exactly what the browser's restorer needs — or strips everything, for a host without a plan.
  */
 import { describe, expect, it } from 'vitest';
-import { localizeMarks, mark, settle, transformMarkup } from '../src/server/reversible.js';
-import { fake_scoped } from './fixtures/fake-scoped-render.js';
+import { localizeMarks, mark, settle, transformMarkup } from '../src/server/reversible.ts';
+import { fake_scoped } from './fixtures/fake-scoped-render.ts';
 
 const island = (inner: string) => `<ogygia-region entry="./a.js" data-og-fp="f1">${inner}</ogygia-region>`;
 const doc = (body: string) => `<!doctype html><html><head><title>t</title></head><body>${body}</body></html>`;

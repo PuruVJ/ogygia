@@ -9,10 +9,10 @@
 import { version } from '$app/env';
 import type { RequestEvent } from '@sveltejs/kit';
 import type { ServerApp } from 'ogygia/plugin';
-import { current_federation } from './registry.js';
-import { begin_source_capture, broadcast_thaw } from './federate.js';
-import { set_hole_signer } from './hole.js';
-import { fed_app } from './app.js';
+import { current_federation } from './registry.ts';
+import { begin_source_capture, broadcast_thaw } from './federate.ts';
+import { set_hole_signer } from './hole.ts';
+import { fed_app } from './app.ts';
 import {
 	verify_signed_request,
 	attach_claims,
@@ -28,8 +28,8 @@ import {
 	THAW_PATH,
 	type Claims,
 	type VerifyConfig
-} from './wire.js';
-import type { Federation, Peer } from './types.js';
+} from './wire.ts';
+import type { Federation, Peer } from './types.ts';
 
 const HOLE_PATH = '/og/frag';
 const HOLE_TTL_MS = 5 * 60_000; // a signed hole URL is good for 5 min (re-minted every render)

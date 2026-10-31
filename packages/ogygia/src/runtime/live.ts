@@ -4,7 +4,7 @@
  *
  * A HYDRATE-phase feature (link/runtime-entry.ts): installed by the hydrate core, never the boot.
  */
-import { slots } from './slots.js';
+import { slots } from './slots.ts';
 import LiveHost from '../LiveHost.svelte';
 import KeepHost from '../KeepHost.svelte';
 

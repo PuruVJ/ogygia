@@ -12,10 +12,10 @@
  * The code is read with a small tokenizer (strings and comments dropped, identifiers and
  * punctuation kept), never a regular expression, and only for the few dozen ledger lines.
  */
-import type { FrameStat } from './analyze.js';
-import type { LedgerLine } from './ledger.js';
-import type { RetainedSite } from './insights.js';
-import type { AwaitEdge, AwaitNode } from './timeline.js';
+import type { FrameStat } from './analyze.ts';
+import type { LedgerLine } from './ledger.ts';
+import type { RetainedSite } from './insights.ts';
+import type { AwaitEdge, AwaitNode } from './timeline.ts';
 import {
 	backtracks,
 	calls_name,
@@ -28,7 +28,7 @@ import {
 	tokens,
 	wrapper_aliases,
 	type SourceReader
-} from './source-scan.js';
+} from './source-scan.ts';
 
 export type PatternKind =
 	| 'formatter-per-call'
@@ -2673,7 +2673,7 @@ export function same_document_pattern(input: {
 export function almost_same_document_pattern(input: {
 	file: string;
 	render_ms: number;
-	diff: import('./doc-diff.js').DocDiff;
+	diff: import('./doc-diff.ts').DocDiff;
 	code?: string;
 }): Pattern {
 	const g = input.diff.groups;

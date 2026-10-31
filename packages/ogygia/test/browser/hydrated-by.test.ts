@@ -1,8 +1,8 @@
 // `hydratedBy()` says `'interaction'` whenever a visitor's input woke the island — an `interaction`
 // island, and a scheduled one pressed before its schedule made it live (its first click is a replay).
 import { expect, test } from 'vitest';
-import { hydratedBy } from '../../src/hydration-info.js';
-import { arm_interaction } from '../../src/runtime/interaction.js';
+import { hydratedBy } from '../../src/hydration-info.ts';
+import { arm_interaction } from '../../src/runtime/interaction.ts';
 
 const CURRENT_REGION = Symbol.for('ogygia.context.current-region');
 const as_current = (el: Element | null) => ((globalThis as Record<symbol, unknown>)[CURRENT_REGION] = el);

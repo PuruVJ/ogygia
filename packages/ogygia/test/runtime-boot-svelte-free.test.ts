@@ -20,7 +20,7 @@ import {
 	FEATURES,
 	generateHydrateFeaturesSource,
 	generateRuntimeEntrySource
-} from '../src/compiler/link/runtime-entry.js';
+} from '../src/compiler/link/runtime-entry.ts';
 
 const SRC = path.resolve(__dirname, '../src');
 const RUNTIME = path.join(SRC, 'runtime');

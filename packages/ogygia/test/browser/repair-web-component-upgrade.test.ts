@@ -5,10 +5,10 @@
 // region; the pristine copy is the server bytes). After repair, the live sequence must equal the server's
 // — that is exactly what Svelte's walk needs — or the island discards.
 import { expect, test, afterEach } from 'vitest';
-import { repair_if_drifted, sequence_differs } from '../../src/runtime/hydrate-core.js';
-import { parse_region_html } from '../../src/runtime/parse-html.js';
-import { install as install_morph } from '../../src/runtime/morph.js';
-import { link_boot } from '../../src/runtime/boot-link.js';
+import { repair_if_drifted, sequence_differs } from '../../src/runtime/hydrate-core.ts';
+import { parse_region_html } from '../../src/runtime/parse-html.ts';
+import { install as install_morph } from '../../src/runtime/morph.ts';
+import { link_boot } from '../../src/runtime/boot-link.ts';
 
 // This file drives the hydrate core's repair directly, without booting the runtime: link the boot
 // helpers it reaches through the registry (runtime/slots.ts `BootLink`), as the boot would.

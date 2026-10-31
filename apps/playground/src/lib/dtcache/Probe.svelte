@@ -1,6 +1,6 @@
 <script lang="ts">
 	// Stamps which build's code woke it: the cache check reads `data-ran` off the page.
-	import { VERSION } from './version.js';
+	import { VERSION } from './version.ts';
 	let { label }: { label: string } = $props();
 	let ran = $state('');
 	$effect(() => {

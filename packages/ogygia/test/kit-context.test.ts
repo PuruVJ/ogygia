@@ -17,7 +17,7 @@ import {
 	KIT_REQUEST_CONTEXT,
 	KIT_STORES_CONTEXT,
 	type KitPage
-} from '../src/server/kit-context.js';
+} from '../src/server/kit-context.ts';
 import PageProbe from './_fixtures/PageProbe.svelte';
 import EventProbe from './_fixtures/EventProbe.svelte';
 import KitPagePass from './_fixtures/KitPagePass.svelte';

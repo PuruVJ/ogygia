@@ -9,7 +9,7 @@
 	 */
 	import ReportBody from './ReportBody.svelte';
 	import PermalinkGate from './PermalinkGate.svelte' with { wake: 'load' };
-	import type { ProfilerRoutes } from '../profiler-router.js';
+	import type { ProfilerRoutes } from '../profiler-router.ts';
 
 	let { data }: ProfilerRoutes['/report/[id]'] = $props();
 </script>

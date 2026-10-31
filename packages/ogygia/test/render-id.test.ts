@@ -5,8 +5,8 @@
 // all of those, so the new build still answers them; only a moved, renamed or removed component does
 // not. The server manifest maps each render identity to the entry that renders it.
 import { describe, it, expect } from 'vitest';
-import { renderId, regionIdentity, regionId } from '../src/compiler/region/identity.js';
-import { server_manifest_module } from '../src/compiler/link/server-manifest.js';
+import { renderId, regionIdentity, regionId } from '../src/compiler/region/identity.ts';
+import { server_manifest_module } from '../src/compiler/link/server-manifest.ts';
 
 const HOLE = 'src/lib/header/holes/MegaMenuHole.svelte';
 const mark = (options: Record<string, unknown>) => ({ strategy: 'server', options });

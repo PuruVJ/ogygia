@@ -5,9 +5,9 @@
  * the components ONE render places into the `<link>` / `<style>` head tags `document()` hoists,
  * deduped through `claim_region_css` (shared with held-region links). Shared by v1 + v2 routers.
  */
-import { router_css_of } from '../router-css.js';
-import { claim_region_css } from '../context.js';
-import type { AnyComponent } from './define.js';
+import { router_css_of } from '../router-css.ts';
+import { claim_region_css } from '../context.ts';
+import type { AnyComponent } from './define.ts';
 
 // ── regexes
 const STYLE_CLOSE_G = /<\/style/gi;

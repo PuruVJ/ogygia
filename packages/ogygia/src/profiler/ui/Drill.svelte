@@ -4,9 +4,9 @@
 	 * who held it (a function, a library, a call) → the line. Static markup: `<details>` open the
 	 * levels, no island. Each bar is its share of the whole render.
 	 */
-	import type { DrillNode } from '../drill.js';
-	import { PATTERN_LABEL, type PatternKind } from '../patterns.js';
-	import { fmt_ms } from './format.js';
+	import type { DrillNode } from '../drill.ts';
+	import { PATTERN_LABEL, type PatternKind } from '../patterns.ts';
+	import { fmt_ms } from './format.ts';
 
 	let { root }: { root: DrillNode } = $props();
 

@@ -24,8 +24,8 @@ export { default as BottomBar } from './BottomBar.svelte';
 export { default as Switcher } from './Switcher.svelte';
 export { default as SiteSlot } from './SiteSlot.svelte';
 // The roving-tabindex keyboard primitive behind every nav surface — reusable for custom nav.
-export { roving } from './roving.js';
-export type { RovingOptions } from './roving.js';
+export { roving } from './roving.ts';
+export type { RovingOptions } from './roving.ts';
 // Shell (and its bar) is deliberately NOT here: the batteries-included shell is its own export —
 // `import DocsShell from '@ogygia/content/docs-shell'`. The barrel holds the generic bricks (Frame = the
 // headless, every-region-overridable composition you build a custom shell from).

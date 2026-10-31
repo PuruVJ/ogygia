@@ -4,11 +4,11 @@
  * by hooks.ts only.
  */
 import type { RequestEvent } from '@sveltejs/kit';
-import type { RequestContext, ServerApp, ServerPlugin } from './index.js';
-import { current_facts, facts_of, mark_per_visitor, type RequestFacts } from './facts.js';
-import { ask, notify, register_hooks } from './hooks.js';
-import { route_option } from './routes.js';
-import { record_server_event } from '../devtools/server-registry.js';
+import type { RequestContext, ServerApp, ServerPlugin } from './index.ts';
+import { current_facts, facts_of, mark_per_visitor, type RequestFacts } from './facts.ts';
+import { ask, notify, register_hooks } from './hooks.ts';
+import { route_option } from './routes.ts';
+import { record_server_event } from '../devtools/server-registry.ts';
 
 /** One plugin's server half as the build lists it (`virtual:ogygia/server-plugins`). */
 export interface ServerPluginEntry {

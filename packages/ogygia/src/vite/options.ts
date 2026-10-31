@@ -3,10 +3,10 @@
  * `defaults + its own presets`. Split out of the adapter so the plugin file stays lean; these are
  * pure type declarations (the plugin factory in index.ts imports them back).
  */
-import type { ImportKeys } from '../compiler/region/transform.js';
-import type { DebarrelOptions } from '../compiler/debarrel/options.js';
-import type { ProfilerOptions } from '../profiler/index.js';
-import type { OgygiaPlugin } from './plugin-api.js';
+import type { ImportKeys } from '../compiler/region/transform.ts';
+import type { DebarrelOptions } from '../compiler/debarrel/options.ts';
+import type { ProfilerOptions } from '../profiler/index.ts';
+import type { OgygiaPlugin } from './plugin-api.ts';
 
 // ── regexes
 

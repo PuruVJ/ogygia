@@ -11,7 +11,7 @@
  * raw secret so the id-salt domain stays separate.
  */
 import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
-import { is_lower_hex } from './endpoint.js';
+import { is_lower_hex } from './endpoint.ts';
 const MAC_INFO = Buffer.from('ogygia-mac-v1');
 const ID_SALT_INFO = Buffer.from('ogygia-id-salt-v1');
 const utf8 = new TextEncoder();

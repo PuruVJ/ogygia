@@ -14,7 +14,7 @@
  * scope-analyzed.
  */
 import { walk } from 'estree-walker';
-import { parse_module } from './parse/oxc.js';
+import { parse_module } from './parse/oxc.ts';
 
 /** The import a flag site comes through. (Moves into the flags plugin's compile facet once the
  *  compile port lands: internal/notes/packages.md.) */

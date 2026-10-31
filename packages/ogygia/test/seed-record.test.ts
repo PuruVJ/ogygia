@@ -10,15 +10,15 @@ import { render } from 'svelte/server';
 import type { Component } from 'svelte';
 import Region from '../src/Region.svelte';
 import Tiny from './_fixtures/Tiny.svelte';
-import { set_page_recorder } from '../src/page-seed-registry.js';
-import { set_reads_page, set_island_remotes, set_page_keys } from './_stubs/virtual-island-deps.js';
-import { region as make_region } from '../src/region.js';
+import { set_page_recorder } from '../src/page-seed-registry.ts';
+import { set_reads_page, set_island_remotes, set_page_keys } from './_stubs/virtual-island-deps.ts';
+import { region as make_region } from '../src/region.ts';
 
 // `render()`'s body is a LAZY getter — the component runs on first read, so every render here reads it.
 
 const region = Region as unknown as Component<Record<string, unknown>>;
 
-let records: Array<{ snap: unknown; seed: import("../src/server/seed-shape.js").SeedAsk; remotes: readonly string[] | null }>;
+let records: Array<{ snap: unknown; seed: import("../src/server/seed-shape.ts").SeedAsk; remotes: readonly string[] | null }>;
 beforeEach(() => {
 	records = [];
 	set_page_recorder((snap, seed, remotes) => records.push({ snap, seed, remotes }));

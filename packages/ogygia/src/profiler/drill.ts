@@ -17,10 +17,10 @@
  * functions go one level further, into their lines (the ledger's shares of the function's CPU); a
  * call, into the line that made it. Small children fold into one "N more" row per level.
  */
-import type { InnerFn, Segment, Timeline } from './timeline.js';
-import { PHASE_LABEL, load_lane_of } from './timeline.js';
-import type { LedgerLine } from './ledger.js';
-import type { Pattern } from './patterns.js';
+import type { InnerFn, Segment, Timeline } from './timeline.ts';
+import { PHASE_LABEL, load_lane_of } from './timeline.ts';
+import type { LedgerLine } from './ledger.ts';
+import type { Pattern } from './patterns.ts';
 
 export interface DrillNode {
 	label: string;

@@ -10,8 +10,8 @@
  * This is the single wiring mechanism — there is no service locator and no per-feature setter.
  */
 import type { Component } from 'svelte';
-import type { Frame } from '../frame.js';
-import { is_frozen } from './region-attrs.js';
+import type { Frame } from '../frame.ts';
+import { is_frozen } from './region-attrs.ts';
 
 // ── lakes ────────────────────────────────────────────────────────────────
 /** Frozen SSR DOM detached before hydrate. */
@@ -130,34 +130,34 @@ export type NavOps = {
  * `test/runtime-boot-svelte-free.test.ts` pins that no lazy chunk imports a boot module.
  */
 export type BootLink = {
-	kit_hydrates_page: typeof import('./kit-boot.js').kit_hydrates_page;
-	KitBoot: typeof import('./kit-boot.js').KitBoot;
+	kit_hydrates_page: typeof import('./kit-boot.ts').kit_hydrates_page;
+	KitBoot: typeof import('./kit-boot.ts').KitBoot;
 	ABSOLUTE_URL_SCHEME: RegExp;
-	register_island_graph: typeof import('./island-graph-preload.js').register_island_graph;
-	is_warmed_module: typeof import('./region-endpoint-url.js').is_warmed_module;
-	warm_island_module: typeof import('./region-endpoint-url.js').warm_island_module;
-	note_entry_location: typeof import('./entry-locations.js').note_entry_location;
-	props_sidecar_of: typeof import('./sidecar.js').props_sidecar_of;
-	parse_region_html: typeof import('./parse-html.js').parse_region_html;
-	runtime_session: typeof import('./session.js').runtime_session;
-	regions_in_shadow: typeof import('./connected.js').regions_in_shadow;
-	yield_task: typeof import('./schedule.js').yield_task;
+	register_island_graph: typeof import('./island-graph-preload.ts').register_island_graph;
+	is_warmed_module: typeof import('./region-endpoint-url.ts').is_warmed_module;
+	warm_island_module: typeof import('./region-endpoint-url.ts').warm_island_module;
+	note_entry_location: typeof import('./entry-locations.ts').note_entry_location;
+	props_sidecar_of: typeof import('./sidecar.ts').props_sidecar_of;
+	parse_region_html: typeof import('./parse-html.ts').parse_region_html;
+	runtime_session: typeof import('./session.ts').runtime_session;
+	regions_in_shadow: typeof import('./connected.ts').regions_in_shadow;
+	yield_task: typeof import('./schedule.ts').yield_task;
 	/** the router's navigation, timed for the profiler's beacon (a no-op without it) */
-	beacon_nav: typeof import('./beacon.js').beacon_nav;
+	beacon_nav: typeof import('./beacon.ts').beacon_nav;
 	/** the load scheduler's queue (./load-scheduler.ts) */
-	load_slot: typeof import('./load-scheduler.js').load_slot;
+	load_slot: typeof import('./load-scheduler.ts').load_slot;
 	/** DOM ownership (./ownership.ts): which children Svelte's walk enters, and self-owned elements */
-	walk_enters: typeof import('./ownership.js').walk_enters;
-	is_self_owned: typeof import('./ownership.js').is_self_owned;
+	walk_enters: typeof import('./ownership.ts').walk_enters;
+	is_self_owned: typeof import('./ownership.ts').is_self_owned;
 };
 export type RouterLink = {
-	document_key: typeof import('./router.js').document_key;
-	jump_to_hash: typeof import('./router.js').jump_to_hash;
-	push_state: typeof import('./router.js').push_state;
-	replace_state: typeof import('./router.js').replace_state;
+	document_key: typeof import('./router.ts').document_key;
+	jump_to_hash: typeof import('./router.ts').jump_to_hash;
+	push_state: typeof import('./router.ts').push_state;
+	replace_state: typeof import('./router.ts').replace_state;
 };
 export type InteractionLink = {
-	resolve_address: typeof import('./interaction.js').resolve_address;
+	resolve_address: typeof import('./interaction.ts').resolve_address;
 };
 
 export type Slots = {
@@ -186,7 +186,7 @@ export type Slots = {
 	/** Interaction's address resolver for its replay chunk (see {@link InteractionLink}). */
 	interaction_link: InteractionLink | null;
 	/** Morph's attribute sync, for the navigation's body reconcile. */
-	sync_attributes: typeof import('./morph.js').sync_attributes | null;
+	sync_attributes: typeof import('./morph.ts').sync_attributes | null;
 };
 
 /** The live registry. A feature's `install()` assigns its slot; core/router read them. */

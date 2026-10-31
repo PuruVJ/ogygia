@@ -24,7 +24,7 @@ import {
 	set_kit_inline_style_threshold,
 	type KitDirs,
 	DEFAULT_KIT_DIRS
-} from '../compiler/kit.js';
+} from '../compiler/kit.ts';
 
 const CONFIG_FILES = ['svelte.config.js', 'svelte.config.mjs'];
 

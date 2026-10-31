@@ -16,7 +16,7 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { Plugin as VitePlugin } from 'vite';
-import type { ServerRealm } from '../compiler/link/caps.js';
+import type { ServerRealm } from '../compiler/link/caps.ts';
 
 /** What an app puts in `ogygia({ plugins })` — the value a plugin's factory returns. */
 export interface OgygiaPlugin<Options = unknown> {

@@ -5,9 +5,9 @@
  * module-variant query).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { content } from '../src/vite/index.js';
-import { rewrite_loaders, extract_preset } from '../src/macros/loaders.js';
-import { bridge } from '../src/bridge.js';
+import { content } from '../src/vite/index.ts';
+import { rewrite_loaders, extract_preset } from '../src/macros/loaders.ts';
+import { bridge } from '../src/bridge.ts';
 
 const saved: Partial<typeof bridge> = {};
 beforeEach(() => {

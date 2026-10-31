@@ -12,10 +12,10 @@
 	 * compile, which is why it is never the default.
 	 */
 	import Region from './Region.svelte';
-	import { register_late_region } from './late-region-registry.js';
-	import { wire_form } from './transport.js';
+	import { register_late_region } from './late-region-registry.ts';
+	import { wire_form } from './transport.ts';
 
-	/** @type {{ of: Promise<import('./region.js').RegionValue>, placeholder?: import('svelte').Snippet, children?: import('svelte').Snippet }} */
+	/** @type {{ of: Promise<import('./region.ts').RegionValue>, placeholder?: import('svelte').Snippet, children?: import('svelte').Snippet }} */
 	let { of, placeholder, children } = $props();
 
 	// svelte-ignore state_referenced_locally

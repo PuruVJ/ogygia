@@ -2,7 +2,7 @@
 // is cut to it. A measured CMS home page shipped 368 KB of page data for islands that read three
 // keys of it; with shaping the same page ships those three.
 import { describe, expect, it } from 'vitest';
-import { merge_seed_ask, shape_page_data } from '../src/server/seed-shape.js';
+import { merge_seed_ask, shape_page_data } from '../src/server/seed-shape.ts';
 
 describe('merge_seed_ask', () => {
 	it('false asks nothing; keys union; all absorbs', () => {

@@ -7,9 +7,9 @@
  * module; the driver serves the client leg for `ssr: false`.
  */
 import { describe, expect, it } from 'vitest';
-import { make_wake_island, lazy_entry_source, island_wrapper_client_source } from '../src/compiler/region/emit.js';
-import { lazyEntryVirtualId } from '../src/compiler/ids.js';
-import { is_island_path } from '../src/compiler/region/transform.js';
+import { make_wake_island, lazy_entry_source, island_wrapper_client_source } from '../src/compiler/region/emit.ts';
+import { lazyEntryVirtualId } from '../src/compiler/ids.ts';
+import { is_island_path } from '../src/compiler/region/transform.ts';
 
 const record = () =>
 	make_wake_island({

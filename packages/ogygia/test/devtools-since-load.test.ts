@@ -1,7 +1,7 @@
 // Since your last load: findings fixed and new (by code and island), islands and vitals that moved
 // past the noise floor, and nothing for another page.
 import { expect, test } from 'vitest';
-import { since_load, type LoadSnapshot } from '../src/devtools/since-load.js';
+import { since_load, type LoadSnapshot } from '../src/devtools/since-load.ts';
 
 const snap = (over: Partial<LoadSnapshot> = {}): LoadSnapshot => ({
 	path: '/lab',

@@ -12,10 +12,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { PROFILER_MAPS_PLACEHOLDER } from '../compiler/ids.js';
-import { GZ_PREFIX } from '../profiler/embedded-maps.js';
-import { build_module_map } from './module-map.js';
-import { client_maps_stash } from './server-sourcemaps.js';
+import { PROFILER_MAPS_PLACEHOLDER } from '../compiler/ids.ts';
+import { GZ_PREFIX } from '../profiler/embedded-maps.ts';
+import { build_module_map } from './module-map.ts';
+import { client_maps_stash } from './server-sourcemaps.ts';
 
 /** the payload the profiler reads (profiler/embedded-maps.ts) */
 export interface ProfilerMaps {

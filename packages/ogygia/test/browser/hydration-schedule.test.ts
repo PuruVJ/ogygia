@@ -6,8 +6,8 @@
 // in-viewport ones LAST, so viewport-first and document-first disagree. Each island spins ~6 ms at
 // init (Heavy.svelte): the old back-to-back microtask hydration made one ~126 ms task of them.
 import { expect, inject, test } from 'vitest';
-import { bootDev } from '../../src/runtime/full.js';
-import { schedule_idle } from '../../src/runtime/schedule.js';
+import { bootDev } from '../../src/runtime/full.ts';
+import { schedule_idle } from '../../src/runtime/schedule.ts';
 
 const inject_html = (key: 'heavy_schedule_ssr_b64') =>
 	decodeURIComponent(escape(atob(inject(key))));
@@ -17,7 +17,7 @@ test('21 load islands: no task ≥ 50 ms, viewport islands first, then document 
 	// tasks are hydration itself, not a first-import evaluation.
 	await Promise.all([
 		import('/test/browser/fixtures/Heavy.svelte'),
-		import('../../src/runtime/hydrate-core.js')
+		import('../../src/runtime/hydrate-core.ts')
 	]);
 	document.body.innerHTML = inject_html('heavy_schedule_ssr_b64');
 	expect(document.querySelectorAll('ogygia-region').length).toBe(21);

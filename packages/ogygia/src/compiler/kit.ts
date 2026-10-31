@@ -1,6 +1,6 @@
-import { fs, path } from './host.js';
+import { fs, path } from './host.ts';
 import { createRequire } from 'node:module';
-import { ISLAND_DIR } from './region/transform.js';
+import { ISLAND_DIR } from './region/transform.ts';
 
 /** The Kit-internal + app paths ogygia deep-imports (resolved off the APP root, not this package). */
 export interface KitPaths {

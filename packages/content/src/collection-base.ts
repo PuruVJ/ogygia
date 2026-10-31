@@ -8,9 +8,9 @@
  * the read that renders it. Visibility (`filter`) is applied at READ time with an optional request
  * context, so the catalog stays a single unfiltered instance (no per-request cache to poison).
  */
-import type { ContentRef, ContentRelations, Entry, RefEntry, SchemaLike } from './index.js';
-import type { GroupMeta, Source, SourceEntry, SourceRef } from './source.js';
-import { parseSchema } from './schema.js';
+import type { ContentRef, ContentRelations, Entry, RefEntry, SchemaLike } from './index.ts';
+import type { GroupMeta, Source, SourceEntry, SourceRef } from './source.ts';
+import { parseSchema } from './schema.ts';
 
 // ── content graph registry ───────────────────────────────────────────────────
 

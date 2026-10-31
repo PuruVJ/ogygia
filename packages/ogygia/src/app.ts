@@ -22,8 +22,8 @@ export {
 	beforeNavigate,
 	afterNavigate,
 	bust_page_cache
-} from './shims/app-navigation.js';
-export { spa_html_cacheable } from './runtime/spa-cacheable.js';
+} from './shims/app-navigation.ts';
+export { spa_html_cacheable } from './runtime/spa-cacheable.ts';
 
 export type {
 	NavTarget,
@@ -31,4 +31,4 @@ export type {
 	AfterNavigation,
 	BeforeNavigateCallback,
 	AfterNavigateCallback
-} from './runtime/router.js';
+} from './runtime/router.ts';

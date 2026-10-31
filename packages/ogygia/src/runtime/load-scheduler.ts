@@ -28,9 +28,9 @@
  * still waits). On a Kit-hydrated document Kit's own start sets the pace, so nothing waits on the
  * critical resources there (the window still applies).
  */
-import { after_document_painted, yield_task } from './schedule.js';
-import { kit_hydrates_page } from './kit-boot.js';
-import { emit as dt_emit } from '../devtools/bus.js';
+import { after_document_painted, yield_task } from './schedule.ts';
+import { kit_hydrates_page } from './kit-boot.ts';
+import { emit as dt_emit } from '../devtools/bus.ts';
 
 const DEVTOOLS = typeof __OGYGIA_DEVTOOLS__ !== 'undefined' ? __OGYGIA_DEVTOOLS__ : false;
 
