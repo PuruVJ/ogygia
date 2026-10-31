@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The STYLES answer key page (internal/bench/devtools-answer-key.mjs --styles): two planted
+	// The STYLES answer key page (internal/bench/devtools-answer-key.ts --styles): two planted
 	// problems. leak.css carries the build's unscoped-fallback marker for LabCard.svelte (the shape
 	// ogygia writes when it cannot compile a component's scoped CSS), and its `.row` rule restyles
 	// markup it was never meant for. unused.css is 600 rules that match nothing here. The healthy

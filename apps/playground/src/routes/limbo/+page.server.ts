@@ -2,7 +2,7 @@
 // built: each planted pattern in a shape no other answer-key page uses, and beside it a DECOY that
 // does the same job the right way. The comment on each (here and in $lib/limbo) says which slow
 // pattern the profiler should name, or why it must stay quiet. Profile it: /__profiler → "Profile one
-// page" → /limbo, or `node internal/bench/profiler-answer-key.mjs --page=/limbo`.
+// page" → /limbo, or `node internal/bench/profiler-answer-key.ts --page=/limbo`.
 import { PRODUCTS } from '$lib/inferno/data';
 import { brandOf, brandOfIndexed, onSale, onSaleShallow, reviewDates, reviewDatesShared, specDirect, specOf } from '$lib/limbo/helpers';
 import type { PageServerLoad } from './$types';

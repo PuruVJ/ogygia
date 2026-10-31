@@ -246,8 +246,7 @@ so their versions always match. A breaking port change bumps `PLUGIN_API` and th
 |---|---|---|
 | `@ogygia/core` | everything else, incl. the CLIENT nav (runtime/router.ts, `ogygia/router/client`) | `ogygia` re-exports it (Q4) |
 | `@ogygia/router` | src/router (the SERVER router: `routes()`, `page`, `mount` hosts) | core imports none of it (checked); federation + profiler build on it; compiler's router prescan + router-css become its compile facet |
-| `@ogygia/devtools` | src/devtools | `@neodrag/svelte` peer moves here |
-| `@ogygia/profiler` | src/profiler | storage adapters as subpaths; drivers already load lazily |
+| `@ogygia/devtools` | src/devtools + src/profiler (MERGED, user 2026-10-31) | one plugin `devtools({ profiler })`: in-page panel + server profiler, each its own on-switch; profiler stays a lazy import; storage adapters as `/profiler/storage/*` subpaths; `@neodrag/svelte` peer moves here |
 | `@ogygia/content` | src/content, Blocks.svelte, markdown macros | mdsvex, shiki, orama, bits-ui peers move here |
 | `@ogygia/federation` | src/federation | |
 | `@ogygia/flags` | flags.ts, src/flags | `/openfeature` subpath |
@@ -268,6 +267,10 @@ by the docs Observatory. Keep as core subpaths.
    2026-10-31): the repo moves to the `ogygiajs` GitHub org first, then trusted publishing is
    re-pointed for the 2 existing packages, then the new packages get theirs. Until then every new
    package is `"private": true`, so a release on `next` never tries to publish it.
+4. VERSIONS (user, 2026-10-31): everything publishes straight as **0.11.0**. Each new package starts
+   at ogygia's current version and joins the changesets `fixed` group with ogygia; when `private`
+   drops, the PR's one minor changeset moves the whole group to 0.11.0 (checked with
+   `changeset status`).
 
 ## Breaking changes (for the release notes)
 

@@ -197,7 +197,7 @@
 		"lint": "oxlint -c .oxlintrc.json src",
 		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json && vitest run && pnpm run lint",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
-		"verify:package": "node scripts/verify-package.mjs"
+		"verify:package": "node scripts/verify-package.ts"
 	},
 	"dependencies": {
 		"devalue": "^5.9.3",

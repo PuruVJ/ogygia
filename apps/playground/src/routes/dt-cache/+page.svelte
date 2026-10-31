@@ -1,5 +1,5 @@
 <script lang="ts">
-	// THE CACHE CHECK's page (internal/bench/cache-bust-check.mjs): islands whose code changes between
+	// THE CACHE CHECK's page (internal/bench/cache-bust-check.ts): islands whose code changes between
 	// two builds (Probe, ProbeTwin: a shared version module) next to one that does not (Steady), and a
 	// hole whose answer carries an island (HoleProbe → HoleInner).
 	import Probe from '$lib/dtcache/Probe.svelte' with { wake: 'load' };

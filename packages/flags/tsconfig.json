@@ -6,7 +6,9 @@
 		"strict": true,
 		"skipLibCheck": true,
 		"noEmit": true,
+		"declaration": true,
+		"isolatedDeclarations": true,
 		"verbatimModuleSyntax": true
 	},
-	"include": ["src", "test"]
+	"include": ["src"]
 }

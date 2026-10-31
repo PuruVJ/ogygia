@@ -1,4 +1,4 @@
-// A PLANTED DUPLICATE (internal/bench/profiler-browser-key.mjs, /dt-dupe): this "package" ships its
+// A PLANTED DUPLICATE (internal/bench/profiler-browser-key.ts, /dt-dupe): this "package" ships its
 // source (src/) and its build (dist/) side by side, and two islands import it by the two paths — the
 // build bundles the module twice. Its dist twin is ../dist/catalog.js. Keep the two the same.
 export const CATALOG: readonly { sku: string; title: string; blurb: string }[] = [

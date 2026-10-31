@@ -18,7 +18,7 @@ wire is language-agnostic), `chaos/` (a latency/failure proxy for the reliabilit
 ```sh
 pnpm install                       # at the REPO root (these apps are workspace members)
 pnpm --filter ogygia build
-node gen-keys.mjs && source keys.env    # in examples/mfe — mints one Ed25519 pair PER app (gitignored)
+node gen-keys.ts && source keys.env    # in examples/mfe — mints one Ed25519 pair PER app (gitignored)
 # (general apps: `npx ogygia keys <name>` prints one pair as env lines — same format)
 # three terminals (source keys.env in each — every app gets ALL publics + all origins + its own signing key):
 cd dash  && ORIGIN=http://localhost:5191 pnpm dev --port 5191

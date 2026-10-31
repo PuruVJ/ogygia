@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The devtools Page tab's ANSWER KEY page (internal/bench/devtools-answer-key.mjs): every PLANTED
+	// The devtools Page tab's ANSWER KEY page (internal/bench/devtools-answer-key.ts): every PLANTED
 	// island has one problem the browser can measure; every DECOY is healthy and must never be named.
 	import Healthy from '$lib/dtlab/Healthy.svelte' with { wake: 'load' };
 	import Clock from '$lib/dtlab/Clock.svelte' with { wake: 'load' };

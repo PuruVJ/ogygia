@@ -47,6 +47,17 @@ jobs:
       - name: Install workspace deps (baseline lockfile)
         run: pnpm install --frozen-lockfile
 
+      # turbo's local cache: a package whose inputs did not change replays its build and check (the
+      # upstream leg moves the lockfile, so its tasks hash differently and run fresh)
+      - name: Turbo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.workflow }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.workflow }}-
+            turbo-${{ runner.os }}-
+
       # Playwright before the baseline: the baseline runs the browser project too.
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium

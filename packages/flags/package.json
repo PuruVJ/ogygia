@@ -34,7 +34,7 @@
 	"files": ["dist", "README.md"],
 	"scripts": {
 		"build": "tsdown",
-		"check": "tsc --noEmit -p .",
+		"check": "tsc -p . && tsc -p test && vitest run",
 		"test": "vitest run"
 	},
 	"dependencies": {

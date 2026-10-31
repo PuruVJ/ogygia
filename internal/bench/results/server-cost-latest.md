@@ -1,6 +1,6 @@
 # server-cost — ogygia's per-request overhead (2026-09-10, round 2 2026-09-19)
 
-`node internal/bench/server-cost.mjs 300 4` — the playground's `/bench-cms` (21 islands: a header
+`node internal/bench/server-cost.ts 300 4` — the playground's `/bench-cms` (21 islands: a header
 island with a ~300 KB config prop outside `page.data`, one `$page` reader, twenty block islands fed
 slices of a ~250 KB `page.data` tree) against `/bench-cms/plain` (the same components, unmarked).
 300 requests × 4 concurrent per route, two rounds; vite preview under `--cpu-prof`.
@@ -18,7 +18,7 @@ before) is gone from the seed/props path (JSON lane). What remains in ogygia's o
 Kit's rope), `measure` 216 ms (the one seed/props walk), `plan_props_wire` 165 ms (native
 `JSON.stringify`), the transform body 255 ms.
 
-## client-boot (`node internal/bench/client-boot.mjs`, same page, Chromium, 4× CPU throttle, median of 3)
+## client-boot (`node internal/bench/client-boot.ts`, same page, Chromium, 4× CPU throttle, median of 3)
 
 | | server half only (88ebaa2) | merged client half (784eb95) |
 | --- | --- | --- |

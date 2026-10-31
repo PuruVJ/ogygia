@@ -1,7 +1,7 @@
 name: Dependency audit
 
 # Checks dependencies against the npm advisory database: weekly, when the lockfile changes, and on
-# demand. The report (.github/scripts/audit-report.mjs) is split by how each advisory reaches ogygia:
+# demand. The report (.github/scripts/audit-report.ts) is split by how each advisory reaches ogygia:
 # its dependencies, the peers the app installs, and this repository's dev tooling. It goes to the run's
 # summary; on a PR, onto the PR as a comment (a same-repository PR: a fork's token cannot comment);
 # otherwise into ONE open "Dependency audit" issue, updated in place (closed, the next run opens a new
@@ -20,7 +20,7 @@ on:
     paths:
       - pnpm-lock.yaml
       - .github/workflows/audit.yml
-      - .github/scripts/audit-report.mjs
+      - .github/scripts/audit-report.ts
   workflow_dispatch:
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
         id: audit
         run: |
           set +e
-          node .github/scripts/audit-report.mjs > audit-report.md
+          node .github/scripts/audit-report.ts > audit-report.md
           echo "code=$?" >> "$GITHUB_OUTPUT"
           cat audit-report.md >> "$GITHUB_STEP_SUMMARY"
 

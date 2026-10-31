@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The THIRD-PARTY answer key page (internal/bench/devtools-answer-key.mjs --third): planted other
+	// The THIRD-PARTY answer key page (internal/bench/devtools-answer-key.ts --third): planted other
 	// origins — a render-blocking script that edits an island, a tag-manager-shaped script that burns
 	// main-thread time and adds three scripts — next to a decoy (a tiny async script) and a healthy
 	// island. The Page tab and the profiler report must name the planted ones, never the decoy.

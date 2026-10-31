@@ -5,7 +5,7 @@
 //   E2E_NO_BUILD=1 pnpm exec playwright test  # reuse the existing playground build
 //   pnpm exec playwright test split-brain     # one spec
 //
-// Lifecycle: the `webServer` command BUILDS then SERVES in one shell — `e2e-build.mjs` builds the
+// Lifecycle: the `webServer` command BUILDS then SERVES in one shell — `e2e-build.ts` builds the
 // library + playground (with the prerender-secret warn-path probe), then `vite preview` serves that
 // exact build. The build MUST live here, not in `globalSetup`: Playwright starts the webServer BEFORE
 // globalSetup, so a build in globalSetup ran UNDER an already-booted preview, which had loaded the
@@ -40,8 +40,8 @@ export default defineConfig({
 	webServer: {
 		// Build THEN preview, in one process chain, so the preview loads exactly the build it just
 		// produced — never a stale in-memory bundle a concurrent rebuild deleted underneath it.
-		// `e2e-build.mjs` is a no-op under E2E_NO_BUILD=1 (reuse the existing build).
-		command: `node ../../e2e/e2e-build.mjs && node node_modules/vite/bin/vite.js preview --port ${PORT} --strictPort`,
+		// `e2e-build.ts` is a no-op under E2E_NO_BUILD=1 (reuse the existing build).
+		command: `node ../../e2e/e2e-build.ts &&node node_modules/vite/bin/vite.js preview --port ${PORT} --strictPort`,
 		cwd: fileURLToPath(new URL('./apps/playground', import.meta.url)),
 		url: BASE + '/',
 		env: { ORIGIN: BASE }, // ORIGIN needed for remote command (POST) + form CSRF

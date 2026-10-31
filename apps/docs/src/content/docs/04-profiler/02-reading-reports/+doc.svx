@@ -55,7 +55,7 @@ With a browser visit, JS at start also counts what the HTML never names but the 
 - **Islands that wake when visible and were on your first screen.** They wake at load on that screen, so they count at start. An island you scrolled to later does not.
 
 ::: tip Checked against a twin
-The playground's `/score-lab` and `/score-lab-kit` carry the same article and the same code editor. One ships the editor as a lazy island, the other the usual fully hydrated way. `internal/bench/profiler-score-key.mjs` checks that the second one's editor code is counted, and that it scores well below the first, with and without a browser visit.
+The playground's `/score-lab` and `/score-lab-kit` carry the same article and the same code editor. One ships the editor as a lazy island, the other the usual fully hydrated way. `internal/bench/profiler-score-key.ts` checks that the second one's editor code is counted, and that it scores well below the first, with and without a browser visit.
 :::
 
 The agent JSON carries the score and the weighed files (`assets`: totals, the 40 largest files, what could not be weighed).
@@ -348,7 +348,7 @@ Production client chunks are minified, so a browser frame is `Y` in `chunks/DvQX
 
 ## With the keyboard
 
-Everything on a report that takes a click also takes the keyboard. Tab reaches each table row, sort header, timeline block and seed row, and Enter or Space presses it. A focused timeline block shows the detail a hover would, and a sort header tells a screen reader its order. The CPU treemap and the flame graph are pictures of data the tables also list; the flame graph's search box zooms to the heaviest match on Enter. `internal/bench/profiler-click-check.mjs` fails on any control only a mouse can press.
+Everything on a report that takes a click also takes the keyboard. Tab reaches each table row, sort header, timeline block and seed row, and Enter or Space presses it. A focused timeline block shows the detail a hover would, and a sort header tells a screen reader its order. The CPU treemap and the flame graph are pictures of data the tables also list; the flame graph's search box zooms to the heaviest match on Enter. `internal/bench/profiler-click-check.ts` fails on any control only a mouse can press.
 
 ## Take the report with you: the standalone HTML
 

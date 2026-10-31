@@ -4,6 +4,7 @@
 
 node_modules/
 .pnpm-store/
+.turbo/
 .svelte-kit/
 /apps/playground/build/
 /apps/docs/build/

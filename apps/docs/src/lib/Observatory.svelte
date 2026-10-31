@@ -596,7 +596,7 @@ Switch to <b>islands</b> mode to see the server render it.</p>
 	// Share via URL (Rung 6): the whole workspace round-trips through the URL HASH — which browsers never
 	// send to a server, so a shared REPL (or one an agent hands the user) stays client-only. The codec
 	// (base64url(gzip(json)), legacy-format reads, and the untrusted-input sanitizer) lives in the pure,
-	// unit-tested ./repl/hash module — see hash.test.mjs.
+	// unit-tested ./repl/hash module — see hash.test.ts.
 
 	let files = $state<FileMap>(structuredClone(PRESETS['demo app']));
 	let active = $state<string>('src/routes/+page.svelte');

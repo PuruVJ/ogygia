@@ -6,7 +6,7 @@
  *
  * `fs` is a throwing stub: the only browser-active reader of `host.fs` is `BuildCache`, which we disable
  * (`__set_build_cache_root(null)`) — a REPL recompiles one file, it needs no on-disk cache. The hashes
- * are vendored + unit-tested byte-for-byte against `node:crypto` (see `browser-host.test.mjs`).
+ * are vendored + unit-tested byte-for-byte against `node:crypto` (see `browser-host.test.ts`).
  */
 import path from 'path-browserify';
 import type { CompilerHost } from 'ogygia/internal/compiler-browser';

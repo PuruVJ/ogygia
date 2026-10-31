@@ -9,7 +9,7 @@
  *   handoff   — `entryLocation` reads it at render time (the server bundle is built first)
  *   server    — the one runtime bootstrap, Region's `src`, preload hints, the graph's `s` map
  * (the browser's half: test/browser/entry-location*.test.ts; the real two-build proof:
- * internal/bench/cache-bust-check.mjs)
+ * internal/bench/cache-bust-check.ts)
  */
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';

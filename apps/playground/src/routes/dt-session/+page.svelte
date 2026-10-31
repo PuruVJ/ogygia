@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The devtools Record tab's ANSWER KEY page (internal/bench/devtools-session-key.mjs): each
+	// The devtools Record tab's ANSWER KEY page (internal/bench/devtools-session-key.ts): each
 	// island plants one problem a visitor would hit while using the page; the decoy answers cleanly.
 	// The "dead" button sits in plain HTML (no island): its click can do nothing.
 	import SessionSlow from '$lib/dtsession/SessionSlow.svelte' with { wake: 'load' };
