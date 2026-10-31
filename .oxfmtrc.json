@@ -1,13 +1,26 @@
 {
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
 	"useTabs": true,
 	"singleQuote": true,
 	"printWidth": 100,
 	"trailingComma": "none",
+	"sortPackageJson": false,
+	"svelte": true,
+	"associations": [{ "files": ["**/*.svx"], "language": "markdown" }],
+	"overrides": [
+		{
+			"files": ["**/*.md", "**/*.svx", "**/*.mdx"],
+			"options": { "embeddedLanguageFormatting": "off" }
+		}
+	],
 	"ignorePatterns": [
 		"**/dist/**",
 		"**/build/**",
 		"**/.svelte-kit/**",
+		"**/.vercel/**",
 		"svelte/**",
-		"kit/**"
+		"kit/**",
+		"pnpm-lock.yaml",
+		"**/CHANGELOG.md"
 	]
 }

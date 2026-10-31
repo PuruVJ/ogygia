@@ -38,7 +38,7 @@
 		"@playwright/test": "catalog:",
 		"@types/node": "catalog:",
 		"axe-core": "catalog:",
-		"oxfmt": "^0.64.0",
+		"oxfmt": "^0.75.0",
 		"playwright": "catalog:",
 		"rolldown": "catalog:",
 		"turbo": "^2.11.10",
