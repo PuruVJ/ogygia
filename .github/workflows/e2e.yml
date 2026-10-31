@@ -54,9 +54,11 @@ jobs:
 
       # Root `check` (build:lib + every package's check, the fixture apps' and the palaestra's
       # svelte-check, each package's e2e tsc) — the e2e suites alone never run it, which let type debt
-      # rot invisibly until upstream-watch tripped on it.
+      # rot invisibly until upstream-watch tripped on it. Two tasks at a time: every package's check runs
+      # its own vitest pool (core's with a browser), and turbo's default ten at once on this 4-core
+      # runner starved them into timeouts.
       - name: Type-check (build:lib, every package's check)
-        run: pnpm run check
+        run: pnpm run check --concurrency=2
 
       # Every package's e2e suite (its specs in packages/<name>/e2e against its own fixture app; core's
       # in apps/palaestra/e2e), through turbo's `e2e` task: a suite whose package, fixture app and
