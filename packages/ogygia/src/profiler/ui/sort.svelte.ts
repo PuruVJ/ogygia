@@ -7,7 +7,15 @@
 // `T` is unconstrained (a typed row interface like `FrameStat` has no index signature, so it can't
 // satisfy `Record<string, unknown>`); the string `key` indexes through a local cast, and `sorted`
 // stays `T[]` so the tables read `row.name` etc. with real types.
-export function sortable<T>(rows: () => T[], initial_key: string) {
+export interface Sortable<T> {
+	readonly key: string;
+	readonly sorted: T[];
+	click(k: string): void;
+	arrow(k: string): string;
+	aria(k: string): 'ascending' | 'descending' | 'none';
+}
+
+export function sortable<T>(rows: () => T[], initial_key: string): Sortable<T> {
 	let key = $state(initial_key);
 	let dir = $state<'asc' | 'desc'>('desc');
 
@@ -19,7 +27,7 @@ export function sortable<T>(rows: () => T[], initial_key: string) {
 		})
 	);
 
-	function click(k: string) {
+	function click(k: string): void {
 		if (key === k) dir = dir === 'asc' ? 'desc' : 'asc';
 		else {
 			key = k;
@@ -28,7 +36,7 @@ export function sortable<T>(rows: () => T[], initial_key: string) {
 	}
 
 	/** The little arrow for a header: ▲/▼ when it's the active column, else empty. */
-	function arrow(k: string) {
+	function arrow(k: string): string {
 		return key === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
 	}
 
@@ -38,10 +46,10 @@ export function sortable<T>(rows: () => T[], initial_key: string) {
 	}
 
 	return {
-		get key() {
+		get key(): string {
 			return key;
 		},
-		get sorted() {
+		get sorted(): T[] {
 			return sorted;
 		},
 		click,

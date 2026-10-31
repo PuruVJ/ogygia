@@ -605,7 +605,7 @@ function merge_facts(a: IslandInteractivityFacts | undefined, b: IslandInteracti
 
 /** Stable handoff path under Kit's `outDir`: client `generateBundle` writes; SSR reads at render
  *  (Kit is SSR-first). */
-export function islandDepsHandoffPath(out_dir: string) {
+export function islandDepsHandoffPath(out_dir: string): string {
 	return path.join(out_dir, 'og-region-deps.json');
 }
 

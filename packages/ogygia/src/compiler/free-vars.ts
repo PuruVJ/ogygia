@@ -369,7 +369,7 @@ function walk_template(nodes: SvelteNode[], outer_bound: Set<string>, sink: Sink
 }
 
 /** Collect all snippet names defined anywhere in a subtree (for cross-boundary error detection). */
-export function collectSnippetNames(nodes: SvelteNode[]) {
+export function collectSnippetNames(nodes: SvelteNode[]): Set<unknown> {
 	const out = new Set();
 	const visit = (list: SvelteNode[]) => {
 		for (const n of list ?? []) {
@@ -396,7 +396,11 @@ export function collectSnippetNames(nodes: SvelteNode[]) {
  * @param nodes hoisted subtree top-level nodes
  * @returns free identifier names + free mutation targets + `$store` read sites
  */
-export function collectCaptureInfo(nodes: SvelteNode[]) {
+export function collectCaptureInfo(nodes: SvelteNode[]): {
+	free: Set<string>;
+	mutated: Set<string>;
+	stores: Map<string, { start: number; end: number }[]>;
+} {
 	const sink: Sink = { refs: new Set(), mutated: new Set(), stores: new Map() };
 	walk_template(nodes, new Set(), sink);
 	return { free: sink.refs, mutated: sink.mutated, stores: sink.stores };
@@ -406,6 +410,6 @@ export function collectCaptureInfo(nodes: SvelteNode[]) {
  * @param nodes hoisted subtree top-level nodes
  * @returns free identifier names
  */
-export function collectFreeIdentifiers(nodes: SvelteNode[]) {
+export function collectFreeIdentifiers(nodes: SvelteNode[]): Set<string> {
 	return collectCaptureInfo(nodes).free;
 }

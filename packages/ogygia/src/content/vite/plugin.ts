@@ -22,7 +22,7 @@ export type ContentPluginOptions = {
  * Invalidate a module and every importer.
  * Returns how many modules were touched.
  */
-export function invalidateModuleTree(server: ViteDevServer, entry: ModuleNode | undefined) {
+export function invalidateModuleTree(server: ViteDevServer, entry: ModuleNode | undefined): number {
 	if (!entry) return 0;
 	const seen = new Set<ModuleNode>();
 	const stack: ModuleNode[] = [entry];

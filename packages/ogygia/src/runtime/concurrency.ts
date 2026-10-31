@@ -24,7 +24,7 @@ export class ConcurrencyGate {
 		}
 	}
 
-	get active() {
+	get active(): number {
 		return this.#active;
 	}
 }

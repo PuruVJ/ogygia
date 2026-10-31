@@ -257,7 +257,17 @@ export function format_report(r: ReturnType<typeof debarrel_report_shape>, root:
 }
 
 /** The report record's shape (for `format_report`'s signature — the value lives in the closure). */
-function debarrel_report_shape() {
+interface DebarrelReport {
+	files: number;
+	importers: number;
+	imports: number;
+	names: number;
+	first_ms: number;
+	last_ms: number;
+	barrels: Map<string, { names: number; importers: Set<string> }>;
+	skipped: Set<string> | undefined;
+}
+function debarrel_report_shape(): DebarrelReport {
 	return {
 		files: 0,
 		importers: 0,

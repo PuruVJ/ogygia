@@ -14,8 +14,8 @@ import {
 	type PageKeys
 } from '../compiler/link/page-keys.js';
 
-export const DEV_MAPS = Symbol.for('ogygia.profiler.dev-maps');
-export const DEV_PAGE_KEYS = Symbol.for('ogygia.profiler.dev-page-keys');
+export const DEV_MAPS: unique symbol = Symbol.for('ogygia.profiler.dev-maps');
+export const DEV_PAGE_KEYS: unique symbol = Symbol.for('ogygia.profiler.dev-page-keys');
 
 /** what an island's code reads of `page.data`, as the build would say: its keys, or `'all'` with
  *  the lines that make it so; `null` when nothing in it reads the page */
@@ -129,7 +129,7 @@ type Graph = { getModuleById(id: string): { transformResult?: { map?: MapLike | 
  * as served: no header to shift by). Looked up by the URL's path, then with its query minus Vite's
  * `t=` / `v=` stamps (a virtual island id keeps its own query).
  */
-export const DEV_CLIENT_MAPS = Symbol.for('ogygia.profiler.dev-client-maps');
+export const DEV_CLIENT_MAPS: unique symbol = Symbol.for('ogygia.profiler.dev-client-maps');
 
 type ClientGraph = { urlToModuleMap?: Map<string, { transformResult?: { map?: { mappings?: unknown } | null } | null }> };
 

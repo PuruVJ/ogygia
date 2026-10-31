@@ -27,11 +27,13 @@ export type PageFields = {
 const is_str = (v: unknown): v is string => typeof v === 'string';
 const str_array = (v: unknown): string[] => (Array.isArray(v) ? v.filter(is_str) : []);
 
+type FieldSchema<Out> = SchemaLike & { readonly ['~standard']: { types?: { output: Out } } };
+
 /** A tiny Standard Schema from a pure `(data) => value | throw`. Keeps the family dependency-free. */
 function schema<Out>(
 	vendor: string,
 	run: (data: Record<string, unknown>) => Out
-): SchemaLike & { readonly ['~standard']: { types?: { output: Out } } } {
+): FieldSchema<Out> {
 	return {
 		['~standard']: {
 			version: 1 as const,
@@ -48,7 +50,7 @@ function schema<Out>(
 	} as SchemaLike & { readonly ['~standard']: { types?: { output: Out } } };
 }
 
-const page = schema<PageFields>('ogygia-content/page', (d) => {
+const page: FieldSchema<PageFields> = schema<PageFields>('ogygia-content/page', (d) => {
 	if (!is_str(d.title) || !d.title) throw new Error('frontmatter needs a non-empty `title`');
 	const out: PageFields = {
 		title: d.title,
@@ -76,7 +78,7 @@ export type BlogPostRef = {
 	author?: string;
 	tags?: string[];
 };
-const post_only = schema<PostFields>('ogygia-content/post', (d) => {
+const post_only: FieldSchema<PostFields> = schema<PostFields>('ogygia-content/post', (d) => {
 	if (!is_str(d.date) || !d.date) throw new Error('a post needs a `date`');
 	const out: PostFields = { date: d.date, tags: str_array(d.tags) };
 	if (is_str(d.author)) out.author = d.author;
@@ -85,7 +87,7 @@ const post_only = schema<PostFields>('ogygia-content/post', (d) => {
 
 /** Extra fields a changelog entry carries beyond a page. */
 export type ChangeFields = { version: string; date: string };
-const change_only = schema<ChangeFields>('ogygia-content/change', (d) => {
+const change_only: FieldSchema<ChangeFields> = schema<ChangeFields>('ogygia-content/change', (d) => {
 	if (!is_str(d.version) || !d.version) throw new Error('a changelog entry needs a `version`');
 	if (!is_str(d.date) || !d.date) throw new Error('a changelog entry needs a `date`');
 	return { version: d.version, date: d.date };
@@ -95,7 +97,11 @@ const change_only = schema<ChangeFields>('ogygia-content/change', (d) => {
  * The blessed schema family. `page` is the universal base; `post` / `change` are pre-layered genre
  * stacks (base + genre extras) consumed by `content({ schema })`, which merges array layers left→right.
  */
-export const fields = {
+export const fields: {
+	page: typeof page;
+	post: [typeof page, typeof post_only];
+	change: [typeof page, typeof change_only];
+} = {
 	page,
 	post: [page, post_only] as [typeof page, typeof post_only],
 	change: [page, change_only] as [typeof page, typeof change_only]

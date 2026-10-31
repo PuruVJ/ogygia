@@ -17,7 +17,7 @@ const KIT_ROUTE_FILE = /(?:^|\/)\+(?:page|layout|error|server|hooks)(?:\.|$)/;
  *
  * @internal HMR policy helper (also covered by unit tests).
  */
-export function needs_csr_false_full_reload(file: string) {
+export function needs_csr_false_full_reload(file: string): boolean {
 	const norm = file.replace(BACKSLASH, '/');
 	if (STYLE_EXT.test(norm)) return false;
 	return KIT_ROUTE_FILE.test(norm);
@@ -32,7 +32,7 @@ export function needs_csr_false_full_reload(file: string) {
 export function needs_island_entry_full_reload(
 	file: string,
 	entries: Iterable<{ componentPath?: string | null }>
-) {
+): boolean {
 	const bare = file.split('?')[0];
 	if (!bare.endsWith('.svelte')) return false;
 	if (STYLE_EXT.test(bare.replace(BACKSLASH, '/'))) return false;
@@ -46,7 +46,7 @@ export function needs_island_entry_full_reload(
  * Absolute path equality with querystrings stripped (host vs component vs Vite watch paths).
  * @internal
  */
-export function same_module_path(a: string | null | undefined, b: string | null | undefined) {
+export function same_module_path(a: string | null | undefined, b: string | null | undefined): boolean {
 	if (!a || !b) return false;
 	return path.resolve(a.split('?')[0]) === path.resolve(b.split('?')[0]);
 }
@@ -61,7 +61,7 @@ export function same_module_path(a: string | null | undefined, b: string | null 
 export function island_vpaths_affected_by_file(
 	file: string,
 	entries: Iterable<[string, { hostPath?: string | null; componentPath?: string | null }]>
-) {
+): string[] {
 	const out: string[] = [];
 	for (const [vpath, entry] of entries) {
 		if (same_module_path(entry.hostPath, file) || same_module_path(entry.componentPath, file)) {

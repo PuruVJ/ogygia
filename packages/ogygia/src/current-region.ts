@@ -9,7 +9,7 @@ const CURRENT_REGION = Symbol.for('ogygia.context.current-region');
 const g = globalThis as Record<symbol, unknown>;
 
 /** Runtime sets the region it is about to hydrate so a nested `get()` knows where to start walking. */
-export function set_current_region(el: Element | null) {
+export function set_current_region(el: Element | null): void {
 	g[CURRENT_REGION] = el;
 }
 
@@ -36,7 +36,7 @@ export interface ForeignHydrate {
 }
 
 /** Runtime marks the foreign island it is about to delegate-hydrate (null when done). */
-export function set_foreign_hydrate(info: ForeignHydrate | null) {
+export function set_foreign_hydrate(info: ForeignHydrate | null): void {
 	g[FOREIGN_HYDRATE] = info;
 }
 

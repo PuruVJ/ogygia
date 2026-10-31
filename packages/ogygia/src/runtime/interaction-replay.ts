@@ -53,7 +53,7 @@ function restore_fields(region: Element, fields: FieldSnapshot[]) {
  * changes in their own render tick. A synchronous replay lands before that tick and toggles
  * nothing; after a frame the component is settled.
  */
-export function replay_clicks(region: Element, queued: QueuedClick[]) {
+export function replay_clicks(region: Element, queued: QueuedClick[]): void {
 	const replay = () => {
 		for (const q of queued) {
 			const t = resolve_address(region, q.addr);
@@ -78,7 +78,7 @@ export function after_wake(
 	fields: FieldSnapshot[],
 	active_addr: number[] | null,
 	queued: QueuedClick[]
-) {
+): void {
 	restore_fields(region, fields);
 	if (active_addr) {
 		const el = resolve_address(region, active_addr);

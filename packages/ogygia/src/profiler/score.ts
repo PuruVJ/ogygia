@@ -147,8 +147,10 @@ export function fmt_bytes(bytes: number): string {
 
 const ms = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} s` : `${Math.round(n)} ms`);
 
+type CurveKey = 'js' | 'weight' | 'blocking' | 'html' | 'data' | 'server' | 'lcp' | 'fcp' | 'ttfb' | 'cls' | 'inp' | 'tbt';
+
 /** The control points, in one place: [p10 (scores 90), median (scores 50)]. */
-export const CURVES = {
+export const CURVES: { readonly [K in CurveKey]: readonly [p10: number, median: number] } = {
 	js: [150 * KB, 700 * KB],
 	weight: [400 * KB, 1.6 * MB],
 	blocking: [25 * KB, 150 * KB],

@@ -4,4 +4,4 @@
  * halves name it from here.
  */
 export const PAGE_FACTS_SCRIPT_TYPE = 'application/ogygia-page-facts';
-export const PAGE_FACTS_SELECTOR = `script[type="${PAGE_FACTS_SCRIPT_TYPE}"]`;
+export const PAGE_FACTS_SELECTOR: `script[type="${typeof PAGE_FACTS_SCRIPT_TYPE}"]` = `script[type="${PAGE_FACTS_SCRIPT_TYPE}"]`;

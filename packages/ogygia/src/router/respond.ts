@@ -4,9 +4,9 @@
  * plus the small Response helpers the dispatcher shares. See internal/notes/router-v2.md.
  */
 
-const REDIRECT = Symbol.for('ogygia.router.redirect');
-const HTTP_ERROR = Symbol.for('ogygia.router.error');
-const ACTION_FAILURE = Symbol.for('ogygia.router.fail');
+const REDIRECT: unique symbol = Symbol.for('ogygia.router.redirect');
+const HTTP_ERROR: unique symbol = Symbol.for('ogygia.router.error');
+const ACTION_FAILURE: unique symbol = Symbol.for('ogygia.router.fail');
 
 export interface Redirect {
 	[REDIRECT]: true;

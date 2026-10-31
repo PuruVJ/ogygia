@@ -17,7 +17,11 @@
  */
 import { configure, invalidate, invalidateWhere } from './registry.js';
 
-export const freeze = { configure, invalidate, invalidateWhere };
+export const freeze: {
+	configure: typeof configure;
+	invalidate: typeof invalidate;
+	invalidateWhere: typeof invalidateWhere;
+} = { configure, invalidate, invalidateWhere };
 
 export { memory_store as memoryStore } from './memory-store.js';
 export { valkey } from './adapters/valkey.js';

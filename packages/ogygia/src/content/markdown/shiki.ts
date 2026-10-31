@@ -149,14 +149,14 @@ export function normalize_shiki(options: MarkdownShikiOptions = {}): ResolvedShi
 	};
 }
 
-export function configure_shiki(options: MarkdownShikiOptions = {}) {
+export function configure_shiki(options: MarkdownShikiOptions = {}): ResolvedShiki {
 	active = normalize_shiki(options);
 	highlighter_p = null;
 	highlighter_key = '';
 	return active;
 }
 
-export function get_shiki_config() {
+export function get_shiki_config(): ResolvedShiki | null {
 	return active;
 }
 
@@ -178,13 +178,13 @@ function get_highlighter(cfg: ResolvedShiki) {
 	));
 }
 
-export function wrap_html(html: string, wrapperClass: string | false) {
+export function wrap_html(html: string, wrapperClass: string | false): string {
 	if (!wrapperClass) return html;
 	return `<div class="${wrapperClass}">${html}</div>`;
 }
 
 /** Escape for embedding inside a Svelte `{@html \`…\`}` template (mdsvex highlighter). */
-export function escape_svelte(html: string) {
+export function escape_svelte(html: string): string {
 	return html
 		.replace(ESCAPE_BACKSLASH, '\\\\')
 		.replace(ESCAPE_BACKTICK, '\\`')
@@ -208,7 +208,7 @@ export async function highlight(
 	/** Raw fence infostring — passed to Shiki as `meta.__raw` so meta-reading transformers
 	 *  (`transformerMetaHighlight` for `{1-3,5}`, word highlight, `// [!code …]`) can read it. */
 	rawMeta?: string
-) {
+): Promise<string> {
 	const cfg = options ? normalize_shiki(options) : active;
 	if (!cfg) {
 		throw new Error(
@@ -280,7 +280,7 @@ export function create_mdsvex_highlighter(
 		code: string,
 		lang: string | undefined,
 		meta?: string | null
-	) {
+	): Promise<string> {
 		// Render (or hit cache) to a serialized region, then apply the `{@html}` embedding wrap on the
 		// way OUT (an mdsvex concern; the region emitter reverses it wholesale). `code()` shares the
 		// exact same fence→region step but inlines the `{ html }` directly, no embedding.

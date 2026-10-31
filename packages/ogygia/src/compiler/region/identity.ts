@@ -15,7 +15,7 @@ const PATH_SEP = /[/\\]/;
  * Fingerprint of a region mark for dedupe. Same component path + same key → one wrapper/entry.
  * @param mark
  */
-export function strategyKey(mark: { strategy: string; options?: Record<string, unknown> | null }) {
+export function strategyKey(mark: { strategy: string; options?: Record<string, unknown> | null }): string {
 	const o = mark.options || {};
 	if (mark.strategy === 'server') {
 		let k = `defer:${o.when ?? 'load'}`;
@@ -84,14 +84,14 @@ export function regionIdentity(
  * Unsalted: it is never a file name (nothing to enumerate) and only rides inside a signed URL.
  * @param identityOrPath a {@link regionIdentity} (its component half is taken) or a component path
  */
-export function renderId(identityOrPath: string) {
+export function renderId(identityOrPath: string): string {
 	const nul = identityOrPath.indexOf('\0');
 	const component = (nul === -1 ? identityOrPath : identityOrPath.slice(0, nul)).split(PATH_SEP).join('/');
 	return createHash('md5').update(`render\0${component}`).digest('hex').slice(0, 12);
 }
 
 /** Hash an identity string (optional production salt) → 12-char region id. */
-export function regionId(identityKey: string, salt = '') {
+export function regionId(identityKey: string, salt = ''): string {
 	const msg = salt ? `${salt}\0${identityKey}` : identityKey;
 	return createHash('md5').update(msg).digest('hex').slice(0, 12);
 }

@@ -194,7 +194,21 @@ export function make_region_binding(opts: {
 	/** named export to pull (asRegion/barrel); undefined → default import */
 	exportName?: string;
 	identity: string;
-}) {
+}): {
+	id: string;
+	virtualPath: string;
+	source: string;
+	bindingPath: string;
+	bindingSsrSource: string;
+	bindingClientSource: string;
+	hostPath: string;
+	componentPath: string;
+	server: boolean;
+	kind: string;
+	held: boolean;
+	lakes: never[];
+	identity: string;
+} {
 	// Descriptor metadata `region()` reads. `__hydrate` is baked only for a `wake:` mark; a
 	// `region: 'raw'` binding bakes none and the schedule comes from the `region()` call's `{ wake }`.
 	// The runtime `<ogygia-region>` fetches on mount (`when: 'load'`) and wakes on the resolved schedule.
@@ -303,7 +317,28 @@ export function make_wake_island(opts: {
 	 * flags differ, which is also why the two carry distinct identities (an endpoint vs none).
 	 */
 	held?: boolean;
-}) {
+}): {
+	kind: string;
+	lakes: never[];
+	identity: string;
+	strategy: string;
+	keep: unknown;
+	held?: boolean;
+	id: string;
+	virtualPath: string;
+	wrapperPath: string;
+	wrapperSource: string;
+	wrapperClientSource: string;
+	lazyPath: string;
+	lazySource: string;
+	bindingPath: string;
+	bindingSsrSource: string;
+	bindingClientSource: string;
+	source: string;
+	hostPath: string;
+	componentPath: string;
+	server: boolean;
+} {
 	const margin =
 		opts.strategy === 'visible' ? (opts.options?.margin as string | undefined) : undefined;
 	const attach = wrapper_attach_binding({
@@ -466,7 +501,7 @@ export function strategy_to_attr(strategy: string, options?: Record<string, unkn
 }
 
 /** Rewrite `$app/{state,stores,navigation}` string literals to absolute shim paths. */
-export const APP_SHIM_IMPORT = /(['"])\$app\/(state|stores|navigation)\1/g;
+export const APP_SHIM_IMPORT: RegExp = /(['"])\$app\/(state|stores|navigation)\1/g;
 
 const REGEXP_META = /[.*+?^${}()|[\]\\]/g;
 const IMPORT_AS_CLAUSE = /^(.+?)(?:\s+as\s+(\w+))?$/;
@@ -482,7 +517,7 @@ export function rewrite_lake_import_to_placeholder(
 	src: string,
 	local: string,
 	placeholder: string
-) {
+): string {
 	const esc = local.replace(REGEXP_META, '\\$&');
 	const ph = JSON.stringify(placeholder);
 	// default: import Lake from '…'

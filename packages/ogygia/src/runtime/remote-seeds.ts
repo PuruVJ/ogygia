@@ -11,6 +11,6 @@ import { seed_query_responses } from '../shims/kit-remote/client-stub.js';
 import { clear_remote_seeds, clear_remote_instances } from '../shims/kit-remote/remote-cache.js';
 
 /** Feature entry: fill the `remoteSeeds` slot. */
-export function install() {
+export function install(): void {
 	slots.remoteSeeds = { seed_query_responses, clear_remote_seeds, clear_remote_instances };
 }

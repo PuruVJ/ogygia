@@ -41,7 +41,7 @@ export function late_chunk(id: string, html: string): string {
  * swaps each into its slot immediately (stylesheet links hoist to head first so the swap never
  * paints unstyled). Kept dependency-free and tiny — it must run before any module script can.
  */
-export const LATE_BOOT_SCRIPT =
+export const LATE_BOOT_SCRIPT: string =
 	'<script data-og-late-boot>(function(){' +
 	'function ap(t){var id=t.getAttribute("data-og-late");var s=document.querySelector(' +
 	"'og-late-slot[data-og-slot=\"'+id+'\"]');if(!s){t.remove();return}" +

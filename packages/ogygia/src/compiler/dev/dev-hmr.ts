@@ -23,7 +23,7 @@
  *
  * @internal Emitted by the plugin; exported for unit tests.
  */
-export function dev_hmr_client_source() {
+export function dev_hmr_client_source(): string {
 	return (
 		`import "/@vite/client";\n` +
 		`const css_modules = import.meta.glob("/src/**/*.{css,scss,sass,less,styl}", { eager: false });\n` +

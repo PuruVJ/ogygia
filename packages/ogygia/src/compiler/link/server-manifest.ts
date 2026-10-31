@@ -72,4 +72,4 @@ export function server_manifest_module(
  *  literal the bundler cannot fold: a plain `null` placeholder was inlined into every reader as the
  *  constant it was (every hole then looked its page up). Unpatched it parses to nothing → `null`. */
 export const PAGE_DATA_READS_TOKEN = '__OGYGIA_PAGE_DATA_READS__';
-export const PAGE_DATA_READS_PLACEHOLDER = `(() => { try { return JSON.parse("${PAGE_DATA_READS_TOKEN}"); } catch { return null; } })()`;
+export const PAGE_DATA_READS_PLACEHOLDER: `(() => { try { return JSON.parse("${typeof PAGE_DATA_READS_TOKEN}"); } catch { return null; } })()` = `(() => { try { return JSON.parse("${PAGE_DATA_READS_TOKEN}"); } catch { return null; } })()`;

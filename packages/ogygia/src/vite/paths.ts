@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 /** This package's root (the plugin runs from `dist/vite/`, so `../..` is the package root). A NATIVE
  *  path (backslashes on Windows): for the file system, never to compare against a module id. */
-export const PKG_ROOT = fileURLToPath(new URL('../..', import.meta.url));
+export const PKG_ROOT: string = fileURLToPath(new URL('../..', import.meta.url));
 
 /** Windows separators → posix. */
 const WIN_SEP_RE = /\\/g;
@@ -36,7 +36,7 @@ export function id_dir(p: string): string {
 
 /** THE own-package test: every module id inside this package starts with this. Every check of "is
  *  this id ogygia's own file" compares against it, never against PKG_ROOT. */
-export const PKG_ROOT_ID = id_dir(PKG_ROOT);
+export const PKG_ROOT_ID: string = id_dir(PKG_ROOT);
 
 // Glob metacharacters in a file path handed to `optimizeDeps.entries` (Vite globs entries as
 // PATTERNS): a route group `(pes)`, a param dir `[slug]`, `{a,b}`, `*`, `?`, `!`. Escaped, or the
@@ -53,7 +53,7 @@ export function scan_entry_pattern(file: string, own_root: string = PKG_ROOT_ID)
 }
 
 /** The two ogygia self-imports the transform injects into hosts / generated island modules. */
-export const OGYGIA_INJECTED_IMPORTS = new Set(['ogygia/internal', 'ogygia/internal/server']);
+export const OGYGIA_INJECTED_IMPORTS: Set<string> = new Set(['ogygia/internal', 'ogygia/internal/server']);
 
 /**
  * DIRECT paths to ogygia's OWN injected runtime entries, resolved WITHOUT `this.resolve`. The
@@ -78,7 +78,7 @@ const OG_HAS_SRC = fs.existsSync(path.join(PKG_ROOT, 'src/internal.ts'));
  * (App islands — including workspace-package components marked at an app import site — need none of
  * this; the mark lives in app source and the src walk already finds it.)
  */
-export const PROFILER_UI_DIR = OG_HAS_SRC
+export const PROFILER_UI_DIR: string = OG_HAS_SRC
 	? path.join(PKG_ROOT, 'src/profiler/ui')
 	: path.join(PKG_ROOT, 'dist/profiler/ui');
 
@@ -89,7 +89,7 @@ export const PROFILER_UI_DIR = OG_HAS_SRC
  * each wrapping `Shell`) become router-css roots, so their scoped `<style>` blocks are emitted +
  * linked exactly like an app router page's. Parallel to PROFILER_UI_DIR's src/dist self-reference.
  */
-export const PROFILER_ROUTER_MODULE = OG_HAS_SRC
+export const PROFILER_ROUTER_MODULE: string = OG_HAS_SRC
 	? path.join(PKG_ROOT, 'src/profiler/profiler-router.ts')
 	: path.join(PKG_ROOT, 'dist/profiler/profiler-router.js');
 
@@ -99,7 +99,7 @@ export const PROFILER_ROUTER_MODULE = OG_HAS_SRC
  * spot it. Dev severs this module's `import('./profiler/index.js')` edge from import-analysis there
  * (see the transform hook) so Kit's dev css crawl can't descend into the profiler UI's stylesheets.
  */
-export const OGYGIA_HOOKS_MODULE = PKG_ROOT_ID + (OG_HAS_SRC ? 'src/hooks.ts' : 'dist/hooks.js');
+export const OGYGIA_HOOKS_MODULE: string =PKG_ROOT_ID + (OG_HAS_SRC ? 'src/hooks.ts' : 'dist/hooks.js');
 /** ogygia's `Region.svelte` — either copy, as the POSIX id Vite hands the transform hook (a workspace
  *  can load the src one and the dist one both): its LateIsland import is the awaiting one where the
  *  app runs Svelte's async mode (late-island.ts). */
@@ -115,7 +115,7 @@ export const OGYGIA_INJECTED_FILES: Record<string, string> = OG_HAS_SRC
 		};
 
 /** Client-side shims aliased for island modules (Kit's client runtime is absent under csr=false). */
-export const APP_SHIMS = {
+export const APP_SHIMS: { '$app/state': string; '$app/stores': string; '$app/navigation': string } = {
 	'$app/state': fileURLToPath(new URL('../shims/app-state.svelte.js', import.meta.url)),
 	'$app/stores': fileURLToPath(new URL('../shims/app-stores.js', import.meta.url)),
 	'$app/navigation': fileURLToPath(new URL('../shims/app-navigation.js', import.meta.url))
@@ -126,7 +126,7 @@ export const APP_SHIMS = {
 // SSR DOM around hydration). SSR keeps the real component. Same empty `ClientBindingStub` used for
 // portable bindings — a lake placeholder and a binding stub are both "render nothing on the client".
 /** On-disk stub for `virtual:ogygia/client-binding-stub` (csr=false client hosts). */
-export const CLIENT_BINDING_STUB_FILE = fileURLToPath(
+export const CLIENT_BINDING_STUB_FILE: string =fileURLToPath(
 	new URL('../ClientBindingStub.svelte', import.meta.url)
 );
 
@@ -134,24 +134,24 @@ export const CLIENT_BINDING_STUB_FILE = fileURLToPath(
 // `__sveltekit/remote` at Kit's real remote-functions and scope-alias the two router-coupled
 // modules those pull in (`client.js`, `state.svelte.js`) to tiny stubs, so the router graph
 // never loads. The old hand-rolled wire client is gone; these stubs are the only glue.
-export const STUB_CLIENT = fileURLToPath(
+export const STUB_CLIENT: string =fileURLToPath(
 	new URL('../shims/kit-remote/client-stub.js', import.meta.url)
 );
-export const STUB_STATE = fileURLToPath(
+export const STUB_STATE: string =fileURLToPath(
 	new URL('../shims/kit-remote/state-stub.js', import.meta.url)
 );
-export const STUB_PATHS = fileURLToPath(
+export const STUB_PATHS: string =fileURLToPath(
 	new URL('../shims/kit-remote/paths-internal-stub.js', import.meta.url)
 );
-export const KIT_REMOTE_CLIENT = /(^|\/)client\.js$/;
-export const KIT_REMOTE_STATE = /state\.svelte\.js$/;
+export const KIT_REMOTE_CLIENT: RegExp = /(^|\/)client\.js$/;
+export const KIT_REMOTE_STATE: RegExp = /state\.svelte\.js$/;
 
 /** Absolute path to real HMAC (SSR-only via `virtual:ogygia/sign`). */
-export const HMAC_MODULE = fileURLToPath(new URL('../server/hmac.js', import.meta.url));
+export const HMAC_MODULE: string =fileURLToPath(new URL('../server/hmac.js', import.meta.url));
 /** The prebuilt runtime dir the runtime chunk bundles (for `generateRuntimeEntrySource`). */
-export const RUNTIME_DIR = fileURLToPath(new URL('../runtime', import.meta.url));
+export const RUNTIME_DIR: string =fileURLToPath(new URL('../runtime', import.meta.url));
 /** Absolute path to SSR region-endpoint helper (signed capability URLs). */
-export const REGION_ENDPOINT_MODULE = fileURLToPath(
+export const REGION_ENDPOINT_MODULE: string =fileURLToPath(
 	new URL('../server/region-endpoint.js', import.meta.url)
 );
 
@@ -193,4 +193,4 @@ function runtime_content_hash(): string {
 }
 
 /** The runtime chunk's source-content hash (the immutable-filename base; feature hash rides on top). */
-export const RUNTIME_HASH = runtime_content_hash();
+export const RUNTIME_HASH: string =runtime_content_hash();

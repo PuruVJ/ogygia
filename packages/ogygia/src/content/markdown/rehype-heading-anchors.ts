@@ -28,7 +28,7 @@ const text_of = (node: HastNode): string => {
 };
 
 export function rehypeHeadingAnchors() {
-	return (tree: HastNode) => {
+	return (tree: HastNode): void => {
 		const visit = (node: HastNode) => {
 			if (!node.children) return;
 			for (const child of node.children) {

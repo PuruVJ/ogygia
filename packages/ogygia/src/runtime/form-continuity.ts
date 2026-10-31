@@ -13,7 +13,7 @@ import { element_address, resolve_address } from './interaction.js';
 import { slots } from './slots.js';
 
 /** Feature entry: enable form-field survival across SPA nav (unless the build disabled it). */
-export function install() {
+export function install(): void {
 	const on =
 		typeof __OGYGIA_CONTINUITY_FORMS__ !== 'undefined' ? __OGYGIA_CONTINUITY_FORMS__ : true;
 	if (!on) return;

@@ -17,8 +17,8 @@ const entry_bytes = (entry: FreezeEntry): number =>
 	entry.kind === 'page' ? entry.html.length : 64;
 
 export function memory_store(
-	max_entries = DEFAULT_MAX_ENTRIES,
-	max_bytes = DEFAULT_MAX_BYTES
+	max_entries: number = DEFAULT_MAX_ENTRIES,
+	max_bytes: number = DEFAULT_MAX_BYTES
 ): FreezeStore {
 	const entries = new SizedLru<FreezeEntry>(max_bytes, max_entries);
 	// tag → keys (og.source receipts). Dead keys are tolerated (evicted entries leave their tag

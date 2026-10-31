@@ -55,9 +55,9 @@ function hovered_anchor(event: Event): HTMLAnchorElement | null {
 // "conflict with SvelteKit's router" warning. Captured lazily so a test/SSR without `History` is safe.
 const native_push = typeof History !== 'undefined' ? History.prototype.pushState : null;
 const native_replace = typeof History !== 'undefined' ? History.prototype.replaceState : null;
-export const push_state = (state: unknown, url: string) =>
+export const push_state = (state: unknown, url: string): void =>
 	(native_push ?? history.pushState).call(history, state, '', url);
-export const replace_state = (state: unknown, url?: string) => {
+export const replace_state = (state: unknown, url?: string): void => {
 	const fn = native_replace ?? history.replaceState;
 	return url === undefined ? fn.call(history, state, '') : fn.call(history, state, '', url);
 };
@@ -131,7 +131,7 @@ function hash_target_exists(hash: string): boolean {
 }
 
 /** Same document = pathname + search. Hash is not part of document identity. */
-export function same_document(a: URL, b: URL) {
+export function same_document(a: URL, b: URL): boolean {
 	return a.pathname === b.pathname && a.search === b.search;
 }
 
@@ -168,12 +168,12 @@ export function same_document_link(
 	return 'refresh';
 }
 
-export function document_key(url: URL) {
+export function document_key(url: URL): string {
 	return url.pathname + url.search;
 }
 
 /** Instant scroll to a hash target (or top). Ignores CSS `scroll-behavior: smooth`. */
-export function jump_to_hash(hash: string) {
+export function jump_to_hash(hash: string): void {
 	const html_el = document.documentElement;
 	const prev = html_el.style.scrollBehavior;
 	html_el.style.scrollBehavior = 'auto';
@@ -245,12 +245,12 @@ export class SpaRouter {
 	 */
 	current_url: URL | null = null;
 
-	beforeNavigate(fn: BeforeNavigateCallback) {
+	beforeNavigate(fn: BeforeNavigateCallback): () => boolean {
 		this.#before_hooks.add(fn);
 		return () => this.#before_hooks.delete(fn);
 	}
 
-	afterNavigate(fn: AfterNavigateCallback) {
+	afterNavigate(fn: AfterNavigateCallback): () => boolean {
 		this.#after_hooks.add(fn);
 		// $app/navigation's afterNavigate fires immediately on mount too
 		try {
@@ -281,15 +281,15 @@ export class SpaRouter {
 		this.nav_target = null;
 	}
 
-	bust_page_cache() {
+	bust_page_cache(): void {
 		loaded_nav?.bust_page_cache(); // no navigation loaded yet ⇒ nothing cached
 	}
 
-	_page_cache_size() {
+	_page_cache_size(): number {
 		return loaded_nav?.page_cache_size() ?? 0;
 	}
 
-	fetch_page(href: string, signal?: AbortSignal, purpose?: 'nav' | 'prefetch' | 'history') {
+	fetch_page(href: string, signal?: AbortSignal, purpose?: 'nav' | 'prefetch' | 'history'): Promise<string | null> {
 		return nav().then((n) => n.fetch_page(href, signal, purpose));
 	}
 
@@ -301,7 +301,7 @@ export class SpaRouter {
 			type?: string;
 			replace?: boolean;
 		} = {}
-	) {
+	): Promise<void> {
 		const { push = true, type = 'link', replace = false } = opts;
 		const from = this.current_url ?? new URL(location.href);
 
@@ -344,7 +344,7 @@ export class SpaRouter {
 		return n.navigate(this, url, from, opts);
 	}
 
-	goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}) {
+	goto(url: string | URL, opts: { replaceState?: boolean; external?: boolean } = {}): Promise<void> {
 		const target = new URL(url, location.href);
 		if (target.protocol !== 'http:' && target.protocol !== 'https:') {
 			throw new Error('[ogygia] goto() only supports http(s) URLs');
@@ -361,15 +361,15 @@ export class SpaRouter {
 		return this.navigate(target, { push: !opts.replaceState, replace: false, type: 'goto' });
 	}
 
-	invalidateAll() {
+	invalidateAll(): Promise<void> {
 		return nav().then((n) => n.invalidate_all());
 	}
 
-	invalidate() {
+	invalidate(): Promise<void> {
 		return this.invalidateAll();
 	}
 
-	preloadData(url: string | URL) {
+	preloadData(url: string | URL): Promise<{ type: string; status: number; data: {} }> {
 		const target = new URL(url, location.href);
 		if (target.origin !== location.origin)
 			return Promise.resolve({ type: 'loaded', status: 200, data: {} });
@@ -377,26 +377,26 @@ export class SpaRouter {
 		return Promise.resolve({ type: 'loaded', status: 200, data: {} });
 	}
 
-	preloadCode() {
+	preloadCode(): Promise<void> {
 		// island chunks are code-split & fetched on connect; nothing to warm here.
 		return Promise.resolve();
 	}
 
-	disableScrollHandling() {
+	disableScrollHandling(): void {
 		if (typeof console !== 'undefined') {
 			console.warn('[ogygia] disableScrollHandling() is a no-op in the islands SPA router.');
 		}
 	}
 
-	pushState() {
+	pushState(): void {
 		console.warn('[ogygia] pushState() shallow routing is not supported; use goto().');
 	}
 
-	replaceState() {
+	replaceState(): void {
 		console.warn('[ogygia] replaceState() shallow routing is not supported; use goto().');
 	}
 
-	start() {
+	start(): void {
 		if (this.#started || typeof document === 'undefined') return;
 		// Only activate when the page carries the `ogygia-router` marker (the handle injects it
 		// globally unless `ogygia({ router: false })`).
@@ -483,7 +483,7 @@ export class SpaRouter {
 		return url;
 	}
 
-	run_before(from: URL, to: URL, type: string) {
+	run_before(from: URL, to: URL, type: string): boolean {
 		let cancelled = false;
 		const nav = {
 			from: this.#build_nav_target(from),
@@ -502,7 +502,7 @@ export class SpaRouter {
 		return !cancelled;
 	}
 
-	run_after(from: URL, to: URL, type: string) {
+	run_after(from: URL, to: URL, type: string): void {
 		for (const fn of this.#after_hooks) {
 			try {
 				fn({
@@ -562,7 +562,7 @@ export class SpaRouter {
 	 * because the scan competes with the freshly swapped page's own islands for the main thread and
 	 * a warm is speculation by definition.
 	 */
-	scan_preload_links() {
+	scan_preload_links(): void {
 		on_idle(() => {
 			// P-IO: recreate observer so detached anchors from the previous body are not retained.
 			this.#reset_viewport_io();
@@ -621,7 +621,7 @@ const spa = new SpaRouter();
  * Call `nav.cancel()` to abort. Returns an unsubscribe function. Inside a component, prefer the
  * `$app/navigation` / `ogygia/app` export, which unsubscribes on destroy.
  */
-export function beforeNavigate(fn: BeforeNavigateCallback) {
+export function beforeNavigate(fn: BeforeNavigateCallback): () => boolean {
 	return spa.beforeNavigate(fn);
 }
 
@@ -630,17 +630,17 @@ export function beforeNavigate(fn: BeforeNavigateCallback) {
  * Returns an unsubscribe function. Inside a component, prefer the `$app/navigation` /
  * `ogygia/app` export, which unsubscribes on destroy.
  */
-export function afterNavigate(fn: AfterNavigateCallback) {
+export function afterNavigate(fn: AfterNavigateCallback): () => boolean {
 	return spa.afterNavigate(fn);
 }
 
 /** Drop all warmed page HTML (call after mutations / auth changes). */
-export function bust_page_cache() {
+export function bust_page_cache(): void {
 	spa.bust_page_cache();
 }
 
 /** Test helper — current warmed entry count. */
-export function _page_cache_size() {
+export function _page_cache_size(): number {
 	return spa._page_cache_size();
 }
 
@@ -649,7 +649,7 @@ export function _page_cache_size() {
  * @param url - Absolute or relative URL (http(s) only).
  * @param opts.replaceState - Replace the current history entry instead of pushing.
  */
-export function goto(url: string | URL, opts: { replaceState?: boolean } = {}) {
+export function goto(url: string | URL, opts: { replaceState?: boolean } = {}): Promise<void> {
 	return spa.goto(url, opts);
 }
 
@@ -658,7 +658,7 @@ export function goto(url: string | URL, opts: { replaceState?: boolean } = {}) {
  * Busts the SPA HTML cache so the next real route change is fresh. Coarser than
  * Kit's dependency-scoped invalidate — see `invalidate_all` in ./router-nav.ts.
  */
-export function invalidateAll() {
+export function invalidateAll(): Promise<void> {
 	return spa.invalidateAll();
 }
 
@@ -666,7 +666,7 @@ export function invalidateAll() {
  * Refresh navigation data. Without Kit's client we cannot invalidate a single
  * dependency, so this refreshes everything (same as {@link invalidateAll}).
  */
-export function invalidate() {
+export function invalidate(): Promise<void> {
 	return spa.invalidate();
 }
 
@@ -676,18 +676,18 @@ export function invalidate() {
  * the browser owns navigation — is the MPA navigation handle's Speculation Rules hint, not this
  * module: ./nav-handle.ts. This module only loads with the router feature.)
  */
-export function preloadData(url: string | URL) {
+export function preloadData(url: string | URL): Promise<{ type: string; status: number; data: {} }> {
 	return spa.preloadData(url);
 }
 
 /** No-op with the router on: page “code” arrives with the HTML body swap (+ island chunks on
  *  connect). Router OFF is the MPA navigation handle's prefetch hint (./nav-handle.ts). */
-export function preloadCode(_url?: string | URL) {
+export function preloadCode(_url?: string | URL): Promise<void> {
 	return spa.preloadCode();
 }
 
 /** Skip scroll restoration / scroll-to-top on the next client-side navigation. */
-export function disableScrollHandling() {
+export function disableScrollHandling(): void {
 	spa.disableScrollHandling();
 }
 
@@ -695,7 +695,7 @@ export function disableScrollHandling() {
  * Shallow routing is not supported without Kit's client runtime.
  * @throws Always — use full navigations instead.
  */
-export function pushState() {
+export function pushState(): void {
 	spa.pushState();
 }
 
@@ -703,7 +703,7 @@ export function pushState() {
  * Shallow routing is not supported without Kit's client runtime.
  * @throws Always — use full navigations instead.
  */
-export function replaceState() {
+export function replaceState(): void {
 	spa.replaceState();
 }
 
@@ -712,7 +712,7 @@ export function replaceState() {
  * Invoked by the runtime once the module loads (handle-injected on every ogygia page, or by an island).
  * @internal
  */
-export function startRouter() {
+export function startRouter(): void {
 	spa.start();
 }
 
@@ -721,7 +721,7 @@ export function startRouter() {
  * `<meta name="ogygia-router">` (the handle injects it globally unless `ogygia({ router: false })`)
  * and Kit is not already booting it.
  */
-export function install() {
+export function install(): void {
 	if (typeof document === 'undefined') return;
 	slots.nav = { goto, invalidateAll };
 	// The SPA router's API is the document's navigation handle: island code (the `$app/navigation`

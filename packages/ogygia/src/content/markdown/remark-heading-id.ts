@@ -6,7 +6,7 @@ const HEADING_ID_STRIP = /\s*\{#[A-Za-z0-9_:-]+\}\s*$/;
  * Runs before mdsvex escapes `{…}` for Svelte.
  */
 export function remarkHeadingId() {
-	return (tree: { type?: string; children?: unknown[]; data?: Record<string, unknown> }) => {
+	return (tree: { type?: string; children?: unknown[]; data?: Record<string, unknown> }): void => {
 		walk(tree);
 	};
 

@@ -7,7 +7,7 @@
  * module: the element (core) writes it, the lazily loaded navigation reads it, and neither needs
  * the other's imports for that.
  */
-export const connected_regions = new Set<Element>();
+export const connected_regions: Set<Element> = new Set<Element>();
 
 /** Is any connected region inside a shadow root (so a body morph would miss it)? */
 export function regions_in_shadow(): boolean {

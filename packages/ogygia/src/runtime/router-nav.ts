@@ -255,7 +255,7 @@ export function install_head_style(
 	source: Element,
 	head: HTMLHeadElement = document.head,
 	before: Node | null = null
-) {
+): HTMLStyleElement {
 	const el = document.createElement('style');
 	for (const attr of Array.from(source.attributes)) {
 		el.setAttribute(attr.name, attr.value);
@@ -271,7 +271,7 @@ export function install_head_style(
  *  keyed head installer, so the swap never paints unstyled). On a full load the inline boot
  *  script in the streamed head does this progressively during parse — this is the swap-path
  *  twin. Islands inside the adopted content are custom elements: they connect and wake alone. */
-export function apply_late_templates(root: ParentNode) {
+export function apply_late_templates(root: ParentNode): void {
 	for (const tpl of Array.from(root.querySelectorAll('template[data-og-late]'))) {
 		const id = tpl.getAttribute('data-og-late') ?? '';
 		const slot = document.querySelector(`og-late-slot[data-og-slot="${CSS.escape(id)}"]`);
@@ -354,13 +354,13 @@ let soft_abort: AbortController | null = null;
  *  removes it, then re-attached. See {@link announce} / {@link reset_focus}. */
 let announcer: HTMLElement | null = null;
 
-export function bust_page_cache() {
+export function bust_page_cache(): void {
 	page_cache.clear();
 	inflight.clear();
 	final_url.clear();
 }
 
-export function page_cache_size() {
+export function page_cache_size(): number {
 	return page_cache.size;
 }
 
@@ -397,7 +397,7 @@ function install_remote_mutation_cache_bust() {
 }
 install_remote_mutation_cache_bust();
 
-export function fetch_page(href: string, signal?: AbortSignal, purpose: NavPurpose = 'nav') {
+export function fetch_page(href: string, signal?: AbortSignal, purpose: NavPurpose = 'nav'): Promise<string | null> {
 	// Warm cache hit (a prefetched page, or an in-flight prefetch): serving it is instant, so
 	// even an abortable navigation uses it — there is nothing to abort on a resolved cache hit
 	// or a shared prefetch promise. Without this, a click after a hover-prefetch would re-fetch
@@ -541,7 +541,7 @@ export async function navigate(
 		type?: string;
 		replace?: boolean;
 	} = {}
-) {
+): Promise<void> {
 	if (!r.run_before(from, url, type)) {
 		// A beforeNavigate hook cancelled: this navigation never starts, so it must not keep claiming
 		// the address (SpaRouter.navigate set it) — a later click on the same link has to navigate.
@@ -852,7 +852,7 @@ export async function navigate(
  * Uses a separate abort/generation from hard `navigate()` so soft fetches never cancel
  * an in-flight click navigation (and vice versa).
  */
-export async function invalidate_all() {
+export async function invalidate_all(): Promise<void> {
 	bust_page_cache();
 	const url = new URL(location.href);
 

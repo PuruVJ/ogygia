@@ -47,7 +47,7 @@ const ISLAND_FLOOR_MS = { hydrate: 10, load: 50 } as const;
 
 const label = (f: { code: string; names: string[] }) => (f.names.length ? `${f.code} (${[...new Set(f.names)].slice(0, 3).join(', ')})` : f.code);
 
-export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at = Date.now()): SinceLoad | null {
+export function since_load(prev: LoadSnapshot, now: LoadSnapshot, at: number = Date.now()): SinceLoad | null {
 	if (prev.path !== now.path) return null;
 	const key = (f: { code: string; names: string[] }) => `${f.code}|${[...new Set(f.names)].sort().join(',')}`;
 	// (the dev server's own doing, on either side, is no change of the code: left out of both)

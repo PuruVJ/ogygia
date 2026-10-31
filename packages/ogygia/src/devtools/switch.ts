@@ -74,7 +74,7 @@ export function testing_lean(): boolean {
 }
 
 /** The `Set-Cookie`-shaped attributes the switch is written with (browser and server alike). */
-export const SWITCH_COOKIE_OPTIONS = { path: '/', maxAge: MAX_AGE, sameSite: 'lax' as const, httpOnly: false };
+export const SWITCH_COOKIE_OPTIONS: { path: string; maxAge: number; sameSite: 'lax'; httpOnly: boolean } = { path: '/', maxAge: MAX_AGE, sameSite: 'lax' as const, httpOnly: false };
 
 /** Is it on in this browser (false off the browser, or with cookies blocked). */
 export function devtools_switched_on(): boolean {

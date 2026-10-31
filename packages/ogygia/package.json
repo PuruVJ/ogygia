@@ -195,7 +195,7 @@
 		"test:node": "vitest run --project node",
 		"test:browser": "vitest run --project browser",
 		"lint": "oxlint -c .oxlintrc.json src",
-		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.json && vitest run && pnpm run lint",
+		"check": "tsc --noEmit && svelte-check --tsconfig ./tsconfig.check.json && vitest run && pnpm run lint",
 		"prepublishOnly": "pnpm run build && pnpm run verify:package",
 		"verify:package": "node scripts/verify-package.ts"
 	},

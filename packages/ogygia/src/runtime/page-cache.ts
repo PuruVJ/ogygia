@@ -59,7 +59,7 @@ export class PageCache {
 		return e.html;
 	}
 
-	set(href: string, html: string) {
+	set(href: string, html: string): void {
 		const now = Date.now();
 		this.#evict_expired(now);
 		this.#drop(href);
@@ -69,20 +69,20 @@ export class PageCache {
 		this.#evict_overflow();
 	}
 
-	delete(href: string) {
+	delete(href: string): void {
 		this.#drop(href);
 	}
 
-	clear() {
+	clear(): void {
 		this.#map.clear();
 		this.#total_bytes = 0;
 	}
 
-	get size() {
+	get size(): number {
 		return this.#map.size;
 	}
 
-	get bytes() {
+	get bytes(): number {
 		return this.#total_bytes;
 	}
 }

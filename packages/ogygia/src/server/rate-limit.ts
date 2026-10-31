@@ -65,11 +65,11 @@ export class RateLimiter {
 		return false;
 	}
 
-	get size() {
+	get size(): number {
 		return this.#buckets.size;
 	}
 
-	clear() {
+	clear(): void {
 		this.#buckets.clear();
 		this.#since_prune = 0;
 	}

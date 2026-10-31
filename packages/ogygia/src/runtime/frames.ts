@@ -12,6 +12,6 @@ import { slots } from './slots.js';
 import { subscribe, ensure, abandon } from './frame-store.js';
 import { batch_times, join_batch, streamFrames } from './frame-nav.js';
 
-export function install() {
+export function install(): void {
 	slots.frames = { subscribe, ensure, abandon, stream: streamFrames, join: join_batch, batch_times };
 }

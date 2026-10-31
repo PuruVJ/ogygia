@@ -23,7 +23,7 @@
 import { speculate_url } from './speculate-hint.js';
 import type { AfterNavigateCallback, BeforeNavigateCallback } from './router.js';
 
-export const NAV_HANDLE_KEY = Symbol.for('ogygia.nav');
+export const NAV_HANDLE_KEY: unique symbol = Symbol.for('ogygia.nav');
 
 export type NavHandle = {
 	goto(url: string | URL, opts?: { replaceState?: boolean; external?: boolean }): Promise<void>;

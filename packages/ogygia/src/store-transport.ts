@@ -35,7 +35,7 @@ export const STORE_WIRE_KEY = 'OgygiaW';
 const GENERIC_TAG = 'svelte:writable';
 
 /** Brand carrying a factory tag on a store object (non-enumerable, set by `mark_store`). */
-const STORE_TAG = Symbol.for('ogygia.store.tag');
+const STORE_TAG: unique symbol = Symbol.for('ogygia.store.tag');
 
 interface StoreLike {
 	subscribe: (run: (value: unknown) => void) => unknown;

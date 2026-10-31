@@ -110,7 +110,7 @@ export function pkg_of(file: string): string {
 }
 
 /** the framework the app runs on: SvelteKit, Svelte, ogygia itself, Vite */
-export const is_framework_pkg = (p: string) =>
+export const is_framework_pkg = (p: string): boolean =>
 	p.startsWith('@sveltejs/') || p === 'svelte' || p.startsWith('ogygia') || p === 'vite';
 
 /** After `renders` more renders a leaking line holds about `renders` × what one render left; one
@@ -204,7 +204,7 @@ export function short_source(path: string): string {
  *  framework's generated build output (a compiled route chunk nobody edits), and not ogygia's own
  *  source reached through a workspace link (`packages/ogygia/src/…`: no node_modules segment, but
  *  the library all the same, as analyze's categorize already says) */
-export const is_app_path = (path: string) =>
+export const is_app_path = (path: string): boolean =>
 	!!path &&
 	!path.includes('/node_modules/') &&
 	!path.startsWith('node:') &&

@@ -17,10 +17,10 @@ import { renderId } from './region/identity.js';
 import type { RuntimeMarks } from './link/runtime-entry.js';
 
 /** Strip a `?query` off a module id (host vs component vs Vite watch paths). */
-export const strip_id = (id: string) => (id ? id.split('?')[0] : id);
+export const strip_id = (id: string): string => (id ? id.split('?')[0] : id);
 
 /** Canonical absolute host key (query-stripped, resolved) — the registry's cross-host dedupe key. */
-export const host_key = (hostPath: string) => path.resolve(strip_id(hostPath));
+export const host_key = (hostPath: string): string => path.resolve(strip_id(hostPath));
 
 /** One row in the virtual-module registry — an island's entry / wrapper / region-binding artifact.
  *  Loose by design: the three roles carry different legs (source vs ssrSource/clientSource). */
@@ -90,37 +90,37 @@ export interface RegisterResult {
 
 export class Program {
 	/** keyed by virtual path → the island's registry row (entry / wrapper / region binding) */
-	readonly registry = new Map<string, RegistryEntry>();
+	readonly registry: Map<string, RegistryEntry> = new Map();
 	/** Absolute module ids in an island's CLIENT dependency graph. `$app/*` resolves to shims
 	 *  for these importers (virtual island module AND its transitive component imports). */
-	readonly island_graph = new Set<string>();
+	readonly island_graph: Set<string> = new Set();
 	/** iid -> entry virtual path (hydrate / defer / swr-lake) */
-	readonly by_id = new Map<string, string>();
+	readonly by_id: Map<string, string> = new Map();
 	/** every region id -> kind (server manifest / emit) */
-	readonly region_kinds = new Map<string, 'hydrate' | 'defer' | 'lake'>();
+	readonly region_kinds: Map<string, 'hydrate' | 'defer' | 'lake'> = new Map();
 	/** host abs path → region ids + virtual paths discovered on last transform of that host */
-	readonly host_index = new Map<string, HostIndexEntry>();
+	readonly host_index: Map<string, HostIndexEntry> = new Map();
 	/** region id → hosts still claiming it (cross-host dedupe: don't drop shared wrappers) */
-	readonly id_hosts = new Map<string, Set<string>>();
+	readonly id_hosts: Map<string, Set<string>> = new Map();
 	/** Client-leg: hydrate island ids whose deterministic chunk has been emitFile'd (dedup across the
 	 *  buildStart prescan emit AND the transform-time emit that catches islands prescan can't see —
 	 *  those declared inside LIBRARY components, where the host lives outside the app's `src`). */
-	readonly emitted_island_chunks = new Set<string>();
+	readonly emitted_island_chunks: Set<string> = new Set();
 	/** BUILD, server leg: every module id Vite actually transformed (`host_key`-normalised) — the
 	 *  server bundle's real graph. Handed to the client leg, which emits island chunks only for
 	 *  islands whose HOST is in it: the prescan registers every marked import under `src/`, but a
 	 *  host nothing imports (a second route tree's pages, a retired component) must not cost a
 	 *  chunk — or drag its imports into a client build whose server pass never saw them (a
 	 *  `.remote.ts` there fails Kit's "expected to find metadata" check). */
-	readonly ssr_transformed = new Set<string>();
+	readonly ssr_transformed: Set<string> = new Set();
 	/** Absolute paths of app modules that define a transportable class (built during prescan). */
-	readonly transportable_modules = new Set<string>();
+	readonly transportable_modules: Set<string> = new Set();
 
 	/** App modules importing `'ogygia/router'` (server-router definition sites) + every walked
 	 *  module's import specifiers — the build data `virtual:ogygia/router-css` computes its
 	 *  component closure from (see link/router-css.ts). Filled during the prescan walk. */
-	readonly router_modules = new Set<string>();
-	readonly module_specs = new Map<string, string[]>();
+	readonly router_modules: Set<string> = new Set();
+	readonly module_specs: Map<string, string[]> = new Map();
 	/** flag()/experiment() call sites the prescan OBSERVED (modules importing 'ogygia' only) —
 	 *  written to node_modules/.ogygia/flags-manifest.json at build for CI flag-debt diffs. */
 	readonly flag_sites: import('./flags.js').FlagSite[] = [];
@@ -129,13 +129,13 @@ export class Program {
 	 *  transform for every module that imports Kit's page store (link/page-keys.ts); the client
 	 *  `writeBundle` unions them over each island's chunk closure (link/island-deps.ts), and the
 	 *  handle ships only those keys of `page.data`. */
-	readonly page_keys = new Map<string, import('./link/page-keys.js').PageKeys>();
+	readonly page_keys: Map<string, import('./link/page-keys.js').PageKeys> = new Map();
 	/** Per module that answered `'all'`: why, and on which line — the build report names it, so a
 	 *  developer sees the one read that makes a page ship its whole `page.data`. */
-	readonly page_key_reasons = new Map<string, import('./link/page-keys.js').AllReason>();
+	readonly page_key_reasons: Map<string, import('./link/page-keys.js').AllReason> = new Map();
 	/** Per module: the `helper(page)` calls into IMPORTED helpers the build follows at `writeBundle`
 	 *  (resolve the specifier, summarize the export, fold the answer into `page_keys`). */
-	readonly page_pending = new Map<string, import('./link/page-keys.js').PendingCall[]>();
+	readonly page_pending: Map<string, import('./link/page-keys.js').PendingCall[]> = new Map();
 
 	/** App crosses a held region / transportable value through Kit's `transport` hook — a `.remote.*`
 	 *  file, or a `region`/`site`/content import (loads & remotes that carry regions or wired values).
@@ -173,7 +173,7 @@ export class Program {
 		};
 	}
 
-	note_runtime_mark(patch: Partial<RuntimeMarks>) {
+	note_runtime_mark(patch: Partial<RuntimeMarks>): void {
 		const runtime_marks = this.runtime_marks;
 		if (patch.hydrate) {
 			runtime_marks.hydrate = [...new Set([...(runtime_marks.hydrate || []), ...patch.hydrate])];
@@ -195,7 +195,7 @@ export class Program {
 	}
 
 	/** Drop this host's claims; shared region ids (cross-host dedupe) stay until unused. */
-	unregister_host(hostPath: string) {
+	unregister_host(hostPath: string): void {
 		const { registry, island_graph, by_id, region_kinds, host_index, id_hosts } = this;
 		const key = host_key(hostPath);
 		const prev = host_index.get(key);
@@ -237,7 +237,7 @@ export class Program {
 	}
 
 	/** Replace this host's claims; shared ids keep one registry entry (path+strategy dedupe). */
-	register(result: RegisterResult, hostId: string) {
+	register(result: RegisterResult, hostId: string): void {
 		const { registry, island_graph, by_id, region_kinds, host_index, id_hosts } = this;
 		this.unregister_host(hostId);
 		const key = host_key(hostId);

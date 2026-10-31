@@ -63,7 +63,7 @@ export function remarkHeadings(options: RemarkHeadingsOptions = {}) {
 	const min = options.minDepth ?? 2;
 	const max = options.maxDepth ?? 4;
 
-	return (tree: MdNode, file: { data: Record<string, unknown> }) => {
+	return (tree: MdNode, file: { data: Record<string, unknown> }): void => {
 		const headings: Heading[] = [];
 		const seen = new Map<string, number>();
 		// Stack of open ancestor headings (shallower, most recent per level). Each new heading pops

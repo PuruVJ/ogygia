@@ -45,9 +45,9 @@ const STYLESHEET_REL_RE = /(?:^|\s)stylesheet(?:\s|$)/i;
 
 export class RuntimeSession {
 	/** Page-owned head nodes (see above). Survives `reset()`: it is the document's, not a page's. */
-	readonly page_head = new WeakSet<Node>();
+	readonly page_head: WeakSet<Node> = new WeakSet<Node>();
 	/** Island-owned head ELEMENTS still to watch (pruned when they leave the document). */
-	readonly island_head = new Set<Element>();
+	readonly island_head: Set<Element> = new Set<Element>();
 
 	/** Mark a node this document's page owns (the router / runtime inserted it for the page). */
 	claim_page_head(node: Node): void {
@@ -99,10 +99,10 @@ export class RuntimeSession {
 		}
 	}
 
-	readonly lake_cache = new Map<string, LakeCacheEntry>();
-	readonly settled_lakes = new WeakSet<Element>();
-	readonly initialized_lakes = new Set<string>();
-	readonly server_gate = new ConcurrencyGate(3);
+	readonly lake_cache: Map<string, LakeCacheEntry> = new Map<string, LakeCacheEntry>();
+	readonly settled_lakes: WeakSet<Element> = new WeakSet<Element>();
+	readonly initialized_lakes: Set<string> = new Set<string>();
+	readonly server_gate: ConcurrencyGate = new ConcurrencyGate(3);
 	/** The page facts answers rendered with (server/render-page.ts), queued at the answer seam
 	 *  (`region_fragment`) for the next hydrate to merge into the page store (seeds.ts). */
 	readonly page_facts: string[] = [];
@@ -111,17 +111,17 @@ export class RuntimeSession {
 	#page_seeded = false;
 	#kit_page: boolean | undefined;
 
-	get remote_seeded() {
+	get remote_seeded(): boolean {
 		return this.#remote_seeded;
 	}
-	mark_remote_seeded() {
+	mark_remote_seeded(): void {
 		this.#remote_seeded = true;
 	}
 
-	get page_seeded() {
+	get page_seeded(): boolean {
 		return this.#page_seeded;
 	}
-	mark_page_seeded() {
+	mark_page_seeded(): void {
 		this.#page_seeded = true;
 	}
 
@@ -133,7 +133,7 @@ export class RuntimeSession {
 	}
 
 	/** Insert/replace a lake cache entry; evict oldest if over LAKE_CACHE_MAX. */
-	set_lake_cache(id: string, entry: LakeCacheEntry) {
+	set_lake_cache(id: string, entry: LakeCacheEntry): void {
 		if (this.lake_cache.has(id)) this.lake_cache.delete(id);
 		this.lake_cache.set(id, entry);
 		while (this.lake_cache.size > LAKE_CACHE_MAX) {
@@ -143,7 +143,7 @@ export class RuntimeSession {
 		}
 	}
 
-	settle_lakes_in(root: ParentNode) {
+	settle_lakes_in(root: ParentNode): void {
 		if (root instanceof Element && root.matches?.(FROZEN_SELECTOR)) {
 			this.settled_lakes.add(root);
 		}
@@ -152,7 +152,7 @@ export class RuntimeSession {
 		}
 	}
 
-	reset() {
+	reset(): void {
 		this.#kit_page = undefined;
 		this.#remote_seeded = false;
 		this.#page_seeded = false;
@@ -162,4 +162,4 @@ export class RuntimeSession {
 }
 
 /** Process-wide session for the islands runtime (one client module graph). */
-export const runtime_session = new RuntimeSession();
+export const runtime_session: RuntimeSession = new RuntimeSession();

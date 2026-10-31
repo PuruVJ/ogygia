@@ -18,7 +18,7 @@
 	let current = $state(initialProps);
 
 	/** Called by the runtime when the island crosses to the next page — reactive prop push. */
-	export function setProps(next: Record<string, unknown>) {
+	export function setProps(next: Record<string, unknown>): void {
 		current = next;
 	}
 

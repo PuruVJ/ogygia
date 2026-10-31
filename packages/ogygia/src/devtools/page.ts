@@ -248,7 +248,7 @@ function first_child_top(el: Element): number {
  *  and an earlier one only while its region is still on the page and still not awake (a kept
  *  island). Every visit to a page with a broken island failed it again: without this, the tab listed
  *  one failure per visit, by fingerprint, on pages that do not have the island at all. */
-export function failures(since = last_nav()?.t ?? -Infinity): Failure[] {
+export function failures(since: number =last_nav()?.t ?? -Infinity): Failure[] {
 	const out: Failure[] = [];
 	const ok = new Set<string>();
 	const seen = new Set<string>();
@@ -300,7 +300,7 @@ function island_code(): IslandCode[] {
 
 /** How long each hole's fallback showed before its first answer (since the last navigation), and
  *  whether it sits on the first screen. */
-export function hole_waits(since = last_nav()?.t ?? -Infinity, fcp = 0): HoleWait[] {
+export function hole_waits(since: number = last_nav()?.t ?? -Infinity, fcp = 0): HoleWait[] {
 	const out: HoleWait[] = [];
 	const seen = new Set<string>();
 	const batched = batch_parts(since);
@@ -373,7 +373,7 @@ function batch_request_start(endpoint: string, sent: number): number {
 }
 
 /** Batch requests that carried fewer holes than they were sent for (since `since`). */
-export function hole_batches(since = last_nav()?.t ?? -Infinity): HoleBatch[] {
+export function hole_batches(since: number =last_nav()?.t ?? -Infinity): HoleBatch[] {
 	const out: HoleBatch[] = [];
 	const sent = new Map<number, string[]>();
 	for (const e of snapshot()) {
@@ -397,7 +397,7 @@ export function hole_batches(since = last_nav()?.t ?? -Infinity): HoleBatch[] {
 
 /** Holes whose answer never came: the last failure of each (no retry after it), unless an answer
  *  arrived since. In a build the runtime says nothing and the page just keeps the fallback. */
-export function hole_failures(since = last_nav()?.t ?? -Infinity): HoleFailure[] {
+export function hole_failures(since: number =last_nav()?.t ?? -Infinity): HoleFailure[] {
 	const out: HoleFailure[] = [];
 	const answered = new Set<string>();
 	const seen = new Set<string>();

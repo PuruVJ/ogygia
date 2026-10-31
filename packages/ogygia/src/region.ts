@@ -346,7 +346,7 @@ export function prebaked_region(
 // parameterless snippet to static server HTML, or build the raw `{ render, setup?, captures? }` form
 // (mirrors Svelte's `createRawSnippet`). Pure runtime, passable, renderable with plain `{@render}`.
 export namespace region {
-	export const snippet = region_snippet;
+	export const snippet: typeof region_snippet = region_snippet;
 }
 
 /**

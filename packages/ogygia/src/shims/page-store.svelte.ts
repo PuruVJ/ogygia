@@ -27,14 +27,14 @@ const FALLBACK: PageSnapshot = {
 };
 
 export class PageState {
-	url = $state.raw(FALLBACK.url);
-	params = $state.raw<Record<string, string>>(FALLBACK.params);
-	route = $state.raw<{ id: string | null }>(FALLBACK.route);
-	status = $state.raw(FALLBACK.status);
-	data = $state.raw<Record<string, unknown>>(FALLBACK.data);
-	form = $state.raw<unknown>(FALLBACK.form);
-	error = $state.raw<{ message: string } | null>(FALLBACK.error);
-	state = $state.raw<Record<string, unknown>>(FALLBACK.state);
+	url: URL = $state.raw(FALLBACK.url);
+	params: Record<string, string> = $state.raw<Record<string, string>>(FALLBACK.params);
+	route: { id: string | null } = $state.raw<{ id: string | null }>(FALLBACK.route);
+	status: number = $state.raw(FALLBACK.status);
+	data: Record<string, unknown> = $state.raw<Record<string, unknown>>(FALLBACK.data);
+	form: unknown = $state.raw<unknown>(FALLBACK.form);
+	error: { message: string } | null = $state.raw<{ message: string } | null>(FALLBACK.error);
+	state: Record<string, unknown> = $state.raw<Record<string, unknown>>(FALLBACK.state);
 
 	#subscribers = new Set<() => void>();
 

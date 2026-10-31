@@ -142,6 +142,10 @@ export function span<T>(
 	return out;
 }
 
+export declare namespace span {
+	export var start: (name: string, attrs?: SpanAttrs) => SpanHandle;
+}
+
 /** Open a span by hand; close it with `end` / `fail`. Nesting: spans started while another span's
  *  `fn` runs record it as their parent; a bare `span.start` at the top level has none. */
 span.start = function start(name: string, attrs?: SpanAttrs): SpanHandle {
@@ -164,7 +168,7 @@ span.start = function start(name: string, attrs?: SpanAttrs): SpanHandle {
 			r.end(s, undefined, error ?? new Error('span failed'));
 		}
 	};
-};
+} satisfies typeof span.start;
 
 /** Stamp the current request with `key = value` (string, number or boolean; kept to 64 chars, at
  *  most 16 keys). Shown on the request's log row and in the report; the dashboard splits the

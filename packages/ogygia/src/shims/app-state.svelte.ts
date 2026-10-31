@@ -11,37 +11,37 @@ export type { PageSnapshot } from './page-store.svelte.js';
 // The per-page fields warn (dev) when read inside a mounted MFE island — see
 // `warn_foreign_page_read`. `url` / `status` / `state` do not: they are the same on both sides.
 export const page = {
-	get url() {
+	get url(): URL {
 		return kit_bridge()?.page.url ?? page_state.url;
 	},
-	get params() {
+	get params(): Record<string, string> {
 		warn_foreign_page_read('page.params');
 		return kit_bridge()?.page.params ?? page_state.params;
 	},
-	get route() {
+	get route(): { id: string | null } {
 		warn_foreign_page_read('page.route');
 		return kit_bridge()?.page.route ?? page_state.route;
 	},
-	get status() {
+	get status(): number {
 		return kit_bridge()?.page.status ?? page_state.status;
 	},
-	get data() {
+	get data(): Record<string, unknown> {
 		warn_foreign_page_read('page.data');
 		return kit_bridge()?.page.data ?? page_state.data;
 	},
-	get form() {
+	get form(): {} | null {
 		warn_foreign_page_read('page.form');
 		const b = kit_bridge();
 		if (b) return b.page.form ?? null;
 		return page_state.form ?? null;
 	},
-	get error() {
+	get error(): { message: string } | null {
 		warn_foreign_page_read('page.error');
 		const b = kit_bridge();
 		if (b) return b.page.error ?? null;
 		return page_state.error ?? null;
 	},
-	get state() {
+	get state(): Record<string, unknown> {
 		const b = kit_bridge();
 		if (b) return b.page.state ?? {};
 		return page_state.state ?? {};
@@ -49,7 +49,7 @@ export const page = {
 };
 
 export const navigating = {
-	get current() {
+	get current(): {} | null {
 		return kit_bridge()?.navigating.current ?? null;
 	}
 };
@@ -57,5 +57,5 @@ export const updated = {
 	get current() {
 		return false;
 	},
-	check: async () => false
+	check: async (): Promise<boolean> => false
 };

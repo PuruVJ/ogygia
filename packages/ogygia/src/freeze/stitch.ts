@@ -16,7 +16,7 @@
  */
 
 /** Cheap presence probe — the capture uses it to flag entries; serves use it to skip the scan. */
-export const STITCH_HOLE_RE = /<ogygia-region\b[^>]*\bstitch\b[^>]*>/;
+export const STITCH_HOLE_RE: RegExp = /<ogygia-region\b[^>]*\bstitch\b[^>]*>/;
 
 import { escape_amp_quot } from '../escape.js';
 

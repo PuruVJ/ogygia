@@ -28,13 +28,13 @@ export const PAGE_DEFER_GLOBAL = '__ogygia_page_resolve';
 
 /** One registry per document, shared by the inline bootstrap and the runtime reviver via globalThis
  *  (dev serves the runtime twice; a Symbol.for handle stays one instance — PAGE-STATE-SINGLETON). */
-export const PAGE_DEFER_REGISTRY_KEY = Symbol.for('ogygia.page-defer');
+export const PAGE_DEFER_REGISTRY_KEY: unique symbol = Symbol.for('ogygia.page-defer');
 
 /** Inline bootstrap the handle emits in the body (before the resolve scripts, which stream after
  *  `</body>`): defines the resolve global, queuing calls into the shared registry until the runtime
  *  installs the live parser. Each call stamps when it arrived (`t[id]`, ms from the navigation): the
  *  devtools Page tab names the streamed `page.data` key that held the document open. Emitted as a classic `<script>` so it runs during parse, before any
  *  streamed resolve script. Kept in sync with the runtime's `install_page_defer` registry shape. */
-export const PAGE_DEFER_BOOTSTRAP =
+export const PAGE_DEFER_BOOTSTRAP: string =
 	`(function(){var K=Symbol.for('ogygia.page-defer'),r=globalThis[K]||(globalThis[K]={});r.q=r.q||[];` +
 	`globalThis.${PAGE_DEFER_GLOBAL}=function(i,o,e){(r.t||(r.t={}))[i]=performance.now();if(r.live)r.live(i,o,e);else r.q.push([i,o,e]);};})();`;

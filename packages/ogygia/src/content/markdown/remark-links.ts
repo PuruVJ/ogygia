@@ -18,7 +18,7 @@ type MdNode = {
 };
 
 export function remarkLinks() {
-	return (tree: MdNode, file: { data: Record<string, unknown> }) => {
+	return (tree: MdNode, file: { data: Record<string, unknown> }): void => {
 		const links: LinkRef[] = [];
 
 		const text_of = (node: MdNode): string => {

@@ -710,7 +710,7 @@ export function boolean_attr_at(server: string, now: string, at: number): { name
 	return tag.indexOf('-') !== -1 ? { name, tag, now: v } : null;
 }
 
-export function analyze_page(page: PageInput, regions: RegionFact[], failures: Failure[] = [], now = Infinity, cpu: CpuSummary | null = null): PageReport {
+export function analyze_page(page: PageInput, regions: RegionFact[], failures: Failure[] = [], now: number = Infinity, cpu: CpuSummary | null = null): PageReport {
 	/** " — mostly in `fn (file:line)`" from the CPU trace, for a finding about this island (or '') */
 	const why_cpu = (fp: string | null): string => {
 		const f = fp ? cpu?.islands[fp]?.top[0] : cpu?.outside.top[0];

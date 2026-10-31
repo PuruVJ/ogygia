@@ -28,5 +28,5 @@ export function rehypeOverrides(tags: readonly string[]) {
 		}
 		if (Array.isArray(node.children)) node.children.forEach(walk);
 	};
-	return (tree: HastNode) => walk(tree);
+	return (tree: HastNode): void => walk(tree);
 }

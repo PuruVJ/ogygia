@@ -138,6 +138,10 @@ export function blocks(
 	});
 }
 
+export declare namespace blocks {
+	export var resolve: typeof resolve_block_tree;
+}
+
 /**
  * `blocks.resolve(tree, registry, schedule?)` — the helper for the no-collection recipe: turn a tree
  * you hold into region nodes (`type → region`, recursively, unknown types skipped). MUST run server-

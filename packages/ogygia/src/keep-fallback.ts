@@ -13,7 +13,7 @@ import { isHoleInline } from './context.js';
 const KEEP = Symbol.for('ogygia.keep-fallback');
 
 /** The message a misplaced `keepFallback()` fails with (a real error, not the signal). */
-export const KEEP_FALLBACK_INLINE_MESSAGE =
+export const KEEP_FALLBACK_INLINE_MESSAGE: string =
 	'[ogygia] keepFallback() ran inside the PAGE render: this server island is nested inside a `wake` island, ' +
 	'where `render: "deferred"` is ignored and its component renders inline — nothing catches the signal there ' +
 	'and its fallback never shows. Move the island out of the enclosing island (into the page, a layout, or a lake), ' +

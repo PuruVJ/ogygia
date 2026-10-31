@@ -5,7 +5,15 @@
  * "something is happening" reassurance bar. Call `start()` when the request goes out, `finish()` when
  * it resolves (it awaits one paint at 100% before returning), `fail()` on error.
  */
-export function fake_progress() {
+export interface FakeProgress {
+	readonly value: number;
+	readonly running: boolean;
+	start(): void;
+	finish(): Promise<void>;
+	fail(): void;
+}
+
+export function fake_progress(): FakeProgress {
 	let value = $state(0);
 	let running = $state(false);
 	let timer: ReturnType<typeof setInterval> | undefined;
@@ -19,26 +27,26 @@ export function fake_progress() {
 	}
 
 	return {
-		get value() {
+		get value(): number {
 			return value;
 		},
-		get running() {
+		get running(): boolean {
 			return running;
 		},
-		start() {
+		start(): void {
 			clearInterval(timer);
 			value = 0;
 			running = true;
 			timer = setInterval(tick, 170);
 		},
-		async finish() {
+		async finish(): Promise<void> {
 			clearInterval(timer);
 			value = 100;
 			// let the 100% frame paint before the caller swaps the view
 			await new Promise((r) => setTimeout(r, 420));
 			running = false;
 		},
-		fail() {
+		fail(): void {
 			clearInterval(timer);
 			running = false;
 			value = 0;

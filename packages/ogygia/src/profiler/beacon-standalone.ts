@@ -375,4 +375,4 @@ export function standalone_beacon(): void {
 }
 
 /** The inline tag the profiler puts in its own user's document, beside the beacon meta tag. */
-export const BEACON_STANDALONE_TAG = script({ run: standalone_beacon, 'data-ogygia-beacon': true });
+export const BEACON_STANDALONE_TAG: string =script({ run: standalone_beacon, 'data-ogygia-beacon': true });

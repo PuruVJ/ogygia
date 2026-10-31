@@ -588,6 +588,10 @@ export function ogygiaPreprocess(options?: MarkdownOptions): PreprocessorGroup {
 	return group;
 }
 
+export declare namespace ogygiaPreprocess {
+	export var extensions: readonly ['.svx', '.md'];
+}
+
 ogygiaPreprocess.extensions = extensions;
 
 /**

@@ -47,7 +47,7 @@ export function hash_code(text: string): string {
 }
 
 export function remarkCodeIds() {
-	return (tree: MdNode) => {
+	return (tree: MdNode): void => {
 		let heading: string | null = null;
 		const seen = new Set<string>();
 

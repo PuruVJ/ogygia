@@ -25,7 +25,7 @@ const GRAPH: { all: Set<Collection<Record<string, unknown>>> } = ((
 };
 
 /** Back-pointer from a public handle to its underlying `Collection` (relations resolve through it). */
-export const COLLECTION = Symbol.for('ogygia.content.collection');
+export const COLLECTION: unique symbol = Symbol.for('ogygia.content.collection');
 
 /** Resolve a relation value (a handle or a Collection) to its Collection, or undefined. */
 function to_collection(value: unknown): Collection<Record<string, unknown>> | undefined {
@@ -121,10 +121,10 @@ export class Collection<
 		}
 	}
 
-	get streaming() {
+	get streaming(): boolean {
 		return !!this.#source.live;
 	}
-	get fromIsFunction() {
+	get fromIsFunction(): boolean {
 		return !!this.#source.live || !!(this.#source as { dynamic?: boolean }).dynamic;
 	}
 
@@ -134,7 +134,10 @@ export class Collection<
 	}
 
 	/** AND-compose a per-remote filter onto collection visibility (narrow only). */
-	compose(extra?: (entry: ContentRef<Data, Meta>) => boolean, ctx: ReadContext = {}) {
+	compose(
+		extra?: (entry: ContentRef<Data, Meta>) => boolean,
+		ctx: ReadContext = {}
+	): (e: ContentRef<Data, Meta>) => boolean {
 		return extra
 			? (e: ContentRef<Data, Meta>) => this.#visible(e, ctx) && extra(e)
 			: (e: ContentRef<Data, Meta>) => this.#visible(e, ctx);
@@ -145,10 +148,10 @@ export class Collection<
 		for (const wake of this.#waiters) wake();
 	}
 
-	snapshot() {
+	snapshot(): ContentRef<Data, Meta>[] {
 		return [...this.#catalog.values()];
 	}
-	version() {
+	version(): number {
 		return this.#version;
 	}
 
@@ -255,7 +258,7 @@ export class Collection<
 		await this.#start();
 	}
 
-	async ready() {
+	async ready(): Promise<ContentRef<Data, Meta>[]> {
 		await this.#loaded();
 		return this.snapshot();
 	}
@@ -278,7 +281,10 @@ export class Collection<
 		return this.snapshot().filter((e) => this.#visible(e, ctx));
 	}
 
-	async resolveGraph(entry: ContentRef<Data, Meta>) {
+	async resolveGraph(entry: ContentRef<Data, Meta>): Promise<{
+		rel: Record<string, RefEntry | RefEntry[] | null>;
+		backlinks: RefEntry[];
+	}> {
 		const rel: Record<string, RefEntry | RefEntry[] | null> = {};
 		const targets = this.relationTargets();
 		for (const name of this.#relationNames) {

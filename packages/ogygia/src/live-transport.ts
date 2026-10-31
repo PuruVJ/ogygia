@@ -39,7 +39,7 @@ import { register_kind, mint, resolve, REF_WIRE_KEY, type Ref } from './ref.js';
 
 /** Feature entry: register every props-seam kind, then fill the `wire` slot so core resolves
  *  ANY transportable kind from `data-ogygia-props` through the one hub key. */
-export function install() {
+export function install(): void {
 	register_wire_kind();
 	register_snippet_kind();
 	register_store_kind();
@@ -53,7 +53,7 @@ export function install() {
 
 /** Reserved key for the static codec — what `import.meta.og.wire` rewrites to. `Symbol.for` so it's
  *  identical across every bundle. Internal: the public opt-in is the construct, not this symbol. */
-export const wire = Symbol.for('ogygia.wire');
+export const wire: unique symbol = Symbol.for('ogygia.wire');
 
 /** The codec `import.meta.og.wire({ … })` carries (or a static method returning it). */
 export interface TransportCodec<T = unknown, D = unknown> {

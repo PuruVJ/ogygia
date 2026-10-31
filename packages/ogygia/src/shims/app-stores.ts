@@ -4,11 +4,11 @@
 // On a Kit-booted document the kit-world page thread supplies Kit's REAL page instead (the
 // island store is never seeded there); the snapshot is read fresh per subscription — a static
 // read, the same accepted trade-off as the shim's own url fallback (see e2e/split-brain.ts).
-import { toStore } from 'svelte/store';
-import { page_state, subscribe_page, warn_foreign_page_read } from './page-store.svelte.js';
+import { toStore, type Unsubscriber } from 'svelte/store';
+import { page_state, subscribe_page, warn_foreign_page_read, type PageSnapshot } from './page-store.svelte.js';
 import { kit_bridge } from './kit-bridge.js';
 
-function snapshot() {
+function snapshot(): PageSnapshot {
 	// A `$page` subscription reads every field — inside a mounted MFE island that is the SHELL's
 	// page (dev warning, once per island; see `warn_foreign_page_read`).
 	warn_foreign_page_read('$page');
@@ -33,7 +33,7 @@ function same(a: Snapshot, b: Snapshot) {
 }
 
 export const page = {
-	subscribe(run: (value: Snapshot) => void) {
+	subscribe(run: (value: Snapshot) => void): () => void {
 		// Kit world: a store over Kit's REAL reactive `page`, so the subscription stays live through
 		// Kit navigations/invalidations (a plain snapshot would freeze at subscribe time). Built from
 		// `$app/state`, not Kit's `$app/stores`: Kit 3 removed those (subscribing throws). A fresh
@@ -52,7 +52,7 @@ export const page = {
 };
 
 export const navigating = {
-	subscribe(run: (value: unknown) => void) {
+	subscribe(run: (value: unknown) => void): Unsubscriber {
 		const kit = kit_bridge();
 		if (kit) return toStore(() => kit.navigating.current ?? null).subscribe(run);
 		run(null);
@@ -61,12 +61,12 @@ export const navigating = {
 };
 
 export const updated = {
-	subscribe(run: (value: boolean) => void) {
+	subscribe(run: (value: boolean) => void): () => void {
 		run(false);
 		return () => {};
 	},
-	check: async () => false
+	check: async (): Promise<boolean> => false
 };
 
 /** Kit's `getStores()` (Kit 3 removed it; an island importing it still builds, and reads these). */
-export const getStores = () => ({ page, navigating, updated });
+export const getStores = (): { page: typeof page; navigating: typeof navigating; updated: typeof updated } => ({ page, navigating, updated });

@@ -880,7 +880,7 @@ export interface ViewSegment extends Segment {
 	inside?: { label: string; kind: Segment['kind']; ms: number }[];
 }
 
-export function coalesce(t: Timeline, min_ms = Math.max(t.window_ms * 0.012, 1)): ViewSegment[] {
+export function coalesce(t: Timeline, min_ms: number =Math.max(t.window_ms * 0.012, 1)): ViewSegment[] {
 	const out: ViewSegment[] = [];
 	let small: Segment[] = [];
 	const len = (s: Segment) => s.t1 - s.t0;

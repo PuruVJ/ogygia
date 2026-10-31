@@ -20,7 +20,7 @@
 // spots router modules by the literal 'ogygia/router' import, and THAT is what makes this module's
 // page components router-css roots with no hand-seeding (the old extra_router_modules special case).
 // Same module either way — the svelte export condition resolves it back into this build's source.
-import { routes, page, error, type Ctx } from 'ogygia/router';
+import { routes, page, error, type Ctx, type PageDef, type Router } from 'ogygia/router';
 import type { AnyComponent } from '../router/define.js';
 import type { Analysis } from './analyze.js';
 import type { ReportExtras, ReportMeta, RequestEntry, RouteAgg } from './report.js';
@@ -179,12 +179,43 @@ async function report_or_404<R>(
 	return await fn(s);
 }
 
+type CtxFn<R> = (c: Ctx) => R;
+type ProfilerPage<Load, Actions = unknown> = PageDef<readonly [], Load, Actions, unknown, unknown>;
+
 /** Build the profiler router. Auth is the table-wide `load` (a redirect/deny short-circuits every
  *  route; on allow it seeds `{ base }`); thrown `error()` renders the root `Message` boundary.
  *  `/report/[id]` is PUBLIC (a share `#fragment` decrypts client-side); its `.json`/`.dump`/`/raw`
  *  siblings keep the suffix so they stay behind the guard's server-data gate. Endpoints are
  *  the plain `{ GET }` object form (bare handlers; `c.params.id` reads from the table key). */
-export function build_profiler_router(d: ProfilerDeps) {
+export function build_profiler_router(d: ProfilerDeps): Router<{
+	readonly '/': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['dashboard']>>;
+	readonly '/run': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['run_page']>>;
+	readonly '/page': { readonly GET: CtxFn<Promise<Response>> };
+	readonly '/reset': { readonly GET: CtxFn<Response> };
+	readonly '/status.json': { readonly GET: CtxFn<Response> };
+	readonly '/beacon': { readonly POST: CtxFn<Promise<Response>> };
+	readonly '/window/start': { readonly POST: CtxFn<Promise<Response>> };
+	readonly '/window/stop': { readonly POST: CtxFn<Promise<Response>> };
+	readonly '/login': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['login_props']>, { default: CtxFn<Promise<Response>> }>;
+	readonly '/logout': { readonly GET: CtxFn<Response> };
+	readonly '/view': ProfilerPage<() => { base: string }, { default: CtxFn<Promise<Response>> }>;
+	readonly '/reports.json': { readonly GET: CtxFn<Promise<Response>> };
+	readonly '/report/[id]': ProfilerPage<
+		(c: Ctx) => Promise<
+			| { report: Awaited<ReturnType<ProfilerDeps['report_view']>>; base: string; login: null; exists: boolean }
+			| { report: null; base: string; login: string | null; exists: boolean }
+		>
+	>;
+	readonly '/report/[id].json': { readonly GET: CtxFn<Promise<Response>>; readonly POST: CtxFn<Promise<Response>> };
+	readonly '/report/[id].html': { readonly GET: CtxFn<Promise<Response>>; readonly POST: CtxFn<Promise<Response>> };
+	readonly '/report/[id].dump': { readonly GET: CtxFn<Promise<Response>>; readonly POST: CtxFn<Promise<Response>> };
+	readonly '/report/[id].ogp': { readonly POST: CtxFn<Promise<Response>> };
+	readonly '/report/[id]/raw': { readonly GET: CtxFn<Promise<Response>> };
+	readonly '/compare/[a]/[b]': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['compare']>>;
+	readonly '/replay/[id]': { readonly GET: CtxFn<Promise<Response>> };
+	readonly '/site': ProfilerPage<(c: Ctx) => ReturnType<ProfilerDeps['site']>>;
+	readonly '/source': { readonly GET: CtxFn<Promise<Response>> };
+}> {
 	return routes(
 		{
 			'/': page(V.Dashboard, { load: (c) => d.dashboard(c) }),

@@ -324,7 +324,7 @@ function layout_page_worlds(layoutDir: string, routesDir: string) {
  * @param hostFile abs path to a route `.svelte`
  * @param routesDir abs `src/routes`
  */
-export function routeCsrIsFalse(hostFile: string, routesDir: string) {
+export function routeCsrIsFalse(hostFile: string, routesDir: string): boolean {
 	if (!hostFile.startsWith(routesDir)) return false;
 	const base = path.basename(hostFile);
 	if (base === '+page.svelte') return own_chain_csr_false(hostFile, routesDir);
@@ -343,7 +343,7 @@ export function routeCsrIsFalse(hostFile: string, routesDir: string) {
  * islands kept, `documentIsCsrTrue` degrades them per document). `false` for non-route files
  * (shared components): their csr depends on which page renders them, so they keep their islands.
  */
-export function routeCsrIsTrue(hostFile: string, routesDir: string) {
+export function routeCsrIsTrue(hostFile: string, routesDir: string): boolean {
 	const base = path.basename(hostFile);
 	if (base !== '+page.svelte' && base !== '+layout.svelte') return false;
 	if (!hostFile.startsWith(routesDir)) return false;
@@ -624,7 +624,7 @@ function collectNodeEffectiveCsr(routesDir: string) {
  * the keepalive. Deviations (a `+page@` reset, a statically-unanalysable option file) can only err
  * toward injecting a keepalive Kit didn't need — a harmless extra client build, never a 404.
  */
-export function clientBuildWillSkip(routesDir: string) {
+export function clientBuildWillSkip(routesDir: string): boolean {
 	if (!fs.existsSync(routesDir)) return false;
 	const nodes = collectNodeEffectiveCsr(routesDir);
 	if (nodes.length === 0) return false;
@@ -635,7 +635,7 @@ export function clientBuildWillSkip(routesDir: string) {
  * True when AT LEAST ONE page route is csr=false. A pure csr=true app (this returns false) needs no
  * ogygia runtime at all — Kit hydrates everything itself — so the runtime chunk is skipped entirely.
  */
-export function hasAnyCsrFalseRoute(routesDir: string) {
+export function hasAnyCsrFalseRoute(routesDir: string): boolean {
 	if (!fs.existsSync(routesDir)) return false;
 	return pageLeaves(routesDir).some((page_file) => routeCsrIsFalse(page_file, routesDir));
 }

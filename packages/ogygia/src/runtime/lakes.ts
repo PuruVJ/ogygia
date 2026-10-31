@@ -13,7 +13,7 @@ import { runtime_session } from './session.js';
 import { slots, type LakeArm, type LiftedLake } from './slots.js';
 
 /** Feature entry: fill the `lakes` slot so core lifts/restores frozen regions. */
-export function install() {
+export function install(): void {
 	slots.lakes = {
 		on_frozen_connect,
 		wait_for_boundary,
@@ -26,7 +26,7 @@ export function install() {
 	};
 }
 
-export function settle_in(root: ParentNode) {
+export function settle_in(root: ParentNode): void {
 	runtime_session.settle_lakes_in(root);
 }
 
@@ -63,7 +63,7 @@ export function lift(parent: Element): LiftedLake[] {
 	return lifted;
 }
 
-export function restore(parent: Element, lifted: LiftedLake[]) {
+export function restore(parent: Element, lifted: LiftedLake[]): void {
 	// Pair by POSITION, not by shared `entry`: two same-component lakes share ONE entry id (props/DOM
 	// ride per-instance, but the id is component+schedule), so `querySelector([entry])` returns the
 	// FIRST for both — both frags land in lake #1, leaving lake #2 empty. `lift()` collected `lifted`
@@ -264,11 +264,11 @@ export function wait_for_boundary(_el: HTMLElement, boundary: Element | null): b
 	return !!(boundary && is_frozen(boundary) && !runtime_session.settled_lakes.has(boundary));
 }
 
-export function mark_frozen_settled(region: HTMLElement) {
+export function mark_frozen_settled(region: HTMLElement): void {
 	if (is_frozen(region)) runtime_session.settled_lakes.add(region);
 }
 
-export function after_html_swap(region: HTMLElement, opts: { revalidate?: boolean }) {
+export function after_html_swap(region: HTMLElement, opts: { revalidate?: boolean }): void {
 	if (!(opts.revalidate && is_frozen(region))) return;
 	const id = region.getAttribute('entry') || '';
 	if (!id) return;
@@ -290,7 +290,7 @@ export function after_fetch_exhausted(
 	region: HTMLElement,
 	opts: { revalidate?: boolean },
 	wake_children: () => void
-) {
+): void {
 	if (opts.revalidate && is_frozen(region) && region.isConnected) {
 		runtime_session.settled_lakes.add(region);
 		wake_children();

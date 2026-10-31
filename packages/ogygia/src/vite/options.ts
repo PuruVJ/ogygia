@@ -427,7 +427,7 @@ export interface ResolvedOgygiaConfig {
 export function resolve_options(
 	options: OgygiaOptions,
 	defaultRegionTtl: number,
-	defaultRenewWindow = 8 * 24 * 3600
+	defaultRenewWindow: number = 8 * 24 * 3600
 ): ResolvedOgygiaConfig {
 	// Region-endpoint rate limit (baked into SSR only via virtual:ogygia/rate-limit).
 	const rate_limit =

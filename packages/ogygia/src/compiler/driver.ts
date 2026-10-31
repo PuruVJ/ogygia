@@ -289,11 +289,11 @@ function client_hooks_boot(ctx: CompileCtx): { imports: string; call: string } {
 
 export class Compiler {
 	readonly program: Program;
-	readonly transform_cache = new Map<string, { code: string; result: unknown }>();
+	readonly transform_cache: Map<string, { code: string; result: unknown }> = new Map();
 	readonly profiler: Profiler;
 	/** Every `import.meta.og.$` hoist collected across the build (tag → factory source). Filled by
 	 *  `macros()`; drained by the adapter's fn-manifest emit (dev load leg, renderChunk, writeBundle). */
-	readonly dollar_hoists = new Map<string, string>();
+	readonly dollar_hoists: Map<string, string> = new Map();
 	/** `prescan()` is once-per-session — guarded so the adapter can call it from any hook. */
 	#scanned = false;
 
@@ -337,7 +337,7 @@ export class Compiler {
 	}
 
 	/** Bind the resolved compile context (called once the bundler has resolved the build). */
-	configure(ctx: CompileCtx) {
+	configure(ctx: CompileCtx): void {
 		this.#ctx = ctx;
 	}
 
@@ -435,7 +435,7 @@ export class Compiler {
 		return cur;
 	}
 
-	transform(source: string, id: string, opts: { ssr?: boolean; linkVirtual?: boolean } = {}) {
+	transform(source: string, id: string, opts: { ssr?: boolean; linkVirtual?: boolean } = {}): unknown {
 		const ctx = this.#ctx!;
 		const { prof, P, outHash } = this.profiler;
 		const ssr = opts.ssr !== false;
@@ -517,7 +517,7 @@ export class Compiler {
 	 * (so both the prescan and the transform hook mint identically). Not memoized — the caller gates it
 	 * on the id + marker; the returned descriptors are the caller's to `register`.
 	 */
-	ts_regions(source: string, id: string) {
+	ts_regions(source: string, id: string): ReturnType<typeof transformTsRegions> {
 		const ctx = this.#ctx!;
 		return transformTsRegions(source, id, {
 			root: ctx.root,
@@ -540,7 +540,7 @@ export class Compiler {
 	 * uses, and its immutable chunk name busts on a feature-set change). Once per session, so the
 	 * adapter can call it from any hook. Populates the `Program`; the fs walk is the only side effect.
 	 */
-	prescan() {
+	prescan(): void {
 		if (this.#scanned) return;
 		this.#scanned = true;
 		const ctx = this.#ctx!;
@@ -970,7 +970,7 @@ export class Compiler {
 
 	/** Client-build refs of each emitted island entry (by island id) and of the runtime entry: the
 	 *  bundle end turns them into the hashed file names the handoff maps the stable names to. */
-	readonly island_entry_refs = new Map<string, string>();
+	readonly island_entry_refs: Map<string, string> = new Map();
 	runtime_entry_ref: string | null = null;
 
 	/**

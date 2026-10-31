@@ -1,5 +1,7 @@
 import { parse } from 'svelte/compiler';
 import MagicString from 'magic-string';
+import type { SourceMap } from 'magic-string';
+import type { IslandDescriptor } from '../program.js';
 import { createHash } from '../host.js';
 import { foucCssVirtualId } from '../fouc-css.js';
 import { collectCaptureInfo } from '../free-vars.js';
@@ -274,7 +276,7 @@ function normalize_import_keys_uncached(overrides?: Partial<ImportKeys> | null):
 /** Memoized hint regex per resolved key map — `import_keys` is build-invariant, so the RegExp is
  * compiled once instead of on every `transformHost` call (per module, per leg). */
 const HINT_CACHE = new WeakMap<ImportKeys, RegExp>();
-export function import_keys_hint(import_keys: ImportKeys) {
+export function import_keys_hint(import_keys: ImportKeys): RegExp {
 	let re = HINT_CACHE.get(import_keys);
 	if (re) return re;
 	const esc = (s: string) => s.replace(REGEXP_META, '\\$&');
@@ -288,7 +290,7 @@ export function import_keys_hint(import_keys: ImportKeys) {
 /** Deterministic short id for a region (stable across dev + build).
  * When `salt` is set (production `OGYGIA_SECRET`), ids are not offline-computable (P1-ID).
  * Paths are always posix so SSR/client builds agree across OS path separators. */
-export function islandId(relHostPath: string, index: string | number, salt = '') {
+export function islandId(relHostPath: string, index: string | number, salt = ''): string {
 	const rel = String(relHostPath).split(PATH_SEP).join('/');
 	const msg = salt ? `${salt}\0${rel}::${index}` : `${rel}::${index}`;
 	return createHash('md5').update(msg).digest('hex').slice(0, 12);
@@ -307,7 +309,7 @@ export function islandChunkFileName(iid: string, appDir = '_app') {
  *  NO base). It is what SSR bakes onto `<ogygia-region entry>`; `Region.svelte` runs it through Kit's
  *  `asset()` at render time, which is the sole authority on `base` / the assets CDN / relative paths —
  *  so a base is never baked here (that would double-apply it). NOT the on-disk output filename. */
-export function islandPublicUrl(iid: string, appDir = '_app') {
+export function islandPublicUrl(iid: string, appDir = '_app'): string {
 	return '/' + islandChunkFileName(iid, appDir);
 }
 
@@ -948,7 +950,14 @@ function transform_csr_true_host(
 	};
 }
 
-export function transformHost(source: string, id: string, ctx: HostCtx) {
+export function transformHost(
+	source: string,
+	id: string,
+	ctx: HostCtx
+):
+	| { code: string; map: SourceMap; islands: never[] }
+	| { code: string; map: SourceMap; islands: IslandDescriptor[]; hasWireCrossing: boolean }
+	| null {
 	return new FileCompilation(source, id, ctx).run();
 }
 
@@ -2615,7 +2624,11 @@ function odd_unescaped_backticks_before(source: string, pos: number): boolean {
 	return backticks % 2 === 1;
 }
 
-export function transformTsRegions(source: string, id: string, ctx: TsRegionCtx) {
+export function transformTsRegions(
+	source: string,
+	id: string,
+	ctx: TsRegionCtx
+): { code: string; map: SourceMap; islands: IslandDescriptor[]; hasWireCrossing: boolean } | null {
 	return new TsRegionCompilation(source, id, ctx).run();
 }
 

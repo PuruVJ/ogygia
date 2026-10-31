@@ -3,10 +3,10 @@
  * on the first call, like the dock: plain JSON out (no elements, no WeakRefs), so a test can assert
  * on it and attach it to its report.
  */
-import { read_page, unmeasured } from './page.js';
+import { read_page, unmeasured, type PageView } from './page.js';
 import { hydration_report, hydration_rows } from './hydration.js';
 import { start_session, recording, set_last_session, session_names } from './session.js';
-import { analyze_session, session_timeline, type Ref } from './session-insights.js';
+import { analyze_session, session_timeline, type Ref, type SessionFinding, type SessionReport, type TimelineItem, type TimelineLane } from './session-insights.js';
 import { region_name_by_fp } from './regions.js';
 import { snapshot } from './bus.js';
 import { ensure_region_names } from './names.js';
@@ -15,6 +15,12 @@ import { nearest_attr } from '../runtime/nearest-attr.js';
 import { charge, own_cost } from '../runtime/own-cost.js';
 import { apply_attr_rules, type AttrRule } from './attr-rules.js';
 import { testing_lean } from './switch.js';
+import type { PageFinding, PageReport } from './page-insights.js';
+import type { CpuSummary } from './cpu.js';
+import type { BeaconPage, AttrChange } from '../runtime/beacon.js';
+
+type EngineStamp = { version: number; lean: boolean };
+type HydrationIsland = ReturnType<typeof hydration_report>['islands'][number];
 
 /** Which engine answered, and whether in lean testing (switch.ts): on every report. */
 const engine = () => ({ version: TESTING_ENGINE_VERSION, lean: testing_lean() });
@@ -34,7 +40,23 @@ function self_cost(): { script_ms: number; bytes: number; phases: Record<string,
 	return { script_ms: c.ms, bytes: engine_bytes, phases: c.phases };
 }
 
-export async function page_json(cpu_fns = 15) {
+export async function page_json(cpu_fns = 15): Promise<{
+	url: string;
+	route: string | null;
+	nav: PageView['nav'];
+	vitals: PageReport['vitals'];
+	islands: PageReport['rows'];
+	findings: (PageFinding & { names: string[] })[];
+	blocking: PageReport['blocking'];
+	bytes: PageReport['bytes'];
+	longtask_ms: number;
+	cpu: Pick<CpuSummary, 'busy_ms' | 'by_kind' | 'fns'> | null;
+	cpu_state: BeaconPage['cpu']['state'];
+	cpu_off: string | null;
+	unmeasured: string[];
+	self: ReturnType<typeof self_cost>;
+	engine: EngineStamp;
+} | null> {
 	await ensure_region_names();
 	const c0 = performance.now();
 	const v = read_page();
@@ -72,7 +94,18 @@ export async function page_json(cpu_fns = 15) {
  *  ancestor that has it, across shadow roots (an id the app renders, e.g. its CMS block's), else
  *  `Name#n`, the n-th island of that name in document order. Two islands under the same keyed
  *  element are told apart as `key`, `key#2`, … in document order. */
-export async function hydration_json(key_attr?: string, ignore: AttrRule[] = []) {
+export async function hydration_json(
+	key_attr?: string,
+	ignore: AttrRule[] = []
+): Promise<{
+	measured: boolean;
+	engine: EngineStamp;
+	islands: ((
+		| HydrationIsland
+		| (Omit<HydrationIsland, 'attributes'> & { attributes: AttrChange[]; ignored: AttrChange[] })
+		| (Omit<HydrationIsland, 'status' | 'attributesOnly' | 'attributes' | 'diff'> & { status: 'clean'; attributesOnly: boolean; attributes: null; diff: null; ignored: AttrChange[] })
+	) & { key: string })[];
+}> {
 	await ensure_region_names();
 	const base = hydration_report();
 	// attribute changes a test ignores: an island whose every difference is one reads `clean`
@@ -117,7 +150,16 @@ export interface BlockedNavigation {
 	t: number | null;
 }
 
-export async function record_stop(blocked: BlockedNavigation[] = []) {
+export async function record_stop(blocked: BlockedNavigation[] = []): Promise<
+	| (Omit<SessionReport, 'findings'> & {
+			findings: (SessionFinding & { names: string[] })[];
+			navigations: { url: string; t: number | null; after: string | null; island: string | null; approx: boolean }[];
+			engine: EngineStamp;
+			timeline: (Omit<TimelineLane, 'items'> & { items: Omit<TimelineItem, 'ref'>[] })[];
+			unmeasured: string[];
+	  })
+	| null
+> {
 	const rec = recording();
 	if (!rec) return null;
 	const data = await rec.stop();

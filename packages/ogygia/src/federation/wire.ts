@@ -27,7 +27,7 @@ const USER_HEADER = 'x-og-user';
 const NONCE_HEADER = 'x-og-n';
 export const DEFAULT_SKEW_MS = 120_000;
 /** Default cap on a forwarded fragment/notice body (form posts are small; 1 MiB is generous). */
-export const DEFAULT_MAX_BODY = 1024 * 1024;
+export const DEFAULT_MAX_BODY: number = 1024 * 1024;
 
 // ── replay defense ───────────────────────────────────────────────────────────────────────────
 // A signature is unique per (key, payload) and the payload carries `ts`, so a byte-identical
@@ -203,7 +203,7 @@ export function verify_signed_request(
 
 /** The raw claims header name — stripped from forwarded requests so nothing downstream can
  *  mistake an unverified header for identity. */
-export const USER_HEADER_NAME = USER_HEADER;
+export const USER_HEADER_NAME: typeof USER_HEADER = USER_HEADER;
 
 // ── documents ────────────────────────────────────────────────────────────────────────────────
 /** The wire document an exposed route table answers with. */
@@ -310,13 +310,17 @@ export function lift_document(html: string, origin: string): Omit<FragmentDocume
 }
 
 // ── JSON responses ───────────────────────────────────────────────────────────────────────────
-export const json_response = (data: unknown, status = 200, extra?: Record<string, string>) =>
+export const json_response = (
+	data: unknown,
+	status: number = 200,
+	extra?: Record<string, string>
+): Response =>
 	new Response(JSON.stringify(data), {
 		status,
 		headers: { 'content-type': 'application/json', ...extra }
 	});
 
-export const json_error = (status: number, error: string) =>
+export const json_error = (status: number, error: string): Response =>
 	json_response({ error, status }, status);
 
 /** Read a request body under a cap BEFORE any verification work (an unauthenticated caller must

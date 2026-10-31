@@ -51,7 +51,7 @@ export class KitBoot {
 	 * start cannot false-match either — its payload never carries a literal `<script` (devalue and
 	 * JSON escape `<`), and `#INLINE` needs one.
 	 */
-	static html_has(html: string, end = html.length): boolean {
+	static html_has(html: string, end: number = html.length): boolean {
 		const window = html.slice(Math.max(0, end - KitBoot.#WINDOW), end);
 		return KitBoot.#INLINE.test(window.replace(KitBoot.#SIDECHANNEL, ''));
 	}
@@ -71,4 +71,4 @@ export function kit_hydrates_page(): boolean {
 	return runtime_session.kit_page;
 }
 
-export const html_has_kit_bootstrap = KitBoot.html_has.bind(KitBoot);
+export const html_has_kit_bootstrap: typeof KitBoot.html_has = KitBoot.html_has.bind(KitBoot);

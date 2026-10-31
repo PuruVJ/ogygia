@@ -36,29 +36,29 @@ const WIN_DRIVE_RE = /^[a-zA-Z]:/;
 const PARENT_TRAVERSAL_RE = /(^|[\\/])\.\.([\\/]|$)/;
 
 /** @param relPosix */
-export function foucCssVirtualId(relPosix: string) {
+export function foucCssVirtualId(relPosix: string): string {
 	return FOUC_CSS_PREFIX + encodeURIComponent(relPosix.split(PATH_SEP).join('/')) + '.js';
 }
 
 /** @param relPosix */
-export function foucScopedVirtualId(relPosix: string) {
+export function foucScopedVirtualId(relPosix: string): string {
 	return FOUC_SCOPED_PREFIX + encodeURIComponent(relPosix.split(PATH_SEP).join('/')) + '.css';
 }
 
 /** @param id */
-export function isFoucCssId(id: string) {
+export function isFoucCssId(id: string): boolean {
 	const bare = id.startsWith('\0') ? id.slice(1) : id;
 	return bare.startsWith(FOUC_CSS_PREFIX) && bare.endsWith('.js');
 }
 
 /** @param id */
-export function isFoucScopedId(id: string) {
+export function isFoucScopedId(id: string): boolean {
 	const bare = id.startsWith('\0') ? id.slice(1) : id;
 	return bare.startsWith(FOUC_SCOPED_PREFIX) && bare.endsWith('.css');
 }
 
 /** @param id */
-export function foucRelFromId(id: string) {
+export function foucRelFromId(id: string): string | null {
 	const bare = id.startsWith('\0') ? id.slice(1) : id;
 	let encoded = null;
 	if (bare.startsWith(FOUC_CSS_PREFIX) && bare.endsWith('.js')) {
@@ -106,7 +106,7 @@ export function resolveFoucImportSpec(
 	importerAbs: string,
 	libDir: string,
 	alias: readonly FoucAlias[] = []
-) {
+): string | null {
 	if (spec === '$lib' || spec.startsWith('$lib/')) {
 		return path.join(libDir, spec === '$lib' ? '' : spec.slice('$lib/'.length));
 	}
@@ -130,7 +130,7 @@ export function resolveFoucImportSpec(
  * @param entryAbs absolute path to the island entry `.svelte`
  * @param opts
  */
-export async function buildFoucCssModuleSource(entryAbs: string, opts: CssReachOptions) {
+export async function buildFoucCssModuleSource(entryAbs: string, opts: CssReachOptions): Promise<string> {
 	const entries = await collectFoucCssReachable(entryAbs, opts);
 	const posix_rel = (abs: string) => path.relative(opts.root, abs).split(PATH_SEP).join('/');
 	const imports: string[] = [];
@@ -344,7 +344,7 @@ export function compileFoucScopedCss(
 		 *  source is tried whole first (Svelte reads `lang="ts"` itself), then script-stripped. */
 		keepScript?: boolean;
 	} = {}
-) {
+): string {
 	// (the whole source first even when not preprocessed: stripping the script first made every
 	// template with a `bind:` or a script name throw, and the dev router leg shipped 11 of the
 	// profiler's 37 styled components unscoped)
@@ -376,7 +376,7 @@ export function compileFoucScopedCss(
 }
 
 /** @param source */
-export function svelteHasStyle(source: string) {
+export function svelteHasStyle(source: string): boolean {
 	return STYLE_OPEN.test(source);
 }
 

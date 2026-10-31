@@ -2411,7 +2411,7 @@ export function _beacon_state(): { target: string | null | undefined; queued: nu
 }
 
 /** @internal tests: the size-aware send */
-export const _beacon_send = send;
+export const _beacon_send: typeof send = send;
 /** @internal tests: a send from inside the hide (a page leaving while it still reads "visible") */
 export function _beacon_send_leaving(body: string, slim?: () => string): void {
 	leaving = true;

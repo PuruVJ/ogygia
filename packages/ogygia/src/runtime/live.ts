@@ -10,7 +10,7 @@ import KeepHost from '../KeepHost.svelte';
 
 /** Feature entry: fill the `live` slot with {@link LiveHost}, and `keep` with {@link KeepHost} (a
  *  kept island's host: the same pushable props, in a placed island's SSR shape). */
-export function install() {
+export function install(): void {
 	slots.live = LiveHost as unknown as NonNullable<typeof slots.live>;
 	slots.keep = KeepHost as unknown as NonNullable<typeof slots.keep>;
 }

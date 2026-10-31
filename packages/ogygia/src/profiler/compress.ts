@@ -1,5 +1,5 @@
 /** a text answer at least this big goes out gzipped (see `gzip_large`) */
-export const GZIP_OVER_BYTES = 256 * 1024;
+export const GZIP_OVER_BYTES: number =256 * 1024;
 
 /**
  * A big profiler answer (a report page is MBs of island props; the run page's `keep` answer carries

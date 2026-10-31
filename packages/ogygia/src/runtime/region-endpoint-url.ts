@@ -4,7 +4,7 @@ import { entry_location } from './entry-locations.js';
 
 /** Hoisted (hot paths — connectedCallback/hydrate run per region); shared with core's
  *  foreign-origin checks. */
-export const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+export const ABSOLUTE_URL_SCHEME: RegExp = /^[a-z][a-z0-9+.-]*:/i;
 
 /**
  * Defense-in-depth: only fetch region HTML from same-origin capability URLs.
@@ -16,7 +16,7 @@ export const ABSOLUTE_URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 /** True when `endpoint` resolves to same-origin http(s). */
 export function is_allowed_region_endpoint(
 	endpoint: string,
-	page_origin = location.origin
+	page_origin: string = location.origin
 ): boolean {
 	if (typeof endpoint !== 'string' || endpoint.length === 0) return false;
 	try {
@@ -39,7 +39,7 @@ const CLOCK_SKEW_SEC = 300;
  * with {@link CLOCK_SKEW_SEC} of slack for a slow clock; a URL that has not expired never renews
  * (the server refuses it), so a wrong guess costs one refused request.
  */
-export function capability_expired(endpoint: string, now_ms = Date.now(), page_origin = location.origin): boolean {
+export function capability_expired(endpoint: string, now_ms: number = Date.now(), page_origin: string = location.origin): boolean {
 	try {
 		const exp = Number(new URL(endpoint, page_origin).searchParams.get('exp'));
 		return Number.isFinite(exp) && exp > 0 && exp <= now_ms / 1000 + CLOCK_SKEW_SEC;
@@ -120,7 +120,7 @@ export function deny_of(res: Response, endpoint: string): string {
 }
 
 /** After fetch: reject opaque redirects that left the page origin. */
-export function is_same_origin_response(res: Response, page_origin = location.origin): boolean {
+export function is_same_origin_response(res: Response, page_origin: string = location.origin): boolean {
 	if (!res.url) return true; // older environments — rely on request URL check
 	try {
 		return new URL(res.url).origin === page_origin;

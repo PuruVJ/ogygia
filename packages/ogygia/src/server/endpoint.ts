@@ -47,7 +47,7 @@ export const DEFAULT_REGION_TTL_SEC = 3600;
  * that same public tuple for longer reveals nothing new. Redeploy survival additionally needs a
  * stable `OGYGIA_SECRET` (the default per-build key rotates; ServerIsland warns at build).
  */
-export const PRERENDER_REGION_TTL_SEC = 10 * 365 * 24 * 3600;
+export const PRERENDER_REGION_TTL_SEC: number =10 * 365 * 24 * 3600;
 
 /**
  * WHEN a capability minted now expires — aligned to a window, not `now + ttl`.
@@ -70,14 +70,14 @@ export function capability_expiry(now_sec: number, ttl_sec: number): number {
 }
 
 /** Region ids are always 12 lowercase hex chars from the transform. */
-export const REGION_ID_RE = /^[0-9a-f]{12}$/;
+export const REGION_ID_RE: RegExp = /^[0-9a-f]{12}$/;
 
 /**
  * A hole's optional cache `ttl` (max-age seconds) as it rides in the endpoint URL: empty (no-store,
  * the default) or 1–7 digits (up to ~115 days). Charset-gated before HMAC so a forged value can't
  * reach the response header, though the MAC is the real guard.
  */
-export const REGION_TTL_RE = /^(|[0-9]{1,7})$/;
+export const REGION_TTL_RE: RegExp = /^(|[0-9]{1,7})$/;
 
 // The per-request gates, as char loops (measured ~2× the anchored patterns above, which stay the
 // documented shape): every hole request runs both before its HMAC.

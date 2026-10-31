@@ -108,6 +108,6 @@ export class Hmac {
 	}
 }
 
-export const sign = Hmac.sign.bind(Hmac);
-export const verify = Hmac.verify.bind(Hmac);
-export const region_mac_message = Hmac.region_message.bind(Hmac);
+export const sign: typeof Hmac.sign = Hmac.sign.bind(Hmac);
+export const verify: typeof Hmac.verify = Hmac.verify.bind(Hmac);
+export const region_mac_message: typeof Hmac.region_message = Hmac.region_message.bind(Hmac);

@@ -11,9 +11,9 @@ import { record_source_read } from './capture.js';
 import { fnv1a } from '../runtime/hash.js';
 
 /** The identity stamp — read by `freeze.invalidate(fn, args)`. */
-export const SOURCE_ID = Symbol.for('ogygia.freeze.source-id');
+export const SOURCE_ID: unique symbol = Symbol.for('ogygia.freeze.source-id');
 /** The optional `{ key }` canonicalizer stamp (exotic signatures). */
-export const SOURCE_KEY = Symbol.for('ogygia.freeze.source-key');
+export const SOURCE_KEY: unique symbol = Symbol.for('ogygia.freeze.source-key');
 
 export interface SourceOptions<A extends unknown[]> {
 	/** Canonicalize exotic args to a stable string yourself; default = structural fingerprint. */

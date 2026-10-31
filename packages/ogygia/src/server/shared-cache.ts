@@ -25,7 +25,7 @@ import { PRERENDER_REGION_TTL_SEC } from './endpoint.js';
 /** The default for how long after expiry a capability can still be renewed
  *  (`regions.maxPageAge`): the longest a stale document is expected to live in a shared cache (a
  *  week of `s-maxage` plus a day of revalidation). */
-export const RENEW_WINDOW_SEC = 8 * 24 * 3600;
+export const RENEW_WINDOW_SEC: number = 8 * 24 * 3600;
 
 /**
  * How long shared caches may serve a document with this `cache-control`, in seconds: its freshness
@@ -80,7 +80,7 @@ export function mint_ttl_sec(o: { stored: boolean; session: string; shared: numb
 
 /** A renewable expiry: an integer that HAS passed, by at most `window` seconds (the app's
  *  `regions.maxPageAge`; `0` renews nothing). */
-export function renewable_expiry(exp_raw: string, now_sec: number, window = RENEW_WINDOW_SEC): boolean {
+export function renewable_expiry(exp_raw: string, now_sec: number, window: number = RENEW_WINDOW_SEC): boolean {
 	if (window <= 0 || exp_raw === '' || exp_raw.length > 12) return false;
 	for (let i = 0; i < exp_raw.length; i++) {
 		const c = exp_raw.charCodeAt(i);

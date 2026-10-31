@@ -35,7 +35,7 @@ function is_current(el: Element): boolean {
 export function roving(opts: RovingOptions) {
 	const vertical = opts.orientation !== 'horizontal';
 	const loop = opts.loop !== false;
-	return (container: HTMLElement) => {
+	return (container: HTMLElement): (() => void) | undefined => {
 		const items = () => [...container.querySelectorAll<HTMLElement>(opts.selector)];
 		const seed = items();
 		if (!seed.length) return;

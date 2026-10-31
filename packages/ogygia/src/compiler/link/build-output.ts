@@ -28,7 +28,7 @@ export function warn_content_leaks(
 	bundle: Record<string, unknown>,
 	root: string,
 	is_island_path: (id: string) => boolean
-) {
+): void {
 	try {
 		const leaks: Array<{ chunk: string; modules: string[] }> = [];
 		for (const [key, chunk] of Object.entries(bundle)) {
@@ -72,7 +72,7 @@ export function warn_content_leaks(
  * regions that cross the wire rendered unstyled on Vercel/Netlify). Unpatched builds keep the fs
  * fallback (adapter-node, dev-preview).
  */
-export function emit_island_deps_handoff(root: string, json: string, out_dir: string) {
+export function emit_island_deps_handoff(root: string, json: string, out_dir: string): void {
 	const handoff = islandDepsHandoffPath(out_dir);
 	fs.mkdirSync(path.dirname(handoff), { recursive: true });
 	fs.writeFileSync(handoff, json);

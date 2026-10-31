@@ -15,11 +15,11 @@ function substitute(id: string, params: Record<string, string> = {}) {
 }
 
 /** Base-prefix a pathname, or populate a route id's dynamic segments. */
-export function resolve(id: string, params: Record<string, string> = {}) {
+export function resolve(id: string, params: Record<string, string> = {}): string {
 	return base + substitute(id, params);
 }
 
 /** Resolve an asset URL in the static dir — `'x'` (Kit 3's form) or `'/x'` (Kit 2's). */
-export function asset(file: string) {
+export function asset(file: string): string {
 	return (assets || base) + (file.startsWith('/') ? file : '/' + file);
 }

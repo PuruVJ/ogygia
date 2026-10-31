@@ -21,7 +21,7 @@ import { strip_id, type Program } from '../compiler/program.js';
 export function rewrite_island_sourcemap_sources(
 	moduleId: string,
 	sources: (string | null)[] | undefined
-) {
+): (string | null)[] | null {
 	if (!sources?.length) return null;
 	let changed = false;
 	const next = sources.map((s) => {

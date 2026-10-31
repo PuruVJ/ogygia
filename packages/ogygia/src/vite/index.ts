@@ -1645,12 +1645,21 @@ export function ogygia(options: OgygiaOptions = {}): Plugin[] {
 // type the reserved `ogygiaFallback` snippet was built and REVERTED — svelte-check/language-tools
 // type the ORIGINAL source and ignore script preprocessors' output for diagnostics (probe-proven),
 // so no preprocessor can augment call-site types. Server islands hand-declare the prop instead.
-ogygia.preprocess = (): PreprocessorGroup[] =>
-	islandBridge.markdownConfig ? [ogygiaPresetPreprocess()] : [];
+function ogygia_preprocess(): PreprocessorGroup[] {
+	return islandBridge.markdownConfig ? [ogygiaPresetPreprocess()] : [];
+}
 
 /**
  * The full svelte `extensions` list — pass it straight through: `extensions: ogygia.extensions()`.
  * Always includes `.svelte`; adds `.svx` / `.md` when `ogygia({ content: { markdown } })` is set.
  */
-ogygia.extensions = (): string[] =>
-	islandBridge.markdownConfig ? ['.svelte', '.svx', '.md'] : ['.svelte'];
+function ogygia_extensions(): string[] {
+	return islandBridge.markdownConfig ? ['.svelte', '.svx', '.md'] : ['.svelte'];
+}
+
+export declare namespace ogygia {
+	export var preprocess: typeof ogygia_preprocess;
+	export var extensions: typeof ogygia_extensions;
+}
+ogygia.preprocess = ogygia_preprocess;
+ogygia.extensions = ogygia_extensions;

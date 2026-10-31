@@ -3590,7 +3590,548 @@ export function page_score_of(meta: ReportMeta, extras: ReportExtras): PageScore
 	return page_score(inputs);
 }
 
-export function report_json(a: Analysis, meta: ReportMeta, base: string, extras: ReportExtras) {
+/** The JSON report (`?as=json`, the testing engine, the MCP tool): the written-out shape of what
+ *  `report_json` builds. The compiler checks the two against each other. */
+export type ReportJson = {
+	target: {
+		runs: number[] | null;
+		warmup_ms: number | null;
+		run_status: number | null;
+		run_bytes: number | null;
+		cache_control: string | null;
+		prerendered: string | null;
+		budget_note: string | null;
+		runs_measured: number[] | null;
+		instance: { first_request_ms: number; node_ms: number; age_s: number; requests_before: number } | null;
+		lambda: boolean;
+		request: { method: string; path: string; route: string | null; ms: number } | null;
+		redirect_stub?: boolean | undefined;
+		page: string | null;
+		redirected_from: string | null;
+	};
+	summary: {
+		window_ms: number;
+		busy_ms: number;
+		overhead: {
+			top: { name: string; url: string; line: number; self_ms: number }[];
+			cpu_ms: number;
+			gc_ms: number;
+			per_run_ms: number;
+			per_run?: number[];
+			note: string;
+		} | null;
+		busy_pct: number;
+		idle_ms: number;
+		gc_ms: number;
+		gc_sampled_ms: number;
+		verdict: string;
+		sample_count: number;
+		cpu_percent: number | null;
+		elu_percent: number | null;
+		loop_delay_ms: { p50: number; p99: number; max: number } | null;
+		rss_mb: number | null;
+	};
+	score: PageScore;
+	findings: Finding[];
+	budget: { label: string; category: import('./analyze.js').FrameCategory; ms: number; pct: number }[];
+	timeline: {
+		window_ms: number;
+		cpu_ms: number;
+		wait_ms: number;
+		unaccounted_ms: number;
+		phases: { phase: import('./timeline.js').Phase; label: string; cpu_ms: number; wait_ms: number }[];
+		steps: {
+			at_ms: number;
+			ms: number;
+			pct: number;
+			kind: 'wait' | 'cpu' | 'gap';
+			phase: import('./timeline.js').Phase;
+			what: string;
+			detail: string | null;
+			file: string | null;
+			calls:
+				| {
+						label: string;
+						ms: number;
+						caller?: string;
+						callers?: string[];
+						timings?: import('./timeline.js').TimelineCall['timings'];
+						body_ms?: number;
+				  }[]
+				| null;
+			within: string | null;
+		}[];
+		parallelizable: { calls: string[]; ms: number; save_ms: number }[];
+		lanes: {
+			file: string;
+			level: 'error' | 'page' | 'layout';
+			kind: 'server' | 'universal';
+			t0_ms: number;
+			t1_ms: number;
+			cpu_ms: number;
+			wait_ms: number;
+			awaited_parent: boolean;
+		}[];
+		chain: import('./timeline.js').LoadChain | null;
+		awaits: import('./timeline.js').AwaitEdge[];
+	} | null;
+	spans: SpanRow[];
+	paths: {
+		owner: {
+			name: string;
+			file: string;
+			line: number;
+			category: import('./analyze.js').FrameCategory;
+			total_ms: number;
+			calls: number | null;
+		};
+		ms: number;
+		pct_busy: number;
+		share_of_owner: number;
+		functions: {
+			name: string;
+			file: string;
+			line: number;
+			category: import('./analyze.js').FrameCategory;
+			package: string | null;
+			ms: number;
+		}[];
+		tree: import('./analyze.js').PathNode;
+	}[];
+	ogygia: {
+		island_rows: {
+			client: {
+				reason?: string | undefined;
+				hydrations: number;
+				p50_ms: number;
+				max_ms: number;
+				load_p50_ms: number;
+				recovered: number;
+			} | null;
+			hazards?: IslandHazard[] | undefined;
+			name: string;
+			entry: string;
+			fp: string;
+			fingerprints: number;
+			copies: number;
+			wake: string;
+			ssr_ms: number | null;
+			props_bytes: number;
+			canonical_bytes: number;
+			json: boolean;
+			devalue_culprit: string | null;
+			seed_refs: number;
+			seed_ref_keys: string[];
+			js_bytes: number | null;
+			js_only_bytes: number | null;
+			modules: string[];
+			interactivity: import('../server/request-stats.js').IslandInteractivity | null;
+		}[];
+		seed: { keys: import('../server/request-stats.js').SeedKeyStat[]; whole_by: string[] } | null;
+		hole_rows: {
+			id: string;
+			component: string | null;
+			props: string | null;
+			when: string;
+			hydrate: string | null;
+			max_age_s: number;
+			copies: number;
+			requests: { hit: number; miss: number; uncached: number; avg_ms: number } | null;
+		}[];
+		transform_ms: number;
+		islands: number;
+		hints: number;
+		holes: number;
+		seed_bytes: number;
+		remote_seed_bytes: number;
+		tail_bytes: number;
+		fnm_bytes: number;
+		ctx_bytes: number;
+		seed_json: boolean;
+		seed_culprit?: string | null;
+	} | null;
+	kit: { uneval_ms: number; etag_ms: number };
+	components: {
+		name: string;
+		instances: number | null;
+		file: string;
+		path: string;
+		line: number;
+		column: number | null;
+		self_ms: number;
+		total_ms: number;
+		per_call_ms: number | null;
+		pct_busy: number;
+		alloc_bytes: number | null;
+		markup_ms: number | null;
+		logic_ms: number | null;
+		parent: string | null;
+		runs_ms: number[] | null;
+		hot_lines: { line: number; ms: number }[] | null;
+		source: { start: number; lines: string[] } | null;
+		callees: import('./analyze.js').Callee[] | null;
+		stacks: { ms: number; frames: string[] }[];
+	}[];
+	hot_functions: {
+		name: string;
+		label: string | null;
+		instances: number | null;
+		file: string;
+		path: string;
+		line: number;
+		column: number | null;
+		category: import('./analyze.js').FrameCategory;
+		package: string | null;
+		self_ms: number;
+		total_ms: number;
+		per_call_ms: number | null;
+		stacks: { ms: number; frames: string[] }[];
+		hot_lines: { line: number; ms: number }[] | null;
+		source: { start: number; lines: string[] } | null;
+		callees: import('./analyze.js').Callee[] | null;
+	}[];
+	files: { file: string; category: import('./analyze.js').FrameCategory; self_ms: number; pct_busy: number }[];
+	network: {
+		count: number;
+		total_ms: number;
+		sequential_ms: number;
+		errors: number;
+		hosts: { host: string; calls: number; total_ms: number; p50_ms: number; max_ms: number; errors: number }[];
+		calls: {
+			method: string;
+			url: string;
+			host: string;
+			status: number;
+			wait_ms: number;
+			body_ms: number | null;
+			bytes: number | null;
+			transfer_bytes: number | null;
+			encoding: string | null;
+			type: string | null;
+			req_bytes: number | null;
+			req_payload: string | null;
+			route: string | null;
+			caller: string | null;
+			callers: string[] | null;
+			server_timing: import('./net.js').ServerTiming[] | null;
+			trace: import('./net.js').UpstreamTrace | null;
+			headers: Record<string, string> | null;
+			error: string | null;
+		}[];
+	};
+	cold: {
+		calls?: number | undefined;
+		ms: number;
+		busy_ms: number;
+		files: {
+			file: string;
+			category: import('./analyze.js').FrameCategory;
+			cold_ms: number;
+			warm_ms: number;
+			extra_ms: number;
+		}[];
+	} | null;
+	browser: {
+		cpu?:
+			| {
+					components: { name: string; file: string; self_ms: number; total_ms: number; instances: number | null }[];
+					hot_functions: {
+						name: string;
+						file: string;
+						line: number;
+						category: import('./analyze.js').FrameCategory;
+						package: string | null;
+						self_ms: number;
+						total_ms: number;
+					}[];
+					by_island?:
+						| { fp: string; name: string | null; ms: number; top: import('./client-windows.js').WindowFn[] }[]
+						| undefined;
+					outside_islands?: { ms: number; top: import('./client-windows.js').WindowFn[] } | undefined;
+					at: number;
+					sampled_ms: number;
+					busy_ms: number;
+			  }
+			| undefined;
+		interaction_cpu?: InteractionCpu | undefined;
+		visit?:
+			| {
+					longtasks: number;
+					islands: { changed?: boolean | undefined; fp: string; t0: number; loaded: number; done: number }[];
+					firsts: { fp: string; t: number; type: string }[];
+					shifts: number;
+					cls_by_island: { [k: string]: number };
+					resource_totals?: { type: string; count: number; transfer: number; size: number }[] | undefined;
+					at: number;
+					nav: import('./visit.js').VisitNav;
+					paints: {
+						fcp?: number;
+						lcp?: number;
+						lcp_fp?: string;
+						lcp_url?: string;
+						lcp_tag?: string;
+						lcp_replaced?: true;
+						lcp_lazy?: true;
+						lcp_priority?: 'high' | 'low';
+						held?: { outcome: 'arrived' | 'input' | 'cap' | 'none'; resources: number; waited_ms: number };
+					};
+					resources: number;
+					resource_bytes: number;
+			  }
+			| undefined;
+		marks?: ClientMarkStat[] | undefined;
+		n?: number | undefined;
+		ttfb?: number | null | undefined;
+		fcp?: number | null | undefined;
+		lcp?: number | null | undefined;
+		cls?: number | null | undefined;
+		inp?: number | null | undefined;
+	} | null;
+	replay: { url: string; path: string; headers: string[] } | null;
+	assets: ReportJsonAssets | { missing: string } | null;
+	strip: {
+		tail?: import('./stream-tail.js').StreamTail | undefined;
+		chunks?: { end: number; t: number }[] | undefined;
+		total: number;
+		by_kind: Partial<Record<import('./byte-strip.js').StripKind, number>>;
+		shadow_count: number;
+		segments: import('./byte-strip.js').StripSegment[];
+	} | null;
+	river: River | null;
+	memory: {
+		rss_start_mb: number;
+		rss_end_mb: number | null;
+		growth_mb: number;
+		gc: GcSummary | null;
+		gc_attribution: {
+			pauses: {
+				t_ms: number;
+				ms: number;
+				ms_measured: number;
+				kind: 'other' | 'minor' | 'major' | 'incremental' | 'weak';
+				forced: boolean;
+				since_ms: number;
+				allocated_bytes: number;
+				estimated: boolean;
+				why: string;
+				running: { label: string; category: string; file?: string } | null;
+				top: { name: string; component: string | null; bytes: number; share: number }[];
+			}[];
+			makers: {
+				name: string;
+				file: string;
+				line: number;
+				category: import('./analyze.js').FrameCategory;
+				component: string | null;
+				via: string | null;
+				allocated_bytes: number;
+				share: number;
+				gc_ms: number;
+				pauses: number;
+			}[];
+			components: { name: string; allocated: number; gc_ms: number }[];
+			count: number;
+			total_ms: number;
+			max_ms: number;
+			measured_ms: number;
+			overhead_ms: number;
+			minor: number;
+			major: number;
+			incremental: number;
+			weak: number;
+			allocated_mb: number;
+			alloc_rate_mb_s: number;
+			retained_mb?: number;
+			slices: number;
+			slice_ms: number;
+		} | null;
+		allocators: {
+			name: string;
+			file: string;
+			line: number;
+			category: import('./analyze.js').FrameCategory;
+			self_bytes: number;
+			total_bytes: number;
+		}[];
+		by_component: { name: string; bytes: number }[];
+		samples: { t_ms: number; rss_mb: number; heap_used_mb: number }[];
+	};
+	deopts: {
+		name: string;
+		file: string;
+		line: number;
+		category: import('./analyze.js').FrameCategory;
+		self_ms: number;
+		count: number;
+		reasons: Record<string, number>;
+	}[];
+	sync_io: { name: string; module: string; self_ms: number; total_ms: number; calls: number | null; callers: string[] }[];
+	memo_candidates: import('./insights.js').MemoCandidate[];
+	promises: { count: number; per_render: number; top: { caller: string; share: number }[] } | null;
+	retained: {
+		total_bytes: number;
+		render_ms: number;
+		sites: {
+			name: string;
+			file: string;
+			line: number;
+			via: string | null;
+			component: string | null;
+			bytes: number;
+			share: number;
+		}[];
+	} | null;
+	steps: import('./steps.js').RenderSteps | null;
+	stacks: {
+		window_ms: number;
+		raw_samples: number;
+		frames: { name: string; file: string | null; category: import('./analyze.js').FrameCategory; parent: number }[];
+		t_ms: number[];
+		d_ms: number[];
+		leaf: number[];
+	} | null;
+	alloc: {
+		grown_mb: number;
+		period_ms: number;
+		longest_gap_ms: number;
+		window: { offset_ms: number; ms: number } | null;
+		bursts: {
+			t0_ms: number;
+			t1_ms: number;
+			mb: number;
+			mb_per_s: number;
+			gc_inside: boolean;
+			running: { label: string; category: string; file?: string; share: number }[];
+		}[];
+		samples: { t_ms: number; heap_mb: number }[];
+	} | null;
+	contention: {
+		overlap_ms: number;
+		cpu_max_ms: number;
+		busy_share: number;
+		inflight_at_start: number[];
+		per_window: { n: number; overlap_ms: number; cpu_max_ms: number }[];
+		requests: import('./contention.js').ContendingRequest[];
+		note: string;
+	} | null;
+	lineage: {
+		keys: {
+			key: string;
+			from: string | null;
+			shipped_bytes: number;
+			load_wait_ms: number | null;
+			verdict: import('./lineage.js').KeyVerdict;
+			readers: { name: string; island: boolean }[];
+		}[];
+		components: import('./lineage.js').LineageComponent[];
+		unread: string[];
+		server_only: string[];
+		notes: string[];
+	} | null;
+	ledger: LedgerLine[] | null;
+	patterns:
+		| {
+				save_per_render_ms: number;
+				cost_per_render_ms: number;
+				kind: import('./patterns.js').PatternKind;
+				title: string;
+				fix: string;
+				example?: { before: string; after: string };
+				sites: import('./patterns.js').PatternSite[];
+				cost_ms: number;
+				alloc_bytes: number;
+				save_ms: number;
+				evidence: string;
+				wait?: boolean;
+				kept_bytes?: number;
+				requests_left?: number;
+				growth?: 'grows' | 'levels-off';
+				seed_bytes?: number;
+				chains?: { start: number; ms: number }[][];
+				naive_save_ms?: number;
+		  }[]
+		| null;
+	growth: HeapGrowth | null;
+	drill: DrillNode | null;
+	forecast: import('./forecast.js').Forecast | null;
+	span_values: import('./insights.js').SpanValueRow[];
+	waiting: { caller: string; kind: string; count: number; wait_ms: number }[];
+	user_timings: { name: string; count: number; total_ms: number; avg_ms: number; max_ms: number }[];
+	requests: {
+		method: string;
+		path: string;
+		route: string | null;
+		status: number;
+		ms: number;
+		cpu_ms: number;
+		wait_ms: number;
+		net_ms: number;
+		net_count: number;
+		inflight: number;
+		internal: boolean;
+		tags: Record<string, string> | null;
+		span_count: number | null;
+		span_ms: number | null;
+		hole: HoleRequestStats | null;
+	}[];
+	links: { html: string; json: string; cpuprofile: string };
+	other_requests_ms?: number | undefined;
+	schema: string;
+	version: number;
+	engine: { version: number };
+	units: { time: string; size: string; memory_suffix_mb: boolean };
+	id: string;
+	created: number;
+	kind: 'window' | 'page' | 'request' | 'trap';
+	node: string;
+	dev: boolean;
+	sourcemapped: boolean;
+};
+
+/** The page's assets in the JSON report (`twice` is absent when nothing shipped twice). */
+type ReportJsonAssets = {
+	twice?: { name: string; copies: { file: string; bytes: number; from?: string }[]; extra: number }[];
+	missed_why?: { url: string; why: string }[] | undefined;
+	missed?: string[] | undefined;
+	totals: {
+		js: number;
+		js_wire: number;
+		css: number;
+		css_wire: number;
+		font: number;
+		image: number;
+		wire: number;
+		lazy_js: number;
+		blocking: number;
+		blocking_count: number;
+		js_files: number;
+	};
+	html: { bytes: number; wire: number };
+	inline: { script: number; style: number };
+	files: {
+		contains?: string[] | undefined;
+		lazy?: boolean | undefined;
+		blocking?: boolean | undefined;
+		url: string;
+		kind: import('./page-assets.js').AssetKind;
+		via:
+			| 'script'
+			| 'img'
+			| 'modulepreload'
+			| 'stylesheet'
+			| 'island'
+			| 'preload'
+			| 'inline-import'
+			| 'static-import'
+			| 'route-node'
+			| 'runtime-phase';
+		bytes: number;
+		wire: number;
+	}[];
+	missing?: undefined;
+};
+
+export function report_json(a: Analysis, meta: ReportMeta, base: string, extras: ReportExtras): ReportJson {
 	const dur = a.duration_ms || 1;
 	const busy = a.busy_ms || 1;
 	const net = extras.net.filter((c) => c.ms >= 0);
@@ -4340,7 +4881,14 @@ export function report_json(a: Analysis, meta: ReportMeta, base: string, extras:
  * downloads from a serverless host (where reports can't be stored) and uploads
  * to the viewer. Rendering needs no inspector, so it works everywhere.
  */
-export function report_dump(a: Analysis, meta: ReportMeta, extras: ReportExtras) {
+export interface ReportDump {
+	kind: 'ogygia-profiler-dump';
+	version: 1;
+	meta: ReportMeta;
+	analysis: Analysis;
+	extras: ReportExtras;
+}
+export function report_dump(a: Analysis, meta: ReportMeta, extras: ReportExtras): ReportDump {
 	return { kind: 'ogygia-profiler-dump', version: 1, meta, analysis: a, extras };
 }
 

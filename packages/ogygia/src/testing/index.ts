@@ -617,10 +617,17 @@ export function checkBudget(r: OgygiaReport, b: Budget): { key: string; measured
 	return out;
 }
 
+/** What each matcher answers — the shape Playwright, Vitest and Jest all read. */
+export interface MatcherResult {
+	pass: boolean;
+	name: string;
+	message: () => string;
+}
+
 /** `expect.extend(ogygiaMatchers)` — Playwright, Vitest and Jest all take this shape. */
 export const ogygiaMatchers = {
 	/** No finding at or above `severity` (default: any), except the codes in `ignore`. */
-	toHaveNoFindings(received: OgygiaReport, opts: { severity?: Severity; ignore?: string[] } = {}) {
+	toHaveNoFindings(received: OgygiaReport, opts: { severity?: Severity; ignore?: string[] } = {}): MatcherResult {
 		const min = SEV[opts.severity ?? 'info'];
 		const list = ('findings' in received ? (received.findings as { code: string; severity: string; message: string }[]) : []).filter(
 			(f) => (SEV[f.severity as Severity] ?? 0) >= min && !(opts.ignore ?? []).includes(f.code)
@@ -636,7 +643,7 @@ export const ogygiaMatchers = {
 		};
 	},
 	/** Every line of the budget met (see {@link Budget}: page, session and profile lines). */
-	toMeetBudget(received: OgygiaReport, budget: Budget) {
+	toMeetBudget(received: OgygiaReport, budget: Budget): MatcherResult {
 		const bad = checkBudget(received, budget).filter((l) => !l.ok);
 		return {
 			pass: bad.length === 0,
@@ -650,7 +657,7 @@ export const ogygiaMatchers = {
 	/** No island failed, recovered, or changed its markup on hydration (`allow` some statuses;
 	 *  `allowAttributeChanges`: a change only in attributes passes; `allowInput`: a change in an island
 	 *  that input landed on while it hydrated passes). */
-	toHydrateCleanly(received: OgygiaReport, opts: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean } = {}) {
+	toHydrateCleanly(received: OgygiaReport, opts: { allow?: HydrationStatus[]; allowAttributeChanges?: boolean; allowInput?: boolean } = {}): MatcherResult {
 		if (received.kind !== 'hydration') return { pass: false, name: 'toHydrateCleanly', message: () => 'toHydrateCleanly takes the report of ogygia.hydration()' };
 		const allow = new Set<HydrationStatus>(['clean', 'asleep', ...(opts.allow ?? [])]);
 		const bad = received.islands.filter(

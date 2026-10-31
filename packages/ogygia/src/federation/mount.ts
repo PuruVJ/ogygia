@@ -218,4 +218,4 @@ export function kit_mount(
 }
 
 /** `mount(peer)` in a table, or `mount.kit(peer)` from a Kit catchall. */
-export const mount = Object.assign(mount_fn, { kit: kit_mount });
+export const mount: typeof mount_fn & { kit: typeof kit_mount } = Object.assign(mount_fn, { kit: kit_mount });
